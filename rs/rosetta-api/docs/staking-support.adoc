@@ -1,25 +1,28 @@
-# Staking and neuron management
+= Staking and neuron management
 
 This document specifies extensions of the Rosetta API enabling staking funds and managing governance "neurons" on the Internet Computer.
 
-NOTE:
-Operations within a transaction are applied in order so the order of operations is significant.
-Because all the operations provided by this API are idempotent, transactions can be re-tried within 24 hour window.
+NOTE: Operations within a transaction are applied in order, so the order of operations is significant.
+Transactions that contain idempotent operations provided by this API can be re-tried within the 24-hour window.
 
-NOTE:
-Due to limitations of the governance canister smart contract, neuron management operations are not reflected on the chain.
-Transactions looked up by identifier returned from `/construction/submit` endpoint might not exist or miss neuron management operations.
-Instead, `/construction/submit` returns the status of all the operations in the `metadata` field using the same format as `/block/transaction`.
+NOTE: Due to limitations of the governance canister smart contract, neuron management operations are not reflected on the chain.
+If you lookup transactions by identifier returned from the `/construction/submit` endpoint, these transactions might not exist or miss neuron management operations.
+Instead, `/construction/submit` returns the statuses of all the operations in the `metadata` field using the same format as `/block/transaction` would return.
 
-## Deriving neuron address
+== Deriving neuron address
 
-Neuron account address must be computed to make staking possible.
-Call `/construction/derive` endpoint with metadata field `account_type` set to `"neuron"` to compute the ledger address corresponding to the neuron controlled by the public key.
-For now one key can only control a single neuron, but this restriction might be lifted in the future.
+[cols="1,1"]
+|===
+| Since version
+| 1.3.0
+|===
 
-### Request
+Call the `/construction/derive` endpoint with metadata field `account_type` set to `"neuron"` to compute the ledger address corresponding to the neuron controlled by the public key.
 
-```json
+=== Request
+
+[source,json]
+----
 {
   "network_identifier": {
     "blockchain": "Internet Computer",
@@ -34,36 +37,44 @@ For now one key can only control a single neuron, but this restriction might be 
     "neuron_index": 0
   }
 }
-```
+----
 
-Note: it's possible to control many neurons using the same key.
-The client can differentiate between neurons it creates using different values of the `neuron_index` metadata field.
-`neuron_index` field is supported by all neuron management operations and is equal to zero if not specified.
+NOTE: Since version 1.3.0, you can control many neurons using the same key.
+You can differentiate between neurons by specifying different values of the `neuron_index` metadata field.
+The `neuron_index` field is supported by all neuron management operations and is equal to zero if not specified.
 
-### Response
+=== Response
 
-```json
+[source,json]
+----
 {
   "account_identifier": {
     "address": "531b163cd9d6c1d88f867bdf16f1ede020be7bcd928d746f92fbf7e797c5526a"
   }
 }
-```
+----
 
-## Stake funds
+== Stake funds
 
-| Since version | Idempotent? |
-| ------------: | ----------- |
-|         1.0.5 |     yes     |
+[cols="1,1"]
+|===
+| Since version
+| 1.0.5
 
-Staking is represented as a normal transfer to the neuron address followed by a `STAKE` operation.
-The only field that should be set for the `STAKE` operation is `account`, which should be equal to the ledger account of the neuron controller.
+| Idempotent?
+| yes
+|===
 
-NOTE: `STAKE` operation is idempotent. 
+To stake funds, execute a transfer to the neuron address followed by a `STAKE` operation.
 
-### Request
+The only field that you must set for the `STAKE` operation is `account`, which should be equal to the ledger account of the neuron controller.
+You can specify `neuron_index` field in the `metadata` field of the `STAKE` operation.
+If you do specify the `neuron_index`, its value must be the same as you used to derive the neuron account identifier.
 
-```json
+=== Request
+
+[source,json]
+----
 {
   "network_identifier": {
     "blockchain": "Internet Computer",
@@ -107,11 +118,12 @@ NOTE: `STAKE` operation is idempotent.
     }
   ]
 }
-```
+----
 
-### Response
+=== Response
 
-```json
+[source,json]
+----
 {
   "transaction_identifier": {
     "hash": "2f23fd8cca835af21f3ac375bac601f97ead75f2e79143bdf71fe2c4be043e8f"
@@ -160,29 +172,38 @@ NOTE: `STAKE` operation is idempotent.
     ]
   }
 }
-```
+----
 
-## Managing neurons
+== Managing neurons
 
-### Setting dissolve timestamp
+=== Setting dissolve timestamp
 
-| Since version | Idempotent? |
-| ------------: | ----------- |
-|         1.1.0 |     yes     |
+[cols="1,1"]
+|===
+| Since version
+| 1.1.0
 
-This operation updates the time when the neuron can reach `DISSOLVED` state.
+| Idempotent?
+| yes
+
+| Minimal access level
+| controller
+|===
+
+This operation updates the time when the neuron can reach the `DISSOLVED` state.
 
 Dissolve timestamp always increases monotonically.
-  * If the neuron is in `DISSOLVING`, this operation can move the dissolve timestamp further into the future.
-  * If the neuron is in `NOT_DISSOLVING` state, invoking `SET_DISSOLVE_TIMESTAMP` with time T will attemp to increase it's dissolve delay (the minimal time it will take to dissolve the neuron) to `T - current_time`.
-  * If the neuron is in `DISSOLVED` state, invoking `SET_DISSOLVE_TIMESTAMP` will move it to the `NOT_DISSOLVING` state and will set the dissolve delay accordingly.
 
-Preconditions
-  * `account.address` is a ledger address of a neuron contoller.
+  * If the neuron is in the `DISSOLVING` state, this operation can move the dissolve timestamp further into the future.
+  * If the neuron is in the `NOT_DISSOLVING` state, invoking `SET_DISSOLVE_TIMESTAMP` with time T will attempt to increase the neuron's dissolve delay (the minimal time it will take to dissolve the neuron) to `T - current_time`.
+  * If the neuron is in the `DISSOLVED` state, invoking `SET_DISSOLVE_TIMESTAMP` will move it to the `NOT_DISSOLVING` state and will set the dissolve delay accordingly.
 
-NOTE: This operation is idempotent.
+.Preconditions
+  * `account.address` is the ledger address of the neuron contoller.
 
-```json
+.Example
+[source,json]
+----
 {
   "operation_identifier": { "index": 4 },
   "type": "SET_DISSOLVE_TIMESTAMP",
@@ -194,25 +215,33 @@ NOTE: This operation is idempotent.
     "dissolve_time_utc_seconds": 1879939507
   }
 }
-```
+----
 
-### Start dissolving
+=== Start dissolving
 
-| Since version | Idempotent? |
-| ------------: | ----------- |
-|         1.1.0 |     yes     |
+[cols="1,1"]
+|===
+| Since version
+| 1.1.0
 
-This operation changes the state of the neuron to `DISSOLVING`.
+| Idempotent?
+| yes
 
-Preconditions:
-  * `account.address` is a ledger address of a neuron contoller.
+| Minimal access level
+| controller
+|===
 
-Postconditions:
-  * The neuron is in `DISSOLVING` state.
+The `START_DISSOLVNG` operation changes the state of the neuron to `DISSOLVING`.
 
-NOTE: This operation is idempotent.
+.Preconditions
+  * `account.address` is the ledger address of the neuron contoller.
 
-```json
+.Postconditions
+  * The neuron is in the `DISSOLVING` state.
+
+.Example
+[source,json]
+----
 {
   "operation_identifier": { "index": 5 },
   "type": "START_DISSOLVING",
@@ -223,25 +252,33 @@ NOTE: This operation is idempotent.
     "neuron_index": 0
   }
 }
-```
+----
 
-### Stop dissolving
+=== Stop dissolving
 
-| Since version | Idempotent? |
-| ------------: | ----------- |
-|         1.1.0 |     yes     |
+[cols="1,1"]
+|===
+| Since version
+| 1.1.0
 
-The `STOP_DISSOLVING` operation changes the state of the neuron to `NOT_DISSOLVING`.
+| Idempotent?
+| yes
 
-Preconditions:
+| Minimal access level
+| controller
+|===
+
+The `STOP_DISSOLVNG` operation changes the state of the neuron to `NOT_DISSOLVING`.
+
+.Preconditions
   * `account.address` is a ledger address of a neuron contoller.
 
-Postconditions:
+.Postconditions
   * The neuron is in `NOT_DISSOLVING` state.
 
-NOTE: This operation is idempotent.
-
-```json
+.Example
+[source,json]
+----
 {
   "operation_identifier": { "index": 6 },
   "type": "STOP_DISSOLVING",
@@ -252,28 +289,35 @@ NOTE: This operation is idempotent.
     "neuron_index": 0
   }
 }
-```
+----
 
-### Adding hot keys
+=== Adding hotkeys
 
-| Since version | Idempotent? |
-| ------------: | ----------- |
-|         1.2.0 |     yes     |
+[cols="1,1"]
+|===
+| Since version
+| 1.2.0
 
-The `ADD_HOTKEY` operation adds a hot key to a neuron.
-The Governance canister smart contract allows some non-critical operations to be signed with a hot key instead of the controller's key (e.g., voting and querying maturity).
+| Idempotent?
+| yes
 
-Preconditions:
-  * `account.address` is a ledger address of a neuron contoller.
-  * The neuron being modified has less than 10 hot keys.
+| Minimal access level
+| controller
+|===
 
-NOTE: This operation is idempotent.
+The `ADD_HOTKEY` operation adds a hotkey to the neuron.
+The Governance canister smart contract allows some non-critical operations to be signed with a hotkey instead of the controller's key (e.g., voting and querying maturity).
 
-The command has two forms: one form accepts an [IC principal](https://smartcontracts.org/docs/interface-spec/index.html#principal) as a hotkey, another form accepts a [public key](https://www.rosetta-api.org/docs/models/PublicKey.html).
+.Preconditions
+  * `account.address` is a ledger address of a neuron controller.
+  * The neuron has less than 10 hotkeys.
 
-#### Add a principal as a hot key
+The command has two forms: one form accepts an https://smartcontracts.org/docs/interface-spec/index.html#principal[IC principal] as a hotkey, another form accepts a https://www.rosetta-api.org/docs/models/PublicKey.html[public key].
 
-```json
+==== Add a principal as a hotkey
+
+[source,json]
+----
 {
   "operation_identifier": { "index": 0 },
   "type": "ADD_HOTKEY",
@@ -283,11 +327,12 @@ The command has two forms: one form accepts an [IC principal](https://smartcontr
     "principal": "sp3em-jkiyw-tospm-2huim-jor4p-et4s7-ay35f-q7tnm-hi4k2-pyicb-xae"
   }
 }
-```
+----
 
-#### Add a public key as a hot key
+==== Add a public key as a hotkey
 
-```json
+[source,json]
+----
 {
   "operation_identifier": { "index": 0 },
   "type": "ADD_HOTKEY",
@@ -300,26 +345,35 @@ The command has two forms: one form accepts an [IC principal](https://smartcontr
     }
   }
 }
-```
+----
 
-### Spawn neurons
+=== Spawn neurons
 
-| Since version | Idempotent? |
-| ------------: | ----------- |
-|         1.3.0 |     yes     |
+[cols="1,1"]
+|===
+| Since version
+| 1.3.0
+
+| Idempotent?
+| yes
+
+| Minimal access level
+| controller
+|===
 
 The `SPAWN` operation creates a new neuron from an existing neuron with enough maturity.
 This operation transfers all the maturity from the existing neuron to the staked amount of the newly spawned neuron.
 
-Preconditions:
+.Preconditions
   * `account.address` is a ledger address of a neuron controller.
   * The parent neuron has at least 1 ICP worth of maturity.
 
-Postconditions:
+.Postconditions
   * Parent neuron maturity is set to `0`.
-  * A new neuron is spawned with a balance equals to transferred maturity.
+  * A new neuron is spawned with a balance equal to the transferred maturity.
 
-```json
+[source,json]
+----
 {
   "operation_identifier": { "index": 0 },
   "type": "SPAWN",
@@ -330,32 +384,44 @@ Postconditions:
     "spawned_neuron_index": 1
   }
 }
-```
+----
 
-Notes:
+[NOTE] 
+====
   * `controller` metadata field is optional and equal to the existing neuron controller by default.
   * `spawned_neuron_index` metadata field is required.
-    The rosetta node uses this index to compute the sub-account for the spawned neuron.
+    The rosetta node uses this index to compute the subaccount for the spawned neuron.
     All spawned neurons must have different values of `spawned_neuron_index`.
+====
 
-### Merge neuron maturity
+=== Merge neuron maturity
 
-| Since version | Idempotent? |
-| ------------: | ----------- |
-|         1.4.0 |     no      |
+[cols="1,1"]
+|===
+| Since version
+| 1.4.0
 
-The `MERGE_MATURITY` operation merges the existing maturity of a neuron into its stake.
-The percentage of maturity to merge can be specified, otherwise the entire maturity is merged by default.
+| Idempotent?
+| no
 
-Preconditions:
- * `account.address` is a ledger address of a neuron controller.
+| Minimal access level
+| controller
+|===
+
+The `MERGE_MATURITY` operation merges the existing maturity of the neuron into its stake.
+The percentage of maturity to merge can be specified, otherwise the entire maturity is merged.
+
+.Preconditions
+ * `account.address` is the ledger address of the neuron controller.
  * The neuron has non-zero maturity to merge.
 
-Postconditions:
+.Postconditions
  * Maturity decreased by the amount merged. 
  * Neuron stake increased by the amount merged.
 
-```json
+.Example
+[source,json]
+----
 {
   "operation_identifier": { "index": 0 },
   "type": "MERGE_MATURITY",
@@ -365,31 +431,38 @@ Postconditions:
     "percentage_to_merge": 14
   }
 }
-```
+----
 
-Notes:
- * `percentage_to_merge` metadata field is optional and equal to 100 by default.
-   If specified, the value must be an integer between 1 and 100 (bounds included).
+NOTE: `percentage_to_merge` metadata field is optional and equal to 100 by default.
+If specified, the value must be an integer between 1 and 100 (bounds included).
 
-## Accessing neuron attributes
+== Accessing neuron attributes
 
-| Since version |
-| ------------: |
-|     1.3.0     |
+[cols="1,1"]
+|===
+| Since version
+| 1.3.0
 
-Use `/account/balance` endpoint to access the staked amount and publicly available neuron metadata.
+| Minimal access level
+| public
+|===
 
-Preconditions
+Call the `/account/balance` endpoint to access the staked amount and publicly available neuron metadata.
+
+.Preconditions
   * `public_key` contains the public key of a neuron's controller.
 
-NOTE: This operation is available only in online mode.
+[NOTE]
+====
+  * This operation is available only in online mode.
+  * The request should not specify any block identifier because the endpoint always returns the latest state of the neuron.
+====
 
-### Request
+=== Request
 
-NOTE: The request should not specify any block identifier because the endpoint always returns the latest state of the neuron.
-
-```json
- {
+[source,json]
+----
+{
   "network_identifier": {
     "blockchain": "Internet Computer",
     "network": "00000000000000020101"
@@ -406,11 +479,12 @@ NOTE: The request should not specify any block identifier because the endpoint a
     }
   }
 }
-```
+----
 
-### Response
+=== Response
 
-```json
+[source,json]
+----
 {
   "block_identifier": {
     "index": 1150,
@@ -435,4 +509,4 @@ NOTE: The request should not specify any block identifier because the endpoint a
     "created_timestamp_seconds": 1638802541
   }
 }
-```
+----
