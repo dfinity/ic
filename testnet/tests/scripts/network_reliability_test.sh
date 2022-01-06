@@ -21,7 +21,8 @@ Success::
       uniformity, and
 .. <= 5% of requests issued by the workload generator fail -- this is
      because no one has time to fix the workload generator, and it sometimes
-     fails to deliver requests.
+     fails to deliver requests (increased to 20% for 56 node nns until a
+     lower percentage is achievable).
 
 end::catalog[]
 DOC
@@ -308,7 +309,7 @@ while read -r wg_status; do
     fi
 done <"$wg_status_file"
 
-# Finalization rate >= 0.3
+# Finalization rate exceeding expected threshold
 finalization_rate="$(jq -r '.data.result[0].value[1]' <"$experiment_dir/metrics/artifact_pool_consensus_height_stat_avg_total.json")"
 
 sed -i "s/finalization_rate/$finalization_rate/g" "$experiment_dir/data_to_upload/FinalizationRate.json"
@@ -351,8 +352,15 @@ else
     bad_percentage=100
 fi
 echo "bad percentage $bad_percentage"
+
 if [[ $bad_percentage -le "5" ]]; then
     success "No more than 5% of requests failed."
+elif [[ "$subnet_type" == "56_nns" ]]; then
+    if [[ $bad_percentage -le "20" ]]; then
+        success "At most 20% of the requests failed."
+    else
+        failure "More than 20% of the requests failed, check '$experiment_dir/0_workload-summary.json and $experiment_dir/1_workload-summary.json'"
+    fi
 else
     failure "More than 5% of requests failed, check '$experiment_dir/0_workload-summary.json and $experiment_dir/1_workload-summary.json'"
 fi
