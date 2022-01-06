@@ -79,3 +79,21 @@ docker run \
     --publish 8080:8080 \
     --rm \
     dfinity/rosetta-api
+....
+
+== Connecting to local `dfx` replica with `ic-rosetta-api`
+
+You need https://github.com/nghttp2/nghttp2[`nghttp2`]. If you have nix,
+it's avaiable as `nixpkgs.nghttp2`.
+
+After installing it, assuming `dfx` replica is listening at `8080` port,
+run this command in another terminal session:
+
+[source,sh]
+----
+$ nghttpx --backend "127.0.0.1,8080" --frontend "127.0.0.1,2053;no-tls"
+----
+
+This will reforward the connections to `2053` port, supporting
+plain-text http2. You can then pass `--ic-url http://127.0.0.1:2053` to
+`ic-rosetta-api`.
