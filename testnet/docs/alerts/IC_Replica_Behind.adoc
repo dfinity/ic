@@ -1,0 +1,49 @@
+= IC_Replica_Behind
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+The finalized height of a replica is significantly below the rest of the subnet
+and the replica has not been able to catch up for a long time.
+
+Either the node is not progressing at all, or is catching up using state
+sync just to immediately fall behind again.
+
+== Impact
+
+The node is is no longer capable to produce blocks.
+The fault budget of the subnet is reduced by 1.
+
+== Possible causes (non-exhaustive)
+
+- Hardware issues of the machine (e.g. broken disk, thrashing swap partiton).
+
+- Connectivity issues
+
+- The state has gotten so large that replicas can no longer catch up after they have fallen behind once.
+
+- A software bug is triggered repeatedly, crashing the node.
+
+== Troubleshooting and remediation
+
+Check network metrics (e.g. transport flows) for connectivity issues.
+If the network is the cause, this is likely a temporary issue.
+
+If a connectivity issue can be ruled out, it is likely a hardware issue:
+
+- Check the logs of the affected node. Does it contain errors / warnings?
+  Compare the logs on affected / non-affected machines.
+
+- Are additional processes running on the affected machine that are using
+  resources that the replica needs?
+
+- Identify any configuration differences between machines (CPU, networking,
+  memory)
+
+
+If the issue with the node can't be identified or is not fixable:
+
+- Reduce the block rate of the subnet to allow the node to catch up.
+
+- Replace the node with a faster one.

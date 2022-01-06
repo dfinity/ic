@@ -1,0 +1,96 @@
+// Refs
+:url-execution-round-duration: https://grafana.dfinity.systems/d/YL3jINNGk/execution-metrics?viewPanel=24&orgId=1&from=now-30m&to=now&refresh=1m&var-ic=mercury&var-ic_subnet=All&var-instances=All&var-heatmap_period=$__auto_interval_heatmap_period
+
+= IC_Subnet_SlowFinalization
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+The rate at which the subnet finalizes blocks has dropped below the
+alerting threshold.
+
+== Impact
+
+*Either*
+
+If the rate has dropped to 0 then the subnet is now
+*stopped* and can make no further progress. All user canisters on the subnet
+can make no further progress.
+
+*Or*
+
+If the rate is above 0 but below the threshold then the subnet is proceeding
+slowly.
+
+[NOTE]
+====
+May also be accompanied by `IC_Replica_CallRequests_ResponseTooSlow` if there
+is enough traffic on the network for that alert to fire too.
+====
+
+== Possible causes (non-exhaustive)
+
+If the finalization rate is 0, the possible causes include:
+
+- There are not enough honest nodes are online to make progess.
+
+- A bug caused the nodes to go into a crash loop.
+
+- A bug caused the nodes to disagree. No faction has the 2 / 3 majority to make progress.
+
+
+If the finalization rate is low but not 0, finalization is likely getting slowed down by another component.
+These include:
+
+- Connectivity issues
+
+- Execution is slow
+
+- State manifest computation takes a long time
+
+- Certification stopped due to state divergence
+
+
+== Troubleshooting and remediation
+
+To narrow down the issue:
+
+- Check the logs. Are there errors / warnings? Are there repeated logs about panics / network disconnects?
+
+- Check the network metrics. Are there disconnected transport flows?
+
+- Check the size of the state. Is this a subnet with exceptionally large state?
+
+- Check execution metrics.
+  Is the {url-execution-round-duration}[execution round] consistently taking longer than it should based on the expected finalization rate?
+  Roughly the execution round shouldn't take more than 1 / finalization_rate in seconds on average.
+
+- Is this during, or shortly after a replica rollout?
+  CD tests should have caught this problem at an earlier stage but double check just in case.
+
+
+If the issue is caused by a network issue:
+
+- Coordinate with platform ops, whether the issue can be fixed or whether it is a transient issue of the backbone.
+
+
+If the issue is caused by slow execution rounds:
+
+- This could point to a misconfiguration of execution limits that result in allowing more work to happen in a round than it should.
+  Confirm what is the expected finalization rate and execution limit.
+  If the execution limit seems to be misconfigured, consult with the execution team on next steps.
+
+
+If the issue is caused by a bug:
+
+- Coordinate with the code owners of the affected code.
+  Is this a newly introduced issue that can be fixed by a rollback, or is a hotfix needed?
+
+- Coordinate with the release management team.
+  If it is a bug introduced in the most recent release, roll back the change.
+  If the bug requires a hotfix, get the fixed version blessed and rolled out.
+
+- If Disaster Recovery is necessary, coordinate with the orchestrator team.
+
+
+
