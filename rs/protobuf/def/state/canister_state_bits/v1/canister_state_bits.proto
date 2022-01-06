@@ -142,9 +142,8 @@ message CanisterStatusStopping {
 message CanisterStatusStopped {}
 
 message CanisterStateBits {
-  // This field is now deprecated. Once all subnets in production contain the
-  // new version of this field, we can remove it (and mark it as reserved).
-  types.v1.PrincipalId controller = 1;
+  reserved 1;
+  reserved "controller";
   uint64 last_full_execution_round = 2;
   CallContextManager call_context_manager = 3;
   uint64 compute_allocation = 4;
