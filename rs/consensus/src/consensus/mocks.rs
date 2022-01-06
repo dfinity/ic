@@ -11,8 +11,6 @@ use ic_registry_client::fake::FakeRegistryClient;
 use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
 use ic_registry_keys::ROOT_SUBNET_ID_KEY;
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
-
-use ic_interfaces::consensus::PayloadBuilderError;
 use ic_test_utilities::{
     crypto::CryptoReturningOk,
     registry::{setup_registry_non_final, SubnetRecordBuilder},
@@ -30,6 +28,8 @@ use mockall::predicate::*;
 use mockall::*;
 use std::sync::{Arc, RwLock};
 
+use super::block_maker::SubnetRecords;
+
 mock! {
     pub PayloadBuilder {}
 
@@ -39,8 +39,10 @@ mock! {
             height: Height,
             ingress_pool: &'a (dyn IngressPoolSelect + 'a),
             past_payloads: &[(Height, Time, Payload)],
-            context: &ValidationContext
-        ) -> Result<BatchPayload, PayloadBuilderError>;
+            context: &ValidationContext,
+            subnet_records: &SubnetRecords,
+        ) -> BatchPayload;
+
         fn validate_payload(
             &self,
             payload: &Payload,

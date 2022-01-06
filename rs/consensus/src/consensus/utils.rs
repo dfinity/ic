@@ -5,6 +5,7 @@ use ic_interfaces::{
     state_manager::StateManager, time_source::TimeSource,
 };
 use ic_logger::{error, warn, ReplicaLogger};
+use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client::helper::subnet::{NotarizationDelaySettings, SubnetRegistry};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -416,6 +417,29 @@ fn get_active_data_at_given_summary(summary_block: &Block, height: Height) -> Op
     } else {
         None
     }
+}
+
+/// Get the [`SubnetRecord`] of this subnet with the
+/// specified [`RegistryVersion`]
+pub(crate) fn get_subnet_record(
+    registry_client: &dyn RegistryClient,
+    subnet_id: SubnetId,
+    registry_version: RegistryVersion,
+    logger: &ReplicaLogger,
+) -> Option<SubnetRecord> {
+    registry_client
+        .get_subnet_record(subnet_id, registry_version)
+        .map_err(|err| warn!(logger, "Registry error: {:?}", err))
+        .ok()?
+        .or_else(|| {
+            warn!(
+                logger,
+                "No subnet record found for registry version={:?} and subnet_id={:?}",
+                subnet_id,
+                registry_version
+            );
+            None
+        })
 }
 
 #[cfg(test)]
