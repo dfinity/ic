@@ -104,7 +104,7 @@ Follow the steps below to deploy your own copy of the ledger canister to a local
 
   1. Check that the canister works:
      ```sh
-     $ dfx canister call ledger account_balance '(record { account = '$(python3 -c 'print("vec{" + ";".join([str(b) for b in bytes.fromhex("'$LEDGER_ACC'")]) + "}")')' })'     
+     $ dfx canister call ledger account_balance '(record { account = '$(python3 -c 'print("vec{" + ";".join([str(b) for b in bytes.fromhex("'$LEDGER_ACC'")]) + "}")')' })'
      (record { e8s = 100_000_000_000 : nat64 })
      ```
 
