@@ -708,6 +708,12 @@ message ManageNeuron {
     uint64 amount_e8s = 1;
   }
 
+  // Merge another neuron into this neuron.
+  message Merge {
+    // The neuron to merge stake and maturity from.
+    ic_nns_common.pb.v1.NeuronId source_neuron_id = 1;
+  }
+
   // When the maturity of a neuron has risen above a threshold, it can
   // be instructed to spawn a new neuron. This creates a new neuron
   // that locks a new balance of ICP on the ledger. The new neuron can
@@ -817,6 +823,7 @@ message ManageNeuron {
     DisburseToNeuron disburse_to_neuron = 9;
     ClaimOrRefresh claim_or_refresh = 10;
     MergeMaturity merge_maturity = 13;
+    Merge merge = 14;
   }
 }
 
@@ -855,6 +862,8 @@ message ManageNeuronResponse {
     ic_nns_common.pb.v1.NeuronId created_neuron_id = 1;
   }
 
+  message MergeResponse {}
+
   message DisburseToNeuronResponse {
     // The ID of the Neuron created from disbursing a Neuron
     ic_nns_common.pb.v1.NeuronId created_neuron_id = 1;
@@ -876,6 +885,7 @@ message ManageNeuronResponse {
     DisburseToNeuronResponse disburse_to_neuron = 9;
     ClaimOrRefreshResponse claim_or_refresh = 10;
     MergeMaturityResponse merge_maturity = 11;
+    MergeResponse merge = 12;
   }
 }
 
@@ -1266,6 +1276,7 @@ message Governance {
       ManageNeuron.MergeMaturity merge_maturity = 7;
       ManageNeuron.ClaimOrRefresh claim_or_refresh_neuron = 8;
       ManageNeuron.Configure configure = 9;
+      ManageNeuron.Merge merge = 10;
     }
   }
 
