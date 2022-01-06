@@ -8,7 +8,7 @@ const WASM_PAGE_SIZE_IN_BYTES: u64 = 64 * 1024; /* 64KiB */
 /// This test assumes it's being executed using 20MiB of subnet capacity.
 pub fn exceeding_memory_capacity_fails_during_message_execution(
     handle: IcHandle,
-    ctx: &fondue::pot::Context,
+    ctx: &ic_fondue::pot::Context,
 ) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");

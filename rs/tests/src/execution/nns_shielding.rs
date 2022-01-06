@@ -47,7 +47,7 @@ const MINT_CYCLES: &str = r#"(module
                   (export "memory" (memory $memory))
               )"#;
 
-pub fn mint_cycles_not_supported_on_system_subnet(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn mint_cycles_not_supported_on_system_subnet(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
@@ -90,7 +90,7 @@ pub fn mint_cycles_not_supported_on_system_subnet(handle: IcHandle, ctx: &fondue
 
 pub fn mint_cycles_not_supported_on_application_subnet(
     handle: IcHandle,
-    ctx: &fondue::pot::Context,
+    ctx: &ic_fondue::pot::Context,
 ) {
     let initial_cycles = CANISTER_FREEZE_BALANCE_RESERVE + Cycles::new(5_000_000_000_000);
     let mut rng = ctx.rng.clone();
@@ -137,7 +137,7 @@ pub fn mint_cycles_not_supported_on_application_subnet(
     });
 }
 
-pub fn no_cycle_balance_limit_on_nns_subnet(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn no_cycle_balance_limit_on_nns_subnet(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
@@ -203,7 +203,7 @@ pub fn config() -> InternetComputer {
         )
 }
 
-pub fn max_cycles_per_canister_system_subnet(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn max_cycles_per_canister_system_subnet(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
@@ -220,7 +220,7 @@ pub fn max_cycles_per_canister_system_subnet(handle: IcHandle, ctx: &fondue::pot
     });
 }
 
-pub fn max_cycles_per_canister_application_subnet(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn max_cycles_per_canister_application_subnet(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
@@ -283,7 +283,7 @@ pub fn max_cycles_per_canister_application_subnet(handle: IcHandle, ctx: &fondue
 
 pub fn max_cycles_per_canister_is_none_application_subnet(
     handle: IcHandle,
-    ctx: &fondue::pot::Context,
+    ctx: &ic_fondue::pot::Context,
 ) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
@@ -364,7 +364,7 @@ pub fn max_cycles_per_canister_is_none_application_subnet(
 /// on the NNS subnet.
 pub fn non_nns_canister_attempt_to_create_canister_on_another_subnet_fails(
     handle: IcHandle,
-    ctx: &fondue::pot::Context,
+    ctx: &ic_fondue::pot::Context,
 ) {
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     let mut rng = ctx.rng.clone();
@@ -503,7 +503,7 @@ pub fn non_nns_canister_attempt_to_create_canister_on_another_subnet_fails(
 /// canister.
 pub fn nns_canister_attempt_to_create_canister_on_another_subnet_succeeds(
     handle: IcHandle,
-    ctx: &fondue::pot::Context,
+    ctx: &ic_fondue::pot::Context,
 ) {
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     let mut rng = ctx.rng.clone();
@@ -535,7 +535,7 @@ pub fn nns_canister_attempt_to_create_canister_on_another_subnet_succeeds(
 
 /// Tests whether a call to `setup_initial_dkg` is rejected when called from a
 /// canister installed on an application subnet.
-pub fn app_canister_attempt_initiating_dkg_fails(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn app_canister_attempt_initiating_dkg_fails(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     let mut rng = ctx.rng.clone();
 

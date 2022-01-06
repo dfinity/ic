@@ -40,7 +40,7 @@ pub fn config() -> InternetComputer {
 /// As the malicious behavior `CorruptOwnStateAtHeights` is enabled, this test
 /// waits for the state to diverge and makes sure that the faulty replica is
 /// restarted and that it can contribute to consensus afterwards.
-pub fn test(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let malicious_endpoint = handle
         .as_permutation_malicious(&mut rng)

@@ -31,7 +31,7 @@ pub fn config() -> InternetComputer {
 }
 
 /// Simply tests
-pub fn create_subnet_with_assigned_nodes_fails(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn create_subnet_with_assigned_nodes_fails(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     // Install NNS canisters
     ctx.install_nns_canisters(&handle, true);
 

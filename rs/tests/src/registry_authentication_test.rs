@@ -16,12 +16,12 @@ Runbook::
 
 end::catalog[] */
 use crate::util::{block_on, get_random_root_node_endpoint, runtime_from_url};
-use fondue::{self, log::info};
 use hyper::{
     service::{make_service_fn, service_fn},
     Body, Request, Response,
 };
 use ic_crypto::threshold_sig_public_key_from_der;
+use ic_fondue::{self, log::info};
 use ic_fondue::{
     ic_manager::IcHandle,
     internet_computer::{InternetComputer, Subnet},
@@ -46,7 +46,7 @@ pub fn config() -> InternetComputer {
     InternetComputer::new().add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
 }
 
-pub fn test(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let root_subnet_endpoint = get_random_root_node_endpoint(&handle, &mut rng);
     block_on(root_subnet_endpoint.assert_ready(ctx));

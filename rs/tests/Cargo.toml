@@ -20,7 +20,6 @@ dfn_candid = { path = "../rust_canisters/dfn_candid" }
 dfn_protobuf = { path = "../rust_canisters/dfn_protobuf" }
 dfn_core = { path = "../rust_canisters/dfn_core" }
 ed25519-dalek = "1.0.1"
-fondue = { path = "../ic_fondue/fondue" }
 futures = "0.3.10"
 garcon = "0.2"
 ic-base-types = { path = "../types/base_types" }

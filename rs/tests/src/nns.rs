@@ -4,13 +4,13 @@ use candid::CandidType;
 use canister_test::{Canister, RemoteTestRuntime, Runtime};
 use cycles_minting_canister::SetAuthorizedSubnetworkListArgs;
 use dfn_candid::candid_one;
-use fondue::{
-    self,
-    log::{info, Logger},
-};
 use ic_base_types::NodeId;
 use ic_canister_client::{Agent, Sender};
 use ic_config::subnet_config::SchedulerConfig;
+use ic_fondue::{
+    self,
+    log::{info, Logger},
+};
 use ic_fondue::{
     ic_manager::{IcEndpoint, IcHandle},
     node_software_version::NodeSoftwareVersion,
@@ -205,7 +205,7 @@ pub trait NnsExt {
     }
 }
 
-impl NnsExt for fondue::pot::Context {
+impl NnsExt for ic_fondue::pot::Context {
     fn install_nns_canisters(&self, handle: &IcHandle, nns_test_neurons_present: bool) {
         let mut is_installed = self.is_nns_installed.lock().unwrap();
         if is_installed.eq(&false) {
@@ -411,7 +411,7 @@ async fn update_subnet_replica_version(
 ///
 /// Eventually returns whether the proposal has been executed.
 pub async fn await_proposal_execution(
-    ctx: &fondue::pot::Context,
+    ctx: &ic_fondue::pot::Context,
     governance: &Canister<'_>,
     proposal_id: ProposalId,
     retry_delay: Duration,
@@ -481,7 +481,7 @@ pub async fn await_proposal_execution(
 /// Eventually returns whether the replica status has changed as specified via
 /// `acceptance_criterium`.
 pub async fn await_replica_status_change(
-    ctx: &fondue::pot::Context,
+    ctx: &ic_fondue::pot::Context,
     endpoint: &IcEndpoint,
     retry_delay: Duration,
     timeout: Duration,

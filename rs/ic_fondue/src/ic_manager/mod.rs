@@ -12,15 +12,15 @@ use url::Url;
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_protobuf::log::log_entry::v1::LogEntry;
 
-use fondue::log::{debug, o, Logger};
-use fondue::manager::{process_pool, HasHandle, Manager, MaybeHasHandle};
+use crate::log::{debug, o, Logger};
+use crate::manager::{process_pool, HasHandle, Manager, MaybeHasHandle};
 mod inner;
 
 use crate::internet_computer::InternetComputer;
 pub use inner::*;
 pub mod handle;
+use crate::mio::InputSource;
 use crossbeam_channel::unbounded;
-use fondue::mio::InputSource;
 pub use handle::{FarmInfo, IcControl, IcEndpoint, IcHandle, IcSubnet, RuntimeDescriptor};
 use std::collections::BTreeSet;
 use std::fs::{create_dir_all, File};
@@ -44,11 +44,11 @@ pub enum Event {
 #[serde(tag = "type", content = "event")]
 pub enum NodeEvent {
     Log {
-        src: fondue::mio::InputSource,
+        src: InputSource,
         log_entry: LogEntry,
     },
     OutputLine {
-        src: fondue::mio::InputSource,
+        src: InputSource,
         line: String,
     },
     Exited {

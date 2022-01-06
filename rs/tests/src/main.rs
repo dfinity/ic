@@ -13,15 +13,15 @@ use std::fs;
 use std::panic;
 use structopt::StructOpt;
 
-use fondue::*; // Import the macros for easier pot declaration
-use fondue::{
-    log::Logger,
-    manager::{HasHandle, Manager},
-    pot,
-};
+use ic_fondue::*; // Import the macros for easier pot declaration
 use ic_fondue::{
     ic_manager::IcManager,
     internet_computer::{InternetComputer, Subnet},
+};
+use ic_fondue::{
+    log::Logger,
+    manager::{HasHandle, Manager},
+    pot,
 };
 use ic_registry_subnet_type::SubnetType;
 
@@ -53,7 +53,7 @@ use std::time::Instant;
 /// here, just add another entry to the vector with the corresponding pot.
 /// The [basic_health_pot] have a tutorial nature to them and are good
 /// places to look for simple test examples.
-fn all_pots() -> Vec<fondue::pot::Pot<IcManager>> {
+fn all_pots() -> Vec<ic_fondue::pot::Pot<IcManager>> {
     // HAVE YOU READ THE README AT THE TOP?
     vec![
         pot1(),
@@ -264,7 +264,7 @@ fn main() {
     // Here we create a default fondue config but then randomize the rng_seed.
     // If the user specified their own seed 's', then 's' will be used when we
     // `modify_fondue_exec_config`.
-    let fondue_default_config = fondue::pot::execution::Config::default().random_pot_rng_seed();
+    let fondue_default_config = ic_fondue::pot::execution::Config::default().random_pot_rng_seed();
     let fondue_config = opt.modify_fondue_exec_config(fondue_default_config);
 
     // Select the pots that match the filter, if any.
@@ -294,7 +294,7 @@ fn main() {
     });
 
     print_rng_seed(&fondue_config);
-    if let Some(res) = fondue::pot::execution::execute(&fondue_config, scheduled_pots) {
+    if let Some(res) = ic_fondue::pot::execution::execute(&fondue_config, scheduled_pots) {
         if let Some(mut w) = results_writer {
             serde_json::to_writer_pretty(
                 &mut w,
@@ -311,7 +311,7 @@ fn main() {
     }
 }
 
-fn print_rng_seed<ManCfg>(fondue_config: &fondue::pot::execution::Config<ManCfg>) {
+fn print_rng_seed<ManCfg>(fondue_config: &ic_fondue::pot::execution::Config<ManCfg>) {
     println!(
         "(To reproduce this exact run, make sure to use '--seed {}')",
         fondue_config.pot_config.rng_seed

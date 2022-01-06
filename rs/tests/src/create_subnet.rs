@@ -22,11 +22,11 @@ use std::collections::HashSet;
 use std::iter::FromIterator;
 use std::time::Duration;
 
-use fondue::log::info;
-use fondue::util::PermOf;
 use ic_base_types::NodeId;
 use ic_fondue::ic_manager::IcSubnet;
 use ic_fondue::internet_computer::Subnet;
+use ic_fondue::log::info;
+use ic_fondue::util::PermOf;
 use ic_fondue::{
     ic_manager::IcHandle,                // we run the test on the IC
     internet_computer::InternetComputer, // which is declared through these types
@@ -53,7 +53,7 @@ pub fn config() -> InternetComputer {
         .with_unassigned_nodes(4)
 }
 
-pub fn create_subnet_test(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn create_subnet_test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     // [Phase I] Prepare NNS
     ctx.install_nns_canisters(&handle, true);
     let mut rng = ctx.rng.clone();

@@ -4,12 +4,12 @@ use crate::util::{
     agent_with_identity, assert_create_agent, delay, get_random_node_endpoint,
     random_ed25519_identity, UniversalCanister,
 };
-use fondue::{
+use ic_agent::export::Principal;
+use ic_agent::{identity::AnonymousIdentity, Identity, Signature};
+use ic_fondue::{
     self,
     log::{debug, info},
 };
-use ic_agent::export::Principal;
-use ic_agent::{identity::AnonymousIdentity, Identity, Signature};
 use ic_fondue::{ic_manager::IcHandle, internet_computer::InternetComputer};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::{
@@ -23,7 +23,7 @@ pub fn config() -> InternetComputer {
     InternetComputer::new().add_fast_single_node_subnet(SubnetType::System)
 }
 
-pub fn test(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
 
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");

@@ -1,7 +1,7 @@
 //! This programs creates a fully functional local internet computer.
 //! See --help (or the docstring below) for details.
 
-use fondue::{self, log, manager::HasHandle};
+use ic_fondue::{self, log, manager::HasHandle};
 use ic_fondue::{
     ic_manager::{IcManager, IcManagerSettings},
     internet_computer::InternetComputer,
@@ -35,7 +35,7 @@ struct CliArgs {
 }
 
 fn main() {
-    fondue::register_double_ctrlc_kill().expect("Couldn't register double Ctrl+C handler");
+    ic_fondue::register_double_ctrlc_kill().expect("Couldn't register double Ctrl+C handler");
     let args = CliArgs::from_args();
     let mut ic = InternetComputer::new();
 
@@ -44,11 +44,11 @@ fn main() {
         ic = ic.add_fast_single_node_subnet(SubnetType::Application);
     }
 
-    let mut fondue_cfg = fondue::pot::Config::default();
+    let mut fondue_cfg = ic_fondue::pot::Config::default();
     fondue_cfg.level = slog::Level::Debug;
     fondue_cfg.ready_timeout = std::time::Duration::from_secs(600);
 
-    let res = fondue::pot::from_isolated("ic-test-bin", &ic, wait_for_sigint(args))
+    let res = ic_fondue::pot::from_isolated("ic-test-bin", &ic, wait_for_sigint(args))
         .run_with(&fondue_cfg, IcManagerSettings::default());
 
     if !res.is_success() {
@@ -56,7 +56,7 @@ fn main() {
     }
 }
 
-fn wait_for_sigint(args: CliArgs) -> impl FnOnce(IcManager, &fondue::pot::Context) {
+fn wait_for_sigint(args: CliArgs) -> impl FnOnce(IcManager, &ic_fondue::pot::Context) {
     move |man, ctx| {
         let handle = man.handle();
         if let Some(ref path) = args.endpoint {

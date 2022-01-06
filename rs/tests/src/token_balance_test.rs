@@ -34,7 +34,6 @@ use crate::util::{
     UniversalCanister,
 };
 
-use fondue;
 use ic_fondue::{ic_manager::IcHandle, internet_computer::InternetComputer};
 
 use crate::nns::NnsExt;
@@ -60,7 +59,7 @@ pub fn config() -> InternetComputer {
         .add_fast_single_node_subnet(SubnetType::Application)
 }
 
-pub fn test(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     // Install NNS canisters
     ctx.install_nns_canisters(&handle, true);
 

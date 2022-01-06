@@ -1,12 +1,12 @@
 use crate::types::*;
 use candid::{Decode, Encode};
 use canister_test::{Canister, RemoteTestRuntime, Runtime, Wasm};
-use fondue::log::info;
 use ic_agent::{
     agent::http_transport::ReqwestHttpReplicaV2Transport, Agent, AgentError, Identity, RequestId,
 };
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
 use ic_fondue::ic_manager::{IcEndpoint, IcHandle};
+use ic_fondue::log::info;
 use ic_ic00_types::{CanisterStatusResult, EmptyBlob};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 
@@ -655,7 +655,7 @@ pub(crate) async fn get_icp_balance(
 }
 
 pub(crate) async fn transact_icp_subaccount(
-    ctx: &fondue::pot::Context,
+    ctx: &ic_fondue::pot::Context,
     ledger: &Canister<'_>,
     sender: (&UniversalCanister<'_>, Option<Subaccount>),
     amount: u64,
@@ -700,7 +700,7 @@ pub(crate) async fn transact_icp_subaccount(
 }
 
 pub(crate) async fn transact_icp(
-    ctx: &fondue::pot::Context,
+    ctx: &ic_fondue::pot::Context,
     ledger: &Canister<'_>,
     sender: &UniversalCanister<'_>,
     amount: u64,
@@ -722,7 +722,7 @@ pub(crate) fn to_principal_id(principal: &Principal) -> PrincipalId {
     PrincipalId::try_from(principal.as_slice()).unwrap()
 }
 
-pub(crate) async fn assert_all_ready(endpoints: &[&IcEndpoint], ctx: &fondue::pot::Context) {
+pub(crate) async fn assert_all_ready(endpoints: &[&IcEndpoint], ctx: &ic_fondue::pot::Context) {
     for &e in endpoints {
         e.assert_ready(ctx).await;
     }

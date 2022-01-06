@@ -24,7 +24,7 @@ use crate::nns::NnsExt;
 use crate::util::{
     create_agent, get_random_nns_node_endpoint, get_random_non_root_node_endpoint, runtime_from_url,
 };
-use fondue::{self, log::info};
+use ic_fondue::{self, log::info};
 
 use ic_fondue::{ic_manager::IcHandle, internet_computer::InternetComputer};
 
@@ -65,7 +65,7 @@ pub fn config() -> InternetComputer {
         .add_fast_single_node_subnet(SubnetType::Application)
 }
 
-pub fn test(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     // Install NNS canisters
     ctx.install_nns_canisters(&handle, true);
 

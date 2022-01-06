@@ -1,7 +1,7 @@
-use fondue::pot::execution::Config as ExecConfig;
-use fondue::pot::Config as PotConfig;
 use ic_base_types::NodeId;
 use ic_fondue::ic_manager::{IcEndpoint, IcManagerSettings, IcSubnet, RuntimeDescriptor};
+use ic_fondue::pot::execution::Config as ExecConfig;
+use ic_fondue::pot::Config as PotConfig;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{PrincipalId, SubnetId};
 use std::path::PathBuf;
@@ -11,8 +11,8 @@ use structopt::StructOpt;
 use url::Url;
 
 impl Options {
-    /// Creates a [fondue::pot::Config] according to the command line options
-    /// captured in [Option] and a given default [fondue::pot::Config].
+    /// Creates a [ic_fondue::pot::Config] according to the command line options
+    /// captured in [Option] and a given default [ic_fondue::pot::Config].
     pub fn modify_fondue_pot_config(&self, cfg: PotConfig) -> PotConfig {
         PotConfig {
             rng_seed: self.fondue_seed.unwrap_or(cfg.rng_seed),
@@ -22,9 +22,9 @@ impl Options {
         }
     }
 
-    /// Creates a [fondue::pot::execution::Config] according to the command line
-    /// options captured in [Option] and a given default
-    /// [fondue::pot::execution::Config].
+    /// Creates a [ic_fondue::pot::execution::Config] according to the command
+    /// line options captured in [Option] and a given default
+    /// [ic_fondue::pot::execution::Config].
     pub fn modify_fondue_exec_config(
         &self,
         cfg: ExecConfig<IcManagerSettings>,
@@ -88,8 +88,8 @@ impl Options {
         }
     }
 
-    fn get_fondue_filter(&self) -> fondue::pot::Filter {
-        fondue::pot::Filter {
+    fn get_fondue_filter(&self) -> ic_fondue::pot::Filter {
+        ic_fondue::pot::Filter {
             select: self.filters.clone().unwrap_or_else(|| "".to_string()),
             skip_filter: self.skip.clone(),
         }

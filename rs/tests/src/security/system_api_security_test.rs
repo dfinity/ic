@@ -4,10 +4,10 @@
 */
 use crate::util::*;
 use core::fmt::Write;
-use fondue::log::debug;
 use ic_agent::export::Principal;
 use ic_agent::AgentError;
 use ic_agent::RequestId;
+use ic_fondue::log::debug;
 use ic_fondue::{
     ic_manager::IcHandle,                          // we run the test on the IC
     internet_computer::{InternetComputer, Subnet}, // which is declared through these types
@@ -26,7 +26,7 @@ pub fn config() -> InternetComputer {
 // Enables additional debug logs
 const ENABLE_DEBUG_LOG: bool = false;
 
-pub fn malicious_inputs(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn malicious_inputs(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     let wasm = wabt::wat2wasm(
@@ -297,7 +297,7 @@ async fn tests_for_stale_data_in_buffer_between_calls(
 }
 
 async fn tests_for_illegal_wasm_memory_access(
-    ctx: &fondue::pot::Context,
+    ctx: &ic_fondue::pot::Context,
     agent: &ic_agent::Agent,
     canister_id: &Principal,
 ) {
@@ -362,7 +362,7 @@ async fn tests_for_illegal_wasm_memory_access(
    by the client and canister B is called by Canister A. The intent is to test malicious
    inter-canister calls
 */
-pub fn malicious_intercanister_calls(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn malicious_intercanister_calls(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     let canister_b_wasm = wabt::wat2wasm(
@@ -606,7 +606,7 @@ fn convert_bytes_to_number(input: &[u8]) -> Option<u64> {
 }
 
 fn print_validate_num_cycles(
-    ctx: &fondue::pot::Context,
+    ctx: &ic_fondue::pot::Context,
     ret_val: &Result<Vec<u8>, AgentError>,
     message: &str,
 ) -> u64 {
@@ -634,7 +634,7 @@ fn print_validate_num_cycles(
 }
 
 fn print_result_or_error(
-    ctx: &fondue::pot::Context,
+    ctx: &ic_fondue::pot::Context,
     ret_val: &Result<Vec<u8>, AgentError>,
     msg: &str,
 ) {
@@ -648,7 +648,7 @@ fn print_result_or_error(
 }
 
 fn print_result_range(
-    ctx: &fondue::pot::Context,
+    ctx: &ic_fondue::pot::Context,
     ret_val: &Result<Vec<u8>, AgentError>,
     msg: &str,
 ) {
@@ -670,7 +670,7 @@ fn print_result_range(
     }
 }
 
-fn print_result(ctx: &fondue::pot::Context, ret_val: &Result<Vec<u8>, AgentError>, msg: &str) {
+fn print_result(ctx: &ic_fondue::pot::Context, ret_val: &Result<Vec<u8>, AgentError>, msg: &str) {
     match ret_val {
         Ok(result) => {
             debug!(ctx.logger, "{} {:?}", msg, result);
@@ -679,6 +679,6 @@ fn print_result(ctx: &fondue::pot::Context, ret_val: &Result<Vec<u8>, AgentError
     }
 }
 
-fn print_cycles(ctx: &fondue::pot::Context, num_cycles: u64, message: &str) {
+fn print_cycles(ctx: &ic_fondue::pot::Context, num_cycles: u64, message: &str) {
     debug!(ctx.logger, "Number of cycles {} - {}", num_cycles, message);
 }

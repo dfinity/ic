@@ -18,7 +18,7 @@ use std::time::{Duration, SystemTime};
 
 const ENDPOINTS: &[&str; 3] = &["call", "query", "read_state"];
 
-pub fn test(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     test_invalid_content_type(&handle, ctx);
     test_invalid_get_requests(&handle, ctx);
     test_garbage_payload(&handle, ctx);
@@ -27,7 +27,7 @@ pub fn test(handle: IcHandle, ctx: &fondue::pot::Context) {
 }
 
 // Endpoints reject requests without the "application/cbor" content type.
-fn test_invalid_content_type(handle: &IcHandle, ctx: &fondue::pot::Context) {
+fn test_invalid_content_type(handle: &IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let client = reqwest::blocking::Client::new();
     let endpoint = util::get_random_node_endpoint(handle, &mut rng);
@@ -55,7 +55,7 @@ fn test_invalid_content_type(handle: &IcHandle, ctx: &fondue::pot::Context) {
 }
 
 // Endpoints reject get requests.
-fn test_invalid_get_requests(handle: &IcHandle, ctx: &fondue::pot::Context) {
+fn test_invalid_get_requests(handle: &IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let endpoint = util::get_random_node_endpoint(handle, &mut rng);
     util::block_on(endpoint.assert_ready(ctx));
@@ -75,7 +75,7 @@ fn test_invalid_get_requests(handle: &IcHandle, ctx: &fondue::pot::Context) {
 }
 
 // Endpoints reject garbage payloads.
-fn test_garbage_payload(handle: &IcHandle, ctx: &fondue::pot::Context) {
+fn test_garbage_payload(handle: &IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let endpoint = util::get_random_node_endpoint(handle, &mut rng);
     util::block_on(endpoint.assert_ready(ctx));
@@ -103,7 +103,7 @@ fn test_garbage_payload(handle: &IcHandle, ctx: &fondue::pot::Context) {
     }
 }
 
-fn test_valid_query_followed_by_garbage(handle: &IcHandle, ctx: &fondue::pot::Context) {
+fn test_valid_query_followed_by_garbage(handle: &IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let endpoint = util::get_random_node_endpoint(handle, &mut rng);
     util::block_on(endpoint.assert_ready(ctx));
@@ -149,7 +149,7 @@ fn test_valid_query_followed_by_garbage(handle: &IcHandle, ctx: &fondue::pot::Co
     assert_eq!(res.status(), StatusCode::BAD_REQUEST);
 }
 
-fn test_valid_update_followed_by_garbage(handle: &IcHandle, ctx: &fondue::pot::Context) {
+fn test_valid_update_followed_by_garbage(handle: &IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let endpoint = util::get_random_node_endpoint(handle, &mut rng);
     util::block_on(endpoint.assert_ready(ctx));

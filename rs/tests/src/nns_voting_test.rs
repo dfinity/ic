@@ -35,7 +35,7 @@ Not Covered::
 
 end::catalog[] */
 
-use fondue::log::info;
+use ic_fondue::log::info;
 
 use crate::util::{get_random_nns_node_endpoint, runtime_from_url};
 
@@ -72,7 +72,7 @@ pub fn config() -> InternetComputer {
     InternetComputer::new().add_fast_single_node_subnet(SubnetType::System)
 }
 
-pub fn test(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     // Install NNS canisters
     ctx.install_nns_canisters(&handle, true);
 

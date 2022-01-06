@@ -1,4 +1,4 @@
-use fondue::pot::execution::TestResult;
+use ic_fondue::pot::execution::TestResult;
 use ic_fondue::prod_tests::cli::CliArgs;
 use ic_fondue::prod_tests::driver_setup::create_driver_context_from_cli;
 use ic_fondue::prod_tests::evaluation::evaluate;

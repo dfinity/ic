@@ -93,7 +93,7 @@ enum PayloadType {
 /// Tests, that an ingress message that is close to the maximum size is accepted
 /// by the block maker, whereas a message this is exactly the maximum size is
 /// not accepted.
-pub fn max_ingress_payload_size_test(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn max_ingress_payload_size_test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
     rt.block_on(async move {
@@ -110,7 +110,7 @@ pub fn max_ingress_payload_size_test(handle: IcHandle, ctx: &fondue::pot::Contex
 /// Tests, that a xnet message that is close to the maximum size is accepted
 /// by the block maker, whereas a message this is exactly the maximum size is
 /// not accepted.
-pub fn max_xnet_payload_size_test(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn max_xnet_payload_size_test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
     rt.block_on(async move {
@@ -126,7 +126,7 @@ pub fn max_xnet_payload_size_test(handle: IcHandle, ctx: &fondue::pot::Context) 
 
 /// Tests, that the internet computer behaves well, when there is a high load of
 /// ingress messages and xnet messages on the same subnet.
-pub fn dual_workload_test(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn dual_workload_test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let logger = &ctx.logger;
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
@@ -156,7 +156,7 @@ pub fn dual_workload_test(handle: IcHandle, ctx: &fondue::pot::Context) {
     });
 }
 
-async fn setup_agents(handle: &IcHandle, ctx: &fondue::pot::Context) -> (Agent, Agent) {
+async fn setup_agents(handle: &IcHandle, ctx: &ic_fondue::pot::Context) -> (Agent, Agent) {
     let mut rng = ctx.rng.clone();
 
     // Choose one node from each subnet

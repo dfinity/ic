@@ -14,7 +14,7 @@ pub fn config() -> InternetComputer {
 }
 
 /// Tests that query replies can be larger than update replies.
-pub fn query_reply_sizes(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn query_reply_sizes(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     // A wasm that exports a query function that has a 3MiB reply.
     let wasm = wabt::wat2wasm(
         r#"(module

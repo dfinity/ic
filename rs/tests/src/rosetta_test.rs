@@ -28,8 +28,8 @@ use ledger_canister::{
 use canister_test::{Canister, RemoteTestRuntime, Runtime};
 use dfn_protobuf::protobuf;
 use ed25519_dalek::Signer;
-use fondue::log::info;
 use ic_canister_client::Sender;
+use ic_fondue::log::info;
 use ic_fondue::{ic_manager::IcHandle, internet_computer::InternetComputer};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_nns_governance::governance::compute_neuron_staking_subaccount;
@@ -64,7 +64,7 @@ pub fn config() -> InternetComputer {
 }
 
 /// No changes to the IC environment
-pub fn test_everything(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn test_everything(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let minting_address = AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), None);
 
     let (acc_a, kp_a, _pk_a, _pid_a) = make_user(100);

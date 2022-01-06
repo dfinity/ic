@@ -19,12 +19,12 @@ CUP height keeps on advancing
 
 end::catalog[] */
 
-use fondue::{
+use ic_agent::Agent;
+use ic_fondue::{
     self,
     log::{info, Logger},
     manager::HasHandle,
 };
-use ic_agent::Agent;
 use ic_fondue::{
     ic_manager::IcManager,
     internet_computer::{InternetComputer, Subnet},
@@ -56,12 +56,12 @@ pub fn config() -> InternetComputer {
 
 /// Here we define the test workflow. This particular test does change
 /// the environment, hence, it receives a `pot::MutContext`.
-pub fn test(mut man: IcManager, ctx: &fondue::pot::Context) {
+pub fn test(mut man: IcManager, ctx: &ic_fondue::pot::Context) {
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on(do_the_work(&ctx.logger, &mut man, ctx));
 }
 
-async fn do_the_work(logger: &Logger, mgr: &mut IcManager, ctx: &fondue::pot::Context) {
+async fn do_the_work(logger: &Logger, mgr: &mut IcManager, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let mut handle = mgr.handle();
 

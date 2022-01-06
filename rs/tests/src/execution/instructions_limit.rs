@@ -8,7 +8,10 @@ use ic_utils::interfaces::{management_canister::builders::InstallMode, Managemen
 
 const FIVE_HUNDRED_MB: u32 = 500 * 1024 * 1024;
 
-pub fn can_use_more_instructions_during_install_code(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn can_use_more_instructions_during_install_code(
+    handle: IcHandle,
+    ctx: &ic_fondue::pot::Context,
+) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({

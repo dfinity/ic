@@ -11,10 +11,10 @@ use super::pot_dsl::{ExecutionMode, Pot, Suite, Test, TestPath, TestSet};
 use super::resource::{allocate_resources, get_resource_request};
 use super::test_setup::create_ic_handle;
 use crate::ic_manager::IcHandle;
+use crate::pot::execution::result::*;
+use crate::pot::Context;
 use crate::prod_tests::driver_setup::tee_logger;
 use crate::prod_tests::farm::{FarmResult, GroupSpec};
-use fondue::pot::execution::result::*;
-use fondue::pot::Context;
 
 pub const N_THREADS_PER_SUITE: usize = 6;
 pub const N_THREADS_PER_POT: usize = 8;

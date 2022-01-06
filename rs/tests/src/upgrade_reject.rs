@@ -53,7 +53,7 @@ pub fn config() -> InternetComputer {
     )
 }
 
-pub fn upgrade_reject(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn upgrade_reject(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
 
     ctx.install_nns_canisters(&handle, true);

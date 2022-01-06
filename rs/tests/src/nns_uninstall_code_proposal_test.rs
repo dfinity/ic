@@ -27,7 +27,7 @@ pub fn config() -> InternetComputer {
 
 /// Submits an `UninstallCode` proposal to the governance and verifies
 /// that, when the proposal is executed, the canister is uninstalled.
-pub fn test(handle: IcHandle, ctx: &fondue::pot::Context) {
+pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     // Install NNS canisters
     ctx.install_nns_canisters(&handle, true);
 

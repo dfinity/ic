@@ -165,9 +165,9 @@ impl Config {
 }
 
 impl<M: Manager + 'static> Pot<M> {
-    /// Runs a fondue::pot::Pot until completion with default configuration.  If
-    /// you want the RNG to produce different runs, make sure to use `run_with`
-    /// and specify the seeds manually.
+    /// Runs a ic_fondue::pot::Pot until completion with default configuration.
+    /// If you want the RNG to produce different runs, make sure to use
+    /// `run_with` and specify the seeds manually.
     pub fn run(self, mancfg: <M as Manager>::ManConfig) -> PotResult {
         self.run_with(&Config::default(), mancfg)
     }

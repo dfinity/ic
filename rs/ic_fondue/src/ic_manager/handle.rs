@@ -3,12 +3,13 @@ use nix::unistd::Pid;
 use rand::Rng;
 use url::{Host, Url};
 
+use crate::pot;
 use crate::prod_tests::{cli::AuthorizedSshAccount, farm};
-use anyhow::Result;
-use fondue::{
+use crate::{
     log::info,
     util::{InfStreamOf, PermOf},
 };
+use anyhow::Result;
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
@@ -295,14 +296,14 @@ impl<'a> IcEndpoint {
     /// before a given deadline. Readiness of assigned nodes is checked through
     /// either active polling of the public API or--in the case of unassiged
     /// nodes--via establishing a connection to port 22.
-    pub async fn assert_ready(&self, ctx: &fondue::pot::Context) {
+    pub async fn assert_ready(&self, ctx: &pot::Context) {
         self.assert_ready_with_start(self.started_at, ctx).await;
     }
 
     /// Same as `assert_ready`, except that the time offset from which the
     /// timeout is measured is defined by `start` and not the IcEndpoint's
     /// `started_at`.
-    pub async fn assert_ready_with_start(&self, start: Instant, ctx: &fondue::pot::Context) {
+    pub async fn assert_ready_with_start(&self, start: Instant, ctx: &pot::Context) {
         let mut interval = time::interval(Duration::from_secs(1));
         loop {
             info!(
