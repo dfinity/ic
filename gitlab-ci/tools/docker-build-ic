@@ -14,7 +14,7 @@ COPY --chown=ubuntu:ubuntu . /ic
 EOF
 
 export IMAGE=ic-build-src:$VERSION
-"$REPO_ROOT"/gitlab-ci/tools/docker-run /ic/gitlab-ci/tools/build-ic
+"$REPO_ROOT"/gitlab-ci/tools/docker-run /ic/gitlab-ci/tools/build-ic "${1:--a=b,c,i}"
 
 if docker volume inspect "ic-artifacts${CI_JOB_ID:-}" 2>&1; then
     mkdir -p artifacts

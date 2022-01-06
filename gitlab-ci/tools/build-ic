@@ -45,11 +45,7 @@ while test $# -gt 0; do
                 case "$option" in
                     b | binaries) BUILD_BINARIES=true ;;
                     c | canisters) BUILD_CANISTERS=true ;;
-                    i | image)
-                        BUILD_BINARIES=true
-                        BUILD_CANISTERS=true
-                        BUILD_IMAGES=true
-                        ;;
+                    i | image) BUILD_IMAGES=true ;;
                 esac
             done
 
@@ -141,7 +137,13 @@ if [ "$BUILD_CANISTERS" == "true" ]; then
     echo -e "\n${HEADER_CANISTERS}\n"
     gitlab-ci/tools/cargo-build-canisters "${CANISTERS_DIR}"
 fi
-if [ "$BUILD_IMAGES" == "true" ] && [ "$BUILD_BINARIES" == "true" ] && [ "$BUILD_CANISTERS" == "true" ]; then
+if [ "$BUILD_IMAGES" == "true" ]; then
+    if [ "$BUILD_BINARIES" != "true" ]; then
+        echo "Trying to pull binaries from S3"
+        mkdir -p /ic/artifacts/release
+        gitlab-ci/src/artifacts/rclone_download.py --remote-path=release --unpack --mark-executable \
+            --git-rev "$(git rev-parse HEAD)" --out /ic/artifacts/release
+    fi
     echo -e "\n${HEADER_ICOS}\n"
     gitlab-ci/src/job_scripts/guest-os-updateimg.sh "${DISK_DIR}"
 fi

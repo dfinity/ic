@@ -41,6 +41,6 @@ cargo build --target $CARGO_BUILD_TARGET --release \
 ls -l "$CARGO_TARGET_DIR"/x86_64-unknown-linux-gnu/release
 
 rm -rf artifacts/release
-if [ "$CI_JOB_NAME" == "docker-build-ic" ] || [ "$CI_JOB_NAME" == "" ]; then
+if [[ "$CI_JOB_NAME" == "docker-build-ic"* ]] || [ "$CI_JOB_NAME" == "" ]; then
     "$ROOT_DIR"/gitlab-ci/src/artifacts/collect_build_binaries.py artifacts/release
 fi
