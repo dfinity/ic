@@ -490,7 +490,7 @@ impl RosettaApiHandle {
         use nix::unistd::Pid;
         kill(Pid::from_raw(self.process.id() as i32), SIGTERM).ok();
 
-        let mut tries_left = 100i32;
+        let mut tries_left = 300i32;
         let backoff = std::time::Duration::from_millis(100);
         while tries_left > 0 {
             tries_left -= 1;
@@ -520,7 +520,7 @@ impl RosettaApiHandle {
             if self.can_panic {
                 panic!(
                     "rosetta-api did not finish in {} sec",
-                    (backoff * 100).as_secs_f32()
+                    (backoff * 300).as_secs_f32()
                 );
             }
         }
