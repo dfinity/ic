@@ -1,26 +1,23 @@
 /// Declare a sub-module of the `log` module
 #[macro_export]
 macro_rules! import_mod {
-    // "block" variant to support additional code in the module, e.g., to
-    // implement conversion methods
-    ($prefix:literal, $module:ident, $version:ident, $file_part:literal, $body:tt) => {
+    ($prefix:literal, $module:ident, $version:ident $(, { $($it:item)+ })?) => {
         pub mod $module {
             pub mod $version {
                 include!(concat!(
-                    "../gen/", $prefix, "/", $prefix, ".", $file_part, ".rs"
+                    env!("OUT_DIR"),
+                    "/",
+                    $prefix,
+                    "/",
+                    $prefix,
+                    ".",
+                    stringify!($module),
+                    ".",
+                    stringify!($version),
+                    ".rs"
                 ));
 
-                pub mod body $body
-            }
-        }
-    };
-
-    ($prefix:literal, $module:ident, $version:ident, $file_part:literal) => {
-        pub mod $module {
-            pub mod $version {
-                include!(concat!(
-                    "../gen/", $prefix, "/", $prefix, ".", $file_part, ".rs"
-                ));
+                $($($it)+)?
             }
         }
     };
