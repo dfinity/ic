@@ -10,13 +10,21 @@ use crate::vault::test_utils;
 use ic_crypto_internal_csp_test_utils::files::mk_temp_dir_with_permissions;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::net::UnixListener;
 
 fn start_new_csp_vault_server() -> PathBuf {
     let socket_path = test_utils::get_temp_file_path();
     let return_socket_path = socket_path.clone();
-    let _ = std::fs::remove_file(&socket_path); // ignore if file doesn't exist
+    let _ignore_if_file_does_not_exist = std::fs::remove_file(&socket_path);
     let sks_dir = mk_temp_dir_with_permissions(0o700);
-    let server = tarpc_csp_vault_server::TarpcCspVaultServerImpl::new(sks_dir.path(), &socket_path);
+    let listener = UnixListener::bind(&socket_path).unwrap_or_else(|e| {
+        panic!(
+            "Error binding to socket at {}: {}",
+            socket_path.display(),
+            e
+        )
+    });
+    let server = tarpc_csp_vault_server::TarpcCspVaultServerImpl::new(sks_dir.path(), listener);
     tokio::spawn(async move {
         let _move_temp_dir_here_to_ensure_it_is_not_cleaned_up = sks_dir;
         server.run().await;
