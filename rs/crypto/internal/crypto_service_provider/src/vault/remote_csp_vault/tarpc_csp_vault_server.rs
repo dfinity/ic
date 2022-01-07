@@ -34,7 +34,7 @@ use ic_types::crypto::{AlgorithmId, KeyId};
 use ic_types::{NodeId, NumberOfNodes, Randomness};
 use rand::rngs::OsRng;
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use tarpc::server::BaseChannel;
 #[allow(unused_imports)]
@@ -49,7 +49,6 @@ use tokio::net::UnixListener;
 use tokio_util::codec::length_delimited::LengthDelimitedCodec;
 
 pub(crate) struct TarpcCspVaultServerImpl {
-    socket_path: PathBuf,
     local_csp_vault: Arc<LocalCspVault<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore>>,
     listener: UnixListener,
 }
@@ -293,7 +292,7 @@ impl TarpcCspVault for TarpcCspVaultServerWorker {
 }
 
 impl TarpcCspVaultServerImpl {
-    pub fn new(sks_dir: &Path, socket_path: &Path) -> Self {
+    pub fn new(sks_dir: &Path, listener: UnixListener) -> Self {
         // TODO(CRP-1254: add a real logger.
         let logger = no_op_logger();
         let node_secret_key_store =
@@ -309,19 +308,12 @@ impl TarpcCspVaultServerImpl {
             Arc::new(CryptoMetrics::none()),
             new_logger!(&logger),
         ));
-        let listener = UnixListener::bind(&socket_path).unwrap_or_else(|e| {
-            panic!(
-                "Error binding to socket at {}: {}",
-                socket_path.display(),
-                e
-            )
-        });
         Self {
-            socket_path: socket_path.to_owned(),
             local_csp_vault: local_csp_server,
             listener,
         }
     }
+
     pub async fn run(self) {
         // Wrap data in telegrams with a length header.
         let codec_builder = LengthDelimitedCodec::builder();
@@ -330,8 +322,8 @@ impl TarpcCspVaultServerImpl {
         loop {
             let (conn, _addr) = self.listener.accept().await.unwrap_or_else(|e| {
                 panic!(
-                    "Error listening at socket {}: {}",
-                    &self.socket_path.display(),
+                    "Error listening at socket {:?}: {}",
+                    &self.listener.local_addr(),
                     e
                 )
             });

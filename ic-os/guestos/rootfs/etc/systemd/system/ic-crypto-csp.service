@@ -9,7 +9,13 @@ Requires=ic-crypto-csp.socket
 [Service]
 User=ic-replica
 ExecStartPre=+sudo /opt/ic/bin/setup-permissions.sh
-ExecStart=/opt/ic/bin/ic-crypto-csp --socket /run/ic-node/crypto-csp/socket
+# When starting ic-crypto-csp, ideally --replica-config-file would directly point to
+# /run/ic-node/config/ic.json5, but this file may be not available yet as it is generated
+# only on ExecStartPre by ic-replica.service. As a temporary workaround, we are generating
+# an ic-csp-service-specific version of ic.json5 of which only the parts related to crypto
+# and logging are relevant.
+ExecStartPre=+/opt/ic/bin/generate-replica-config.sh -i /opt/ic/share/ic.json5.template -o /run/ic-node/config/ic-crypto-csp.json5
+ExecStart=/opt/ic/bin/ic-crypto-csp --replica-config-file /run/ic-node/config/ic-crypto-csp.json5
 NotifyAccess=main
 
 [Install]

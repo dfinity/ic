@@ -25,6 +25,7 @@ use tecdsa::{
     IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
     IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
 };
+use tokio::net::UnixListener;
 
 mod tarpc_csp_vault_client;
 mod tarpc_csp_vault_server;
@@ -164,7 +165,7 @@ pub trait TarpcCspVault {
     ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError>;
 }
 
-pub async fn run_csp_vault_server(sks_dir: &Path, socket_path: &Path) {
-    let server = tarpc_csp_vault_server::TarpcCspVaultServerImpl::new(sks_dir, socket_path);
+pub async fn run_csp_vault_server(sks_dir: &Path, listener: UnixListener) {
+    let server = tarpc_csp_vault_server::TarpcCspVaultServerImpl::new(sks_dir, listener);
     server.run().await
 }
