@@ -4300,18 +4300,7 @@ fn test_neuron_merge_fails() {
         if code == NotAuthorized as i32 &&
            msg == "Source neuron must be owned by the caller");
 
-    // 4. Source neuron of a merge must have been created after the target neuron
-    assert_matches!(
-        nns.merge_neurons(
-            &NeuronId { id: 2 },
-            &principal(1),
-            &NeuronId { id: 1 },
-        ),
-        Err(GovernanceError{error_type: code, error_message: msg})
-        if code == PreconditionFailed as i32 &&
-           msg == "Source neuron of a merge must have been created after the target neuron");
-
-    // 5. Source neuron's kyc_verified field must match target
+    // 4. Source neuron's kyc_verified field must match target
     assert_matches!(
         nns.merge_neurons(
             &NeuronId { id: 1 },
@@ -4322,7 +4311,7 @@ fn test_neuron_merge_fails() {
         if code == PreconditionFailed as i32 &&
            msg == "Source neuron's kyc_verified field does not match target");
 
-    // 6. Source neuron's not_for_profit field must match target
+    // 5. Source neuron's not_for_profit field must match target
     assert_matches!(
         nns.merge_neurons(
             &NeuronId { id: 1 },
@@ -4333,7 +4322,7 @@ fn test_neuron_merge_fails() {
         if code == PreconditionFailed as i32 &&
            msg == "Source neuron's not_for_profit field does not match target");
 
-    // 7. Cannot merge neurons that have been dedicated to the community fund
+    // 6. Cannot merge neurons that have been dedicated to the community fund
     assert_matches!(
         nns.merge_neurons(
             &NeuronId { id: 1 },
@@ -4344,7 +4333,7 @@ fn test_neuron_merge_fails() {
         if code == PreconditionFailed as i32 &&
            msg == "Cannot merge neurons that have been dedicated to the community fund");
 
-    // 8. Subaccount of source neuron to be merged must be present
+    // 7. Subaccount of source neuron to be merged must be present
     assert_matches!(
         nns.merge_neurons(
             &NeuronId { id: 1 },
@@ -4355,7 +4344,7 @@ fn test_neuron_merge_fails() {
         if code == External as i32 &&
            msg == "Source account doesn't exist");
 
-    // 9. Subaccount of target neuron to be merged must be present
+    // 8. Subaccount of target neuron to be merged must be present
     assert_matches!(
         nns.merge_neurons(
             &NeuronId { id: 6 },
@@ -4366,7 +4355,7 @@ fn test_neuron_merge_fails() {
         if code == External as i32 &&
            msg == "Target account doesn't exist");
 
-    // 10. Neither neuron can be the proposer of an open proposal
+    // 9. Neither neuron can be the proposer of an open proposal
     let _pid = nns.propose_and_vote("-----------P", "the unique proposal".to_string());
     assert_matches!(
         nns.merge_neurons(
@@ -4378,7 +4367,7 @@ fn test_neuron_merge_fails() {
         if code == PreconditionFailed as i32 &&
            msg == "Cannot merge neurons that are involved in open proposals");
 
-    // 11. Neither neuron can be the subject of a MergeNeuron proposal
+    // 10. Neither neuron can be the subject of a MergeNeuron proposal
     nns.governance
         .manage_neuron(
             &principal(11),
@@ -4416,7 +4405,7 @@ fn test_neuron_merge_fails() {
         if code == PreconditionFailed as i32 &&
            msg == "Cannot merge neurons that are involved in open proposals");
 
-    // 12. Source neuron must exist
+    // 11. Source neuron must exist
     assert_matches!(
         nns.merge_neurons(
             &NeuronId { id: 6 },
@@ -4427,7 +4416,7 @@ fn test_neuron_merge_fails() {
         if code == NotFound as i32 &&
            msg == "Neuron not found: NeuronId { id: 100 }");
 
-    // 13. Target neuron must exist
+    // 12. Target neuron must exist
     assert_matches!(
         nns.merge_neurons(
             &NeuronId { id: 100 },
@@ -4438,7 +4427,7 @@ fn test_neuron_merge_fails() {
         if code == NotFound as i32 &&
            msg == "Neuron not found: NeuronId { id: 100 }");
 
-    // 14. Stake of the source neuron of a merge must be greater than the fee
+    // 13. Stake of the source neuron of a merge must be greater than the fee
     assert_matches!(
         nns.merge_neurons(
             &NeuronId { id: 1 },

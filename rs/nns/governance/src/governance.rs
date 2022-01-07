@@ -2775,7 +2775,6 @@ impl Governance {
     /// - Source id and target id cannot be the same
     /// - Target neuron must be owned by the caller
     /// - Source neuron must be owned by the caller
-    /// - Source neuron of merge must be created after target neuron
     /// - Source neuron's kyc_verified field must match target
     /// - Source neuron's not_for_profit field must match target
     /// - Cannot merge neurons that have been dedicated to the community fund
@@ -2823,15 +2822,6 @@ impl Governance {
             ));
         }
 
-        // To avoid the situation where a GTC neuron might be merged into
-        // a post-genesis neuron, avoid this by always requiring that the
-        // target be the older neuron.
-        if source_neuron.created_timestamp_seconds < target_neuron.created_timestamp_seconds {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "Source neuron of a merge must have been created after the target neuron",
-            ));
-        }
         if source_neuron.kyc_verified != target_neuron.kyc_verified {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
