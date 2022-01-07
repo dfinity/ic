@@ -36,7 +36,7 @@ repos:
 # The following repo is maintained by us at
 # https://gitlab.com/dfinity-lab/open/pre-commit-tools.
 - repo: https://gitlab.com/dfinity-lab/open/pre-commit-tools.git
-  rev: 65e8990328b0651ab00d5653d26535d4080ca5f3
+  rev: 78d95356302554075c79ae7b55faf9ef4a1cd94c
   hooks:
   - id: buf-checks
     args: ["--config=buf.yaml"]

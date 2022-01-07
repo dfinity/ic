@@ -1,6 +1,6 @@
 #[rustfmt::skip]
 pub mod v2 {
-    include!(std::concat!("../../gen/registry/registry.node_rewards.v2.rs"));
+    include!(concat!(env!("OUT_DIR"), "/registry/registry.node_rewards.v2.rs"));
     use std::iter::Extend;
     use std::collections::BTreeMap;
     use std::fmt;
@@ -193,7 +193,7 @@ pub mod v2 {
 /// DEPRECATED
 #[rustfmt::skip]
 pub mod v1 {
-    include!(std::concat!("../../gen/registry/registry.node_rewards.v1.rs"));
+    include!(concat!(env!("OUT_DIR"), "/registry/registry.node_rewards.v1.rs"));
     use std::collections::{BTreeMap, HashMap};
     use std::iter::Extend;
 
