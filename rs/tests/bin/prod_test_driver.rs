@@ -18,8 +18,10 @@ use ic_tests::{
     execution,
 };
 use ic_tests::{
-    cycles_minting_test, feature_flags, nns_canister_upgrade_test, registry_authentication_test,
-    ssh_access_to_nodes, subnet_creation, transaction_ledger_correctness_test, wasm_generator_test,
+    cycles_minting_test, feature_flags,
+    networking::firewall::{self, change_to_firewall_rules_takes_effect},
+    nns_canister_upgrade_test, registry_authentication_test, ssh_access_to_nodes, subnet_creation,
+    transaction_ledger_correctness_test, wasm_generator_test,
 };
 use regex::Regex;
 use std::collections::HashMap;
@@ -135,6 +137,13 @@ fn get_test_suites() -> HashMap<String, Suite> {
         suite(
             "pre_master",
             vec![
+                pot(
+                    "firewall_pot", 
+                    firewall::config(),
+                    par(vec![
+                        t("change_to_firewall_rules_takes_effect", change_to_firewall_rules_takes_effect),
+                    ]),
+                ),
                 pot(
                     "create_subnet", 
                     create_subnet::config(),

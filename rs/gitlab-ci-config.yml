@@ -89,7 +89,6 @@ ci_jobs_required:
   - maximum-capacity-subnet-update-nightly
   - maximum-capacity-subnet-query-nightly
   - maximum-capacity-xnet-slo-nightly
-  - firewall-test-nightly
   - subnet-update-workload-slo-100-1kb
   - large-subnet-update-workload-slo-200-1kb
   - subnet-update-workload-slo-5-100kb
