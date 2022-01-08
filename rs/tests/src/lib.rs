@@ -7,6 +7,7 @@ pub mod cycles_minting_test;
 pub mod execution;
 pub mod feature_flags;
 pub mod malicious_input_test;
+pub mod networking;
 pub mod nns;
 pub mod nns_canister_upgrade_test;
 pub mod nns_fault_tolerance_test;
