@@ -57,8 +57,8 @@ if [[ ! " ${SUBNET_TYPES[*]} " =~ ${subnet_type} ]]; then
     echo >&2 "Invalid subnet type specified, choose between normal, large, large_nns and 56_nns."
     exit_usage
 fi
-if ! printf '%s\n' "boundary_nodes" "replica_nodes" "dns" | grep -q "^$load_dest\$"; then
-    echo >&2 "Invalid load destination specified, choose between 'boundary_nodes | replica_nodes | dns'"
+if ! printf '%s\n' "boundary_nodes" "icos_boundary_nodes" "replica_nodes" "dns" | grep -q "^$load_dest\$"; then
+    echo >&2 "Invalid load destination specified, choose between 'boundary_nodes | icos_boundary_nodes | replica_nodes | dns'"
     exit_usage
 fi
 
@@ -95,7 +95,7 @@ if [[ "$load_dest" == "dns" ]]; then
     loadhosts="https://$testnet.dfinity.network/"
 elif [[ "$load_dest" == "replica_nodes" ]]; then
     loadhosts=$install_endpoints
-elif [[ "$load_dest" == "boundary_nodes" ]]; then
+elif [[ "$load_dest" == "boundary_nodes" || "$load_dest" == "icos_boundary_nodes" ]]; then
     loadhosts=$(jq_hostvars 'map(select(.subnet_index=="boundary") | .api_listen_url) | join(",")')
     http2_only=true
     STATUS_CHECK="--no-status-check"
@@ -135,8 +135,14 @@ calltime="$(date '+%s')"
 echo "Testcase Start time: $(dateFromEpoch "$calltime")"
 
 # re-deploy the testnet
-deploy_with_timeout "$testnet" \
-    --git-revision "$GIT_REVISION" "${HOSTS_INI_ARGUMENTS[@]}"
+# For new ICOS boundary nodes, specify --icos-boundary-nodes paramter while deploying
+if [[ "$load_dest" == "icos_boundary_nodes" ]]; then
+    deploy_with_timeout "$testnet" \
+        --git-revision "$GIT_REVISION" --icos-boundary-nodes "${HOSTS_INI_ARGUMENTS[@]}"
+else
+    deploy_with_timeout "$testnet" \
+        --git-revision "$GIT_REVISION" "${HOSTS_INI_ARGUMENTS[@]}"
+fi
 
 echo "Testnet deployment successful. Test starts now."
 

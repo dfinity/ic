@@ -1,0 +1,13 @@
+[Unit]
+Description=Set up ssh account keys
+After=bootstrap-boundary-node.service
+Requires=bootstrap-boundary-node.service
+Before=ssh.service
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/setup-ssh-account-keys.sh

@@ -15,16 +15,16 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 
 function exit_usage() {
     if (($# < 1)); then
-        echo >&2 "Usage: icos_deploy.sh [--git-head ] [--git-revision <git_revision>] [--dkg-interval-length <dil>] [--ansible-args <additional-args>] [--hosts-ini <hosts_override.ini>] [--no-boundary-nodes] <deployment_name>"
+        echo >&2 "Usage: icos_deploy.sh [--git-head ] [--git-revision <git_revision>] [--dkg-interval-length <dil>] [--ansible-args <additional-args>] [--hosts-ini <hosts_override.ini>] [--no-boundary-nodes] [--icos-boundary-nodes] <deployment_name>"
         echo >&2 "    --git-head                       Deploy the testnet from the current git head."
         echo >&2 "    --git-revision <git_revision>    Deploy the testnet from the given git revision."
         echo >&2 "    --ansible-args <additional-args> Additional ansible args. Can be specified multiple times."
         echo >&2 "    --dkg-interval-length <dil>      Set DKG interval length (-1 if not provided explicitly, which means - default will be used)"
         echo >&2 "    --hosts-ini <hosts_override.ini> Override the default ansible hosts.ini to set different testnet configuration"
         echo >&2 "    --no-boundary-nodes              Do not deploy boundary nodes even if they are declared in the hosts.ini file"
+        echo >&2 "    --icos-boundary-nodes            Launch boundary nodes as self-contained VMs (performs local build)"
         echo >&2 "    --with-testnet-keys              Initialize the registry with readonly and backup keys from testnet/config/ssh_authorized_keys"
-
-        echo >&2 -e "\nTo get the latest branch revision that has a disk image pre-built, you can use /gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh"
+        echo >&2 -e "\nTo get the latest branch revision that has a disk image pre-built, you can use gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh"
         echo >&2 -e "Example (deploy latest master to small-a):\n"
 
         echo >&2 -e "    testnet/tools/icos_deploy.sh small-a --git-revision \$(gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh master)\n"
@@ -37,6 +37,7 @@ GIT_REVISION="${GIT_REVISION:-}"
 ANSIBLE_ARGS=()
 HOSTS_INI_FILENAME="${HOSTS_INI_FILENAME:-hosts.ini}"
 USE_BOUNDARY_NODES="true"
+USE_ICOS_BOUNDARY_NODE_VMs="false"
 WITH_TESTNET_KEYS=""
 
 while [ $# -gt 0 ]; do
@@ -66,6 +67,10 @@ while [ $# -gt 0 ]; do
             ;;
         --no-boundary-nodes)
             USE_BOUNDARY_NODES="false"
+            ;;
+        --icos-boundary-nodes)
+            # This is a temporay switch to integrated the upcoming self-contained boundary node VM
+            USE_ICOS_BOUNDARY_NODE_VMs="true"
             ;;
         --with-testnet-keys)
             WITH_TESTNET_KEYS="--with-testnet-keys"
@@ -150,11 +155,18 @@ ${ipv6_info}
 -------------------------------------------------------------------------------"
 
 MEDIA_PATH="$REPO_ROOT/artifacts/guestos/${deployment}/${GIT_REVISION}"
+BN_MEDIA_PATH="$REPO_ROOT/artifacts/boundary-guestos/${deployment}/${GIT_REVISION}"
 INVENTORY="$REPO_ROOT/testnet/env/$deployment/hosts"
+
+ANSIBLE="ansible-playbook -i $INVENTORY ${ANSIBLE_ARGS[*]} -e ic_git_revision=$GIT_REVISION -e ic_media_path=\"$MEDIA_PATH\""
 if ! boundary_nodes_exists $INVENTORY; then
     USE_BOUNDARY_NODES="false"
+elif [[ "${USE_ICOS_BOUNDARY_NODE_VMs}" == "true" ]]; then
+    ANSIBLE+=" -e bn_media_path=\"$BN_MEDIA_PATH\" -e ic_boundary_node_image=boundary"
+else
+    ANSIBLE+=" -e ic_boundary_node_image=generic --skip-tags "boundary_node_vm""
 fi
-ANSIBLE="ansible-playbook -i $INVENTORY ${ANSIBLE_ARGS[*]} -e ic_git_revision=$GIT_REVISION -e ic_media_path=\"$MEDIA_PATH\""
+
 cd "$REPO_ROOT/ic-os/guestos"
 
 pushd "$REPO_ROOT/testnet/ansible" >/dev/null
@@ -168,7 +180,7 @@ popd >/dev/null
 # Ensure we kill these on CTRL+C or failure
 trap 'echo "EXIT received, killing all jobs"; jobs -p | xargs -rn1 pkill -P >/dev/null 2>&1; exit 1' EXIT
 
-echo "**** Build USB sticks"
+echo "**** Build USB sticks for IC nodes"
 rm -rf "$MEDIA_PATH"
 mkdir -p "$MEDIA_PATH"
 "$REPO_ROOT/testnet/env/${deployment}/hosts" --media-json >"$MEDIA_PATH/${deployment}.json"
@@ -181,6 +193,27 @@ mkdir -p "$MEDIA_PATH"
     --whitelist="$REPO_ROOT/testnet/env/${deployment}/provisional_whitelist.json" \
     --dkg-interval-length=$DKG_INTERVAL_LENGTH \
     $WITH_TESTNET_KEYS
+
+if [[ "${USE_ICOS_BOUNDARY_NODE_VMs}" == "true" ]]; then
+    echo "-------------------------------------------------------------------------------"
+    echo "**** Build USB sticks for boundary nodes"
+    cd "$REPO_ROOT/ic-os/boundary-guestos"
+    rm -rf "$BN_MEDIA_PATH"
+    mkdir -p "$BN_MEDIA_PATH"
+
+    "$REPO_ROOT"/testnet/env/${deployment}/hosts --media-json >"$BN_MEDIA_PATH/${deployment}.json"
+
+    "$REPO_ROOT"/ic-os/boundary-guestos/scripts/build-deployment.sh \
+        --debug \
+        --input="$BN_MEDIA_PATH/${deployment}.json" \
+        --output="$BN_MEDIA_PATH" \
+        --git-revision=$GIT_REVISION
+
+    echo "**** Build boundary node VM disk image"
+    VERSION=$(git rev-parse --verify HEAD)
+    ./scripts/build-disk-image.sh -o "$BN_MEDIA_PATH/disk.img" -v $VERSION
+    echo "-------------------------------------------------------------------------------"
+fi
 
 # In case someone wants to deploy with a locally built disk image the following lines contain
 # the necessary commands.
@@ -212,9 +245,16 @@ $ANSIBLE icos_network_redeploy.yml -e ic_state="start"
 if [[ "${USE_BOUNDARY_NODES}" == "true" ]]; then
     pushd "$REPO_ROOT/testnet"
     BOUNDARY_OUT=$(mktemp /tmp/icos-deploy.sh.XXXXXX)
-    echo "**** Installing boundary nodes (log $BOUNDARY_OUT)"
-    # We're invoking ansible as a quoted command, so all given ansible arguments need to be properly quoted as well, hence printf
-    script --quiet --return "$BOUNDARY_OUT" --command "set -x; $(printf '%q ' $ANSIBLE) -l boundary icos_test.yml" >/dev/null 2>&1 &
+    if [[ "${USE_ICOS_BOUNDARY_NODE_VMs}" == "true" ]]; then
+        # The new boundary node VM still needs a couple of configuration steps via ansible
+        echo "**** Installing boundary node VMs (log $BOUNDARY_OUT)"
+        # We're invoking ansible as a quoted command, so all given ansible arguments need to be properly quoted as well, hence printf
+        script --quiet --return "$BOUNDARY_OUT" --command "set -x; $(printf '%q ' $ANSIBLE) -l boundary icos_test_bnvm.yml" >/dev/null 2>&1 &
+    else
+        echo "**** Installing boundary nodes (log $BOUNDARY_OUT)"
+        # We're invoking ansible as a quoted command, so all given ansible arguments need to be properly quoted as well, hence printf
+        script --quiet --return "$BOUNDARY_OUT" --command "set -x; $(printf '%q ' $ANSIBLE) -l boundary icos_test.yml" >/dev/null 2>&1 &
+    fi
     BOUNDARY_PID=$!
     popd
 fi

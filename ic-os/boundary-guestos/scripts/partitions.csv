@@ -1,0 +1,19 @@
+# Partitions specification
+#
+# Each row takes the form:
+#   name,start,size,type,uuid,comment
+# where
+#   name: identifier used for the partition (see design doc)
+#   start: start of partition in sector units (512 bytes)
+#   size: size of partition in sector units (512 bytes)
+#   type: a typecode recognized by sfdisk
+#   uuid: uuid for partition (to ensure that the build is deterministic)
+#   comment: free-form field explaining the partition
+#
+# Note that "start" and "size" need to match up correctly, otherwise
+# partition table building will fail.
+esp   ,    2048,  204800,U,B78084E2-3363-1346-8C25-D426F26B8928,EFI system partition
+grub  ,  206848,  204800,L,6788E4CF-F456-104E-9A34-A2C58CFB0EE6,Grub bootloader modules and config
+config,  411648,  204800,L,A5BA3816-BEAA-D74D-993E-CFA5AA6BA1F6,System config store
+boot,    616448, 2097152,L,DDF618FE-7244-B446-A175-3296E6B9D02E,Boot partition for system A
+root,   2713600,20971520,L,7C0A626E-E5EA-E543-B5C5-300EB8304DB7,Root partition for system A

@@ -38,6 +38,23 @@
     executable: /bin/bash
   tags: [ "ic_guest" ]
 
+- name: copy file media.img for boundary node VMs
+  vars:
+    boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary  | default([]) | join(' ') }}"
+  shell: |
+    set -eExuo pipefail
+
+    MEDIA_DIR="/var/local/ic/media/{{ ic_deployment_name }}/{{ ic_git_revision }}/boundary"
+    ITEMS=({{ boundary_nodes }})
+    parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty cp -v --reflink=auto --sparse=always $MEDIA_DIR/'{}.img' /var/lib/libvirt/media/'{}.img'
+    chown libvirt-qemu:kvm /var/lib/libvirt/media/*.img
+    chmod 0664 /var/lib/libvirt/media/*.img
+  register: script_res
+  changed_when: "script_res.stdout | default('')"
+  args:
+    executable: /bin/bash
+  tags: [ "boundary_node_vm" ]
+
 - name: copy file disk.img for boundary nodes
   vars:
     boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary  | default([]) | join(' ') }}"
@@ -46,7 +63,7 @@
     set -eExuo pipefail
 
     # Deploy replica images
-    IMAGE_DIR="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/generic"
+    IMAGE_DIR="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/{{ ic_boundary_node_image }}"
     ITEMS=({{ boundary_nodes }})
     parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty test -r /var/lib/libvirt/images/'{}.img' \|\| cp -v --reflink=auto --sparse=always "$IMAGE_DIR/disk.img" /var/lib/libvirt/images/'{}.img'
 

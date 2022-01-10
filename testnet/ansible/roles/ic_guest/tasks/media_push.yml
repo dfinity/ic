@@ -10,3 +10,14 @@
     group: root
   loop: "{{ hostvars[inventory_hostname].ic_guests }}"
   tags: [ "ic_guest" ]
+
+- name: copy new boundary node VM media.img to remote
+  copy:
+    # copy the media image built for the new boundary node
+    src: "{{ bn_media_path }}/{{ item }}.img"
+    dest: "/var/local/ic/media/{{ ic_deployment_name }}/{{ ic_git_revision }}/boundary/"
+    mode: "0644"
+    owner: root
+    group: root
+  loop: "{{ hostvars[inventory_hostname].groups.boundary }}"
+  tags: [ "boundary_node_vm" ]

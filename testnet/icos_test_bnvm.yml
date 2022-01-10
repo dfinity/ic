@@ -1,0 +1,16 @@
+---
+
+- hosts: all
+  become: true
+  gather_facts: no
+  pre_tasks:
+    - name: wait_for_connection
+      wait_for_connection:
+        delay: 5
+        timeout: 600
+
+    - name: Gathering facts
+      setup:
+
+  roles:
+    - role: icos_test_boundary_node_vm
