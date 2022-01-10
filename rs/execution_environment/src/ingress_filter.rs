@@ -2,7 +2,10 @@ use crate::{
     common::{PendingFutureResult, PendingFutureResultInternal},
     ExecutionEnvironmentImpl,
 };
-use ic_interfaces::{execution_environment::IngressFilterService, state_manager::StateReader};
+use ic_interfaces::{
+    execution_environment::{ExecutionMode, IngressFilterService},
+    state_manager::StateReader,
+};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{canonical_error::CanonicalError, messages::SignedIngressContent};
@@ -80,8 +83,12 @@ impl Service<(ProvisionalWhitelist, SignedIngressContent)> for IngressFilter {
         threadpool.execute(move || {
             if let Some(future) = FutureIngressFilterResult::from_weak(weak_future) {
                 let state = state_reader.get_latest_state().take();
-                let v =
-                    exec_env.should_accept_ingress_message(state, &provisional_whitelist, &ingress);
+                let v = exec_env.should_accept_ingress_message(
+                    state,
+                    &provisional_whitelist,
+                    &ingress,
+                    ExecutionMode::NonReplicated,
+                );
                 future.resolve(Ok(v));
             }
         });

@@ -84,6 +84,12 @@ impl SubnetAvailableMemory {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum ExecutionMode {
+    Replicated,
+    NonReplicated,
+}
+
 // Canister and subnet configuration parameters required for execution.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ExecutionParameters {
@@ -92,6 +98,7 @@ pub struct ExecutionParameters {
     pub subnet_available_memory: SubnetAvailableMemory,
     pub compute_allocation: ComputeAllocation,
     pub subnet_type: SubnetType,
+    pub execution_mode: ExecutionMode,
 }
 
 /// The data structure returned by

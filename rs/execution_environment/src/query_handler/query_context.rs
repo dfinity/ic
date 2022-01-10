@@ -43,7 +43,7 @@ use crate::{
 };
 use ic_base_types::NumBytes;
 use ic_interfaces::execution_environment::{
-    ExecutionParameters, HypervisorError, HypervisorResult, SubnetAvailableMemory,
+    ExecutionMode, ExecutionParameters, HypervisorError, HypervisorResult, SubnetAvailableMemory,
 };
 use ic_logger::{debug, error, fatal, warn, ReplicaLogger};
 use ic_registry_routing_table::RoutingTable;
@@ -927,6 +927,7 @@ impl<'a> QueryContext<'a> {
             subnet_available_memory: self.subnet_available_memory.clone(),
             compute_allocation: canister.scheduler_state.compute_allocation,
             subnet_type: self.own_subnet_type,
+            execution_mode: ExecutionMode::NonReplicated,
         }
     }
 }

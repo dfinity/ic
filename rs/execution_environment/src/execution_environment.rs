@@ -17,8 +17,8 @@ use ic_ic00_types::{
 };
 use ic_interfaces::{
     execution_environment::{
-        CanisterHeartbeatError, ExecuteMessageResult, ExecutionParameters, HypervisorError,
-        IngressHistoryWriter, SubnetAvailableMemory,
+        CanisterHeartbeatError, ExecuteMessageResult, ExecutionMode, ExecutionParameters,
+        HypervisorError, IngressHistoryWriter, SubnetAvailableMemory,
     },
     messages::{CanisterInputMessage, RequestOrIngress},
 };
@@ -54,7 +54,7 @@ use strum::ParseError;
 /// on the IC.
 #[cfg_attr(test, automock)]
 pub trait ExecutionEnvironment: Sync + Send {
-    /// Executes a message sent to a subnet.
+    /// Executes a replicated message sent to a subnet.
     //
     // A deterministic cryptographically secure pseudo-random number generator
     // is created per round and per thread and passed to this method to be used
@@ -78,7 +78,7 @@ pub trait ExecutionEnvironment: Sync + Send {
         max_number_of_canisters: u64,
     ) -> (ReplicatedState, NumInstructions);
 
-    /// Executes a message sent to a canister.
+    /// Executes a replicated message sent to a canister.
     #[allow(clippy::too_many_arguments)]
     fn execute_canister_message(
         &self,
@@ -122,6 +122,7 @@ pub trait ExecutionEnvironment: Sync + Send {
         canister: &CanisterState,
         instruction_limit: NumInstructions,
         subnet_available_memory: SubnetAvailableMemory,
+        execution_mode: ExecutionMode,
     ) -> ExecutionParameters;
 }
 
@@ -246,6 +247,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                                 subnet_available_memory,
                                 compute_allocation: ComputeAllocation::default(),
                                 subnet_type: state.metadata.own_subnet_type,
+                                execution_mode: ExecutionMode::Replicated,
                             };
 
                             let (instructions_left, result) = self.canister_manager.install_code(
@@ -793,8 +795,12 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
             );
         }
 
-        let execution_parameters =
-            self.execution_parameters(&canister, instructions_limit, subnet_available_memory);
+        let execution_parameters = self.execution_parameters(
+            &canister,
+            instructions_limit,
+            subnet_available_memory,
+            ExecutionMode::Replicated,
+        );
 
         let (mut canister, num_instructions_left, result) =
             self.hypervisor.execute_canister_heartbeat(
@@ -829,6 +835,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
         canister: &CanisterState,
         instruction_limit: NumInstructions,
         subnet_available_memory: SubnetAvailableMemory,
+        execution_mode: ExecutionMode,
     ) -> ExecutionParameters {
         ExecutionParameters {
             instruction_limit,
@@ -836,6 +843,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
             subnet_available_memory,
             compute_allocation: canister.scheduler_state.compute_allocation,
             subnet_type: self.own_subnet_type,
+            execution_mode,
         }
     }
 }
@@ -1180,8 +1188,12 @@ impl ExecutionEnvironmentImpl {
                 },
             )
         } else {
-            let execution_parameters =
-                self.execution_parameters(&canister, cycles, subnet_available_memory);
+            let execution_parameters = self.execution_parameters(
+                &canister,
+                cycles,
+                subnet_available_memory,
+                ExecutionMode::Replicated,
+            );
             let (mut canister, cycles, heap_delta, result) = self.hypervisor.execute_callback(
                 canister,
                 &call_origin,
@@ -1321,8 +1333,12 @@ impl ExecutionEnvironmentImpl {
         let sender = req.sender;
         let reply_callback = req.sender_reply_callback;
 
-        let execution_parameters =
-            self.execution_parameters(&canister, cycles, subnet_available_memory);
+        let execution_parameters = self.execution_parameters(
+            &canister,
+            cycles,
+            subnet_available_memory,
+            ExecutionMode::Replicated,
+        );
 
         let (mut canister, cycles, action, heap_delta) = self.hypervisor.execute_update(
             canister,
@@ -1354,8 +1370,12 @@ impl ExecutionEnvironmentImpl {
         // query is fine as we do not persist state modifications.
         let subnet_available_memory =
             SubnetAvailableMemory::new(self.config.subnet_memory_capacity.get() as i64);
-        let execution_parameters =
-            self.execution_parameters(&canister, cycles, subnet_available_memory);
+        let execution_parameters = self.execution_parameters(
+            &canister,
+            cycles,
+            subnet_available_memory,
+            ExecutionMode::Replicated,
+        );
         let (mut canister, cycles, result) = self.hypervisor.execute_query(
             QueryExecutionType::Replicated,
             req.method_name.as_str(),
@@ -1393,6 +1413,7 @@ impl ExecutionEnvironmentImpl {
         state: Arc<ReplicatedState>,
         provisional_whitelist: &ProvisionalWhitelist,
         ingress: &SignedIngressContent,
+        execution_mode: ExecutionMode,
     ) -> Result<(), CanonicalError> {
         // A first-pass check on the canister's balance to prevent needless gossiping
         // if the canister's balance is too low. A more rigorous check happens later
@@ -1446,6 +1467,7 @@ impl ExecutionEnvironmentImpl {
                         canister,
                         self.config.max_instructions_for_message_acceptance_calls,
                         subnet_available_memory,
+                        execution_mode,
                     );
                     self.hypervisor.execute_inspect_message(
                         canister.clone(),
@@ -1551,8 +1573,12 @@ impl ExecutionEnvironmentImpl {
         let message_id = ingress.message_id.clone();
         let source = ingress.source;
 
-        let execution_parameters =
-            self.execution_parameters(&canister, cycles, subnet_available_memory);
+        let execution_parameters = self.execution_parameters(
+            &canister,
+            cycles,
+            subnet_available_memory,
+            ExecutionMode::Replicated,
+        );
         let (mut canister, cycles, action, heap_delta) = self.hypervisor.execute_update(
             canister,
             RequestOrIngress::Ingress(ingress),
@@ -1584,8 +1610,12 @@ impl ExecutionEnvironmentImpl {
         // query is fine as we do not persist state modifications.
         let subnet_available_memory =
             SubnetAvailableMemory::new(self.config.subnet_memory_capacity.get() as i64);
-        let execution_parameters =
-            self.execution_parameters(&canister, cycles, subnet_available_memory);
+        let execution_parameters = self.execution_parameters(
+            &canister,
+            cycles,
+            subnet_available_memory,
+            ExecutionMode::Replicated,
+        );
         let (canister, cycles, result) = self.hypervisor.execute_query(
             QueryExecutionType::Replicated,
             ingress.method_name.as_str(),
