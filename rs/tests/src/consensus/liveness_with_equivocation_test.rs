@@ -23,14 +23,14 @@ end::catalog[] */
 
 use crate::util::*;
 use ic_agent::export::Principal;
-use ic_fondue::log::{debug, info, Logger};
 use ic_fondue::{
+    ic_instance::{InternetComputer, Subnet},
     ic_manager::IcHandle,
-    internet_computer::{InternetComputer, Subnet},
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use rand::Rng;
+use slog::{debug, info, Logger};
 use url::Url;
 
 pub fn config() -> InternetComputer {

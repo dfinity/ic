@@ -28,7 +28,7 @@ end::catalog[] */
 
 use crate::util::{get_random_nns_node_endpoint, runtime_from_url};
 
-use ic_fondue::{ic_manager::IcHandle, internet_computer::InternetComputer};
+use ic_fondue::{ic_instance::InternetComputer, ic_manager::IcHandle};
 
 use ic_nns_governance::pb::v1::{
     governance_error::ErrorType,
@@ -45,7 +45,6 @@ use ic_nns_test_utils::ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID, TEST_NEURON_3_I
 use assert_matches::assert_matches;
 use ed25519_dalek::Keypair;
 use ic_canister_client::Sender;
-use ic_fondue::log::info;
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::{
     ids::{TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR, TEST_NEURON_3_OWNER_KEYPAIR},
@@ -53,6 +52,7 @@ use ic_nns_constants::{
 };
 use ic_registry_subnet_type::SubnetType;
 use rand::Rng;
+use slog::info;
 use std::collections::HashSet;
 
 pub fn config() -> InternetComputer {

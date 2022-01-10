@@ -21,10 +21,9 @@ use hyper::{
     Body, Request, Response,
 };
 use ic_crypto::threshold_sig_public_key_from_der;
-use ic_fondue::{self, log::info};
 use ic_fondue::{
+    ic_instance::{InternetComputer, Subnet},
     ic_manager::IcHandle,
-    internet_computer::{InternetComputer, Subnet},
 };
 use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::itest_helpers::{
@@ -39,6 +38,7 @@ use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_registry_transport::upsert;
 use ic_types::RegistryVersion;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
+use slog::info;
 use std::convert::Infallible;
 use std::net::SocketAddr;
 

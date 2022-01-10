@@ -3,17 +3,15 @@ use nix::unistd::Pid;
 use rand::Rng;
 use url::{Host, Url};
 
+use crate::iterator::{InfStreamOf, PermOf};
 use crate::pot;
 use crate::prod_tests::{cli::AuthorizedSshAccount, farm};
-use crate::{
-    log::info,
-    util::{InfStreamOf, PermOf},
-};
 use anyhow::Result;
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use ic_types::SubnetId;
+use slog::info;
 use slog::Logger;
 use std::{
     net::IpAddr,

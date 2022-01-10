@@ -1,15 +1,9 @@
-pub mod buffered_reader;
+pub mod ic_instance;
 pub mod ic_manager;
-pub mod internet_computer;
-pub mod log;
-pub mod manager;
-pub mod mcond;
-pub mod mvar;
-pub mod node_software_version;
-pub mod port_allocator;
+pub mod iterator;
 pub mod pot;
 pub mod prod_tests;
-pub mod util;
+pub mod result;
 
 use signal_hook::consts::TERM_SIGNALS;
 use signal_hook::flag;

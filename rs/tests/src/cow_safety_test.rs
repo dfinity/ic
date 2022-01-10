@@ -21,14 +21,10 @@ end::catalog[] */
 
 use ic_agent::Agent;
 use ic_fondue::{
-    self,
-    log::{info, Logger},
-    manager::HasHandle,
-};
-use ic_fondue::{
+    ic_instance::{InternetComputer, Subnet},
     ic_manager::IcManager,
-    internet_computer::{InternetComputer, Subnet},
 };
+use slog::{info, Logger};
 
 use ic_agent::export::Principal;
 use ic_types::Height;

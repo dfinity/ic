@@ -28,8 +28,8 @@ use crate::util::{
 use futures::{join, stream::FuturesUnordered, StreamExt};
 use ic_agent::{Agent, AgentError};
 use ic_fondue::{
+    ic_instance::{InternetComputer, Subnet},
     ic_manager::IcHandle,
-    internet_computer::{InternetComputer, Subnet},
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_universal_canister::{call_args, wasm};

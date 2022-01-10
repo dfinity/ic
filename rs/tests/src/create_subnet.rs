@@ -24,13 +24,12 @@ use std::time::Duration;
 
 use ic_base_types::NodeId;
 use ic_fondue::ic_manager::IcSubnet;
-use ic_fondue::internet_computer::Subnet;
-use ic_fondue::log::info;
-use ic_fondue::util::PermOf;
+use ic_fondue::iterator::PermOf;
 use ic_fondue::{
-    ic_manager::IcHandle,                // we run the test on the IC
-    internet_computer::InternetComputer, // which is declared through these types
+    ic_instance::{InternetComputer, Subnet}, // which is declared through these types
+    ic_manager::IcHandle,                    // we run the test on the IC
 };
+use slog::info;
 
 use ic_registry_common::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;

@@ -29,10 +29,9 @@ use crate::request_signature_test::{expiry_time, random_ecdsa_identity, sign_upd
 use crate::util::*;
 use ic_agent::export::Principal;
 use ic_agent::{agent::status::Value, Identity};
-use ic_fondue::log::info;
 use ic_fondue::{
+    ic_instance::{InternetComputer, Subnet},
     ic_manager::{IcEndpoint, IcHandle},
-    internet_computer::{InternetComputer, Subnet},
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_types::crypto::SignedBytesWithoutDomainSeparator;
@@ -42,6 +41,7 @@ use ic_types::messages::{
 };
 use ic_types::{CanisterId, Time};
 use ic_universal_canister::wasm;
+use slog::info;
 use std::convert::TryFrom;
 use url::Url;
 

@@ -17,7 +17,7 @@ use crate::{
     util::{get_random_nns_node_endpoint, runtime_from_url},
 };
 
-use ic_fondue::{ic_manager::IcHandle, internet_computer::InternetComputer};
+use ic_fondue::{ic_instance::InternetComputer, ic_manager::IcHandle};
 use ic_nns_governance::pb::v1::NnsFunction;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;

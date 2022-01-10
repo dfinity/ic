@@ -35,8 +35,8 @@ use crate::util::*; // to use the universal canister
 use futures::future::join_all; // because we use concurrency
 use ic_agent::export::Principal; // we observe canister identifiers
 use ic_fondue::{
-    ic_manager::{IcEndpoint, IcHandle}, // we run the test on the IC
-    internet_computer::{InternetComputer, Subnet}, // which is declared through these types
+    ic_instance::{InternetComputer, Subnet}, // which is declared through these types
+    ic_manager::{IcEndpoint, IcHandle},      // we run the test on the IC
 };
 use ic_registry_subnet_type::SubnetType;
 use itertools::Itertools; // for the function [unique_by]

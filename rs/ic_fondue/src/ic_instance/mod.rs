@@ -1,5 +1,3 @@
-use crate::manager::Summarize;
-use crate::node_software_version::NodeSoftwareVersion;
 use ic_config::{consensus::ConsensusConfig, ConfigOptional as ReplicaConfig};
 use ic_protobuf::registry::subnet::v1::GossipConfig;
 use ic_protobuf::registry::subnet::v1::SubnetFeatures;
@@ -7,11 +5,15 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::p2p::build_default_gossip_config;
 use ic_types::{Cycles, Height, NodeId, NumBytes, PrincipalId};
+use node_software_version::NodeSoftwareVersion;
 use phantom_newtype::AmountOf;
 use serde::{Deserialize, Serialize};
 use std::collections::{hash_map::DefaultHasher, BTreeMap};
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
+
+pub mod node_software_version;
+pub mod port_allocator;
 
 /// Builder object to declare a topology of an InternetComputer. Used as input
 /// to the IC Manager.
@@ -84,26 +86,8 @@ impl InternetComputer {
         }
         self
     }
-}
 
-impl Default for InternetComputer {
-    fn default() -> Self {
-        Self {
-            initial_version: None,
-            vm_allocation: None,
-            subnets: vec![],
-            malicious_behaviours: Default::default(),
-            node_operator: None,
-            node_provider: None,
-            experimental_vm_test: false,
-            unassigned_nodes: vec![],
-            ssh_readonly_access_to_unassigned_nodes: vec![],
-        }
-    }
-}
-
-impl Summarize for InternetComputer {
-    fn summarize(&self) -> String {
+    pub fn summarize(&self) -> String {
         // XXX: The prefix of this name exposes information to fondue about the
         // environment in which the pot is to be run. Strictly speaking, this
         // breaks the abstraction layers between fondue and ic-fondue. This is a
@@ -122,6 +106,22 @@ impl Summarize for InternetComputer {
         let my_id = s.join("");
 
         format!("{}{}", exp_prefix, my_id)
+    }
+}
+
+impl Default for InternetComputer {
+    fn default() -> Self {
+        Self {
+            initial_version: None,
+            vm_allocation: None,
+            subnets: vec![],
+            malicious_behaviours: Default::default(),
+            node_operator: None,
+            node_provider: None,
+            experimental_vm_test: false,
+            unassigned_nodes: vec![],
+            ssh_readonly_access_to_unassigned_nodes: vec![],
+        }
     }
 }
 

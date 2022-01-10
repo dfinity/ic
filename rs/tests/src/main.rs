@@ -13,17 +13,14 @@ use std::fs;
 use std::panic;
 use structopt::StructOpt;
 
+use ic_fondue::pot;
 use ic_fondue::*; // Import the macros for easier pot declaration
 use ic_fondue::{
+    ic_instance::{InternetComputer, Subnet},
     ic_manager::IcManager,
-    internet_computer::{InternetComputer, Subnet},
-};
-use ic_fondue::{
-    log::Logger,
-    manager::{HasHandle, Manager},
-    pot,
 };
 use ic_registry_subnet_type::SubnetType;
+use slog::Logger;
 
 use ic_tests::basic_health_test;
 use ic_tests::cow_safety_test;
@@ -53,7 +50,7 @@ use std::time::Instant;
 /// here, just add another entry to the vector with the corresponding pot.
 /// The [basic_health_pot] have a tutorial nature to them and are good
 /// places to look for simple test examples.
-fn all_pots() -> Vec<ic_fondue::pot::Pot<IcManager>> {
+fn all_pots() -> Vec<ic_fondue::pot::Pot> {
     // HAVE YOU READ THE README AT THE TOP?
     vec![
         pot1(),
@@ -84,7 +81,7 @@ fn all_pots() -> Vec<ic_fondue::pot::Pot<IcManager>> {
 /// composable test and consists in a setup phase. The setup is responsible for
 /// installing a number of passive health monitoring devices in the network.
 /// After the setup runs, the actual test is ran.
-fn basic_health_pot() -> pot::Pot<IcManager> {
+fn basic_health_pot() -> pot::Pot {
     composable!(
         "basic_health_pot",
         basic_health_test::config(),
@@ -100,17 +97,17 @@ fn basic_health_pot() -> pot::Pot<IcManager> {
 /// [node_removal_test::test] removes a node. Isolated tests consists of a
 /// single [node_removal_test::config] and a single [node_removal_test::test]
 /// function, which must exist in the module passed to the macro below.
-fn node_removal_pot() -> pot::Pot<IcManager> {
+fn node_removal_pot() -> pot::Pot {
     isolated_test!(node_removal_test)
 }
 
-fn cow_safety_pot() -> pot::Pot<IcManager> {
+fn cow_safety_pot() -> pot::Pot {
     isolated_test!(cow_safety_test)
 }
 
 /// In order to parallelize execution of the large number of execution related
 /// system tests, we declare a second pot with the same configuration.
-fn pot1() -> pot::Pot<IcManager> {
+fn pot1() -> pot::Pot {
     composable!(
         "pot2",
         pot1_config(),
@@ -120,7 +117,7 @@ fn pot1() -> pot::Pot<IcManager> {
     )
 }
 
-fn request_auth_malicious_replica_pot() -> pot::Pot<IcManager> {
+fn request_auth_malicious_replica_pot() -> pot::Pot {
     composable!(
         "request_auth_malicious_replica_pot",
         request_auth_malicious_replica_test::config(),
@@ -128,7 +125,7 @@ fn request_auth_malicious_replica_pot() -> pot::Pot<IcManager> {
     )
 }
 
-fn canister_lifecycle_memory_capacity_pot() -> pot::Pot<IcManager> {
+fn canister_lifecycle_memory_capacity_pot() -> pot::Pot {
     composable!(
         "canister_lifecycle_memory_capacity_pot",
         execution::config_memory_capacity(),
@@ -136,7 +133,7 @@ fn canister_lifecycle_memory_capacity_pot() -> pot::Pot<IcManager> {
     )
 }
 
-fn subnet_capacity_pot() -> pot::Pot<IcManager> {
+fn subnet_capacity_pot() -> pot::Pot {
     composable!(
         "subnet_capacity_pot",
         execution::config_memory_capacity(),
@@ -146,7 +143,7 @@ fn subnet_capacity_pot() -> pot::Pot<IcManager> {
     )
 }
 
-fn max_number_of_canisters_pot() -> pot::Pot<IcManager> {
+fn max_number_of_canisters_pot() -> pot::Pot {
     composable!(
         "max_number_of_canisters_pot",
         execution::canister_lifecycle::config_max_number_of_canisters(),
@@ -156,7 +153,7 @@ fn max_number_of_canisters_pot() -> pot::Pot<IcManager> {
     )
 }
 
-fn canister_lifecycle_memory_size_pot() -> pot::Pot<IcManager> {
+fn canister_lifecycle_memory_size_pot() -> pot::Pot {
     composable!(
         "canister_lifecycle_memory_size_pot",
         execution::canister_lifecycle::config_canister_memory_size(),
@@ -164,7 +161,7 @@ fn canister_lifecycle_memory_size_pot() -> pot::Pot<IcManager> {
     )
 }
 
-fn system_subnets_pot() -> pot::Pot<IcManager> {
+fn system_subnets_pot() -> pot::Pot {
     composable!(
         "system_subnets_pot",
         execution::config_many_system_subnets(),
@@ -177,7 +174,7 @@ fn system_subnets_pot() -> pot::Pot<IcManager> {
 
 /// In case you want to choose the name of each composable step explicitely,
 /// you can use the more manual form by defining each step individually.
-fn consensus_liveness_with_equivocation_pot() -> pot::Pot<IcManager> {
+fn consensus_liveness_with_equivocation_pot() -> pot::Pot {
     composable!(
         "consensus_liveness_with_equivocation_pot",
         consensus::liveness_with_equivocation_test::config(),
@@ -185,7 +182,7 @@ fn consensus_liveness_with_equivocation_pot() -> pot::Pot<IcManager> {
     )
 }
 
-fn consensus_safety_pot() -> pot::Pot<IcManager> {
+fn consensus_safety_pot() -> pot::Pot {
     composable!(
         "consensus_safety_pot",
         consensus::safety_test::config(),
@@ -193,7 +190,7 @@ fn consensus_safety_pot() -> pot::Pot<IcManager> {
     )
 }
 
-fn nns_uninstall_pot() -> pot::Pot<IcManager> {
+fn nns_uninstall_pot() -> pot::Pot {
     composable!(
         "nns_uninstall_pot",
         nns_uninstall_code_proposal_test::config(),
@@ -201,7 +198,7 @@ fn nns_uninstall_pot() -> pot::Pot<IcManager> {
     )
 }
 
-fn nns_subnet_creation_pot() -> pot::Pot<IcManager> {
+fn nns_subnet_creation_pot() -> pot::Pot {
     composable!(
         "nns_subnet_creation_pot",
         subnet_creation::config(),
@@ -209,7 +206,7 @@ fn nns_subnet_creation_pot() -> pot::Pot<IcManager> {
     )
 }
 
-fn execution_config_is_none_pot() -> pot::Pot<IcManager> {
+fn execution_config_is_none_pot() -> pot::Pot {
     composable!(
         "execution_config_is_none_pot",
         execution::nns_shielding::config(),
@@ -220,7 +217,7 @@ fn execution_config_is_none_pot() -> pot::Pot<IcManager> {
     )
 }
 
-fn replica_determinism_pot() -> pot::Pot<IcManager> {
+fn replica_determinism_pot() -> pot::Pot {
     composable!(
         "replica_determinism_pot",
         replica_determinism_test::config(),
@@ -228,7 +225,7 @@ fn replica_determinism_pot() -> pot::Pot<IcManager> {
     )
 }
 
-fn dual_workload_pot() -> pot::Pot<IcManager> {
+fn dual_workload_pot() -> pot::Pot {
     composable!(
         "dual_workload_pot",
         consensus::payload_builder_test::dual_workload_config(),
@@ -236,7 +233,7 @@ fn dual_workload_pot() -> pot::Pot<IcManager> {
     )
 }
 
-fn max_payload_pot() -> pot::Pot<IcManager> {
+fn max_payload_pot() -> pot::Pot {
     composable!(
         "max_payload_pod",
         consensus::payload_builder_test::max_payload_size_config(),
@@ -247,7 +244,7 @@ fn max_payload_pot() -> pot::Pot<IcManager> {
     )
 }
 
-fn system_api_security_pot() -> pot::Pot<IcManager> {
+fn system_api_security_pot() -> pot::Pot {
     composable!(
         "system_security_tests",
         system_api_security_test::config(),
@@ -311,7 +308,7 @@ fn main() {
     }
 }
 
-fn print_rng_seed<ManCfg>(fondue_config: &ic_fondue::pot::execution::Config<ManCfg>) {
+fn print_rng_seed(fondue_config: &ic_fondue::pot::execution::Config) {
     println!(
         "(To reproduce this exact run, make sure to use '--seed {}')",
         fondue_config.pot_config.rng_seed

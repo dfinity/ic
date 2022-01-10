@@ -18,8 +18,8 @@ end::catalog[] */
 
 use ic_fondue::{self};
 use ic_fondue::{
+    ic_instance::{InternetComputer, Subnet},
     ic_manager::{IcControl, IcHandle},
-    internet_computer::{InternetComputer, Subnet},
 };
 use ic_registry_subnet_type::SubnetType;
 
