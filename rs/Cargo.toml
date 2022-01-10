@@ -101,7 +101,6 @@ members = [
   "replica/setup_ic_network",
   "phantom_newtype",
   "prep",
-  "process_manager",
   "protobuf",
   "registry/admin",
   "registry/admin-derive",
