@@ -52,9 +52,9 @@ experiment_dir="$results_dir/subnet_update_workload_test_${testnet}-rt_${exec_ti
 # shellcheck disable=SC1090
 source "${HELPERS:-$(dirname "${BASH_SOURCE[0]}")/include/helpers.sh}"
 
-SUBNET_TYPES=("normal" "large" "large_nns" "56_nns")
+SUBNET_TYPES=("normal" "large" "large_nns" "56_nns" "46_nns")
 if [[ ! " ${SUBNET_TYPES[*]} " =~ ${subnet_type} ]]; then
-    echo >&2 "Invalid subnet type specified, choose between normal, large, large_nns and 56_nns."
+    echo >&2 "Invalid subnet type specified, choose between normal, large, large_nns, 46_nns and 56_nns."
     exit_usage
 fi
 if ! printf '%s\n' "boundary_nodes" "icos_boundary_nodes" "replica_nodes" "dns" | grep -q "^$load_dest\$"; then
@@ -81,6 +81,12 @@ fi
 if [[ "$subnet_type" == "56_nns" ]]; then
     # The test will run with a special hosts file creating a large nns subnet.
     export HOSTS_INI_FILENAME=hosts_56_nns.ini
+    HOSTS_INI_ARGUMENTS+=(--hosts-ini "$HOSTS_INI_FILENAME")
+    subnet_index=0
+fi
+if [[ "$subnet_type" == "46_nns" ]]; then
+    # The test will run with a special hosts file creating a large nns subnet.
+    export HOSTS_INI_FILENAME=hosts_46_nns.ini
     HOSTS_INI_ARGUMENTS+=(--hosts-ini "$HOSTS_INI_FILENAME")
     subnet_index=0
 fi

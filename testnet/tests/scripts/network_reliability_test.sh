@@ -30,7 +30,7 @@ export exit_code=0
 set -euo pipefail
 if (($# != 6)); then
     echo >&2 "Wrong number of arguments, please provide values for <testnet_identifier> <runtime_in_seconds> <rate> <payload_size> <topology> <results_dir>:"
-    echo >&2 "$0 p2p_15 30 40 250b [normal|large|large_nns|56_nns] ./results/"
+    echo >&2 "$0 p2p_15 30 40 250b [normal|large|large_nns|56_nns|46_nns] ./results/"
     exit 1
 fi
 
@@ -48,7 +48,7 @@ experiment_dir="$results_dir/network_reliability_test_${testnet}-rt_${runtime}-r
 # shellcheck disable=SC1090
 source "${HELPERS:-$(dirname "${BASH_SOURCE[0]}")/include/helpers.sh}"
 
-SUBNET_TYPES=("normal" "large" "large_nns" "56_nns")
+SUBNET_TYPES=("normal" "large" "large_nns" "56_nns" "46_nns")
 if [[ ! " ${SUBNET_TYPES[*]} " =~ ${subnet_type} ]]; then
     echo >&2 "Invalid subnet type specified, choose between normal, large, large_nns and 56_nns."
     exit_usage
@@ -68,6 +68,11 @@ fi
 if [[ "$subnet_type" == "56_nns" ]]; then
     # The test will run with a special hosts file creating a large nns subnet.
     export HOSTS_INI_FILENAME=hosts_56_nns.ini
+    HOSTS_INI_ARGUMENTS+=(--hosts-ini "$HOSTS_INI_FILENAME")
+fi
+if [[ "$subnet_type" == "46_nns" ]]; then
+    # The test will run with a special hosts file creating a large nns subnet.
+    export HOSTS_INI_FILENAME=hosts_46_nns.ini
     HOSTS_INI_ARGUMENTS+=(--hosts-ini "$HOSTS_INI_FILENAME")
 fi
 
