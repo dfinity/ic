@@ -19,8 +19,7 @@ use ic_certified_vars::verify_certificate;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_crypto::threshold_sig_public_key_from_der;
 use ic_crypto_tree_hash::MixedHashTree;
-use ic_fondue::log::info;
-use ic_fondue::{ic_manager::IcHandle, internet_computer::InternetComputer};
+use ic_fondue::{ic_instance::InternetComputer, ic_manager::IcHandle};
 use ic_nns_common::types::{NeuronId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{
     ids::{TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL},
@@ -43,6 +42,7 @@ use ledger_canister::{
     self, Block, BlockArg, BlockHeight, BlockRes, Operation, Tokens, TRANSACTION_FEE,
 };
 use on_wire::{FromWire, IntoWire};
+use slog::info;
 use url::Url;
 
 pub fn config() -> InternetComputer {

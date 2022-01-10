@@ -6,9 +6,9 @@ use std::{
     process::Command,
 };
 
-use crate::internet_computer::InternetComputer;
-use crate::node_software_version::NodeSoftwareVersion;
-use crate::port_allocator::AddrType;
+use crate::ic_instance::{
+    node_software_version::NodeSoftwareVersion, port_allocator::AddrType, InternetComputer,
+};
 use crate::prod_tests::farm::FarmResult;
 use ic_base_types::NodeId;
 

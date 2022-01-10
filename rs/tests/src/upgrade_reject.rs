@@ -24,10 +24,9 @@ use std::time::Duration;
 use ic_nns_constants::ids::TEST_NEURON_1_OWNER_KEYPAIR;
 
 use ic_base_types::SubnetId;
-use ic_fondue::internet_computer::Subnet;
 use ic_fondue::{
-    ic_manager::IcHandle,                // we run the test on the IC
-    internet_computer::InternetComputer, // which is declared through these types
+    ic_instance::{InternetComputer, Subnet}, // which is declared through these types
+    ic_manager::IcHandle,                    // we run the test on the IC
 };
 
 use ic_nns_common::types::NeuronId;

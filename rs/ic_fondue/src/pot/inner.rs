@@ -29,9 +29,11 @@ use std::panic::{catch_unwind, RefUnwindSafe, UnwindSafe};
 use std::sync::{Arc, Mutex};
 use std::{path::PathBuf, thread};
 
-use crate::log::{info, mk_logger, warn, Logger};
-use crate::manager::*;
-use crate::pot::execution::result::*;
+use super::log::mk_logger;
+use crate::ic_instance::*;
+use crate::ic_manager::*;
+use crate::result::*;
+use slog::{info, warn, Logger};
 
 /// A [Context] carries auxiliary data to a test. Using the provided PRNG is
 /// very important if we care about test reproducibility. The
@@ -63,9 +65,9 @@ impl Context {
 /// A [Pot] carries a derived name which often includes a hash of the
 /// configuration and a hash of the test names inside of it. Check
 /// [crate::manager::Summarize] for additional info.
-pub struct Pot<M: Manager> {
-    pub env: M::EnvConfig,
-    pub test: Test<M>,
+pub struct Pot {
+    pub env: InternetComputer,
+    pub test: Test,
     pub derived_name: String,
     pub experimental: bool,
 }
@@ -74,19 +76,19 @@ pub struct Pot<M: Manager> {
 /// The difference is that an isolated test is allowed to change its
 /// environment and a composable test can only read from its environment
 /// (with the exception of the setup).
-pub enum Test<M: Manager> {
-    Isolated(IsolatedTest<M>),
+pub enum Test {
+    Isolated(IsolatedTest),
     Composable {
         /// The `before_tests` field gets executed once after the environment is
         /// setup and is allowed to make arbitrary changes in it. This
         /// is useful to be able to configure the environment a little
         /// more easily than having to rely solely on [Manager::EnvConfig]
-        before_tests: Option<Setup<M>>,
-        tests: Vec<ComposableTest<M>>,
+        before_tests: Option<Setup>,
+        tests: Vec<ComposableTest>,
     },
 }
 
-impl<M: Manager> Test<M> {
+impl Test {
     pub fn test_names(&self) -> Vec<String> {
         match self {
             Test::Isolated(t) => vec![t.name.clone()],
@@ -107,9 +109,9 @@ impl<M: Manager> Test<M> {
     }
 }
 
-pub type Setup<M> = Box<dyn FondueTestFn<M>>;
-pub type IsolatedTest<M> = FondueTest<M>;
-pub type ComposableTest<M> = FondueTest<<M as HasHandle>::Handle>;
+pub type Setup = Box<dyn FondueTestFn<IcManager>>;
+pub type IsolatedTest = FondueTest<IcManager>;
+pub type ComposableTest = FondueTest<IcHandle>;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct PotResult {
@@ -164,19 +166,15 @@ impl Config {
     }
 }
 
-impl<M: Manager + 'static> Pot<M> {
+impl Pot {
     /// Runs a ic_fondue::pot::Pot until completion with default configuration.
     /// If you want the RNG to produce different runs, make sure to use
     /// `run_with` and specify the seeds manually.
-    pub fn run(self, mancfg: <M as Manager>::ManConfig) -> PotResult {
+    pub fn run(self, mancfg: IcManagerSettings) -> PotResult {
         self.run_with(&Config::default(), mancfg)
     }
 
-    pub fn run_against_handle(
-        mut self,
-        cfg: &Config,
-        handle: <M as HasHandle>::Handle,
-    ) -> PotResult {
+    pub fn run_against_handle(mut self, cfg: &Config, handle: IcHandle) -> PotResult {
         let pot_name = self.derived_name;
         let logger = mk_logger(cfg.level, cfg.log_target.clone());
         info!(
@@ -196,7 +194,7 @@ impl<M: Manager + 'static> Pot<M> {
             Test::Composable {
                 before_tests: _,
                 tests: ref mut ts,
-            } => run_composable_tests::<M>(handle, &Context::new(rng, logger.clone()), ts),
+            } => run_composable_tests(handle, &Context::new(rng, logger.clone()), ts),
         };
 
         info!(logger, "<<< POT DONE >>>");
@@ -204,7 +202,7 @@ impl<M: Manager + 'static> Pot<M> {
         PotResult { test_reports: res }
     }
 
-    pub fn run_with(mut self, cfg: &Config, mancfg: <M as Manager>::ManConfig) -> PotResult {
+    pub fn run_with(mut self, cfg: &Config, mancfg: IcManagerSettings) -> PotResult {
         let pot_name = self.derived_name;
         let logger = mk_logger(cfg.level, cfg.log_target.clone());
         info!(
@@ -215,7 +213,7 @@ impl<M: Manager + 'static> Pot<M> {
             cfg.rng_seed,
         );
 
-        let man = M::start(pot_name, mancfg, self.env, &logger);
+        let man = IcManager::start(pot_name, mancfg, self.env, &logger);
         thread::spawn({
             let logger = logger.clone();
             let man = man.clone();
@@ -280,11 +278,11 @@ impl Filter {
 }
 
 /// Builds a pot from a single isolated test
-pub fn from_isolated<M: Manager, S: Into<String>>(
+pub fn from_isolated<S: Into<String>>(
     name: S,
-    env: &M::EnvConfig,
-    t: impl FondueTestFn<M>,
-) -> Pot<M> {
+    env: &InternetComputer,
+    t: impl FondueTestFn<IcManager>,
+) -> Pot {
     let name_str = name.into();
     Pot {
         derived_name: format!("{}:{}", name_str, env.summarize()),
@@ -295,22 +293,22 @@ pub fn from_isolated<M: Manager, S: Into<String>>(
 }
 
 /// Builds a pot from an iterator of composable tests without a setup phase.
-pub fn from_composable<M: Manager, S: Into<String>>(
+pub fn from_composable<S: Into<String>>(
     name: S,
-    env: &M::EnvConfig,
-    ts: impl Iterator<Item = ComposableTest<M>>,
-) -> Pot<M> {
+    env: &InternetComputer,
+    ts: impl Iterator<Item = ComposableTest>,
+) -> Pot {
     from_composable_setup(name, env, None, ts, false)
 }
 
 /// Builds a pot from an iterator of composable tests with a setup phase
-pub fn from_composable_setup<M: Manager, S: Into<String>>(
+pub fn from_composable_setup<S: Into<String>>(
     name: S,
-    env: &M::EnvConfig,
-    before_tests: Option<Setup<M>>,
-    ts: impl Iterator<Item = ComposableTest<M>>,
+    env: &InternetComputer,
+    before_tests: Option<Setup>,
+    ts: impl Iterator<Item = ComposableTest>,
     experimental: bool,
-) -> Pot<M> {
+) -> Pot {
     let tests: Vec<_> = ts.collect();
     Pot {
         derived_name: format!("{}:{}", name.into(), env.summarize()),
@@ -395,7 +393,7 @@ impl<M: RefUnwindSafe + UnwindSafe> FondueTest<M> {
 /// If every step of a test is marked as `skip`, there's no need to run
 /// anything. This function returns a `Some` with a skipped report for every
 /// step of a test when they are all marked as `skip`.
-pub fn should_skip<M: Manager>(test: &Test<M>) -> bool {
+pub fn should_skip(test: &Test) -> bool {
     match test {
         Test::Isolated(it) => it.skip,
         Test::Composable { tests, .. } => tests.iter().all(|t| t.skip),
@@ -404,10 +402,7 @@ pub fn should_skip<M: Manager>(test: &Test<M>) -> bool {
 
 /// Runs a test and returns its result. In case of composable tests,
 /// returns whether or not all of them were successful
-pub fn run_test<M>(man: &M, ctx: &Context, test: Test<M>) -> Vec<TestResultNode>
-where
-    M: Manager + 'static,
-{
+pub fn run_test(man: &IcManager, ctx: &Context, test: Test) -> Vec<TestResultNode> {
     match test {
         Test::Isolated(t) => vec![run_isolated_test(man, ctx, t)],
         Test::Composable {
@@ -434,22 +429,18 @@ where
                 }
             };
             // After the setup has been executed (if any!), we run the composable tests
-            run_composable_tests::<M>(man.handle(), ctx, &mut ts)
+            run_composable_tests(man.handle(), ctx, &mut ts)
         }
     }
 }
 
 /// An isolated test produces a single result
-pub fn run_setup<M: Manager + 'static>(man: &M, ctx: &Context, setup: Setup<M>) -> bool {
+pub fn run_setup(man: &IcManager, ctx: &Context, setup: Setup) -> bool {
     catch_unwind(|| (setup)(man.clone(), ctx)).is_ok()
 }
 
 /// An isolated test produces a single result
-pub fn run_isolated_test<M: Manager + 'static>(
-    man: &M,
-    ctx: &Context,
-    test: IsolatedTest<M>,
-) -> TestResultNode {
+pub fn run_isolated_test(man: &IcManager, ctx: &Context, test: IsolatedTest) -> TestResultNode {
     let name = test.name.clone();
     let result = test.run(man.clone(), ctx);
     let started_at = std::time::Instant::now();
@@ -471,14 +462,11 @@ pub fn run_isolated_test<M: Manager + 'static>(
 ///
 /// We do return the results of each individual test here to enable
 /// us to do some better reporting if we wanted to.
-pub fn run_composable_tests<M>(
-    handle: M::Handle,
+pub fn run_composable_tests(
+    handle: IcHandle,
     ctx: &Context,
-    tests: &mut Vec<ComposableTest<M>>,
-) -> Vec<TestResultNode>
-where
-    M: Manager + 'static,
-{
+    tests: &mut Vec<ComposableTest>,
+) -> Vec<TestResultNode> {
     let mut results = Vec::new();
     let mut rng = ctx.rng.clone();
     while let Some(test) = pop_random(tests, &mut rng) {

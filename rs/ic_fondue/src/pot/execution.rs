@@ -39,13 +39,7 @@
 //! * The code in this module was heavily inspired by `raclette`.
 
 #![allow(clippy::new_without_default)]
-use mio::unix::pipe;
-use mio::{Events, Interest, Poll};
-use nix::sys::signal::{kill, killpg, Signal};
-use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
-use nix::unistd::{self, fork, ForkResult, Pid};
-use signal_hook::consts::signal::{SIGINT, SIGTERM};
-use signal_hook_mio::v0_7::Signals;
+
 use std::io::{self, Write};
 use std::os::unix::io::AsRawFd;
 use std::{
@@ -53,18 +47,23 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::buffered_reader::BufferedReader;
-use crate::manager::{Manager, MaybeHasHandle};
+use mio::unix::pipe;
+use mio::{Events, Interest, Poll};
+use nix::sys::signal::{kill, killpg, Signal};
+use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
+use nix::unistd::{self, fork, ForkResult, Pid};
+use signal_hook::consts::signal::{SIGINT, SIGTERM};
+use signal_hook_mio::v0_7::Signals;
+
+pub use crate::result::*;
+
+use crate::ic_manager::{buffered_reader::BufferedReader, IcManagerSettings};
 use crate::mio::{make_token, split_token, InputSource, SIGNAL_TOKEN};
 use crate::pot::inner as pot;
-
-pub mod result;
-pub mod stream_decoder;
-pub use result::*;
-use stream_decoder::*;
+use crate::pot::stream_decoder::*;
 
 /// Execution configuration options.
-pub struct Config<ManCfg> {
+pub struct Config {
     /// Configures the time we are willing to wait for the
     /// entire execution of a pot.
     pub pot_timeout: std::time::Duration,
@@ -79,22 +78,22 @@ pub struct Config<ManCfg> {
     pub pot_config: pot::Config,
 
     /// And finally, the domain specific settings for manager startup
-    pub man_config: ManCfg,
+    pub man_config: IcManagerSettings,
 }
 
-impl<ManCfg: Default> Default for Config<ManCfg> {
+impl Default for Config {
     fn default() -> Self {
         Config {
             pot_timeout: Duration::from_secs(1500),
             filter: None,
             jobs: 1,
             pot_config: pot::Config::default(),
-            man_config: ManCfg::default(),
+            man_config: IcManagerSettings::default(),
         }
     }
 }
 
-impl<ManCfg> Config<ManCfg> {
+impl Config {
     pub fn random_pot_rng_seed(self) -> Self {
         Config {
             pot_config: self.pot_config.random_rng_seed(),
@@ -105,10 +104,7 @@ impl<ManCfg> Config<ManCfg> {
 
 /// Executes a list of tasks and produces an [ExecutionResult] with the status
 /// of /all/ tasks, regardless of whether they were skipped, ignored, etc.
-pub fn execute<M: Manager + 'static>(
-    config: &Config<M::ManConfig>,
-    mut tasks: Vec<pot::Pot<M>>,
-) -> Option<ExecutionResult> {
+pub fn execute(config: &Config, mut tasks: Vec<pot::Pot>) -> Option<ExecutionResult> {
     if let Some(ref filter) = config.filter {
         for t in tasks.iter_mut() {
             t.apply_filter(filter);
@@ -344,11 +340,7 @@ fn print_buffer(lbl: &str, buf: &[u8]) {
 impl Executor {
     /// Evaluates whether `p` should be launched or skipped based on the CLI
     /// --skip option and on whether or not the user sent SIGINT already.
-    fn launch_or_skip<M: Manager + 'static>(
-        &mut self,
-        p: pot::Pot<M>,
-        config: &Config<M::ManConfig>,
-    ) {
+    fn launch_or_skip(&mut self, p: pot::Pot, config: &Config) {
         // If the pot contains only tests marked to be skipped  we're not executing
         // anything anymore; just produce a result that shows that we've
         // pondered running these tests but decided against.
@@ -375,7 +367,7 @@ impl Executor {
     /// Launches a process responsible for running the given pot and registers
     /// the necessary pipes in the internal poll and the [RunningPot] within
     /// `self.observing`. Returns the process id of the launched process.
-    fn launch<M: Manager + 'static>(&mut self, p: pot::Pot<M>, cfg: &Config<M::ManConfig>) -> Pid {
+    fn launch(&mut self, p: pot::Pot, cfg: &Config) -> Pid {
         let (stdout_sender, mut stdout_receiver) = pipe::new().unwrap();
         let (stderr_sender, mut stderr_receiver) = pipe::new().unwrap();
         let (mut result_sender, result_receiver) = pipe::new().unwrap();
@@ -419,13 +411,14 @@ impl Executor {
                 // If the manager configuration provides us with a handle,
                 // then we execute composable tests against that handle rather
                 // than starting up a manager.
-                let res = if let Some(req) = cfg.man_config.request_handle() {
+                let res = if let Some(h) = cfg.man_config.request_handle() {
                     println!("Calling p.run_against_handle...");
-                    p.run_against_handle(&cfg.pot_config, req.handle())
+                    p.run_against_handle(&cfg.pot_config, h)
                 } else {
                     println!("Calling p.run_with...");
                     p.run_with(&cfg.pot_config, cfg.man_config.clone())
                 };
+
                 serialize_and_write(&mut result_sender, &res).unwrap();
                 std::process::exit(if res.is_success() { 0 } else { 1 })
             }

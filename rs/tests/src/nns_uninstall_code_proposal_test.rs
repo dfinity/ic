@@ -4,8 +4,8 @@ use crate::util::*;
 use canister_test::Canister;
 use ic_canister_client::Sender;
 use ic_fondue::{
+    ic_instance::{InternetComputer, Subnet},
     ic_manager::IcHandle,
-    internet_computer::{InternetComputer, Subnet},
 };
 use ic_nns_common::types::NeuronId;
 use ic_nns_constants::ids::TEST_NEURON_1_OWNER_KEYPAIR;

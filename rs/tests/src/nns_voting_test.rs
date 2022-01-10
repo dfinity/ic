@@ -35,11 +35,11 @@ Not Covered::
 
 end::catalog[] */
 
-use ic_fondue::log::info;
+use slog::info;
 
 use crate::util::{get_random_nns_node_endpoint, runtime_from_url};
 
-use ic_fondue::{ic_manager::IcHandle, internet_computer::InternetComputer};
+use ic_fondue::{ic_instance::InternetComputer, ic_manager::IcHandle};
 
 use ic_nns_governance::pb::v1::{
     governance_error::ErrorType,

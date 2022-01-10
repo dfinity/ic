@@ -29,8 +29,7 @@ use canister_test::{Canister, RemoteTestRuntime, Runtime};
 use dfn_protobuf::protobuf;
 use ed25519_dalek::Signer;
 use ic_canister_client::Sender;
-use ic_fondue::log::info;
-use ic_fondue::{ic_manager::IcHandle, internet_computer::InternetComputer};
+use ic_fondue::{ic_instance::InternetComputer, ic_manager::IcHandle};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_nns_governance::governance::compute_neuron_staking_subaccount;
 use ic_nns_governance::pb::v1::{Governance, NetworkEconomics, Neuron};
@@ -51,6 +50,7 @@ use ic_rosetta_test_utils::{
 };
 use ic_types::{messages::Blob, CanisterId, PrincipalId};
 use serde_json::{json, Value};
+use slog::info;
 use slog::Logger;
 use std::collections::HashMap;
 use std::path::PathBuf;

@@ -24,8 +24,8 @@ use crate::{
 };
 
 use ic_fondue::{
+    ic_instance::InternetComputer,
     ic_manager::{IcControl, IcEndpoint, IcHandle},
-    internet_computer::InternetComputer,
 };
 use ic_nns_governance::pb::v1::NnsFunction;
 use ic_registry_subnet_type::SubnetType;

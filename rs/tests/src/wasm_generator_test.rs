@@ -4,8 +4,8 @@ use ic_agent::export::Principal;
 use ic_agent::Agent;
 use ic_fondue::{self};
 use ic_fondue::{
+    ic_instance::{InternetComputer, Subnet},
     ic_manager::IcHandle,
-    internet_computer::{InternetComputer, Subnet},
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_utils::interfaces::ManagementCanister;

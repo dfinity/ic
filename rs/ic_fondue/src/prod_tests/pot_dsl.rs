@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 use crate::pot::FondueTestFn;
-use crate::{ic_manager::IcHandle, internet_computer::InternetComputer};
+use crate::{ic_instance::InternetComputer, ic_manager::IcHandle};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 

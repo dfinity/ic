@@ -36,9 +36,9 @@ use std::{
     time::Duration,
 };
 
-use crate::buffered_reader::{BufferedReader, LineBuffer};
-use crate::log::{debug, error, o, trace, warn, Logger};
+use super::buffered_reader::{BufferedReader, LineBuffer};
 use crate::mio::{make_token, split_token, InputSource, SIGNAL_TOKEN};
+use slog::{debug, error, o, trace, warn, Logger};
 
 /// The ProcessPool feeds 'Events' into the passive pipeline.
 /// These events consist in either events produced by the children

@@ -29,10 +29,10 @@ use crate::util;
 use canister_test;
 use ic_base_types::NodeId;
 use ic_fondue::{
+    ic_instance::InternetComputer,
+    ic_instance::Subnet,
     ic_manager::{IcControl, IcHandle},
-    internet_computer::InternetComputer,
-    internet_computer::Subnet,
-    util::PermOf,
+    iterator::PermOf,
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::pb::v1::NnsFunction;

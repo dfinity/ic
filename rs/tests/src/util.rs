@@ -6,9 +6,9 @@ use ic_agent::{
 };
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
 use ic_fondue::ic_manager::{IcEndpoint, IcHandle};
-use ic_fondue::log::info;
 use ic_ic00_types::{CanisterStatusResult, EmptyBlob};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
+use slog::info;
 
 use dfn_protobuf::{protobuf, ProtoBuf};
 use ic_agent::export::Principal;

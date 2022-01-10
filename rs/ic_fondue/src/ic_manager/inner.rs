@@ -27,22 +27,23 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use crate::internet_computer::InternetComputer;
-use crate::log::{debug, info, warn, Logger};
-use crate::manager::process_pool::{self, ManagedProcessCfg};
-use crate::node_software_version::NodeSoftwareVersion;
-use crate::port_allocator::{AddrType, EphemeralPortAllocator, TcpAddrAllocator, VmAddrAllocator};
+use crate::ic_instance::node_software_version::NodeSoftwareVersion;
+use crate::ic_instance::port_allocator::{
+    AddrType, EphemeralPortAllocator, TcpAddrAllocator, VmAddrAllocator,
+};
+use crate::ic_instance::InternetComputer;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use nix::unistd::Pid;
+use slog::{debug, info, warn, Logger};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
+use super::process_pool::{self, ManagedProcessCfg, Signal};
 use super::{IcEndpoint, RuntimeDescriptor};
 use crossbeam_channel::Receiver;
 use ic_config::metrics::Exporter;
 use ic_registry_subnet_type::SubnetType;
-use process_pool::Signal;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::time::{Duration, Instant};
 

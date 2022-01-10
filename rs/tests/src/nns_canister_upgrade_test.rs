@@ -16,11 +16,11 @@ Runbook::
 
 end::catalog[] */
 
-use ic_fondue::log::info;
+use slog::info;
 
 use crate::util::{get_random_nns_node_endpoint, runtime_from_url};
 
-use ic_fondue::{ic_manager::IcHandle, internet_computer::InternetComputer};
+use ic_fondue::{ic_instance::InternetComputer, ic_manager::IcHandle};
 
 use crate::nns::NnsExt;
 use candid::Encode;

@@ -22,13 +22,13 @@ Remark::
 
 
 end::catalog[] */
-use ic_fondue::{self, log::info, manager::HasHandle};
 use ic_fondue::{
+    ic_instance::{InternetComputer, Subnet},
     ic_manager::IcManager,
-    internet_computer::{InternetComputer, Subnet},
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
+use slog::info;
 use std::time::{Duration, Instant};
 use url::Url;
 

@@ -24,9 +24,9 @@ use crate::nns::NnsExt;
 use crate::util::{
     create_agent, get_random_nns_node_endpoint, get_random_non_root_node_endpoint, runtime_from_url,
 };
-use ic_fondue::{self, log::info};
+use slog::info;
 
-use ic_fondue::{ic_manager::IcHandle, internet_computer::InternetComputer};
+use ic_fondue::{self, ic_instance::InternetComputer, ic_manager::IcHandle};
 
 use async_recursion::async_recursion;
 use canister_test::{Canister, Runtime};

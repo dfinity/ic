@@ -7,13 +7,13 @@ use core::fmt::Write;
 use ic_agent::export::Principal;
 use ic_agent::AgentError;
 use ic_agent::RequestId;
-use ic_fondue::log::debug;
 use ic_fondue::{
-    ic_manager::IcHandle,                          // we run the test on the IC
-    internet_computer::{InternetComputer, Subnet}, // which is declared through these types
+    ic_instance::{InternetComputer, Subnet}, // which is declared through these types
+    ic_manager::IcHandle,                    // we run the test on the IC
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_utils::interfaces::ManagementCanister;
+use slog::debug;
 use std::{time::Duration, time::Instant};
 use tokio::time::sleep_until;
 

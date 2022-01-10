@@ -1,6 +1,6 @@
 use ic_fondue::{
+    ic_instance::{InternetComputer, Subnet},
     ic_manager::IcHandle,
-    internet_computer::{InternetComputer, Subnet},
 };
 
 use crate::nns::NnsExt;

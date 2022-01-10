@@ -12,7 +12,7 @@ pub mod queries;
 pub mod subnet_capacity;
 pub mod upgraded_pots;
 
-use ic_fondue::internet_computer::{InternetComputer, Subnet};
+use ic_fondue::ic_instance::{InternetComputer, Subnet};
 use ic_registry_subnet_type::SubnetType;
 
 use crate::util::CYCLES_LIMIT_PER_CANISTER;

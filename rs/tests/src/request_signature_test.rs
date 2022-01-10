@@ -6,17 +6,14 @@ use crate::util::{
 };
 use ic_agent::export::Principal;
 use ic_agent::{identity::AnonymousIdentity, Identity, Signature};
-use ic_fondue::{
-    self,
-    log::{debug, info},
-};
-use ic_fondue::{ic_manager::IcHandle, internet_computer::InternetComputer};
+use ic_fondue::{ic_instance::InternetComputer, ic_manager::IcHandle};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::{
     Blob, HttpCanisterUpdate, HttpQueryContent, HttpRequestEnvelope, HttpSubmitContent,
     HttpUserQuery,
 };
 use ic_universal_canister::wasm;
+use slog::{debug, info};
 use std::time::{Duration, SystemTime};
 
 pub fn config() -> InternetComputer {

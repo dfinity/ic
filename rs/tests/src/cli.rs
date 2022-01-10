@@ -25,10 +25,7 @@ impl Options {
     /// Creates a [ic_fondue::pot::execution::Config] according to the command
     /// line options captured in [Option] and a given default
     /// [ic_fondue::pot::execution::Config].
-    pub fn modify_fondue_exec_config(
-        &self,
-        cfg: ExecConfig<IcManagerSettings>,
-    ) -> ExecConfig<IcManagerSettings> {
+    pub fn modify_fondue_exec_config(&self, cfg: ExecConfig) -> ExecConfig {
         ExecConfig {
             pot_timeout: self.pot_timeout.unwrap_or(cfg.pot_timeout),
             filter: Some(self.get_fondue_filter()),

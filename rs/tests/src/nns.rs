@@ -8,12 +8,8 @@ use ic_base_types::NodeId;
 use ic_canister_client::{Agent, Sender};
 use ic_config::subnet_config::SchedulerConfig;
 use ic_fondue::{
-    self,
-    log::{info, Logger},
-};
-use ic_fondue::{
+    ic_instance::node_software_version::NodeSoftwareVersion,
     ic_manager::{IcEndpoint, IcHandle},
-    node_software_version::NodeSoftwareVersion,
 };
 use ic_interfaces::registry::ZERO_REGISTRY_VERSION;
 use ic_nns_common::types::{NeuronId, ProposalId};
@@ -58,6 +54,7 @@ use registry_canister::mutations::{
     do_create_subnet::CreateSubnetPayload,
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
 };
+use slog::{info, Logger};
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::path::Path;

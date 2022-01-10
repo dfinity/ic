@@ -1,14 +1,14 @@
 //! This programs creates a fully functional local internet computer.
 //! See --help (or the docstring below) for details.
 
-use ic_fondue::{self, log, manager::HasHandle};
 use ic_fondue::{
+    self,
+    ic_instance::InternetComputer,
     ic_manager::{IcManager, IcManagerSettings},
-    internet_computer::InternetComputer,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_tests::util::block_on;
-use log::info;
+use slog::info;
 use std::fs;
 use std::path::PathBuf;
 use structopt::StructOpt;
