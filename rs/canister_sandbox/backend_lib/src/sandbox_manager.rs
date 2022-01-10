@@ -23,7 +23,7 @@ use ic_canister_sandbox_common::protocol::structs::{
     MemoryModifications, SandboxExecInput, SandboxExecOutput, StateModifications,
 };
 use ic_canister_sandbox_common::{controller_service::ControllerService, protocol};
-use ic_config::embedders::{Config, PersistenceType};
+use ic_config::embedders::PersistenceType;
 use ic_embedders::wasm_executor::DirtyPageIndices;
 use ic_embedders::WasmExecutionOutput;
 use ic_embedders::{
@@ -216,16 +216,15 @@ struct CanisterWasm {
 
 impl CanisterWasm {
     /// Validates and compiles the given Wasm binary.
-    pub fn compile(wasm_src: Vec<u8>) -> HypervisorResult<Self> {
+    pub fn compile(
+        config: &ic_config::embedders::Config,
+        wasm_src: Vec<u8>,
+    ) -> HypervisorResult<Self> {
         let wasm = BinaryEncodedWasm::new(wasm_src);
         let log = ic_logger::replica_logger::no_op_logger();
-        // TODO(EXC-755): Use the proper embedder config.
-        let mut config = Config::new();
-        config.persistence_type = PersistenceType::Sigsegv;
-
         // TODO(EXC-756): Cache WasmtimeEmbedder instance.
         let embedder = Arc::new(WasmtimeEmbedder::new(config.clone(), log));
-        let instrumentation_output = validate_wasm_binary(&wasm, &config)
+        let instrumentation_output = validate_wasm_binary(&wasm, config)
             .map_err(HypervisorError::from)
             .and_then(|_| {
                 instrument(&wasm, &InstructionCostTable::new()).map_err(HypervisorError::from)
@@ -247,6 +246,7 @@ impl CanisterWasm {
 pub struct SandboxManager {
     repr: Mutex<SandboxManagerInt>,
     controller: Arc<dyn ControllerService>,
+    config: ic_config::embedders::Config,
 }
 struct SandboxManagerInt {
     canister_wasms: std::collections::HashMap<WasmId, Arc<CanisterWasm>>,
@@ -261,15 +261,20 @@ impl SandboxManager {
     /// an established backward RPC channel to the controller process
     /// to relay e.g. syscalls and completions.
     pub fn new(controller: Arc<dyn ControllerService>) -> Self {
+        // TODO(EXC-755): Use the proper embedder config.
+        let config = ic_config::embedders::Config::default();
         SandboxManager {
             repr: Mutex::new(SandboxManagerInt {
                 canister_wasms: HashMap::new(),
                 memories: HashMap::new(),
                 workers_for_replicated_execution: threadpool::ThreadPool::new(1),
-                workers_for_non_replicated_execution: threadpool::ThreadPool::new(2),
+                workers_for_non_replicated_execution: threadpool::ThreadPool::new(
+                    config.query_execution_threads,
+                ),
                 workers_for_cleanup: threadpool::ThreadPool::new(1),
             }),
             controller,
+            config,
         }
     }
 
@@ -282,7 +287,7 @@ impl SandboxManager {
             "Failed to open wasm session {}: id is already in use",
             wasm_id,
         );
-        let wasm = CanisterWasm::compile(wasm_src)?;
+        let wasm = CanisterWasm::compile(&self.config, wasm_src)?;
         guard.canister_wasms.insert(wasm_id, Arc::new(wasm));
         Ok(())
     }
@@ -412,8 +417,7 @@ impl SandboxManager {
                 &binary_encoded_wasm,
                 &embedder_cache,
                 &embedder,
-                // TODO(EXC-755): Use the proper embedder config.
-                &Config::default(),
+                &self.config,
                 &mut wasm_page_map,
                 canister_id,
             )?;

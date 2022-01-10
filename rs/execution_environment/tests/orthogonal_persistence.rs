@@ -53,7 +53,6 @@ impl HypervisorTest {
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let hypervisor = Hypervisor::new(
             Config::default(),
-            1,
             &registry,
             subnet_id,
             subnet_type,

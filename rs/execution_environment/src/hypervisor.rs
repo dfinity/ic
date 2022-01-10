@@ -1035,7 +1035,6 @@ impl Hypervisor {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         config: Config,
-        num_runtime_threads: usize,
         metrics_registry: &MetricsRegistry,
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
@@ -1044,8 +1043,7 @@ impl Hypervisor {
     ) -> Self {
         let mut embedder_config = EmbeddersConfig::new();
         embedder_config.persistence_type = config.persistence_type;
-        embedder_config.num_runtime_generic_threads = num_runtime_threads;
-        embedder_config.num_runtime_query_threads = std::cmp::min(num_runtime_threads, 4);
+        embedder_config.query_execution_threads = config.query_execution_threads;
 
         let wasm_embedder = WasmtimeEmbedder::new(embedder_config.clone(), log.clone());
         let wasm_executor = WasmExecutor::new(

@@ -67,7 +67,6 @@ where
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let hypervisor = Hypervisor::new(
             Config::default(),
-            1,
             &metrics_registry,
             subnet_id,
             subnet_type,

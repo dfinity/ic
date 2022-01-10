@@ -130,7 +130,6 @@ where
         );
         let hypervisor = Hypervisor::new(
             execution_environment::Config::default(),
-            1,
             &metrics_registry,
             subnet_id,
             subnet_type,
@@ -171,7 +170,6 @@ fn test_outgoing_messages(
         );
         let hypervisor = Hypervisor::new(
             execution_environment::Config::default(),
-            1,
             &metrics_registry,
             subnet_id,
             subnet_type,
@@ -1910,7 +1908,6 @@ fn get_execution_environment(
     );
     let hypervisor = Hypervisor::new(
         execution_environment::Config::default(),
-        1,
         &metrics_registry,
         own_subnet_id,
         subnet_type,
@@ -2382,7 +2379,6 @@ fn metrics_are_observed_for_subnet_messages() {
         );
         let hypervisor = Hypervisor::new(
             execution_environment::Config::default(),
-            1,
             &metrics_registry,
             subnet_id,
             subnet_type,

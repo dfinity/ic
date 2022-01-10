@@ -17,7 +17,8 @@ pub(crate) const MAX_CUSTOM_SECTIONS: usize = 16;
 // Maximum 1 MiB is allowed per canister for the custom sections.
 // Thus maximum size per custom section is 1 MiB / MAX_CUSTOM_SECTIONS.
 pub(crate) const MAX_CUSTOM_SECTION_SIZE: NumBytes = NumBytes::new(65536);
-
+/// The number of threads to use for query execution.
+pub(crate) const QUERY_EXECUTION_THREADS: usize = 2;
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct FeatureFlags {
     pub api_cycles_u128_flag: FeatureStatus,
@@ -35,8 +36,7 @@ impl Default for FeatureFlags {
 pub struct Config {
     pub persistence_type: PersistenceType,
     pub max_wasm_stack_size: usize,
-    pub num_runtime_generic_threads: usize,
-    pub num_runtime_query_threads: usize,
+    pub query_execution_threads: usize,
 
     /// Maximum number of globals allowed in a Wasm module.
     pub max_globals: usize,
@@ -59,8 +59,7 @@ impl Config {
         Config {
             persistence_type: PersistenceType::Sigsegv,
             max_wasm_stack_size: 5 * 1024 * 1024,
-            num_runtime_generic_threads: 1,
-            num_runtime_query_threads: 4,
+            query_execution_threads: QUERY_EXECUTION_THREADS,
             max_globals: MAX_GLOBALS,
             max_functions: MAX_FUNCTIONS,
             max_custom_sections: MAX_CUSTOM_SECTIONS,
