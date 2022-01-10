@@ -7,7 +7,7 @@ use ic_execution_environment::{
 };
 use ic_interfaces::{
     execution_environment::{
-        CanisterHeartbeatError, CanisterOutOfCyclesError, ExecuteMessageResult,
+        CanisterHeartbeatError, CanisterOutOfCyclesError, ExecuteMessageResult, ExecutionMode,
         SubnetAvailableMemory,
     },
     messages::CanisterInputMessage,
@@ -2758,7 +2758,8 @@ fn message_to_canister_with_not_enough_balance_is_rejected() {
                         .build()
                 ),
                 &ProvisionalWhitelist::new_empty(),
-                &ingress
+                &ingress,
+                ExecutionMode::NonReplicated,
             ),
             Err(permission_denied_error(
                 &CanisterOutOfCyclesError {
@@ -2805,7 +2806,8 @@ fn message_to_canister_with_enough_balance_is_accepted() {
                         .build()
                 ),
                 &ProvisionalWhitelist::new_empty(),
-                &ingress
+                &ingress,
+                ExecutionMode::NonReplicated,
             ),
             Ok(())
         );
@@ -2837,7 +2839,8 @@ fn management_message_to_canister_with_enough_balance_is_accepted() {
                             .build()
                     ),
                     &ProvisionalWhitelist::new_empty(),
-                    ingress.content()
+                    ingress.content(),
+                    ExecutionMode::NonReplicated,
                 ),
                 Ok(())
             );
@@ -2876,7 +2879,8 @@ fn management_message_to_canister_with_not_enough_balance_is_not_accepted() {
                             .build()
                     ),
                     &ProvisionalWhitelist::new_empty(),
-                    ingress.content()
+                    ingress.content(),
+                    ExecutionMode::NonReplicated,
                 ),
                 Err(permission_denied_error(
                     &CanisterOutOfCyclesError {
@@ -2906,7 +2910,8 @@ fn management_message_to_canister_that_doesnt_exist_is_not_accepted() {
                 exec_env.should_accept_ingress_message(
                     Arc::new(ReplicatedStateBuilder::default().build()),
                     &ProvisionalWhitelist::new_empty(),
-                    ingress.content()
+                    ingress.content(),
+                    ExecutionMode::NonReplicated,
                 ),
                 Err(not_found_error("Requested canister does not exist")),
             );
@@ -2928,7 +2933,8 @@ fn management_message_with_invalid_payload_is_not_accepted() {
                 exec_env.should_accept_ingress_message(
                     Arc::new(ReplicatedStateBuilder::default().build()),
                     &ProvisionalWhitelist::new_empty(),
-                    ingress.content()
+                    ingress.content(),
+                    ExecutionMode::NonReplicated,
                 ),
                 Err(permission_denied_error(
                     "Requested canister rejected the message"
@@ -2951,7 +2957,8 @@ fn management_message_with_invalid_method_is_not_accepted() {
                 exec_env.should_accept_ingress_message(
                     Arc::new(ReplicatedStateBuilder::default().build()),
                     &ProvisionalWhitelist::new_empty(),
-                    ingress.content()
+                    ingress.content(),
+                    ExecutionMode::NonReplicated,
                 ),
                 Err(permission_denied_error(
                     "Requested canister rejected the message"

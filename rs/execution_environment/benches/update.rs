@@ -2,7 +2,7 @@ use criterion::Criterion;
 use ic_config::execution_environment::Config;
 use ic_execution_environment::Hypervisor;
 use ic_interfaces::{
-    execution_environment::{ExecutionParameters, SubnetAvailableMemory},
+    execution_environment::{ExecutionMode, ExecutionParameters, SubnetAvailableMemory},
     messages::RequestOrIngress,
 };
 use ic_metrics::MetricsRegistry;
@@ -112,6 +112,7 @@ where
         subnet_available_memory: MAX_SUBNET_AVAILABLE_MEMORY.clone(),
         compute_allocation: canister_state.scheduler_state.compute_allocation,
         subnet_type: SubnetType::Application,
+        execution_mode: ExecutionMode::Replicated,
     };
     ExecuteUpdateArgs(
         canister_state,

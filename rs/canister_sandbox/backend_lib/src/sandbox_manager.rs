@@ -33,7 +33,7 @@ use ic_embedders::{
     },
     WasmtimeEmbedder,
 };
-use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
+use ic_interfaces::execution_environment::{ExecutionMode, HypervisorError, HypervisorResult};
 use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::page_map::PageMapSerialization;
 use ic_replicated_state::{EmbedderCache, Memory, PageMap};
@@ -251,7 +251,9 @@ pub struct SandboxManager {
 struct SandboxManagerInt {
     canister_wasms: std::collections::HashMap<WasmId, Arc<CanisterWasm>>,
     memories: std::collections::HashMap<MemoryId, Arc<Memory>>,
-    workers: threadpool::ThreadPool,
+    workers_for_replicated_execution: threadpool::ThreadPool,
+    workers_for_non_replicated_execution: threadpool::ThreadPool,
+    workers_for_cleanup: threadpool::ThreadPool,
 }
 
 impl SandboxManager {
@@ -263,7 +265,9 @@ impl SandboxManager {
             repr: Mutex::new(SandboxManagerInt {
                 canister_wasms: HashMap::new(),
                 memories: HashMap::new(),
-                workers: threadpool::ThreadPool::new(4),
+                workers_for_replicated_execution: threadpool::ThreadPool::new(1),
+                workers_for_non_replicated_execution: threadpool::ThreadPool::new(2),
+                workers_for_cleanup: threadpool::ThreadPool::new(1),
             }),
             controller,
         }
@@ -317,7 +321,7 @@ impl SandboxManager {
         );
         // Dropping memory may be expensive. Do it on a worker thread to avoid
         // blocking the main thread of the sandbox process.
-        guard.workers.execute(move || drop(removed));
+        guard.workers_for_cleanup.execute(move || drop(removed));
     }
 
     /// Starts Wasm execution using specific code and state, passing
@@ -354,16 +358,28 @@ impl SandboxManager {
                 exec_id, stable_memory_id,
             )
         });
-        Execution::start_on_worker_thread(
-            exec_id,
-            Arc::clone(wasm_runner),
-            Arc::clone(wasm_memory),
-            Arc::clone(stable_memory),
-            Arc::clone(sandbox_manager),
-            &mut guard.workers,
-            exec_input,
-            total_timer,
-        );
+        match exec_input.execution_parameters.execution_mode {
+            ExecutionMode::Replicated => Execution::start_on_worker_thread(
+                exec_id,
+                Arc::clone(wasm_runner),
+                Arc::clone(wasm_memory),
+                Arc::clone(stable_memory),
+                Arc::clone(sandbox_manager),
+                &mut guard.workers_for_replicated_execution,
+                exec_input,
+                total_timer,
+            ),
+            ExecutionMode::NonReplicated => Execution::start_on_worker_thread(
+                exec_id,
+                Arc::clone(wasm_runner),
+                Arc::clone(wasm_memory),
+                Arc::clone(stable_memory),
+                Arc::clone(sandbox_manager),
+                &mut guard.workers_for_non_replicated_execution,
+                exec_input,
+                total_timer,
+            ),
+        };
     }
 
     pub fn create_execution_state(

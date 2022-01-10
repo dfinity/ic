@@ -1,6 +1,8 @@
 use super::{system_api, StoreData, NUM_INSTRUCTION_GLOBAL_NAME};
 use crate::wasm_utils::instrumentation::{instrument, InstructionCostTable};
-use ic_interfaces::execution_environment::{ExecutionParameters, SubnetAvailableMemory};
+use ic_interfaces::execution_environment::{
+    ExecutionMode, ExecutionParameters, SubnetAvailableMemory,
+};
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{Memory, SystemState};
@@ -44,6 +46,7 @@ fn test_wasmtime_system_api() {
             subnet_available_memory: MAX_SUBNET_AVAILABLE_MEMORY.clone(),
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,
+            execution_mode: ExecutionMode::Replicated,
         },
         Memory::default(),
         no_op_logger(),

@@ -13,7 +13,9 @@ use ic_base_types::{NumSeconds, PrincipalId};
 use ic_config::execution_environment::Config;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::{
-    execution_environment::{ExecutionParameters, HypervisorError, SubnetAvailableMemory},
+    execution_environment::{
+        ExecutionMode, ExecutionParameters, HypervisorError, SubnetAvailableMemory,
+    },
     messages::RequestOrIngress,
 };
 use ic_logger::replica_logger::no_op_logger;
@@ -79,6 +81,7 @@ lazy_static! {
         subnet_available_memory: MAX_SUBNET_AVAILABLE_MEMORY.clone(),
         compute_allocation: ComputeAllocation::default(),
         subnet_type: SubnetType::Application,
+        execution_mode: ExecutionMode::Replicated,
     };
 }
 

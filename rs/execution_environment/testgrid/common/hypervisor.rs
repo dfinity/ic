@@ -1,5 +1,6 @@
 use crate::config;
 use ic_execution_environment::{Hypervisor, QueryExecutionType};
+use ic_interfaces::execution_environment::ExecutionMode;
 use ic_interfaces::execution_environment::{
     ExecutionParameters, HypervisorError, HypervisorError::ContractViolation, HypervisorResult,
     SubnetAvailableMemory, TrapCode,
@@ -67,6 +68,7 @@ fn execution_parameters_with_unique_subnet_available_memory(
         subnet_available_memory,
         compute_allocation: canister.scheduler_state.compute_allocation,
         subnet_type: SubnetType::Application,
+        execution_mode: ExecutionMode::Replicated,
     }
 }
 
@@ -345,6 +347,7 @@ fn execute(
             subnet_available_memory: MAX_SUBNET_AVAILABLE_MEMORY.clone(),
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,
+            execution_mode: ExecutionMode::Replicated,
         };
         *result_ref = hypervisor
             .execute(

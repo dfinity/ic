@@ -1,7 +1,9 @@
 use ic_config::embedders::{Config, PersistenceType};
 use ic_embedders::wasm_utils::instrumentation::{instrument, InstructionCostTable};
 use ic_embedders::WasmtimeEmbedder;
-use ic_interfaces::execution_environment::{ExecutionParameters, SubnetAvailableMemory};
+use ic_interfaces::execution_environment::{
+    ExecutionMode, ExecutionParameters, SubnetAvailableMemory,
+};
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
@@ -81,6 +83,7 @@ fn test_api_for_update(
             subnet_available_memory: MAX_SUBNET_AVAILABLE_MEMORY.clone(),
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,
+            execution_mode: ExecutionMode::Replicated,
         },
         Memory::default(),
         log,

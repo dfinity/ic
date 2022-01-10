@@ -3,7 +3,9 @@ use ic_embedders::{
     wasm_utils::instrumentation::{instrument, InstructionCostTable},
     WasmtimeEmbedder,
 };
-use ic_interfaces::execution_environment::{ExecutionParameters, SubnetAvailableMemory};
+use ic_interfaces::execution_environment::{
+    ExecutionMode, ExecutionParameters, SubnetAvailableMemory,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{Global, NumWasmPages};
 use ic_test_utilities::{
@@ -24,6 +26,7 @@ fn execution_parameters() -> ExecutionParameters {
         subnet_available_memory: SubnetAvailableMemory::new(i64::MAX / 2),
         compute_allocation: ComputeAllocation::default(),
         subnet_type: SubnetType::Application,
+        execution_mode: ExecutionMode::Replicated,
     }
 }
 
