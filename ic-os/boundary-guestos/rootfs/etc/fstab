@@ -1,0 +1,5 @@
+/dev/rootfs /   ext4    errors=remount-ro   0   1
+tmpfs    /tmp    tmpfs   defaults 0   2
+/dev/vda1   /boot/efi   vfat    defaults    0   2
+/dev/vda2   /boot/grub  vfat    defaults    0   2
+/dev/vda3   /boot/config    ext4    defaults    0   2

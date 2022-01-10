@@ -1,0 +1,7 @@
+---
+# vars file for icos_test_boundary_node
+default_routing: false
+ipv6_listen: true
+
+# test boundary nodes don't currently have a real domain
+custom_domains: ["~.*"]

@@ -6,6 +6,7 @@
     # check if disk image is available on the new or the old location for the given hash
     CDN_URL="https://download.dfinity.systems"
 
+    # TODO: (NODE-250) -- once CI integration took place this needs to be extended by the boundary node VM
     disk_types=(generic replica)
     declare -A image_cdn=(
       [replica]="${CDN_URL}/ic/{{ ic_git_revision }}/guest-os/disk-img-dev"
@@ -49,17 +50,48 @@
   until: script_res is not failed
   tags: [ "ic_guest" ]
 
+- name: archive new boundary image
+  command:
+    cmd: "tar --directory={{ bn_media_path }} --create --sparse --use-compress-program='gzip --fast' --file='{{ bn_media_path }}/disk-img.tar.gz' disk.img"
+    creates: "{{ bn_media_path }}/disk-img.tar.gz"
+  run_once: true
+  delegate_to: localhost
+  args:
+    warn: false
+  tags: [ "boundary_node_vm" ]
+
+- name: create directory for new boundary image
+  ansible.builtin.file:
+    path: "/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/boundary"
+    state: directory
+    mode: '0755'
+  tags: [ "boundary_node_vm" ]
+
+- name: copy new boundary image
+  ansible.builtin.copy:
+    src: "{{ bn_media_path }}/disk-img.tar.gz"
+    dest: "/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/boundary/disk-img.tar.gz"
+  tags: [ "boundary_node_vm" ]
+
 - name: unarchive file disk-img.tar.gz # noqa risky-shell-pipe
   shell: |
     # if the unpacked file does not exist or if the archive is newer than the unpacked file
     set -eExuo pipefail
 
-    disk_types=(generic replica)
-
-    declare -A image_dir=(
-      [replica]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}"
-      [generic]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/generic"
-    )
+    if [[ "{{ ic_boundary_node_image }}" == "generic" ]]; then
+        disk_types=(generic replica)
+        declare -A image_dir=(
+                [replica]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}"
+                [generic]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/generic"
+        )
+    else
+        disk_types=(generic replica boundary)
+        declare -A image_dir=(
+                [replica]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}"
+                [generic]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/generic"
+                [boundary]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/boundary"
+        )
+    fi
 
     # unarchive each disk type
     for disk_type in "${disk_types[@]}"; do

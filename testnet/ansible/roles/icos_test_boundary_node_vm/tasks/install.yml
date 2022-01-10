@@ -1,0 +1,426 @@
+---
+
+- name: create certs directory under /etc/nginx
+  file:
+    state: directory
+    path: "/etc/nginx/certs"
+    mode: "0755"
+    owner: "root"
+    group: "root"
+  tags:
+    - boundary_node_vm
+
+- name: create keys directory under /etc/nginx
+  file:
+    state: directory
+    path: "/etc/nginx/keys"
+    mode: "0755"
+    owner: "root"
+    group: "root"
+  tags:
+    - boundary_node_vm
+
+- name: create directory under /etc/nginx for ic network
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  file:
+    state: directory
+    path: "/etc/nginx/ic_networks/{{ ic }}"
+    mode: "0755"
+    owner: "root"
+    group: "root"
+  tags:
+    - boundary_node_vm
+
+- name: copy boundary-node-control-plane for icos_test
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  copy:
+    src: "/opt/ic/bin/boundary-node-control-plane"
+    dest: "/etc/nginx/ic_networks/{{ ic }}/boundary-node-control-plane"
+    mode: "0755"
+    owner: "root"
+    group: "root"
+    remote_src: yes
+  register: boundary_node_control_plane
+#  notify: restart service boundary_node
+  tags:
+    - boundary_node_vm
+
+- name: create templated nginx.conf for ic network
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  template:
+    src: "../../boundary_node/templates/nginx.conf"
+    dest: "/etc/nginx/ic_networks/{{ ic }}/nginx.conf"
+    mode: "0644"
+    owner: "root"
+    group: "root"
+  register: network_nginx_conf
+  tags:
+    - boundary_node_vm
+
+- name: check for ic_router_table.js for ic network
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  stat:
+    path: "/etc/nginx/ic_networks/{{ ic }}/ic_router_table.js"
+  register: ic_router_table
+  tags:
+    - boundary_node_vm
+
+- name: create templated ic_router_table.js for ic network
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  template:
+    src: "ic_router_table.js"
+    dest: "/etc/nginx/ic_networks/{{ ic }}/ic_router_table.js"
+    mode: "0644"
+    owner: "root"
+    group: "root"
+  when: not ic_router_table.stat.exists
+  tags:
+    - boundary_node_vm
+
+- name: enumerate the ic-router-table.js files and build list of ic networks that have them
+  shell: "ls -1 /etc/nginx/ic_networks/*/ic_router_table.js | xargs -L1 dirname | xargs -L1 basename"
+  register: ics_with_ic_router_tables
+  tags:
+    - boundary_node_vm
+
+- name: check for nginx_table.config for ic network
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  stat:
+    path: "/etc/nginx/ic_networks/{{ ic }}/nginx_table.conf"
+  register: nginx_table
+  tags:
+    - boundary_node_vm
+
+- name: create templated nginx_table.conf for ic network
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  template:
+    src: "../../boundary_node/templates/nginx_table.conf"
+    dest: "/etc/nginx/ic_networks/{{ ic }}/nginx_table.conf"
+    mode: "0644"
+    owner: "root"
+    group: "root"
+  when: not nginx_table.stat.exists
+  tags:
+    - boundary_node_vm
+
+- name: create ic_router.js that imports all of the ic router tables for the ics
+  vars:
+    default_routing_value: "{{ default_routing | ternary(default_routing, (inventory_file | dirname | basename), 'mainnet') }}"
+    ics: "{{ ics_with_ic_router_tables.stdout_lines }}"
+  template:
+    src: "../../boundary_node/templates/ic_router.js"
+    dest: "/etc/nginx/ic_router.js"
+    mode: "0644"
+    owner: "root"
+    group: "root"
+  tags:
+    - boundary_node_vm
+
+- name: create templated 000-nginx-global.conf for ic network
+  template:
+    src: "000-nginx-global.conf"
+    dest: "/etc/nginx/conf.d/000-nginx-global.conf"
+    mode: "0644"
+    owner: "root"
+    group: "root"
+  register: nginx_global
+  tags:
+    - boundary_node_vm
+
+- name: remove the old /etc/nginx/conf.d/nginx-global.conf
+  file:
+    state: absent
+    path: /etc/nginx/conf.d/nginx-global.conf
+  tags:
+    - boundary_node_vm
+
+
+- name: create a symbolic link for the ic network nginx.conf
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  file:
+    src: "/etc/nginx/ic_networks/{{ ic }}/nginx.conf"
+    dest: "/etc/nginx/conf.d/{{ ic }}.conf"
+    owner: root
+    group: root
+    state: link
+  tags:
+    - boundary_node_vm
+
+- name: create templated ic_router_control_plane.py for ic network
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  template:
+    src: "../../boundary_node/templates/ic_router_control_plane.py"
+    dest: "/etc/nginx/ic_networks/{{ ic }}/ic_router_control_plane.py"
+    mode: "0755"
+    owner: "root"
+    group: "root"
+  register: ic_router_control_plane_py
+  tags:
+    - boundary_node_vm
+
+- name: create templated ic_router_control_plane_watcher.sh for ic network
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  template:
+    src: "../../boundary_node/templates/ic_router_control_plane_watcher.sh"
+    dest: "/etc/nginx/ic_networks/{{ ic }}/ic_router_control_plane_watcher.sh"
+    mode: "0755"
+    owner: "root"
+    group: "root"
+  register: ic_router_control_plane_watcher_sh
+  tags:
+    - boundary_node_vm
+
+- name: create directory /etc/nginx/ic_routes
+  file:
+    state: directory
+    path: "/etc/nginx/ic_routes"
+    mode: "0755"
+    owner: "root"
+    group: "root"
+  tags:
+    - boundary_node_vm
+
+- name: create directory under /etc/nginx/ic_routes for ic network
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  file:
+    state: directory
+    path: "/etc/nginx/ic_routes/{{ ic }}"
+    mode: "0755"
+    owner: "root"
+    group: "root"
+  tags:
+    - boundary_node_vm
+
+- name: create cache directory /var/cache/nginx
+  file:
+    state: directory
+    path: "/var/cache/nginx/ic"
+    mode: "0755"
+    owner: "root"
+    group: "root"
+  tags:
+    - boundary_node_vm
+
+- name: create directory under /var/cache/nginx for ic network
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  file:
+    state: directory
+    path: "/var/cache/nginx/ic/{{ ic }}"
+    mode: "0750"
+    owner: "www-data"
+    group: "www-data"
+  tags:
+    - boundary_node_vm
+
+# This throws an error right now, need to figure out why
+- name: Extract nns-url for icos_test
+  block:
+    - name: Get pre-configured nns-urls for icos-test deployment
+      shell: "grep nns_url /boot/config/nns.conf | cut -f 2 -d="
+      register: nns_urls
+
+    - name: set nns-urls as local fact
+      set_fact:
+        nns_urls: "{{ nns_urls.stdout_lines[0]}}"
+  tags:
+    - boundary_node_vm
+
+- name: create file boundary-node-control-plane service for ic network
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  template:
+    src: "../../boundary_node/templates/boundary-node-control-plane.service"
+    dest: "/lib/systemd/system/boundary-node-control-plane-{{ ic }}.service"
+    owner: root
+    group: root
+    mode: 0644
+  register: boundary_node_control_plane_service
+  tags:
+    - boundary_node_vm
+
+- name: restart service boundary-node-control-plane for ic network
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  service:
+    daemon_reload: yes
+    name: "boundary-node-control-plane-{{ ic }}"
+    state: restarted
+  when: boundary_node_control_plane_service.changed or boundary_node_control_plane.changed
+  tags:
+    - boundary_node_vm
+
+- name: start service boundary-node-control-plane for ic network
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  service:
+    state: started
+    enabled: yes
+    name: "boundary-node-control-plane-{{ ic }}"
+    daemon_reload: yes
+  tags:
+    - boundary_node_vm
+
+- name: create file ic-router-control-plane-watcher for ic network
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  template:
+    src: "../../boundary_node/templates/ic-router-control-plane-watcher.service"
+    dest: "/lib/systemd/system/ic-router-control-plane-watcher-{{ ic }}.service"
+    mode: "0644"
+    owner: "root"
+    group: "root"
+  register: ic_router_control_plane_watcher
+  tags:
+    - boundary_node_vm
+
+- name: restart service ic-router-control-plane-watcher for ic network
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  service:
+    name: "ic-router-control-plane-watcher-{{ ic }}"
+    state: restarted
+    daemon_reload: yes
+  when: ic_router_control_plane_watcher.changed or ic_router_control_plane_py.changed or ic_router_control_plane_watcher_sh.changed or boundary_node_control_plane.changed
+  tags:
+    - boundary_node_vm
+
+- name: start service ic-router-control-plane-watcher for ic network
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  service:
+    state: started
+    enabled: yes
+    name: "ic-router-control-plane-watcher-{{ ic }}"
+    daemon_reload: yes
+  tags:
+    - boundary_node_vm
+
+- name: stop and disable service icx-http-server.service
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  shell: "systemctl stop icx-http-server-{{ ic }}.service ; systemctl disable icx-http-server-{{ ic }}.service; true"
+  tags:
+    - boundary_node_vm
+
+- name: remove older icx-http-server.service for ic network
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  file:
+    path: "/lib/systemd/system/icx-http-server-{{ ic }}.service"
+    state: absent
+  tags:
+    - boundary_node_vm
+
+- name: touch router files
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  shell: "for route in /etc/nginx/ic_routes/{{ ic }}/*route*; do if [ -f $route ]; then touch $route ; fi ; done"
+
+- name: create rules.v4
+  file:
+    path: "/etc/iptables/rules.v4"
+    state: absent
+  tags:
+    - boundary_node_vm
+
+- name: create rules.v6
+  file:
+    path: "/etc/iptables/rules.v6"
+    state: absent
+  tags:
+    - boundary_node_vm
+
+- name: check for dhparam.pem
+  stat:
+    path: "/etc/nginx/dhparam.pem"
+  register: dhparam
+  tags:
+    - boundary_node_vm
+
+- name: generate dhparam.pem if it does not exist
+  # FLASHING WARNING SIGN
+  #
+  # This creates weak DH params. Creating a 4096 bit parameter set is
+  # extremely slow and not required for test. `-dsaparam` also weakens the
+  # params to increase speed.
+  shell: "cd /etc/nginx ; /usr/bin/openssl dhparam -dsaparam -out dhparam.pem 2048"
+  when: not dhparam.stat.exists
+
+- name: check for ic network trusted_certs.pem
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  stat:
+    path: "/etc/nginx/ic_networks/{{ ic }}/trusted_certs.pem"
+  register: trusted_certs
+
+- name: generate trusted_certs.pem for ic network if it does not yet exist
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  shell: "/usr/bin/cp -f /etc/ssl/certs/ssl-cert-snakeoil.pem /etc/nginx/ic_networks/{{ ic }}/trusted_certs.pem"
+  when: (not trusted_certs.stat.exists) or (trusted_certs.stat.size == 0)
+  tags:
+    - boundary_node_vm
+
+- name: remove /etc/nginx/conf.d/default.conf if it exists
+  file:
+    path: /etc/nginx/conf.d/default.conf
+    state: absent
+  tags:
+    - boundary_node_vm
+
+- name: remove /etc/nginx/sites-enabled/default if it exists
+  file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  tags:
+    - boundary_node_vm
+
+- name: remove /etc/nginx/conf.d/default if it exists
+  file:
+    path: /etc/nginx/conf.d/default
+    state: absent
+  tags:
+    - boundary_node_vm
+
+- name: nginx config test
+  shell: "nginx -t"
+  register: nginx_config_test
+  tags:
+    - boundary_node_vm
+
+- name: start nginx
+  service:
+    name: nginx
+    state: started
+    daemon_reload: yes
+  tags:
+    - boundary_node_vm
+
+- name: reload nginx
+  service:
+    name: nginx
+    state: reloaded
+    daemon_reload: yes
+  tags:
+    - boundary_node_vm
+
+- name: restart service ic-router-control-plane-watcher for ic network
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  service:
+    name: "ic-router-control-plane-watcher-{{ ic }}"
+    state: restarted
+  tags:
+    - boundary_node_vm
