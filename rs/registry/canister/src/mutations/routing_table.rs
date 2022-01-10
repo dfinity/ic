@@ -1,6 +1,6 @@
 use crate::{mutations::common::decode_registry_value, registry::Registry};
 
-use std::{collections::BTreeMap, convert::TryFrom};
+use std::convert::TryFrom;
 
 use ic_base_types::SubnetId;
 use ic_protobuf::registry::routing_table::v1 as pb;
@@ -56,18 +56,12 @@ impl Registry {
         } = self
             .get(make_routing_table_record_key().as_bytes(), version)
             .unwrap();
-        let routing_table = RoutingTable::try_from(decode_registry_value::<pb::RoutingTable>(
+        let mut routing_table = RoutingTable::try_from(decode_registry_value::<pb::RoutingTable>(
             routing_table_vec.clone(),
         ))
-        .unwrap();
+        .expect("failed to decode the routing table from protobuf");
 
-        let mut map = BTreeMap::new();
-        for (canister_id_range, subnet_id) in routing_table.into_iter() {
-            if subnet_id != subnet_id_to_remove {
-                map.insert(canister_id_range, subnet_id);
-            }
-        }
-        let routing_table = RoutingTable::new(map);
+        routing_table.remove_subnet(subnet_id_to_remove);
 
         into_registry_mutation(routing_table, 1)
     }

@@ -7,7 +7,7 @@ use ic_ic00_types::{
     SetControllerArgs, UpdateSettingsArgs,
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, convert::TryFrom, str::FromStr, sync::Arc};
+use std::{collections::BTreeMap, convert::TryFrom, str::FromStr};
 
 pub enum ResolveDestinationError {
     CandidError(candid::Error),
@@ -24,7 +24,7 @@ impl From<candid::Error> for ResolveDestinationError {
 /// Inspect the method name and payload of a request to ic:00 to figure out to
 /// which subnet it should be sent to.
 pub fn resolve_destination(
-    routing_table: Arc<RoutingTable>,
+    routing_table: &RoutingTable,
     method_name: &str,
     payload: &[u8],
     own_subnet: SubnetId,
@@ -129,10 +129,8 @@ pub struct CanisterIdRange {
 #[derive(Debug, Eq, PartialEq)]
 pub enum WellFormedError {
     CanisterIdRangeNonClosedRange(String),
-    CanisterIdRangeAppGroupSplit(String),
     CanisterIdRangeNotSortedOrNotDisjoint(String),
     RoutingTableNonEmptyRange(String),
-    RoutingTableAppGroupSplit(String),
     RoutingTableNotDisjoint(String),
 }
 
@@ -141,7 +139,7 @@ pub enum WellFormedError {
 pub struct CanisterIdRanges(Vec<CanisterIdRange>);
 
 impl CanisterIdRanges {
-    /// Returns true if this collection of canister ID ranges is well-formed.
+    /// Returns Ok if this collection of canister ID ranges is well-formed.
     fn well_formed(&self) -> Result<(), WellFormedError> {
         use WellFormedError::*;
 
@@ -151,24 +149,6 @@ impl CanisterIdRanges {
                 return Err(CanisterIdRangeNonClosedRange(format!(
                     "start {} is greater than end {}",
                     range.start, range.end,
-                )));
-            }
-        }
-
-        // Ranges do not split application groups.
-        for range in self.0.iter() {
-            if canister_id_into_u64(range.start) & 0xff != 0 {
-                return Err(CanisterIdRangeAppGroupSplit(format!(
-                    "Start {} ({}) & 0xff != 0",
-                    range.start,
-                    canister_id_into_u64(range.start)
-                )));
-            }
-            if canister_id_into_u64(range.end) & 0xff != 0xff {
-                return Err(CanisterIdRangeAppGroupSplit(format!(
-                    "end {} ({}) & 0xff != 0xff",
-                    range.end,
-                    canister_id_into_u64(range.end)
                 )));
             }
         }
@@ -243,26 +223,57 @@ pub fn routing_table_insert_subnet(
 
 /// Stores an ordered map mapping CanisterId ranges to SubnetIds.  The ranges
 /// tracked are inclusive of start and end i.e. can be denoted as [a, b].
+// INVARIANT: self.well_formed() == Ok(())
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RoutingTable(pub BTreeMap<CanisterIdRange, SubnetId>);
+pub struct RoutingTable(BTreeMap<CanisterIdRange, SubnetId>);
+
+impl TryFrom<BTreeMap<CanisterIdRange, SubnetId>> for RoutingTable {
+    type Error = WellFormedError;
+
+    fn try_from(map: BTreeMap<CanisterIdRange, SubnetId>) -> Result<Self, WellFormedError> {
+        let t = Self(map);
+        t.well_formed()?;
+        Ok(t)
+    }
+}
 
 impl RoutingTable {
-    pub fn new(map: BTreeMap<CanisterIdRange, SubnetId>) -> Self {
-        let ret = Self(map);
-        assert_eq!(ret.well_formed(), Ok(()));
-        ret
+    /// Constructs an empty routing table.
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    /// Insert a new subnet with a corresponding canister_id_range into the
-    /// routing table.  You may want to consider using
-    /// routing_table_insert_subnet instead.  It may meet your needs.
+    /// Inserts a mapping from the corresponding canister_id_range to the subnet
+    /// into the routing table.
+    ///
+    /// Returns an error if adding a new entry makes the routing table invalid.
+    /// If this function returns an error, the routing table is not modified.
+    ///
+    /// NOTE: consider using [routing_table_insert_subnet] instead.
     pub fn insert(
         &mut self,
         canister_id_range: CanisterIdRange,
         subnet_id: SubnetId,
     ) -> Result<(), WellFormedError> {
-        self.0.insert(canister_id_range, subnet_id);
-        self.well_formed()
+        let old_value = self.0.insert(canister_id_range, subnet_id);
+        let result = self.well_formed();
+
+        if result.is_err() {
+            // Undo the table change
+            match old_value {
+                Some(v) => self.0.insert(canister_id_range, v),
+                None => self.0.remove(&canister_id_range),
+            };
+        }
+
+        result
+    }
+
+    /// Removes all canister id ranges mapped to the specified subnet.
+    pub fn remove_subnet(&mut self, subnet_id_to_remove: SubnetId) {
+        self.0
+            .retain(|_range, subnet_id| *subnet_id != subnet_id_to_remove);
+        debug_assert_eq!(self.well_formed(), Ok(()));
     }
 
     pub fn iter(&self) -> impl std::iter::Iterator<Item = (&CanisterIdRange, &SubnetId)> {
@@ -273,7 +284,7 @@ impl RoutingTable {
         self.0.is_empty()
     }
 
-    /// Returns true if the routing table is well-formed.
+    /// Returns Ok if the routing table is well-formed.
     pub fn well_formed(&self) -> Result<(), WellFormedError> {
         use WellFormedError::*;
 
@@ -286,21 +297,6 @@ impl RoutingTable {
                 return Err(RoutingTableNonEmptyRange(format!(
                     "start {} is greater than end {}",
                     range.start, range.end
-                )));
-            }
-            // Check that ranges do not split application groups.
-            if canister_id_into_u64(range.start) & 0xff != 0 {
-                return Err(RoutingTableAppGroupSplit(format!(
-                    "Start {} ({}) & 0xff != 0",
-                    range.start,
-                    canister_id_into_u64(range.start)
-                )));
-            }
-            if canister_id_into_u64(range.end) & 0xff != 0xff {
-                return Err(RoutingTableAppGroupSplit(format!(
-                    "End {} ({}) & 0xff != 0xff",
-                    range.end,
-                    canister_id_into_u64(range.end)
                 )));
             }
 
@@ -392,7 +388,7 @@ impl RoutingTable {
             }
         }
         let res = CanisterIdRanges(ranges);
-        assert_eq!(res.well_formed(), Ok(()));
+        debug_assert_eq!(res.well_formed(), Ok(()));
         res
     }
 }
@@ -494,24 +490,6 @@ mod test {
             Err(WellFormedError::CanisterIdRangeNonClosedRange(_))
         );
 
-        let ranges = CanisterIdRanges(vec![CanisterIdRange {
-            start: CanisterId::from(1),
-            end: CanisterId::from(0xff),
-        }]);
-        assert_matches!(
-            ranges.well_formed(),
-            Err(WellFormedError::CanisterIdRangeAppGroupSplit(_))
-        );
-
-        let ranges = CanisterIdRanges(vec![CanisterIdRange {
-            start: CanisterId::from(0),
-            end: CanisterId::from(0xfe),
-        }]);
-        assert_matches!(
-            ranges.well_formed(),
-            Err(WellFormedError::CanisterIdRangeAppGroupSplit(_))
-        );
-
         let ranges = CanisterIdRanges(vec![
             CanisterIdRange {
                 start: CanisterId::from(0),
@@ -535,20 +513,6 @@ mod test {
         assert_matches!(
             rt.well_formed(),
             Err(WellFormedError::RoutingTableNonEmptyRange(_))
-        );
-
-        // not respecting application groups
-        let rt = new_routing_table([((0x1, 0x10fe), 0)].to_vec());
-        assert_matches!(
-            rt.well_formed(),
-            Err(WellFormedError::RoutingTableAppGroupSplit(_))
-        );
-
-        // not respecting application groups
-        let rt = new_routing_table([((0x1000, 0x10fe), 0)].to_vec());
-        assert_matches!(
-            rt.well_formed(),
-            Err(WellFormedError::RoutingTableAppGroupSplit(_))
         );
 
         // overlaping ranges.
@@ -633,5 +597,60 @@ mod test {
         assert_eq!(rt.route(subnet_id8.get()), Some(subnet_id8));
         assert_eq!(rt.route(subnet_id5.get()), None);
         assert_eq!(rt.route(subnet_id12.get()), None);
+    }
+
+    #[test]
+    fn can_insert_valid_route() {
+        let mut rt = new_routing_table(vec![((1, 1000), 1)]);
+        assert_eq!(rt.well_formed(), Ok(()));
+        assert_eq!(
+            rt.insert(
+                CanisterIdRange {
+                    start: CanisterId::from(1001u64),
+                    end: CanisterId::from(2000u64)
+                },
+                subnet_test_id(2)
+            ),
+            Ok(())
+        );
+        assert_eq!(rt.well_formed(), Ok(()));
+        assert_eq!(
+            rt.route(CanisterId::from(1001u64).get()),
+            Some(subnet_test_id(2))
+        );
+    }
+
+    #[test]
+    fn cannot_insert_invalid_route() {
+        let mut rt = new_routing_table(vec![((1, 1000), 1)]);
+        assert_eq!(rt.well_formed(), Ok(()));
+        assert_matches!(
+            rt.insert(
+                CanisterIdRange {
+                    start: CanisterId::from(100u64),
+                    end: CanisterId::from(2000u64)
+                },
+                subnet_test_id(2)
+            ),
+            Err(WellFormedError::RoutingTableNotDisjoint(_))
+        );
+        assert_eq!(
+            rt.route(CanisterId::from(101u64).get()),
+            Some(subnet_test_id(1))
+        );
+        assert_eq!(rt.well_formed(), Ok(()));
+    }
+
+    #[test]
+    fn can_remove_subnet() {
+        let mut rt = new_routing_table(vec![((1, 1000), 1), ((2000, 3000), 2)]);
+        assert_eq!(rt.well_formed(), Ok(()));
+        assert_eq!(
+            rt.route(CanisterId::from(100u64).get()),
+            Some(subnet_test_id(1))
+        );
+        rt.remove_subnet(subnet_test_id(1));
+        assert_eq!(rt.well_formed(), Ok(()));
+        assert_eq!(rt.route(CanisterId::from(100u64).get()), None);
     }
 }

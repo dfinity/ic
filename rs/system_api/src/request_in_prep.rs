@@ -10,7 +10,7 @@ use ic_types::{
     CanisterId, Cycles, NumBytes, PrincipalId, SubnetId,
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, convert::TryFrom, sync::Arc};
+use std::{collections::BTreeMap, convert::TryFrom};
 
 /// Represents an under construction `Request`.
 ///
@@ -147,7 +147,7 @@ impl RequestInPrep {
 /// Turns a `RequestInPrep` into a `Request`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn into_request(
-    routing_table: Arc<RoutingTable>,
+    routing_table: &RoutingTable,
     subnet_records: &BTreeMap<SubnetId, SubnetType>,
     RequestInPrep {
         sender,

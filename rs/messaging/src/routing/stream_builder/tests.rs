@@ -28,7 +28,10 @@ use ic_types::{
 };
 use lazy_static::lazy_static;
 use maplit::btreemap;
-use std::collections::{BTreeMap, VecDeque};
+use std::{
+    collections::{BTreeMap, VecDeque},
+    convert::TryFrom,
+};
 
 const LOCAL_SUBNET: SubnetId = SUBNET_27;
 const REMOTE_SUBNET: SubnetId = SUBNET_42;
@@ -172,11 +175,11 @@ fn reject_local_request_for_subnet() {
 fn build_streams_success() {
     with_test_replica_logger(|log| {
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
-        provided_state.metadata.network_topology.routing_table = Arc::new(RoutingTable::new(
+        provided_state.metadata.network_topology.routing_table = Arc::new(RoutingTable::try_from(
             btreemap! {
                 CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
             },
-        ));
+        ).unwrap());
         let mut expected_state = provided_state.clone();
 
         let msgs = generate_messages_for_test(/* senders = */ 2, /* receivers = */ 2);
@@ -274,9 +277,9 @@ fn build_streams_local_canisters() {
         provided_state.put_canister_states(provided_canister_states);
 
         // Ensure the routing table knows about the `LOCAL_SUBNET`.
-        let routing_table = Arc::new(RoutingTable::new(btreemap! {
+        let routing_table = Arc::new(RoutingTable::try_from(btreemap! {
             CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => LOCAL_SUBNET,
-        }));
+        }).unwrap());
         provided_state.metadata.network_topology.routing_table = Arc::clone(&routing_table);
 
         // Set up the expected Stream from the messages.
@@ -346,11 +349,11 @@ fn build_streams_local_canisters() {
 fn build_streams_impl_at_limit_leaves_state_untouched() {
     with_test_replica_logger(|log| {
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
-        provided_state.metadata.network_topology.routing_table = Arc::new(RoutingTable::new(
+        provided_state.metadata.network_topology.routing_table = Arc::new(RoutingTable::try_from(
             btreemap! {
                 CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
             },
-        ));
+        ).unwrap());
 
         // Set up the provided_canister_states.
         let msgs = generate_messages_for_test(/* senders = */ 2, /* receivers = */ 2);
@@ -398,11 +401,11 @@ fn build_streams_impl_at_limit_leaves_state_untouched() {
 fn build_streams_impl_respects_limit() {
     with_test_replica_logger(|log| {
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
-        provided_state.metadata.network_topology.routing_table = Arc::new(RoutingTable::new(
+        provided_state.metadata.network_topology.routing_table = Arc::new(RoutingTable::try_from(
             btreemap! {
                 CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
             },
-        ));
+        ).unwrap());
         let mut expected_state = provided_state.clone();
 
         let msgs = generate_messages_for_test(/* senders = */ 2, /* receivers = */ 2);
@@ -565,11 +568,11 @@ fn build_streams_with_messages_targeted_to_other_subnets() {
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
 
         // Ensure the routing table knows about the `REMOTE_SUBNET`.
-        provided_state.metadata.network_topology.routing_table = Arc::new(RoutingTable::new(
+        provided_state.metadata.network_topology.routing_table = Arc::new(RoutingTable::try_from(
             btreemap! {
                 CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
             },
-        ));
+        ).unwrap());
         let mut expected_state = provided_state.clone();
 
         // Set up the expected Stream from the messages.

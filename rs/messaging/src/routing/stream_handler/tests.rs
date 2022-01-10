@@ -34,6 +34,7 @@ use ic_types::{
 };
 use lazy_static::lazy_static;
 use maplit::btreemap;
+use std::convert::TryFrom;
 
 const LOCAL_SUBNET: SubnetId = SUBNET_12;
 const REMOTE_SUBNET: SubnetId = SUBNET_23;
@@ -1097,10 +1098,10 @@ fn new_fixture_with_config(
 
     // Ensure the routing table maps `LOCAL_CANISTER` to `LOCAL_SUBNET`,
     // `REMOTE_CANISTER` to `REMOTE_SUBNET` and `UNKNOWN_CANISTER` to `None`.
-    let routing_table = Arc::new(RoutingTable::new(btreemap! {
+    let routing_table = Arc::new(RoutingTable::try_from(btreemap! {
         CanisterIdRange{ start: CanisterId::from(0x0), end: CanisterId::from(0xff) } => LOCAL_SUBNET,
         CanisterIdRange{ start: CanisterId::from(0x100), end: CanisterId::from(0x1ff) } => REMOTE_SUBNET,
-    }));
+    }).unwrap());
     assert_eq!(
         Some(LOCAL_SUBNET),
         routing_table.route(LOCAL_CANISTER.get())

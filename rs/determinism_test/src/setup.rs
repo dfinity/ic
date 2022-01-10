@@ -29,7 +29,7 @@ use ic_test_utilities::{
     types::ids::subnet_test_id,
 };
 use ic_types::{replica_config::ReplicaConfig, NodeId, PrincipalId, RegistryVersion, SubnetId};
-use std::{collections::BTreeMap, sync::Arc};
+use std::sync::Arc;
 
 fn get_registry(
     metrics_registry: &MetricsRegistry,
@@ -53,7 +53,7 @@ fn get_registry(
             Some(root_subnet_id_proto),
         )
         .unwrap();
-    let mut routing_table = RoutingTable::new(BTreeMap::new());
+    let mut routing_table = RoutingTable::new();
     routing_table_insert_subnet(&mut routing_table, subnet_id).unwrap();
     let pb_routing_table = PbRoutingTable::from(routing_table);
     data_provider

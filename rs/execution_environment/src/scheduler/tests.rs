@@ -431,9 +431,10 @@ fn inner_loop_stops_when_max_instructions_per_round_consumed() {
 
 fn setup_routing_table() -> (SubnetId, RoutingTable) {
     let subnet_id = subnet_test_id(1);
-    let routing_table = RoutingTable::new(btreemap! {
+    let routing_table = RoutingTable::try_from(btreemap! {
         CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => subnet_id,
-    });
+    })
+    .unwrap();
     (subnet_id, routing_table)
 }
 
@@ -789,9 +790,9 @@ fn test_multiple_iterations_of_inner_loop() {
                 scheduler_test_fixture.canister_num,
                 scheduler_test_fixture.message_num_per_canister,
             );
-            let routing_table = Arc::new(RoutingTable::new(btreemap! {
+            let routing_table = Arc::new(RoutingTable::try_from(btreemap! {
                 CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => scheduler.own_subnet_id,
-            }));
+            }).unwrap());
             state.metadata.network_topology.routing_table = routing_table;
 
             let canister_id = canister_test_id(0);
@@ -3208,13 +3209,15 @@ fn replicated_state_metrics_all_canisters_in_routing_table() {
     state.put_canister_state(get_running_canister(canister_test_id(2)));
 
     let routing_table = Arc::make_mut(&mut state.metadata.network_topology.routing_table);
-    let _ = routing_table.insert(
-        CanisterIdRange {
-            start: canister_test_id(0),
-            end: canister_test_id(3),
-        },
-        subnet_test_id(1),
-    );
+    routing_table
+        .insert(
+            CanisterIdRange {
+                start: canister_test_id(0),
+                end: canister_test_id(3),
+            },
+            subnet_test_id(1),
+        )
+        .unwrap();
 
     let registry = MetricsRegistry::new();
     let scheduler_metrics = SchedulerMetrics::new(&registry);
@@ -3239,13 +3242,15 @@ fn replicated_state_metrics_some_canisters_not_in_routing_table() {
     state.put_canister_state(get_running_canister(canister_test_id(100)));
 
     let routing_table = Arc::make_mut(&mut state.metadata.network_topology.routing_table);
-    let _ = routing_table.insert(
-        CanisterIdRange {
-            start: canister_test_id(0),
-            end: canister_test_id(5),
-        },
-        subnet_test_id(1),
-    );
+    routing_table
+        .insert(
+            CanisterIdRange {
+                start: canister_test_id(0),
+                end: canister_test_id(5),
+            },
+            subnet_test_id(1),
+        )
+        .unwrap();
 
     let registry = MetricsRegistry::new();
     let scheduler_metrics = SchedulerMetrics::new(&registry);

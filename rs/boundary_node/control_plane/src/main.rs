@@ -559,7 +559,6 @@ fn get_routes(
         .map_err(|_| "unable to get canister routing table")?
         .ok_or("bad canister routing table")?;
     routes.canister_routes = canister_routes
-        .0
         .iter()
         .map(|(range, subnet_id)| CanisterRoute {
             start_canister_id: range.start.to_string(),

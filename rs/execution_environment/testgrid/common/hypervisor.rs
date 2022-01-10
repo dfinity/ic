@@ -99,9 +99,12 @@ fn setup() -> (
 ) {
     let subnet_id = subnet_test_id(1);
     let subnet_type = SubnetType::Application;
-    let routing_table = Arc::new(RoutingTable::new(btreemap! {
-        CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => subnet_id,
-    }));
+    let routing_table = Arc::new(
+        RoutingTable::try_from(btreemap! {
+            CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => subnet_id,
+        })
+        .unwrap(),
+    );
     let subnet_records = Arc::new(btreemap! {
         subnet_id => subnet_type,
     });

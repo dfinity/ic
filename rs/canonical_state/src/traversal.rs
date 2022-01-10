@@ -70,6 +70,7 @@ mod tests {
     use ic_wasm_types::BinaryEncodedWasm;
     use maplit::btreemap;
     use std::collections::BTreeSet;
+    use std::convert::TryFrom;
     use std::sync::Arc;
     use std::time::Duration;
 
@@ -656,11 +657,14 @@ mod tests {
                 end: CanisterId::from_u64(to),
             }
         }
-        state.metadata.network_topology.routing_table = Arc::new(RoutingTable(btreemap! {
-            id_range(0, 10) => subnet_test_id(0),
-            id_range(11, 20) => subnet_test_id(1),
-            id_range(21, 30) => subnet_test_id(0),
-        }));
+        state.metadata.network_topology.routing_table = Arc::new(
+            RoutingTable::try_from(btreemap! {
+                id_range(0, 10) => subnet_test_id(0),
+                id_range(11, 20) => subnet_test_id(1),
+                id_range(21, 30) => subnet_test_id(0),
+            })
+            .unwrap(),
+        );
 
         let visitor = TracingVisitor::new(NoopVisitor);
         state.metadata.certification_version = 2;

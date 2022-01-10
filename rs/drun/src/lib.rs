@@ -41,7 +41,6 @@ use ic_types::{
     CanisterId, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId,
 };
 use slog::{Drain, Logger};
-use std::collections::BTreeMap;
 use std::fs::OpenOptions;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -117,7 +116,7 @@ fn get_registry(
             Some(root_subnet_id_proto),
         )
         .unwrap();
-    let mut routing_table = RoutingTable::new(BTreeMap::new());
+    let mut routing_table = RoutingTable::new();
     routing_table_insert_subnet(&mut routing_table, subnet_id).unwrap();
     let pb_routing_table = PbRoutingTable::from(routing_table);
     data_provider

@@ -26,6 +26,7 @@ use lazy_static::lazy_static;
 use maplit::btreemap;
 use proptest::prelude::*;
 use std::collections::BTreeSet;
+use std::convert::TryFrom;
 use std::sync::Arc;
 
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
@@ -43,9 +44,12 @@ fn test_api_for_update(
 ) -> SystemApiImpl<ic_system_api::SystemStateAccessorDirect> {
     let caller = caller.unwrap_or_else(|| user_test_id(24).get());
     let subnet_id = subnet_test_id(1);
-    let routing_table = Arc::new(RoutingTable::new(btreemap! {
-        CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => subnet_id,
-    }));
+    let routing_table = Arc::new(
+        RoutingTable::try_from(btreemap! {
+            CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => subnet_id,
+        })
+        .unwrap(),
+    );
     let subnet_records = Arc::new(btreemap! {
         subnet_id => subnet_type,
     });
