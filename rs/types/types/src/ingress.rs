@@ -23,8 +23,28 @@ use std::time::Duration;
 pub const MAX_INGRESS_TTL: Duration = Duration::from_secs(5 * 60); // 5 minutes
 
 /// Duration subtracted from `MAX_INGRESS_TTL` by
-/// `current_time_and_expiry_time()`.
+/// `current_time_and_expiry_time()` when creating an ingress message.
 pub const PERMITTED_DRIFT: Duration = Duration::from_secs(60);
+
+/// Duration added to `MAX_INGRESS_TTL` when checking the max allowed
+/// expiry at the http handler. The purpose is to admit ingress created with
+/// MAX_INGRESS_TTL by clients with a slightly skewed local clock instead
+/// of rejecting them right away.
+pub const PERMITTED_DRIFT_AT_VALIDATOR: Duration = Duration::from_secs(30);
+
+/// Duration added to `MAX_INGRESS_TTL` when checking the max allowed expiry
+/// at the artifact manager when it receives ingress from http_handler or p2p.
+/// The purpose is to account for time drift between subnet nodes.
+///
+/// Together with `PERMITTED_DRIFT_AT_VALIDATOR` we give some leeway to
+/// accommodate possible time drift both between the user client and a subnet
+/// node, and between subnet nodes.
+///
+/// Note that when a blockmaker creates a payload, it will only choose from
+/// its ingress pool based on MAX_INGRESS_TTL. So time drift considerations
+/// may lead to more messages being admitted to the ingress pool, but
+/// shouldn't impact other parts of the system.
+pub const PERMITTED_DRIFT_AT_ARTIFACT_MANAGER: Duration = Duration::from_secs(60);
 
 /// The status of an ingress message.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
