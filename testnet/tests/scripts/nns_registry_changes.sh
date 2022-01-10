@@ -27,7 +27,7 @@ trap "echo 'SIGINT received, killing all jobs'; jobs -p | xargs -rn1 pkill -P >/
 
 if (($# != 5)); then
     echo >&2 "Wrong number of arguments, please provide values for <testnet_identifier> <duration> <num_proposals> <subnet_type> <results_dir>:"
-    echo >&2 "$0 consensus3 600 5 [normal|large_nns|56_nns] ./results/"
+    echo >&2 "$0 consensus3 600 5 [normal|large_nns|56_nns|46_nns] ./results/"
     exit 1
 fi
 
@@ -41,12 +41,12 @@ results_dir="$(
 )"
 # Results will be stored in $results_dir/$experiment_id -- this will allow us to collect all runs
 # if ever needed.
-# To make it discernable, use all the inputs, plus the current starttime
+# To make it discernible, use all the inputs, plus the current start time
 experiment_dir="$results_dir/testcase_registry_changes_${testnet}-$(date +%s)"
 
-SUBNET_TYPES=("normal" "large" "large_nns" "56_nns")
+SUBNET_TYPES=("normal" "large" "large_nns" "56_nns" "46_nns")
 if [[ ! " ${SUBNET_TYPES[*]} " =~ ${subnet_type} ]]; then
-    echo >&2 "Invalid subnet type specified, choose between normal, large, large_nns and 56_nns."
+    echo >&2 "Invalid subnet type specified, choose between normal, large, large_nns, 46_nns and 56_nns."
     exit_usage
 fi
 
@@ -64,6 +64,11 @@ fi
 if [[ "$subnet_type" == "56_nns" ]]; then
     # The test will run with a special hosts file creating a large nns subnet.
     export HOSTS_INI_FILENAME=hosts_56_nns.ini
+    HOSTS_INI_ARGUMENTS+=(--hosts-ini "$HOSTS_INI_FILENAME")
+fi
+if [[ "$subnet_type" == "46_nns" ]]; then
+    # The test will run with a special hosts file creating a large nns subnet.
+    export HOSTS_INI_FILENAME=hosts_46_nns.ini
     HOSTS_INI_ARGUMENTS+=(--hosts-ini "$HOSTS_INI_FILENAME")
 fi
 
