@@ -20,8 +20,6 @@ gflags.DEFINE_integer("update_rps_increment", 5, "Increment of requests per seco
 
 # Duration in seconds for which to execute workload in each round.
 gflags.DEFINE_integer("iter_duration", 300, "Duration per iteration of the benchmark.")
-# Size of payload for the memory test canister
-gflags.DEFINE_integer("payload_size", 5000000, "Payload size to use.")
 
 # Maximum failure rate and median query duration limit to consider
 # for rps to choose as rps_max. If failure rate or latency is higher,

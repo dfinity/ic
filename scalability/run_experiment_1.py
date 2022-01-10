@@ -127,20 +127,17 @@ class Experiment1(load_experiment.LoadExperiment):
 
             duration = int(time.time()) - t_start
 
-            if len(datapoints) == 1:
-                run = False
-            else:
-                max_t_median = FLAGS.update_max_t_median if self.use_updates else FLAGS.max_t_median
-                if failure_rate < FLAGS.max_failure_rate and t_median < max_t_median:
-                    if num_success / duration > rps_max:
-                        rps_max = num_success / duration
-                        rps_max_in = load_total
+            max_t_median = FLAGS.update_max_t_median if self.use_updates else FLAGS.max_t_median
+            if failure_rate < FLAGS.max_failure_rate and t_median < max_t_median:
+                if num_success / duration > rps_max:
+                    rps_max = num_success / duration
+                    rps_max_in = load_total
 
-                run = (
-                    failure_rate < FLAGS.stop_failure_rate
-                    and t_median < FLAGS.stop_t_median
-                    and iteration < len(datapoints)
-                )
+            run = (
+                failure_rate < FLAGS.stop_failure_rate
+                and t_median < FLAGS.stop_t_median
+                and iteration < len(datapoints)
+            )
 
             # Write summary file in each iteration including experiment specific data.
             self.write_summary_file(

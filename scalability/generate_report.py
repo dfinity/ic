@@ -206,7 +206,6 @@ def generate_report(githash, timestamp):
 
         data["topology"] = add_file(f"{githash}/{timestamp}", ["topology.json"], "topology data missing")
 
-        print("Rendering with page: {}".format(json.dumps(data, indent=2)))
         output = template(data)
         outfile.write(output)
 
