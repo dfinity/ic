@@ -5662,7 +5662,6 @@ dependencies = [
  "nix 0.23.0",
  "on_wire",
  "phantom_newtype",
- "process_manager",
  "prost",
  "rand 0.7.3",
  "rand_chacha 0.2.2",
@@ -8201,17 +8200,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0d8caf72986c1a598726adc988bb5984792ef84f5ee5aa50209145ee8077038"
 dependencies = [
  "unicode-xid 0.2.0",
-]
-
-[[package]]
-name = "process_manager"
-version = "0.8.0"
-dependencies = [
- "assert_matches",
- "futures",
- "nix 0.23.0",
- "tokio",
- "tokio-stream",
 ]
 
 [[package]]
