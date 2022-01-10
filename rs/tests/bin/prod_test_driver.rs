@@ -262,12 +262,12 @@ fn get_test_suites() -> HashMap<String, Suite> {
                             ssh_access_to_nodes::updating_readonly_does_not_remove_backup_keys,
                         ),
                         t(
-                            "can_add_50_readonly_and_backup_keys",
-                            ssh_access_to_nodes::can_add_100_readonly_and_backup_keys,
+                            "can_add_max_number_of_readonly_and_backup_keys",
+                            ssh_access_to_nodes::can_add_max_number_of_readonly_and_backup_keys,
                         ),
                         t(
-                            "cannot_add_51_readonly_or_backup_keys",
-                            ssh_access_to_nodes::cannot_add_101_readonly_or_backup_keys,
+                            "cannot_add_more_than_max_number_of_readonly_or_backup_keys",
+                            ssh_access_to_nodes::cannot_add_more_than_max_number_of_readonly_or_backup_keys,
                         ),
                     ]),
                 ),

@@ -27,6 +27,7 @@ use ic_fondue::{
     ic_instance::InternetComputer,
     ic_manager::{IcControl, IcEndpoint, IcHandle},
 };
+use ic_nns_common::registry::MAX_NUM_SSH_KEYS;
 use ic_nns_governance::pb::v1::NnsFunction;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::SubnetId;
@@ -312,7 +313,10 @@ pub fn updating_readonly_does_not_remove_backup_keys(
     assert_authentication_works(&node_ip, "backup", &backup_mean);
 }
 
-pub fn can_add_100_readonly_and_backup_keys(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn can_add_max_number_of_readonly_and_backup_keys(
+    handle: IcHandle,
+    ctx: &ic_fondue::pot::Context,
+) {
     let mut rng = ctx.rng.clone();
 
     // Choose a random node from the nns subnet
@@ -324,11 +328,11 @@ pub fn can_add_100_readonly_and_backup_keys(handle: IcHandle, ctx: &ic_fondue::p
         .unwrap();
 
     let (_private_key, public_key) = generate_key_strings();
-    // Update the registry with 50*2 new pairs of keys.
+    // Update the registry with MAX_NUM_SSH_KEYS new pairs of keys.
     let payload_for_subnet = get_updatesubnetpayload(
         app_subnet_id,
-        Some(vec![public_key.clone(); 100]),
-        Some(vec![public_key.clone(); 100]),
+        Some(vec![public_key.clone(); MAX_NUM_SSH_KEYS]),
+        Some(vec![public_key.clone(); MAX_NUM_SSH_KEYS]),
     );
     block_on(update_the_subnet_record(nns_endpoint, payload_for_subnet));
 
@@ -340,7 +344,10 @@ pub fn can_add_100_readonly_and_backup_keys(handle: IcHandle, ctx: &ic_fondue::p
     ));
 }
 
-pub fn cannot_add_101_readonly_or_backup_keys(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn cannot_add_more_than_max_number_of_readonly_or_backup_keys(
+    handle: IcHandle,
+    ctx: &ic_fondue::pot::Context,
+) {
     let mut rng = ctx.rng.clone();
 
     // Choose a random node from the nns subnet
@@ -353,10 +360,10 @@ pub fn cannot_add_101_readonly_or_backup_keys(handle: IcHandle, ctx: &ic_fondue:
 
     let (_private_key, public_key) = generate_key_strings();
 
-    // Try to update the registry with 51 readonly keys.
+    // Try to update the registry with MAX_NUM_SSH_KEYS+1 readonly keys.
     let readonly_payload = get_updatesubnetpayload(
         app_subnet_id,
-        Some(vec![public_key.clone(); 101]),
+        Some(vec![public_key.clone(); MAX_NUM_SSH_KEYS + 1]),
         Some(vec![]),
     );
     block_on(fail_updating_the_subnet_record(
@@ -364,11 +371,11 @@ pub fn cannot_add_101_readonly_or_backup_keys(handle: IcHandle, ctx: &ic_fondue:
         readonly_payload,
     ));
 
-    // Try to update the registry with 51 backup keys.
+    // Try to update the registry with MAX_NUM_SSH_KEYS backup keys.
     let backup_payload = get_updatesubnetpayload(
         app_subnet_id,
         Some(vec![]),
-        Some(vec![public_key.clone(); 101]),
+        Some(vec![public_key.clone(); MAX_NUM_SSH_KEYS + 1]),
     );
     block_on(fail_updating_the_subnet_record(
         nns_endpoint,
@@ -377,7 +384,7 @@ pub fn cannot_add_101_readonly_or_backup_keys(handle: IcHandle, ctx: &ic_fondue:
 
     // Also do that for unassigned nodes
     let readonly_payload_for_the_unassigned =
-        get_updateunassignednodespayload(Some(vec![public_key; 101]));
+        get_updateunassignednodespayload(Some(vec![public_key; MAX_NUM_SSH_KEYS + 1]));
     block_on(fail_updating_ssh_keys_for_all_unassigned_nodes(
         nns_endpoint,
         readonly_payload_for_the_unassigned,
