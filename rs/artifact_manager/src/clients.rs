@@ -26,7 +26,7 @@ use ic_types::{
         certification::CertificationMessage, dkg::Message as DkgMessage, ConsensusMessage,
         HasVersion,
     },
-    ingress::MAX_INGRESS_TTL,
+    ingress::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_ARTIFACT_MANAGER},
     malicious_flags::MaliciousFlags,
     messages::{SignedIngress, SignedRequestBytes},
     p2p, NodeId, ReplicaVersion,
@@ -374,12 +374,6 @@ impl<Pool: IngressPool + IngressGossipPool + Send + Sync> ArtifactClient<Ingress
         bytes: SignedRequestBytes,
         peer_id: &NodeId,
     ) -> Result<ArtifactAcceptance<SignedIngress>, ArtifactPoolError> {
-        // We account for a bit of drift here and accept messages with a bit longer
-        // than `MAX_INGRESS_TTL` time-to-live into the ingress pool.
-        // The purpose is to be a bit more permissive than the HTTP handler when the
-        // ingress was first accepted because here the ingress may have come
-        // from the network.
-        let permitted_drift = std::time::Duration::from_secs(60);
         let msg: SignedIngress = bytes
             .try_into()
             .map_err(|err| ArtifactPoolError::ArtifactRejected(Box::new(err)))?;
@@ -392,7 +386,12 @@ impl<Pool: IngressPool + IngressGossipPool + Send + Sync> ArtifactClient<Ingress
         }
 
         let time_now = self.time_source.get_relative_time();
-        let time_plus_ttl = time_now + MAX_INGRESS_TTL + permitted_drift;
+        // We account for a bit of drift here and accept messages with a bit longer
+        // than `MAX_INGRESS_TTL` time-to-live into the ingress pool.
+        // The purpose is to be a bit more permissive than the HTTP handler when the
+        // ingress was first accepted because here the ingress may have come
+        // from the network.
+        let time_plus_ttl = time_now + MAX_INGRESS_TTL + PERMITTED_DRIFT_AT_ARTIFACT_MANAGER;
         let msg_expiry_time = msg.expiry_time();
         if msg_expiry_time < time_now {
             Err(ArtifactPoolError::MessageExpired)
