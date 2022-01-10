@@ -1,5 +1,6 @@
 use crate::{
-    embedders::PersistenceType, feature_status::FeatureStatus,
+    embedders::{PersistenceType, QUERY_EXECUTION_THREADS},
+    feature_status::FeatureStatus,
     subnet_config::MAX_INSTRUCTIONS_PER_MESSAGE,
 };
 use ic_base_types::NumSeconds;
@@ -72,6 +73,9 @@ pub struct Config {
 
     /// Indicates whether canisters sandboxing is enabled or not.
     pub canister_sandboxing_flag: FeatureStatus,
+
+    /// The number of threads to use for query execution.
+    pub query_execution_threads: usize,
 }
 
 impl Default for Config {
@@ -96,6 +100,7 @@ impl Default for Config {
             max_controllers: 10,
             // Change this value to enable/disable canister sandboxing by default.
             canister_sandboxing_flag: FeatureStatus::Disabled,
+            query_execution_threads: QUERY_EXECUTION_THREADS,
         }
     }
 }

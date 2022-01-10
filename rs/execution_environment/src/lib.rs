@@ -36,7 +36,6 @@ use query_handler::{HttpQueryHandler, InternalHttpQueryHandler};
 use scheduler::SchedulerImpl;
 use std::sync::{Arc, Mutex};
 
-const QUERY_EXECUTION_THREADS: usize = 2;
 const QUERY_EXECUTION_MAX_BUFFERED_QUERIES: usize = 2000;
 
 /// When executing a wasm method of query type, this enum indicates if we are
@@ -83,7 +82,6 @@ pub fn setup_execution(
 ) {
     let hypervisor = Arc::new(Hypervisor::new(
         config.clone(),
-        1,
         metrics_registry,
         own_subnet_id,
         own_subnet_type,
@@ -113,12 +111,12 @@ pub fn setup_execution(
         hypervisor,
         own_subnet_id,
         own_subnet_type,
-        config,
+        config.clone(),
         metrics_registry,
         scheduler_config.max_instructions_per_message,
     ));
     let threadpool = threadpool::Builder::new()
-        .num_threads(QUERY_EXECUTION_THREADS)
+        .num_threads(config.query_execution_threads)
         .thread_name("query_execution".into())
         .thread_stack_size(8_192_000)
         .build();
@@ -127,7 +125,7 @@ pub fn setup_execution(
 
     let async_query_handler = HttpQueryHandler::new_service(
         QUERY_EXECUTION_MAX_BUFFERED_QUERIES,
-        QUERY_EXECUTION_THREADS,
+        config.query_execution_threads,
         Arc::clone(&sync_query_handler) as Arc<_>,
         Arc::clone(&threadpool),
         Arc::clone(&state_reader),
@@ -135,7 +133,7 @@ pub fn setup_execution(
 
     let ingress_filter = IngressFilter::new_service(
         QUERY_EXECUTION_MAX_BUFFERED_QUERIES,
-        QUERY_EXECUTION_THREADS,
+        config.query_execution_threads,
         threadpool,
         Arc::clone(&state_reader),
         Arc::clone(&exec_env),

@@ -152,7 +152,6 @@ where
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let hypervisor = Hypervisor::new(
             config(),
-            1,
             &metrics_registry,
             subnet_test_id(1),
             SubnetType::Application,
@@ -2804,7 +2803,6 @@ fn test_mint_cycles_cmc_canister() {
         );
         let hypervisor = Hypervisor::new(
             config(),
-            1,
             &metrics_registry,
             cycles_account_manager.get_subnet_id(),
             SubnetType::System,
@@ -2843,7 +2841,6 @@ fn test_mint_cycles_fail_on_system_canister() {
         );
         let hypervisor = Hypervisor::new(
             config(),
-            1,
             &metrics_registry,
             cycles_account_manager.get_subnet_id(),
             SubnetType::System,
@@ -3319,7 +3316,6 @@ fn canister_metrics_are_recorded() {
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let hypervisor = Hypervisor::new(
             config(),
-            1,
             &registry,
             subnet_test_id(1),
             SubnetType::Application,
@@ -3385,7 +3381,6 @@ fn executing_non_existing_method_does_not_consume_cycles() {
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let hypervisor = Hypervisor::new(
             config(),
-            1,
             &registry,
             subnet_test_id(1),
             SubnetType::Application,

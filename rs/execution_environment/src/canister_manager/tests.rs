@@ -111,7 +111,6 @@ impl CanisterManagerBuilder {
         let cycles_account_manager = Arc::new(self.cycles_account_manager);
         let hypervisor = Hypervisor::new(
             Config::default(),
-            1,
             &metrics_registry,
             self.subnet_id,
             subnet_type,
@@ -193,7 +192,6 @@ where
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let hypervisor = Hypervisor::new(
             Config::default(),
-            1,
             &metrics_registry,
             subnet_id,
             subnet_type,
@@ -1136,7 +1134,6 @@ fn reinstall_calls_canister_start_and_canister_init() {
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let hypervisor = Hypervisor::new(
             Config::default(),
-            1,
             &metrics_registry,
             subnet_id,
             subnet_type,
@@ -1233,7 +1230,6 @@ fn install_calls_canister_start_and_canister_init() {
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let hypervisor = Hypervisor::new(
             Config::default(),
-            1,
             &metrics_registry,
             subnet_id,
             subnet_type,
