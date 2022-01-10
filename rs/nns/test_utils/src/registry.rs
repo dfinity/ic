@@ -262,12 +262,13 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
         ..Default::default()
     };
 
-    let routing_table = RoutingTable::new(btreemap! {
+    let routing_table = RoutingTable::try_from(btreemap! {
         CanisterIdRange {
            start: CanisterId::from(0),
            end: CanisterId::from(u64::MAX),
         } => nns_subnet_id,
-    });
+    })
+    .unwrap();
 
     let mut mutations = vec![
         insert(

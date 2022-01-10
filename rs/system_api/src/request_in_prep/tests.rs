@@ -8,6 +8,7 @@ use ic_test_utilities::{
 };
 use maplit::btreemap;
 use std::convert::TryInto;
+use std::sync::Arc;
 
 #[test]
 fn large_methods_rejected() {
@@ -109,10 +110,11 @@ fn payloads_larger_than_inter_limit_rejected() {
         assert!(foreign_subnet_canister_id_range.start <= dest);
         assert!(dest <= foreign_subnet_canister_id_range.end);
 
-        let routing_table = Arc::new(RoutingTable::new(btreemap! {
+        let routing_table = RoutingTable::try_from(btreemap! {
             foreign_subnet_canister_id_range => foreign_subnet_id,
             sender_subnet_canister_id_range => sender_subnet,
-        }));
+        })
+        .unwrap();
 
         let subnet_records = btreemap! {
             sender_subnet => subnet_type,
@@ -154,7 +156,7 @@ fn payloads_larger_than_inter_limit_rejected() {
     let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
 
     into_request(
-        routing_table,
+        &routing_table,
         &subnet_records,
         req_in_prep,
         CallContextId::from(1),
@@ -191,10 +193,11 @@ fn application_subnet_cannot_send_cycles_to_verified_subnet() {
     assert!(dest_subnet_canister_id_range.start <= dest);
     assert!(dest <= dest_subnet_canister_id_range.end);
 
-    let routing_table = Arc::new(RoutingTable::new(btreemap! {
+    let routing_table = RoutingTable::try_from(btreemap! {
         dest_subnet_canister_id_range => dest_subnet,
         sender_subnet_canister_id_range => sender_subnet,
-    }));
+    })
+    .unwrap();
 
     let subnet_records = btreemap! {
         sender_subnet => sender_subnet_type,
@@ -227,7 +230,7 @@ fn application_subnet_cannot_send_cycles_to_verified_subnet() {
 
     let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
     into_request(
-        routing_table,
+        &routing_table,
         &subnet_records,
         req_in_prep,
         CallContextId::from(1),

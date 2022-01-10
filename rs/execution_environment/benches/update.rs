@@ -100,9 +100,9 @@ where
             .build(),
     );
     let time = mock_time();
-    let routing_table = Arc::new(RoutingTable::new(btreemap! {
+    let routing_table = Arc::new(RoutingTable::try_from(btreemap! {
         CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => subnet_test_id(1),
-    }));
+    }).unwrap());
     let subnet_records = Arc::new(btreemap! {
         subnet_test_id(1) => SubnetType::Application,
     });

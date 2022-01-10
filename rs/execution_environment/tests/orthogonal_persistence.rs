@@ -19,7 +19,7 @@ use ic_types::{
 };
 use maplit::btreemap;
 use proptest::prelude::*;
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, convert::TryFrom, sync::Arc};
 
 fn execution_parameters() -> ExecutionParameters {
     ExecutionParameters {
@@ -43,9 +43,9 @@ impl HypervisorTest {
     fn init(wast: &str, log: ReplicaLogger) -> Self {
         let subnet_id = subnet_test_id(1);
         let subnet_type = SubnetType::Application;
-        let routing_table = Arc::new(RoutingTable::new(btreemap! {
+        let routing_table = Arc::new(RoutingTable::try_from(btreemap! {
             CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => subnet_id,
-        }));
+        }).unwrap());
         let subnet_records = Arc::new(btreemap! {
             subnet_id => subnet_type,
         });

@@ -89,9 +89,12 @@ fn initial_state(
 ) {
     let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
     let subnet_id = subnet_test_id(1);
-    let routing_table = Arc::new(RoutingTable::new(btreemap! {
-        CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => subnet_id,
-    }));
+    let routing_table = Arc::new(
+        RoutingTable::try_from(btreemap! {
+            CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => subnet_id,
+        })
+        .unwrap(),
+    );
     let subnet_records = Arc::new(btreemap! {
         subnet_id => subnet_type,
     });
@@ -1892,10 +1895,10 @@ fn get_execution_environment(
 ) -> (ReplicatedState, ExecutionEnvironmentImpl) {
     let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
 
-    let routing_table = Arc::new(RoutingTable(btreemap! {
+    let routing_table = Arc::new(RoutingTable::try_from(btreemap! {
         CanisterIdRange{ start: CanisterId::from(0x0), end: CanisterId::from(0xff) } => own_subnet_id,
         CanisterIdRange{ start: CanisterId::from(0x100), end: CanisterId::from(0x1ff) } => sender_subnet_id,
-    }));
+    }).unwrap());
 
     let mut state =
         ReplicatedState::new_rooted_at(own_subnet_id, subnet_type, tmpdir.path().to_path_buf());

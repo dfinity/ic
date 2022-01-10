@@ -27,7 +27,7 @@ use ic_types::{
 };
 use ic_types::{CanisterId, Cycles, NumBytes, NumInstructions, SubnetId};
 use maplit::btreemap;
-use std::{path::Path, sync::Arc};
+use std::{convert::TryFrom, path::Path, sync::Arc};
 
 const CYCLE_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 const INSTRUCTION_LIMIT: NumInstructions = NumInstructions::new(1_000_000_000);
@@ -52,9 +52,9 @@ where
     }
 
     fn initial_state(path: &Path, subnet_id: SubnetId, subnet_type: SubnetType) -> ReplicatedState {
-        let routing_table = Arc::new(RoutingTable::new(btreemap! {
+        let routing_table = Arc::new(RoutingTable::try_from(btreemap! {
             CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => subnet_id,
-        }));
+        }).unwrap());
         let mut state = ReplicatedState::new_rooted_at(subnet_id, subnet_type, path.to_path_buf());
         state.metadata.network_topology.routing_table = routing_table;
         state.metadata.network_topology.nns_subnet_id = subnet_id;

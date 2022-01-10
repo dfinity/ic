@@ -1571,7 +1571,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                 let callee = if callee == IC_00.get() {
                     // This is a request to ic:00. Update `callee` to be the appropriate subnet.
                     let callee = resolve_destination(
-                        Arc::clone(routing_table),
+                        routing_table,
                         method_name.as_str(),
                         payload.as_slice(),
                         *own_subnet_id,
@@ -1823,7 +1823,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                 })?;
 
                 let req = into_request(
-                    Arc::clone(routing_table),
+                    routing_table,
                     subnet_records,
                     req_in_prep,
                     *call_context_id,
@@ -1856,7 +1856,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                 subnet_records.insert(*own_subnet_id, own_subnet_type);
 
                 let req = into_request(
-                    Arc::clone(routing_table),
+                    routing_table,
                     &subnet_records,
                     req_in_prep,
                     *call_context_id,

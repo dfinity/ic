@@ -44,7 +44,6 @@ use ic_types::{
     CanisterId, CryptoHashOfState, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId,
     UserId,
 };
-use std::collections::BTreeMap;
 use std::fmt;
 use std::string::ToString;
 use std::sync::Arc;
@@ -76,7 +75,7 @@ fn make_single_node_registry(
         )
         .unwrap();
 
-    let mut routing_table = RoutingTable::new(BTreeMap::new());
+    let mut routing_table = RoutingTable::new();
     routing_table_insert_subnet(&mut routing_table, subnet_id).unwrap();
     let pb_routing_table = PbRoutingTable::from(routing_table);
     data_provider

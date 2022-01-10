@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{convert::TryFrom, sync::Arc};
 
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
@@ -318,7 +318,7 @@ fn push_input_queues_respects_local_remote_subnet() {
     assert_eq!(state.canister_state(&remote_canister_id), None);
 
     // Populate routing table.
-    let routing_table = RoutingTable(maplit::btreemap! {
+    let routing_table = RoutingTable::try_from(maplit::btreemap! {
         CanisterIdRange {
             start: CanisterId::from(0x00),
             end: CanisterId::from(0xff),
@@ -327,8 +327,8 @@ fn push_input_queues_respects_local_remote_subnet() {
                 start: CanisterId::from(0x100),
                 end: CanisterId::from(0x1ff),
             } => remote_canister_subnet_id
-    });
-    routing_table.well_formed().unwrap();
+    })
+    .unwrap();
     state.metadata.network_topology.routing_table = Arc::new(routing_table);
 
     // Pushing message from the remote canister, should be in the remote subnet

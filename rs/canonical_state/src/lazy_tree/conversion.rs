@@ -203,7 +203,7 @@ fn invert_routing_table(
     routing_table: &RoutingTable,
 ) -> BTreeMap<SubnetId, Vec<(PrincipalId, PrincipalId)>> {
     let mut inverse_map: BTreeMap<SubnetId, Vec<_>> = BTreeMap::new();
-    for (range, subnet_id) in routing_table.0.iter() {
+    for (range, subnet_id) in routing_table.iter() {
         inverse_map
             .entry(*subnet_id)
             .or_default()

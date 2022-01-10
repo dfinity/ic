@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, convert::TryFrom, sync::Arc};
 
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
 use ic_cycles_account_manager::CyclesAccountManager;
@@ -50,9 +50,9 @@ impl ApiTypeBuilder {
     pub fn new() -> Self {
         let own_subnet_id = subnet_test_id(1);
         let own_subnet_type = SubnetType::Application;
-        let routing_table = Arc::new(RoutingTable::new(btreemap! {
+        let routing_table = Arc::new(RoutingTable::try_from(btreemap! {
             CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => own_subnet_id,
-        }));
+        }).unwrap());
         let subnet_records = Arc::new(btreemap! {
             own_subnet_id => own_subnet_type,
         });

@@ -13,12 +13,15 @@ use ic_test_utilities::{
 };
 use ic_types::{messages::UserQuery, user_error::ErrorCode, CanisterId, SubnetId};
 use maplit::btreemap;
-use std::{path::Path, sync::Arc};
+use std::{convert::TryFrom, path::Path, sync::Arc};
 
 fn initial_state(path: &Path, subnet_id: SubnetId) -> ReplicatedState {
-    let routing_table = Arc::new(RoutingTable::new(btreemap! {
-        CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => subnet_id,
-    }));
+    let routing_table = Arc::new(
+        RoutingTable::try_from(btreemap! {
+            CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => subnet_id,
+        })
+        .unwrap(),
+    );
     let mut state =
         ReplicatedState::new_rooted_at(subnet_id, SubnetType::Application, path.to_path_buf());
     state.metadata.network_topology.routing_table = routing_table;

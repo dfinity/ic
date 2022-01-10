@@ -55,6 +55,7 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{NodeId, RegistryVersion, SubnetId};
 use std::collections::BTreeMap;
+use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::io::{Error, ErrorKind};
 use std::net::IpAddr;
@@ -441,7 +442,6 @@ impl InternalState {
 
         // adjust routing table
         let new_routing_table: BTreeMap<CanisterIdRange, SubnetId> = routing_table
-            .0
             .into_iter()
             .filter_map(|(r, s_id)| {
                 if s_id == old_nns_subnet_id {
@@ -451,7 +451,12 @@ impl InternalState {
                 }
             })
             .collect();
-        let new_routing_table = RoutingTable::new(new_routing_table);
+
+        // It's safe to unwrap here because we started from a valid table and
+        // removed entries from it.  Removing entries cannot invalidate the
+        // table.
+        let new_routing_table =
+            RoutingTable::try_from(new_routing_table).expect("bug: invalid routing table");
         let pb_routing_table = PbRoutingTable::from(new_routing_table);
         let mut pb_routing_table_bytes = vec![];
         pb_routing_table
