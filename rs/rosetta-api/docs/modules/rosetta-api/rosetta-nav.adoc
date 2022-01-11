@@ -1,0 +1,8 @@
+* Financial integration
+** Rosetta API documentation
+*** xref:transfers.adoc[Transfer ICP]
+*** xref:neuron-lifecycle.adoc[Intoduction: neuron lifecycle]
+*** xref:staking-support.adoc[Stake ICP and manage neurons]
+*** xref:staking-tutorial.adoc[Tutorial: ICP staking workflow]
+** Ledger canister smart contract
+*** xref:ledger.adoc[Ledger specification]

@@ -25,14 +25,14 @@ From the Internet Computer point of view, creating a neuron is a multi-step oper
 Rosetta API represents these steps as https://www.rosetta-api.org/docs/models/Operation.html[operations] of a transaction.
 The execution of those operations must follow https://www.rosetta-api.org/docs/flow.html#construction-api[the Construction API flow].
 
-=== Deriving account identifiers
+== Deriving account identifiers
 
 Staking requires transferring tokens to a sub-account of the Governance canister smart contract.
 To complete the transfer, you need to know both your ledger account identifier (source of the transfer) and the account identifier of the Governance sub-account (destination of the transfer).
 
 Call the `/construction/derive` endpoint to get the default ledger account controlled by your public key and the account of the neuron controlled by that key.
 
-=== Compute the source ledger account
+== Compute the source ledger account
 
 NOTE: replace `hex_bytes` in the request below with bytes of your public key.
 
@@ -62,7 +62,7 @@ The expected response should look like the following:
 }
 ----
 
-=== Compute the ledger account for staking
+== Compute the ledger account for staking
 
 NOTE: replace `hex_bytes` in the request below with bytes of your public key.
 
@@ -100,7 +100,7 @@ The response should look like the following:
 }
 ----
 
-=== Obtain payloads to sign
+== Obtain payloads to sign
 
 Notes:
 
@@ -272,7 +272,7 @@ NOTE: The `payloads` field of the response contains the list of payloads that ne
 NOTE: According to the Rosetta API specification (https://www.rosetta-api.org/docs/construction_api_introduction.html#flow-of-operations[Flow of Operations]), the client should call `/construction/preprocess` and `/construction/metadata` before calling `/construction/payloads` because there might be some metadata that needs to be attached to the payloads request.
 Currently, there is no need to do it for the ICP Rosetta node implementation, so we skipped these unnecessary steps.
 
-=== Check the contents of the transaction you're about to sign
+== Check the contents of the transaction you're about to sign
 
 Call `/construction/parse` endpoint to decode the contents of a transaction.
 
@@ -373,7 +373,7 @@ The response must match the transaction intent.
 }
 ----
 
-=== Sign payloads and construct a signed transaction
+== Sign payloads and construct a signed transaction
 
 Sign the payloads from the `/construction/payloads` response using the tool of your choice.
 Include the signatures into a `/construction/combine` request as demonstrated in the command below.
@@ -521,7 +521,7 @@ The response should look like the following:
 }
 ----
 
-=== Check the contents of the transaction you're about to submit
+== Check the contents of the transaction you're about to submit
 
 Call `/construction/parse` endpoint to decode the contents of a transaction.
 
@@ -626,7 +626,7 @@ The response must match the transaction intent.
 }
 ----
 
-=== Submit the transaction
+== Submit the transaction
 
 Call `/construction/submit` endpoint to submit a signed transaction.
 Replace the `signed_transaction` field in the request below with the value of the `signed_transaction` field you got from the `/construction/combine` endpoint.
@@ -741,7 +741,7 @@ The response should look like the following:
 ====
     
 
-=== Check the status of the neuron
+== Check the status of the neuron
 
 Let us now check the status of the newly created neuron.
 
