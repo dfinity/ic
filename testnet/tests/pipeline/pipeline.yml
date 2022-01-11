@@ -242,19 +242,6 @@ node-remove-test-nightly:
 
       $SHELL_WRAPPER timeout 48m ./testnet/tests/scripts/node_assign_remove_test.sh "$TESTNET" "$CI_JOB_STAGE/$CI_JOB_NAME"
 
-# kill 1/3 of the nodes and observe that the rest progresses.
-subnet-threshold-test-nightly:
-  extends: .prod-nightly-test-group-2
-  script:
-    - |
-      set -eExou pipefail
-      if [[ -z "$TESTNET2" ]]; then echo "Please set the TESTNET2 environment variable for proper resource_group locking"; exit 1; fi
-      git fetch
-      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
-      export GIT_REVISION
-
-      $SHELL_WRAPPER timeout 40m ./testnet/tests/scripts/subnet_threshold_test.sh "$TESTNET" 300 20 5kb "$CI_JOB_STAGE/$CI_JOB_NAME"
-
 # nns_workload: Perform batches with 10 proposals each for 3 minutes,
 # perform a batch of 9 ledger transfers and queries per second for 3 minutes,
 # Stop one node after 0.75 minutes for 1.5 minutes and let it restart
