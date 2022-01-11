@@ -38,7 +38,7 @@ pub struct Config {
     pub consensus: ConsensusConfig,
     pub crypto: CryptoConfig,
     pub logger: LoggerConfig,
-    // If `manager_logger` is not specified in the configuration file, it
+    // If `orchestrator_logger` is not specified in the configuration file, it
     // defaults to the value specified for `logger`.
     pub orchestrator_logger: LoggerConfig,
     pub message_routing: MessageRoutingConfig,

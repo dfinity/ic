@@ -239,7 +239,7 @@ impl Orchestrator {
     /// output.
     fn get_logger(config: &Config) -> (ReplicaLogger, AsyncGuard) {
         let base_logger = LoggerImpl::new(&config.orchestrator_logger, "orchestrator".into());
-        let logger = new_replica_logger(base_logger.root.clone(), &config.logger);
+        let logger = new_replica_logger(base_logger.root.clone(), &config.orchestrator_logger);
 
         (logger, base_logger.async_log_guard)
     }
