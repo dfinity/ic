@@ -41,7 +41,9 @@ use crate::nns::{
     submit_update_subnet_replica_version_proposal, NnsExt,
 };
 
-use crate::util::{get_random_nns_node_endpoint, runtime_from_url};
+use crate::util::{
+    get_random_nns_node_endpoint, get_update_image_url, runtime_from_url, UpdateImageType,
+};
 
 use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
 
@@ -67,10 +69,7 @@ pub fn upgrade_reject(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     // These are the URL and version of *some* replica image; since we are testing a
     // rejection scenario, it does not matter that it is outdated.
     let git_revision = String::from("72670d259dc14936955d9f722677285a40342e0f");
-    let upgrade_url = format!(
-        "https://download.dfinity.systems/ic/{}/guest-os/update-img/update-img-test.tar.gz",
-        git_revision
-    );
+    let upgrade_url = get_update_image_url(UpdateImageType::ImageTest, &git_revision);
     let version = ReplicaVersion::try_from(format!("{}-test", git_revision)).unwrap();
 
     rt.block_on(async move {

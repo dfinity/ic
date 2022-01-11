@@ -5,7 +5,9 @@ use openssl::pkey::Private;
 use openssl::rsa::Rsa;
 use pem::{encode, Pem};
 use ssh2::Session;
+use std::io::Read;
 use std::net::{IpAddr, TcpStream};
+use std::path::Path;
 use std::time::Duration;
 
 pub(crate) fn generate_key_strings() -> (String, String) {
@@ -52,16 +54,11 @@ impl SshSession {
         }
     }
 
-    pub fn login(
-        &mut self,
-        ip: &IpAddr,
-        username: &str,
-        mean: &AuthMean,
-    ) -> Result<(), ssh2::Error> {
+    pub fn login(&mut self, ip: &IpAddr, username: &str, mean: &AuthMean) -> Result<(), String> {
         let ip_str = format!("[{}]:22", ip);
-        let tcp = TcpStream::connect(ip_str).unwrap();
+        let tcp = TcpStream::connect(ip_str).map_err(|err| err.to_string())?;
         self.session.set_tcp_stream(tcp);
-        self.session.handshake().unwrap();
+        self.session.handshake().map_err(|err| err.to_string())?;
 
         match mean {
             AuthMean::PrivateKey(pk) => self
@@ -70,7 +67,29 @@ impl SshSession {
             AuthMean::Password(pw) => self.session.userauth_password(username, pw),
             AuthMean::None => self.session.userauth_agent(username),
         }
+        .map_err(|err| err.to_string())
     }
+
+    pub fn scp_recv(&mut self, path: &Path, buf: &mut Vec<u8>) -> Result<usize, String> {
+        let mut result = self
+            .session
+            .scp_recv(path)
+            .map_err(|err| err.message().to_string())?;
+        result.0.read_to_end(buf).map_err(|err| err.to_string())
+    }
+}
+
+pub(crate) fn read_remote_file(
+    ip: &IpAddr,
+    username: &str,
+    mean: &AuthMean,
+    path: &Path,
+) -> Result<String, String> {
+    let mut buffer = Vec::new();
+    let mut sess = SshSession::new();
+    sess.login(ip, username, mean)?;
+    sess.scp_recv(path, &mut buffer)?;
+    Ok(String::from_utf8_lossy(&buffer).to_string())
 }
 
 pub(crate) fn assert_authentication_works(ip: &IpAddr, username: &str, mean: &AuthMean) {

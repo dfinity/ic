@@ -451,7 +451,7 @@ async fn fail_updating_the_subnet_record(nns_endpoint: &IcEndpoint, payload: Upd
     vote_execute_proposal_assert_failed(&gov_can, proposal_id, "too long").await;
 }
 
-fn get_updateunassignednodespayload(
+pub fn get_updateunassignednodespayload(
     readonly_keys: Option<Vec<String>>,
 ) -> UpdateUnassignedNodesConfigPayload {
     UpdateUnassignedNodesConfigPayload {
@@ -460,7 +460,7 @@ fn get_updateunassignednodespayload(
     }
 }
 
-async fn update_ssh_keys_for_all_unassigned_nodes(
+pub async fn update_ssh_keys_for_all_unassigned_nodes(
     nns_endpoint: &IcEndpoint,
     payload: UpdateUnassignedNodesConfigPayload,
 ) {

@@ -29,6 +29,7 @@ pub mod subnet_creation;
 pub mod token_balance_test;
 pub mod transaction_ledger_correctness_test;
 pub mod types;
+pub mod unassigned_node_upgrade_test;
 pub mod upgrade_reject;
 pub mod util;
 pub mod wasm_generator_test;
