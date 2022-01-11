@@ -87,6 +87,11 @@ in
             source "$checkout_root/dshell/load"
           fi
           ulimit -n 8192
+
+          if ! hash rustup 2>/dev/null; then
+            echo >&2 "Warning: The IC nix-shell no longer provides rustc. Please install rustup using the instructions at https://rustup.rs/."
+            exit 1
+          fi
         '';
     }
   )
