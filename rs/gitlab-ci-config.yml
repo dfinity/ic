@@ -79,7 +79,6 @@ ci_jobs_required:
   - generic-hourly
   - subnet-update-workload-nightly
   - global-reboot-nightly
-  - subnet-threshold-test-nightly
   - nns-workload-nightly
   - xnet-slo-nightly
   - xnet-slo-nightly-many-single-node-subnets
@@ -102,8 +101,6 @@ ci_jobs_required:
   - maximum-capacity-xnet-script
   - maximum-capacity-large-subnet-update
   - maximum-capacity-large-subnet-query
-  - wasm-generator-nightly
-  - wasm-generator-slo
   # finalize stage
   - notify-gitlab-success
   - notify-gitlab-failure
