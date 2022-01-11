@@ -10240,6 +10240,7 @@ dependencies = [
  "ic-crypto-sha",
  "ic-crypto-tree-hash",
  "ic-fondue",
+ "ic-http-utils",
  "ic-ic00-types",
  "ic-interfaces",
  "ic-nns-common",

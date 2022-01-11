@@ -53,6 +53,7 @@ use registry_canister::mutations::{
 use registry_canister::mutations::{
     do_create_subnet::CreateSubnetPayload,
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
+    do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
 };
 use slog::{info, Logger};
 use std::collections::{HashMap, HashSet};
@@ -898,4 +899,41 @@ pub async fn get_subnet_list_from_registry(client: &RegistryCanister) -> Vec<Sub
         .iter()
         .map(|s| SubnetId::from(PrincipalId::try_from(s.clone().as_slice()).unwrap()))
         .collect::<Vec<SubnetId>>()
+}
+
+/// Submits a proposal for updating replica software version of unassigned
+/// nodes.
+///
+/// # Arguments
+///
+/// * `governance`          - Governance canister
+/// * `sender`              - Sender of the proposal
+/// * `neuron_id`           - ID of the proposing neuron. This neuron will
+///   automatically vote in favor of the proposal.
+/// * `version`             - Replica software version
+/// * `readonly_public_key` - Public key of ssh credentials for readonly access
+///   to the node.
+///
+/// Eventually returns the identifier of the newly submitted proposal.
+pub async fn submit_update_unassigned_node_version_proposal(
+    governance: &Canister<'_>,
+    sender: Sender,
+    neuron_id: NeuronId,
+    version: String,
+    readonly_public_key: String,
+) -> ProposalId {
+    submit_external_update_proposal_allowing_error(
+        governance,
+        sender,
+        neuron_id,
+        NnsFunction::UpdateUnassignedNodesConfig,
+        UpdateUnassignedNodesConfigPayload {
+            ssh_readonly_access: Some(vec![readonly_public_key]),
+            replica_version: Some(version.clone()),
+        },
+        format!("Update unassigned nodes version to: {}", version.clone()),
+        "".to_string(),
+    )
+    .await
+    .expect("submit_update_unassigned_node_version_proposal failed")
 }
