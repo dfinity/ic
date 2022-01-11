@@ -13,7 +13,7 @@ cycles-minting-canister = {path = "../../nns/cmc"}
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 ic-base-types = { path = "../../types/base_types/" }
-ic-certified-map = { git = "git://github.com/dfinity/cdk-rs", rev = "2112e912e156b271389a51777680de542bb43980" }
+ic-certified-map = { git = "https://github.com/dfinity/cdk-rs", rev = "2112e912e156b271389a51777680de542bb43980" }
 ic-crypto-node-key-validation = { path = "../../crypto/node_key_validation" }
 ic-crypto-utils-basic-sig = { path = "../../crypto/utils/basic_sig" }
 ic-nns-common = { path = "../../nns/common" }
