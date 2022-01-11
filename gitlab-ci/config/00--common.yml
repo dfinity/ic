@@ -158,7 +158,7 @@ before_script:
     CAPSULE_ID="$(echo "${CI_JOB_NAME}" | tr ' ' '-')"
     export CAPSULE_ID
     CAPSULE_EXTRA_ARGS="${CAPSULE_EXTRA_ARGS:-}"
-    export CAPSULE_ARGS="${CAPSULE_EXTRA_ARGS} -c '${CAPSULE_ID}' -b s3 --honeycomb_dataset='${CAPSULE_HONEYCOMB_DATASET}' --honeycomb_token='${CAPSULE_HONEYCOMB_TOKEN}' --honeycomb_trace_id='${ROOT_PIPELINE_ID}' --honeycomb_kv=branch='${CI_COMMIT_BRANCH:-}' -t '${CI_JOB_IMAGE:-docker}'"
+    export CAPSULE_ARGS="${CAPSULE_EXTRA_ARGS} -c '${CAPSULE_ID}' -j '${CI_JOB_URL}' -b s3 --honeycomb_dataset='${CAPSULE_HONEYCOMB_DATASET}' --honeycomb_token='${CAPSULE_HONEYCOMB_TOKEN}' --honeycomb_trace_id='${ROOT_PIPELINE_ID}' --honeycomb_kv=branch='${CI_COMMIT_BRANCH:-}' -t '${CI_JOB_IMAGE:-docker}'"
   - echo -e "\e[0Ksection_end:$(date +%s):before_script\r\e[0K"
 
 
@@ -242,7 +242,7 @@ after_script:
   # - Build results are stored in non-persisted /cargo_target
   # - The container is destroyed and all non-persisted data is dropped, including /cargo_target
   image:
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-nix:2022-01-04-1f341c0e-618b776c3326db1b9b4005153dd0915225e2f425"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-nix:2022-01-11-09e900bc-14a8b92e63698e7fb3110262237d4351592c05b5"
   tags:
     # Build on runners that have following tags
     - dfinity
