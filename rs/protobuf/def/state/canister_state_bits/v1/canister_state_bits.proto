@@ -152,10 +152,8 @@ message CanisterStateBits {
   reserved "query_allocation";
   ExecutionStateBits execution_state_bits = 7;
   uint64 memory_allocation = 8;
-  // This field is now deprecated. Once all subnets in production contain the
-  // new version of this field, we can remove it (and mark it as reserved).
-  // (EXC-299) With this change, CyclesAccount can also be removed.
-  CyclesAccount cycles_account = 9;
+  reserved 9;
+  reserved "cycles_account";
   reserved 10;
   reserved "icp_balance";
   oneof canister_status {
