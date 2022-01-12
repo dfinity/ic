@@ -965,7 +965,6 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             memory_allocation: item.memory_allocation.bytes().get(),
             freeze_threshold: item.freeze_threshold.get(),
             cycles_balance: Some(item.cycles_balance.into()),
-            cycles_account: Some(item.cycles_balance.into()),
             canister_status: Some((&item.status).into()),
             scheduled_as_first: item.scheduled_as_first,
             skipped_round_due_to_no_messages: item.skipped_round_due_to_no_messages,
@@ -1014,17 +1013,8 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             controllers.insert(PrincipalId::try_from(controller)?);
         }
 
-        // Once all subnets in production contain the
-        // new version of this field, we can remove this code.
-        let cycles_balance = match try_from_option_field(
-            value.cycles_balance,
-            "CanisterStateBits::cycles_balance",
-        ) {
-            Ok(cycles_balance) => cycles_balance,
-            Err(_) => {
-                try_from_option_field(value.cycles_account, "CanisterStateBits::cycles_account")?
-            }
-        };
+        let cycles_balance =
+            try_from_option_field(value.cycles_balance, "CanisterStateBits::cycles_balance")?;
 
         // TODO(EXC-402): Remove this branch once subnets have been upgraded to have
         // the new 64-bit size along with the old 32-bit size.
