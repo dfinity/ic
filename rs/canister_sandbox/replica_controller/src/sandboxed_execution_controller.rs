@@ -12,7 +12,7 @@ use ic_replicated_state::canister_state::execution_state::{
     SandboxMemory, SandboxMemoryHandle, SandboxMemoryOwner, WasmBinary,
 };
 use ic_replicated_state::{EmbedderCache, ExecutionState, ExportedFunctions, Memory, PageMap};
-use ic_system_api::SystemStateAccessorDirect;
+use ic_system_api::{sandbox_safe_system_state::SystemStateChanges, SystemStateAccessorDirect};
 use ic_types::{CanisterId, NumInstructions};
 use ic_wasm_types::BinaryEncodedWasm;
 use prometheus::{Histogram, HistogramVec, IntGauge};
@@ -319,7 +319,7 @@ impl SandboxedExecutionController {
         &self,
         WasmExecutionInput {
             api_type,
-            static_system_state,
+            sandbox_safe_system_state,
             canister_current_memory_usage,
             execution_parameters,
             func_ref,
@@ -330,6 +330,7 @@ impl SandboxedExecutionController {
         WasmExecutionOutput,
         ExecutionState,
         SystemStateAccessorDirect,
+        SystemStateChanges,
     ) {
         let api_type_label = api_type.as_str();
         let _execute_timer = self
@@ -344,7 +345,7 @@ impl SandboxedExecutionController {
             .start_timer();
 
         // Determine which process we want to run this on.
-        let sandbox_process = self.get_sandbox_process(&static_system_state.canister_id());
+        let sandbox_process = self.get_sandbox_process(&sandbox_safe_system_state.canister_id());
 
         // Ensure that Wasm is compiled.
         let (wasm_id, compile_count) = match open_wasm(
@@ -364,6 +365,7 @@ impl SandboxedExecutionController {
                     },
                     execution_state,
                     system_state_accessor,
+                    SystemStateChanges::default(),
                 );
             }
         };
@@ -420,7 +422,7 @@ impl SandboxedExecutionController {
                     execution_parameters,
                     next_wasm_memory_id,
                     next_stable_memory_id,
-                    static_system_state,
+                    static_system_state: sandbox_safe_system_state,
                 },
             })
             .on_completion(|_| {});
@@ -447,7 +449,7 @@ impl SandboxedExecutionController {
             .unwrap();
 
         // Unless execution trapped, commit state.
-        if exec_output.wasm.wasm_result.is_ok() {
+        let system_state_changes = if exec_output.wasm.wasm_result.is_ok() {
             if let Some(state_modifications) = exec_output.state {
                 // TODO: If a canister has broken out of wasm then it might have allocated more
                 // wasm or stable memory then allowed. We should add an additional check here
@@ -478,8 +480,13 @@ impl SandboxedExecutionController {
                 // responsible for reseting the value themselves (see
                 // `SystemApiImpl::take_execution_result`).
                 subnet_available_memory.set(state_modifications.subnet_available_memory);
+                state_modifications.system_state_changes
+            } else {
+                SystemStateChanges::default()
             }
-        }
+        } else {
+            SystemStateChanges::default()
+        };
         self.metrics
             .sandboxed_execution_sandbox_execute_duration
             .with_label_values(&[api_type_label])
@@ -489,7 +496,12 @@ impl SandboxedExecutionController {
             .with_label_values(&[api_type_label])
             .observe(exec_output.execute_run_duration.as_secs_f64());
 
-        (exec_output.wasm, execution_state, system_state_accessor)
+        (
+            exec_output.wasm,
+            execution_state,
+            system_state_accessor,
+            system_state_changes,
+        )
     }
 
     pub fn create_execution_state(

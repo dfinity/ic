@@ -3,7 +3,8 @@ use std::path::PathBuf;
 
 use ic_replicated_state::canister_state::execution_state::WasmBinary;
 use ic_replicated_state::{ExportedFunctions, Global, Memory, NumWasmPages, PageMap};
-use ic_system_api::{ApiType, StaticSystemState, SystemStateAccessor, SystemStateAccessorDirect};
+use ic_system_api::sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateChanges};
+use ic_system_api::ApiType;
 use ic_types::methods::{FuncRef, WasmMethod};
 use prometheus::{Histogram, IntCounter};
 
@@ -22,7 +23,10 @@ use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{EmbedderCache, ExecutionState};
 use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
-use ic_system_api::{system_api_empty::SystemApiEmpty, ModificationTracking, SystemApiImpl};
+use ic_system_api::{
+    system_api_empty::SystemApiEmpty, ModificationTracking, SystemApiImpl, SystemStateAccessor,
+    SystemStateAccessorDirect,
+};
 use ic_types::{CanisterId, NumBytes, NumInstructions};
 use ic_wasm_types::BinaryEncodedWasm;
 
@@ -178,7 +182,7 @@ impl WasmExecutor {
         &self,
         WasmExecutionInput {
             api_type,
-            static_system_state,
+            sandbox_safe_system_state,
             canister_current_memory_usage,
             execution_parameters,
             func_ref,
@@ -189,6 +193,7 @@ impl WasmExecutor {
         WasmExecutionOutput,
         ExecutionState,
         SystemStateAccessorDirect,
+        SystemStateChanges,
     ) {
         // Ensure that Wasm is compiled.
         let embedder_cache = match self.get_embedder_cache(&execution_state.wasm_binary) {
@@ -205,6 +210,7 @@ impl WasmExecutor {
                     },
                     execution_state,
                     system_state_accessor,
+                    sandbox_safe_system_state.changes(),
                 )
             }
         };
@@ -213,7 +219,7 @@ impl WasmExecutor {
             api_type,
             canister_current_memory_usage,
             execution_parameters,
-            static_system_state,
+            sandbox_safe_system_state,
             system_state_accessor,
             &embedder_cache,
             &self.wasm_embedder,
@@ -227,16 +233,18 @@ impl WasmExecutor {
             execution_state.exported_globals = new_globals;
         }
 
-        let system_state_accessor = match instance_or_system_api {
+        let system_api = match instance_or_system_api {
             Ok(instance) => instance.into_store_data().system_api,
             Err(system_api) => system_api,
-        }
-        .release_system_state_accessor();
+        };
+        let (system_state_accessor, system_state_changes) =
+            system_api.release_system_state_accessor();
 
         (
             wasm_execution_output,
             execution_state,
             system_state_accessor,
+            system_state_changes,
         )
     }
 
@@ -319,7 +327,7 @@ pub fn process<A: SystemStateAccessor>(
     api_type: ApiType,
     canister_current_memory_usage: NumBytes,
     execution_parameters: ExecutionParameters,
-    static_system_state: StaticSystemState,
+    static_system_state: SandboxSafeSystemState,
     system_state_accessor: A,
     embedder_cache: &EmbedderCache,
     embedder: &WasmtimeEmbedder,

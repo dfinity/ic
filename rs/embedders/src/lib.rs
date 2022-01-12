@@ -7,14 +7,16 @@ pub mod wasmtime_embedder;
 use ic_interfaces::execution_environment::{ExecutionParameters, HypervisorError, InstanceStats};
 use ic_replicated_state::{ExecutionState, Global, NumWasmPages, PageIndex};
 use ic_sys::PageBytes;
-use ic_system_api::{ApiType, StaticSystemState, SystemStateAccessorDirect};
+use ic_system_api::{
+    sandbox_safe_system_state::SandboxSafeSystemState, ApiType, SystemStateAccessorDirect,
+};
 use ic_types::{ingress::WasmResult, methods::FuncRef, NumBytes, NumInstructions};
 use serde::{Deserialize, Serialize};
 pub use wasmtime_embedder::{WasmtimeEmbedder, WasmtimeMemoryCreator};
 
 pub struct WasmExecutionInput {
     pub api_type: ApiType,
-    pub static_system_state: StaticSystemState,
+    pub sandbox_safe_system_state: SandboxSafeSystemState,
     pub canister_current_memory_usage: NumBytes,
     pub execution_parameters: ExecutionParameters,
     pub func_ref: FuncRef,

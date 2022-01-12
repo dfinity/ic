@@ -37,9 +37,6 @@ pub trait SystemStateAccessor {
     /// reclaim cycles from unfulfilled requests.
     fn canister_cycles_refund(&self, cycles: Cycles);
 
-    /// Set certified data.
-    fn set_certified_data(&self, data: Vec<u8>);
-
     /// Registers callback for call return.
     fn register_callback(&self, callback: Callback) -> CallbackId;
 

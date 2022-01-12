@@ -21,7 +21,8 @@ use ic_replicated_state::{
 };
 use ic_sys::PAGE_SIZE;
 use ic_system_api::{
-    ApiType, NonReplicatedQueryKind, StaticSystemState, SystemStateAccessorDirect,
+    sandbox_safe_system_state::SandboxSafeSystemState, ApiType, NonReplicatedQueryKind,
+    SystemStateAccessorDirect,
 };
 use ic_types::{
     canonical_error::{internal_error, not_found_error, permission_denied_error, CanonicalError},
@@ -1095,15 +1096,15 @@ impl Hypervisor {
     ) -> (WasmExecutionOutput, ExecutionState, SystemState) {
         let api_type_str = api_type.as_str();
         let static_system_state =
-            StaticSystemState::new(&system_state, self.cycles_account_manager.subnet_type());
+            SandboxSafeSystemState::new(&system_state, self.cycles_account_manager.subnet_type());
         let system_state_accessor =
             SystemStateAccessorDirect::new(system_state, Arc::clone(&self.cycles_account_manager));
 
-        let (output, execution_state, system_state_accessor) =
+        let (output, execution_state, system_state_accessor, system_state_changes) =
             if let Some(sandbox_executor) = self.sandbox_executor.as_ref() {
                 sandbox_executor.process(WasmExecutionInput {
                     api_type: api_type.clone(),
-                    static_system_state,
+                    sandbox_safe_system_state: static_system_state,
                     canister_current_memory_usage,
                     execution_parameters,
                     func_ref,
@@ -1113,7 +1114,7 @@ impl Hypervisor {
             } else {
                 self.wasm_executor.process(WasmExecutionInput {
                     api_type: api_type.clone(),
-                    static_system_state,
+                    sandbox_safe_system_state: static_system_state,
                     canister_current_memory_usage,
                     execution_parameters,
                     func_ref,
@@ -1122,10 +1123,8 @@ impl Hypervisor {
                 })
             };
         self.metrics.observe(api_type_str, &output);
-        (
-            output,
-            execution_state,
-            system_state_accessor.release_system_state(),
-        )
+        let mut system_state = system_state_accessor.release_system_state();
+        system_state_changes.apply_changes(&mut system_state);
+        (output, execution_state, system_state)
     }
 }

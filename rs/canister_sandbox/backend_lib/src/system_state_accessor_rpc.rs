@@ -118,16 +118,6 @@ impl SystemStateAccessor for SystemStateAccessorRPC {
         }
     }
 
-    fn set_certified_data(&self, data: Vec<u8>) {
-        let reply = self.make_call(protocol::syscall::Request::SetCertifiedData(
-            protocol::syscall::SetCertifiedDataRequest { data },
-        ));
-        match reply {
-            protocol::syscall::Reply::SetCertifiedData(_rep) => {}
-            _ => unimplemented!(),
-        }
-    }
-
     fn register_callback(&self, callback: Callback) -> CallbackId {
         let reply = self.make_call(protocol::syscall::Request::RegisterCallback(
             protocol::syscall::RegisterCallbackRequest { callback },

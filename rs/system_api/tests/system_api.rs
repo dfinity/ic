@@ -10,7 +10,8 @@ use ic_replicated_state::{
     Memory, NumWasmPages, PageMap, SystemState,
 };
 use ic_system_api::{
-    ApiType, NonReplicatedQueryKind, StaticSystemState, SystemApiImpl, SystemStateAccessorDirect,
+    sandbox_safe_system_state::SandboxSafeSystemState, ApiType, NonReplicatedQueryKind,
+    SystemApiImpl, SystemStateAccessorDirect,
 };
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
@@ -1204,11 +1205,10 @@ fn certified_data_set() {
     // Copy the certified data into the system state.
     api.ic0_certified_data_set(0, 32, &heap).unwrap();
 
-    let system_state_accessor = api.release_system_state_accessor();
-    assert_eq!(
-        system_state_accessor.release_system_state().certified_data,
-        vec![10; 32]
-    )
+    let (system_state_accessor, system_state_changes) = api.release_system_state_accessor();
+    let mut system_state = system_state_accessor.release_system_state();
+    system_state_changes.apply_changes(&mut system_state);
+    assert_eq!(system_state.certified_data, vec![10; 32])
 }
 
 #[test]
@@ -1455,7 +1455,7 @@ fn call_perform_not_enough_cycles_resets_state() {
         .unwrap();
     api.ic0_call_cycles_add128(Cycles::from(100)).unwrap();
     assert_eq!(api.ic0_call_perform().unwrap(), 2);
-    let system_state = api.release_system_state_accessor().release_system_state();
+    let system_state = api.release_system_state_accessor().0.release_system_state();
     let call_context_manager = system_state.call_context_manager().unwrap();
     assert_eq!(call_context_manager.call_contexts().len(), 1);
     assert_eq!(call_context_manager.callbacks().len(), 0);
@@ -1470,7 +1470,7 @@ fn stable_grow_updates_subnet_available_memory() {
     let system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let static_system_state =
-        StaticSystemState::new(&system_state, cycles_account_manager.subnet_type());
+        SandboxSafeSystemState::new(&system_state, cycles_account_manager.subnet_type());
     let system_state_accessor =
         SystemStateAccessorDirect::new(system_state, Arc::new(cycles_account_manager));
     let mut api = SystemApiImpl::new(
@@ -1502,7 +1502,7 @@ fn stable_grow_returns_allocated_memory_on_error() {
     let system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let static_system_state =
-        StaticSystemState::new(&system_state, cycles_account_manager.subnet_type());
+        SandboxSafeSystemState::new(&system_state, cycles_account_manager.subnet_type());
     let system_state_accessor =
         SystemStateAccessorDirect::new(system_state, Arc::new(cycles_account_manager));
     let mut api = SystemApiImpl::new(
@@ -1542,7 +1542,7 @@ fn update_available_memory_updates_subnet_available_memory() {
     let system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let static_system_state =
-        StaticSystemState::new(&system_state, cycles_account_manager.subnet_type());
+        SandboxSafeSystemState::new(&system_state, cycles_account_manager.subnet_type());
     let system_state_accessor =
         SystemStateAccessorDirect::new(system_state, Arc::new(cycles_account_manager));
     let mut api = SystemApiImpl::new(
@@ -1572,7 +1572,7 @@ fn push_output_request_respects_memory_limits() {
     let system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let static_system_state =
-        StaticSystemState::new(&system_state, cycles_account_manager.subnet_type());
+        SandboxSafeSystemState::new(&system_state, cycles_account_manager.subnet_type());
     let own_canister_id = system_state.canister_id;
     let system_state_accessor =
         SystemStateAccessorDirect::new(system_state, Arc::new(cycles_account_manager));
@@ -1624,7 +1624,7 @@ fn push_output_request_respects_memory_limits() {
     }
 
     // Ensure that exactly one output request was pushed.
-    let system_state = api.release_system_state_accessor().release_system_state();
+    let system_state = api.release_system_state_accessor().0.release_system_state();
     assert_eq!(1, system_state.queues().output_queues_len());
 }
 
@@ -1635,7 +1635,7 @@ fn push_output_request_oversized_request_memory_limits() {
     let system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let static_system_state =
-        StaticSystemState::new(&system_state, cycles_account_manager.subnet_type());
+        SandboxSafeSystemState::new(&system_state, cycles_account_manager.subnet_type());
     let own_canister_id = system_state.canister_id;
     let system_state_accessor =
         SystemStateAccessorDirect::new(system_state, Arc::new(cycles_account_manager));
@@ -1705,6 +1705,6 @@ fn push_output_request_oversized_request_memory_limits() {
     }
 
     // Ensure that exactly one output request was pushed.
-    let system_state = api.release_system_state_accessor().release_system_state();
+    let system_state = api.release_system_state_accessor().0.release_system_state();
     assert_eq!(1, system_state.queues().output_queues_len());
 }

@@ -3,7 +3,10 @@ use ic_interfaces::execution_environment::ExecutionParameters;
 use ic_replicated_state::{
     page_map::PageDeltaSerialization, Global, Memory, NumWasmPages, PageIndex,
 };
-use ic_system_api::{ApiType, StaticSystemState};
+use ic_system_api::{
+    sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateChanges},
+    ApiType,
+};
 use ic_types::{methods::FuncRef, NumBytes};
 use serde::{Deserialize, Serialize};
 
@@ -23,7 +26,7 @@ pub struct SandboxExecInput {
     pub next_stable_memory_id: MemoryId,
     /// System state that won't change over the course of executing a single
     /// message.
-    pub static_system_state: StaticSystemState,
+    pub static_system_state: SandboxSafeSystemState,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -55,6 +58,8 @@ pub struct StateModifications {
     /// The number of free bytes of memory left on the subnet after executing
     /// the message.
     pub subnet_available_memory: i64,
+
+    pub system_state_changes: SystemStateChanges,
 }
 
 impl StateModifications {
@@ -65,6 +70,7 @@ impl StateModifications {
         wasm_memory_delta: &[PageIndex],
         stable_memory_delta: &[PageIndex],
         subnet_available_memory: i64,
+        system_state_changes: SystemStateChanges,
     ) -> Self {
         let wasm_memory = MemoryModifications {
             page_delta: wasm_memory.page_map.serialize_delta(wasm_memory_delta),
@@ -81,6 +87,7 @@ impl StateModifications {
             wasm_memory,
             stable_memory,
             subnet_available_memory,
+            system_state_changes,
         }
     }
 }

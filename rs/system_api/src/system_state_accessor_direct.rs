@@ -113,10 +113,6 @@ impl SystemStateAccessor for SystemStateAccessorDirect {
             .add_cycles(&mut self.system_state.borrow_mut(), cycles);
     }
 
-    fn set_certified_data(&self, data: Vec<u8>) {
-        self.system_state.borrow_mut().certified_data = data;
-    }
-
     fn register_callback(&self, callback: Callback) -> CallbackId {
         let mut system_state = self.system_state.borrow_mut();
         // A call context manager exists as the canister is either in

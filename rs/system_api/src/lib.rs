@@ -1,4 +1,5 @@
 mod request_in_prep;
+pub mod sandbox_safe_system_state;
 mod stable_memory;
 pub mod system_api_empty;
 mod system_state_accessor;
@@ -15,10 +16,8 @@ use ic_logger::{error, info, ReplicaLogger};
 use ic_registry_routing_table::{resolve_destination, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::{system_state::CanisterStatus, ENFORCE_MESSAGE_MEMORY_USAGE},
-    memory_required_to_push_request,
-    page_map::PAGE_SIZE,
-    Memory, NumWasmPages, PageIndex, StateError, SystemState,
+    canister_state::ENFORCE_MESSAGE_MEMORY_USAGE, memory_required_to_push_request,
+    page_map::PAGE_SIZE, Memory, NumWasmPages, PageIndex, StateError,
 };
 use ic_sys::PageBytes;
 use ic_types::{
@@ -29,6 +28,7 @@ use ic_types::{
     CanisterId, Cycles, NumBytes, NumInstructions, PrincipalId, SubnetId, Time,
 };
 use request_in_prep::{into_request, RequestInPrep};
+use sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState, SystemStateChanges};
 use serde::{Deserialize, Serialize};
 use stable_memory::StableMemory;
 use std::{
@@ -41,6 +41,7 @@ pub use system_state_accessor_direct::SystemStateAccessorDirect;
 
 const MULTIPLIER_MAX_SIZE_LOCAL_SUBNET: u64 = 5;
 const MAX_NON_REPLICATED_QUERY_REPLY_SIZE: NumBytes = NumBytes::new(3 << 20);
+const CERTIFIED_DATA_MAX_LENGTH: u32 = 32;
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[doc(hidden)]
@@ -587,64 +588,6 @@ impl MemoryUsage {
     }
 }
 
-/// The information that canisters can see about their own status.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub enum CanisterStatusView {
-    Running,
-    Stopping,
-    Stopped,
-}
-
-impl CanisterStatusView {
-    pub fn from_full_status(full_status: &CanisterStatus) -> Self {
-        match full_status {
-            CanisterStatus::Running { .. } => Self::Running,
-            CanisterStatus::Stopping { .. } => Self::Stopping,
-            CanisterStatus::Stopped => Self::Stopped,
-        }
-    }
-}
-
-/// Contains some fields from the `SystemState` that don't change over the
-/// course of a message execution.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StaticSystemState {
-    canister_id: CanisterId,
-    controller: PrincipalId,
-    status: CanisterStatusView,
-    subnet_type: SubnetType,
-}
-
-impl StaticSystemState {
-    /// Only public for use in tests.
-    pub fn new_internal(
-        canister_id: CanisterId,
-        controller: PrincipalId,
-        status: CanisterStatusView,
-        subnet_type: SubnetType,
-    ) -> Self {
-        Self {
-            canister_id,
-            controller,
-            status,
-            subnet_type,
-        }
-    }
-
-    pub fn new(system_state: &SystemState, subnet_type: SubnetType) -> Self {
-        Self::new_internal(
-            system_state.canister_id,
-            *system_state.controller(),
-            CanisterStatusView::from_full_status(&system_state.status),
-            subnet_type,
-        )
-    }
-
-    pub fn canister_id(&self) -> CanisterId {
-        self.canister_id
-    }
-}
-
 /// Struct that implements the SystemApi trait. This trait enables a canister to
 /// have mediated access to its system state.
 pub struct SystemApiImpl<A: SystemStateAccessor> {
@@ -669,14 +612,14 @@ pub struct SystemApiImpl<A: SystemStateAccessor> {
     /// through the `SystemStateAccessor` to read it. This saves on IPC
     /// communication between the sandboxed canister process and the main
     /// replica process.
-    static_system_state: StaticSystemState,
+    sandbox_safe_system_state: SandboxSafeSystemState,
 }
 
 impl<A: SystemStateAccessor> SystemApiImpl<A> {
     pub fn new(
         api_type: ApiType,
         system_state_accessor: A,
-        static_system_state: StaticSystemState,
+        sandbox_safe_system_state: SandboxSafeSystemState,
         canister_current_memory_usage: NumBytes,
         execution_parameters: ExecutionParameters,
         stable_memory: Memory,
@@ -684,7 +627,7 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
     ) -> Self {
         let memory_usage = MemoryUsage::new(
             &log,
-            static_system_state.canister_id,
+            sandbox_safe_system_state.canister_id,
             execution_parameters.canister_memory_limit,
             canister_current_memory_usage,
             execution_parameters.subnet_available_memory.clone(),
@@ -698,7 +641,7 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
             memory_usage,
             execution_parameters,
             stable_memory,
-            static_system_state,
+            sandbox_safe_system_state,
             log,
         }
     }
@@ -999,8 +942,15 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
         }
     }
 
-    pub fn release_system_state_accessor(self) -> A {
-        self.system_state_accessor
+    pub fn release_system_state_accessor(self) -> (A, SystemStateChanges) {
+        (
+            self.system_state_accessor,
+            self.sandbox_safe_system_state.system_state_changes,
+        )
+    }
+
+    pub fn take_system_state_changes(&mut self) -> SystemStateChanges {
+        self.sandbox_safe_system_state.take_changes()
     }
 
     pub fn stable_memory_size(&self) -> NumWasmPages {
@@ -1064,7 +1014,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
     }
 
     fn get_num_instructions_from_bytes(&self, num_bytes: NumBytes) -> NumInstructions {
-        match self.static_system_state.subnet_type {
+        match self.sandbox_safe_system_state.subnet_type {
             SubnetType::System => NumInstructions::from(0),
             SubnetType::VerifiedApplication | SubnetType::Application => {
                 NumInstructions::from(num_bytes.get())
@@ -1403,7 +1353,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::RejectCallback { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. } => Ok(self
-                .static_system_state
+                .sandbox_safe_system_state
                 .canister_id
                 .get_ref()
                 .as_slice()
@@ -1431,7 +1381,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. } => {
                 valid_subslice("ic0.canister_self_copy heap", dst, size, heap)?;
-                let canister_id = self.static_system_state.canister_id;
+                let canister_id = self.sandbox_safe_system_state.canister_id;
                 let id_bytes = canister_id.get_ref().as_slice();
                 let slice = valid_subslice("ic0.canister_self_copy id", offset, size, id_bytes)?;
                 let (dst, size) = (dst as usize, size as usize);
@@ -1454,7 +1404,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. } => {
-                Ok(self.static_system_state.controller.as_slice().len())
+                Ok(self.sandbox_safe_system_state.controller.as_slice().len())
             }
         }
     }
@@ -1479,7 +1429,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. } => {
                 valid_subslice("ic0.controller_copy heap", dst, size, heap)?;
-                let controller = self.static_system_state.controller;
+                let controller = self.sandbox_safe_system_state.controller;
                 let id_bytes = controller.as_slice();
                 let slice = valid_subslice("ic0.controller_copy id", offset, size, id_bytes)?;
                 let (dst, size) = (dst as usize, size as usize);
@@ -1582,7 +1532,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                             "Request destination: Couldn't find the right subnet. Send it to the current subnet {},
                             which will handle rejecting the request gracefully: sender id {}, receiver id {}, method_name {}.",
                             own_subnet_id,
-                            self.static_system_state.canister_id, callee, method_name
+                            self.sandbox_safe_system_state.canister_id, callee, method_name
                         );
                         *own_subnet_id
                     });
@@ -1602,7 +1552,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                 ));
 
                 let msg = Request {
-                    sender: self.static_system_state.canister_id,
+                    sender: self.sandbox_safe_system_state.canister_id,
                     receiver: callee,
                     method_name,
                     method_payload: payload,
@@ -1660,7 +1610,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                 }
 
                 let req = RequestInPrep::new(
-                    self.static_system_state.canister_id,
+                    self.sandbox_safe_system_state.canister_id,
                     callee_src,
                     callee_size,
                     name_src,
@@ -2297,7 +2247,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::PreUpgrade { .. } => {
-                if size > 32 {
+                if size > CERTIFIED_DATA_MAX_LENGTH {
                     return Err(ContractViolation(format!(
                         "ic0_certified_data_set failed because the passed data must be \
                         no larger than 32 bytes. Found {} bytes",
@@ -2319,8 +2269,9 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                 }
 
                 // Update the certified data.
-                self.system_state_accessor
-                    .set_certified_data(heap[src..src + size].to_vec());
+                self.sandbox_safe_system_state
+                    .system_state_changes
+                    .new_certified_data = Some(heap[src..src + size].to_vec());
                 Ok(())
             }
         }
@@ -2338,7 +2289,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::PreUpgrade { .. }
-            | ApiType::InspectMessage { .. } => match self.static_system_state.status {
+            | ApiType::InspectMessage { .. } => match self.sandbox_safe_system_state.status {
                 CanisterStatusView::Running => Ok(1),
                 CanisterStatusView::Stopping => Ok(2),
                 CanisterStatusView::Stopped => Ok(3),
@@ -2379,7 +2330,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
         };
         eprintln!(
             "[Canister {}] {}",
-            self.static_system_state.canister_id, msg
+            self.sandbox_safe_system_state.canister_id, msg
         );
     }
 
