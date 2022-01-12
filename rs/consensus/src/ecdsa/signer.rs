@@ -1,7 +1,7 @@
 //! The signature process manager
 
 use crate::consensus::{
-    metrics::{timed_call, EcdsaSignerMetrics},
+    metrics::{timed_call, EcdsaPayloadMetrics, EcdsaSignerMetrics},
     utils::RoundRobin,
     ConsensusCrypto,
 };
@@ -304,7 +304,7 @@ pub(crate) trait EcdsaSignatureBuilder: Send {
 pub(crate) struct EcdsaSignatureBuilderImpl<'a> {
     consensus_cache: &'a dyn ConsensusPoolCache,
     crypto: &'a dyn ConsensusCrypto,
-    metrics: EcdsaSignerMetrics,
+    metrics: &'a EcdsaPayloadMetrics,
     log: ReplicaLogger,
 }
 
@@ -312,13 +312,13 @@ impl<'a> EcdsaSignatureBuilderImpl<'a> {
     pub(crate) fn new(
         consensus_cache: &'a dyn ConsensusPoolCache,
         crypto: &'a dyn ConsensusCrypto,
-        metrics_registry: MetricsRegistry,
+        metrics: &'a EcdsaPayloadMetrics,
         log: ReplicaLogger,
     ) -> Self {
         Self {
             consensus_cache,
             crypto,
-            metrics: EcdsaSignerMetrics::new(metrics_registry),
+            metrics,
             log,
         }
     }
@@ -337,11 +337,11 @@ impl<'a> EcdsaSignatureBuilderImpl<'a> {
                     request_id,
                     error
                 );
-                self.metrics.sign_errors_inc("combine_sig_share");
+                self.metrics.payload_errors_inc("combine_sig_share");
                 Default::default()
             },
             |combined_signature| {
-                self.metrics.sign_metrics_inc("signatures_completed");
+                self.metrics.payload_metrics_inc("signatures_completed");
                 Some(combined_signature)
             },
         )
