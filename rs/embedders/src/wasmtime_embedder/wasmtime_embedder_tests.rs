@@ -6,7 +6,7 @@ use ic_interfaces::execution_environment::{
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{Memory, SystemState};
-use ic_system_api::{ApiType, StaticSystemState, SystemApiImpl};
+use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType, SystemApiImpl};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder, types::ids::canister_test_id,
 };
@@ -29,7 +29,7 @@ fn test_wasmtime_system_api() {
     let engine = Engine::new(&config).expect("Failed to initialize Wasmtime engine");
     let canister_id = canister_test_id(53);
     let system_state = SystemState::new_for_start(canister_id);
-    let static_system_state = StaticSystemState::new(&system_state, SubnetType::Application);
+    let static_system_state = SandboxSafeSystemState::new(&system_state, SubnetType::Application);
     let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
     let system_state_accessor =
         ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);

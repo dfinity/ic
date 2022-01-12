@@ -106,7 +106,10 @@ mod tests {
     use ic_registry_routing_table::RoutingTable;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{Global, NumWasmPages, PageIndex, PageMap};
-    use ic_system_api::{ApiType, CanisterStatusView, StaticSystemState};
+    use ic_system_api::{
+        sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState},
+        ApiType,
+    };
     use ic_test_utilities::types::ids::{canister_test_id, user_test_id};
     use ic_types::{
         ingress::WasmResult,
@@ -132,8 +135,8 @@ mod tests {
         }
     }
 
-    fn static_system_state() -> StaticSystemState {
-        StaticSystemState::new_internal(
+    fn static_system_state() -> SandboxSafeSystemState {
+        SandboxSafeSystemState::new_internal(
             canister_test_id(0),
             user_test_id(0).get(),
             CanisterStatusView::Running,

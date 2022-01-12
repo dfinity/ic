@@ -10,7 +10,10 @@ use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CallOrigin, Memory, SystemState};
-use ic_system_api::{ApiType, StaticSystemState, SystemApiImpl, SystemStateAccessorDirect};
+use ic_system_api::{
+    sandbox_safe_system_state::SandboxSafeSystemState, ApiType, SystemApiImpl,
+    SystemStateAccessorDirect,
+};
 use ic_test_utilities::{
     mock_time,
     types::ids::{call_context_test_id, subnet_test_id, user_test_id},
@@ -124,7 +127,7 @@ pub fn get_system_api(
     cycles_account_manager: CyclesAccountManager,
 ) -> SystemApiImpl<SystemStateAccessorDirect> {
     let static_system_state =
-        StaticSystemState::new(&system_state, cycles_account_manager.subnet_type());
+        SandboxSafeSystemState::new(&system_state, cycles_account_manager.subnet_type());
     let system_state_accessor =
         SystemStateAccessorDirect::new(system_state, Arc::new(cycles_account_manager));
     SystemApiImpl::new(

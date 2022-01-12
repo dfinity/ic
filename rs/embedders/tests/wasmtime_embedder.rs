@@ -33,7 +33,7 @@ fn execution_parameters() -> ExecutionParameters {
 #[cfg(test)]
 mod tests {
     use ic_replicated_state::Memory;
-    use ic_system_api::{ModificationTracking, StaticSystemState};
+    use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ModificationTracking};
     use ic_test_utilities::types::ids::canister_test_id;
 
     use super::*;
@@ -82,7 +82,7 @@ mod tests {
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let system_state = ic_test_utilities::state::SystemStateBuilder::default().build();
         let static_system_state =
-            StaticSystemState::new(&system_state, cycles_account_manager.subnet_type());
+            SandboxSafeSystemState::new(&system_state, cycles_account_manager.subnet_type());
         let system_state_accessor =
             ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
         let api = ic_system_api::SystemApiImpl::new(
@@ -165,7 +165,7 @@ mod tests {
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let system_state = ic_test_utilities::state::SystemStateBuilder::default().build();
         let static_system_state =
-            StaticSystemState::new(&system_state, cycles_account_manager.subnet_type());
+            SandboxSafeSystemState::new(&system_state, cycles_account_manager.subnet_type());
         let system_state_accessor =
             ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
         let api = ic_system_api::SystemApiImpl::new(
@@ -234,7 +234,7 @@ mod tests {
 
         let system_state = SystemStateBuilder::default().build();
         let static_system_state =
-            StaticSystemState::new(&system_state, cycles_account_manager.subnet_type());
+            SandboxSafeSystemState::new(&system_state, cycles_account_manager.subnet_type());
         let system_state_accessor = ic_system_api::SystemStateAccessorDirect::new(
             system_state,
             Arc::clone(&cycles_account_manager),
@@ -271,7 +271,7 @@ mod tests {
         // Change the value of globals and verify we can get them back.
         let system_state = SystemStateBuilder::default().build();
         let static_system_state =
-            StaticSystemState::new(&system_state, cycles_account_manager.subnet_type());
+            SandboxSafeSystemState::new(&system_state, cycles_account_manager.subnet_type());
         let system_state_accessor =
             ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
         let api = ic_system_api::SystemApiImpl::new(
@@ -325,7 +325,7 @@ mod tests {
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let system_state = SystemStateBuilder::default().build();
         let static_system_state =
-            StaticSystemState::new(&system_state, cycles_account_manager.subnet_type());
+            SandboxSafeSystemState::new(&system_state, cycles_account_manager.subnet_type());
         let system_state_accessor = ic_system_api::SystemStateAccessorDirect::new(
             system_state,
             Arc::clone(&cycles_account_manager),
@@ -365,7 +365,7 @@ mod tests {
         // Change the value of globals and verify we can get them back.
         let system_state = SystemStateBuilder::default().build();
         let static_system_state =
-            StaticSystemState::new(&system_state, cycles_account_manager.subnet_type());
+            SandboxSafeSystemState::new(&system_state, cycles_account_manager.subnet_type());
         let system_state_accessor =
             ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
         let api = ic_system_api::SystemApiImpl::new(
@@ -414,7 +414,7 @@ mod tests {
         let system_state = SystemStateBuilder::default().build();
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let static_system_state =
-            StaticSystemState::new(&system_state, cycles_account_manager.subnet_type());
+            SandboxSafeSystemState::new(&system_state, cycles_account_manager.subnet_type());
         let system_state_accessor =
             ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
         let api = ic_system_api::SystemApiImpl::new(
@@ -465,7 +465,7 @@ mod tests {
         let system_state = SystemStateBuilder::default().build();
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let static_system_state =
-            StaticSystemState::new(&system_state, cycles_account_manager.subnet_type());
+            SandboxSafeSystemState::new(&system_state, cycles_account_manager.subnet_type());
         let system_state_accessor =
             ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
         let api = ic_system_api::SystemApiImpl::new(

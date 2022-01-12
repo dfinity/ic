@@ -122,10 +122,7 @@ impl Execution {
                 instance_stats,
             },
             deltas,
-            // This field isn't used, but we want to ensure that it is not
-            // dropped until the execution result is send back to the replica
-            // because the drop can be expensive.
-            _instance_or_system_api,
+            instance_or_system_api,
         ) = ic_embedders::wasm_executor::process(
             exec_input.func_ref,
             exec_input.api_type,
@@ -151,6 +148,20 @@ impl Execution {
                         },
                         globals,
                     )| {
+                        let system_state_changes = match instance_or_system_api {
+                            // Here we use `store_data_mut` instead of
+                            // `into_store_data` because the later will drop the
+                            // wasmtime Instance which can be an expensive
+                            // operation. Mutating the store instead allows us
+                            // to delay the drop until after the execution
+                            // completed message is sent back to the main
+                            // process.
+                            Ok(mut instance) => instance
+                                .store_data_mut()
+                                .system_api
+                                .take_system_state_changes(),
+                            Err(system_api) => system_api.release_system_state_accessor().1,
+                        };
                         StateModifications::new(
                             globals,
                             &wasm_memory,
@@ -158,6 +169,7 @@ impl Execution {
                             &wasm_memory_delta,
                             &stable_memory_delta,
                             subnet_available_memory.get(),
+                            system_state_changes,
                         )
                     },
                 );

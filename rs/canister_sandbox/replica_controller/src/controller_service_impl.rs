@@ -141,10 +141,6 @@ impl ControllerService for ControllerServiceImpl {
                             system_state_accessor.canister_cycles_refund(req.cycles);
                             Reply::CanisterCyclesRefund(CanisterCyclesRefundReply {})
                         }
-                        Request::SetCertifiedData(req) => {
-                            system_state_accessor.set_certified_data(req.data);
-                            Reply::SetCertifiedData(SetCertifiedDataReply {})
-                        }
                         Request::RegisterCallback(req) => {
                             let result = system_state_accessor.register_callback(req.callback);
                             Reply::RegisterCallback(RegisterCallbackReply { result })

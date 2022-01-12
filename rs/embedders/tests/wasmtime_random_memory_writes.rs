@@ -9,7 +9,7 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{Memory, NumWasmPages};
 use ic_sys::PAGE_SIZE;
-use ic_system_api::{ApiType, StaticSystemState, SystemApiImpl};
+use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType, SystemApiImpl};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     mock_time,
@@ -60,7 +60,7 @@ fn test_api_for_update(
             .build(),
     );
     let static_system_state =
-        StaticSystemState::new(&system_state, cycles_account_manager.subnet_type());
+        SandboxSafeSystemState::new(&system_state, cycles_account_manager.subnet_type());
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);
 
