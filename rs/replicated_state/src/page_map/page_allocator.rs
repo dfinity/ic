@@ -238,6 +238,39 @@ pub struct PageSerialization {
     pub bytes: PageBytes,
 }
 
+/// Information for validating page contents.
+///
+/// If the page contains only zeros, then both fields are zeros.  Otherwise,
+/// the fields specify any non-zero two-byte word within the page by the
+/// word's index and value.
+///
+/// The mmap-based page allocator frees physical memory by punching holes in the
+/// backing file. A subsequent access to an already a freed page (both in the
+/// sandbox and the replica processes) does not cause a segmentation fault.
+/// Instead, the page silently becomes a zero page. That is dangerous and may
+/// cause silent data corruption.  That's why we use this validation to catch
+/// use-after-free bugs.
+///
+/// This validation is also useful for checking that the page transfer between
+/// the sandbox and the replica processes works properly.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default)]
+pub struct PageValidation {
+    // The index of a non-zero two-byte word in the page.
+    // It is zero if no such word exists.
+    pub non_zero_word_index: u16,
+    // The value of a non-zero two-byte word specified by the index above.
+    // It is zero if no such word exists.
+    pub non_zero_word_value: u16,
+}
+
+/// Serialization-friendly representation of an mmap-based page.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct MmapPageSerialization {
+    pub page_index: PageIndex,
+    pub file_offset: FileOffset,
+    pub validation: PageValidation,
+}
+
 /// Serialization-friendly representation of `PageDelta`.
 ///
 /// It contains sufficient information to reconstruct the page-delta
@@ -256,7 +289,7 @@ pub enum PageDeltaSerialization {
     Heap(Vec<PageSerialization>),
     Mmap {
         file_len: FileOffset,
-        pages: Vec<(PageIndex, FileOffset)>,
+        pages: Vec<MmapPageSerialization>,
     },
 }
 

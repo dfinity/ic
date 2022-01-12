@@ -1,8 +1,8 @@
 use crate::page_map::{FileDescriptor, FileOffset};
 
 use super::{
-    Page, PageAllocatorInner, PageAllocatorSerialization, PageDeltaSerialization, PageInner,
-    ALLOCATED_PAGES,
+    MmapPageSerialization, Page, PageAllocatorInner, PageAllocatorSerialization,
+    PageDeltaSerialization, PageInner, PageValidation, ALLOCATED_PAGES,
 };
 use cvt::cvt_r;
 use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
@@ -41,6 +41,7 @@ pub struct MmapBasedPage {
     // to enqueue the page for freeing. This field is empty if the page allocator
     // does not own the backing file.
     page_allocator: Option<Arc<MmapBasedPageAllocator>>,
+    validation: PageValidation,
 }
 
 impl Drop for MmapBasedPage {
@@ -57,7 +58,10 @@ impl PageInner for MmapBasedPage {
     fn contents(&self) -> &PageBytes {
         // SAFETY: The provided reference to the page allocator is a witness that the
         // underlying memory is still valid.
-        unsafe { page_bytes_from_ptr(self, self.ptr.0) }
+        unsafe {
+            assert!(self.is_valid());
+            page_bytes_from_ptr(self, self.ptr.0)
+        }
     }
 
     fn copy_from_slice<'a>(&mut self, offset: usize, slice: &[u8]) {
@@ -66,8 +70,53 @@ impl PageInner for MmapBasedPage {
         // underlying memory is still valid. The mutable reference to self shows that
         // the page is privately owned.
         unsafe {
-            std::ptr::copy_nonoverlapping(slice.as_ptr(), self.ptr.0.add(offset), slice.len())
+            if self.validation.non_zero_word_value != 0 {
+                // The branch optimizes for the common case when the page is
+                // initialized immediately after allocation.
+                assert!(self.is_valid());
+            }
+            std::ptr::copy_nonoverlapping(slice.as_ptr(), self.ptr.0.add(offset), slice.len());
+            // Update the validation information if it wasn't initialized yet or
+            // became invalid.
+            if self.validation.non_zero_word_value == 0 || !self.is_valid() {
+                self.validation = self.compute_validation();
+            }
         };
+    }
+}
+
+impl MmapBasedPage {
+    // See the comments of `PageValidation`.
+    #[inline]
+    unsafe fn is_valid(&self) -> bool {
+        let ptr = self.ptr.0 as *const u16;
+        *ptr.add(self.validation.non_zero_word_index as usize)
+            == self.validation.non_zero_word_value
+    }
+
+    // See the comments of `PageValidation`.
+    unsafe fn compute_validation(&self) -> PageValidation {
+        // Search for the first non-zero 8-byte word.
+        let mut ptr = self.ptr.0 as *const u64;
+        let end = self.ptr.0.add(PAGE_SIZE) as *const u64;
+        while ptr != end && *ptr == 0 {
+            ptr = ptr.add(1);
+        }
+        if ptr == end {
+            // The page contains only zeros.
+            return PageValidation::default();
+        }
+        // We found the non-zero 8-byte word. Now find the non-zero two-byte
+        // word within it. The `while` loop below is guaranteed to stop after
+        // at most four steps.
+        let mut ptr = ptr as *const u16;
+        while *ptr == 0 {
+            ptr = ptr.add(1);
+        }
+        PageValidation {
+            non_zero_word_index: ptr.offset_from(self.ptr.0 as *const u16) as u16,
+            non_zero_word_value: *ptr,
+        }
     }
 }
 
@@ -145,9 +194,13 @@ impl PageAllocatorInner for MmapBasedPageAllocator {
     where
         I: IntoIterator<Item = (PageIndex, &'a Page<Self::PageInner>)>,
     {
-        let pages: Vec<(PageIndex, FileOffset)> = page_delta
+        let pages: Vec<_> = page_delta
             .into_iter()
-            .map(|(page_index, page)| (page_index, page.0.offset))
+            .map(|(page_index, page)| MmapPageSerialization {
+                page_index,
+                file_offset: page.0.offset,
+                validation: page.0.validation,
+            })
             .collect();
         let mut guard = self.0.lock().unwrap();
         let core = guard.get_or_insert(MmapBasedPageAllocatorCore::new());
@@ -172,9 +225,9 @@ impl PageAllocatorInner for MmapBasedPageAllocator {
                 // the call to `grow_for_deserialization(file_len)`.
                 pages
                     .into_iter()
-                    .map(|(page_index, file_offset)| {
-                        let page = core.deserialize_page(file_offset, page_allocator);
-                        (page_index, Page(Arc::new(page)))
+                    .map(|ser| {
+                        let page = core.deserialize_page(&ser, page_allocator);
+                        (ser.page_index, Page(Arc::new(page)))
                     })
                     .collect()
             }
@@ -274,6 +327,7 @@ impl AllocationArea {
             ptr,
             offset,
             page_allocator: page_allocator.map(Arc::clone),
+            validation: PageValidation::default(),
         }
     }
 }
@@ -481,13 +535,14 @@ impl MmapBasedPageAllocatorCore {
     // memory-mapped in `grow_for_deserialization()`.
     fn deserialize_page(
         &self,
-        file_offset: FileOffset,
+        serialized_page: &MmapPageSerialization,
         page_allocator: &Arc<MmapBasedPageAllocator>,
     ) -> MmapBasedPage {
         let page_allocator = match self.backing_file_owner {
             BackingFileOwner::CurrentAllocator => Some(page_allocator),
             BackingFileOwner::AnotherAllocator => None,
         };
+        let file_offset = serialized_page.file_offset;
         // Find the memory-mapped chunk that contains the given file offset.
         // For a file of length N bytes, there will be O(lg(N)) chunks because
         // allocation ensures that the chunk size increases exponentially.
@@ -510,6 +565,7 @@ impl MmapBasedPageAllocatorCore {
                     ptr: PagePtr(page_start),
                     offset: file_offset,
                     page_allocator: page_allocator.map(Arc::clone),
+                    validation: serialized_page.validation,
                 };
             }
         }
@@ -574,3 +630,6 @@ fn free_pages(mut pages: Vec<PagePtr>) {
     // SAFETY: the range consists of pages that mapped as shared and writable.
     unsafe { madvise_remove(start_ptr, end_ptr) }
 }
+
+#[cfg(test)]
+mod tests;
