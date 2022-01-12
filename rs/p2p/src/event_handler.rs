@@ -227,27 +227,6 @@ impl<T: Send + 'static> PeerFlowQueueMap<T> {
     }
 }
 
-struct DrainReceiver<'a, T> {
-    receiver: &'a mut Receiver<T>,
-}
-
-// This future is being called after a single value is just consumed from the
-// receiver.
-impl<'a, T> Future for DrainReceiver<'a, T> {
-    type Output = Vec<T>;
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Vec<T>> {
-        let mut batch = Vec::with_capacity(BATCH_LIMIT);
-        while let Poll::Ready(Some(item)) = self.receiver.poll_recv(cx) {
-            batch.push(item);
-            if batch.len() >= BATCH_LIMIT {
-                break;
-            }
-        }
-        Poll::Ready(batch)
-    }
-}
-
 impl<T: Send + 'static> PeerFlowQueueMap<T> {
     /// The method starts the processing of messages in the `PeerFlowQueueMap`.
     fn start<F>(&self, fn_consume_message: F)
@@ -310,10 +289,12 @@ impl<T: Send + 'static> PeerFlowQueueMap<T> {
                 let mut batch = Vec::with_capacity(BATCH_LIMIT);
                 batch.push(item);
 
-                let r = DrainReceiver {
-                    receiver: &mut receive_map[idx].1,
-                };
-                batch.append(&mut r.await);
+                while let Ok(item) = receive_map[idx].1.try_recv() {
+                    batch.push(item);
+                    if batch.len() >= BATCH_LIMIT {
+                        break;
+                    }
+                }
 
                 let node_id = receive_map[idx].0;
                 for item in batch.into_iter() {
@@ -578,6 +559,32 @@ impl P2PEventHandlerImpl {
     pub fn stop(&self) {
         self.peer_flows.stop();
     }
+
+    async fn send_gossip_message<T>(
+        &self,
+        send_map: &SendMap<T>,
+        peer_id: NodeId,
+        msg: T,
+    ) -> Result<(), SendError> {
+        let sender = send_map
+            .read()
+            .unwrap()
+            .get(&peer_id)
+            .ok_or(SendError::EndpointNotFound)?
+            .clone();
+        let permit = match sender.try_reserve() {
+            Err(_err) => {
+                self.metrics.adverts_blocked.inc();
+                match sender.reserve().await {
+                    Ok(permit) => permit,
+                    Err(_) => return Err(SendError::EndpointClosed),
+                }
+            }
+            Ok(permit) => permit,
+        };
+        permit.send(msg);
+        Ok(())
+    }
 }
 
 impl P2PEventHandlerControl for P2PEventHandlerImpl {
@@ -604,104 +611,32 @@ impl AsyncTransportEventHandler for P2PEventHandlerImpl {
         let start_time = std::time::Instant::now();
         let (msg_type, ret) = match gossip_message {
             GossipMessage::Advert(msg) => {
-                let sender = {
-                    let send_map = self.peer_flows.advert.send_map.read().unwrap();
-                    send_map
-                        .get(&flow.peer_id)
-                        .ok_or(SendError::EndpointNotFound)?
-                        .clone()
-                };
-                ("Advert", {
-                    match sender.try_send(msg) {
-                        Err(e) => {
-                            let msg = match e {
-                                TrySendError::Full(a) => a,
-                                TrySendError::Closed(a) => a,
-                            };
-                            self.metrics.adverts_blocked.inc();
-                            sender
-                                .send(msg)
-                                .await
-                                .map_err(|_| SendError::EndpointClosed)
-                        }
-                        Ok(_) => Ok(()),
-                    }
-                })
+                let send_map = &self.peer_flows.advert.send_map;
+                (
+                    "Advert",
+                    self.send_gossip_message(send_map, flow.peer_id, msg).await,
+                )
             }
             GossipMessage::ChunkRequest(msg) => {
-                let sender = {
-                    let send_map = self.peer_flows.request.send_map.read().unwrap();
-                    send_map
-                        .get(&flow.peer_id)
-                        .ok_or(SendError::EndpointNotFound)?
-                        .clone()
-                };
-                ("Request", {
-                    match sender.try_send(msg) {
-                        Err(e) => {
-                            let msg = match e {
-                                TrySendError::Full(a) => a,
-                                TrySendError::Closed(a) => a,
-                            };
-                            self.metrics.requests_blocked.inc();
-                            sender
-                                .send(msg)
-                                .await
-                                .map_err(|_| SendError::EndpointClosed)
-                        }
-                        Ok(_) => Ok(()),
-                    }
-                })
+                let send_map = &self.peer_flows.request.send_map;
+                (
+                    "Request",
+                    self.send_gossip_message(send_map, flow.peer_id, msg).await,
+                )
             }
             GossipMessage::Chunk(msg) => {
-                let sender = {
-                    let send_map = self.peer_flows.chunk.send_map.read().unwrap();
-                    send_map
-                        .get(&flow.peer_id)
-                        .ok_or(SendError::EndpointNotFound)?
-                        .clone()
-                };
-                ("Chunk", {
-                    match sender.try_send(msg) {
-                        Err(e) => {
-                            let msg = match e {
-                                TrySendError::Full(a) => a,
-                                TrySendError::Closed(a) => a,
-                            };
-                            self.metrics.chunks_blocked.inc();
-                            sender
-                                .send(msg)
-                                .await
-                                .map_err(|_| SendError::EndpointClosed)
-                        }
-                        Ok(_) => Ok(()),
-                    }
-                })
+                let send_map = &self.peer_flows.chunk.send_map;
+                (
+                    "Chunk",
+                    self.send_gossip_message(send_map, flow.peer_id, msg).await,
+                )
             }
             GossipMessage::RetransmissionRequest(msg) => {
-                let sender = {
-                    let send_map = self.peer_flows.retransmission.send_map.read().unwrap();
-                    send_map
-                        .get(&flow.peer_id)
-                        .ok_or(SendError::EndpointNotFound)?
-                        .clone()
-                };
-                ("Retransmission", {
-                    match sender.try_send(msg) {
-                        Err(e) => {
-                            let msg = match e {
-                                TrySendError::Full(a) => a,
-                                TrySendError::Closed(a) => a,
-                            };
-                            self.metrics.retransmissions_blocked.inc();
-                            sender
-                                .send(msg)
-                                .await
-                                .map_err(|_| SendError::EndpointClosed)
-                        }
-                        Ok(_) => Ok(()),
-                    }
-                })
+                let send_map = &self.peer_flows.retransmission.send_map;
+                (
+                    "Retransmission",
+                    self.send_gossip_message(send_map, flow.peer_id, msg).await,
+                )
             }
         };
         self.metrics
