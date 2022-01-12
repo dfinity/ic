@@ -32,10 +32,7 @@ async fn main() {
     let ic_config = get_ic_config(PathBuf::from(replica_config_file_flag));
     let sks_dir = ic_config.crypto.crypto_root.as_path();
 
-    //////////////////////////////////////////////////////////////////////////////
-    // TODO: decide if this sanity check is kept or name is even made configurable
     ensure_single_named_systemd_socket(IC_CRYPTO_CSP_SOCKET_NAME);
-    //////////////////////////////////////////////////////////////////////////////
     let systemd_socket_listener = listener_from_first_systemd_socket();
 
     println!(
