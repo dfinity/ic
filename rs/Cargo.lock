@@ -3275,6 +3275,7 @@ dependencies = [
  "nix 0.23.0",
  "once_cell 1.8.0",
  "prometheus",
+ "regex",
  "slog",
  "which 4.2.2",
 ]
