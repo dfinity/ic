@@ -71,7 +71,7 @@ function install_executables() {
         if [ ! -f "${TGTDIR}/${EXECUTABLE}" -o "${SRCDIR}/${EXECUTABLE}" -nt "${TGTDIR}/${EXECUTABLE}" ]; then
             echo "Install and strip ${EXECUTABLE}"
             cp "${SRCDIR}/${EXECUTABLE}" "${TGTDIR}/${EXECUTABLE}"
-            if [ "${EXECUTABLE}" = "replica" ]; then
+            if [[ "${EXECUTABLE}" =~ ^(replica|canister_sandbox)$ ]]; then
                 echo "not stripping ${EXECUTABLE}"
             else
                 echo "stripping ${EXECUTABLE}"
