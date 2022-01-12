@@ -139,14 +139,14 @@ fn get_test_suites() -> HashMap<String, Suite> {
             vec![
                 pot(
                     "firewall_pot", 
-                    firewall::config(),
+                    firewall::config,
                     par(vec![
                         t("change_to_firewall_rules_takes_effect", change_to_firewall_rules_takes_effect),
                     ]),
                 ),
                 pot(
                     "create_subnet", 
-                    create_subnet::config(),
+                    create_subnet::config,
                     par(vec![
                         t("create_subnet", create_subnet_test),
                     ]),
@@ -157,37 +157,37 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 execution::upgraded_pots::compute_allocation_pot(),
                 pot(
                     "node_assign_pot",
-                    node_assign_test::config(),
+                    node_assign_test::config,
                     par(vec![t("node_assign_test", node_assign_test)]),
                 ),
                 pot(
                     "nns_follow_pot",
-                    nns_follow_test::config(),
+                    nns_follow_test::config,
                     par(vec![t("follow_test", follow_test)]),
                 ),
                 pot(
                     "nns_voting_pot",
-                    nns_voting_test::config(),
+                    nns_voting_test::config,
                     par(vec![t("voting_test", voting_test)]),
                 ),
                 pot(
                     "nns_token_balance_pot",
-                    token_balance_test::config(),
+                    token_balance_test::config,
                     par(vec![t("token_balance_test", token_balance_test)]),
                 ),
                 pot(
                     "node_restart_pot",
-                    node_restart_test::config(),
+                    node_restart_test::config,
                     par(vec![t("node_restart_test", node_restart_test)]),
                 ),
                 pot(
                     "cycles_minting_pot",
-                    cycles_minting_test::config(),
+                    cycles_minting_test::config,
                     par(vec![t("cycles_minting_test", cycles_minting_test::test)]),
                 ),
                 pot(
                     "nns_subnet_creation_pot",
-                    subnet_creation::config(),
+                    subnet_creation::config,
                     par(vec![t(
                         "create_subnet_with_assigned_nodes_fails",
                         subnet_creation::create_subnet_with_assigned_nodes_fails,
@@ -195,7 +195,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 ),
                 pot(
                     "nns_voting_fuzzing_poc_pot",
-                    nns_voting_fuzzing_poc_test::config(),
+                    nns_voting_fuzzing_poc_test::config,
                     par(vec![t(
                         "nns_voting_fuzzing_poc_test",
                         nns_voting_fuzzing_poc_test::test,
@@ -203,7 +203,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 ),
                 pot(
                     "nns_canister_upgrade_pot",
-                    nns_canister_upgrade_test::config(),
+                    nns_canister_upgrade_test::config,
                     par(vec![t(
                         "nns_canister_upgrade_test",
                         nns_canister_upgrade_test::test,
@@ -211,7 +211,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 ),
                 pot(
                     "certified_registry_pot",
-                    registry_authentication_test::config(),
+                    registry_authentication_test::config,
                     par(vec![t(
                         "registry_authentication_test",
                         registry_authentication_test::test,
@@ -219,7 +219,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 ),
                 pot(
                     "transaction_ledger_correctness_pot",
-                    transaction_ledger_correctness_test::config(),
+                    transaction_ledger_correctness_test::config,
                     par(vec![t(
                         "transaction_ledger_correctness_test",
                         transaction_ledger_correctness_test::test,
@@ -227,7 +227,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 ),
                 pot(
                     "unassigned_node_upgrade_test_pot",
-                    unassigned_node_upgrade_test::config(),
+                    unassigned_node_upgrade_test::config,
                     par(vec![t(
                         "unassigned_node_upgrade_test",
                         unassigned_node_upgrade_test::test,
@@ -235,7 +235,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 ),
                 pot(
                     "ssh_access_to_nodes_pot",
-                    ssh_access_to_nodes::config(),
+                    ssh_access_to_nodes::config,
                     seq(vec![
                         t(
                             "root_cannot_authenticate",
@@ -290,7 +290,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
             vec![
                 pot(
                     "basic_health_pot",
-                    basic_health_test::config(),
+                    basic_health_test::config,
                     par(vec![
                         t("basic_health_test", basic_health_test),
                         t("basic_health_test2", basic_health_test),
@@ -298,7 +298,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 ),
                 pot(
                     "nns_fault_tolerance_pot",
-                    nns_fault_tolerance_test::config(),
+                    nns_fault_tolerance_test::config,
                     par(vec![t(
                         "nns_fault_tolerance_test",
                         nns_fault_tolerance_test::test,
@@ -306,17 +306,17 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 ),
                 pot(
                     "create_subnet",
-                    create_subnet::config(),
+                    create_subnet::config,
                     par(vec![t("create_subnet", create_subnet_test)]),
                 ),
                 pot(
                     "upgrade_reject",
-                    upgrade_reject::config(),
+                    upgrade_reject::config,
                     par(vec![t("upgrade_reject", upgrade_reject)]),
                 ),
                 pot(
                     "basic_pot_with_all_features_enabled",
-                    feature_flags::basic_config_with_all_features_enabled(),
+                    feature_flags::basic_config_with_all_features_enabled,
                     par(vec![t(
                         "mock_ecdsa_signatures_are_supported",
                         feature_flags::mock_ecdsa_signatures_are_supported,
@@ -334,7 +334,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
             "wasm_generator",
             vec![pot_with_time_limit(
                 "wasm_generator_pot",
-                wasm_generator_test::config(),
+                wasm_generator_test::config,
                 par(vec![t("wasm_generator_test", wasm_generator_test::test)]),
                 Duration::from_secs(7200),
             )],
@@ -347,7 +347,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
             "rosetta",
             vec![pot(
                 "rosetta_pot",
-                rosetta_test::config(),
+                rosetta_test::config,
                 par(vec![t(
                     "rosetta_test_everything",
                     rosetta_test::test_everything,
