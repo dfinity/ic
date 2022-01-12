@@ -11,7 +11,7 @@ use crate::{
 pub fn general_execution_pot() -> Pot {
     pot(
         "general_execution_pot",
-        pot1_config(),
+        pot1_config,
         par(vec![
             t(
                 "request_signature_test",
@@ -216,7 +216,7 @@ pub fn general_execution_pot() -> Pot {
 pub fn cycles_restrictions_pot() -> Pot {
     pot(
         "cycles_restriction_pot",
-        execution::config_system_verified_application_subnets(),
+        execution::config_system_verified_application_subnets,
         par(vec![
             t(
                 "cannot_send_cycles_from_application_to_verified_subnets",
@@ -237,7 +237,7 @@ pub fn cycles_restrictions_pot() -> Pot {
 pub fn inter_canister_queries() -> Pot {
     pot(
         "inter_canister_queries",
-        execution::config_system_verified_subnets(),
+        execution::config_system_verified_subnets,
         par(vec![
             t(
                 "intermediate_canister_does_not_reply",
@@ -306,7 +306,7 @@ pub fn inter_canister_queries() -> Pot {
 pub fn compute_allocation_pot() -> Pot {
     pot(
         "compute_allocation_pot",
-        execution::canister_lifecycle::config_compute_allocation(),
+        execution::canister_lifecycle::config_compute_allocation,
         par(vec![t(
             "total_compute_allocation_cannot_be_exceeded",
             execution::canister_lifecycle::total_compute_allocation_cannot_be_exceeded,

@@ -1,8 +1,5 @@
 use std::{panic::catch_unwind, time::Instant};
 
-use crossbeam_channel::{bounded, Receiver, Sender};
-use slog::{error, info, warn};
-
 use super::bootstrap::{
     attach_config_disk_images, create_config_disk_images, init_ic, upload_config_disk_images,
 };
@@ -10,11 +7,15 @@ use super::driver_setup::DriverContext;
 use super::pot_dsl::{ExecutionMode, Pot, Suite, Test, TestPath, TestSet};
 use super::resource::{allocate_resources, get_resource_request};
 use super::test_setup::create_ic_handle;
+use crate::ic_instance::InternetComputer;
 use crate::ic_manager::IcHandle;
 use crate::pot::Context;
 use crate::prod_tests::driver_setup::tee_logger;
 use crate::prod_tests::farm::{FarmResult, GroupSpec};
 use crate::result::*;
+use anyhow::{bail, Result};
+use crossbeam_channel::{bounded, Receiver, Sender};
+use slog::{error, info, warn};
 
 pub const N_THREADS_PER_SUITE: usize = 6;
 pub const N_THREADS_PER_POT: usize = 8;
@@ -83,7 +84,7 @@ fn evaluate_pot_and_propagate_result(
 }
 
 #[allow(clippy::mutex_atomic)]
-fn evaluate_pot(ctx: &DriverContext, pot: Pot, path: TestPath) -> FarmResult<TestResultNode> {
+fn evaluate_pot(ctx: &DriverContext, mut pot: Pot, path: TestPath) -> Result<TestResultNode> {
     if pot.execution_mode == ExecutionMode::Skip {
         return Ok(TestResultNode {
             name: pot.name,
@@ -98,26 +99,32 @@ fn evaluate_pot(ctx: &DriverContext, pot: Pot, path: TestPath) -> FarmResult<Tes
         .replace(":", "_")
         .replace(".", "_");
     info!(logger, "creating group '{}'", group_name);
-    let spec = GroupSpec {
-        vm_allocation: pot.config.vm_allocation.clone(),
+    let pot_timeout = pot.pot_timeout;
+    let config = match pot.config.evaluate() {
+        Ok(r) => r,
+        Err(e) => {
+            bail!("Could not evaluate pot config: {:?}", e)
+        }
     };
-    ctx.farm.create_group(
-        &group_name,
-        pot.pot_timeout.unwrap_or(ctx.pot_timeout),
-        spec,
-    )?;
-    let res = evaluate_pot_with_group(ctx, pot, pot_path, &group_name);
+    let spec = GroupSpec {
+        vm_allocation: config.vm_allocation.clone(),
+    };
+    let config = config.clone();
+    ctx.farm
+        .create_group(&group_name, pot_timeout.unwrap_or(ctx.pot_timeout), spec)?;
+    let res = evaluate_pot_with_group(ctx, pot, config, pot_path, &group_name);
     if let Err(e) = ctx.farm.delete_group(&group_name) {
         warn!(ctx.logger, "Could not delete group {}: {:?}", group_name, e);
     }
 
-    res
+    Ok(res?)
 }
 
 #[allow(clippy::mutex_atomic)]
 fn evaluate_pot_with_group(
     ctx: &DriverContext,
     pot: Pot,
+    config: InternetComputer,
     pot_path: TestPath,
     group_name: &str,
 ) -> FarmResult<TestResultNode> {
@@ -133,10 +140,10 @@ fn evaluate_pot_with_group(
         .collect();
     let tests_num = tests.len();
 
-    let res_request = get_resource_request(ctx, &pot.config, group_name);
+    let res_request = get_resource_request(ctx, &config, group_name);
     let res_group = allocate_resources(ctx, &res_request)?;
     let temp_dir = tempfile::tempdir().expect("Could not create temp directory");
-    let (init_ic, mal_beh, node_vms) = init_ic(ctx, temp_dir.path(), pot.config, &res_group);
+    let (init_ic, mal_beh, node_vms) = init_ic(ctx, temp_dir.path(), config, &res_group);
     create_config_disk_images(ctx, group_name, &logger, &init_ic);
     let cfg_disk_image_ids = upload_config_disk_images(ctx, &init_ic, group_name)?;
     attach_config_disk_images(ctx, &res_group, cfg_disk_image_ids)?;
