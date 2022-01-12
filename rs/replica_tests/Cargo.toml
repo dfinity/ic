@@ -14,7 +14,6 @@ ic-registry-keys = { path = "../registry/keys" }
 ic-registry-common = { path = "../registry/common" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
-ic-transport = { path = "../transport" }
 ic-interfaces = { path = "../interfaces" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-prep = { path = "../prep" }
