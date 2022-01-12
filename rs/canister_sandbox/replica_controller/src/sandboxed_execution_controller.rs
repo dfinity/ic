@@ -5,7 +5,7 @@ use ic_canister_sandbox_common::protocol::structs::SandboxExecInput;
 use ic_canister_sandbox_common::sandbox_service::SandboxService;
 use ic_embedders::{WasmExecutionInput, WasmExecutionOutput};
 use ic_interfaces::execution_environment::{HypervisorResult, InstanceStats};
-use ic_logger::ReplicaLogger;
+use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::canister_state::execution_state::{
@@ -15,8 +15,9 @@ use ic_replicated_state::{EmbedderCache, ExecutionState, ExportedFunctions, Memo
 use ic_system_api::SystemStateAccessorDirect;
 use ic_types::{CanisterId, NumInstructions};
 use ic_wasm_types::BinaryEncodedWasm;
-use prometheus::{Histogram, HistogramVec};
+use prometheus::{Histogram, HistogramVec, IntGauge};
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::path::PathBuf;
 use std::sync::{
     atomic::{AtomicU64, Ordering},
@@ -26,6 +27,7 @@ use std::sync::{
 use crate::active_execution_state_registry::ActiveExecutionStateRegistry;
 use crate::controller_service_impl::ControllerServiceImpl;
 use crate::launch_as_process::{create_sandbox_argv, create_sandbox_process};
+use crate::process_os_metrics;
 use std::process::Child;
 use std::process::ExitStatus;
 use std::thread;
@@ -38,6 +40,7 @@ struct SandboxedExecutionMetrics {
     sandboxed_execution_sandbox_execute_duration: HistogramVec,
     sandboxed_execution_sandbox_execute_run_duration: HistogramVec,
     sandboxed_execution_spawn_process: Histogram,
+    sandboxed_execution_subprocess_anon_rss_total: IntGauge,
 }
 
 impl SandboxedExecutionMetrics {
@@ -85,6 +88,10 @@ impl SandboxedExecutionMetrics {
                 "The time to spawn a sandbox process",
                 decimal_buckets_with_zero(-4, 1),
             ),
+            sandboxed_execution_subprocess_anon_rss_total: metrics_registry.int_gauge(
+                "sandboxed_execution_subprocess_anon_rss_total_kib",
+                "The resident anonymous memory for all canister sandbox processes in KiB",
+            ),
         }
     }
 }
@@ -97,6 +104,9 @@ pub struct SandboxProcess {
 
     /// Handle for IPC down to sandbox.
     sandbox_service: Arc<dyn SandboxService>,
+
+    /// Process id of the backend process.
+    pid: u32,
 }
 
 /// Manages the lifetime of a remote compiled Wasm and provides its id.
@@ -188,12 +198,73 @@ impl SandboxedExecutionController {
     /// same interface as the `WasmExecutor`.
     pub fn new(logger: ReplicaLogger, metrics_registry: &MetricsRegistry) -> Self {
         let sandbox_exec_argv = create_sandbox_argv().expect("No canister_sandbox binary found");
+        let backends = Arc::new(Mutex::new(HashMap::new()));
+        let metrics = Arc::new(SandboxedExecutionMetrics::new(metrics_registry));
+
+        let backends_copy = Arc::clone(&backends);
+        let metrics_copy = Arc::clone(&metrics);
+        let logger_copy = logger.clone();
+
+        std::thread::spawn(move || {
+            SandboxedExecutionController::collect_process_metrics(
+                logger_copy,
+                backends_copy,
+                metrics_copy,
+            );
+        });
+
         Self {
-            backends: Arc::new(Mutex::new(HashMap::new())),
+            backends,
             logger,
             compile_count_for_testing: AtomicU64::new(0),
             sandbox_exec_argv,
-            metrics: Arc::new(SandboxedExecutionMetrics::new(metrics_registry)),
+            metrics,
+        }
+    }
+
+    // Walk through all our backend processes and fetch information about them
+    // from kernel. Publish these as metrics.
+    fn collect_process_metrics(
+        logger: ReplicaLogger,
+        backends: Arc<Mutex<HashMap<CanisterId, SandboxProcess>>>,
+        metrics: Arc<SandboxedExecutionMetrics>,
+    ) {
+        loop {
+            // Collect pids while having list of backend processes locked, but
+            // ensure that we only hold the lock long enough for the collection
+            // to finish. This ensures that metrics collection does not unduly
+            // lock out normal operation, at the risk that metrics may be
+            // temporarily stale (but that is something to be expected anyways).
+            let pids = {
+                let mut pids = Vec::<u32>::new();
+                for sandbox_process in backends.lock().unwrap().values() {
+                    pids.push(sandbox_process.pid);
+                }
+                pids
+            };
+
+            let mut total_anon_rss: u64 = 0;
+
+            // For all processes requested, get their memory usage and report
+            // it keyed by pid. Ignore processes failures to get
+            for pid in &pids {
+                if let Ok(kib) = process_os_metrics::get_nonshared_rss(*pid) {
+                    total_anon_rss += kib;
+                } else {
+                    warn!(logger, "Unable to get process information for pid {}", *pid);
+                }
+            }
+
+            metrics
+                .sandboxed_execution_subprocess_anon_rss_total
+                .set(total_anon_rss.try_into().unwrap());
+
+            // Collect metrics sufficiently infrequently that it does not use
+            // excessive compute resources. It might be sensible to scale this
+            // based on the time measured to perform the collection and e.g.
+            // ensure that we are 99% idle instead of using a static duration
+            // here.
+            std::thread::sleep(std::time::Duration::from_secs(5));
         }
     }
 
@@ -221,6 +292,7 @@ impl SandboxedExecutionController {
             let sandbox_process = SandboxProcess {
                 execution_states: reg,
                 sandbox_service,
+                pid: child_handle.id(),
             };
             (*guard).insert(*canister_id, sandbox_process.clone());
 
