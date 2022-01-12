@@ -138,6 +138,41 @@ impl EcdsaSignerImpl {
         ret
     }
 
+    /// Purges the entries no longer needed from the artifact pool
+    fn purge_artifacts(
+        &self,
+        ecdsa_pool: &dyn EcdsaPool,
+        block_reader: &dyn EcdsaBlockReader,
+    ) -> EcdsaChangeSet {
+        let mut in_progress = BTreeSet::new();
+        for (request_id, _) in block_reader.requested_signatures() {
+            in_progress.insert(request_id.clone());
+        }
+
+        let mut ret = Vec::new();
+        let current_height = block_reader.height();
+
+        // Unvalidated signature shares.
+        let mut action = ecdsa_pool
+            .unvalidated()
+            .signature_shares()
+            .filter(|(_, share)| self.should_purge(share, current_height, &in_progress))
+            .map(|(id, _)| EcdsaChangeAction::RemoveUnvalidated(id))
+            .collect();
+        ret.append(&mut action);
+
+        // Validated signature shares.
+        let mut action = ecdsa_pool
+            .validated()
+            .signature_shares()
+            .filter(|(_, share)| self.should_purge(share, current_height, &in_progress))
+            .map(|(id, _)| EcdsaChangeAction::RemoveValidated(id))
+            .collect();
+        ret.append(&mut action);
+
+        ret
+    }
+
     /// Load necessary transcripts for the inputs
     fn crypto_load_transcript(
         &self,
@@ -264,6 +299,16 @@ impl EcdsaSignerImpl {
             .signature_shares()
             .any(|(_, share)| share.request_id == *request_id && share.signer_id == *signer_id)
     }
+
+    /// Checks if the signature share should be purged
+    fn should_purge(
+        &self,
+        share: &EcdsaSigShare,
+        current_height: Height,
+        in_progress: &BTreeSet<RequestId>,
+    ) -> bool {
+        share.requested_height <= current_height && !in_progress.contains(&share.request_id)
+    }
 }
 
 impl EcdsaSigner for EcdsaSignerImpl {
@@ -286,8 +331,19 @@ impl EcdsaSigner for EcdsaSignerImpl {
             )
         };
 
-        let calls: [&'_ dyn Fn() -> EcdsaChangeSet; 2] =
-            [&send_signature_shares, &validate_signature_shares];
+        let purge_artifacts = || {
+            timed_call(
+                "purge_artifacts",
+                || self.purge_artifacts(ecdsa_pool, &block_reader),
+                &metrics.on_state_change_duration,
+            )
+        };
+
+        let calls: [&'_ dyn Fn() -> EcdsaChangeSet; 3] = [
+            &send_signature_shares,
+            &validate_signature_shares,
+            &purge_artifacts,
+        ];
         self.schedule.call_next(&calls)
     }
 }
@@ -758,6 +814,120 @@ mod tests {
                 assert!(is_handle_invalid(&change_set, &msg_id_2_a));
                 assert!(is_handle_invalid(&change_set, &msg_id_2_b));
                 assert!(is_moved_to_validated(&change_set, &msg_id_3));
+            })
+        })
+    }
+
+    // Tests purging of signature shares from unvalidated pool
+    #[test]
+    fn test_ecdsa_purge_unvalidated_signature_shares() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut ecdsa_pool, signer) = create_signer_dependencies(pool_config, logger);
+                let time_source = FastForwardTimeSource::new();
+                let (id_1, id_2, id_3) = (
+                    create_request_id(1),
+                    create_request_id(2),
+                    create_request_id(3),
+                );
+
+                // Set up the transcript creation request
+                // The block requests transcripts 1, 3
+                let block_reader = TestEcdsaBlockReader::for_signer_test(
+                    Height::from(100),
+                    vec![
+                        (id_1.clone(), create_sig_inputs(1)),
+                        (id_3.clone(), create_sig_inputs(3)),
+                    ],
+                );
+
+                // Share 1: height <= current_height, in_progress (not purged)
+                let mut share = create_signature_share(NODE_2, id_1);
+                share.requested_height = Height::from(10);
+                ecdsa_pool.insert(UnvalidatedArtifact {
+                    message: EcdsaMessage::EcdsaSigShare(share),
+                    peer_id: NODE_2,
+                    timestamp: time_source.get_relative_time(),
+                });
+
+                // Share 2: height <= current_height, !in_progress (purged)
+                let mut share = create_signature_share(NODE_2, id_2);
+                share.requested_height = Height::from(20);
+                let key = share.key();
+                let msg_id_2 = EcdsaSigShare::key_to_outer_hash(&key);
+                ecdsa_pool.insert(UnvalidatedArtifact {
+                    message: EcdsaMessage::EcdsaSigShare(share),
+                    peer_id: NODE_2,
+                    timestamp: time_source.get_relative_time(),
+                });
+
+                // Share 3: height > current_height (not purged)
+                let mut share = create_signature_share(NODE_2, id_3);
+                share.requested_height = Height::from(200);
+                ecdsa_pool.insert(UnvalidatedArtifact {
+                    message: EcdsaMessage::EcdsaSigShare(share),
+                    peer_id: NODE_2,
+                    timestamp: time_source.get_relative_time(),
+                });
+
+                let change_set = signer.purge_artifacts(&ecdsa_pool, &block_reader);
+                assert_eq!(change_set.len(), 1);
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
+            })
+        })
+    }
+
+    // Tests purging of signature shares from validated pool
+    #[test]
+    fn test_ecdsa_purge_validated_signature_shares() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut ecdsa_pool, signer) = create_signer_dependencies(pool_config, logger);
+                let (id_1, id_2, id_3) = (
+                    create_request_id(1),
+                    create_request_id(2),
+                    create_request_id(3),
+                );
+
+                // Set up the transcript creation request
+                // The block requests transcripts 1, 3
+                let block_reader = TestEcdsaBlockReader::for_signer_test(
+                    Height::from(100),
+                    vec![
+                        (id_1.clone(), create_sig_inputs(1)),
+                        (id_3.clone(), create_sig_inputs(3)),
+                    ],
+                );
+
+                // Share 1: height <= current_height, in_progress (not purged)
+                let mut share = create_signature_share(NODE_2, id_1);
+                share.requested_height = Height::from(10);
+                let change_set = vec![EcdsaChangeAction::AddToValidated(
+                    EcdsaMessage::EcdsaSigShare(share),
+                )];
+                ecdsa_pool.apply_changes(change_set);
+
+                // Share 2: height <= current_height, !in_progress (purged)
+                let mut share = create_signature_share(NODE_2, id_2);
+                share.requested_height = Height::from(20);
+                let key = share.key();
+                let msg_id_2 = EcdsaSigShare::key_to_outer_hash(&key);
+                let change_set = vec![EcdsaChangeAction::AddToValidated(
+                    EcdsaMessage::EcdsaSigShare(share),
+                )];
+                ecdsa_pool.apply_changes(change_set);
+
+                // Share 3: height > current_height (not purged)
+                let mut share = create_signature_share(NODE_2, id_3);
+                share.requested_height = Height::from(200);
+                let change_set = vec![EcdsaChangeAction::AddToValidated(
+                    EcdsaMessage::EcdsaSigShare(share),
+                )];
+                ecdsa_pool.apply_changes(change_set);
+
+                let change_set = signer.purge_artifacts(&ecdsa_pool, &block_reader);
+                assert_eq!(change_set.len(), 1);
+                assert!(is_removed_from_validated(&change_set, &msg_id_2));
             })
         })
     }
