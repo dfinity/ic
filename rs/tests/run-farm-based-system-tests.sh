@@ -1,5 +1,13 @@
 #!/usr/bin/env bash
-set -eExou pipefail
+set -eEou pipefail
+
+RED='\033[1;31m'
+GREEN='\033[1;32m'
+NC='\033[0m'
+
+function log() {
+    echo -e "${GREEN}System Tests $(date --iso-8601=seconds): $1${NC}"
+}
 
 function usage() {
     cat <<EOF
@@ -30,26 +38,29 @@ EOF
 }
 
 if [[ ${TMPDIR-/tmp} == /run/* ]]; then
-    echo "Running in nix-shell on Linux, unsetting TMPDIR"
+    log "Running in nix-shell on Linux, unsetting TMPDIR"
     export TMPDIR=
 fi
 
 SHELL_WRAPPER=${SHELL_WRAPPER:-/usr/bin/time}
 CI_PROJECT_DIR=${CI_PROJECT_DIR:-"$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../"}
 RESULT_FILE="$(mktemp -d)/test-results.json"
-JOB_ID="${CI_JOB_ID:-}"
 
+JOB_ID="${CI_JOB_ID:-}"
 if [[ -z "${JOB_ID}" ]]; then
+    # We run locally, not in CI
     ARTIFACT_DIR="$(mktemp -d)/artifacts"
     JOB_ID="$(whoami)-$(hostname)-$(date +%s)"
     RUN_CMD="cargo"
     ADDITIONAL_ARGS=(run --bin prod-test-driver --)
 else
+    # We assume that we are running on CI
+    set -x
     ARTIFACT_DIR="artifacts"
     RUN_CMD="${ARTIFACT_DIR}/prod-test-driver"
 fi
 
-echo "Storing artifacts in: ${ARTIFACT_DIR}"
+log "Artifacts will be stored in: ${ARTIFACT_DIR}"
 
 # Parse arguments
 # if --help is provided, print both, the usage of this script and the help of
@@ -69,7 +80,7 @@ done
 
 if [ -z "${GIT_REVISION:-}" ]; then
     TEST_BRANCH="${TEST_BRANCH:-origin/master}"
-    echo "Using newest artifacts from branch $TEST_BRANCH"
+    log "Downloading newest artifacts from branch ${RED}$TEST_BRANCH${NC}"
 
     SCRIPT="$CI_PROJECT_DIR/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh"
     GIT_REVISION=$("$SCRIPT" "$TEST_BRANCH")
@@ -79,7 +90,7 @@ fi
 if [ -z "${SSH_KEY_DIR:-}" ]; then
     SSH_KEY_DIR=$(mktemp -d)
     # Prepare admin key
-    echo "Preparing default ssh key for admin."
+    log "Preparing default ssh key for admin."
     ssh-keygen -t ed25519 -N '' -f "$SSH_KEY_DIR/admin"
 fi
 
@@ -90,6 +101,8 @@ fi
 
 RCLONE_ARGS=("--git-rev" "$GIT_REVISION" "--out=$ARTIFACT_DIR" "--unpack" "--mark-executable")
 # prod-test-driver and (NNS) canisters
+log "Downloading dependencies built from commit: ${RED}$GIT_REVISION${NC}"
+log "NOTE: Dependencies include canisters, rust-binaries (such as ic-rosetta-binaries), etc."
 "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/rclone_download.py --remote-path=canisters "${RCLONE_ARGS[@]}"
 "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/rclone_download.py --remote-path=release "${RCLONE_ARGS[@]}"
 
