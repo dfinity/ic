@@ -40,7 +40,6 @@ ic-registry-common = { path = "../registry/common" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-logger = { path = "../monitoring/logger" }
-ic-transport = { path = "../transport" }
 ic-replica-setup-ic-network = { path = "../replica/setup_ic_network" }
 mockall = "0.7.2"
 tempfile = "3.1.0"

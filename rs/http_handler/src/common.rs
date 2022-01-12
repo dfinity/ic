@@ -96,19 +96,14 @@ pub(crate) fn empty_response() -> Response<Body> {
     response
 }
 
-/// Encode the provided prost::Message implementing type as a protobuf Vec<u8>.
-fn encode_as_protobuf_vec<R: Message>(r: &R) -> Vec<u8> {
-    let mut buf = Vec::<u8>::new();
-    r.encode(&mut buf)
-        .expect("impossible: Serialization failed");
-    buf
-}
-
 /// Write the provided prost::Message as a serialized protobuf into a Response
 /// object.
 pub(crate) fn protobuf_response<R: Message>(r: &R) -> Response<Body> {
     use hyper::header;
-    let mut response = Response::new(Body::from(encode_as_protobuf_vec(r)));
+    let mut buf = Vec::<u8>::new();
+    r.encode(&mut buf)
+        .expect("impossible: Serialization failed");
+    let mut response = Response::new(Body::from(buf));
     *response.status_mut() = StatusCode::OK;
     *response.headers_mut() = get_cors_headers();
     response.headers_mut().insert(

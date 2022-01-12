@@ -5,15 +5,13 @@ edition = "2018"
 
 [dependencies]
 askama = "0.10.5"
-futures-util = "0.3.13"
 hex = "0.4.2"
 http = "0.2.5"
-flate2 = "1.0.20"
 futures = "0.3.13"
+futures-util = "0.3.13"
 hyper = { version = "0.14.16", features = ["full"] }
 ic-base-thread = { path = "../base/thread" }
 ic-config = { path = "../config" }
-ic-crypto = { path = "../crypto" }
 ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-interfaces = { path = "../interfaces" }
@@ -34,7 +32,6 @@ reqwest = { version = "0.11.1", features = [ "native-tls", "blocking" ] }
 serde = "1.0.99"
 serde_cbor = "0.11.1"
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
-tar = "0.4.30"
 tempfile = "3.1.0"
 tokio = { version = "1.15.0", features = [ "full" ] }
 tower =  { version = "0.4.8", features = ["load-shed", "limit", "steer"] }
