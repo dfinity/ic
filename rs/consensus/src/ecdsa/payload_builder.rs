@@ -3,10 +3,12 @@
 #![allow(clippy::enum_variant_names)]
 
 use super::pre_signer::{EcdsaTranscriptBuilder, EcdsaTranscriptBuilderImpl};
+use super::signer::{EcdsaSignatureBuilder, EcdsaSignatureBuilderImpl};
 use crate::consensus::{
     crypto::ConsensusCrypto, metrics::EcdsaPayloadMetrics, pool_reader::PoolReader,
 };
 use ic_interfaces::{
+    consensus_pool::ConsensusPoolCache,
     ecdsa::EcdsaPool,
     registry::RegistryClient,
     state_manager::{StateManager, StateManagerError},
@@ -184,7 +186,7 @@ pub(crate) fn create_data_payload(
     state_manager: &dyn StateManager<State = ReplicatedState>,
     context: &ValidationContext,
     parent_block: &Block,
-    metrics: &EcdsaPayloadMetrics,
+    ecdsa_payload_metrics: &EcdsaPayloadMetrics,
     log: ReplicaLogger,
 ) -> Result<ecdsa::Payload, EcdsaPayloadError> {
     let height = parent_block.height().increment();
@@ -240,7 +242,7 @@ pub(crate) fn create_data_payload(
                             )
                         });
                 let summary = summary_block.payload.as_ref().as_summary();
-                let _ecdsa_summary = summary.ecdsa.as_ref().unwrap_or_else(|| {
+                let ecdsa_summary = summary.ecdsa.as_ref().unwrap_or_else(|| {
                     panic!("ecdsa payload exists but previous summary is not found")
                 });
                 let (summary_registry_version, node_ids) =
@@ -250,12 +252,20 @@ pub(crate) fn create_data_payload(
                         subnet_id,
                     )?;
                 let mut payload = prev_payload.clone();
-                let count = update_signing_requests(
-                    log.clone(),
+                update_signature_agreements(
+                    pool_reader.as_cache(),
                     ecdsa_pool.clone(),
+                    crypto,
+                    &mut payload,
+                    ecdsa_payload_metrics,
+                    log.clone(),
+                );
+                let count = update_signing_requests(
                     state_manager,
                     context,
                     &mut payload,
+                    &ecdsa_summary.current_ecdsa_transcript,
+                    log.clone(),
                 )?;
                 // quadruples are consumed, need to produce more
                 let next_available_quadruple_id = payload
@@ -277,7 +287,7 @@ pub(crate) fn create_data_payload(
                 let transcript_builder = EcdsaTranscriptBuilderImpl::new(
                     pool_reader.as_cache(),
                     crypto,
-                    metrics,
+                    ecdsa_payload_metrics,
                     log.clone(),
                 );
                 let ecdsa_pool = ecdsa_pool.read().unwrap();
@@ -288,15 +298,15 @@ pub(crate) fn create_data_payload(
                     completed_transcripts.insert(transcript.transcript_id, transcript);
                 }
                 update_quadruples_in_creation(None, &mut payload, &mut completed_transcripts, log)?;
-                metrics.payload_metrics_set(
+                ecdsa_payload_metrics.payload_metrics_set(
                     "available_quadruples",
                     payload.available_quadruples.len() as i64,
                 );
-                metrics.payload_metrics_set(
+                ecdsa_payload_metrics.payload_metrics_set(
                     "ongoing_signatures",
                     payload.ongoing_signatures.len() as i64,
                 );
-                metrics.payload_metrics_set(
+                ecdsa_payload_metrics.payload_metrics_set(
                     "quaruples_in_creation",
                     payload.quadruples_in_creation.len() as i64,
                 );
@@ -403,33 +413,17 @@ fn start_making_new_quadruples(
     Ok(())
 }
 
-// Try to comibine signature shares in the ECDSA pool and return
-// an interator of new full signatures constructed.
-// TODO: also pass in signatures we are looking for to avoid traversing
-// everything.
-fn combine_signatures(
-    _ecdsa_pool: Arc<RwLock<dyn EcdsaPool>>,
-) -> Box<dyn Iterator<Item = (ecdsa::RequestId, ecdsa::EcdsaSignature)>> {
-    Box::new(std::iter::empty())
-}
-
-/// Update data fields related to signing requests in the ECDSA payload:
-///
-/// - Check if new signatures have been produced, and add them to
-/// signature agreements.
-/// - Check if there are new signing requests, and start to work on them.
-///
-/// Return the number of new signing requests that are worked on (or
-/// equivalently, the number of quadruples that are consumed).
-fn update_signing_requests(
-    log: ReplicaLogger,
+fn update_signature_agreements(
+    consensus_cache: &dyn ConsensusPoolCache,
     ecdsa_pool: Arc<RwLock<dyn EcdsaPool>>,
-    state_manager: &dyn StateManager<State = ReplicatedState>,
-    context: &ValidationContext,
+    crypto: &dyn ConsensusCrypto,
     payload: &mut ecdsa::EcdsaDataPayload,
-) -> Result<usize, EcdsaPayloadError> {
-    // Check if new signatures have been produced
-    for (request_id, signature) in combine_signatures(ecdsa_pool) {
+    metrics: &EcdsaPayloadMetrics,
+    log: ReplicaLogger,
+) {
+    let ecdsa_pool = ecdsa_pool.read().unwrap();
+    let builder = EcdsaSignatureBuilderImpl::new(consensus_cache, crypto, metrics, log.clone());
+    for (request_id, signature) in builder.get_completed_signatures(ecdsa_pool.deref()) {
         if payload.ongoing_signatures.remove(&request_id).is_none() {
             warn!(
                 log,
@@ -440,6 +434,24 @@ fn update_signing_requests(
             payload.signature_agreements.insert(request_id, signature);
         }
     }
+}
+
+/// Update data fields related to signing requests in the ECDSA payload:
+///
+/// - Check if new signatures have been produced, and add them to
+/// signature agreements.
+/// - Check if there are new signing requests, and start to work on them.
+///
+/// Return the number of new signing requests that are worked on (or
+/// equivalently, the number of quadruples that are consumed).
+// Return new signing requests initiated from canisters.
+fn update_signing_requests(
+    state_manager: &dyn StateManager<State = ReplicatedState>,
+    context: &ValidationContext,
+    payload: &mut ecdsa::EcdsaDataPayload,
+    current_ecdsa_transcript: &Option<ecdsa::UnmaskedTranscript>,
+    _log: ReplicaLogger,
+) -> Result<usize, EcdsaPayloadError> {
     // Get the set of new signing requests that we have not signed, and are
     // not already working on.
     let existing_requests: BTreeSet<&ecdsa::RequestId> = payload
@@ -451,7 +463,7 @@ fn update_signing_requests(
         state_manager,
         &existing_requests,
         &mut payload.available_quadruples,
-        None,
+        current_ecdsa_transcript.as_ref(),
         context.certified_height,
     )?;
     let mut count = 0;
@@ -723,7 +735,6 @@ pub fn validate_data_payload(_payload: ecdsa::EcdsaDataPayload) -> Result<(), Ec
 
 /// Helper to build threshold signature inputs from the context and
 /// the pre-signature quadruple
-/// TODO: PrincipalId, key transcript, etc need to figured out
 fn build_signature_inputs(
     context: &SignWithEcdsaContext,
     quadruple: &PreSignatureQuadruple,
