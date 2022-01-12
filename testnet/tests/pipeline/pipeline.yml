@@ -859,7 +859,6 @@ icos-continuous-upgrade-nightly:
   artifacts:
     when: always
     paths:
-      - "$CI_PROJECT_DIR/test-results.json"
       - "$CI_PROJECT_DIR/logs/"
   allow_failure: true
   script:
