@@ -24,7 +24,7 @@ def main(argv):
 
     machines = vmtools.pool().request_machines(
         [
-            {"name": "node0", "ram": "4G", "disk": "100G", "cores": 1},
+            {"name": "node0", "ram": "6G", "disk": "100G", "cores": 1},
         ],
     )
 

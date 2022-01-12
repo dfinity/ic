@@ -71,7 +71,7 @@ function install_executables() {
         if [ ! -f "${TGTDIR}/${EXECUTABLE}" -o "${SRCDIR}/${EXECUTABLE}" -nt "${TGTDIR}/${EXECUTABLE}" ]; then
             echo "Install and strip ${EXECUTABLE}"
             cp "${SRCDIR}/${EXECUTABLE}" "${TGTDIR}/${EXECUTABLE}"
-            if [ "${EXECUTABLE}" = "replica" ]; then
+            if [[ "${EXECUTABLE}" =~ ^(replica|canister_sandbox)$ ]]; then
                 echo "not stripping ${EXECUTABLE}"
             else
                 echo "stripping ${EXECUTABLE}"
@@ -145,7 +145,7 @@ fi
 truncate --size 0 "${BOOT_IMG}"
 truncate --size 0 "${ROOT_IMG}"
 truncate --size 100M "${BOOT_IMG}"
-truncate --size 2G "${ROOT_IMG}"
+truncate --size 3G "${ROOT_IMG}"
 
 if [ "${IN_FILE}" != "" ]; then
     build_ubuntu_from_tar "${ROOT_IMG}" "${BOOT_IMG}" <"${IN_FILE}"
