@@ -49,36 +49,65 @@ impl CatchUpPackageProvider {
         }
     }
 
-    // Return the latest and highest `CatchUpPackage`s provided by all peers in
-    // this node's Subnet. Use the given `cup` as a starting point, and only
-    // fetch `CatchUpPackage` that are newer.
-    //
-    // If no later CUP than the one given as `latest_cup` can be
-    // found, return that.
-    async fn get_latest_subnet_cup(
+    // Randomly selects a peer from the subnet and pulls its CUP. If this CUP is
+    // newer than the currently available one and it could be verified, then this CUP
+    // is returned. Note that it is acceptable to use a single peer, because CUPs are validated.
+    // If all `f` nodes serve unusable CUPs, we have a probability of 2/3 to hit
+    // a non-faulty node, so roughly on 4th attempt we should obtain the correct
+    // peer CUP.
+    async fn get_peer_cup(
         &self,
         subnet_id: SubnetId,
-        version: RegistryVersion,
-        mut latest_cup: Option<CUPWithOriginalProtobuf>,
+        registry_version: RegistryVersion,
+        current_cup: Option<CUPWithOriginalProtobuf>,
     ) -> Option<CUPWithOriginalProtobuf> {
+        use ic_protobuf::registry::node::v1::NodeRecord;
+        use ic_registry_client::helper::subnet::SubnetTransportRegistry;
+        use ic_types::NodeId;
         use rand::seq::SliceRandom;
 
-        let mut peer_urls = self.registry.get_node_urls(subnet_id, version);
+        let mut nodes: Vec<(NodeId, NodeRecord)> = self
+            .registry
+            .registry_client
+            .get_subnet_transport_infos(subnet_id, registry_version)
+            .ok()
+            .flatten()
+            .unwrap_or_else(Vec::new);
         // Randomize the order of peer_urls
-        peer_urls.shuffle(&mut rand::thread_rng());
+        nodes.shuffle(&mut rand::thread_rng());
 
-        for url in peer_urls.into_iter().flatten() {
-            let param = latest_cup.as_ref().map(CatchUpPackageParam::from);
-            let cup = self
-                .fetch_verify_and_deserialize_catch_up_package(url, param, subnet_id)
-                .await;
-            // Note: None is < Some(_)
-            if cup.as_ref().map(CatchUpPackageParam::from) > param {
-                latest_cup = cup;
+        let peer_url = match &nodes.as_slice() {
+            [] => {
+                warn!(
+                    self.logger,
+                    "Empty peer list for subnet {} at version {}", subnet_id, registry_version
+                );
+                return None;
             }
+            [(_, node_record), ..] => {
+                let http = node_record.clone().http?;
+                let url = format!("http://[{}]:{}", http.ip_addr, http.port);
+                Url::parse(&url)
+                    .map_err(|err| {
+                        warn!(
+                            self.logger,
+                            "Unable to parse the peer url {}: {:?}", url, err
+                        );
+                    })
+                    .ok()?
+            }
+        };
+
+        let param = current_cup.as_ref().map(CatchUpPackageParam::from);
+        let peer_cup = self
+            .fetch_verify_and_deserialize_catch_up_package(peer_url, param, subnet_id)
+            .await;
+        // Note: None is < Some(_)
+        if peer_cup.as_ref().map(CatchUpPackageParam::from) > param {
+            return peer_cup;
         }
 
-        latest_cup
+        current_cup
     }
 
     // Download CUP from the given URL.
@@ -222,7 +251,7 @@ impl CatchUpPackageProvider {
 
         // Returns local_cup in case no more recent CUP is found.
         let subnet_cup = self
-            .get_latest_subnet_cup(subnet_id, registry_version, local_cup)
+            .get_peer_cup(subnet_id, registry_version, local_cup)
             .await;
 
         let registry_cup = self

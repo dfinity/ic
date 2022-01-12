@@ -2,22 +2,19 @@ use crate::error::{OrchestratorError, OrchestratorResult};
 use ic_config::Config;
 use ic_consensus::dkg::make_registry_cup;
 use ic_interfaces::registry::RegistryClient;
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::firewall::v1::FirewallConfig;
-use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client::client::{create_data_provider, RegistryClientImpl};
 use ic_registry_client::helper::firewall::FirewallRegistry;
-use ic_registry_client::helper::subnet::{SubnetRegistry, SubnetTransportRegistry};
+use ic_registry_client::helper::subnet::SubnetRegistry;
 use ic_registry_client::helper::unassigned_nodes::UnassignedNodeRegistry;
 use ic_types::consensus::CatchUpPackage;
 use ic_types::{NodeId, RegistryVersion, ReplicaVersion, SubnetId};
 use std::convert::TryFrom;
-use std::net::SocketAddr;
 use std::sync::Arc;
-use url::Url;
 
 /// Calls the Registry and converts errors into `OrchestratorError`
 #[derive(Clone)]
@@ -96,57 +93,6 @@ impl RegistryHelper {
             self.node_id,
             version,
         ))
-    }
-
-    /// Return HTTP urls for all nodes in subnetwork
-    pub(crate) fn get_node_urls(
-        &self,
-        subnet_id: SubnetId,
-        version: RegistryVersion,
-    ) -> Vec<Option<Url>> {
-        let endpoints: Vec<(NodeId, NodeRecord)> = self
-            .registry_client
-            .get_subnet_transport_infos(subnet_id, version)
-            .ok()
-            .flatten()
-            .unwrap_or_else(Vec::new);
-
-        let endpoints: Vec<Option<Url>> = endpoints
-            .iter()
-            .map(|(_, record)| {
-                if let Some(http) = &record.http {
-                    let ip_addr = http
-                        .ip_addr
-                        .parse()
-                        .map_err(|e| {
-                            warn!(
-                                self.logger,
-                                "Failed to parse URL from endpoint: {:?}, error: {:?}", &http, e
-                            );
-                        })
-                        .ok()?;
-                    let url = Url::parse(
-                        format!(
-                            "http://{}",
-                            SocketAddr::new(ip_addr, u16::try_from(http.port).unwrap())
-                        )
-                        .as_str(),
-                    )
-                    .map_err(|e| {
-                        warn!(
-                            self.logger,
-                            "Failed to parse URL from endpoint: {:?}, error: {:?}", &http, e
-                        );
-                    })
-                    .ok()?;
-                    Some(url)
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        endpoints
     }
 
     /// Return the `SubnetRecord` for the given subnet
