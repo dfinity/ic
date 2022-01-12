@@ -78,6 +78,12 @@ function wasm_canisters_cargo_args() {
 
 build_with_features ledger-canister notify-method ledger-canister_notify-method
 
+# We need to build and optimize ledger archive node before we build the ledger
+# because the ledger embeds the Wasm file of the archive.
+cargo build --target wasm32-unknown-unknown --release --bin ledger-archive-node-canister
+optimize_wasm ledger-archive-node-canister
+export LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH=${ARTIFACTS}/ledger-archive-node-canister.wasm
+
 # shellcheck disable=SC2046  # Intended splitting of $(wasm_canisters_cargo_args)
 cargo build --target wasm32-unknown-unknown --release $(wasm_canisters_cargo_args)
 

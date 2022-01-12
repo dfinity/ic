@@ -7,7 +7,7 @@ use std::collections::VecDeque;
 
 // Wasm bytecode of an Archive Node
 const ARCHIVE_NODE_BYTECODE: &[u8] =
-    std::include_bytes!("../wasm/ledger-archive-node-canister.wasm");
+    std::include_bytes!(std::env!("LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH"));
 
 #[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
 pub struct ArchiveOptions {
