@@ -33,7 +33,7 @@ for i in $(seq 1 $NB_CANISTERS); do
         rm -f "sample.*"
     fi
 
-    timeout 10s csmith $OPTIONS -o sample.c
+    timeout 10s csmith --seed "$i" $OPTIONS -o sample.c
 
     if ! [ -f "sample.c" ]; then
         echo "failed to generate sample.c "
@@ -45,8 +45,11 @@ for i in $(seq 1 $NB_CANISTERS); do
 
     gcc -I "$CSMITH_INCLUDE" -I "$LIBC_INCLUDE" sample.c -o sample -w
 
-    # Reject a random program if it does not terminate within 10s
-    timeout 10s ./sample || continue
+    # Reject a random program if it does not terminate within 1s
+    timeout 1s ./sample || {
+        echo "rejecting canister..."
+        continue
+    }
 
     sed -i'.original' -e 's/platform_main_end(crc32_context ^ 0xFFFFFFFFUL, print_hash_value);/return crc32_context ^ 0xFFFFFFFFUL ;/g' sample.c
     sed -i'.original' -e 's/return 0;//g' sample.c
