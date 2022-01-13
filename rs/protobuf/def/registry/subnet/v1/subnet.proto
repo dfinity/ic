@@ -14,13 +14,8 @@ message SubnetRecord {
   reserved 2;
   reserved "initial_dkg_transcript";
 
-  // Ingress message params used by that subnet.
-  //
-  // Maximum amount of bytes per block. This is a soft cap, which means
-  // we stop adding messages once overall size grows above this limit. This
-  // allows big messages to still get into the block, because the size of
-  // a message can exceed this limit.
-  uint64 ingress_bytes_per_block_soft_cap = 4;
+  reserved 4;
+  reserved "ingress_bytes_per_block_soft_cap";
 
   // Maximum amount of bytes per message. This is a hard cap, which means
   // ingress messages greater than the limit will be dropped.

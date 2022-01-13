@@ -41,7 +41,6 @@ fn test_submit_and_accept_update_subnet_proposal() {
             );
             let initial_subnet_record = SubnetRecord {
                 membership: vec![],
-                ingress_bytes_per_block_soft_cap: 2 * 1024 * 1024,
                 max_ingress_bytes_per_message: 60 * 1024 * 1024,
                 max_ingress_messages_per_block: 1000,
                 max_block_payload_size: 4 * 1024 * 1024,
@@ -85,7 +84,6 @@ fn test_submit_and_accept_update_subnet_proposal() {
 
             let proposal_payload = UpdateSubnetPayload {
                 subnet_id,
-                ingress_bytes_per_block_soft_cap: None,
                 max_ingress_bytes_per_message: Some(10 * 1024 * 1024),
                 max_block_payload_size: None,
                 unit_delay_millis: None,
@@ -162,7 +160,6 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 subnet_record_after_update,
                 SubnetRecord {
                     membership: vec![],
-                    ingress_bytes_per_block_soft_cap: 2 * 1024 * 1024,
                     max_ingress_bytes_per_message: 10 * 1024 * 1024,
                     max_ingress_messages_per_block: 1000,
                     max_block_payload_size: 4 * 1024 * 1024,

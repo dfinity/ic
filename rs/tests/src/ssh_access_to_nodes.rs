@@ -398,7 +398,6 @@ fn get_updatesubnetpayload(
 ) -> UpdateSubnetPayload {
     UpdateSubnetPayload {
         subnet_id,
-        ingress_bytes_per_block_soft_cap: None,
         max_ingress_bytes_per_message: None,
         max_block_payload_size: None,
         unit_delay_millis: None,

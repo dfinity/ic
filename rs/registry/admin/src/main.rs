@@ -1019,12 +1019,6 @@ struct ProposeToUpdateSubnetCmd {
     /// If set, the created proposal will contain a desired override of that
     /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
     /// of this field.
-    pub ingress_bytes_per_block_soft_cap: Option<u64>,
-
-    #[clap(long)]
-    /// If set, the created proposal will contain a desired override of that
-    /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
-    /// of this field.
     pub max_ingress_bytes_per_message: Option<u64>,
 
     #[clap(long)]
@@ -1185,7 +1179,6 @@ impl ProposalTitleAndPayload<UpdateSubnetPayload> for ProposeToUpdateSubnetCmd {
         let subnet_id = self.subnet.get_id(&registry_canister).await;
         UpdateSubnetPayload {
             subnet_id,
-            ingress_bytes_per_block_soft_cap: self.ingress_bytes_per_block_soft_cap,
             max_ingress_bytes_per_message: self.max_ingress_bytes_per_message,
             max_block_payload_size: self.max_block_payload_size,
             unit_delay_millis: self.unit_delay_millis,
