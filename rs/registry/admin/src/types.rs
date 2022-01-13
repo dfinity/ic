@@ -50,7 +50,6 @@ impl Default for RegistryValue {
 #[derive(Default, Serialize)]
 pub(crate) struct SubnetRecord {
     pub membership: Vec<String>,
-    pub ingress_bytes_per_block_soft_cap: u64,
     pub max_ingress_bytes_per_message: u64,
     pub max_ingress_messages_per_block: u64,
     pub max_block_payload_size: u64,
@@ -87,7 +86,6 @@ impl From<&SubnetRecordProto> for SubnetRecord {
                     .to_string()
                 })
                 .collect(),
-            ingress_bytes_per_block_soft_cap: value.ingress_bytes_per_block_soft_cap,
             max_ingress_bytes_per_message: value.max_ingress_bytes_per_message,
             max_ingress_messages_per_block: value.max_ingress_messages_per_block,
             max_block_payload_size: value.max_block_payload_size,

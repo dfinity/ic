@@ -278,7 +278,6 @@ impl SubnetConfig {
 
         let subnet_record = SubnetRecord {
             membership: membership_nodes,
-            ingress_bytes_per_block_soft_cap: self.ingress_bytes_per_block_soft_cap,
             max_ingress_bytes_per_message: self.max_ingress_bytes_per_message,
             max_ingress_messages_per_block: self.max_ingress_messages_per_block,
             max_block_payload_size: self.max_block_payload_size,

@@ -243,8 +243,6 @@ impl From<CreateSubnetPayload> for SubnetRecord {
                 .iter()
                 .map(|id| id.get().into_vec())
                 .collect::<Vec<_>>(),
-
-            ingress_bytes_per_block_soft_cap: val.ingress_bytes_per_block_soft_cap,
             max_ingress_bytes_per_message: val.max_ingress_bytes_per_message,
             max_ingress_messages_per_block: val.max_ingress_messages_per_block,
             max_block_payload_size: val.max_block_payload_size,

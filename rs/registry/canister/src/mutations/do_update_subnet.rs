@@ -52,7 +52,6 @@ impl Registry {
 pub struct UpdateSubnetPayload {
     pub subnet_id: SubnetId,
 
-    pub ingress_bytes_per_block_soft_cap: Option<u64>,
     pub max_ingress_bytes_per_message: Option<u64>,
     pub max_block_payload_size: Option<u64>,
     pub unit_delay_millis: Option<u64>,
@@ -147,7 +146,6 @@ fn merge_subnet_record(
 
     let UpdateSubnetPayload {
         subnet_id: _subnet_id,
-        ingress_bytes_per_block_soft_cap,
         max_ingress_bytes_per_message,
         max_block_payload_size,
         unit_delay_millis,
@@ -177,7 +175,6 @@ fn merge_subnet_record(
         ssh_backup_access,
     } = payload;
 
-    maybe_set!(subnet_record, ingress_bytes_per_block_soft_cap);
     maybe_set!(subnet_record, max_ingress_bytes_per_message);
     maybe_set!(subnet_record, max_block_payload_size);
     maybe_set!(subnet_record, unit_delay_millis);
@@ -245,7 +242,6 @@ mod tests {
     fn can_override_all_fields() {
         let subnet_record = SubnetRecord {
             membership: vec![],
-            ingress_bytes_per_block_soft_cap: 2 * 1024 * 1024,
             max_ingress_bytes_per_message: 60 * 1024 * 1024,
             max_block_payload_size: 4 * 1024 * 1024,
             max_ingress_messages_per_block: 1000,
@@ -285,7 +281,6 @@ mod tests {
                 )
                 .unwrap(),
             ),
-            ingress_bytes_per_block_soft_cap: Some(100),
             max_ingress_bytes_per_message: Some(256),
             max_block_payload_size: Some(200),
             unit_delay_millis: Some(300),
@@ -324,7 +319,6 @@ mod tests {
             merge_subnet_record(subnet_record, payload),
             SubnetRecord {
                 membership: vec![],
-                ingress_bytes_per_block_soft_cap: 100,
                 max_ingress_bytes_per_message: 256,
                 max_ingress_messages_per_block: 1000,
                 max_block_payload_size: 200,
@@ -373,7 +367,6 @@ mod tests {
     fn can_override_some_fields() {
         let subnet_record = SubnetRecord {
             membership: vec![],
-            ingress_bytes_per_block_soft_cap: 2 * 1024 * 1024,
             max_ingress_bytes_per_message: 60 * 1024 * 1024,
             max_block_payload_size: 4 * 1024 * 1024,
             max_ingress_messages_per_block: 1000,
@@ -415,7 +408,6 @@ mod tests {
                 )
                 .unwrap(),
             ),
-            ingress_bytes_per_block_soft_cap: None,
             max_ingress_bytes_per_message: None,
             max_block_payload_size: None,
             unit_delay_millis: Some(100),
@@ -449,7 +441,6 @@ mod tests {
             merge_subnet_record(subnet_record, payload),
             SubnetRecord {
                 membership: vec![],
-                ingress_bytes_per_block_soft_cap: 2 * 1024 * 1024,
                 max_ingress_bytes_per_message: 60 * 1024 * 1024,
                 max_block_payload_size: 4 * 1024 * 1024,
                 max_ingress_messages_per_block: 1000,
@@ -492,7 +483,6 @@ mod tests {
     fn can_handle_invalid_combination_of_set_gossip_config_to_default() {
         let subnet_record = SubnetRecord {
             membership: vec![],
-            ingress_bytes_per_block_soft_cap: 2 * 1024 * 1024,
             max_ingress_bytes_per_message: 60 * 1024 * 1024,
             max_block_payload_size: 4 * 1024 * 1024,
             max_ingress_messages_per_block: 1000,
@@ -522,7 +512,6 @@ mod tests {
                 )
                 .unwrap(),
             ),
-            ingress_bytes_per_block_soft_cap: None,
             max_ingress_bytes_per_message: None,
             max_block_payload_size: None,
             unit_delay_millis: Some(100),
@@ -559,7 +548,6 @@ mod tests {
     fn can_set_default_gossip_config_and_override_fields() {
         let subnet_record = SubnetRecord {
             membership: vec![],
-            ingress_bytes_per_block_soft_cap: 2 * 1024 * 1024,
             max_ingress_bytes_per_message: 60 * 1024 * 1024,
             max_block_payload_size: 4 * 1024 * 1024,
             max_ingress_messages_per_block: 1000,
@@ -589,7 +577,6 @@ mod tests {
                 )
                 .unwrap(),
             ),
-            ingress_bytes_per_block_soft_cap: None,
             max_ingress_bytes_per_message: None,
             max_block_payload_size: None,
             unit_delay_millis: None,
@@ -623,7 +610,6 @@ mod tests {
             merge_subnet_record(subnet_record, payload),
             SubnetRecord {
                 membership: vec![],
-                ingress_bytes_per_block_soft_cap: 2 * 1024 * 1024,
                 max_ingress_bytes_per_message: 60 * 1024 * 1024,
                 max_block_payload_size: 4 * 1024 * 1024,
                 max_ingress_messages_per_block: 1000,
@@ -664,7 +650,6 @@ mod tests {
     fn update_advert_config() {
         let subnet_record = SubnetRecord {
             membership: vec![],
-            ingress_bytes_per_block_soft_cap: 2 * 1024 * 1024,
             max_ingress_bytes_per_message: 60 * 1024 * 1024,
             max_block_payload_size: 4 * 1024 * 1024,
             max_ingress_messages_per_block: 1000,
@@ -706,7 +691,6 @@ mod tests {
                 )
                 .unwrap(),
             ),
-            ingress_bytes_per_block_soft_cap: None,
             max_ingress_bytes_per_message: None,
             max_block_payload_size: None,
             unit_delay_millis: Some(100),
@@ -740,7 +724,6 @@ mod tests {
             merge_subnet_record(subnet_record, payload),
             SubnetRecord {
                 membership: vec![],
-                ingress_bytes_per_block_soft_cap: 2 * 1024 * 1024,
                 max_ingress_bytes_per_message: 60 * 1024 * 1024,
                 max_block_payload_size: 4 * 1024 * 1024,
                 max_ingress_messages_per_block: 1000,

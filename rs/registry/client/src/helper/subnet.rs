@@ -25,11 +25,6 @@ pub struct NotarizationDelaySettings {
 }
 
 pub struct IngressMessageSettings {
-    /// Maximum number of bytes per block. This is a soft cap, which means we
-    /// stop adding messages once overall size grows above this limit. This
-    /// allows big messages to still get into the block, because the size of a
-    /// message can exceed this limit.
-    pub ingress_bytes_per_block_soft_cap: usize,
     /// Maximum number of bytes per message. This is a hard cap, which means
     /// ingress messages greater than the limit will be dropped.
     pub max_ingress_bytes_per_message: usize,
@@ -222,8 +217,6 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
         Ok(
             deserialize_registry_value::<SubnetRecord>(bytes)?.map(|subnet| {
                 IngressMessageSettings {
-                    ingress_bytes_per_block_soft_cap: subnet.ingress_bytes_per_block_soft_cap
-                        as usize,
                     max_ingress_bytes_per_message: subnet.max_ingress_bytes_per_message as usize,
                     max_ingress_messages_per_block: subnet.max_ingress_messages_per_block as usize,
                 }

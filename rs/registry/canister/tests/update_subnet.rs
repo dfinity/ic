@@ -48,7 +48,6 @@ fn test_the_anonymous_user_cannot_update_a_subnets_configuration() {
         // update payload message
         let payload = UpdateSubnetPayload {
             subnet_id,
-            ingress_bytes_per_block_soft_cap: None,
             max_ingress_bytes_per_message: None,
             max_block_payload_size: None,
             unit_delay_millis: None,
@@ -121,7 +120,6 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_update_a_subnets_con
         );
         let initial_subnet_record = SubnetRecord {
             membership: vec![],
-            ingress_bytes_per_block_soft_cap: 2 * 1024 * 1024,
             max_ingress_bytes_per_message: 60 * 1024 * 1024,
             max_block_payload_size: 4 * 1024 * 1024,
             max_ingress_messages_per_block: 1000,
@@ -171,7 +169,6 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_update_a_subnets_con
         // update payload message
         let payload = UpdateSubnetPayload {
             subnet_id,
-            ingress_bytes_per_block_soft_cap: None,
             max_ingress_bytes_per_message: None,
             max_block_payload_size: None,
             unit_delay_millis: None,
@@ -245,7 +242,6 @@ fn test_the_proposals_canister_can_update_a_subnets_configuration() {
                         make_subnet_record_key(subnet_id).as_bytes().to_vec(),
                         encode_or_panic(&SubnetRecord {
                             membership: vec![],
-                            ingress_bytes_per_block_soft_cap: 2 * 1024 * 1024,
                             max_ingress_bytes_per_message: 60 * 1024 * 1024,
                             max_block_payload_size: 4 * 1024 * 1024,
                             max_ingress_messages_per_block: 1000,
@@ -286,7 +282,6 @@ fn test_the_proposals_canister_can_update_a_subnets_configuration() {
         // update payload message
         let payload = UpdateSubnetPayload {
             subnet_id,
-            ingress_bytes_per_block_soft_cap: None,
             max_ingress_bytes_per_message: None,
             max_block_payload_size: None,
             unit_delay_millis: Some(100),
@@ -336,7 +331,6 @@ fn test_the_proposals_canister_can_update_a_subnets_configuration() {
             subnet_record,
             SubnetRecord {
                 membership: vec![],
-                ingress_bytes_per_block_soft_cap: 2 * 1024 * 1024,
                 max_ingress_bytes_per_message: 60 * 1024 * 1024,
                 max_block_payload_size: 4 * 1024 * 1024,
                 max_ingress_messages_per_block: 1000,
