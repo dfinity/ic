@@ -8,6 +8,7 @@ use ic_tests::nns_fault_tolerance_test;
 use ic_tests::nns_follow_test::{self, test as follow_test};
 use ic_tests::nns_voting_test::{self, test as voting_test};
 use ic_tests::node_assign_test::{self, test as node_assign_test};
+use ic_tests::node_removal_from_registry_test::{self, test as node_removal_from_registry_test};
 use ic_tests::node_restart_test::{self, test as node_restart_test};
 use ic_tests::rosetta_test;
 use ic_tests::security::nns_voting_fuzzing_poc_test;
@@ -155,6 +156,11 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 execution::upgraded_pots::cycles_restrictions_pot(),
                 execution::upgraded_pots::inter_canister_queries(),
                 execution::upgraded_pots::compute_allocation_pot(),
+                pot(
+                    "node_removal_from_registry_pot",
+                    node_removal_from_registry_test::config,
+                    par(vec![t("node_removal_from_registry_test", node_removal_from_registry_test)]),
+                ),
                 pot(
                     "node_assign_pot",
                     node_assign_test::config,
