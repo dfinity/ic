@@ -4558,6 +4558,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "thiserror",
+ "tokio",
  "tower",
 ]
 
