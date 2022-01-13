@@ -13,6 +13,7 @@ use ed25519_dalek::Keypair;
 use ic_canister_client::{Agent, Sender};
 use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto::threshold_sig_public_key_to_der;
+use ic_crypto_sha::Sha256;
 use ic_crypto_utils_basic_sig::conversions::Ed25519SecretKeyConversions;
 use ic_http_utils::file_downloader::{check_file_hash, extract_tar_gz_into_dir, FileDownloader};
 use ic_prep_lib::subnet_configuration;
@@ -106,6 +107,7 @@ use registry_canister::mutations::{
 };
 use serde::Serialize;
 use std::collections::{BTreeMap, HashSet};
+use std::fmt::Debug;
 use std::io::Write;
 use std::sync::Arc;
 use std::{
@@ -399,6 +401,7 @@ pub trait ProposalMetadata {
     fn url(&self) -> String;
     fn proposer_and_sender(&self, sender: Sender) -> (NeuronId, Sender);
     fn is_dry_run(&self) -> bool;
+    fn is_verbose(&self) -> bool;
 }
 
 /// Trait to extract the title and the payload for each proposal type.
@@ -2682,7 +2685,7 @@ async fn print_and_get_last_value<T: Message + Default + serde::Serialize>(
 /// Extracts a proposal payload from the provided command and uses it to submit
 /// a proposal to the governance canister.
 async fn propose_external_proposal_from_command<
-    C: CandidType + Serialize,
+    C: CandidType + Serialize + Debug,
     Command: ProposalMetadata + ProposalTitleAndPayload<C>,
 >(
     cmd: Command,
@@ -2699,7 +2702,7 @@ async fn propose_external_proposal_from_command<
     ));
 
     let payload = cmd.payload(nns_url).await;
-    print_payload(&payload);
+    print_payload(&payload, &cmd);
 
     if cmd.is_dry_run() {
         return;
@@ -3007,6 +3010,23 @@ pub struct UpgradeRootProposalPayload {
     pub stop_upgrade_start: bool,
 }
 
+impl std::fmt::Debug for UpgradeRootProposalPayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut wasm_sha = Sha256::new();
+        wasm_sha.write(&self.wasm_module);
+        let wasm_sha = wasm_sha.finish();
+        let mut arg_sha = Sha256::new();
+        arg_sha.write(&self.module_arg);
+        let arg_sha = arg_sha.finish();
+
+        f.debug_struct("UpgradeRootProposalPayload")
+            .field("stop_upgrade_start", &self.stop_upgrade_start)
+            .field("wasm_module_sha256", &format!("{:x?}", wasm_sha))
+            .field("module_arg_sha256", &format!("{:x?}", arg_sha))
+            .finish()
+    }
+}
+
 /// Writes a threshold signing public key to the given path.
 pub fn store_threshold_sig_pk<P: AsRef<Path>>(pk: &PublicKey, path: P) {
     let pk = ThresholdSigPublicKey::try_from(pk.clone())
@@ -3057,7 +3077,7 @@ async fn propose_to_add_or_remove_node_provider(
         ),
     };
     let payload = AddOrRemoveNodeProvider { change };
-    print_payload(&payload);
+    print_payload(&payload, &cmd);
 
     if cmd.is_dry_run() {
         return;
@@ -3563,7 +3583,11 @@ impl RootCanisterClient {
     }
 }
 
-fn print_payload<T: Serialize>(payload: &T) {
-    let serialized = serde_json::to_string(&payload).unwrap();
-    println!("submit_proposal payload: \n{}", serialized);
+fn print_payload<T: Serialize + Debug, C: ProposalMetadata>(payload: &T, cmd: &C) {
+    if cmd.is_verbose() {
+        let serialized = serde_json::to_string(&payload).unwrap();
+        println!("submit_proposal payload: \n{}", serialized);
+    } else {
+        println!("submit_proposal payload: \n{:#?}", payload);
+    }
 }

@@ -183,7 +183,7 @@ impl ChangeNnsCanisterProposalPayload {
     }
 }
 
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
+#[derive(CandidType, Serialize, Deserialize, Clone)]
 pub struct AddNnsCanisterProposalPayload {
     /// A unique name for this NNS canister.
     pub name: String,
@@ -210,6 +210,40 @@ pub struct AddNnsCanisterProposalPayload {
     /// newly added canisters are not expected to be here: instead, they are
     /// expected to belong to the init payload, `arg`.
     pub authz_changes: Vec<MethodAuthzChange>,
+}
+
+impl AddNnsCanisterProposalPayload {
+    fn format(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut wasm_sha = Sha256::new();
+        wasm_sha.write(&self.wasm_module);
+        let wasm_sha = wasm_sha.finish();
+        let mut arg_sha = Sha256::new();
+        arg_sha.write(&self.arg);
+        let arg_sha = arg_sha.finish();
+
+        f.debug_struct("AddNnsCanisterProposalPayload")
+            .field("name", &self.name)
+            .field("wasm_module_sha256", &format!("{:x?}", wasm_sha))
+            .field("arg_sha256", &format!("{:x?}", arg_sha))
+            .field("compute_allocation", &self.compute_allocation)
+            .field("memory_allocation", &self.memory_allocation)
+            .field("query_allocation", &self.query_allocation)
+            .field("initial_cycles", &self.initial_cycles)
+            .field("authz_changes", &self.authz_changes)
+            .finish()
+    }
+}
+
+impl std::fmt::Debug for AddNnsCanisterProposalPayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.format(f)
+    }
+}
+
+impl std::fmt::Display for AddNnsCanisterProposalPayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.format(f)
+    }
 }
 
 // The action to take on the canister.

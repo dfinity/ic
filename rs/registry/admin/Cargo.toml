@@ -25,6 +25,7 @@ ic-consensus = { path = "../../consensus" }
 ic-crypto = { path = "../../crypto" }
 ic-crypto-utils-basic-sig = { path = "../../crypto/utils/basic_sig" }
 ic-crypto-internal-types = { path = "../../crypto/internal/crypto_lib/types" }
+ic-crypto-sha = {path = "../../crypto/sha/" }
 ic-http-utils = { path = "../../http_utils" }
 ic-interfaces = { path = "../../interfaces" }
 ic-protobuf = { path = "../../protobuf" }

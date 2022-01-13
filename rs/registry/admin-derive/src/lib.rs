@@ -33,6 +33,10 @@ fn impl_proposal_metadata(ast: &syn::DeriveInput) -> TokenStream {
             fn is_dry_run(&self) -> bool {
                 self.dry_run
             }
+
+            fn is_verbose(&self) -> bool {
+                self.verbose
+            }
         }
     };
     gen.into()
@@ -85,6 +89,10 @@ pub fn derive_common_proposal_fields(_: TokenStream, item: TokenStream) -> Token
                             /// submitted.
                             #[clap(long)]
                             pub dry_run: bool,
+
+                            /// If set, verbose output will be printed.
+                            #[clap(long)]
+                            pub verbose: bool,
                     });
                     stream.extend(gen);
                     stream.extend(group.stream());

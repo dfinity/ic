@@ -2971,6 +2971,7 @@ dependencies = [
  "ic-consensus",
  "ic-crypto",
  "ic-crypto-internal-types",
+ "ic-crypto-sha",
  "ic-crypto-utils-basic-sig",
  "ic-http-utils",
  "ic-interfaces",
