@@ -48,9 +48,16 @@ pub mod v2 {
         /// reward rates for the most specific region in this hierarchy that has an entry in the
         /// rewards table.
         pub fn get(&self, region: &str) -> Option<NodeRewardRates> {
-            region
-                .split(',')
-                .rfold(None, |acc, sub_region| acc.or_else(|| self.table.get(sub_region).cloned()))
+            let mut sub_regions: Vec<&str> = region.split(',').collect();
+            while !sub_regions.is_empty() {
+                let full_region = sub_regions.join(",");
+                if let Some(rates) = self.table.get(&full_region).cloned() {
+                    return Some(rates);
+                }
+                sub_regions.pop();
+            }
+
+            None
         }
     }
 
@@ -162,17 +169,24 @@ pub mod v2 {
         #[test]
         fn test_get() {
             let existing_entries = btreemap! {
-                "US".to_string() =>  NodeRewardRates {
+                "North America,US,NY".to_string() => NodeRewardRates {
                     rates: btreemap!{
                         "default".to_string() => NodeRewardRate {
                             xdr_permyriad_per_node_per_month: 240,
                         },
                     }
                 },
-                "NY".to_string() => NodeRewardRates {
+                "North America,US".to_string() => NodeRewardRates {
                     rates: btreemap!{
                         "default".to_string() => NodeRewardRate {
                             xdr_permyriad_per_node_per_month: 677,
+                        },
+                    }
+                },
+                "North America".to_string() => NodeRewardRates {
+                    rates: btreemap!{
+                        "default".to_string() => NodeRewardRate {
+                            xdr_permyriad_per_node_per_month: 801,
                         },
                     }
                 }
@@ -182,10 +196,16 @@ pub mod v2 {
                 table: existing_entries
             };
 
-            assert_eq!(table.get("US,OR").unwrap().rates.get("default").unwrap().xdr_permyriad_per_node_per_month, 240);
-            assert_eq!(table.get("US").unwrap().rates.get("default").unwrap().xdr_permyriad_per_node_per_month, 240);
-            assert_eq!(table.get("US,NY").unwrap().rates.get("default").unwrap().xdr_permyriad_per_node_per_month, 677);
-            assert_eq!(table.get("NY").unwrap().rates.get("default").unwrap().xdr_permyriad_per_node_per_month, 677);
+            assert_eq!(table.get("US,OR"), None);
+            assert_eq!(table.get("US"), None);
+            assert_eq!(table.get("US,NY"), None);
+            assert_eq!(table.get("NY"), None);
+
+            assert_eq!(table.get("North America,US,NY").unwrap().rates.get("default").unwrap().xdr_permyriad_per_node_per_month, 240);
+            assert_eq!(table.get("North America,US").unwrap().rates.get("default").unwrap().xdr_permyriad_per_node_per_month, 677);
+            assert_eq!(table.get("North America,US,OR").unwrap().rates.get("default").unwrap().xdr_permyriad_per_node_per_month, 677);
+            assert_eq!(table.get("North America,CA,BC").unwrap().rates.get("default").unwrap().xdr_permyriad_per_node_per_month, 801);
+            assert_eq!(table.get("North America").unwrap().rates.get("default").unwrap().xdr_permyriad_per_node_per_month, 801);
         }
     }
 }

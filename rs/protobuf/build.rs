@@ -8,7 +8,8 @@ fn out_dir() -> PathBuf {
         .into()
 }
 
-// protobuf doesn't actually check whether the out_dir exists before attempting to use it
+// protobuf doesn't actually check whether the out_dir exists before attempting
+// to use it
 fn set_out_dir(config: &mut Config, path: PathBuf) {
     config.out_dir(&path);
     std::fs::create_dir_all(path).expect("could not create out dir");
