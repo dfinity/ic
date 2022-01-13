@@ -195,7 +195,15 @@ fn compute_priority(
             }
         }
         ConsensusMessageAttribute::CatchUpPackage(_) => FetchNow,
-        ConsensusMessageAttribute::CatchUpPackageShare(_) => Fetch,
+        ConsensusMessageAttribute::CatchUpPackageShare(_) => {
+            if height <= catch_up_height {
+                Drop
+            } else if height > finalized_height {
+                Stash
+            } else {
+                Fetch
+            }
+        }
     }
 }
 
