@@ -123,32 +123,53 @@ impl ShareAggregator {
 
     /// Attempt to construct `CatchUpPackage`s.
     fn aggregate_catch_up_package_shares(&self, pool: &PoolReader<'_>) -> Vec<ConsensusMessage> {
-        let start_block = pool.get_highest_summary_block();
-        let height = start_block.height();
+        let mut start_block = pool.get_highest_summary_block();
+        let current_cup_height = pool.get_catch_up_height();
 
-        // Skip if we have a full CatchUpPackage already
-        if height <= pool.get_catch_up_height() {
-            return Vec::new();
-        }
-        let shares = pool.get_catch_up_package_shares(height).map(|share| {
-            let block = pool
-                .get_block(&share.content.block, height)
-                .unwrap_or_else(|err| panic!("Block not found for {:?}, error: {:?}", share, err));
-            Signed {
-                content: CatchUpContent::from_share_content(share.content, block),
-                signature: share.signature,
+        while start_block.height() > current_cup_height {
+            let height = start_block.height();
+            let shares = pool.get_catch_up_package_shares(height).map(|share| {
+                let block = pool
+                    .get_block(&share.content.block, height)
+                    .unwrap_or_else(|err| {
+                        panic!("Block not found for {:?}, error: {:?}", share, err)
+                    });
+                Signed {
+                    content: CatchUpContent::from_share_content(share.content, block),
+                    signature: share.signature,
+                }
+            });
+            let state_reader = pool.as_cache();
+            let dkg_id = utils::active_high_threshold_transcript(state_reader, height)
+                .map(|transcript| transcript.dkg_id);
+            let result = utils::aggregate(
+                &self.log,
+                self.membership.as_ref(),
+                self.crypto.as_aggregate(),
+                Box::new(|_| dkg_id),
+                shares,
+            );
+            if !result.is_empty() {
+                return to_messages(result);
             }
-        });
-        let state_reader = pool.as_cache();
-        let dkg_id = utils::active_high_threshold_transcript(state_reader, height)
-            .map(|transcript| transcript.dkg_id);
-        to_messages(utils::aggregate(
-            &self.log,
-            self.membership.as_ref(),
-            self.crypto.as_aggregate(),
-            Box::new(|_| dkg_id),
-            shares,
-        ))
+
+            if let Some(block_from_last_interval) =
+                pool.get_finalized_block(start_block.height.decrement())
+            {
+                let next_start_height = block_from_last_interval
+                    .payload
+                    .as_ref()
+                    .dkg_interval_start_height();
+                if let Some(new_start_block) = pool.get_finalized_block(next_start_height) {
+                    start_block = new_start_block;
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+        Vec::new()
     }
 }
 

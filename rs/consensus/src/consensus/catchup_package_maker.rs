@@ -111,13 +111,37 @@ impl<'a> CatchUpPackageMaker {
 
         self.report_state_divergence_if_required(pool);
 
-        let start_block = pool.get_highest_summary_block();
-        let height = start_block.height();
+        let current_cup_height = pool.get_catch_up_height();
+        let mut block = pool.get_highest_summary_block();
 
-        // Skip if we have a full CatchUpPackage already
-        if height <= pool.get_catch_up_height() {
-            return None;
+        while block.height() > current_cup_height {
+            let result = self.consider_block(pool, block.clone());
+            if result.is_some() {
+                // If we were able to generate a share, we simply return.
+                // Subsequent calls into the catch up package maker will only
+                // result in the creation of shares at earlier heights being, if
+                // the creation of this share does not result in an aggregated
+                // catch up package.
+                return result;
+            }
+
+            let next_start_height = pool
+                .get_finalized_block(block.height.decrement())?
+                .payload
+                .as_ref()
+                .dkg_interval_start_height();
+            block = pool.get_finalized_block(next_start_height)?;
         }
+        None
+    }
+
+    /// Consider the provided block for the creation of a catch up package.
+    fn consider_block(
+        &self,
+        pool: &PoolReader<'_>,
+        start_block: Block,
+    ) -> Option<CatchUpPackageShare> {
+        let height = start_block.height();
 
         // Skip if this node is not in the committee to make CUP shares
         let my_node_id = self.replica_config.node_id;

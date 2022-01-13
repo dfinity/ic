@@ -20,6 +20,12 @@ use std::time::Duration;
 /// rate.
 pub const ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP: u64 = 3;
 
+/// The acceptable ratio between the length of the dkg interval and the gap
+/// between the last cup and the current finalized tip. This means that we will
+/// start slowing down if we get approximately halfway through a dkg interval
+/// without producing the cup for the last summary block.
+pub const ACCEPTABLE_CUP_GAP_RATIO: f64 = 1.5;
+
 /// Rotate on_state_change calls with a round robin schedule to ensure fairness.
 #[derive(Default)]
 pub struct RoundRobin {
@@ -155,7 +161,27 @@ pub fn get_adjusted_notary_delay(
         state_manager.latest_certified_height().get() + ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP,
     );
 
-    let adjusted_delay = finality_adjusted_delay + unit_delay.as_millis() as u64 * certified_gap;
+    let certified_adjusted_delay =
+        finality_adjusted_delay + unit_delay.as_millis() as u64 * certified_gap;
+
+    let cup_gap = finalized_height.saturating_sub(pool.get_catch_up_height().get());
+    let cup_dkg_interval_length = pool
+        .get_highest_catch_up_package()
+        .content
+        .block
+        .as_ref()
+        .payload
+        .as_ref()
+        .as_summary()
+        .dkg
+        .interval_length;
+
+    let acceptable_gap_size =
+        (ACCEPTABLE_CUP_GAP_RATIO * cup_dkg_interval_length.get() as f64).round() as u64;
+
+    let cup_multiple = cup_gap.saturating_sub(acceptable_gap_size);
+
+    let adjusted_delay = certified_adjusted_delay + unit_delay.as_millis() as u64 * cup_multiple;
     Some(Duration::from_millis(adjusted_delay))
 }
 
