@@ -18,7 +18,7 @@ use ic_interfaces::{
     },
     time_source::{SysTimeSource, TimeSource},
 };
-use ic_logger::{debug, info, warn, ReplicaLogger};
+use ic_logger::{debug, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::consensus::HasRank;
 use ic_types::{
@@ -365,7 +365,7 @@ impl<
                     ));
                     if let ConsensusMessage::BlockProposal(p) = to_add {
                         let rank = p.clone().content.decompose().1.rank();
-                        info!(
+                        debug!(
                             self.log,
                             "Added proposal {:?} of rank {:?} to artifact pool", p, rank
                         );
@@ -378,7 +378,7 @@ impl<
                     ));
                     if let ConsensusMessage::BlockProposal(p) = to_move {
                         let rank = p.clone().content.decompose().1.rank();
-                        info!(
+                        debug!(
                             self.log,
                             "Moved proposal {:?} of rank {:?} to artifact pool", p, rank
                         );
