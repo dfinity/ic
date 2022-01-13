@@ -36,7 +36,8 @@ use query_handler::{HttpQueryHandler, InternalHttpQueryHandler};
 use scheduler::SchedulerImpl;
 use std::sync::{Arc, Mutex};
 
-const QUERY_EXECUTION_MAX_BUFFERED_QUERIES: usize = 2000;
+const MAX_BUFFERED_QUERIES: usize = 2000;
+const CONCURRENT_QUERIES_PER_THREAD: usize = 4;
 
 /// When executing a wasm method of query type, this enum indicates if we are
 /// running in an replicated or non-replicated context. This information is
@@ -124,16 +125,16 @@ pub fn setup_execution(
     let threadpool = Arc::new(Mutex::new(threadpool));
 
     let async_query_handler = HttpQueryHandler::new_service(
-        QUERY_EXECUTION_MAX_BUFFERED_QUERIES,
-        config.query_execution_threads,
+        MAX_BUFFERED_QUERIES,
+        config.query_execution_threads * CONCURRENT_QUERIES_PER_THREAD,
         Arc::clone(&sync_query_handler) as Arc<_>,
         Arc::clone(&threadpool),
         Arc::clone(&state_reader),
     );
 
     let ingress_filter = IngressFilter::new_service(
-        QUERY_EXECUTION_MAX_BUFFERED_QUERIES,
-        config.query_execution_threads,
+        MAX_BUFFERED_QUERIES,
+        config.query_execution_threads * CONCURRENT_QUERIES_PER_THREAD,
         threadpool,
         Arc::clone(&state_reader),
         Arc::clone(&exec_env),
