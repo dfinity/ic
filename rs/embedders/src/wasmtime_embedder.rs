@@ -40,34 +40,60 @@ mod wasmtime_embedder_tests;
 
 const NUM_INSTRUCTION_GLOBAL_NAME: &str = "canister counter_instructions";
 
-fn trap_to_error(err: anyhow::Error) -> HypervisorError {
-    let message = {
-        // We cannot use `format!` here because displaying `err` may fail.
-        let mut output = String::new();
-        match std::fmt::write(&mut output, format_args!("{}", err)) {
-            Ok(()) => output,
-            Err(_) => "Conversion of Wasmtime error to string failed.".to_string(),
+const BAD_SIGNATURE_MESSAGE: &str = "function invocation does not match its signature";
+
+fn wasmtime_error_to_hypervisor_error(err: anyhow::Error) -> HypervisorError {
+    match err.downcast::<wasmtime::Trap>() {
+        Ok(trap) => match trap.trap_code() {
+            Some(trap_code) => trap_code_to_hypervisor_error(trap_code),
+            None => HypervisorError::Trapped(TrapCode::Other),
+        },
+        Err(err) => {
+            // The error could be either a compile error or some other error.
+            // We have to inspect the error message to distingiush these cases.
+            let message = {
+                // We cannot use `format!` here because displaying `err` may fail.
+                let mut output = String::new();
+                match std::fmt::write(&mut output, format_args!("{}", err)) {
+                    Ok(()) => output,
+                    Err(_) => "Conversion of Wasmtime error to string failed.".to_string(),
+                }
+            };
+            let re_signature_mismatch = regex::Regex::new("expected \\d+ arguments, got \\d+")
+                .expect("signature mismatch regex");
+            if message.contains("argument type mismatch")
+                || re_signature_mismatch.is_match(&message)
+            {
+                return HypervisorError::ContractViolation(BAD_SIGNATURE_MESSAGE.to_string());
+            }
+            HypervisorError::Trapped(TrapCode::Other)
         }
-    };
-    let re_signature_mismatch =
-        regex::Regex::new("expected \\d+ arguments, got \\d+").expect("signature mismatch regex");
-    if message.contains("wasm trap: call stack exhausted") {
-        HypervisorError::Trapped(TrapCode::StackOverflow)
-    } else if message.contains("wasm trap: out of bounds memory access") {
-        HypervisorError::Trapped(TrapCode::HeapOutOfBounds)
-    } else if message.contains("wasm trap: integer divide by zero") {
-        HypervisorError::Trapped(TrapCode::IntegerDivByZero)
-    } else if message.contains("wasm trap: unreachable") {
-        HypervisorError::Trapped(TrapCode::Unreachable)
-    } else if message.contains("wasm trap: undefined element: out of bounds") {
-        HypervisorError::Trapped(TrapCode::TableOutOfBounds)
-    } else if message.contains("argument type mismatch") || re_signature_mismatch.is_match(&message)
-    {
-        HypervisorError::ContractViolation(
-            "function invocation does not match its signature".to_string(),
-        )
-    } else {
-        HypervisorError::Trapped(TrapCode::Other)
+    }
+}
+
+fn trap_code_to_hypervisor_error(trap_code: wasmtime::TrapCode) -> HypervisorError {
+    match trap_code {
+        wasmtime::TrapCode::StackOverflow => HypervisorError::Trapped(TrapCode::StackOverflow),
+        wasmtime::TrapCode::MemoryOutOfBounds => {
+            HypervisorError::Trapped(TrapCode::HeapOutOfBounds)
+        }
+        wasmtime::TrapCode::TableOutOfBounds => {
+            HypervisorError::Trapped(TrapCode::TableOutOfBounds)
+        }
+        wasmtime::TrapCode::BadSignature => {
+            HypervisorError::ContractViolation(BAD_SIGNATURE_MESSAGE.to_string())
+        }
+        wasmtime::TrapCode::IntegerDivisionByZero => {
+            HypervisorError::Trapped(TrapCode::IntegerDivByZero)
+        }
+        wasmtime::TrapCode::UnreachableCodeReached => {
+            HypervisorError::Trapped(TrapCode::Unreachable)
+        }
+        _ => {
+            // The `wasmtime::TrapCode` enum is marked as #[non_exhaustive]
+            // so we have to use the wildcard matching here.
+            HypervisorError::Trapped(TrapCode::Other)
+        }
     }
 }
 
@@ -463,7 +489,7 @@ impl<S: SystemApi> WasmtimeInstance<S> {
                 HypervisorError::ContractViolation("export is not a function".to_string())
             })?
             .call(&mut self.store, args)
-            .map_err(trap_to_error)?
+            .map_err(wasmtime_error_to_hypervisor_error)?
             .to_vec())
     }
 
@@ -524,7 +550,7 @@ impl<S: SystemApi> WasmtimeInstance<S> {
                     )
                 })?
                 .call(&mut self.store, &[Val::I32(closure.env as i32)])
-                .map_err(trap_to_error)
+                .map_err(wasmtime_error_to_hypervisor_error)
                 .map(|boxed_slice| boxed_slice.to_vec()),
         }
         .map_err(|e| {
