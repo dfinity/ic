@@ -19,12 +19,9 @@ pub mod mmap;
 #[cfg(target_os = "linux")]
 mod default_implementation {
     pub use super::mmap::{MmapBasedPage, MmapBasedPageAllocator};
-    use super::{HeapBasedPage, HeapBasedPageAllocator};
     // Exported publicly for benchmarking.
-    // TODO(EXC-658): Use mmap-based page allocator after fixing
-    // the OOM with inter-canister query calls.
-    pub type DefaultPageImpl = HeapBasedPage;
-    pub type DefaultPageAllocatorImpl = HeapBasedPageAllocator;
+    pub type DefaultPageImpl = MmapBasedPage;
+    pub type DefaultPageAllocatorImpl = MmapBasedPageAllocator;
 }
 #[cfg(not(target_os = "linux"))]
 mod default_implementation {
