@@ -221,13 +221,13 @@ async fn add_data_centers(nns_canisters: &NnsCanisters<'_>) {
         },
         DataCenterRecord {
             id: "BC1".into(),
-            region: "Canada".into(),
+            region: "North America,Canada,BC".into(),
             owner: "Bob".into(),
             gps: None,
         },
         DataCenterRecord {
             id: "FM1".into(),
-            region: "US,Fremont".into(),
+            region: "North America,US,CA,Fremont".into(),
             owner: "Carol".into(),
             gps: None,
         },
@@ -265,7 +265,7 @@ async fn add_data_centers(nns_canisters: &NnsCanisters<'_>) {
 /// Add a test rewards table to the Registry
 async fn add_node_rewards_table(nns_canisters: &NnsCanisters<'_>) {
     let new_entries = btreemap! {
-        "Antwerp".to_string() =>  NodeRewardRates {
+        "EU".to_string() =>  NodeRewardRates {
             rates: btreemap!{
                 "default".to_string() => NodeRewardRate {
                     xdr_permyriad_per_node_per_month: 24_000,
@@ -275,7 +275,7 @@ async fn add_node_rewards_table(nns_canisters: &NnsCanisters<'_>) {
                 },
             }
         },
-        "Canada".to_string() =>  NodeRewardRates {
+        "North America,Canada".to_string() =>  NodeRewardRates {
             rates: btreemap!{
                 "default".to_string() => NodeRewardRate {
                     xdr_permyriad_per_node_per_month: 68_000,
@@ -285,7 +285,7 @@ async fn add_node_rewards_table(nns_canisters: &NnsCanisters<'_>) {
                 },
             }
         },
-        "Fremont".to_string() =>  NodeRewardRates {
+        "North America,US,CA".to_string() =>  NodeRewardRates {
             rates: btreemap!{
                 "default".to_string() => NodeRewardRate {
                     xdr_permyriad_per_node_per_month: 234_000,
