@@ -124,6 +124,7 @@
 /rs/replicated_state/                @dfinity-lab/teams/execution-owners @dfinity-lab/teams/message-routing-owners
 /rs/rosetta-api/                     @dfinity-lab/teams/financial-integrations
 /rs/rust_canisters/                  @dfinity-lab/teams/nns-team
+/rs/rust_canisters/memory_test/      @dfinity-lab/teams/execution-owners
 /rs/scenario_tests/                  @dfinity-lab/teams/ic-testing-verification
 /rs/state_layout/                    @dfinity-lab/teams/execution-owners @dfinity-lab/teams/message-routing-owners
 /rs/state_machine_tests/             @dfinity-lab/teams/message-routing-owners
