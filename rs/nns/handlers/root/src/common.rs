@@ -247,14 +247,14 @@ impl std::fmt::Display for AddNnsCanisterProposalPayload {
 }
 
 // The action to take on the canister.
-#[derive(candid::CandidType, candid::Deserialize, Clone, Debug)]
+#[derive(candid::CandidType, Serialize, candid::Deserialize, Clone, Debug)]
 pub enum CanisterAction {
     Stop,
     Start,
 }
 
 // A proposal payload to start/stop any NNS canister.
-#[derive(candid::CandidType, candid::Deserialize, Clone, Debug)]
+#[derive(candid::CandidType, Serialize, candid::Deserialize, Clone, Debug)]
 pub struct StopOrStartNnsCanisterProposalPayload {
     pub canister_id: CanisterId,
     pub action: CanisterAction,
