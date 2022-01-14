@@ -18,6 +18,10 @@ const M: u64 = 1_000_000;
 // long messages.
 pub(crate) const MAX_INSTRUCTIONS_PER_MESSAGE: NumInstructions = NumInstructions::new(5 * B);
 
+// We assume 1 cycles unit ≅ 1 CPU cycle, so on a 2 GHz CPU it takes
+// at most 1ms to enter and exit the Wasm engine.
+pub(crate) const INSTRUCTION_OVERHEAD_PER_MESSAGE: NumInstructions = NumInstructions::new(2 * M);
+
 // If messages are short, then we expect about 2B=(7B - 5B) instructions to run
 // in a round in about 1 second. Short messages followed by one long message
 // would cause the longest possible round of 7B instructions or 3.5 seconds.
@@ -78,6 +82,11 @@ pub struct SchedulerConfig {
     /// This should be significantly smaller than `max_instructions_per_round`.
     pub max_instructions_per_message: NumInstructions,
 
+    /// The overhead of entering and exiting the Wasm engine to execute a
+    /// message. The overhead is measured in instructions that are counted
+    /// towards the round limit.
+    pub instruction_overhead_per_message: NumInstructions,
+
     /// Maximum number of instructions an `install_code` message can consume.
     pub max_instructions_per_install_code: NumInstructions,
 
@@ -122,6 +131,7 @@ impl SchedulerConfig {
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
             max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND,
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE,
+            instruction_overhead_per_message: INSTRUCTION_OVERHEAD_PER_MESSAGE,
             max_instructions_per_install_code: MAX_INSTRUCTIONS_PER_INSTALL_CODE,
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION,
             max_message_duration_before_warn_in_seconds:
@@ -138,6 +148,7 @@ impl SchedulerConfig {
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
             max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND * SYSTEM_SUBNET_FACTOR,
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE * SYSTEM_SUBNET_FACTOR,
+            instruction_overhead_per_message: INSTRUCTION_OVERHEAD_PER_MESSAGE,
             max_instructions_per_install_code,
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION * SYSTEM_SUBNET_FACTOR,
             max_message_duration_before_warn_in_seconds:
@@ -155,6 +166,7 @@ impl SchedulerConfig {
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
             max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND,
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE,
+            instruction_overhead_per_message: INSTRUCTION_OVERHEAD_PER_MESSAGE,
             max_instructions_per_install_code: MAX_INSTRUCTIONS_PER_INSTALL_CODE,
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION,
             max_message_duration_before_warn_in_seconds:
