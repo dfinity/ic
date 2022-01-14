@@ -62,6 +62,7 @@ pub(crate) struct CanisterExecutionLimits {
     total_instruction_limit: NumInstructions,
     max_heap_delta_per_iteration: NumBytes,
     instruction_limit_per_message: NumInstructions,
+    instruction_overhead_per_message: NumInstructions,
     max_message_duration_before_warn_in_seconds: f64,
     heap_delta_rate_limit: NumBytes,
 }
@@ -72,6 +73,7 @@ impl CanisterExecutionLimits {
             total_instruction_limit: config.max_instructions_per_round,
             max_heap_delta_per_iteration: config.max_heap_delta_per_iteration,
             instruction_limit_per_message: config.max_instructions_per_message,
+            instruction_overhead_per_message: config.instruction_overhead_per_message,
             max_message_duration_before_warn_in_seconds: config
                 .max_message_duration_before_warn_in_seconds,
             heap_delta_rate_limit: config.heap_delta_rate_limit,
@@ -1186,7 +1188,8 @@ fn execute_canisters_on_thread(
             );
             canister = result.canister;
             ingress_results.extend(result.ingress_status);
-            total_instructions_executed += instructions_consumed;
+            total_instructions_executed +=
+                instructions_consumed + canister_execution_limits.instruction_overhead_per_message;
             total_messages_executed.inc_assign();
             total_heap_delta += result.heap_delta;
             canister.scheduler_state.heap_delta_debit += result.heap_delta;
