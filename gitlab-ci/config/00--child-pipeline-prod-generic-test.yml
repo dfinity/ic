@@ -30,9 +30,8 @@ prod-generic-test:
   script:
     - |
       set -xeuo pipefail
-      # The GIT_REVISION may be provided as a variable when generating the child pipeline.
-      # Otherwise, the latest revision with disk image will be used.
-      GIT_REVISION=${GIT_REVISION:-$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh HEAD)}
+      # Fake Git revision until we make testing scripts forget there is git.
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/find-build-id.sh)
       export GIT_REVISION
       # Run generic test against $CDPRNET
       # * run it for 120 seconds

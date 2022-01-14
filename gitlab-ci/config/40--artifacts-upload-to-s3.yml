@@ -1,0 +1,25 @@
+# This file consolidates storage uploads for binaries and canisters.
+# We need to defer it until the Build ID can be determined.
+artifacts-upload-to-s3:
+  extends:
+    - .ubuntu-nix-docker-protected
+    - .rules-parent-pipeline-autorun-on-trigger
+  stage: guest-os-build
+  needs:
+    - cargo-build-canisters
+    - cargo-build-release-linux-native
+    - cargo-build-release-linux-native-nd
+  script:
+    - |
+      set -exuo pipefail
+
+      VERSION=$("${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/find-build-id.sh)
+      echo "Build ID: ${VERSION}"
+
+      CARGO_BUILD_TARGET=x86_64-unknown-linux-gnu buildevents cmd "${PARENT_PIPELINE_ID}" "${CI_JOB_ID}" uploads-release -- "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/collect_build_binaries.py "artifacts/release"
+
+      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+        gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" "artifacts/release" release
+
+      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+        gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" "artifacts/canisters" canisters

@@ -3,17 +3,17 @@
 set -exuo pipefail
 
 REPO_ROOT=$(git rev-parse --show-toplevel)
-VERSION=$(git rev-parse --verify HEAD)
+TAG=$(openssl rand -hex 4)
 
 "$REPO_ROOT"/gitlab-ci/docker/docker-build-local-image.sh
 
 cd "$REPO_ROOT"
-docker image build -t ic-build-src:$VERSION -f- . <<EOF
+docker image build -t ic-build-src:$TAG -f- . <<EOF
 FROM dfinity/ic-build:latest
 COPY --chown=ubuntu:ubuntu . /ic
 EOF
 
-export IMAGE=ic-build-src:$VERSION
+export IMAGE=ic-build-src:$TAG
 "$REPO_ROOT"/gitlab-ci/tools/docker-run /ic/gitlab-ci/tools/build-ic "${1:--a=b,c,i}"
 
 if docker volume inspect "ic-artifacts${CI_JOB_ID:-}" 2>&1; then

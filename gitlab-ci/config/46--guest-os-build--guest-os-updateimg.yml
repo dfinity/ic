@@ -5,6 +5,7 @@ guest-os-updateimg-build:
   retry: 1
   stage: guest-os-build
   needs:
+    - cargo-build-canisters   # For build-id
     - cargo-build-release-linux-native
   variables:
       BUILD_EXTRA_ARGS: ""
@@ -15,8 +16,8 @@ guest-os-updateimg-build:
 
       BUILD_OUT="build-out/update-img${BUILD_EXTRA_SUFFIX}"
       UPLOAD_TARGET="guest-os/update-img${BUILD_EXTRA_SUFFIX}"
-
-      VERSION=$(git rev-parse --verify HEAD)
+      VERSION=$("${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/find-build-id.sh)
+      echo "Build ID: ${VERSION}"
 
       ls -lah /var/run/docker.sock; groups
 
@@ -29,7 +30,7 @@ guest-os-updateimg-build:
 
       # shellcheck disable=SC2086  # Expanding BUILD_EXTRA_ARGS into multiple parameters
       buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" build-disk-upgrade-img -- \
-      capsule -v -t "$(openssl sha256 <<<${BUILD_EXTRA_ARGS}${BUILD_EXTRA_SUFFIX})" -t "${CI_JOB_IMAGE:-docker}" -t "${VERSION}" -o "${BUILD_OUT}/update-img.tar.gz" -- \
+      capsule -v -t "$(openssl sha256 <<<${BUILD_EXTRA_ARGS}${BUILD_EXTRA_SUFFIX})" -t "${VERSION}" -o "${BUILD_OUT}/update-img.tar.gz" -- \
       ./scripts/build-update-image.sh -o "${BUILD_OUT}"/update-img.tar.gz -v "${VERSION}" -x ../../artifacts/release ${BUILD_EXTRA_ARGS}
 
       # Create a second upgrade image with different version number to ease testing with self upgrades
@@ -43,7 +44,7 @@ guest-os-updateimg-build:
       "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/openssl-sign.sh "${BUILD_OUT}"
 
       buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
-        "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_upload.py "${BUILD_OUT}" "${UPLOAD_TARGET}"
+        "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" "${BUILD_OUT}" "${UPLOAD_TARGET}"
 
   artifacts:
     paths:
@@ -57,3 +58,10 @@ guest-os-updateimg-build-dev:
   variables:
       BUILD_EXTRA_ARGS: "-p root"
       BUILD_EXTRA_SUFFIX: "-dev"
+
+# An exact dupe of the updateimg job for non-determinism testing.
+guest-os-updateimg-build-determinism:
+  extends:
+    - guest-os-updateimg-build
+  variables:
+    BUILD_EXTRA_SUFFIX: "-determinism"

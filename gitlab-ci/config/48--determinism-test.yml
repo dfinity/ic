@@ -78,7 +78,7 @@ build-determinism-update-img:
   stage: build-determinism-test
   needs:
     - guest-os-updateimg-build
-    - docker-build-ic-img
+    - guest-os-updateimg-build-determinism
   script:
     - |
       set -eux
@@ -86,8 +86,8 @@ build-determinism-update-img:
       cd ic-os/guestos/build-out/update-img
       sha256sum update-img.tar.gz | tee SHAS
       cd -
-      echo "docker-build-ic:"
-      cd artifacts/docker-build-ic/icos
+      echo "guest-os-updateimg-build-determinism:"
+      cd ic-os/guestos/build-out/update-img-determinism
       sha256sum update-img.tar.gz | tee SHAS
       cd -
       if [ "${CI_COMMIT_REF_PROTECTED:-}" != "true" ]; then
@@ -101,4 +101,4 @@ build-determinism-update-img:
       else
           echo "Difference indicates that Build Determinism is broken IC-OS guest image!"
       fi
-      diff -u ic-os/guestos/build-out/update-img/SHAS artifacts/docker-build-ic/icos/SHAS
+      diff -u ic-os/guestos/build-out/update-img/SHAS ic-os/guestos/build-out/update-img-determinism/SHAS

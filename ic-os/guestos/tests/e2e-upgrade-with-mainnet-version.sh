@@ -152,11 +152,13 @@ sudo ip addr add fd00:2:1:1:1::1/64 dev ipv6_ic
 if [[ $downgrade == "true" ]]; then
     GUESTOS_IMG="$(pwd)/disk.img"
     UPGRADE_IMG="$(pwd)/guestos-$subnet-subnet/update-img/update-img.tar.gz"
+    UPGRADE_IMG_TAG=""
     direction="to"
     out_dir="e2e-downgrade-from-new-version-to-mainnet-$subnet-subnet"
 else
     GUESTOS_IMG="$(pwd)/guestos-$subnet-subnet/disk.img"
     UPGRADE_IMG="${ci_project_dir}/ic-os/guestos/build-out/update-img/update-img.tar.gz"
+    UPGRADE_IMG_TAG="$(openssl sha256 ${UPGRADE_IMG})" # For capsule to influence its input hash.
     direction="from"
     out_dir="e2e-upgrade-from-mainnet-$subnet-subnet-to-new-version"
 fi
@@ -172,7 +174,7 @@ else
 fi
 
 # Actual test script, sets up VMs and drives the test.
-capsule -v -i "../ic-os/guestos/tests/*.py" -i "**/*" -- \
+capsule -v -i "../ic-os/guestos/tests/*.py" -i "**/*" -t "${UPGRADE_IMG_TAG}" -- \
     "${ci_project_dir}/ic-os/guestos/tests/${upgrade_script}" \
     --vmtoolscfg=internal \
     --disk_image "${GUESTOS_IMG}" \

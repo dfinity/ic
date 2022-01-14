@@ -8,6 +8,9 @@ ROOT_DIR=$(git rev-parse --show-toplevel)
 BUILD_BINARIES=true
 BUILD_CANISTERS=true
 BUILD_IMAGES=true
+# TODO: remove the assumption that git exists. It should build even from an extracted tarball.
+VERSION="${VERSION:-$(git rev-parse HEAD)}"
+
 cd $ROOT_DIR
 sudo setfacl -m u:$(id -u):rwx -R $ROOT_DIR
 
@@ -142,7 +145,7 @@ if [ "$BUILD_IMAGES" == "true" ]; then
         echo "Trying to pull binaries from S3"
         mkdir -p /ic/artifacts/release
         gitlab-ci/src/artifacts/rclone_download.py --remote-path=release --unpack --mark-executable \
-            --git-rev "$(git rev-parse HEAD)" --out /ic/artifacts/release
+            --git-rev "${VERSION}" --out /ic/artifacts/release
     fi
     echo -e "\n${HEADER_ICOS}\n"
     gitlab-ci/src/job_scripts/guest-os-updateimg.sh "${DISK_DIR}"

@@ -265,15 +265,6 @@ def main():
     )
 
     parser.add_argument(
-        "--git-ref",
-        action="store",
-        help="Git reference for which to download the artifacts (default=master)",
-        nargs="?",
-        const="master",
-        default="master",
-    )
-
-    parser.add_argument(
         "--latest-to",
         action="store",
         help="Download latest artifacts available at or before the given git revision",
@@ -356,17 +347,11 @@ def main():
             exit(1)
         gl.download_latest_artifacts_to_merge_base(job_name=args.job_name)
     elif args.git_rev:
-        if not (args.git_ref and args.job_name):
+        if not (args.job_name):
             logging.error(" --job-name needs to be provided in order to download by --git-rev")
             parser.print_help()
             exit(1)
         gl.download_artifacts_for_git_rev(args.git_rev, args.job_name)
-    elif args.git_ref:
-        if not (args.git_ref and args.job_name):
-            logging.error(" --job-name needs to be provided in order to download by --git-ref")
-            parser.print_help()
-            exit(1)
-        gl.download_artifacts_for_ref(args.git_ref, args.job_name)
 
 
 if __name__ == "__main__":

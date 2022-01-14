@@ -9,10 +9,59 @@ input_files = [
 
 [system-tests-pre-master]
 input_files = [
-  "artifacts/prod-test-driver",
+  "artifacts/release/*.gz",
+  "artifacts/canisters/nns-ui-canister.wasm.gz",
   "rs/tests/run-farm-based-system-tests.sh",
-  "gitlab-ci/src/test_spans/exporter.py",
   "gitlab-ci/src/artifacts/rclone_download.py",
   "gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh",
   "gitlab-ci/src/test_results/*",
+]
+
+# List here all files on which the build-id depends.
+# Any job that wants to use build-id should depend on at least binaries and canisters.
+# TODO: this duplicates ic/ic-os-/guestos/Capsule.toml, which needs to be fixed somehow.
+[build-id]
+input_files = [
+        # Binaries
+        "artifacts/release/replica.gz",
+        "artifacts/release/orchestrator.gz",
+        "artifacts/release/canister_sandbox.gz",
+        "artifacts/release/vsock_agent.gz",
+        "artifacts/release/state-tool.gz",
+        "artifacts/release/ic-consensus-pool-util.gz",
+        "artifacts/release/ic-crypto-csp.gz",
+        "artifacts/release/ic-regedit.gz",
+        # Canisters
+        "artifacts/canisters/counter.wat.gz",
+        "artifacts/canisters/cow_safety.wasm.gz",
+        "artifacts/canisters/cycles-minting-canister.wasm.gz",
+        "artifacts/canisters/genesis-token-canister.wasm.gz",
+        "artifacts/canisters/governance-canister.wasm.gz",
+        "artifacts/canisters/governance-mem-test-canister.wasm.gz",
+        "artifacts/canisters/identity-canister.wasm.gz",
+        "artifacts/canisters/inter_canister_error_handling.wasm.gz",
+        "artifacts/canisters/json.wasm.gz",
+        "artifacts/canisters/ledger-archive-node-canister.wasm.gz",
+        "artifacts/canisters/ledger-canister.wasm.gz",
+        "artifacts/canisters/lifeline.wasm.gz",
+        "artifacts/canisters/mem-utils-test-canister.wasm.gz",
+        "artifacts/canisters/memory-test-canister.wasm.gz",
+        "artifacts/canisters/nan_canonicalized.wasm.gz",
+        "artifacts/canisters/nns-ui-canister.wasm.gz",
+        "artifacts/canisters/panics.wasm.gz",
+        "artifacts/canisters/pmap_canister.wasm.gz",
+        "artifacts/canisters/registry-canister.wasm.gz",
+        "artifacts/canisters/root-canister.wasm.gz",
+        "artifacts/canisters/stable.wasm.gz",
+        "artifacts/canisters/statesync-test-canister.wasm.gz",
+        "artifacts/canisters/test-notified.wasm.gz",
+        "artifacts/canisters/time.wasm.gz",
+        "artifacts/canisters/upgrade-test-canister.wasm.gz",
+        "artifacts/canisters/wasm.wasm.gz",
+        "artifacts/canisters/xnet-test-canister.wasm.gz",
+        # IC-OS Build scripts
+        "ic-os/guestos/scripts/*",
+        "gitlab-ci/src/job_scripts/*",
+        "ic-os/guestos/bootloader/*",
+        "ic-os/guestos/rootfs/**/*",
 ]

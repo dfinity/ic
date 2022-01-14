@@ -4,12 +4,14 @@ generic-guest-os-diskimg:
     - .rules-parent-pipeline-autorun-on-trigger
   stage: guest-os-build
   needs:
+    - cargo-build-canisters  # Needed for correct calculation of the Build ID
     - cargo-build-release-linux-native
   script:
     - |
       set -xeuo pipefail
 
-      VERSION=$(git rev-parse --verify HEAD)
+      VERSION=$("${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/find-build-id.sh)
+      echo "Build ID: ${VERSION}"
 
       ls -lah /var/run/docker.sock; groups
 
@@ -19,7 +21,7 @@ generic-guest-os-diskimg:
 
       mkdir -p build-out/disk-img/ build-tmp/
       buildevents cmd  "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" build-disk-img -- \
-      capsule -v -i "rootfs/**/*" -i "../../artifacts/release/**/*" -t "${VERSION}" -o build-tmp/disk.img -- \
+      capsule -v -t "${VERSION}" -o build-tmp/disk.img -- \
       ./scripts/build-disk-image.sh -o build-tmp/disk.img -p root -v "${VERSION}" -x ../../artifacts/release/
       echo "${VERSION}" > build-tmp/version.txt
       ls -lah build-tmp
@@ -33,7 +35,7 @@ generic-guest-os-diskimg:
         "$CI_PROJECT_DIR"/gitlab-ci/tools/copy-disk "$CDPRNET" "generic"
 
       buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
-        "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_upload.py build-out/disk-img/ generic-guest-os/disk-img
+        "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" build-out/disk-img/ generic-guest-os/disk-img
 
   artifacts:
     paths:
