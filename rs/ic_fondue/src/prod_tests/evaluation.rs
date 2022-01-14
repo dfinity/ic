@@ -1,8 +1,6 @@
 use std::{panic::catch_unwind, time::Instant};
 
-use super::bootstrap::{
-    attach_config_disk_images, create_config_disk_images, init_ic, upload_config_disk_images,
-};
+use super::bootstrap::{init_ic, setup_and_start_vms};
 use super::driver_setup::DriverContext;
 use super::pot_dsl::{ExecutionMode, Pot, Suite, Test, TestPath, TestSet};
 use super::resource::{allocate_resources, get_resource_request};
@@ -11,7 +9,7 @@ use crate::ic_instance::InternetComputer;
 use crate::ic_manager::IcHandle;
 use crate::pot::Context;
 use crate::prod_tests::driver_setup::tee_logger;
-use crate::prod_tests::farm::{FarmResult, GroupSpec};
+use crate::prod_tests::farm::GroupSpec;
 use crate::result::*;
 use anyhow::{bail, Result};
 use crossbeam_channel::{bounded, Receiver, Sender};
@@ -116,8 +114,7 @@ fn evaluate_pot(ctx: &DriverContext, mut pot: Pot, path: TestPath) -> Result<Tes
     if let Err(e) = ctx.farm.delete_group(&group_name) {
         warn!(ctx.logger, "Could not delete group {}: {:?}", group_name, e);
     }
-
-    Ok(res?)
+    res
 }
 
 #[allow(clippy::mutex_atomic)]
@@ -127,7 +124,7 @@ fn evaluate_pot_with_group(
     config: InternetComputer,
     pot_path: TestPath,
     group_name: &str,
-) -> FarmResult<TestResultNode> {
+) -> Result<TestResultNode> {
     let logger = ctx.logger();
     let started_at = Instant::now();
     let (no_threads, all_tests) = match pot.testset {
@@ -143,12 +140,10 @@ fn evaluate_pot_with_group(
     let res_request = get_resource_request(ctx, &config, group_name);
     let res_group = allocate_resources(ctx, &res_request)?;
     let temp_dir = tempfile::tempdir().expect("Could not create temp directory");
-    let (init_ic, mal_beh, node_vms) = init_ic(ctx, temp_dir.path(), config, &res_group);
-    create_config_disk_images(ctx, group_name, &logger, &init_ic);
-    let cfg_disk_image_ids = upload_config_disk_images(ctx, &init_ic, group_name)?;
-    attach_config_disk_images(ctx, &res_group, cfg_disk_image_ids)?;
-    let ic_handle = create_ic_handle(ctx, &init_ic, &node_vms, &mal_beh);
     info!(logger, "temp_dir: {:?}", temp_dir.path());
+    let (init_ic, mal_beh, node_vms) = init_ic(ctx, temp_dir.path(), config, &res_group);
+    setup_and_start_vms(ctx, &init_ic, &node_vms)?;
+    let ic_handle = create_ic_handle(ctx, &init_ic, &node_vms, &mal_beh);
 
     let (sender, receiver) = bounded(tests_num);
     let chunks = chunk(tests, no_threads);

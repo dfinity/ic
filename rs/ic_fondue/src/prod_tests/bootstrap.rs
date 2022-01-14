@@ -1,3 +1,4 @@
+use anyhow::bail;
 use std::{
     collections::BTreeMap,
     fs::File,
@@ -19,8 +20,9 @@ use ic_prep_lib::{
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
-use slog::{info, Logger};
+use slog::info;
 use std::io::Write;
+use std::thread::{self, JoinHandle};
 use url::Url;
 
 use super::{
@@ -196,124 +198,107 @@ pub fn init_ic<P: AsRef<Path>>(
     (init_ic, malicious_nodes, node_vms)
 }
 
-pub fn upload_config_disk_images(
+pub fn setup_and_start_vms(
     ctx: &DriverContext,
     initialized_ic: &InitializedIc,
-    group_name: &str,
-) -> FarmResult<Vec<String>> {
-    let upload_for_node = |node: &InitializedNode| -> FarmResult<String> {
-        let compressed_img_path = mk_compressed_img_path();
-        let target_file = PathBuf::from(&node.node_path).join(compressed_img_path.clone());
-        let image_id = ctx
-            .farm
-            .upload_image(group_name, target_file, compressed_img_path)?;
-        info!(ctx.logger, "Uploaded image: {}", image_id);
-        Ok(image_id)
-    };
-
-    let mut res = vec![];
-    // TODO(VER-1261): upload all images in one batch.
+    vms: &NodeVms,
+) -> anyhow::Result<()> {
+    let mut nodes = vec![];
     for subnet in initialized_ic.initialized_topology.values() {
         for node in subnet.initialized_nodes.values() {
-            res.push(upload_for_node(node)?);
+            nodes.push(node.clone());
         }
     }
     for node in initialized_ic.unassigned_nodes.values() {
-        res.push(upload_for_node(node)?);
+        nodes.push(node.clone());
     }
-    Ok(res)
+
+    let mut join_handles: Vec<JoinHandle<anyhow::Result<()>>> = vec![];
+    for node in nodes {
+        let t_ctx = ctx.clone();
+        let local_store_path = initialized_ic.target_dir.join("ic_registry_local_store");
+        let vm = vms
+            .get(&node.node_id)
+            .expect("internal error: vm for given node id not found")
+            .clone();
+        join_handles.push(thread::spawn(move || {
+            create_config_disk_image(&t_ctx, &node, &vm.group_name, &local_store_path)?;
+            let image_id = upload_config_disk_image(&t_ctx, &node, &vm.group_name)?;
+            t_ctx
+                .farm
+                .attach_disk_image(&vm.group_name, &vm.name, "usb-storage", image_id)?;
+            t_ctx.farm.start_vm(&vm.group_name, &vm.name)?;
+            Ok(())
+        }));
+    }
+
+    for jh in join_handles {
+        jh.join().expect("waiting for a thread failed")?;
+    }
+    Ok(())
+}
+
+pub fn upload_config_disk_image(
+    ctx: &DriverContext,
+    node: &InitializedNode,
+    group_name: &str,
+) -> FarmResult<String> {
+    let compressed_img_path = mk_compressed_img_path();
+    let target_file = PathBuf::from(&node.node_path).join(compressed_img_path.clone());
+    let image_id = ctx
+        .farm
+        .upload_image(group_name, target_file, compressed_img_path)?;
+    info!(ctx.logger, "Uploaded image: {}", image_id);
+    Ok(image_id)
 }
 
 /// side-effectful function that creates the config disk images in the node
 /// directories.
-pub fn create_config_disk_images(
+pub fn create_config_disk_image(
     ctx: &DriverContext,
+    node: &InitializedNode,
     group_name: &str,
-    logger: &Logger,
-    initialized_ic: &InitializedIc,
-) {
-    let ic_registry_local_store_path = initialized_ic.target_dir.join("ic_registry_local_store");
-    let cfg_for_node = |node: &InitializedNode| {
-        let img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
+    local_store_path: &Path,
+) -> anyhow::Result<()> {
+    let img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
+    let mut cmd = Command::new("build-bootstrap-config-image.sh");
+    cmd.arg(img_path.clone())
+        .arg("--ic_registry_local_store")
+        .arg(&local_store_path)
+        .arg("--ic_crypto")
+        .arg(node.crypto_path())
+        .arg("--accounts_ssh_authorized_keys")
+        .arg(ctx.authorized_ssh_accounts_dir.path())
+        .arg("--journalbeat_tags")
+        .arg(format!("system_test {}", group_name));
 
-        let mut cmd = Command::new("build-bootstrap-config-image.sh");
-        cmd.arg(img_path.clone())
-            .arg("--ic_registry_local_store")
-            .arg(&ic_registry_local_store_path)
-            .arg("--ic_crypto")
-            .arg(node.crypto_path())
-            .arg("--accounts_ssh_authorized_keys")
-            .arg(ctx.authorized_ssh_accounts_dir.path())
-            .arg("--journalbeat_tags")
-            .arg(format!("system_test {}", group_name));
-
-        if !ctx.journalbeat_hosts.is_empty() {
-            cmd.arg("--journalbeat_hosts")
-                .arg(ctx.journalbeat_hosts.join(" "));
-        }
-
-        let output = cmd
-            .output()
-            .expect("could not spawn image creation process");
-
-        info!(logger, "status: {}", output.status);
-        std::io::stdout().write_all(&output.stdout).unwrap();
-        std::io::stderr().write_all(&output.stderr).unwrap();
-
-        let img_file = File::open(img_path).unwrap();
-        let compressed_img_path = PathBuf::from(&node.node_path).join(mk_compressed_img_path());
-        let compressed_img_file = File::create(compressed_img_path.clone()).unwrap();
-        zstd::stream::copy_encode(img_file, compressed_img_file, 0).unwrap();
-
-        let mut cmd = Command::new("sha256sum");
-        cmd.arg(compressed_img_path);
-
-        let output = cmd
-            .output()
-            .expect("could not spawn image creation process");
-
-        info!(logger, "status: {}", output.status);
-        assert!(
-            output.status.success(),
-            "Could not create config disk image for IC node."
-        );
-        std::io::stdout().write_all(&output.stdout).unwrap();
-        std::io::stderr().write_all(&output.stderr).unwrap();
-    };
-
-    for subnet in initialized_ic.initialized_topology.values() {
-        for node in subnet.initialized_nodes.values() {
-            cfg_for_node(node);
-        }
+    if !ctx.journalbeat_hosts.is_empty() {
+        cmd.arg("--journalbeat_hosts")
+            .arg(ctx.journalbeat_hosts.join(" "));
     }
-    for node in initialized_ic.unassigned_nodes.values() {
-        cfg_for_node(node);
+
+    let output = cmd.output()?;
+    if !output.status.success() {
+        bail!("could not spawn image creation process");
     }
-}
 
-pub fn attach_config_disk_images(
-    ctx: &DriverContext,
-    res_group: &ResourceGroup,
-    cfg_disk_image_ids: Vec<String>,
-) -> FarmResult<()> {
-    assert_eq!(res_group.vms.len(), cfg_disk_image_ids.len());
-    res_group
-        .vms
-        .iter()
-        .zip(cfg_disk_image_ids.iter())
-        .try_for_each(|(vm, image_id)| {
-            ctx.farm.attach_disk_image(
-                &res_group.group_name,
-                &vm.name,
-                "usb-storage",
-                image_id.clone(),
-            )
-        })?;
+    std::io::stdout().write_all(&output.stdout)?;
+    std::io::stderr().write_all(&output.stderr)?;
 
-    res_group
-        .vms
-        .iter()
-        .try_for_each(|alloc_vm| ctx.farm.start_vm(&res_group.group_name, &alloc_vm.name))?;
+    let img_file = File::open(img_path)?;
+    let compressed_img_path = PathBuf::from(&node.node_path).join(mk_compressed_img_path());
+    let compressed_img_file = File::create(compressed_img_path.clone())?;
+    zstd::stream::copy_encode(img_file, compressed_img_file, 0)?;
+
+    let mut cmd = Command::new("sha256sum");
+    cmd.arg(compressed_img_path);
+    let output = cmd.output()?;
+    if !output.status.success() {
+        bail!("could not create sha256 of image");
+    }
+
+    std::io::stdout().write_all(&output.stdout)?;
+    std::io::stderr().write_all(&output.stderr)?;
     Ok(())
 }
 
