@@ -1,5 +1,5 @@
 # Testnets
-# 2021-10-06 18:36:40 UTC
+# 2022-01-12 12:45:00 UTC
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKhWL9AO/Y2/Sb9UcV+lYgYVAOsIZfJCJNyWi8SZSVT9 stefan.schneider@dfinity.org
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINRBrgZ6jAUTeETjO78xPCJtwEM00TBwKFwXjYQepL6w nikolay.komarevskiy@dfinity.org
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHORvcoHzfqmyRCm9FtJk6K4IBJc1vGFL6lSqi4lcBgH nicolas.zoghb@dfinity.org
@@ -101,4 +101,5 @@ ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILdOcbnwL1VircMP31HVkyvW2sczLL+ti83yicqx8W76
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG82Zm/ojyd2vTs4vu7uKXCx5ej9Ub5KuC0uJ/EwnXk0 avi.dessauer@dfinity.org
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ3ciMjtYxk/vZV6lai9S0h9sexYGYWcRY+TmpVFvYGk hugo.lageneste@dfinity.org
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJE0TG7j18oAKjkqlpmD2TaiczgkqYYO7UL7tG2h5MNF venkkatesh.sekar@dfinity.org
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILZ715P5QfVZ5B/wN1mIlAIYX5TC8aFseYx80qYJvsi5 david.dalbusco@dfinity.org
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPHCMENfPY0arXQBTCXXIPvcc8hgjc/C+oevYvGcPmSq daniel.wong@dfinity.org
