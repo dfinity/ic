@@ -82,6 +82,7 @@ fn can_fully_execute_canisters_with_one_input_message_each() {
             max_instructions_per_round: NumInstructions::from(1 << 30),
             max_instructions_per_message: num_instructions_consumed_per_msg
                 + NumInstructions::from(1),
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
@@ -148,6 +149,7 @@ fn stops_executing_messages_when_heap_delta_capacity_reached() {
         scheduler_config: SchedulerConfig {
             scheduler_cores: 1,
             subnet_heap_delta_capacity: NumBytes::from(10),
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
@@ -222,6 +224,7 @@ fn canister_gets_heap_delta_rate_limited() {
     let scheduler_test_fixture = SchedulerTestFixture {
         scheduler_config: SchedulerConfig {
             scheduler_cores: 1,
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
@@ -305,6 +308,7 @@ fn inner_loop_stops_when_no_instructions_consumed() {
             scheduler_cores: 1,
             max_instructions_per_round: NumInstructions::new(100),
             max_instructions_per_message: NumInstructions::new(50),
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
@@ -373,6 +377,7 @@ fn inner_loop_stops_when_max_instructions_per_round_consumed() {
             scheduler_cores: 1,
             max_instructions_per_round: NumInstructions::new(100),
             max_instructions_per_message: NumInstructions::new(50),
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
@@ -450,6 +455,7 @@ fn basic_induct_messages_on_same_subnet_works() {
             scheduler_cores: 1,
             max_instructions_per_round: NumInstructions::from(1),
             max_instructions_per_message: NumInstructions::from(1),
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::system_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
@@ -508,6 +514,7 @@ fn induct_messages_on_same_subnet_handles_foreign_subnet() {
             scheduler_cores: 1,
             max_instructions_per_round: NumInstructions::from(1),
             max_instructions_per_message: NumInstructions::from(1),
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::system_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
@@ -564,6 +571,7 @@ fn induct_messages_to_self_works() {
             scheduler_cores: 1,
             max_instructions_per_round: NumInstructions::from(1),
             max_instructions_per_message: NumInstructions::from(1),
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::system_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
@@ -625,6 +633,7 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
             scheduler_cores: 1,
             max_instructions_per_round: NumInstructions::from(1),
             max_instructions_per_message: NumInstructions::from(1),
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
@@ -776,6 +785,7 @@ fn test_multiple_iterations_of_inner_loop() {
             scheduler_cores: 1,
             max_instructions_per_round: NumInstructions::new(200),
             max_instructions_per_message: NumInstructions::new(50),
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
@@ -882,6 +892,7 @@ fn canister_can_run_for_multiple_iterations() {
             // The number of instructions will limit the canister to running at most 6 times.
             max_instructions_per_round: NumInstructions::new(300),
             max_instructions_per_message: NumInstructions::new(50),
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
@@ -937,6 +948,7 @@ fn validate_consumed_instructions_metric() {
             scheduler_cores: 1,
             max_instructions_per_message: NumInstructions::from(50),
             max_instructions_per_round: NumInstructions::from(400),
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
@@ -1099,6 +1111,7 @@ fn dont_execute_any_canisters_if_not_enough_cycles() {
             max_instructions_per_round: num_instructions_consumed_per_msg
                 - NumInstructions::from(1),
             max_instructions_per_message: num_instructions_consumed_per_msg,
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
@@ -1172,6 +1185,7 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
             max_instructions_per_round: num_instructions_consumed_per_msg
                 - NumInstructions::from(1),
             max_instructions_per_message: num_instructions_consumed_per_msg,
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
@@ -1254,6 +1268,7 @@ fn can_execute_messages_with_just_enough_cycles() {
             scheduler_cores: 1,
             max_instructions_per_round: num_instructions_consumed_per_msg * 3,
             max_instructions_per_message: num_instructions_consumed_per_msg,
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
@@ -1323,6 +1338,7 @@ fn execute_only_canisters_with_messages() {
             max_instructions_per_round: NumInstructions::from(1 << 30),
             max_instructions_per_message: num_instructions_consumed_per_msg
                 + NumInstructions::from(1),
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
@@ -1411,6 +1427,7 @@ fn can_fully_execute_multiple_canisters_with_multiple_messages_each() {
             scheduler_cores: 1,
             max_instructions_per_round: NumInstructions::from(1 << 30),
             max_instructions_per_message: num_instructions_consumed_per_msg,
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
@@ -1482,6 +1499,7 @@ fn can_fully_execute_canisters_deterministically_until_out_of_cycles() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(51),
             max_instructions_per_message: num_instructions_consumed_per_msg,
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
@@ -1551,6 +1569,7 @@ fn can_execute_messages_from_multiple_canisters_until_out_of_instructions() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(18),
             max_instructions_per_message: num_instructions_consumed_per_msg,
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
@@ -1617,6 +1636,7 @@ fn subnet_messages_respect_instruction_limit_per_round() {
             scheduler_cores: 1,
             max_instructions_per_round: NumInstructions::new(100),
             max_instructions_per_message: NumInstructions::new(10),
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
@@ -1701,6 +1721,7 @@ fn execute_heartbeat_once_per_round_in_system_subnet() {
             scheduler_cores: 1,
             max_instructions_per_round: NumInstructions::from(1000),
             max_instructions_per_message: NumInstructions::from(100),
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::system_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
@@ -1767,6 +1788,7 @@ fn execute_heartbeat_before_messages() {
             scheduler_cores: 1,
             max_instructions_per_round: NumInstructions::from(1),
             max_instructions_per_message: NumInstructions::from(1),
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::system_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
@@ -1835,6 +1857,7 @@ fn execute_multiple_heartbeats() {
             scheduler_cores: 5,
             max_instructions_per_round: NumInstructions::from(1000),
             max_instructions_per_message: NumInstructions::from(100),
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::system_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
@@ -1906,6 +1929,7 @@ fn can_record_metrics_single_scheduler_thread() {
             scheduler_cores: 1,
             max_instructions_per_round: NumInstructions::from(18),
             max_instructions_per_message,
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         };
 
@@ -2056,6 +2080,7 @@ fn can_record_metrics_for_a_round() {
             scheduler_cores: 1,
             max_instructions_per_round: NumInstructions::from(51),
             max_instructions_per_message: num_instructions_consumed_per_msg,
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
@@ -2239,6 +2264,7 @@ fn heap_delta_rate_limiting_metrics_recorded() {
     let scheduler_test_fixture = SchedulerTestFixture {
         scheduler_config: SchedulerConfig {
             scheduler_cores: 1,
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
@@ -2319,6 +2345,7 @@ fn requested_method_does_not_exist() {
             scheduler_cores: 1,
             max_instructions_per_round: NumInstructions::from(50),
             max_instructions_per_message: num_instructions_consumed_per_msg,
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
@@ -2406,6 +2433,7 @@ fn stopping_canisters_are_stopped_when_they_are_ready() {
             scheduler_cores: 1,
             max_instructions_per_round: NumInstructions::from(50),
             max_instructions_per_message: NumInstructions::from(5),
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
@@ -2477,6 +2505,7 @@ fn stopping_canisters_are_not_stopped_if_not_ready() {
             scheduler_cores: 1,
             max_instructions_per_round: NumInstructions::from(50),
             max_instructions_per_message: NumInstructions::from(5),
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
@@ -2608,6 +2637,7 @@ fn execution_round_metrics_are_recorded() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(10),
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
@@ -2869,6 +2899,7 @@ fn heartbeat_metrics_are_recorded() {
             scheduler_cores: 1,
             max_instructions_per_round: NumInstructions::from(1000),
             max_instructions_per_message: NumInstructions::from(100),
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::system_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
@@ -2986,6 +3017,7 @@ fn execution_round_does_not_too_early() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(150),
             max_instructions_per_message: NumInstructions::from(10),
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
@@ -3046,6 +3078,7 @@ fn canisters_reject_open_call_contexts_when_forcibly_uninstalled() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(150),
             max_instructions_per_message: NumInstructions::from(10),
+            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
@@ -3286,6 +3319,7 @@ proptest! {
                 scheduler_cores: 1,
                 max_instructions_per_round,
                 max_instructions_per_message: num_instructions_consumed_per_msg,
+            instruction_overhead_per_message: NumInstructions::from(0),
                 ..SchedulerConfig::application_subnet()
             },
             metrics_registry: MetricsRegistry::new(),
@@ -3334,6 +3368,7 @@ proptest! {
                 scheduler_cores: 1,
                 max_instructions_per_round,
                 max_instructions_per_message: num_instructions_consumed_per_msg,
+            instruction_overhead_per_message: NumInstructions::from(0),
                 ..SchedulerConfig::application_subnet()
             },
             metrics_registry: MetricsRegistry::new(),
@@ -3395,6 +3430,7 @@ proptest! {
                 scheduler_cores,
                 max_instructions_per_round,
                 max_instructions_per_message: num_instructions_consumed_per_msg,
+            instruction_overhead_per_message: NumInstructions::from(0),
                 ..SchedulerConfig::application_subnet()
             },
             metrics_registry: MetricsRegistry::new(),
@@ -3450,6 +3486,7 @@ proptest! {
                 scheduler_cores: 1,
                 max_instructions_per_round,
                 max_instructions_per_message: num_instructions_consumed_per_msg,
+            instruction_overhead_per_message: NumInstructions::from(0),
                 ..SchedulerConfig::application_subnet()
             },
             metrics_registry: MetricsRegistry::new(),
