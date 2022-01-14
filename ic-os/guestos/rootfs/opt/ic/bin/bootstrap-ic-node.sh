@@ -17,6 +17,7 @@ set -eo pipefail
 # List all block devices marked as "removable".
 function find_removable_devices() {
     for DEV in $(ls -C /sys/class/block); do
+        echo "Consider device $DEV" >&2
         if [ -e /sys/class/block/"${DEV}"/removable ]; then
             local IS_REMOVABLE=$(cat /sys/class/block/"${DEV}"/removable)
             if [ "${IS_REMOVABLE}" == 1 ]; then
@@ -32,7 +33,7 @@ function find_removable_devices() {
                 fi
                 # Sanity check whether device is usable (it could be a
                 # CD drive with no medium in)
-                if blockdev "$TGT" >/dev/null 2>/dev/null; then
+                if blockdev "${TGT}"; then
                     echo "$TGT"
                 fi
             fi
@@ -87,7 +88,13 @@ function process_bootstrap() {
 
 MAX_TRIES=10
 
+if [ -f /boot/config/CONFIGURED ]; then
+    echo "Bootstrap completed already"
+    exit 0
+fi
+
 while [ ! -f /boot/config/CONFIGURED ]; do
+    echo "Locating removable device"
     DEV="$(find_removable_devices)"
 
     # Check whether we were provided with a removable device -- on "real"
