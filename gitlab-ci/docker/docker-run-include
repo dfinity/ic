@@ -23,6 +23,7 @@ DOCKER_RUN_ARGS=(
     -e CI_COMMIT_SHA=${CI_COMMIT_SHA:-"$(git rev-parse HEAD)"}
     -e CI_JOB_NAME=${CI_JOB_NAME:-""}
     -e SHELL_WRAPPER="${SHELL_WRAPPER:-/usr/bin/time}"
+    -e VERSION=${VERSION:-"$(git rev-parse HEAD)"}
 )
 
 # if i'm not withing docker already, bind mount the source

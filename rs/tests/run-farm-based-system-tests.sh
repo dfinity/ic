@@ -101,10 +101,25 @@ fi
 
 RCLONE_ARGS=("--git-rev" "$GIT_REVISION" "--out=$ARTIFACT_DIR" "--unpack" "--mark-executable")
 # prod-test-driver and (NNS) canisters
-log "Downloading dependencies built from commit: ${RED}$GIT_REVISION${NC}"
-log "NOTE: Dependencies include canisters, rust-binaries (such as ic-rosetta-binaries), etc."
-"${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/rclone_download.py --remote-path=canisters "${RCLONE_ARGS[@]}"
-"${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/rclone_download.py --remote-path=release "${RCLONE_ARGS[@]}"
+if [[ -z "${JOB_ID}" ]]; then
+    log "Downloading dependencies built from commit: ${RED}$GIT_REVISION${NC}"
+    log "NOTE: Dependencies include canisters, rust-binaries (such as ic-rosetta-binaries), etc."
+    "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/rclone_download.py --remote-path=canisters "${RCLONE_ARGS[@]}"
+    "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/rclone_download.py --remote-path=release "${RCLONE_ARGS[@]}"
+else
+    # On CI, we have these dependencies as artifacts, but they are gzipped
+    set +x
+    for f in artifacts/canisters/*.gz; do
+        mv "$f" "${ARTIFACT_DIR}"
+        gunzip "${ARTIFACT_DIR}/$(basename $f)"
+    done
+    for f in artifacts/release/*.gz; do
+        mv "$f" "${ARTIFACT_DIR}"
+        gunzip "${ARTIFACT_DIR}/$(basename $f)"
+        chmod +x "${ARTIFACT_DIR}/$(basename $f .gz)"
+    done
+    set -x
+fi
 
 ls -R "$ARTIFACT_DIR"
 

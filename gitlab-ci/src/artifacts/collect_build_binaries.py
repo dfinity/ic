@@ -153,25 +153,6 @@ class Collector:
         else:
             print("WARNING: /openssl/private.pem doesn't exist, so these artifacts won't be signed")
 
-        job_id = os.environ.get("CI_JOB_ID")
-        job_name = os.environ.get("CI_JOB_NAME")
-        if job_id and job_name and not job_name.startswith("docker-build-ic"):
-            sh(
-                "buildevents",
-                "cmd",
-                getenv("ROOT_PIPELINE_ID"),
-                job_id,
-                "rclone",
-                "--",
-                local("rclone_upload.py"),
-                self.out_dir,
-                path.join(path.basename(self.args.artifacts_dir), self.args.publish_suffix),
-            )
-        else:
-            print("CI_JOB_ID isn't set, skipping rclone")
-
-        sh("git", "rev-parse", "--verify", "HEAD", pipe_to=path.join(self.out_dir, "git_ref"))
-
     def _process_one(self, binary: str):
         """
         Things we do in here:.

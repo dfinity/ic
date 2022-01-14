@@ -67,12 +67,8 @@ class RcloneUpload:
         else:
             raise Exception("Failed to upload too many times.")
 
-    def upload_artifacts(self, local_path, remote_subdir):
+    def upload_artifacts(self, local_path, remote_subdir, version):
         """Upload artifacts from local_path to the CDN in remote_subdir."""
-        sha = os.environ.get("CI_COMMIT_SHA")
-        if not sha:
-            logging.error("The CI_COMMIT_SHA environment variable is not set. Can't continue.")
-
         if os.environ.get("CI_COMMIT_REF_PROTECTED") == "true":
             # The first build of blessed binaries (prepared on verified builders) is also stored at /blessed
             # The /blessed folder is already prioritized when downloading from the HTTPS endpoint,
@@ -81,12 +77,12 @@ class RcloneUpload:
             # dfinity-download-public/blessed/ic/some/binary and fallback to dfinity-download-public/ic/some/binary.
             self._upload(
                 local_path=local_path,
-                remote_subdir=f"blessed/ic/{sha}/{remote_subdir}",
+                remote_subdir=f"blessed/ic/{version}/{remote_subdir}",
                 other_options=["--ignore-existing"],
             )
 
         self._upload(
-            local_path=local_path, remote_subdir=f"ic/{sha}/{remote_subdir}", other_options=["--ignore-existing"]
+            local_path=local_path, remote_subdir=f"ic/{version}/{remote_subdir}", other_options=["--ignore-existing"]
         )
 
 
@@ -110,6 +106,12 @@ def main():
         "--dry-run",
         action="store_true",
         help="Mock the upload, for debugging purposes.",
+    )
+
+    parser.add_argument(
+        "--version",
+        action="store",
+        help="Specify the version string.",
     )
 
     parser.add_argument(
@@ -137,7 +139,13 @@ def main():
 
     local_path = str(pathlib.Path(args.local_path).absolute())
 
-    rclone.upload_artifacts(local_path, args.remote_subdir)
+    version = args.version or os.environ.get("CI_COMMIT_SHA")
+    if not version:
+        logging.error(
+            "Cannot determine version string either from --version nor " "from CI_COMMIT_SHA environment variable"
+        )
+
+    rclone.upload_artifacts(local_path, args.remote_subdir, version)
 
 
 if __name__ == "__main__":

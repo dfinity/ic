@@ -105,10 +105,6 @@ cargo-build-canisters:
 
       gitlab-ci/src/artifacts/openssl-sign.sh "artifacts/canisters${ARTIFACT_EXT}"
 
-      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
-        gitlab-ci/src/artifacts/rclone_upload.py "artifacts/canisters${ARTIFACT_EXT}" canisters
-
       echo -e "\e[0Ksection_start:$(date +%s):sccache_stats[collapsed=true]\r\e[0KClick here to see the sccache stats"
       "$RUSTC_WRAPPER" --show-stats
       echo -e "\e[0Ksection_end:$(date +%s):sccache_stats\r\e[0K"
-
