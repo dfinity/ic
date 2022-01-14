@@ -208,7 +208,7 @@ fn build_registry_proto() {
     );
     config.type_attribute(
         ".registry.node_operator",
-        "#[derive(serde::Serialize, serde::Deserialize)]",
+        "#[derive(candid::CandidType, serde::Serialize, candid::Deserialize)]",
     );
     config.type_attribute(
         ".registry.nns",
