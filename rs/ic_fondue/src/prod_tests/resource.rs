@@ -67,8 +67,6 @@ pub enum BootImage {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ResourceGroup {
     pub group_name: String,
-    /// By internal contract, for the initial allocation of resources, the
-    /// position of the AllocatedVm reflects the node index.
     pub vms: Vec<AllocatedVm>,
 }
 
