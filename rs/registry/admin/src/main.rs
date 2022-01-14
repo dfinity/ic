@@ -45,7 +45,8 @@ use ic_nns_governance::{
 };
 use ic_nns_handler_root::{
     common::{
-        AddNnsCanisterProposalPayload, CanisterStatusResult, ChangeNnsCanisterProposalPayload,
+        AddNnsCanisterProposalPayload, CanisterAction, CanisterStatusResult,
+        ChangeNnsCanisterProposalPayload, StopOrStartNnsCanisterProposalPayload,
     },
     root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot},
 };
@@ -317,6 +318,10 @@ enum SubCommand {
     GetUnassignedNodes,
     /// Get the monthly Node Provider rewards
     GetMonthlyNodeProviderRewards,
+    /// Propose to start a canister managed by the governance.
+    ProposeToStartCanister(StartCanisterCmd),
+    /// Propose to stop a canister managed by the governance.
+    ProposeToStopCanister(StopCanisterCmd),
 }
 
 /// Indicates whether a value should be added or removed.
@@ -580,6 +585,56 @@ impl ProposalTitleAndPayload<UpdateUnassignedNodesConfigPayload>
         UpdateUnassignedNodesConfigPayload {
             ssh_readonly_access: self.ssh_readonly_access.clone(),
             replica_version: self.replica_version_id.clone(),
+        }
+    }
+}
+
+/// Sub-command to submit a proposal to start a canister.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Clap)]
+struct StartCanisterCmd {
+    #[clap(long)]
+    pub canister_id: CanisterId,
+}
+
+#[async_trait]
+impl ProposalTitleAndPayload<StopOrStartNnsCanisterProposalPayload> for StartCanisterCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!("Start canister {}", self.canister_id),
+        }
+    }
+
+    async fn payload(&self, _: Url) -> StopOrStartNnsCanisterProposalPayload {
+        StopOrStartNnsCanisterProposalPayload {
+            canister_id: self.canister_id,
+            action: CanisterAction::Start,
+        }
+    }
+}
+
+/// Sub-command to submit a proposal to start a canister.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Clap)]
+struct StopCanisterCmd {
+    #[clap(long)]
+    pub canister_id: CanisterId,
+}
+
+#[async_trait]
+impl ProposalTitleAndPayload<StopOrStartNnsCanisterProposalPayload> for StopCanisterCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!("Stop canister {}", self.canister_id),
+        }
+    }
+
+    async fn payload(&self, _: Url) -> StopOrStartNnsCanisterProposalPayload {
+        StopOrStartNnsCanisterProposalPayload {
+            canister_id: self.canister_id,
+            action: CanisterAction::Stop,
         }
     }
 }
@@ -2409,6 +2464,24 @@ async fn main() {
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::UninstallCode,
+                opts.nns_url,
+                sender,
+            )
+            .await;
+        }
+        SubCommand::ProposeToStartCanister(cmd) => {
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::StopOrStartNnsCanister,
+                opts.nns_url,
+                sender,
+            )
+            .await;
+        }
+        SubCommand::ProposeToStopCanister(cmd) => {
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::StopOrStartNnsCanister,
                 opts.nns_url,
                 sender,
             )
