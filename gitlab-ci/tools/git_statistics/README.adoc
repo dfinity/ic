@@ -1,0 +1,9 @@
+= Script to get data about the number of engineers working on DFINITY's code
+
+Usage:
+
+-----
+cd gitlab-ci/tools/git_statistics
+nix-shell shell.nix
+python git_statistics.py
+----
