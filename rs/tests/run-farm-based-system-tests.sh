@@ -101,7 +101,7 @@ fi
 
 RCLONE_ARGS=("--git-rev" "$GIT_REVISION" "--out=$ARTIFACT_DIR" "--unpack" "--mark-executable")
 # prod-test-driver and (NNS) canisters
-if [[ -z "${JOB_ID}" ]]; then
+if [[ -z "${JOB_ID}" || "${CI_PARENT_PIPELINE_SOURCE:-}" != "merge_request_event" ]]; then
     log "Downloading dependencies built from commit: ${RED}$GIT_REVISION${NC}"
     log "NOTE: Dependencies include canisters, rust-binaries (such as ic-rosetta-binaries), etc."
     "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/rclone_download.py --remote-path=canisters "${RCLONE_ARGS[@]}"
