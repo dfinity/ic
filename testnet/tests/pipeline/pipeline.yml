@@ -890,14 +890,9 @@ rosetta-hourly:
     cd_target_env: "HOURLY"
   before_script:
     - |
-      set -eExou pipefail
-      ROSETTA_CLI_VERSION="0.6.7"
-      ROSETTA_CLI_DIR="$(mktemp -d)/rosetta-cli"
-      mkdir -p "${ROSETTA_CLI_DIR}" && cd "${ROSETTA_CLI_DIR}"
-      curl -sSL "https://github.com/coinbase/rosetta-cli/releases/download/v${ROSETTA_CLI_VERSION}/rosetta-cli-${ROSETTA_CLI_VERSION}-linux-amd64.tar.gz" | tar -xzv
-      mv "rosetta-cli-${ROSETTA_CLI_VERSION}-linux-amd64" rosetta-cli
-      PATH=$PATH:"$ROSETTA_CLI_DIR"
-      cd -
+      # Ensure that rosetta 3rd-party dependencies are available
+      # shellcheck disable=SC1090
+      . "${CI_PROJECT_DIR}/rs/tests/prepare-rosetta-deps.sh"
 
 .system-tests-wasm-generator:
   extends: .system-tests
