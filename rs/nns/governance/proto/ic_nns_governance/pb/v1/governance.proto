@@ -174,7 +174,7 @@ message NeuronInfo {
   uint64 stake_e8s = 8;
   // Timestamp when this neuron joined the community fund.
   optional uint64 joined_community_fund_timestamp_seconds = 9;
-  // Name of this neuron if it has been given one.
+  // If this neuron is a known neuron, this is data associated with it, including the neuron's name and (optionally) a description.
   optional KnownNeuronData known_neuron_data = 10;
 }
 
@@ -625,7 +625,7 @@ message Proposal {
     SetDefaultFollowees set_default_followees = 18;
     // Reward multiple NodeProvider
     RewardNodeProviders reward_node_providers = 19;
-    // Register Neuron
+    // Register Known Neuron
     KnownNeuron register_known_neuron = 21;
   }
 }
@@ -1244,7 +1244,7 @@ message KnownNeuron {
   KnownNeuronData known_neuron_data = 2;
 }
 
-// Known neurons have extra information (mainly a name) used to identify them.
+// Known neurons have extra information (a name and optionally a description) that can be used to identify them.
 message KnownNeuronData {
   string name = 1;
   optional string description = 2;

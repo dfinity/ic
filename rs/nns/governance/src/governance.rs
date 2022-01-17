@@ -21,11 +21,11 @@ use crate::pb::v1::{
     proposal,
     reward_node_provider::RewardMode,
     Ballot, BallotInfo, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError,
-    KnownNeuron, ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListProposalInfo,
-    ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse, NetworkEconomics, Neuron,
-    NeuronInfo, NeuronState, NnsFunction, NodeProvider, Proposal, ProposalData, ProposalInfo,
-    ProposalRewardStatus, ProposalStatus, RewardEvent, RewardNodeProvider, RewardNodeProviders,
-    Tally, Topic, UpdateNodeProvider, Vote,
+    KnownNeuron, KnownNeuronData, ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse,
+    ListProposalInfo, ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
+    NetworkEconomics, Neuron, NeuronInfo, NeuronState, NnsFunction, NodeProvider, Proposal,
+    ProposalData, ProposalInfo, ProposalRewardStatus, ProposalStatus, RewardEvent,
+    RewardNodeProvider, RewardNodeProviders, Tally, Topic, UpdateNodeProvider, Vote,
 };
 use candid::Decode;
 use dfn_protobuf::ToProto;
@@ -146,7 +146,7 @@ pub const HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES: usize =
 
 pub(crate) const LOG_PREFIX: &str = "[Governance] ";
 
-/// Max character length for a neuron's name.
+/// Max character length for a neuron's name, in KnownNeuronData.
 pub const KNOWN_NEURON_NAME_MAX_LEN: usize = 200;
 
 /// Max character length for the field "description" in KnownNeuronData.
@@ -1614,6 +1614,14 @@ impl GovernanceProto {
         index
     }
 
+    pub fn build_known_neuron_name_index(&self) -> HashSet<String> {
+        self.neurons
+            .iter()
+            .filter(|(_id, neuron)| neuron.known_neuron_data.is_some())
+            .map(|(_id, neuron)| neuron.known_neuron_data.as_ref().unwrap().name.clone())
+            .collect()
+    }
+
     // Returns whether the proposed default following is valid by making
     // sure that the refered to neurons exist.
     fn validate_default_followees(
@@ -1847,6 +1855,11 @@ pub struct Governance {
     /// is saved and restored.
     pub principal_to_neuron_ids_index: BTreeMap<PrincipalId, HashSet<u64>>,
 
+    /// Set of all names given to Known Neurons, to prevent duplication.
+    ///
+    /// This set is cached and will be removed and recreated when the state is saved and restored.
+    pub known_neuron_name_set: HashSet<String>,
+
     /// Timestamp, in seconds since the unix epoch, until which no proposal
     /// needs to be processed.
     closest_proposal_deadline_timestamp_seconds: u64,
@@ -1894,6 +1907,7 @@ impl Governance {
             ledger,
             topic_followee_index: BTreeMap::new(),
             principal_to_neuron_ids_index: BTreeMap::new(),
+            known_neuron_name_set: HashSet::new(),
             closest_proposal_deadline_timestamp_seconds: 0,
             latest_gc_timestamp_seconds: 0,
             latest_gc_num_proposals: 0,
@@ -1947,6 +1961,7 @@ impl Governance {
     fn initialize_indices(&mut self) {
         self.topic_followee_index = self.proto.build_topic_followee_index();
         self.principal_to_neuron_ids_index = self.proto.build_principal_to_neuron_ids_index();
+        self.known_neuron_name_set = self.proto.build_known_neuron_name_index();
     }
 
     fn transaction_fee(&self) -> u64 {
@@ -4491,7 +4506,7 @@ impl Governance {
                 self.reward_node_providers(pid, proposal).await;
             }
             proposal::Action::RegisterKnownNeuron(known_neuron) => {
-                let result = self.register_neuron(known_neuron);
+                let result = self.register_known_neuron(known_neuron);
                 self.set_proposal_execution_status(pid, result);
             }
         }
@@ -5624,11 +5639,18 @@ impl Governance {
     ///  - Name: the name given to the neuron.
     ///  - Description: optional field to add a short description of the neuron,
     ///    or organization behind it.
-    fn register_neuron(&mut self, known_neuron: KnownNeuron) -> Result<(), GovernanceError> {
+    ///
+    /// Preconditions:
+    ///  - A Neuron ID is given in the request and this ID identifies an existing neuron.
+    ///  - Known Neuron Data is specified in the request.
+    ///  - Name is at most of length KNOWN_NEURON_NAME_MAX_LEN.
+    ///  - Description, if present, is at most of length KNOWN_NEURON_DESCRIPTION_MAX_LEN.
+    ///  - Name is not already used in another known neuron.
+    fn register_known_neuron(&mut self, known_neuron: KnownNeuron) -> Result<(), GovernanceError> {
         let neuron_id = known_neuron.id.ok_or_else(|| {
             GovernanceError::new_with_message(
                 ErrorType::NotFound,
-                "No neuron ID specified in the register neuron request.",
+                "No neuron ID specified in the request to register a known neuron.",
             )
         })?;
         let known_neuron_data = known_neuron.known_neuron_data.as_ref().ok_or_else(|| {
@@ -5641,7 +5663,7 @@ impl Governance {
             return Err(GovernanceError::new_with_message(
                 ErrorType::NotAuthorized,
                 format!(
-                    "The maximum length for a neuron's name is {}",
+                    "The maximum length for a neuron's name, which is {}, has been exceeded",
                     KNOWN_NEURON_NAME_MAX_LEN
                 ),
             ));
@@ -5653,8 +5675,17 @@ impl Governance {
             return Err(GovernanceError::new_with_message(
                 ErrorType::NotAuthorized,
                 format!(
-                    "The maximum length for a neuron's description is {}",
+                    "The maximum length for a neuron's description, which is {}, has been exceeded",
                     KNOWN_NEURON_DESCRIPTION_MAX_LEN
+                ),
+            ));
+        }
+        if self.known_neuron_name_set.contains(&known_neuron_data.name) {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                format!(
+                    "The name {} already belongs to a Neuron",
+                    known_neuron_data.name
                 ),
             ));
         }
@@ -5662,7 +5693,12 @@ impl Governance {
         let neuron = self.proto.neurons.get_mut(&neuron_id.id).ok_or_else(||
             // The specified neuron is not present.
             GovernanceError::new_with_message(ErrorType::NotFound, "Neuron not found"))?;
+        if let Some(KnownNeuronData { name: old_name, .. }) = &neuron.known_neuron_data {
+            self.known_neuron_name_set.remove(old_name);
+        }
         neuron.known_neuron_data = Some(known_neuron_data.clone());
+        self.known_neuron_name_set
+            .insert(known_neuron_data.name.clone());
 
         Ok(())
     }

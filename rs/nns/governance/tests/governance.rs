@@ -9607,7 +9607,9 @@ fn test_wfq_constant_flipping() {
 ///   expected one.
 /// - Assert than when querying all known neurons the result is the expected
 ///   one.
-/// - Update the name of one of the neurons
+/// - Try Updating one Neuron with the name of the other, this should not succeed.
+/// - Verify that nothing is changed, the previous proposal did not succeed.
+/// - Update the name of one of the neurons, with a new name.
 /// - Assert than when querying the neuron the updated name is correct.
 #[test]
 fn test_known_neurons() {
@@ -9666,7 +9668,6 @@ fn test_known_neurons() {
 
     gov.make_proposal(
         &NeuronId { id: 3 },
-        // Must match neuron 1's serialized_id.
         &principal(3),
         &Proposal {
             title: Some("A Reasonable Title".to_string()),
@@ -9674,7 +9675,7 @@ fn test_known_neurons() {
             action: Some(proposal::Action::RegisterKnownNeuron(KnownNeuron {
                 id: Some(NeuronId { id: 1 }),
                 known_neuron_data: Some(KnownNeuronData {
-                    name: "The One".to_string(),
+                    name: "One".to_string(),
                     description: None,
                 }),
             })),
@@ -9685,7 +9686,6 @@ fn test_known_neurons() {
 
     gov.make_proposal(
         &NeuronId { id: 3 },
-        // Must match neuron 1's serialized_id.
         &principal(3),
         &Proposal {
             title: Some("A Reasonable Title".to_string()),
@@ -9693,7 +9693,7 @@ fn test_known_neurons() {
             action: Some(proposal::Action::RegisterKnownNeuron(KnownNeuron {
                 id: Some(NeuronId { id: 2 }),
                 known_neuron_data: Some(KnownNeuronData {
-                    name: "Dos".to_string(),
+                    name: "Two".to_string(),
                     description: None,
                 }),
             })),
@@ -9707,20 +9707,20 @@ fn test_known_neurons() {
             .known_neuron_data
             .unwrap()
             .name,
-        "The One".to_string()
+        "One".to_string()
     );
     let expected_known_neurons = vec![
         KnownNeuron {
             id: Some(NeuronId { id: 1 }),
             known_neuron_data: Some(KnownNeuronData {
-                name: "The One".to_string(),
+                name: "One".to_string(),
                 description: None,
             }),
         },
         KnownNeuron {
             id: Some(NeuronId { id: 2 }),
             known_neuron_data: Some(KnownNeuronData {
-                name: "Dos".to_string(),
+                name: "Two".to_string(),
                 description: None,
             }),
         },
@@ -9730,14 +9730,46 @@ fn test_known_neurons() {
         .sort_by(|a, b| a.id.as_ref().unwrap().id.cmp(&b.id.as_ref().unwrap().id));
     assert_eq!(sorted_response_known_neurons, expected_known_neurons);
 
+    // This proposal tries to name neuron 1 with the already existing name "Two", the change should not be executed.
+    let failed_proposal_id = gov
+        .make_proposal(
+            &NeuronId { id: 3 },
+            &principal(3),
+            &Proposal {
+                title: Some("A Reasonable Title".to_string()),
+                summary: "proposal 3 summary".to_string(),
+                action: Some(proposal::Action::RegisterKnownNeuron(KnownNeuron {
+                    id: Some(NeuronId { id: 1 }),
+                    known_neuron_data: Some(KnownNeuronData {
+                        name: "Two".to_string(),
+                        description: None,
+                    }),
+                })),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+    assert_eq!(
+        gov.get_proposal_info(&principal(3), failed_proposal_id)
+            .unwrap()
+            .status(),
+        ProposalStatus::Failed
+    );
+
+    // Check that the state is the same as before the last proposal.
+    let mut sorted_response_known_neurons = gov.list_known_neurons().known_neurons;
+    sorted_response_known_neurons
+        .sort_by(|a, b| a.id.as_ref().unwrap().id.cmp(&b.id.as_ref().unwrap().id));
+    assert_eq!(sorted_response_known_neurons, expected_known_neurons);
+
     // Update the name of neuron 2.
     gov.make_proposal(
         &NeuronId { id: 3 },
-        // Must match neuron 1's serialized_id.
         &principal(3),
         &Proposal {
             title: Some("A Reasonable Title".to_string()),
-            summary: "proposal 3 summary".to_string(),
+            summary: "proposal 4 summary".to_string(),
             action: Some(proposal::Action::RegisterKnownNeuron(KnownNeuron {
                 id: Some(NeuronId { id: 2 }),
                 known_neuron_data: Some(KnownNeuronData {
@@ -9757,6 +9789,12 @@ fn test_known_neurons() {
             .name,
         "Zwei".to_string()
     );
+
+    let expected_known_neuron_name_set: HashSet<String> = ["One".to_string(), "Zwei".to_string()]
+        .iter()
+        .cloned()
+        .collect();
+    assert_eq!(expected_known_neuron_name_set, gov.known_neuron_name_set);
 }
 
 #[test]
