@@ -1,5 +1,6 @@
+use anyhow::bail;
 use wasmtime::MemoryType;
-use wasmtime_environ::{WASM_MAX_PAGES, WASM_PAGE_SIZE};
+use wasmtime_environ::{WASM32_MAX_PAGES, WASM_PAGE_SIZE};
 
 use crate::ICMemoryCreator;
 use crate::LinearMemory;
@@ -16,7 +17,7 @@ use std::io::Error;
 use std::ops::Deref;
 use std::ptr;
 use std::sync::{
-    atomic::{AtomicU32, Ordering},
+    atomic::{AtomicUsize, Ordering},
     Arc, Mutex,
 };
 
@@ -29,16 +30,16 @@ fn round_up_to_os_page_size(size: usize) -> usize {
 }
 
 fn wasm_max_mem_size_in_bytes() -> usize {
-    WASM_MAX_PAGES as usize * WASM_PAGE_SIZE as usize
+    WASM32_MAX_PAGES as usize * WASM_PAGE_SIZE as usize
 }
 
 #[derive(Hash, PartialEq, Eq)]
 pub(crate) struct MemoryStart(pub(crate) usize);
 
-pub(crate) struct MemoryPageSize(Arc<AtomicU32>);
+pub(crate) struct MemoryPageSize(Arc<AtomicUsize>);
 
 impl Deref for MemoryPageSize {
-    type Target = Arc<AtomicU32>;
+    type Target = Arc<AtomicUsize>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -72,20 +73,20 @@ where
     fn new_memory(
         &self,
         ty: MemoryType,
-        reserved_size_in_bytes: Option<u64>,
-        guard_size: u64,
+        _minimum: usize,
+        _maximum: Option<usize>,
+        reserved_size_in_bytes: Option<usize>,
+        guard_size: usize,
     ) -> Result<Box<dyn wasmtime::LinearMemory>, String> {
-        //Wasmtime 'guarantees' that these values are <= WASM_MAX_PAGES
-        //and has asserts for that in its Memory implementation
-        //but let's just clip to that without panicking in case they change
+        // Wasmtime 'guarantees' that these values are <= WASM_MAX_PAGES
+        // and has asserts for that in its Memory implementation
+        // but let's just clip to that without panicking in case they change
         // something...
-        let min = std::cmp::min(ty.limits().min(), WASM_MAX_PAGES);
-        let max = ty.limits().max().unwrap_or(WASM_MAX_PAGES);
-        let max = std::cmp::min(max, WASM_MAX_PAGES);
+        let min = std::cmp::min(ty.minimum(), WASM32_MAX_PAGES) as usize;
+        let max =
+            std::cmp::min(ty.maximum().unwrap_or(WASM32_MAX_PAGES), WASM32_MAX_PAGES) as usize;
 
-        let mem_size =
-            reserved_size_in_bytes.unwrap_or(wasm_max_mem_size_in_bytes() as u64) as usize;
-        let guard_size = guard_size as usize;
+        let mem_size = reserved_size_in_bytes.unwrap_or_else(wasm_max_mem_size_in_bytes);
 
         let mem = self
             .raw_creator
@@ -114,8 +115,8 @@ impl ICMemoryCreator for MmapMemoryCreator {
         mem_size: usize,
         guard_size: usize,
         _instance_heap_offset: usize,
-        _min_pages: u32,
-        _max_pages: Option<u32>,
+        _min_pages: usize,
+        _max_pages: Option<usize>,
     ) -> MmapMemory {
         MmapMemory::new(mem_size, guard_size)
     }
@@ -180,45 +181,62 @@ impl Drop for MmapMemory {
 
 pub struct WasmtimeMemory<M: LinearMemory> {
     mem: M,
-    maximum: u32,
+    maximum: usize,
     used: MemoryPageSize,
 }
 
 impl<M: LinearMemory + Send> WasmtimeMemory<M> {
-    fn new(mem: M, min: u32, maximum: u32) -> Self {
+    fn new(mem: M, min: usize, maximum: usize) -> Self {
         Self {
             mem,
             maximum,
-            used: MemoryPageSize(Arc::new(AtomicU32::new(min))),
+            used: MemoryPageSize(Arc::new(AtomicUsize::new(min))),
         }
     }
 }
 
+fn convert_pages_to_bytes(pages: usize) -> usize {
+    let (result, overflow) = pages.overflowing_mul(WASM_PAGE_SIZE as usize);
+    if overflow {
+        panic!("Unable to convert memory page size {} to bytes", pages)
+    }
+    result
+}
+
 unsafe impl<M: LinearMemory + Send + Sync + 'static> wasmtime::LinearMemory for WasmtimeMemory<M> {
     /// Returns the number of allocated wasm pages.
-    fn size(&self) -> u32 {
-        self.used.load(Ordering::SeqCst)
+    fn byte_size(&self) -> usize {
+        convert_pages_to_bytes(self.used.load(Ordering::SeqCst))
     }
 
-    fn maximum(&self) -> Option<u32> {
-        Some(self.maximum)
+    fn maximum_byte_size(&self) -> Option<usize> {
+        Some(convert_pages_to_bytes(self.maximum))
     }
 
-    fn grow(&mut self, delta: u32) -> Option<u32> {
-        self.used
+    fn grow_to(&mut self, new_size: usize) -> anyhow::Result<()> {
+        if new_size % WASM_PAGE_SIZE as usize != 0 {
+            bail!(
+                "Requested wasm page size increase wasn't a multiple of the wasm page size: {}",
+                new_size
+            )
+        }
+        let new_pages = new_size / WASM_PAGE_SIZE as usize;
+        match self
+            .used
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |prev_pages| {
-                let new_pages = match prev_pages.checked_add(delta) {
-                    Some(x) => x,
-                    None => return None,
-                };
-
-                if new_pages > self.maximum {
+                if new_pages <= prev_pages || new_pages > self.maximum {
                     None
                 } else {
                     Some(new_pages)
                 }
-            })
-            .ok()
+            }) {
+            Ok(_) => Ok(()),
+            Err(prev_pages) => bail!(
+                "Unable to grow wasm memory from {} pages to {} pages",
+                prev_pages,
+                new_pages
+            ),
+        }
     }
 
     fn as_ptr(&self) -> *mut u8 {

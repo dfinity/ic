@@ -50,7 +50,7 @@ pub trait ICMemoryCreator {
         mem_size: usize,
         guard_size: usize,
         instance_heap_offset: usize,
-        min_pages: u32,
-        max_pages: Option<u32>,
+        min_pages: usize,
+        max_pages: Option<usize>,
     ) -> Self::Mem;
 }
