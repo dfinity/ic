@@ -1,19 +1,18 @@
-use crate::convert;
 use crate::errors::ApiError;
 use crate::models;
-use crate::models::{
-    AccountIdentifier, Amount, BlockIdentifier, Currency, Operation, OperationIdentifier, Timestamp,
-};
+use crate::models::{AccountIdentifier, Amount, BlockIdentifier, Currency, Operation, Timestamp};
 use crate::request_types::{
     AddHotKey, Disburse, DisburseMetadata, KeyMetadata, MergeMaturity, MergeMaturityMetadata,
-    NeuronIdentifierMetadata, PublicKeyOrPrincipal, Request, SetDissolveTimestamp,
-    SetDissolveTimestampMetadata, Spawn, SpawnMetadata, Stake, StartDissolve, StopDissolve,
-    ADD_HOT_KEY, BURN, DISBURSE, FEE, MERGE_MATURITY, MINT, SET_DISSOLVE_TIMESTAMP, SPAWN, STAKE,
-    START_DISSOLVE, STATUS_COMPLETED, STOP_DISSOLVE, TRANSACTION,
+    NeuronIdentifierMetadata, PublicKeyOrPrincipal, Request, RequestResult, RequestResultMetadata,
+    SetDissolveTimestamp, SetDissolveTimestampMetadata, Spawn, SpawnMetadata, Stake, StartDissolve,
+    Status, StopDissolve, TransactionOperationResults, TransactionResults, ADD_HOT_KEY, DISBURSE,
+    FEE, MERGE_MATURITY, SET_DISSOLVE_TIMESTAMP, SPAWN, STAKE, START_DISSOLVE, STATUS_COMPLETED,
+    STOP_DISSOLVE, TRANSACTION,
 };
 use crate::store::HashedBlock;
 use crate::time::Seconds;
 use crate::transaction_id::TransactionIdentifier;
+use crate::{convert, errors};
 use dfn_protobuf::ProtoBuf;
 use ic_crypto_tree_hash::Path;
 use ic_types::messages::{HttpCanisterUpdate, HttpReadState};
@@ -78,264 +77,6 @@ pub fn transaction(hb: &HashedBlock, token_name: &str) -> Result<models::Transac
     );
     t.metadata = Some(metadata);
     Ok(t)
-}
-
-/// Translates a sequence of internal requests into an array of Rosetta API
-/// operations.
-pub fn requests_to_operations(
-    requests: &[Request],
-    token_name: &str,
-) -> Result<Vec<Operation>, ApiError> {
-    let mut ops = vec![];
-    let mut idx = 0;
-    let mut allocate_op_id = || {
-        let n = idx;
-        idx += 1;
-        OperationIdentifier::new(n)
-    };
-
-    for request in requests {
-        match request {
-            Request::Transfer(LedgerOperation::Transfer {
-                from,
-                to,
-                amount,
-                fee,
-            }) => {
-                let from_account = Some(to_model_account_identifier(from));
-                let amount = i128::from(amount.get_e8s());
-
-                ops.push(Operation {
-                    operation_identifier: allocate_op_id(),
-                    _type: TRANSACTION.to_string(),
-                    status: None,
-                    account: from_account.clone(),
-                    amount: Some(signed_amount(-amount, token_name)),
-                    related_operations: None,
-                    coin_change: None,
-                    metadata: None,
-                });
-                ops.push(Operation {
-                    operation_identifier: allocate_op_id(),
-                    _type: TRANSACTION.to_string(),
-                    status: None,
-                    account: Some(to_model_account_identifier(to)),
-                    amount: Some(signed_amount(amount, token_name)),
-                    related_operations: None,
-                    coin_change: None,
-                    metadata: None,
-                });
-                ops.push(Operation {
-                    operation_identifier: allocate_op_id(),
-                    _type: FEE.to_string(),
-                    status: None,
-                    account: from_account,
-                    amount: Some(signed_amount(-(fee.get_e8s() as i128), token_name)),
-                    related_operations: None,
-                    coin_change: None,
-                    metadata: None,
-                });
-            }
-            Request::Transfer(LedgerOperation::Mint { to, amount, .. }) => {
-                ops.push(Operation {
-                    operation_identifier: allocate_op_id(),
-                    _type: MINT.to_string(),
-                    status: None,
-                    account: Some(to_model_account_identifier(to)),
-                    amount: Some(amount_(*amount, token_name)?),
-                    related_operations: None,
-                    coin_change: None,
-                    metadata: None,
-                });
-            }
-            Request::Transfer(LedgerOperation::Burn { from, amount, .. }) => {
-                ops.push(Operation {
-                    operation_identifier: allocate_op_id(),
-                    _type: BURN.to_string(),
-                    status: None,
-                    account: Some(to_model_account_identifier(from)),
-                    amount: Some(signed_amount(-i128::from(amount.get_e8s()), token_name)),
-                    related_operations: None,
-                    coin_change: None,
-                    metadata: None,
-                });
-            }
-            Request::Stake(Stake {
-                account,
-                neuron_index,
-            }) => {
-                ops.push(Operation {
-                    operation_identifier: allocate_op_id(),
-                    _type: STAKE.to_string(),
-                    status: None,
-                    account: Some(to_model_account_identifier(account)),
-                    amount: None,
-                    related_operations: None,
-                    coin_change: None,
-                    metadata: Some(
-                        NeuronIdentifierMetadata {
-                            neuron_index: *neuron_index,
-                        }
-                        .into(),
-                    ),
-                });
-            }
-            Request::SetDissolveTimestamp(SetDissolveTimestamp {
-                account,
-                neuron_index,
-                timestamp,
-            }) => {
-                ops.push(Operation {
-                    operation_identifier: allocate_op_id(),
-                    _type: SET_DISSOLVE_TIMESTAMP.to_string(),
-                    status: None,
-                    account: Some(to_model_account_identifier(account)),
-                    amount: None,
-                    related_operations: None,
-                    coin_change: None,
-                    metadata: Some(
-                        SetDissolveTimestampMetadata {
-                            neuron_index: *neuron_index,
-                            timestamp: *timestamp,
-                        }
-                        .into(),
-                    ),
-                });
-            }
-            Request::StartDissolve(StartDissolve {
-                account,
-                neuron_index,
-            }) => {
-                ops.push(Operation {
-                    operation_identifier: allocate_op_id(),
-                    _type: START_DISSOLVE.to_string(),
-                    status: None,
-                    account: Some(to_model_account_identifier(account)),
-                    amount: None,
-                    related_operations: None,
-                    coin_change: None,
-                    metadata: Some(
-                        NeuronIdentifierMetadata {
-                            neuron_index: *neuron_index,
-                        }
-                        .into(),
-                    ),
-                });
-            }
-            Request::StopDissolve(StopDissolve {
-                account,
-                neuron_index,
-            }) => {
-                ops.push(Operation {
-                    operation_identifier: allocate_op_id(),
-                    _type: STOP_DISSOLVE.to_string(),
-                    status: None,
-                    account: Some(to_model_account_identifier(account)),
-                    amount: None,
-                    related_operations: None,
-                    coin_change: None,
-                    metadata: Some(
-                        NeuronIdentifierMetadata {
-                            neuron_index: *neuron_index,
-                        }
-                        .into(),
-                    ),
-                });
-            }
-            Request::Disburse(Disburse {
-                account,
-                amount,
-                recipient,
-                neuron_index,
-            }) => {
-                ops.push(Operation {
-                    operation_identifier: allocate_op_id(),
-                    _type: DISBURSE.to_string(),
-                    status: None,
-                    account: Some(to_model_account_identifier(account)),
-                    amount: amount.map(|a| amount_(a, token_name).expect("amount_ never fails")),
-                    related_operations: None,
-                    coin_change: None,
-                    metadata: Some(
-                        DisburseMetadata {
-                            recipient: *recipient,
-                            neuron_index: *neuron_index,
-                        }
-                        .into(),
-                    ),
-                });
-            }
-            Request::AddHotKey(AddHotKey {
-                account,
-                neuron_index,
-                key,
-            }) => {
-                ops.push(Operation {
-                    operation_identifier: allocate_op_id(),
-                    _type: ADD_HOT_KEY.to_string(),
-                    status: None,
-                    account: Some(to_model_account_identifier(account)),
-                    amount: None,
-                    related_operations: None,
-                    coin_change: None,
-                    metadata: Some(
-                        KeyMetadata {
-                            key: key.clone(),
-                            neuron_index: *neuron_index,
-                        }
-                        .into(),
-                    ),
-                });
-            }
-            Request::Spawn(Spawn {
-                account,
-                spawned_neuron_index,
-                controller,
-                neuron_index,
-            }) => {
-                ops.push(Operation {
-                    operation_identifier: allocate_op_id(),
-                    _type: SPAWN.to_string(),
-                    status: None,
-                    account: Some(to_model_account_identifier(account)),
-                    amount: None,
-                    related_operations: None,
-                    coin_change: None,
-                    metadata: Some(
-                        SpawnMetadata {
-                            neuron_index: *neuron_index,
-                            controller: *controller,
-                            spawned_neuron_index: *spawned_neuron_index,
-                        }
-                        .into(),
-                    ),
-                });
-            }
-            Request::MergeMaturity(MergeMaturity {
-                account,
-                percentage_to_merge,
-                neuron_index,
-            }) => {
-                ops.push(Operation {
-                    operation_identifier: allocate_op_id(),
-                    _type: MERGE_MATURITY.to_string(),
-                    status: None,
-                    account: Some(to_model_account_identifier(account)),
-                    amount: None,
-                    related_operations: None,
-                    coin_change: None,
-                    metadata: Some(
-                        MergeMaturityMetadata {
-                            percentage_to_merge: Option::from(*percentage_to_merge),
-                            neuron_index: *neuron_index,
-                        }
-                        .into(),
-                    ),
-                });
-            }
-        }
-    }
-    Ok(ops)
 }
 
 /// Helper for `from_operations` that creates `Transfer`s from related
@@ -806,7 +547,6 @@ pub fn account_from_public_key(pk: &models::PublicKey) -> Result<AccountIdentifi
 }
 
 /// `neuron_index` must also be the `nonce` of neuron management commands.
-// TODO(ROSETTA1-178) this method doesn't work for Spawned neurons.
 pub fn neuron_subaccount_bytes_from_public_key(
     pk: &models::PublicKey,
     neuron_index: u64,
@@ -879,6 +619,76 @@ pub fn make_read_state_from_update(update: &HttpCanisterUpdate) -> HttpReadState
         nonce: None,
         ingress_expiry: update.ingress_expiry,
     }
+}
+
+/// Convert TransactionOperationResults to ApiError.
+pub fn transaction_operation_result_to_api_error(
+    e: TransactionOperationResults,
+    token_name: &str,
+) -> ApiError {
+    match from_transaction_operation_results(e, token_name) {
+        Ok(e) => ApiError::OperationsErrors(e, token_name.to_string()),
+        Err(e) => e,
+    }
+}
+
+/// Convert TransactionOperationResults to TransactionResults.
+pub fn from_transaction_operation_results(
+    t: TransactionOperationResults,
+    token_name: &str,
+) -> Result<TransactionResults, ApiError> {
+    let requests = convert::from_operations(&t.operations, false, token_name)?;
+
+    let mut operations = Vec::with_capacity(requests.len());
+    let mut op_idx = 0;
+    for _type in requests.into_iter() {
+        let o = match (&_type, &t.operations[op_idx..]) {
+            (Request::Transfer(LedgerOperation::Transfer { .. }), [withdraw, deposit, fee, ..])
+                if withdraw._type == TRANSACTION
+                    && deposit._type == TRANSACTION
+                    && fee._type == FEE =>
+            {
+                op_idx += 3;
+                fee
+            }
+            (_, [o, ..]) => {
+                op_idx += 1;
+                o
+            }
+            (_, []) => {
+                return Err(ApiError::internal_error(
+                    "Too few Operations, could not match Operations with Requests",
+                ))
+            }
+        };
+
+        let status = o.status.clone().and_then(|n| Status::from_name(n.as_str()));
+
+        let RequestResultMetadata {
+            block_index,
+            neuron_id,
+            transaction_identifier,
+            response,
+        } = RequestResultMetadata::try_from(o.metadata.clone())?;
+        let status = response
+            .map(|e| Status::Failed(errors::convert_to_api_error(e, token_name)))
+            .or(status)
+            .ok_or_else(|| ApiError::internal_error("Could not decode Status from Operation"))?;
+
+        operations.push(RequestResult {
+            _type,
+            block_index,
+            neuron_id,
+            transaction_identifier,
+            status,
+        });
+    }
+
+    Ok(TransactionResults { operations })
+}
+
+pub fn transaction_results_to_api_error(tr: TransactionResults, token_name: &str) -> ApiError {
+    ApiError::OperationsErrors(tr, token_name.to_string())
 }
 
 #[cfg(test)]

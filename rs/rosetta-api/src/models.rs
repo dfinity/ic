@@ -1,5 +1,6 @@
+use crate::request_types::TransactionOperationResults;
 use crate::{
-    convert::from_hex, errors::ApiError, request_types::RequestType,
+    convert::from_hex, errors, errors::ApiError, request_types::RequestType,
     transaction_id::TransactionIdentifier,
 };
 use ic_types::{
@@ -27,8 +28,7 @@ pub struct ConstructionSubmitResponse {
     /// If a transaction only contains neuron management operations
     /// the constant identifier will be returned.
     pub transaction_identifier: TransactionIdentifier,
-
-    pub metadata: Object,
+    pub metadata: TransactionOperationResults,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1167,7 +1167,7 @@ pub struct Error {
 
 impl Error {
     pub fn new(err_type: &ApiError) -> Self {
-        Self::from(err_type)
+        errors::convert_to_error(err_type)
     }
 
     pub fn serialization_error_json_str() -> String {
@@ -1451,6 +1451,7 @@ pub struct Operation {
     /// in a call tree.
     #[serde(rename = "related_operations")]
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub related_operations: Option<Vec<OperationIdentifier>>,
 
     /// The network-specific type of the operation. Ensure that any type that
@@ -1470,18 +1471,22 @@ pub struct Operation {
 
     #[serde(rename = "account")]
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub account: Option<AccountIdentifier>,
 
     #[serde(rename = "amount")]
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub amount: Option<Amount>,
 
     #[serde(rename = "coin_change")]
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub coin_change: Option<CoinChange>,
 
     #[serde(rename = "metadata")]
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub metadata: Option<Object>,
 }
 
@@ -1887,7 +1892,7 @@ pub struct Transaction {
     pub operations: Vec<Operation>,
 
     /// Transactions that are related to other transactions (like a cross-shard
-    /// transaction) should include the tranaction_identifier of these
+    /// transaction) should include the transaction_identifier of these
     /// transactions in the metadata.
     #[serde(rename = "metadata")]
     #[serde(skip_serializing_if = "Option::is_none")]

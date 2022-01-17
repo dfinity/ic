@@ -371,7 +371,7 @@ pub fn test_everything(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         test_disburse(&rosetta_api_serv, &ledger, account_id, key_pair.into(), neuron_subaccount_identifier, None, None, &neuron).await.unwrap();
         // Test against prepopulated neurons (raw)
         let NeuronInfo {account_id, key_pair, neuron_subaccount_identifier, neuron, ..} = neuron_tests.get_neuron_for_test("Test raw JSON disburse");
-        test_disburse_raw(&rosetta_api_serv, &ledger, account_id, key_pair.into(), neuron_subaccount_identifier, None, None, &neuron, &ctx.logger).await.unwrap();
+        test_disburse_raw(&rosetta_api_serv, &ledger, account_id, key_pair.into(), neuron_subaccount_identifier, None, None, &neuron).await.unwrap();
 
         let NeuronInfo {account_id, key_pair, neuron_subaccount_identifier, neuron, ..} = neuron_tests.get_neuron_for_test("Test disburse to custom recipient");
         let (recipient, _, _, _) = make_user(102);
@@ -613,7 +613,7 @@ async fn test_make_transaction(
         None,
     )
     .await
-    .unwrap();
+    .expect("Error during transfer operation.");
 
     if let Some(h) = results.last_block_index() {
         assert_eq!(h, expected_idx);
@@ -1295,6 +1295,11 @@ async fn test_staking_raw(
         .unwrap()
         .as_array()
         .unwrap();
+    assert_eq!(
+        7,
+        operations.len(),
+        "Expecting 7 operations for the staking transactions."
+    );
     for op in operations.iter() {
         assert_eq!(
             op.get("status").unwrap(),
@@ -1305,15 +1310,19 @@ async fn test_staking_raw(
     assert_json_include!(
         actual: &operations[0],
         expected: json!({
-            "amount": {"e8s": 1000010000},
-            "fee": {"e8s": 10000},
-            "from": &acc,
-            "to": &dst_acc,
-            "status": "COMPLETED"
+            "amount": {"currency": {"decimals": 8, "symbol": "ICP"}, "value": "-1000010000"},
+            "operation_identifier": {"index": 0},
+            "status": "COMPLETED",
+            "type": "TRANSACTION"
         })
     );
 
-    let last_neuron_id = operations.last().unwrap().get("neuron_id");
+    let last_neuron_id = operations
+        .last()
+        .unwrap()
+        .get("metadata")
+        .expect("Expecting metadata in response")
+        .get("neuron_id");
     assert!(
         last_neuron_id.is_some(),
         "NeuronId should have been returned here"
@@ -1322,7 +1331,10 @@ async fn test_staking_raw(
 
     // Block height is the last block observed.
     // In this case the transfer to neuron_account.
-    let last_block_idx = operations.iter().rev().find_map(|r| r.get("block_index"));
+    let last_block_idx = operations
+        .iter()
+        .rev()
+        .find_map(|r| r.get("metadata").and_then(|r| r.get("block_index")));
     assert!(last_block_idx.is_some());
 
     let neuron_info = ros
@@ -1689,7 +1701,6 @@ async fn test_disburse_raw(
     amount: Option<Tokens>,
     recipient: Option<AccountIdentifier>,
     neuron: &Neuron,
-    logger: &Logger,
 ) -> Result<(), ic_rosetta_api::models::Error> {
     let pre_disburse = get_balance(ledger, acc).await;
     let (_, tip_idx) = get_tip(ledger).await;
@@ -1719,8 +1730,6 @@ async fn test_disburse_raw(
             .0,
     )
     .unwrap();
-
-    info!(logger, "{}", &req);
 
     let mut req: Object = serde_json::from_str(&req).unwrap();
     req.insert("metadata".to_string(), metadata.into());
@@ -1753,6 +1762,14 @@ async fn test_disburse_raw(
         hash_res.transaction_identifier,
         submit_res.transaction_identifier
     );
+
+    for op in submit_res.metadata.operations.iter() {
+        assert_eq!(
+            op.status.as_ref().expect("Expecting status to be set."),
+            "COMPLETED",
+            "Operation didn't complete."
+        );
+    }
 
     let amount = amount.unwrap_or_else(|| Tokens::from_e8s(neuron.cached_neuron_stake_e8s));
     let expected_idx = tip_idx + 1;
