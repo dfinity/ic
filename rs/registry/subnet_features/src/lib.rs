@@ -6,10 +6,17 @@ use std::str::FromStr;
 /// List of features that can be enabled or disabled on the given subnet.
 #[derive(CandidType, Clone, Copy, Default, Deserialize, Debug, Eq, PartialEq, Serialize)]
 pub struct SubnetFeatures {
+    /// This feature flag controls whether canisters of this subnet are capable of
+    /// issuing threshold ecdsa signatures.
     pub ecdsa_signatures: bool,
+
     /// This feature flag controls whether canister execution happens
     /// in sandboxed process or not. It is disabled by default.
     pub canister_sandboxing: bool,
+
+    /// This feature flag controls whether canisters of this subnet are capable of
+    /// performing http(s) requests to the web2.
+    pub http_requests: bool,
 }
 
 impl From<SubnetFeatures> for pb::SubnetFeatures {
@@ -17,6 +24,7 @@ impl From<SubnetFeatures> for pb::SubnetFeatures {
         Self {
             ecdsa_signatures: features.ecdsa_signatures,
             canister_sandboxing: features.canister_sandboxing,
+            http_requests: features.http_requests,
         }
     }
 }
@@ -26,6 +34,7 @@ impl From<pb::SubnetFeatures> for SubnetFeatures {
         Self {
             ecdsa_signatures: features.ecdsa_signatures,
             canister_sandboxing: features.canister_sandboxing,
+            http_requests: features.http_requests,
         }
     }
 }
@@ -45,6 +54,7 @@ impl FromStr for SubnetFeatures {
             match feature {
                 "ecdsa_signatures" => features.ecdsa_signatures = true,
                 "canister_sandboxing" => features.canister_sandboxing = true,
+                "http_requests" => features.http_requests = true,
                 _ => return Err(format!("Unknown feature {:?} in {:?}", feature, string)),
             }
         }
@@ -78,12 +88,14 @@ mod tests {
 
     #[test]
     fn test_all_can_be_set_true() {
-        let result = SubnetFeatures::from_str("ecdsa_signatures,canister_sandboxing").unwrap();
+        let result =
+            SubnetFeatures::from_str("ecdsa_signatures,canister_sandboxing,http_requests").unwrap();
         assert_eq!(
             result,
             SubnetFeatures {
                 ecdsa_signatures: true,
                 canister_sandboxing: true,
+                http_requests: true,
             }
         );
     }

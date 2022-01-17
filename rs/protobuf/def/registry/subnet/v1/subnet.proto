@@ -194,10 +194,15 @@ enum SubnetType {
 }
 
 message SubnetFeatures {
+    // This feature flag controls, whether canisters of this subnet are capable of
+    // issuing threshold ecdsa signatures.
     bool ecdsa_signatures = 1;
     // This feature flag controls whether canister execution happens
     // in sandboxed process or not. It is disabled by default.
     bool canister_sandboxing = 2;
+    // This feature flag controls whether canisters of this subnet are capable of
+    // performing http(s) requests to the web2.
+    bool http_requests = 3;
 }
 
 // Per subnet P2P configuration

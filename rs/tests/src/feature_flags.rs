@@ -45,6 +45,7 @@ pub fn basic_config_with_all_features_enabled() -> InternetComputer {
         SubnetFeatures {
             ecdsa_signatures: true,
             canister_sandboxing: false,
+            http_requests: true,
         },
     ))
 }

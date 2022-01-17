@@ -306,6 +306,7 @@ mod tests {
             features: Some(SubnetFeatures {
                 ecdsa_signatures: false,
                 canister_sandboxing: false,
+                http_requests: false,
             }),
             ecdsa_config: Some(EcdsaConfig {
                 quadruples_to_create_in_advance: 10,
@@ -350,6 +351,7 @@ mod tests {
                     SubnetFeatures {
                         ecdsa_signatures: false,
                         canister_sandboxing: false,
+                        http_requests: false,
                     }
                     .into()
                 ),
