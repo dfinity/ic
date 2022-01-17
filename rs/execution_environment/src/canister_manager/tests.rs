@@ -2675,17 +2675,28 @@ fn install_code_respects_instruction_limit() {
           (i32.const 0)
           drop
         )
+        (func $canister_pre_upgrade
+          (i32.const 0)
+          drop
+        )
+        (func $canister_post_upgrade
+          (i32.const 0)
+          drop
+        )
         (memory $memory 1)
         (start $start)
         (export "canister_init" (func $canister_init))
+        (export "canister_pre_upgrade" (func $canister_pre_upgrade))
+        (export "canister_post_upgrade" (func $canister_post_upgrade))
     )"#;
     let wasm = wabt::wat2wasm(wasm).unwrap();
 
+    // Too few instructions result in failed installation.
     let (instructions_left, result) = canister_manager.install_code(
         InstallCodeContext {
             sender,
             canister_id,
-            wasm_module: wasm,
+            wasm_module: wasm.clone(),
             arg: vec![],
             compute_allocation: None,
             memory_allocation: None,
@@ -2706,6 +2717,75 @@ fn install_code_respects_instruction_limit() {
         ))
     );
     assert_eq!(instructions_left, NumInstructions::from(0));
+
+    // Enough instructions result in successful installation.
+    let (instructions_left, result) = canister_manager.install_code(
+        InstallCodeContext {
+            sender,
+            canister_id,
+            wasm_module: wasm.clone(),
+            arg: vec![],
+            compute_allocation: None,
+            memory_allocation: None,
+            mode: CanisterInstallMode::Install,
+            query_allocation: QueryAllocation::default(),
+        },
+        &mut state,
+        ExecutionParameters {
+            instruction_limit: NumInstructions::from(5),
+            ..EXECUTION_PARAMETERS.clone()
+        },
+    );
+    assert!(result.is_ok());
+    assert_eq!(instructions_left, NumInstructions::from(1));
+
+    // Too few instructions result in failed upgrade.
+    let (instructions_left, result) = canister_manager.install_code(
+        InstallCodeContext {
+            sender,
+            canister_id,
+            wasm_module: wasm.clone(),
+            arg: vec![],
+            compute_allocation: None,
+            memory_allocation: None,
+            mode: CanisterInstallMode::Upgrade,
+            query_allocation: QueryAllocation::default(),
+        },
+        &mut state,
+        ExecutionParameters {
+            instruction_limit: NumInstructions::from(5),
+            ..EXECUTION_PARAMETERS.clone()
+        },
+    );
+    assert_matches!(
+        result,
+        Err(CanisterManagerError::Hypervisor(
+            _,
+            HypervisorError::InstructionLimitExceeded
+        ))
+    );
+    assert_eq!(instructions_left, NumInstructions::from(0));
+
+    // Enough instructions result in successful upgrade.
+    let (instructions_left, result) = canister_manager.install_code(
+        InstallCodeContext {
+            sender,
+            canister_id,
+            wasm_module: wasm,
+            arg: vec![],
+            compute_allocation: None,
+            memory_allocation: None,
+            mode: CanisterInstallMode::Upgrade,
+            query_allocation: QueryAllocation::default(),
+        },
+        &mut state,
+        ExecutionParameters {
+            instruction_limit: NumInstructions::from(10),
+            ..EXECUTION_PARAMETERS.clone()
+        },
+    );
+    assert!(result.is_ok());
+    assert_eq!(instructions_left, NumInstructions::from(4));
 }
 
 #[test]

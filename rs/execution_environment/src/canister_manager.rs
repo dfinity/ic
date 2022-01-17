@@ -963,6 +963,7 @@ impl CanisterManager {
             execution_parameters.instruction_limit - instructions_limit,
             instructions_limit
         );
+        execution_parameters.instruction_limit = instructions_limit;
         match res {
             Ok(heap_delta) => {
                 total_heap_delta += heap_delta;
@@ -1040,6 +1041,7 @@ impl CanisterManager {
             execution_parameters.instruction_limit - instructions_limit,
             instructions_limit
         );
+        execution_parameters.instruction_limit = instructions_limit;
         match result {
             Ok(heap_delta) => {
                 total_heap_delta += heap_delta;
