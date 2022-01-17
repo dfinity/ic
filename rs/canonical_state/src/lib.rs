@@ -41,4 +41,4 @@ pub const MAX_SUPPORTED_CERTIFICATION_VERSION: u32 = 6;
 
 /// The Canonical State certification version that should be used for newly
 /// computed states.
-pub const CURRENT_CERTIFICATION_VERSION: u32 = 4;
+pub const CURRENT_CERTIFICATION_VERSION: u32 = 5;
