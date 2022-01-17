@@ -450,7 +450,9 @@ def _generate_tests_may_raise_exception(
 
     log_rdeps(wmarked_crates_to_dep)
 
-    if git_changes.get_changed_files(git_root, [guestos_workspace]):
+    if git_changes.get_changed_files(git_root, [guestos_workspace]) or git_changes.get_changed_files(
+        git_root, ["testnet", "ic-os", "rs/workload_generator", "rs/registry/client"]
+    ):
         force_pipeline = True
     else:
         force_pipeline = False
@@ -474,11 +476,6 @@ def _generate_tests_may_raise_exception(
             disable_caching=disable_caching,
         )
     else:
-        if git_changes.get_changed_files(git_root, ["testnet", "ic-os", "rs/workload_generator", "rs/registry/client"]):
-            # Run a shortened generic prod test with the latest revision that has the disk image
-            prod_generic_test_job = get_prod_generic_test_job(git_root, empty_child_pipeline=True)
-        else:
-            prod_generic_test_job = None
         generate_gitlab_yaml(
             cargo_test_sample_crates.union(set(wmarked_crates_to_dep.keys())),
             gitlab_ci_config,
@@ -489,21 +486,15 @@ def _generate_tests_may_raise_exception(
         )
 
 
-def get_prod_generic_test_job(git_root: str, empty_child_pipeline=False):
+def get_prod_generic_test_job(git_root: str):
     gl_cfg = gitlab_config.DfinityGitLabConfig(git_root)
     gl_cfg_file = f"{git_root}/.gitlab-ci.yml"
     if os.path.exists(gl_cfg_file):
         gl_cfg.ci_cfg_load_from_file(open(gl_cfg_file))
         job_file = f"{git_root}/gitlab-ci/config/00--child-pipeline-prod-generic-test.yml"
         gl_cfg.ci_cfg_load_from_file(open(job_file))
-        if empty_child_pipeline:
-            job = gl_cfg.ci_cfg_expanded["prod-generic-test"]
-            job["needs"] = []
-            del job["variables"]["GIT_REVISION"]
-            job["variables"]["CDPRNET"] = "cdpr0%s" % (random.randint(1, 5))
-        else:
-            job = gl_cfg.ci_cfg["prod-generic-test"]
-            job["stage"] = "prod-tests"
+        job = gl_cfg.ci_cfg["prod-generic-test"]
+        job["stage"] = "prod-tests"
         result = {"prod-generic-test": job}
         return result
 
