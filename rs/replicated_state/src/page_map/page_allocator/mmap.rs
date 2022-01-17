@@ -220,6 +220,9 @@ impl PageAllocatorInner for MmapBasedPageAllocator {
                 let mut guard = page_allocator.0.lock().unwrap();
                 let core = guard.as_mut().unwrap();
                 core.grow_for_deserialization(file_len);
+                core.deserialized_pages += pages.len();
+                // Deserialized pages are considered as allocated for the purposes of the metric.
+                ALLOCATED_PAGES.inc_by(pages.len());
                 // File offsets of all pages are smaller than `file_len`, which means
                 // that the precondition of `deserialize_page()` is fulfilled after
                 // the call to `grow_for_deserialization(file_len)`.
@@ -360,6 +363,8 @@ struct MmapBasedPageAllocatorCore {
     allocation_area: AllocationArea,
     // The number of already allocated pages.
     allocated_pages: usize,
+    // The number of deserialized pages.
+    deserialized_pages: usize,
     // The descriptor of the backing file.
     file_descriptor: RawFd,
     // The length of the backing file.
@@ -392,6 +397,8 @@ impl Drop for MmapBasedPageAllocatorCore {
             )
         });
         ALLOCATED_PAGES.dec_by(self.allocated_pages);
+        // Deserialized pages are considered as allocated for the purposes of the metric.
+        ALLOCATED_PAGES.dec_by(self.deserialized_pages);
     }
 }
 
@@ -406,6 +413,7 @@ impl MmapBasedPageAllocatorCore {
         Self {
             allocation_area: Default::default(),
             allocated_pages: 0,
+            deserialized_pages: 0,
             file_descriptor: file_descriptor.fd,
             file_len: 0,
             chunks: vec![],
