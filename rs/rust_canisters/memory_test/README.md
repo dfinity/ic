@@ -1,12 +1,18 @@
+Memory Test Canister Quick Start
+================================
+
 Build
 -----
 
-```
+```bash
 # Build the Wasm binary
 cargo build --target wasm32-unknown-unknown --release
 
-# Go to dfinity/rs
+# Go to ic/rs
 cd ../..
+
+# Optional: install ic-cdk-optimizer
+cargo install ic-cdk-optimizer
 
 # Reduce the Wasm binary size
 ic-cdk-optimizer target/wasm32-unknown-unknown/release/memory-test-canister.wasm --output memory-test-canister.wasm
@@ -15,22 +21,23 @@ ic-cdk-optimizer target/wasm32-unknown-unknown/release/memory-test-canister.wasm
 Run
 ---
 
-```
+```bash
 NODE='http://[2001:4d78:40d:0:5000:67ff:fe4f:650d]:8080'
 # Payload (a json string) has to be encoded in hex.
 PAYLOAD=$(echo -n '{"size":  5000000}'|od -t x1 -A none|xargs|sed -e 's/ //g')
 # Run a query
-cargo run --release  --bin ic-workload-generator $NODE -r 10 -n 300 \
-      -m Query --call-method "query_copy"  --payload $PAYLOAD --canister memory-test-canister.wasm
+cargo run --release --bin ic-workload-generator $NODE -r 10 -n 300 \
+      -m Query --call-method "query_copy" --payload $PAYLOAD --canister memory-test-canister.wasm
 # Run a replicated query
-cargo run --release  --bin ic-workload-generator $NODE -r 10 -n 300 \
-      -m Update --call-method "query_copy"  --payload $PAYLOAD --canister memory-test-canister.wasm
+cargo run --release --bin ic-workload-generator $NODE -r 10 -n 300 \
+      -m Update --call-method "query_copy" --payload $PAYLOAD --canister memory-test-canister.wasm
 # Run an update
-cargo run --release  --bin ic-workload-generator $NODE -r 10 -n 300 \
-      -m Update --call-method "update_copy"  --payload $PAYLOAD --canister memory-test-canister.wasm
+cargo run --release --bin ic-workload-generator $NODE -r 10 -n 300 \
+      -m Update --call-method "update_copy" --payload $PAYLOAD --canister memory-test-canister.wasm
 ```
 
 Other canister methods can be called similarly:
+
 - `query_read`,
 - `query_write`,
 - `query_read_write`,
@@ -47,7 +54,8 @@ Other canister methods can be called similarly:
 - `update_copy`.
 
 The payload JSON has the following structure:
-```
+
+```bash
 payload = {
   "repeat": <usize, optional, default=1>,
   "address": <usize, optional, default=random>,
