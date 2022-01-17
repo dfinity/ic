@@ -80,14 +80,6 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
-        // Change this value to enable/disable canister sandboxing by default.
-        // EXC-523: Sandboxing is currently available only on Linux because it
-        // uses `memfd` files.
-        #[cfg(target_os = "linux")]
-        let canister_sandboxing_flag = FeatureStatus::Enabled;
-        #[cfg(not(target_os = "linux"))]
-        let canister_sandboxing_flag = FeatureStatus::Disabled;
-
         Self {
             persistence_type: PersistenceType::Sigsegv,
             create_funds_whitelist: String::default(),
@@ -106,7 +98,8 @@ impl Default for Config {
             // Maximum number of controllers allowed in a request (specified in the public
             // Spec).
             max_controllers: 10,
-            canister_sandboxing_flag,
+            // Change this value to enable/disable canister sandboxing by default.
+            canister_sandboxing_flag: FeatureStatus::Disabled,
             query_execution_threads: QUERY_EXECUTION_THREADS,
         }
     }
