@@ -176,7 +176,6 @@ for ((p = 0; p < num_proposals; p++)); do
         result=$(ic-admin --nns-url="$NNS_URL" propose-to-update-subnet \
             --test-neuron-proposer \
             --subnet-id $subnet_index \
-            --ingress-bytes-per-block-soft-cap 2097152 \
             --max-ingress-bytes-per-message "$bytes_per_message" \
             --unit-delay-millis 1000 \
             --initial-notary-delay-millis 600 \
