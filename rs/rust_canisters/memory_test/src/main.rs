@@ -11,27 +11,31 @@ use std::cell::RefCell;
 use std::mem;
 
 const ELEMENT_SIZE: usize = mem::size_of::<u64>();
-const MEMORY_SIZE: usize = 1 << 30; // 1GiB.
+const MEMORY_SIZE: usize = 1 << 30; // 1GiB, can't exceed 4GB.
 const MEMORY_LEN: usize = MEMORY_SIZE / ELEMENT_SIZE;
+// Note: the WASM target is 32 bit, so we need to explicitly use u64, not usize
 const STABLE_MEMORY_SIZE: u64 = 6 * (1 << 30); // 6GiB.
-const WASM_PAGE_SIZE_IN_BYTES: u64 = 64 * 1024; // 64 KiB
+const WASM_PAGE_SIZE_IN_BYTES: usize = 64 * 1024; // 64 KiB
+const PAGE_SIZE: usize = 4096;
 
 /// All methods get this struct as an argument encoded in a JSON string.
 /// Each method performs some memory operation like `read`, `write`,
-/// `read_write`, `copy` on some memory range. The address and the size
-/// of the memory range is given in the corresponding fields. If the
-/// address is omitted, then it is chosen randomly. The `value` field
-/// specifies an 8 byte value to write or read. (Reading a value means
-/// fetching the value from the memory and asserting that it is equal
-/// to the given value). If the value is omitted, then a random value
-/// is chosed for writing. Reading simply skips the comparison.
-/// The `repeat` field specifies how many times to repeat the operation.
-/// The default value is 1.
+/// `read_write`, `copy` on some memory region.
+///
+/// # Fields
+///
+/// * `repeat` - optional number of iterations (1 by default).
+/// * `address` - optional start address of the memory region (random by default).
+/// * `size` - size of the memory region in bytes.
+/// * `step` - optional interval between reads/writes in bytes (contig. by default).
+/// * `value` - optional value to assert/write (no assertion/random by default)
 #[derive(Serialize, Deserialize, Debug)]
 struct Operation {
     repeat: Option<usize>,
-    address: Option<usize>,
-    size: usize,
+    // Note: the WASM target is 32 bit, so we need to explicitly use u64, not usize
+    address: Option<u64>,
+    size: u64,
+    step: Option<usize>,
     value: Option<u8>,
 }
 
@@ -52,7 +56,7 @@ thread_local! {
 }
 
 fn arg_data() -> Vec<u8> {
-    let len: u32 = unsafe { ic0::msg_arg_data_size() };
+    let len = unsafe { ic0::msg_arg_data_size() };
     let mut bytes = vec![0; len as usize];
     unsafe {
         ic0::msg_arg_data_copy(bytes.as_mut_ptr() as u32, 0, len);
@@ -62,7 +66,13 @@ fn arg_data() -> Vec<u8> {
 
 fn operation_from_args() -> Operation {
     let data = arg_data();
-    match serde_json::from_slice(&data) {
+    // To quick and dirty support `dfx` tool, we also try to parse [8..] (skipping DIDL..q.).
+    // TODO: support Rust CDK?
+    // Usage:
+    //    dfx canister --network "${NODE}" call "${CANISTER_ID}" query_read '("{\"size\": 1}")'
+    // Then to decode return blob value:
+    //    echo 0x3230 | xxd -rp
+    match serde_json::from_slice(&data).or_else(|_| serde_json::from_slice(&data[8..])) {
         Ok(op) => op,
         Err(err) => {
             trap_with(&format!(
@@ -75,37 +85,42 @@ fn operation_from_args() -> Operation {
     }
 }
 
-fn rand(low: usize, high: usize) -> usize {
+fn rand<T>(low: T, high: T) -> T
+where
+    T: rand::distributions::uniform::SampleUniform,
+{
     RNG.with(|rng| rng.borrow_mut().gen_range(low, high))
 }
 
-/// Reads and sums up all eight byte words in the given memory region.
+/// Reads and sums up all 8-byte values from the given memory region.
 ///
-/// Arguments:
-/// - operation.repeat: the number of operations.
-/// - operation.address: optional start address of the memory region. It is
-///   chosen randomly if not given.
-/// - operation.size: the size of the memory region in bytes.
-/// - operation.value: optional eight byte value. If the value is given, then
-///   the operation asserts that all read values match the given value.
+/// # Arguments
+///
+/// * `operation.repeat` - optional number of iterations (1 by default).
+/// * `operation.address` - optional start address of the memory region (random by default).
+/// * `operation.size` - size of the memory region in bytes.
+/// * `operation.step` - optional interval between reads in bytes (contig. by default).
+/// * `operation.value` - optional value to assert (no assertion by default)
 fn read() {
     let operation = operation_from_args();
     let mut sum = 0;
 
+    let repeat = operation.repeat.unwrap_or(1);
+    let step = operation.step.unwrap_or(ELEMENT_SIZE) / ELEMENT_SIZE;
+    // Address can't exceed 4GiB WASM memory
+    let len = operation.size;
+    let src = operation
+        .address
+        .unwrap_or_else(|| rand(0, MEMORY_SIZE as u64 - len));
+    assert!(src + len <= MEMORY_SIZE as u64);
+    let len = len as usize / ELEMENT_SIZE;
+    let src = src as usize / ELEMENT_SIZE;
+
     MEMORY.with(|memory| {
         let memory_ref = memory.borrow();
         let memory = memory_ref.as_slice();
-        let repeat = operation.repeat.unwrap_or(1);
-        let len = (operation.size + ELEMENT_SIZE - 1) / ELEMENT_SIZE;
-        assert!(len <= MEMORY_LEN);
         for _ in 0..repeat {
-            let src = operation
-                .address
-                .unwrap_or_else(|| rand(0, MEMORY_LEN - len + 1) * ELEMENT_SIZE)
-                as usize
-                / ELEMENT_SIZE;
-            #[allow(clippy::needless_range_loop)]
-            for i in src..src + len {
+            for i in (src..src + len).step_by(step) {
                 let value = memory[i];
                 if let Some(expected_value) = operation.value {
                     if expected_value != value as u8 {
@@ -124,34 +139,34 @@ fn read() {
     api::reply(sum.to_string().as_bytes());
 }
 
-/// Writes the given eight byte value into the given memory region.
+/// Writes 8-byte values into the given memory region.
 ///
-/// Arguments:
-/// - operation.repeat: the number of operations.
-/// - operation.address: optional start address of the memory region. It is
-///   chosen randomly if not given.
-/// - operation.size: the size of the memory region in bytes.
-/// - operation.value: optional eight byte value. It is chosen randomly if not
-///   given.
+/// # Arguments
+///
+/// * `operation.repeat` - optional number of iterations (1 by default).
+/// * `operation.address` - optional start address of the memory region (random by default).
+/// * `operation.size` - size of the memory region in bytes.
+/// * `operation.step` - optional interval between writes in bytes (contig. by default).
+/// * `operation.value` - optional value to write (random by default)
 fn write() {
     let operation = operation_from_args();
 
+    let repeat = operation.repeat.unwrap_or(1);
+    let step = operation.step.unwrap_or(ELEMENT_SIZE) / ELEMENT_SIZE;
+    let value = operation.value.unwrap_or_else(|| rand(0, u8::MAX));
+    // Address can't exceed 4GiB WASM memory
+    let len = operation.size;
+    let dst = operation
+        .address
+        .unwrap_or_else(|| rand(0, MEMORY_SIZE as u64 - len));
+    assert!(dst + len <= MEMORY_SIZE as u64);
+    let len = len as usize / ELEMENT_SIZE;
+    let dst = dst as usize / ELEMENT_SIZE;
     MEMORY.with(|memory| {
         let mut memory_ref = memory.borrow_mut();
         let memory = memory_ref.as_mut_slice();
-        let repeat = operation.repeat.unwrap_or(1);
-        let value = operation
-            .value
-            .unwrap_or_else(|| rand(0, u8::MAX.into()) as u8);
-        let len = (operation.size + ELEMENT_SIZE - 1) / ELEMENT_SIZE;
-        assert!(len <= MEMORY_LEN);
         for _ in 0..repeat {
-            let dst = operation
-                .address
-                .unwrap_or_else(|| rand(0, MEMORY_LEN - len + 1) * ELEMENT_SIZE)
-                / ELEMENT_SIZE;
-            #[allow(clippy::needless_range_loop)]
-            for i in dst..dst + len {
+            for i in (dst..dst + len).step_by(step) {
                 memory[i] = value as u64;
             }
         }
@@ -161,33 +176,33 @@ fn write() {
 
 /// Combines the read and write operations above.
 ///
-/// Arguments:
-/// - operation.repeat: the number of operations.
-/// - operation.address: optional start address of the memory region. It is
-///   chosen randomly if not given.
-/// - operation.size: the size of the memory region in bytes.
-/// - operation.value: optional eight byte value. It is chosen randomly if not
-///   given.
+/// # Arguments:
+///
+/// * `operation.repeat` - optional number of iterations (1 by default).
+/// * `operation.address` - optional start address of the memory region (random by default).
+/// * `operation.size` - size of the memory region in bytes.
+/// * `operation.step` - optional interval between writes in bytes (contig. by default).
+/// * `operation.value` - optional value to write (random by default)
 fn read_write() {
     let operation = operation_from_args();
     let mut sum = 0;
 
+    let repeat = operation.repeat.unwrap_or(1);
+    let step = operation.step.unwrap_or(ELEMENT_SIZE) / ELEMENT_SIZE;
+    let value = operation.value.unwrap_or_else(|| rand(0, u8::MAX));
+    // Address can't exceed 4GiB WASM memory
+    let len = operation.size;
+    let src = operation
+        .address
+        .unwrap_or_else(|| rand(0, MEMORY_SIZE as u64 - len));
+    assert!(src + len <= MEMORY_SIZE as u64);
+    let len = len as usize / ELEMENT_SIZE;
+    let src = src as usize / ELEMENT_SIZE;
     MEMORY.with(|memory| {
         let mut memory_ref = memory.borrow_mut();
         let memory = memory_ref.as_mut_slice();
-        let repeat = operation.repeat.unwrap_or(1);
-        let len = (operation.size + ELEMENT_SIZE - 1) / ELEMENT_SIZE;
-        assert!(len <= MEMORY_LEN);
-        let value = operation
-            .value
-            .unwrap_or_else(|| rand(0, u8::MAX.into()) as u8);
         for _ in 0..repeat {
-            let src = operation
-                .address
-                .unwrap_or_else(|| rand(0, MEMORY_LEN - len + 1) * ELEMENT_SIZE)
-                / ELEMENT_SIZE;
-            #[allow(clippy::needless_range_loop)]
-            for i in src..src + len {
+            for i in (src..src + len).step_by(step) {
                 sum += memory[i];
                 memory[i] = value as u64;
             }
@@ -196,24 +211,23 @@ fn read_write() {
     api::reply(sum.to_string().as_bytes());
 }
 
-/// Reads and sums up all byte words in the given stable memory region.
+/// Reads and sums up all 8-byte values from the given stable memory region.
 ///
-/// Arguments:
-/// - operation.repeat: the number of operations.
-/// - operation.address: optional start address of the stable memory region. It
-///   is chosen randomly if not given.
-/// - operation.size: the size of the stable memory region in bytes.
-/// - operation.value: optional byte value. If the value is given, then the
-///   operation asserts that all read values match the given value.
+/// # Arguments
+///
+/// * `operation.repeat` - optional number of iterations (1 by default).
+/// * `operation.address` - optional start address of the memory region (random by default).
+/// * `operation.size` - size of the memory region in bytes.
+/// * `operation.step` - optional interval between reads in bytes (contig. by default).
+/// * `operation.value` - optional value to assert (no assertion by default)
 fn stable_read() {
     let operation = operation_from_args();
     let mut sum = 0;
 
     let repeat = operation.repeat.unwrap_or(1);
-    let len = operation.size as u64;
-    assert!(len <= STABLE_MEMORY_SIZE);
+    let step = operation.step.unwrap_or(ELEMENT_SIZE);
+    let len = operation.size;
     for _ in 0..repeat {
-        let dst = RNG.with(|rng| rng.borrow_mut().gen_range(0, STABLE_MEMORY_SIZE - len));
         MEMORY.with(|memory| {
             let mut refmut = memory.borrow_mut();
             #[allow(unused_assignments)]
@@ -221,22 +235,51 @@ fn stable_read() {
             unsafe {
                 buf = refmut.align_to_mut::<u8>().1;
             }
-            // Always use the first part of `MEMORY` to minimize the number of different
-            // pages touched. This should in turn minimize the overhead of wasm
-            // memory operations when testing out stable memory operations.
-            stable::stable64_read(buf, dst as u64, len as u64);
-            #[allow(clippy::needless_range_loop)]
-            for i in 0..len as usize {
-                let value = buf[i];
-                if let Some(expected_value) = operation.value {
-                    if expected_value != value {
-                        trap_with(&format!(
-                            "Value mismatch at {}, expected {}, got {}",
-                            i, expected_value, value
-                        ));
+            if step == ELEMENT_SIZE {
+                // Single stable read, can't exceed 4GiB WASM memory
+                let src = operation
+                    .address
+                    .unwrap_or_else(|| rand(0, MEMORY_SIZE as u64 - len));
+                assert!(src + len <= MEMORY_SIZE as u64);
+                // Always use the first part of `MEMORY` to minimize the number of different
+                // pages touched. This should in turn minimize the overhead of wasm
+                // memory operations when testing out stable memory operations.
+                stable::stable64_read(buf, src, len);
+
+                for i in (0..len).step_by(step) {
+                    // Reading u64 and u8 gives the same result on little endian system,
+                    // provided the rest of the bytes are zeros.
+                    // So the sum should match the sum of normal `read()`
+                    let value = buf[i as usize];
+                    if let Some(expected_value) = operation.value {
+                        if expected_value != value {
+                            trap_with(&format!(
+                                "Value mismatch at {}, expected {}, got {}",
+                                i, expected_value, value
+                            ));
+                        }
                     }
+                    sum += value as u64;
                 }
-                sum += value;
+            } else {
+                // Sparse stable reads, can address more than 4GiB
+                let src = operation
+                    .address
+                    .unwrap_or_else(|| rand(0, STABLE_MEMORY_SIZE - len));
+                assert!(src + len <= STABLE_MEMORY_SIZE);
+                for i in (src..src + len).step_by(step) {
+                    stable::stable64_read(buf, i, 1);
+                    let value = buf[0];
+                    if let Some(expected_value) = operation.value {
+                        if expected_value != value {
+                            trap_with(&format!(
+                                "Value mismatch at {}, expected {}, got {}",
+                                i, expected_value, value
+                            ));
+                        }
+                    }
+                    sum += value as u64;
+                }
             }
         });
     }
@@ -244,25 +287,23 @@ fn stable_read() {
     api::reply(sum.to_string().as_bytes());
 }
 
-/// Writes the given byte value into the given stable memory region.
+/// Writes 8-byte values into the given stable memory region.
 ///
-/// Arguments:
-/// - operation.repeat: the number of operations.
-/// - operation.address: optional start address of the stable memory region. It
-///   is chosen randomly if not given.
-/// - operation.size: the size of the stable memory region in bytes.
-/// - operation.value: optional byte value. It is chosen randomly if not given.
+/// # Arguments
+///
+/// * `operation.repeat` - optional number of iterations (1 by default).
+/// * `operation.address` - optional start address of the memory region (random by default).
+/// * `operation.size` - size of the memory region in bytes.
+/// * `operation.step` - optional interval between writes in bytes (contig. by default).
+/// * `operation.value` - optional value to write (random by default)
 fn stable_write() {
     let operation = operation_from_args();
 
     let repeat = operation.repeat.unwrap_or(1);
-    let value = operation
-        .value
-        .unwrap_or_else(|| rand(0, u8::MAX.into()) as u8);
-    let len = operation.size as u64;
-    assert!(len <= STABLE_MEMORY_SIZE);
+    let step = operation.step.unwrap_or(ELEMENT_SIZE);
+    let value = operation.value.unwrap_or_else(|| rand(0, u8::MAX));
+    let len = operation.size;
     for _ in 0..repeat {
-        let dst = RNG.with(|rng| rng.borrow_mut().gen_range(0, STABLE_MEMORY_SIZE - len));
         MEMORY.with(|memory| {
             let mut refmut = memory.borrow_mut();
             #[allow(unused_assignments)]
@@ -270,40 +311,57 @@ fn stable_write() {
             unsafe {
                 buf = refmut.align_to_mut::<u8>().1;
             }
-            // Always use the first part of `MEMORY` to minimize the number of different
-            // pages touched. This should in turn minimize the overhead of wasm
-            // memory operations when testing out stable memory operations.
-            #[allow(clippy::needless_range_loop)]
-            for i in 0..len as usize {
-                buf[i] = value;
+            if step == ELEMENT_SIZE {
+                // Single stable write, can't exceed 4GiB WASM memory
+                let dst = operation
+                    .address
+                    .unwrap_or_else(|| rand(0, MEMORY_SIZE as u64 - len));
+                assert!(dst + len <= MEMORY_SIZE as u64);
+                // Always use the first part of `MEMORY` to minimize the number of different
+                // pages touched. This should in turn minimize the overhead of wasm
+                // memory operations when testing out stable memory operations.
+                for i in (0..len).step_by(step) {
+                    // Writing u64 and u8 gives the same result on little endian system,
+                    // provided the rest of the bytes are zeros.
+                    // So the sum should match the sum of normal `read()`
+                    buf[i as usize] = value;
+                }
+                stable::stable64_write(dst, &buf[..len as usize]);
+            } else {
+                // Sparse stable write, can address more than 4GiB
+                let dst = operation
+                    .address
+                    .unwrap_or_else(|| rand(0, STABLE_MEMORY_SIZE - len));
+                assert!(dst + len <= STABLE_MEMORY_SIZE);
+                for i in (dst..dst + len).step_by(step) {
+                    buf[0] = value;
+                    stable::stable64_write(i, &buf[..1]);
+                }
             }
-            stable::stable64_write(dst as u64, &buf[..len as usize]);
         });
     }
 
     api::reply(&[]);
 }
 
-/// Combines the stable read and write operations above.
+/// Combines the read and write operations above.
 ///
-/// Arguments:
-/// - operation.repeat: the number of operations.
-/// - operation.address: optional start address of the stable memory region. It
-///   is chosen randomly if not given.
-/// - operation.size: the size of the stable memory region in bytes.
-/// - operation.value: optional byte value. It is chosen randomly if not given.
+/// # Arguments:
+///
+/// * `operation.repeat` - optional number of iterations (1 by default).
+/// * `operation.address` - optional start address of the memory region (random by default).
+/// * `operation.size` - size of the memory region in bytes.
+/// * `operation.step` - optional interval between writes in bytes (contig. by default).
+/// * `operation.value` - optional value to write (random by default)
 fn stable_read_write() {
     let operation = operation_from_args();
     let mut sum = 0;
 
     let repeat = operation.repeat.unwrap_or(1);
-    let value = operation
-        .value
-        .unwrap_or_else(|| rand(0, u8::MAX.into()) as u8);
-    let len = operation.size as u64;
-    assert!(len <= STABLE_MEMORY_SIZE);
+    let step = operation.step.unwrap_or(ELEMENT_SIZE);
+    let value = operation.value.unwrap_or_else(|| rand(0, u8::MAX));
+    let len = operation.size;
     for _ in 0..repeat {
-        let dst = RNG.with(|rng| rng.borrow_mut().gen_range(0, STABLE_MEMORY_SIZE - len));
         MEMORY.with(|memory| {
             let mut refmut = memory.borrow_mut();
             #[allow(unused_assignments)]
@@ -311,55 +369,70 @@ fn stable_read_write() {
             unsafe {
                 buf = refmut.align_to_mut::<u8>().1;
             }
-
-            stable::stable64_read(buf, dst as u64, len as u64);
-            #[allow(clippy::needless_range_loop)]
-            for i in 0..len as usize {
-                sum += buf[i];
+            if step == ELEMENT_SIZE {
+                // Single stable read/write, can't exceed 4GiB WASM memory
+                let dst = operation
+                    .address
+                    .unwrap_or_else(|| rand(0, MEMORY_SIZE as u64 - len));
+                assert!(dst + len <= MEMORY_SIZE as u64);
+                stable::stable64_read(buf, dst, len);
+                // Always use first part of `MEMORY` to minimize the number of different pages
+                // touched. This should in turn minimize the overhead of wasm memory
+                // operations when testing out stable memory operations.
+                for i in (0..len).step_by(step) {
+                    sum += buf[i as usize] as u64;
+                    buf[i as usize] = value;
+                }
+                stable::stable64_write(dst, &buf[..len as usize]);
+            } else {
+                // Sparse stable read/write, can address more than 4GiB
+                let dst = operation
+                    .address
+                    .unwrap_or_else(|| rand(0, STABLE_MEMORY_SIZE - len));
+                assert!(dst + len <= STABLE_MEMORY_SIZE);
+                for i in (dst..dst + len).step_by(step) {
+                    stable::stable64_read(buf, i, 1);
+                    sum += buf[0] as u64;
+                    buf[0] = value;
+                    stable::stable64_write(i, &buf[..1]);
+                }
             }
-
-            // Always use first part of `MEMORY` to minimize the number of different pages
-            // touched. This should in turn minimize the overhead of wasm memory
-            // operations when testing out stable memory operations.
-            #[allow(clippy::needless_range_loop)]
-            for i in 0..len as usize {
-                buf[i] = value;
-            }
-            stable::stable64_write(dst as u64, &buf[..len as usize]);
         });
     }
 
     api::reply(sum.to_string().as_bytes());
 }
 
-/// Copies a memory regions of the given size from one random address to another
-/// and adds the given eight byte value to each destination eight byte word.
-/// The latter is done to ensure that the memory regions remain different so
+/// Copies a memory regions of the given size from one random address to another.
+///
+/// The copy always adds the given or a random value to each destination 8-byte word.
+/// This is done to ensure that the memory regions remain different so
 /// that multiple update calls get similar state.
 ///
 /// The addresses are chosen such that they do not overlap.
 ///
-/// Arguments:
-/// - operation.repeat: the number of operations.
-/// - operation.size: the size of the memory region in bytes. It must not exceed
-///   MEMORY_SIZE / 2.
-/// - operation.value: an optional value to be added on copy. It is chosen
-///   randomly if not specified.
+/// # Arguments:
+///
+/// * `operation.repeat` - optional number of iterations (1 by default).
+/// * `operation.size` - size of the memory region in bytes (must be <= MEMORY_SIZE / 2).
+/// * `operation.step` - optional interval between writes in bytes (contig. by default).
+/// * `operation.value` - optional value to add (random by default)
 fn copy() {
     let operation = operation_from_args();
+
+    let repeat = operation.repeat.unwrap_or(1);
+    let step = operation.step.unwrap_or(ELEMENT_SIZE) / ELEMENT_SIZE;
+    let value = operation.value.unwrap_or_else(|| rand(0, u8::MAX));
+    // Address can't exceed 4GiB WASM memory
+    let len = (operation.size as usize + ELEMENT_SIZE - 1) / ELEMENT_SIZE;
+    assert!(2 * len <= MEMORY_LEN);
     MEMORY.with(|memory| {
         let mut memory_ref = memory.borrow_mut();
         let memory = memory_ref.as_mut_slice();
-        let repeat = operation.repeat.unwrap_or(1);
-        let len = (operation.size + ELEMENT_SIZE - 1) / ELEMENT_SIZE;
-        assert!(2 * len <= MEMORY_LEN);
-        let value = operation
-            .value
-            .unwrap_or_else(|| rand(0, u8::MAX.into()) as u8);
         for _ in 0..repeat {
             let src = rand(len, MEMORY_LEN - len + 1);
             let dst = rand(0, src - len + 1);
-            for i in 0..len as usize {
+            for i in (0..len).step_by(step) {
                 memory[dst + i] = memory[src + i] + value as u64;
             }
         }
@@ -439,9 +512,8 @@ fn query_stable_read_write() {
 
 #[export_name = "canister_init"]
 fn main() {
-    let mut memory = vec![0; MEMORY_LEN as usize];
+    let mut memory = vec![0; MEMORY_LEN];
     // Ensure that all pages are different.
-    const PAGE_SIZE: usize = 4096;
     let mut middle_of_page = PAGE_SIZE / ELEMENT_SIZE / 2;
     while (middle_of_page) < memory.len() {
         memory[middle_of_page] = middle_of_page as u64;
@@ -454,7 +526,7 @@ fn main() {
     ));
 
     // Grow stable memory by `STABLE_MEMORY_SIZE`.
-    if stable::stable64_grow((STABLE_MEMORY_SIZE / WASM_PAGE_SIZE_IN_BYTES) as u64) == -1 {
+    if stable::stable64_grow(STABLE_MEMORY_SIZE / WASM_PAGE_SIZE_IN_BYTES as u64) == -1 {
         api::trap_with(&format!(
             "Could not grow stable memory by {} bytes",
             STABLE_MEMORY_SIZE,
