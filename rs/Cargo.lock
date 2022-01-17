@@ -3272,6 +3272,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-types 0.8.0",
  "ic-wasm-types",
+ "lazy_static",
  "libc",
  "nix 0.23.0",
  "once_cell 1.8.0",

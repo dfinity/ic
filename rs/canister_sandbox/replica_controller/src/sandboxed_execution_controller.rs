@@ -41,6 +41,7 @@ struct SandboxedExecutionMetrics {
     sandboxed_execution_sandbox_execute_run_duration: HistogramVec,
     sandboxed_execution_spawn_process: Histogram,
     sandboxed_execution_subprocess_anon_rss_total: IntGauge,
+    sandboxed_execution_subprocess_memfd_rss_total: IntGauge,
 }
 
 impl SandboxedExecutionMetrics {
@@ -91,6 +92,10 @@ impl SandboxedExecutionMetrics {
             sandboxed_execution_subprocess_anon_rss_total: metrics_registry.int_gauge(
                 "sandboxed_execution_subprocess_anon_rss_total_kib",
                 "The resident anonymous memory for all canister sandbox processes in KiB",
+            ),
+            sandboxed_execution_subprocess_memfd_rss_total: metrics_registry.int_gauge(
+                "sandboxed_execution_subprocess_memfd_rss_total_kib",
+                "The resident shared memory for all canister sandbox processes in KiB"
             ),
         }
     }
@@ -244,6 +249,7 @@ impl SandboxedExecutionController {
             };
 
             let mut total_anon_rss: u64 = 0;
+            let mut total_memfd_rss: u64 = 0;
 
             // For all processes requested, get their memory usage and report
             // it keyed by pid. Ignore processes failures to get
@@ -251,13 +257,22 @@ impl SandboxedExecutionController {
                 if let Ok(kib) = process_os_metrics::get_nonshared_rss(*pid) {
                     total_anon_rss += kib;
                 } else {
-                    warn!(logger, "Unable to get process information for pid {}", *pid);
+                    warn!(logger, "Unable to get anon RSS for pid {}", *pid);
+                }
+                if let Ok(kib) = process_os_metrics::get_memfd_rss(*pid) {
+                    total_memfd_rss += kib;
+                } else {
+                    warn!(logger, "Unable to get memfd RSS for pid {}", *pid);
                 }
             }
 
             metrics
                 .sandboxed_execution_subprocess_anon_rss_total
                 .set(total_anon_rss.try_into().unwrap());
+
+            metrics
+                .sandboxed_execution_subprocess_memfd_rss_total
+                .set(total_memfd_rss.try_into().unwrap());
 
             // Collect metrics sufficiently infrequently that it does not use
             // excessive compute resources. It might be sensible to scale this
