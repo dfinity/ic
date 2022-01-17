@@ -185,7 +185,7 @@ pub fn init_ic<P: AsRef<Path>>(
             node_vms.insert(n.node_id, node_idx_to_vm.get(idx).cloned().unwrap());
         });
 
-    let delta_idx = init_ic.initialized_topology.len();
+    let delta_idx = node_vms.len();
     init_ic
         .unassigned_nodes
         .values()
