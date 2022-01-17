@@ -13,7 +13,7 @@ use ic_rosetta_api::request_types::{
     StartDissolve, StopDissolve, TransactionResults,
 };
 use ic_rosetta_api::transaction_id::TransactionIdentifier;
-use ic_rosetta_api::{errors::ApiError, DEFAULT_TOKEN_NAME};
+use ic_rosetta_api::{convert, errors, errors::ApiError, DEFAULT_TOKEN_NAME};
 use ic_types::{messages::Blob, time, PrincipalId};
 
 use ledger_canister::{AccountIdentifier, BlockHeight, Operation, Tokens};
@@ -22,7 +22,6 @@ pub use ed25519_dalek::Keypair as EdKeypair;
 use log::debug;
 use rand::{rngs::StdRng, seq::SliceRandom, thread_rng, SeedableRng};
 use std::collections::HashMap;
-use std::convert::TryInto;
 use std::sync::Arc;
 
 pub mod rosetta_api_serv;
@@ -407,7 +406,9 @@ pub async fn do_multiple_txn(
         .unwrap()?;
     assert_eq!(submit_res, submit_res3);
 
-    let results: TransactionResults = submit_res.metadata.try_into()?;
+    let results =
+        convert::from_transaction_operation_results(submit_res.metadata, DEFAULT_TOKEN_NAME)
+            .expect("Couldn't convert metadata to TransactionResults");
 
     if let Some(RequestResult {
         _type: Request::Transfer(_),
@@ -485,16 +486,18 @@ pub async fn send_icpts_with_window(
                     fee,
                 ))
             } else {
-                Err(RosettaError::from(ic_rosetta_api::errors::ApiError::from(
-                    results,
-                )))
+                Err(errors::convert_to_error(
+                    &convert::transaction_results_to_api_error(results, DEFAULT_TOKEN_NAME),
+                ))
             }
         })
 }
 
 pub fn assert_ic_error(err: &RosettaError, code: u32, ic_http_status: u64, text: &str) {
-    let err = if let ApiError::OperationsErrors(results) = err.clone().into() {
-        results.error().unwrap().clone().into()
+    let err = if let ApiError::OperationsErrors(results, _) =
+        errors::convert_to_api_error(err.clone(), DEFAULT_TOKEN_NAME)
+    {
+        errors::convert_to_error(&results.error().unwrap().clone())
     } else {
         err.clone()
     };
@@ -514,8 +517,10 @@ pub fn assert_ic_error(err: &RosettaError, code: u32, ic_http_status: u64, text:
 }
 
 pub fn assert_canister_error(err: &RosettaError, code: u32, text: &str) {
-    let err = if let ApiError::OperationsErrors(results) = err.clone().into() {
-        results.error().unwrap().clone().into()
+    let err = if let ApiError::OperationsErrors(results, _) =
+        errors::convert_to_api_error(err.clone(), DEFAULT_TOKEN_NAME)
+    {
+        errors::convert_to_error(&results.error().unwrap().clone())
     } else {
         err.clone()
     };

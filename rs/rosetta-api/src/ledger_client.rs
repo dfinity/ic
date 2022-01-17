@@ -35,6 +35,7 @@ use on_wire::{FromWire, IntoWire};
 
 use crate::balance_book::BalanceBook;
 use crate::certification::verify_block_hash;
+use crate::convert;
 use crate::errors::{ApiError, Details, ICError};
 use crate::models::{EnvelopePair, SignedTransaction};
 use crate::request_types::START_DISSOLVE;
@@ -426,7 +427,10 @@ impl LedgerAccess for LedgerClient {
                 .await
             {
                 result.status = Status::Failed(e);
-                return Err(ApiError::from(results));
+                return Err(convert::transaction_results_to_api_error(
+                    results,
+                    &self.token_name,
+                ));
             }
         }
 

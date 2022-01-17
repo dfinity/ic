@@ -2,6 +2,7 @@ use crate::{
     convert::{
         self, amount_, principal_id_from_public_key, signed_amount, to_model_account_identifier,
     },
+    errors,
     errors::ApiError,
     models::{self, Object, Operation, OperationIdentifier},
     time::Seconds,
@@ -105,6 +106,114 @@ impl RequestType {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct TransactionOperationResults {
+    pub operations: Vec<Operation>,
+}
+
+impl TransactionOperationResults {
+    /// Parse a TransactionOperationResults from a Json object.
+    pub fn parse(json: Object) -> Result<Self, ApiError> {
+        serde_json::from_value(serde_json::Value::Object(json)).map_err(|e| {
+            ApiError::internal_error(format!(
+                "Could not parse TransactionOperationResults from Object: {}",
+                e
+            ))
+        })
+    }
+
+    /// Convert TransactionResults to TransactionOperationResults.
+    pub fn from_transaction_results(
+        tr: TransactionResults,
+        token_name: &str,
+    ) -> Result<Self, ApiError> {
+        let mut operations = Request::requests_to_operations(
+            tr.operations
+                .iter()
+                .map(|rr| rr._type.clone())
+                .collect::<Vec<_>>()
+                .as_slice(),
+            token_name,
+        )?;
+
+        let merge_metadata = |o: &mut Operation, rr: &RequestResult| {
+            let mut metadata = o.metadata.take().unwrap_or_default();
+            let rrmd = convert_to_request_result_metadata(rr);
+            let rrmd = Object::from(rrmd);
+            for (k, v) in rrmd {
+                metadata.insert(k, v);
+            }
+            o.metadata = if metadata.is_empty() {
+                None
+            } else {
+                Some(metadata)
+            };
+            o.status = Some(rr.status.name().to_owned());
+        };
+
+        let mut op_idx = 0;
+        for rr in tr.operations.iter() {
+            match (rr, &mut operations[op_idx..]) {
+                (
+                    RequestResult {
+                        _type: Request::Transfer(LedgerOperation::Transfer { .. }),
+                        ..
+                    },
+                    [withdraw, deposit, fee, ..],
+                ) if withdraw._type.as_str() == TRANSACTION
+                    && deposit._type.as_str() == TRANSACTION
+                    && fee._type.as_str() == FEE =>
+                {
+                    merge_metadata(withdraw, rr);
+                    merge_metadata(deposit, rr);
+                    merge_metadata(fee, rr);
+                    op_idx += 3;
+                }
+                (rr, [o, ..]) => {
+                    merge_metadata(o, rr);
+                    op_idx += 1
+                }
+                _ => {
+                    return Err(ApiError::internal_error(format!(
+                        "Too few Operations, could not match requests with operations.\n{}\n\n{}",
+                        serde_json::to_string(&tr.operations).unwrap(),
+                        serde_json::to_string(&operations).unwrap()
+                    )))
+                }
+            };
+        }
+
+        Ok(TransactionOperationResults { operations })
+    }
+}
+
+impl From<RequestResultMetadata> for Object {
+    fn from(d: RequestResultMetadata) -> Self {
+        match serde_json::to_value(d) {
+            Ok(Value::Object(o)) => o,
+            _ => Object::default(),
+        }
+    }
+}
+
+impl From<TransactionOperationResults> for Object {
+    fn from(d: TransactionOperationResults) -> Self {
+        match serde_json::to_value(d) {
+            Ok(Value::Object(o)) => o,
+            _ => Object::default(),
+        }
+    }
+}
+
+impl From<&TransactionOperationResults> for Object {
+    fn from(d: &TransactionOperationResults) -> Self {
+        match serde_json::to_value(d) {
+            Ok(Value::Object(o)) => o,
+            _ => Object::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct TransactionResults {
     pub operations: Vec<RequestResult>,
 }
@@ -136,15 +245,6 @@ impl TransactionResults {
     }
 }
 
-impl From<TransactionResults> for Object {
-    fn from(d: TransactionResults) -> Self {
-        match serde_json::to_value(d) {
-            Ok(Value::Object(o)) => o,
-            _ => Object::default(),
-        }
-    }
-}
-
 impl From<&TransactionResults> for Object {
     fn from(d: &TransactionResults) -> Self {
         match serde_json::to_value(d) {
@@ -159,7 +259,7 @@ impl TryFrom<Object> for TransactionResults {
     fn try_from(o: Object) -> Result<Self, ApiError> {
         serde_json::from_value(serde_json::Value::Object(o)).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not parse RequestsResults from Object: {}",
+                "Could not parse TransactionResults from Object: {}",
                 e
             ))
         })
@@ -178,94 +278,58 @@ impl From<TransactionResults> for Vec<RequestResult> {
     }
 }
 
-impl From<TransactionResults> for ApiError {
-    fn from(e: TransactionResults) -> Self {
-        ApiError::OperationsErrors(e)
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct RequestResultMetadata {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub block_index: Option<BlockHeight>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub neuron_id: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub transaction_identifier: Option<TransactionIdentifier>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub response: Option<models::Error>,
+}
+
+impl TryFrom<Option<Object>> for RequestResultMetadata {
+    type Error = ApiError;
+    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+        serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
+            ApiError::internal_error(format!(
+                "Could not parse a `neuron_identifier` from metadata JSON object: {}",
+                e
+            ))
+        })
+    }
+}
+
+pub fn convert_to_request_result_metadata(rr: &RequestResult) -> RequestResultMetadata {
+    RequestResultMetadata {
+        block_index: rr.block_index,
+        neuron_id: rr.neuron_id,
+        transaction_identifier: rr.transaction_identifier.clone(),
+        response: rr.status.failed().map(|e| errors::convert_to_error(e)),
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct RequestResult {
     #[serde(rename = "type")]
-    #[serde(flatten)]
     pub _type: Request,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub block_index: Option<BlockHeight>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub neuron_id: Option<u64>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub transaction_identifier: Option<TransactionIdentifier>,
     #[serde(flatten)]
     pub status: Status,
-}
-
-#[test]
-fn request_result_serialization_test() {
-    let account = AccountIdentifier::from(ic_types::PrincipalId::default());
-
-    let neuron_index = 0;
-
-    let rr = RequestResult {
-        _type: Request::Stake(Stake {
-            account,
-            neuron_index,
-        }),
-        block_index: None,
-        neuron_id: None,
-        transaction_identifier: None,
-        status: Status::Failed(ApiError::internal_error("foo")),
-    };
-
-    let se = serde_json::to_string(&rr).unwrap();
-    let de: RequestResult = serde_json::from_str(&se).unwrap();
-    let s = serde_json::from_str(
-        r#"{
-        "type":"STAKE",
-        "account":"2d0e897f7e862d2b57d9bc9ea5c65f9a24ac6c074575f47898314b8d6cb0929d",
-        "status":"FAILED",
-        "response":{
-            "code":700,
-            "message":"Internal server error",
-            "retriable":false,
-            "details":{"error_message":"foo"}
-        }
-    }"#,
-    )
-    .unwrap();
-
-    assert_eq!(rr, de);
-    assert_eq!(rr, s);
-
-    let rr = RequestResult {
-        _type: Request::Stake(Stake {
-            account,
-            neuron_index,
-        }),
-        block_index: None,
-        neuron_id: Some(5757483),
-        transaction_identifier: None,
-        status: Status::Completed,
-    };
-
-    let se = serde_json::to_string(&rr).unwrap();
-    let de: RequestResult = serde_json::from_str(&se).unwrap();
-    let s = serde_json::from_str(
-        r#"{
-        "type":"STAKE",
-        "account":"2d0e897f7e862d2b57d9bc9ea5c65f9a24ac6c074575f47898314b8d6cb0929d",
-        "neuron_id":5757483,
-        "status":"COMPLETED"
-    }"#,
-    )
-    .unwrap();
-
-    assert_eq!(rr, de);
-    assert_eq!(rr, s);
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -283,6 +347,24 @@ impl Status {
     pub fn failed(&self) -> Option<&ApiError> {
         match self {
             Status::Failed(e) => Some(e),
+            _ => None,
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        match self {
+            Status::Completed => "COMPLETED",
+            Status::AlreadyApplied => "ALREADY_APPLIED",
+            Status::Failed(_) => "FAILED",
+            Status::NotAttempted => "NOT_ATTEMPTED",
+        }
+    }
+
+    pub fn from_name(n: &str) -> Option<Self> {
+        match n {
+            "COMPLETED" => Some(Status::Completed),
+            "ALREADY_APPLIED" => Some(Status::AlreadyApplied),
+            "NOT_ATTEMPTED" => Some(Status::NotAttempted),
             _ => None,
         }
     }
@@ -574,7 +656,7 @@ impl TryFrom<&models::Request> for Request {
     }
 }
 
-/// A helper for serializing `RequestResults`
+/// A helper for serializing `TransactionResults`
 mod send {
     use super::*;
 

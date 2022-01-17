@@ -58,7 +58,7 @@ fn test_account(n: u64) -> AccountIdentifier {
 }
 
 #[test]
-fn test_transfer_request_to_operations() {
+fn test_transfer_requests_to_operations() {
     assert_eq!(
         Request::requests_to_operations(
             &[Request::Transfer(LedgerOperation::Transfer {

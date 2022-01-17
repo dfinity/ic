@@ -19,7 +19,7 @@ use crate::convert::{
 use crate::ledger_client::LedgerAccess;
 use crate::request_types::{
     AddHotKey, Disburse, MergeMaturity, PublicKeyOrPrincipal, Request, RequestType,
-    SetDissolveTimestamp, Spawn, Stake, StartDissolve, StopDissolve,
+    SetDissolveTimestamp, Spawn, Stake, StartDissolve, StopDissolve, TransactionOperationResults,
 };
 use crate::store::HashedBlock;
 use crate::time::Seconds;
@@ -1194,11 +1194,8 @@ impl RosettaRequestHandler {
         msg: models::ConstructionSubmitRequest,
     ) -> Result<ConstructionSubmitResponse, ApiError> {
         verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
-
         let envelopes = msg.signed_transaction()?;
-
         let results = self.ledger.submit(envelopes).await?;
-
         let transaction_identifier = results
             .last_transaction_id()
             .cloned()
@@ -1212,10 +1209,13 @@ impl RosettaRequestHandler {
                     hash: transaction_id::NEURON_MANAGEMEN_PSEUDO_HASH.to_owned(),
                 }
             });
-
+        let results = TransactionOperationResults::from_transaction_results(
+            results,
+            self.ledger.token_name(),
+        )?;
         Ok(ConstructionSubmitResponse {
             transaction_identifier,
-            metadata: results.into(),
+            metadata: results,
         })
     }
 
@@ -1332,6 +1332,7 @@ impl RosettaRequestHandler {
                     "MERGE_MATURITY".to_string(),
                 ],
                 {
+                    let token_name = self.ledger.token_name();
                     let mut errs = vec![
                         Error::new(&ApiError::InternalError(true, Default::default())),
                         Error::new(&ApiError::InvalidRequest(false, Default::default())),
@@ -1349,7 +1350,10 @@ impl RosettaRequestHandler {
                         Error::new(&ApiError::InvalidTransaction(false, Default::default())),
                         Error::new(&ApiError::ICError(Default::default())),
                         Error::new(&ApiError::TransactionRejected(false, Default::default())),
-                        Error::new(&ApiError::OperationsErrors(Default::default())),
+                        Error::new(&ApiError::OperationsErrors(
+                            Default::default(),
+                            token_name.to_string(),
+                        )),
                         Error::new(&ApiError::TransactionExpired),
                     ];
 

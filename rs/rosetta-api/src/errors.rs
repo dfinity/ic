@@ -1,4 +1,6 @@
+use crate::request_types::TransactionOperationResults;
 use crate::{
+    convert,
     models::{Error, Object},
     request_types::TransactionResults,
 };
@@ -20,8 +22,6 @@ use std::convert::TryFrom;
 /// your specific error to a general `ApiError`.
 /// See `ICError` for an example of this pattern.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(into = "Error")]
-#[serde(from = "Error")]
 pub enum ApiError {
     InternalError(bool, Details),
     InvalidRequest(bool, Details),
@@ -37,7 +37,7 @@ pub enum ApiError {
     ICError(ICError),
     TransactionRejected(bool, Details),
     TransactionExpired,
-    OperationsErrors(TransactionResults),
+    OperationsErrors(TransactionResults, String),
 }
 
 impl ApiError {
@@ -56,7 +56,7 @@ impl ApiError {
             | ApiError::NotAvailableOffline(r, _)
             | ApiError::ICError(ICError { retriable: r, .. })
             | ApiError::TransactionRejected(r, _) => *r,
-            ApiError::OperationsErrors(e) => e.retriable(),
+            ApiError::OperationsErrors(e, _) => e.retriable(),
             ApiError::TransactionExpired => false,
         }
     }
@@ -94,148 +94,149 @@ impl ApiError {
     }
 }
 
-impl From<&ApiError> for Error {
-    fn from(err_type: &ApiError) -> Self {
-        let (code, msg, retriable, details) = match err_type {
-            ApiError::InternalError(r, d) => (700, "Internal server error", *r, d.into()),
-            ApiError::InvalidRequest(r, d) => (701, "Invalid request", *r, d.into()),
-            ApiError::NotAvailableOffline(r, d) => {
-                (702, "Not available in offline mode", *r, d.into())
+pub fn convert_to_error(api_err: &ApiError) -> Error {
+    let (code, msg, retriable, details) = match api_err {
+        ApiError::InternalError(r, d) => (700, "Internal server error", *r, d.into()),
+        ApiError::InvalidRequest(r, d) => (701, "Invalid request", *r, d.into()),
+        ApiError::NotAvailableOffline(r, d) => (702, "Not available in offline mode", *r, d.into()),
+        ApiError::InvalidNetworkId(r, d) => (710, "Invalid NetworkId", *r, d.into()),
+        ApiError::InvalidAccountId(r, d) => (711, "Account not found", *r, d.into()),
+        ApiError::InvalidBlockId(r, d) => (712, "Block not found", *r, d.into()),
+        ApiError::InvalidPublicKey(r, d) => (713, "Invalid public key", *r, d.into()),
+        ApiError::InvalidTransactionId(r, d) => (714, "Invalid transaction id", *r, d.into()),
+        ApiError::MempoolTransactionMissing(r, d) => {
+            (720, "Transaction not in the mempool", *r, d.into())
+        }
+        ApiError::BlockchainEmpty(r, d) => (721, "Blockchain is empty", *r, d.into()),
+        ApiError::InvalidTransaction(r, d) => (
+            730,
+            "An invalid transaction has been detected",
+            *r,
+            d.into(),
+        ),
+        ApiError::ICError(e) => (740, "Internet Computer error", e.retriable, e.into()),
+        ApiError::TransactionRejected(r, d) => (750, "Transaction rejected", *r, d.into()),
+        ApiError::TransactionExpired => (760, "Transaction expired", false, Object::default()),
+        ApiError::OperationsErrors(e, token_name) => {
+            match TransactionOperationResults::from_transaction_results(e.clone(), token_name) {
+                Ok(o) => (770, "Operation failed", e.retriable(), o.into()),
+                Err(_) => (
+                    700,
+                    "Internal server error",
+                    false,
+                    Object::from(&Details::from(
+                        "Could not convert TransactionResults to TransactionOperationResults",
+                    )),
+                ),
             }
-            ApiError::InvalidNetworkId(r, d) => (710, "Invalid NetworkId", *r, d.into()),
-            ApiError::InvalidAccountId(r, d) => (711, "Account not found", *r, d.into()),
-            ApiError::InvalidBlockId(r, d) => (712, "Block not found", *r, d.into()),
-            ApiError::InvalidPublicKey(r, d) => (713, "Invalid public key", *r, d.into()),
-            ApiError::InvalidTransactionId(r, d) => (714, "Invalid transaction id", *r, d.into()),
-            ApiError::MempoolTransactionMissing(r, d) => {
-                (720, "Transaction not in the mempool", *r, d.into())
-            }
-            ApiError::BlockchainEmpty(r, d) => (721, "Blockchain is empty", *r, d.into()),
-            ApiError::InvalidTransaction(r, d) => (
-                730,
-                "An invalid transaction has been detected",
-                *r,
-                d.into(),
-            ),
-            ApiError::ICError(e) => (740, "Internet Computer error", e.retriable, e.into()),
-            ApiError::TransactionRejected(r, d) => (750, "Transaction rejected", *r, d.into()),
-            ApiError::TransactionExpired => (760, "Transaction expired", false, Object::default()),
-            ApiError::OperationsErrors(e) => (770, "Operation failed", e.retriable(), e.into()),
-        };
-        Self {
-            code,
-            message: msg.to_string(),
+        }
+    };
+    Error {
+        code,
+        message: msg.to_string(),
+        retriable,
+        details: Some(details),
+    }
+}
+
+/// Convert an Error to an ApiError.
+pub fn convert_to_api_error(err: Error, token_name: &str) -> ApiError {
+    match err {
+        Error {
+            code: 700,
             retriable,
-            details: Some(details),
-        }
-    }
-}
-
-impl From<ApiError> for Error {
-    fn from(e: ApiError) -> Self {
-        From::from(&e)
-    }
-}
-
-impl From<Error> for ApiError {
-    fn from(err: Error) -> Self {
-        match err {
-            Error {
-                code: 700,
-                retriable,
-                details,
-                ..
-            } => ApiError::InternalError(retriable, details.unwrap_or_default().into()),
-            Error {
-                code: 701,
-                retriable,
-                details,
-                ..
-            } => ApiError::InvalidRequest(retriable, details.unwrap_or_default().into()),
-            Error {
-                code: 702,
-                retriable,
-                details,
-                ..
-            } => ApiError::NotAvailableOffline(retriable, details.unwrap_or_default().into()),
-            Error {
-                code: 710,
-                retriable,
-                details,
-                ..
-            } => ApiError::InvalidNetworkId(retriable, details.unwrap_or_default().into()),
-            Error {
-                code: 711,
-                retriable,
-                details,
-                ..
-            } => ApiError::InvalidAccountId(retriable, details.unwrap_or_default().into()),
-            Error {
-                code: 712,
-                retriable,
-                details,
-                ..
-            } => ApiError::InvalidBlockId(retriable, details.unwrap_or_default().into()),
-            Error {
-                code: 713,
-                retriable,
-                details,
-                ..
-            } => ApiError::InvalidPublicKey(retriable, details.unwrap_or_default().into()),
-            Error {
-                code: 714,
-                retriable,
-                details,
-                ..
-            } => ApiError::InvalidTransactionId(retriable, details.unwrap_or_default().into()),
-            Error {
-                code: 720,
-                retriable,
-                details,
-                ..
-            } => ApiError::MempoolTransactionMissing(retriable, details.unwrap_or_default().into()),
-            Error {
-                code: 721,
-                retriable,
-                details,
-                ..
-            } => ApiError::BlockchainEmpty(retriable, details.unwrap_or_default().into()),
-            Error {
-                code: 730,
-                retriable,
-                details,
-                ..
-            } => ApiError::InvalidTransaction(retriable, details.unwrap_or_default().into()),
-            Error {
-                code: 740,
-                retriable,
-                details,
-                ..
-            } => match ICError::try_from(details).map(|mut e| {
-                e.retriable = retriable;
-                ApiError::ICError(e)
-            }) {
-                Err(e) | Ok(e) => e,
-            },
-            Error {
-                code: 750,
-                retriable,
-                details,
-                ..
-            } => ApiError::TransactionRejected(retriable, details.unwrap_or_default().into()),
-            Error { code: 760, .. } => ApiError::TransactionExpired,
-            Error {
-                code: 770, details, ..
-            } => match details.map(TransactionResults::try_from) {
-                Some(Ok(e)) => e.into(),
-                Some(Err(e)) => e,
-                None => ApiError::internal_error("OperationsErrors missing details object"),
-            },
-            e => ApiError::internal_error(format!(
-                "Unknown error code encountered when converting RosettaError to ApiError: {:?}",
-                e
-            )),
-        }
+            details,
+            ..
+        } => ApiError::InternalError(retriable, details.unwrap_or_default().into()),
+        Error {
+            code: 701,
+            retriable,
+            details,
+            ..
+        } => ApiError::InvalidRequest(retriable, details.unwrap_or_default().into()),
+        Error {
+            code: 702,
+            retriable,
+            details,
+            ..
+        } => ApiError::NotAvailableOffline(retriable, details.unwrap_or_default().into()),
+        Error {
+            code: 710,
+            retriable,
+            details,
+            ..
+        } => ApiError::InvalidNetworkId(retriable, details.unwrap_or_default().into()),
+        Error {
+            code: 711,
+            retriable,
+            details,
+            ..
+        } => ApiError::InvalidAccountId(retriable, details.unwrap_or_default().into()),
+        Error {
+            code: 712,
+            retriable,
+            details,
+            ..
+        } => ApiError::InvalidBlockId(retriable, details.unwrap_or_default().into()),
+        Error {
+            code: 713,
+            retriable,
+            details,
+            ..
+        } => ApiError::InvalidPublicKey(retriable, details.unwrap_or_default().into()),
+        Error {
+            code: 714,
+            retriable,
+            details,
+            ..
+        } => ApiError::InvalidTransactionId(retriable, details.unwrap_or_default().into()),
+        Error {
+            code: 720,
+            retriable,
+            details,
+            ..
+        } => ApiError::MempoolTransactionMissing(retriable, details.unwrap_or_default().into()),
+        Error {
+            code: 721,
+            retriable,
+            details,
+            ..
+        } => ApiError::BlockchainEmpty(retriable, details.unwrap_or_default().into()),
+        Error {
+            code: 730,
+            retriable,
+            details,
+            ..
+        } => ApiError::InvalidTransaction(retriable, details.unwrap_or_default().into()),
+        Error {
+            code: 740,
+            retriable,
+            details,
+            ..
+        } => match ICError::try_from(details).map(|mut e| {
+            e.retriable = retriable;
+            ApiError::ICError(e)
+        }) {
+            Err(e) | Ok(e) => e,
+        },
+        Error {
+            code: 750,
+            retriable,
+            details,
+            ..
+        } => ApiError::TransactionRejected(retriable, details.unwrap_or_default().into()),
+        Error { code: 760, .. } => ApiError::TransactionExpired,
+        Error {
+            code: 770, details, ..
+        } => match details.map(TransactionOperationResults::parse) {
+            Some(Ok(e)) => convert::transaction_operation_result_to_api_error(e, token_name),
+            Some(Err(e)) => e,
+            None => ApiError::internal_error("OperationsErrors missing details object"),
+        },
+        e => ApiError::internal_error(format!(
+            "Unknown error code encountered when converting RosettaError to ApiError: {:?}",
+            e
+        )),
     }
 }
 
