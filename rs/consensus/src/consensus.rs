@@ -61,7 +61,7 @@ use ic_interfaces::{
     state_manager::StateManager,
     time_source::TimeSource,
 };
-use ic_logger::{error, info, trace, warn, ReplicaLogger};
+use ic_logger::{debug, error, info, trace, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client::helper::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
@@ -111,10 +111,11 @@ pub struct ConsensusImpl {
     metrics: ConsensusMetrics,
     time_source: Arc<dyn TimeSource>,
     registry_client: Arc<dyn RegistryClient>,
+    state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
     last_invoked: RefCell<BTreeMap<ConsensusSubcomponent, Time>>,
     schedule: RoundRobin,
-    subnet_id: SubnetId,
+    replica_config: ReplicaConfig,
     #[allow(dead_code)]
     malicious_flags: MaliciousFlags,
     log: ReplicaLogger,
@@ -245,7 +246,7 @@ impl ConsensusImpl {
                 logger.clone(),
             ),
             purger: Purger::new(
-                state_manager,
+                state_manager.clone(),
                 message_routing,
                 logger.clone(),
                 metrics_registry.clone(),
@@ -254,8 +255,9 @@ impl ConsensusImpl {
             log: logger,
             time_source,
             registry_client,
+            state_manager,
             malicious_flags,
-            subnet_id: replica_config.subnet_id,
+            replica_config,
             last_invoked: RefCell::new(last_invoked),
             schedule: RoundRobin::default(),
             config: consensus_config,
@@ -321,11 +323,14 @@ impl ConsensusImpl {
     /// latest registry version instructs the subnet to halt
     pub fn should_halt_by_subnet_record(&self) -> bool {
         let version = self.registry_client.get_latest_version();
-        match self.registry_client.get_is_halted(self.subnet_id, version) {
+        match self
+            .registry_client
+            .get_is_halted(self.replica_config.subnet_id, version)
+        {
             Ok(None) => {
                 panic!(
                     "No subnet record found for registry version={:?} and subnet_id={:?}",
-                    version, self.subnet_id,
+                    version, self.replica_config.subnet_id,
                 );
             }
             Err(err) => {
@@ -337,6 +342,29 @@ impl ConsensusImpl {
             }
             Ok(Some(is_halted)) => is_halted,
         }
+    }
+
+    /// Checks, whether DKG transcripts for this replica are available
+    fn dkgs_available(&self, pool_reader: &PoolReader) -> bool {
+        // Get last summary
+        let block_payload =
+            BlockPayload::from(pool_reader.get_highest_summary_block().payload).into_summary();
+
+        // Get transcripts from summary
+        let transcripts = block_payload.dkg.current_transcripts();
+
+        // Check that this replica is listed as a receiver for every transcript type
+        transcripts
+            .iter()
+            .map(|(_, transcript)| {
+                transcript
+                    .committee
+                    .get()
+                    .iter()
+                    .any(|id| *id == self.replica_config.node_id)
+            })
+            .reduce(|a, b| a && b)
+            .unwrap_or(false)
     }
 }
 
@@ -377,7 +405,7 @@ impl Consensus for ConsensusImpl {
         // For non-root subnets, we must halt if our registry is outdated
         if let Ok(false) = is_root_subnet(
             self.registry_client.as_ref(),
-            self.subnet_id,
+            self.replica_config.subnet_id,
             self.registry_client.get_latest_version(),
         ) {
             if let Err(e) = self.check_registry_outdated() {
@@ -399,6 +427,17 @@ impl Consensus for ConsensusImpl {
             );
             return ChangeSet::new();
         }
+
+        // Log some information about the state of consensus
+        // This is useful for testing purposes
+        debug!(
+            self.log,
+            "Consensus finalized height: {}, state available: {}, DKG key material available: {}",
+            pool_reader.get_finalized_height(),
+            pool_reader.get_finalized_tip().context.certified_height
+                <= self.state_manager.latest_certified_height(),
+            self.dkgs_available(&pool_reader)
+        );
 
         let finalize = || {
             self.call_with_metrics(ConsensusSubcomponent::Finalizer, || {
@@ -462,7 +501,7 @@ impl Consensus for ConsensusImpl {
         if let Some(settings) = get_notarization_delay_settings(
             &self.log,
             &*self.registry_client,
-            self.subnet_id,
+            self.replica_config.subnet_id,
             self.registry_client.get_latest_version(),
         ) {
             let unit_delay = settings.unit_delay;
