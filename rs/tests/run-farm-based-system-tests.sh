@@ -162,6 +162,7 @@ else
 fi
 
 # Print a summary of the executed test suite.
-python3 "${CI_PROJECT_DIR}/gitlab-ci/src/test_results/summary.py" "${SUMMARY_ARGS[@]}"
+# Do not propagate errors, if the script fails.
+python3 "${CI_PROJECT_DIR}/gitlab-ci/src/test_results/summary.py" "${SUMMARY_ARGS[@]}" || true
 
 exit $RES

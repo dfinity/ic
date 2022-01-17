@@ -1,4 +1,5 @@
 import argparse
+import logging
 from collections import Counter
 from collections import defaultdict
 from functools import reduce
@@ -38,13 +39,17 @@ def pot_summary(p):
 
 def create_link(group_name):
     url = NODE_LOGS.format(group_name)
-    # Shorten a link pointing to replica logs corresponding to a given pot.
-    resp = requests.post(KIBANA_BASE_URL + "/api/shorten_url", headers={"kbn-xsrf": "true"}, json={"url": url}).json()
-    if "urlId" in resp:
-        return "{}/goto/{}".format(KIBANA_BASE_URL, resp["urlId"])
-    else:
-        # Fall back to using a long url, if the shorten_url service fails.
-        return KIBANA_BASE_URL + url
+    try:
+        # Shorten a link pointing to replica logs corresponding to a given pot.
+        resp = requests.post(
+            KIBANA_BASE_URL + "/api/shorten_url", headers={"kbn-xsrf": "true"}, json={"url": url}
+        ).json()
+        if "urlId" in resp:
+            return "{}/goto/{}".format(KIBANA_BASE_URL, resp["urlId"])
+    except Exception as e:
+        logging.error("Error while sending a request to Kibana: {}".format(e))
+    # Fall back to using a long url, if the shorten_url service fails.
+    return KIBANA_BASE_URL + url
 
 
 def print_statistics(root):
