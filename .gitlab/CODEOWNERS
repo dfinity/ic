@@ -103,6 +103,7 @@
 /rs/interfaces/src/messaging.rs      @dfinity-lab/teams/message-routing-owners
 /rs/interfaces/src/p2p.rs            @dfinity-lab/teams/networking-team
 /rs/interfaces/src/registry.rs       @dfinity-lab/teams/node-team
+/rs/interfaces/src/rpc_bridge.rs     @dfinity-lab/teams/networking-team
 /rs/memory_tracker/                  @dfinity-lab/teams/execution-owners
 /rs/messaging/                       @dfinity-lab/teams/message-routing-owners
 /rs/nns/                             @dfinity-lab/teams/nns-team @granstrom1
