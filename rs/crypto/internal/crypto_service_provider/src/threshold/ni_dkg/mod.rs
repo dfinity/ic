@@ -420,8 +420,8 @@ pub mod specialise {
     pub fn fs_key_set(
         secret_key: CspSecretKey,
     ) -> Result<CspFsEncryptionKeySet, ni_dkg_errors::MalformedSecretKeyError> {
-        if let CspSecretKey::FsEncryption(key_set) = secret_key {
-            Ok(key_set)
+        if let CspSecretKey::FsEncryption(key_set) = &secret_key {
+            Ok(key_set.clone())
         } else {
             let unexpected_type_name: &'static str = secret_key.into();
             Err(ni_dkg_errors::MalformedSecretKeyError {

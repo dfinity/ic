@@ -31,8 +31,8 @@ fn key_from_secret_key_store(
     let secret_key: CspSecretKey = csp_vault
         .get_secret_key(&tls_cert_hash_as_key_id(self_cert))
         .ok_or(CspTlsSecretKeyError::SecretKeyNotFound)?;
-    let secret_key_der_bytes = match secret_key {
-        CspSecretKey::TlsEd25519(secret_key_der_bytes) => Ok(secret_key_der_bytes),
+    let secret_key_der_bytes = match &secret_key {
+        CspSecretKey::TlsEd25519(secret_key_der_bytes) => Ok(secret_key_der_bytes.clone()),
         _ => Err(CspTlsSecretKeyError::WrongSecretKeyType),
     }?;
     // Note: we don't want to expose *any* info about the secret key,
