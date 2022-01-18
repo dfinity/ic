@@ -141,14 +141,6 @@ impl ControllerService for ControllerServiceImpl {
                             system_state_accessor.canister_cycles_refund(req.cycles);
                             Reply::CanisterCyclesRefund(CanisterCyclesRefundReply {})
                         }
-                        Request::RegisterCallback(req) => {
-                            let result = system_state_accessor.register_callback(req.callback);
-                            Reply::RegisterCallback(RegisterCallbackReply { result })
-                        }
-                        Request::UnregisterCallback(req) => {
-                            system_state_accessor.unregister_callback(req.callback_id);
-                            Reply::UnregisterCallback(UnregisterCallbackReply {})
-                        }
                         Request::PushOutputMessage(req) => {
                             let result = system_state_accessor.push_output_request(
                                 req.canister_current_memory_usage,

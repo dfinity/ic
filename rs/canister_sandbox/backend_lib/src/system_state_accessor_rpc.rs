@@ -9,11 +9,7 @@ use ic_replicated_state::StateError;
 /// forms the back-end of the SystemApi (as far as it accesses system
 /// state) and relays all methods to the replica via RPC.
 use ic_system_api::SystemStateAccessor;
-use ic_types::{
-    messages::{CallContextId, CallbackId},
-    methods::Callback,
-    ComputeAllocation, Cycles, NumBytes,
-};
+use ic_types::{messages::CallContextId, ComputeAllocation, Cycles, NumBytes};
 
 use std::sync::Arc;
 
@@ -114,26 +110,6 @@ impl SystemStateAccessor for SystemStateAccessorRPC {
         ));
         match reply {
             protocol::syscall::Reply::CanisterCyclesRefund(_rep) => {}
-            _ => unimplemented!(),
-        }
-    }
-
-    fn register_callback(&self, callback: Callback) -> CallbackId {
-        let reply = self.make_call(protocol::syscall::Request::RegisterCallback(
-            protocol::syscall::RegisterCallbackRequest { callback },
-        ));
-        match reply {
-            protocol::syscall::Reply::RegisterCallback(rep) => rep.result,
-            _ => unimplemented!(),
-        }
-    }
-
-    fn unregister_callback(&self, callback_id: CallbackId) -> Option<Callback> {
-        let reply = self.make_call(protocol::syscall::Request::UnregisterCallback(
-            protocol::syscall::UnregisterCallbackRequest { callback_id },
-        ));
-        match reply {
-            protocol::syscall::Reply::UnregisterCallback(_rep) => None,
             _ => unimplemented!(),
         }
     }

@@ -202,8 +202,6 @@ pub enum Request {
     CanisterCyclesBalance(CanisterCyclesBalanceRequest),
     CanisterCyclesWithdraw(CanisterCyclesWithdrawRequest),
     CanisterCyclesRefund(CanisterCyclesRefundRequest),
-    RegisterCallback(RegisterCallbackRequest),
-    UnregisterCallback(UnregisterCallbackRequest),
     PushOutputMessage(PushOutputMessageRequest),
 }
 #[derive(Serialize, Deserialize, Clone)]
@@ -214,7 +212,5 @@ pub enum Reply {
     CanisterCyclesBalance(CanisterCyclesBalanceReply),
     CanisterCyclesWithdraw(CanisterCyclesWithdrawReply),
     CanisterCyclesRefund(CanisterCyclesRefundReply),
-    RegisterCallback(RegisterCallbackReply),
-    UnregisterCallback(UnregisterCallbackReply),
     PushOutputMessage(PushOutputMessageReply),
 }

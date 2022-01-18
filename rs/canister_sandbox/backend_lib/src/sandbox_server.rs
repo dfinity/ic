@@ -135,12 +135,13 @@ mod tests {
         }
     }
 
-    fn static_system_state() -> SandboxSafeSystemState {
+    fn sandbox_safe_system_state() -> SandboxSafeSystemState {
         SandboxSafeSystemState::new_internal(
             canister_test_id(0),
             user_test_id(0).get(),
             CanisterStatusView::Running,
             SubnetType::Application,
+            Some(0),
         )
     }
 
@@ -183,7 +184,7 @@ mod tests {
             execution_parameters: execution_parameters(),
             next_wasm_memory_id,
             next_stable_memory_id,
-            static_system_state: static_system_state(),
+            static_system_state: sandbox_safe_system_state(),
         }
     }
 
@@ -205,7 +206,7 @@ mod tests {
             execution_parameters: execution_parameters(),
             next_wasm_memory_id: MemoryId::new(),
             next_stable_memory_id: MemoryId::new(),
-            static_system_state: static_system_state(),
+            static_system_state: sandbox_safe_system_state(),
         }
     }
 
