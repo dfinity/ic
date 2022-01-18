@@ -117,9 +117,9 @@ impl ProtoSecretKeyStore {
                         });
                     if let CspSecretKey::FsEncryption(CspFsEncryptionKeySet::Groth20_Bls12_381(
                         key_set,
-                    )) = csp_key
+                    )) = &csp_key
                     {
-                        let key_set_with_pop = convert_keyset_to_keyset_with_pop(key_set);
+                        let key_set_with_pop = convert_keyset_to_keyset_with_pop(key_set.clone());
                         csp_key = CspSecretKey::FsEncryption(
                             CspFsEncryptionKeySet::Groth20WithPop_Bls12_381(key_set_with_pop),
                         );
@@ -145,9 +145,9 @@ impl ProtoSecretKeyStore {
 
                     if let CspSecretKey::FsEncryption(CspFsEncryptionKeySet::Groth20_Bls12_381(
                         key_set,
-                    )) = csp_key
+                    )) = &csp_key
                     {
-                        let key_set_with_pop = convert_keyset_to_keyset_with_pop(key_set);
+                        let key_set_with_pop = convert_keyset_to_keyset_with_pop(key_set.clone());
                         csp_key = CspSecretKey::FsEncryption(
                             CspFsEncryptionKeySet::Groth20WithPop_Bls12_381(key_set_with_pop),
                         );

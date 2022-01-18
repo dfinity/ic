@@ -31,9 +31,9 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Bas
                 })?;
 
         match algorithm_id {
-            AlgorithmId::Ed25519 => match secret_key {
+            AlgorithmId::Ed25519 => match &secret_key {
                 CspSecretKey::Ed25519(secret_key) => {
-                    let sig_bytes = ed25519::sign(message, &secret_key).map_err(|_e| {
+                    let sig_bytes = ed25519::sign(message, secret_key).map_err(|_e| {
                         CspBasicSignatureError::MalformedSecretKey {
                             algorithm: AlgorithmId::Ed25519,
                         }

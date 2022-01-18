@@ -167,8 +167,8 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
     ) -> Result<CommitmentOpeningBytes, IDkgCreateDealingError> {
         let key_id = commitment_key_id(commitment);
         let opening = self.canister_sks_read_lock().get(&key_id);
-        match opening {
-            Some(CspSecretKey::IDkgCommitmentOpening(bytes)) => Ok(bytes),
+        match &opening {
+            Some(CspSecretKey::IDkgCommitmentOpening(bytes)) => Ok(bytes.clone()),
             _ => Err(IDkgCreateDealingError::SecretSharesNotFound {
                 commitment_string: format!("{:?}", commitment),
             }),

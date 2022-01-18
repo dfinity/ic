@@ -171,7 +171,7 @@ mod tls {
         let cert = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
 
         let secret_key = secret_key_from_store(Arc::clone(&csp.csp_vault), cert.as_x509().clone());
-        if let CspSecretKey::TlsEd25519(sk_der_bytes) = secret_key {
+        if let CspSecretKey::TlsEd25519(sk_der_bytes) = &secret_key {
             let private_key = PKey::private_key_from_der(&sk_der_bytes.bytes)
                 .expect("unable to parse DER secret key");
             assert_eq!(private_key.id(), Id::ED25519);
