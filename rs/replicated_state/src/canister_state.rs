@@ -222,6 +222,27 @@ impl CanisterState {
         }
     }
 
+    /// Checks the constraints that a canister should always respect.
+    /// These invariants will be verified at the end of each execution round.
+    pub fn check_invariants(
+        &self,
+        own_subnet_type: SubnetType,
+        default_limit: NumBytes,
+    ) -> Result<(), StateError> {
+        let memory_used = self.memory_usage(own_subnet_type);
+        let memory_limit = self.memory_limit(default_limit);
+
+        if memory_used > memory_limit {
+            return Err(StateError::InvariantBroken(format!(
+                "Memory of canister {} exceeds the limit allowed: used {}, allowed {}",
+                self.canister_id(),
+                memory_used,
+                memory_limit
+            )));
+        }
+        Ok(())
+    }
+
     /// The amount of memory currently being used by the canister.
     pub fn memory_usage(&self, own_subnet_type: SubnetType) -> NumBytes {
         self.execution_state

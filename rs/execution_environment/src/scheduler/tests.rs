@@ -35,7 +35,6 @@ use ic_test_utilities::{
     },
     with_test_replica_logger,
 };
-use ic_types::messages::{CallbackId, RequestOrResponse, MAX_RESPONSE_COUNT_BYTES};
 use ic_types::methods::SystemMethod;
 use ic_types::{
     ingress::WasmResult,
@@ -43,6 +42,10 @@ use ic_types::{
     time::UNIX_EPOCH,
     user_error::{ErrorCode, UserError},
     ComputeAllocation, Cycles, NumBytes,
+};
+use ic_types::{
+    messages::{CallbackId, RequestOrResponse, MAX_RESPONSE_COUNT_BYTES},
+    MAX_MEMORY_ALLOCATION,
 };
 use ic_wasm_types::WasmEngineError;
 use lazy_static::lazy_static;
@@ -56,13 +59,14 @@ use std::{convert::TryFrom, path::PathBuf, time::Duration};
 const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
 const MAX_INSTRUCTIONS_PER_MESSAGE: NumInstructions = NumInstructions::new(1 << 30);
 const LAST_ROUND_MAX: u64 = 100;
-const MAX_CANISTER_MEMORY_SIZE: NumBytes = NumBytes::new(u64::MAX / 2);
-const SUBNET_AVAILABLE_MEMORY: i64 = i64::MAX / 2;
+const MAX_CANISTER_MEMORY_SIZE: NumBytes = MAX_MEMORY_ALLOCATION;
+const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(u64::MAX);
 const MAX_NUMBER_OF_CANISTERS: u64 = 0;
 
 lazy_static! {
     static ref INITIAL_CYCLES: Cycles =
         CANISTER_FREEZE_BALANCE_RESERVE + Cycles::new(5_000_000_000_000);
+    static ref SUBNET_AVAILABLE_MEMORY: i64 = MAX_MEMORY_ALLOCATION.get() as i64;
 }
 
 fn assert_floats_are_equal(val0: f64, val1: f64) {
@@ -726,11 +730,15 @@ fn test_multiple_iterations_of_inner_loop() {
     exec_env
         .expect_subnet_available_memory()
         .times(..)
-        .return_const(SUBNET_AVAILABLE_MEMORY);
+        .return_const(*SUBNET_AVAILABLE_MEMORY);
     exec_env
         .expect_max_canister_memory_size()
         .times(..)
         .return_const(MAX_CANISTER_MEMORY_SIZE);
+    exec_env
+        .expect_subnet_memory_capacity()
+        .times(..)
+        .return_const(SUBNET_MEMORY_CAPACITY);
     exec_env
         .expect_execute_canister_message()
         .times(2)
@@ -859,11 +867,15 @@ fn canister_can_run_for_multiple_iterations() {
     exec_env
         .expect_subnet_available_memory()
         .times(..)
-        .return_const(SUBNET_AVAILABLE_MEMORY);
+        .return_const(*SUBNET_AVAILABLE_MEMORY);
     exec_env
         .expect_max_canister_memory_size()
         .times(..)
         .return_const(MAX_CANISTER_MEMORY_SIZE);
+    exec_env
+        .expect_subnet_memory_capacity()
+        .times(..)
+        .return_const(SUBNET_MEMORY_CAPACITY);
     exec_env
         .expect_execute_canister_message()
         .times(..)
@@ -2035,7 +2047,7 @@ fn can_record_metrics_single_scheduler_thread() {
             scheduler_config,
             ExecutionRound::from(0),
             mock_time(),
-            SUBNET_AVAILABLE_MEMORY,
+            *SUBNET_AVAILABLE_MEMORY,
             Arc::new(RoutingTable::default()),
             subnet_records,
             HeartbeatHandling::Execute {
@@ -2445,7 +2457,11 @@ fn stopping_canisters_are_stopped_when_they_are_ready() {
     exec_env
         .expect_subnet_available_memory()
         .times(..)
-        .return_const(SUBNET_AVAILABLE_MEMORY);
+        .return_const(*SUBNET_AVAILABLE_MEMORY);
+    exec_env
+        .expect_subnet_memory_capacity()
+        .times(..)
+        .return_const(SUBNET_MEMORY_CAPACITY);
     let exec_env = Arc::new(exec_env);
 
     // Expect ingress history writer to be called twice to respond to
@@ -2517,7 +2533,11 @@ fn stopping_canisters_are_not_stopped_if_not_ready() {
     exec_env
         .expect_subnet_available_memory()
         .times(..)
-        .return_const(SUBNET_AVAILABLE_MEMORY);
+        .return_const(*SUBNET_AVAILABLE_MEMORY);
+    exec_env
+        .expect_subnet_memory_capacity()
+        .times(..)
+        .return_const(SUBNET_MEMORY_CAPACITY);
 
     // Expect ingress history writer to never be called since the canister
     // isn't ready to be stopped.
@@ -3614,11 +3634,15 @@ fn default_exec_env_mock(
     exec_env
         .expect_subnet_available_memory()
         .times(..)
-        .return_const(SUBNET_AVAILABLE_MEMORY);
+        .return_const(*SUBNET_AVAILABLE_MEMORY);
     exec_env
         .expect_max_canister_memory_size()
         .times(..)
         .return_const(MAX_CANISTER_MEMORY_SIZE);
+    exec_env
+        .expect_subnet_memory_capacity()
+        .times(..)
+        .return_const(SUBNET_MEMORY_CAPACITY);
     exec_env
         .expect_execute_canister_message()
         .times(calls)
