@@ -450,13 +450,6 @@ def _generate_tests_may_raise_exception(
 
     log_rdeps(wmarked_crates_to_dep)
 
-    if git_changes.get_changed_files(git_root, [guestos_workspace]) or git_changes.get_changed_files(
-        git_root, ["testnet", "ic-os", "rs/workload_generator", "rs/registry/client"]
-    ):
-        force_pipeline = True
-    else:
-        force_pipeline = False
-
     cargo_test_sample_crates = set()
     if git_changes.nix_shell_changes(rust_workspace) or git_changes.ci_config_changes(git_root):
         logging.info("Nix or CI config changed, also test sample crates")
@@ -470,12 +463,18 @@ def _generate_tests_may_raise_exception(
             cargo_test_sample_crates.union(set(wmarked_crates_to_dep.keys())),
             gitlab_ci_config,
             out,
-            force_pipeline,
             gitlab_ci_config_changes=True,
             prod_generic_test_job=prod_generic_test_job,
             disable_caching=disable_caching,
         )
     else:
+        force_pipeline = git_changes.get_changed_files(git_root, [guestos_workspace]) or git_changes.get_changed_files(
+            git_root, ["testnet", "ic-os", "rs/workload_generator", "rs/registry/client"]
+        )
+
+        if not force_pipeline:
+            prod_generic_test_job = None
+
         generate_gitlab_yaml(
             cargo_test_sample_crates.union(set(wmarked_crates_to_dep.keys())),
             gitlab_ci_config,
