@@ -58,6 +58,8 @@ const START_OFFSET: Duration = Duration::from_millis(500);
 // permits are scaled down based on the response from the replicas.
 const INITIAL_PERMITS_MULTIPLIER: usize = 10;
 
+const QUERY_TIMEOUT: Duration = Duration::from_secs(60 * 5);
+
 #[derive(PartialEq, Eq, Hash)]
 enum CallFailure {
     None,
@@ -94,7 +96,8 @@ impl Engine {
                 Url::parse(url.as_str()).unwrap(),
                 agent_sender.clone(),
                 http_client_config,
-            );
+            )
+            .with_query_timeout(QUERY_TIMEOUT);
             agent.sender_field = sender_field.clone();
             agent
         });
