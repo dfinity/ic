@@ -534,6 +534,7 @@ fn reject_code_for_state_error(err: &StateError) -> RejectCode {
         StateError::CanisterNotFound(_) => RejectCode::DestinationInvalid,
         StateError::CanisterStopped(_) => RejectCode::CanisterReject,
         StateError::CanisterStopping(_) => RejectCode::CanisterReject,
+        StateError::InvariantBroken(_) => RejectCode::SysTransient,
         StateError::UnknownSubnetMethod(_) => RejectCode::CanisterReject,
         StateError::InvalidSubnetPayload => RejectCode::CanisterReject,
         StateError::OutOfMemory { .. } => RejectCode::SysTransient,

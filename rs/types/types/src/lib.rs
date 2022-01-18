@@ -484,7 +484,7 @@ pub const MAX_STABLE_MEMORY_IN_BYTES: u64 = 8 * GB;
 pub const MAX_WASM_MEMORY_IN_BYTES: u64 = 4 * GB;
 
 const MIN_MEMORY_ALLOCATION: NumBytes = NumBytes::new(0);
-const MAX_MEMORY_ALLOCATION: NumBytes =
+pub const MAX_MEMORY_ALLOCATION: NumBytes =
     NumBytes::new(MAX_STABLE_MEMORY_IN_BYTES + MAX_WASM_MEMORY_IN_BYTES);
 
 impl InvalidMemoryAllocationError {

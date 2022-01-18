@@ -165,7 +165,9 @@ impl ValidSetRuleImpl {
                     StateError::CanisterOutOfCycles { .. } => ErrorCode::CanisterOutOfCycles,
                     StateError::UnknownSubnetMethod(_) => ErrorCode::CanisterOutOfCycles,
                     StateError::InvalidSubnetPayload => ErrorCode::CanisterOutOfCycles,
-                    StateError::QueueFull { .. } | StateError::OutOfMemory { .. } => {
+                    StateError::QueueFull { .. }
+                    | StateError::OutOfMemory { .. }
+                    | StateError::InvariantBroken { .. } => {
                         unreachable!("Unexpected error: {}", err)
                     }
                 };

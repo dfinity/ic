@@ -115,6 +115,9 @@ pub trait ExecutionEnvironment: Sync + Send {
     /// canister.
     fn max_canister_memory_size(&self) -> NumBytes;
 
+    /// Returns the subnet memory capacity.
+    fn subnet_memory_capacity(&self) -> NumBytes;
+
     /// Builds execution parameters for the given canister with the given
     /// instruction limit and available subnet memory counter.
     fn execution_parameters(
@@ -828,6 +831,10 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
 
     fn max_canister_memory_size(&self) -> NumBytes {
         self.config.max_canister_memory_size
+    }
+
+    fn subnet_memory_capacity(&self) -> NumBytes {
+        self.config.subnet_memory_capacity
     }
 
     fn execution_parameters(

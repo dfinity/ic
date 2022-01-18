@@ -70,6 +70,9 @@ pub enum StateError {
     /// Canister is out of cycles.
     CanisterOutOfCycles(CanisterOutOfCyclesError),
 
+    /// Canister state is invalid because of broken invariant.
+    InvariantBroken(String),
+
     /// Message enqueuing failed due to calling an unknown subnet method.
     UnknownSubnetMethod(String),
 
@@ -201,6 +204,7 @@ pub const LABEL_VALUE_QUEUE_FULL: &str = "QueueFull";
 pub const LABEL_VALUE_CANISTER_STOPPED: &str = "CanisterStopped";
 pub const LABEL_VALUE_CANISTER_STOPPING: &str = "CanisterStopping";
 pub const LABEL_VALUE_CANISTER_OUT_OF_CYCLES: &str = "CanisterOutOfCycles";
+pub const LABEL_VALUE_INVARIANT_BROKEN: &str = "InvariantBroken";
 pub const LABEL_VALUE_UNKNOWN_SUBNET_METHOD: &str = "UnknownSubnetMethod";
 pub const LABEL_VALUE_INVALID_SUBNET_PAYLOAD: &str = "InvalidSubnetPayload";
 pub const LABEL_VALUE_OUT_OF_MEMORY: &str = "OutOfMemory";
@@ -215,6 +219,7 @@ impl StateError {
             StateError::CanisterStopped(_) => LABEL_VALUE_CANISTER_STOPPED,
             StateError::CanisterStopping(_) => LABEL_VALUE_CANISTER_STOPPING,
             StateError::CanisterOutOfCycles(_) => LABEL_VALUE_CANISTER_OUT_OF_CYCLES,
+            StateError::InvariantBroken(_) => LABEL_VALUE_INVARIANT_BROKEN,
             StateError::UnknownSubnetMethod(_) => LABEL_VALUE_UNKNOWN_SUBNET_METHOD,
             StateError::InvalidSubnetPayload => LABEL_VALUE_INVALID_SUBNET_PAYLOAD,
             StateError::OutOfMemory { .. } => LABEL_VALUE_OUT_OF_MEMORY,
@@ -240,6 +245,10 @@ impl std::fmt::Display for StateError {
                 write!(f, "Canister {} is stopping", canister_id)
             }
             StateError::CanisterOutOfCycles(err) => write!(f, "{}", err.to_string()),
+
+            StateError::InvariantBroken(err) => {
+                write!(f, "Invariant broken: {}", err)
+            }
             StateError::UnknownSubnetMethod(method) => write!(
                 f,
                 "Cannot enqueue management message. Method {} is unknown.",
