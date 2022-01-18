@@ -2,8 +2,7 @@ use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerError}
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_replicated_state::{StateError, SystemState};
 use ic_types::{
-    messages::{CallContextId, CallbackId, Request},
-    methods::Callback,
+    messages::{CallContextId, Request},
     ComputeAllocation, Cycles,
 };
 use std::ops::DerefMut;
@@ -111,24 +110,6 @@ impl SystemStateAccessor for SystemStateAccessorDirect {
     fn canister_cycles_refund(&self, cycles: Cycles) {
         self.cycles_account_manager
             .add_cycles(&mut self.system_state.borrow_mut(), cycles);
-    }
-
-    fn register_callback(&self, callback: Callback) -> CallbackId {
-        let mut system_state = self.system_state.borrow_mut();
-        // A call context manager exists as the canister is either in
-        // `Running` or `Stopping` status when executing a message so
-        // this unwrap should be safe.
-        let call_context_manager = system_state.call_context_manager_mut().unwrap();
-        call_context_manager.register_callback(callback)
-    }
-
-    fn unregister_callback(&self, callback_id: CallbackId) -> Option<Callback> {
-        let mut system_state = self.system_state.borrow_mut();
-        // A call context manager exists as the canister is either in
-        // `Running` or `Stopping` status when executing a message so
-        // this unwrap should be safe.
-        let call_context_manager = system_state.call_context_manager_mut().unwrap();
-        call_context_manager.unregister_callback(callback_id)
     }
 
     fn push_output_request(

@@ -2,8 +2,7 @@ use ic_base_types::NumBytes;
 use ic_interfaces::execution_environment::HypervisorResult;
 use ic_replicated_state::StateError;
 use ic_types::{
-    messages::{CallContextId, CallbackId, Request},
-    methods::Callback,
+    messages::{CallContextId, Request},
     ComputeAllocation, Cycles,
 };
 
@@ -36,12 +35,6 @@ pub trait SystemStateAccessor {
     /// (Re-)add cycles to canister. This is intended to be used to
     /// reclaim cycles from unfulfilled requests.
     fn canister_cycles_refund(&self, cycles: Cycles);
-
-    /// Registers callback for call return.
-    fn register_callback(&self, callback: Callback) -> CallbackId;
-
-    /// Unregister callback for call return.
-    fn unregister_callback(&self, callback_id: CallbackId) -> Option<Callback>;
 
     /// Pushes outgoing request.
     fn push_output_request(

@@ -966,9 +966,11 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
     /// Note that this function is made public only for the tests
     #[doc(hidden)]
     pub fn push_output_request(&mut self, req: Request) -> HypervisorResult<i32> {
-        let abort = |request: Request, accessor: &A| {
+        let abort = |request: Request,
+                     accessor: &A,
+                     sandbox_safe_system_state: &mut SandboxSafeSystemState| {
             accessor.canister_cycles_refund(request.payment);
-            accessor.unregister_callback(request.sender_reply_callback);
+            sandbox_safe_system_state.unregister_callback(request.sender_reply_callback);
             Ok(RejectCode::SysTransient as i32)
         };
 
@@ -981,7 +983,11 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
                 .allocate_memory(reservation_bytes)
                 .is_err()
         {
-            return abort(req, &self.system_state_accessor);
+            return abort(
+                req,
+                &self.system_state_accessor,
+                &mut self.sandbox_safe_system_state,
+            );
         }
 
         match self.system_state_accessor.push_output_request(
@@ -995,7 +1001,11 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
                 if enforce_message_memory_usage {
                     self.memory_usage.deallocate_memory(reservation_bytes);
                 }
-                abort(request, &self.system_state_accessor)
+                abort(
+                    request,
+                    &self.system_state_accessor,
+                    &mut self.sandbox_safe_system_state,
+                )
             }
             Err((err, _)) => {
                 unreachable!("Unexpected error while pushing to output queue: {}", err)
@@ -1543,13 +1553,15 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
 
                 let on_reply = WasmClosure::new(reply_fun, reply_env);
                 let on_reject = WasmClosure::new(reject_fun, reject_env);
-                let callback_id = self.system_state_accessor.register_callback(Callback::new(
-                    *call_context_id,
-                    Cycles::from(0),
-                    on_reply,
-                    on_reject,
-                    None,
-                ));
+                let callback_id =
+                    self.sandbox_safe_system_state
+                        .register_callback(Callback::new(
+                            *call_context_id,
+                            Cycles::from(0),
+                            on_reply,
+                            on_reject,
+                            None,
+                        ))?;
 
                 let msg = Request {
                     sender: self.sandbox_safe_system_state.canister_id,
@@ -1779,7 +1791,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                     *call_context_id,
                     *own_subnet_id,
                     *own_subnet_type,
-                    &self.system_state_accessor,
+                    &mut self.sandbox_safe_system_state,
                     &self.log,
                 )?;
                 self.push_output_request(req)
@@ -1812,7 +1824,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                     *call_context_id,
                     *own_subnet_id,
                     own_subnet_type,
-                    &self.system_state_accessor,
+                    &mut self.sandbox_safe_system_state,
                     &self.log,
                 )?;
                 self.push_output_request(req)

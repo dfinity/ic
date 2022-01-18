@@ -459,6 +459,12 @@ impl CallContextManager {
             .filter(|(_, callback)| callback.call_context_id == call_context_id)
             .count()
     }
+
+    /// Expose the `next_callback_id` field so that the canister sandbox can
+    /// predict what the new ids will be.
+    pub fn next_callback_id(&self) -> u64 {
+        self.next_callback_id
+    }
 }
 
 impl From<&RequestOrIngress> for CallOrigin {

@@ -426,8 +426,8 @@ impl Hypervisor {
             .unwrap();
 
         let closure = match payload {
-            Payload::Data(_) => callback.on_reply.clone(),
-            Payload::Reject(_) => callback.on_reject.clone(),
+            Payload::Data(_) => callback.on_reply,
+            Payload::Reject(_) => callback.on_reject,
         };
 
         let api_type = match payload {

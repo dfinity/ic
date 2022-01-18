@@ -1,4 +1,4 @@
-use crate::{valid_subslice, SystemStateAccessor};
+use crate::{sandbox_safe_system_state::SandboxSafeSystemState, valid_subslice};
 use ic_ic00_types::IC_00;
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_logger::{info, ReplicaLogger};
@@ -164,7 +164,7 @@ pub(crate) fn into_request(
     call_context_id: CallContextId,
     own_subnet_id: SubnetId,
     own_subnet_type: SubnetType,
-    system_state_accessor: &dyn SystemStateAccessor,
+    sandbox_safe_system_state: &mut SandboxSafeSystemState,
     logger: &ReplicaLogger,
 ) -> HypervisorResult<Request> {
     let (destination_canister, destination_subnet) = if callee == IC_00.get() {
@@ -243,13 +243,13 @@ pub(crate) fn into_request(
         )));
     }
 
-    let callback_id = system_state_accessor.register_callback(Callback::new(
+    let callback_id = sandbox_safe_system_state.register_callback(Callback::new(
         call_context_id,
         cycles,
         on_reply,
         on_reject,
         on_cleanup,
-    ));
+    ))?;
 
     Ok(Request {
         sender,
