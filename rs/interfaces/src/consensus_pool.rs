@@ -298,6 +298,13 @@ pub trait ConsensusPoolCache: Send + Sync {
     }
 }
 
+/// Cache of blocks from the finalized chain.
+pub trait ConsensusBlockCache: Send + Sync {
+    /// Returns the block at the given height from the finalized chain.
+    /// The implementation can choose the number of past blocks to cache.
+    fn block(&self, height: Height) -> Option<Block>;
+}
+
 /// An iterator for block ancestors.
 pub struct ChainIterator<'a> {
     consensus_pool: &'a dyn ConsensusPool,
@@ -306,7 +313,7 @@ pub struct ChainIterator<'a> {
 }
 
 impl<'a> ChainIterator<'a> {
-    /// Return an interator that iterates block acenstors, going backwards
+    /// Return an iterator that iterates block ancestors, going backwards
     /// from the `from_block` to the `to_block` (both inclusive), or until a
     /// parent is not found in the consensus pool if the `to_block` is not
     /// specified.

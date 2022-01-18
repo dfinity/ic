@@ -1,7 +1,7 @@
 //! We define a cache for consensus objects/values that is updated whenever
 //! consensus updates the consensus pool.
 use ic_interfaces::consensus_pool::{
-    ChainIterator, ChangeAction, ConsensusPool, ConsensusPoolCache,
+    ChainIterator, ChangeAction, ConsensusBlockCache, ConsensusPool, ConsensusPoolCache,
 };
 use ic_types::{
     consensus::{
@@ -11,6 +11,7 @@ use ic_types::{
     Height, Time,
 };
 use std::cmp::Ordering;
+use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::sync::RwLock;
 
@@ -31,6 +32,7 @@ struct CachedData {
     finalized_block: Block,
     summary_block: Block,
     catch_up_package: CUPWithOriginalProtobuf,
+    finalized_chain: FinalizedChain,
 }
 
 impl CachedData {
@@ -81,6 +83,12 @@ impl ConsensusPoolCache for ConsensusCacheImpl {
     }
 }
 
+impl ConsensusBlockCache for ConsensusCacheImpl {
+    fn block(&self, height: Height) -> Option<Block> {
+        self.cache.read().unwrap().finalized_chain.block(height)
+    }
+}
+
 impl ConsensusCacheImpl {
     /// Initialize and return a new ConsensusCache with data from the given
     /// ConsensusPool.
@@ -89,12 +97,14 @@ impl ConsensusCacheImpl {
         let finalized_block = get_highest_finalized_block(pool, &catch_up_package.cup);
         let mut summary_block = catch_up_package.cup.content.block.as_ref().clone();
         update_summary_block(pool, &mut summary_block, &finalized_block);
+        let finalized_chain = FinalizedChain::new(pool, &summary_block, &finalized_block);
 
         Self {
             cache: RwLock::new(CachedData {
                 finalized_block,
                 summary_block,
                 catch_up_package,
+                finalized_chain,
             }),
         }
     }
@@ -142,6 +152,9 @@ impl ConsensusCacheImpl {
             }
         });
         update_summary_block(pool, &mut cache.summary_block, &cache.finalized_block);
+        cache
+            .finalized_chain
+            .update(pool, &cache.summary_block, &cache.finalized_block);
     }
 }
 
@@ -242,6 +255,109 @@ pub(crate) fn update_summary_block(
     }
 }
 
+struct FinalizedChain {
+    /// The blocks in the chain between [summary_block, finalized_block],
+    /// ends inclusive. So this can never be empty.
+    finalized_chain: BTreeMap<Height, Block>,
+}
+
+impl FinalizedChain {
+    fn new(
+        consensus_pool: &dyn ConsensusPool,
+        summary_block: &Block,
+        finalized_tip: &Block,
+    ) -> Self {
+        let mut finalized_chain = BTreeMap::new();
+        match summary_block.height().cmp(&finalized_tip.height()) {
+            Ordering::Less | Ordering::Equal => Self::add_blocks(
+                consensus_pool,
+                summary_block.height(),
+                finalized_tip,
+                &mut finalized_chain,
+            ),
+            Ordering::Greater => {
+                panic!(
+                    "FinalizedChain::new(): summary height {} > finalized height {}",
+                    summary_block.height(),
+                    finalized_tip.height()
+                );
+            }
+        }
+
+        Self { finalized_chain }
+    }
+
+    /// Updates the blocks based on the new summary_block/finalized_tip.
+    fn update(
+        &mut self,
+        consensus_pool: &dyn ConsensusPool,
+        summary_block: &Block,
+        finalized_tip: &Block,
+    ) {
+        // The map can never be empty, hence these unwraps are safe.
+        let cur_summary_height = *self.finalized_chain.keys().next().unwrap();
+        let cur_tip_height = *self.finalized_chain.keys().next_back().unwrap();
+
+        let start_height = if cur_summary_height == summary_block.height() {
+            match cur_tip_height.cmp(&finalized_tip.height()) {
+                Ordering::Less => {
+                    // Common case: only the tip moved. Just append the new blocks
+                    cur_tip_height.increment()
+                }
+                Ordering::Equal => return,
+                Ordering::Greater => {
+                    panic!(
+                        "FinalizedChain::update(): current tip {} > new tip {}",
+                        cur_tip_height,
+                        finalized_tip.height(),
+                    );
+                }
+            }
+        } else {
+            // Summary block changed. Rebuild the chain with the new range.
+            self.finalized_chain.clear();
+            summary_block.height()
+        };
+
+        assert!(
+            start_height <= finalized_tip.height(),
+            "FinalizedChain::update(): start_height {} > new tip {}, \
+            cur_tip = {}, cur_summary = {}, new_summary = {}",
+            start_height,
+            finalized_tip.height(),
+            cur_tip_height,
+            cur_summary_height,
+            summary_block.height(),
+        );
+        Self::add_blocks(
+            consensus_pool,
+            start_height,
+            finalized_tip,
+            &mut self.finalized_chain,
+        )
+    }
+
+    /// Adds the blocks in the range [start_height, finalized_tip.height()] to the
+    /// finalized chain(ends inclusive).
+    fn add_blocks(
+        consensus_pool: &dyn ConsensusPool,
+        start_height: Height,
+        finalized_tip: &Block,
+        finalized_chain: &mut BTreeMap<Height, Block>,
+    ) {
+        ChainIterator::new(consensus_pool, finalized_tip.clone(), None)
+            .take_while(|block| block.height() >= start_height)
+            .for_each(|block| {
+                finalized_chain.insert(block.height(), block);
+            })
+    }
+
+    /// Looks up the finalized chain for the block at the given height.
+    fn block(&self, height: Height) -> Option<Block> {
+        self.finalized_chain.get(&height).cloned()
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -259,6 +375,20 @@ mod test {
     use ic_types::consensus::*;
     use std::sync::Arc;
     use std::time::Duration;
+
+    // Verifies that the finalized chain has the specified blocks
+    fn check_finalized_chain(consensus_cache: &ConsensusCacheImpl, expected: &[Height]) {
+        let blocks = &consensus_cache
+            .cache
+            .read()
+            .unwrap()
+            .finalized_chain
+            .finalized_chain;
+        assert_eq!(blocks.len(), expected.len());
+        for height in expected {
+            assert!(blocks.contains_key(height));
+        }
+    }
 
     #[test]
     fn test_consensus_cache() {
@@ -291,6 +421,7 @@ mod test {
             assert_eq!(consensus_cache.finalized_block().height(), Height::from(0));
             // No consensus time when there is only genesis block
             assert_eq!(consensus_cache.consensus_time(), None);
+            check_finalized_chain(&consensus_cache, &[Height::from(0)]);
 
             assert_eq!(pool.advance_round_normal_operation_n(2), Height::from(2));
             let mut block = pool.make_next_block();
@@ -314,6 +445,15 @@ mod test {
             assert_eq!(consensus_cache.consensus_time(), Some(time));
             pool.insert_validated(pool.make_next_beacon());
             pool.insert_validated(pool.make_next_tape());
+            check_finalized_chain(
+                &consensus_cache,
+                &[
+                    Height::from(0),
+                    Height::from(1),
+                    Height::from(2),
+                    Height::from(3),
+                ],
+            );
 
             // 3. Cache can be updated by CatchUpPackage
             assert_eq!(
@@ -329,6 +469,7 @@ mod test {
             consensus_cache.update(&pool, updates);
             assert_eq!(consensus_cache.catch_up_package(), catch_up_package);
             assert_eq!(consensus_cache.finalized_block().height(), Height::from(4));
+            check_finalized_chain(&consensus_cache, &[Height::from(4)]);
         })
     }
 }
