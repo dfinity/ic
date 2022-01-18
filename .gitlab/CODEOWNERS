@@ -67,7 +67,7 @@
 /testnet/tests/scripts/nns_workload.sh                     @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/nns-team
 /testnet/tests/scripts/node_assign_remove_test.sh                 @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
 /testnet/tests/scripts/rejoin_test.sh                      @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/message-routing-owners
-/testnet/tests/scripts/subnet_query_workload.sh            @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/execution-owners
+/testnet/tests/scripts/subnet_query_workload.sh            @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
 
 /testnet/tests/scripts/subnet_update_workload.sh           @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
 /testnet/tests/scripts/uninstall_canister_by_proposal_test.sh            @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/execution-owners
@@ -90,7 +90,7 @@
 /rs/execution_environment/           @dfinity-lab/teams/execution-owners
 /rs/guestos_vsock_agent/             @dfinity-lab/teams/node-team
 /rs/http_handler/                    @dfinity-lab/teams/networking-team
-/rs/ic_fondue/                         @dfinity-lab/teams/ic-testing-verification
+/rs/ic_fondue/                       @dfinity-lab/teams/ic-testing-verification
 /rs/ingress_manager/                 @dfinity-lab/teams/consensus-owners
 /rs/interfaces/                      @dfinity-lab/teams/interface-owners
 /rs/interfaces/src/artifact_pool.rs  @dfinity-lab/teams/consensus-owners
@@ -104,6 +104,7 @@
 /rs/interfaces/src/p2p.rs            @dfinity-lab/teams/networking-team
 /rs/interfaces/src/registry.rs       @dfinity-lab/teams/node-team
 /rs/interfaces/src/rpc_bridge.rs     @dfinity-lab/teams/networking-team
+/rs/interfaces/src/transport.rs      @dfinity-lab/teams/networking-team
 /rs/memory_tracker/                  @dfinity-lab/teams/execution-owners
 /rs/messaging/                       @dfinity-lab/teams/message-routing-owners
 /rs/nns/                             @dfinity-lab/teams/nns-team @granstrom1
@@ -156,6 +157,7 @@
 /rs/types/types/src/p2p.rs           @dfinity-lab/teams/networking-team
 /rs/universal_canister/              @dfinity-lab/teams/execution-owners @dfinity-lab/teams/ic-testing-verification
 /rs/validator/                       @dfinity-lab/teams/execution-owners
+/rs/workload_generator               @dfinity-lab/teams/networking-team
 
 # Scalability suite is currently owned by both node-team and testing team
 # Most individual benchmarks are owned by individual teams
