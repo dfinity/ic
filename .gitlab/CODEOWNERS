@@ -84,7 +84,7 @@
 /rs/consensus/                       @dfinity-lab/teams/consensus-owners
 /rs/crypto/                          @dfinity-lab/teams/crypto-owners
 /rs/cycles_account_manager/          @dfinity-lab/teams/execution-owners
-/rs/drun/                            @dfinity-lab/teams/networking-team
+/rs/drun/                            @dfinity-lab/teams/execution-owners
 /rs/embedders/                       @dfinity-lab/teams/execution-owners
 /rs/execution_environment/           @dfinity-lab/teams/execution-owners
 /rs/guestos_vsock_agent/             @dfinity-lab/teams/node-team
