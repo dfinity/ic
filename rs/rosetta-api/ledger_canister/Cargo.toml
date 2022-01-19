@@ -10,7 +10,7 @@ dfn_core = {path = "../../rust_canisters/dfn_core"}
 dfn_candid = {path = "../../rust_canisters/dfn_candid"}
 dfn_http = {path = "../../rust_canisters/dfn_http"}
 dfn_protobuf = {path = "../../rust_canisters/dfn_protobuf"}
-candid = "0.7.8"
+candid = "0.7.10"
 lazy_static = "1.4.0"
 serde = "1.0"
 ic-crypto-sha = {path = "../../crypto/sha/"}

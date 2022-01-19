@@ -1,8 +1,10 @@
 use ledger_canister::{
-    metrics_encoder::MetricsEncoder, BlockHeight, BlockRes, EncodedBlock, GetBlocksArgs,
-    IterBlocksArgs,
+    metrics_encoder::MetricsEncoder, BlockHeight, BlockRange, BlockRes, CandidBlock, EncodedBlock,
+    GetBlocksArgs, GetBlocksError, GetBlocksResult, IterBlocksArgs, MAX_BLOCKS_PER_REQUEST,
 };
 
+use candid::candid_method;
+use dfn_candid::candid_one;
 use dfn_core::api::stable_memory_size_in_pages;
 use dfn_core::{over_init, stable, BytesS};
 use dfn_protobuf::protobuf;
@@ -168,6 +170,7 @@ fn iter_blocks_() {
     dfn_core::over(protobuf, |IterBlocksArgs { start, length }| {
         let archive_state = ARCHIVE_STATE.read().unwrap();
         let blocks = &archive_state.blocks;
+        let length = length.min(MAX_BLOCKS_PER_REQUEST);
         ledger_canister::iter_blocks(blocks, start, length)
     });
 }
@@ -180,8 +183,53 @@ fn get_blocks_() {
         let archive_state = ARCHIVE_STATE.read().unwrap();
         let blocks = &archive_state.blocks;
         let from_offset = archive_state.block_height_offset;
+        let length = length.min(MAX_BLOCKS_PER_REQUEST);
         ledger_canister::get_blocks(blocks, from_offset, start, length)
     });
+}
+
+#[candid_method(query, rename = "get_blocks")]
+fn get_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> GetBlocksResult {
+    use ledger_canister::range_utils;
+
+    let archive_state = ARCHIVE_STATE.read().unwrap();
+    let blocks = &archive_state.blocks;
+
+    let block_range = range_utils::make_range(archive_state.block_height_offset, blocks.len());
+
+    if start < block_range.start {
+        return Err(GetBlocksError::BadFirstBlockIndex {
+            requested_index: start,
+            first_valid_index: block_range.start,
+        });
+    }
+
+    let requested_range = range_utils::make_range(start, length);
+    let effective_range = range_utils::intersect(
+        &block_range,
+        &range_utils::head(&requested_range, MAX_BLOCKS_PER_REQUEST),
+    );
+
+    let mut candid_blocks: Vec<CandidBlock> =
+        Vec::with_capacity(range_utils::range_len(&effective_range) as usize);
+
+    for i in effective_range {
+        let encoded_block = &blocks[(i - block_range.start) as usize];
+        let candid_block =
+            CandidBlock::from(encoded_block.decode().expect("failed to decode a block"));
+        candid_blocks.push(candid_block);
+    }
+
+    Ok(BlockRange {
+        blocks: candid_blocks,
+    })
+}
+
+/// Get multiple Blocks by BlockHeight and length. If the query is outside the
+/// range stored in the Node the result is an error.
+#[export_name = "canister_query get_blocks"]
+fn get_blocks_candid_() {
+    dfn_core::over(candid_one, get_blocks);
 }
 
 #[export_name = "canister_post_upgrade"]
@@ -255,4 +303,21 @@ fn encode_metrics(w: &mut MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
 #[export_name = "canister_query http_request"]
 fn http_request() {
     ledger_canister::http_request::serve_metrics(encode_metrics);
+}
+
+#[test]
+fn check_archive_candid_interface_compatibility() {
+    use candid::utils::CandidSource;
+
+    candid::export_service!();
+
+    let actual_interface = __export_service();
+    let expected_interface_path =
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ledger_archive.did");
+
+    candid::utils::service_compatible(
+        CandidSource::Text(&actual_interface),
+        CandidSource::File(&expected_interface_path),
+    )
+    .expect("ledger archive canister interface is not compatible with the ledger_archive.did file");
 }

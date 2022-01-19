@@ -30,6 +30,7 @@ pub mod tokens;
 #[path = "../gen/ic_ledger.pb.v1.rs"]
 #[rustfmt::skip]
 pub mod protobuf;
+pub mod range_utils;
 pub mod timestamp;
 pub mod validate_endpoints;
 
@@ -53,6 +54,7 @@ where
 }
 
 pub const HASH_LENGTH: usize = 32;
+pub const MAX_BLOCKS_PER_REQUEST: usize = 2000;
 
 #[derive(CandidType, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct HashOf<T> {
@@ -1961,6 +1963,102 @@ impl AccountBalanceArgs {
     }
 }
 
+/// An operation which modifies account balances
+#[derive(
+    Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord,
+)]
+pub enum CandidOperation {
+    Burn {
+        from: AccountIdBlob,
+        amount: Tokens,
+    },
+    Mint {
+        to: AccountIdBlob,
+        amount: Tokens,
+    },
+    Transfer {
+        from: AccountIdBlob,
+        to: AccountIdBlob,
+        amount: Tokens,
+        fee: Tokens,
+    },
+}
+
+impl From<Operation> for CandidOperation {
+    fn from(op: Operation) -> Self {
+        match op {
+            Operation::Burn { from, amount } => Self::Burn {
+                from: from.to_address(),
+                amount,
+            },
+            Operation::Mint { to, amount } => Self::Mint {
+                to: to.to_address(),
+                amount,
+            },
+            Operation::Transfer {
+                from,
+                to,
+                amount,
+                fee,
+            } => Self::Transfer {
+                from: from.to_address(),
+                to: to.to_address(),
+                amount,
+                fee,
+            },
+        }
+    }
+}
+
+/// An operation with the metadata the client generated attached to it
+#[derive(
+    Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord,
+)]
+pub struct CandidTransaction {
+    pub operation: CandidOperation,
+    pub memo: Memo,
+    pub created_at_time: TimeStamp,
+}
+
+impl From<Transaction> for CandidTransaction {
+    fn from(
+        Transaction {
+            operation,
+            memo,
+            created_at_time,
+        }: Transaction,
+    ) -> Self {
+        Self {
+            memo,
+            operation: operation.into(),
+            created_at_time,
+        }
+    }
+}
+
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct CandidBlock {
+    pub parent_hash: Option<[u8; HASH_LENGTH]>,
+    pub transaction: CandidTransaction,
+    pub timestamp: TimeStamp,
+}
+
+impl From<Block> for CandidBlock {
+    fn from(
+        Block {
+            parent_hash,
+            transaction,
+            timestamp,
+        }: Block,
+    ) -> Self {
+        Self {
+            parent_hash: parent_hash.map(|h| h.into_bytes()),
+            transaction: transaction.into(),
+            timestamp,
+        }
+    }
+}
+
 /// Argument taken by the total_supply endpoint
 ///
 /// The reason it is a struct is so that it can be extended -- e.g., to be able
@@ -1976,15 +2074,29 @@ pub struct TipOfChainRes {
     pub tip_index: BlockHeight,
 }
 
+#[derive(Serialize, Deserialize, CandidType)]
 pub struct GetBlocksArgs {
     pub start: BlockHeight,
     pub length: usize,
 }
 
-impl GetBlocksArgs {
-    pub fn new(start: BlockHeight, length: usize) -> Self {
-        GetBlocksArgs { start, length }
-    }
+#[derive(Serialize, Deserialize, CandidType, Debug)]
+pub struct BlockRange {
+    pub blocks: Vec<CandidBlock>,
+}
+
+pub type GetBlocksResult = Result<BlockRange, GetBlocksError>;
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, CandidType)]
+pub enum GetBlocksError {
+    BadFirstBlockIndex {
+        requested_index: BlockHeight,
+        first_valid_index: BlockHeight,
+    },
+    Other {
+        error_code: u64,
+        error_message: String,
+    },
 }
 
 pub struct GetBlocksRes(pub Result<Vec<EncodedBlock>, String>);
