@@ -57,7 +57,7 @@ pub fn test(man: IcManager, ctx: &ic_fondue::pot::Context) {
 
     let node_ids = ctx.initial_node_ids(&handle);
     info!(ctx.logger, "Removing {:?}", node_ids[0]);
-    ctx.remove_node(&handle, node_ids[0]);
+    ctx.remove_nodes(&handle, vec![node_ids[0]].as_ref());
     info!(ctx.logger, "Node removed from registry");
 
     // Verify that subnet membership has been updated via Consensus

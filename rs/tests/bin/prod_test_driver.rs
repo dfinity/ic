@@ -17,6 +17,7 @@ use ic_tests::upgrade_reject::{self, upgrade_reject};
 use ic_tests::{
     basic_health_test::{self, basic_health_test},
     execution,
+    node_reassignment_test::{self, test as node_reassignment_test},
 };
 use ic_tests::{
     cycles_minting_test, feature_flags,
@@ -301,6 +302,11 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         t("basic_health_test", basic_health_test),
                         t("basic_health_test2", basic_health_test),
                     ]),
+                ),
+                pot(
+                    "node_reassignment_pot",
+                    node_reassignment_test::config,
+                    par(vec![t("node_reassignment_test", node_reassignment_test)]),
                 ),
                 pot(
                     "nns_fault_tolerance_pot",

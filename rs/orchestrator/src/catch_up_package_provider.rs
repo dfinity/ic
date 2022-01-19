@@ -256,7 +256,7 @@ impl CatchUpPackageProvider {
 
         let registry_cup = self
             .registry
-            .get_registry_cup(registry_version)
+            .get_registry_cup(registry_version, subnet_id)
             .map(CUPWithOriginalProtobuf::from_cup)
             .map_err(|err| warn!(self.logger, "Failed to retrieve registry CUP {:?}", err))
             .ok();
@@ -293,6 +293,9 @@ impl CatchUpPackageProvider {
     /// Returns the locally persisted CUP.
     pub fn get_local_cup(&self) -> Option<CUPWithOriginalProtobuf> {
         let path = self.get_cup_path();
+        if !path.exists() {
+            return None;
+        }
         match File::open(&path) {
             Ok(reader) => pb::CatchUpPackage::read_from_reader(reader)
                 .and_then(|protobuf| {

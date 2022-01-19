@@ -104,6 +104,7 @@ pub struct IcEndpoint {
     pub node_id: NodeId,
 }
 
+/// A set of operations on an IC node. Note that all calls are blocking.
 pub trait IcControl {
     fn start_node(&self, logger: Logger) -> IcEndpoint;
     fn kill_node(&self, logger: Logger);
