@@ -233,23 +233,14 @@ impl FilteredCanisters {
         }
     }
 
-    fn from(
-        active_canister_ids: BTreeSet<CanisterId>,
-        rate_limited_canister_ids: BTreeSet<CanisterId>,
-    ) -> Self {
-        Self {
-            active_canister_ids,
-            rate_limited_canister_ids,
-        }
-    }
-
-    fn add_rate_limited_canisters(&mut self, rate_limited_ids: &BTreeSet<CanisterId>) {
+    fn add_canisters(
+        &mut self,
+        active_canister_ids: &[CanisterId],
+        rate_limited_ids: &BTreeSet<CanisterId>,
+    ) {
+        self.active_canister_ids.extend(active_canister_ids.iter());
         self.rate_limited_canister_ids
             .extend(rate_limited_ids.iter());
-    }
-
-    fn add_active_canisters(&mut self, active_canister_ids: &BTreeSet<CanisterId>) {
-        self.active_canister_ids.extend(active_canister_ids.iter());
     }
 }
 
@@ -262,7 +253,7 @@ fn filter_canisters(
     canisters: &BTreeMap<CanisterId, CanisterState>,
     heartbeat_handling: HeartbeatHandling,
     heap_delta_rate_limit: NumBytes,
-) -> FilteredCanisters {
+) -> (Vec<CanisterId>, BTreeSet<CanisterId>) {
     let mut rate_limited_ids = BTreeSet::new();
 
     // Consider only canisters with some input messages for execution.
@@ -282,7 +273,7 @@ fn filter_canisters(
         .cloned()
         .collect();
 
-    FilteredCanisters::from(active_canister_ids, rate_limited_ids)
+    (active_canister_ids, rate_limited_ids)
 }
 
 // Partitions the executable canisters to the available cores for execution.
@@ -299,7 +290,7 @@ fn filter_canisters(
 // * Core 3 takes CanisterId3`, `CanisterId6`
 fn partition_canisters_to_cores(
     scheduler_cores: usize,
-    executable_canister_ids: &BTreeSet<CanisterId>,
+    executable_canister_ids: &[CanisterId],
     mut canisters: BTreeMap<CanisterId, CanisterState>,
 ) -> (Vec<Vec<CanisterState>>, BTreeMap<CanisterId, CanisterState>) {
     let mut res = vec![Vec::<CanisterState>::new(); scheduler_cores];
@@ -386,19 +377,19 @@ impl SchedulerImpl {
             let subnet_available_memory = self.exec_env.subnet_available_memory(&state);
             let canisters = state.take_canister_states();
             // Obtain the active canisters and update the collection of heap delta rate-limited canisters.
-            let filtered_canisters = filter_canisters(
+            let (active_canister_ids, rate_limited_canister_ids) = filter_canisters(
                 ordered_canister_ids,
                 &canisters,
                 heartbeat_handling,
                 self.config.heap_delta_rate_limit,
             );
             round_filtered_canisters
-                .add_rate_limited_canisters(&filtered_canisters.rate_limited_canister_ids);
+                .add_canisters(&active_canister_ids, &rate_limited_canister_ids);
 
             let (mut active_canisters_partitioned_by_cores, inactive_canisters) =
                 partition_canisters_to_cores(
                     self.config.scheduler_cores,
-                    &filtered_canisters.active_canister_ids,
+                    &active_canister_ids,
                     canisters,
                 );
 
@@ -440,39 +431,6 @@ impl SchedulerImpl {
             );
             ingress_execution_results.append(&mut loop_ingress_execution_results);
 
-            // We only export metrics for "executable" canisters to ensure that the metrics
-            // are not polluted by canisters that haven't had any messages for a long time.
-            for loop_executable_canister_id in &filtered_canisters.active_canister_ids {
-                if round_filtered_canisters
-                    .active_canister_ids
-                    .contains(loop_executable_canister_id)
-                {
-                    continue;
-                }
-                let loop_executable_canister_state =
-                    state.canister_state(loop_executable_canister_id).unwrap();
-                let canister_age = current_round.get()
-                    - loop_executable_canister_state
-                        .scheduler_state
-                        .last_full_execution_round
-                        .get();
-                self.metrics.canister_age.observe(canister_age as f64);
-                // If `canister_age` > 1 / `compute_allocation` the canister ought to have been
-                // scheduled.
-                let allocation = Ratio::new(
-                    loop_executable_canister_state
-                        .scheduler_state
-                        .compute_allocation
-                        .as_percent(),
-                    100,
-                );
-                if *allocation.numer() > 0 && Ratio::from_integer(canister_age) > allocation.recip()
-                {
-                    self.metrics.canister_compute_allocation_violation.inc();
-                }
-            }
-            round_filtered_canisters.add_active_canisters(&filtered_canisters.active_canister_ids);
-
             total_instructions_consumed += instructions_consumed;
             if instructions_consumed == NumInstructions::from(0) {
                 break state;
@@ -497,6 +455,30 @@ impl SchedulerImpl {
             is_first_iteration = false;
             drop(finalization_timer);
         };
+
+        // We only export metrics for "executable" canisters to ensure that the metrics
+        // are not polluted by canisters that haven't had any messages for a long time.
+        for canister_id in &round_filtered_canisters.active_canister_ids {
+            let canister_state = state.canister_state(canister_id).unwrap();
+            let canister_age = current_round.get()
+                - canister_state
+                    .scheduler_state
+                    .last_full_execution_round
+                    .get();
+            self.metrics.canister_age.observe(canister_age as f64);
+            // If `canister_age` > 1 / `compute_allocation` the canister ought to have been
+            // scheduled.
+            let allocation = Ratio::new(
+                canister_state
+                    .scheduler_state
+                    .compute_allocation
+                    .as_percent(),
+                100,
+            );
+            if *allocation.numer() > 0 && Ratio::from_integer(canister_age) > allocation.recip() {
+                self.metrics.canister_compute_allocation_violation.inc();
+            }
+        }
 
         for (message_id, status) in ingress_execution_results {
             self.ingress_history_writer
