@@ -1,8 +1,10 @@
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::AlgorithmId;
-use ic_types::{NodeIndex, NumberOfNodes, Randomness};
+use ic_types::{NumberOfNodes, Randomness};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+
+pub use ic_types::NodeIndex;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ThresholdEcdsaError {

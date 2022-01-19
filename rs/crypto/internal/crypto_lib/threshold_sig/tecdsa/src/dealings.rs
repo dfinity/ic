@@ -354,9 +354,8 @@ impl IDkgDealingInternal {
                     }
                     PolynomialCommitment::Simple(c) => {
                         let constant_term = self.commitment.constant_term();
-                        let dealer_index = EccScalar::from_node_index(curve_type, dealer_index);
 
-                        if c.evaluate_at(&dealer_index)? != constant_term {
+                        if c.evaluate_at(dealer_index)? != constant_term {
                             return Err(ThresholdEcdsaError::InconsistentCommitments);
                         }
                     }

@@ -115,3 +115,21 @@ fn test_scalar_negate() -> ThresholdEcdsaResult<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_point_mul_by_node_index() -> ThresholdEcdsaResult<()> {
+    for curve in EccCurveType::all() {
+        let g = EccCurve::new(curve).generator_g()?;
+
+        for node_index in 0..300 {
+            let g_ni = g.mul_by_node_index(node_index)?;
+
+            let scalar = EccScalar::from_node_index(curve, node_index);
+            let g_s = g.scalar_mul(&scalar)?;
+
+            assert_eq!(g_s, g_ni);
+        }
+    }
+
+    Ok(())
+}
