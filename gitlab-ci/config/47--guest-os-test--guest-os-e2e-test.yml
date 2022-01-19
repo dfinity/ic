@@ -219,6 +219,25 @@ guest-os-downgrade-from-new-version-to-mainnet-nns-subnet:
     - |
       $SHELL_WRAPPER "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "nns" "true"
 
+.run-farm-based-test: &run-farm-based-test |
+  # Determine a fake GIT_REVISION. It will be the SHA of the inputs to the image.
+  # TODO: remove the assumption in tests that there is git.
+  GIT_REVISION=$("${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/find-build-id.sh)
+  export GIT_REVISION
+  BASE_DIR="${CI_PROJECT_DIR}/logs/$(date +%Y%m%d_%H%M%S)"
+  mkdir -p "$BASE_DIR"
+  # Logs produced during execution of the system tests are stored away in a structured way, i.e. one file per test.
+  # Unstructured logs, i.e. those which bypassed the logger and were outputed directly to stdout/stderr,
+  # are forwarded to a separate file.
+  # All lines produced by the logger share the same structure: e.g. "Nov 10 13:20:30.931 INFO ...".
+  # Hence, the fourth column can be used to distinguish structured from unstructerd logs.
+  $SHELL_WRAPPER capsule -v -t "${GIT_REVISION}" -i 'ic-os/guestos/build-out/**/*' -- \
+  "${CI_PROJECT_DIR}/rs/tests/run-farm-based-system-tests.sh" \
+    --suite "${SUITE_NAME}" \
+    --log-base-dir "${BASE_DIR}" \
+  | tee "${BASE_DIR}/unstructured-logs.log" \
+  | awk '$4 ~ /CRIT|ERRO|WARN|INFO|DEBG|TRCE/'
+
 .system-tests:
   extends:
     - .e2e-test-base
@@ -237,26 +256,20 @@ guest-os-downgrade-from-new-version-to-mainnet-nns-subnet:
       - "logs/"
   timeout: 30m
   script:
-    - |
-      # Determine a fake GIT_REVISION. It will be the SHA of the inputs to the image.
-      # TODO: remove the assumption in tests that there is git.
-      GIT_REVISION=$("${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/find-build-id.sh)
-      export GIT_REVISION
-      BASE_DIR="${CI_PROJECT_DIR}/logs/$(date +%Y%m%d_%H%M%S)"
-      mkdir -p "$BASE_DIR"
-      # Logs produced during execution of the system tests are stored away in a structured way, i.e. one file per test.
-      # Unstructured logs, i.e. those which bypassed the logger and were outputed directly to stdout/stderr,
-      # are forwarded to a separate file.
-      # All lines produced by the logger share the same structure: e.g. "Nov 10 13:20:30.931 INFO ...".
-      # Hence, the fourth column can be used to distinguish structured from unstructerd logs.
-      $SHELL_WRAPPER capsule -v -t "${GIT_REVISION}" -i 'ic-os/guestos/build-out/**/*' -- \
-      "${CI_PROJECT_DIR}/rs/tests/run-farm-based-system-tests.sh" \
-        --suite "${SUITE_NAME}" \
-        --log-base-dir "${BASE_DIR}" \
-      | tee "${BASE_DIR}/unstructured-logs.log" \
-      | awk '$4 ~ /CRIT|ERRO|WARN|INFO|DEBG|TRCE/'
+    - *run-farm-based-test
 
 system-tests-pre-master:
   extends: .system-tests
   variables:
     SUITE_NAME: "pre_master"
+
+rosetta-hourly:
+  extends: .system-tests
+  variables:
+    SUITE_NAME: "rosetta"
+  script:
+    - |
+      # Ensure that rosetta 3rd-party dependencies are available
+      # shellcheck disable=SC1090
+      . "${CI_PROJECT_DIR}/rs/tests/prepare-rosetta-deps.sh"
+    - *run-farm-based-test
