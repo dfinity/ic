@@ -94,10 +94,12 @@ if [ -z "${SSH_KEY_DIR:-}" ]; then
     ssh-keygen -t ed25519 -N '' -f "$SSH_KEY_DIR/admin"
 fi
 
-JOURNALBEAT_HOSTS=()
-if [ -n "${TEST_ES_HOSTNAMES:-}" ]; then
-    JOURNALBEAT_HOSTS+=("--journalbeat-hosts" "${TEST_ES_HOSTNAMES//[[:space:]]/}")
+if [ -z "${TEST_ES_HOSTNAMES:-}" ]; then
+    TEST_ES_HOSTNAMES+="elasticsearch-node-0.testnet.dfinity.systems:443,"
+    TEST_ES_HOSTNAMES+="elasticsearch-node-1.testnet.dfinity.systems:443,"
+    TEST_ES_HOSTNAMES+="elasticsearch-node-2.testnet.dfinity.systems:443"
 fi
+JOURNALBEAT_HOSTS=("--journalbeat-hosts" "${TEST_ES_HOSTNAMES//[[:space:]]/}")
 
 RCLONE_ARGS=("--git-rev" "$GIT_REVISION" "--out=$ARTIFACT_DIR" "--unpack" "--mark-executable")
 # prod-test-driver and (NNS) canisters
