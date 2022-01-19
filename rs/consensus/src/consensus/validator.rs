@@ -783,7 +783,6 @@ impl Validator {
                             notarization.into_message(),
                             format!("{:?}", e),
                         ));
-                        continue;
                     } else if verification.is_ok() {
                         if get_notarized_parent(pool_reader, &proposal).is_ok() {
                             self.metrics.observe_block(pool_reader, &proposal);
