@@ -137,12 +137,11 @@ impl ThresholdEcdsaSigShareInternal {
         let e = EccScalar::from_bytes_wide(curve_type, hashed_message)?;
 
         let theta = e.add(&rho.mul(&key_tweak)?)?;
-        let index = EccScalar::from_node_index(curve_type, signer_index);
 
         // Evaluate commitments at the receiver index
-        let lambda_j = lambda.evaluate_at(&index)?;
-        let kappa_times_lambda_j = kappa_times_lambda.evaluate_at(&index)?;
-        let key_times_lambda_j = key_times_lambda.evaluate_at(&index)?;
+        let lambda_j = lambda.evaluate_at(signer_index)?;
+        let kappa_times_lambda_j = kappa_times_lambda.evaluate_at(signer_index)?;
+        let key_times_lambda_j = key_times_lambda.evaluate_at(signer_index)?;
 
         let sigma_num = lambda_j
             .scalar_mul(&theta)?

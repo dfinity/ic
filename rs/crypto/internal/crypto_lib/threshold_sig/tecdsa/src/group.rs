@@ -662,6 +662,50 @@ impl EccPoint {
         }
     }
 
+    /// Perform point*scalar multiplication for node indexes (not constant time)
+    ///
+    /// This is a non-constant-time equivalent to
+    /// pt.scalar_mul(EccScalar::from_node_index(scalar)).
+    ///
+    /// When verifying commitments, the scalars used in evaluating the
+    /// polynomials are small and public (namely, the nodex indexes). By taking
+    /// advantage of this, it is possible to gain substantial performance
+    /// improvements as compared to using a constant-time scalar multiplication.
+    pub fn mul_by_node_index(&self, scalar: NodeIndex) -> ThresholdEcdsaResult<Self> {
+        use std::ops::Add;
+
+        // This cannot overflow as NodeIndex is a u32
+        let scalar = scalar as u64 + 1;
+        let scalar_bits = 64 - scalar.leading_zeros();
+
+        match self {
+            Self::K256(pt) => {
+                let mut res = k256::ProjectivePoint::identity();
+
+                for b in 0..scalar_bits {
+                    res = res.double();
+                    if (scalar >> (scalar_bits - 1 - b)) & 1 == 1 {
+                        res = res.add(pt);
+                    }
+                }
+
+                Ok(Self::K256(res))
+            }
+            Self::P256(pt) => {
+                let mut res = p256::ProjectivePoint::identity();
+
+                for b in 0..scalar_bits {
+                    res = res.double();
+                    if (scalar >> (scalar_bits - 1 - b)) & 1 == 1 {
+                        res = res.add(pt);
+                    }
+                }
+
+                Ok(Self::P256(res))
+            }
+        }
+    }
+
     /// Return self * scalar1 + other * scalar2
     pub fn mul_points(
         &self,

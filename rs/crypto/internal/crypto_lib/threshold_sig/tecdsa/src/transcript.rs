@@ -26,7 +26,7 @@ impl IDkgTranscriptInternal {
         self.combined_commitment.commitment().constant_term()
     }
 
-    pub(crate) fn evaluate_at(&self, eval_point: &EccScalar) -> ThresholdEcdsaResult<EccPoint> {
+    pub(crate) fn evaluate_at(&self, eval_point: NodeIndex) -> ThresholdEcdsaResult<EccPoint> {
         self.combined_commitment
             .commitment()
             .evaluate_at(eval_point)
@@ -297,8 +297,6 @@ impl CommitmentOpening {
             openings.push((dealer_index, opening));
         }
 
-        let receiver_index = EccScalar::from_node_index(curve, receiver_index);
-
         // Recombine the openings according to the type of combined polynomial
         match &transcript.combined_commitment {
             CombinedCommitment::BySummation(commitment) => {
@@ -318,7 +316,7 @@ impl CommitmentOpening {
                 let combined_opening = Self::Pedersen(combined_value, combined_mask);
 
                 // Check reconstructed opening matches the commitment
-                if commitment.check_opening(&receiver_index, &combined_opening)? {
+                if commitment.check_opening(receiver_index, &combined_opening)? {
                     Ok(combined_opening)
                 } else {
                     Err(ThresholdEcdsaError::InconsistentCommitments)
@@ -343,7 +341,7 @@ impl CommitmentOpening {
                 let combined_mask = EccScalar::interpolation_at_zero(&masks)?;
 
                 // Check reconstructed opening matches the commitment
-                if commitment.check_opening(&receiver_index, &combined_value, &combined_mask)? {
+                if commitment.check_opening(receiver_index, &combined_value, &combined_mask)? {
                     Ok(Self::Pedersen(combined_value, combined_mask))
                 } else {
                     Err(ThresholdEcdsaError::InconsistentCommitments)
@@ -365,7 +363,7 @@ impl CommitmentOpening {
                 let combined_value = EccScalar::interpolation_at_zero(&values)?;
 
                 // Check reconstructed opening matches the commitment
-                if commitment.check_opening(&receiver_index, &combined_value)? {
+                if commitment.check_opening(receiver_index, &combined_value)? {
                     Ok(Self::Simple(combined_value))
                 } else {
                     Err(ThresholdEcdsaError::InconsistentCommitments)

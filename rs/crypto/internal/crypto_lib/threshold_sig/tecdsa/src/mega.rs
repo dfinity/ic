@@ -488,9 +488,7 @@ pub(crate) fn decrypt_and_check(
         }
     };
 
-    let commitment_eval_point =
-        EccScalar::from_node_index(secret_key.curve().curve_type(), receiver_index as NodeIndex);
-    if commitment.check_opening(&commitment_eval_point, &opening)? {
+    if commitment.check_opening(receiver_index as NodeIndex, &opening)? {
         Ok(opening)
     } else {
         Err(ThresholdEcdsaError::InconsistentCommitments)

@@ -363,10 +363,12 @@ pub struct SimpleCommitment {
     pub points: Vec<EccPoint>,
 }
 
-fn evaluate_at(points: &[EccPoint], eval_point: &EccScalar) -> ThresholdEcdsaResult<EccPoint> {
-    let mut acc = EccPoint::identity(eval_point.curve_type());
+fn evaluate_at(points: &[EccPoint], eval_point: NodeIndex) -> ThresholdEcdsaResult<EccPoint> {
+    let curve_type = points[0].curve_type();
+
+    let mut acc = EccPoint::identity(curve_type);
     for pt in points.iter().rev() {
-        acc = acc.scalar_mul(eval_point)?;
+        acc = acc.mul_by_node_index(eval_point)?;
         acc = acc.add_points(pt)?;
     }
     Ok(acc)
@@ -397,13 +399,13 @@ impl SimpleCommitment {
         Ok(Self::new(points))
     }
 
-    pub fn evaluate_at(&self, eval_point: &EccScalar) -> ThresholdEcdsaResult<EccPoint> {
+    pub(crate) fn evaluate_at(&self, eval_point: NodeIndex) -> ThresholdEcdsaResult<EccPoint> {
         evaluate_at(&self.points, eval_point)
     }
 
-    pub fn check_opening(
+    pub(crate) fn check_opening(
         &self,
-        eval_point: &EccScalar,
+        eval_point: NodeIndex,
         value: &EccScalar,
     ) -> ThresholdEcdsaResult<bool> {
         let eval = self.evaluate_at(eval_point)?;
@@ -459,17 +461,17 @@ impl PedersenCommitment {
         Ok(Self::new(points))
     }
 
-    pub fn evaluate_at(&self, eval_point: &EccScalar) -> ThresholdEcdsaResult<EccPoint> {
+    pub(crate) fn evaluate_at(&self, eval_point: NodeIndex) -> ThresholdEcdsaResult<EccPoint> {
         evaluate_at(&self.points, eval_point)
     }
 
-    pub fn check_opening(
+    pub(crate) fn check_opening(
         &self,
-        eval_point: &EccScalar,
+        eval_point: NodeIndex,
         value: &EccScalar,
         mask: &EccScalar,
     ) -> ThresholdEcdsaResult<bool> {
-        let curve = eval_point.curve();
+        let curve = value.curve();
         let eval = self.evaluate_at(eval_point)?;
         let g = curve.generator_g()?;
         let h = curve.generator_h()?;
@@ -532,7 +534,7 @@ impl PolynomialCommitment {
         self.points().len()
     }
 
-    pub(crate) fn evaluate_at(&self, eval_point: &EccScalar) -> ThresholdEcdsaResult<EccPoint> {
+    pub(crate) fn evaluate_at(&self, eval_point: NodeIndex) -> ThresholdEcdsaResult<EccPoint> {
         evaluate_at(self.points(), eval_point)
     }
 
@@ -562,7 +564,7 @@ impl PolynomialCommitment {
 
     pub fn check_opening(
         &self,
-        eval_point: &EccScalar,
+        eval_point: NodeIndex,
         opening: &CommitmentOpening,
     ) -> ThresholdEcdsaResult<bool> {
         match (self, opening) {
