@@ -9,12 +9,12 @@ use ic_crypto_internal_csp::Csp;
 use rand_core::OsRng;
 use std::str::FromStr;
 use strum::IntoEnumIterator;
-use strum_macros::{EnumIter, EnumString, ToString};
+use strum_macros::{Display, EnumIter, EnumString};
 
 mod clib;
 pub mod csp;
 
-#[derive(EnumString, EnumIter, ToString)]
+#[derive(EnumString, EnumIter, Display)]
 #[strum(serialize_all = "snake_case")]
 enum Command {
     Lib,

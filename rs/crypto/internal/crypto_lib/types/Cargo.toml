@@ -11,8 +11,8 @@ ic-protobuf = { path = "../../../../protobuf" }
 phantom_newtype = { path = "../../../../phantom_newtype" }
 serde = { version = "1.0.99", features = [ "derive" ] }
 serde_cbor = "0.11.1"
-strum = "0.18.0"
-strum_macros = "0.18.0"
+strum = "0.23.0"
+strum_macros = "0.23.0"
 thiserror = "1.0"
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 

@@ -10,14 +10,14 @@ use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
 use num_traits::cast::ToPrimitive;
 use serde::Serialize;
 use std::{collections::BTreeSet, convert::TryFrom};
-use strum_macros::{EnumIter, EnumString, ToString};
+use strum_macros::{Display, EnumIter, EnumString};
 
 /// The id of the management canister.
 pub const IC_00: CanisterId = CanisterId::ic_00();
 pub const MAX_CONTROLLERS: usize = 10;
 
 /// Methods exported by ic:00.
-#[derive(Debug, EnumString, EnumIter, ToString, Copy, Clone)]
+#[derive(Debug, EnumString, EnumIter, Display, Copy, Clone)]
 #[strum(serialize_all = "snake_case")]
 pub enum Method {
     CanisterStatus,

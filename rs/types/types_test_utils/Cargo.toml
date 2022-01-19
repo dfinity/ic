@@ -7,4 +7,4 @@ edition = "2018"
 [dependencies]
 ic-types = { path = "../types" }
 proptest = "0.9.4"
-strum = "0.18.0"
+strum = "0.23.0"

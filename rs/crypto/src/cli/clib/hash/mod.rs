@@ -1,12 +1,12 @@
 //! Command line for hashes
 use std::str::FromStr;
 use strum::IntoEnumIterator;
-use strum_macros::{EnumIter, EnumString, ToString};
+use strum_macros::{Display, EnumIter, EnumString};
 
 mod bench;
 mod simple;
 
-#[derive(EnumString, EnumIter, ToString)]
+#[derive(EnumString, EnumIter, Display)]
 #[strum(serialize_all = "snake_case")]
 enum Command {
     Simple,

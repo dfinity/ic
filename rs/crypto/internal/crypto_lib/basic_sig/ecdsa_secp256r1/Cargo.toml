@@ -20,4 +20,4 @@ simple_asn1 = "0.5.4"
 ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
 proptest = "0.9.4"
 proptest-derive = "0.1.0"
-strum = "0.18.0"
+strum = "0.23.0"

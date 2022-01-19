@@ -2,14 +2,14 @@
 //! Subcommands are used to direct work to subcomponents.
 use std::str::FromStr;
 use strum::IntoEnumIterator;
-use strum_macros::{EnumIter, EnumString, ToString};
+use strum_macros::{Display, EnumIter, EnumString};
 
 mod basic_sig;
 mod hash;
 mod multi_sig;
 mod threshold_sig;
 
-#[derive(EnumString, EnumIter, ToString)]
+#[derive(EnumString, EnumIter, Display)]
 #[strum(serialize_all = "snake_case")]
 enum Command {
     Hash,

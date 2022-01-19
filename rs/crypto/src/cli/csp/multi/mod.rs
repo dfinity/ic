@@ -2,7 +2,7 @@
 //! Subcommands are used to direct work to subcomponents.
 use std::str::FromStr;
 use strum::IntoEnumIterator;
-use strum_macros::{EnumIter, EnumString, ToString};
+use strum_macros::{Display, EnumIter, EnumString};
 
 mod combine_signatures;
 mod keygen;
@@ -10,7 +10,7 @@ mod sign;
 mod verify_combined;
 mod verify_individual;
 
-#[derive(EnumString, EnumIter, ToString)]
+#[derive(EnumString, EnumIter, Display)]
 #[strum(serialize_all = "snake_case")]
 enum Command {
     KeyGen,
