@@ -92,13 +92,13 @@ pub(crate) struct SchedulerImpl {
     thread_pool: RefCell<scoped_threadpool::Pool>,
 }
 
-// Indicates whether the heartbeat method of a canister should be run on not and
-// how errors should be tracked.
-//
-// An execution round consists of multiple iterations. The heartbeat should
-// run only in the first iteration.
-// Additionally, all errors should be tracked on system subnets, but on other
-// subnets only system errors should be tracked.
+/// Indicates whether the heartbeat method of a canister should be run on not and
+/// how errors should be tracked.
+///
+/// An execution round consists of multiple iterations. The heartbeat should
+/// run only in the first iteration.
+/// Additionally, all errors should be tracked on system subnets, but on other
+/// subnets only system errors should be tracked.
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 enum HeartbeatHandling {
     Execute { only_track_system_errors: bool },
@@ -114,11 +114,11 @@ impl HeartbeatHandling {
     }
 }
 
-// Orders the canisters and updates their accumulated priorities according to
-// the strategy described in the Scheduler Analysis document:
-// https://drive.google.com/file/d/1hSmUphdQv0zyB9sohOk8GhfVVlS5TjHo
-// A shorter description of the scheduling strategy is available in the note
-// section about [Scheduler and AccumulatedPriority] in types/src/lib.rs
+/// Orders the canisters and updates their accumulated priorities according to
+/// the strategy described in the Scheduler Analysis document:
+/// https://drive.google.com/file/d/1hSmUphdQv0zyB9sohOk8GhfVVlS5TjHo
+/// A shorter description of the scheduling strategy is available in the note
+/// section about [Scheduler and AccumulatedPriority] in types/src/lib.rs
 fn apply_scheduling_strategy(
     scheduler_cores: usize,
     current_round: ExecutionRound,
@@ -216,12 +216,12 @@ fn apply_scheduling_strategy(
         .collect()
 }
 
-// This struct represents a collection of canister IDs.
+/// This struct represents a collection of canister IDs.
 struct FilteredCanisters {
-    // Active canisters during the execution of the inner round.
+    /// Active canisters during the execution of the inner round.
     active_canister_ids: BTreeSet<CanisterId>,
 
-    // Canisters that were heap delta rate-limited during the execution of the inner round.
+    /// Canisters that were heap delta rate-limited during the execution of the inner round.
     rate_limited_canister_ids: BTreeSet<CanisterId>,
 }
 
@@ -244,10 +244,10 @@ impl FilteredCanisters {
     }
 }
 
-// Separates the ordered canisters into a list of active canisters and a set of canisters that
-// were heap delta rate limited. Does not alter the order of canisters to be executed.
-//
-// Returns the filtered canisters.
+/// Separates the ordered canisters into a list of active canisters and a set of canisters that
+/// were heap delta rate limited. Does not alter the order of canisters to be executed.
+///
+/// Returns the filtered canisters.
 fn filter_canisters(
     ordered_canister_ids: &[CanisterId],
     canisters: &BTreeMap<CanisterId, CanisterState>,
@@ -276,18 +276,18 @@ fn filter_canisters(
     (active_canister_ids, rate_limited_ids)
 }
 
-// Partitions the executable canisters to the available cores for execution.
-//
-// Returns the executable canisters partitioned by cores and the
-// non-executable canisters.
-//
-// ## Example
-//
-// Given a list of 8 executable canisters and 3 cpu cores, then we have the
-// following assignment:
-// * Core 1 takes `CanisterId1`, `CanisterId4`, `CanisterId7`
-// * Core 2 takes CanisterId2`, `CanisterId5`, `CanisterId8`
-// * Core 3 takes CanisterId3`, `CanisterId6`
+/// Partitions the executable canisters to the available cores for execution.
+///
+/// Returns the executable canisters partitioned by cores and the
+/// non-executable canisters.
+///
+/// ## Example
+///
+/// Given a list of 8 executable canisters and 3 cpu cores, then we have the
+/// following assignment:
+/// * Core 1 takes `CanisterId1`, `CanisterId4`, `CanisterId7`
+/// * Core 2 takes CanisterId2`, `CanisterId5`, `CanisterId8`
+/// * Core 3 takes CanisterId3`, `CanisterId6`
 fn partition_canisters_to_cores(
     scheduler_cores: usize,
     executable_canister_ids: &[CanisterId],
@@ -495,15 +495,15 @@ impl SchedulerImpl {
         (state, round_filtered_canisters.active_canister_ids)
     }
 
-    // Executes canisters in parallel using the thread pool.
-    //
-    // The function is invoked in each iteration of `inner_round`.
-    // The given `canisters_by_thread` defines the priority of canisters.
-    // Returns:
-    // - the new states of the canisters,
-    // - the ingress results,
-    // - the maximum number of instructions executed on a thread,
-    // - the total heap delta.
+    /// Executes canisters in parallel using the thread pool.
+    ///
+    /// The function is invoked in each iteration of `inner_round`.
+    /// The given `canisters_by_thread` defines the priority of canisters.
+    /// Returns:
+    /// - the new states of the canisters,
+    /// - the ingress results,
+    /// - the maximum number of instructions executed on a thread,
+    /// - the total heap delta.
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     fn execute_canisters_in_inner_round(
         &self,
@@ -610,9 +610,9 @@ impl SchedulerImpl {
         )
     }
 
-    // Checks for stopping canisters and, if any of them are ready to stop,
-    // transitions them to be fully stopped. Responses to the pending stop
-    // message(s) are written to ingress history.
+    /// Checks for stopping canisters and, if any of them are ready to stop,
+    /// transitions them to be fully stopped. Responses to the pending stop
+    /// message(s) are written to ingress history.
     fn process_stopping_canisters(&self, mut state: ReplicatedState) -> ReplicatedState {
         let mut canister_states = state.take_canister_states();
         let time = state.time();
@@ -705,8 +705,8 @@ impl SchedulerImpl {
         state.put_canister_states(canisters);
     }
 
-    // Charge canisters for their resource allocation and usage. Canisters
-    // that did not manage to pay are uninstalled.
+    /// Charge canisters for their resource allocation and usage. Canisters
+    /// that did not manage to pay are uninstalled.
     fn charge_canisters_for_resource_allocation_and_usage(&self, state: &mut ReplicatedState) {
         let duration_since_last_charge = state
             .metadata
@@ -1113,7 +1113,7 @@ fn observe_instructions_consumed_per_message(
     }
 }
 
-// This struct holds the result of a single execution thread.
+/// This struct holds the result of a single execution thread.
 #[derive(Default)]
 struct ExecutionThreadResult {
     canisters: Vec<CanisterState>,
@@ -1123,11 +1123,11 @@ struct ExecutionThreadResult {
     heap_delta: NumBytes,
 }
 
-// Executes the given canisters one by one. For each canister it
-// - runs the heartbeat handler of the canister if needed,
-// - executes all messages of the canister.
-// The execution stops if `total_instruction_limit` is reached
-// or all canisters are processed.
+/// Executes the given canisters one by one. For each canister it
+/// - runs the heartbeat handler of the canister if needed,
+/// - executes all messages of the canister.
+/// The execution stops if `total_instruction_limit` is reached
+/// or all canisters are processed.
 #[allow(clippy::too_many_arguments)]
 fn execute_canisters_on_thread(
     canisters_to_execute: Vec<CanisterState>,
