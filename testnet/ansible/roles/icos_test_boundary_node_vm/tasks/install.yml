@@ -32,21 +32,6 @@
   tags:
     - boundary_node_vm
 
-- name: copy boundary-node-control-plane for icos_test
-  vars:
-    ic: "{{ inventory_file | dirname | basename }}"
-  copy:
-    src: "/opt/ic/bin/boundary-node-control-plane"
-    dest: "/etc/nginx/ic_networks/{{ ic }}/boundary-node-control-plane"
-    mode: "0755"
-    owner: "root"
-    group: "root"
-    remote_src: yes
-  register: boundary_node_control_plane
-#  notify: restart service boundary_node
-  tags:
-    - boundary_node_vm
-
 - name: create templated nginx.conf for ic network
   vars:
     ic: "{{ inventory_file | dirname | basename }}"

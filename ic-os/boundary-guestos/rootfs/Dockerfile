@@ -39,15 +39,6 @@ RUN cd /tmp/ && \
    echo "8dca8fb93a6645c4aee23f601e9d9f62a00638ff29f95ceafcd10f422a3126f0  libnginx-mod-http-cbor-input_0.0.9_amd64.deb" > libnginx-mod-httpor-input.sha256 && \
    shasum -c  libnginx-mod-httpor-input.sha256
 
-# Currenlty, we are downloading a particular version of boundary node control plane and icx-proxy.
-# Fix this to download latest boundary node control plane and icx-proxy
-# TODO: NODE-316
-# RUN cd /tmp/ && \
-#	curl -so - https://download.dfinity.systems/ic/1960ce69dcefd88e318ad294bb2869d5de287b2b/release/boundary-node-control-plane.gz | gunzip > boundary-node-control-plane && \
-#	chmod +x boundary-node-control-plane
-
-#RUN cargo install icx-proxy --git https://github.com/dfinity/agent-rs/ --rev 3ed7655ddf4bff29a5be3ac962f369e16844bd0f \
-#	--target-dir /tmp/icx-proxy.build --root /tmp/icx-proxy.build
 
 # Second build stage: construct the actual target image (root filesystem of the
 # boundary node VM).
