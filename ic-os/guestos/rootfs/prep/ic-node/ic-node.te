@@ -39,6 +39,9 @@ allow mount_t net_conf_t : file { mounton };
 # Allow /etc/ssh and /etc/node_exporter to be bind-mounted
 allow mount_t etc_t : dir { mounton };
 
+# Allow to mount /var/lib/ic/backup using correct label.
+allow mount_t ic_data_t : filesystem { relabelfrom };
+
 ###############################################################################
 # Orchestrator, basic process stuff
 
