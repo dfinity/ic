@@ -34,7 +34,7 @@ use ic_types::registry::connection_endpoint::{
 
 use crate::{config, metrics};
 
-#[derive(Error, Debug, strum::IntoStaticStr)]
+#[derive(Error, Debug, strum_macros::IntoStaticStr)]
 pub(crate) enum ServiceDiscoveryError {
     #[error("registry failed invariant check: {source}")]
     RegistryInvariantFailed {
@@ -64,7 +64,7 @@ pub(crate) enum ServiceDiscoveryError {
 /// Errors indicating a registry invariant check failed. See
 /// https://docs.google.com/document/d/137Xr74mHKRuFfjnKmkCBSvMJ1XTrTy6c7OyPNGKaovk/edit#
 /// for details.
-#[derive(Error, Debug, strum::IntoStaticStr)]
+#[derive(Error, Debug, strum_macros::IntoStaticStr)]
 pub(crate) enum RegistryInvariantError {
     #[error("failed to fetch subnet list from registry {registry_version}: {source}")]
     GetSubnetsFailed {

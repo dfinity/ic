@@ -43,8 +43,8 @@ rand = "0.7.3"
 rand_core = "0.5.1"
 registry-canister = { path = "../../registry/canister" }
 bytes = "1.0.1"
-strum_macros = "0.18.0"
-strum = "0.18.0"
+strum_macros = "0.23.0"
+strum = "0.23.0"
 comparable = { version = "0.5", features = ["derive"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

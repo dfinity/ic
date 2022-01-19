@@ -56,8 +56,8 @@ candid = "0.7.4"
 reqwest = { version = "0.11.1", features = [ "native-tls" ] }
 tempfile = "3.1.0"
 url = { version = "2.1.1", features = ["serde"] }
-strum = "0.18.0"
-strum_macros = "0.18.0"
+strum = "0.23.0"
+strum_macros = "0.23.0"
 chrono = "0.4"
 
 [dev-dependencies]

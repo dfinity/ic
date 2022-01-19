@@ -51,7 +51,7 @@ fn should_use_unique_separator_byte_per_randomness_purpose() {
     assert!(set.insert(EXECUTION_THREAD_SEPARATOR_BYTE));
 
     // ensure there is a separator for each purpose
-    assert_eq!(set.len(), RandomnessPurpose::count());
+    assert_eq!(set.len(), RandomnessPurpose::COUNT);
 }
 
 #[test]
@@ -70,7 +70,7 @@ fn should_generate_purpose_specific_randomness_for_random_beacon() {
     assert!(set.insert(rng_et.next_u32()));
 
     // ensure _all_ purposes are compared (i.e., no purpose was forgotten)
-    assert_eq!(set.len(), RandomnessPurpose::count());
+    assert_eq!(set.len(), RandomnessPurpose::COUNT);
 }
 
 #[test]
@@ -89,7 +89,7 @@ fn should_generate_purpose_specific_randomness_for_randomness_seed() {
     assert!(set.insert(rng_et.next_u32()));
 
     // ensure _all_ purposes are compared (i.e., no purpose was forgotten)
-    assert_eq!(set.len(), RandomnessPurpose::count());
+    assert_eq!(set.len(), RandomnessPurpose::COUNT);
 }
 
 #[test]

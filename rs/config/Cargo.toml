@@ -12,7 +12,6 @@ ic-types = { path = "../types/types" }
 json5 = "0.2.7"
 serde = { version = "1.0.99", features = ["derive"] }
 slog = "2.5.2"
-strum = "0.18.0"
 tempfile = "3.1.0"
 url = { version = "2.1.1", features = ["serde"] }
 
