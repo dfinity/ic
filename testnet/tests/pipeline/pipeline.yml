@@ -853,6 +853,21 @@ icos-continuous-upgrade-nightly:
           --version "$GIT_REVISION" \
           --is_upgrade_test
 
+.run-farm-based-test: &run-farm-based-test |
+  BASE_DIR="${CI_PROJECT_DIR}/logs/$(date +%Y%m%d_%H%M%S)"
+  mkdir -p "$BASE_DIR"
+  # Logs produced during execution of the system tests are stored away in a structured way, i.e. one file per test.
+  # Unstructured logs, i.e. those which bypassed the logger and were outputed directly to stdout/stderr,
+  # are forwarded to a separate file.
+  # All lines produced by the logger share the same structure: e.g. "Nov 10 13:20:30.931 INFO ...".
+  # Hence, the fourth column can be used to distinguish structured from unstructured logs.
+  $SHELL_WRAPPER "${CI_PROJECT_DIR}/rs/tests/run-farm-based-system-tests.sh" \
+    --git-use-current-commit \
+    --suite "${SUITE_NAME}" \
+    --log-base-dir "${BASE_DIR}" \
+  | tee "${BASE_DIR}/unstructured-logs.log" \
+  | awk '$4 ~ /CRIT|ERRO|WARN|INFO|DEBG|TRCE/'
+
 .system-tests:
   extends: .prod-test
   needs: []  # allow starting immediately
@@ -861,49 +876,38 @@ icos-continuous-upgrade-nightly:
     paths:
       - "$CI_PROJECT_DIR/logs/"
   allow_failure: true
-  script:
-    - |
-      BASE_DIR="${CI_PROJECT_DIR}/logs/$(date +%Y%m%d_%H%M%S)"
-      mkdir -p "$BASE_DIR"
-      # Logs produced during execution of the system tests are stored away in a structured way, i.e. one file per test.
-      # Unstructured logs, i.e. those which bypassed the logger and were outputed directly to stdout/stderr,
-      # are forwarded to a separate file.
-      # All lines produced by the logger share the same structure: e.g. "Nov 10 13:20:30.931 INFO ...".
-      # Hence, the fourth column can be used to distinguish structured from unstructured logs.
-      $SHELL_WRAPPER "${CI_PROJECT_DIR}/rs/tests/run-farm-based-system-tests.sh" \
-        --git-use-current-commit \
-        --suite "${SUITE_NAME}" \
-        --log-base-dir "${BASE_DIR}" \
-      | tee "${BASE_DIR}/unstructured-logs.log" \
-      | awk '$4 ~ /CRIT|ERRO|WARN|INFO|DEBG|TRCE/'
 
 system-tests-hourly:
   extends: .system-tests
   variables:
     SUITE_NAME: "hourly"
     cd_target_env: "HOURLY"
+  script:
+    - *run-farm-based-test
 
 rosetta-hourly:
   extends: .system-tests
   variables:
     SUITE_NAME: "rosetta"
     cd_target_env: "HOURLY"
-  before_script:
+  script:
     - |
       # Ensure that rosetta 3rd-party dependencies are available
       # shellcheck disable=SC1090
       . "${CI_PROJECT_DIR}/rs/tests/prepare-rosetta-deps.sh"
+    - *run-farm-based-test
 
 .system-tests-wasm-generator:
   extends: .system-tests
   variables:
     SUITE_NAME: "wasm_generator"
-  before_script:
+  script:
     - |
       export RANDOM_CANISTERS_BASE_DIR="${CI_PROJECT_DIR}/test_canisters"
       mkdir "${RANDOM_CANISTERS_BASE_DIR}"
       export TEST_MODULES="${CI_PROJECT_DIR}/testnet/tests/scripts/test_modules"
       $SHELL_WRAPPER "${TEST_MODULES}/wasm-generator/wasm-generator.sh" 20 "${NUMBER_OF_CANISTERS}"
+    - *run-farm-based-test
 
 wasm-generator-hourly:
   extends: .system-tests-wasm-generator
