@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/bin/python
 import glob
 import json
 import os
@@ -119,7 +119,19 @@ if __name__ == "__main__":
                         "arrowhead": 7,
                         "ax": 0,
                         "ay": -40,
-                    }
+                    },
+                    {
+                        "x": convert_date(1642271520),
+                        "y": "4000.0",
+                        "xref": "x",
+                        "yref": "y",
+                        "text": "likely EXC-832",
+                        "textangle": "-60",
+                        "showarrow": "true",
+                        "arrowhead": 7,
+                        "ax": 0,
+                        "ay": -40,
+                    },
                 ]
             }
         )
