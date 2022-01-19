@@ -21,10 +21,11 @@ use std::time::Duration;
 pub const ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP: u64 = 3;
 
 /// The acceptable ratio between the length of the dkg interval and the gap
-/// between the last cup and the current finalized tip. This means that we will
-/// start slowing down if we get approximately halfway through a dkg interval
-/// without producing the cup for the last summary block.
-pub const ACCEPTABLE_CUP_GAP_RATIO: f64 = 1.5;
+/// between a summary height and the current finalized tip that transpires
+/// without the production the cup. This means that we will start slowing down
+/// if we get approximately halfway through a dkg interval without producing the
+/// cup for the last summary block.
+pub const ACCEPTABLE_CUP_GAP_RATIO: f64 = 0.5;
 
 /// Rotate on_state_change calls with a round robin schedule to ensure fairness.
 #[derive(Default)]
@@ -121,7 +122,8 @@ pub fn is_time_to_make_block(
 /// Calculate the required delay for notary based on the rank of block to
 /// notarize, adjusted by a multiplier depending the gap between finalized and
 /// notarized heights, and adjusted by how far the certified height lags behind
-/// the finalized height.
+/// the finalized height. Use membership and height to determine the
+/// notarization settings that should be used.
 pub fn get_adjusted_notary_delay(
     membership: &Membership,
     pool: &PoolReader<'_>,
@@ -130,16 +132,34 @@ pub fn get_adjusted_notary_delay(
     height: Height,
     rank: Rank,
 ) -> Option<Duration> {
+    Some(get_adjusted_notary_delay_from_settings(
+        get_notarization_delay_settings(
+            log,
+            &*membership.registry_client,
+            membership.subnet_id,
+            pool.registry_version(height)?,
+        )?,
+        pool,
+        state_manager,
+        rank,
+    ))
+}
+
+/// Calculate the required delay for notary based on the rank of block to
+/// notarize, adjusted by a multiplier depending the gap between finalized and
+/// notarized heights, and adjusted by how far the certified height lags behind
+/// the finalized height.
+pub fn get_adjusted_notary_delay_from_settings(
+    settings: NotarizationDelaySettings,
+    pool: &PoolReader<'_>,
+    state_manager: &dyn StateManager<State = ReplicatedState>,
+    rank: Rank,
+) -> Duration {
     let NotarizationDelaySettings {
         unit_delay,
         initial_notary_delay,
         ..
-    } = get_notarization_delay_settings(
-        log,
-        &*membership.registry_client,
-        membership.subnet_id,
-        pool.registry_version(height)?,
-    )?;
+    } = settings;
     // We adjust regular delay based on the gap between finalization and
     // notarization to make it exponentially longer to keep the gap from growing too
     // big. This is because increasing delay leads to higher chance of notarizing
@@ -165,7 +185,7 @@ pub fn get_adjusted_notary_delay(
         finality_adjusted_delay + unit_delay.as_millis() as u64 * certified_gap;
 
     let cup_gap = finalized_height.saturating_sub(pool.get_catch_up_height().get());
-    let cup_dkg_interval_length = pool
+    let last_cup_dkg_info = pool
         .get_highest_catch_up_package()
         .content
         .block
@@ -174,15 +194,18 @@ pub fn get_adjusted_notary_delay(
         .as_ref()
         .as_summary()
         .dkg
-        .interval_length;
+        .clone();
 
-    let acceptable_gap_size =
-        (ACCEPTABLE_CUP_GAP_RATIO * cup_dkg_interval_length.get() as f64).round() as u64;
+    let last_interval_length = last_cup_dkg_info.interval_length;
+    let missing_cup_interval_length = last_cup_dkg_info.next_interval_length;
+
+    let acceptable_gap_size = last_interval_length.get()
+        + (ACCEPTABLE_CUP_GAP_RATIO * missing_cup_interval_length.get() as f64).round() as u64;
 
     let cup_multiple = cup_gap.saturating_sub(acceptable_gap_size);
 
     let adjusted_delay = certified_adjusted_delay + unit_delay.as_millis() as u64 * cup_multiple;
-    Some(Duration::from_millis(adjusted_delay))
+    Duration::from_millis(adjusted_delay)
 }
 
 /// Return the validated block proposals with the lowest rank at height `h`, if
@@ -493,6 +516,72 @@ mod tests {
             signer,
         };
         Signed { content, signature }
+    }
+
+    #[test]
+    fn test_get_adjusted_notary_delay_cup_delay() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let settings = NotarizationDelaySettings {
+                unit_delay: Duration::from_secs(1),
+                initial_notary_delay: Duration::from_secs(0),
+            };
+            let crate::consensus::mocks::Dependencies {
+                mut pool,
+                state_manager,
+                ..
+            } = crate::consensus::mocks::dependencies(pool_config, 3);
+            let last_cup_dkg_info = PoolReader::new(&pool)
+                .get_highest_catch_up_package()
+                .content
+                .block
+                .as_ref()
+                .payload
+                .as_ref()
+                .as_summary()
+                .dkg
+                .clone();
+
+            for _ in 0..last_cup_dkg_info.interval_length.get() {
+                pool.advance_round_normal_operation_no_cup();
+            }
+
+            for _ in 0..(last_cup_dkg_info.next_interval_length.get() / 2 + 1) {
+                pool.advance_round_normal_operation_no_cup();
+            }
+
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .return_const(PoolReader::new(&pool).get_finalized_height());
+
+            assert_eq!(
+                get_adjusted_notary_delay_from_settings(
+                    settings.clone(),
+                    &PoolReader::new(&pool),
+                    state_manager.as_ref(),
+                    Rank(0),
+                ),
+                Duration::from_secs(0)
+            );
+
+            state_manager.get_mut().checkpoint();
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .return_const(PoolReader::new(&pool).get_finalized_height());
+
+            pool.advance_round_normal_operation_no_cup();
+
+            assert_eq!(
+                get_adjusted_notary_delay_from_settings(
+                    settings,
+                    &PoolReader::new(&pool),
+                    state_manager.as_ref(),
+                    Rank(0),
+                ),
+                Duration::from_secs(1)
+            );
+        });
     }
 
     #[test]
