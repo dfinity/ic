@@ -64,7 +64,7 @@ impl SecretKeyBytes {
 pub struct PublicKey(pub G2Projective);
 
 /// Interpolation failed because of duplicate x-coordinates.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum ThresholdError {
     DuplicateX,
 }
