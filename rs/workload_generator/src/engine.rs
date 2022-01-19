@@ -8,9 +8,7 @@ use crate::{
     RequestType,
 };
 use backoff::backoff::Backoff;
-use ic_canister_client::{
-    get_backoff_policy, update_path, Agent, HttpClientConfig, Sender as AgentSender,
-};
+use ic_canister_client::{update_path, Agent, HttpClientConfig, Sender as AgentSender};
 use ic_types::{
     messages::{Blob, MessageId, SignedRequestBytes},
     time::current_time_and_expiry_time,
@@ -391,7 +389,6 @@ impl Engine {
     ) -> bool {
         let nonce = plan.nonce.clone();
         let deadline = Instant::now() + agent.ingress_timeout;
-        let mut backoff = get_backoff_policy();
         let (request, request_id) = agent
             .prepare_update_raw(
                 &plan.canister_id,
@@ -494,8 +491,23 @@ impl Engine {
 
                 let mut finished = false;
 
+                // https://docs.rs/backoff/latest/backoff/exponential/struct.ExponentialBackoff.html#structfield.initial_interval
+                let mut backoff = backoff::ExponentialBackoff {
+                    initial_interval: Duration::from_millis(50),
+                    current_interval: Duration::from_millis(50), // Should probably be the same as initial_interval
+                    // See fomula here:
+                    // https://docs.rs/backoff/latest/backoff/
+                    randomization_factor: 0.01,
+                    multiplier: 1.2,
+                    start_time: std::time::Instant::now(),
+                    // Stop increasing at this value
+                    max_interval: Duration::from_secs(10),
+                    max_elapsed_time: None,
+                    clock: backoff::SystemClock::default(),
+                };
+
                 // Check request status for the first time after 2s (~ time between blocks)
-                let mut next_poll_time = Instant::now() + Duration::from_secs(2);
+                let mut next_poll_time = Instant::now() + Duration::from_millis(500);
 
                 while !finished && next_poll_time < deadline {
                     tokio::time::sleep_until(tokio::time::Instant::from_std(next_poll_time)).await;
