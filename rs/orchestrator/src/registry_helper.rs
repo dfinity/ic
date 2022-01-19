@@ -138,8 +138,8 @@ impl RegistryHelper {
     pub(crate) fn get_registry_cup(
         &self,
         version: RegistryVersion,
+        subnet_id: SubnetId,
     ) -> OrchestratorResult<CatchUpPackage> {
-        let subnet_id = self.get_subnet_id(version)?;
         make_registry_cup(&*self.registry_client, subnet_id, Some(&self.logger))
             .ok_or(OrchestratorError::MakeRegistryCupError(subnet_id, version))
     }

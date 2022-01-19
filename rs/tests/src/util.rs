@@ -222,8 +222,7 @@ impl<'a> UniversalCanister<'a> {
     }
 
     /// Tries to read `len` bytes of the stable memory, starting from `offset`.
-    /// Panics if the read could not be performed.
-    pub async fn try_read_stable(&self, offset: u32, len: u32) -> Vec<u8> {
+    pub async fn read_stable(&self, offset: u32, len: u32) -> Result<Vec<u8>, AgentError> {
         self.agent
             .query(&self.canister_id, "query")
             .with_arg(
@@ -235,9 +234,14 @@ impl<'a> UniversalCanister<'a> {
             )
             .call()
             .await
-            .unwrap_or_else(|err| {
-                panic!("could not read message of len {} from stable: {}", len, err)
-            })
+    }
+
+    /// Tries to read `len` bytes of the stable memory, starting from `offset`.
+    /// Panics if the read could not be performed.
+    pub async fn try_read_stable(&self, offset: u32, len: u32) -> Vec<u8> {
+        self.read_stable(offset, len).await.unwrap_or_else(|err| {
+            panic!("could not read message of len {} from stable: {}", len, err)
+        })
     }
 
     /// Forwards a message to the `receiver` that calls

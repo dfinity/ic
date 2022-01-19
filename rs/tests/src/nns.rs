@@ -47,13 +47,13 @@ use ledger_canister::LedgerCanisterInitPayload;
 use ledger_canister::Tokens;
 use prost::Message;
 use registry_canister::mutations::{
-    do_bless_replica_version::BlessReplicaVersionPayload,
-    do_update_subnet_replica::UpdateSubnetReplicaVersionPayload,
-};
-use registry_canister::mutations::{
-    do_create_subnet::CreateSubnetPayload,
+    do_add_nodes_to_subnet::AddNodesToSubnetPayload, do_create_subnet::CreateSubnetPayload,
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
     do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
+};
+use registry_canister::mutations::{
+    do_bless_replica_version::BlessReplicaVersionPayload,
+    do_update_subnet_replica::UpdateSubnetReplicaVersionPayload,
 };
 use slog::{info, Logger};
 use std::collections::{HashMap, HashSet};
@@ -167,8 +167,8 @@ pub trait NnsExt {
         acceptance_criterium: impl Fn(&ic_agent::agent::status::Status) -> bool,
     ) -> bool;
 
-    /// A function to remove a node from a subnet.
-    fn remove_node(&self, handle: &IcHandle, node_id: NodeId);
+    /// Removes nodes from their subnet.
+    fn remove_nodes(&self, handle: &IcHandle, node_ids: &[NodeId]);
 
     /// A list of all nodes that were registered with the initial registry (i.e.
     /// at bootstrap).
@@ -293,10 +293,10 @@ impl NnsExt for ic_fondue::pot::Context {
         });
     }
 
-    fn remove_node(&self, handle: &IcHandle, node_id: NodeId) {
+    fn remove_nodes(&self, handle: &IcHandle, node_ids: &[NodeId]) {
         let rt = tokio::runtime::Runtime::new().expect("Tokio runtime failed to create");
         rt.block_on(async move {
-            remove_node(handle, node_id).await.unwrap();
+            remove_nodes(handle, node_ids).await.unwrap();
         })
     }
 }
@@ -613,12 +613,43 @@ pub async fn set_authorized_subnetwork_list(
     Ok(())
 }
 
-async fn remove_node(handle: &IcHandle, node_id: NodeId) -> Result<(), String> {
+async fn remove_nodes(handle: &IcHandle, node_ids: &[NodeId]) -> Result<(), String> {
     let root_url = first_root_url(handle);
-    let nns_api = runtime_from_url(root_url);
+    remove_nodes_via_endpoint(root_url, node_ids).await
+}
+
+pub async fn add_nodes_to_subnet(
+    url: Url,
+    subnet_id: SubnetId,
+    node_ids: &[NodeId],
+) -> Result<(), String> {
+    let nns_api = runtime_from_url(url);
+    let governance_canister = get_canister(&nns_api, GOVERNANCE_CANISTER_ID);
+    let proposal_payload = AddNodesToSubnetPayload {
+        node_ids: node_ids.to_vec(),
+        subnet_id: subnet_id.get(),
+    };
+
+    let proposal_id = submit_external_update_proposal(
+        &governance_canister,
+        Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
+        NeuronId(TEST_NEURON_1_ID),
+        NnsFunction::AddNodeToSubnet,
+        proposal_payload,
+        String::from("Add nodes for testing"),
+        "".to_string(),
+    )
+    .await;
+
+    vote_and_execute_proposal(&governance_canister, proposal_id).await;
+    Ok(())
+}
+
+pub async fn remove_nodes_via_endpoint(url: Url, node_ids: &[NodeId]) -> Result<(), String> {
+    let nns_api = runtime_from_url(url);
     let governance_canister = get_canister(&nns_api, GOVERNANCE_CANISTER_ID);
     let proposal_payload = RemoveNodesFromSubnetPayload {
-        node_ids: vec![node_id],
+        node_ids: node_ids.to_vec(),
     };
 
     let proposal_id = submit_external_update_proposal(

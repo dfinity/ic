@@ -14,6 +14,7 @@ use ic_registry_client::helper::unassigned_nodes::UnassignedNodeRegistry;
 use ic_registry_common::local_store::LocalStoreImpl;
 use ic_types::consensus::catchup::CUPWithOriginalProtobuf;
 use ic_types::consensus::CatchUpPackage;
+use ic_types::consensus::HasHeight;
 use ic_types::{NodeId, RegistryVersion, ReplicaVersion, SubnetId};
 use std::convert::TryFrom;
 use std::path::PathBuf;
@@ -76,36 +77,47 @@ impl ReleasePackage {
     pub(crate) async fn check_for_upgrade(&self) -> OrchestratorResult<()> {
         let latest_registry_version = self.registry.get_latest_version();
         // Determine the subnet_id using the local CUP.
-        let latest_subnet_id = if let Some(cup_with_proto) = self.cup_provider.get_local_cup() {
-            let cup = &cup_with_proto.cup;
-            let subnet_id = get_subnet_id(&*self.registry.registry_client, cup).map_err(|err| {
-                OrchestratorError::UpgradeError(format!(
-                    "Couldn't extract the subnet id from the local CUP: {:?}",
-                    err
-                ))
-            })?;
-            if should_node_become_unassigned(
-                &*self.registry.registry_client,
-                self.node_id,
-                subnet_id,
-                cup,
-            ) {
-                return Err(OrchestratorError::UpgradeError(
-                    "Unassignment is not implemented".to_string(),
-                ));
-            }
-            subnet_id
-        } else {
-            // If the local CUP was not found we first try to create one from the registry.
-            if let Ok(cup) = self.registry.get_registry_cup(latest_registry_version) {
-                self.cup_provider
-                    .persist_cup(&CUPWithOriginalProtobuf::from_cup(cup))?;
-                return Ok(());
-            }
-            // If we couldn't create a registry CUP, this node is not assigned;
-            // check if it needs to be upgraded.
-            return self.check_for_upgrade_as_unassigned().await;
-        };
+        let (latest_subnet_id, local_cup) =
+            if let Some(cup_with_proto) = self.cup_provider.get_local_cup() {
+                let cup = cup_with_proto.cup;
+                let subnet_id =
+                    get_subnet_id(&*self.registry.registry_client, &cup).map_err(|err| {
+                        OrchestratorError::UpgradeError(format!(
+                            "Couldn't extract the subnet id from the local CUP: {:?}",
+                            err
+                        ))
+                    })?;
+                if should_node_become_unassigned(
+                    &*self.registry.registry_client,
+                    self.node_id,
+                    subnet_id,
+                    &cup,
+                ) {
+                    self.stop_replica()?;
+                    remove_node_state(
+                        self.replica_config_file.clone(),
+                        self.cup_provider.get_cup_path(),
+                    )
+                    .map_err(OrchestratorError::UpgradeError)?;
+                    info!(self.logger, "Subnet state removed");
+                    return Ok(());
+                }
+                (subnet_id, Some(cup))
+            } else {
+                match self.registry.get_subnet_id(latest_registry_version) {
+                    Ok(subnet_id) => (subnet_id, None),
+                    // If no subnet is assigned to the node id, we're unassigned.
+                    _ => return self.check_for_upgrade_as_unassigned().await,
+                }
+            };
+
+        let cup = self.cup_provider.get_latest_cup(latest_subnet_id).await?;
+
+        // If the latest CUP is newer than the local one, persist it.
+        if Some(cup.cup.content.height()) > local_cup.map(|cup| cup.content.height()) {
+            self.cup_provider
+                .persist_cup_deprecated(&cup, latest_subnet_id)?;
+        }
 
         // Now we know the subnet_id and we're assigned; start the replica if necessary.
         if !self.replica_process.lock().unwrap().is_running() {
@@ -126,7 +138,7 @@ impl ReleasePackage {
         {
             let cup = self
                 .registry
-                .get_registry_cup(latest_registry_version)
+                .get_registry_cup(latest_registry_version, latest_subnet_id)
                 .expect("A registry cup must be present in the the registry");
 
             self.cup_provider.persist_cup_deprecated(
@@ -174,9 +186,6 @@ impl ReleasePackage {
 
             utils::reexec_current_process(&self.logger);
         }
-
-        // Get latest CUP from peers & local CUPs on disk (fallback to registry)
-        let cup = self.cup_provider.get_latest_cup(latest_subnet_id).await?;
 
         let cup_registry_version = cup.cup.content.registry_version();
 
@@ -481,7 +490,14 @@ fn should_node_become_unassigned(
         .as_summary()
         .dkg;
     let oldest_relevant_version = dkg_summary.get_subnet_membership_version().get();
-    for version in oldest_relevant_version..=registry.get_latest_version().get() {
+    let latest_registry_version = registry.get_latest_version().get();
+    // Make sure that if the latest registry version is for some reason violating the
+    // assumption that it's higher/equal than any other version used in the system, we still
+    // do not remove the subnet state by a mistake.
+    if latest_registry_version < oldest_relevant_version {
+        return false;
+    }
+    for version in oldest_relevant_version..=latest_registry_version {
         if let Ok(Some(members)) =
             registry.get_node_ids_on_subnet(subnet_id, RegistryVersion::from(version))
         {
@@ -491,4 +507,36 @@ fn should_node_become_unassigned(
         }
     }
     true
+}
+
+// Deletes the subnet state consisting of the consensus pool, execution state
+// and the local CUP.
+fn remove_node_state(replica_config_file: PathBuf, cup_path: PathBuf) -> Result<(), String> {
+    use ic_config::{Config, ConfigSource};
+    use std::fs::{remove_dir_all, remove_file};
+    let tmpdir = tempfile::Builder::new()
+        .prefix("ic_config")
+        .tempdir()
+        .map_err(|err| format!("Couldn't create a temporary directory: {:?}", err))?;
+    let config = Config::load_with_tmpdir(
+        ConfigSource::File(replica_config_file),
+        tmpdir.path().to_path_buf(),
+    );
+
+    let consensus_pool_path = config.artifact_pool.consensus_pool_path;
+    remove_dir_all(&consensus_pool_path).map_err(|err| {
+        format!(
+            "Couldn't delete the consensus pool at {:?}: {:?}",
+            consensus_pool_path, err
+        )
+    })?;
+
+    let state_path = config.state_manager.state_root();
+    remove_dir_all(&state_path)
+        .map_err(|err| format!("Couldn't delete the state at {:?}: {:?}", state_path, err))?;
+
+    remove_file(&cup_path)
+        .map_err(|err| format!("Couldn't delete the CUP at {:?}: {:?}", cup_path, err))?;
+
+    Ok(())
 }
