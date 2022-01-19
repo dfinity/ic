@@ -28,15 +28,16 @@ The ledger canister keeps track of accounts:
 * The account identifier corresponding to such a pair is a 32-byte string calculated as follows:
 
 ....
-account_identifier(principal,subbaccount_identifier) = CRC32(h) || h
+account_identifier(principal,subaccount_identifier) = CRC32(h) || h
 
 where
 
 h = sha224(“\x0Aaccount-id” || principal || subaccount_identifier)
 ....
 
-That is, the account identifier (or sometimes simply, the account) corresponding to a principal and a sub-account identifier is obtained by hashing using sha224 the concatenation of domain separator “\x0Aaccount-id”, the principal and the sub-account identifier, and prepended with
-the CRC32 of the resulting hash value.
+That is, the account identifier (or sometimes simply, the account) corresponding to a principal and a subaccount identifier is obtained by hashing using sha224 the concatenation of domain separator “\x0Aaccount-id”, the principal and the subaccount identifier, and prepended with
+the (big endian representation of the) CRC32 of the resulting hash value.
+The domain separator consists of a string (here "account-id") prepended by a single byte equal to the length of the string (here, \x0A).
 
 
 ** For any principle, we refer to the account which corresponds to the all-0 subaccount_identifier as the default account of a principle.
@@ -125,8 +126,8 @@ The owner of an account can transfer tokens from that account to any other accou
 The inputs to the method are as follows:
 
 * `amount`: the amount of tokens to be transferred
-* `fee`: the fee to be payed for the transfer
-* `from_subaccount`: a sub-account identifier which specifies from which account of the caller the ICP should take place. This parameter is optional -- if it is not specified by the caller, then it is set to the all 0 vector.
+* `fee`: the fee to be paid for the transfer
+* `from_subaccount`: a subaccount identifier which specifies from which account of the caller the ICP should take place. This parameter is optional -- if it is not specified by the caller, then it is set to the all 0 vector.
 * `to`: the account identifier to which the tokens should be transferred
 * `memo`: this is a 64-bit number chosen by the sender; it can be used in various ways, e.g. to identify specific transfers.
 * `created_at_time`: a timestamp indicating when the transaction was created by the caller -- if it is not specified by the caller then this is set to the current IC time.
@@ -165,16 +166,6 @@ The candid signature of the `transfer` method, together with some additional req
 
 Additional datatypes & canister methods::
 ----
-type SendArgs = record {
-    memo: Memo;
-    amount: Tokens;
-    fee: Tokens;
-    from_subaccount: opt SubAccount;
-    to: AccountIdentifier;
-    created_at_time: opt TimeStamp;
-};
-
-
 
 // Arguments for the `transfer` call.
 type TransferArgs = record {
@@ -213,7 +204,7 @@ service : {
 
 ==== Balance ====
 
-A transaction ledger tracks the balances of all accounts in the natural way (see the Semantics session below for a more formal definition).
+A transaction ledger tracks the balances of all accounts in the natural way (see the Semantics section below for a more formal definition).
 
 Any principal can obtain the balance of an arbitrary account via the method `account_balance`: the input parameter is the account identifier; the result is the balance associated to the account.
 The balance of the account with account identifier `minting_account_id` is always 0; the balance of any other account is calculated in the obvious way.
