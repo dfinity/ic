@@ -5,10 +5,11 @@ use ic_canister_client::Sender;
 use ic_types::{CanisterId, PrincipalId};
 use ledger_canister::{
     AccountBalanceArgs, AccountIdentifier, ArchiveOptions, BinaryAccountBalanceArgs, Block,
-    BlockArg, BlockHeight, BlockRes, EncodedBlock, GetBlocksArgs, GetBlocksRes, IterBlocksArgs,
-    IterBlocksRes, LedgerCanisterInitPayload, Memo, NotifyCanisterArgs, Operation, SendArgs,
-    Subaccount, TimeStamp, Tokens, TotalSupplyArgs, Transaction, TransferArgs, TransferError,
-    MIN_BURN_AMOUNT, TRANSACTION_FEE,
+    BlockArg, BlockHeight, BlockRange, BlockRes, CandidBlock, EncodedBlock, GetBlocksArgs,
+    GetBlocksError, GetBlocksRes, GetBlocksResult, IterBlocksArgs, IterBlocksRes,
+    LedgerCanisterInitPayload, Memo, NotifyCanisterArgs, Operation, SendArgs, Subaccount,
+    TimeStamp, Tokens, TotalSupplyArgs, Transaction, TransferArgs, TransferError, MIN_BURN_AMOUNT,
+    TRANSACTION_FEE,
 };
 use on_wire::IntoWire;
 use std::collections::{HashMap, HashSet};
@@ -98,6 +99,43 @@ async fn transfer_candid(
         .expect("transfer call trapped")
 }
 
+async fn get_blocks_pb(
+    archive: &Canister<'_>,
+    range: std::ops::Range<u64>,
+) -> Result<GetBlocksRes, String> {
+    archive
+        .query_(
+            "get_blocks_pb",
+            protobuf,
+            GetBlocksArgs {
+                start: range.start,
+                length: range.end.saturating_sub(range.start) as usize,
+            },
+        )
+        .await
+}
+
+async fn get_blocks_candid(archive: &Canister<'_>, range: std::ops::Range<u64>) -> GetBlocksResult {
+    archive
+        .query_(
+            "get_blocks",
+            candid_one,
+            GetBlocksArgs {
+                start: range.start,
+                length: range.end.saturating_sub(range.start) as usize,
+            },
+        )
+        .await
+        .expect("get_blocks call trapped")
+}
+
+fn assert_same_blocks(pb: &[EncodedBlock], candid: &[CandidBlock]) {
+    assert_eq!(pb.len(), candid.len());
+    for (pb_block, did_block) in pb.iter().zip(candid.iter()) {
+        assert_eq!(&CandidBlock::from(pb_block.decode().unwrap()), did_block);
+    }
+}
+
 fn make_accounts(num_accounts: u64, num_subaccounts: u8) -> HashMap<AccountIdentifier, Tokens> {
     (1..=num_accounts)
         .flat_map(|i| {
@@ -135,16 +173,12 @@ fn upgrade_test() {
             )
             .await?;
 
-        let GetBlocksRes(blocks_before) = ledger
-            .query_("get_blocks_pb", protobuf, GetBlocksArgs::new(0u64, 20usize))
-            .await?;
+        let GetBlocksRes(blocks_before) = get_blocks_pb(&ledger, 0..20).await?;
         let blocks_before = blocks_before.unwrap();
 
         ledger.upgrade_to_self_binary(Vec::new()).await?;
 
-        let GetBlocksRes(blocks_after) = ledger
-            .query_("get_blocks_pb", protobuf, GetBlocksArgs::new(0u64, 20usize))
-            .await?;
+        let GetBlocksRes(blocks_after) = get_blocks_pb(&ledger, 0..20).await?;
         let blocks_after = blocks_after.unwrap();
 
         assert_eq!(blocks_before, blocks_after);
@@ -218,9 +252,7 @@ fn archive_blocks_small_test() {
         simple_send(&ledger, &create_sender(12345), &minting_account, 100, 0).await?;
 
         ledger_assert_num_blocks(&ledger, 1).await;
-        let GetBlocksRes(ledger_blocks) = ledger
-            .query_("get_blocks_pb", protobuf, GetBlocksArgs::new(12u64, 1usize))
-            .await?;
+        let GetBlocksRes(ledger_blocks) = get_blocks_pb(&ledger, 12..13).await?;
         assert_eq!(ledger_blocks.unwrap().len(), 1);
 
         // First we get the CanisterId of each archive node that has been
@@ -308,7 +340,7 @@ fn archive_blocks_large_test() {
         let blocks = {
             let mut blocks = vec![];
             // Need to make multiple queries due to query message size limit
-            let blocks_per_query: usize = 8192;
+            let blocks_per_query: usize = 2000;
             for i in 0usize..(blocks_per_archive_node / blocks_per_query) - 1 {
                 let offset = i * blocks_per_query;
                 println!(
@@ -354,7 +386,7 @@ fn archive_blocks_large_test() {
             let mut blocks = {
                 let mut blocks = vec![];
                 // Need to make multiple queries due to query message size limit
-                let blocks_per_query: usize = 8192;
+                let blocks_per_query: usize = 2000;
                 for i in 0usize..blocks_per_archive_node / blocks_per_query {
                     let offset = i * blocks_per_query;
                     println!(
@@ -1314,44 +1346,40 @@ fn get_multiple_blocks_test() {
         // Query Blocks 10 and 11
         {
             println!("[test] querying blocks 10 and 11");
-            let GetBlocksRes(blocks_from_node) = node
-                .query_("get_blocks_pb", protobuf, GetBlocksArgs::new(10u64, 2usize))
-                .await?;
-
+            let GetBlocksRes(blocks_from_node) = get_blocks_pb(&node, 10..12).await?;
+            let BlockRange { blocks } = get_blocks_candid(&node, 10..12).await.unwrap();
             let blocks_from_node: Vec<EncodedBlock> = blocks_from_node.unwrap();
+            assert_same_blocks(&blocks_from_node, &blocks);
             assert!(blocks_from_node.len() == 2);
         }
 
         // Query Blocks 11 and 12
         {
             println!("[test] querying blocks 11 and 12");
-            let GetBlocksRes(blocks_from_node) = node
-                .query_("get_blocks_pb", protobuf, GetBlocksArgs::new(11u64, 2usize))
-                .await?;
-
+            let GetBlocksRes(blocks_from_node) = get_blocks_pb(&node, 11..13).await?;
+            let BlockRange { blocks } = get_blocks_candid(&node, 11..13).await.unwrap();
             let blocks_from_node: Vec<EncodedBlock> = blocks_from_node.unwrap();
+            assert_same_blocks(&blocks_from_node, &blocks);
             assert!(blocks_from_node.len() == 2);
         }
 
         // Query Blocks 12 and 13
         {
             println!("[test] querying blocks 12 and 13");
-            let GetBlocksRes(blocks_from_node) = node
-                .query_("get_blocks_pb", protobuf, GetBlocksArgs::new(11u64, 2usize))
-                .await?;
-
+            let GetBlocksRes(blocks_from_node) = get_blocks_pb(&node, 12..14).await?;
+            let BlockRange { blocks } = get_blocks_candid(&node, 12..14).await.unwrap();
             let blocks_from_node: Vec<EncodedBlock> = blocks_from_node.unwrap();
+            assert_same_blocks(&blocks_from_node, &blocks);
             assert!(blocks_from_node.len() == 2);
         }
 
         // Query all blocks
         {
             println!("[test] querying all blocks");
-            let GetBlocksRes(blocks_from_node) = node
-                .query_("get_blocks_pb", protobuf, GetBlocksArgs::new(9u64, 5usize))
-                .await?;
-
+            let GetBlocksRes(blocks_from_node) = get_blocks_pb(&node, 9..14).await?;
+            let BlockRange { blocks } = get_blocks_candid(&node, 9..14).await.unwrap();
             let blocks_from_node: Vec<EncodedBlock> = blocks_from_node.unwrap();
+            assert_same_blocks(&blocks_from_node, &blocks);
             assert!(blocks_from_node.len() == 5);
         }
 
@@ -1359,22 +1387,30 @@ fn get_multiple_blocks_test() {
         println!("[test] testing invalid queries to the archive node");
         {
             // outside range left
-            let GetBlocksRes(blocks_from_node) = node
-                .query_("get_blocks_pb", protobuf, GetBlocksArgs::new(8u64, 2usize))
-                .await?;
-            assert!(blocks_from_node.is_err());
+            let GetBlocksRes(blocks_from_node) = get_blocks_pb(&node, 8..10).await?;
+            blocks_from_node.unwrap_err();
+
+            assert_eq!(
+                get_blocks_candid(&node, 8..10).await.unwrap_err(),
+                GetBlocksError::BadFirstBlockIndex {
+                    requested_index: 8,
+                    first_valid_index: 9
+                }
+            );
 
             // outside range right
-            let GetBlocksRes(blocks_from_node) = node
-                .query_("get_blocks_pb", protobuf, GetBlocksArgs::new(10u64, 5usize))
-                .await?;
-            assert!(blocks_from_node.is_err());
+            let GetBlocksRes(blocks_from_node) = get_blocks_pb(&node, 10..16).await?;
+            blocks_from_node.unwrap_err();
+
+            // The candid endpoint succeeds and returns the valid prefix of the request.
+            assert_eq!(
+                get_blocks_candid(&node, 10..18).await.unwrap().blocks.len(),
+                4
+            );
 
             // outside range both sides
-            let GetBlocksRes(blocks_from_node) = node
-                .query_("get_blocks_pb", protobuf, GetBlocksArgs::new(8u64, 6usize))
-                .await?;
-            assert!(blocks_from_node.is_err());
+            let GetBlocksRes(blocks_from_node) = get_blocks_pb(&node, 8..16).await?;
+            blocks_from_node.unwrap_err();
         }
 
         println!("[test] generating additional blocks in the ledger");
@@ -1387,9 +1423,7 @@ fn get_multiple_blocks_test() {
         {
             println!("[test] querying blocks from the ledger");
             // Fetch 2 blocks beginning at BlockHeight 14 from the ledger
-            let GetBlocksRes(blocks_from_ledger) = ledger
-                .query_("get_blocks_pb", protobuf, GetBlocksArgs::new(14u64, 2usize))
-                .await?;
+            let GetBlocksRes(blocks_from_ledger) = get_blocks_pb(&ledger, 14..16).await?;
             let blocks_from_ledger = blocks_from_ledger.unwrap();
             assert!(
                 blocks_from_ledger.len() == 2,
@@ -1398,25 +1432,17 @@ fn get_multiple_blocks_test() {
 
             println!("[test] testing invalid queries to the ledger");
             // And some invalid queries
-            let GetBlocksRes(blocks_from_ledger) = ledger
-                .query_("get_blocks_pb", protobuf, GetBlocksArgs::new(10u64, 2usize))
-                .await?;
-            assert!(blocks_from_ledger.is_err());
+            let GetBlocksRes(blocks_from_ledger) = get_blocks_pb(&ledger, 10..12).await?;
+            blocks_from_ledger.unwrap_err();
 
-            let GetBlocksRes(blocks_from_ledger) = ledger
-                .query_("get_blocks_pb", protobuf, GetBlocksArgs::new(14u64, 3usize))
-                .await?;
-            assert!(blocks_from_ledger.is_err());
+            let GetBlocksRes(blocks_from_ledger) = get_blocks_pb(&ledger, 14..17).await?;
+            blocks_from_ledger.unwrap_err();
 
-            let GetBlocksRes(blocks_from_ledger) = ledger
-                .query_("get_blocks_pb", protobuf, GetBlocksArgs::new(13u64, 2usize))
-                .await?;
-            assert!(blocks_from_ledger.is_err());
+            let GetBlocksRes(blocks_from_ledger) = get_blocks_pb(&ledger, 13..15).await?;
+            blocks_from_ledger.unwrap_err();
 
-            let GetBlocksRes(blocks_from_ledger) = ledger
-                .query_("get_blocks_pb", protobuf, GetBlocksArgs::new(13u64, 7usize))
-                .await?;
-            assert!(blocks_from_ledger.is_err());
+            let GetBlocksRes(blocks_from_ledger) = get_blocks_pb(&ledger, 13..20).await?;
+            blocks_from_ledger.unwrap_err();
         }
 
         Ok(())
