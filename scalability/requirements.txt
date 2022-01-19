@@ -1,4 +1,4 @@
-ansible>=2.10.7
+ansible>=2
 cbor>=1.0.0
 GitPython>=3.1.24
 pybars3>=0.9.7
