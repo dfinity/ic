@@ -3,7 +3,8 @@
 
 use super::super::Polynomial;
 use super::PublicCoefficients;
-use crate::types::PublicKey;
+use crate::types::bls::random_bls12_381_scalar;
+use crate::types::{PublicKey, ThresholdError};
 use bls12_381::Scalar;
 use ic_crypto_internal_bls12381_common::test_utils::{int_to_fr, uint_to_fr, uint_to_g2};
 use std::ops::MulAssign;
@@ -174,6 +175,60 @@ mod public_coefficients {
         let observed = PublicCoefficients::lagrange_coefficients_at_zero(&x_values_as_fr)
             .expect("Cannot fail because all the x values are distinct");
         assert_eq!(lagrange_coefficients[..], observed[..]);
+    }
+
+    #[test]
+    fn test_lagrange_coefficients_at_zero_rejects_duplicate_points() {
+        let mut rng = rand::thread_rng();
+
+        for num_coefficients in 1..50 {
+            let mut inputs = vec![];
+
+            let dup_r = random_bls12_381_scalar(&mut rng);
+
+            inputs.push(dup_r);
+
+            for _i in 0..=num_coefficients {
+                let r = random_bls12_381_scalar(&mut rng);
+                inputs.push(r);
+            }
+            inputs.push(dup_r);
+
+            assert_eq!(
+                PublicCoefficients::lagrange_coefficients_at_zero(&inputs),
+                Err(ThresholdError::DuplicateX)
+            );
+            assert!(PublicCoefficients::lagrange_coefficients_at_zero(&inputs[1..]).is_ok());
+        }
+    }
+
+    #[test]
+    fn test_interpolation_is_resilient_to_duplicate_points() {
+        let mut rng = rand::thread_rng();
+
+        for num_coefficients in 1..50 {
+            let poly = Polynomial::random(num_coefficients, &mut rng);
+
+            let mut samples = vec![];
+
+            let dup_r = random_bls12_381_scalar(&mut rng);
+            let dup_p_r = poly.evaluate_at(&dup_r);
+
+            for _i in 0..=num_coefficients {
+                samples.push((dup_r, dup_p_r));
+            }
+
+            for _i in 0..=num_coefficients {
+                let r = random_bls12_381_scalar(&mut rng);
+                let p_r = poly.evaluate_at(&r);
+                samples.push((r, p_r));
+                samples.push((dup_r, dup_p_r));
+            }
+
+            let interp = Polynomial::interpolate(&samples);
+
+            assert_eq!(poly, interp);
+        }
     }
 
     #[test]

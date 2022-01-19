@@ -24,9 +24,13 @@ impl PublicCoefficients {
         }
     }
 
-    /// Given a list of samples `(x, f(x) * g)` for a polynomial `f`, returns
+    /// Given a list of samples `(x, f(x) * g)` for a polynomial `f` in the scalar field, and a generator g of G1 returns
     /// `f(0) * g`.
     /// See: https://en.wikipedia.org/wiki/Shamir%27s_Secret_Sharing#Computationally_efficient_approach
+    /// # Arguments:
+    /// * `samples` contains the list of `(x, y)` points to be used in the interpolation, where `x` is an element in the scalar field, and the `y` is an element of G1.
+    /// # Returns
+    /// The generator `g` of G1 multiplied by to the constant term of the interpolated polynomial `f(x)`. If `samples` contains multiple entries for the same scalar `x`, only the first sample contributes toward the interpolation and the subsequent entries are discarded.
     pub fn interpolate_g1(
         samples: &[(Scalar, G1Projective)],
     ) -> Result<G1Projective, ThresholdError> {
@@ -39,9 +43,13 @@ impl PublicCoefficients {
         Ok(result)
     }
 
-    /// Given a list of samples `(x, f(x) * g)` for a polynomial `f`, returns
+    /// Given a list of samples `(x, f(x) * g)` for a polynomial `f` in the scalar field, and a generator g of G2 returns
     /// `f(0) * g`.
     /// See: https://en.wikipedia.org/wiki/Shamir%27s_Secret_Sharing#Computationally_efficient_approach
+    /// # Arguments:
+    /// * `samples` contains the list of `(x, y)` points to be used in the interpolation, where `x` is an element in the scalar field, and the `y` is an element of G2.
+    /// # Returns
+    /// The generator `g` of G2 multiplied by to the constant term of the interpolated polynomial `f(x)`, i.e. `f(0)`. If `samples` contains multiple entries for the same scalar `x`, only the first sample contributes toward the interpolation and the subsequent entries are discarded.
     pub fn interpolate_g2(
         samples: &[(Scalar, G2Projective)],
     ) -> Result<G2Projective, ThresholdError> {
@@ -52,6 +60,18 @@ impl PublicCoefficients {
             result.add_assign(&sample.borrow().mul(*coefficient))
         }
         Ok(result)
+    }
+
+    fn contains_duplicates(scalars: &[Scalar]) -> bool {
+        let mut set = std::collections::HashSet::new();
+
+        for scalar in scalars {
+            if !set.insert(scalar.to_bytes().to_vec()) {
+                return true;
+            }
+        }
+
+        false
     }
 
     /// Compute the Lagrange coefficients at x=0.
@@ -65,7 +85,7 @@ impl PublicCoefficients {
     ///    * denominator_i = (x_0 - x_i) * (x_1 - x_i) * ... * (x_(i-1) - x_i) *
     ///      (x_(i+1) - x_i) * ... * (x_n - x_i)
     /// # Errors
-    /// This will return an error if the denominator is zero.
+    /// `ThresholdError::DuplicateX`: in case the interpolation points `samples` are not all distinct.
     pub fn lagrange_coefficients_at_zero(
         samples: &[Scalar],
     ) -> Result<Vec<Scalar>, ThresholdError> {
@@ -75,6 +95,10 @@ impl PublicCoefficients {
         }
         if len == 1 {
             return Ok(vec![Scalar::one()]);
+        }
+
+        if Self::contains_duplicates(samples) {
+            return Err(ThresholdError::DuplicateX);
         }
 
         // The j'th numerator is the product of all `x_prod[i]` for `i!=j`.
