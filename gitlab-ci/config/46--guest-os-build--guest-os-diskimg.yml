@@ -28,6 +28,7 @@ guest-os-diskimg:
         "$BUILD_OUT" "$BUILD_TMP" "$UPLOAD_TARGET" "$VERSION" "$CDPRNET"
       buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" rclone -- \
       "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" "$BUILD_OUT" "$UPLOAD_TARGET"
+      echo "Build ID (real or fake git revision): ${VERSION}"
 
   artifacts:
     paths:
