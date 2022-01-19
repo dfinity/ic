@@ -214,7 +214,7 @@ impl Wasm {
                     );
                     match backoff.next_backoff() {
                         Some(interval) => {
-                            std::thread::sleep(interval);
+                            tokio::time::sleep(interval).await;
                         }
                         None => {
                             return Err(format!(
@@ -245,7 +245,7 @@ where
             Err(e) => match backoff.next_backoff() {
                 Some(interval) => {
                     eprintln!("Retrying due to: {}", &e);
-                    std::thread::sleep(interval);
+                    tokio::time::sleep(interval).await;
                 }
                 None => {
                     eprintln!("Failed due to: {}", &e);

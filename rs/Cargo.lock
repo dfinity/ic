@@ -898,6 +898,7 @@ dependencies = [
  "on_wire",
  "rand 0.7.3",
  "reqwest",
+ "tokio",
  "wabt",
 ]
 
