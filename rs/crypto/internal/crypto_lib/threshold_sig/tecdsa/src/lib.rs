@@ -4,6 +4,7 @@ use ic_types::{NumberOfNodes, Randomness};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+pub use ic_types::crypto::canister_threshold_sig::EcdsaPublicKey;
 pub use ic_types::NodeIndex;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -28,12 +29,12 @@ pub enum ThresholdEcdsaError {
 
 pub type ThresholdEcdsaResult<T> = std::result::Result<T, ThresholdEcdsaError>;
 
-pub mod bip32;
 mod dealings;
 mod ecdsa;
 mod fe;
 mod group;
 mod hash2curve;
+mod key_derivation;
 mod mega;
 mod poly;
 mod seed;
@@ -42,16 +43,16 @@ mod transcript;
 mod xmd;
 pub mod zk;
 
-pub use dealings::*;
-pub use fe::*;
-pub use group::*;
-pub use mega::*;
-pub use poly::*;
-pub use seed::*;
-pub use transcript::*;
-pub use xmd::*;
+pub use crate::dealings::*;
+pub use crate::fe::*;
+pub use crate::group::*;
+pub use crate::mega::*;
+pub use crate::poly::*;
+pub use crate::seed::*;
+pub use crate::transcript::*;
+pub use crate::xmd::*;
 
-pub use bip32::DerivationPath;
+pub use crate::key_derivation::DerivationPath;
 pub use sign::{ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSigShareInternal};
 
 /// Create MEGa encryption keypair
@@ -349,6 +350,7 @@ pub fn sign_share(
     derivation_path: &DerivationPath,
     hashed_message: &[u8],
     nonce: Randomness,
+    key_transcript: &IDkgTranscriptInternal,
     presig_transcript: &IDkgTranscriptInternal,
     lambda: &CommitmentOpening,
     kappa_times_lambda: &CommitmentOpening,
@@ -366,6 +368,7 @@ pub fn sign_share(
         derivation_path,
         hashed_message,
         nonce,
+        key_transcript,
         presig_transcript,
         lambda,
         kappa_times_lambda,
@@ -404,6 +407,7 @@ pub fn verify_signature_share(
     hashed_message: &[u8],
     randomness: Randomness,
     signer_index: NodeIndex,
+    key_transcript: &IDkgTranscriptInternal,
     presig_transcript: &IDkgTranscriptInternal,
     lambda: &IDkgTranscriptInternal,
     kappa_times_lambda: &IDkgTranscriptInternal,
@@ -422,6 +426,7 @@ pub fn verify_signature_share(
         hashed_message,
         randomness,
         signer_index,
+        key_transcript,
         presig_transcript,
         lambda,
         kappa_times_lambda,
@@ -462,6 +467,7 @@ impl From<ThresholdEcdsaError> for ThresholdEcdsaCombineSigSharesInternalError {
 pub fn combine_sig_shares(
     derivation_path: &DerivationPath,
     randomness: Randomness,
+    key_transcript: &IDkgTranscriptInternal,
     presig_transcript: &IDkgTranscriptInternal,
     reconstruction_threshold: NumberOfNodes,
     sig_shares: &BTreeMap<NodeIndex, ThresholdEcdsaSigShareInternal>,
@@ -475,6 +481,7 @@ pub fn combine_sig_shares(
     sign::ThresholdEcdsaCombinedSigInternal::new(
         derivation_path,
         randomness,
+        key_transcript,
         presig_transcript,
         reconstruction_threshold,
         sig_shares,
@@ -540,4 +547,4 @@ pub fn verify_threshold_signature(
     Ok(())
 }
 
-pub use sign::derive_public_key;
+pub use crate::sign::derive_public_key;

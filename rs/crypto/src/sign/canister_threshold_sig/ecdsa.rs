@@ -26,11 +26,13 @@ pub fn sign_share<C: CspThresholdEcdsaSigner>(
         internal_transcript_from_transcript(inputs.presig_quadruple().kappa_times_lambda())?;
     let key_times_lambda =
         internal_transcript_from_transcript(inputs.presig_quadruple().key_times_lambda())?;
+    let key = internal_transcript_from_transcript(inputs.key_transcript())?;
 
     let internal_sig_share = csp_client.ecdsa_sign_share(
         inputs.derivation_path(),
         inputs.hashed_message(),
         inputs.nonce(),
+        &key,
         &kappa_unmasked,
         &lambda_masked,
         &kappa_times_lambda,
@@ -68,9 +70,16 @@ pub fn combine_sig_shares<C: CspThresholdEcdsaSigVerifier>(
 
     let internal_shares = internal_sig_shares_by_index_from_sig_shares(shares, inputs.receivers())?;
 
+    let key = internal_transcript_from_transcript(inputs.key_transcript()).map_err(|e| {
+        ThresholdEcdsaCombineSigSharesError::SerializationError {
+            internal_error: format!("{:?}", e),
+        }
+    })?;
+
     let internal_combined_sig = csp_client.ecdsa_combine_sig_shares(
         inputs.derivation_path(),
         inputs.nonce(),
+        &key,
         &kappa_unmasked,
         inputs.reconstruction_threshold(),
         &internal_shares,

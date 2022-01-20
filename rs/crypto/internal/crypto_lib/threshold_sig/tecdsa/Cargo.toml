@@ -8,6 +8,7 @@ edition = "2018"
 [dependencies]
 ic-crypto-sha = { path = "../../../../sha" }
 ic-crypto-internal-types = { path = "../../types" }
+ic-crypto-internal-hmac = { path = "../../hmac" }
 ic-types = { path = "../../../../../types/types" }
 k256 = { version = "0.9.5", features = ["arithmetic"] }
 p256 = { version = "0.9.0", features = ["arithmetic"] }
@@ -27,6 +28,7 @@ lazy_static = "1.4.0"
 rand = "0.7"
 criterion = { version = "0.3", features = ["html_reports"] }
 k256 = { version = "0.9.5", features = ["ecdsa"] }
+bip32 = { version = "0.2.2", features = ["secp256k1"] }
 
 [[bench]]
 name = "field_ops"

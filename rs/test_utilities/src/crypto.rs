@@ -640,6 +640,7 @@ impl ThresholdEcdsaSigVerifier for CryptoReturningOk {
         Ok(EcdsaPublicKey {
             algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
             public_key: vec![],
+            chain_key: vec![],
         })
     }
 }

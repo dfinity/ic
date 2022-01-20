@@ -1,6 +1,5 @@
-use crate::bip32::DerivationPath;
+use crate::DerivationPath;
 use crate::*;
-use ic_types::crypto::canister_threshold_sig::EcdsaPublicKey;
 
 // This is the conversion function used by ECDSA which returns the
 // x-coordinate of a point reduced modulo the modulus of the scalar
@@ -15,6 +14,7 @@ fn derive_rho(
     curve_type: EccCurveType,
     randomness: &Randomness,
     derivation_path: &DerivationPath,
+    key_transcript: &IDkgTranscriptInternal,
     presig_transcript: &IDkgTranscriptInternal,
 ) -> ThresholdEcdsaResult<(EccScalar, EccScalar, EccScalar)> {
     let pre_sig = match &presig_transcript.combined_commitment {
@@ -26,7 +26,7 @@ fn derive_rho(
         return Err(ThresholdEcdsaError::InconsistentCommitments);
     }
 
-    let key_tweak = derivation_path.derive_tweak(curve_type)?;
+    let (key_tweak, _chain_key) = derivation_path.derive_tweak(&key_transcript.constant_term())?;
 
     let mut hasher_input = Vec::new();
 
@@ -63,14 +63,20 @@ impl ThresholdEcdsaSigShareInternal {
         derivation_path: &DerivationPath,
         hashed_message: &[u8],
         randomness: Randomness,
+        key_transcript: &IDkgTranscriptInternal,
         presig_transcript: &IDkgTranscriptInternal,
         lambda: &CommitmentOpening,
         kappa_times_lambda: &CommitmentOpening,
         key_times_lambda: &CommitmentOpening,
         curve_type: EccCurveType,
     ) -> ThresholdEcdsaResult<Self> {
-        let (rho, key_tweak, randomizer) =
-            derive_rho(curve_type, &randomness, derivation_path, presig_transcript)?;
+        let (rho, key_tweak, randomizer) = derive_rho(
+            curve_type,
+            &randomness,
+            derivation_path,
+            key_transcript,
+            presig_transcript,
+        )?;
 
         // Compute the message represenative from the hash, which may require
         // a reduction if int(hashed_message) >= group_order
@@ -125,6 +131,7 @@ impl ThresholdEcdsaSigShareInternal {
         hashed_message: &[u8],
         randomness: Randomness,
         signer_index: NodeIndex,
+        key_transcript: &IDkgTranscriptInternal,
         presig_transcript: &IDkgTranscriptInternal,
         lambda: &IDkgTranscriptInternal,
         kappa_times_lambda: &IDkgTranscriptInternal,
@@ -132,8 +139,13 @@ impl ThresholdEcdsaSigShareInternal {
         curve_type: EccCurveType,
     ) -> ThresholdEcdsaResult<bool> {
         // Compute rho and tweak
-        let (rho, key_tweak, randomizer) =
-            derive_rho(curve_type, &randomness, derivation_path, presig_transcript)?;
+        let (rho, key_tweak, randomizer) = derive_rho(
+            curve_type,
+            &randomness,
+            derivation_path,
+            key_transcript,
+            presig_transcript,
+        )?;
 
         // Compute theta
         let e = EccScalar::from_bytes_wide(curve_type, hashed_message)?;
@@ -198,6 +210,7 @@ impl ThresholdEcdsaCombinedSigInternal {
     pub(crate) fn new(
         derivation_path: &DerivationPath,
         randomness: Randomness,
+        key_transcript: &IDkgTranscriptInternal,
         presig_transcript: &IDkgTranscriptInternal,
         reconstruction_threshold: NumberOfNodes,
         sig_shares: &BTreeMap<NodeIndex, ThresholdEcdsaSigShareInternal>,
@@ -208,8 +221,13 @@ impl ThresholdEcdsaCombinedSigInternal {
             return Err(ThresholdEcdsaError::InsufficientDealings);
         }
 
-        let (rho, _key_tweak, _randomizer) =
-            derive_rho(curve_type, &randomness, derivation_path, presig_transcript)?;
+        let (rho, _key_tweak, _randomizer) = derive_rho(
+            curve_type,
+            &randomness,
+            derivation_path,
+            key_transcript,
+            presig_transcript,
+        )?;
 
         // Compute sigma's numerator via interpolation
         let mut numerator_samples = Vec::with_capacity(reconstruction_threshold);
@@ -273,8 +291,13 @@ impl ThresholdEcdsaCombinedSigInternal {
         key_transcript: &IDkgTranscriptInternal,
         curve_type: EccCurveType,
     ) -> ThresholdEcdsaResult<bool> {
-        let (rho, key_tweak, _) =
-            derive_rho(curve_type, &randomness, derivation_path, presig_transcript)?;
+        let (rho, key_tweak, _) = derive_rho(
+            curve_type,
+            &randomness,
+            derivation_path,
+            key_transcript,
+            presig_transcript,
+        )?;
 
         if self.r != rho {
             return Ok(false);
@@ -298,16 +321,8 @@ pub fn derive_public_key(
     derivation_path: &DerivationPath,
     algorithm_id: AlgorithmId,
 ) -> ThresholdEcdsaResult<EcdsaPublicKey> {
-    let curve_type = match algorithm_id {
-        AlgorithmId::ThresholdEcdsaSecp256k1 => Ok(EccCurveType::K256),
-        _ => Err(ThresholdEcdsaError::InvalidArguments(format!(
-            "Unknown algorithm {:?}",
-            algorithm_id
-        ))),
-    }?;
-
     // Compute tweak
-    let key_tweak = derivation_path.derive_tweak(curve_type)?;
+    let (key_tweak, chain_key) = derivation_path.derive_tweak(&key_transcript.constant_term())?;
 
     let master_public_key = key_transcript.constant_term();
     let tweak_g = EccPoint::mul_by_g(&key_tweak)?;
@@ -316,5 +331,6 @@ pub fn derive_public_key(
     Ok(EcdsaPublicKey {
         algorithm_id,
         public_key: public_key.serialize(),
+        chain_key,
     })
 }

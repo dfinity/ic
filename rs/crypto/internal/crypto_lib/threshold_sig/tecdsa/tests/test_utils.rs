@@ -429,6 +429,10 @@ impl SignatureProtocolSetup {
             kappa_times_lambda,
         })
     }
+
+    pub fn public_key(&self, path: &DerivationPath) -> Result<EcdsaPublicKey, ThresholdEcdsaError> {
+        derive_public_key(&self.key.transcript, path, self.setup.alg)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -468,6 +472,7 @@ impl SignatureProtocolExecution {
                 &self.derivation_path,
                 &self.hashed_message,
                 self.random_beacon,
+                &self.setup.key.transcript,
                 &self.setup.kappa.transcript,
                 &self.setup.lambda.openings[node_index],
                 &self.setup.kappa_times_lambda.openings[node_index],
@@ -482,6 +487,7 @@ impl SignatureProtocolExecution {
                 &self.hashed_message,
                 self.random_beacon,
                 node_index as u32,
+                &self.setup.key.transcript,
                 &self.setup.kappa.transcript,
                 &self.setup.lambda.transcript,
                 &self.setup.kappa_times_lambda.transcript,
@@ -504,6 +510,7 @@ impl SignatureProtocolExecution {
         combine_sig_shares(
             &self.derivation_path,
             self.random_beacon,
+            &self.setup.key.transcript,
             &self.setup.kappa.transcript,
             self.setup.setup.threshold,
             shares,
@@ -526,11 +533,7 @@ impl SignatureProtocolExecution {
         )?;
 
         // If verification succeeded, check with RustCrypto's ECDSA also
-        let pk = derive_public_key(
-            &self.setup.key.transcript,
-            &self.derivation_path,
-            self.setup.setup.alg,
-        )?;
+        let pk = self.setup.public_key(&self.derivation_path)?;
 
         use k256::ecdsa::signature::{Signature, Verifier};
 
