@@ -546,8 +546,8 @@ pub fn sigsegv_fault_handler_old(
 /// in the constructor of the memory tracker. So handler tries to mprotect `P`
 /// and a few of its subsequent pages that have the same backing memory.
 /// This optimization is referred to as prefetching in the code. Prefetching
-/// is disabled if we are tracking dirty pages and the faulting access was a
-/// write access.
+/// is done both for read and write access. In the latter case the prefetched
+/// pages are marked as speculatively dirty.
 ///
 /// The third case is handled similar to the old implementation with one
 /// important optimization: if the faulting access is a write access and the
