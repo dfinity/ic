@@ -1,5 +1,6 @@
-/opt/ic/bin/orchestrator              -- gen_context(system_u:object_r:ic_orchestrator_exec_t,s0)
+/opt/ic/bin/orchestrator             -- gen_context(system_u:object_r:ic_orchestrator_exec_t,s0)
 /opt/ic/bin/replica                  -- gen_context(system_u:object_r:ic_replica_exec_t,s0)
+/opt/ic/bin/canister_sandbox         -- gen_context(system_u:object_r:ic_canister_sandbox_exec_t,s0)
 /var/lib/ic/backup(/.*)?                gen_context(system_u:object_r:ic_data_t,s0)
 /var/lib/ic/data(/.*)?                  gen_context(system_u:object_r:ic_data_t,s0)
 /var/lib/ic/crypto(/.*)?                gen_context(system_u:object_r:ic_crypto_store_t,s0)

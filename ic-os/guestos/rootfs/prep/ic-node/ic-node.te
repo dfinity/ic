@@ -8,6 +8,9 @@ type ic_orchestrator_exec_t;
 type ic_replica_t;
 type ic_replica_exec_t;
 
+type ic_canister_sandbox_t;
+type ic_canister_sandbox_exec_t;
+
 # On-disk state types.
 type ic_crypto_store_t;
 type ic_data_t;
@@ -189,14 +192,32 @@ require { type tmp_t; }
 rw_dirs_pattern(ic_replica_t, tmp_t, tmp_t)
 create_dirs_pattern(ic_replica_t, tmp_t, tmp_t)
 
-# Replica seems to be creating an internal unix socket
-allow ic_replica_t self : unix_stream_socket { create };
+# Replica creates and reads/writes to/from internal unix domain socket,
+# as well as the socket connecting it to the sandbox.
+allow ic_replica_t self : unix_stream_socket { create read write };
+
+# Replica uses an internal fifo file
+allow ic_replica_t ic_replica_t : fifo_file { read };
 
 # It is not clear why replica needs this.
 allow ic_replica_t fs_t : filesystem { getattr };
 
 # Wants to read /proc/sys/kernel/osrelease
 kernel_read_kernel_sysctls(ic_replica_t)
+
+# Allow managing ic data.
+rw_dirs_pattern(ic_replica_t, ic_data_t, ic_data_t)
+create_dirs_pattern(ic_replica_t, ic_data_t, ic_data_t)
+rw_files_pattern(ic_replica_t, ic_data_t, ic_data_t)
+create_files_pattern(ic_replica_t, ic_data_t, ic_data_t)
+
+### Replica interaction with sandbox.
+
+# Allow launching canister sandbox
+domain_auto_transition_pattern(ic_replica_t, ic_canister_sandbox_exec_t, ic_canister_sandbox_t)
+
+# Allow inspecting sandbox process /proc files to collect metrics.
+read_files_pattern(ic_replica_t, ic_canister_sandbox_t, ic_canister_sandbox_t)
 
 ###############################################################################
 # Config file handling
@@ -235,4 +256,86 @@ read_files_pattern(iptables_t, ic_nftables_ruleset_t, ic_nftables_ruleset_t)
 # Allow orchestrator to write nftables ruleset
 manage_files_pattern(ic_orchestrator_t, ic_nftables_ruleset_t, ic_nftables_ruleset_t)
 
+###############################################################################
+# Canister sandbox
 
+role system_r types ic_canister_sandbox_t;
+
+require {
+    type ld_so_cache_t, ld_so_t, lib_t, root_t, usr_t, cpu_online_t, proc_t, sysfs_t, null_device_t;
+    attribute unconfined_domain_type;
+}
+
+allow ic_canister_sandbox_t etc_t:dir { getattr ioctl lock open read search };
+allow ic_canister_sandbox_t ld_so_cache_t:file { getattr ioctl lock map open read };
+allow ic_canister_sandbox_t ld_so_t:file { execute getattr map open read };
+allow ic_canister_sandbox_t ld_so_t:lnk_file { getattr read };
+allow ic_canister_sandbox_t lib_t:dir { getattr lock open read search };
+allow ic_canister_sandbox_t lib_t:file { execute getattr map open read };
+allow ic_canister_sandbox_t lib_t:lnk_file { getattr read };
+allow ic_canister_sandbox_t root_t:dir { getattr read search };
+allow ic_canister_sandbox_t root_t:lnk_file { getattr read };
+allow ic_canister_sandbox_t unconfined_domain_type:association recvfrom;
+allow ic_canister_sandbox_t usr_t:dir { getattr open search };
+allow ic_canister_sandbox_t ic_canister_sandbox_exec_t:file { entrypoint execute map read };
+allow ic_canister_sandbox_t ic_canister_sandbox_t:process { execmem fork getsched };
+
+allow ic_canister_sandbox_t ic_canister_sandbox_exec_t : file { entrypoint execute map read };
+
+# Allow to turn anonymous memory executable (required for the native code
+# compiled from wasm inside the process). This is obviously not desirable
+# from security POV.
+allow ic_canister_sandbox_t self : process { execmem };
+
+# Allow to get own scheduler -- that's harmless, obviously.
+allow ic_canister_sandbox_t ic_canister_sandbox_t : process { getsched };
+
+# Allow to communicate with replica. We should have the sockets explicitly
+# labeled by replica such that we precisely identify this as the "allowed"
+# communication channel (and such that there is no "accidental" use of any
+# differently labeled channel.
+allow ic_canister_sandbox_t ic_replica_t : fd use;
+allow ic_canister_sandbox_t ic_replica_t : unix_stream_socket { read write };
+
+# Allow to access the shared memory area set up by replica. NB this should be
+# labelled differently eventually because allowing tmpfs is fairly broad.
+require { type tmpfs_t; }
+allow ic_canister_sandbox_t tmpfs_t : file { read write };
+
+# Wants to read its own control group. Should deny that.
+dontaudit ic_canister_sandbox_t cgroup_t : dir { search };
+dontaudit ic_canister_sandbox_t cgroup_t : file { open read };
+
+# There is a leaked epoll descriptor from orchestrator!
+dontaudit ic_canister_sandbox_t ic_orchestrator_t : fd { use };
+
+# Allow to use the logging file descriptor inherited from init.
+# This should actually not be allowed, logs should be routed through
+# replica.
+allow ic_canister_sandbox_t init_t : fd { use };
+allow ic_canister_sandbox_t init_t : unix_stream_socket { read write };
+
+# Deny access to system information as well as own proc file (would
+# also allow accessing proc files of *other* sandboxes).
+dontaudit ic_canister_sandbox_t sysfs_t : dir { search };
+dontaudit ic_canister_sandbox_t cpu_online_t : file { open read };
+dontaudit ic_canister_sandbox_t ic_canister_sandbox_t : dir { search };
+dontaudit ic_canister_sandbox_t ic_canister_sandbox_t : file { getattr open read };
+allow ic_canister_sandbox_t null_device_t : chr_file { read };
+dontaudit ic_canister_sandbox_t proc_t : dir { search };
+dontaudit ic_canister_sandbox_t proc_t : lnk_file { read };
+
+# Deny accessing system information (tries to access "/proc/sys/kernel/osrelease" for unspecified reasons).
+dontaudit ic_canister_sandbox_t sysctl_kernel_t : dir { search };
+dontaudit ic_canister_sandbox_t sysctl_kernel_t : file { getattr open read };
+dontaudit ic_canister_sandbox_t sysctl_t : dir { search };
+
+# Allow our unconfined domain to debug this process
+allow unconfined_domain_type ic_canister_sandbox_t : dir *;
+allow unconfined_domain_type ic_canister_sandbox_t : file *;
+allow unconfined_domain_type ic_canister_sandbox_t : lnk_file *;
+allow unconfined_domain_type ic_canister_sandbox_t : process *;
+
+# Silence systemd journal trying to access sandbox proc files
+dontaudit syslogd_t ic_canister_sandbox_t : dir { getattr open read search };
+dontaudit syslogd_t ic_canister_sandbox_t : file { open read };
