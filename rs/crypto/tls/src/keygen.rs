@@ -34,10 +34,11 @@ use rand::Rng;
 /// * if `not_after` cannot be parsed or lies in the past
 /// * if the generated X509 certificate is malformed
 pub fn generate_tls_keys(common_name: &str, not_after: &str) -> (TlsPublicKeyCert, TlsPrivateKey) {
-    let serial: [u8; 19] = OsRng::default().gen();
+    let csprng = &mut OsRng;
+    let serial: [u8; 19] = csprng.gen();
     let not_after =
         Asn1Time::from_str_x509(not_after).expect("unable to parse not after as ASN1Time");
-    let (cert, secret_key) = generate_tls_key_pair(common_name, serial, &not_after);
+    let (cert, secret_key) = generate_tls_key_pair(csprng, common_name, serial, &not_after);
     (
         // We panic here, because we *shouldn't* generate a malformed cert.
         TlsPublicKeyCert::new_from_x509(cert).expect("Generated X509 certificate is malformed"),

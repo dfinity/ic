@@ -8,6 +8,7 @@ use openssl::{
     pkey::{PKey, Private},
     x509::{X509Name, X509},
 };
+use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::fmt;
@@ -58,13 +59,14 @@ impl fmt::Debug for TlsEd25519SecretKeyDerBytes {
 /// to https://tools.ietf.org/html/rfc5280 Section 4.1.2.2. The 19 bytes serial
 /// number argument is interpreted as an unsigned integer and thus fits in 20
 /// bytes, encoded as a signed ASN1 integer.
-pub fn generate_tls_key_pair_der(
+pub fn generate_tls_key_pair_der<R: Rng + CryptoRng>(
+    csprng: &mut R,
     common_name: &str,
     serial: [u8; 19],
     not_after: &Asn1Time,
 ) -> (TlsEd25519CertificateDerBytes, TlsEd25519SecretKeyDerBytes) {
-    let (x509_certificate, key_pair) = generate_tls_key_pair(common_name, serial, not_after);
-    der_encode_cert_and_secret_key(&key_pair, x509_certificate)
+    let (x509_cert, key_pair) = generate_tls_key_pair(csprng, common_name, serial, not_after);
+    der_encode_cert_and_secret_key(&key_pair, x509_cert)
 }
 
 /// Generate a key pair and return the certificate and private key.
@@ -73,12 +75,13 @@ pub fn generate_tls_key_pair_der(
 /// to https://tools.ietf.org/html/rfc5280 Section 4.1.2.2. The 19 bytes serial
 /// number argument is interpreted as an unsigned integer and thus fits in 20
 /// bytes, encoded as a signed ASN1 integer.
-pub fn generate_tls_key_pair(
+pub fn generate_tls_key_pair<R: Rng + CryptoRng>(
+    csprng: &mut R,
     common_name: &str,
     serial: [u8; 19],
     not_after: &Asn1Time,
 ) -> (X509, PKey<Private>) {
-    let key_pair = ed25519_key_pair();
+    let key_pair = ed25519_key_pair(csprng);
     let x509_certificate = x509_v3_certificate(
         common_name,
         serial,
@@ -90,8 +93,11 @@ pub fn generate_tls_key_pair(
     (x509_certificate, key_pair)
 }
 
-fn ed25519_key_pair() -> PKey<Private> {
-    PKey::generate_ed25519().expect("failed to create Ed25519 key pair")
+fn ed25519_key_pair<R: Rng + CryptoRng>(csprng: &mut R) -> PKey<Private> {
+    let (secret_key, _public_key_ignored_because_regenerated_by_openssl) =
+        ic_crypto_internal_basic_sig_ed25519::keypair_from_rng(csprng);
+    PKey::private_key_from_raw_bytes(secret_key.0.expose_secret(), openssl::pkey::Id::ED25519)
+        .expect("failed to create Ed25519 key pair from raw private key")
 }
 
 fn x509_v3_certificate(

@@ -3877,9 +3877,11 @@ name = "ic-crypto-internal-tls"
 version = "0.8.0"
 dependencies = [
  "base64 0.11.0",
+ "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-test-utils",
  "ic-types 0.8.0",
  "openssl",
+ "rand 0.7.3",
  "serde",
  "serde_bytes",
  "zeroize",
