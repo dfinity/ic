@@ -1,6 +1,5 @@
 use crate::{CheckpointError, CheckpointMetrics};
 use ic_base_types::CanisterId;
-use ic_cow_state::{CowMemoryManager, CowMemoryManagerImpl, MappedState};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::Memory;
 use ic_replicated_state::{
@@ -8,15 +7,12 @@ use ic_replicated_state::{
     ExecutionState, NumWasmPages, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_state_layout::{
-    CanisterStateBits, CheckpointLayout, ExecutionStateBits, ReadPolicy, ReadWritePolicy, RwPolicy,
-    StateLayout,
+    CanisterStateBits, CheckpointLayout, ExecutionStateBits, ReadPolicy, RwPolicy, StateLayout,
 };
 use ic_types::Height;
-use ic_utils::ic_features::*;
 use ic_utils::thread::parallel_map;
 use std::collections::BTreeMap;
 use std::convert::{From, TryFrom};
-use std::sync::Arc;
 
 /// Creates a checkpoint of the node state using specified directory
 /// layout. Returns a new state that is equivalent the to given one
@@ -107,8 +103,6 @@ fn serialize_canister_to_tip(
                 .stable_memory
                 .page_map
                 .persist_and_sync_delta(&canister_layout.stable_memory_blob())?;
-
-            execution_state.cow_mem_mgr.checkpoint();
 
             Some(ExecutionStateBits {
                 exported_globals: execution_state.exported_globals.clone(),
@@ -271,10 +265,6 @@ fn load_canister_state_from_checkpoint<P: ReadPolicy>(
                 exports: execution_state_bits.exports,
                 metadata: execution_state_bits.metadata,
                 last_executed_round: execution_state_bits.last_executed_round,
-                cow_mem_mgr: Arc::new(CowMemoryManagerImpl::open_readonly(
-                    canister_layout.raw_path(),
-                )),
-                mapped_state: None,
             })
         }
         None => None,
@@ -318,80 +308,6 @@ fn load_canister_state_from_checkpoint<P: ReadPolicy>(
             heap_delta_debit: canister_state_bits.heap_delta_debit,
         },
     })
-}
-
-pub fn handle_disk_format_changes<P: ReadWritePolicy>(
-    layout: &CheckpointLayout<P>,
-    state: &ReplicatedState,
-) -> Result<bool, CheckpointError> {
-    let mut needs_reload = false;
-    for (canister, canister_state) in state.canister_states.iter() {
-        if canister_state.execution_state.is_some() {
-            let canister_layout = layout.canister(canister)?;
-            let execution_state = canister_state.execution_state.as_ref().unwrap();
-
-            let canister_base = canister_layout.raw_path();
-            let is_cow = CowMemoryManagerImpl::is_cow(&canister_base);
-            let should_upgrade =
-                !is_cow && cow_state_feature::is_enabled(cow_state_feature::cow_state);
-            let should_downgrade =
-                is_cow && !cow_state_feature::is_enabled(cow_state_feature::cow_state);
-
-            if should_upgrade {
-                let cow_mem_mgr = CowMemoryManagerImpl::open_readwrite(canister_layout.raw_path());
-
-                let mut pages_to_write = Vec::new();
-                let mapped_state = cow_mem_mgr.get_map();
-                for (idx, data) in execution_state.wasm_memory.page_map.host_pages_iter() {
-                    pages_to_write.push(idx.get());
-                    mapped_state.update_heap_page(idx.get(), data);
-                }
-                mapped_state.soft_commit(pages_to_write.as_mut_slice());
-                cow_mem_mgr.create_snapshot(execution_state.last_executed_round.get());
-            } else if should_downgrade {
-                let cow_mem_mgr = CowMemoryManagerImpl::open_readonly(canister_layout.raw_path());
-                let mapped_state = cow_mem_mgr.get_map();
-                let heap_base = mapped_state.get_heap_base();
-                let heap_len = mapped_state.get_heap_len();
-                mapped_state.make_heap_accessible();
-
-                let contents = unsafe { std::slice::from_raw_parts(heap_base, heap_len) };
-
-                let memory_path = &canister_layout.vmemory_0();
-
-                std::fs::write(memory_path, contents).map_err(|err| CheckpointError::IoError {
-                    path: memory_path.clone(),
-                    message: "Failed to overwrite file".to_string(),
-                    io_err: err.to_string(),
-                })?;
-
-                CowMemoryManagerImpl::purge(&canister_base);
-
-                // We should reload the state from disk after this format change
-                needs_reload = true;
-            }
-        }
-    }
-    Ok(needs_reload)
-}
-
-// This function prepares the passed in state as a mutable tip. Primarily it
-// reopens the cow state in writable mode.
-pub fn reopen_state_as_tip<P: ReadWritePolicy>(
-    layout: &CheckpointLayout<P>,
-    state: &mut ReplicatedState,
-) -> Result<(), CheckpointError> {
-    for (canister, canister_state) in state.canister_states.iter_mut() {
-        if canister_state.execution_state.is_some() {
-            let canister_layout = layout.canister(canister)?;
-            let mut execution_state = canister_state.execution_state.take().unwrap();
-            execution_state.cow_mem_mgr = Arc::new(CowMemoryManagerImpl::open_readwrite(
-                canister_layout.raw_path(),
-            ));
-            canister_state.execution_state = Some(execution_state);
-        }
-    }
-    Ok(())
 }
 
 #[cfg(test)]
@@ -579,9 +495,6 @@ mod tests {
             const HEIGHT: Height = Height::new(42);
             let canister_id: CanisterId = canister_test_id(10);
 
-            let tip = layout.tip().unwrap();
-            let can_layout = tip.canister(&canister_id);
-
             let wasm = empty_wasm();
             let wasm_memory = one_page_of(1);
 
@@ -603,10 +516,6 @@ mod tests {
                 exports: ExportedFunctions::new(BTreeSet::new()),
                 metadata: WasmMetadata::default(),
                 last_executed_round: ExecutionRound::from(0),
-                cow_mem_mgr: Arc::new(CowMemoryManagerImpl::open_readwrite(
-                    can_layout.unwrap().raw_path(),
-                )),
-                mapped_state: None,
             };
             canister_state.execution_state = Some(execution_state);
 

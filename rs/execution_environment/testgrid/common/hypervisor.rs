@@ -38,7 +38,6 @@ use ic_types::{
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
     PrincipalId, SubnetId, Time, UserId,
 };
-use ic_utils::ic_features::cow_state_feature;
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use proptest::prelude::*;
@@ -3360,16 +3359,12 @@ fn canister_metrics_are_recorded() {
             Some(HistogramStats { sum: 1.0, count: 1 })
         );
 
-        // Cow memory does not support absolute accessed pages
-        // accounting.
-        if !cow_state_feature::is_enabled(cow_state_feature::cow_state) {
-            match fetch_histogram_stats(&registry, "hypervisor_accessed_pages") {
-                Some(HistogramStats { sum, count }) => {
-                    assert_eq!(count, 1);
-                    assert!(sum >= 2.0);
-                }
-                None => unreachable!(),
+        match fetch_histogram_stats(&registry, "hypervisor_accessed_pages") {
+            Some(HistogramStats { sum, count }) => {
+                assert_eq!(count, 1);
+                assert!(sum >= 2.0);
             }
+            None => unreachable!(),
         }
     });
 }
@@ -4626,9 +4621,6 @@ impl MemoryAccessor {
     }
 
     fn verify_dirty_pages(&self, is_dirty_page: &[bool]) {
-        if cow_state_feature::is_enabled(cow_state_feature::cow_state) {
-            return;
-        }
         for (page_index, is_dirty_page) in is_dirty_page.iter().enumerate() {
             match self
                 .canister

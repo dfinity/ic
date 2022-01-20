@@ -61,7 +61,6 @@ mod tests {
     use super::*;
     use hex::FromHex;
     use ic_base_types::NumSeconds;
-    use ic_cow_state::CowMemoryManagerImpl;
     use ic_crypto_tree_hash::Digest;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
@@ -84,7 +83,6 @@ mod tests {
     };
     use ic_wasm_types::BinaryEncodedWasm;
     use std::collections::BTreeSet;
-    use std::sync::Arc;
 
     const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 
@@ -177,7 +175,6 @@ mod tests {
             wasm_memory
                 .page_map
                 .update(&[(PageIndex::from(1), &[0u8; PAGE_SIZE])]);
-            let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
             let wasm_binary = WasmBinary::new(BinaryEncodedWasm::new(vec![]));
             let execution_state = ExecutionState {
                 canister_root: "NOT_USED".into(),
@@ -189,8 +186,6 @@ mod tests {
                 exports: ExportedFunctions::new(BTreeSet::new()),
                 metadata: WasmMetadata::default(),
                 last_executed_round: ExecutionRound::from(0),
-                cow_mem_mgr: Arc::new(CowMemoryManagerImpl::open_readwrite(tmpdir.path().into())),
-                mapped_state: None,
             };
             canister_state.execution_state = Some(execution_state);
 

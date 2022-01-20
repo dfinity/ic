@@ -9,7 +9,6 @@ use ic_interfaces::state_manager::StateReader;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{canonical_error::internal_error, Height, ReplicaVersion};
-use ic_utils::ic_features::cow_state_feature;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -59,16 +58,14 @@ impl Service<Body> for DashboardService {
         let canisters: Vec<&ic_replicated_state::CanisterState> =
             labeled_state.get_ref().canisters_iter().collect();
 
-        let cow_memory_manager_enabled =
-            cow_state_feature::is_enabled(cow_state_feature::cow_state);
-
         let dashboard = Dashboard {
             subnet_type: self.subnet_type,
             http_config: &self.config,
             height: labeled_state.height(),
             replicated_state: labeled_state.get_ref(),
             canisters: &canisters,
-            cow_memory_manager_enabled,
+            // TODO(EXC-750): Remove this field.
+            cow_memory_manager_enabled: false,
             replica_version: ReplicaVersion::default(),
         };
 

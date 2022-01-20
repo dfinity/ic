@@ -8,7 +8,6 @@ anyhow = "1.0.31"
 clap = "2.33.3"
 crossbeam-channel = "0.5.0"
 ic-config = { path = "../config" }
-ic-cow-state = { path = "../cow_state" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }

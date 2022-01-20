@@ -58,14 +58,6 @@ pub fn file_hasher() -> Sha256 {
     hasher_for_domain("ic-state-file")
 }
 
-pub fn cow_file_hasher() -> Sha256 {
-    hasher_for_domain("ic-cow-state-file")
-}
-
 pub fn chunk_hasher() -> Sha256 {
     hasher_for_domain("ic-state-chunk")
-}
-
-pub fn cow_chunk_hasher() -> Sha256 {
-    hasher_for_domain("ic-state-cow-chunk")
 }

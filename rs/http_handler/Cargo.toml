@@ -23,7 +23,6 @@ ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist"
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-types = { path = "../types/types" }
-ic-utils = { path = "../utils" }
 ic-validator = { path = "../validator" }
 prometheus = { version = "0.12.0", features = [ "process" ] }
 prost = "0.9.0"

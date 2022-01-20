@@ -1995,7 +1995,7 @@ fn can_record_metrics_single_scheduler_thread() {
         let mut exports = BTreeSet::new();
         exports.insert(WasmMethod::Update("write".to_string()));
         exports.insert(WasmMethod::Query("read".to_string()));
-        let mut execution_state = initial_execution_state(None);
+        let mut execution_state = initial_execution_state();
         execution_state.exports = ExportedFunctions::new(exports);
         canister_state.execution_state = Some(execution_state);
 
@@ -2393,7 +2393,7 @@ fn requested_method_does_not_exist() {
             let mut exports = BTreeSet::new();
             exports.insert(WasmMethod::Update("write".to_string()));
             exports.insert(WasmMethod::Query("read".to_string()));
-            let mut execution_state = initial_execution_state(None);
+            let mut execution_state = initial_execution_state();
             execution_state.exports = ExportedFunctions::new(exports);
             canister_state.execution_state = Some(execution_state);
 

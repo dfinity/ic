@@ -13,7 +13,6 @@ ic-canister-client = { path = "../canister_client" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-consensus-message = { path = "../consensus/message" }
-ic-cow-state = { path = "../cow_state" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-internal-types = { path = "../crypto/internal/crypto_lib/types" }
 ic-crypto-sha = { path = "../crypto/sha" }

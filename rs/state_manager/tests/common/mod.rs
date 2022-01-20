@@ -11,7 +11,6 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::execution_state::WasmBinary;
 use ic_replicated_state::{testing::ReplicatedStateTesting, ReplicatedState, Stream};
-use ic_state_layout::{CheckpointLayout, RwPolicy};
 use ic_state_manager::{stream_encoding, StateManagerImpl};
 use ic_test_utilities::{
     consensus::fake::{Fake, FakeVerifier},
@@ -317,10 +316,6 @@ pub fn wait_for_checkpoint(state_manager: &impl StateManager, h: Height) -> Cryp
 }
 
 pub fn insert_dummy_canister(state: &mut ReplicatedState, canister_id: CanisterId) {
-    let can_layout = CheckpointLayout::<RwPolicy>::new(state.path().into(), Height::from(0))
-        .and_then(|layout| layout.canister(&canister_id))
-        .expect("failed to obtain canister layout");
-
     let wasm = empty_wasm();
     let mut canister_state = new_canister_state(
         canister_id,
@@ -328,7 +323,7 @@ pub fn insert_dummy_canister(state: &mut ReplicatedState, canister_id: CanisterI
         INITIAL_CYCLES,
         NumSeconds::from(100_000),
     );
-    let mut execution_state = initial_execution_state(Some(can_layout.raw_path()));
+    let mut execution_state = initial_execution_state();
     execution_state.wasm_binary = WasmBinary::new(wasm);
     canister_state.execution_state = Some(execution_state);
     state.put_canister_state(canister_state);

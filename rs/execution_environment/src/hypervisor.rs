@@ -2,7 +2,6 @@ use crate::QueryExecutionType;
 use ic_canister_sandbox_replica_controller::sandboxed_execution_controller::SandboxedExecutionController;
 use ic_config::feature_status::FeatureStatus;
 use ic_config::{embedders::Config as EmbeddersConfig, execution_environment::Config};
-use ic_cow_state::{error::CowError, CowMemoryManager};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
     wasm_executor::WasmExecutor, WasmExecutionInput, WasmExecutionOutput, WasmtimeEmbedder,
@@ -257,7 +256,7 @@ impl Hypervisor {
         let (execution_state, system_state, scheduler_state) = canister.into_parts();
 
         // Validate that the Wasm module is present.
-        let mut execution_state = match execution_state {
+        let execution_state = match execution_state {
             None => {
                 return (
                     CanisterState::from_parts(None, system_state, scheduler_state),
@@ -279,13 +278,6 @@ impl Hypervisor {
 
         match query_execution_type {
             QueryExecutionType::Replicated => {
-                if execution_state.cow_mem_mgr.is_valid() {
-                    // Replicated queries are similar to update executions and they operate
-                    // against the "current" canister state
-                    execution_state.mapped_state =
-                        Some(Arc::new(execution_state.cow_mem_mgr.get_map()));
-                }
-
                 let api_type =
                     ApiType::replicated_query(time, payload.to_vec(), caller, data_certificate);
                 // As we are executing the query in the replicated mode, we do
@@ -311,20 +303,6 @@ impl Hypervisor {
                 routing_table,
                 query_kind,
             } => {
-                if execution_state.cow_mem_mgr.is_valid() {
-                    // Non replicated queries execute against
-                    // older snapshotted state.
-                    execution_state.mapped_state = match execution_state
-                        .cow_mem_mgr
-                        .get_map_for_snapshot(execution_state.last_executed_round.get())
-                    {
-                        Ok(state) => Some(Arc::new(state)),
-                        Err(err @ CowError::SlotDbError { .. }) => {
-                            fatal!(self.log, "Failure due to {}", err)
-                        }
-                    };
-                }
-
                 let api_type = ApiType::non_replicated_query(
                     time,
                     payload.to_vec(),

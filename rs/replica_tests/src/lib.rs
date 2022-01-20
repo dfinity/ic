@@ -40,7 +40,6 @@ use ic_types::{
     user_error::UserError,
     CanisterId, Height, NodeId, RegistryVersion, Time,
 };
-use ic_utils::ic_features::*;
 use prost::Message;
 use slog_scope::info;
 use std::collections::BTreeMap;
@@ -324,12 +323,6 @@ where
     Fut: Future<Output = Out>,
     F: FnOnce(LocalTestRuntime) -> Fut + 'static,
 {
-    if subnet_config.cow_memory_manager_config.enabled {
-        cow_state_feature::enable(cow_state_feature::cow_state);
-    } else {
-        cow_state_feature::disable(cow_state_feature::cow_state);
-    }
-
     with_test_replica_logger(|logger| {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let _rt_guard = rt.enter();

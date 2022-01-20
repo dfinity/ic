@@ -14,7 +14,6 @@ use ic_registry_client::helper::subnet::SubnetRegistry;
 use ic_replica::{args::ReplicaArgs, setup};
 use ic_sys::PAGE_SIZE;
 use ic_types::{replica_version::REPLICA_BINARY_HASH, PrincipalId, ReplicaVersion, SubnetId};
-use ic_utils::ic_features::*;
 use nix::unistd::{setpgid, Pid};
 use static_assertions::assert_eq_size;
 use std::env;
@@ -225,14 +224,6 @@ async fn run() -> io::Result<()> {
     .await;
 
     let subnet_config = SubnetConfigs::default().own_subnet_config(subnet_type);
-    // Any change to these lines should be mirrored in the file
-    // `rs/replay/src/lib.rs` so that the replica and the replay tool of the same
-    // version have an identical behavior wrt. CoW.
-    if subnet_config.cow_memory_manager_config.enabled {
-        cow_state_feature::enable(cow_state_feature::cow_state);
-    } else {
-        cow_state_feature::disable(cow_state_feature::cow_state);
-    }
 
     // Read the root subnet id from registry
     let root_subnet_id = registry

@@ -6,7 +6,6 @@ use crate::{
 };
 use candid::Decode;
 use ic_base_types::NumSeconds;
-use ic_cow_state::CowMemoryManager;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_ic00_types::{
     CanisterIdRecord, CanisterStatusResultV2, InstallCodeArgs, Method as Ic00Method,
@@ -33,7 +32,6 @@ use ic_types::{
     CanisterId, CanisterStatusType, ComputeAllocation, Cycles, Height, InstallCodeContext,
     MemoryAllocation, NumBytes, NumInstructions, PrincipalId, SubnetId, Time, UserId,
 };
-use ic_utils::ic_features::cow_state_feature;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::{collections::BTreeSet, convert::TryFrom, str::FromStr, sync::Arc};
@@ -971,16 +969,6 @@ impl CanisterManager {
                 total_heap_delta += heap_delta;
             }
             Err(err) => return (instructions_limit, Err((canister_id, err).into())),
-        }
-
-        // Wipe the heap first
-        if cow_state_feature::is_enabled(cow_state_feature::cow_state) {
-            new_canister
-                .execution_state
-                .as_ref()
-                .unwrap()
-                .cow_mem_mgr
-                .upgrade();
         }
 
         // Replace the execution state of the canister with a new execution state, but

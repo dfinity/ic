@@ -48,7 +48,6 @@ mod tests {
         test_visitors::{NoopVisitor, TraceEntry as E, TracingVisitor},
     };
     use ic_base_types::NumSeconds;
-    use ic_cow_state::CowMemoryManagerImpl;
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
@@ -264,8 +263,6 @@ mod tests {
             exports: ExportedFunctions::new(BTreeSet::new()),
             metadata: WasmMetadata::new(metadata),
             last_executed_round: ExecutionRound::from(0),
-            cow_mem_mgr: Arc::new(CowMemoryManagerImpl::open_readwrite(tmpdir.path().into())),
-            mapped_state: None,
         };
         canister_state.execution_state = Some(execution_state);
 

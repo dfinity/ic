@@ -9,10 +9,7 @@ use crate::{
     LABEL_VALUE_HASHED_AND_COMPARED, LABEL_VALUE_REUSED,
 };
 use bit_vec::BitVec;
-use hash::{
-    chunk_hasher, cow_chunk_hasher, cow_file_hasher, file_hasher, manifest_hasher, ManifestHash,
-};
-use ic_cow_state::{CowMemoryManager, CowMemoryManagerImpl, MappedState};
+use hash::{chunk_hasher, file_hasher, manifest_hasher, ManifestHash};
 use ic_crypto_sha::Sha256;
 use ic_logger::{error, ReplicaLogger};
 use ic_state_layout::{CheckpointLayout, ReadOnly};
@@ -344,6 +341,7 @@ fn build_chunk_table_parallel(
 }
 
 /// Build a chunk table from the file table.
+#[cfg(debug_assertions)]
 fn build_chunk_table_sequential(
     metrics: &ManifestMetrics,
     log: &ReplicaLogger,
@@ -357,11 +355,7 @@ fn build_chunk_table_sequential(
     let mut chunk_index: usize = 0;
 
     for (file_index, FileWithSize(relative_path, size_bytes)) in files.into_iter().enumerate() {
-        let mut file_hash = if relative_path.ends_with("state_file") {
-            cow_file_hasher()
-        } else {
-            file_hasher()
-        };
+        let mut file_hash = file_hasher();
 
         let mut bytes_left = size_bytes;
 
@@ -377,11 +371,7 @@ fn build_chunk_table_sequential(
                 let offset = size_bytes - bytes_left;
 
                 let recompute_chunk_hash = || {
-                    let mut hasher = if relative_path.ends_with("state_file") {
-                        cow_chunk_hasher()
-                    } else {
-                        chunk_hasher()
-                    };
+                    let mut hasher = chunk_hasher();
                     hasher.write(&data[offset as usize..(offset + chunk_size) as usize]);
                     hasher.finish()
                 };
@@ -451,22 +441,9 @@ fn build_chunk_table_sequential(
             });
         };
 
-        if relative_path.ends_with("state_file") {
-            let absolute_path = root.join(&relative_path);
-            let cow_base_dir = absolute_path.parent().unwrap();
-            let cow_mgr = CowMemoryManagerImpl::open_readonly(cow_base_dir.to_path_buf());
-            let mapped_state = cow_mgr.get_map();
-            mapped_state.make_heap_accessible();
-            let data = unsafe {
-                std::slice::from_raw_parts(mapped_state.get_heap_base(), size_bytes as usize)
-            };
-            compute_file_chunk_hashes(data);
-        } else {
-            let mmap =
-                ScopedMmap::from_path(root.join(&relative_path)).expect("failed to open file");
-            let data = mmap.as_slice();
-            compute_file_chunk_hashes(data);
-        };
+        let mmap = ScopedMmap::from_path(root.join(&relative_path)).expect("failed to open file");
+        let data = mmap.as_slice();
+        compute_file_chunk_hashes(data);
     }
 
     assert_eq!(chunk_table.len(), chunk_actions.len());
@@ -491,16 +468,7 @@ fn files_with_sizes(
         })?;
 
     if metadata.is_file() {
-        let len = if relative_path.ends_with("state_file") {
-            let cow_base_dir = absolute_path.parent().unwrap();
-            let cow_mgr = CowMemoryManagerImpl::open_readonly(cow_base_dir.to_path_buf());
-            let map = cow_mgr.get_map();
-            map.get_heap_len() as u64
-        } else {
-            metadata.len()
-        };
-
-        files.push(FileWithSize(relative_path, len))
+        files.push(FileWithSize(relative_path, metadata.len()))
     } else {
         if relative_path.ends_with("slot_db") {
             return Ok(());
@@ -768,62 +736,41 @@ pub fn compute_manifest(
         None => default_hash_plan(&files, max_chunk_size),
     };
 
-    if files
-        .iter()
-        .any(|FileWithSize(path, _)| path.ends_with("state_file"))
+    #[cfg(debug_assertions)]
+    let (seq_file_table, seq_chunk_table) = {
+        let metrics_registry = ic_metrics::MetricsRegistry::new();
+        let metrics = ManifestMetrics::new(&metrics_registry);
+        build_chunk_table_sequential(
+            &metrics,
+            log,
+            checkpoint_root_path,
+            files.clone(),
+            max_chunk_size,
+            chunk_actions.clone(),
+        )
+    };
+
+    let (file_table, chunk_table) = build_chunk_table_parallel(
+        thread_pool,
+        metrics,
+        log,
+        checkpoint_root_path,
+        files,
+        max_chunk_size,
+        chunk_actions,
+    );
+
+    #[cfg(debug_assertions)]
     {
-        // The parallel algorithm doesn't handle COW memory manager, which is a subject
-        // for removal anyway.
-        let (file_table, chunk_table) = build_chunk_table_sequential(
-            metrics,
-            log,
-            checkpoint_root_path,
-            files,
-            max_chunk_size,
-            chunk_actions,
-        );
-        Ok(Manifest {
-            version,
-            file_table,
-            chunk_table,
-        })
-    } else {
-        #[cfg(debug_assertions)]
-        let (seq_file_table, seq_chunk_table) = {
-            let metrics_registry = ic_metrics::MetricsRegistry::new();
-            let metrics = ManifestMetrics::new(&metrics_registry);
-            build_chunk_table_sequential(
-                &metrics,
-                log,
-                checkpoint_root_path,
-                files.clone(),
-                max_chunk_size,
-                chunk_actions.clone(),
-            )
-        };
-
-        let (file_table, chunk_table) = build_chunk_table_parallel(
-            thread_pool,
-            metrics,
-            log,
-            checkpoint_root_path,
-            files,
-            max_chunk_size,
-            chunk_actions,
-        );
-
-        #[cfg(debug_assertions)]
-        {
-            assert_eq!(file_table, seq_file_table);
-            assert_eq!(chunk_table, seq_chunk_table);
-        }
-
-        Ok(Manifest {
-            version,
-            file_table,
-            chunk_table,
-        })
+        assert_eq!(file_table, seq_file_table);
+        assert_eq!(chunk_table, seq_chunk_table);
     }
+
+    Ok(Manifest {
+        version,
+        file_table,
+        chunk_table,
+    })
 }
 
 /// Validates manifest contents and checks that the hash of the manifest matches
@@ -835,11 +782,7 @@ pub fn validate_manifest(
     let mut chunk_start: usize = 0;
 
     for (file_index, f) in manifest.file_table.iter().enumerate() {
-        let mut hasher = if f.relative_path.ends_with("state_file") {
-            cow_file_hasher()
-        } else {
-            file_hasher()
-        };
+        let mut hasher = file_hasher();
 
         let chunk_count: usize = manifest.chunk_table[chunk_start..]
             .iter()
@@ -894,14 +837,7 @@ pub fn validate_chunk(
             actual_size: bytes.len(),
         });
     }
-    let mut hasher = if manifest.file_table[chunk.file_index as usize]
-        .relative_path
-        .ends_with("state_file")
-    {
-        cow_chunk_hasher()
-    } else {
-        chunk_hasher()
-    };
+    let mut hasher = chunk_hasher();
 
     let hash = {
         hasher.write(bytes);
