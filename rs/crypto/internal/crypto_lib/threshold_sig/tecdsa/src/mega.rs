@@ -20,10 +20,6 @@ pub struct MEGaPublicKey {
 }
 
 impl MEGaPublicKey {
-    pub fn curve(&self) -> EccCurve {
-        self.point.curve()
-    }
-
     pub fn curve_type(&self) -> EccCurveType {
         self.point.curve_type()
     }
@@ -50,19 +46,12 @@ pub struct MEGaPrivateKey {
 }
 
 impl MEGaPrivateKey {
-    pub fn curve(&self) -> EccCurve {
-        self.secret.curve()
-    }
-
     pub fn curve_type(&self) -> EccCurveType {
         self.secret.curve_type()
     }
 
     pub fn public_key(&self) -> ThresholdEcdsaResult<MEGaPublicKey> {
-        let curve = self.curve();
-        Ok(MEGaPublicKey::new(
-            curve.generator_g()?.scalar_mul(&self.secret)?,
-        ))
+        Ok(MEGaPublicKey::new(EccPoint::mul_by_g(&self.secret)?))
     }
 
     pub fn generate<R: RngCore + CryptoRng>(
@@ -99,28 +88,10 @@ pub struct MEGaCiphertextSingle {
     pub ctexts: Vec<EccScalar>,
 }
 
-impl MEGaCiphertextSingle {
-    pub fn new(ephemeral_key: EccPoint, ctexts: Vec<EccScalar>) -> Self {
-        Self {
-            ephemeral_key,
-            ctexts,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MEGaCiphertextPair {
     pub ephemeral_key: EccPoint, // "v" in the paper
     pub ctexts: Vec<(EccScalar, EccScalar)>,
-}
-
-impl MEGaCiphertextPair {
-    pub fn new(ephemeral_key: EccPoint, ctexts: Vec<(EccScalar, EccScalar)>) -> Self {
-        Self {
-            ephemeral_key,
-            ctexts,
-        }
-    }
 }
 
 /// The type of MEGa ciphertext
@@ -192,7 +163,7 @@ impl From<MEGaCiphertextPair> for MEGaCiphertext {
 fn check_plaintexts(
     plaintexts: &[EccScalar],
     recipients: &[MEGaPublicKey],
-) -> ThresholdEcdsaResult<EccCurve> {
+) -> ThresholdEcdsaResult<EccCurveType> {
     if plaintexts.len() != recipients.len() {
         return Err(ThresholdEcdsaError::InvalidArguments(
             "Must be as many plaintexts as recipients".to_string(),
@@ -205,27 +176,27 @@ fn check_plaintexts(
         ));
     }
 
-    let curve = plaintexts[0].curve();
+    let curve_type = plaintexts[0].curve_type();
 
     for pt in plaintexts {
-        if pt.curve() != curve {
+        if pt.curve_type() != curve_type {
             return Err(ThresholdEcdsaError::CurveMismatch);
         }
     }
 
     for recipient in recipients {
-        if recipient.curve() != curve {
+        if recipient.curve_type() != curve_type {
             return Err(ThresholdEcdsaError::CurveMismatch);
         }
     }
 
-    Ok(curve)
+    Ok(curve_type)
 }
 
 fn check_plaintexts_pair(
     plaintexts: &[(EccScalar, EccScalar)],
     recipients: &[MEGaPublicKey],
-) -> ThresholdEcdsaResult<EccCurve> {
+) -> ThresholdEcdsaResult<EccCurveType> {
     if plaintexts.len() != recipients.len() {
         return Err(ThresholdEcdsaError::InvalidArguments(
             "Must be as many plaintexts as recipients".to_string(),
@@ -238,21 +209,21 @@ fn check_plaintexts_pair(
         ));
     }
 
-    let curve = plaintexts[0].0.curve();
+    let curve_type = plaintexts[0].0.curve_type();
 
     for pt in plaintexts {
-        if pt.0.curve() != curve || pt.1.curve() != curve {
+        if pt.0.curve_type() != curve_type || pt.1.curve_type() != curve_type {
             return Err(ThresholdEcdsaError::CurveMismatch);
         }
     }
 
     for recipient in recipients {
-        if recipient.curve() != curve {
+        if recipient.curve_type() != curve_type {
             return Err(ThresholdEcdsaError::CurveMismatch);
         }
     }
 
-    Ok(curve)
+    Ok(curve_type)
 }
 
 fn format_hash_to_scalar_inputs(
@@ -297,13 +268,12 @@ pub fn mega_encrypt_single(
     dealer_index: usize,
     associated_data: &[u8],
 ) -> ThresholdEcdsaResult<MEGaCiphertextSingle> {
-    let curve = check_plaintexts(plaintexts, recipients)?;
+    let curve_type = check_plaintexts(plaintexts, recipients)?;
 
     let mut rng = seed.derive(MEGA_SINGLE_SEED_DOMAIN_SEPARATOR).into_rng();
 
-    let beta = curve.random_scalar(&mut rng)?;
-
-    let v = curve.generator_g()?.scalar_mul(&beta)?;
+    let beta = EccScalar::random(curve_type, &mut rng)?;
+    let v = EccPoint::mul_by_g(&beta)?;
     let v_bytes = v.serialize();
 
     let mut ctexts = Vec::with_capacity(recipients.len());
@@ -320,17 +290,20 @@ pub fn mega_encrypt_single(
             &ubeta.serialize(),
         )?;
 
-        let hm = curve.hash_to_scalar(
-            1,
+        let hm = EccScalar::hash_to_scalar(
+            curve_type,
             &hash_to_scalar_input,
             MEGA_SINGLE_ENC_DOMAIN_SEPARATOR.as_bytes(),
         )?;
-        let ctext = hm[0].add(ptext)?;
+        let ctext = hm.add(ptext)?;
 
         ctexts.push(ctext);
     }
 
-    Ok(MEGaCiphertextSingle::new(v, ctexts))
+    Ok(MEGaCiphertextSingle {
+        ephemeral_key: v,
+        ctexts,
+    })
 }
 
 pub fn mega_encrypt_pair(
@@ -340,13 +313,12 @@ pub fn mega_encrypt_pair(
     dealer_index: usize,
     associated_data: &[u8],
 ) -> ThresholdEcdsaResult<MEGaCiphertextPair> {
-    let curve = check_plaintexts_pair(plaintexts, recipients)?;
+    let curve_type = check_plaintexts_pair(plaintexts, recipients)?;
 
     let mut rng = seed.derive(MEGA_PAIR_SEED_DOMAIN_SEPARATOR).into_rng();
 
-    let beta = curve.random_scalar(&mut rng)?;
-
-    let v = curve.generator_g()?.scalar_mul(&beta)?;
+    let beta = EccScalar::random(curve_type, &mut rng)?;
+    let v = EccPoint::mul_by_g(&beta)?;
     let v_bytes = v.serialize();
 
     let mut ctexts = Vec::with_capacity(recipients.len());
@@ -363,7 +335,8 @@ pub fn mega_encrypt_pair(
             &ubeta.serialize(),
         )?;
 
-        let hm = curve.hash_to_scalar(
+        let hm = EccScalar::hash_to_several_scalars(
+            curve_type,
             2,
             &hash_to_scalar_input,
             MEGA_PAIR_ENC_DOMAIN_SEPARATOR.as_bytes(),
@@ -375,7 +348,10 @@ pub fn mega_encrypt_pair(
         ctexts.push((ctext0, ctext1));
     }
 
-    Ok(MEGaCiphertextPair::new(v, ctexts))
+    Ok(MEGaCiphertextPair {
+        ephemeral_key: v,
+        ctexts,
+    })
 }
 
 pub fn mega_decrypt_single(
@@ -392,7 +368,6 @@ pub fn mega_decrypt_single(
         ));
     }
 
-    let curve = our_private_key.curve();
     let ubeta = ctext.ephemeral_key.scalar_mul(&our_private_key.secret)?;
     let v_bytes = ctext.ephemeral_key.serialize();
 
@@ -405,12 +380,12 @@ pub fn mega_decrypt_single(
         &ubeta.serialize(),
     )?;
 
-    let hm = curve.hash_to_scalar(
-        1,
+    let hm = EccScalar::hash_to_scalar(
+        our_private_key.curve_type(),
         &hash_to_scalar_input,
         MEGA_SINGLE_ENC_DOMAIN_SEPARATOR.as_bytes(),
     )?;
-    ctext.ctexts[our_index].sub(&hm[0])
+    ctext.ctexts[our_index].sub(&hm)
 }
 
 pub fn mega_decrypt_pair(
@@ -427,7 +402,6 @@ pub fn mega_decrypt_pair(
         ));
     }
 
-    let curve = our_private_key.curve();
     let ubeta = ctext.ephemeral_key.scalar_mul(&our_private_key.secret)?;
     let v_bytes = ctext.ephemeral_key.serialize();
 
@@ -440,7 +414,8 @@ pub fn mega_decrypt_pair(
         &ubeta.serialize(),
     )?;
 
-    let hm = curve.hash_to_scalar(
+    let hm = EccScalar::hash_to_several_scalars(
+        our_private_key.curve_type(),
         2,
         &hash_to_scalar_input,
         MEGA_PAIR_ENC_DOMAIN_SEPARATOR.as_bytes(),

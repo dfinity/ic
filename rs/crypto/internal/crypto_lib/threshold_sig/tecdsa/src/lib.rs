@@ -40,6 +40,7 @@ mod seed;
 pub mod sign;
 mod transcript;
 mod xmd;
+pub mod zk;
 
 pub use dealings::*;
 pub use fe::*;
@@ -230,6 +231,7 @@ pub fn publicly_verify_dealing(
     reconstruction_threshold: NumberOfNodes,
     dealer_index: NodeIndex,
     number_of_receivers: NumberOfNodes,
+    associated_data: &[u8],
 ) -> Result<(), IDkgVerifyDealingInternalError> {
     let curve = match algorithm_id {
         AlgorithmId::ThresholdEcdsaSecp256k1 => Ok(EccCurveType::K256),
@@ -243,6 +245,7 @@ pub fn publicly_verify_dealing(
             reconstruction_threshold,
             dealer_index,
             number_of_receivers,
+            associated_data,
         )
         .map_err(|e| e.into())
 }

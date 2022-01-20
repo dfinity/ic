@@ -229,7 +229,6 @@ impl ProtocolRound {
     ) -> ThresholdEcdsaResult<()> {
         let constant_term = commitment.constant_term();
         let curve_type = constant_term.curve_type();
-        let curve = EccCurve::new(curve_type);
 
         match commitment {
             PolynomialCommitment::Simple(_) => {
@@ -245,7 +244,7 @@ impl ProtocolRound {
                 }
 
                 let dlog = EccScalar::interpolation_at_zero(&g_openings)?;
-                let pt = dlog.curve().generator_g()?.scalar_mul(&dlog)?;
+                let pt = EccPoint::mul_by_g(&dlog)?;
                 assert_eq!(pt, constant_term);
             }
 
@@ -265,9 +264,7 @@ impl ProtocolRound {
 
                 let dlog_g = EccScalar::interpolation_at_zero(&g_openings)?;
                 let dlog_h = EccScalar::interpolation_at_zero(&h_openings)?;
-                let pt_g = curve.generator_g()?.scalar_mul(&dlog_g)?;
-                let pt_h = curve.generator_h()?.scalar_mul(&dlog_h)?;
-                let pt = pt_g.add_points(&pt_h)?;
+                let pt = EccPoint::pedersen(&dlog_g, &dlog_h)?;
                 assert_eq!(pt, constant_term);
             }
         }
@@ -353,6 +350,7 @@ impl ProtocolRound {
                 setup.threshold,
                 dealer_index,
                 number_of_receivers,
+                &setup.ad,
             )
             .is_err();
 

@@ -12,6 +12,7 @@ const SEED_LEN: usize = 32;
 /// multiple unrelated Seeds from a single source Seed.
 ///
 /// It is not possible to extract the value of a Seed.
+#[derive(Clone)]
 pub struct Seed {
     value: [u8; SEED_LEN],
 }

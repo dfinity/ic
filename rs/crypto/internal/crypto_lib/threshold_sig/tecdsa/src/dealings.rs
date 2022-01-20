@@ -5,13 +5,6 @@ use ic_types::NumberOfNodes;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
-// TODO(CRP-1158) these should have values
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ZkProof {
-    ProofOfMaskedResharing,
-    ProofOfMultiplication,
-}
-
 #[derive(Clone)]
 pub enum SecretShares {
     Random,
@@ -162,6 +155,12 @@ fn encrypt_and_commit_pair_of_polynomials(
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ZkProof {
+    ProofOfMaskedResharing(zk::ProofOfEqualOpenings),
+    ProofOfProduct(zk::ProofOfProduct),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IDkgDealingInternal {
     pub ciphertext: MEGaCiphertext,
     pub commitment: PolynomialCommitment,
@@ -253,11 +252,14 @@ impl IDkgDealingInternal {
                     mega_seed,
                 )?;
 
-                // Compute zk proof
-                // Note that `masking` will be used here as part of the witness
-                let proof = Some(ZkProof::ProofOfMaskedResharing); // TODO(CRP-1158)
+                let proof = ZkProof::ProofOfMaskedResharing(zk::ProofOfEqualOpenings::create(
+                    seed.derive(zk::PROOF_OF_EQUAL_OPENINGS_DST),
+                    secret,
+                    masking,
+                    associated_data,
+                )?);
 
-                (commitment, ciphertext, proof)
+                (commitment, ciphertext, Some(proof))
             }
             SecretShares::UnmaskedTimesMasked(left_value, (right_value, right_masking)) => {
                 if left_value.curve_type() != curve
@@ -269,9 +271,16 @@ impl IDkgDealingInternal {
 
                 // Generate secret polynomials
                 let product = left_value.mul(right_value)?;
+
+                let product_masking = EccScalar::random(curve, &mut poly_rng)?;
+
                 let values =
                     Polynomial::random_with_constant(product, num_coefficients, &mut poly_rng)?;
-                let mask = Polynomial::random(curve, num_coefficients, &mut poly_rng)?;
+                let mask = Polynomial::random_with_constant(
+                    product_masking,
+                    num_coefficients,
+                    &mut poly_rng,
+                )?;
 
                 let (ciphertext, commitment) = encrypt_and_commit_pair_of_polynomials(
                     &values,
@@ -283,11 +292,17 @@ impl IDkgDealingInternal {
                     mega_seed,
                 )?;
 
-                // Compute zk proof
-                // Note that `right_masking` will be used here as part of the witness
-                let proof = Some(ZkProof::ProofOfMultiplication); // TODO(CRP-1158)
+                let proof = ZkProof::ProofOfProduct(zk::ProofOfProduct::create(
+                    seed.derive(zk::PROOF_OF_PRODUCT_DST),
+                    left_value,
+                    right_value,
+                    right_masking,
+                    &product,
+                    &product_masking,
+                    associated_data,
+                )?);
 
-                (commitment, ciphertext, proof)
+                (commitment, ciphertext, Some(proof))
             }
         };
 
@@ -305,6 +320,7 @@ impl IDkgDealingInternal {
         reconstruction_threshold: NumberOfNodes,
         dealer_index: NodeIndex,
         number_of_receivers: NumberOfNodes,
+        associated_data: &[u8],
     ) -> ThresholdEcdsaResult<()> {
         if self.commitment.len() != reconstruction_threshold.get() as usize {
             return Err(ThresholdEcdsaError::InconsistentCommitments);
@@ -330,14 +346,22 @@ impl IDkgDealingInternal {
                 // no ZK proof for this transcript type
                 Ok(())
             }
-            (Op::ReshareOfMasked(previous_commitment), Some(ZkProof::ProofOfMaskedResharing)) => {
+            (
+                Op::ReshareOfMasked(previous_commitment),
+                Some(ZkProof::ProofOfMaskedResharing(proof)),
+            ) => {
                 self.commitment
                     .verify_is(PolynomialCommitmentType::Simple, curve_type)?;
                 previous_commitment.verify_is(PolynomialCommitmentType::Pedersen, curve_type)?;
                 self.ciphertext
                     .verify_is(MEGaCiphertextType::Single, curve_type)?;
 
-                /* TODO(CRP-1158) verify proof */
+                proof.verify(
+                    &previous_commitment.evaluate_at(dealer_index)?,
+                    &self.commitment.constant_term(),
+                    associated_data,
+                )?;
+
                 Ok(())
             }
 
@@ -364,7 +388,7 @@ impl IDkgDealingInternal {
                 // no ZK proof for this transcript type
                 Ok(())
             }
-            (Op::UnmaskedTimesMasked(lhs, rhs), Some(ZkProof::ProofOfMultiplication)) => {
+            (Op::UnmaskedTimesMasked(lhs, rhs), Some(ZkProof::ProofOfProduct(proof))) => {
                 self.commitment
                     .verify_is(PolynomialCommitmentType::Pedersen, curve_type)?;
                 self.ciphertext
@@ -372,7 +396,13 @@ impl IDkgDealingInternal {
                 lhs.verify_is(PolynomialCommitmentType::Simple, curve_type)?;
                 rhs.verify_is(PolynomialCommitmentType::Pedersen, curve_type)?;
 
-                /* TODO(CRP-1158) verify proof */
+                proof.verify(
+                    &lhs.evaluate_at(dealer_index)?,
+                    &rhs.evaluate_at(dealer_index)?,
+                    &self.commitment.constant_term(),
+                    associated_data,
+                )?;
+
                 Ok(())
             }
             (_transcript_type, _proof) => Err(ThresholdEcdsaError::InvalidProof),

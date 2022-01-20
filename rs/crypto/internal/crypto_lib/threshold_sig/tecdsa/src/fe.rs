@@ -1,4 +1,4 @@
-use crate::{EccCurve, EccCurveType, ThresholdEcdsaError, ThresholdEcdsaResult};
+use crate::{EccCurveType, ThresholdEcdsaError, ThresholdEcdsaResult};
 use std::fmt;
 
 mod secp256k1;
@@ -16,7 +16,7 @@ impl fmt::Display for EccFieldElement {
         write!(
             f,
             "FieldElem({}, 0x{})",
-            self.curve(),
+            self.curve_type(),
             hex::encode(self.as_bytes())
         )
     }
@@ -24,15 +24,11 @@ impl fmt::Display for EccFieldElement {
 
 impl EccFieldElement {
     /// Return the curve this field element is from
-    pub fn curve(&self) -> EccCurve {
-        match self {
-            Self::K256(_) => EccCurve::new(EccCurveType::K256),
-            Self::P256(_) => EccCurve::new(EccCurveType::P256),
-        }
-    }
-
     pub fn curve_type(&self) -> EccCurveType {
-        self.curve().curve_type()
+        match self {
+            Self::K256(_) => EccCurveType::K256,
+            Self::P256(_) => EccCurveType::P256,
+        }
     }
 
     /// Return the zero field element
