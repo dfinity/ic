@@ -75,7 +75,7 @@ impl ProbeResultHelper for ProbeResult {
     fn status_code(&self) -> StatusCode {
         match self {
             Ok(_) => STATUS_CODE_OK,
-            Err((status_code, _)) => status_code.clone(),
+            Err((status_code, _)) => *status_code,
         }
     }
 
