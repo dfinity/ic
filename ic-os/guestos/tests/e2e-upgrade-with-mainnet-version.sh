@@ -11,6 +11,7 @@ Parameters::
 . ci_project_dir - the directory of the IC repository being checked out at.
 . subnet - the subnet to perform mainnet version query, and to perform upgrade operation. Possible values: "nns", "app".
 . downgrade - whether this is a downgrade from remote version to local new version. Possible values: true, false.
+. request_type - the request type to be used in the workload generator. Possible values: "update", "query".
 
 Success::
 . Testnet upgraded successfully and performs healthy after the upgrade.
@@ -18,16 +19,17 @@ Success::
 end::catalog[]
 DOC
 
-if (($# < 3)); then
-    echo >&2 "Usage: guest-os-e2e-upgrade.sh <ci_project_dir> <subnet> <downgrade>\n
-    Example #1: guest-os-e2e-upgrade.sh \"/builds/git/JgGsR4vA/4/dfinity-lab/public/ic\" nns false
-    Example #2: guest-ose-e2e-upgrade.sh \"/builds/git/JgGsR4vA/4/dfinity-lab/public/ic\" app true"
+if (($# < 4)); then
+    echo >&2 "Usage: guest-os-e2e-upgrade.sh <ci_project_dir> <subnet> <downgrade> <request_type>\n
+    Example #1: guest-os-e2e-upgrade.sh \"/builds/git/JgGsR4vA/4/dfinity-lab/public/ic\" nns false query
+    Example #2: guest-ose-e2e-upgrade.sh \"/builds/git/JgGsR4vA/4/dfinity-lab/public/ic\" app true update"
     exit 1
 fi
 
 ci_project_dir="$1"
 subnet="$2"
 downgrade="$3"
+request_type="$4"
 
 # Make sure the host has mounted necessary devices into the docker container.
 # And check dependencies.
@@ -186,4 +188,5 @@ capsule -v -i "../ic-os/guestos/tests/*.py" -i "**/*" -t "${UPGRADE_IMG_TAG}" --
     --log_directory "${ci_project_dir}/ic-os/guestos/test-out/$out_dir" \
     --timeout "$E2E_TEST_TIMEOUT" \
     --ic_workload_generator_bin "$(pwd)/ic-workload-generator" \
-    --is_upgrade_test
+    --is_upgrade_test \
+    --request_type "${request_type}"

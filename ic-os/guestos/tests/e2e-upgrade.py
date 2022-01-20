@@ -16,6 +16,8 @@ gflags.DEFINE_string("disk_image", None, "Path to disk image to use for VMs")
 gflags.MarkFlagAsRequired("disk_image")
 gflags.DEFINE_string("ic_workload_generator_bin", None, "ic-workload-generator binary")
 gflags.MarkFlagAsRequired("ic_workload_generator_bin")
+gflags.DEFINE_string("request_type", None, "Request type to be used by workload generator")
+gflags.MarkFlagAsRequired("request_type")
 
 
 def upgrade(ic_url, origin_ip):
@@ -80,7 +82,10 @@ def main(argv):
     ictools.nns_install(ic_config, ic_url)
 
     # Start workload generator
-    workload_process = subprocess.Popen([FLAGS.ic_workload_generator_bin, "-n", "500", "-u", "-r", "10", ic_url])
+    subprocess_args = [FLAGS.ic_workload_generator_bin, "-n", "500", "-r", "10", ic_url]
+    if FLAGS.request_type == "update":
+        subprocess_args.append("-u")
+    workload_process = subprocess.Popen(subprocess_args)
 
     # Check version on each machine
     for m in machines:
@@ -100,17 +105,15 @@ def main(argv):
     time.sleep(10)
     workload_process.terminate()
 
-    # Run workload generator again: fail if errors
-    subprocess.run(
-        [FLAGS.ic_workload_generator_bin, "-n", "10", "-u", "-r", "10", ic_url],
-        check=True,
-    )
+    subprocess_args = [FLAGS.ic_workload_generator_bin, "-n", "120", "-r", "100", ic_url]
+    if FLAGS.request_type == "update":
+        subprocess_args.append("-u")
 
     # Run workload generator again: fail if errors
-    subprocess.run(
-        [FLAGS.ic_workload_generator_bin, "-n", "10", "-u", "-r", "10", ic_url],
-        check=True,
-    )
+    subprocess.run(subprocess_args, check=True)
+
+    # Run workload generator again: fail if errors
+    subprocess.run(subprocess_args, check=True)
 
     machines[0].stop()
     machines[1].stop()
