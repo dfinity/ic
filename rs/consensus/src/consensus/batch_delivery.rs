@@ -147,7 +147,10 @@ pub fn deliver_batches(
                 let xnet_bytes = batch.payload.xnet.count_bytes();
                 let ingress_ids = batch.payload.ingress.message_ids();
                 let block_context_certified_height = block.context.certified_height.get();
-                debug!(log, "deliver batch {:?}", batch_height);
+                debug!(
+                    log,
+                    "deliver batch {:?} for block_hash {:?}", batch_height, block_hash
+                );
                 let result = message_routing.deliver_batch(batch);
                 if let Some(f) = result_processor {
                     f(
