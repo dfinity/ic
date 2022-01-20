@@ -41,7 +41,6 @@ impl DerivationPath {
     pub fn derive_tweak(&self, curve_type: EccCurveType) -> ThresholdEcdsaResult<EccScalar> {
         // this is a stopgap until proper BIP32 support:
 
-        let curve = EccCurve::new(curve_type);
         let mut sha256 = Sha256::new();
 
         for elem in &self.path {
@@ -59,12 +58,12 @@ impl DerivationPath {
             }
         }
 
-        let s = curve.hash_to_scalar(
-            1,
+        let s = EccScalar::hash_to_scalar(
+            curve_type,
             &sha256.finish(),
             "ic-crypto-tecdsa-path-derivation".as_bytes(),
         )?;
 
-        Ok(s[0])
+        Ok(s)
     }
 }

@@ -50,13 +50,12 @@ fn hash_to_scalar_k256_has_fixed_output() -> ThresholdEcdsaResult<()> {
 #[test]
 fn generator_h_has_expected_value() -> ThresholdEcdsaResult<()> {
     for curve_type in EccCurveType::all() {
-        let curve = EccCurve::new(curve_type);
-        let h = curve.generator_h()?;
+        let h = EccPoint::generator_h(curve_type)?;
 
-        let h2p = curve.hash_to_point(
-            "h".as_bytes(),
-            format!("ic-crypto-tecdsa-{}-generator-h", curve_type).as_bytes(),
-        )?;
+        let input = "h";
+        let dst = format!("ic-crypto-tecdsa-{}-generator-h", curve_type);
+
+        let h2p = EccPoint::hash_to_point(curve_type, input.as_bytes(), dst.as_bytes())?;
 
         assert_eq!(h, h2p);
     }
@@ -119,7 +118,7 @@ fn test_scalar_negate() -> ThresholdEcdsaResult<()> {
 #[test]
 fn test_point_mul_by_node_index() -> ThresholdEcdsaResult<()> {
     for curve in EccCurveType::all() {
-        let g = EccCurve::new(curve).generator_g()?;
+        let g = EccPoint::generator_g(curve)?;
 
         for node_index in 0..300 {
             let g_ni = g.mul_by_node_index(node_index)?;

@@ -21,7 +21,6 @@ pub fn verify_signature(
     }
 
     let curve_type = public_key.curve_type();
-    let curve = EccCurve::new(curve_type);
 
     // ECDSA has special rules for converting the hash to a scalar,
     // when the hash is larger than the curve order. If this check is
@@ -40,7 +39,7 @@ pub fn verify_signature(
     let u1 = msg.mul(&s_inv)?;
     let u2 = r_sig.mul(&s_inv)?;
 
-    let rp = curve.generator_g()?.mul_points(&u1, public_key, &u2)?;
+    let rp = EccPoint::mul_points(&EccPoint::generator_g(curve_type)?, &u1, public_key, &u2)?;
 
     if rp.is_infinity()? {
         return Ok(false);

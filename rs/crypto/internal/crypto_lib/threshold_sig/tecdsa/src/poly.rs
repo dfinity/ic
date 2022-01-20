@@ -8,7 +8,7 @@ use zeroize::Zeroize;
 /// A Polynomial whose coefficients are scalars in an elliptic curve group
 ///
 /// The coefficients are stored in little-endian ordering, ie a_0 is
-/// self.coefficients[0]
+/// self.coefficients\[0\]
 #[derive(Clone)]
 pub struct Polynomial {
     curve: EccCurveType,
@@ -207,7 +207,7 @@ impl Polynomial {
 
     /// Evaluate the polynomial at x
     ///
-    /// This uses Horner's method: https://en.wikipedia.org/wiki/Horner%27s_method
+    /// This uses Horner's method: <https://en.wikipedia.org/wiki/Horner%27s_method>
     pub fn evaluate_at(&self, x: &EccScalar) -> ThresholdEcdsaResult<EccScalar> {
         if self.curve_type() != x.curve_type() {
             return Err(ThresholdEcdsaError::CurveMismatch);
@@ -387,13 +387,10 @@ impl SimpleCommitment {
     ///
     /// The polynomial must have at most num_coefficients coefficients
     pub fn create(poly: &Polynomial, num_coefficients: usize) -> ThresholdEcdsaResult<Self> {
-        let curve = EccCurve::new(poly.curve_type());
-        let g = curve.generator_g()?;
-
         let mut points = Vec::with_capacity(num_coefficients);
 
         for coeff in poly.get_coefficients(num_coefficients)? {
-            points.push(g.scalar_mul(&coeff)?);
+            points.push(EccPoint::mul_by_g(&coeff)?);
         }
 
         Ok(Self::new(points))
@@ -409,8 +406,7 @@ impl SimpleCommitment {
         value: &EccScalar,
     ) -> ThresholdEcdsaResult<bool> {
         let eval = self.evaluate_at(eval_point)?;
-        let g = eval.curve().generator_g()?;
-        Ok(eval == g.scalar_mul(value)?)
+        Ok(eval == EccPoint::mul_by_g(value)?)
     }
 }
 
@@ -443,10 +439,6 @@ impl PedersenCommitment {
             return Err(ThresholdEcdsaError::CurveMismatch);
         }
 
-        let curve = EccCurve::new(p_values.curve_type());
-        let g = curve.generator_g()?;
-        let h = curve.generator_h()?;
-
         let coeffs_values = p_values.get_coefficients(num_coefficients)?;
         let coeffs_masking = p_masking.get_coefficients(num_coefficients)?;
 
@@ -454,7 +446,7 @@ impl PedersenCommitment {
 
         for (coeff_values, coeff_masking) in coeffs_values.iter().zip(coeffs_masking) {
             // compute c = g*a + h*b
-            let c = g.mul_points(coeff_values, &h, &coeff_masking)?;
+            let c = EccPoint::pedersen(coeff_values, &coeff_masking)?;
             points.push(c);
         }
 
@@ -471,11 +463,8 @@ impl PedersenCommitment {
         value: &EccScalar,
         mask: &EccScalar,
     ) -> ThresholdEcdsaResult<bool> {
-        let curve = value.curve();
         let eval = self.evaluate_at(eval_point)?;
-        let g = curve.generator_g()?;
-        let h = curve.generator_h()?;
-        Ok(eval == g.mul_points(value, &h, mask)?)
+        Ok(eval == EccPoint::pedersen(value, mask)?)
     }
 }
 

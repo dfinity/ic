@@ -278,7 +278,7 @@ impl CommitmentOpening {
         secret_key: &MEGaPrivateKey,
         public_key: &MEGaPublicKey,
     ) -> ThresholdEcdsaResult<Self> {
-        let curve = secret_key.curve().curve_type();
+        let curve = secret_key.curve_type();
         let mut openings = Vec::with_capacity(verified_dealings.len());
 
         for (dealer_index, dealing) in verified_dealings {

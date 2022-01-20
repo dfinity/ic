@@ -28,8 +28,6 @@ fn derive_rho(
 
     let key_tweak = derivation_path.derive_tweak(curve_type)?;
 
-    let curve = EccCurve::new(curve_type);
-
     let mut hasher_input = Vec::new();
 
     // For any specific curve these values are fixed length so there is no need
@@ -38,11 +36,15 @@ fn derive_rho(
     hasher_input.extend_from_slice(&pre_sig.serialize());
     hasher_input.extend_from_slice(&key_tweak.serialize());
 
-    let randomizer =
-        curve.hash_to_scalar(1, &hasher_input, b"ic-crypto-tecdsa-rerandomize-presig")?[0];
+    let randomizer = EccScalar::hash_to_scalar(
+        curve_type,
+        &hasher_input,
+        b"ic-crypto-tecdsa-rerandomize-presig",
+    )?;
 
     // Rerandomize presignature
-    let randomized_pre_sig = pre_sig.add_points(&curve.generator_g()?.scalar_mul(&randomizer)?)?;
+    let randomized_pre_sig =
+        pre_sig.add_points(&EccPoint::generator_g(curve_type)?.scalar_mul(&randomizer)?)?;
 
     let rho = ecdsa_conversion_function(&randomized_pre_sig)?;
 
@@ -151,16 +153,9 @@ impl ThresholdEcdsaSigShareInternal {
             .scalar_mul(&randomizer)?
             .add_points(&kappa_times_lambda_j)?;
 
-        let curve = EccCurve::new(curve_type);
-        let g = curve.generator_g()?;
-        let h = curve.generator_h()?;
-
         match self.sigma_numerator {
             CommitmentOpening::Pedersen(v, m) => {
-                let g_v = g.scalar_mul(&v)?;
-                let h_m = h.scalar_mul(&m)?;
-                let gv_hm = g_v.add_points(&h_m)?;
-                if sigma_num != gv_hm {
+                if sigma_num != EccPoint::pedersen(&v, &m)? {
                     return Ok(false);
                 }
             }
@@ -169,10 +164,7 @@ impl ThresholdEcdsaSigShareInternal {
 
         match self.sigma_denominator {
             CommitmentOpening::Pedersen(v, m) => {
-                let g_v = g.scalar_mul(&v)?;
-                let h_m = h.scalar_mul(&m)?;
-                let gv_hm = g_v.add_points(&h_m)?;
-                if sigma_den != gv_hm {
+                if sigma_den != EccPoint::pedersen(&v, &m)? {
                     return Ok(false);
                 }
             }
@@ -294,9 +286,7 @@ impl ThresholdEcdsaCombinedSigInternal {
         }
 
         let master_public_key = key_transcript.constant_term();
-        let tweak_g = EccCurve::new(curve_type)
-            .generator_g()?
-            .scalar_mul(&key_tweak)?;
+        let tweak_g = EccPoint::mul_by_g(&key_tweak)?;
         let public_key = tweak_g.add_points(&master_public_key)?;
 
         ecdsa::verify_signature(&public_key, hashed_message, &self.r, &self.s)
@@ -320,9 +310,7 @@ pub fn derive_public_key(
     let key_tweak = derivation_path.derive_tweak(curve_type)?;
 
     let master_public_key = key_transcript.constant_term();
-    let tweak_g = EccCurve::new(curve_type)
-        .generator_g()?
-        .scalar_mul(&key_tweak)?;
+    let tweak_g = EccPoint::mul_by_g(&key_tweak)?;
     let public_key = tweak_g.add_points(&master_public_key)?;
 
     Ok(EcdsaPublicKey {
