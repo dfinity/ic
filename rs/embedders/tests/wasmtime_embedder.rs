@@ -102,7 +102,6 @@ mod tests {
                 &[],
                 ic_replicated_state::NumWasmPages::from(0),
                 None,
-                None,
                 ModificationTracking::Track,
                 api,
             )
@@ -185,7 +184,6 @@ mod tests {
                 &[],
                 ic_replicated_state::NumWasmPages::from(0),
                 None,
-                None,
                 ModificationTracking::Track,
                 api,
             )
@@ -255,7 +253,6 @@ mod tests {
                 &[],
                 NumWasmPages::from(0),
                 None,
-                None,
                 ModificationTracking::Track,
                 api,
             )
@@ -290,7 +287,6 @@ mod tests {
                 &embedder.compile(PersistenceType::Sigsegv, wasm).unwrap(),
                 &[Global::I64(5), Global::I32(12)],
                 NumWasmPages::from(0),
-                None,
                 None,
                 ModificationTracking::Track,
                 api,
@@ -346,7 +342,6 @@ mod tests {
                 &[],
                 NumWasmPages::from(0),
                 None,
-                None,
                 ModificationTracking::Track,
                 api,
             )
@@ -383,7 +378,6 @@ mod tests {
                 &embedder.compile(PersistenceType::Sigsegv, wasm).unwrap(),
                 &[Global::F64(5.3), Global::F32(12.37)],
                 NumWasmPages::from(0),
-                None,
                 None,
                 ModificationTracking::Track,
                 api,
@@ -435,7 +429,6 @@ mod tests {
                 &[Global::I64(5), Global::I64(12)],
                 NumWasmPages::from(0),
                 None,
-                None,
                 ModificationTracking::Track,
                 api,
             )
@@ -483,7 +476,6 @@ mod tests {
                 &embedder.compile(PersistenceType::Sigsegv, wasm).unwrap(),
                 &[Global::I64(0); DEFAULT_GLOBALS_LENGTH + 1].to_vec(),
                 NumWasmPages::from(0),
-                None,
                 None,
                 ModificationTracking::Track,
                 api,

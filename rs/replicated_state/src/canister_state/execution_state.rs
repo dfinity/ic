@@ -1,13 +1,11 @@
 use super::SessionNonce;
 use crate::{num_bytes_try_from, NumWasmPages, PageMap};
 use ic_config::embedders::PersistenceType;
-use ic_cow_state::{CowMemoryManager, CowMemoryManagerImpl, MappedState, MappedStateImpl};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::canister_state_bits::v1 as pb,
 };
 use ic_types::{methods::WasmMethod, ExecutionRound, NumBytes};
-use ic_utils::ic_features::cow_state_feature;
 use ic_wasm_types::BinaryEncodedWasm;
 use maplit::btreemap;
 use serde::{Deserialize, Serialize};
@@ -334,12 +332,6 @@ pub struct ExecutionState {
     /// Round number at which canister executed
     /// update type operation.
     pub last_executed_round: ExecutionRound,
-
-    /// The persistent cow memory of the canister.
-    pub cow_mem_mgr: Arc<CowMemoryManagerImpl>,
-
-    /// Mapped state of the current execution
-    pub mapped_state: Option<Arc<MappedStateImpl>>,
 }
 
 // We have to implement it by hand as embedder_cache can not be compared for
@@ -372,25 +364,6 @@ impl ExecutionState {
         stable_memory: Memory,
         exported_globals: Vec<Global>,
     ) -> Self {
-        let cow_mem_mgr = Arc::new(CowMemoryManagerImpl::open_readwrite(canister_root.clone()));
-        if cow_state_feature::is_enabled(cow_state_feature::cow_state) {
-            let mapped_state = cow_mem_mgr.get_map();
-            let mut updated_pages = Vec::new();
-
-            for i in wasm_memory.page_map.host_pages_iter() {
-                let page_idx = i.0;
-                updated_pages.push(page_idx.get());
-                mapped_state
-                    .update_heap_page(page_idx.get(), wasm_memory.page_map.get_page(page_idx));
-            }
-            mapped_state.soft_commit(&updated_pages);
-        }
-        let mapped_state = if cow_mem_mgr.is_valid() {
-            Some(Arc::new(cow_mem_mgr.get_map()))
-        } else {
-            None
-        };
-
         Self {
             canister_root,
             session_nonce: None,
@@ -401,8 +374,6 @@ impl ExecutionState {
             exported_globals,
             metadata: WasmMetadata::default(),
             last_executed_round: ExecutionRound::from(0),
-            cow_mem_mgr,
-            mapped_state,
         }
     }
 
@@ -431,11 +402,7 @@ impl ExecutionState {
 
     /// Returns the persistence type associated with this state.
     pub fn persistence_type(&self) -> PersistenceType {
-        if self.cow_mem_mgr.is_valid() {
-            PersistenceType::Pagemap
-        } else {
-            PersistenceType::Sigsegv
-        }
+        PersistenceType::Sigsegv
     }
 }
 

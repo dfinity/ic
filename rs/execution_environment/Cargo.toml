@@ -8,7 +8,6 @@ candid = "0.7.4"
 ic-canister-sandbox-replica-controller = { path = "../canister_sandbox/replica_controller" }
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
-ic-cow-state = { path = "../cow_state" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-sha = { path = "../crypto/sha" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }

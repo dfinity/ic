@@ -7,7 +7,6 @@ use crate::{
     },
 };
 use ic_base_types::NumSeconds;
-use ic_cow_state::CowMemoryManagerImpl;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::{
@@ -257,7 +256,7 @@ impl CanisterStateBuilder {
 
         let execution_state = match self.wasm {
             Some(wasm_binary) => {
-                let mut ee = initial_execution_state(None);
+                let mut ee = initial_execution_state();
                 ee.wasm_binary = WasmBinary::new(BinaryEncodedWasm::new(wasm_binary));
                 ee.stable_memory = stable_memory;
                 Some(ee)
@@ -384,12 +383,7 @@ impl Default for CallContextBuilder {
     }
 }
 
-pub fn initial_execution_state(p: Option<std::path::PathBuf>) -> ExecutionState {
-    let cow_mem_mgr = match p {
-        Some(path) => CowMemoryManagerImpl::open_readwrite(path),
-        None => CowMemoryManagerImpl::open_readwrite_fake(),
-    };
-
+pub fn initial_execution_state() -> ExecutionState {
     let mut metadata: BTreeMap<String, CustomSection> = BTreeMap::new();
     metadata.insert(
         String::from("candid"),
@@ -417,8 +411,6 @@ pub fn initial_execution_state(p: Option<std::path::PathBuf>) -> ExecutionState 
         exports: ExportedFunctions::new(BTreeSet::new()),
         metadata: wasm_metadata,
         last_executed_round: ExecutionRound::from(0),
-        cow_mem_mgr: Arc::new(cow_mem_mgr),
-        mapped_state: None,
     }
 }
 
@@ -593,7 +585,7 @@ pub fn insert_dummy_canister(
         INITIAL_CYCLES,
         NumSeconds::from(100_000),
     );
-    let mut execution_state = initial_execution_state(None);
+    let mut execution_state = initial_execution_state();
     execution_state.wasm_binary = WasmBinary::new(wasm);
     canister_state.execution_state = Some(execution_state);
     state.put_canister_state(canister_state);
@@ -656,7 +648,7 @@ prop_compose! {
     (
         (allocation, round) in arb_compute_allocation_and_last_round(last_round_max)
     ) -> CanisterState {
-        let mut execution_state = initial_execution_state(None);
+        let mut execution_state = initial_execution_state();
         execution_state.wasm_binary = WasmBinary::new(BinaryEncodedWasm::new(wabt::wat2wasm(r#"(module)"#).unwrap()));
         let scheduler_state = SchedulerState::default();
         let system_state = SystemState::new_running(

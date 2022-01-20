@@ -16,7 +16,6 @@ use ic_canonical_state::{
     lazy_tree::{materialize::materialize_partial, LazyTree},
 };
 use ic_config::state_manager::Config;
-use ic_cow_state::CowMemoryManager;
 use ic_crypto_tree_hash::{recompute_digest, Digest, LabeledTree, MixedHashTree, Witness};
 use ic_interfaces::{
     certification::Verifier,
@@ -45,9 +44,9 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     state_sync::Manifest,
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
-    CryptoHashOfPartialState, CryptoHashOfState, ExecutionRound, Height, RegistryVersion, SubnetId,
+    CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
 };
-use ic_utils::{ic_features::*, thread::JoinOnDrop};
+use ic_utils::thread::JoinOnDrop;
 use prometheus::{HistogramVec, IntCounter, IntCounterVec, IntGauge};
 use prost::Message;
 use std::fmt;
@@ -610,27 +609,8 @@ fn load_checkpoint_as_tip(
         .tip()
         .unwrap_or_else(|err| fatal!(log, "Failed to retrieve tip {:?}", err));
 
-    let tip = checkpoint::load_checkpoint(&tip_layout, own_subnet_type, None)
-        .unwrap_or_else(|err| fatal!(log, "Failed to reset tip to checkpoint height: {:?}", err));
-
-    let mut tip = match checkpoint::handle_disk_format_changes(&tip_layout, &tip) {
-        Ok(needs_reload) => {
-            if needs_reload {
-                // Reload the checkpoint to factor in the upgrades/downgrades
-                checkpoint::load_checkpoint(&tip_layout, own_subnet_type, None).unwrap_or_else(
-                    |err| fatal!(log, "Failed to reset tip to checkpoint height: {:?}", err),
-                )
-            } else {
-                tip
-            }
-        }
-        Err(err) => fatal!(log, "Failed to upgrade/downgrade tip {:?}", err),
-    };
-
-    checkpoint::reopen_state_as_tip(&tip_layout, &mut tip)
-        .unwrap_or_else(|err| fatal!(log, "Failed to reopen tip {:?}", err));
-
-    tip
+    checkpoint::load_checkpoint(&tip_layout, own_subnet_type, None)
+        .unwrap_or_else(|err| fatal!(log, "Failed to reset tip to checkpoint height: {:?}", err))
 }
 
 /// Deletes obsolete diverged states and state backups, keeping at most
@@ -1613,15 +1593,6 @@ impl StateManagerImpl {
 
         self.persist_metadata_or_die(&states.states_metadata);
     }
-
-    fn first_known_height(&self) -> Height {
-        let states = self.states.read();
-        states
-            .snapshots
-            .get(1)
-            .map(|s| s.height)
-            .unwrap_or_else(|| Height::new(0))
-    }
 }
 
 fn initial_state(own_subnet_id: SubnetId, own_subnet_type: SubnetType) -> Labeled<ReplicatedState> {
@@ -1638,16 +1609,6 @@ fn crypto_hash_of_tree(t: &HashTree) -> CryptoHash {
 fn update_latest_height(cached: &AtomicU64, h: Height) -> u64 {
     let h = h.get();
     cached.fetch_max(h, Ordering::Relaxed).max(h)
-}
-
-fn purge_cow_rounds_below(state: &mut ReplicatedState, height: Height) {
-    if cow_state_feature::is_enabled(cow_state_feature::cow_state) {
-        for cs in state.canisters_iter_mut() {
-            if let Some(es) = &mut cs.execution_state {
-                es.cow_mem_mgr.remove_states_below(height.get());
-            }
-        }
-    }
 }
 
 impl StateManager for StateManagerImpl {
@@ -2206,33 +2167,14 @@ impl StateManager for StateManagerImpl {
             .with_label_values(&["commit_and_certify"])
             .start_timer();
 
-        if cow_state_feature::is_enabled(cow_state_feature::cow_state) {
-            for cs in state.canisters_iter_mut() {
-                if let Some(es) = &mut cs.execution_state {
-                    let last_executed_round = ExecutionRound::from(height.get());
-                    if es.last_executed_round == ExecutionRound::from(0) {
-                        // This can happen in 1 conditions only:
-                        // 1. Canister install/reinstall/upgrade when new execution state is created
-                        es.last_executed_round = last_executed_round;
-                    }
-
-                    if es.last_executed_round == last_executed_round {
-                        es.cow_mem_mgr.create_snapshot(last_executed_round.get());
-                    }
-                }
-            }
-        }
-
         self.populate_extra_metadata(&mut state, height);
         self.flush_page_maps(&mut state);
         let mut dirty_pages = None;
         let checkpointed_state = match scope {
             CertificationScope::Full => {
                 let start = Instant::now();
-                if !cow_state_feature::is_enabled(cow_state_feature::cow_state) {
-                    // The api of dirty pages is only supported by PageMap currently.
-                    dirty_pages = Some(get_dirty_pages(&state));
-                }
+                dirty_pages = Some(get_dirty_pages(&state));
+
                 // We don't need to persist the deltas to the tip because we
                 // flush deltas separately every round, see flush_page_maps.
                 strip_page_map_deltas(&mut state);
@@ -2246,7 +2188,6 @@ impl StateManager for StateManagerImpl {
                         &mut thread_pool,
                     )
                 };
-                purge_cow_rounds_below(&mut state, self.first_known_height());
 
                 let elapsed = start.elapsed();
                 match result {

@@ -31,8 +31,6 @@ use signal_stack::WasmtimeSignalStack;
 
 use crate::wasm_utils::validation::ensure_determinism;
 
-use crate::cow_memory_creator::{CowMemoryCreator, CowMemoryCreatorProxy};
-
 use super::InstanceRunResult;
 
 use self::host_memory::{MemoryPageSize, MemoryStart};
@@ -130,18 +128,18 @@ impl WasmtimeEmbedder {
     ) -> HypervisorResult<EmbedderCache> {
         let mut config = wasmtime::Config::default();
         ensure_determinism(&mut config);
-        let cached_mem_creator = match persistence_type {
+        match persistence_type {
             PersistenceType::Sigsegv => {
                 let raw_creator = MmapMemoryCreator {};
-                let mem_creator = Arc::new(WasmtimeMemoryCreator::new(raw_creator, Arc::clone(&self.created_memories)));
+                let mem_creator = Arc::new(WasmtimeMemoryCreator::new(
+                    raw_creator,
+                    Arc::clone(&self.created_memories),
+                ));
                 config.with_host_memory(mem_creator);
-                None
             }
-            _ /*Pagemap*/ => {
-                let raw_creator = CowMemoryCreatorProxy::new(Arc::new(CowMemoryCreator::new_uninitialized()));
-                let mem_creator = Arc::new(WasmtimeMemoryCreator::new(raw_creator.clone(), Arc::clone(&self.created_memories)));
-                config.with_host_memory(mem_creator);
-                Some(raw_creator)
+            PersistenceType::Pagemap => {
+                // TODO(EXC-750): Remove PersistenceType and this branch.
+                unreachable!("Invalid PersistenceType")
             }
         };
 
@@ -165,7 +163,7 @@ impl WasmtimeEmbedder {
         // a bit of reference counting, i.e. it is a "shallow copy"). This is
         // important because EmbedderCache is cloned frequently, and that must
         // not be an expensive operation.
-        Ok(EmbedderCache::new((module, cached_mem_creator)))
+        Ok(EmbedderCache::new(module))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -175,13 +173,12 @@ impl WasmtimeEmbedder {
         cache: &EmbedderCache,
         exported_globals: &[Global],
         heap_size: NumWasmPages,
-        memory_creator: Option<Arc<CowMemoryCreator>>,
         page_map: Option<PageMap>,
         modification_tracking: ModificationTracking,
         system_api: S,
     ) -> Result<WasmtimeInstance<S>, (HypervisorError, S)> {
-        let (module, memory_creator_proxy) = cache
-            .downcast::<(wasmtime::Module, Option<CowMemoryCreatorProxy>)>()
+        let module = cache
+            .downcast::<wasmtime::Module>()
             .expect("incompatible embedder cache, expected BinaryEncodedWasm");
 
         let mut store = Store::new(
@@ -194,61 +191,17 @@ impl WasmtimeEmbedder {
 
         let linker = system_api::syscalls(self.log.clone(), canister_id, &store);
 
-        let (instance, persistence_type) = match (memory_creator, memory_creator_proxy) {
-            (Some(memory_creator), Some(cow_mem_creator_proxy)) => {
-                // If we have the CowMemoryCreator we want to ensure it is used
-                // atomically
-                let _lock = cow_mem_creator_proxy.memory_creator_lock.lock().unwrap();
-
-                cow_mem_creator_proxy.replace(memory_creator);
-
-                let instance = match linker.instantiate(&mut store, module) {
-                    Ok(instance) => instance,
-                    Err(err) => {
-                        error!(
-                            self.log,
-                            "Failed to instantiate module for {}: {}", canister_id, err
-                        );
-                        return Err((
-                            HypervisorError::WasmEngineError(
-                                WasmEngineError::FailedToInstantiateModule,
-                            ),
-                            store.into_data().system_api,
-                        ));
-                    }
-                };
-
-                // After the Wasm module instance and its corresponding memory
-                // are created we want to ensure that this particular
-                // MemoryCreator can't be reused
-                cow_mem_creator_proxy
-                    .replace(std::sync::Arc::new(CowMemoryCreator::new_uninitialized()));
-                (instance, PersistenceType::Pagemap)
-            }
-            (None, None) => {
-                let instance = match linker.instantiate(&mut store, module) {
-                    Ok(instance) => instance,
-                    Err(err) => {
-                        error!(
-                            self.log,
-                            "Failed to instantiate module for {}: {}", canister_id, err
-                        );
-                        return Err((
-                            HypervisorError::WasmEngineError(
-                                WasmEngineError::FailedToInstantiateModule,
-                            ),
-                            store.into_data().system_api,
-                        ));
-                    }
-                };
-                (instance, PersistenceType::Sigsegv)
-            }
-            (None, Some(_)) | (Some(_), None) => {
-                fatal!(
+        let instance = match linker.instantiate(&mut store, module) {
+            Ok(instance) => instance,
+            Err(err) => {
+                error!(
                     self.log,
-                    "We are caching mem creator if and only if mem_creator argument is not None,
-                            and both happen if persistence type is Pagemap"
+                    "Failed to instantiate module for {}: {}", canister_id, err
                 );
+                return Err((
+                    HypervisorError::WasmEngineError(WasmEngineError::FailedToInstantiateModule),
+                    store.into_data().system_api,
+                ));
             }
         };
 
@@ -339,10 +292,6 @@ impl WasmtimeEmbedder {
         let memory_tracker = match instance_memory {
             None => None,
             Some(instance_memory) => {
-                let page_map = match persistence_type {
-                    PersistenceType::Sigsegv => page_map,
-                    PersistenceType::Pagemap => None,
-                };
                 let start = MemoryStart(instance_memory.data_ptr(&store) as usize);
                 match self
                     .created_memories
@@ -363,7 +312,7 @@ impl WasmtimeEmbedder {
                         ));
                     }
                     Some(current_memory_size_in_pages) => Some(sigsegv_memory_tracker(
-                        persistence_type,
+                        PersistenceType::Sigsegv,
                         &instance_memory,
                         current_memory_size_in_pages,
                         &mut store,

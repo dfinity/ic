@@ -64,7 +64,6 @@ use ic_types::{
     time::current_time,
     Height, PrincipalId, Randomness, RegistryVersion, ReplicaVersion, SubnetId, Time, UserId,
 };
-use ic_utils::ic_features::cow_state_feature;
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
@@ -269,15 +268,6 @@ impl Player {
 
         let metrics_registry = MetricsRegistry::global();
         let subnet_config = SubnetConfigs::default().own_subnet_config(subnet_type);
-
-        // Any change to these lines should be mirrored in the file
-        // `rs/replica/src/main.rs` so that the replica and the replay tool of the same
-        // version have an identical behavior wrt. CoW.
-        if subnet_config.cow_memory_manager_config.enabled {
-            cow_state_feature::enable(cow_state_feature::cow_state);
-        } else {
-            cow_state_feature::disable(cow_state_feature::cow_state);
-        }
 
         let cycles_account_manager = Arc::new(CyclesAccountManager::new(
             subnet_config.scheduler_config.max_instructions_per_message,
