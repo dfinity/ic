@@ -5,8 +5,10 @@ edition = "2018"
 
 [dependencies]
 base64 = "0.11.0"
+ic-crypto-internal-basic-sig-ed25519 = { path = "../basic_sig/ed25519" }
 ic-types = { path = "../../../../types/types" }
 openssl = "0.10.29"
+rand = "0.7.3"
 serde = { version = "1.0.99", features = [ "derive" ] }
 serde_bytes = "0.11"
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }

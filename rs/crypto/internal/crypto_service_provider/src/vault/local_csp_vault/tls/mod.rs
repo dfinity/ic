@@ -30,7 +30,8 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Tls
         let common_name = &node.get().to_string()[..];
         let not_after = Asn1Time::from_str_x509(not_after)
             .expect("invalid X.509 certificate expiration date (not_after)");
-        let (cert, secret_key) = generate_tls_key_pair_der(common_name, serial, &not_after);
+        let (cert, secret_key) =
+            generate_tls_key_pair_der(&mut *self.rng_write_lock(), common_name, serial, &not_after);
 
         let x509_pk_cert = TlsPublicKeyCert::new_from_der(cert.bytes)
             .expect("generated X509 certificate has malformed DER encoding");
