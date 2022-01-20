@@ -1,6 +1,7 @@
 artifact_pool/src/backup.rs:    fs,
 artifact_pool/src/backup.rs:use std::{
 artifact_pool/src/lib.rs:use std::fs;
+bitcoin/adapter/src/cli.rs:use std::{fs::File, io, path::PathBuf};
 boundary_node/control_plane/src/main.rs:    collections::{HashMap, HashSet},
 boundary_node/control_plane/src/main.rs:    fs::{read_dir, remove_file, File},
 boundary_node/control_plane/src/main.rs:use std::{

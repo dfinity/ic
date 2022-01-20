@@ -5,6 +5,7 @@ members = [
   "artifact_pool",
   "base/server",
   "base/thread",
+  "bitcoin/adapter",
   "bitcoin/consensus",
   "bitcoin/validation",
   "boundary_node/control_plane",

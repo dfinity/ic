@@ -1,0 +1,7 @@
+{
+    "version": 70015,
+    "network": "regtest",
+    "nodes": [
+        "127.0.0.1:18444"
+    ]
+}
