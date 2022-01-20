@@ -20,7 +20,7 @@ use ic_prep_lib::{
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
-use slog::info;
+use slog::{info, warn};
 use std::io::Write;
 use std::thread::{self, JoinHandle};
 use url::Url;
@@ -232,10 +232,15 @@ pub fn setup_and_start_vms(
         }));
     }
 
+    let mut result = Ok(());
+    // Wait for all threads to finish and return an error if any of them fails.
     for jh in join_handles {
-        jh.join().expect("waiting for a thread failed")?;
+        if let Err(e) = jh.join().expect("waiting for a thread failed") {
+            warn!(ctx.logger, "starting VM failed with: {:?}", e);
+            result = Err(anyhow::anyhow!("failed to set up and start a VM pool"));
+        }
     }
-    Ok(())
+    result
 }
 
 pub fn upload_config_disk_image(
