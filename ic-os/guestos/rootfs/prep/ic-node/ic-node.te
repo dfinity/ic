@@ -12,6 +12,9 @@ type ic_replica_exec_t;
 type ic_crypto_store_t;
 type ic_data_t;
 
+permissive ic_orchestrator_t;
+permissive ic_replica_t;
+
 ###############################################################################
 # System integration bits
 
