@@ -24,7 +24,6 @@ use std::time::Duration;
 
 use ic_base_types::NodeId;
 use ic_fondue::ic_manager::IcSubnet;
-use ic_fondue::iterator::PermOf;
 use ic_fondue::{
     ic_instance::{InternetComputer, Subnet}, // which is declared through these types
     ic_manager::IcHandle,                    // we run the test on the IC
@@ -137,47 +136,48 @@ pub fn create_subnet_test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         "created application subnet with ID {}", new_subnet.id
     );
 
-    // get some endpoint of an originally unassigned node.
-    let some_unassigned_endpoint = PermOf::new(&unassigned_endpoints, &mut rng)
-        .find(|_ep| true)
-        .unwrap();
+    for unassigned_endpoint in unassigned_endpoints {
+        let new_subnet = new_subnet.clone();
 
-    // [Phase III] install a canister onto that subnet and check that it is
-    // operational
-    block_on(async move {
-        let newly_assigned_endpoint = some_unassigned_endpoint.recreate_with_subnet(new_subnet);
+        // [Phase III] install a canister onto that subnet and check that it is
+        // operational
+        block_on(async move {
+            let newly_assigned_endpoint = unassigned_endpoint.recreate_with_subnet(new_subnet);
 
-        newly_assigned_endpoint.assert_ready(ctx).await;
+            newly_assigned_endpoint.assert_ready(ctx).await;
+            // For some reason the
+            // tokio::time::sleep(Duration::from_secs(5)).await;
 
-        let agent = assert_create_agent(newly_assigned_endpoint.url.as_str()).await;
-        info!(
-            ctx.logger,
-            "successfully created agent for endpoint of an originally unassigned node"
-        );
+            let agent = assert_create_agent(newly_assigned_endpoint.url.as_str()).await;
+            info!(
+                ctx.logger,
+                "successfully created agent for endpoint of an originally unassigned node"
+            );
 
-        let universal_canister = UniversalCanister::new(&agent).await;
-        info!(
-            ctx.logger,
-            "successfully created a universal canister instance"
-        );
+            let universal_canister = UniversalCanister::new(&agent).await;
+            info!(
+                ctx.logger,
+                "successfully created a universal canister instance"
+            );
 
-        const UPDATE_MSG_1: &[u8] =
-            b"This beautiful prose should be persisted for future generations";
+            const UPDATE_MSG_1: &[u8] =
+                b"This beautiful prose should be persisted for future generations";
 
-        universal_canister.store_to_stable(0, UPDATE_MSG_1).await;
-        info!(
-            ctx.logger,
-            "successfully saved message in the universal canister"
-        );
+            universal_canister.store_to_stable(0, UPDATE_MSG_1).await;
+            info!(
+                ctx.logger,
+                "successfully saved message in the universal canister"
+            );
 
-        assert_eq!(
-            universal_canister
-                .try_read_stable(0, UPDATE_MSG_1.len() as u32)
-                .await,
-            UPDATE_MSG_1.to_vec(),
-            "could not validate that subnet is healty: universal canister is broken"
-        );
-    })
+            assert_eq!(
+                universal_canister
+                    .try_read_stable(0, UPDATE_MSG_1.len() as u32)
+                    .await,
+                UPDATE_MSG_1.to_vec(),
+                "could not validate that subnet is healty: universal canister is broken"
+            );
+        })
+    }
 }
 
 fn set<H: Clone + std::cmp::Eq + std::hash::Hash>(data: &[H]) -> HashSet<H> {

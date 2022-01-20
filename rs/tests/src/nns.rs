@@ -907,7 +907,7 @@ pub async fn submit_create_application_subnet_proposal(
         max_instructions_per_round: scheduler.max_instructions_per_round.get(),
         max_instructions_per_install_code: scheduler.max_instructions_per_install_code.get(),
         features: SubnetFeatures::default(),
-        max_number_of_canisters: 3,
+        max_number_of_canisters: 4,
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
     };
