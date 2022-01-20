@@ -84,7 +84,7 @@ fn query(parts: Parts) -> Result<(Duration, i32), CanonicalError> {
         Some(val) => match val.parse() {
             Ok(val) => val,
             Err(err) => {
-                return Err(invalid_argument_error(&err.to_string()));
+                return Err(invalid_argument_error(err.to_string()));
             }
         },
         None => DEFAULT_DURATION_SECONDS,
@@ -95,7 +95,7 @@ fn query(parts: Parts) -> Result<(Duration, i32), CanonicalError> {
         Some(val) => match val.parse() {
             Ok(val) => val,
             Err(err) => {
-                return Err(invalid_argument_error(&err.to_string()));
+                return Err(invalid_argument_error(err.to_string()));
             }
         },
         None => DEFAULT_FREQUENCY,
@@ -107,7 +107,7 @@ fn query(parts: Parts) -> Result<(Duration, i32), CanonicalError> {
 fn into_response(result: Result<Vec<u8>, Error>, content_type: &'static str) -> Response<Body> {
     match result {
         Ok(body) => ok_response(body, content_type),
-        Err(err) => make_response(internal_error(&err.to_string())),
+        Err(err) => make_response(internal_error(err.to_string())),
     }
 }
 

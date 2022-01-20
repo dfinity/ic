@@ -437,7 +437,9 @@ fn create_main_service(
                     timer.set_label(LABEL_STATUS, status.as_str());
                     Ok::<_, CanonicalError>(response)
                 }
-                Err(_err) => Err(unknown_error("We should never return an error here.")),
+                Err(_err) => Err(unknown_error(
+                    "We should never return an error here.".to_string(),
+                )),
             }),
     )
 }
@@ -590,7 +592,7 @@ async fn make_router(
             )),
     );
 
-    let invalid_argument_response = common::make_response(invalid_argument_error(&format!("")));
+    let invalid_argument_response = common::make_response(invalid_argument_error(format!("")));
     metrics
         .protocol_version_total
         .with_label_values(&[app_layer.as_str(), &format!("{:?}", req.version())])

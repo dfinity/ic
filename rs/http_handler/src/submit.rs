@@ -85,7 +85,7 @@ fn get_registry_data(
                 registry_version, subnet_id
             );
             warn!(log, "{}", err_msg);
-            return Err(internal_error(&err_msg));
+            return Err(internal_error(err_msg));
         }
         Err(err) => {
             let err_msg = format!(
@@ -93,7 +93,7 @@ fn get_registry_data(
                 registry_version, subnet_id, err
             );
             error!(log, "{}", err_msg);
-            return Err(internal_error(&err_msg));
+            return Err(internal_error(err_msg));
         }
     };
 
@@ -137,9 +137,10 @@ impl Service<Vec<u8>> for CallService {
         let msg: SignedIngress = match SignedRequestBytes::from(body).try_into() {
             Ok(msg) => msg,
             Err(e) => {
-                let res = make_response(invalid_argument_error(
-                    format!("Could not parse body as submit message: {}", e).as_str(),
-                ));
+                let res = make_response(invalid_argument_error(format!(
+                    "Could not parse body as submit message: {}",
+                    e
+                )));
                 return Box::pin(async move { Ok(res) });
             }
         };
@@ -157,15 +158,12 @@ impl Service<Vec<u8>> for CallService {
             }
         };
         if msg.count_bytes() > ingress_registry_settings.max_ingress_bytes_per_message {
-            let res = make_response(out_of_range_error(
-                format!(
-                    "Request {} is too large. Message bytes {} is bigger than the max allowed {}.",
-                    message_id,
-                    msg.count_bytes(),
-                    ingress_registry_settings.max_ingress_bytes_per_message
-                )
-                .as_str(),
-            ));
+            let res = make_response(out_of_range_error(format!(
+                "Request {} is too large. Message bytes {} is bigger than the max allowed {}.",
+                message_id,
+                msg.count_bytes(),
+                ingress_registry_settings.max_ingress_bytes_per_message
+            )));
             return Box::pin(async move { Ok(res) });
         }
 

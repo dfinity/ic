@@ -37,9 +37,9 @@ fn map_box_error_to_canonical_error(err: BoxError) -> CanonicalError {
             .expect("Downcasting must succeed.");
     }
     if err.is::<Overloaded>() {
-        return resource_exhausted_error("The service is overloaded.");
+        return resource_exhausted_error("The service is overloaded.".to_string());
     }
-    internal_error(&format!("Could not convert {:?} to CanonicalError", err))
+    internal_error(format!("Could not convert {:?} to CanonicalError", err))
 }
 
 pub(crate) fn map_box_error_to_response(err: BoxError) -> Response<Body> {
@@ -121,7 +121,7 @@ pub(crate) fn make_response_on_validation_error(
     match err {
         RequestValidationError::InvalidIngressExpiry(msg)
         | RequestValidationError::InvalidDelegationExpiry(msg) => {
-            make_response(invalid_argument_error(&msg))
+            make_response(invalid_argument_error(msg))
         }
         _ => {
             let message = format!(
@@ -129,7 +129,7 @@ pub(crate) fn make_response_on_validation_error(
                 message_id, err
             );
             info!(log, "{}", message);
-            make_response(permission_denied_error(&message))
+            make_response(permission_denied_error(message))
         }
     }
 }

@@ -95,7 +95,7 @@ impl Service<Vec<u8>> for ReadStateService {
             .observe(body.len() as f64);
         if *self.health_status.read().unwrap() != ReplicaHealthStatus::Healthy {
             let res = make_response(unavailable_error(
-                "Replica is starting. Check the /api/v2/status for more information.",
+                "Replica is starting. Check the /api/v2/status for more information.".to_string(),
             ));
             return Box::pin(async move { Ok(res) });
         }
@@ -106,9 +106,10 @@ impl Service<Vec<u8>> for ReadStateService {
         ) {
             Ok(request) => request,
             Err(e) => {
-                let res = make_response(invalid_argument_error(
-                    format!("Could not parse body as read request: {}", e).as_str(),
-                ));
+                let res = make_response(invalid_argument_error(format!(
+                    "Could not parse body as read request: {}",
+                    e
+                )));
                 return Box::pin(async move { Ok(res) });
             }
         };
@@ -118,9 +119,10 @@ impl Service<Vec<u8>> for ReadStateService {
         let request = match HttpRequest::<ReadState>::try_from(request) {
             Ok(request) => request,
             Err(e) => {
-                let res = make_response(invalid_argument_error(
-                    format!("Malformed request: {:?}", e).as_str(),
-                ));
+                let res = make_response(invalid_argument_error(format!(
+                    "Malformed request: {:?}",
+                    e
+                )));
                 return Box::pin(async move { Ok(res) });
             }
         };
@@ -171,7 +173,7 @@ impl Service<Vec<u8>> for ReadStateService {
                 cbor_response(&res)
             }
             None => make_response(unavailable_error(
-                "Certified state is not available yet. Please try again...",
+                "Certified state is not available yet. Please try again...".to_string(),
             )),
         };
         Box::pin(async move { Ok(res) })
@@ -202,7 +204,7 @@ fn verify_paths(
             [b"canister", _canister_id, b"module_hash"] => {}
             [b"canister", canister_id, b"metadata", name] => {
                 let name = String::from_utf8(Vec::from(*name)).map_err(|err| {
-                    invalid_argument_error(&format!(
+                    invalid_argument_error(format!(
                         "Could not parse the custom section name: {}.",
                         err
                     ))
@@ -213,7 +215,7 @@ fn verify_paths(
                         can_read_canister_metadata(user, &canister_id, &name, &state)?
                     }
                     Err(err) => {
-                        return Err(invalid_argument_error(&format!(
+                        return Err(invalid_argument_error(format!(
                             "Could not parse Canister ID: {}.",
                             err
                         )))
@@ -226,7 +228,7 @@ fn verify_paths(
                 num_request_ids += 1;
 
                 if num_request_ids > MAX_READ_STATE_REQUEST_IDS {
-                    return Err(resource_exhausted_error(&format!(
+                    return Err(resource_exhausted_error(format!(
                         "Can only request up to {} request IDs.",
                         MAX_READ_STATE_REQUEST_IDS
                     )));
@@ -240,13 +242,14 @@ fn verify_paths(
                         if let Some(receiver) = ingress_status.receiver() {
                             if ingress_user_id != *user || !targets.contains(&receiver) {
                                 return Err(permission_denied_error(
-                                    "Request IDs must be for requests signed by the caller.",
+                                    "Request IDs must be for requests signed by the caller."
+                                        .to_string(),
                                 ));
                             }
                         }
                     }
                 } else {
-                    return Err(invalid_argument_error(&format!(
+                    return Err(invalid_argument_error(format!(
                         "Request IDs must be {} bytes in length.",
                         EXPECTED_MESSAGE_ID_LENGTH
                     )));
@@ -254,7 +257,7 @@ fn verify_paths(
             }
             _ => {
                 // All other paths are unsupported.
-                return Err(not_found_error("Invalid path requested."));
+                return Err(not_found_error("Invalid path requested.".to_string()));
             }
         }
     }
@@ -271,26 +274,26 @@ fn can_read_canister_metadata(
     let canister = state
         .canister_states
         .get(canister_id)
-        .ok_or_else(|| not_found_error("Invalid path requested."))?;
+        .ok_or_else(|| not_found_error("Invalid path requested.".to_string()))?;
 
     match &canister.execution_state {
         Some(execution_state) => {
             let custom_section = execution_state
                 .metadata
                 .get_custom_section(custom_section_name)
-                .ok_or_else(|| not_found_error("Invalid path requested."))?;
+                .ok_or_else(|| not_found_error("Invalid path requested.".to_string()))?;
 
             // Only the controller can request this custom section.
             if custom_section.visibility == CustomSectionType::Private
                 && !canister.system_state.controllers.contains(&user.get())
             {
-                return Err(permission_denied_error(&format!(
+                return Err(permission_denied_error(format!(
                     "Custom section {} can only be requested by the controllers of the canister.",
                     custom_section_name
                 )));
             }
         }
-        None => return Err(not_found_error("Invalid path requested.")),
+        None => return Err(not_found_error("Invalid path requested.".to_string())),
     }
     Ok(())
 }
@@ -410,13 +413,14 @@ mod test {
             can_read_canister_metadata(&non_controller, &canister_id, "candid", &state),
             Err(permission_denied_error(
                 "Custom section candid can only be requested by the controllers of the canister."
+                    .to_string()
             ))
         );
 
         // Non existent public custom section.
         assert_eq!(
             can_read_canister_metadata(&non_controller, &canister_id, "unknown-name", &state),
-            Err(not_found_error("Invalid path requested."))
+            Err(not_found_error("Invalid path requested.".to_string()))
         );
     }
 }

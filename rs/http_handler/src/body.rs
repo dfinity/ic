@@ -59,19 +59,17 @@ async fn receive_body_without_timeout(
     while let Some(chunk) = body.next().await {
         match chunk {
             Err(err) => {
-                return Err(unknown_error(
-                    format!("Unexpected error while reading request: {}", err).as_str(),
-                ));
+                return Err(unknown_error(format!(
+                    "Unexpected error while reading request: {}",
+                    err
+                )));
             }
             Ok(bytes) => {
                 if received_body.len() + bytes.len() > max_request_body_size_bytes {
-                    return Err(out_of_range_error(
-                        format!(
-                            "The request body is bigger than {} bytes.",
-                            max_request_body_size_bytes
-                        )
-                        .as_str(),
-                    ));
+                    return Err(out_of_range_error(format!(
+                        "The request body is bigger than {} bytes.",
+                        max_request_body_size_bytes
+                    )));
                 }
                 received_body.append(&mut bytes.to_vec());
             }
@@ -92,7 +90,7 @@ async fn receive_body(
     .await
     {
         Ok(res) => res,
-        Err(_err) => Err(out_of_range_error(&format!(
+        Err(_err) => Err(out_of_range_error(format!(
             "The request body was not received within {:?} seconds.",
             max_request_receive_duration
         ))),
@@ -205,7 +203,7 @@ mod tests {
             .expect_err("The service must have returned an Err.");
         assert_eq!(
             response,
-            out_of_range_error(&format!(
+            out_of_range_error(format!(
                 "The request body is bigger than {} bytes.",
                 MAX_REQUEST_SIZE_BYTES
             ))
@@ -240,7 +238,7 @@ mod tests {
             .expect_err("parse_body must have returned an Err.");
         assert_eq!(
             response,
-            out_of_range_error(&format!(
+            out_of_range_error(format!(
                 "The request body was not received within {:?} seconds.",
                 time_to_wait
             ))
@@ -279,7 +277,7 @@ mod tests {
             .expect_err("parse_body must have returned an Err.");
         assert_eq!(
             response,
-            out_of_range_error(&format!(
+            out_of_range_error(format!(
                 "The request body was not received within {:?} seconds.",
                 time_to_wait
             ))

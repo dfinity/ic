@@ -2761,7 +2761,7 @@ fn message_to_canister_with_not_enough_balance_is_rejected() {
                 ExecutionMode::NonReplicated,
             ),
             Err(permission_denied_error(
-                &CanisterOutOfCyclesError {
+                CanisterOutOfCyclesError {
                     canister_id,
                     available,
                     requested: ingress_induction_cost,
@@ -2882,7 +2882,7 @@ fn management_message_to_canister_with_not_enough_balance_is_not_accepted() {
                     ExecutionMode::NonReplicated,
                 ),
                 Err(permission_denied_error(
-                    &CanisterOutOfCyclesError {
+                    CanisterOutOfCyclesError {
                         canister_id,
                         available: Cycles::from(0),
                         requested: ingress_induction_cost,
@@ -2912,7 +2912,9 @@ fn management_message_to_canister_that_doesnt_exist_is_not_accepted() {
                     ingress.content(),
                     ExecutionMode::NonReplicated,
                 ),
-                Err(not_found_error("Requested canister does not exist")),
+                Err(not_found_error(
+                    "Requested canister does not exist".to_string()
+                )),
             );
         }
     });
@@ -2936,7 +2938,7 @@ fn management_message_with_invalid_payload_is_not_accepted() {
                     ExecutionMode::NonReplicated,
                 ),
                 Err(permission_denied_error(
-                    "Requested canister rejected the message"
+                    "Requested canister rejected the message".to_string()
                 )),
             );
         }
@@ -2960,7 +2962,7 @@ fn management_message_with_invalid_method_is_not_accepted() {
                     ExecutionMode::NonReplicated,
                 ),
                 Err(permission_denied_error(
-                    "Requested canister rejected the message"
+                    "Requested canister rejected the message".to_string()
                 )),
             );
         }

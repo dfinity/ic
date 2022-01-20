@@ -715,7 +715,7 @@ impl Service<SignedIngress> for IngressEventHandler {
         let node_id = self.node_id;
         let jh = self.rt_handle.spawn_blocking(move || {
             if throttler.read().unwrap().exceeds_threshold() {
-                return Ok(Err(unavailable_error("Service Unavailable!")));
+                return Ok(Err(unavailable_error("Service Unavailable!".to_string())));
             }
             Ok(gossip.on_user_ingress(signed_ingress, node_id))
         });

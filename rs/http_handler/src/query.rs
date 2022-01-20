@@ -88,7 +88,7 @@ impl Service<Vec<u8>> for QueryService {
             .observe(body.len() as f64);
         if *self.health_status.read().unwrap() != ReplicaHealthStatus::Healthy {
             let res = make_response(unavailable_error(
-                "Replica is starting. Check the /api/v2/status for more information.",
+                "Replica is starting. Check the /api/v2/status for more information.".to_string(),
             ));
             return Box::pin(async move { Ok(res) });
         }
@@ -99,9 +99,10 @@ impl Service<Vec<u8>> for QueryService {
         ) {
             Ok(request) => request,
             Err(e) => {
-                let res = make_response(invalid_argument_error(
-                    format!("Could not parse body as read request: {}", e).as_str(),
-                ));
+                let res = make_response(invalid_argument_error(format!(
+                    "Could not parse body as read request: {}",
+                    e
+                )));
                 return Box::pin(async move { Ok(res) });
             }
         };
@@ -111,9 +112,10 @@ impl Service<Vec<u8>> for QueryService {
         let request = match HttpRequest::<UserQuery>::try_from(request) {
             Ok(request) => request,
             Err(e) => {
-                let res = make_response(invalid_argument_error(
-                    format!("Malformed request: {:?}", e).as_str(),
-                ));
+                let res = make_response(invalid_argument_error(format!(
+                    "Malformed request: {:?}",
+                    e
+                )));
                 return Box::pin(async move { Ok(res) });
             }
         };
@@ -128,7 +130,7 @@ impl Service<Vec<u8>> for QueryService {
         ) {
             Ok(targets) => {
                 if !targets.contains(&query.receiver) {
-                    let res = make_response(permission_denied_error(""));
+                    let res = make_response(permission_denied_error("".to_string()));
                     return Box::pin(async move { Ok(res) });
                 }
             }
