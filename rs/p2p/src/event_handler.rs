@@ -74,14 +74,10 @@ use crate::{
         GossipRetransmissionRequest,
     },
     metrics::EventHandlerMetrics,
-    P2PErrorCode, P2PResult,
 };
 use async_trait::async_trait;
-use crossbeam_channel::Receiver as CrossBeamReceiver;
-use crossbeam_channel::Sender as CrossBeamSender;
 use futures::future::select_all;
 use futures::future::FutureExt;
-use ic_base_thread::async_safe_block_on_await;
 use ic_interfaces::{
     ingress_pool::IngressPoolThrottler,
     registry::RegistryClient,
@@ -89,9 +85,7 @@ use ic_interfaces::{
 };
 use ic_logger::{info, replica_logger::ReplicaLogger, trace};
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::p2p::v1 as pb;
-use ic_protobuf::proxy::ProtoProxy;
-use ic_protobuf::registry::subnet::v1::GossipConfig;
+use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy, registry::subnet::v1::GossipConfig};
 use ic_registry_client::helper::subnet::SubnetRegistry;
 use ic_types::transport::{TransportError, TransportErrorCode, TransportFlowInfo};
 use ic_types::{
@@ -102,23 +96,29 @@ use ic_types::{
     transport::{FlowId, TransportNotification, TransportPayload, TransportStateChange},
     NodeId, SubnetId,
 };
-use std::future::Future;
-use std::pin::Pin;
-use std::task::{Context, Poll};
 use std::{
     cmp::max,
     collections::BTreeMap,
     convert::{Infallible, TryInto},
-    sync::{Arc, Mutex, RwLock},
+    fmt::Debug,
+    future::Future,
+    pin::Pin,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex, RwLock,
+    },
+    task::{Context, Poll},
+    thread::JoinHandle,
     vec::Vec,
 };
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 use tokio::{
-    sync::mpsc::error::TrySendError,
-    sync::mpsc::{channel, Receiver, Sender},
-    task::JoinHandle,
-    time::{timeout, Duration},
+    sync::mpsc::{
+        channel, error::TrySendError, unbounded_channel, Receiver, Sender, UnboundedReceiver,
+        UnboundedSender,
+    },
+    time::timeout,
 };
 use tower_service::Service;
 
@@ -167,24 +167,17 @@ enum FlowType {
     SendAdvert,
 }
 
-/// The message sent to the receive threads (in the process_message() loop).
-enum ManagementCommands<T> {
-    /// Add peer variant.
-    AddPeer(NodeId, Receiver<T>),
-    /// Stop variant.
-    Stop,
-}
-
 /// This type contains the (node ID, receiver) pairs.
 type ReceiveMap<T> = Vec<(NodeId, Receiver<T>)>; // Exclusive ownership
 /// This type contains the (node ID, sender) pairs. Since access is shared, it
 /// uses a read-write lock.
 type SendMap<T> = Arc<RwLock<BTreeMap<NodeId, Sender<T>>>>; // Shared
 
-/// The type of a sender of management commands.
-type ManagementCommandSender<T> = CrossBeamSender<ManagementCommands<T>>;
-/// The type of a receiver of management commands.
-type ManagementCommandReceiver<T> = CrossBeamReceiver<ManagementCommands<T>>;
+// We use tokio channel for adding peers because the sender can running
+// either in async or sync.
+type AddPeer<T> = (NodeId, Receiver<T>);
+type AddPeerSender<T> = UnboundedSender<AddPeer<T>>;
+type AddPeerReceiver<T> = UnboundedReceiver<AddPeer<T>>;
 
 /// A *Gossip* type with atomic reference counting.
 pub type GossipArc = Arc<
@@ -201,49 +194,51 @@ pub type GossipArc = Arc<
 
 /// The struct maps from node IDs to bounded flows.
 /// It also encapsulates the processing of received messages.
-struct PeerFlowQueueMap<T: Send + 'static> {
+struct PeerFlowQueueMap<T: Send + 'static + Debug> {
     rt_handle: tokio::runtime::Handle,
     /// Flow End-points need to be thread-safe to support concurrent node
     /// addition and polling.
     send_map: SendMap<T>,
     /// The sender of management commands.
-    management_command_sender: ManagementCommandSender<T>,
+    add_peer_sender: AddPeerSender<T>,
     /// The receive task handle, in a Mutex for interior mutability.
     receive_task_handle: Mutex<Option<JoinHandle<()>>>,
     /// The management command receiver, in a Mutex for interior mutability.
-    management_command_receiver: Mutex<Option<ManagementCommandReceiver<T>>>,
+    add_peer_receiver: Mutex<Option<AddPeerReceiver<T>>>,
+    cancelled: Arc<AtomicBool>,
 }
 
-impl<T: Send + 'static> PeerFlowQueueMap<T> {
+impl<T: Send + 'static + Debug> PeerFlowQueueMap<T> {
     fn new(rt_handle: tokio::runtime::Handle) -> Self {
-        let (mgmt_cmd_sender, mgmt_cmd_receiver) = crossbeam_channel::unbounded();
+        let (add_peer_sender, add_peer_receiver) = unbounded_channel();
         Self {
             rt_handle,
             send_map: Arc::new(RwLock::new(BTreeMap::new())),
-            management_command_sender: mgmt_cmd_sender,
-            management_command_receiver: Mutex::new(Some(mgmt_cmd_receiver)),
+            add_peer_sender,
+            add_peer_receiver: Mutex::new(Some(add_peer_receiver)),
             receive_task_handle: Mutex::new(None),
+            cancelled: Arc::new(AtomicBool::new(false)),
         }
     }
 }
 
-impl<T: Send + 'static> PeerFlowQueueMap<T> {
+impl<T: Send + 'static + Debug> PeerFlowQueueMap<T> {
     /// The method starts the processing of messages in the `PeerFlowQueueMap`.
     fn start<F>(&self, fn_consume_message: F)
     where
         F: Fn(T, NodeId) + Clone + Send + 'static,
     {
-        let mgmt_cmd_receive = self
-            .management_command_receiver
-            .lock()
-            .unwrap()
-            .take()
+        let mgmt_cmd_receive = self.add_peer_receiver.lock().unwrap().take().unwrap();
+        let rt_handle = self.rt_handle.clone();
+        let cancelled = Arc::clone(&self.cancelled);
+        let recv_task_handle = std::thread::Builder::new()
+            .name("PeerFlow".to_string())
+            .spawn(move || {
+                rt_handle.block_on(async move {
+                    Self::process_messages(mgmt_cmd_receive, fn_consume_message, cancelled).await;
+                });
+            })
             .unwrap();
-        let recv_task_handle = self.rt_handle.spawn_blocking(move || {
-            tokio::runtime::Handle::current().block_on(async move {
-                Self::process_messages(mgmt_cmd_receive, fn_consume_message).await;
-            });
-        });
 
         self.receive_task_handle
             .lock()
@@ -253,28 +248,24 @@ impl<T: Send + 'static> PeerFlowQueueMap<T> {
             .expect_err("Handler already started");
     }
 
-    /// The method stops the `PeerFlowQueueMap`.
-    fn stop(&self) {
-        self.management_command_sender
-            .send(ManagementCommands::Stop)
-            .expect("Failed to send ManagementCommands::Stop command");
-        if let Some(handle) = self.receive_task_handle.lock().unwrap().take() {
-            async_safe_block_on_await(handle).unwrap();
-        }
-    }
-
     /// The function processes received messages.
     ///
     /// The event handler loop calls `select()` on receivers and dispatch.
     async fn process_messages<F>(
-        mut mgmt_cmd_receive: ManagementCommandReceiver<T>,
+        mut add_peer_receiver: AddPeerReceiver<T>,
         fn_consume_message: F,
+        cancelled: Arc<AtomicBool>,
     ) where
-        F: Fn(T, NodeId) + Clone + 'static,
+        F: Fn(T, NodeId) + Clone + 'static + Send,
     {
         let mut receive_map: ReceiveMap<T> = Vec::with_capacity(MAX_PEERS_HINT);
-        let receive_duration = Duration::from_millis(500);
-        while Self::process_management_commands(&mut receive_map, &mut mgmt_cmd_receive).is_ok() {
+        let receive_duration = tokio::time::Duration::from_millis(500);
+        while !cancelled.load(Ordering::Relaxed) {
+            if let Ok((node_id, receiver)) = add_peer_receiver.try_recv() {
+                receive_map.push((node_id, receiver));
+                continue;
+            }
+
             let receive_futures = receive_map
                 .iter_mut()
                 .map(|(_, receiver)| receiver.recv().boxed())
@@ -308,27 +299,6 @@ impl<T: Send + 'static> PeerFlowQueueMap<T> {
         }
     }
 
-    /// The function processes management commands.
-    fn process_management_commands(
-        receive_map: &mut ReceiveMap<T>,
-        management_command_receiver: &mut ManagementCommandReceiver<T>,
-    ) -> P2PResult<()> {
-        loop {
-            match management_command_receiver.try_recv() {
-                Ok(cmd) => match cmd {
-                    ManagementCommands::AddPeer(node_id, receiver) => {
-                        receive_map.push((node_id, receiver));
-                    }
-                    ManagementCommands::Stop => return P2PErrorCode::ChannelShutDown.into(),
-                },
-                Err(crossbeam_channel::TryRecvError::Empty) => return Ok(()),
-                Err(crossbeam_channel::TryRecvError::Disconnected) => {
-                    return P2PErrorCode::ChannelShutDown.into()
-                }
-            }
-        }
-    }
-
     /// The method adds the node with the given node ID.
     fn add_node(&self, node_id: NodeId, buffer: usize) {
         let mut send_map = self.send_map.write().unwrap();
@@ -336,9 +306,16 @@ impl<T: Send + 'static> PeerFlowQueueMap<T> {
             let (send, recv) = channel(max(1, buffer));
             e.insert(send);
 
-            self.management_command_sender
-                .send(ManagementCommands::AddPeer(node_id, recv))
+            self.add_peer_sender
+                .send((node_id, recv))
                 .expect("Failed to send ManagementCommands::AddPeer command");
+        }
+    }
+
+    fn stop(&self) {
+        self.cancelled.store(true, Ordering::Relaxed);
+        if let Some(handle) = self.receive_task_handle.lock().unwrap().take() {
+            handle.join().unwrap();
         }
     }
 }
