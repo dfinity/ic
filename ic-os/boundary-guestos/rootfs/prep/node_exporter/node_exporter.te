@@ -1,0 +1,107 @@
+policy_module(node_exporter, 1.0.0)
+
+###############################################################################
+# Types
+
+# Domain for node_exporter process to run under
+type node_exporter_t;
+domain_type(node_exporter_t)
+
+# The node_exporter binary:
+# /usr/local/bin/node_exporter
+type node_exporter_exec_t;
+files_type(node_exporter_exec_t)
+
+# The state directory:
+# /run/node_exporter/collector_textfile
+type node_exporter_var_lib_t;
+files_type(node_exporter_var_lib_t)
+
+# The configuration files and directories:
+# /etc/default/node_exporter
+# /etc/node_exporter/node_exporter.crt
+# /etc/node_exporter/node_exporter.key
+# /etc/node_exporter/web.yml
+type node_exporter_conf_t;
+files_type(node_exporter_conf_t)
+
+###############################################################################
+# System integration bits
+
+# Allow tmpfiles to manage the node_exporter files
+systemd_tmpfilesd_managed(node_exporter_conf_t, dir)
+require { type systemd_tmpfiles_t; }
+list_dirs_pattern(systemd_tmpfiles_t, node_exporter_conf_t, node_exporter_conf_t)
+
+# Allow it to be spawned from init scripts
+init_daemon_domain(node_exporter_t, node_exporter_exec_t)
+
+# Read configuration files and directories
+files_read_etc_files(node_exporter_t)
+read_files_pattern(node_exporter_t, node_exporter_conf_t, node_exporter_conf_t);
+
+# Manage state files in:
+# /run/node_exporter/collector_textfile
+files_search_var_lib(node_exporter_t)
+manage_files_pattern(node_exporter_t, node_exporter_var_lib_t, node_exporter_var_lib_t)
+
+# Execute node_exporter binary
+allow node_exporter_t self:process { getsched signal };
+corecmd_search_bin(node_exporter_t)
+
+###############################################################################
+# Primary rights for operation
+
+# Read system metrics
+allow node_exporter_t self:process { getsched signal };
+allow node_exporter_t self:tcp_socket { accept bind create getattr listen read setopt write };
+dev_list_sysfs(node_exporter_t)
+dev_read_sysfs(node_exporter_t)
+files_search_boot(node_exporter_t)
+
+# Allow to read disk free metrics
+require {
+    type ic_data_t;
+}
+allow node_exporter_t ic_data_t:filesystem { getattr };
+fs_getattr_dos_fs(node_exporter_t)
+fs_getattr_tmpfs(node_exporter_t)
+fs_getattr_xattr_fs(node_exporter_t)
+
+# Allow to read the process state of init
+init_read_state(node_exporter_t)
+
+# Allow to read Kernel metrics
+kernel_read_fs_sysctls(node_exporter_t)
+kernel_read_kernel_sysctls(node_exporter_t)
+kernel_read_net_sysctls(node_exporter_t)
+kernel_read_network_state(node_exporter_t)
+kernel_read_software_raid_state(node_exporter_t)
+kernel_read_system_state(node_exporter_t)
+kernel_search_fs_sysctls(node_exporter_t)
+kernel_search_network_state(node_exporter_t)
+kernel_search_network_sysctl(node_exporter_t)
+miscfiles_read_localization(node_exporter_t)
+
+# Allow to read and write from/to own fifo pipe
+allow node_exporter_t self:fifo_file { read write };
+
+# Allow to bind port 9100/tcp (built-in port description does not match)
+require {
+    type node_t;
+    type hplip_port_t;
+}
+allow node_exporter_t node_t:tcp_socket { node_bind };
+allow node_exporter_t hplip_port_t:tcp_socket { name_bind };
+
+# Allow to interact with tmfiles
+require {
+    type node_exporter_var_lib_t;
+}
+allow systemd_tmpfiles_t node_exporter_var_lib_t:dir { create getattr open read relabelfrom relabelto };
+
+# Allow to read from /var/run/<users>
+require {
+    type user_runtime_root_t;
+}
+allow node_exporter_t user_runtime_root_t:dir { search };

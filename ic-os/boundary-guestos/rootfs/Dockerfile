@@ -21,10 +21,9 @@ RUN cd /tmp/ && \
     shasum -c journalbeat.sha512
 
 # Download and verify node_exporter
-#TODO: NODE-317
 RUN cd /tmp/ && \
-    curl -L -O https://github.com/prometheus/node_exporter/releases/download/v1.2.2/node_exporter-1.2.2.linux-amd64.tar.gz && \
-    echo "344bd4c0bbd66ff78f14486ec48b89c248139cdd485e992583ea30e89e0e5390  node_exporter-1.2.2.linux-amd64.tar.gz" > node_exporter.sha256 && \
+    curl -L -O https://github.com/prometheus/node_exporter/releases/download/v1.3.1/node_exporter-1.3.1.linux-amd64.tar.gz && \
+    echo "68f3802c2dd3980667e4ba65ea2e1fb03f4a4ba026cca375f15a0390ff850949  node_exporter-1.3.1.linux-amd64.tar.gz" > node_exporter.sha256 && \
     shasum -c node_exporter.sha256
 
 # Download libnginx-mod-http-ndk.deb
@@ -180,19 +179,23 @@ RUN adduser --system --disabled-password --home /var/lib/bnadmin --shell /bin/ba
     adduser admin sudo
 
 # The "node_exporter" account. Used to run node_exporter binary to export
-# telemetry metrics of the boundary-guestos.
+# telemetry metrics of the boundary-guestOS.
 RUN addgroup node_exporter && \
     adduser --system --disabled-password --shell /usr/sbin/nologin -c "Node Exporter" node_exporter && \
     adduser node_exporter node_exporter
 
 # Install node_exporter
-COPY --from=download /tmp/node_exporter-1.2.2.linux-amd64.tar.gz /usr/local/src/node_exporter-1.2.2.linux-amd64.tar.gz
-RUN cd /usr/local/src/ && \
-    tar --strip-components=1 -C /usr/local/bin/ -zvxf node_exporter-1.2.2.linux-amd64.tar.gz node_exporter-1.2.2.linux-amd64/node_exporter && \
-    chown root:root /usr/local/bin/node_exporter && \
+COPY --from=download /tmp/node_exporter-1.3.1.linux-amd64.tar.gz /tmp/node_exporter-1.3.1.linux-amd64.tar.gz
+RUN cd /tmp/ && \
+    mkdir -p /etc/node_exporter && \
+    tar --strip-components=1 -C /usr/local/bin/ -zvxf node_exporter-1.3.1.linux-amd64.tar.gz node_exporter-1.3.1.linux-amd64/node_exporter && \
+    chown root:root /etc/node_exporter \
+                    /usr/local/bin/node_exporter && \
+    chmod 0755 /etc/node_exporter \
+               /usr/local/bin/node_exporter && \
     chmod 0644 /etc/default/node_exporter \
                /etc/node_exporter/web.yml && \
-    rm /usr/local/src/node_exporter-1.2.2.linux-amd64.tar.gz
+    rm /tmp/node_exporter-1.3.1.linux-amd64.tar.gz
 
 # Update POSIX permissions in /etc/
 RUN    chmod 0644 /etc/chrony/chrony.conf \
