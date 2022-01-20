@@ -73,6 +73,7 @@ fn evaluate_pot_and_propagate_result(
         error!(ctx.logger, "failed to execute pot {}: {}", &name, e);
         TestResultNode {
             name,
+            result: TestResult::Failed,
             ..TestResultNode::default()
         }
     });
