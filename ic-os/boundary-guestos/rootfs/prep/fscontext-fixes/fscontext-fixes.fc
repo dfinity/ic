@@ -1,0 +1,11 @@
+/lib	-l	system_u:object_r:lib_t:s0
+/lib32	-l	system_u:object_r:lib_t:s0
+/lib64	-l	system_u:object_r:lib_t:s0
+/usr/lib32	-d	system_u:object_r:lib_t:s0
+/usr/libx32	-d	system_u:object_r:lib_t:s0
+/bin	-l	system_u:object_r:bin_t:s0
+/sbin	-l	system_u:object_r:bin_t:s0
+/root	-d	system_u:object_r:user_home_dir_t:s0
+/home/journalbeat	-d	system_u:object_r:user_home_dir_t:s0
+/home/node_exporter	-d	system_u:object_r:user_home_dir_t:s0
+/home	-d	system_u:object_r:home_root_t:s0
