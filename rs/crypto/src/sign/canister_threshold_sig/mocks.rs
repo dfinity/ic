@@ -51,5 +51,6 @@ pub fn get_public_key(
     Ok(EcdsaPublicKey {
         algorithm_id: AlgorithmId::EcdsaSecp256k1,
         public_key: vec![],
+        chain_key: vec![],
     })
 }

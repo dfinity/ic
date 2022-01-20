@@ -69,6 +69,7 @@ pub trait CspThresholdEcdsaSigner {
         derivation_path: &ExtendedDerivationPath,
         hashed_message: &[u8],
         nonce: &Randomness,
+        key: &IDkgTranscriptInternal,
         kappa_unmasked: &IDkgTranscriptInternal,
         lambda_masked: &IDkgTranscriptInternal,
         kappa_times_lambda: &IDkgTranscriptInternal,
@@ -81,10 +82,12 @@ pub trait CspThresholdEcdsaSigner {
 /// verification.
 pub trait CspThresholdEcdsaSigVerifier {
     /// Combine signature shares.
+    #[allow(clippy::too_many_arguments)]
     fn ecdsa_combine_sig_shares(
         &self,
         derivation_path: &ExtendedDerivationPath,
         nonce: &Randomness,
+        key: &IDkgTranscriptInternal,
         kappa_unmasked: &IDkgTranscriptInternal,
         reconstruction_threshold: NumberOfNodes,
         sig_shares: &BTreeMap<NodeIndex, ThresholdEcdsaSigShareInternal>,

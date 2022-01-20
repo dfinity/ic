@@ -5,7 +5,6 @@ use tecdsa::*;
 
 mod test_utils;
 
-use crate::test_utils::ProtocolRound;
 use crate::test_utils::*;
 
 fn insufficient_dealings(r: Result<ProtocolRound, ThresholdEcdsaError>) {

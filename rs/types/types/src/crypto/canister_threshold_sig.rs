@@ -14,10 +14,13 @@ pub mod idkg;
 /// A threshold ECDSA public key.
 ///
 /// The public key itself is stored as raw bytes.
+///
+/// The chain key is included for BIP32-style key derivation
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct EcdsaPublicKey {
     pub algorithm_id: AlgorithmId,
     pub public_key: Vec<u8>,
+    pub chain_key: Vec<u8>,
 }
 
 /// A combined threshold ECDSA signature.
