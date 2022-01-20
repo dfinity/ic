@@ -64,7 +64,7 @@ impl Service<Vec<u8>> for CatchUpPackageService {
                         Ok(common::empty_response())
                     }
                 }
-                Err(e) => Ok(common::make_response(invalid_argument_error(&format!(
+                Err(e) => Ok(common::make_response(invalid_argument_error(format!(
                     "Could not parse body as CatchUpPackage param: {}",
                     e
                 )))),

@@ -1429,7 +1429,9 @@ impl ExecutionEnvironmentImpl {
             let induction_cost = self
                 .cycles_account_manager
                 .ingress_induction_cost(ingress)
-                .map_err(|_| permission_denied_error("Requested canister rejected the message"))?;
+                .map_err(|_| {
+                    permission_denied_error("Requested canister rejected the message".to_string())
+                })?;
 
             if let IngressInductionCost::Fee { payer, cost } = induction_cost {
                 match state.canister_state(&payer) {
@@ -1440,11 +1442,13 @@ impl ExecutionEnvironmentImpl {
                             canister.memory_usage(self.own_subnet_type),
                             canister.scheduler_state.compute_allocation,
                         ) {
-                            return Err(permission_denied_error(&err.to_string()));
+                            return Err(permission_denied_error(err.to_string()));
                         }
                     }
                     None => {
-                        return Err(not_found_error("Requested canister does not exist"));
+                        return Err(not_found_error(
+                            "Requested canister does not exist".to_string(),
+                        ));
                     }
                 }
             }
@@ -1485,7 +1489,9 @@ impl ExecutionEnvironmentImpl {
                         execution_parameters,
                     )
                 }
-                None => Err(not_found_error("Requested canister does not exist")),
+                None => Err(not_found_error(
+                    "Requested canister does not exist".to_string(),
+                )),
             }
         }
     }

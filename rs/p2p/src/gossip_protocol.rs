@@ -458,7 +458,7 @@ impl Gossip for GossipImpl {
             )
             .map_err(|e| {
                 info!(self.log, "Artifact not inserted {:?}", e);
-                unavailable_error("Service Unavailable!")
+                unavailable_error("Service Unavailable!".to_string())
             })
     }
 

@@ -168,11 +168,8 @@ pub struct CanonicalError {
 }
 
 impl CanonicalError {
-    fn new(code: CanonicalErrorCode, msg: &str) -> Self {
-        Self {
-            code,
-            message: msg.to_string(),
-        }
+    fn new(code: CanonicalErrorCode, msg: String) -> Self {
+        Self { code, message: msg }
     }
 }
 
@@ -229,7 +226,7 @@ impl From<Box<(dyn Error + Send + Sync + 'static)>> for CanonicalError {
             .downcast::<CanonicalError>()
             .unwrap_or_else(|_| {
                 Box::new(unknown_error(
-                    "Could not convert Box<(dyn Error ...)> to CanonicalError.",
+                    "Could not convert Box<(dyn Error ...)> to CanonicalError.".to_string(),
                 ))
             })
     }
@@ -237,7 +234,7 @@ impl From<Box<(dyn Error + Send + Sync + 'static)>> for CanonicalError {
 
 impl fmt::Display for CanonicalError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}: {}", self.code.as_str().to_string(), self.message)
+        write!(f, "{}: {}", self.code.as_str(), self.message)
     }
 }
 
@@ -245,62 +242,62 @@ impl fmt::Display for CanonicalError {
 // code as indicated by the associated function name, using the error message
 // passed in `msg`.
 
-pub fn unknown_error(msg: &str) -> CanonicalError {
+pub fn unknown_error(msg: String) -> CanonicalError {
     CanonicalError::new(CanonicalErrorCode::Unknown, msg)
 }
 
-pub fn invalid_argument_error(msg: &str) -> CanonicalError {
+pub fn invalid_argument_error(msg: String) -> CanonicalError {
     CanonicalError::new(CanonicalErrorCode::InvalidArgument, msg)
 }
 
-pub fn deadline_exceeded_error(msg: &str) -> CanonicalError {
+pub fn deadline_exceeded_error(msg: String) -> CanonicalError {
     CanonicalError::new(CanonicalErrorCode::DeadlineExceeded, msg)
 }
 
-pub fn not_found_error(msg: &str) -> CanonicalError {
+pub fn not_found_error(msg: String) -> CanonicalError {
     CanonicalError::new(CanonicalErrorCode::NotFound, msg)
 }
 
-pub fn already_exists_error(msg: &str) -> CanonicalError {
+pub fn already_exists_error(msg: String) -> CanonicalError {
     CanonicalError::new(CanonicalErrorCode::AlreadyExists, msg)
 }
 
-pub fn permission_denied_error(msg: &str) -> CanonicalError {
+pub fn permission_denied_error(msg: String) -> CanonicalError {
     CanonicalError::new(CanonicalErrorCode::PermissionDenied, msg)
 }
 
-pub fn unauthenticated_error(msg: &str) -> CanonicalError {
+pub fn unauthenticated_error(msg: String) -> CanonicalError {
     CanonicalError::new(CanonicalErrorCode::Unauthenticated, msg)
 }
 
-pub fn resource_exhausted_error(msg: &str) -> CanonicalError {
+pub fn resource_exhausted_error(msg: String) -> CanonicalError {
     CanonicalError::new(CanonicalErrorCode::ResourceExhausted, msg)
 }
 
-pub fn failed_precondition_error(msg: &str) -> CanonicalError {
+pub fn failed_precondition_error(msg: String) -> CanonicalError {
     CanonicalError::new(CanonicalErrorCode::FailedPrecondition, msg)
 }
 
-pub fn aborted_error(msg: &str) -> CanonicalError {
+pub fn aborted_error(msg: String) -> CanonicalError {
     CanonicalError::new(CanonicalErrorCode::Aborted, msg)
 }
 
-pub fn out_of_range_error(msg: &str) -> CanonicalError {
+pub fn out_of_range_error(msg: String) -> CanonicalError {
     CanonicalError::new(CanonicalErrorCode::OutOfRange, msg)
 }
 
-pub fn unimplemented_error(msg: &str) -> CanonicalError {
+pub fn unimplemented_error(msg: String) -> CanonicalError {
     CanonicalError::new(CanonicalErrorCode::Unimplemented, msg)
 }
 
-pub fn internal_error(msg: &str) -> CanonicalError {
+pub fn internal_error(msg: String) -> CanonicalError {
     CanonicalError::new(CanonicalErrorCode::Internal, msg)
 }
 
-pub fn unavailable_error(msg: &str) -> CanonicalError {
+pub fn unavailable_error(msg: String) -> CanonicalError {
     CanonicalError::new(CanonicalErrorCode::Unavailable, msg)
 }
 
-pub fn data_loss_error(msg: &str) -> CanonicalError {
+pub fn data_loss_error(msg: String) -> CanonicalError {
     CanonicalError::new(CanonicalErrorCode::DataLoss, msg)
 }

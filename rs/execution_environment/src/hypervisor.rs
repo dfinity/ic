@@ -825,7 +825,11 @@ impl Hypervisor {
 
         // Validate that the Wasm module is present.
         let execution_state = match execution_state {
-            None => return Err(not_found_error("Requested canister has no wasm module")),
+            None => {
+                return Err(not_found_error(
+                    "Requested canister has no wasm module".to_string(),
+                ))
+            }
             Some(execution_state) => execution_state,
         };
 
@@ -855,18 +859,19 @@ impl Hypervisor {
             },
             Err(err) => match err {
                 HypervisorError::MessageRejected => Err(permission_denied_error(
-                    "Requested canister rejected the message",
+                    "Requested canister rejected the message".to_string(),
                 )),
                 err => {
                     let canonical_error = match err {
                         HypervisorError::MethodNotFound(_) => not_found_error(
-                            "Attempt to execute non-existent method on the canister",
+                            "Attempt to execute non-existent method on the canister".to_string(),
                         ),
-                        HypervisorError::CalledTrap(_) => {
-                            permission_denied_error("Requested canister rejected the message")
-                        }
+                        HypervisorError::CalledTrap(_) => permission_denied_error(
+                            "Requested canister rejected the message".to_string(),
+                        ),
                         _ => internal_error(
-                            "Requested canister failed to process the message acceptance request",
+                            "Requested canister failed to process the message acceptance request"
+                                .to_string(),
                         ),
                     };
                     Err(canonical_error)

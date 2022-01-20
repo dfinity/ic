@@ -142,18 +142,20 @@ impl CanisterManager {
                 Some(canister) => {
                     if !canister.controllers().contains(&sender.get()) {
                         Err(permission_denied_error(
-                            "Requested canister rejected the message",
+                            "Requested canister rejected the message".to_string(),
                         ))
                     } else {
                         Ok(())
                     }
                 }
-                None => Err(not_found_error("Requested canister does not exist")),
+                None => Err(not_found_error(
+                    "Requested canister does not exist".to_string(),
+                )),
             }
         }
 
         let rejected_canister_err = Err(permission_denied_error(
-            "Requested canister rejected the message",
+            "Requested canister rejected the message".to_string(),
         ));
         // The message is targeted towards the management canister. The
         // actual type of the method will determine if the message should be

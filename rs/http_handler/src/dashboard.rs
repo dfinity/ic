@@ -84,7 +84,7 @@ impl Service<Body> for DashboardService {
             }
             // If there was an internal error, the error description is text, not HTML, and
             // therefore we don't attach the header
-            Err(e) => make_response(internal_error(&format!("Internal error: {}", e))),
+            Err(e) => make_response(internal_error(format!("Internal error: {}", e))),
         };
         Box::pin(async move { Ok(res) })
     }
