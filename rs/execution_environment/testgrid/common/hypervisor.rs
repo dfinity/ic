@@ -97,15 +97,18 @@ fn setup() -> (
     Arc<BTreeMap<SubnetId, SubnetType>>,
 ) {
     let subnet_id = subnet_test_id(1);
+    let subnet_id_2 = subnet_test_id(2);
     let subnet_type = SubnetType::Application;
     let routing_table = Arc::new(
         RoutingTable::try_from(btreemap! {
-            CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => subnet_id,
+            CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfe) } => subnet_id,
+            CanisterIdRange{ start: CanisterId::from(0xff), end: CanisterId::from(0xff) } => subnet_id_2,
         })
         .unwrap(),
     );
     let subnet_records = Arc::new(btreemap! {
         subnet_id => subnet_type,
+        subnet_id_2 => SubnetType::VerifiedApplication,
     });
     (subnet_id, subnet_type, routing_table, subnet_records)
 }
@@ -2629,9 +2632,64 @@ fn test_call_with_builder_does_not_enqueue_request_if_err() {
 }
 
 #[test]
+fn send_cycles_from_application_to_verified_subnet_fails() {
+    with_hypervisor(|hypervisor, tmp_path| {
+        let (canister, _instructions_left, action, _) = execute_update(
+            &hypervisor,
+            r#"(module
+                  (import "ic0" "call_new"
+                    (func $ic0_call_new
+                        (param i32 i32)
+                        (param $method_name_src i32)    (param $method_name_len i32)
+                        (param $reply_fun i32)          (param $reply_env i32)
+                        (param $reject_fun i32)         (param $reject_env i32)
+                    ))
+                  (import "ic0" "call_cycles_add" (func $ic0_call_cycles_add (param $amount i64)))
+                  (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
+                  (func $test
+                    (call $ic0_call_new
+                        (i32.const 100) (i32.const 10)  ;; callee canister id = 777
+                        (i32.const 0) (i32.const 18)    ;; refers to "some_remote_method" on the heap
+                        (i32.const 11) (i32.const 22)   ;; fictive on_reply closure
+                        (i32.const 33) (i32.const 44)   ;; fictive on_reject closure
+                    )
+                    (call $ic0_call_cycles_add
+                        (i64.const 10000000000)         ;; amount of cycles used to be transferred
+                    )
+                    (call $ic0_call_perform)
+                    drop)
+
+                  (export "canister_update test" (func $test))
+                  (memory $memory 1)
+                  (export "memory" (memory $memory))
+                  (data (i32.const 0) "some_remote_method XYZ")
+                  (data (i32.const 100) "\00\00\00\00\00\00\00\ff\01\01")
+                )"#,
+            "test",
+            EMPTY_PAYLOAD,
+            tmp_path,
+        );
+
+        assert_eq!(action, CallContextAction::Fail {
+            error: ContractViolation(
+                "Canisters on Application subnets cannot send cycles to canisters on VerifiedApplication subnets".to_string()
+            ),
+            refund: Cycles::from(0)
+        });
+        assert_eq!(canister.system_state.queues().output_queues_len(), 0);
+
+        assert_balance_equals(
+            INITIAL_CYCLES,
+            canister.system_state.cycles_balance,
+            BALANCE_EPSILON,
+        );
+    });
+}
+
+#[test]
 fn test_call_add_cycles_deducts_cycles() {
     with_hypervisor(|hypervisor, tmp_path| {
-        let (canister, instructions_left, action, _) = execute_update(
+        let (canister, _instructions_left, action, _) = execute_update(
             &hypervisor,
             r#"(module
                   (import "ic0" "call_new"
@@ -2671,7 +2729,6 @@ fn test_call_add_cycles_deducts_cycles() {
         assert_eq!(canister.system_state.queues().output_queues_len(), 1);
 
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-        let instructions_executed = MAX_NUM_INSTRUCTIONS - instructions_left;
         let messaging_fee = cycles_account_manager.xnet_call_performed_fee()
             + cycles_account_manager
                 .xnet_call_bytes_transmitted_fee(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES)
@@ -2680,10 +2737,7 @@ fn test_call_add_cycles_deducts_cycles() {
         // Amount of cycles used to be transferred.
         let amount_cycles = Cycles::new(10_000_000_000);
         assert_balance_equals(
-            INITIAL_CYCLES
-                - amount_cycles
-                - cycles_account_manager.execution_cost(instructions_executed)
-                - messaging_fee,
+            INITIAL_CYCLES - amount_cycles - messaging_fee,
             canister.system_state.cycles_balance,
             BALANCE_EPSILON,
         );

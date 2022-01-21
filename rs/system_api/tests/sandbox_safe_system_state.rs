@@ -3,7 +3,7 @@ use ic_interfaces::execution_environment::{CanisterOutOfCyclesError, SystemApi};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{StateError, SystemState};
-use ic_system_api::{SystemStateAccessor, SystemStateAccessorDirect};
+use ic_system_api::sandbox_safe_system_state::SandboxSafeSystemState;
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     state::SystemStateBuilder,
@@ -15,7 +15,7 @@ use ic_test_utilities::{
 use ic_types::{
     messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, ComputeAllocation, Cycles, NumInstructions,
 };
-use std::{convert::From, sync::Arc};
+use std::convert::From;
 
 mod common;
 use common::*;
@@ -29,11 +29,9 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
         .sender(canister_test_id(0))
         .build();
 
-    let cycles_account_manager = Arc::new(
-        CyclesAccountManagerBuilder::new()
-            .with_max_num_instructions(MAX_NUM_INSTRUCTIONS)
-            .build(),
-    );
+    let cycles_account_manager = CyclesAccountManagerBuilder::new()
+        .with_max_num_instructions(MAX_NUM_INSTRUCTIONS)
+        .build();
 
     let xnet_cost = cycles_account_manager.xnet_call_performed_fee();
     let request_payload_cost =
@@ -54,11 +52,11 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
         NumSeconds::from(100_000),
     );
 
-    let system_state_accessor =
-        SystemStateAccessorDirect::new(system_state, cycles_account_manager);
+    let mut sandbox_safe_system_state =
+        SandboxSafeSystemState::new(&system_state, cycles_account_manager);
 
     assert_eq!(
-        system_state_accessor.push_output_request(
+        sandbox_safe_system_state.push_output_request(
             NumBytes::from(0),
             ComputeAllocation::default(),
             request.clone()
@@ -81,11 +79,9 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
         .sender(canister_test_id(0))
         .build();
 
-    let cycles_account_manager = Arc::new(
-        CyclesAccountManagerBuilder::new()
-            .with_max_num_instructions(MAX_NUM_INSTRUCTIONS)
-            .build(),
-    );
+    let cycles_account_manager = CyclesAccountManagerBuilder::new()
+        .with_max_num_instructions(MAX_NUM_INSTRUCTIONS)
+        .build();
 
     let xnet_cost = cycles_account_manager.xnet_call_performed_fee();
     let request_payload_cost =
@@ -106,11 +102,11 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
         NumSeconds::from(100_000),
     );
 
-    let system_state_accessor =
-        SystemStateAccessorDirect::new(system_state, cycles_account_manager);
+    let mut sandbox_safe_system_state =
+        SandboxSafeSystemState::new(&system_state, cycles_account_manager);
 
     assert_eq!(
-        system_state_accessor.push_output_request(
+        sandbox_safe_system_state.push_output_request(
             NumBytes::from(0),
             ComputeAllocation::default(),
             request.clone()
@@ -129,11 +125,9 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
 
 #[test]
 fn push_output_request_succeeds_with_enough_cycles() {
-    let cycles_account_manager = Arc::new(
-        CyclesAccountManagerBuilder::new()
-            .with_max_num_instructions(MAX_NUM_INSTRUCTIONS)
-            .build(),
-    );
+    let cycles_account_manager = CyclesAccountManagerBuilder::new()
+        .with_max_num_instructions(MAX_NUM_INSTRUCTIONS)
+        .build();
 
     let system_state = SystemState::new_running(
         canister_test_id(0),
@@ -142,11 +136,11 @@ fn push_output_request_succeeds_with_enough_cycles() {
         NumSeconds::from(100_000),
     );
 
-    let system_state_accessor =
-        SystemStateAccessorDirect::new(system_state, Arc::clone(&cycles_account_manager));
+    let mut sandbox_safe_system_state =
+        SandboxSafeSystemState::new(&system_state, cycles_account_manager);
 
     assert_eq!(
-        system_state_accessor.push_output_request(
+        sandbox_safe_system_state.push_output_request(
             NumBytes::from(0),
             ComputeAllocation::default(),
             RequestBuilder::default()
@@ -160,13 +154,11 @@ fn push_output_request_succeeds_with_enough_cycles() {
 #[test]
 fn correct_charging_source_canister_for_a_request() {
     let subnet_type = SubnetType::Application;
-    let cycles_account_manager = Arc::new(
-        CyclesAccountManagerBuilder::new()
-            .with_max_num_instructions(MAX_NUM_INSTRUCTIONS)
-            .with_subnet_type(subnet_type)
-            .build(),
-    );
-    let system_state = SystemState::new_running(
+    let cycles_account_manager = CyclesAccountManagerBuilder::new()
+        .with_max_num_instructions(MAX_NUM_INSTRUCTIONS)
+        .with_subnet_type(subnet_type)
+        .build();
+    let mut system_state = SystemState::new_running(
         canister_test_id(0),
         user_test_id(1).get(),
         INITIAL_CYCLES,
@@ -175,8 +167,8 @@ fn correct_charging_source_canister_for_a_request() {
 
     let initial_cycles_balance = system_state.cycles_balance;
 
-    let system_state_accessor =
-        SystemStateAccessorDirect::new(system_state, Arc::clone(&cycles_account_manager));
+    let mut sandbox_safe_system_state =
+        SandboxSafeSystemState::new(&system_state, cycles_account_manager);
 
     let request = RequestBuilder::default()
         .sender(canister_test_id(0))
@@ -195,7 +187,7 @@ fn correct_charging_source_canister_for_a_request() {
         + cycles_account_manager.execution_cost(MAX_NUM_INSTRUCTIONS);
 
     // Enqueue the Request.
-    system_state_accessor
+    sandbox_safe_system_state
         .push_output_request(NumBytes::from(0), ComputeAllocation::default(), request)
         .unwrap();
 
@@ -209,7 +201,9 @@ fn correct_charging_source_canister_for_a_request() {
     // ExecutionEnvironmentImpl::execute_canister_response()
     // => Mock the response_cycles_refund() invocation from the
     // execute_canister_response()
-    let mut system_state = system_state_accessor.release_system_state();
+    sandbox_safe_system_state
+        .system_state_changes
+        .apply_changes(&mut system_state);
     cycles_account_manager.response_cycles_refund(&mut system_state, &mut response);
 
     // MAX_NUM_INSTRUCTIONS also gets partially refunded in the real
@@ -230,7 +224,7 @@ fn mint_all_cycles() {
         .build();
 
     let api_type = ApiTypeBuilder::new().build_update_api();
-    let mut api = get_system_api(api_type, get_cmc_system_state(), cycles_account_manager);
+    let mut api = get_system_api(api_type, &get_cmc_system_state(), cycles_account_manager);
     let balance_before = api.ic0_canister_cycle_balance().unwrap();
 
     let amount = 50;
@@ -251,18 +245,21 @@ fn mint_cycles_above_max() {
         .build();
 
     // Set cycles balance to max - 10.
-    cycles_account_manager.add_cycles(&mut system_state, CYCLES_LIMIT_PER_CANISTER);
+    cycles_account_manager.add_cycles(&mut system_state.cycles_balance, CYCLES_LIMIT_PER_CANISTER);
     cycles_account_manager
         .withdraw_cycles_for_transfer(
-            &mut system_state,
+            system_state.canister_id,
+            system_state.freeze_threshold,
+            system_state.memory_allocation,
             NumBytes::from(0),
             ComputeAllocation::default(),
+            &mut system_state.cycles_balance,
             Cycles::from(10),
         )
         .unwrap();
 
     let api_type = ApiTypeBuilder::new().build_update_api();
-    let mut api = get_system_api(api_type, system_state, cycles_account_manager);
+    let mut api = get_system_api(api_type, &system_state, cycles_account_manager);
     let balance_before = api.ic0_canister_cycle_balance().unwrap();
 
     let amount = 50;
@@ -280,7 +277,7 @@ fn mint_cycles_fails_caller_not_on_nns() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut api = get_system_api(
         ApiTypeBuilder::new().build_update_api(),
-        system_state,
+        &system_state,
         cycles_account_manager,
     );
 
@@ -290,5 +287,29 @@ fn mint_cycles_fails_caller_not_on_nns() {
     assert_eq!(
         api.ic0_canister_cycle_balance().unwrap() - balance_before,
         0
+    );
+}
+
+#[test]
+fn call_increases_cycles_consumed_metric() {
+    let mut system_state = SystemStateBuilder::default().build();
+    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+    let mut api = get_system_api(
+        ApiTypeBuilder::new().build_update_api(),
+        &system_state,
+        cycles_account_manager,
+    );
+
+    api.ic0_call_simple(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, &[])
+        .unwrap();
+
+    let system_state_changes = api.into_system_state_changes();
+    system_state_changes.apply_changes(&mut system_state);
+    assert!(
+        system_state
+            .canister_metrics
+            .consumed_cycles_since_replica_started
+            .get()
+            > 0
     );
 }

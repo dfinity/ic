@@ -174,6 +174,23 @@ fn input_push_without_reservation_fails() {
 }
 
 #[test]
+fn input_queue_available_slots_is_correct() {
+    let capacity = 2;
+    let mut input_queue = InputQueue::new(capacity);
+    assert_eq!(input_queue.available_slots(), 2);
+    input_queue
+        .push(
+            QueueIndex::from(0),
+            RequestBuilder::default().build().into(),
+        )
+        .unwrap();
+    assert_eq!(input_queue.available_slots(), 1);
+    input_queue.reserve_slot().unwrap();
+    assert_eq!(input_queue.available_slots(), 0);
+    assert!(input_queue.check_has_slot().is_err())
+}
+
+#[test]
 fn output_queue_constructor_test() {
     let capacity: usize = 14;
     let mut queue = OutputQueue::new(capacity);
@@ -242,6 +259,20 @@ fn output_queue_pop_returns_incrementing_indices() {
 fn output_push_into_reserved_slot_fails() {
     let mut queue = OutputQueue::new(10);
     queue.push_response(ResponseBuilder::default().build());
+}
+
+#[test]
+fn output_queue_available_slots_is_correct() {
+    let capacity = 2;
+    let mut output_queue = OutputQueue::new(capacity);
+    assert_eq!(output_queue.available_slots(), 2);
+    output_queue
+        .push_request(RequestBuilder::default().build())
+        .unwrap();
+    assert_eq!(output_queue.available_slots(), 1);
+    output_queue.reserve_slot().unwrap();
+    assert_eq!(output_queue.available_slots(), 0);
+    assert!(output_queue.check_has_slot().is_err())
 }
 
 #[test]

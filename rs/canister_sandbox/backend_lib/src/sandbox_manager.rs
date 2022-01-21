@@ -40,8 +40,6 @@ use ic_replicated_state::{EmbedderCache, Memory, PageMap};
 use ic_types::CanisterId;
 use ic_wasm_types::BinaryEncodedWasm;
 
-use crate::system_state_accessor_rpc::SystemStateAccessorRPC;
-
 struct ExecutionInstantiateError;
 
 impl Debug for ExecutionInstantiateError {
@@ -108,9 +106,6 @@ impl Execution {
     ) {
         let run_timer = std::time::Instant::now();
 
-        let system_state_accessor =
-            SystemStateAccessorRPC::new(self.exec_id, self.sandbox_manager.controller.clone());
-
         let subnet_available_memory = exec_input
             .execution_parameters
             .subnet_available_memory
@@ -128,8 +123,7 @@ impl Execution {
             exec_input.api_type,
             exec_input.canister_current_memory_usage,
             exec_input.execution_parameters,
-            exec_input.static_system_state,
-            system_state_accessor,
+            exec_input.sandox_safe_system_state,
             &self.canister_wasm.compilate,
             &self.canister_wasm.embedder,
             &mut wasm_memory,
@@ -160,7 +154,7 @@ impl Execution {
                                 .store_data_mut()
                                 .system_api
                                 .take_system_state_changes(),
-                            Err(system_api) => system_api.release_system_state_accessor().1,
+                            Err(system_api) => system_api.into_system_state_changes(),
                         };
                         StateModifications::new(
                             globals,

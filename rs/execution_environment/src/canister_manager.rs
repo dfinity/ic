@@ -822,7 +822,7 @@ impl CanisterManager {
     /// Returns a `CanisterManagerError` in case the canister does not exist
     pub(crate) fn deposit_cycles(&self, canister: &mut CanisterState, cycles: Cycles) -> Cycles {
         self.cycles_account_manager
-            .add_cycles(&mut canister.system_state, cycles)
+            .add_cycles(&mut canister.system_state.cycles_balance, cycles)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1181,7 +1181,7 @@ impl CanisterManager {
         };
 
         self.cycles_account_manager
-            .add_cycles(&mut canister.system_state, cycles_amount);
+            .add_cycles(&mut canister.system_state.cycles_balance, cycles_amount);
 
         Ok(())
     }

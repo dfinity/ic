@@ -17,13 +17,6 @@ impl ControllerService for DummyControllerService {
         unimplemented!();
     }
 
-    fn canister_system_call(
-        &self,
-        _req: ctlsvc::CanisterSystemCallRequest,
-    ) -> rpc::Call<ctlsvc::CanisterSystemCallReply> {
-        unimplemented!();
-    }
-
     fn log_via_replica(&self, _req: LogRequest) -> rpc::Call<()> {
         unimplemented!();
     }

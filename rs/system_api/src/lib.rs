@@ -2,8 +2,6 @@ mod request_in_prep;
 pub mod sandbox_safe_system_state;
 mod stable_memory;
 pub mod system_api_empty;
-mod system_state_accessor;
-mod system_state_accessor_direct;
 
 use ic_ic00_types::IC_00;
 use ic_interfaces::execution_environment::{
@@ -36,8 +34,6 @@ use std::{
     convert::{From, TryFrom},
     sync::Arc,
 };
-pub use system_state_accessor::SystemStateAccessor;
-pub use system_state_accessor_direct::SystemStateAccessorDirect;
 
 const MULTIPLIER_MAX_SIZE_LOCAL_SUBNET: u64 = 5;
 const MAX_NON_REPLICATED_QUERY_REPLY_SIZE: NumBytes = NumBytes::new(3 << 20);
@@ -590,7 +586,7 @@ impl MemoryUsage {
 
 /// Struct that implements the SystemApi trait. This trait enables a canister to
 /// have mediated access to its system state.
-pub struct SystemApiImpl<A: SystemStateAccessor> {
+pub struct SystemApiImpl {
     /// An execution error of the current message.
     execution_error: Option<HypervisorError>,
 
@@ -598,9 +594,6 @@ pub struct SystemApiImpl<A: SystemStateAccessor> {
 
     /// The variant of ApiType being executed.
     api_type: ApiType,
-
-    /// Mediate access to system state.
-    system_state_accessor: A,
 
     memory_usage: MemoryUsage,
 
@@ -615,10 +608,9 @@ pub struct SystemApiImpl<A: SystemStateAccessor> {
     sandbox_safe_system_state: SandboxSafeSystemState,
 }
 
-impl<A: SystemStateAccessor> SystemApiImpl<A> {
+impl SystemApiImpl {
     pub fn new(
         api_type: ApiType,
-        system_state_accessor: A,
         sandbox_safe_system_state: SandboxSafeSystemState,
         canister_current_memory_usage: NumBytes,
         execution_parameters: ExecutionParameters,
@@ -637,7 +629,6 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
         Self {
             execution_error: None,
             api_type,
-            system_state_accessor,
             memory_usage,
             execution_parameters,
             stable_memory,
@@ -673,8 +664,8 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
                 outgoing_request, ..
             } => {
                 if let Some(outgoing_request) = outgoing_request.take() {
-                    self.system_state_accessor
-                        .canister_cycles_refund(outgoing_request.take_cycles());
+                    self.sandbox_safe_system_state
+                        .refund_cycles(outgoing_request.take_cycles());
                 }
             }
         }
@@ -839,7 +830,7 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
                     method_name
                 ))),
                 Some(request) => {
-                    self.system_state_accessor.canister_cycles_withdraw(
+                    self.sandbox_safe_system_state.canister_cycles_withdraw(
                         self.memory_usage.current_usage,
                         self.execution_parameters.compute_allocation,
                         amount,
@@ -864,7 +855,7 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. } => {
-                let res = self.system_state_accessor.canister_cycles_balance();
+                let res = self.sandbox_safe_system_state.cycles_balance();
                 Ok(res)
             }
         }
@@ -888,9 +879,9 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
             }
             | ApiType::RejectCallback {
                 call_context_id, ..
-            } => self
-                .system_state_accessor
-                .msg_cycles_available(call_context_id),
+            } => Ok(self
+                .sandbox_safe_system_state
+                .msg_cycles_available(*call_context_id)),
         }
     }
 
@@ -937,16 +928,13 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
             | ApiType::RejectCallback {
                 call_context_id, ..
             } => Ok(self
-                .system_state_accessor
-                .msg_cycles_accept(call_context_id, max_amount)),
+                .sandbox_safe_system_state
+                .msg_cycles_accept(*call_context_id, max_amount)),
         }
     }
 
-    pub fn release_system_state_accessor(self) -> (A, SystemStateChanges) {
-        (
-            self.system_state_accessor,
-            self.sandbox_safe_system_state.system_state_changes,
-        )
+    pub fn into_system_state_changes(self) -> SystemStateChanges {
+        self.sandbox_safe_system_state.system_state_changes
     }
 
     pub fn take_system_state_changes(&mut self) -> SystemStateChanges {
@@ -957,7 +945,7 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
         self.stable_memory.stable_memory_size
     }
 
-    /// Wrapper around `self.system_state_accessor.push_output_request()` that
+    /// Wrapper around `self.sandbox_safe_system_state.push_output_request()` that
     /// tries to allocate memory for the `Request` before pushing it.
     ///
     /// On failure to allocate memory or withdraw cycles; or on queue full;
@@ -966,10 +954,8 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
     /// Note that this function is made public only for the tests
     #[doc(hidden)]
     pub fn push_output_request(&mut self, req: Request) -> HypervisorResult<i32> {
-        let abort = |request: Request,
-                     accessor: &A,
-                     sandbox_safe_system_state: &mut SandboxSafeSystemState| {
-            accessor.canister_cycles_refund(request.payment);
+        let abort = |request: Request, sandbox_safe_system_state: &mut SandboxSafeSystemState| {
+            sandbox_safe_system_state.refund_cycles(request.payment);
             sandbox_safe_system_state.unregister_callback(request.sender_reply_callback);
             Ok(RejectCode::SysTransient as i32)
         };
@@ -983,14 +969,10 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
                 .allocate_memory(reservation_bytes)
                 .is_err()
         {
-            return abort(
-                req,
-                &self.system_state_accessor,
-                &mut self.sandbox_safe_system_state,
-            );
+            return abort(req, &mut self.sandbox_safe_system_state);
         }
 
-        match self.system_state_accessor.push_output_request(
+        match self.sandbox_safe_system_state.push_output_request(
             self.memory_usage.current_usage,
             self.execution_parameters.compute_allocation,
             req,
@@ -1001,11 +983,7 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
                 if enforce_message_memory_usage {
                     self.memory_usage.deallocate_memory(reservation_bytes);
                 }
-                abort(
-                    request,
-                    &self.system_state_accessor,
-                    &mut self.sandbox_safe_system_state,
-                )
+                abort(request, &mut self.sandbox_safe_system_state)
             }
             Err((err, _)) => {
                 unreachable!("Unexpected error while pushing to output queue: {}", err)
@@ -1014,7 +992,7 @@ impl<A: SystemStateAccessor> SystemApiImpl<A> {
     }
 }
 
-impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
+impl SystemApi for SystemApiImpl {
     fn set_execution_error(&mut self, error: HypervisorError) {
         self.execution_error = Some(error)
     }
@@ -1617,8 +1595,8 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                 outgoing_request, ..
             } => {
                 if let Some(outgoing_request) = outgoing_request.take() {
-                    self.system_state_accessor
-                        .canister_cycles_refund(outgoing_request.take_cycles());
+                    self.sandbox_safe_system_state
+                        .refund_cycles(outgoing_request.take_cycles());
                 }
 
                 let req = RequestInPrep::new(
@@ -1794,6 +1772,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                     &mut self.sandbox_safe_system_state,
                     &self.log,
                 )?;
+
                 self.push_output_request(req)
             }
             ApiType::NonReplicatedQuery {
@@ -1827,6 +1806,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
                     &mut self.sandbox_safe_system_state,
                     &self.log,
                 )?;
+
                 self.push_output_request(req)
             }
         }
@@ -2323,7 +2303,7 @@ impl<A: SystemStateAccessor> SystemApi for SystemApiImpl<A> {
             | ApiType::Heartbeat { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. } => {
-                self.system_state_accessor
+                self.sandbox_safe_system_state
                     .mint_cycles(Cycles::from(amount))?;
                 Ok(amount)
             }

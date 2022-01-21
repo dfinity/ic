@@ -7,6 +7,7 @@ use crate::execution_environment::SUBNET_HEAP_DELTA_CAPACITY;
 use ic_base_types::NumBytes;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Cycles, NumInstructions};
+use serde::{Deserialize, Serialize};
 
 const B: u64 = 1_000_000_000;
 const M: u64 = 1_000_000;
@@ -185,7 +186,7 @@ impl SchedulerConfig {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CyclesAccountManagerConfig {
     /// Fee for creating canisters on a subnet
     pub canister_creation_fee: Cycles,

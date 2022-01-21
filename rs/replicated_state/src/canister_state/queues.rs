@@ -16,7 +16,7 @@ use ic_types::{
 };
 use queue::{IngressQueue, InputQueue, OutputQueue};
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     convert::{From, TryFrom},
     ops::{AddAssign, SubAssign},
     sync::Arc,
@@ -443,6 +443,34 @@ impl CanisterQueues {
         debug_assert!(self.stats_ok());
 
         Ok(())
+    }
+
+    /// Returns the number of output requests that can be pushed onto the queue
+    /// before it becomes full.
+    pub fn available_output_request_slots(&self) -> BTreeMap<CanisterId, usize> {
+        let canisters: BTreeSet<_> = self
+            .input_queues
+            .keys()
+            .chain(self.output_queues.keys())
+            .collect();
+        let mut result = BTreeMap::new();
+        for canister in canisters {
+            // When pushing a request we need to reserve a slot on the input
+            // queue for the eventual reply. So we are limited by the amount of
+            // space on both the output and input queues.
+            let input_slots = self
+                .input_queues
+                .get(canister)
+                .map(|q| q.available_slots())
+                .unwrap_or(DEFAULT_QUEUE_CAPACITY);
+            let output_slots = self
+                .output_queues
+                .get(canister)
+                .map(|q| q.available_slots())
+                .unwrap_or(DEFAULT_QUEUE_CAPACITY);
+            result.insert(*canister, input_slots.min(output_slots));
+        }
+        result
     }
 
     /// Pushes a `Response` type message into the relevant output queue. The

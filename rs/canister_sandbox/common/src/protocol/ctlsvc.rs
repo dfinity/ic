@@ -1,4 +1,4 @@
-use crate::protocol::{logging::LogRequest, syscall};
+use crate::protocol::logging::LogRequest;
 use serde::{Deserialize, Serialize};
 
 use super::{id::ExecId, structs::SandboxExecOutput};
@@ -18,21 +18,6 @@ pub struct ExecutionFinishedRequest {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct ExecutionFinishedReply {}
 
-// Relay system call made by canister to controller.
-#[derive(Serialize, Deserialize, Clone)]
-pub struct CanisterSystemCallRequest {
-    // Id for this run, as set up by controller.
-    pub exec_id: ExecId,
-
-    // The actual system call and its arguments.
-    pub request: syscall::Request,
-}
-#[derive(Serialize, Deserialize, Clone)]
-pub struct CanisterSystemCallReply {
-    // Response to the system call.
-    pub reply: syscall::Reply,
-}
-
 /// We reply to the replica controller that either the execution was
 /// finished or the request failed, or request a system call or a log
 /// to be applied.
@@ -40,7 +25,6 @@ pub struct CanisterSystemCallReply {
 #[derive(Serialize, Deserialize, Clone)]
 pub enum Request {
     ExecutionFinished(ExecutionFinishedRequest),
-    CanisterSystemCall(CanisterSystemCallRequest),
     LogViaReplica(LogRequest),
 }
 
@@ -50,6 +34,5 @@ pub enum Request {
 #[derive(Serialize, Deserialize, Clone)]
 pub enum Reply {
     ExecutionFinished(ExecutionFinishedReply),
-    CanisterSystemCall(CanisterSystemCallReply),
     LogViaReplica(()),
 }

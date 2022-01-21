@@ -81,14 +81,11 @@ mod tests {
 
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let system_state = ic_test_utilities::state::SystemStateBuilder::default().build();
-        let static_system_state =
-            SandboxSafeSystemState::new(&system_state, cycles_account_manager.subnet_type());
-        let system_state_accessor =
-            ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
+        let sandbox_safe_system_state =
+            SandboxSafeSystemState::new(&system_state, *cycles_account_manager);
         let api = ic_system_api::SystemApiImpl::new(
             ic_system_api::ApiType::init(ic_test_utilities::mock_time(), vec![], user_id.get()),
-            system_state_accessor,
-            static_system_state,
+            sandbox_safe_system_state,
             ic_types::NumBytes::from(0),
             execution_parameters(),
             Memory::default(),
@@ -163,14 +160,11 @@ mod tests {
 
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let system_state = ic_test_utilities::state::SystemStateBuilder::default().build();
-        let static_system_state =
-            SandboxSafeSystemState::new(&system_state, cycles_account_manager.subnet_type());
-        let system_state_accessor =
-            ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
+        let sandbox_safe_system_state =
+            SandboxSafeSystemState::new(&system_state, *cycles_account_manager);
         let api = ic_system_api::SystemApiImpl::new(
             ic_system_api::ApiType::init(ic_test_utilities::mock_time(), vec![], user_id.get()),
-            system_state_accessor,
-            static_system_state,
+            sandbox_safe_system_state,
             ic_types::NumBytes::from(0),
             execution_parameters(),
             Memory::default(),
@@ -231,16 +225,11 @@ mod tests {
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
 
         let system_state = SystemStateBuilder::default().build();
-        let static_system_state =
-            SandboxSafeSystemState::new(&system_state, cycles_account_manager.subnet_type());
-        let system_state_accessor = ic_system_api::SystemStateAccessorDirect::new(
-            system_state,
-            Arc::clone(&cycles_account_manager),
-        );
+        let sandbox_safe_system_state =
+            SandboxSafeSystemState::new(&system_state, *cycles_account_manager);
         let api = ic_system_api::SystemApiImpl::new(
             ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
-            system_state_accessor,
-            static_system_state,
+            sandbox_safe_system_state,
             ic_types::NumBytes::from(0),
             execution_parameters(),
             Memory::default(),
@@ -267,14 +256,11 @@ mod tests {
 
         // Change the value of globals and verify we can get them back.
         let system_state = SystemStateBuilder::default().build();
-        let static_system_state =
-            SandboxSafeSystemState::new(&system_state, cycles_account_manager.subnet_type());
-        let system_state_accessor =
-            ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
+        let sandbox_safe_system_state =
+            SandboxSafeSystemState::new(&system_state, *cycles_account_manager);
         let api = ic_system_api::SystemApiImpl::new(
             ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
-            system_state_accessor,
-            static_system_state,
+            sandbox_safe_system_state,
             ic_types::NumBytes::from(0),
             execution_parameters(),
             Memory::default(),
@@ -320,16 +306,11 @@ mod tests {
         let embedder = WasmtimeEmbedder::new(ic_config::embedders::Config::default(), log.clone());
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let system_state = SystemStateBuilder::default().build();
-        let static_system_state =
-            SandboxSafeSystemState::new(&system_state, cycles_account_manager.subnet_type());
-        let system_state_accessor = ic_system_api::SystemStateAccessorDirect::new(
-            system_state,
-            Arc::clone(&cycles_account_manager),
-        );
+        let sandbox_safe_system_state =
+            SandboxSafeSystemState::new(&system_state, *cycles_account_manager);
         let api = ic_system_api::SystemApiImpl::new(
             ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
-            system_state_accessor,
-            static_system_state,
+            sandbox_safe_system_state,
             ic_types::NumBytes::from(0),
             execution_parameters(),
             Memory::default(),
@@ -359,14 +340,11 @@ mod tests {
 
         // Change the value of globals and verify we can get them back.
         let system_state = SystemStateBuilder::default().build();
-        let static_system_state =
-            SandboxSafeSystemState::new(&system_state, cycles_account_manager.subnet_type());
-        let system_state_accessor =
-            ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
+        let sandbox_safe_system_state =
+            SandboxSafeSystemState::new(&system_state, *cycles_account_manager);
         let api = ic_system_api::SystemApiImpl::new(
             ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
-            system_state_accessor,
-            static_system_state,
+            sandbox_safe_system_state,
             ic_types::NumBytes::from(0),
             execution_parameters(),
             Memory::default(),
@@ -407,14 +385,11 @@ mod tests {
         .unwrap();
         let system_state = SystemStateBuilder::default().build();
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-        let static_system_state =
-            SandboxSafeSystemState::new(&system_state, cycles_account_manager.subnet_type());
-        let system_state_accessor =
-            ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
+        let sandbox_safe_system_state =
+            SandboxSafeSystemState::new(&system_state, *cycles_account_manager);
         let api = ic_system_api::SystemApiImpl::new(
             ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
-            system_state_accessor,
-            static_system_state,
+            sandbox_safe_system_state,
             ic_types::NumBytes::from(0),
             execution_parameters(),
             Memory::default(),
@@ -457,14 +432,11 @@ mod tests {
         let embedder = WasmtimeEmbedder::new(ic_config::embedders::Config::default(), log.clone());
         let system_state = SystemStateBuilder::default().build();
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-        let static_system_state =
-            SandboxSafeSystemState::new(&system_state, cycles_account_manager.subnet_type());
-        let system_state_accessor =
-            ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
+        let sandbox_safe_system_state =
+            SandboxSafeSystemState::new(&system_state, *cycles_account_manager);
         let api = ic_system_api::SystemApiImpl::new(
             ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
-            system_state_accessor,
-            static_system_state,
+            sandbox_safe_system_state,
             ic_types::NumBytes::from(0),
             execution_parameters(),
             Memory::default(),

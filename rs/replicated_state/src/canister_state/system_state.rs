@@ -20,8 +20,11 @@ use ic_types::{
 use lazy_static::lazy_static;
 use maplit::btreeset;
 use serde::{Deserialize, Serialize};
-use std::convert::{TryFrom, TryInto};
 use std::str::FromStr;
+use std::{
+    collections::BTreeMap,
+    convert::{TryFrom, TryInto},
+};
 use std::{collections::BTreeSet, sync::Arc};
 
 lazy_static! {
@@ -348,6 +351,14 @@ impl SystemState {
             self.canister_id, msg.sender
         );
         self.queues.push_output_request(msg)
+    }
+
+    /// Returns the number of output requests that can be pushed onto the queue
+    /// before it becomes full. Specifically, this is the number of times
+    /// `push_output_request` can be called (assuming the canister has enough
+    /// cycles to pay for sending the messages).
+    pub fn available_output_request_slots(&self) -> BTreeMap<CanisterId, usize> {
+        self.queues.available_output_request_slots()
     }
 
     /// Pushes a `Response` type message into the relevant output queue. The

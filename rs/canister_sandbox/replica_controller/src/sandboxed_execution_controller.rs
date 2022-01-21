@@ -12,7 +12,7 @@ use ic_replicated_state::canister_state::execution_state::{
     SandboxMemory, SandboxMemoryHandle, SandboxMemoryOwner, WasmBinary,
 };
 use ic_replicated_state::{EmbedderCache, ExecutionState, ExportedFunctions, Memory, PageMap};
-use ic_system_api::{sandbox_safe_system_state::SystemStateChanges, SystemStateAccessorDirect};
+use ic_system_api::sandbox_safe_system_state::SystemStateChanges;
 use ic_types::{CanisterId, NumInstructions};
 use ic_wasm_types::BinaryEncodedWasm;
 use prometheus::{Histogram, HistogramVec, IntGauge};
@@ -339,14 +339,8 @@ impl SandboxedExecutionController {
             execution_parameters,
             func_ref,
             mut execution_state,
-            system_state_accessor,
         }: WasmExecutionInput,
-    ) -> (
-        WasmExecutionOutput,
-        ExecutionState,
-        SystemStateAccessorDirect,
-        SystemStateChanges,
-    ) {
+    ) -> (WasmExecutionOutput, ExecutionState, SystemStateChanges) {
         let api_type_label = api_type.as_str();
         let _execute_timer = self
             .metrics
@@ -379,7 +373,6 @@ impl SandboxedExecutionController {
                         },
                     },
                     execution_state,
-                    system_state_accessor,
                     SystemStateChanges::default(),
                 );
             }
@@ -398,12 +391,12 @@ impl SandboxedExecutionController {
         // Generate an ID for this execution, register it. We need to
         // pass the system state accessor as well as the completion
         // function that gets our result back in the end.
-        let exec_id = sandbox_process.execution_states.register_execution(
-            system_state_accessor,
-            move |_id, exec_output| {
-                tx.send(exec_output).unwrap();
-            },
-        );
+        let exec_id =
+            sandbox_process
+                .execution_states
+                .register_execution(move |_id, exec_output| {
+                    tx.send(exec_output).unwrap();
+                });
 
         // Now set up resources on the sandbox to drive the execution.
         let wasm_memory_handle = open_remote_memory(
@@ -437,7 +430,7 @@ impl SandboxedExecutionController {
                     execution_parameters,
                     next_wasm_memory_id,
                     next_stable_memory_id,
-                    static_system_state: sandbox_safe_system_state,
+                    sandox_safe_system_state: sandbox_safe_system_state,
                 },
             })
             .on_completion(|_| {});
@@ -457,13 +450,8 @@ impl SandboxedExecutionController {
             .with_label_values(&[api_type_label])
             .start_timer();
 
-        // Release the system state accessor (we need to return it to the caller).
-        let system_state_accessor = sandbox_process
-            .execution_states
-            .unregister_execution(exec_id)
-            .unwrap();
-
-        // Unless execution trapped, commit state.
+        // Unless execution trapped, commit state (applying execution state
+        // changes, returning system state changes to caller).
         let system_state_changes = if exec_output.wasm.wasm_result.is_ok() {
             if let Some(state_modifications) = exec_output.state {
                 // TODO: If a canister has broken out of wasm then it might have allocated more
@@ -511,12 +499,7 @@ impl SandboxedExecutionController {
             .with_label_values(&[api_type_label])
             .observe(exec_output.execute_run_duration.as_secs_f64());
 
-        (
-            exec_output.wasm,
-            execution_state,
-            system_state_accessor,
-            system_state_changes,
-        )
+        (exec_output.wasm, execution_state, system_state_changes)
     }
 
     pub fn create_execution_state(

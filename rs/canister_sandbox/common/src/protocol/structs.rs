@@ -24,9 +24,9 @@ pub struct SandboxExecInput {
     pub execution_parameters: ExecutionParameters,
     pub next_wasm_memory_id: MemoryId,
     pub next_stable_memory_id: MemoryId,
-    /// System state that won't change over the course of executing a single
-    /// message.
-    pub static_system_state: SandboxSafeSystemState,
+    // View of the system_state that is safe for the sandboxed process to
+    // access.
+    pub sandox_safe_system_state: SandboxSafeSystemState,
 }
 
 #[derive(Serialize, Deserialize, Clone)]

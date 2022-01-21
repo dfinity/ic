@@ -86,9 +86,12 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
         CyclesAccountManagerBuilder::new()
             .build()
             .withdraw_cycles_for_transfer(
-                &mut system_state,
+                system_state.canister_id,
+                system_state.freeze_threshold,
+                system_state.memory_allocation,
                 NumBytes::from(0),
                 ComputeAllocation::default(),
+                &mut system_state.cycles_balance,
                 Cycles::from(200),
             ),
         Ok(())
@@ -104,9 +107,12 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
         CyclesAccountManagerBuilder::new()
             .build()
             .withdraw_cycles_for_transfer(
-                &mut system_state,
+                system_state.canister_id,
+                system_state.freeze_threshold,
+                system_state.memory_allocation,
                 NumBytes::from(0),
                 ComputeAllocation::default(),
+                &mut system_state.cycles_balance,
                 Cycles::from(200),
             ),
         Ok(())
@@ -122,9 +128,12 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
         CyclesAccountManagerBuilder::new()
             .build()
             .withdraw_cycles_for_transfer(
-                &mut system_state,
+                system_state.canister_id,
+                system_state.freeze_threshold,
+                system_state.memory_allocation,
                 NumBytes::from(4 << 30),
                 ComputeAllocation::default(),
+                &mut system_state.cycles_balance,
                 Cycles::from(200),
             ),
         Ok(())
@@ -140,9 +149,12 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
     let memory_usage = NumBytes::from(4 << 30);
     assert_eq!(
         cycles_account_manager.withdraw_cycles_for_transfer(
-            &mut system_state,
+            system_state.canister_id,
+            system_state.freeze_threshold,
+            system_state.memory_allocation,
             memory_usage,
             ComputeAllocation::default(),
+            &mut system_state.cycles_balance,
             Cycles::from(200),
         ),
         Err(CanisterOutOfCyclesError {
@@ -150,7 +162,8 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
             available: initial_cycles,
             requested: Cycles::from(200),
             threshold: cycles_account_manager.freeze_threshold_cycles(
-                &system_state,
+                system_state.freeze_threshold,
+                system_state.memory_allocation,
                 memory_usage,
                 ComputeAllocation::default(),
             )
@@ -185,7 +198,7 @@ fn add_cycles_does_not_overflow_when_balance_limit() {
     let amount = Cycles::from(CYCLES_LIMIT_PER_CANISTER.get() / 2);
     cycles_balance_expected = add_limited(cycles_balance_expected, amount);
     assert_eq!(
-        cycles_account_manager.add_cycles(&mut system_state, amount),
+        cycles_account_manager.add_cycles(&mut system_state.cycles_balance, amount),
         Cycles::from(0)
     );
     assert_eq!(system_state.cycles_balance, apply_cycle_limit(amount));
@@ -194,7 +207,7 @@ fn add_cycles_does_not_overflow_when_balance_limit() {
     let amount = amount - Cycles::from(10);
     cycles_balance_expected = add_limited(cycles_balance_expected, amount);
     assert_eq!(
-        cycles_account_manager.add_cycles(&mut system_state, amount),
+        cycles_account_manager.add_cycles(&mut system_state.cycles_balance, amount),
         Cycles::from(0)
     );
     assert_eq!(
@@ -206,7 +219,7 @@ fn add_cycles_does_not_overflow_when_balance_limit() {
         CYCLES_LIMIT_PER_CANISTER - Cycles::from(10)
     );
 
-    cycles_account_manager.add_cycles(&mut system_state, Cycles::from(0));
+    cycles_account_manager.add_cycles(&mut system_state.cycles_balance, Cycles::from(0));
     assert_eq!(
         system_state.cycles_balance,
         apply_cycle_limit(cycles_balance_expected)
@@ -216,11 +229,11 @@ fn add_cycles_does_not_overflow_when_balance_limit() {
         CYCLES_LIMIT_PER_CANISTER - Cycles::from(10)
     );
 
-    cycles_account_manager.add_cycles(&mut system_state, Cycles::from(10));
+    cycles_account_manager.add_cycles(&mut system_state.cycles_balance, Cycles::from(10));
     assert_eq!(system_state.cycles_balance, CYCLES_LIMIT_PER_CANISTER);
     // Returns cycles which don't fit in the balance.
     assert_eq!(
-        cycles_account_manager.add_cycles(&mut system_state, amount),
+        cycles_account_manager.add_cycles(&mut system_state.cycles_balance, amount),
         amount
     );
     assert_eq!(system_state.cycles_balance, CYCLES_LIMIT_PER_CANISTER);
@@ -240,16 +253,16 @@ fn add_cycles_does_not_overflow_when_no_balance_limit() {
     assert_eq!(system_state.cycles_balance, cycles_balance_expected);
 
     let amount = Cycles::from(u128::MAX / 2);
-    cycles_account_manager.add_cycles(&mut system_state, amount);
+    cycles_account_manager.add_cycles(&mut system_state.cycles_balance, amount);
     assert_eq!(system_state.cycles_balance, amount);
 
-    cycles_account_manager.add_cycles(&mut system_state, amount);
+    cycles_account_manager.add_cycles(&mut system_state.cycles_balance, amount);
     assert_eq!(system_state.cycles_balance, Cycles::from(u128::MAX - 1));
 
-    cycles_account_manager.add_cycles(&mut system_state, Cycles::from(1));
+    cycles_account_manager.add_cycles(&mut system_state.cycles_balance, Cycles::from(1));
     assert_eq!(system_state.cycles_balance, Cycles::from(u128::MAX));
 
-    cycles_account_manager.add_cycles(&mut system_state, Cycles::from(100));
+    cycles_account_manager.add_cycles(&mut system_state.cycles_balance, Cycles::from(100));
     assert_eq!(system_state.cycles_balance, Cycles::from(u128::MAX));
 }
 
@@ -327,7 +340,7 @@ fn max_cycles_per_canister_none_on_application_subnet() {
         cycles,
     );
 
-    cycles_account_manager.add_cycles(&mut system_state, cycles);
+    cycles_account_manager.add_cycles(&mut system_state.cycles_balance, cycles);
     assert_eq!(
         system_state.cycles_balance,
         CYCLES_LIMIT_PER_CANISTER + cycles
@@ -347,7 +360,7 @@ fn max_cycles_per_canister_on_application_subnet() {
         Cycles::new(0),
     );
 
-    cycles_account_manager.add_cycles(&mut system_state, cycles);
+    cycles_account_manager.add_cycles(&mut system_state.cycles_balance, cycles);
     assert_eq!(system_state.cycles_balance, CYCLES_LIMIT_PER_CANISTER);
 }
 
@@ -367,7 +380,7 @@ fn max_cycles_per_canister_none_on_system_subnet() {
     );
 
     // On system subnet, the canister's balance can exceed `max_cycles_per_canister`
-    cycles_account_manager.add_cycles(&mut system_state, cycles);
+    cycles_account_manager.add_cycles(&mut system_state.cycles_balance, cycles);
     assert_eq!(
         system_state.cycles_balance,
         CYCLES_LIMIT_PER_CANISTER + cycles
@@ -391,7 +404,7 @@ fn max_cycles_per_canister_on_system_subnet() {
     );
 
     // On system subnet, the canister's balance can exceed `max_cycles_per_canister`
-    cycles_account_manager.add_cycles(&mut system_state, cycles);
+    cycles_account_manager.add_cycles(&mut system_state.cycles_balance, cycles);
     assert_eq!(
         system_state.cycles_balance,
         CYCLES_LIMIT_PER_CANISTER + cycles
@@ -533,7 +546,12 @@ fn cycles_withdraw_no_threshold() {
 
     let threshold = Cycles::from(0);
     assert!(cycles_account_manager
-        .withdraw_with_threshold(&mut system_state, Cycles::from(0), threshold)
+        .withdraw_with_threshold(
+            system_state.canister_id,
+            &mut system_state.cycles_balance,
+            Cycles::from(0),
+            threshold
+        )
         .is_ok());
     // unchanged cycles
     assert_eq!(system_state.cycles_balance, cycles_balance_expected);
@@ -542,7 +560,12 @@ fn cycles_withdraw_no_threshold() {
     // withdraw i128::MAX and verify correctness
     let amount = Cycles::from(i128::MAX as u128);
     assert!(cycles_account_manager
-        .withdraw_with_threshold(&mut system_state, amount, threshold)
+        .withdraw_with_threshold(
+            system_state.canister_id,
+            &mut system_state.cycles_balance,
+            amount,
+            threshold
+        )
         .is_ok());
     cycles_balance_expected -= amount;
     assert_eq!(
@@ -551,20 +574,35 @@ fn cycles_withdraw_no_threshold() {
     );
 
     assert!(cycles_account_manager
-        .withdraw_with_threshold(&mut system_state, amount, threshold)
+        .withdraw_with_threshold(
+            system_state.canister_id,
+            &mut system_state.cycles_balance,
+            amount,
+            threshold
+        )
         .is_ok());
     cycles_balance_expected -= amount;
     assert_eq!(system_state.cycles_balance, Cycles::from(1));
 
     let amount = Cycles::from(1);
     assert!(cycles_account_manager
-        .withdraw_with_threshold(&mut system_state, amount, threshold)
+        .withdraw_with_threshold(
+            system_state.canister_id,
+            &mut system_state.cycles_balance,
+            amount,
+            threshold
+        )
         .is_ok());
     cycles_balance_expected -= amount;
     assert_eq!(system_state.cycles_balance, Cycles::from(0));
 
     assert!(cycles_account_manager
-        .withdraw_with_threshold(&mut system_state, amount, threshold)
+        .withdraw_with_threshold(
+            system_state.canister_id,
+            &mut system_state.cycles_balance,
+            amount,
+            threshold
+        )
         .is_err());
     cycles_balance_expected -= amount;
     assert_eq!(system_state.cycles_balance, Cycles::from(0));
@@ -588,7 +626,8 @@ fn cycles_withdraw_for_execution() {
     );
 
     let freeze_threshold_cycles = cycles_account_manager.freeze_threshold_cycles(
-        &system_state,
+        system_state.freeze_threshold,
+        system_state.memory_allocation,
         memory_usage,
         compute_allocation,
     );
@@ -708,9 +747,12 @@ fn withdraw_for_transfer_does_not_consume_cycles() {
         .consumed_cycles_since_replica_started;
     cycles_account_manager
         .withdraw_cycles_for_transfer(
-            &mut system_state,
+            system_state.canister_id,
+            system_state.freeze_threshold,
+            system_state.memory_allocation,
             NumBytes::from(0),
             ComputeAllocation::default(),
+            &mut system_state.cycles_balance,
             Cycles::from(1_000_000),
         )
         .unwrap();

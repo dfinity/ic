@@ -28,18 +28,6 @@ impl ControllerService for ControllerClientStub {
             });
         Call::new(cell)
     }
-    fn canister_system_call(
-        &self,
-        req: CanisterSystemCallRequest,
-    ) -> Call<CanisterSystemCallReply> {
-        let cell = self
-            .channel
-            .call(Request::CanisterSystemCall(req), |rep| match rep {
-                Reply::CanisterSystemCall(rep) => Ok(rep),
-                _ => Err(Error::ServerError),
-            });
-        Call::new(cell)
-    }
 
     fn log_via_replica(&self, req: LogRequest) -> Call<()> {
         let cell = self
