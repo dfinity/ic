@@ -1118,6 +1118,8 @@ impl CanisterManager {
         max_number_of_canisters: u64,
         state: &mut ReplicatedState,
     ) -> Result<CanisterId, CanisterManagerError> {
+        // A value of 0 is equivalent to setting no limit.
+        // See documentation of `SubnetRecord` for the semantics of `max_number_of_canisters`.
         if max_number_of_canisters > 0 && state.num_canisters() as u64 >= max_number_of_canisters {
             return Err(CanisterManagerError::MaxNumberOfCanistersReached {
                 subnet_id: self.config.own_subnet_id,
