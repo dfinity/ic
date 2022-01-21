@@ -5,7 +5,6 @@ import re
 import subprocess
 import sys
 import time
-import traceback
 from typing import List
 
 import flamegraphs
@@ -14,6 +13,8 @@ import gflags
 import machine_failure
 import prometheus
 import ssh
+from termcolor import colored
+
 
 NNS_SUBNET_INDEX = 0  # Subnet index of the NNS subnetwork
 
@@ -21,8 +22,7 @@ FLAGS = gflags.FLAGS
 gflags.DEFINE_string("testnet", None, 'Testnet to use. Use "mercury" to run against mainnet.')
 gflags.MarkFlagAsRequired("testnet")
 gflags.DEFINE_boolean("skip_generate_report", False, "Skip generating report after experiment is finished")
-gflags.DEFINE_boolean("should_deploy_ic", False, "Should the IC be deployed on testnet before the experiment.")
-gflags.DEFINE_string("git_revision", "", "Git revision to be deployed to the testnet")
+gflags.DEFINE_string("experiment_dir", "./", "The directory for output of current experiment run.")
 gflags.DEFINE_string("canister_id", "", "Use given canister ID instead of installing a new canister")
 gflags.DEFINE_string("artifacts_path", "../artifacts/release", "Path to the artifacts directory")
 gflags.DEFINE_boolean("no_instrument", False, "Do not instrument target machine")
@@ -35,73 +35,7 @@ gflags.DEFINE_string(
 
 gflags.DEFINE_boolean("simulate_machine_failures", False, "Simulate machine failures while testing.")
 gflags.DEFINE_string("nns_url", "", "Use the following NNS URL instead of getting it from the testnet configuration")
-
-
-class Color:
-    """Colors for the shell commands."""
-
-    BLUE = "\033[94m"
-    RED = "\033[91m"
-    BOLD = "\033[1m"
-    END = "\033[0m"
-    GREEN = "\033[32m"
-
-
-def try_deploy_ic(testnet: str, revision: str, out_dir: str) -> None:
-    """
-    Try to deploy IC on the desired testnet.
-
-    Args:
-    ----
-        testnet (str): name of the testnet, e.g. large01.
-        revision (str): git revision hash to be used to deploy.
-        out_dir (str): directory for storing stdout and stderr into files.
-
-    """
-    # TODO: command paths should be managed better.
-    # Get the newest hash (containing disk image) from master.
-    result_stdout = f"{out_dir}/stdout_log.txt"
-    result_stderr = f"{out_dir}/stderr_log.txt"
-
-    if revision == "":
-        with open(result_stderr, "w") as errfile:
-            try:
-                result_newest_revision = subprocess.run(
-                    ["../gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh", "origin/master"],
-                    stdout=subprocess.PIPE,
-                    stderr=errfile,
-                )
-            except Exception as e:
-                print(f"Getting newest revision failed. See {result_stderr} file for details.")
-                errfile.write(str(e))
-                errfile.write(traceback.format_exc())
-                sys.exit(1)
-            if result_newest_revision.returncode != 0:
-                print(f"Getting newest revision failed. See {result_stderr} file for details.")
-                sys.exit(1)
-        revision = result_newest_revision.stdout.decode("utf-8").strip()
-
-    # Start the IC deployment.
-    print(
-        f"{Color.RED}Deploying IC revision {revision} on testnet={testnet}. See the intermediate output in {result_stdout}. This can take some minutes ...{Color.END}"
-    )
-
-    with open(result_stdout, "w") as outfile, open(result_stderr, "w") as errfile:
-        try:
-            result_deploy_ic = subprocess.run(
-                ["../testnet/tools/icos_deploy.sh", "--git-revision", f"{revision}", f"{testnet}"],
-                stdout=outfile,
-                stderr=errfile,
-            )
-        except Exception as e:
-            print(f"Deployment of the IC failed: See {result_stderr} file for details.")
-            errfile.write(str(e))
-            errfile.write(traceback.format_exc())
-            sys.exit(1)
-    if result_deploy_ic.returncode != 0:
-        print(f"Deployment of the IC failed. See {result_stderr} file for details.")
-        sys.exit(1)
-    print(f"{Color.BOLD}{Color.GREEN}Deployment of the IC to testnet={testnet} finished successfully.{Color.END}")
+gflags.DEFINE_boolean("is_ci_job", False, "This is a test run exercised by CI. Deafult to false.")
 
 
 def parse_command_line_args():
@@ -109,14 +43,14 @@ def parse_command_line_args():
     # Get a dictionary of gflags from all imported files.
     flags = gflags.FLAGS.__dict__["__flags"]
 
-    parser = argparse.ArgumentParser(description=f"{Color.BOLD}{Color.BLUE}Experiment parameters.{Color.END}")
+    parser = argparse.ArgumentParser(description=colored("Experiment parameters.", "blue"))
     # Create a set of command line options, based on the imported gflags.
     for key, value in flags.items():
         if key == "help":
             continue
         # gflags with default=None are required arguments. (SK: that's not true, optional flags with None as default values are not required)
         if value.default is None:
-            parser.add_argument(f"--{key}", required=True, help=f"{Color.RED} Required field. {Color.END} {value.help}")
+            parser.add_argument(f"--{key}", required=True, help=colored("Required field. {value.help}", "red"))
         else:
             parser.add_argument(
                 f"--{key}", required=False, default=value.default, help=f"{value.help}; default={value.default}"
@@ -126,9 +60,9 @@ def parse_command_line_args():
     # Initialize gflags from the command line args.
     FLAGS(sys.argv)
     # Print all gflags for the experiment.
-    print(f"{Color.BOLD}{Color.RED}The following values will " f"be used in the experiment.{Color.END}")
+    print(colored("The following values will be used in the experiment.", "red"))
     for key, value in flags.items():
-        print(f"Parameter {Color.BLUE} {key} = {value.value} {Color.END}")
+        print(colored("Parameter {key} = {value.value}", "blue"))
 
     if FLAGS.testnet == "mercury" and FLAGS.target_subnet_id is None:
         raise Exception("--target_subnet_id has to be set when running against mainnet")
@@ -155,10 +89,9 @@ class Experiment:
         self.iteration = 0
 
         self.request_type = request_type
-        self.git_hash = (
-            FLAGS.git_revision
-            if FLAGS.git_revision != ""
-            else ictools.get_ic_version("http://[{}]:8080/api/v2/status".format(self.get_machine_to_instrument()))
+
+        self.git_hash = ictools.get_ic_version(
+            "http://[{}]:8080/api/v2/status".format(self.get_machine_to_instrument())
         )
 
     def init(self):
@@ -166,15 +99,13 @@ class Experiment:
         print(f"Running against an IC with git hash: {self.git_hash}")
 
         self.out_dir_timestamp = int(time.time())
-        self.out_dir = "{}/{}/".format(
+        self.out_dir = "{}/{}/{}/".format(
+            FLAGS.experiment_dir,
             self.git_hash if len(FLAGS.top_level_out_dir) < 1 else FLAGS.top_level_out_dir,
             self.out_dir_timestamp if len(FLAGS.second_level_out_dir) < 1 else FLAGS.second_level_out_dir,
         )
         os.makedirs(self.out_dir, 0o755)
         print(f"📂 Storing output in {self.out_dir}")
-
-        if FLAGS.should_deploy_ic:
-            try_deploy_ic(testnet=self.testnet, revision=FLAGS.git_revision, out_dir=self.out_dir)
 
         self.store_ic_info()
         self.store_hardware_info()
@@ -311,7 +242,7 @@ class Experiment:
             )
         )
         if not FLAGS.skip_generate_report:
-            generate_report.generate_report(self.git_hash, self.out_dir_timestamp)
+            generate_report.generate_report(self.out_dir, self.git_hash, self.out_dir_timestamp)
 
     def get_ic_admin_path(self):
         """Return path to ic-admin."""

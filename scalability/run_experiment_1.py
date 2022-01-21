@@ -31,27 +31,25 @@ import time
 
 import experiment
 import gflags
-import load_experiment
+import workload_experiment
 from termcolor import colored
 
 FLAGS = gflags.FLAGS
-gflags.DEFINE_bool("use_updates", False, "Issue update calls instead of query calls")
 gflags.DEFINE_integer("duration", 60, "Duration to run the workload in seconds")
 gflags.DEFINE_integer("load", 50, "Load in requests per second to issue")
 gflags.DEFINE_integer("num_workload_generators", 5, "Number of workload generators to run")
 
 
-class Experiment1(load_experiment.LoadExperiment):
+class Experiment1(workload_experiment.WorkloadExperiment):
     """Logic for experiment 1."""
 
     def __init__(self):
         """Construct experiment 1."""
         super().__init__(
-            num_workload_gen=FLAGS.num_workload_generators, request_type="call" if FLAGS.use_updates else "query"
+            num_workload_gen=FLAGS.num_workload_generators,
+            request_type="call" if FLAGS.use_updates else "query",
         )
         self.init()
-        self.use_updates = FLAGS.use_updates
-        print(f"Update calls: {self.use_updates}")
         self.init_experiment()
 
     def init_experiment(self):
@@ -95,6 +93,13 @@ class Experiment1(load_experiment.LoadExperiment):
         rps = []
         failure_rate = 0.0
         t_median = 0.0
+        duration = []
+        t_average = 0.0
+        t_max = 0.0
+        t_min = 0.0
+        total_requests = 0
+        num_success = 0
+        num_failure = 0
 
         while run:
 
@@ -125,19 +130,26 @@ class Experiment1(load_experiment.LoadExperiment):
 
             print(f"🚀  ... failure rate for {load_total} rps was {failure_rate} median latency is {t_median}")
 
-            duration = int(time.time()) - t_start
+            duration_in_iteration = int(time.time()) - t_start
+            duration.append(duration_in_iteration)
 
-            max_t_median = FLAGS.update_max_t_median if self.use_updates else FLAGS.max_t_median
-            if failure_rate < FLAGS.max_failure_rate and t_median < max_t_median:
-                if num_success / duration > rps_max:
-                    rps_max = num_success / duration
-                    rps_max_in = load_total
+            if len(datapoints) == 1:
+                rps_max = num_success / duration_in_iteration
+                rps_max_in = load_total
+                run = False
 
-            run = (
-                failure_rate < FLAGS.stop_failure_rate
-                and t_median < FLAGS.stop_t_median
-                and iteration < len(datapoints)
-            )
+            else:
+                max_t_median = FLAGS.update_max_t_median if self.use_updates else FLAGS.max_t_median
+                if failure_rate < FLAGS.max_failure_rate and t_median < max_t_median:
+                    if num_success / duration_in_iteration > rps_max:
+                        rps_max = num_success / duration_in_iteration
+                        rps_max_in = load_total
+
+                run = (
+                    failure_rate < FLAGS.stop_failure_rate
+                    and t_median < FLAGS.stop_t_median
+                    and iteration < len(datapoints)
+                )
 
             # Write summary file in each iteration including experiment specific data.
             self.write_summary_file(
@@ -155,6 +167,7 @@ class Experiment1(load_experiment.LoadExperiment):
                     "t_average": "{:.2f}".format(t_average),
                     "t_max": "{:.2f}".format(t_max),
                     "t_min": "{:.2f}".format(t_min),
+                    "duration": duration,
                 },
                 rps,
                 "requests / s",
@@ -163,8 +176,9 @@ class Experiment1(load_experiment.LoadExperiment):
             )
 
             print(f"🚀  ... measured capacity so far is {rps_max}")
+
         self.end_experiment()
-        return (failure_rate, t_median, t_average, t_max, t_min, total_requests, num_success, num_failure)
+        return (failure_rate, t_median, t_average, t_max, t_min, total_requests, num_success, num_failure, rps_max)
 
 
 if __name__ == "__main__":
@@ -179,7 +193,7 @@ if __name__ == "__main__":
         {"rps": FLAGS.load},
         [FLAGS.load],
         "requests / s",
-        rtype="update" if exp.use_updates else "query",
+        rtype="update" if FLAGS.use_updates else "query",
     )
 
     exp.end_experiment()

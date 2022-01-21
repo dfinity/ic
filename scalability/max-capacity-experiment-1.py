@@ -3,6 +3,7 @@ import experiment
 import gflags
 import misc
 import run_experiment_1
+from elasticsearch import ElasticSearch
 
 FLAGS = gflags.FLAGS
 
@@ -42,6 +43,7 @@ gflags.DEFINE_integer("stop_t_median", 120000, "Maximum median latency before ab
 
 if __name__ == "__main__":
     experiment.parse_command_line_args()
+    experiment_name = "System_Baseline_Maximum_Capacity"
 
     datapoints = (
         misc.get_datapoints(
@@ -53,4 +55,25 @@ if __name__ == "__main__":
         )
     )
     exp = run_experiment_1.Experiment1()
-    exp.run_iterations(datapoints)
+    (
+        failure_rate,
+        t_median,
+        t_average,
+        t_max,
+        t_min,
+        total_requests,
+        num_success,
+        num_failure,
+        rps,
+    ) = exp.run_iterations(datapoints)
+
+    ElasticSearch.send_max_capacity(
+        experiment_name,
+        "Update" if FLAGS.use_updates else "Query",
+        "N/A",
+        "N/A",
+        FLAGS.is_ci_job,
+        rps,
+        exp.out_dir,
+        exp.t_experiment_start,
+    )

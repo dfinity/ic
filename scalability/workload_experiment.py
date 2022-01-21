@@ -13,6 +13,7 @@ from termcolor import colored
 NUM_WORKLOAD_GEN = 2  # Number of machines to run the workload generator on
 
 FLAGS = gflags.FLAGS
+gflags.DEFINE_bool("use_updates", False, "Issue update calls instead of query calls")
 gflags.DEFINE_string(
     "wg_testnet", None, "Testnet to deploy workload generators too. Can be the same as testnet, but use with care!"
 )
@@ -33,7 +34,7 @@ gflags.DEFINE_integer(
 )
 
 
-class LoadExperiment(experiment.Experiment):
+class WorkloadExperiment(experiment.Experiment):
     """Wrapper class around experiments that generates query/update load."""
 
     def __init__(self, num_workload_gen=NUM_WORKLOAD_GEN, request_type="query"):
@@ -41,6 +42,7 @@ class LoadExperiment(experiment.Experiment):
         super().__init__(request_type)
 
         self.wg_testnet = FLAGS.wg_testnet
+        self.use_updates = FLAGS.use_updates
 
         print(
             (

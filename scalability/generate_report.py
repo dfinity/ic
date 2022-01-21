@@ -18,7 +18,7 @@ def add_file(base, path, alt):
     return content
 
 
-def generate_report(githash, timestamp):
+def generate_report(base, githash, timestamp):
     """Generate report for the given measurement."""
     source = open("templates/experiment.html.hb", mode="r").read()
     data = {
@@ -27,7 +27,6 @@ def generate_report(githash, timestamp):
         "githash": githash,
     }
 
-    base = "{}/{}".format(githash, timestamp)
     report_file = os.path.join(base, "report.html")
     http_request_duration = []
     wg_http_latency = []
