@@ -255,7 +255,7 @@ impl<'a> IcEndpoint {
     /// Returns true if [IcEndpoint] is healthy, i.e. up and running and ready
     /// for interaction. A status of the endpoint is requested from the
     /// public API.
-    pub async fn healthy(&self) -> Result<bool> {
+    pub async fn healthy(&self) -> Result<(bool, Option<Vec<u8>>)> {
         let response = reqwest::Client::builder()
             .timeout(READY_RESPONSE_TIMEOUT)
             .build()
@@ -279,16 +279,18 @@ impl<'a> IcEndpoint {
         .expect("response is not encoded as cbor");
         let status = serde_cbor::value::from_value::<HttpStatusResponse>(cbor_response)
             .expect("failed to deserialize a response to HttpStatusResponse");
-        Ok(Some(ReplicaHealthStatus::Healthy) == status.replica_health_status)
+        let root_key = status.root_key.map(|x| x.0);
+        let is_healthy = Some(ReplicaHealthStatus::Healthy) == status.replica_health_status;
+        Ok((is_healthy, root_key))
     }
 
     /// Returns `Ok(true)` if a TCP-connection to port 22 can be established.
-    pub async fn ssh_open(&self) -> Result<bool> {
+    pub async fn ssh_open(&self) -> Result<(bool, Option<Vec<u8>>)> {
         let ip_str = format!("[{}]:22", self.ip_address().unwrap());
         TcpStream::connect(ip_str)
             .await
-            .map(|_| true)
-            .map_err(anyhow::Error::new)
+            .map_err(anyhow::Error::new)?;
+        Ok((true, None))
     }
 
     /// Returns as soon as [IcEndpoint] is ready, panics if it didn't come up
@@ -319,11 +321,16 @@ impl<'a> IcEndpoint {
             };
 
             match ready {
-                Ok(true) => {
-                    info!(ctx.logger, "Node [{:?}] is ready!", self.url.as_str());
+                Ok((true, root_key)) => {
+                    info!(
+                        ctx.logger,
+                        "Node [{:?}] is ready! root_key: {:?}",
+                        self.url.as_str(),
+                        root_key
+                    );
                     return;
                 }
-                Ok(false) => {
+                Ok((false, _)) => {
                     info!(
                         ctx.logger,
                         "Node [{:?}] is responsive but reports 'unhealthy'.",

@@ -145,8 +145,6 @@ pub fn create_subnet_test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             let newly_assigned_endpoint = unassigned_endpoint.recreate_with_subnet(new_subnet);
 
             newly_assigned_endpoint.assert_ready(ctx).await;
-            // For some reason the
-            // tokio::time::sleep(Duration::from_secs(5)).await;
 
             let agent = assert_create_agent(newly_assigned_endpoint.url.as_str()).await;
             info!(
