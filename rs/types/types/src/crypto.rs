@@ -557,7 +557,7 @@ impl<T: CountBytes> CountBytes for BasicSigOf<T> {
 }
 
 /// An individual multi-signature.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct IndividualMultiSig(#[serde(with = "serde_bytes")] pub Vec<u8>);
 /// An individual multi-signature for content of type `T`
 pub type IndividualMultiSigOf<T> = Id<T, IndividualMultiSig>; // Use newtype instead?
@@ -575,7 +575,7 @@ impl<T: CountBytes> CountBytes for IndividualMultiSigOf<T> {
 }
 
 /// A combined multi-signature.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct CombinedMultiSig(#[serde(with = "serde_bytes")] pub Vec<u8>);
 /// A combined multi-signature for content of type `T`
 pub type CombinedMultiSigOf<T> = Id<T, CombinedMultiSig>; // Use newtype instead?
@@ -593,7 +593,7 @@ impl<T: CountBytes> CountBytes for CombinedMultiSigOf<T> {
 }
 
 /// A threshold signature share.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct ThresholdSigShare(#[serde(with = "serde_bytes")] pub Vec<u8>);
 /// A threshold signature share for content of type `T`
 pub type ThresholdSigShareOf<T> = Id<T, ThresholdSigShare>; // Use newtype instead?
