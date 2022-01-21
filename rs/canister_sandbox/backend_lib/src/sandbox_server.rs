@@ -91,6 +91,7 @@ impl SandboxService for SandboxServer {
 mod tests {
 
     use super::*;
+    use ic_base_types::{NumSeconds, PrincipalId};
     use ic_canister_sandbox_common::{
         controller_service::ControllerService,
         fdenum::EnumerateInnerFileDescriptors,
@@ -100,6 +101,8 @@ mod tests {
             structs::SandboxExecInput,
         },
     };
+    use ic_config::subnet_config::CyclesAccountManagerConfig;
+    use ic_cycles_account_manager::CyclesAccountManager;
     use ic_interfaces::execution_environment::{
         ExecutionMode, ExecutionParameters, SubnetAvailableMemory,
     };
@@ -110,13 +113,13 @@ mod tests {
         sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState},
         ApiType,
     };
-    use ic_test_utilities::types::ids::{canister_test_id, user_test_id};
+    use ic_test_utilities::types::ids::{canister_test_id, subnet_test_id, user_test_id};
     use ic_types::{
         ingress::WasmResult,
         messages::CallContextId,
         methods::{FuncRef, WasmMethod},
         time::Time,
-        ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId, SubnetId,
+        ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions, SubnetId,
     };
     use mockall::*;
     use std::collections::BTreeMap;
@@ -140,8 +143,19 @@ mod tests {
             canister_test_id(0),
             user_test_id(0).get(),
             CanisterStatusView::Running,
-            SubnetType::Application,
+            NumSeconds::from(3600),
+            MemoryAllocation::BestEffort,
+            Cycles::from(1_000_000),
+            BTreeMap::new(),
+            CyclesAccountManager::new(
+                NumInstructions::from(1_000_000_000),
+                None,
+                SubnetType::Application,
+                subnet_test_id(0),
+                CyclesAccountManagerConfig::application_subnet(),
+            ),
             Some(0),
+            BTreeMap::new(),
         )
     }
 
@@ -184,7 +198,7 @@ mod tests {
             execution_parameters: execution_parameters(),
             next_wasm_memory_id,
             next_stable_memory_id,
-            static_system_state: sandbox_safe_system_state(),
+            sandox_safe_system_state: sandbox_safe_system_state(),
         }
     }
 
@@ -206,7 +220,7 @@ mod tests {
             execution_parameters: execution_parameters(),
             next_wasm_memory_id: MemoryId::new(),
             next_stable_memory_id: MemoryId::new(),
-            static_system_state: sandbox_safe_system_state(),
+            sandox_safe_system_state: sandbox_safe_system_state(),
         }
     }
 
@@ -218,10 +232,6 @@ mod tests {
             fn execution_finished(
                 &self, req : protocol::ctlsvc::ExecutionFinishedRequest
             ) -> rpc::Call<protocol::ctlsvc::ExecutionFinishedReply>;
-
-            fn canister_system_call(
-                &self, req : protocol::ctlsvc::CanisterSystemCallRequest
-            ) -> rpc::Call<protocol::ctlsvc::CanisterSystemCallReply>;
 
             fn log_via_replica(&self, log: protocol::logging::LogRequest) -> rpc::Call<()>;
         }

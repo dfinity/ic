@@ -11,24 +11,24 @@ use ic_replicated_state::{
 };
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, NonReplicatedQueryKind,
-    SystemApiImpl, SystemStateAccessorDirect,
+    SystemApiImpl,
 };
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     mock_time,
     state::SystemStateBuilder,
     types::{
-        ids::{canister_test_id, user_test_id},
+        ids::{call_context_test_id, canister_test_id, user_test_id},
         messages::RequestBuilder,
     },
 };
 use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext, MAX_RESPONSE_COUNT_BYTES},
+    methods::{Callback, WasmClosure},
     user_error::RejectCode,
     ComputeAllocation, CountBytes, Cycles, NumBytes, NumInstructions,
 };
-use std::convert::TryInto;
-use std::{convert::From, sync::Arc};
+use std::convert::{From, TryInto};
 
 mod common;
 use common::*;
@@ -64,7 +64,7 @@ fn test_canister_init_support() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut api = get_system_api(
         ApiType::init(mock_time(), vec![], user_test_id(1).get()),
-        get_system_state(),
+        &get_system_state(),
         cycles_account_manager,
     );
 
@@ -123,7 +123,7 @@ fn test_canister_update_support() {
         .build();
 
     let api_type = ApiTypeBuilder::new().build_update_api();
-    let mut api = get_system_api(api_type, get_cmc_system_state(), cycles_account_manager);
+    let mut api = get_system_api(api_type, &get_cmc_system_state(), cycles_account_manager);
 
     assert_api_supported(api.ic0_msg_caller_size());
     assert_api_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
@@ -178,7 +178,7 @@ fn test_canister_replicated_query_support() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut api = get_system_api(
         ApiType::replicated_query(mock_time(), vec![], user_test_id(1).get(), None),
-        get_system_state(),
+        &get_system_state(),
         cycles_account_manager,
     );
 
@@ -235,7 +235,7 @@ fn test_canister_pure_query_support() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut api = get_system_api(
         ApiType::replicated_query(mock_time(), vec![], user_test_id(1).get(), None),
-        get_system_state(),
+        &get_system_state(),
         cycles_account_manager,
     );
 
@@ -302,7 +302,7 @@ fn test_canister_stateful_query_support() {
             Some(vec![1]),
             NonReplicatedQueryKind::Stateful,
         ),
-        get_system_state(),
+        &get_system_state(),
         cycles_account_manager,
     );
 
@@ -361,7 +361,7 @@ fn test_reply_api_support_on_nns() {
         .build();
 
     let api_type = ApiTypeBuilder::new().build_reply_api(Cycles::from(0));
-    let mut api = get_system_api(api_type, get_cmc_system_state(), cycles_account_manager);
+    let mut api = get_system_api(api_type, &get_cmc_system_state(), cycles_account_manager);
 
     assert_api_not_supported(api.ic0_msg_caller_size());
     assert_api_not_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
@@ -418,7 +418,7 @@ fn test_reply_api_support_non_nns() {
         .build();
 
     let api_type = ApiTypeBuilder::new().build_reply_api(Cycles::from(0));
-    let mut api = get_system_api(api_type, get_system_state(), cycles_account_manager);
+    let mut api = get_system_api(api_type, &get_system_state(), cycles_account_manager);
 
     assert_api_not_supported(api.ic0_msg_caller_size());
     assert_api_not_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
@@ -478,7 +478,7 @@ fn test_reject_api_support_on_nns() {
         code: RejectCode::CanisterReject,
         message: "error".to_string(),
     });
-    let mut api = get_system_api(api_type, get_cmc_system_state(), cycles_account_manager);
+    let mut api = get_system_api(api_type, &get_cmc_system_state(), cycles_account_manager);
 
     assert_api_not_supported(api.ic0_msg_caller_size());
     assert_api_not_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
@@ -538,7 +538,7 @@ fn test_reject_api_support_non_nns() {
         code: RejectCode::CanisterReject,
         message: "error".to_string(),
     });
-    let mut api = get_system_api(api_type, get_system_state(), cycles_account_manager);
+    let mut api = get_system_api(api_type, &get_system_state(), cycles_account_manager);
 
     assert_api_not_supported(api.ic0_msg_caller_size());
     assert_api_not_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
@@ -593,7 +593,7 @@ fn test_pre_upgrade_support() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut api = get_system_api(
         ApiType::pre_upgrade(mock_time(), user_test_id(1).get()),
-        get_system_state(),
+        &get_system_state(),
         cycles_account_manager,
     );
 
@@ -648,7 +648,11 @@ fn test_pre_upgrade_support() {
 #[test]
 fn test_start_support() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    let mut api = get_system_api(ApiType::start(), get_system_state(), cycles_account_manager);
+    let mut api = get_system_api(
+        ApiType::start(),
+        &get_system_state(),
+        cycles_account_manager,
+    );
 
     assert_api_not_supported(api.ic0_msg_arg_data_size());
     assert_api_not_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
@@ -703,7 +707,7 @@ fn test_cleanup_support() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut api = get_system_api(
         ApiType::Cleanup { time: mock_time() },
-        get_system_state(),
+        &get_system_state(),
         cycles_account_manager,
     );
 
@@ -765,7 +769,7 @@ fn test_inspect_message_support() {
             vec![],
             mock_time(),
         ),
-        get_system_state(),
+        &get_system_state(),
         cycles_account_manager,
     );
 
@@ -823,7 +827,7 @@ fn test_canister_heartbeat_support() {
 
     let mut api = get_system_api(
         ApiTypeBuilder::new().build_heartbeat_api(),
-        get_system_state(),
+        &get_system_state(),
         cycles_account_manager,
     );
 
@@ -882,7 +886,7 @@ fn test_canister_heartbeat_support_nns() {
         .build();
 
     let api_type = ApiTypeBuilder::new().build_heartbeat_api();
-    let mut api = get_system_api(api_type, get_cmc_system_state(), cycles_account_manager);
+    let mut api = get_system_api(api_type, &get_cmc_system_state(), cycles_account_manager);
 
     assert_api_not_supported(api.ic0_msg_caller_size());
     assert_api_not_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
@@ -941,7 +945,7 @@ fn test_discard_cycles_charge_by_new_call() {
         .build();
     let mut api = get_system_api(
         ApiTypeBuilder::new().build_update_api(),
-        get_system_state_with_cycles(cycles_amount),
+        &get_system_state_with_cycles(cycles_amount),
         cycles_account_manager,
     );
 
@@ -983,7 +987,7 @@ fn test_fail_add_cycles_when_not_enough_balance() {
     let canister_id = system_state.canister_id();
     let mut api = get_system_api(
         ApiTypeBuilder::new().build_update_api(),
-        system_state,
+        &system_state,
         cycles_account_manager,
     );
 
@@ -1024,7 +1028,7 @@ fn test_fail_adding_more_cycles_when_not_enough_balance() {
     let canister_id = system_state.canister_id();
     let mut api = get_system_api(
         ApiTypeBuilder::new().build_update_api(),
-        system_state,
+        &system_state,
         cycles_account_manager,
     );
 
@@ -1085,7 +1089,7 @@ fn test_canister_balance() {
 
     let api = get_system_api(
         ApiTypeBuilder::new().build_update_api(),
-        system_state,
+        &system_state,
         cycles_account_manager,
     );
 
@@ -1112,7 +1116,7 @@ fn test_canister_cycle_balance() {
 
     let api = get_system_api(
         ApiTypeBuilder::new().build_update_api(),
-        system_state,
+        &system_state,
         cycles_account_manager,
     );
 
@@ -1145,7 +1149,7 @@ fn test_msg_cycles_available_traps() {
 
     let api = get_system_api(
         ApiTypeBuilder::new().build_update_api(),
-        system_state,
+        &system_state,
         cycles_account_manager,
     );
 
@@ -1169,7 +1173,7 @@ fn test_msg_cycles_refunded_traps() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let api = get_system_api(
         ApiTypeBuilder::new().build_reply_api(incoming_cycles),
-        system_state,
+        &system_state,
         cycles_account_manager,
     );
 
@@ -1188,10 +1192,10 @@ fn test_msg_cycles_refunded_traps() {
 #[test]
 fn certified_data_set() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    let system_state = SystemStateBuilder::default().build();
+    let mut system_state = SystemStateBuilder::default().build();
     let mut api = get_system_api(
         ApiTypeBuilder::new().build_update_api(),
-        system_state,
+        &system_state,
         cycles_account_manager,
     );
     let heap = vec![10; 33];
@@ -1205,8 +1209,7 @@ fn certified_data_set() {
     // Copy the certified data into the system state.
     api.ic0_certified_data_set(0, 32, &heap).unwrap();
 
-    let (system_state_accessor, system_state_changes) = api.release_system_state_accessor();
-    let mut system_state = system_state_accessor.release_system_state();
+    let system_state_changes = api.into_system_state_changes();
     system_state_changes.apply_changes(&mut system_state);
     assert_eq!(system_state.certified_data, vec![10; 32])
 }
@@ -1222,7 +1225,7 @@ fn data_certificate_copy() {
             user_test_id(1).get(),
             Some(vec![1, 2, 3, 4, 5, 6]),
         ),
-        system_state,
+        &system_state,
         cycles_account_manager,
     );
     let mut heap = vec![0; 10];
@@ -1250,7 +1253,7 @@ fn canister_status() {
 
     let api = get_system_api(
         ApiTypeBuilder::new().build_update_api(),
-        get_system_state_with_cycles(INITIAL_CYCLES),
+        &get_system_state_with_cycles(INITIAL_CYCLES),
         cycles_account_manager,
     );
     assert_eq!(api.ic0_canister_status(), Ok(1));
@@ -1263,7 +1266,7 @@ fn canister_status() {
     );
     let api = get_system_api(
         ApiTypeBuilder::new().build_update_api(),
-        stopping_system_state,
+        &stopping_system_state,
         cycles_account_manager,
     );
     assert_eq!(api.ic0_canister_status(), Ok(2));
@@ -1276,7 +1279,7 @@ fn canister_status() {
     );
     let api = get_system_api(
         ApiTypeBuilder::new().build_update_api(),
-        stopped_system_state,
+        &stopped_system_state,
         cycles_account_manager,
     );
     assert_eq!(api.ic0_canister_status(), Ok(3));
@@ -1297,7 +1300,7 @@ fn msg_cycles_accept_all_cycles_in_call_context() {
         );
     let mut api = get_system_api(
         ApiTypeBuilder::new().build_update_api(),
-        system_state,
+        &system_state,
         cycles_account_manager,
     );
 
@@ -1319,7 +1322,7 @@ fn msg_cycles_accept_all_cycles_in_call_context_when_more_asked() {
         );
     let mut api = get_system_api(
         ApiTypeBuilder::new().build_update_api(),
-        system_state,
+        &system_state,
         cycles_account_manager,
     );
 
@@ -1342,19 +1345,22 @@ fn msg_cycles_accept_accept_till_max_on_application_subnet() {
         );
 
     // Set cycles balance to max - 10.
-    cycles_account_manager.add_cycles(&mut system_state, CYCLES_LIMIT_PER_CANISTER);
+    cycles_account_manager.add_cycles(&mut system_state.cycles_balance, CYCLES_LIMIT_PER_CANISTER);
     cycles_account_manager
         .withdraw_cycles_for_transfer(
-            &mut system_state,
+            system_state.canister_id,
+            system_state.freeze_threshold,
+            system_state.memory_allocation,
             NumBytes::from(0),
             ComputeAllocation::default(),
+            &mut system_state.cycles_balance,
             Cycles::from(10),
         )
         .unwrap();
 
     let mut api = get_system_api(
         ApiTypeBuilder::new().build_update_api(),
-        system_state,
+        &system_state,
         cycles_account_manager,
     );
 
@@ -1376,11 +1382,11 @@ fn msg_cycles_accept_max_cycles_per_canister_none_on_application_subnet() {
             Cycles::from(cycles),
         );
 
-    cycles_account_manager.add_cycles(&mut system_state, CYCLES_LIMIT_PER_CANISTER);
+    cycles_account_manager.add_cycles(&mut system_state.cycles_balance, CYCLES_LIMIT_PER_CANISTER);
 
     let mut api = get_system_api(
         ApiTypeBuilder::new().build_update_api(),
-        system_state,
+        &system_state,
         cycles_account_manager,
     );
 
@@ -1405,19 +1411,22 @@ fn msg_cycles_accept_above_max_on_nns() {
         );
 
     // Set cycles balance to max - 10.
-    cycles_account_manager.add_cycles(&mut system_state, CYCLES_LIMIT_PER_CANISTER);
+    cycles_account_manager.add_cycles(&mut system_state.cycles_balance, CYCLES_LIMIT_PER_CANISTER);
     cycles_account_manager
         .withdraw_cycles_for_transfer(
-            &mut system_state,
+            system_state.canister_id,
+            system_state.freeze_threshold,
+            system_state.memory_allocation,
             NumBytes::from(0),
             ComputeAllocation::default(),
+            &mut system_state.cycles_balance,
             Cycles::from(10),
         )
         .unwrap();
 
     let mut api = get_system_api(
         ApiTypeBuilder::new().build_update_api(),
-        system_state,
+        &system_state,
         cycles_account_manager,
     );
 
@@ -1448,18 +1457,19 @@ fn call_perform_not_enough_cycles_resets_state() {
         );
     let mut api = get_system_api(
         ApiTypeBuilder::new().build_update_api(),
-        system_state,
+        &system_state,
         cycles_account_manager,
     );
     api.ic0_call_new(0, 10, 0, 10, 0, 0, 0, 0, &[0; 1024])
         .unwrap();
     api.ic0_call_cycles_add128(Cycles::from(100)).unwrap();
     assert_eq!(api.ic0_call_perform().unwrap(), 2);
-    let system_state = api.release_system_state_accessor().0.release_system_state();
+    let system_state_changes = api.into_system_state_changes();
+    system_state_changes.apply_changes(&mut system_state);
+    assert_eq!(system_state.cycles_balance, initial_cycles);
     let call_context_manager = system_state.call_context_manager().unwrap();
     assert_eq!(call_context_manager.call_contexts().len(), 1);
     assert_eq!(call_context_manager.callbacks().len(), 0);
-    assert_eq!(system_state.cycles_balance, initial_cycles);
 }
 
 #[test]
@@ -1469,14 +1479,11 @@ fn stable_grow_updates_subnet_available_memory() {
     let subnet_available_memory = SubnetAvailableMemory::new(subnet_available_memory_bytes);
     let system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    let static_system_state =
-        SandboxSafeSystemState::new(&system_state, cycles_account_manager.subnet_type());
-    let system_state_accessor =
-        SystemStateAccessorDirect::new(system_state, Arc::new(cycles_account_manager));
+    let sandbox_safe_system_state =
+        SandboxSafeSystemState::new(&system_state, cycles_account_manager);
     let mut api = SystemApiImpl::new(
         ApiTypeBuilder::new().build_update_api(),
-        system_state_accessor,
-        static_system_state,
+        sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
         ExecutionParameters {
             subnet_available_memory: subnet_available_memory.clone(),
@@ -1501,14 +1508,11 @@ fn stable_grow_returns_allocated_memory_on_error() {
     let subnet_available_memory = SubnetAvailableMemory::new(subnet_available_memory_bytes);
     let system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    let static_system_state =
-        SandboxSafeSystemState::new(&system_state, cycles_account_manager.subnet_type());
-    let system_state_accessor =
-        SystemStateAccessorDirect::new(system_state, Arc::new(cycles_account_manager));
+    let sandbox_safe_system_state =
+        SandboxSafeSystemState::new(&system_state, cycles_account_manager);
     let mut api = SystemApiImpl::new(
         ApiTypeBuilder::new().build_update_api(),
-        system_state_accessor,
-        static_system_state,
+        sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
         ExecutionParameters {
             subnet_available_memory: subnet_available_memory.clone(),
@@ -1541,14 +1545,11 @@ fn update_available_memory_updates_subnet_available_memory() {
     let subnet_available_memory = SubnetAvailableMemory::new(subnet_available_memory_bytes);
     let system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    let static_system_state =
-        SandboxSafeSystemState::new(&system_state, cycles_account_manager.subnet_type());
-    let system_state_accessor =
-        SystemStateAccessorDirect::new(system_state, Arc::new(cycles_account_manager));
+    let sandbox_safe_system_state =
+        SandboxSafeSystemState::new(&system_state, cycles_account_manager);
     let mut api = SystemApiImpl::new(
         ApiTypeBuilder::new().build_update_api(),
-        system_state_accessor,
-        static_system_state,
+        sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
         ExecutionParameters {
             subnet_available_memory: subnet_available_memory.clone(),
@@ -1569,17 +1570,23 @@ fn update_available_memory_updates_subnet_available_memory() {
 fn push_output_request_respects_memory_limits() {
     let subnet_available_memory_bytes = MAX_RESPONSE_COUNT_BYTES as i64 + 13;
     let subnet_available_memory = SubnetAvailableMemory::new(subnet_available_memory_bytes);
-    let system_state = SystemStateBuilder::default().build();
+    let mut system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    let static_system_state =
-        SandboxSafeSystemState::new(&system_state, cycles_account_manager.subnet_type());
+    let mut sandbox_safe_system_state =
+        SandboxSafeSystemState::new(&system_state, cycles_account_manager);
+    let callback_id = sandbox_safe_system_state
+        .register_callback(Callback::new(
+            call_context_test_id(0),
+            Cycles::from(0),
+            WasmClosure::new(0, 0),
+            WasmClosure::new(0, 0),
+            None,
+        ))
+        .unwrap();
     let own_canister_id = system_state.canister_id;
-    let system_state_accessor =
-        SystemStateAccessorDirect::new(system_state, Arc::new(cycles_account_manager));
     let mut api = SystemApiImpl::new(
         ApiTypeBuilder::new().build_update_api(),
-        system_state_accessor,
-        static_system_state,
+        sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
         ExecutionParameters {
             subnet_available_memory: subnet_available_memory.clone(),
@@ -1589,7 +1596,10 @@ fn push_output_request_respects_memory_limits() {
         no_op_logger(),
     );
 
-    let req = RequestBuilder::default().sender(own_canister_id).build();
+    let req = RequestBuilder::default()
+        .sender(own_canister_id)
+        .sender_reply_callback(callback_id)
+        .build();
 
     // First push succeeds with of without message memory usage accounting, as the
     // initial subnet available memory is `MAX_RESPONSE_COUNT_BYTES + 13`.
@@ -1624,7 +1634,8 @@ fn push_output_request_respects_memory_limits() {
     }
 
     // Ensure that exactly one output request was pushed.
-    let system_state = api.release_system_state_accessor().0.release_system_state();
+    let system_state_changes = api.into_system_state_changes();
+    system_state_changes.apply_changes(&mut system_state);
     assert_eq!(1, system_state.queues().output_queues_len());
 }
 
@@ -1632,17 +1643,23 @@ fn push_output_request_respects_memory_limits() {
 fn push_output_request_oversized_request_memory_limits() {
     let subnet_available_memory_bytes = 3 * MAX_RESPONSE_COUNT_BYTES as i64;
     let subnet_available_memory = SubnetAvailableMemory::new(subnet_available_memory_bytes);
-    let system_state = SystemStateBuilder::default().build();
+    let mut system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    let static_system_state =
-        SandboxSafeSystemState::new(&system_state, cycles_account_manager.subnet_type());
+    let mut sandbox_safe_system_state =
+        SandboxSafeSystemState::new(&system_state, cycles_account_manager);
+    let callback_id = sandbox_safe_system_state
+        .register_callback(Callback::new(
+            call_context_test_id(0),
+            Cycles::from(0),
+            WasmClosure::new(0, 0),
+            WasmClosure::new(0, 0),
+            None,
+        ))
+        .unwrap();
     let own_canister_id = system_state.canister_id;
-    let system_state_accessor =
-        SystemStateAccessorDirect::new(system_state, Arc::new(cycles_account_manager));
     let mut api = SystemApiImpl::new(
         ApiTypeBuilder::new().build_update_api(),
-        system_state_accessor,
-        static_system_state,
+        sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
         ExecutionParameters {
             subnet_available_memory: subnet_available_memory.clone(),
@@ -1655,6 +1672,7 @@ fn push_output_request_oversized_request_memory_limits() {
     // Oversized payload larger than available memory.
     let req = RequestBuilder::default()
         .sender(own_canister_id)
+        .sender_reply_callback(callback_id)
         .method_payload(vec![13; 4 * MAX_RESPONSE_COUNT_BYTES])
         .build();
 
@@ -1705,6 +1723,7 @@ fn push_output_request_oversized_request_memory_limits() {
     }
 
     // Ensure that exactly one output request was pushed.
-    let system_state = api.release_system_state_accessor().0.release_system_state();
+    let system_state_changes = api.into_system_state_changes();
+    system_state_changes.apply_changes(&mut system_state);
     assert_eq!(1, system_state.queues().output_queues_len());
 }

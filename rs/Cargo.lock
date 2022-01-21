@@ -3272,8 +3272,10 @@ dependencies = [
 name = "ic-canister-sandbox-backend-lib"
 version = "0.8.0"
 dependencies = [
+ "ic-base-types",
  "ic-canister-sandbox-common",
  "ic-config",
+ "ic-cycles-account-manager",
  "ic-embedders",
  "ic-interfaces",
  "ic-logger",
@@ -4208,6 +4210,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-types 0.8.0",
  "ic-wasm-types",
+ "serde",
  "slog",
 ]
 

@@ -1161,7 +1161,7 @@ impl ExecutionEnvironmentImpl {
             resp.refund
         };
         self.cycles_account_manager
-            .add_cycles(&mut canister.system_state, refunded_cycles);
+            .add_cycles(&mut canister.system_state.cycles_balance, refunded_cycles);
 
         // The canister that sends a request must also pay the fee for
         // the transmission of the response. As we do not know how big

@@ -203,7 +203,6 @@ pub(crate) fn into_request(
         Some(subnet_type) => *subnet_type,
     };
 
-    // Based on the types of the subnets the sending and the destination canisters
     // are on, apply the desired constraints.
     match (own_subnet_type, destination_subnet_type) {
         (SubnetType::Application, SubnetType::Application)

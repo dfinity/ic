@@ -12,7 +12,6 @@ pub mod protocol {
     pub mod logging;
     pub mod sbxsvc;
     pub mod structs;
-    pub mod syscall;
     pub mod transport;
 }
 pub mod fdenum;

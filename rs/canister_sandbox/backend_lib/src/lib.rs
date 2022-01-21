@@ -1,7 +1,6 @@
 pub mod logging;
 pub mod sandbox_manager;
 pub mod sandbox_server;
-pub mod system_state_accessor_rpc;
 
 use ic_canister_sandbox_common::{controller_client_stub, protocol, rpc, transport};
 use std::os::unix::io::FromRawFd;

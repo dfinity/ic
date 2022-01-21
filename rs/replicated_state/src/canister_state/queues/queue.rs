@@ -68,6 +68,12 @@ impl<T: std::clone::Clone + CountBytes> QueueWithReservation<T> {
         Ok(())
     }
 
+    /// Returns the number of slots available in the queue. This many items can
+    /// be reserved or pushed before an error is returned.
+    fn available_slots(&self) -> usize {
+        self.capacity - (self.queue.len() + self.num_slots_reserved)
+    }
+
     /// Reserves a slot if available, else returns `Err(StateError::QueueFull)`.
     fn reserve_slot(&mut self) -> Result<(), StateError> {
         self.check_has_slot()?;
@@ -189,6 +195,10 @@ impl InputQueue {
         self.queue.check_has_slot()
     }
 
+    pub(super) fn available_slots(&self) -> usize {
+        self.queue.available_slots()
+    }
+
     pub(super) fn push(
         &mut self,
         msg_ind: QueueIndex,
@@ -284,6 +294,10 @@ impl OutputQueue {
 
     pub(super) fn check_has_slot(&self) -> Result<(), StateError> {
         self.queue.check_has_slot()
+    }
+
+    pub(super) fn available_slots(&self) -> usize {
+        self.queue.available_slots()
     }
 
     pub(super) fn push_request(&mut self, msg: Request) -> Result<(), (StateError, Request)> {

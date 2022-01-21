@@ -41,7 +41,7 @@ fn test_api_for_update(
     caller: Option<PrincipalId>,
     payload: Vec<u8>,
     subnet_type: SubnetType,
-) -> SystemApiImpl<ic_system_api::SystemStateAccessorDirect> {
+) -> SystemApiImpl {
     let caller = caller.unwrap_or_else(|| user_test_id(24).get());
     let subnet_id = subnet_test_id(1);
     let routing_table = Arc::new(
@@ -59,13 +59,10 @@ fn test_api_for_update(
             .with_subnet_type(subnet_type)
             .build(),
     );
-    let static_system_state =
-        SandboxSafeSystemState::new(&system_state, cycles_account_manager.subnet_type());
+    let static_system_state = SandboxSafeSystemState::new(&system_state, *cycles_account_manager);
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);
 
-    let system_state_accessor =
-        ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
     SystemApiImpl::new(
         ApiType::update(
             mock_time(),
@@ -78,7 +75,6 @@ fn test_api_for_update(
             routing_table,
             subnet_records,
         ),
-        system_state_accessor,
         static_system_state,
         canister_current_memory_usage,
         ExecutionParameters {

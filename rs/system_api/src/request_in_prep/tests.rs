@@ -1,7 +1,10 @@
 use super::*;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_routing_table::CanisterIdRange;
-use ic_test_utilities::{state::SystemStateBuilder, types::ids::subnet_test_id};
+use ic_test_utilities::{
+    cycles_account_manager::CyclesAccountManagerBuilder, state::SystemStateBuilder,
+    types::ids::subnet_test_id,
+};
 use maplit::btreemap;
 use std::convert::TryInto;
 
@@ -148,9 +151,7 @@ fn payloads_larger_than_inter_limit_rejected() {
     )
     .unwrap();
     req_in_prep.extend_method_payload(0, 50, &heap).unwrap();
-    // TODO EXC-827: add this back when SandboxSafeSystemState becomes
-    // responsible for cycles.
-    // let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
+    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
 
     into_request(
         &routing_table,
@@ -161,7 +162,7 @@ fn payloads_larger_than_inter_limit_rejected() {
         sender_subnet_type,
         &mut SandboxSafeSystemState::new(
             &SystemStateBuilder::default().build(),
-            SubnetType::Application,
+            cycles_account_manager,
         ),
         &no_op_logger(),
     )
@@ -225,9 +226,7 @@ fn application_subnet_cannot_send_cycles_to_verified_subnet() {
     req_in_prep.extend_method_payload(0, 50, &heap).unwrap();
     req_in_prep.add_cycles(Cycles::from(100));
 
-    // TODO EXC-827: add this back when SandboxSafeSystemState becomes
-    // responsible for cycles.
-    // let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
+    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     into_request(
         &routing_table,
         &subnet_records,
@@ -237,7 +236,7 @@ fn application_subnet_cannot_send_cycles_to_verified_subnet() {
         sender_subnet_type,
         &mut SandboxSafeSystemState::new(
             &SystemStateBuilder::default().build(),
-            SubnetType::Application,
+            cycles_account_manager,
         ),
         &no_op_logger(),
     )

@@ -4,7 +4,9 @@ version = "0.8.0"
 edition = "2018"
 
 [dependencies]
+ic-base-types = { path = "../../types/base_types" }
 ic-canister-sandbox-common  = { path = "../common" }
+ic-cycles-account-manager = { path = "../../cycles_account_manager" }
 ic-config = { path = "../../config" }
 ic-embedders = { path = "../../embedders" }
 ic-logger = { path = "../../monitoring/logger" }

@@ -14,7 +14,6 @@ use ic_types::{ComputeAllocation, NumBytes, NumInstructions};
 use ic_wasm_types::BinaryEncodedWasm;
 
 use lazy_static::lazy_static;
-use std::sync::Arc;
 use wasmtime::{Config, Engine, Module, Store, Val};
 
 lazy_static! {
@@ -29,16 +28,13 @@ fn test_wasmtime_system_api() {
     let engine = Engine::new(&config).expect("Failed to initialize Wasmtime engine");
     let canister_id = canister_test_id(53);
     let system_state = SystemState::new_for_start(canister_id);
-    let static_system_state = SandboxSafeSystemState::new(&system_state, SubnetType::Application);
-    let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-    let system_state_accessor =
-        ic_system_api::SystemStateAccessorDirect::new(system_state, cycles_account_manager);
+    let sandbox_safe_system_state =
+        SandboxSafeSystemState::new(&system_state, CyclesAccountManagerBuilder::new().build());
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);
     let system_api = SystemApiImpl::new(
         ApiType::start(),
-        system_state_accessor,
-        static_system_state,
+        sandbox_safe_system_state,
         canister_current_memory_usage,
         ExecutionParameters {
             instruction_limit: MAX_NUM_INSTRUCTIONS,
