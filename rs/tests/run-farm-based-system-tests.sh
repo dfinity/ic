@@ -37,6 +37,8 @@ Usage:
 EOF
 }
 
+cleanup_artifacts=true
+
 if [[ ${TMPDIR-/tmp} == /run/* ]]; then
     log "Running in nix-shell on Linux, unsetting TMPDIR"
     export TMPDIR=
@@ -58,9 +60,26 @@ else
     set -x
     ARTIFACT_DIR="artifacts"
     RUN_CMD="${ARTIFACT_DIR}/prod-test-driver"
+    cleanup_artifacts=false
 fi
 
 log "Artifacts will be stored in: ${ARTIFACT_DIR}"
+
+# Call cleanup() when the user presses Ctrl+C
+trap on_sigterm 2
+
+on_sigterm() {
+    log "Received SIGTERM ..."
+    cleanup_dirs
+    exit 1
+}
+
+cleanup_dirs() {
+    if [[ "$cleanup_artifacts" == true ]]; then
+        log "${RED}Removing artifacts directory: ${ARTIFACT_DIR}"
+        rm -rf "$ARTIFACT_DIR"
+    fi
+}
 
 # Parse arguments
 # if --help is provided, print both, the usage of this script and the help of
@@ -80,7 +99,7 @@ done
 
 if [ -z "${GIT_REVISION:-}" ]; then
     TEST_BRANCH="${TEST_BRANCH:-origin/master}"
-    log "Downloading newest artifacts from branch ${RED}$TEST_BRANCH${NC}"
+    log "Newest available build artifacts are used for branch ${RED}$TEST_BRANCH"
 
     SCRIPT="$CI_PROJECT_DIR/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh"
     GIT_REVISION=$("$SCRIPT" "$TEST_BRANCH")
@@ -104,7 +123,7 @@ JOURNALBEAT_HOSTS=("--journalbeat-hosts" "${TEST_ES_HOSTNAMES//[[:space:]]/}")
 RCLONE_ARGS=("--git-rev" "$GIT_REVISION" "--out=$ARTIFACT_DIR" "--unpack" "--mark-executable")
 # prod-test-driver and (NNS) canisters
 if [[ -z "${JOB_ID}" || "${CI_PARENT_PIPELINE_SOURCE:-}" != "merge_request_event" ]]; then
-    log "Downloading dependencies built from commit: ${RED}$GIT_REVISION${NC}"
+    log "Downloading dependencies built from commit: ${RED}$GIT_REVISION"
     log "NOTE: Dependencies include canisters, rust-binaries (such as ic-rosetta-binaries), etc."
     "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/rclone_download.py --remote-path=canisters "${RCLONE_ARGS[@]}"
     "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/rclone_download.py --remote-path=release "${RCLONE_ARGS[@]}"
@@ -113,12 +132,12 @@ else
     set +x
     for f in artifacts/canisters/*.gz; do
         mv "$f" "${ARTIFACT_DIR}"
-        gunzip "${ARTIFACT_DIR}/$(basename $f)"
+        gunzip "${ARTIFACT_DIR}/$(basename "$f")"
     done
     for f in artifacts/release/*.gz; do
         mv "$f" "${ARTIFACT_DIR}"
-        gunzip "${ARTIFACT_DIR}/$(basename $f)"
-        chmod +x "${ARTIFACT_DIR}/$(basename $f .gz)"
+        gunzip "${ARTIFACT_DIR}/$(basename "$f")"
+        chmod +x "${ARTIFACT_DIR}/$(basename "$f" .gz)"
     done
     set -x
 fi
@@ -166,5 +185,7 @@ fi
 # Print a summary of the executed test suite.
 # Do not propagate errors, if the script fails.
 python3 "${CI_PROJECT_DIR}/gitlab-ci/src/test_results/summary.py" "${SUMMARY_ARGS[@]}" 1>&2 || true
+
+cleanup_dirs
 
 exit $RES
