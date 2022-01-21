@@ -35,6 +35,7 @@ gflags.DEFINE_integer("stop_t_median", 600000, "Maximum median latency before ab
 if __name__ == "__main__":
     experiment.parse_command_line_args()
 
+    experiment_name = "System_Baseline_Maximum_Capacity_Inc_Payload"
     exp = run_experiment_1.Experiment1()
     exp.start_experiment()
 

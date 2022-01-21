@@ -127,6 +127,7 @@ def get_http_request_duration(testnet, hosts: List[str], t_start, t_end, request
 
     # Dashboard:
     # https://grafana.dfinity.systems/d/rnF_68BGk/http-handler?viewPanel=6&orgId=1&from=now-15m&to=now&var-ic=mercury&var-ic_subnet=All&var-request_type=All&var-group_by=request_type
+    print(f"Request duration has been: {t_end - t_start}")
     assert t_end - t_start > 60
 
     metric = "replica_http_request_duration_seconds"
