@@ -16,24 +16,36 @@ Usage:
 
   Run upgraded system tests [farm-based].
 
-  --git-use-current-commit
-    
-    Test with the artifacts of the current commit.
-
-    This requires the commit to be built by CI/CD. I.e., it must be pushed to
-    origin and a corresponding MR has to be created. If the script can't find
-    artifacts for the current commit, it will fail.
-
-    Note: If you just want to test with the newest artifacts available for a
-    particular branch, you can do that by setting the TEST_BRANCH environment
-    variable.
-    E.g.,
-    
-      $ TEST_BRANCH=origin/my_other_branch ./run-farm-based-system-tests.sh ...
-
   --help
 
     Displays this help message and the help-message of test driver.
+
+
+  Environment Variables:
+
+  IC_VERSION_ID
+    
+    Defines the version of the default GuestOS image and other build artifacts
+    (NNS canisters, ic-rosetta-api, etc.) used when executing the test.
+
+    This requires the commit to be built by CI/CD. I.e., it must be pushed to
+    origin and a corresponding MR has to be created. As of now, the version id
+    must be fetched manually.
+
+    If this environment variable is not set, the latest available version for
+    branch specified in the variable TEST_BRANCH will be used (see below).
+
+    E.g.,
+    
+      $ IC_VERSION_ID=<a1ffee..> ./run-farm-based-system-tests.sh ...
+
+  TEST_BRANCH (default: origin/master)
+
+    If specified, the latest published version of build artifacts of that
+    branch will be used.
+
+    If TEST_BRANCH is unspecified, 'origin/master' is assumed.
+
 EOF
 }
 
@@ -91,19 +103,19 @@ for arg in "$@"; do
         exit 0
     fi
     if [ "$arg" == "--git-use-current-commit" ]; then
-        GIT_REVISION=$(git log --pretty=format:'%H' -n 1)
+        IC_VERSION_ID=$(git log --pretty=format:'%H' -n 1)
     else
         RUNNER_ARGS+=("$arg")
     fi
 done
 
-if [ -z "${GIT_REVISION:-}" ]; then
+if [ -z "${IC_VERSION_ID:-}" ]; then
     TEST_BRANCH="${TEST_BRANCH:-origin/master}"
     log "Newest available build artifacts are used for branch ${RED}$TEST_BRANCH"
 
     SCRIPT="$CI_PROJECT_DIR/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh"
-    GIT_REVISION=$("$SCRIPT" "$TEST_BRANCH")
-    export GIT_REVISION
+    IC_VERSION_ID=$("$SCRIPT" "$TEST_BRANCH")
+    export IC_VERSION_ID
 fi
 
 if [ -z "${SSH_KEY_DIR:-}" ]; then
@@ -120,10 +132,10 @@ if [ -z "${TEST_ES_HOSTNAMES:-}" ]; then
 fi
 JOURNALBEAT_HOSTS=("--journalbeat-hosts" "${TEST_ES_HOSTNAMES//[[:space:]]/}")
 
-RCLONE_ARGS=("--git-rev" "$GIT_REVISION" "--out=$ARTIFACT_DIR" "--unpack" "--mark-executable")
+RCLONE_ARGS=("--git-rev" "$IC_VERSION_ID" "--out=$ARTIFACT_DIR" "--unpack" "--mark-executable")
 # prod-test-driver and (NNS) canisters
 if [[ -z "${JOB_ID}" || "${CI_PARENT_PIPELINE_SOURCE:-}" != "merge_request_event" ]]; then
-    log "Downloading dependencies built from commit: ${RED}$GIT_REVISION"
+    log "Downloading dependencies built from commit: ${RED}$IC_VERSION_ID"
     log "NOTE: Dependencies include canisters, rust-binaries (such as ic-rosetta-binaries), etc."
     "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/rclone_download.py --remote-path=canisters "${RCLONE_ARGS[@]}"
     "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/rclone_download.py --remote-path=release "${RCLONE_ARGS[@]}"
@@ -151,7 +163,7 @@ export PATH="$ARTIFACT_DIR:${PATH}"
 export PATH="${CI_PROJECT_DIR}/ic-os/guestos/scripts:$PATH"
 
 # Download sha256 sum for revision
-DEV_IMG_BASE_URL="https://download.dfinity.systems/ic/${GIT_REVISION}/guest-os/disk-img-dev/"
+DEV_IMG_BASE_URL="https://download.dfinity.systems/ic/${IC_VERSION_ID}/guest-os/disk-img-dev/"
 DEV_IMG_URL="${DEV_IMG_BASE_URL}disk-img.tar.gz"
 DEV_IMG_SHA256_URL="${DEV_IMG_BASE_URL}SHA256SUMS"
 DEV_IMG_SHA256=$(curl "${DEV_IMG_SHA256_URL}" | sed -E 's/^([0-9a-fA-F]+)\s.*/\1/')
@@ -161,7 +173,7 @@ DEV_IMG_SHA256=$(curl "${DEV_IMG_SHA256_URL}" | sed -E 's/^([0-9a-fA-F]+)\s.*/\1
         "${ADDITIONAL_ARGS[@]}" \
         "${RUNNER_ARGS[@]}" \
         --job-id "${JOB_ID}" \
-        --initial-replica-version "$GIT_REVISION" \
+        --initial-replica-version "$IC_VERSION_ID" \
         --base-img-url "${DEV_IMG_URL}" \
         --base-img-sha256 "${DEV_IMG_SHA256}" \
         --nns-canister-path "${ARTIFACT_DIR}" \

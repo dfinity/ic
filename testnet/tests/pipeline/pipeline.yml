@@ -833,6 +833,7 @@ icos-continuous-upgrade-nightly:
 .run-farm-based-test: &run-farm-based-test |
   BASE_DIR="${CI_PROJECT_DIR}/logs/$(date +%Y%m%d_%H%M%S)"
   mkdir -p "$BASE_DIR"
+  export IC_VERSION_ID=GIT_REVISION
   # Logs produced during execution of the system tests are stored away in a structured way, i.e. one file per test.
   # Unstructured logs, i.e. those which bypassed the logger and were outputed directly to stdout/stderr,
   # are forwarded to a separate file.

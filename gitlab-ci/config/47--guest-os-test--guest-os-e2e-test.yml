@@ -287,10 +287,8 @@ guest-os-downgrade-from-new-version-to-mainnet-nns-subnet-query-workload:
       $SHELL_WRAPPER "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "nns" "true" "query"
 
 .run-farm-based-test: &run-farm-based-test |
-  # Determine a fake GIT_REVISION. It will be the SHA of the inputs to the image.
-  # TODO: remove the assumption in tests that there is git.
-  GIT_REVISION=$("${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/find-build-id.sh)
-  export GIT_REVISION
+  IC_VERSION_ID=$("${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/find-build-id.sh)
+  export IC_VERSION_ID
   BASE_DIR="${CI_PROJECT_DIR}/logs/$(date +%Y%m%d_%H%M%S)"
   mkdir -p "$BASE_DIR"
   # Logs produced during execution of the system tests are stored away in a structured way, i.e. one file per test.
@@ -298,7 +296,7 @@ guest-os-downgrade-from-new-version-to-mainnet-nns-subnet-query-workload:
   # are forwarded to a separate file.
   # All lines produced by the logger share the same structure: e.g. "Nov 10 13:20:30.931 INFO ...".
   # Hence, the fourth column can be used to distinguish structured from unstructerd logs.
-  $SHELL_WRAPPER capsule -v -t "${GIT_REVISION}" -i 'ic-os/guestos/build-out/**/*' -- \
+  $SHELL_WRAPPER capsule -v -t "${IC_VERSION_ID}" -i 'ic-os/guestos/build-out/**/*' -- \
   "${CI_PROJECT_DIR}/rs/tests/run-farm-based-system-tests.sh" \
     --suite "${SUITE_NAME}" \
     --log-base-dir "${BASE_DIR}" \
