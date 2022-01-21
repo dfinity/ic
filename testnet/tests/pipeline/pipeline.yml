@@ -131,6 +131,10 @@ generic-hourly:
 
       $SHELL_WRAPPER timeout 50m ./testnet/tests/scripts/generic.sh "$TESTNET" 1800 100 1k "$CI_JOB_STAGE/$CI_JOB_NAME"
 
+      finalization_rate=$(jq -r '.FinalizationRate' <"$(find . -name 'FinalizationRate.json')")
+      finish_time=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+      curl -X POST http://elasticsearch.dfinity.systems:9200/performance-trend/_doc/ -H 'Content-Type: application/json' -d "{\"timestamp\":\"$finish_time\", \"test\": \"generic-hourly\", \"finalization_rate\":$finalization_rate}"
+
 # NIGHTLY TESTS
 
 # Backup recovery test
