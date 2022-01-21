@@ -330,7 +330,7 @@ system-tests-pre-master:
   variables:
     SUITE_NAME: "pre_master"
 
-rosetta-hourly:
+rosetta-pre-master:
   extends: .system-tests
   variables:
     SUITE_NAME: "rosetta"
