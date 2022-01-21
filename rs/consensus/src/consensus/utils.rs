@@ -12,7 +12,7 @@ use ic_types::{
     consensus::Rank,
     crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
 /// The acceptable gap between the finalized height and the certified height. If
@@ -283,7 +283,7 @@ pub fn get_notarization_delay_settings(
 pub fn aggregate<
     Message: Eq + Ord + Clone + std::fmt::Debug + HasHeight + HasCommittee,
     CryptoMessage,
-    Signature,
+    Signature: Ord,
     KeySelector: Copy,
     CommitteeSignature,
     Shares: Iterator<Item = Signed<Message, Signature>>,
@@ -330,15 +330,18 @@ pub fn aggregate<
 
 // Return a mapping from the unique content contained in `shares` to the
 // shares that contain this content
-fn group_shares<C: Eq + Ord, S, Shares: Iterator<Item = Signed<C, S>>>(
+fn group_shares<C: Eq + Ord, S: Ord, Shares: Iterator<Item = Signed<C, S>>>(
     shares: Shares,
-) -> BTreeMap<C, Vec<S>> {
+) -> BTreeMap<C, BTreeSet<S>> {
     shares.fold(BTreeMap::new(), |mut grouped_shares, share| {
         match grouped_shares.get_mut(&share.content) {
-            Some(existing) => existing.push(share.signature),
+            Some(existing) => {
+                existing.insert(share.signature);
+            }
             None => {
-                let new_vec = vec![share.signature];
-                grouped_shares.insert(share.content, new_vec);
+                let mut new_set = BTreeSet::new();
+                new_set.insert(share.signature);
+                grouped_shares.insert(share.content, new_set);
             }
         };
         grouped_shares
@@ -500,19 +503,22 @@ mod tests {
     /// that a different share is grouped by itself
     #[test]
     fn test_group_shares() {
-        let share1 = fake_share(1);
-        let share2 = fake_share(1);
-        let share3 = fake_share(2);
+        let share1 = fake_share(1, vec![1]);
+        let share2 = fake_share(1, vec![2]);
+        let share3 = fake_share(2, vec![1]);
 
         let grouped_shares = group_shares(Box::new(vec![share1, share2, share3].into_iter()));
         assert_eq!(grouped_shares.get(&1).unwrap().len(), 2);
         assert_eq!(grouped_shares.get(&2).unwrap().len(), 1);
     }
 
-    fn fake_share<C: Eq + Ord + Clone>(content: C) -> Signed<C, ThresholdSignatureShare<C>> {
+    fn fake_share<C: Eq + Ord + Clone>(
+        content: C,
+        sig: Vec<u8>,
+    ) -> Signed<C, ThresholdSignatureShare<C>> {
         let signer = node_test_id(0);
         let signature = ThresholdSignatureShare {
-            signature: ThresholdSigShareOf::new(ThresholdSigShare(vec![])),
+            signature: ThresholdSigShareOf::new(ThresholdSigShare(sig)),
             signer,
         };
         Signed { content, signature }

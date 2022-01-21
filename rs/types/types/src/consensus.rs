@@ -46,7 +46,7 @@ pub struct ThresholdSignature<T> {
 
 /// ThresholdSignatureShare captures a share of a threshold signature on a value
 /// and the identity of the replica that signed
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Ord, PartialOrd)]
 pub struct ThresholdSignatureShare<T> {
     pub signature: ThresholdSigShareOf<T>,
     pub signer: NodeId,
@@ -54,7 +54,7 @@ pub struct ThresholdSignatureShare<T> {
 
 /// MultiSignature captures a cryptographic multi-signature, which is one
 /// message signed by multiple signers
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Ord, PartialOrd)]
 pub struct MultiSignature<T> {
     pub signature: CombinedMultiSigOf<T>,
     pub signers: Vec<NodeId>,
@@ -62,7 +62,7 @@ pub struct MultiSignature<T> {
 
 /// MultiSignatureShare is a signature from one replica. Multiple shares can be
 /// aggregated into a MultiSignature.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct MultiSignatureShare<T> {
     pub signature: IndividualMultiSigOf<T>,
     pub signer: NodeId,
