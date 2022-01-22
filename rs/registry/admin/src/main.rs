@@ -52,7 +52,6 @@ use ic_nns_handler_root::{
 };
 use ic_nns_init::make_hsm_sender;
 use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
-use ic_protobuf::registry::dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord};
 use ic_protobuf::registry::node_rewards::v2::{
     NodeRewardsTable, UpdateNodeRewardsTableProposalPayload,
 };
@@ -66,6 +65,10 @@ use ic_protobuf::registry::{
     routing_table::v1::RoutingTable,
     subnet::v1::{EcdsaConfig, SubnetListRecord, SubnetRecord as SubnetRecordProto},
     unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
+};
+use ic_protobuf::registry::{
+    dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
+    node_operator::v1::RemoveNodeOperatorsPayload,
 };
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client::helper::{crypto::CryptoRegistry, subnet::SubnetRegistry};
@@ -322,6 +325,8 @@ enum SubCommand {
     ProposeToStartCanister(StartCanisterCmd),
     /// Propose to stop a canister managed by the governance.
     ProposeToStopCanister(StopCanisterCmd),
+    /// Propose to remove a list of node operators from the Registry
+    ProposeToRemoveNodeOperators(ProposeToRemoveNodeOperatorsCmd),
 }
 
 /// Indicates whether a value should be added or removed.
@@ -519,6 +524,41 @@ struct ProposeToUpdateSubnetReplicaVersionCmd {
     subnet: SubnetDescriptor,
     /// The new Replica version to use.
     replica_version_id: String,
+}
+
+/// Sub-command to submit a proposal to remove node operators.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Clap)]
+struct ProposeToRemoveNodeOperatorsCmd {
+    /// List of principal ids of node operators to remove
+    node_operators_to_remove: Vec<PrincipalId>,
+}
+
+#[async_trait]
+impl ProposalTitleAndPayload<RemoveNodeOperatorsPayload> for ProposeToRemoveNodeOperatorsCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!(
+                "Remove node operators with principal ids: {:?}",
+                self.node_operators_to_remove
+                    .iter()
+                    .map(|x| shortened_pid_string(x))
+                    .collect::<Vec<String>>()
+            ),
+        }
+    }
+
+    async fn payload(&self, _: Url) -> RemoveNodeOperatorsPayload {
+        RemoveNodeOperatorsPayload {
+            node_operators_to_remove: self
+                .node_operators_to_remove
+                .clone()
+                .iter()
+                .map(|x| x.to_vec())
+                .collect(),
+        }
+    }
 }
 
 /// Shortens the id of the provided subent to make it easier to display.
@@ -2120,6 +2160,7 @@ async fn main() {
             SubCommand::ProposeToUpdateNodeRewardsTable(_) => (),
             SubCommand::ProposeToUpdateUnassignedNodesConfig(_) => (),
             SubCommand::ProposeToAddNodeOperator(_) => (),
+            SubCommand::ProposeToRemoveNodeOperators(_) => (),
             _ => panic!(
                 "Specifying a secret key or HSM is only supported for \
                      methods that interact with NNS handlers."
@@ -2664,6 +2705,15 @@ async fn main() {
 
             let response = canister_client.get_monthly_node_provider_rewards().await;
             println!("{:?}", response);
+        }
+        SubCommand::ProposeToRemoveNodeOperators(cmd) => {
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::RemoveNodeOperators,
+                opts.nns_url,
+                sender,
+            )
+            .await;
         }
     }
 }
