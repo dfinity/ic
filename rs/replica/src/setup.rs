@@ -321,13 +321,6 @@ pub fn setup_crypto_provider(
     replica_logger: ReplicaLogger,
     metrics_registry: Option<&MetricsRegistry>,
 ) -> CryptoComponent {
-    std::fs::create_dir_all(&config.crypto_root).unwrap_or_else(|err| {
-        panic!(
-            "Failed to create crypto root directory {}: {}",
-            config.crypto_root.display(),
-            err
-        )
-    });
     CryptoConfig::check_dir_has_required_permissions(&config.crypto_root).unwrap();
     CryptoComponent::new(config, registry, replica_logger, metrics_registry)
 }

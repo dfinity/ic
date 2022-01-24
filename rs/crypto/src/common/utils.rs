@@ -24,7 +24,6 @@ mod temp_crypto;
 
 pub use crate::sign::utils::combined_threshold_signature_and_public_key;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
-use std::os::unix::fs::PermissionsExt;
 pub use temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 
 #[cfg(test)]
@@ -36,9 +35,9 @@ mod tests;
 /// Stores the secret key in the key store at `crypto_root` and returns the
 /// corresponding public key.
 ///
-/// If the `crypto_root` directory does not exist, it is created with the
-/// required permissions. If there exists no key store in `crypto_root`, a new
-/// one is created.
+/// The `crypto_root` directory must exist and have the [permissions required
+/// for storing crypto state](CryptoConfig::check_dir_has_required_permissions).
+/// If there exists no key store in `crypto_root`, a new one is created.
 pub fn generate_dkg_dealing_encryption_keys(crypto_root: &Path, node_id: NodeId) -> PublicKeyProto {
     let mut csp = csp_at_root(crypto_root);
     let (pubkey, pop) = csp
@@ -52,9 +51,9 @@ pub fn generate_dkg_dealing_encryption_keys(crypto_root: &Path, node_id: NodeId)
 /// Stores the secret key in the key store at `crypto_root` and returns the
 /// corresponding public key.
 ///
-/// If the `crypto_root` directory does not exist, it is created with the
-/// required permissions. If there exists no key store in `crypto_root`, a new
-/// one is created.
+/// The `crypto_root` directory must exist and have the [permissions required
+/// for storing crypto state](CryptoConfig::check_dir_has_required_permissions).
+/// If there exists no key store in `crypto_root`, a new one is created.
 pub fn generate_idkg_dealing_encryption_keys(crypto_root: &Path) -> PublicKeyProto {
     let mut csp = csp_at_root(crypto_root);
     let pubkey = csp
@@ -83,6 +82,10 @@ pub fn generate_idkg_dealing_encryption_keys(crypto_root: &Path) -> PublicKeyPro
 /// the node's TLS certificate and the node's DKG dealing encryption key are
 /// bound to this node ID. The newly generated public keys are then returned
 /// together with the corresponding node ID.
+///
+/// The `crypto_root` directory must exist and have the [permissions required
+/// for storing crypto state](CryptoConfig::check_dir_has_required_permissions).
+/// If there exists no key store in `crypto_root`, a new one is created.
 ///
 /// # Panics
 ///  * if public keys exist but are inconsistent with the secret keys.
@@ -251,18 +254,7 @@ fn generate_tls_keys(crypto_root: &Path, node: NodeId) -> TlsPublicKeyCert {
 pub(crate) fn csp_at_root(
     crypto_root: &Path,
 ) -> Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
-    let config = config_with_dir_and_permissions(crypto_root);
+    let config = CryptoConfig::new(crypto_root.to_path_buf());
     // disable metrics
     Csp::new(&config, None, Arc::new(CryptoMetrics::none()))
-}
-
-fn config_with_dir_and_permissions(crypto_root: &Path) -> CryptoConfig {
-    std::fs::create_dir_all(&crypto_root)
-        .unwrap_or_else(|err| panic!("Failed to create crypto root directory: {}", err));
-    let config = CryptoConfig::new(crypto_root.to_path_buf());
-    std::fs::set_permissions(crypto_root, std::fs::Permissions::from_mode(0o750))
-        .expect("Could not set the permissions of the new test directory.");
-    CryptoConfig::check_dir_has_required_permissions(&config.crypto_root)
-        .expect("Could not setup crypto_root directory");
-    config
 }
