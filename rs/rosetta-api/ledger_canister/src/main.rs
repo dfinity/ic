@@ -1,24 +1,26 @@
+use archive::FailedToArchiveBlocks;
 use candid::candid_method;
 use dfn_candid::{candid, candid_one, CandidOne};
 use dfn_core::{
-    api::{
-        call_bytes_with_cleanup, call_with_cleanup, caller, data_certificate, set_certified_data,
-        trap_with, Funds,
-    },
-    endpoint::over_async_may_reject_explicit,
+    api::{caller, data_certificate, set_certified_data, trap_with},
     over, over_async, over_init, printer, setup, stable, BytesS,
 };
-use dfn_protobuf::{protobuf, ProtoBuf};
+use dfn_protobuf::protobuf;
 use ic_types::CanisterId;
 use ledger_canister::*;
-use on_wire::IntoWire;
 use std::time::Duration;
-
-use archive::FailedToArchiveBlocks;
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, RwLock},
 };
+
+#[cfg(feature = "notify-method")]
+use dfn_core::{
+    api::{call_bytes_with_cleanup, call_with_cleanup, Funds},
+    endpoint::over_async_may_reject_explicit,
+};
+use dfn_protobuf::ProtoBuf;
+use on_wire::IntoWire;
 
 // Helper to print messages in magenta
 fn print<S: std::convert::AsRef<str>>(s: S)
@@ -93,6 +95,7 @@ fn init(
     }
 }
 
+#[cfg(feature = "notify-method")]
 fn add_payment(
     memo: Memo,
     operation: Operation,
