@@ -1,15 +1,17 @@
-FROM rust:bullseye as builder-00
-
-ARG GITHUB_TOKEN
+FROM rust:1.55.0-bullseye as builder
 
 ARG RELEASE=master
 
 WORKDIR /var/tmp
 
+ADD \
+  https://github.com/dfinity/ic/archive/${RELEASE}.tar.gz \
+  ic.tar.gz
+
 RUN \
-  (curl -H "Authorization: token ${GITHUB_TOKEN}" -L https://api.github.com/repos/dfinity-lab/dfinity/tarball/${RELEASE} | tar xz --strip-components=1) && \
+  tar -xf ic.tar.gz --strip-components=1 && \
   cd rs/rosetta-api && \
-  cargo build --release --package ic-rosetta-api --bin ic-rosetta-api
+  cargo build --release --bin ic-rosetta-api
 
 FROM debian:bullseye-slim
 
@@ -19,11 +21,11 @@ LABEL RELEASE=${RELEASE}
 
 WORKDIR /root
 
-COPY --from=builder-00 \
+COPY --from=builder \
   /var/tmp/rs/target/release/ic-rosetta-api \
   /usr/local/bin/
 
-COPY --from=builder-00 \
+COPY --from=builder \
   /var/tmp/rs/rosetta-api/log_config.yml \
   /root/
 
