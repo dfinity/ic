@@ -117,8 +117,6 @@ pub struct PeerInfo {
 pub struct GetDataRequestInfo {
     /// This field stores the socket address of the Bitcoin node to which the request was sent.
     socket: SocketAddr,
-    /// This field contains the inventory for which the GetData request was issued.
-    inventory: Inventory,
     /// This field contains the time at which the GetData request was sent.  
     sent_at: SystemTime,
     /// This field contains the action to take if the request is expired.
@@ -143,10 +141,10 @@ pub struct BlockchainManager {
     /// (1) The corresponding "Block" response is received or
     /// (2) If the request is expired or
     /// (3) If the peer is disconnected.
-    get_data_request_info: HashMap<Inventory, GetDataRequestInfo>,
+    get_data_request_info: HashMap<BlockHash, GetDataRequestInfo>,
 
-    /// This HashSet stores the list of inventory that is yet to be synced by the BlockChainManager.
-    inventory_to_be_synced: HashSet<Inventory>,
+    /// This HashSet stores the list of block hashes that has yet to be synced by the BlockChainManager.
+    blocks_to_be_synced: HashSet<BlockHash>,
 
     /// This vector stores the list of messages that are to be sent to the Bitcoin network.
     outgoing_command_queue: Vec<Command>,
@@ -170,7 +168,7 @@ impl BlockchainManager {
             peer_info,
             rng,
             get_data_request_info,
-            inventory_to_be_synced,
+            blocks_to_be_synced: inventory_to_be_synced,
             outgoing_command_queue,
             logger,
         }
@@ -362,8 +360,7 @@ impl BlockchainManager {
 
         let block_hash = block.block_hash();
 
-        let inv = Inventory::Block(block_hash);
-        let maybe_request_info = self.get_data_request_info.get(&inv);
+        let maybe_request_info = self.get_data_request_info.get(&block_hash);
         let time_taken = match maybe_request_info {
             Some(request_info) => request_info
                 .sent_at
@@ -380,23 +377,23 @@ impl BlockchainManager {
             block_hash
         );
 
+        //Remove the corresponding `GetData` request from peer_info and get_data_request_info.
+        if let Some(request_info) = maybe_request_info {
+            if request_info.socket == *addr {
+                peer.num_of_outstanding_get_data_requests =
+                    peer.num_of_outstanding_get_data_requests.saturating_sub(1);
+            }
+        }
+
+        self.get_data_request_info.remove(&block_hash);
+
         match self.blockchain.add_block(block.clone()) {
             Ok(block_height) => {
                 slog::info!(
                     self.logger,
-                    "Block added to the blockchain successfully with height = {}",
+                    "Block added to the cache successfully at height = {}",
                     block_height
                 );
-
-                //Remove the corresponding `GetData` request from peer_info and get_data_request_info.
-                if let Some(request_info) = maybe_request_info {
-                    if request_info.socket == *addr {
-                        peer.num_of_outstanding_get_data_requests =
-                            peer.num_of_outstanding_get_data_requests.saturating_sub(1);
-                    }
-                }
-
-                self.get_data_request_info.remove(&inv);
                 Ok(())
             }
             Err(err) => {
@@ -447,13 +444,13 @@ impl BlockchainManager {
         let now = SystemTime::now();
         let timeout_period = Duration::new(GETDATA_REQUEST_TIMEOUT_SECS, 0);
         let mut requests_to_remove = vec![];
-        for request in self.get_data_request_info.values_mut() {
+        for (block_hash, request) in self.get_data_request_info.iter_mut() {
             if request.sent_at + timeout_period < now {
                 if let Some(peer) = self.peer_info.get_mut(&request.socket) {
                     peer.num_of_outstanding_get_data_requests =
                         peer.num_of_outstanding_get_data_requests.saturating_sub(1);
                 }
-                requests_to_remove.push(request.inventory);
+                requests_to_remove.push(*block_hash);
             }
         }
 
@@ -463,24 +460,20 @@ impl BlockchainManager {
     }
 
     pub fn sync_blocks(&mut self) {
-        if self.inventory_to_be_synced.is_empty() {
+        if self.blocks_to_be_synced.is_empty() {
             return;
         }
 
         slog::info!(
             self.logger,
-            "Syning blocks. Inventory to be synced : {:?}",
-            self.inventory_to_be_synced
+            "Syning blocks. Blocks to be synced : {:?}",
+            self.blocks_to_be_synced
         );
 
         // Removing expired GetData requests from `self.get_data_request_info`
         self.filter_expired_get_data_requests();
 
-        // Filter out the inventory for which GetData request has already been sent and the request hasn't timed out yet.
-        // We will send GetData requests only for the inventory which hasn't been request before, or for which the earlier request has expired.
-        let mut inventory_to_be_synced =
-            &self.inventory_to_be_synced - &self.get_data_request_info.keys().copied().collect();
-        slog::info!(self.logger, "Syning blocks. Inventory to be synced after filtering out the past GetData requests : {:?}", inventory_to_be_synced);
+        slog::info!(self.logger, "Syncing blocks. Inventory to be synced after filtering out the past GetData requests : {:?}", self.blocks_to_be_synced);
 
         // PeerInfo for each peer stores the `num_of_outstanding_get_data_requests`
         // We prefer to send GetData requests to those peers for which `num_of_outstanding_get_data_requests` is lowest.
@@ -515,7 +508,8 @@ impl BlockchainManager {
                 INV_PER_GET_DATA_REQUEST.saturating_sub(peer.num_of_outstanding_get_data_requests);
 
             // Randomly sample some inventory to be requested from the peer.
-            let selected_inventory = inventory_to_be_synced
+            let selected_inventory = self
+                .blocks_to_be_synced
                 .iter()
                 .cloned()
                 .choose_multiple(&mut self.rng, num_requests_to_be_sent as usize);
@@ -534,7 +528,12 @@ impl BlockchainManager {
             //Send 'GetData' request for the inventory to the peer.
             self.outgoing_command_queue.push(Command {
                 address: Some(peer.socket),
-                message: NetworkMessage::GetData(selected_inventory.clone()),
+                message: NetworkMessage::GetData(
+                    selected_inventory
+                        .iter()
+                        .map(|h| Inventory::Block(*h))
+                        .collect(),
+                ),
             });
 
             peer.num_of_outstanding_get_data_requests = peer
@@ -546,18 +545,15 @@ impl BlockchainManager {
                     inv,
                     GetDataRequestInfo {
                         socket: peer.socket,
-                        inventory: inv,
                         sent_at: SystemTime::now(),
                         on_timeout: OnTimeout::Ignore,
                     },
                 );
 
                 // Remove the inventory that is going to be sent.
-                inventory_to_be_synced.remove(&inv);
+                self.blocks_to_be_synced.remove(&inv);
             }
         }
-
-        self.inventory_to_be_synced = inventory_to_be_synced;
     }
 
     /// This function is called by the adapter when a new event takes place.
@@ -695,19 +691,23 @@ impl HandleClientRequest for BlockchainManager {
             future_successor_block_hashes.remove(&successor.block_hash());
         }
 
+        // Add `future_successor_block_hashes` to `self.inventory_to_be_synced`
+        // if `self.blockchain` does not currently have the block.
+        let active_sent_hashes: HashSet<_> = self.get_data_request_info.keys().copied().collect();
+        for block_hash in future_successor_block_hashes {
+            if self.blockchain.get_block(&block_hash).is_none()
+                && !active_sent_hashes.contains(&block_hash)
+            {
+                self.blocks_to_be_synced.insert(block_hash);
+            }
+        }
+
         slog::info!(
             self.logger,
             "Number of blocks cached: {}, Number of uncached successor blocks : {}",
             successor_blocks.len(),
-            future_successor_block_hashes.len()
+            self.blocks_to_be_synced.len()
         );
-
-        //Add `uncached_successor_block_hashes` to `self.inventory_to_be_synced`
-        //so as to send GetData requests in the future.
-        for block_hash in future_successor_block_hashes {
-            self.inventory_to_be_synced
-                .insert(Inventory::Block(block_hash));
-        }
 
         successor_blocks.get(0).cloned()
     }
@@ -961,11 +961,11 @@ pub mod test {
         assert_eq!(added_headers.len(), headers.len());
         assert!(maybe_err.is_none());
         blockchain_manager
-            .inventory_to_be_synced
-            .insert(Inventory::Block(block_1.block_hash()));
+            .blocks_to_be_synced
+            .insert(block_1.block_hash());
         blockchain_manager
-            .inventory_to_be_synced
-            .insert(Inventory::Block(block_2.block_hash()));
+            .blocks_to_be_synced
+            .insert(block_2.block_hash());
 
         blockchain_manager.add_peer(&peer_addr);
         // Ensure that the number of requests is at 0.
@@ -1055,5 +1055,58 @@ pub mod test {
         assert!(successor_hashes.contains(&side_chain[0].block_hash()));
         assert!(successor_hashes.contains(&side_chain[1].block_hash()));
         assert!(successor_hashes.contains(&test_state.block_2.block_hash()));
+    }
+
+    /// This tests ensures that `BlockchainManager::handle_client_request(...)` does the following:
+    /// 1. Retrieves immediate successor hashes and returns block 1.
+    /// 2. Adds block 2 to `blockchain_manager.blocks_to_be_synced`.
+    /// 3. Sync the blocks.
+    /// 4. Retrieves with a set of hashes containing block 1.
+    ///     a. No block is returned
+    ///     b. Block 1 has been pruned from the cache.
+    ///     c. Block 2 is no longer in the `blockchain_manager.blocks_to_be_synced` field.
+    #[test]
+    fn test_handle_client_request() {
+        let test_state = TestState::setup();
+        let config = ConfigBuilder::new().build();
+        let addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
+        let mut blockchain_manager = BlockchainManager::new(&config, make_logger());
+        blockchain_manager.add_peer(&addr);
+        blockchain_manager
+            .blockchain
+            .add_header(test_state.block_1.header)
+            .expect("invalid header");
+        blockchain_manager
+            .blockchain
+            .add_header(test_state.block_2.header)
+            .expect("invalid header");
+        blockchain_manager
+            .blockchain
+            .add_block(test_state.block_1.clone())
+            .expect("invalid block");
+
+        let hashes = vec![blockchain_manager.blockchain.genesis().header.block_hash()];
+        let maybe_block = blockchain_manager.handle_client_request(hashes);
+        let block_1_hash = test_state.block_1.block_hash();
+        let block_2_hash = test_state.block_2.block_hash();
+        assert!(matches!(maybe_block, Some(block) if block.block_hash() == block_1_hash));
+        assert_eq!(blockchain_manager.blocks_to_be_synced.len(), 1);
+        assert!(blockchain_manager
+            .blocks_to_be_synced
+            .contains(&block_2_hash));
+
+        let hashes = vec![
+            blockchain_manager.blockchain.genesis().header.block_hash(),
+            block_1_hash,
+        ];
+
+        blockchain_manager.sync_blocks();
+        let maybe_block = blockchain_manager.handle_client_request(hashes);
+        assert!(maybe_block.is_none());
+        assert!(blockchain_manager
+            .blockchain
+            .get_block(&block_1_hash)
+            .is_none());
+        assert!(blockchain_manager.blocks_to_be_synced.is_empty());
     }
 }
