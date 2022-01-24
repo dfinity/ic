@@ -158,7 +158,7 @@
 /rs/types/types/src/p2p.rs           @dfinity-lab/teams/networking-team
 /rs/universal_canister/              @dfinity-lab/teams/execution-owners @dfinity-lab/teams/ic-testing-verification
 /rs/validator/                       @dfinity-lab/teams/execution-owners
-/rs/workload_generator               @dfinity-lab/teams/networking-team
+/rs/workload_generator/               @dfinity-lab/teams/networking-team
 
 # Scalability suite is currently owned by both node-team and testing team
 # Most individual benchmarks are owned by individual teams

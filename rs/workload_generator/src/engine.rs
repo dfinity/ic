@@ -332,6 +332,7 @@ impl Engine {
     ) -> Option<u32> {
         let time_query_start = Instant::now();
         let response = agent.execute_query(&plan.canister_id, &*method, arg).await;
+        let latency = Instant::now().duration_since(time_query_start);
         debug!("Sent query ({}). Response was: {:?}", n, response);
 
         match response {
@@ -344,7 +345,7 @@ impl Engine {
                     fs::write(f, bytes).unwrap();
                 }
 
-                Engine::check_query(r, tx, time_query_start, plan).await
+                Engine::check_query(r, tx, latency, plan).await
             }
             Err(e) => {
                 let err = format!("{:?}", e).to_string();
@@ -358,7 +359,7 @@ impl Engine {
                     fact: Fact::record(
                         ContentLength::new(0),
                         http_status,
-                        Instant::now().duration_since(time_query_start),
+                        latency,
                         false,
                         plan.request_type,
                     ),
@@ -631,7 +632,7 @@ impl Engine {
     async fn check_query(
         resp: Option<Vec<u8>>,
         tx: Sender<CallResult>,
-        time_query_start: Instant,
+        latency: Duration,
         plan: &Plan,
     ) -> Option<u32> {
         debug!("Response: {:?}", resp);
@@ -639,8 +640,6 @@ impl Engine {
             .as_ref()
             .map(|r| Engine::interpret_counter_canister_response(r));
         debug!("🚀 Got counter value: {:?}", counter);
-
-        let latency = Instant::now().duration_since(time_query_start);
 
         LATENCY_HISTOGRAM
             .with_label_values(&["query", "replied"])
