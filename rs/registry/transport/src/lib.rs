@@ -24,6 +24,8 @@ pub enum Error {
     UnknownError(String),
 }
 
+impl std::error::Error for Error {}
+
 impl fmt::Display for Error {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.write_str("Registry Canister Error. Msg: ")?;

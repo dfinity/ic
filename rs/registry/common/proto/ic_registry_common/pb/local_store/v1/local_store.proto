@@ -37,3 +37,9 @@ message CertifiedTime {
   // Number of nano seconds since UNIX EPOCH
   uint64 unix_epoch_nanos = 1;
 }
+
+// A changelog that is applicable at a specific registry version.
+message Delta {
+  uint64 registry_version = 1;
+  repeated ChangelogEntry changelog = 2;
+}

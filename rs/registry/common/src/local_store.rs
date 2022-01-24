@@ -1,5 +1,5 @@
 use crate::pb::local_store::v1::{
-    CertifiedTime as PbCertifiedTime, ChangelogEntry as PbChangelogEntry,
+    CertifiedTime as PbCertifiedTime, ChangelogEntry as PbChangelogEntry, Delta as PbDelta,
     KeyMutation as PbKeyMutation, MutationType,
 };
 use ic_interfaces::registry::{
@@ -11,7 +11,7 @@ use ic_utils::fs::write_protobuf_using_tmp_file;
 use prost::Message;
 use std::{
     convert::TryFrom,
-    io,
+    io::{self},
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
@@ -64,7 +64,7 @@ pub trait LocalStoreWriter: Send + Sync {
     fn update_certified_time(&self, unix_epoch_nanos: u64) -> io::Result<()>;
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct LocalStoreImpl {
     /// Directory with one .pb file per registry version.
     path: PathBuf,
@@ -150,23 +150,7 @@ impl LocalStoreReader for LocalStoreImpl {
 impl LocalStoreWriter for LocalStoreImpl {
     // precondition: version > 0
     fn store(&self, version: RegistryVersion, ce: ChangelogEntry) -> io::Result<()> {
-        assert!(!ce.is_empty());
-        let key_mutations = ce
-            .iter()
-            .map(|km| {
-                let mutation_type = if km.value.is_some() {
-                    MutationType::Set as i32
-                } else {
-                    MutationType::Unset as i32
-                };
-                PbKeyMutation {
-                    key: km.key.clone(),
-                    value: km.value.clone().unwrap_or_default(),
-                    mutation_type,
-                }
-            })
-            .collect();
-        let pb_ce = PbChangelogEntry { key_mutations };
+        let pb_ce = changelog_entry_to_protobuf(ce);
         self.write_changelog_entry(version.get(), pb_ce)
     }
 
@@ -301,6 +285,79 @@ impl LocalStoreCertifiedTimeReader for LocalStoreImpl {
     }
 }
 
+/// Translate a compact protobuf message to a changelog.
+///
+/// The original use case is auxiliary services and utilities that interact with
+/// the mainnet-registry and ship with a hardcoded prefix. As the registry is
+/// designed as an append-only store, this has the benefit that the prefix does
+/// not need to be re-fetched. Further, all mainnet configuration information is
+/// already available (provided the software is received through an
+/// authenticated channel).
+pub fn compact_delta_to_changelog(source: &[u8]) -> std::io::Result<(RegistryVersion, Changelog)> {
+    PbDelta::decode(source)
+        .map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Protobuf encoding for registry delta failed: {:?}", e),
+            )
+        })
+        .and_then(|delta| {
+            let changelog =
+                delta
+                    .changelog
+                    .into_iter()
+                    .try_fold(vec![], |mut changelog, entry| {
+                        changelog.push(ChangelogEntry::try_from(entry)?);
+                        Ok::<_, std::io::Error>(changelog)
+                    })?;
+            Ok((RegistryVersion::from(delta.registry_version), changelog))
+        })
+}
+
+/// Inverse of [compact_delta_to_changelog].
+///
+/// # Panics
+///
+/// This function panics if any of the changelog entries is empty.
+pub fn changelog_to_compact_delta(
+    registry_version: RegistryVersion,
+    changelog: Changelog,
+) -> std::io::Result<Vec<u8>> {
+    let changelog = changelog
+        .into_iter()
+        .map(changelog_entry_to_protobuf)
+        .collect::<Vec<_>>();
+    let delta = PbDelta {
+        registry_version: registry_version.get(),
+        changelog,
+    };
+    let mut buf = vec![];
+    delta
+        .encode(&mut buf)
+        .expect("Encoding protobuf message failed!");
+    Ok(buf)
+}
+
+fn changelog_entry_to_protobuf(ce: ChangelogEntry) -> PbChangelogEntry {
+    assert!(!ce.is_empty());
+    let key_mutations = ce
+        .iter()
+        .map(|km| {
+            let mutation_type = if km.value.is_some() {
+                MutationType::Set as i32
+            } else {
+                MutationType::Unset as i32
+            };
+            PbKeyMutation {
+                key: km.key.clone(),
+                value: km.value.clone().unwrap_or_default(),
+                mutation_type,
+            }
+        })
+        .collect();
+    PbChangelogEntry { key_mutations }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -424,5 +481,18 @@ mod tests {
                 None
             },
         }
+    }
+
+    #[test]
+    fn mainnet_delta_can_be_read() {
+        let changelog = get_mainnet_delta();
+        assert_eq!(changelog.len(), 0x6dc1);
+    }
+
+    fn get_mainnet_delta() -> Changelog {
+        let mainnet_delta_raw = include_bytes!("../artifacts/mainnet_delta_00-6d-c1.pb");
+        compact_delta_to_changelog(&mainnet_delta_raw[..])
+            .expect("")
+            .1
     }
 }
