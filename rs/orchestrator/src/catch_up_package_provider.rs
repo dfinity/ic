@@ -196,37 +196,6 @@ impl CatchUpPackageProvider {
         Ok(cup_file_path)
     }
 
-    pub(crate) fn persist_cup_deprecated(
-        &self,
-        cup: &CUPWithOriginalProtobuf,
-        subnet_id: SubnetId,
-    ) -> OrchestratorResult<PathBuf> {
-        let cup_file_path = self.get_upgrade_cup_save_path(subnet_id);
-        info!(
-            self.logger,
-            "Persisting CUP to file: {:?}, replica version={}, height={}",
-            &cup_file_path,
-            cup.cup.content.registry_version(),
-            cup.cup.height()
-        );
-        write_protobuf_using_tmp_file(&cup_file_path, &cup.protobuf).map_err(|e| {
-            OrchestratorError::IoError(
-                format!("Failed to serialize protobuf to disk: {:?}", &cup_file_path),
-                e,
-            )
-        })?;
-
-        self.persist_cup(cup)
-    }
-
-    // The path that should be used to save the CUP for the given subnet.
-    // Includes the specific type encoded in the file for future-proofing and
-    // ease of debugging.
-    fn get_upgrade_cup_save_path(&self, subnet_id: SubnetId) -> PathBuf {
-        self.cup_dir
-            .join(format!("cup_{}.types.v1.CatchUpPackage.pb", subnet_id))
-    }
-
     /// The path that should be used to save the CUP for the assigned subnet.
     /// Includes the specific type encoded in the file for future-proofing and
     /// ease of debugging.
@@ -244,10 +213,7 @@ impl CatchUpPackageProvider {
         subnet_id: SubnetId,
     ) -> OrchestratorResult<CUPWithOriginalProtobuf> {
         let registry_version = self.registry.get_latest_version();
-        let local_cup = match self.get_local_cup() {
-            None => self.get_local_cup_deprecated(subnet_id),
-            other => other,
-        };
+        let local_cup = self.get_local_cup();
 
         // Returns local_cup in case no more recent CUP is found.
         let subnet_cup = self
@@ -269,25 +235,6 @@ impl CatchUpPackageProvider {
                 subnet_id,
                 registry_version,
             ))
-    }
-
-    fn get_local_cup_deprecated(&self, subnet_id: SubnetId) -> Option<CUPWithOriginalProtobuf> {
-        let path = self.get_upgrade_cup_save_path(subnet_id);
-        match File::open(&path) {
-            Ok(reader) => pb::CatchUpPackage::read_from_reader(reader)
-                .and_then(|protobuf| {
-                    Ok(CUPWithOriginalProtobuf {
-                        cup: CatchUpPackage::try_from(&protobuf)?,
-                        protobuf,
-                    })
-                })
-                .map_err(|e| warn!(self.logger, "Failed to read CUP from file {:?}", e))
-                .ok(),
-            Err(err) => {
-                warn!(self.logger, "Couldn't open file {:?}: {:?}", path, err);
-                None
-            }
-        }
     }
 
     /// Returns the locally persisted CUP.

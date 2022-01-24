@@ -115,8 +115,7 @@ impl ReleasePackage {
 
         // If the latest CUP is newer than the local one, persist it.
         if Some(cup.cup.content.height()) > local_cup.map(|cup| cup.content.height()) {
-            self.cup_provider
-                .persist_cup_deprecated(&cup, latest_subnet_id)?;
+            self.cup_provider.persist_cup(&cup)?;
         }
 
         // Now we know the subnet_id and we're assigned; start the replica if necessary.
@@ -141,10 +140,8 @@ impl ReleasePackage {
                 .get_registry_cup(latest_registry_version, latest_subnet_id)
                 .expect("A registry cup must be present in the the registry");
 
-            self.cup_provider.persist_cup_deprecated(
-                &CUPWithOriginalProtobuf::from_cup(cup),
-                latest_subnet_id,
-            )?;
+            self.cup_provider
+                .persist_cup(&CUPWithOriginalProtobuf::from_cup(cup))?;
 
             warn!(
                 self.logger,
@@ -263,8 +260,7 @@ impl ReleasePackage {
         }
 
         // Now that we know we are upgrading, persist the CUP.
-        self.cup_provider
-            .persist_cup_deprecated(&cup, latest_subnet_id)?;
+        self.cup_provider.persist_cup(&cup)?;
 
         info!(
             self.logger,
