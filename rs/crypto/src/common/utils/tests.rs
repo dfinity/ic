@@ -2,6 +2,8 @@
 
 use super::*;
 use ic_config::crypto::CryptoConfig;
+use ic_test_utilities::crypto::empty_fake_registry;
+use ic_test_utilities::types::ids::node_test_id;
 
 fn store_public_keys(crypto_root: &Path, node_pks: &NodePublicKeys) {
     public_key_store::store_node_public_keys(crypto_root, node_pks).unwrap();
@@ -41,21 +43,29 @@ fn should_generate_all_keys_for_a_node_without_public_keys() {
 #[test]
 #[should_panic(expected = "inconsistent key material")]
 fn should_panic_if_node_has_inconsistent_keys() {
-    CryptoConfig::run_with_temp_config(|config| {
-        let _node_signing_pk = Some(generate_node_signing_keys(&config.crypto_root));
-        let different_crypto_root = config.crypto_root.join("different_subdir");
-        let different_node_signing_pk = Some(generate_node_signing_keys(&different_crypto_root));
-
-        // Store different_node_signing_pk in `config.crypto_root`.
-        store_public_keys(
-            &config.crypto_root,
-            &NodePublicKeys {
-                node_signing_pk: different_node_signing_pk,
-                ..Default::default()
-            },
+    let (temp_crypto, _node_keys) = TempCryptoComponent::new_with_node_keys_generation(
+        empty_fake_registry(),
+        node_test_id(1),
+        NodeKeysToGenerate::only_node_signing_key(),
+    );
+    let different_node_signing_pk = {
+        let (_temp_crypto2, node_keys2) = TempCryptoComponent::new_with_node_keys_generation(
+            empty_fake_registry(),
+            node_test_id(2),
+            NodeKeysToGenerate::only_node_signing_key(),
         );
-        let (_node_pks, _node_id) = get_node_keys_or_generate_if_missing(&config.crypto_root);
-    })
+        node_keys2.node_signing_pk
+    };
+
+    // Store different_node_signing_pk in temp_crypto's crypto_root.
+    store_public_keys(
+        temp_crypto.temp_dir_path(),
+        &NodePublicKeys {
+            node_signing_pk: different_node_signing_pk,
+            ..Default::default()
+        },
+    );
+    let (_node_pks, _node_id) = get_node_keys_or_generate_if_missing(temp_crypto.temp_dir_path());
 }
 
 #[test]
@@ -80,34 +90,44 @@ fn check_keys_locally_returns_none_if_no_public_keys_are_present() {
 
 #[test]
 fn should_fail_check_keys_locally_if_no_matching_secret_key_is_present() {
-    CryptoConfig::run_with_temp_config(|config| {
-        let node_signing_pk = Some(generate_node_signing_keys(&config.crypto_root));
-        let different_crypto_root = config.crypto_root.join("different_subdir");
-        let different_node_signing_pk = Some(generate_node_signing_keys(&different_crypto_root));
-
-        // Fail the check if `different_node_signing_pk` is stored.
-        store_public_keys(
-            &config.crypto_root,
-            &NodePublicKeys {
-                node_signing_pk: different_node_signing_pk,
-                ..Default::default()
-            },
+    let (temp_crypto, node_keys) = TempCryptoComponent::new_with_node_keys_generation(
+        empty_fake_registry(),
+        node_test_id(1),
+        NodeKeysToGenerate::only_node_signing_key(),
+    );
+    let crypto_root = temp_crypto.temp_dir_path();
+    let node_signing_pk = node_keys.node_signing_pk;
+    let different_node_signing_pk = {
+        let (_temp_crypto2, node_keys2) = TempCryptoComponent::new_with_node_keys_generation(
+            empty_fake_registry(),
+            node_test_id(2),
+            NodeKeysToGenerate::only_node_signing_key(),
         );
-        let result = check_keys_locally(&config.crypto_root);
-        assert!(result.is_err());
+        node_keys2.node_signing_pk
+    };
 
-        // Succeed the check if node_signing_pk is stored.
-        store_public_keys(
-            &config.crypto_root,
-            &NodePublicKeys {
-                node_signing_pk,
-                ..Default::default()
-            },
-        );
-        let result = check_keys_locally(&config.crypto_root);
-        assert!(result.is_ok());
-        assert!(result.unwrap().is_some());
-    })
+    // Fail the check if `different_node_signing_pk` is stored.
+    store_public_keys(
+        crypto_root,
+        &NodePublicKeys {
+            node_signing_pk: different_node_signing_pk,
+            ..Default::default()
+        },
+    );
+    let result = check_keys_locally(crypto_root);
+    assert!(result.is_err());
+
+    // Succeed the check if node_signing_pk is stored.
+    store_public_keys(
+        crypto_root,
+        &NodePublicKeys {
+            node_signing_pk,
+            ..Default::default()
+        },
+    );
+    let result = check_keys_locally(crypto_root);
+    assert!(result.is_ok());
+    assert!(result.unwrap().is_some());
 }
 
 #[test]

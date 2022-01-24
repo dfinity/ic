@@ -26,6 +26,7 @@ use ic_types::{
     registry::connection_endpoint::{ConnectionEndpoint, ConnectionEndpointTryFromError},
     NodeId, PrincipalId, RegistryVersion,
 };
+use std::os::unix::fs::PermissionsExt;
 
 const CRYPTO_DIR: &str = "crypto";
 pub type SubnetIndex = u64;
@@ -341,8 +342,6 @@ impl NodeConfiguration {
         self,
         node_path: P,
     ) -> Result<InitializedNode, InitializeNodeError> {
-        let crypto_path = InitializedNode::build_crypto_path(node_path.as_ref());
-
         std::fs::create_dir_all(node_path.as_ref()).map_err(|source| {
             InitializeNodeError::CreateNodePathFailed {
                 path: node_path.as_ref().to_string_lossy().to_string(),
@@ -350,6 +349,20 @@ impl NodeConfiguration {
             }
         })?;
 
+        let crypto_path = InitializedNode::build_crypto_path(node_path.as_ref());
+        std::fs::create_dir_all(&crypto_path).map_err(|source| {
+            InitializeNodeError::CreateNodePathFailed {
+                path: crypto_path.to_string_lossy().to_string(),
+                source,
+            }
+        })?;
+        // Set permissions required for `get_node_keys_or_generate_if_missing`
+        std::fs::set_permissions(&crypto_path, std::fs::Permissions::from_mode(0o750)).map_err(
+            |source| InitializeNodeError::CreateNodePathFailed {
+                path: crypto_path.to_string_lossy().to_string(),
+                source,
+            },
+        )?;
         let (node_pks, node_id) = get_node_keys_or_generate_if_missing(&crypto_path);
         // CRP-1273: Remove the following call when the encryption keys are generated
         // together with the rest of the node keys.

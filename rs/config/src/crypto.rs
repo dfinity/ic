@@ -40,16 +40,19 @@ impl CryptoConfig {
         Self { crypto_root }
     }
 
-    /// Creates a new CryptoConfig in a temporary directory and returns the
-    /// config together with the temporary directory.
+    /// Creates a new CryptoConfig in a temporary directory for testing.
+    /// The directory has the permissions required for storing crypto state (see
+    /// [`Self::check_dir_has_required_permissions`]) and will be automatically
+    /// deleted when the returned `TempDir` goes out of scope.
+    /// Panics if creating the directory or setting the permissions fails.
     pub fn new_in_temp_dir() -> (Self, TempDir) {
         let temp_dir = tempfile::Builder::new()
             .prefix("ic_crypto_")
             .tempdir()
-            .unwrap();
+            .expect("failed to create temporary crypto directory");
         fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o750)).unwrap_or_else(|_| {
             panic!(
-                "Could not set the permissions of the new test directory {}",
+                "failed to set permissions of crypto directory {}",
                 temp_dir.path().display()
             )
         });

@@ -16,9 +16,9 @@ cow_state/src/lib.rs:use std::{
 crypto/internal/crypto_lib/basic_sig/ecdsa_secp256_wycheproof_tests/src/tests.rs:use std::fs::File;
 crypto/internal/crypto_service_provider/src/public_key_store/mod.rs:use std::fs;
 crypto/internal/crypto_service_provider/src/secret_key_store/proto_store.rs:use std::fs;
+crypto/internal/csp_test_utils/src/files.rs:use std::fs::Permissions;
 crypto/internal/csp_test_utils/src/files.rs:use std::fs;
 crypto/internal/csp_test_utils/src/files.rs:use std::os::unix::fs::PermissionsExt;
-crypto/src/common/utils.rs:use std::os::unix::fs::PermissionsExt;
 drun/src/lib.rs:use std::fs::OpenOptions;
 drun/src/message.rs:    convert::TryFrom,
 drun/src/message.rs:    fmt,
@@ -65,6 +65,7 @@ prep/src/internet_computer.rs:    convert::TryInto,
 prep/src/internet_computer.rs:    fmt,
 prep/src/internet_computer.rs:    fs::{self, File},
 prep/src/internet_computer.rs:use std::{
+prep/src/node.rs:use std::os::unix::fs::PermissionsExt;
 registry/admin/src/main.rs:    convert::TryFrom,
 registry/admin/src/main.rs:    fs::{metadata, read_to_string, File},
 registry/admin/src/main.rs:use std::{

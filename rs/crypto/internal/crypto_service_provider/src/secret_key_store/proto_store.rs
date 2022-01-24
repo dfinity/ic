@@ -67,7 +67,8 @@ pub struct ProtoSecretKeyStore {
 impl ProtoSecretKeyStore {
     /// Creates a database instance.
     pub fn open(dir: &Path, file_name: &str, logger: Option<ReplicaLogger>) -> Self {
-        CryptoConfig::check_dir_has_required_permissions(dir).expect("Wrong crypto root");
+        CryptoConfig::check_dir_has_required_permissions(dir)
+            .expect("wrong crypto root permissions");
         let proto_file = dir.join(file_name);
         let secret_keys = match Self::read_sks_data_from_disk(&proto_file) {
             Some(sks_proto) => sks_proto,
