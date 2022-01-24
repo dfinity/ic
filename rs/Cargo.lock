@@ -5222,6 +5222,7 @@ dependencies = [
 name = "ic-registry-client"
 version = "0.8.0"
 dependencies = [
+ "anyhow",
  "assert_matches",
  "ic-config",
  "ic-interfaces",
@@ -5241,6 +5242,8 @@ dependencies = [
  "serde",
  "serde_cbor",
  "slog",
+ "tempfile",
+ "thiserror",
  "tokio",
  "url",
 ]
