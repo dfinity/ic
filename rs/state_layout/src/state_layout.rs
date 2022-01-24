@@ -974,13 +974,6 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             consumed_cycles_since_replica_started: Some(
                 (&item.consumed_cycles_since_replica_started).into(),
             ),
-            stable_memory_size: match u32::try_from(item.stable_memory_size.get()) {
-                Ok(num) => num,
-                // If the value is bigger than 2^32, simply saturate it, `stable_memory_size64`
-                // should be the field that correctly represents the size of stable memory in this
-                // case.
-                Err(_) => u32::MAX,
-            },
             stable_memory_size64: item.stable_memory_size.get() as u64,
             heap_delta_debit: item.heap_delta_debit.get(),
         }
@@ -1016,18 +1009,6 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
         let cycles_balance =
             try_from_option_field(value.cycles_balance, "CanisterStateBits::cycles_balance")?;
 
-        // TODO(EXC-402): Remove this branch once subnets have been upgraded to have
-        // the new 64-bit size along with the old 32-bit size.
-        let stable_memory_size = if value.stable_memory_size64 > 0 {
-            value.stable_memory_size64
-        } else {
-            // This case happens on the first upgrade of the replica when
-            // `stable_memory_size64` is not set yet has the default value of 0.
-            // This may also happen if the memory size is actually 0, then
-            // `stable_memory_size` is guaranteed to be 0 as well.
-            value.stable_memory_size as u64
-        };
-
         Ok(Self {
             controllers,
             last_full_execution_round: value.last_full_execution_round.into(),
@@ -1057,7 +1038,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             interruped_during_execution: value.interruped_during_execution,
             certified_data: value.certified_data,
             consumed_cycles_since_replica_started,
-            stable_memory_size: NumWasmPages::from(stable_memory_size as usize),
+            stable_memory_size: NumWasmPages::from(value.stable_memory_size64 as usize),
             heap_delta_debit: NumBytes::from(value.heap_delta_debit),
         })
     }
