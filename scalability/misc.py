@@ -7,14 +7,12 @@ def get_datapoints(target_rps=500, rps_min=50, rps_max=20000, increment=50, expo
     for inc in sorted(set([increment * round(2 ** (i * exponent)) for i in range(100)])):
 
         r = target_rps - inc
-        if r > rps_min:
-            rps.append(r)
+        rps.append(r)
 
         r = target_rps + inc
-        if r < rps_max:
-            rps.append(r)
+        rps.append(r)
 
-    datapoints = sorted(set(rps))
+    datapoints = sorted(set([x for x in rps if x >= rps_min and x <= rps_max]))
     num = len(datapoints)
 
     print(f"Measuring {num} datapoints {datapoints}")

@@ -350,21 +350,14 @@ class Experiment:
         """Store info for the target machine in the experiment output directory."""
         if FLAGS.no_instrument:
             return
-        p = ssh.run_ssh(
-            self.get_machine_to_instrument(),
-            "lscpu",
-            f_stdout=os.path.join(self.out_dir, "lscpu.stdout.txt"),
-            f_stderr=os.path.join(self.out_dir, "lscpu.stderr.txt"),
-        )
-        p.wait()
-
-        p = ssh.run_ssh(
-            self.get_machine_to_instrument(),
-            "free -h",
-            f_stdout=os.path.join(self.out_dir, "free.stdout.txt"),
-            f_stderr=os.path.join(self.out_dir, "free.stderr.txt"),
-        )
-        p.wait()
+        for (cmd, name) in [("lscpu", "lscpu"), ("free -h", "free"), ("df -h", "df")]:
+            p = ssh.run_ssh(
+                self.get_machine_to_instrument(),
+                cmd,
+                f_stdout=os.path.join(self.out_dir, f"{name}.stdout.txt"),
+                f_stderr=os.path.join(self.out_dir, f"{name}.stderr.txt"),
+            )
+            p.wait()
 
     def get_node_ip_address(self, nodeid):
         """Get HTTP endpoint for the given node."""

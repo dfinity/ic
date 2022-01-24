@@ -43,11 +43,17 @@ class Flamegraph(metrics.Metric):
             # warning: Maximum frequency rate (750 Hz) exceeded, throttling from 997 Hz to 750 Hz.
             # The limit can be raised via /proc/sys/kernel/perf_event_max_sample_rate.
             # The kernel will lower it when perf's interrupts take too long.
+            all_correct = [0 for _ in range(len(machines))]
 
-            ssh.run_ssh_in_parallel(machines, "echo -1 | sudo tee /proc/sys/kernel/perf_event_paranoid")
-            ssh.run_ssh_in_parallel(
+            rcs = ssh.run_ssh_in_parallel(machines, "echo -1 | sudo tee /proc/sys/kernel/perf_event_paranoid")
+            assert rcs == all_correct
+            # ic-os now has a read-only file system. Need to remount rw
+            rcs = ssh.run_ssh_in_parallel(machines, "sudo mount -o remount,rw /")
+            assert rcs == all_correct
+            rcs = ssh.run_ssh_in_parallel(
                 machines, "sudo apt update; sudo apt install -y linux-tools-common linux-tools-$(uname -r)"
             )
+            assert rcs == all_correct
 
             destinations = ["admin@[{}]:".format(m) for m in machines]
             sources = ["flamegraph" for _ in machines]

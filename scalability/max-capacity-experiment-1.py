@@ -14,9 +14,9 @@ gflags.DEFINE_integer("query_rps_increment", 50, "Increment of requests per seco
 
 # Flags for update mode
 gflags.DEFINE_integer("target_update_load", 600, "Target update load in queries per second to issue.")
-gflags.DEFINE_integer("update_rps_increment", 5, "Increment of requests per second per round for update calls.")
-gflags.DEFINE_integer("update_initial_rps", 20, "Start rps and increment in update mode.")
-gflags.DEFINE_integer("max_update_load", 1000, "Maximum update load in queries per second to issue.")
+gflags.DEFINE_integer("update_rps_increment", 20, "Increment of requests per second per round for update calls.")
+gflags.DEFINE_integer("update_initial_rps", 100, "Start rps and increment in update mode.")
+gflags.DEFINE_integer("max_update_load", 2000, "Maximum update load in queries per second to issue.")
 
 # Duration in seconds for which to execute workload in each round.
 gflags.DEFINE_integer("iter_duration", 300, "Duration per iteration of the benchmark.")
@@ -45,11 +45,11 @@ if __name__ == "__main__":
 
     datapoints = (
         misc.get_datapoints(
-            FLAGS.target_update_load, FLAGS.update_initial_rps, FLAGS.max_update_load, FLAGS.update_rps_increment, 1.5
+            FLAGS.target_update_load, FLAGS.update_initial_rps, FLAGS.max_update_load, FLAGS.update_rps_increment, 1
         )
         if FLAGS.use_updates
         else misc.get_datapoints(
-            FLAGS.target_query_load, FLAGS.query_initial_rps, FLAGS.max_query_load, FLAGS.query_rps_increment, 1.5
+            FLAGS.target_query_load, FLAGS.query_initial_rps, FLAGS.max_query_load, FLAGS.query_rps_increment, 1
         )
     )
     exp = run_experiment_1.Experiment1()
