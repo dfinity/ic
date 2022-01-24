@@ -15,15 +15,16 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 
 function exit_usage() {
     if (($# < 1)); then
-        echo >&2 "Usage: icos_deploy.sh [--git-head ] [--git-revision <git_revision>] [--dkg-interval-length <dil>] [--ansible-args <additional-args>] [--hosts-ini <hosts_override.ini>] [--no-boundary-nodes] [--icos-boundary-nodes] <deployment_name>"
-        echo >&2 "    --git-head                       Deploy the testnet from the current git head."
-        echo >&2 "    --git-revision <git_revision>    Deploy the testnet from the given git revision."
-        echo >&2 "    --ansible-args <additional-args> Additional ansible args. Can be specified multiple times."
-        echo >&2 "    --dkg-interval-length <dil>      Set DKG interval length (-1 if not provided explicitly, which means - default will be used)"
-        echo >&2 "    --hosts-ini <hosts_override.ini> Override the default ansible hosts.ini to set different testnet configuration"
-        echo >&2 "    --no-boundary-nodes              Do not deploy boundary nodes even if they are declared in the hosts.ini file"
-        echo >&2 "    --icos-boundary-nodes            Launch boundary nodes as self-contained VMs (performs local build)"
-        echo >&2 "    --with-testnet-keys              Initialize the registry with readonly and backup keys from testnet/config/ssh_authorized_keys"
+        echo >&2 "Usage: icos_deploy.sh [--git-head ] [--git-revision <git_revision>] [--dkg-interval-length <dil>] [--max-ingress-bytes-per-message <dil>] [--ansible-args <additional-args>] [--hosts-ini <hosts_override.ini>] [--no-boundary-nodes] [--icos-boundary-nodes] <deployment_name>"
+        echo >&2 "    --git-head                            Deploy the testnet from the current git head."
+        echo >&2 "    --git-revision <git_revision>         Deploy the testnet from the given git revision."
+        echo >&2 "    --ansible-args <additional-args>      Additional ansible args. Can be specified multiple times."
+        echo >&2 "    --dkg-interval-length <dil>           Set DKG interval length (-1 if not provided explicitly, which means - default will be used)"
+        echo >&2 "    --max-ingress-bytes-per-message <dil> Set maximum ingress size in bytes (-1 if not provided explicitly, which means - default will be used)"
+        echo >&2 "    --hosts-ini <hosts_override.ini>      Override the default ansible hosts.ini to set different testnet configuration"
+        echo >&2 "    --no-boundary-nodes                   Do not deploy boundary nodes even if they are declared in the hosts.ini file"
+        echo >&2 "    --icos-boundary-nodes                 Launch boundary nodes as self-contained VMs (performs local build)"
+        echo >&2 "    --with-testnet-keys                   Initialize the registry with readonly and backup keys from testnet/config/ssh_authorized_keys"
         echo >&2 -e "\nTo get the latest branch revision that has a disk image pre-built, you can use gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh"
         echo >&2 -e "Example (deploy latest master to small-a):\n"
 
@@ -60,6 +61,11 @@ while [ $# -gt 0 ]; do
             if [[ -z "${DKG_INTERVAL_LENGTH}" ]]; then exit_usage; fi
             shift
             ;;
+        --max-ingress-bytes-per-message)
+            MAX_INGRESS_BYTES_PER_MESSAGE="${2:-}"
+            if [[ -z "${MAX_INGRESS_BYTES_PER_MESSAGE}" ]]; then exit_usage; fi
+            shift
+            ;;
         --hosts-ini)
             if [[ -z "${2:-}" ]]; then exit_usage; fi
             HOSTS_INI_FILENAME="${2}"
@@ -94,6 +100,8 @@ fi
 
 # Negative DKG value means unset (default will be used)
 DKG_INTERVAL_LENGTH="${DKG_INTERVAL_LENGTH:=-1}"
+# Negative value means unset (default will be used)
+MAX_INGRESS_BYTES_PER_MESSAGE="${MAX_INGRESS_BYTES_PER_MESSAGE:=-1}"
 # This environment variable will be picked up by the Ansible inventory generation script.
 # No further action is required to use the custom HOSTS_INI file.
 export HOSTS_INI_FILENAME
@@ -192,6 +200,7 @@ mkdir -p "$MEDIA_PATH"
     --git-revision=$GIT_REVISION \
     --whitelist="$REPO_ROOT/testnet/env/${deployment}/provisional_whitelist.json" \
     --dkg-interval-length=$DKG_INTERVAL_LENGTH \
+    --max-ingress-bytes-per-message=$MAX_INGRESS_BYTES_PER_MESSAGE \
     $WITH_TESTNET_KEYS
 
 if [[ "${USE_ICOS_BOUNDARY_NODE_VMs}" == "true" ]]; then

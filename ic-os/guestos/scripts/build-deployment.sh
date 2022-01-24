@@ -26,15 +26,16 @@ for argument in "${@}"; do
          Removable Media Builder
 
 Arguments:
-  -h,  --help                 show this help message and exit
-  -i=, --input=               JSON formatted input file (Default: ./subnet.json)
-  -o=, --output=              removable media output directory (Default: ./build-out/)
-  -s=, --ssh=                 specify directory holding SSH authorized_key files (Default: ../../testnet/config/ssh_authorized_keys)
-       --git-revision=        git revision for which to prepare the media
-       --whitelist=           path to provisional whitelist that allows canister creation
-       --dkg-interval-length= number of consensus rounds between DKG (-1 if not provided explicitly, which means - default will be used)
-  -x,  --debug                enable verbose console output
-       --with-testnet-keys    Initialize the registry with readonly and backup keys from testnet/config/ssh_authorized_keys.
+  -h,  --help                           show this help message and exit
+  -i=, --input=                         JSON formatted input file (Default: ./subnet.json)
+  -o=, --output=                        removable media output directory (Default: ./build-out/)
+  -s=, --ssh=                           specify directory holding SSH authorized_key files (Default: ../../testnet/config/ssh_authorized_keys)
+       --git-revision=                  git revision for which to prepare the media
+       --whitelist=                     path to provisional whitelist that allows canister creation
+       --dkg-interval-length=           number of consensus rounds between DKG (-1 if not provided explicitly, which means - default will be used)
+       --max-ingress-bytes-per-message= maximum size of ingress message allowed in bytes
+  -x,  --debug                          enable verbose console output
+       --with-testnet-keys              Initialize the registry with readonly and backup keys from testnet/config/ssh_authorized_keys.
 '
             exit 1
             ;;
@@ -62,6 +63,10 @@ Arguments:
             DKG_INTERVAL_LENGTH="${argument#*=}"
             shift
             ;;
+        --max-ingress-bytes-per-message=*)
+            MAX_INGRESS_BYTES_PER_MESSAGE="${argument#*=}"
+            shift
+            ;;
         -x | --debug)
             DEBUG=1
             ;;
@@ -83,6 +88,8 @@ GIT_REVISION="${GIT_REVISION:=}"
 WHITELIST="${WHITELIST:=}"
 # Negative DKG value means unset (default will be used)
 DKG_INTERVAL_LENGTH="${DKG_INTERVAL_LENGTH:=-1}"
+# Negative value means unset (default will be used)
+MAX_INGRESS_BYTES_PER_MESSAGE="${MAX_INGRESS_BYTES_PER_MESSAGE:=-1}"
 
 if [[ -z "$GIT_REVISION" ]]; then
     echo "Please provide the GIT_REVISION as env. variable or the command line with --git-revision=<value>"
@@ -238,6 +245,7 @@ function generate_subnet_config() {
         "--orchestrator-hash" "${NM_HASH}" \
         "--nns-subnet-index" "0" \
         "--dkg-interval-length" "${DKG_INTERVAL_LENGTH}" \
+        "--max-ingress-bytes-per-message" "${MAX_INGRESS_BYTES_PER_MESSAGE}" \
         "--p2p-flows" "1234-1" \
         "--nodes" ${NODES_NNS[*]} ${NODES_APP[*]} \
         "--provisional-whitelist" "${WHITELIST}" \

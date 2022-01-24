@@ -135,6 +135,11 @@ struct CliArgs {
     /// nodes.
     #[structopt(long, parse(from_os_str))]
     pub ssh_backup_access_file: Option<PathBuf>,
+
+    /// Maximum size of ingress message in bytes.
+    /// Negative integer means the default should be used.
+    #[structopt(long, allow_hyphen_values = true)]
+    pub max_ingress_bytes_per_message: Option<i64>,
 }
 
 fn main() -> Result<()> {
@@ -153,7 +158,7 @@ fn main() -> Result<()> {
             nodes.to_owned(),
             valid_args.replica_version_id.clone(),
             None,
-            None,
+            valid_args.max_ingress_bytes_per_message,
             None,
             None,
             None,
@@ -222,6 +227,7 @@ struct ValidatedArgs {
     pub initial_node_provider: Option<PrincipalId>,
     pub ssh_readonly_access: Vec<String>,
     pub ssh_backup_access: Vec<String>,
+    pub max_ingress_bytes_per_message: Option<u64>,
 }
 
 /// Structured definition of a flow provided by the `--p2p-flows` flag.
@@ -644,6 +650,13 @@ impl CliArgs {
             ssh_backup_access: self
                 .ssh_backup_access_file
                 .map_or(vec![], read_keys_from_pub_file),
+            max_ingress_bytes_per_message: self.max_ingress_bytes_per_message.and_then(|x| {
+                if x >= 0 {
+                    Some(x as u64)
+                } else {
+                    None
+                }
+            }),
         })
     }
 }
