@@ -36,7 +36,7 @@ if __name__ == "__main__":
     experiment.parse_command_line_args()
     experiment_name = "System_Baseline_Nightly"
 
-    query_median_latency_threshold = 75
+    query_median_latency_threshold = 380
     query_median_latency_delta_threshold = 0.1
     query_failure_rate_threshold = 0
     query_failure_rate_delta_threshold = 0
