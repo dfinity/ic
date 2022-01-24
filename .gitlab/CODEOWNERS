@@ -51,8 +51,9 @@
 /testnet/tests/scripts/                                    @dfinity-lab/teams/ic-testing-verification @sasa-tomic
 /testnet/tests/tools/                                      @dfinity-lab/teams/ic-testing-verification
 # production testnet tests are owned by a team
-/testnet/tests/scripts/disaster_recovery_nns_test.sh       @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
-/testnet/tests/scripts/disaster_recovery_basic_test.sh     @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
+/testnet/tests/scripts/subnet_recovery_nns_test.sh         @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
+/testnet/tests/scripts/subnet_recovery_nns_upgrade_test.sh @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
+/testnet/tests/scripts/subnet_recovery_basic_test.sh       @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
 /testnet/tests/scripts/generic.sh                          @dfinity-lab/teams/ic-testing-verification
 /testnet/tests/scripts/global_reboot_test.sh               @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/message-routing-owners
 /testnet/tests/scripts/maximum_capacity_rejoin.sh          @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/message-routing-owners
