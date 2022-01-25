@@ -99,17 +99,12 @@ pub struct PeerInfo {
     height: BlockHeight,
     /// This field stores the block hash of the tip header received from the peer.
     tip: BlockHash,
-
-    //last_active: Option<LocalTime>,
     /// Locators sent in the last `GetHeaders` or `GetData` request
     last_asked: Option<Locators>,
     /// Time at which the request was sent.
     sent_at: Option<SystemTime>,
     /// What to do if this request times out.
     on_timeout: OnTimeout,
-    /// Number of outstanding & unexpired 'GetData' requests sent to the peer
-    /// but the corresponding "Block" response not received yet.  
-    num_of_outstanding_get_data_requests: u32,
 }
 
 /// This struct stores the information related to a "GetData" request sent by the BlockChainManager
@@ -353,10 +348,9 @@ impl BlockchainManager {
         addr: &SocketAddr,
         block: &Block,
     ) -> Result<(), ReceivedBlockMessageError> {
-        let peer = self
-            .peer_info
-            .get_mut(addr)
-            .ok_or(ReceivedBlockMessageError::UnknownPeer)?;
+        if !self.peer_info.contains_key(addr) {
+            return Err(ReceivedBlockMessageError::UnknownPeer);
+        }
 
         let block_hash = block.block_hash();
 
@@ -378,13 +372,6 @@ impl BlockchainManager {
         );
 
         //Remove the corresponding `GetData` request from peer_info and get_data_request_info.
-        if let Some(request_info) = maybe_request_info {
-            if request_info.socket == *addr {
-                peer.num_of_outstanding_get_data_requests =
-                    peer.num_of_outstanding_get_data_requests.saturating_sub(1);
-            }
-        }
-
         self.get_data_request_info.remove(&block_hash);
 
         match self.blockchain.add_block(block.clone()) {
@@ -424,7 +411,6 @@ impl BlockchainManager {
                 last_asked: None,
                 sent_at: None,
                 on_timeout: OnTimeout::Ignore,
-                num_of_outstanding_get_data_requests: 0,
             },
         );
         let locators = (vec![initial_hash], BlockHash::default());
@@ -443,20 +429,8 @@ impl BlockchainManager {
     fn filter_expired_get_data_requests(&mut self) {
         let now = SystemTime::now();
         let timeout_period = Duration::new(GETDATA_REQUEST_TIMEOUT_SECS, 0);
-        let mut requests_to_remove = vec![];
-        for (block_hash, request) in self.get_data_request_info.iter_mut() {
-            if request.sent_at + timeout_period < now {
-                if let Some(peer) = self.peer_info.get_mut(&request.socket) {
-                    peer.num_of_outstanding_get_data_requests =
-                        peer.num_of_outstanding_get_data_requests.saturating_sub(1);
-                }
-                requests_to_remove.push(*block_hash);
-            }
-        }
-
-        for entry in requests_to_remove {
-            self.get_data_request_info.remove(&entry);
-        }
+        self.get_data_request_info
+            .retain(|_, request| request.sent_at + timeout_period > now);
     }
 
     pub fn sync_blocks(&mut self) {
@@ -475,37 +449,27 @@ impl BlockchainManager {
 
         slog::info!(self.logger, "Syncing blocks. Inventory to be synced after filtering out the past GetData requests : {:?}", self.blocks_to_be_synced);
 
-        // PeerInfo for each peer stores the `num_of_outstanding_get_data_requests`
-        // We prefer to send GetData requests to those peers for which `num_of_outstanding_get_data_requests` is lowest.
-        // We thereby sort the peers in descending order based on this metric.
+        // Count the number of requests per peer.
+        let mut requests_per_peer: HashMap<SocketAddr, u32> =
+            self.peer_info.keys().map(|addr| (*addr, 0)).collect();
+        for info in self.get_data_request_info.values() {
+            let counter = requests_per_peer.entry(info.socket).or_insert(0);
+            *counter = counter.saturating_add(1);
+        }
+
         let mut peer_info: Vec<_> = self.peer_info.values_mut().collect();
         peer_info.sort_by(|a, b| {
-            a.num_of_outstanding_get_data_requests
-                .cmp(&b.num_of_outstanding_get_data_requests)
+            let requests_sent_to_a = requests_per_peer.get(&a.socket).unwrap_or(&0);
+            let requests_sent_to_b = requests_per_peer.get(&b.socket).unwrap_or(&0);
+            requests_sent_to_a.cmp(requests_sent_to_b)
         });
-
-        slog::debug!(
-            self.logger,
-            "List of Bitcoin peers: {:?}",
-            peer_info
-                .iter()
-                .map(|p| p.socket)
-                .collect::<Vec<SocketAddr>>(),
-        );
-        slog::info!(
-            self.logger,
-            "Number of outstanding getdata requests : {:?}",
-            peer_info
-                .iter()
-                .map(|peer| peer.num_of_outstanding_get_data_requests)
-                .collect::<Vec<u32>>()
-        );
 
         // For each peer, select a random subset of the inventory and send a "GetData" request for it.
         for peer in peer_info {
             // Calculate number of inventory that can be sent in 'GetData' request to the peer.
+            let requests_sent_to_peer = requests_per_peer.get(&peer.socket).unwrap_or(&0);
             let num_requests_to_be_sent =
-                INV_PER_GET_DATA_REQUEST.saturating_sub(peer.num_of_outstanding_get_data_requests);
+                INV_PER_GET_DATA_REQUEST.saturating_sub(*requests_sent_to_peer);
 
             // Randomly sample some inventory to be requested from the peer.
             let selected_inventory = self
@@ -536,9 +500,6 @@ impl BlockchainManager {
                 ),
             });
 
-            peer.num_of_outstanding_get_data_requests = peer
-                .num_of_outstanding_get_data_requests
-                .saturating_add(selected_inventory.len() as u32);
             for inv in selected_inventory {
                 // Record the `getdata` request.
                 self.get_data_request_info.insert(
@@ -942,7 +903,7 @@ pub mod test {
     }
 
     /// This test performs a surface level check to make ensure the `sync_blocks` and `received_block_message`
-    /// increment and decrement the `num_of_outstanding_get_data_requests`.
+    /// adds to and removes from `BlockchainManager.get_data_request_info` correctly.
     #[test]
     fn test_simple_sync_blocks_and_received_block_message_lifecycle() {
         let peer_addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
@@ -970,34 +931,36 @@ pub mod test {
         blockchain_manager.add_peer(&peer_addr);
         // Ensure that the number of requests is at 0.
         {
-            let peer_info = blockchain_manager
-                .peer_info
-                .get(&peer_addr)
-                .expect("peer should be here");
-
-            assert_eq!(peer_info.num_of_outstanding_get_data_requests, 0);
+            let available_requests_for_peer = blockchain_manager
+                .get_data_request_info
+                .values()
+                .filter(|p| p.socket == peer_addr)
+                .count();
+            assert_eq!(available_requests_for_peer, 0);
         }
 
         // Sync block information.
         blockchain_manager.sync_blocks();
         // Ensure there are now 2 outbound requests for the blocks.
         {
-            let peer_info = blockchain_manager
-                .peer_info
-                .get(&peer_addr)
-                .expect("peer should be here");
-            assert_eq!(peer_info.num_of_outstanding_get_data_requests, 2);
+            let available_requests_for_peer = blockchain_manager
+                .get_data_request_info
+                .values()
+                .filter(|p| p.socket == peer_addr)
+                .count();
+            assert_eq!(available_requests_for_peer, 2);
         }
 
         // Ensure there is now 1 request.
         let result = blockchain_manager.received_block_message(&peer_addr, &block_1);
         assert!(result.is_ok());
         {
-            let peer_info = blockchain_manager
-                .peer_info
-                .get(&peer_addr)
-                .expect("peer should be here");
-            assert_eq!(peer_info.num_of_outstanding_get_data_requests, 1);
+            let available_requests_for_peer = blockchain_manager
+                .get_data_request_info
+                .values()
+                .filter(|p| p.socket == peer_addr)
+                .count();
+            assert_eq!(available_requests_for_peer, 1);
         }
 
         let result = blockchain_manager.received_block_message(&peer_addr, &block_2);
@@ -1005,11 +968,12 @@ pub mod test {
         blockchain_manager.sync_blocks();
         // Ensure there is now zero requests.
         {
-            let peer_info = blockchain_manager
-                .peer_info
-                .get(&peer_addr)
-                .expect("peer should be here");
-            assert_eq!(peer_info.num_of_outstanding_get_data_requests, 0);
+            let available_requests_for_peer = blockchain_manager
+                .get_data_request_info
+                .values()
+                .filter(|p| p.socket == peer_addr)
+                .count();
+            assert_eq!(available_requests_for_peer, 0);
         }
     }
 
