@@ -1,8 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    path::PathBuf,
-    sync::Arc,
-};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use prost::Message;
 
@@ -404,14 +400,11 @@ fn construct_init_state() -> NnsInitPayloads {
         (*TEST_NEURON_2_OWNER_PRINCIPAL).into(),
         Tokens::from_tokens(1000).unwrap(),
     );
-    nns_init_payload_builder.ledger = LedgerCanisterInitPayload::new(
-        GOVERNANCE_CANISTER_ID.into(),
-        ledger_init_state,
-        None,
-        None,
-        None,
-        HashSet::new(),
-    );
+    nns_init_payload_builder.ledger = LedgerCanisterInitPayload::builder()
+        .minting_account(GOVERNANCE_CANISTER_ID.into())
+        .initial_values(ledger_init_state)
+        .build()
+        .unwrap();
 
     nns_init_payload_builder
         .genesis_token

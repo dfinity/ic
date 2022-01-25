@@ -20,7 +20,7 @@ use ic_types::ic00::{CanisterIdRecord, CanisterSettingsArgs, CreateCanisterArgs,
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use ledger_canister::{
     AccountIdentifier, BlockHeight, CyclesResponse, Memo, SendArgs, Tokens,
-    TransactionNotification, TRANSACTION_FEE,
+    TransactionNotification, DEFAULT_TRANSFER_FEE,
 };
 use on_wire::{FromWire, IntoWire, NewType};
 
@@ -574,7 +574,7 @@ async fn burn_or_refund(
     ledger_canister_id: &CanisterId,
 ) -> Result<Option<BlockHeight>, String> {
     if is_ok {
-        if let Ok(amount) = tn.amount - TRANSACTION_FEE {
+        if let Ok(amount) = tn.amount - DEFAULT_TRANSFER_FEE {
             burn_and_log(tn, amount, ledger_canister_id).await;
         }
         Ok(None)
@@ -654,7 +654,7 @@ async fn refund(
     let mut refund_block_index = None;
 
     // Don't refund a negative amount.
-    let amount_minus_fee = if let Ok(amount) = tn.amount - TRANSACTION_FEE {
+    let amount_minus_fee = if let Ok(amount) = tn.amount - DEFAULT_TRANSFER_FEE {
         amount
     } else {
         return Ok(None);
@@ -672,7 +672,7 @@ async fn refund(
         let send_args = SendArgs {
             memo: Memo::default(),
             amount: refunded,
-            fee: TRANSACTION_FEE,
+            fee: DEFAULT_TRANSFER_FEE,
             from_subaccount: tn.to_subaccount,
             to: AccountIdentifier::new(tn.from, tn.from_subaccount),
             created_at_time: None,

@@ -17,7 +17,9 @@ use ic_nns_gtc::test_constants::{
 use ic_nns_test_utils::itest_helpers::{
     local_test_on_nns_subnet, NnsCanisters, NnsInitPayloadsBuilder,
 };
-use ledger_canister::{AccountBalanceArgs, AccountIdentifier, Subaccount, Tokens, TRANSACTION_FEE};
+use ledger_canister::{
+    AccountBalanceArgs, AccountIdentifier, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
+};
 use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::sync::Arc;
@@ -281,7 +283,7 @@ async fn assert_unclaimed_neurons_can_be_forwarded(
         Tokens::from_tokens(account_before_forward.icpts as u64)
             .unwrap()
             .get_e8s()
-            - (TRANSACTION_FEE.get_e8s() * account_before_forward.neuron_ids.len() as u64),
+            - (DEFAULT_TRANSFER_FEE.get_e8s() * account_before_forward.neuron_ids.len() as u64),
     );
 
     // Get the custodian neuron and its ledger account, so that we can later
@@ -430,7 +432,7 @@ async fn assert_neurons_can_be_donated(
         Tokens::from_tokens(account_before_donation.icpts as u64)
             .unwrap()
             .get_e8s()
-            - (TRANSACTION_FEE.get_e8s() * account_before_donation.neuron_ids.len() as u64),
+            - (DEFAULT_TRANSFER_FEE.get_e8s() * account_before_donation.neuron_ids.len() as u64),
     );
 
     // Get the custodian neuron and its ledger account, so that we can later

@@ -11,7 +11,6 @@ use crate::{
 };
 
 use std::{
-    collections::HashMap,
     convert::TryInto,
     future::Future,
     path::Path,
@@ -59,7 +58,7 @@ use ic_test_utilities::universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
 };
 use ic_utils::byte_slice_fmt::truncate_and_format;
-use ledger::{LedgerCanisterInitPayload, Subaccount, Tokens};
+use ledger::{LedgerCanisterInitPayload, Subaccount, Tokens, DEFAULT_TRANSFER_FEE};
 use ledger_canister as ledger;
 use ledger_canister::AccountIdentifier;
 use lifeline::LIFELINE_CANISTER_WASM;
@@ -110,10 +109,9 @@ impl NnsInitPayloadsBuilder {
         NnsInitPayloadsBuilder {
             registry: RegistryCanisterInitPayloadBuilder::new(),
             governance: GovernanceCanisterInitPayloadBuilder::new(),
-            ledger: LedgerCanisterInitPayload {
-                minting_account: GOVERNANCE_CANISTER_ID.get().into(),
-                initial_values: HashMap::new(),
-                archive_options: Some(ledger::ArchiveOptions {
+            ledger: LedgerCanisterInitPayload::builder()
+                .minting_account(GOVERNANCE_CANISTER_ID.get().into())
+                .archive_options(ledger::ArchiveOptions {
                     trigger_threshold: 2000,
                     num_blocks_to_archive: 1000,
                     // 1 GB, which gives us 3 GB space when upgrading
@@ -121,12 +119,14 @@ impl NnsInitPayloadsBuilder {
                     // 128kb
                     max_message_size_bytes: Some(128 * 1024),
                     controller_id: ROOT_CANISTER_ID,
-                }),
-                max_message_size_bytes: Some(128 * 1024),
+                })
+                .max_message_size_bytes(128 * 1024)
                 // 24 hour transaction window
-                transaction_window: Some(Duration::from_secs(24 * 60 * 60)),
-                send_whitelist: ALL_NNS_CANISTER_IDS.iter().map(|&x| *x).collect(),
-            },
+                .transaction_window(Duration::from_secs(24 * 60 * 60))
+                .send_whitelist(ALL_NNS_CANISTER_IDS.iter().map(|&x| *x).collect())
+                .transfer_fee(DEFAULT_TRANSFER_FEE)
+                .build()
+                .unwrap(),
             root: RootCanisterInitPayloadBuilder::new(),
             cycles_minting: CyclesCanisterInitPayload {
                 ledger_canister_id: LEDGER_CANISTER_ID,

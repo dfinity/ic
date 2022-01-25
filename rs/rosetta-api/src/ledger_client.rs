@@ -29,7 +29,8 @@ use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, messages::SignedReq
 use ledger_canister::protobuf::{ArchiveIndexEntry, ArchiveIndexResponse};
 use ledger_canister::{
     protobuf::TipOfChainRequest, AccountIdentifier, BlockArg, BlockHeight, BlockRes, EncodedBlock,
-    GetBlocksArgs, GetBlocksRes, HashOf, TipOfChainRes, Tokens, Transaction,
+    GetBlocksArgs, GetBlocksRes, HashOf, TipOfChainRes, Tokens, Transaction, TransferFee,
+    TransferFeeArgs, DEFAULT_TRANSFER_FEE,
 };
 use on_wire::{FromWire, IntoWire};
 
@@ -63,6 +64,7 @@ pub trait LedgerAccess {
         acc_id: NeuronIdOrSubaccount,
         verified: bool,
     ) -> Result<NeuronInfo, ApiError>;
+    async fn transfer_fee(&self) -> Result<TransferFee, ApiError>;
 }
 
 pub struct SubmitResult {
@@ -502,6 +504,44 @@ impl LedgerAccess for LedgerClient {
         })?;
 
         Ok(ninfo)
+    }
+
+    async fn transfer_fee(&self) -> Result<TransferFee, ApiError> {
+        let agent = &self.canister_access.as_ref().unwrap().agent;
+        let arg = CandidOne(TransferFeeArgs {})
+            .into_bytes()
+            .map_err(|e| ApiError::internal_error(format!("Serialization failed: {:?}", e)))?;
+
+        let res = agent
+            .execute_query(&self.canister_id, "transfer_fee", arg)
+            .await;
+
+        // Older Ledger versions may not have the transfer_fee method. Ideally
+        // this method should return the default DEFAULT_TRANSFER_FEE as transfer_fee
+        // only if the IC returns an error saying that the canister doesn't have
+        // the method. canister-client's agent does not return the error code
+        // with the error so there is no way to know if the error was 302
+        // CanisterMethodNotFound or something else. As a workaround, we always
+        // return the default transfer fee if there was an error in calling the
+        // Ledger transfer_fee method.
+        // see https://dfinity.atlassian.net/browse/NET-833
+        match res {
+            Err(e) => {
+                warn!(
+                    "Error while calling transfer_fee, returning the default one {}. Error was: {}",
+                    DEFAULT_TRANSFER_FEE, e
+                );
+                Ok(TransferFee {
+                    transfer_fee: DEFAULT_TRANSFER_FEE,
+                })
+            }
+            Ok(None) => Err(ApiError::internal_error(
+                "conf reply payload was empty".to_string(),
+            )),
+            Ok(Some(bytes)) => CandidOne::from_bytes(bytes).map(|c| c.0).map_err(|e| {
+                ApiError::internal_error(format!("Error querying transfer_fee: {}", e))
+            }),
+        }
     }
 }
 

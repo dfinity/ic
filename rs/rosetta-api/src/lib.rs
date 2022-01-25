@@ -41,7 +41,7 @@ use on_wire::IntoWire;
 
 use models::*;
 
-use ledger_canister::{BlockHeight, Memo, Operation, SendArgs, TRANSACTION_FEE};
+use ledger_canister::{BlockHeight, Memo, Operation, SendArgs};
 use serde_json::map::Map;
 use std::convert::TryFrom;
 use transaction_id::TransactionIdentifier;
@@ -454,10 +454,13 @@ impl RosettaRequestHandler {
             {
                 None
             }
-            _ => Some(vec![convert::amount_(
-                TRANSACTION_FEE,
-                self.ledger.token_name(),
-            )?]),
+            _ => {
+                let transfer_fee = self.ledger.transfer_fee().await?.transfer_fee;
+                Some(vec![convert::amount_(
+                    transfer_fee,
+                    self.ledger.token_name(),
+                )?])
+            }
         };
         Ok(ConstructionMetadataResponse {
             metadata: ConstructionPayloadsRequestMetadata::default(),

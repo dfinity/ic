@@ -38,7 +38,7 @@ use ic_nns_constants::{
     LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
 };
 use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
-use ledger_canister::{AccountIdentifier, Subaccount, TRANSACTION_FEE};
+use ledger_canister::{AccountIdentifier, Subaccount, DEFAULT_TRANSFER_FEE};
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 
 use async_trait::async_trait;
@@ -162,7 +162,7 @@ impl NetworkEconomics {
             neuron_spawn_dissolve_delay_seconds: ONE_DAY_SECONDS * 7,   // 7 days
             maximum_node_provider_rewards_e8s: 1_000_000 * 100_000_000, // 1M ICPT
             minimum_icp_xdr_rate: 100,                                  // 1 XDR
-            transaction_fee_e8s: TRANSACTION_FEE.get_e8s(),
+            transaction_fee_e8s: DEFAULT_TRANSFER_FEE.get_e8s(),
             max_proposals_to_keep_per_topic: 100,
         }
     }
@@ -1648,7 +1648,7 @@ impl GovernanceProto {
                 metrics.community_fund_total_staked_e8s += neuron.stake_e8s();
             }
 
-            if neuron.cached_neuron_stake_e8s < TRANSACTION_FEE.get_e8s() {
+            if neuron.cached_neuron_stake_e8s < DEFAULT_TRANSFER_FEE.get_e8s() {
                 metrics.garbage_collectable_neurons_count += 1;
             }
             if 0 < neuron.cached_neuron_stake_e8s

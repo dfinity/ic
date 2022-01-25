@@ -19,7 +19,7 @@ use ic_types::messages::{HttpCanisterUpdate, HttpReadState};
 use ic_types::{CanisterId, PrincipalId};
 use ledger_canister::{
     BlockHeight, HashOf, Operation as LedgerOperation, SendArgs, Subaccount, Tokens,
-    DECIMAL_PLACES, TRANSACTION_FEE,
+    DECIMAL_PLACES, DEFAULT_TRANSFER_FEE,
 };
 use on_wire::{FromWire, IntoWire};
 use serde_json::map::Map;
@@ -105,7 +105,7 @@ impl State {
 
         // If you're preprocessing just continue with the default fee
         if self.preprocessing && self.fee.is_none() && self.db.is_some() {
-            self.fee = Some((TRANSACTION_FEE, self.db.unwrap().1))
+            self.fee = Some((DEFAULT_TRANSFER_FEE, self.db.unwrap().1))
         }
 
         if self.cr.is_none() || self.db.is_none() || self.fee.is_none() {
@@ -372,10 +372,6 @@ pub fn from_operations(
                     .as_ref()
                     .ok_or_else(|| op_error(o, "Amount must be populated".into()))?;
                 let amount = from_amount(amount, token_name).map_err(|e| op_error(o, e))?;
-                if -amount != TRANSACTION_FEE.get_e8s() as i128 {
-                    let msg = format!("Fee should be equal: {}", TRANSACTION_FEE.get_e8s());
-                    return Err(op_error(o, msg));
-                }
                 state.fee(account, Tokens::from_e8s((-amount) as u64))?;
             }
             STAKE => {

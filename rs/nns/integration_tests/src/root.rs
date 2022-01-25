@@ -32,7 +32,7 @@ use ic_nns_test_utils_macros::parameterized_upgrades;
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use ledger_canister::{
     AccountBalanceArgs, AccountIdentifier, BlockHeight, LedgerCanisterInitPayload, Memo, SendArgs,
-    Tokens, TRANSACTION_FEE,
+    Tokens, DEFAULT_TRANSFER_FEE,
 };
 use std::collections::HashMap;
 
@@ -118,14 +118,12 @@ fn test_stop_start_nns_canister() {
             let alloc = Tokens::from_tokens(1000).unwrap();
             let mut ledger_init_state = HashMap::new();
             ledger_init_state.insert(user1.get_principal_id().into(), alloc);
-            let init_args = LedgerCanisterInitPayload::new(
-                GOVERNANCE_CANISTER_ID.into(),
-                ledger_init_state,
-                None,
-                None,
-                None,
-                ALL_NNS_CANISTER_IDS.iter().map(|&x| *x).collect(),
-            );
+            let init_args = LedgerCanisterInitPayload::builder()
+                .minting_account(GOVERNANCE_CANISTER_ID.into())
+                .initial_values(ledger_init_state)
+                .send_whitelist(ALL_NNS_CANISTER_IDS.iter().map(|&x| *x).collect())
+                .build()
+                .unwrap();
 
             let nns_init_payload = NnsInitPayloadsBuilder::new()
                 .with_ledger_init_state(init_args)
@@ -143,7 +141,7 @@ fn test_stop_start_nns_canister() {
                     SendArgs {
                         memo: Memo(0),
                         amount: Tokens::from_tokens(100).unwrap(),
-                        fee: TRANSACTION_FEE,
+                        fee: DEFAULT_TRANSFER_FEE,
                         from_subaccount: None,
                         to: AccountIdentifier::new(user2.get_principal_id(), None),
                         created_at_time: None,
@@ -208,7 +206,7 @@ fn test_stop_start_nns_canister() {
                     SendArgs {
                         memo: Memo(0),
                         amount: Tokens::from_tokens(100).unwrap(),
-                        fee: TRANSACTION_FEE,
+                        fee: DEFAULT_TRANSFER_FEE,
                         from_subaccount: None,
                         to: AccountIdentifier::new(user2.get_principal_id(), None),
                         created_at_time: None,
@@ -273,7 +271,7 @@ fn test_stop_start_nns_canister() {
                     SendArgs {
                         memo: Memo(0),
                         amount: Tokens::from_tokens(100).unwrap(),
-                        fee: TRANSACTION_FEE,
+                        fee: DEFAULT_TRANSFER_FEE,
                         from_subaccount: None,
                         to: AccountIdentifier::new(user2.get_principal_id(), None),
                         created_at_time: None,
@@ -300,7 +298,8 @@ fn test_stop_start_nns_canister() {
             assert_eq!(
                 user1_balance,
                 Tokens::from_e8s(
-                    Tokens::from_tokens(800).unwrap().get_e8s() - 2 * TRANSACTION_FEE.get_e8s()
+                    Tokens::from_tokens(800).unwrap().get_e8s()
+                        - 2 * DEFAULT_TRANSFER_FEE.get_e8s()
                 )
             );
 

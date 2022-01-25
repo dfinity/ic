@@ -2,14 +2,14 @@ use candid::CandidType;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use ledger_canister::{
-    AccountIdentifier, BlockHeight, Memo, SendArgs, Subaccount, Tokens, TRANSACTION_FEE,
+    AccountIdentifier, BlockHeight, Memo, SendArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
 };
 use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_CYCLES_PER_XDR: u128 = 1_000_000_000_000u128; // 1T cycles = 1 XDR
 
-pub const CREATE_CANISTER_REFUND_FEE: Tokens = Tokens::from_e8s(TRANSACTION_FEE.get_e8s() * 4);
-pub const TOP_UP_CANISTER_REFUND_FEE: Tokens = Tokens::from_e8s(TRANSACTION_FEE.get_e8s() * 2);
+pub const CREATE_CANISTER_REFUND_FEE: Tokens = Tokens::from_e8s(DEFAULT_TRANSFER_FEE.get_e8s() * 4);
+pub const TOP_UP_CANISTER_REFUND_FEE: Tokens = Tokens::from_e8s(DEFAULT_TRANSFER_FEE.get_e8s() * 2);
 
 #[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
 pub struct CyclesCanisterInitPayload {
@@ -31,7 +31,7 @@ pub fn create_canister_txn(
     let send_args = SendArgs {
         memo: MEMO_CREATE_CANISTER,
         amount,
-        fee: TRANSACTION_FEE,
+        fee: DEFAULT_TRANSFER_FEE,
         from_subaccount,
         to: AccountIdentifier::new(*cycles_canister_id.get_ref(), Some(sub_account)),
         created_at_time: None,
@@ -49,7 +49,7 @@ pub fn top_up_canister_txn(
     let send_args = SendArgs {
         memo: MEMO_TOP_UP_CANISTER,
         amount,
-        fee: TRANSACTION_FEE,
+        fee: DEFAULT_TRANSFER_FEE,
         from_subaccount,
         to: AccountIdentifier::new(*cycles_canister_id.get_ref(), Some(sub_account)),
         created_at_time: None,

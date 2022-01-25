@@ -20,7 +20,7 @@ use ic_nns_test_utils::{
 use ic_protobuf::registry::conversion_rate::v1::IcpXdrConversionRateRecord;
 use ledger_canister::{
     AccountBalanceArgs, AccountIdentifier, BlockHeight, CyclesResponse, Memo, NotifyCanisterArgs,
-    SendArgs, Subaccount, Tokens, TRANSACTION_FEE,
+    SendArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
 };
 
 /// Test that the CMC's `icp_xdr_conversion_rate` can be updated via Governance
@@ -225,8 +225,9 @@ fn test_cmc_mints_cycles_when_registry_has_exchange_rate() {
 
         let mut expected_final_balance = icpts;
         expected_final_balance = (expected_final_balance - Tokens::new(10, 0).unwrap()).unwrap();
-        expected_final_balance =
-            (expected_final_balance - (TRANSACTION_FEE + TRANSACTION_FEE).unwrap()).unwrap();
+        expected_final_balance = (expected_final_balance
+            - (DEFAULT_TRANSFER_FEE + DEFAULT_TRANSFER_FEE).unwrap())
+        .unwrap();
         assert_eq!(final_balance, expected_final_balance);
 
         let total_cycles_minted_final: u64 = nns_canisters
@@ -312,8 +313,9 @@ fn test_cmc_mints_cycles_when_cmc_has_exchange_rate() {
 
         let mut expected_final_balance = icpts;
         expected_final_balance = (expected_final_balance - Tokens::new(10, 0).unwrap()).unwrap();
-        expected_final_balance =
-            (expected_final_balance - (TRANSACTION_FEE + TRANSACTION_FEE).unwrap()).unwrap();
+        expected_final_balance = (expected_final_balance
+            - (DEFAULT_TRANSFER_FEE + DEFAULT_TRANSFER_FEE).unwrap())
+        .unwrap();
         assert_eq!(final_balance, expected_final_balance);
 
         let total_cycles_minted_final: u64 = nns_canisters
@@ -359,7 +361,7 @@ async fn send_cycles(
     let send_args = SendArgs {
         memo,
         amount: Tokens::new(10, 0).unwrap(),
-        fee: TRANSACTION_FEE,
+        fee: DEFAULT_TRANSFER_FEE,
         from_subaccount: None,
         to: AccountIdentifier::new(CYCLES_MINTING_CANISTER_ID.get(), Some(*subaccount)),
         created_at_time: None,
@@ -387,7 +389,7 @@ async fn send_cycles(
 
     let mut expected_balance = initial_icpts;
     expected_balance = (expected_balance - Tokens::new(10, 0).unwrap()).unwrap();
-    expected_balance = (expected_balance - TRANSACTION_FEE).unwrap();
+    expected_balance = (expected_balance - DEFAULT_TRANSFER_FEE).unwrap();
     assert_eq!(after_send_balance, expected_balance);
 
     let notify_args = NotifyCanisterArgs::new_from_send(

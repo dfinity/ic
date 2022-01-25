@@ -11,7 +11,7 @@ use ic_fondue::ic_manager::IcControl;
 use ic_nns_constants::{LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::CanisterId;
-use ledger_canister::TRANSACTION_FEE;
+use ledger_canister::DEFAULT_TRANSFER_FEE;
 use std::convert::TryFrom;
 
 pub fn config() -> InternetComputer {
@@ -52,7 +52,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
 
     // Top up canisters with amounts of ICP needed for subsequent operations to
     // succeed.
-    let fee = TRANSACTION_FEE.get_e8s();
+    let fee = DEFAULT_TRANSFER_FEE.get_e8s();
     transfer(
         ctx,
         &rt,

@@ -14,14 +14,6 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-#[cfg(feature = "notify-method")]
-use dfn_core::{
-    api::{call_bytes_with_cleanup, call_with_cleanup, Funds},
-    endpoint::over_async_may_reject_explicit,
-};
-use dfn_protobuf::ProtoBuf;
-use on_wire::IntoWire;
-
 // Helper to print messages in magenta
 fn print<S: std::convert::AsRef<str>>(s: S)
 where
@@ -45,6 +37,8 @@ where
 /// * `archive_options` - The options of the canister that manages the store of
 ///   old blocks.
 /// * `send_whitelist` - The [Ledger] canister whitelist.
+/// * `transfer_fee` - The fee to pay to perform a transaction.
+#[allow(clippy::too_many_arguments)]
 fn init(
     minting_account: AccountIdentifier,
     initial_values: HashMap<AccountIdentifier, Tokens>,
@@ -52,6 +46,7 @@ fn init(
     transaction_window: Option<Duration>,
     archive_options: Option<archive::ArchiveOptions>,
     send_whitelist: HashSet<CanisterId>,
+    transfer_fee: Option<Tokens>,
 ) {
     print(format!(
         "[ledger] init(): minting account is {}",
@@ -63,6 +58,7 @@ fn init(
         dfn_core::api::now().into(),
         transaction_window,
         send_whitelist,
+        transfer_fee,
     );
     match max_message_size_bytes {
         None => {
@@ -118,8 +114,7 @@ fn add_payment(
 ///   withdrawn is equal to the amount + the fee.
 /// * `fee` - The maximum fee that the sender is willing to pay. If the required
 ///   fee is greater than this the transaction will be rejected otherwise the
-///   required fee will be paid. TODO(ROSETTA1-45): automatically pay a lower
-///   fee if possible.
+///   required fee will be paid.
 /// * `from_subaccount` - The subaccount you want to draw funds from.
 /// * `to` - The account you want to send the funds to.
 /// * `created_at_time`: When the transaction has been created. If not set then
@@ -154,14 +149,16 @@ async fn send(
         Operation::Mint { to, amount }
     } else if to == minting_acc {
         assert_eq!(fee, Tokens::ZERO, "Fee for burning should be zero");
-        if amount < MIN_BURN_AMOUNT {
-            panic!("Burns lower than {} are not allowed", MIN_BURN_AMOUNT);
+        let min_burn_amount = LEDGER.read().unwrap().transfer_fee;
+        if amount < min_burn_amount {
+            panic!("Burns lower than {} are not allowed", min_burn_amount);
         }
         Operation::Burn { from, amount }
     } else {
-        if fee != TRANSACTION_FEE {
+        let transfer_fee = LEDGER.read().unwrap().transfer_fee;
+        if fee != transfer_fee {
             return Err(TransferError::BadFee {
-                expected_fee: TRANSACTION_FEE,
+                expected_fee: transfer_fee,
             });
         }
         Operation::Transfer {
@@ -214,6 +211,10 @@ pub async fn notify(
     to_subaccount: Option<Subaccount>,
     notify_using_protobuf: bool,
 ) -> Result<BytesS, String> {
+    use dfn_core::api::{call_bytes_with_cleanup, call_with_cleanup, Funds};
+    use dfn_protobuf::ProtoBuf;
+    use on_wire::IntoWire;
+
     let caller_principal_id = caller();
 
     if !LEDGER.read().unwrap().can_send(&caller_principal_id) {
@@ -231,8 +232,10 @@ pub async fn notify(
 
     let expected_to = AccountIdentifier::new(to_canister.get(), to_subaccount);
 
-    if max_fee != TRANSACTION_FEE {
-        panic!("Transaction fee should be {}", TRANSACTION_FEE);
+    let transfer_fee = LEDGER.read().unwrap().transfer_fee;
+
+    if max_fee != transfer_fee {
+        panic!("Transfer fee should be {}", transfer_fee);
     }
 
     let raw_block: EncodedBlock =
@@ -399,6 +402,11 @@ fn account_balance(account: AccountIdentifier) -> Tokens {
     LEDGER.read().unwrap().balances.account_balance(&account)
 }
 
+#[candid_method(query, rename = "transfer_fee")]
+fn transfer_fee(_: TransferFeeArgs) -> TransferFee {
+    LEDGER.read().unwrap().transfer_fee()
+}
+
 /// The total number of Tokens not inside the minting canister
 fn total_supply() -> Tokens {
     LEDGER.read().unwrap().balances.total_supply()
@@ -413,6 +421,7 @@ fn canister_init(arg: LedgerCanisterInitPayload) {
         arg.transaction_window,
         arg.archive_options,
         arg.send_whitelist,
+        arg.transfer_fee,
     )
 }
 
@@ -547,6 +556,9 @@ fn send_dfx_() {
 #[cfg(feature = "notify-method")]
 #[export_name = "canister_update notify_pb"]
 fn notify_() {
+    use dfn_core::endpoint::over_async_may_reject_explicit;
+    use dfn_protobuf::ProtoBuf;
+
     // we use over_init because it doesn't reply automatically so we can do explicit
     // replies in the callback
     over_async_may_reject_explicit(
@@ -596,6 +608,8 @@ fn transfer() {
 #[cfg(feature = "notify-method")]
 #[export_name = "canister_update notify_dfx"]
 fn notify_dfx_() {
+    use dfn_core::endpoint::over_async_may_reject_explicit;
+
     // we use over_init because it doesn't reply automatically so we can do explicit
     // replies in the callback
     over_async_may_reject_explicit(
@@ -686,6 +700,16 @@ fn account_balance_dfx_(args: AccountBalanceArgs) -> Tokens {
 #[export_name = "canister_query account_balance_dfx"]
 fn account_balance_dfx() {
     over(candid_one, account_balance_dfx_);
+}
+
+#[export_name = "canister_query transfer_fee"]
+fn transfer_fee_candid() {
+    over(candid_one, transfer_fee)
+}
+
+#[export_name = "canister_query transfer_fee_pb"]
+fn transfer_fee_() {
+    over(protobuf, transfer_fee)
 }
 
 #[export_name = "canister_query total_supply_pb"]

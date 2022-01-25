@@ -43,7 +43,7 @@ use dfn_core::api::now;
 pub mod spawn;
 pub use account_identifier::{AccountIdentifier, Subaccount};
 pub use protobuf::TimeStamp;
-pub use tokens::{Tokens, DECIMAL_PLACES, MIN_BURN_AMOUNT, TOKEN_SUBDIVIDABLE_BY, TRANSACTION_FEE};
+pub use tokens::{Tokens, DECIMAL_PLACES, DEFAULT_TRANSFER_FEE, TOKEN_SUBDIVIDABLE_BY};
 
 // Helper to print messages in magenta
 pub fn print<S: std::convert::AsRef<str>>(s: S)
@@ -707,6 +707,24 @@ fn default_max_transactions_in_window() -> usize {
     Ledger::DEFAULT_MAX_TRANSACTIONS_IN_WINDOW
 }
 
+fn default_transfer_fee() -> Tokens {
+    DEFAULT_TRANSFER_FEE
+}
+
+#[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+pub struct TransferFee {
+    /// The fee to pay to perform a transfer
+    pub transfer_fee: Tokens,
+}
+
+impl Default for TransferFee {
+    fn default() -> Self {
+        TransferFee {
+            transfer_fee: DEFAULT_TRANSFER_FEE,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Ledger {
     pub balances: LedgerBalances,
@@ -740,6 +758,9 @@ pub struct Ledger {
     /// within the transaction_window.
     #[serde(default = "default_max_transactions_in_window")]
     max_transactions_in_window: usize,
+    /// The fee to pay to perform a transfer
+    #[serde(default = "default_transfer_fee")]
+    pub transfer_fee: Tokens,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -762,6 +783,7 @@ impl Default for Ledger {
             transactions_by_height: VecDeque::new(),
             send_whitelist: HashSet::new(),
             max_transactions_in_window: Self::DEFAULT_MAX_TRANSACTIONS_IN_WINDOW,
+            transfer_fee: DEFAULT_TRANSFER_FEE,
         }
     }
 }
@@ -961,6 +983,7 @@ impl Ledger {
         timestamp: TimeStamp,
         transaction_window: Option<Duration>,
         send_whitelist: HashSet<CanisterId>,
+        transfer_fee: Option<Tokens>,
     ) {
         self.balances.token_pool = Tokens::MAX;
         self.minting_account_id = Some(minting_account);
@@ -979,6 +1002,9 @@ impl Ledger {
         }
 
         self.send_whitelist = send_whitelist;
+        if let Some(transfer_fee) = transfer_fee {
+            self.transfer_fee = transfer_fee;
+        }
     }
 
     pub fn change_notification_state(
@@ -1067,6 +1093,12 @@ impl Ledger {
     pub fn transactions_by_height_len(&self) -> usize {
         self.transactions_by_height.len()
     }
+
+    pub fn transfer_fee(&self) -> TransferFee {
+        TransferFee {
+            transfer_fee: self.transfer_fee,
+        }
+    }
 }
 
 lazy_static! {
@@ -1109,33 +1141,100 @@ pub struct LedgerCanisterInitPayload {
     pub transaction_window: Option<Duration>,
     pub archive_options: Option<ArchiveOptions>,
     pub send_whitelist: HashSet<CanisterId>,
+    pub transfer_fee: Option<Tokens>,
 }
 
 impl LedgerCanisterInitPayload {
-    pub fn new(
-        minting_account: AccountIdentifier,
-        initial_values: HashMap<AccountIdentifier, Tokens>,
-        archive_options: Option<ArchiveOptions>,
-        max_message_size_bytes: Option<usize>,
-        transaction_window: Option<Duration>,
-        send_whitelist: HashSet<CanisterId>,
-    ) -> Self {
+    pub fn builder() -> LedgerCanisterInitPayloadBuilder {
+        LedgerCanisterInitPayloadBuilder::new()
+    }
+}
+
+pub struct LedgerCanisterInitPayloadBuilder {
+    minting_account: Option<AccountIdentifier>,
+    initial_values: HashMap<AccountIdentifier, Tokens>,
+    max_message_size_bytes: Option<usize>,
+    transaction_window: Option<Duration>,
+    archive_options: Option<ArchiveOptions>,
+    send_whitelist: HashSet<CanisterId>,
+    transfer_fee: Option<Tokens>,
+}
+
+impl LedgerCanisterInitPayloadBuilder {
+    fn new() -> Self {
+        Self {
+            minting_account: None,
+            initial_values: Default::default(),
+            max_message_size_bytes: None,
+            transaction_window: None,
+            archive_options: None,
+            send_whitelist: Default::default(),
+            transfer_fee: None,
+        }
+    }
+
+    pub fn minting_account(mut self, minting_account: AccountIdentifier) -> Self {
+        self.minting_account = Some(minting_account);
+        self
+    }
+
+    pub fn initial_values(mut self, initial_values: HashMap<AccountIdentifier, Tokens>) -> Self {
+        self.initial_values = initial_values;
+        self
+    }
+
+    pub fn max_message_size_bytes(mut self, max_message_size_bytes: usize) -> Self {
+        self.max_message_size_bytes = Some(max_message_size_bytes);
+        self
+    }
+
+    pub fn transaction_window(mut self, transaction_window: Duration) -> Self {
+        self.transaction_window = Some(transaction_window);
+        self
+    }
+
+    pub fn archive_options(mut self, archive_options: ArchiveOptions) -> Self {
+        self.archive_options = Some(archive_options);
+        self
+    }
+
+    pub fn send_whitelist(mut self, send_whitelist: HashSet<CanisterId>) -> Self {
+        self.send_whitelist = send_whitelist;
+        self
+    }
+
+    pub fn transfer_fee(mut self, transfer_fee: Tokens) -> Self {
+        self.transfer_fee = Some(transfer_fee);
+        self
+    }
+
+    pub fn build(self) -> Result<LedgerCanisterInitPayload, String> {
+        let minting_account = self
+            .minting_account
+            .ok_or("minting_account must be set in the payload")?;
+
         // verify ledger's invariant about the maximum amount
-        let _can_sum = initial_values.values().fold(Tokens::ZERO, |acc, x| {
-            (acc + *x).expect("Summation overflowing?")
-        });
+        let mut sum = Tokens::ZERO;
+        for initial_value in self.initial_values.values() {
+            sum = (sum + *initial_value).map_err(|_| "initial_values sum overflows".to_string())?
+        }
 
         // Don't allow self-transfers of the minting canister
-        assert!(initial_values.get(&minting_account).is_none());
-
-        Self {
-            minting_account,
-            initial_values,
-            max_message_size_bytes,
-            transaction_window,
-            archive_options,
-            send_whitelist,
+        if self.initial_values.get(&minting_account).is_some() {
+            return Err(
+                "initial_values cannot contain transfers to the minting_account".to_string(),
+            );
         }
+
+        Ok(LedgerCanisterInitPayload {
+            minting_account,
+            initial_values: self.initial_values,
+            max_message_size_bytes: self.max_message_size_bytes,
+            transaction_window: self.transaction_window,
+            archive_options: self.archive_options,
+            send_whitelist: self.send_whitelist,
+            transfer_fee: self.transfer_fee,
+        })
     }
 }
 
@@ -1320,13 +1419,14 @@ mod tests {
             SystemTime::UNIX_EPOCH.into(),
             None,
             HashSet::new(),
+            None,
         );
 
         let txn = Transaction::new(
             PrincipalId::new_user_test_id(0).into(),
             PrincipalId::new_user_test_id(1).into(),
             Tokens::new(10000, 50).unwrap(),
-            TRANSACTION_FEE,
+            state.transfer_fee,
             Memo(456),
             TimeStamp::new(1, 0),
         );
@@ -1353,7 +1453,7 @@ mod tests {
             PrincipalId::new_user_test_id(0).into(),
             PrincipalId::new_user_test_id(200).into(),
             Tokens::new(30000, 10000).unwrap(),
-            TRANSACTION_FEE,
+            state.transfer_fee,
             Memo(0),
             TimeStamp::new(1, 100),
         );
@@ -1577,6 +1677,7 @@ mod tests {
             SystemTime::UNIX_EPOCH.into(),
             None,
             HashSet::new(),
+            None,
         );
 
         for i in 0..10 {
@@ -1584,7 +1685,7 @@ mod tests {
                 PrincipalId::new_user_test_id(0).into(),
                 PrincipalId::new_user_test_id(1).into(),
                 Tokens::new(1, 0).unwrap(),
-                TRANSACTION_FEE,
+                state.transfer_fee,
                 Memo(i),
                 TimeStamp::new(1, 0),
             );
@@ -1634,6 +1735,7 @@ mod tests {
             genesis,
             Some(Duration::from_millis(10)),
             HashSet::new(),
+            None,
         );
         let little_later = genesis + Duration::from_millis(1);
 
@@ -1794,7 +1896,7 @@ mod tests {
             PrincipalId::new_user_test_id(0).into(),
             PrincipalId::new_user_test_id(1).into(),
             Tokens::new(1, 0).unwrap(),
-            TRANSACTION_FEE,
+            DEFAULT_TRANSFER_FEE,
             Memo(123456),
             TimeStamp::new(1, 0),
         );
@@ -1867,7 +1969,7 @@ impl fmt::Display for TransferError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::BadFee { expected_fee } => {
-                write!(f, "transaction fee should be {}", expected_fee)
+                write!(f, "transfer fee should be {}", expected_fee)
             }
             Self::InsufficientFunds { balance } => {
                 write!(
@@ -2058,6 +2160,15 @@ impl From<Block> for CandidBlock {
         }
     }
 }
+
+/// Argument taken by the transfer fee endpoint
+///
+/// The reason it is a struct is so that it can be extended -- e.g., to be able
+/// to query past values. Requiring 1 candid value instead of zero is a
+/// non-backward compatible change. But adding optional fields to a struct taken
+/// as input is backward-compatible.
+#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+pub struct TransferFeeArgs {}
 
 /// Argument taken by the total_supply endpoint
 ///

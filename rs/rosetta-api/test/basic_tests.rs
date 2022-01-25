@@ -16,13 +16,17 @@ async fn smoke_test() {
     let mut scribe = Scribe::new();
     let num_transactions: usize = 1000;
     let num_accounts = 100;
+    let transaction_fee = Tokens::from_e8s(2_000);
 
     scribe.gen_accounts(num_accounts, 1_000_000);
     for _i in 0..num_transactions {
         scribe.gen_transaction();
     }
 
-    let ledger = Arc::new(TestLedger::new());
+    let ledger = Arc::new(TestLedger {
+        transfer_fee: transaction_fee,
+        ..Default::default()
+    });
     let req_handler = RosettaRequestHandler::new(ledger.clone());
     for b in &scribe.blockchain {
         ledger.add_block(b.clone()).await.ok();
@@ -194,6 +198,24 @@ async fn smoke_test() {
     let msg = ConstructionDeriveRequest::new(req_handler.network_id(), pk);
     let res = req_handler.construction_derive(msg).await;
     assert!(res.is_err(), "This pk should not have been accepted");
+
+    let msg = ConstructionMetadataRequest::new(req_handler.network_id());
+    let res = req_handler.construction_metadata(msg).await;
+    assert_eq!(
+        res,
+        Ok(ConstructionMetadataResponse {
+            metadata: Default::default(),
+            suggested_fee: Some(vec![Amount {
+                value: format!("{}", transaction_fee.get_e8s()),
+                currency: Currency {
+                    symbol: "ICP".to_string(),
+                    decimals: 8,
+                    metadata: None,
+                },
+                metadata: None,
+            }]),
+        })
+    );
 }
 
 #[actix_rt::test]

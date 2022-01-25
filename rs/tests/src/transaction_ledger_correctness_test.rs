@@ -43,7 +43,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{CanisterId, PrincipalId};
 use ledger_canister::{
     AccountIdentifier, BinaryAccountBalanceArgs, BlockArg, BlockHeight, BlockRes, Memo, Operation,
-    Tokens, Transaction, TransferArgs, TransferError, TRANSACTION_FEE,
+    Tokens, Transaction, TransferArgs, TransferError, DEFAULT_TRANSFER_FEE,
 };
 use quickcheck::{Arbitrary, Gen};
 use rand::Rng;
@@ -316,7 +316,7 @@ fn funds(ptr: &Result<PrincipalId, u32>, plan: &Plan) -> Tokens {
                 Err((_, public)) => ed25519_public_to_principal(&public),
             });
 
-            let minimal_balance = (Tokens::from_e8s(*amount) + TRANSACTION_FEE).unwrap();
+            let minimal_balance = (Tokens::from_e8s(*amount) + DEFAULT_TRANSFER_FEE).unwrap();
             if from != *to {
                 // checking for account exhaustion
                 let source = funds(&from, tail);
@@ -337,7 +337,7 @@ fn funds(ptr: &Result<PrincipalId, u32>, plan: &Plan) -> Tokens {
             }
             if *ptr == from {
                 balance =
-                    ((balance - Tokens::from_e8s(*amount)).unwrap() - TRANSACTION_FEE).unwrap()
+                    ((balance - Tokens::from_e8s(*amount)).unwrap() - DEFAULT_TRANSFER_FEE).unwrap()
             }
             balance
         }
@@ -476,7 +476,7 @@ async fn run_actions(nns_rt: &Runtime, app_rt: &Runtime, actions: &[Action]) {
             }
             Message::Send((from_funds, to_funds), to, amount) => {
                 let to_account = AccountIdentifier::new(*to, None);
-                let debit = (*amount + TRANSACTION_FEE).unwrap();
+                let debit = (*amount + DEFAULT_TRANSFER_FEE).unwrap();
                 let block: Option<(BlockHeight, AccountIdentifier, Memo)> = match owner {
                     Ok(princ) => {
                         let rt = if *princ == LIFELINE_CANISTER_ID.get() {
@@ -506,7 +506,7 @@ async fn run_actions(nns_rt: &Runtime, app_rt: &Runtime, actions: &[Action]) {
                             memo: Memo::default(),
                             from_subaccount: None,
                             amount: *amount,
-                            fee: TRANSACTION_FEE,
+                            fee: DEFAULT_TRANSFER_FEE,
                             to: to_account.to_address(),
                             created_at_time: None,
                         };
@@ -550,7 +550,7 @@ async fn run_actions(nns_rt: &Runtime, app_rt: &Runtime, actions: &[Action]) {
                         assert_eq!(from, from_account);
                         assert_eq!(to, to_account);
                         assert_eq!(amnt, *amount);
-                        assert_eq!(fee, TRANSACTION_FEE);
+                        assert_eq!(fee, DEFAULT_TRANSFER_FEE);
                     } else {
                         panic!("Encountered {:?}", trans.operation)
                     }

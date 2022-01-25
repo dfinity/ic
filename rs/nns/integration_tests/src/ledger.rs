@@ -32,7 +32,7 @@ use ic_nns_test_utils::itest_helpers::{
 use ledger_canister::{
     protobuf::TipOfChainRequest, AccountBalanceArgs, AccountIdentifier, ArchiveOptions, Block,
     BlockHeight, LedgerCanisterInitPayload, Memo, SendArgs, TimeStamp, TipOfChainRes, Tokens,
-    Transaction, TRANSACTION_FEE,
+    Transaction, DEFAULT_TRANSFER_FEE,
 };
 use tokio::time::{timeout_at, Instant};
 
@@ -41,7 +41,7 @@ fn example_block() -> Block {
         AccountIdentifier::new(CanisterId::from_u64(1).get(), None),
         AccountIdentifier::new(CanisterId::from_u64(2).get(), None),
         Tokens::new(10000, 50).unwrap(),
-        TRANSACTION_FEE,
+        DEFAULT_TRANSFER_FEE,
         Memo(456),
         TimeStamp::new(2_000_000_000, 123_456_789),
     );
@@ -67,7 +67,7 @@ async fn perform_transfers(
                     SendArgs {
                         memo: Memo(idx as u64),
                         amount: Tokens::from_tokens(1).unwrap(),
-                        fee: TRANSACTION_FEE,
+                        fee: DEFAULT_TRANSFER_FEE,
                         from_subaccount: None,
                         to: AccountIdentifier::new(user.get_principal_id(), None),
                         created_at_time: None,
@@ -109,20 +109,19 @@ fn test_rosetta1_92() {
 
         let mut ledger_init_state = HashMap::new();
         ledger_init_state.insert(AccountIdentifier::new(user.get_principal_id(), None), alloc);
-        let init_args = LedgerCanisterInitPayload::new(
-            GOVERNANCE_CANISTER_ID.into(),
-            ledger_init_state,
-            Some(ArchiveOptions {
+        let init_args = LedgerCanisterInitPayload::builder()
+            .minting_account(GOVERNANCE_CANISTER_ID.into())
+            .initial_values(ledger_init_state)
+            .archive_options(ArchiveOptions {
                 node_max_memory_size_bytes: Some(node_max_memory_size_bytes),
                 max_message_size_bytes: Some(max_message_size_bytes),
                 controller_id: ROOT_CANISTER_ID,
                 trigger_threshold: blocks_per_archive_node,
                 num_blocks_to_archive: blocks_per_archive_call,
-            }),
-            None,
-            None,
-            ALL_NNS_CANISTER_IDS.iter().map(|&x| *x).collect(),
-        );
+            })
+            .send_whitelist(ALL_NNS_CANISTER_IDS.iter().map(|&x| *x).collect())
+            .build()
+            .unwrap();
 
         let nns_init_payload = NnsInitPayloadsBuilder::new()
             .with_test_neurons()
@@ -230,14 +229,12 @@ fn test_stake_and_disburse_neuron_with_notification() {
             let alloc = Tokens::from_tokens(1000).unwrap();
             let mut ledger_init_state = HashMap::new();
             ledger_init_state.insert(user.get_principal_id().into(), alloc);
-            let init_args = LedgerCanisterInitPayload::new(
-                GOVERNANCE_CANISTER_ID.into(),
-                ledger_init_state,
-                None,
-                None,
-                None,
-                ALL_NNS_CANISTER_IDS.iter().map(|&x| *x).collect(),
-            );
+            let init_args = LedgerCanisterInitPayload::builder()
+                .minting_account(GOVERNANCE_CANISTER_ID.into())
+                .initial_values(ledger_init_state)
+                .send_whitelist(ALL_NNS_CANISTER_IDS.iter().map(|&x| *x).collect())
+                .build()
+                .unwrap();
 
             let nns_init_payload = NnsInitPayloadsBuilder::new()
                 .with_ledger_init_state(init_args)
@@ -272,7 +269,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
                     SendArgs {
                         memo: Memo(nonce),
                         amount: stake,
-                        fee: TRANSACTION_FEE,
+                        fee: DEFAULT_TRANSFER_FEE,
                         from_subaccount: None,
                         to: AccountIdentifier::new(
                             PrincipalId::from(GOVERNANCE_CANISTER_ID),
@@ -328,7 +325,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
             // The balance should now be: initial allocation - stake - fee
             assert_eq!(
                 Tokens::from_e8s(
-                    user_balance.get_e8s() + stake.get_e8s() + TRANSACTION_FEE.get_e8s()
+                    user_balance.get_e8s() + stake.get_e8s() + DEFAULT_TRANSFER_FEE.get_e8s()
                 ),
                 alloc
             );
@@ -374,7 +371,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
             // The balance should now be: initial allocation - fee * 2 (one fee for the
             // stake and one for the disburse).
             assert_eq!(
-                Tokens::from_e8s(user_balance.get_e8s() + 2 * TRANSACTION_FEE.get_e8s()),
+                Tokens::from_e8s(user_balance.get_e8s() + 2 * DEFAULT_TRANSFER_FEE.get_e8s()),
                 alloc
             );
 
@@ -395,14 +392,12 @@ fn test_stake_and_disburse_neuron_with_account() {
             let alloc = Tokens::from_tokens(1000).unwrap();
             let mut ledger_init_state = HashMap::new();
             ledger_init_state.insert(user.get_principal_id().into(), alloc);
-            let init_args = LedgerCanisterInitPayload::new(
-                GOVERNANCE_CANISTER_ID.into(),
-                ledger_init_state,
-                None,
-                None,
-                None,
-                ALL_NNS_CANISTER_IDS.iter().map(|&x| *x).collect(),
-            );
+            let init_args = LedgerCanisterInitPayload::builder()
+                .minting_account(GOVERNANCE_CANISTER_ID.into())
+                .initial_values(ledger_init_state)
+                .send_whitelist(ALL_NNS_CANISTER_IDS.iter().map(|&x| *x).collect())
+                .build()
+                .unwrap();
 
             let nns_init_payload = NnsInitPayloadsBuilder::new()
                 .with_ledger_init_state(init_args)
@@ -436,7 +431,7 @@ fn test_stake_and_disburse_neuron_with_account() {
                     SendArgs {
                         memo: Memo(nonce),
                         amount: stake,
-                        fee: TRANSACTION_FEE,
+                        fee: DEFAULT_TRANSFER_FEE,
                         from_subaccount: None,
                         to: AccountIdentifier::new(
                             PrincipalId::from(GOVERNANCE_CANISTER_ID),
@@ -463,7 +458,7 @@ fn test_stake_and_disburse_neuron_with_account() {
             // The balance should now be: initial allocation - stake - fee
             assert_eq!(
                 Tokens::from_e8s(
-                    user_balance.get_e8s() + stake.get_e8s() + TRANSACTION_FEE.get_e8s()
+                    user_balance.get_e8s() + stake.get_e8s() + DEFAULT_TRANSFER_FEE.get_e8s()
                 ),
                 alloc
             );
@@ -563,7 +558,7 @@ fn test_stake_and_disburse_neuron_with_account() {
 
             // The balance should now be: initial allocation - fee * 2;
             assert_eq!(
-                Tokens::from_e8s(user_balance.get_e8s() + 2 * TRANSACTION_FEE.get_e8s()),
+                Tokens::from_e8s(user_balance.get_e8s() + 2 * DEFAULT_TRANSFER_FEE.get_e8s()),
                 alloc
             );
 
@@ -581,14 +576,12 @@ fn test_ledger_gtc_sync() {
         let alloc = Tokens::from_tokens(100).unwrap();
         ledger_init_state.insert(gtc_user_id.into(), alloc);
 
-        let init_args = LedgerCanisterInitPayload::new(
-            GOVERNANCE_CANISTER_ID.into(),
-            ledger_init_state,
-            None,
-            None,
-            None,
-            ALL_NNS_CANISTER_IDS.iter().map(|&x| *x).collect(),
-        );
+        let init_args = LedgerCanisterInitPayload::builder()
+            .minting_account(GOVERNANCE_CANISTER_ID.into())
+            .initial_values(ledger_init_state)
+            .send_whitelist(ALL_NNS_CANISTER_IDS.iter().map(|&x| *x).collect())
+            .build()
+            .unwrap();
 
         let nns_init_payload = NnsInitPayloadsBuilder::new()
             .with_ledger_init_state(init_args)
