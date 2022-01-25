@@ -186,7 +186,7 @@ pub struct NeuronBuilder {
     stake: u64,
     owner: Option<PrincipalId>,
     hot_keys: Vec<PrincipalId>,
-    age_seconds: Option<u64>,
+    age_timestamp: Option<u64>,
     created_seconds: Option<u64>,
     maturity: u64,
     neuron_fees: u64,
@@ -205,7 +205,7 @@ impl From<Neuron> for NeuronBuilder {
             stake: neuron.cached_neuron_stake_e8s,
             owner: None,
             hot_keys: neuron.hot_keys,
-            age_seconds: if neuron.aging_since_timestamp_seconds == u64::MAX {
+            age_timestamp: if neuron.aging_since_timestamp_seconds == u64::MAX {
                 None
             } else {
                 Some(neuron.aging_since_timestamp_seconds)
@@ -230,7 +230,7 @@ impl NeuronBuilder {
             stake,
             owner: None,
             hot_keys: Vec::new(),
-            age_seconds: None,
+            age_timestamp: None,
             created_seconds: None,
             maturity: 0,
             neuron_fees: 0,
@@ -249,7 +249,7 @@ impl NeuronBuilder {
             stake,
             owner: Some(owner),
             hot_keys: Vec::new(),
-            age_seconds: None,
+            age_timestamp: None,
             created_seconds: None,
             maturity: 0,
             neuron_fees: 0,
@@ -293,7 +293,7 @@ impl NeuronBuilder {
     }
 
     pub fn set_aging_since_timestamp(mut self, secs: u64) -> Self {
-        self.age_seconds = Some(secs);
+        self.age_timestamp = Some(secs);
         self
     }
 
@@ -345,9 +345,9 @@ impl NeuronBuilder {
             created_timestamp_seconds: self.created_seconds.unwrap_or(now),
             aging_since_timestamp_seconds: match self.dissolve_state {
                 Some(DissolveState::WhenDissolvedTimestampSeconds(_)) => u64::MAX,
-                _ => match self.age_seconds {
+                _ => match self.age_timestamp {
                     None => now,
-                    Some(secs) => now - secs,
+                    Some(secs) => secs,
                 },
             },
             maturity_e8s_equivalent: self.maturity,
