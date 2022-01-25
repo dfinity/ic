@@ -1,8 +1,8 @@
 use dfn_candid::candid;
-
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_canister_client::Sender;
 use ic_crypto::utils::get_node_keys_or_generate_if_missing;
+use ic_nns_common::registry::encode_or_panic;
 use ic_nns_constants::ids::{TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_test_utils::{
     itest_helpers::{local_test_on_nns_subnet, set_up_registry_canister},
@@ -30,8 +30,6 @@ use registry_canister::{
         do_remove_node_directly::RemoveNodeDirectlyPayload,
     },
 };
-
-use prost::Message;
 
 const TEST_NODE_ALLOWANCE: u64 = 5;
 
@@ -186,13 +184,13 @@ fn node_cannot_be_removed_if_in_subnet() {
                         RegistryMutation {
                             mutation_type: registry_mutation::Type::Insert as i32,
                             key: make_subnet_record_key(test_subnet_id).as_bytes().to_vec(),
-                            value: protobuf_to_vec(&test_subnet_record),
+                            value: encode_or_panic(&test_subnet_record),
                         },
                         // Overwrite Subnet List
                         RegistryMutation {
                             mutation_type: registry_mutation::Type::Update as i32,
                             key: make_subnet_list_record_key().as_bytes().to_vec(),
-                            value: protobuf_to_vec(&test_subnet_list_record),
+                            value: encode_or_panic(&test_subnet_list_record),
                         },
                     ],
                     preconditions: vec![],
@@ -242,7 +240,7 @@ fn init_mutation(node_record: &NodeRecord) -> (NodeId, RegistryAtomicMutateReque
                 RegistryMutation {
                     mutation_type: registry_mutation::Type::Insert as i32,
                     key: make_node_record_key(node_id).as_bytes().to_vec(),
-                    value: protobuf_to_vec(node_record),
+                    value: encode_or_panic(node_record),
                 },
                 // Insert the Node's NO
                 RegistryMutation {
@@ -250,7 +248,7 @@ fn init_mutation(node_record: &NodeRecord) -> (NodeId, RegistryAtomicMutateReque
                     key: make_node_operator_record_key(*TEST_NEURON_1_OWNER_PRINCIPAL)
                         .as_bytes()
                         .to_vec(),
-                    value: protobuf_to_vec(&NodeOperatorRecord {
+                    value: encode_or_panic(&NodeOperatorRecord {
                         node_allowance: TEST_NODE_ALLOWANCE,
                         ..Default::default()
                     }),
@@ -263,10 +261,4 @@ fn init_mutation(node_record: &NodeRecord) -> (NodeId, RegistryAtomicMutateReque
 
 fn prepare_payload(node_id: NodeId) -> RemoveNodeDirectlyPayload {
     RemoveNodeDirectlyPayload { node_id }
-}
-
-fn protobuf_to_vec<T: Message>(entry: &T) -> Vec<u8> {
-    let mut buf: Vec<u8> = Vec::new();
-    entry.encode(&mut buf).expect("This must not fail");
-    buf
 }

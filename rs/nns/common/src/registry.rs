@@ -22,7 +22,8 @@ pub const MAX_NUM_SSH_KEYS: usize = 130;
 /// Wraps around Message::encode and panics on error.
 pub fn encode_or_panic<T: Message>(msg: &T) -> Vec<u8> {
     let mut buf = Vec::<u8>::new();
-    msg.encode(&mut buf).unwrap();
+    msg.encode(&mut buf)
+        .expect("Encoding input as Protobuf failed");
     buf
 }
 
