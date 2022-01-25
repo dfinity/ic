@@ -1,13 +1,10 @@
 use crate::error::{OrchestratorError, OrchestratorResult};
-use ic_config::Config;
 use ic_consensus::dkg::make_registry_cup;
 use ic_interfaces::registry::RegistryClient;
 use ic_logger::ReplicaLogger;
-use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::firewall::v1::FirewallConfig;
 use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
-use ic_registry_client::client::{create_data_provider, RegistryClientImpl};
 use ic_registry_client::helper::firewall::FirewallRegistry;
 use ic_registry_client::helper::subnet::SubnetRegistry;
 use ic_registry_client::helper::unassigned_nodes::UnassignedNodeRegistry;
@@ -36,34 +33,14 @@ pub(crate) struct RegistryHelper {
 /// lookups would fail).
 ///
 /// Security note: The registry data accessed by the `RegistryHelper` accesses
-/// data stored locally, fetched and verified by the `NnsRegistryReplicator`.
+/// data stored locally, fetched and verified by the `RegistryReplicator`.
 /// Thus, it does not verify the registry data threshold signature again.
 impl RegistryHelper {
-    pub(crate) fn new_with(
-        metrics_registry: &MetricsRegistry,
-        config: &Config,
+    pub(crate) fn new(
         node_id: NodeId,
+        registry_client: Arc<dyn RegistryClient>,
         logger: ReplicaLogger,
     ) -> Self {
-        let data_provider = create_data_provider(
-            config
-                .registry_client
-                .data_provider
-                .as_ref()
-                .expect("No data provider was provided in the registry client configuration"),
-            // We set the NNS public key to `None` (and thus disable registry data signature
-            // verification). See the Rustdoc of `RegistryHelper` for an explanation.
-            None,
-        );
-        let registry_client = Arc::new(RegistryClientImpl::new(
-            data_provider,
-            Some(metrics_registry),
-        ));
-
-        if let Err(e) = registry_client.fetch_and_start_polling() {
-            panic!("fetch_and_start_polling failed: {}", e);
-        };
-
         Self {
             node_id,
             registry_client,

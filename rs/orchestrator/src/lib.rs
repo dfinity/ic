@@ -38,7 +38,6 @@ mod crypto_helper;
 mod error;
 mod firewall;
 mod metrics;
-mod nns_registry_replicator;
 pub mod orchestrator;
 mod registration;
 mod registry_helper;

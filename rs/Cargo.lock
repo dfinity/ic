@@ -5305,6 +5305,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-registry-replicator"
+version = "0.1.0"
+dependencies = [
+ "ic-base-thread",
+ "ic-config",
+ "ic-crypto-utils-threshold-sig",
+ "ic-interfaces",
+ "ic-logger",
+ "ic-metrics",
+ "ic-protobuf",
+ "ic-registry-client",
+ "ic-registry-common",
+ "ic-registry-keys",
+ "ic-registry-routing-table",
+ "ic-types 0.8.0",
+ "prost",
+ "slog",
+ "slog-async",
+ "slog-term",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "ic-registry-routing-table"
 version = "0.8.0"
 dependencies = [
@@ -7723,6 +7747,7 @@ dependencies = [
  "ic-registry-client",
  "ic-registry-common",
  "ic-registry-keys",
+ "ic-registry-replicator",
  "ic-registry-routing-table",
  "ic-release",
  "ic-sys",

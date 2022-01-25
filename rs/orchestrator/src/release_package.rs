@@ -1,6 +1,5 @@
 use crate::catch_up_package_provider::CatchUpPackageProvider;
 use crate::error::{OrchestratorError, OrchestratorResult};
-use crate::nns_registry_replicator::NnsRegistryReplicator;
 use crate::registry_helper::RegistryHelper;
 use crate::release_package_provider::ReleasePackageProvider;
 use crate::replica_process::ReplicaProcess;
@@ -12,6 +11,7 @@ use ic_registry_client::helper::node::NodeRegistry;
 use ic_registry_client::helper::subnet::SubnetRegistry;
 use ic_registry_client::helper::unassigned_nodes::UnassignedNodeRegistry;
 use ic_registry_common::local_store::LocalStoreImpl;
+use ic_registry_replicator::RegistryReplicator;
 use ic_types::consensus::catchup::CUPWithOriginalProtobuf;
 use ic_types::consensus::CatchUpPackage;
 use ic_types::consensus::HasHeight;
@@ -32,7 +32,7 @@ pub(crate) struct ReleasePackage {
     replica_version: ReplicaVersion,
     replica_config_file: PathBuf,
     ic_binary_dir: PathBuf,
-    nns_registry_replicator: Arc<NnsRegistryReplicator>,
+    registry_replicator: Arc<RegistryReplicator>,
     logger: ReplicaLogger,
     node_id: NodeId,
     enabled: Arc<std::sync::atomic::AtomicBool>,
@@ -49,7 +49,7 @@ impl ReleasePackage {
         replica_config_file: PathBuf,
         node_id: NodeId,
         ic_binary_dir: PathBuf,
-        nns_registry_replicator: Arc<NnsRegistryReplicator>,
+        registry_replicator: Arc<RegistryReplicator>,
         logger: ReplicaLogger,
     ) -> Arc<std::sync::atomic::AtomicBool> {
         let enabled = Arc::new(std::sync::atomic::AtomicBool::new(true));
@@ -62,7 +62,7 @@ impl ReleasePackage {
             replica_version,
             replica_config_file,
             ic_binary_dir,
-            nns_registry_replicator,
+            registry_replicator,
             logger,
             enabled: enabled.clone(),
         };
@@ -178,7 +178,7 @@ impl ReleasePackage {
             }
 
             let new_local_store = LocalStoreImpl::new(local_store_location);
-            self.nns_registry_replicator
+            self.registry_replicator
                 .stop_polling_and_set_local_registry_data(&new_local_store);
 
             utils::reexec_current_process(&self.logger);

@@ -6,21 +6,15 @@ use ic_config::{
     http_handler::Config as HttpConfig,
     message_routing::Config as MsgRoutingConfig,
     metrics::{Config as MetricsConfig, Exporter},
-    registry_client::DataProviderConfig,
     Config,
 };
-use ic_crypto_utils_threshold_sig::parse_threshold_sig_key;
 use ic_interfaces::crypto::KeyManager;
 use ic_interfaces::registry::{RegistryClient, ZERO_REGISTRY_VERSION};
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_registry_common::local_store::{
-    Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreReader, LocalStoreWriter,
-};
-use ic_registry_common::registry::RegistryCanister;
+use ic_registry_common::local_store::LocalStore;
 use ic_sys::utility_command::UtilityCommand;
 use ic_types::transport::TransportConfig;
-use ic_types::RegistryVersion;
 use prost::Message;
 use rand::prelude::*;
 use registry_canister::mutations::do_add_node::AddNodePayload;
@@ -34,7 +28,7 @@ pub(crate) struct NodeRegistration {
     node_config: Config,
     registry_client: Arc<dyn RegistryClient>,
     key_manager: Arc<dyn KeyManager>,
-    local_store: Arc<LocalStoreImpl>,
+    local_store: Arc<dyn LocalStore>,
 }
 
 impl NodeRegistration {
@@ -44,7 +38,7 @@ impl NodeRegistration {
         node_config: Config,
         registry_client: Arc<dyn RegistryClient>,
         key_manager: Arc<dyn KeyManager>,
-        local_store: Arc<LocalStoreImpl>,
+        local_store: Arc<dyn LocalStore>,
     ) -> Self {
         Self {
             log,
@@ -61,8 +55,6 @@ impl NodeRegistration {
     /// If the node has not been registered, retries registering the node using
     /// one of the nns nodes in `nns_node_list`.
     pub(crate) async fn register_node(&mut self) {
-        self.initialize_local_store().await;
-
         let latest_version = self.registry_client.get_latest_version();
         if let Err(e) = self.key_manager.check_keys_with_registry(latest_version) {
             warn!(self.log, "Node keys are not setup: {:?}", e);
@@ -70,95 +62,6 @@ impl NodeRegistration {
             self.touch_eject_file();
         }
         // postcondition: node keys are registered
-    }
-
-    pub(crate) async fn initialize_local_store(&mut self) {
-        let local_store_path = if let DataProviderConfig::LocalStore(p) = self
-            .node_config
-            .registry_client
-            .data_provider
-            .clone()
-            .expect("Data Provider is not configured.")
-        {
-            p
-        } else {
-            panic!("LocalStore is the only data registry provider supported.")
-        };
-        std::fs::create_dir_all(local_store_path)
-            .expect("Could not create directory for registry local store.");
-        if self
-            .local_store
-            .get_changelog_since_version(ZERO_REGISTRY_VERSION)
-            .expect("Could not read registry local store.")
-            .is_empty()
-        {
-            let nns_urls = self
-                .node_config
-                .registration
-                .nns_url
-                .clone()
-                .expect("Registry Local Store is empty and no NNS Url configured.")
-                .split(',')
-                .map(|s| Url::parse(s).expect("Could not parse registration NNS url from config"))
-                .collect::<Vec<Url>>();
-
-            let nns_pub_key_path = self
-                .node_config
-                .registration
-                .nns_pub_key_pem
-                .clone()
-                .expect("Registry Local Store is empty and no NNS Public Key configured.");
-
-            let nns_pub_key = parse_threshold_sig_key(&nns_pub_key_path)
-                .expect("Could not parse configured NNS Public Key file.");
-
-            let registry_canister = RegistryCanister::new(nns_urls);
-            while self
-                .local_store
-                .get_changelog_since_version(ZERO_REGISTRY_VERSION)
-                .expect("Could not read registry local store.")
-                .is_empty()
-            {
-                match registry_canister
-                    .get_certified_changes_since(0, &nns_pub_key)
-                    .await
-                {
-                    Ok((mut records, _, t)) if !records.is_empty() => {
-                        records.sort_by_key(|tr| tr.version);
-                        let changelog = records.iter().fold(Changelog::default(), |mut cl, r| {
-                            let rel_version = (r.version - ZERO_REGISTRY_VERSION).get();
-                            if cl.len() < rel_version as usize {
-                                cl.push(ChangelogEntry::default());
-                            }
-                            cl.last_mut().unwrap().push(KeyMutation {
-                                key: r.key.clone(),
-                                value: r.value.clone(),
-                            });
-                            cl
-                        });
-
-                        changelog
-                            .into_iter()
-                            .enumerate()
-                            .try_for_each(|(i, cle)| {
-                                let v = ZERO_REGISTRY_VERSION + RegistryVersion::from(i as u64 + 1);
-                                self.local_store.store(v, cle)
-                            })
-                            .expect("Could not write to local store.");
-                        self.local_store
-                            .update_certified_time(t.as_nanos_since_unix_epoch())
-                            .expect("Could not store certified time");
-                        return;
-                    }
-                    Err(e) => warn!(
-                        self.log,
-                        "Could not fetch registry changelog from NNS: {:?}", e
-                    ),
-                    _ => {}
-                };
-                tokio::time::sleep(Duration::from_secs(30)).await;
-            }
-        }
     }
 
     // postcondition: we are registered with the NNS

@@ -1,42 +1,11 @@
-//! # NNS Registry Replicator
-//!
-//! (1) It polls one of the NNS Nodes for registry updates on a regular basis,
-//! verifies the response using the public key configured in the registry and
-//! applies the received changelog to the Registry Local Store.
-//!
-//! (2) In case of a "switch-over" or starting a new independent NNS subnet, the
-//! NNS Registry Replicator modifies the Registry Local Store before rebooting:
-//!
-//! Consider the registry of the «parent» IC instance as the source registry.
-//! Let subnet_record be a subnet record (in the source registry) with
-//! subnet_record.start_as_nns set to true. Let v be the registry version at
-//! which subnet_record was added to the registry (i.e. the smallest v for which
-//! subnet_record exists). Create a fresh (target) registry state that contains
-//! all versions up to and including v-1. Add version v, but with the following
-//! changes:
-//! * subnet_record.start_as_nns is unset on all subnet records
-//! * nns_subnet_id set to the new nns subnet id
-//! * subnet_list: contains only the nns_subnet_id
-//! * routing table: consists of a single entry that maps the same range of
-//!   canister ids that was mapped to the NNS in the source registry to the
-//!   subnet id obtained from subnet record
-//!
-//! # Concurrency
-//!
-//! This is the only component that writes to the Registry Local Store. While
-//! individual changelog entries are stored atomically when replicating the
-//! registry, the switch-over is *not* atomic. This is the reason why the
-//! switch-over is handled in this component.
-
 use ic_base_thread::async_safe_block_on_await;
 use ic_interfaces::registry::{RegistryClient, ZERO_REGISTRY_VERSION};
-use ic_logger::{debug, warn, ReplicaLogger};
-use ic_protobuf::registry::subnet::v1::SubnetType;
+use ic_logger::{warn, ReplicaLogger};
 use ic_protobuf::{
     registry::{
         node::v1::ConnectionEndpoint,
         routing_table::v1::RoutingTable as PbRoutingTable,
-        subnet::v1::{SubnetListRecord, SubnetRecord},
+        subnet::v1::{SubnetListRecord, SubnetRecord, SubnetType},
     },
     types::v1::{PrincipalId as PrincipalIdProto, SubnetId as SubnetIdProto},
 };
@@ -57,143 +26,16 @@ use ic_types::{NodeId, RegistryVersion, SubnetId};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::fmt::Debug;
-use std::io::{Error, ErrorKind};
 use std::net::IpAddr;
 use std::str::FromStr;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use url::Url;
 
-pub(crate) struct NnsRegistryReplicator {
-    log: ReplicaLogger,
+pub(crate) struct InternalState {
+    logger: ReplicaLogger,
     node_id: NodeId,
-    registry: Arc<dyn RegistryClient>,
-    local_store: Arc<dyn LocalStore>,
-    started: Arc<AtomicBool>,
-    cancelled: Arc<AtomicBool>,
-    poll_delay: Duration,
-}
-
-impl NnsRegistryReplicator {
-    pub(crate) fn new(
-        log: ReplicaLogger,
-        node_id: NodeId,
-        registry: Arc<dyn RegistryClient>,
-        local_store: Arc<dyn LocalStore>,
-        poll_delay: Duration,
-    ) -> Self {
-        Self {
-            log,
-            node_id,
-            registry,
-            local_store,
-            started: Arc::new(AtomicBool::new(false)),
-            cancelled: Arc::new(AtomicBool::new(false)),
-            poll_delay,
-        }
-    }
-
-    /// Calls `poll()` synchronously and spawns a background task that
-    /// continuously polls for updates. Returns the result of the first poll.
-    /// The background task is stopped when the object is dropped.
-    pub fn fetch_and_start_polling(&self) -> Result<(), Error> {
-        if self.started.swap(true, Ordering::Relaxed) {
-            return Err(Error::new(
-                ErrorKind::AlreadyExists,
-                "'start_polling' was already called",
-            ));
-        }
-
-        let mut internal_state = InternalState::new(
-            self.log.clone(),
-            self.node_id,
-            self.registry.clone(),
-            self.local_store.clone(),
-            self.poll_delay,
-        );
-        let res = internal_state
-            .poll()
-            .map_err(|err| Error::new(ErrorKind::Other, err));
-
-        let log = self.log.clone();
-        let cancelled = Arc::clone(&self.cancelled);
-        let poll_delay = self.poll_delay;
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(poll_delay);
-            while !cancelled.load(Ordering::Relaxed) {
-                let tick_time = interval.tick().await;
-                // The relevant I/O-operation of the poll() function is querying
-                // a node on the NNS for updates. As we set the query timeout to
-                // `poll_delay` when constructing the underlying
-                // `RegistryCanister` abstraction, we are guaranteed that
-                // `poll()` returns after a maximal duration of `poll_delay`.
-                if let Err(msg) = internal_state.poll() {
-                    warn!(log, "Polling the NNS registry failed: {}", msg);
-                } else {
-                    debug!(log, "Polling the NNS succeeded.");
-                }
-
-                // Ticks happen at _absolute_ points in time. Thus, if the
-                // delay between ticks (because, for example, under load the
-                // scheduler cannot schedule this thread) is _longer_ than the
-                // interval length, the intervals "pile up" and tick() will
-                // immediately return a number of times.
-                //
-                // To prevent a situation where nodes start flooding the NNS
-                // with requests, we simply reset the interval if the "skew"
-                // becomes larger than poll_delay (or 2*poll_delay, accounting
-                // for the maximum delay of poll() after the tick_time).
-                if tokio::time::Instant::now().duration_since(tick_time) > 2 * poll_delay {
-                    interval = tokio::time::interval(poll_delay);
-                }
-            }
-        });
-        res
-    }
-
-    /// Set the local registry data to what is contained in the provided local
-    /// store.
-    fn set_local_registry_data(&self, source_registry: &dyn LocalStore) {
-        // Read the registry data.
-        let changelog = source_registry
-            .get_changelog_since_version(RegistryVersion::from(0))
-            .expect("Could not read changelog from source registry.");
-
-        // Reset the local store and fill it with the read registry data.
-        self.local_store
-            .clear()
-            .expect("Could not clear registry local store");
-        for (v, cle) in changelog.into_iter().enumerate() {
-            self.local_store
-                .store(RegistryVersion::from((v + 1) as u64), cle)
-                .expect("Could not store change log entry");
-        }
-    }
-
-    pub(crate) fn stop_polling_and_set_local_registry_data(
-        &self,
-        source_registry: &dyn LocalStore,
-    ) {
-        self.stop_polling();
-        self.set_local_registry_data(source_registry);
-    }
-
-    pub fn stop_polling(&self) {
-        self.cancelled.fetch_or(true, Ordering::Relaxed);
-    }
-}
-
-impl Drop for NnsRegistryReplicator {
-    fn drop(&mut self) {
-        self.stop_polling();
-    }
-}
-
-struct InternalState {
-    log: ReplicaLogger,
-    node_id: NodeId,
-    registry: Arc<dyn RegistryClient>,
+    registry_client: Arc<dyn RegistryClient>,
     local_store: Arc<dyn LocalStore>,
     latest_version: RegistryVersion,
     nns_pub_key: Option<ThresholdSigPublicKey>,
@@ -203,17 +45,17 @@ struct InternalState {
 }
 
 impl InternalState {
-    fn new(
-        log: ReplicaLogger,
+    pub(crate) fn new(
+        logger: ReplicaLogger,
         node_id: NodeId,
-        registry: Arc<dyn RegistryClient>,
+        registry_client: Arc<dyn RegistryClient>,
         local_store: Arc<dyn LocalStore>,
         poll_delay: Duration,
     ) -> Self {
         Self {
-            log,
+            logger,
             node_id,
-            registry,
+            registry_client,
             local_store,
             latest_version: ZERO_REGISTRY_VERSION,
             nns_pub_key: None,
@@ -223,8 +65,8 @@ impl InternalState {
         }
     }
 
-    fn poll(&mut self) -> Result<(), String> {
-        let latest_version = self.registry.get_latest_version();
+    pub(crate) fn poll(&mut self) -> Result<(), String> {
+        let latest_version = self.registry_client.get_latest_version();
         if latest_version != self.latest_version {
             // latest version has changed
             self.latest_version = latest_version;
@@ -232,7 +74,7 @@ impl InternalState {
                 .expect("Start new NNS failed.");
             if let Err(e) = self.update_registry_canister(latest_version) {
                 warn!(
-                    self.log,
+                    self.logger,
                     "Could not update registry canister with new topology data: {:?}", e
                 );
             }
@@ -304,7 +146,7 @@ impl InternalState {
         }
 
         let (subnet_id, subnet_record) = match self
-            .registry
+            .registry_client
             .get_listed_subnet_for_node_id(self.node_id, latest_version)
         {
             Ok(Some((id, r))) if r.start_as_nns => (id, r),
@@ -324,7 +166,7 @@ impl InternalState {
         let mut v = latest_version - RegistryVersion::from(1);
         let k = loop {
             if self
-                .registry
+                .registry_client
                 .get_subnet_record(subnet_id, v)
                 .map_err(|e| map_to_str("Could not retrieve subnet record", v, e))?
                 .is_none()
@@ -357,7 +199,7 @@ impl InternalState {
         }
 
         warn!(
-            self.log,
+            self.logger,
             "Rebooting node after switch-over to new NNS subnet."
         );
         std::process::exit(1);
@@ -375,13 +217,13 @@ impl InternalState {
         let registry_version = RegistryVersion::from(changelog.len() as u64);
 
         let routing_table = self
-            .registry
+            .registry_client
             .get_routing_table(registry_version)
             .expect("Could not query registry for routing table.")
             .expect("No routing table configured in registry");
 
         let old_nns_subnet_id = self
-            .registry
+            .registry_client
             .get_root_subnet_id(registry_version)
             .expect("Could not query registry for nns subnet id")
             .expect("No NNS subnet id configured in the registry");
@@ -497,7 +339,7 @@ impl InternalState {
     }
 
     fn get_root_subnet_id(&self, version: RegistryVersion) -> Result<SubnetId, String> {
-        match self.registry.get_root_subnet_id(version) {
+        match self.registry_client.get_root_subnet_id(version) {
             Ok(Some(v)) => Ok(v),
             Ok(_) => Err(format!(
                 "No NNS subnet id configured at version {}",
@@ -516,7 +358,7 @@ impl InternalState {
         version: RegistryVersion,
     ) -> Result<ThresholdSigPublicKey, String> {
         match self
-            .registry
+            .registry_client
             .get_threshold_signing_public_key_for_subnet(subnet_id, version)
         {
             Ok(Some(v)) => Ok(v),
@@ -536,7 +378,10 @@ impl InternalState {
         subnet_id: SubnetId,
         version: RegistryVersion,
     ) -> Result<Vec<Url>, String> {
-        let t_infos = match self.registry.get_subnet_transport_infos(subnet_id, version) {
+        let t_infos = match self
+            .registry_client
+            .get_subnet_transport_infos(subnet_id, version)
+        {
             Ok(Some(v)) => v,
             Ok(None) => {
                 return Err(format!(
@@ -584,7 +429,7 @@ impl InternalState {
         match Url::parse(&url) {
             Ok(v) => Some(v),
             Err(e) => {
-                warn!(self.log, "Invalid url: {}: {:?}", url, e);
+                warn!(self.logger, "Invalid url: {}: {:?}", url, e);
                 None
             }
         }
