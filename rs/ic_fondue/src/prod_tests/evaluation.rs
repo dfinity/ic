@@ -207,6 +207,8 @@ fn evaluate_test(
     if let Err(panic_res) = t_res {
         if let Some(s) = panic_res.downcast_ref::<String>() {
             warn!(test_ctx.logger, "{} FAILED: {}", path, s);
+        } else if let Some(s) = panic_res.downcast_ref::<&str>() {
+            warn!(test_ctx.logger, "{} FAILED: {}", path, s);
         } else {
             warn!(test_ctx.logger, "{} FAILED (): {:?}", path, panic_res);
         }
