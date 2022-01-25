@@ -84,7 +84,7 @@ use std::path::PathBuf;
 use dfn_protobuf::ToProto;
 use ic_nns_governance::governance::{
     MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS, MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
-    ONE_DAY_SECONDS, ONE_YEAR_SECONDS,
+    ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
 };
 use ic_nns_governance::pb::v1::governance::GovernanceCachedMetrics;
 use ic_nns_governance::pb::v1::governance_error::ErrorType::{NotFound, ResourceExhausted};
@@ -4462,7 +4462,7 @@ fn test_neuron_merge() {
                 .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS)
                 .set_maturity(n1_maturity)
                 .set_neuron_fees(n1_fees)
-                .set_aging_since_timestamp(0),
+                .set_aging_since_timestamp(DEFAULT_TEST_START_TIMESTAMP_SECONDS),
         )
         // the target
         .add_neuron(
@@ -4470,9 +4470,14 @@ fn test_neuron_merge() {
                 .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4)
                 .set_maturity(n2_maturity)
                 .set_neuron_fees(n2_fees)
-                .set_aging_since_timestamp(10),
+                .set_aging_since_timestamp(
+                    DEFAULT_TEST_START_TIMESTAMP_SECONDS + ONE_MONTH_SECONDS,
+                ),
         )
         .create();
+
+    // ensure that both the source and target have lots of age
+    nns.advance_time_by(ONE_YEAR_SECONDS);
 
     nns.governance
         .merge_neurons(
@@ -4499,6 +4504,10 @@ fn test_neuron_merge() {
     assert_changes!(
         nns,
         Changed::Changed(vec![
+            NNSStateChange::Now(U64Change(
+                DEFAULT_TEST_START_TIMESTAMP_SECONDS,
+                DEFAULT_TEST_START_TIMESTAMP_SECONDS + ONE_YEAR_SECONDS
+            )),
             NNSStateChange::Accounts(vec![
                 MapChange::Changed(
                     nns.get_neuron_account_id(2),
@@ -4513,6 +4522,10 @@ fn test_neuron_merge() {
                     vec![
                         NeuronChange::CachedNeuronStakeE8S(U64Change(n1_stake, 0)),
                         NeuronChange::NeuronFeesE8S(U64Change(n1_fees, 0)),
+                        NeuronChange::AgingSinceTimestampSeconds(U64Change(
+                            DEFAULT_TEST_START_TIMESTAMP_SECONDS,
+                            nns.now()
+                        )),
                         NeuronChange::MaturityE8SEquivalent(U64Change(n1_maturity, 0)),
                     ],
                 ),
@@ -4523,7 +4536,20 @@ fn test_neuron_merge() {
                             n2_stake,
                             n2_stake + (n1_stake - n1_fees) - fee,
                         )),
-                        NeuronChange::AgingSinceTimestampSeconds(U64Change(999110990, 999110993)),
+                        NeuronChange::AgingSinceTimestampSeconds(U64Change(
+                            DEFAULT_TEST_START_TIMESTAMP_SECONDS + ONE_MONTH_SECONDS,
+                            {
+                                let n1_age = nns
+                                    .now()
+                                    .saturating_sub(DEFAULT_TEST_START_TIMESTAMP_SECONDS);
+                                let n2_age = nns.now().saturating_sub(
+                                    DEFAULT_TEST_START_TIMESTAMP_SECONDS + ONE_MONTH_SECONDS,
+                                );
+                                nns.now()
+                                    - ((n1_stake - n1_fees) * n1_age + n2_stake * n2_age)
+                                        / ((n1_stake - n1_fees) + n2_stake)
+                            }
+                        )),
                         NeuronChange::MaturityE8SEquivalent(U64Change(
                             n2_maturity,
                             n2_maturity + n1_maturity

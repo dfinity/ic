@@ -2920,6 +2920,7 @@ impl Governance {
             .saturating_sub(source_neuron_fees_e8s);
 
         let source_age_timestamp_seconds = source_neuron_mut.aging_since_timestamp_seconds;
+        let source_age_seconds = source_neuron.age_seconds(now);
         let source_stake_e8s = source_neuron_mut.stake_e8s();
         let source_stake_less_transaction_fee_e8s =
             source_stake_e8s.saturating_sub(transaction_fee_e8s);
@@ -2988,7 +2989,6 @@ impl Governance {
             .expect("Expected the source neuron to exist");
 
         // Set source maturity to zero
-        let source_age_seconds = source_neuron_mut.age_seconds(now);
         let source_maturity = source_neuron_mut.maturity_e8s_equivalent;
         source_neuron_mut.maturity_e8s_equivalent = 0;
 
