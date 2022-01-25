@@ -45,6 +45,35 @@ pub struct EcdsaDataPayload {
 
     /// Next TranscriptId that is incremented after creating a new transcript.
     pub next_unused_transcript_id: IDkgTranscriptId,
+
+    /// Progress of creating the next ECDSA key transcript.
+    pub next_key_transcript_creation: Option<KeyTranscriptCreation>,
+}
+
+/// The creation of an ecdsa key transcript goes through one of the two paths below:
+/// 1. RandomTranscript -> ReshareOfMasked -> Created
+/// 2. ReshareOfUnmasked -> Created
+///
+/// The initial bootstrap will start with an empty 'EcdsaSummaryPayload', and then
+/// we'll go through the first path to create the key transcript.
+///
+/// After the initial key transcript is created, we will be able to create the first
+/// 'EcdsaSummaryPayload' by carrying over the key transcript, which will be carried
+/// over to the next DKG interval if there is no node membership change.
+///
+/// If in the future there is a membership change, we will create a new key transcript
+/// by going through the second path above. Then the switch-over will happen at
+/// the next 'EcdsaSummaryPayload'.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum KeyTranscriptCreation {
+    // Configuration to create initial random transcript.
+    RandomTranscriptParams(RandomTranscriptParams),
+    // Configuration to create initial key transcript by resharing the random transcript.
+    ReshareOfMaskedParams(ReshareOfMaskedParams),
+    // Configuration to create next key transcript by resharing the current key transcript.
+    ReshareOfUnmaskedParams(ReshareOfUnmaskedParams),
+    // Created
+    Created(UnmaskedTranscript),
 }
 
 impl EcdsaDataPayload {
@@ -53,11 +82,21 @@ impl EcdsaDataPayload {
     pub fn iter_transcript_configs_in_creation(
         &self,
     ) -> Box<dyn Iterator<Item = &IDkgTranscriptParams> + '_> {
+        let iter =
+            self.next_key_transcript_creation
+                .iter()
+                .filter_map(|transcript| match transcript {
+                    KeyTranscriptCreation::RandomTranscriptParams(x) => Some(x),
+                    KeyTranscriptCreation::ReshareOfMaskedParams(x) => Some(x),
+                    KeyTranscriptCreation::ReshareOfUnmaskedParams(x) => Some(x),
+                    KeyTranscriptCreation::Created(_) => None,
+                });
         Box::new(
             self.quadruples_in_creation
                 .iter()
                 .map(|(_, quadruple)| quadruple.iter_transcript_configs_in_creation())
-                .flatten(),
+                .flatten()
+                .chain(iter),
         )
     }
 }
@@ -69,12 +108,8 @@ pub struct EcdsaSummaryPayload {
     /// The `RequestIds` for which we are currently generating signatures.
     pub ongoing_signatures: BTreeMap<RequestId, ThresholdEcdsaSigInputs>,
 
-    /// The ECDSA transcript that we're currently using (if we have one).
-    pub current_ecdsa_transcript: Option<UnmaskedTranscript>,
-
-    /// The ECDSA transcript that would become the current transcript on the
-    /// next summary (if we have one).
-    pub next_ecdsa_transcript: Option<UnmaskedTranscript>,
+    /// The ECDSA key transcript used for the corresponding interval.
+    pub current_key_transcript: UnmaskedTranscript,
 
     /// ECDSA transcript quadruples that we can use to create ECDSA signatures.
     pub available_quadruples: BTreeMap<QuadrupleId, PreSignatureQuadruple>,
