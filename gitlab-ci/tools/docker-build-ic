@@ -16,7 +16,7 @@ EOF
 export IMAGE=ic-build-src:$TAG
 "$REPO_ROOT"/gitlab-ci/tools/docker-run /ic/gitlab-ci/tools/build-ic "${1:--a=b,c,i}"
 
-if docker volume inspect "ic-artifacts${CI_JOB_ID:-}" 2>&1; then
+if docker volume inspect "ic-artifacts${CI_JOB_ID:-}" 2>/dev/null; then
     mkdir -p artifacts
     cd artifacts
 
@@ -27,3 +27,5 @@ if docker volume inspect "ic-artifacts${CI_JOB_ID:-}" 2>&1; then
     docker rm -f $DID
     docker volume rm -f "ic-artifacts${CI_JOB_ID:-}"
 fi
+
+echo "See artifacts in artifacts directory"
