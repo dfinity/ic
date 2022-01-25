@@ -98,6 +98,7 @@ members = [
   "nns/gtc_accounts",
   "determinism_test",
   "orchestrator",
+  "orchestrator/registry_replicator",
   "p2p",
   "replica/setup_ic_network",
   "phantom_newtype",

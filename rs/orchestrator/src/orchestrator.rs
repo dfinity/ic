@@ -3,7 +3,6 @@ use crate::catch_up_package_provider::CatchUpPackageProvider;
 use crate::crypto_helper::setup_crypto;
 use crate::firewall::Firewall;
 use crate::metrics::OrchestratorMetrics;
-use crate::nns_registry_replicator::NnsRegistryReplicator;
 use crate::registration::NodeRegistration;
 use crate::registry_helper::RegistryHelper;
 use crate::release_package::ReleasePackage;
@@ -11,7 +10,6 @@ use crate::release_package_provider::ReleasePackageProvider;
 use crate::replica_process::ReplicaProcess;
 use crate::ssh_access_manager::SshAccessManager;
 use crate::utils;
-use ic_config::registry_client::DataProviderConfig;
 use ic_config::{
     metrics::{Config as MetricsConfig, Exporter},
     Config,
@@ -23,7 +21,7 @@ use ic_interfaces::{crypto::KeyManager, registry::RegistryClient};
 use ic_logger::{error, info, new_replica_logger, warn, LoggerImpl, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_metrics_exporter::MetricsRuntimeImpl;
-use ic_registry_common::local_store::{LocalStore, LocalStoreImpl};
+use ic_registry_replicator::RegistryReplicator;
 use ic_types::ReplicaVersion;
 use slog_async::AsyncGuard;
 use std::convert::TryFrom;
@@ -80,7 +78,6 @@ impl Orchestrator {
         let (_node_pks, node_id) = get_node_keys_or_generate_if_missing(&config.crypto.crypto_root);
 
         let (logger, _async_log_guard) = Self::get_logger(&config);
-        let slog_logger = logger.inner_logger.root.clone();
         let metrics_registry = MetricsRegistry::global();
         let current_orchestrator_hash = utils::get_orchestrator_binary_hash()
             .expect("Failed to determine sha256 of orchestrator binary");
@@ -93,10 +90,18 @@ impl Orchestrator {
             config
         );
 
-        let registry = Arc::new(RegistryHelper::new_with(
-            &metrics_registry,
-            &config,
+        let registry_replicator =
+            Arc::new(RegistryReplicator::new(logger.clone(), &config, node_id));
+
+        if let Err(err) = registry_replicator.fetch_and_start_polling(&config).await {
+            warn!(logger, "{}", err);
+        }
+
+        let registry_client = registry_replicator.get_registry_client();
+        let registry_local_store = registry_replicator.get_local_store();
+        let registry = Arc::new(RegistryHelper::new(
             node_id,
+            registry_client.clone(),
             logger.clone(),
         ));
 
@@ -106,59 +111,13 @@ impl Orchestrator {
             logger.clone(),
         ));
 
-        let cup_provider = Arc::new(CatchUpPackageProvider::new(
-            Arc::clone(&registry),
-            args.cup_dir.clone(),
-            crypto.clone(),
-            logger.clone(),
-        ));
-
-        let replica_version = load_version_from_file(&logger, &args.version_file)?;
-
-        // we only support the local store data provider
-        let local_store_path = if let DataProviderConfig::LocalStore(path) = config
-            .registry_client
-            .data_provider
-            .clone()
-            .expect("registry data provider is not configured")
-        {
-            path
-        } else {
-            panic!("Only LocalStore is supported in the orchestrator.");
-        };
-
-        let (metrics, _metrics_runtime) = Self::get_metrics(
-            metrics_addr,
-            &slog_logger,
-            &metrics_registry,
-            registry.get_registry_client(),
-            crypto.clone(),
-        );
-        let metrics = Arc::new(metrics);
-
-        let registry_local_store = Arc::new(LocalStoreImpl::new(local_store_path));
         let mut registration = NodeRegistration::new(
             logger.clone(),
             config.clone(),
-            Arc::clone(&registry.registry_client),
+            Arc::clone(&registry_client),
             Arc::clone(&crypto) as Arc<dyn KeyManager>,
             registry_local_store.clone(),
         );
-        // initialize the registry local store. Will not return if the nns is not
-        // reachable.
-        registration.initialize_local_store().await;
-
-        let nns_registry_replicator = Arc::new(NnsRegistryReplicator::new(
-            logger.clone(),
-            node_id,
-            registry.get_registry_client(),
-            registry_local_store as Arc<dyn LocalStore>,
-            std::time::Duration::from_millis(config.nns_registry_replicator.poll_delay_duration_ms),
-        ));
-
-        if let Err(err) = nns_registry_replicator.fetch_and_start_polling() {
-            warn!(logger, "{}", err);
-        }
 
         if args.enable_provisional_registration {
             // will not return until the node is registered
@@ -180,6 +139,15 @@ impl Orchestrator {
             .unwrap_or(&PathBuf::from("/tmp"))
             .clone();
 
+        let cup_provider = Arc::new(CatchUpPackageProvider::new(
+            Arc::clone(&registry),
+            args.cup_dir.clone(),
+            crypto.clone(),
+            logger.clone(),
+        ));
+
+        let replica_version = load_version_from_file(&logger, &args.version_file)?;
+
         let release_package = ReleasePackage::start(
             Arc::clone(&registry),
             replica_process.clone(),
@@ -189,10 +157,20 @@ impl Orchestrator {
             args.replica_config_file.clone(),
             node_id,
             ic_binary_directory.clone(),
-            nns_registry_replicator,
+            registry_replicator,
             logger.clone(),
         )
         .await;
+
+        let (metrics, _metrics_runtime) = Self::get_metrics(
+            metrics_addr,
+            &slog_logger,
+            &metrics_registry,
+            registry.get_registry_client(),
+            crypto.clone(),
+        );
+        let metrics = Arc::new(metrics);
+
         let firewall = Firewall::new(
             Arc::clone(&registry),
             Arc::clone(&metrics),
