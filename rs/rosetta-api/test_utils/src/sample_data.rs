@@ -1,5 +1,6 @@
 use ledger_canister::{
-    AccountIdentifier, Block, BlockHeight, Memo, Operation, Tokens, Transaction, TRANSACTION_FEE,
+    AccountIdentifier, Block, BlockHeight, Memo, Operation, Tokens, Transaction,
+    DEFAULT_TRANSFER_FEE,
 };
 
 use ic_rosetta_api::store::HashedBlock;
@@ -139,7 +140,7 @@ impl Scribe {
         let amount = Tokens::from_e8s(amount);
         self.transactions
             .push_back(Trans::Transfer(src, dst, amount));
-        *self.balance_book.get_mut(&src).unwrap() -= (amount + TRANSACTION_FEE).unwrap();
+        *self.balance_book.get_mut(&src).unwrap() -= (amount + DEFAULT_TRANSFER_FEE).unwrap();
         *self.balance_book.get_mut(&dst).unwrap() += amount;
 
         let transaction = Transaction {
@@ -147,7 +148,7 @@ impl Scribe {
                 from: src,
                 to: dst,
                 amount,
-                fee: TRANSACTION_FEE,
+                fee: DEFAULT_TRANSFER_FEE,
             },
             memo: self.next_message(),
             created_at_time: self.time().into(),
@@ -171,7 +172,7 @@ impl Scribe {
         let amount = self.rand_val(x, 0.1);
         let icpt_amount = Tokens::from_e8s(amount);
 
-        let acc1 = self.get_rand_account((icpt_amount + TRANSACTION_FEE).unwrap());
+        let acc1 = self.get_rand_account((icpt_amount + DEFAULT_TRANSFER_FEE).unwrap());
         let mut acc2 = self.get_rand_account(Tokens::ZERO);
 
         let mut safety_belt = 1000;

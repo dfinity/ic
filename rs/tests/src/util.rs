@@ -21,7 +21,7 @@ use ic_universal_canister::{call_args, UNIVERSAL_CANISTER_WASM};
 use ic_utils::call::AsyncCall;
 use ic_utils::interfaces::ManagementCanister;
 use ledger_canister::{
-    AccountBalanceArgs, AccountIdentifier, Memo, SendArgs, Subaccount, Tokens, TRANSACTION_FEE,
+    AccountBalanceArgs, AccountIdentifier, Memo, SendArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
 };
 use on_wire::FromWire;
 use rand_chacha::ChaCha8Rng;
@@ -671,7 +671,7 @@ pub(crate) async fn transact_icp_subaccount(
     let args = SendArgs {
         memo: Memo::default(),
         amount: Tokens::from_e8s(amount),
-        fee: TRANSACTION_FEE,
+        fee: DEFAULT_TRANSFER_FEE,
         to: AccountIdentifier::new(pid, recipient.1),
         created_at_time: None,
         from_subaccount: sender.1,

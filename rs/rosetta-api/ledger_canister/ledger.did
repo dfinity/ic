@@ -76,6 +76,13 @@ type AccountBalanceArgs = record {
     account: AccountIdentifier;
 };
 
+type TransferFeeArg = record {};
+
+type TransferFee = record {
+    // The fee to pay to perform a transfer
+    transfer_fee: Tokens;
+};
+
 service : {
   // Transfers tokens from a subaccount of the caller to the destination address.
   // The source address is computed from the principal of the caller and the specified subaccount.
@@ -84,4 +91,7 @@ service : {
 
   // Returns the amount of Tokens on the specified account.
   account_balance : (AccountBalanceArgs) -> (Tokens) query;
+
+  // Returns the current transfer_fee.
+  transfer_fee : (TransferFeeArg) -> (TransferFee) query;
 }

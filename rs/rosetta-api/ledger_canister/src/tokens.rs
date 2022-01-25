@@ -27,10 +27,10 @@ pub const DECIMAL_PLACES: u32 = 8;
 /// How many times can Tokens be divided
 pub const TOKEN_SUBDIVIDABLE_BY: u64 = 100_000_000;
 
-/// This is 1/10,000th of an Token, this is probably more than it costs us to
-/// store a transaction so it will likely come down in the future
-pub const TRANSACTION_FEE: Tokens = Tokens { e8s: 10_000 };
-pub const MIN_BURN_AMOUNT: Tokens = TRANSACTION_FEE;
+/// Note that the Ledger can be deployed with a
+/// different transaction fee. Clients that want to use the Ledger should query
+/// for the fee before doing transactions.
+pub const DEFAULT_TRANSFER_FEE: Tokens = Tokens { e8s: 10_000 };
 
 impl Tokens {
     /// The maximum value of this construct is 2^64-1 E8s or Roughly 184

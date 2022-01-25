@@ -1,10 +1,10 @@
-use crate::protobuf;
 use crate::protobuf::transaction::Transfer as PTransfer;
+use crate::{protobuf, TransferFee, TransferFeeArgs};
 use crate::{
     AccountBalanceArgs, AccountIdentifier, Block, BlockArg, BlockRes, CyclesResponse, EncodedBlock,
     GetBlocksArgs, GetBlocksRes, HashOf, IterBlocksArgs, IterBlocksRes, Memo, NotifyCanisterArgs,
     Operation, SendArgs, Subaccount, TimeStamp, TipOfChainRes, Tokens, TotalSupplyArgs,
-    Transaction, TransactionNotification, HASH_LENGTH, TRANSACTION_FEE,
+    Transaction, TransactionNotification, DEFAULT_TRANSFER_FEE, HASH_LENGTH,
 };
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, CanisterIdError};
@@ -51,6 +51,36 @@ impl ToProto for AccountBalanceArgs {
     fn into_proto(self) -> Self::Proto {
         protobuf::AccountBalanceRequest {
             account: Some(self.account.into_proto()),
+        }
+    }
+}
+
+impl ToProto for TransferFeeArgs {
+    type Proto = protobuf::TransferFeeRequest;
+
+    fn from_proto(_: Self::Proto) -> Result<Self, String> {
+        Ok(TransferFeeArgs {})
+    }
+
+    fn into_proto(self) -> Self::Proto {
+        protobuf::TransferFeeRequest {}
+    }
+}
+
+impl ToProto for TransferFee {
+    type Proto = protobuf::TransferFeeResponse;
+
+    fn from_proto(pb: Self::Proto) -> Result<Self, String> {
+        let transfer_fee = pb
+            .transfer_fee
+            .ok_or_else(|| "transaction_fee should be set".to_string())
+            .and_then(Tokens::from_proto)?;
+        Ok(Self { transfer_fee })
+    }
+
+    fn into_proto(self) -> Self::Proto {
+        protobuf::TransferFeeResponse {
+            transfer_fee: Some(self.transfer_fee.into_proto()),
         }
     }
 }
@@ -307,7 +337,7 @@ impl ToProto for SendArgs {
             .ok_or("Payment is missing or incomplete")?;
         let fee = match max_fee {
             Some(f) => Tokens::from_proto(f)?,
-            None => TRANSACTION_FEE,
+            None => DEFAULT_TRANSFER_FEE,
         };
         let from_subaccount = match from_subaccount {
             Some(sa) => Some(Subaccount::from_proto(sa)?),
@@ -378,7 +408,7 @@ impl ToProto for NotifyCanisterArgs {
 
         let max_fee = match max_fee {
             Some(f) => Tokens::from_proto(f)?,
-            None => TRANSACTION_FEE,
+            None => DEFAULT_TRANSFER_FEE,
         };
 
         let block_height = block_height.ok_or("Missing block height")?.height;
@@ -568,7 +598,7 @@ impl ToProto for Transaction {
                 amount: Tokens::from_proto(amount)?,
                 fee: match max_fee {
                     Some(fee) => Tokens::from_proto(fee)?,
-                    None => TRANSACTION_FEE,
+                    None => DEFAULT_TRANSFER_FEE,
                 },
             },
             t => return Err(format!("Transaction lacked a required field: {:?}", t)),

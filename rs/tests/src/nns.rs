@@ -56,7 +56,7 @@ use registry_canister::mutations::{
     do_update_subnet_replica::UpdateSubnetReplicaVersionPayload,
 };
 use slog::{info, Logger};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::path::Path;
 use std::time::Duration;
@@ -344,14 +344,11 @@ pub fn install_nns_canisters(
                 Tokens::from_tokens(200000).unwrap(),
             );
             info!(logger, "Initial ledger: {:?}", ledger_balances);
-            let mut ledger_init_payload = LedgerCanisterInitPayload::new(
-                GOVERNANCE_CANISTER_ID.get().into(),
-                ledger_balances,
-                None,
-                None,
-                None,
-                HashSet::new(),
-            );
+            let mut ledger_init_payload = LedgerCanisterInitPayload::builder()
+                .minting_account(GOVERNANCE_CANISTER_ID.get().into())
+                .initial_values(ledger_balances)
+                .build()
+                .unwrap();
             ledger_init_payload
                 .send_whitelist
                 .insert(CYCLES_MINTING_CANISTER_ID);

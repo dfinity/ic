@@ -39,7 +39,7 @@ use ic_types::{
     Cycles,
 };
 use ledger_canister::{
-    self, Block, BlockArg, BlockHeight, BlockRes, Operation, Tokens, TRANSACTION_FEE,
+    self, Block, BlockArg, BlockHeight, BlockRes, Operation, Tokens, DEFAULT_TRANSFER_FEE,
 };
 use on_wire::{FromWire, IntoWire};
 use slog::info;
@@ -273,7 +273,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         /* Create with funds < the refund fee. */
         info!(ctx.logger, "creating canister (not enough funds)");
 
-        let insufficient_amount2 = (TRANSACTION_FEE + Tokens::from_e8s(10_000)).unwrap();
+        let insufficient_amount2 = (DEFAULT_TRANSFER_FEE + Tokens::from_e8s(10_000)).unwrap();
 
         let (err, no_refund_block) = cycles_minting_client::CreateCanister {
             client: agent_client.clone(),
@@ -304,7 +304,10 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
 
         match txn.operation {
             Operation::Burn { amount, .. } => {
-                assert_eq!((insufficient_amount2 - TRANSACTION_FEE).unwrap(), amount);
+                assert_eq!(
+                    (insufficient_amount2 - DEFAULT_TRANSFER_FEE).unwrap(),
+                    amount
+                );
             }
             _ => panic!("unexpected block {:?}", txn),
         }
@@ -338,7 +341,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
 
         match txn.operation {
             Operation::Burn { amount, .. } => {
-                assert_eq!((amount + TRANSACTION_FEE).unwrap(), initial_amount);
+                assert_eq!((amount + DEFAULT_TRANSFER_FEE).unwrap(), initial_amount);
             }
             _ => panic!("unexpected block {:?}", txn),
         }
@@ -406,7 +409,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
 
         match txn.operation {
             Operation::Burn { amount, .. } => {
-                assert_eq!((amount + TRANSACTION_FEE).unwrap(), top_up_amount);
+                assert_eq!((amount + DEFAULT_TRANSFER_FEE).unwrap(), top_up_amount);
             }
             _ => panic!("unexpected block {:?}", txn),
         }
@@ -646,7 +649,7 @@ async fn check_refund(
     match txn.operation {
         Operation::Transfer { amount, to, .. } => {
             assert_eq!(
-                ((amount + TRANSACTION_FEE).unwrap() + refund_fee).unwrap(),
+                ((amount + DEFAULT_TRANSFER_FEE).unwrap() + refund_fee).unwrap(),
                 send_amount
             );
             assert_eq!(to, (*TEST_USER1_PRINCIPAL).into());

@@ -293,3 +293,10 @@ message Certification {
   bytes certification = 1;
 }
 
+message TransferFeeRequest {
+
+}
+
+message TransferFeeResponse {
+  Tokens transfer_fee = 1;
+}

@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::convert::TryFrom;
 use std::fmt;
 use std::sync::Arc;
@@ -38,7 +38,7 @@ use ic_nns_test_utils::itest_helpers::{
 };
 use ledger_canister::{
     AccountBalanceArgs, AccountIdentifier, BlockHeight, LedgerCanisterInitPayload, Memo,
-    NotifyCanisterArgs, SendArgs, Subaccount, Tokens, TRANSACTION_FEE,
+    NotifyCanisterArgs, SendArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
 };
 
 /// A user that owns/controls Accounts and/or Neurons.
@@ -188,7 +188,7 @@ impl FuzzState {
             } => {
                 let source_account = self.accounts.get_mut(&source.id).unwrap();
                 source_account.balance =
-                    ((source_account.balance - *amount).unwrap() - TRANSACTION_FEE).unwrap();
+                    ((source_account.balance - *amount).unwrap() - DEFAULT_TRANSFER_FEE).unwrap();
                 let destination_account = self.accounts.get_mut(&destination.id).unwrap();
                 destination_account.balance = (destination_account.balance + *amount).unwrap();
             }
@@ -200,7 +200,7 @@ impl FuzzState {
             } => {
                 let source_account = self.accounts.get_mut(&source.id).unwrap();
                 source_account.balance =
-                    ((source_account.balance - *amount).unwrap() - TRANSACTION_FEE).unwrap();
+                    ((source_account.balance - *amount).unwrap() - DEFAULT_TRANSFER_FEE).unwrap();
                 let destination_neuron = self.neurons.get_mut(&destination.id).unwrap();
                 destination_neuron.balance = (destination_neuron.balance + *amount).unwrap();
             }
@@ -212,8 +212,9 @@ impl FuzzState {
             } => {
                 let source_neuron = self.neurons.get_mut(&source.id).unwrap();
                 let amount = if let Some(amount) = amount {
-                    source_neuron.balance =
-                        ((source_neuron.balance - *amount).unwrap() - TRANSACTION_FEE).unwrap();
+                    source_neuron.balance = ((source_neuron.balance - *amount).unwrap()
+                        - DEFAULT_TRANSFER_FEE)
+                        .unwrap();
                     *amount
                 } else {
                     let amount = source_neuron.balance;
@@ -675,7 +676,7 @@ impl FuzzGenerator {
     fn generate_random_ledger_transfer(&mut self) -> Option<Operation> {
         let id = self.next_op_id;
         let source = self.state.random_account(&mut self.rng)?;
-        if source.balance.get_e8s() < TRANSACTION_FEE.get_e8s() {
+        if source.balance.get_e8s() < DEFAULT_TRANSFER_FEE.get_e8s() {
             return None;
         }
         let destination = self
@@ -683,7 +684,7 @@ impl FuzzGenerator {
             .random_account_different_than(&mut self.rng, &source)?;
         let amount = Tokens::from_e8s(
             self.rng
-                .gen_range(0, source.balance.get_e8s() - TRANSACTION_FEE.get_e8s()),
+                .gen_range(0, source.balance.get_e8s() - DEFAULT_TRANSFER_FEE.get_e8s()),
         );
         let operation = Operation::LedgerTransfer {
             id,
@@ -722,14 +723,14 @@ impl FuzzGenerator {
         let id = self.next_op_id;
         let source = self.state.random_staked_neuron(&mut self.rng)?;
         let destination = self.state.random_account(&mut self.rng)?;
-        if source.balance.get_e8s() < TRANSACTION_FEE.get_e8s() {
+        if source.balance.get_e8s() < DEFAULT_TRANSFER_FEE.get_e8s() {
             return None;
         }
         let amount = match self.rng.gen_bool(1.0 / 2.0) {
-            true => Some(Tokens::from_e8s(
-                self.rng
-                    .gen_range(0, source.balance.get_e8s() - TRANSACTION_FEE.get_e8s()),
-            )),
+            true => Some(Tokens::from_e8s(self.rng.gen_range(
+                0,
+                source.balance.get_e8s() - DEFAULT_TRANSFER_FEE.get_e8s(),
+            ))),
             false => None,
         };
         let operation = Operation::NeuronDisburse {
@@ -1042,7 +1043,7 @@ impl LocalNnsFuzzDriver {
                 SendArgs {
                     memo: Memo(0),
                     amount,
-                    fee: TRANSACTION_FEE,
+                    fee: DEFAULT_TRANSFER_FEE,
                     from_subaccount: source.subaccount,
                     to: destination.clone().into(),
                     created_at_time: None,
@@ -1071,7 +1072,7 @@ impl LocalNnsFuzzDriver {
                 SendArgs {
                     memo: Memo(destination.nonce),
                     amount,
-                    fee: TRANSACTION_FEE,
+                    fee: DEFAULT_TRANSFER_FEE,
                     from_subaccount: source.subaccount,
                     to: AccountIdentifier::new(
                         PrincipalId::from(GOVERNANCE_CANISTER_ID),
@@ -1098,7 +1099,7 @@ impl LocalNnsFuzzDriver {
                 protobuf,
                 NotifyCanisterArgs {
                     block_height: result.unwrap(),
-                    max_fee: TRANSACTION_FEE,
+                    max_fee: DEFAULT_TRANSFER_FEE,
                     from_subaccount: source.subaccount,
                     to_canister: GOVERNANCE_CANISTER_ID,
                     to_subaccount: Some(destination.subaccount()),
@@ -1343,14 +1344,11 @@ impl FuzzDriver for LocalNnsFuzzDriver {
                         .insert(neuron.id_in_governance.unwrap(), neuron.clone().into());
                 }
 
-                let ledger_init_args = LedgerCanisterInitPayload::new(
-                    GOVERNANCE_CANISTER_ID.into(),
-                    ledger_init_state,
-                    None,
-                    None,
-                    None,
-                    HashSet::new(),
-                );
+                let ledger_init_args = LedgerCanisterInitPayload::builder()
+                    .minting_account(GOVERNANCE_CANISTER_ID.into())
+                    .initial_values(ledger_init_state)
+                    .build()
+                    .unwrap();
 
                 let nns_init_payload = NnsInitPayloadsBuilder::new()
                     .with_governance_proto(governance)

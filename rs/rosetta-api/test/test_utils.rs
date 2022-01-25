@@ -10,7 +10,10 @@ use ic_rosetta_api::models::{
 use ic_rosetta_api::request_types::{
     Request, RequestResult, RequestType, Status, TransactionResults,
 };
-use ledger_canister::{self, AccountIdentifier, Block, BlockHeight, Operation, SendArgs, Tokens};
+use ledger_canister::{
+    self, AccountIdentifier, Block, BlockHeight, Operation, SendArgs, Tokens, TransferFee,
+    DEFAULT_TRANSFER_FEE,
+};
 use tokio::sync::RwLock;
 
 use async_trait::async_trait;
@@ -54,10 +57,11 @@ fn create_tmp_dir() -> tempfile::TempDir {
 }
 
 pub struct TestLedger {
-    blockchain: RwLock<Blocks>,
-    canister_id: CanisterId,
-    governance_canister_id: CanisterId,
-    submit_queue: RwLock<Vec<HashedBlock>>,
+    pub blockchain: RwLock<Blocks>,
+    pub canister_id: CanisterId,
+    pub governance_canister_id: CanisterId,
+    pub submit_queue: RwLock<Vec<HashedBlock>>,
+    pub transfer_fee: Tokens,
 }
 
 impl TestLedger {
@@ -70,18 +74,14 @@ impl TestLedger {
             .unwrap(),
             governance_canister_id: ic_nns_constants::GOVERNANCE_CANISTER_ID,
             submit_queue: RwLock::new(Vec::new()),
+            transfer_fee: DEFAULT_TRANSFER_FEE,
         }
     }
 
     pub fn from_blockchain(blocks: Blocks) -> Self {
         Self {
             blockchain: RwLock::new(blocks),
-            canister_id: CanisterId::new(
-                PrincipalId::from_str("5v3p4-iyaaa-aaaaa-qaaaa-cai").unwrap(),
-            )
-            .unwrap(),
-            governance_canister_id: ic_nns_constants::GOVERNANCE_CANISTER_ID,
-            submit_queue: RwLock::new(Vec::new()),
+            ..Default::default()
         }
     }
 
@@ -234,6 +234,12 @@ impl LedgerAccess for TestLedger {
         _: bool,
     ) -> Result<NeuronInfo, ApiError> {
         panic!("Neuron info not available through TestLedger");
+    }
+
+    async fn transfer_fee(&self) -> Result<TransferFee, ApiError> {
+        Ok(TransferFee {
+            transfer_fee: self.transfer_fee,
+        })
     }
 }
 
