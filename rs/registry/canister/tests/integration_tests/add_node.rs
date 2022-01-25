@@ -1,6 +1,8 @@
-use dfn_candid::candid;
+use std::collections::BTreeMap;
 
+use dfn_candid::candid;
 use ic_canister_client::Sender;
+use ic_nns_common::registry::encode_or_panic;
 use ic_nns_constants::ids::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_USER1_KEYPAIR,
 };
@@ -22,9 +24,6 @@ use ic_registry_transport::pb::v1::{
 };
 use ic_types::{crypto::KeyPurpose, NodeId};
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
-
-use prost::Message;
-use std::collections::BTreeMap;
 
 #[test]
 fn node_is_created_on_receiving_the_request() {
@@ -230,14 +229,8 @@ fn init_mutation_with_node_allowance(node_allowance: u64) -> RegistryAtomicMutat
             key: make_node_operator_record_key(*TEST_NEURON_1_OWNER_PRINCIPAL)
                 .as_bytes()
                 .to_vec(),
-            value: protobuf_to_vec(&node_operator_record),
+            value: encode_or_panic(&node_operator_record),
         }],
         preconditions: vec![],
     }
-}
-
-fn protobuf_to_vec<M: Message>(entry: &M) -> Vec<u8> {
-    let mut buf: Vec<u8> = Vec::new();
-    entry.encode(&mut buf).expect("This must not fail");
-    buf
 }

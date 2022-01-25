@@ -265,10 +265,10 @@ mod tests {
     use super::*;
     use ic_base_types::NodeId;
     use ic_crypto::utils::get_node_keys_or_generate_if_missing;
+    use ic_nns_common::registry::encode_or_panic;
     use ic_protobuf::crypto::v1::NodePublicKeys;
     use ic_test_utilities::crypto::temp_dir::temp_dir;
     use lazy_static::lazy_static;
-    use prost::Message;
 
     #[derive(Clone)]
     struct TestData {
@@ -300,12 +300,6 @@ mod tests {
         };
     }
 
-    fn protobuf_to_vec<M: Message>(entry: &M) -> Vec<u8> {
-        let mut buf: Vec<u8> = Vec::new();
-        entry.encode(&mut buf).expect("This must not fail");
-        buf
-    }
-
     #[test]
     fn empty_node_signing_key_is_detected() {
         let payload = PAYLOAD.clone();
@@ -316,7 +310,7 @@ mod tests {
     fn empty_committee_signing_key_is_detected() {
         let mut payload = PAYLOAD.clone();
         let node_signing_pubkey =
-            protobuf_to_vec(&TEST_DATA.clone().node_pks.node_signing_pk.unwrap());
+            encode_or_panic(&TEST_DATA.clone().node_pks.node_signing_pk.unwrap());
         payload.node_signing_pk = node_signing_pubkey;
         assert!(valid_keys_from_payload(&payload).is_err());
     }
@@ -325,8 +319,8 @@ mod tests {
     fn empty_dkg_dealing_key_is_detected() {
         let mut payload = PAYLOAD.clone();
         let node_pks = TEST_DATA.clone().node_pks;
-        let node_signing_pubkey = protobuf_to_vec(&node_pks.node_signing_pk.unwrap());
-        let committee_signing_pubkey = protobuf_to_vec(&node_pks.committee_signing_pk.unwrap());
+        let node_signing_pubkey = encode_or_panic(&node_pks.node_signing_pk.unwrap());
+        let committee_signing_pubkey = encode_or_panic(&node_pks.committee_signing_pk.unwrap());
         payload.node_signing_pk = node_signing_pubkey;
         payload.committee_signing_pk = committee_signing_pubkey;
         assert!(valid_keys_from_payload(&payload).is_err());
@@ -336,10 +330,10 @@ mod tests {
     fn empty_tls_cert_is_detected() {
         let mut payload = PAYLOAD.clone();
         let node_pks = TEST_DATA.clone().node_pks;
-        let node_signing_pubkey = protobuf_to_vec(&node_pks.node_signing_pk.unwrap());
-        let committee_signing_pubkey = protobuf_to_vec(&node_pks.committee_signing_pk.unwrap());
+        let node_signing_pubkey = encode_or_panic(&node_pks.node_signing_pk.unwrap());
+        let committee_signing_pubkey = encode_or_panic(&node_pks.committee_signing_pk.unwrap());
         let ni_dkg_dealing_encryption_pubkey =
-            protobuf_to_vec(&node_pks.dkg_dealing_encryption_pk.unwrap());
+            encode_or_panic(&node_pks.dkg_dealing_encryption_pk.unwrap());
         payload.node_signing_pk = node_signing_pubkey;
         payload.committee_signing_pk = committee_signing_pubkey;
         payload.ni_dkg_dealing_encryption_pk = ni_dkg_dealing_encryption_pubkey;
