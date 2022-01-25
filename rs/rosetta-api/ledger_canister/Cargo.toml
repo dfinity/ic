@@ -46,7 +46,6 @@ ed25519-dalek = "1.0.1"
 ic-canister-client = {path = "../../canister_client/"}
 rand_chacha = "0.2.2"
 rand_core = "0.5.1"
-tempfile = "3.1.0"
 
 [[test]]
 name = "test"

@@ -825,34 +825,77 @@ fn http_request() {
     ledger_canister::http_request::serve_metrics(encode_metrics);
 }
 
-#[test]
-fn check_candid_interface_compatibility() {
-    use candid::types::subtype::{subtype, Gamma};
-    use candid::types::Type;
-    use std::io::Write;
-    use std::path::PathBuf;
-
-    candid::export_service!();
-
-    let actual_interface = __export_service();
-    println!("Generated DID:\n {}", actual_interface);
-    let mut tmp = tempfile::NamedTempFile::new().expect("failed to create a temporary file");
-    write!(tmp, "{}", actual_interface).expect("failed to write interface to a temporary file");
-    let (mut env1, t1) =
-        candid::pretty_check_file(tmp.path()).expect("failed to check generated candid file");
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ledger.did");
-    let (env2, t2) =
-        candid::pretty_check_file(path.as_path()).expect("failed to open ledger.did file");
-
-    let (t1_ref, t2) = match (t1.as_ref().unwrap(), t2.unwrap()) {
-        (Type::Class(_, s1), Type::Class(_, s2)) => (s1.as_ref(), *s2),
-        (Type::Class(_, s1), s2 @ Type::Service(_)) => (s1.as_ref(), s2),
-        (s1 @ Type::Service(_), Type::Class(_, s2)) => (s1, *s2),
-        (t1, t2) => (t1, t2),
+#[cfg(test)]
+mod tests {
+    use crate::{
+        AccountBalanceArgs, BinaryAccountBalanceArgs, BlockHeight, LedgerCanisterInitPayload,
+        SendArgs, Tokens, TransferArgs, TransferError, TransferFee, TransferFeeArgs,
     };
+    use candid::utils::{service_compatible, CandidSource};
+    use std::path::PathBuf;
+    use std::process::Command;
 
-    let mut gamma = Gamma::new();
-    let t2 = env1.merge_type(env2, t2);
-    subtype(&mut gamma, &env1, t1_ref, &t2)
-        .expect("ledger canister interface is not compatible with the ledger.did file");
+    fn source_to_str(source: &CandidSource) -> String {
+        match source {
+            CandidSource::File(f) => std::fs::read_to_string(f).unwrap_or_else(|_| "".to_string()),
+            CandidSource::Text(t) => t.to_string(),
+        }
+    }
+
+    fn check_service_compatible(
+        new_name: &str,
+        new: CandidSource,
+        old_name: &str,
+        old: CandidSource,
+    ) {
+        let new_str = source_to_str(&new);
+        let old_str = source_to_str(&old);
+        match service_compatible(new, old) {
+            Ok(_) => {}
+            Err(e) => {
+                eprintln!(
+                    "{} is not compatible with {}!\n\n\
+                {}:\n\
+                {}\n\n\
+                {}:\n\
+                {}\n",
+                    new_name, old_name, new_name, new_str, old_name, old_str
+                );
+                panic!("{:?}", e);
+            }
+        }
+    }
+
+    #[test]
+    fn check_candid_interface_compatibility() {
+        candid::export_service!();
+
+        let new_interface = __export_service();
+
+        // check the public interface against the actual one
+        let old_interface = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ledger.did");
+
+        check_service_compatible(
+            "actual ledger candid interface",
+            CandidSource::Text(&new_interface),
+            "declared candid interface in ledger.did file",
+            CandidSource::File(old_interface.as_path()),
+        );
+
+        // check the public interface against the master version if we are in a
+        // repository
+        let master_interface = Command::new("git")
+            .args(["show", "refs/remotes/origin/master:rs/rosetta-api/ledger_canister/ledger.did"])
+            .output()
+            .expect("Failed to execute git show refs/remotes/origin/master:rs/rosetta-api/ledger_canister/ledger.did")
+            .stdout;
+        let master_interface = String::from_utf8(master_interface).unwrap();
+
+        check_service_compatible(
+            "current branch ledger.did",
+            CandidSource::File(old_interface.as_path()),
+            "master ledger.did",
+            CandidSource::Text(&master_interface),
+        );
+    }
 }
