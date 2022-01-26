@@ -19,7 +19,7 @@ use ic_interfaces::transport::AsyncTransportEventHandler;
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_types::{
-    transport::{FlowId, FlowTag, TransportClientType, TransportErrorCode},
+    transport::{FlowId, FlowTag, TransportErrorCode},
     NodeId, RegistryVersion,
 };
 use std::collections::HashMap;
@@ -51,12 +51,11 @@ impl TransportImpl {
         &self,
         peer_id: &NodeId,
         peer_record: &NodeRecord,
-        client_type: TransportClientType,
         registry_version: RegistryVersion,
     ) -> Result<(), TransportErrorCode> {
         let mut client_map = self.client_map.write().unwrap();
         let client_state = client_map
-            .get_mut(&client_type)
+            .as_mut()
             .ok_or(TransportErrorCode::TransportClientNotFound)?;
         let role = Self::connection_role(&self.node_id, peer_id);
         // If we are the server, we should add the peer to the allowed_clients.
@@ -66,18 +65,16 @@ impl TransportImpl {
         *self.registry_version.write().unwrap() = registry_version;
         info!(
             self.log,
-            "ControlPlane::start_peer_connections(): client_type = {:?}, node_id = {:?} peer_id = {:?}",
-            client_type,
+            "ControlPlane::start_peer_connections(): node_id = {:?} peer_id = {:?}",
             self.node_id,
             peer_id
         );
-        self.start_peer(client_type, peer_id, peer_record, client_state, role)
+        self.start_peer(peer_id, peer_record, client_state, role)
     }
 
     /// Stops connection to a peer
     pub(crate) fn stop_peer_connections(
         &self,
-        client_type: TransportClientType,
         peer_id: &NodeId,
         registry_version: RegistryVersion,
     ) -> Result<(), TransportErrorCode> {
@@ -85,7 +82,7 @@ impl TransportImpl {
         *self.registry_version.write().unwrap() = registry_version;
         let mut client_map = self.client_map.write().unwrap();
         let client_state = client_map
-            .get_mut(&client_type)
+            .as_mut()
             .ok_or(TransportErrorCode::TransportClientNotFound)?;
         let peer_state = client_state
             .peer_map
@@ -111,9 +108,7 @@ impl TransportImpl {
 
         info!(
             self.log,
-            "ControlPlane::stop_peer_connections(): client_type = {:?}, peer_id = {:?}",
-            client_type,
-            peer_id
+            "ControlPlane::stop_peer_connections(): peer_id = {:?}", peer_id
         );
         Ok(())
     }
@@ -122,7 +117,6 @@ impl TransportImpl {
     /// structures and tasks
     fn start_peer(
         &self,
-        client_type: TransportClientType,
         peer_id: &NodeId,
         peer_record: &NodeRecord,
         client_state: &mut ClientState,
@@ -148,7 +142,6 @@ impl TransportImpl {
                     .map_or("Unknown Peer IP".to_string(), |x| x.to_string());
                 let flow_label = get_flow_label(&peer_ip, peer_id);
                 let flow_id = FlowId {
-                    client_type,
                     peer_id: *peer_id,
                     flow_tag,
                 };
@@ -204,7 +197,6 @@ impl TransportImpl {
             let flow_label = get_flow_label(endpoint.ip_addr.as_str(), peer_id);
             let server_port = endpoint.port as u16;
             let connecting_task = self.spawn_connect_task(
-                client_type,
                 flow_endpoint.flow_tag.into(),
                 *peer_id,
                 peer_ip,
@@ -215,7 +207,6 @@ impl TransportImpl {
                 connecting_task,
             };
             let flow_id = FlowId {
-                client_type,
                 peer_id: *peer_id,
                 flow_tag,
             };
@@ -242,12 +233,7 @@ impl TransportImpl {
     }
 
     /// Starts the async task to accept the incoming TcpStreams in server mode.
-    fn spawn_accept_task(
-        &self,
-        client_type: TransportClientType,
-        flow_tag: FlowTag,
-        tcp_listener: TcpListener,
-    ) -> AbortHandle {
+    fn spawn_accept_task(&self, flow_tag: FlowTag, tcp_listener: TcpListener) -> AbortHandle {
         let weak_self = self.weak_self.read().unwrap().clone();
         let tokio_runtime = self.tokio_runtime.clone();
         let metrics = self.control_plane_metrics.clone();
@@ -276,10 +262,7 @@ impl TransportImpl {
                                 Err(_) => return,
                             };
                             // Errors are reported in tls_server_handshake
-                            if let Ok(()) = arc_self
-                                .tls_server_handshake(client_type, flow_tag, stream)
-                                .await
-                            {
+                            if let Ok(()) = arc_self.tls_server_handshake(flow_tag, stream).await {
                                 metrics
                                     .tcp_accept_conn_success
                                     .with_label_values(&[&flow_tag.to_string()])
@@ -319,7 +302,6 @@ impl TransportImpl {
     #[allow(clippy::too_many_arguments)]
     fn spawn_connect_task(
         &self,
-        client_type: TransportClientType,
         flow_tag: FlowTag,
         peer_id: NodeId,
         peer_ip: IpAddr,
@@ -352,7 +334,7 @@ impl TransportImpl {
                 match Self::connect_to_server(&local_addr, &peer_addr, &arc_self.log).await {
                     Ok(stream) => {
                         match arc_self
-                            .tls_client_handshake(peer_id, client_type, flow_tag, stream)
+                            .tls_client_handshake(peer_id, flow_tag, stream)
                             .await
                         {
                             Ok(()) => {
@@ -440,7 +422,6 @@ impl TransportImpl {
         &self,
         peer_id: NodeId,
         role: ConnectionRole,
-        client_type: TransportClientType,
         flow_tag: FlowTag,
         local_addr: SocketAddr,
         peer_addr: SocketAddr,
@@ -448,11 +429,7 @@ impl TransportImpl {
         tls_writer: TlsWriteHalf,
     ) -> Result<(), TransportErrorCode> {
         // Pass the established connection to the data plane to start IOs.
-        let flow_id = FlowId {
-            client_type,
-            peer_id,
-            flow_tag,
-        };
+        let flow_id = FlowId { peer_id, flow_tag };
         self.on_connect(
             flow_id,
             role,
@@ -492,7 +469,7 @@ impl TransportImpl {
 
         let mut client_map = self.client_map.write().unwrap();
         let client_state = client_map
-            .get_mut(&flow_id.client_type)
+            .as_mut()
             .ok_or(TransportErrorCode::TransportClientNotFound)?;
         let peer_state = client_state
             .peer_map
@@ -526,7 +503,6 @@ impl TransportImpl {
             if client_state.accept_ports.contains_key(&flow_id.flow_tag) {
                 let socket_addr = sa.peer_addr;
                 let connecting_task = self.spawn_connect_task(
-                    flow_id.client_type,
                     flow_id.flow_tag,
                     flow_id.peer_id,
                     socket_addr.ip(),
@@ -604,7 +580,6 @@ impl TransportImpl {
     /// Performs the server side TLS hand shake processing
     async fn tls_server_handshake(
         &self,
-        client_type: TransportClientType,
         flow_tag: FlowTag,
         stream: TcpStream,
     ) -> Result<(), TransportErrorCode> {
@@ -693,7 +668,6 @@ impl TransportImpl {
         self.process_handshake_result(
             peer_id,
             ConnectionRole::Server,
-            client_type,
             flow_tag,
             local_addr,
             peer_addr,
@@ -713,7 +687,6 @@ impl TransportImpl {
     async fn tls_client_handshake(
         &self,
         peer_id: NodeId,
-        client_type: TransportClientType,
         flow_tag: FlowTag,
         stream: TcpStream,
     ) -> Result<(), TransportErrorCode> {
@@ -765,7 +738,6 @@ impl TransportImpl {
         self.process_handshake_result(
             peer_id,
             ConnectionRole::Client,
-            client_type,
             flow_tag,
             local_addr,
             peer_addr,
@@ -905,11 +877,10 @@ impl TransportImpl {
     /// Initilizes a client
     pub(crate) fn init_client(
         &self,
-        client_type: TransportClientType,
         event_handler: Arc<dyn AsyncTransportEventHandler>,
     ) -> Result<(), TransportErrorCode> {
         let mut client_map = self.client_map.write().unwrap();
-        if client_map.contains_key(&client_type) {
+        if client_map.is_some() {
             return Err(TransportErrorCode::TransportClientAlreadyRegistered);
         }
 
@@ -927,17 +898,14 @@ impl TransportImpl {
         let mut accept_ports = HashMap::new();
         for (config_flow_tag, _, tcp_listener) in listeners {
             let flow_tag = FlowTag::from(config_flow_tag);
-            let accept_task = self.spawn_accept_task(client_type, flow_tag, tcp_listener);
+            let accept_task = self.spawn_accept_task(flow_tag, tcp_listener);
             accept_ports.insert(flow_tag, ServerPortState { accept_task });
         }
-        client_map.insert(
-            client_type,
-            ClientState {
-                accept_ports,
-                peer_map: HashMap::new(),
-                event_handler,
-            },
-        );
+        client_map.replace(ClientState {
+            accept_ports,
+            peer_map: HashMap::new(),
+            event_handler,
+        });
 
         Ok(())
     }
@@ -963,8 +931,7 @@ mod tests {
     use ic_types::transport::TransportErrorCode;
     use ic_types::{
         transport::{
-            FlowId, TransportClientType, TransportConfig, TransportFlowConfig, TransportPayload,
-            TransportStateChange,
+            FlowId, TransportConfig, TransportFlowConfig, TransportPayload, TransportStateChange,
         },
         NodeId, RegistryVersion,
     };
@@ -1079,7 +1046,7 @@ mod tests {
                 connected: connected_1,
             });
             control_plane_1
-                .register_client(TransportClientType::P2P, fake_event_handler_1)
+                .register_client(fake_event_handler_1)
                 .expect("register_client");
             let mut node_record_1: NodeRecord = Default::default();
             node_record_1.p2p_flow_endpoints.push(FlowEndpoint {
@@ -1091,14 +1058,14 @@ mod tests {
                 }),
             });
             control_plane_1
-                .start_connections(TransportClientType::P2P, &NODE_ID_2, &node_record_1, REG_V1)
+                .start_connections(&NODE_ID_2, &node_record_1, REG_V1)
                 .expect("start_connections");
 
             let fake_event_handler_2 = Arc::new(FakeEventHandler {
                 connected: connected_2,
             });
             control_plane_2
-                .register_client(TransportClientType::P2P, fake_event_handler_2)
+                .register_client(fake_event_handler_2)
                 .expect("register_client");
             let mut node_record_2: NodeRecord = Default::default();
             node_record_2.p2p_flow_endpoints.push(FlowEndpoint {
@@ -1110,7 +1077,7 @@ mod tests {
                 }),
             });
             control_plane_2
-                .start_connections(TransportClientType::P2P, &NODE_ID_1, &node_record_2, REG_V1)
+                .start_connections(&NODE_ID_1, &node_record_2, REG_V1)
                 .expect("start_connections");
             assert_eq!(done_1.recv(), Ok(true));
             assert_eq!(done_2.recv(), Ok(true));

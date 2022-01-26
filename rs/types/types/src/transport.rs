@@ -25,22 +25,9 @@ pub enum TransportNotification {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Bytes(#[serde(with = "serde_bytes")] pub Vec<u8>);
 
-/// The type of a transport client.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum TransportClientType {
-    /// P2P/Gossip module.
-    P2P,
-
-    /// Cross net module.
-    XnetCom,
-}
-
 /// FlowId is the unique key for the flows being managed
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct FlowId {
-    /// Client type
-    pub client_type: TransportClientType,
-
     /// Peer Id
     pub peer_id: NodeId,
 
@@ -312,11 +299,7 @@ pub enum TransportErrorCode {
 }
 
 impl FlowId {
-    pub fn new(client_type: TransportClientType, peer_id: NodeId, flow_tag: FlowTag) -> Self {
-        Self {
-            client_type,
-            peer_id,
-            flow_tag,
-        }
+    pub fn new(peer_id: NodeId, flow_tag: FlowTag) -> Self {
+        Self { peer_id, flow_tag }
     }
 }

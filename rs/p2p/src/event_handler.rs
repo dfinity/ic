@@ -765,7 +765,7 @@ pub mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::{p2p::p2p_test_setup_logger, types::ids::node_test_id};
     use ic_types::artifact::AdvertClass;
-    use ic_types::transport::{FlowTag, TransportClientType};
+    use ic_types::transport::FlowTag;
     use tokio::time::{sleep, Duration};
 
     struct TestThrottle();
@@ -920,7 +920,6 @@ pub mod tests {
             let _ = handler
                 .send_message(
                     FlowId {
-                        client_type: TransportClientType::P2P,
                         peer_id,
                         flow_tag: FlowTag::from(0),
                     },

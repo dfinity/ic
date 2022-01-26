@@ -362,7 +362,7 @@ impl TransportImpl {
         }
         let event_handler = {
             let mut cl_map = self.client_map.write().unwrap();
-            let client_state = match cl_map.get_mut(&flow_id.client_type) {
+            let client_state = match cl_map.as_mut() {
                 Some(client_state) => client_state,
                 _ => return,
             };
@@ -386,7 +386,7 @@ impl TransportImpl {
         writer: Box<TlsWriteHalf>,
     ) -> Result<Arc<dyn AsyncTransportEventHandler>, TransportErrorCode> {
         let mut client_map = self.client_map.write().unwrap();
-        let client_state = match client_map.get_mut(&flow_id.client_type) {
+        let client_state = match client_map.as_mut() {
             Some(client_state) => client_state,
             None => return Err(TransportErrorCode::TransportClientNotFound),
         };

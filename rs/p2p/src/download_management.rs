@@ -74,7 +74,7 @@ use ic_types::{
     chunkable::{ArtifactErrorCode, ChunkId},
     crypto::CryptoHash,
     p2p::GossipAdvert,
-    transport::{FlowTag, TransportClientType, TransportPayload},
+    transport::{FlowTag, TransportPayload},
     NodeId, SubnetId,
 };
 
@@ -266,8 +266,6 @@ pub(crate) struct PeerManagerImpl {
     current_peers: Arc<Mutex<PeerContextDictionary>>,
     /// The underlying *Transport*.
     transport: Arc<dyn Transport>,
-    /// The transport client type.
-    transport_client_type: TransportClientType,
 }
 
 /// An implementation of the `DownloadManager` trait.
@@ -293,8 +291,6 @@ pub(crate) struct DownloadManagerImpl {
     transport: Arc<dyn Transport>,
     /// The flow mapper.
     flow_mapper: Arc<FlowMapper>,
-    /// The *Transport* client type.
-    transport_client_type: TransportClientType,
     /// The list of artifacts that is under construction.
     artifacts_under_construction: RwLock<ArtifactDownloadListImpl>,
     /// The logger.
@@ -708,8 +704,7 @@ impl DownloadManager for DownloadManagerImpl {
 
                         // Clear the send queues and send re-transmission request to the peer on
                         // connect.
-                        self.transport
-                            .clear_send_queues(self.transport_client_type, &peer_id);
+                        self.transport.clear_send_queues(&peer_id);
                     }
                     Err(e) => {
                         warn!(self.log, "Error in elapsed time calculation: {:?}", e);
@@ -763,8 +758,7 @@ impl DownloadManager for DownloadManagerImpl {
         // A retransmission request was received from a peer.
         // The send queues are cleared and a response is sent containing all the adverts
         // that satisfy the filter.
-        self.transport
-            .clear_send_queues(self.transport_client_type, &peer_id);
+        self.transport.clear_send_queues(&peer_id);
 
         let adverts = self
             .artifact_manager
@@ -866,7 +860,6 @@ impl DownloadManagerImpl {
         log: ReplicaLogger,
         metrics_registry: &MetricsRegistry,
     ) -> Self {
-        let transport_client_type = TransportClientType::P2P;
         let gossip_config =
             crate::event_handler::fetch_gossip_config(registry_client.clone(), subnet_id);
 
@@ -876,7 +869,6 @@ impl DownloadManagerImpl {
             log.clone(),
             current_peers.clone(),
             transport.clone(),
-            transport_client_type,
         ));
 
         let prioritizer = Arc::new(DownloadPrioritizerImpl::new(
@@ -895,7 +887,6 @@ impl DownloadManagerImpl {
             current_peers,
             transport: transport.clone(),
             flow_mapper,
-            transport_client_type,
             artifacts_under_construction: RwLock::new(ArtifactDownloadListImpl::new(log.clone())),
             log,
             metrics: DownloadManagementMetrics::new(metrics_registry),
@@ -1049,7 +1040,7 @@ impl DownloadManagerImpl {
             .start_timer();
         let message = TransportPayload(pb::GossipMessage::proxy_encode(message).unwrap());
         self.transport
-            .send(self.transport_client_type, &peer_id, flow_tag, message)
+            .send(&peer_id, flow_tag, message)
             .map_err(|e| {
                 trace!(
                     self.log,
@@ -1416,14 +1407,12 @@ impl PeerManagerImpl {
         log: ReplicaLogger,
         current_peers: Arc<Mutex<PeerContextDictionary>>,
         transport: Arc<dyn Transport>,
-        transport_client_type: TransportClientType,
     ) -> Self {
         Self {
             node_id,
             log,
             current_peers,
             transport,
-            transport_client_type,
         }
     }
 }
@@ -1514,12 +1503,7 @@ impl PeerManager for PeerManagerImpl {
         // Instead, connection failures should be retried internally in
         // transport.
         self.transport
-            .start_connections(
-                self.transport_client_type,
-                &node_id,
-                node_record,
-                registry_version,
-            )
+            .start_connections(&node_id, node_record, registry_version)
             .map_err(|e| {
                 let mut current_peers = self.current_peers.lock().unwrap();
                 current_peers.remove(&node_id);
@@ -1533,10 +1517,7 @@ impl PeerManager for PeerManagerImpl {
     /// The method removes the given peer from the list of current peers.
     fn remove_peer(&self, node_id: NodeId, registry_version: RegistryVersion) {
         let mut current_peers = self.current_peers.lock().unwrap();
-        if let Err(e) =
-            self.transport
-                .stop_connections(self.transport_client_type, &node_id, registry_version)
-        {
+        if let Err(e) = self.transport.stop_connections(&node_id, registry_version) {
             warn!(self.log, "stop connection failed {:?}: {:?}", node_id, e);
         }
         // Remove the peer irrespective of the result of the stop_connections() call.
@@ -2421,14 +2402,12 @@ pub mod tests {
             let transport = get_transport(0, hub_access, &logger);
 
             // Context:
-            let transport_client_type = TransportClientType::P2P;
-            transport.register_client(transport_client_type, Arc::new(new_test_event_handler( MAX_ADVERT_BUFFER, node_test_id(0)))).unwrap();
+            transport.register_client(Arc::new(new_test_event_handler( MAX_ADVERT_BUFFER, node_test_id(0)))).unwrap();
             let peer_manager = PeerManagerImpl {
                 node_id: node_test_id(0),
                 log: p2p_test_setup_logger().root.clone().into(),
                 current_peers,
                 transport,
-                transport_client_type,
             };
 
             let current_peers = peer_manager.get_current_peer_ids();
@@ -2471,14 +2450,12 @@ pub mod tests {
             let transport = get_transport(0, hub_access, &logger);
 
             // Context
-            let transport_client_type = TransportClientType::P2P;
-            transport.register_client(transport_client_type, Arc::new(new_test_event_handler(MAX_ADVERT_BUFFER, node_test_id(0)))).unwrap();
+            transport.register_client(Arc::new(new_test_event_handler(MAX_ADVERT_BUFFER, node_test_id(0)))).unwrap();
             let peer_manager = PeerManagerImpl {
                 node_id: node_test_id(0),
                 log: p2p_test_setup_logger().root.clone().into(),
                 current_peers,
                 transport,
-                transport_client_type,
             };
 
             // Set property on one node.
@@ -2522,7 +2499,6 @@ pub mod tests {
             p2p_test_setup_logger().root.clone().into(),
             current_peers.clone(),
             Arc::new(MockTransport::new()),
-            TransportClientType::P2P,
         );
 
         {
@@ -2561,7 +2537,6 @@ pub mod tests {
             p2p_test_setup_logger().root.clone().into(),
             Arc::new(Mutex::new(PeerContextDictionary::default())),
             Arc::new(MockTransport::new()),
-            TransportClientType::P2P,
         );
         let ret = peer_manager.get_random_subset(Percentage::from(10));
         assert!(ret.is_empty());
