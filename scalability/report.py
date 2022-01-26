@@ -1,6 +1,23 @@
 import json
+from statistics import mean
 
 from termcolor import colored
+
+
+def convert_duration(data: dict):
+    """
+    Convert the given duration.
+
+    Format has to be a dictionary with "nanos" and "secs".
+    """
+    last = None
+    times = []
+    for d in data:
+        t_ms = d["secs"] * 1000 + d["nanos"] / 1000.0 / 1000.0
+        times.append(t_ms)
+        assert last is None or t_ms > last
+        last = t_ms
+    return times
 
 
 def evaluate_summaries(summaries):
@@ -10,6 +27,8 @@ def evaluate_summaries(summaries):
     t_max = []
     t_min = []
     t_average = []
+    t_percentile = []
+
     num_machines = 0
     for summary in summaries:
         try:
@@ -27,12 +46,15 @@ def evaluate_summaries(summaries):
                         result[code] = 0
                     result[code] += number
 
+                t_percentile.append(convert_duration(data[0]["percentiles"]))
+
                 t_median.append(convert_time_from_summary(data[0]["median"]))
                 t_max.append(convert_time_from_summary(data[0]["max"]))
                 t_min.append(convert_time_from_summary(data[0]["min"]))
                 t_average.append(convert_time_from_summary(data[0]["average"]))
-        except Exception:
+        except Exception as e:
             print("⚠️  Failed to read one summary file from workload gnerators, continuing ..")
+            print(e)
 
     total_number = 0
     success = {True: 0, False: 0}
@@ -41,13 +63,16 @@ def evaluate_summaries(summaries):
         total_number += number
         print(colored("{} - {} - {}".format(code, is_success(code), number), "green" if is_success(code) else "red"))
 
+    percentiles = [mean([x[p] for x in t_percentile]) for p in range(0, 100)]
+
     failure_rate = success[False] / (success[True] + success[False])
     return (
         failure_rate,
-        max(t_median),
+        max(t_median),  # Just to be conservatie, use the maximum median from all workload generators
         max(t_average),
         max(t_max),
         min(t_min),
+        percentiles,
         total_number,
         success[True],
         success[False],
