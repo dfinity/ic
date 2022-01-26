@@ -283,12 +283,13 @@ pub fn create_config_disk_image(
     }
 
     let output = cmd.output()?;
-    if !output.status.success() {
-        bail!("could not spawn image creation process");
-    }
 
     std::io::stdout().write_all(&output.stdout)?;
     std::io::stderr().write_all(&output.stderr)?;
+
+    if !output.status.success() {
+        bail!("could not spawn image creation process");
+    }
 
     let img_file = File::open(img_path)?;
     let compressed_img_path = PathBuf::from(&node.node_path).join(mk_compressed_img_path());
