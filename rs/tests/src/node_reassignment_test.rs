@@ -51,6 +51,7 @@ pub fn config() -> InternetComputer {
 }
 
 pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+    let log = &ctx.logger;
     ctx.install_nns_canisters(&handle, true);
     info!(ctx.logger, "NNS canisters installed");
 
@@ -76,8 +77,8 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let nns_msg = "hello world from nns!";
 
     let nns_can_id = block_on(store_message(&node1.url, nns_msg));
-    assert!(block_on(can_read_msg(&node1.url, nns_can_id, nns_msg)));
-    assert!(block_on(can_read_msg(&node2.url, nns_can_id, nns_msg)));
+    assert!(block_on(can_read_msg(log, &node1.url, nns_can_id, nns_msg)));
+    assert!(block_on(can_read_msg(log, &node2.url, nns_can_id, nns_msg)));
 
     info!(ctx.logger, "message on both nns nodes verified!");
 
@@ -86,7 +87,12 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     block_on(app_node.assert_ready(ctx));
     let app_msg = "hello world from app subnet!";
     let app_can_id = block_on(store_message(&app_node.url, app_msg));
-    assert!(block_on(can_read_msg(&app_node.url, app_can_id, app_msg)));
+    assert!(block_on(can_read_msg(
+        log,
+        &app_node.url,
+        app_can_id,
+        app_msg
+    )));
     info!(ctx.logger, "message on app node verified!");
 
     // Unassign 2 nns nodes
@@ -110,8 +116,8 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
 
     let mut retries = 50;
     while retries > 0
-        && (!block_on(can_read_msg(&node1.url, app_can_id, app_msg))
-            || !block_on(can_read_msg(&node2.url, app_can_id, app_msg)))
+        && (!block_on(can_read_msg(log, &node1.url, app_can_id, app_msg))
+            || !block_on(can_read_msg(log, &node2.url, app_can_id, app_msg)))
     {
         std::thread::sleep(std::time::Duration::from_secs(5));
         retries -= 1;
@@ -121,8 +127,8 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         ctx.logger,
         "App message on former NNS nodes could be retrieved!"
     );
-    assert!(block_on(can_read_msg(&node3.url, nns_can_id, nns_msg)));
-    assert!(block_on(can_read_msg(&node4.url, nns_can_id, nns_msg)));
+    assert!(block_on(can_read_msg(log, &node3.url, nns_can_id, nns_msg)));
+    assert!(block_on(can_read_msg(log, &node4.url, nns_can_id, nns_msg)));
     info!(
         ctx.logger,
         "NNS message on remaining NNS nodes could be retrieved!"
@@ -131,11 +137,21 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     // Now make sure the subnets are able to store new messages
     let nns_msg_2 = "hello again on nns!";
     let nns_can_id_2 = block_on(store_message(&node3.url, nns_msg_2));
-    assert!(block_on(can_read_msg(&node4.url, nns_can_id_2, nns_msg_2)));
+    assert!(block_on(can_read_msg(
+        log,
+        &node4.url,
+        nns_can_id_2,
+        nns_msg_2
+    )));
 
     let app_msg_2 = "hello again on app subnet!";
     let app_can_id_2 = block_on(store_message(&app_node.url, app_msg_2));
-    assert!(block_on(can_read_msg(&node1.url, app_can_id_2, app_msg_2)));
+    assert!(block_on(can_read_msg(
+        log,
+        &node1.url,
+        app_can_id_2,
+        app_msg_2
+    )));
     info!(
         ctx.logger,
         "New messages could be written and retrieved on both subnets!"
@@ -153,11 +169,14 @@ async fn store_message(url: &Url, msg: &str) -> Principal {
     ucan.canister_id()
 }
 
-async fn can_read_msg(url: &Url, canister_id: Principal, msg: &str) -> bool {
+async fn can_read_msg(log: &slog::Logger, url: &Url, canister_id: Principal, msg: &str) -> bool {
     let bytes = msg.as_bytes();
     let agent = match create_agent(url.as_str()).await {
         Ok(val) => val,
-        _ => return false,
+        Err(e) => {
+            info!(log, "Could not create agent: {:?}", e);
+            return false;
+        }
     };
     let ucan = UniversalCanister::from_canister_id(&agent, canister_id);
     // query stored data
