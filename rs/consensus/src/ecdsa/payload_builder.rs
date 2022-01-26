@@ -648,7 +648,7 @@ fn update_next_key_transcript(
                     IDkgReceivers::new(subnet_nodes.iter().copied().collect::<BTreeSet<_>>())?;
                 payload.next_key_transcript_creation =
                     Some(ecdsa::KeyTranscriptCreation::ReshareOfMaskedParams(
-                        ecdsa::ReshareOfUnmaskedParams::new(
+                        ecdsa::ReshareOfMaskedParams::new(
                             transcript_id,
                             dealers,
                             receivers,
@@ -670,7 +670,7 @@ fn update_next_key_transcript(
         (None, Some(ecdsa::KeyTranscriptCreation::ReshareOfUnmaskedParams(_))) => {
             unreachable!("Unexpected ReshareOfUnmaskedParams for key transcript creation");
         }
-        (None, Some(ecdsa::KeyTranscriptCreation::Created(_))) => {
+        (_, Some(ecdsa::KeyTranscriptCreation::Created(_))) => {
             // valid case that we can ignored
         }
         _ => {
