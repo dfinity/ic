@@ -8,6 +8,7 @@ use ic_tests::nns_fault_tolerance_test;
 use ic_tests::nns_follow_test::{self, test as follow_test};
 use ic_tests::nns_voting_test::{self, test as voting_test};
 use ic_tests::node_assign_test::{self, test as node_assign_test};
+use ic_tests::node_graceful_leaving_test::{self, test as node_graceful_leaving_test};
 use ic_tests::node_removal_from_registry_test::{self, test as node_removal_from_registry_test};
 use ic_tests::node_restart_test::{self, test as node_restart_test};
 use ic_tests::rosetta_test;
@@ -166,6 +167,11 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "node_assign_pot",
                     node_assign_test::config,
                     par(vec![t("node_assign_test", node_assign_test)]),
+                ),
+                pot(
+                    "node_graceful_leaving_pot",
+                    node_graceful_leaving_test::config,
+                    par(vec![t("node_graceful_leaving_test", node_graceful_leaving_test)]),
                 ),
                 pot(
                     "nns_follow_pot",
