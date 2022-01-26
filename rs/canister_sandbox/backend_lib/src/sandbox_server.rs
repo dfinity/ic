@@ -149,7 +149,6 @@ mod tests {
             BTreeMap::new(),
             CyclesAccountManager::new(
                 NumInstructions::from(1_000_000_000),
-                None,
                 SubnetType::Application,
                 subnet_test_id(0),
                 CyclesAccountManagerConfig::application_subnet(),

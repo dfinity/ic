@@ -7,7 +7,6 @@
 //! include the principal author on the corresponding PR.
 #![allow(unused_imports)]
 use ic_tests::consensus;
-use ic_tests::execution::pot1_config;
 use std::ffi::OsString;
 use std::fs;
 use std::panic;
@@ -53,7 +52,6 @@ use std::time::Instant;
 fn all_pots() -> Vec<ic_fondue::pot::Pot> {
     // HAVE YOU READ THE README AT THE TOP?
     vec![
-        pot1(),
         canister_lifecycle_memory_capacity_pot(),
         canister_lifecycle_memory_size_pot(),
         max_number_of_canisters_pot(),
@@ -62,7 +60,6 @@ fn all_pots() -> Vec<ic_fondue::pot::Pot> {
         consensus_liveness_with_equivocation_pot(),
         consensus_safety_pot(),
         cow_safety_pot(),
-        execution_config_is_none_pot(),
         nns_uninstall_pot(),
         nns_subnet_creation_pot(),
         replica_determinism_pot(),
@@ -103,18 +100,6 @@ fn node_removal_pot() -> pot::Pot {
 
 fn cow_safety_pot() -> pot::Pot {
     isolated_test!(cow_safety_test)
-}
-
-/// In order to parallelize execution of the large number of execution related
-/// system tests, we declare a second pot with the same configuration.
-fn pot1() -> pot::Pot {
-    composable!(
-        "pot2",
-        pot1_config(),
-        steps! {
-            execution::nns_shielding::max_cycles_per_canister_application_subnet
-        }
-    )
 }
 
 fn request_auth_malicious_replica_pot() -> pot::Pot {
@@ -203,17 +188,6 @@ fn nns_subnet_creation_pot() -> pot::Pot {
         "nns_subnet_creation_pot",
         subnet_creation::config(),
         steps! {subnet_creation::create_subnet_with_assigned_nodes_fails}
-    )
-}
-
-fn execution_config_is_none_pot() -> pot::Pot {
-    composable!(
-        "execution_config_is_none_pot",
-        execution::nns_shielding::config(),
-        steps! {
-            execution::nns_shielding::max_cycles_per_canister_system_subnet,
-            execution::nns_shielding::max_cycles_per_canister_is_none_application_subnet
-        }
     )
 }
 

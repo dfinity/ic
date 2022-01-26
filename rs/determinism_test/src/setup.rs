@@ -116,7 +116,6 @@ pub(crate) fn setup() -> (
 
     let cycles_account_manager = Arc::new(CyclesAccountManager::new(
         subnet_config.scheduler_config.max_instructions_per_message,
-        config.hypervisor.max_cycles_per_canister,
         subnet_type,
         subnet_id,
         subnet_config.cycles_account_manager_config,

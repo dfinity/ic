@@ -1,7 +1,7 @@
 use ic_fondue::prod_tests::pot_dsl::{par, pot, t, Pot};
 
 use crate::{
-    execution::{self, pot1_config},
+    execution::{self, config_system_verified_application_subnets},
     malicious_input_test, request_signature_test,
 };
 
@@ -11,7 +11,7 @@ use crate::{
 pub fn general_execution_pot() -> Pot {
     pot(
         "general_execution_pot",
-        pot1_config,
+        config_system_verified_application_subnets,
         par(vec![
             t(
                 "request_signature_test",
@@ -176,10 +176,6 @@ pub fn general_execution_pot() -> Pot {
             t(
                 "no_cycle_balance_limit_on_nns_subnet",
                 execution::nns_shielding::no_cycle_balance_limit_on_nns_subnet
-            ),
-            t(
-                "max_cycles_per_canister_system_subnet",
-                execution::nns_shielding::max_cycles_per_canister_system_subnet
             ),
             t(
                 "app_canister_attempt_initiating_dkg_fails",

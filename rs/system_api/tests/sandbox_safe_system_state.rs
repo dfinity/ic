@@ -236,7 +236,7 @@ fn mint_all_cycles() {
 }
 
 #[test]
-fn mint_cycles_above_max() {
+fn mint_cycles_large_value() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new()
         .with_subnet_type(SubnetType::System)
         .build();
@@ -244,19 +244,10 @@ fn mint_cycles_above_max() {
         .canister_id(CYCLES_MINTING_CANISTER_ID)
         .build();
 
-    // Set cycles balance to max - 10.
-    cycles_account_manager.add_cycles(&mut system_state.cycles_balance, CYCLES_LIMIT_PER_CANISTER);
-    cycles_account_manager
-        .withdraw_cycles_for_transfer(
-            system_state.canister_id,
-            system_state.freeze_threshold,
-            system_state.memory_allocation,
-            NumBytes::from(0),
-            ComputeAllocation::default(),
-            &mut system_state.cycles_balance,
-            Cycles::from(10),
-        )
-        .unwrap();
+    cycles_account_manager.add_cycles(
+        &mut system_state.cycles_balance,
+        Cycles::from(1_000_000_000_000_000_u128),
+    );
 
     let api_type = ApiTypeBuilder::new().build_update_api();
     let mut api = get_system_api(api_type, &system_state, cycles_account_manager);

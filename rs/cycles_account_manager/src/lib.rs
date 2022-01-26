@@ -62,10 +62,6 @@ pub struct CyclesAccountManager {
     /// execution.
     max_num_instructions: NumInstructions,
 
-    /// The maximum amount of cycles a canister can hold.
-    /// If set to None, the canisters have no upper limit.
-    max_cycles_per_canister: Option<Cycles>,
-
     /// The subnet type of this [`CyclesAccountManager`].
     own_subnet_type: SubnetType,
 
@@ -79,17 +75,15 @@ pub struct CyclesAccountManager {
 
 impl CyclesAccountManager {
     pub fn new(
-        // Note: `max_num_instructions` and `max_cycles_per_canister` are passed from different
-        // Configs
+        // Note: `max_num_instructions` is passed from a different config.
+        // Config.
         max_num_instructions: NumInstructions,
-        max_cycles_per_canister: Option<Cycles>,
         own_subnet_type: SubnetType,
         own_subnet_id: SubnetId,
         config: CyclesAccountManagerConfig,
     ) -> Self {
         Self {
             max_num_instructions,
-            max_cycles_per_canister,
             own_subnet_type,
             own_subnet_id,
             config,
@@ -581,32 +575,11 @@ impl CyclesAccountManager {
         Ok(())
     }
 
-    /// Returns the maximum amount of `Cycles` that can be added to a canister's
-    /// balance taking into account the `max_cycles_per_canister` value if
-    /// present.
-    pub fn check_max_cycles_can_add(
-        &self,
-        current_balance: Cycles,
-        cycles_to_add: Cycles,
-    ) -> Cycles {
-        match self.own_subnet_type {
-            SubnetType::System => cycles_to_add,
-            SubnetType::Application | SubnetType::VerifiedApplication => {
-                match self.max_cycles_per_canister {
-                    None => cycles_to_add,
-                    Some(max_cycles) => std::cmp::min(cycles_to_add, max_cycles - current_balance),
-                }
-            }
-        }
-    }
-
     /// Adds `cycles` worth of cycles to the canister's balance.
     /// The cycles balance added in a single go is limited to u64::max_value()
     /// Returns the amount of cycles that does not fit in the balance.
-    pub fn add_cycles(&self, cycles_balance: &mut Cycles, cycles_to_add: Cycles) -> Cycles {
-        let cycles = self.check_max_cycles_can_add(*cycles_balance, cycles_to_add);
-        *cycles_balance += cycles;
-        cycles_to_add - cycles
+    pub fn add_cycles(&self, cycles_balance: &mut Cycles, cycles_to_add: Cycles) {
+        *cycles_balance += cycles_to_add;
     }
 
     /// Mints `amount_to_mint` [`Cycles`].

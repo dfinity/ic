@@ -1,5 +1,4 @@
 use crate::framework::file_tree_artifact_mgr::ArtifactChunkingTestImpl;
-use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_config::subnet_config::SubnetConfigs;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::IngressHistoryReaderImpl;
@@ -77,7 +76,6 @@ fn execute_test(
         let subnet_config = SubnetConfigs::default().own_subnet_config(SubnetType::System);
         let cycles_account_manager = Arc::new(CyclesAccountManager::new(
             subnet_config.scheduler_config.max_instructions_per_message,
-            HypervisorConfig::default().max_cycles_per_canister,
             SubnetType::System,
             subnet_id,
             subnet_config.cycles_account_manager_config,
@@ -230,7 +228,6 @@ fn execute_test_chunking_pool(
         let subnet_config = SubnetConfigs::default().own_subnet_config(SubnetType::System);
         let cycles_account_manager = Arc::new(CyclesAccountManager::new(
             subnet_config.scheduler_config.max_instructions_per_message,
-            HypervisorConfig::default().max_cycles_per_canister,
             SubnetType::System,
             subnet_id,
             subnet_config.cycles_account_manager_config,

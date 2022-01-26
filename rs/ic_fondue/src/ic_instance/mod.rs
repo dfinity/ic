@@ -4,7 +4,7 @@ use ic_protobuf::registry::subnet::v1::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::p2p::build_default_gossip_config;
-use ic_types::{Cycles, Height, NodeId, NumBytes, PrincipalId};
+use ic_types::{Height, NodeId, NumBytes, PrincipalId};
 use node_software_version::NodeSoftwareVersion;
 use phantom_newtype::AmountOf;
 use serde::{Deserialize, Serialize};
@@ -292,15 +292,6 @@ impl Subnet {
         let mut hypervisor_config = self.node_config.hypervisor.unwrap_or_default();
 
         hypervisor_config.subnet_memory_capacity = NumBytes::new(capacity);
-
-        self.node_config.hypervisor = Some(hypervisor_config);
-        self
-    }
-
-    pub fn with_max_cycles_per_canister(mut self, max_cycles_per_canister: Option<Cycles>) -> Self {
-        let mut hypervisor_config = self.node_config.hypervisor.unwrap_or_default();
-
-        hypervisor_config.max_cycles_per_canister = max_cycles_per_canister;
 
         self.node_config.hypervisor = Some(hypervisor_config);
         self

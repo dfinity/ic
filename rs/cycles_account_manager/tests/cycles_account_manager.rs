@@ -21,7 +21,6 @@ use ic_types::{
 };
 use std::{convert::TryFrom, time::Duration};
 
-const CYCLES_LIMIT_PER_CANISTER: Cycles = Cycles::new(100_000_000_000_000);
 const INITIAL_CYCLES: Cycles = Cycles::new(5_000_000_000_000);
 
 #[test]
@@ -172,74 +171,6 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
 }
 
 #[test]
-fn add_cycles_does_not_overflow_when_balance_limit() {
-    let mut cycles_balance_expected = Cycles::from(0);
-    let mut system_state = SystemStateBuilder::new()
-        .initial_cycles(cycles_balance_expected)
-        .build();
-    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    assert_eq!(system_state.cycles_balance, cycles_balance_expected);
-
-    fn apply_cycle_limit(balance: Cycles) -> Cycles {
-        if balance > CYCLES_LIMIT_PER_CANISTER {
-            return CYCLES_LIMIT_PER_CANISTER;
-        }
-        balance
-    }
-
-    fn add_limited(balance: Cycles, amount_to_add: Cycles) -> Cycles {
-        let result = balance + amount_to_add;
-        if result > CYCLES_LIMIT_PER_CANISTER {
-            return CYCLES_LIMIT_PER_CANISTER;
-        }
-        result
-    }
-
-    let amount = Cycles::from(CYCLES_LIMIT_PER_CANISTER.get() / 2);
-    cycles_balance_expected = add_limited(cycles_balance_expected, amount);
-    assert_eq!(
-        cycles_account_manager.add_cycles(&mut system_state.cycles_balance, amount),
-        Cycles::from(0)
-    );
-    assert_eq!(system_state.cycles_balance, apply_cycle_limit(amount));
-    assert_eq!(system_state.cycles_balance, amount);
-
-    let amount = amount - Cycles::from(10);
-    cycles_balance_expected = add_limited(cycles_balance_expected, amount);
-    assert_eq!(
-        cycles_account_manager.add_cycles(&mut system_state.cycles_balance, amount),
-        Cycles::from(0)
-    );
-    assert_eq!(
-        system_state.cycles_balance,
-        apply_cycle_limit(cycles_balance_expected)
-    );
-    assert_eq!(
-        system_state.cycles_balance,
-        CYCLES_LIMIT_PER_CANISTER - Cycles::from(10)
-    );
-
-    cycles_account_manager.add_cycles(&mut system_state.cycles_balance, Cycles::from(0));
-    assert_eq!(
-        system_state.cycles_balance,
-        apply_cycle_limit(cycles_balance_expected)
-    );
-    assert_eq!(
-        system_state.cycles_balance,
-        CYCLES_LIMIT_PER_CANISTER - Cycles::from(10)
-    );
-
-    cycles_account_manager.add_cycles(&mut system_state.cycles_balance, Cycles::from(10));
-    assert_eq!(system_state.cycles_balance, CYCLES_LIMIT_PER_CANISTER);
-    // Returns cycles which don't fit in the balance.
-    assert_eq!(
-        cycles_account_manager.add_cycles(&mut system_state.cycles_balance, amount),
-        amount
-    );
-    assert_eq!(system_state.cycles_balance, CYCLES_LIMIT_PER_CANISTER);
-}
-
-#[test]
 fn add_cycles_does_not_overflow_when_no_balance_limit() {
     // When there is not `max_cycles_per_canister`,
     // Cycles is capped by u128::MAX
@@ -247,9 +178,7 @@ fn add_cycles_does_not_overflow_when_no_balance_limit() {
     let mut system_state = SystemStateBuilder::new()
         .initial_cycles(cycles_balance_expected)
         .build();
-    let cycles_account_manager = CyclesAccountManagerBuilder::new()
-        .with_cycles_limit_per_canister(None)
-        .build();
+    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     assert_eq!(system_state.cycles_balance, cycles_balance_expected);
 
     let amount = Cycles::from(u128::MAX / 2);
@@ -323,92 +252,6 @@ fn canister_charge_for_memory_until_zero_works() {
     assert!(cycles_account_manager
         .charge_for_memory(&mut system_state, gibs, Duration::from_secs(1))
         .is_err());
-}
-
-#[test]
-fn max_cycles_per_canister_none_on_application_subnet() {
-    let cycles = Cycles::new(10_000_000_000);
-    let mut system_state = SystemStateBuilder::new()
-        .initial_cycles(CYCLES_LIMIT_PER_CANISTER)
-        .build();
-    let cycles_account_manager = CyclesAccountManagerBuilder::new()
-        .with_cycles_limit_per_canister(None)
-        .build();
-
-    assert_eq!(
-        cycles_account_manager.check_max_cycles_can_add(system_state.cycles_balance, cycles),
-        cycles,
-    );
-
-    cycles_account_manager.add_cycles(&mut system_state.cycles_balance, cycles);
-    assert_eq!(
-        system_state.cycles_balance,
-        CYCLES_LIMIT_PER_CANISTER + cycles
-    );
-}
-
-#[test]
-fn max_cycles_per_canister_on_application_subnet() {
-    let cycles = Cycles::new(10_000_000_000);
-    let mut system_state = SystemStateBuilder::new()
-        .initial_cycles(CYCLES_LIMIT_PER_CANISTER)
-        .build();
-    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-
-    assert_eq!(
-        cycles_account_manager.check_max_cycles_can_add(system_state.cycles_balance, cycles),
-        Cycles::new(0),
-    );
-
-    cycles_account_manager.add_cycles(&mut system_state.cycles_balance, cycles);
-    assert_eq!(system_state.cycles_balance, CYCLES_LIMIT_PER_CANISTER);
-}
-
-#[test]
-fn max_cycles_per_canister_none_on_system_subnet() {
-    let cycles = Cycles::new(10_000_000_000);
-    let mut system_state = SystemStateBuilder::new()
-        .initial_cycles(CYCLES_LIMIT_PER_CANISTER)
-        .build();
-    let cycles_account_manager = CyclesAccountManagerBuilder::new()
-        .with_subnet_type(SubnetType::System)
-        .build();
-
-    assert_eq!(
-        cycles_account_manager.check_max_cycles_can_add(system_state.cycles_balance, cycles),
-        cycles,
-    );
-
-    // On system subnet, the canister's balance can exceed `max_cycles_per_canister`
-    cycles_account_manager.add_cycles(&mut system_state.cycles_balance, cycles);
-    assert_eq!(
-        system_state.cycles_balance,
-        CYCLES_LIMIT_PER_CANISTER + cycles
-    );
-}
-
-#[test]
-fn max_cycles_per_canister_on_system_subnet() {
-    let cycles = Cycles::new(10_000_000_000);
-    // Set balance to `max_cycles_per_canister`.
-    let mut system_state = SystemStateBuilder::new()
-        .initial_cycles(CYCLES_LIMIT_PER_CANISTER)
-        .build();
-    let cycles_account_manager = CyclesAccountManagerBuilder::new()
-        .with_subnet_type(SubnetType::System)
-        .build();
-
-    assert_eq!(
-        cycles_account_manager.check_max_cycles_can_add(system_state.cycles_balance, cycles),
-        cycles,
-    );
-
-    // On system subnet, the canister's balance can exceed `max_cycles_per_canister`
-    cycles_account_manager.add_cycles(&mut system_state.cycles_balance, cycles);
-    assert_eq!(
-        system_state.cycles_balance,
-        CYCLES_LIMIT_PER_CANISTER + cycles
-    );
 }
 
 #[test]
