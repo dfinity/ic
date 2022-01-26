@@ -22,7 +22,6 @@ use ic_types::{
 };
 use maplit::btreemap;
 
-pub const CYCLES_LIMIT_PER_CANISTER: Cycles = Cycles::new(100_000_000_000_000);
 pub const CANISTER_CURRENT_MEMORY_USAGE: NumBytes = NumBytes::new(0);
 
 pub fn execution_parameters() -> ExecutionParameters {

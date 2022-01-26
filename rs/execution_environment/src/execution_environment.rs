@@ -870,7 +870,6 @@ impl ExecutionEnvironmentImpl {
     ) -> Self {
         let canister_manager_config: CanisterMgrConfig = CanisterMgrConfig::new(
             config.subnet_memory_capacity,
-            config.max_cycles_per_canister,
             config.default_provisional_cycles_balance,
             config.default_freeze_threshold,
             own_subnet_id,
@@ -985,10 +984,11 @@ impl ExecutionEnvironmentImpl {
             ),
 
             Some(canister_state) => {
-                let cycles_to_return = self
-                    .canister_manager
-                    .deposit_cycles(canister_state, msg.take_cycles());
-                (Ok(EmptyBlob::encode()), cycles_to_return)
+                self.cycles_account_manager.add_cycles(
+                    &mut canister_state.system_state.cycles_balance,
+                    msg.take_cycles(),
+                );
+                (Ok(EmptyBlob::encode()), Cycles::from(0))
             }
         }
     }
@@ -1160,6 +1160,7 @@ impl ExecutionEnvironmentImpl {
         } else {
             resp.refund
         };
+
         self.cycles_account_manager
             .add_cycles(&mut canister.system_state.cycles_balance, refunded_cycles);
 

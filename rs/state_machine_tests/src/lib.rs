@@ -185,7 +185,6 @@ impl StateMachine {
 
         let cycles_account_manager = Arc::new(CyclesAccountManager::new(
             subnet_config.scheduler_config.max_instructions_per_message,
-            hypervisor_config.max_cycles_per_canister,
             subnet_type,
             subnet_id,
             subnet_config.cycles_account_manager_config,

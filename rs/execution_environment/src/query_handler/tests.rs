@@ -41,7 +41,6 @@ where
     fn canister_manager_config(subnet_id: SubnetId, subnet_type: SubnetType) -> CanisterMgrConfig {
         CanisterMgrConfig::new(
             MEMORY_CAPACITY,
-            Some(CYCLE_BALANCE),
             CYCLE_BALANCE,
             NumSeconds::from(100_000),
             subnet_id,

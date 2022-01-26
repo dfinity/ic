@@ -61,7 +61,6 @@ pub(crate) enum StopCanisterResult {
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub(crate) struct CanisterMgrConfig {
     pub(crate) subnet_memory_capacity: NumBytes,
-    pub(crate) max_cycles_per_canister: Option<Cycles>,
     pub(crate) default_provisional_cycles_balance: Cycles,
     pub(crate) default_freeze_threshold: NumSeconds,
     pub(crate) compute_capacity: u64,
@@ -74,7 +73,6 @@ impl CanisterMgrConfig {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         subnet_memory_capacity: NumBytes,
-        max_cycles_per_canister: Option<Cycles>,
         default_provisional_cycles_balance: Cycles,
         default_freeze_threshold: NumSeconds,
         own_subnet_id: SubnetId,
@@ -84,7 +82,6 @@ impl CanisterMgrConfig {
     ) -> Self {
         Self {
             subnet_memory_capacity,
-            max_cycles_per_canister,
             default_provisional_cycles_balance,
             default_freeze_threshold,
             own_subnet_id,
@@ -814,17 +811,6 @@ impl CanisterManager {
         Ok(())
     }
 
-    /// Deposits the amount of cycles specified from the sender to the target
-    /// `canister_id`.
-    ///
-    /// # Errors
-    ///
-    /// Returns a `CanisterManagerError` in case the canister does not exist
-    pub(crate) fn deposit_cycles(&self, canister: &mut CanisterState, cycles: Cycles) -> Cycles {
-        self.cycles_account_manager
-            .add_cycles(&mut canister.system_state.cycles_balance, cycles)
-    }
-
     #[allow(clippy::too_many_arguments)]
     fn install(
         &self,
@@ -1132,10 +1118,7 @@ impl CanisterManager {
 
         // Take the fee out of the cycles that are going to be added as the canister's
         // initial balance.
-        let mut cycles = cycles - creation_fee;
-        cycles = self
-            .cycles_account_manager
-            .check_max_cycles_can_add(Cycles::from(0), cycles);
+        let cycles = cycles - creation_fee;
 
         // Canister id available. Create the new canister.
         let mut system_state = SystemState::new_running(

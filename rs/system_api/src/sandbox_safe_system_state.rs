@@ -70,24 +70,28 @@ impl Default for SystemStateChanges {
 
 impl SystemStateChanges {
     /// Checks that no cycles were created during the execution of this message
-    /// (unless the canister is the cycles minting canister). Returns None if
-    /// there was overflow during the calculation.
-    fn cycle_change_is_valid(&self, is_cmc_canister: bool) -> Option<bool> {
+    /// (unless the canister is the cycles minting canister).
+    fn cycle_change_is_valid(&self, is_cmc_canister: bool) -> bool {
         let mut universal_cycle_change = 0;
         universal_cycle_change += self.cycles_balance_change;
         for call_context_balance_taken in self.call_context_balance_taken.values() {
-            universal_cycle_change = universal_cycle_change
-                .checked_sub(call_context_balance_taken.get().try_into().ok()?)?;
+            universal_cycle_change = universal_cycle_change.saturating_sub(
+                call_context_balance_taken
+                    .get()
+                    .try_into()
+                    .unwrap_or(i128::MAX), // saturate overflowing conversion
+            );
         }
         for req in self.requests.iter() {
-            universal_cycle_change =
-                universal_cycle_change.checked_add(req.payment.get().try_into().ok()?)?;
+            universal_cycle_change = universal_cycle_change
+                // saturate overflowing conversion
+                .saturating_add(req.payment.get().try_into().unwrap_or(i128::MAX));
         }
         if is_cmc_canister {
-            Some(true)
+            true
         } else {
             // Check that no cycles were created.
-            Some(universal_cycle_change <= 0)
+            universal_cycle_change <= 0
         }
     }
 
@@ -100,9 +104,7 @@ impl SystemStateChanges {
     /// canister has broken out of wasmtime.
     pub fn apply_changes(self, system_state: &mut SystemState) {
         // Verify total cycle change is not positive and update cycles balance.
-        assert!(self
-            .cycle_change_is_valid(system_state.canister_id == CYCLES_MINTING_CANISTER_ID)
-            .unwrap());
+        assert!(self.cycle_change_is_valid(system_state.canister_id == CYCLES_MINTING_CANISTER_ID));
         if self.cycles_balance_change >= 0 {
             system_state.cycles_balance += Cycles::from(self.cycles_balance_change as u128);
         } else {
@@ -368,10 +370,6 @@ impl SandboxSafeSystemState {
         amount_to_accept: Cycles,
     ) -> Cycles {
         let mut new_balance = self.cycles_balance();
-        // Scale amount that can be accepted by CYCLES_LIMIT_PER_CANISTER.
-        let amount_to_accept = self
-            .cycles_account_manager
-            .check_max_cycles_can_add(new_balance, amount_to_accept);
 
         // Scale amount that can be accepted by what is actually available on
         // the call context.

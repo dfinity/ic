@@ -174,7 +174,6 @@ fn criterion_calls(criterion: &mut Criterion) {
     let subnet_config = SubnetConfigs::default().own_subnet_config(subnet_type);
     let cycles_account_manager = Arc::new(CyclesAccountManager::new(
         subnet_config.scheduler_config.max_instructions_per_message,
-        ExecutionConfig::default().max_cycles_per_canister,
         subnet_type,
         bench_replica.replica_config.subnet_id,
         SubnetConfigs::default()

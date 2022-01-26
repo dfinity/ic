@@ -78,6 +78,9 @@ pub struct SystemState {
     pub certified_data: Vec<u8>,
     pub canister_metrics: CanisterMetrics,
 
+    /// Should only be modified using the methods of a `CyclesAccountManager` or
+    /// by applying the updates from a `SystemStateChanges`.
+    ///
     /// A canister's state has an associated cycles balance, and may `send` a
     /// part of this cycles balance to another canister.
     /// In addition to sending cycles to another canister, a canister `spend`s

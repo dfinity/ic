@@ -63,7 +63,6 @@ use std::{collections::BTreeSet, convert::TryFrom, path::Path, sync::Arc};
 const CANISTER_CREATION_FEE: Cycles = Cycles::new(100_000_000_000);
 const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
-const CYCLES_LIMIT_PER_CANISTER: Cycles = Cycles::new(100_000_000_000_000);
 const DEFAULT_PROVISIONAL_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 const MEMORY_CAPACITY: NumBytes = NumBytes::new(8 * 1024 * 1024 * 1024); // 8GiB
 const MAX_CONTROLLERS: usize = 10;
@@ -140,7 +139,6 @@ impl Default for CanisterManagerBuilder {
 fn canister_manager_config(subnet_id: SubnetId, subnet_type: SubnetType) -> CanisterMgrConfig {
     CanisterMgrConfig::new(
         MEMORY_CAPACITY,
-        Some(CYCLES_LIMIT_PER_CANISTER),
         DEFAULT_PROVISIONAL_BALANCE,
         NumSeconds::from(100_000),
         subnet_id,
@@ -2072,39 +2070,14 @@ fn deposit_cycles_succeeds_with_enough_cycles() {
         let cycles_balance_before = canister.system_state.cycles_balance;
         let cycles = Cycles::from(100);
 
-        let cycles_to_return = canister_manager.deposit_cycles(&mut canister, cycles);
-        assert_eq!(cycles_to_return, Cycles::from(0));
+        canister_manager
+            .cycles_account_manager
+            .add_cycles(&mut canister.system_state.cycles_balance, cycles);
 
         // Assert that state has changed
         assert_eq!(
             canister.system_state.cycles_balance,
             cycles_balance_before + cycles,
-        );
-    });
-}
-
-#[test]
-fn deposit_cycles_succeeds_with_enough_cycles_in_balance() {
-    with_setup(|canister_manager, _, _| {
-        let canister_id = canister_test_id(0);
-        let sender = canister_test_id(1).get();
-        let mut canister = get_running_canister_with_args(
-            canister_id,
-            sender,
-            CYCLES_LIMIT_PER_CANISTER - Cycles::from(10),
-        );
-
-        let cycles_balance_before = canister.system_state.cycles_balance;
-        let cycles = Cycles::from(20);
-
-        let cycles_to_return = canister_manager.deposit_cycles(&mut canister, cycles);
-        assert_eq!(cycles_to_return, Cycles::from(10));
-
-        // Assert that state has changed
-        // Only ten cycles can fit in the balance
-        assert_eq!(
-            canister.system_state.cycles_balance,
-            cycles_balance_before + Cycles::from(10),
         );
     });
 }

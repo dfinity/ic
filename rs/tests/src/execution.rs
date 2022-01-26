@@ -15,8 +15,6 @@ pub mod upgraded_pots;
 use ic_fondue::ic_instance::{InternetComputer, Subnet};
 use ic_registry_subnet_type::SubnetType;
 
-use crate::util::CYCLES_LIMIT_PER_CANISTER;
-
 pub fn config_system_verified_application_subnets() -> InternetComputer {
     InternetComputer::new()
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
@@ -28,18 +26,6 @@ pub fn config_system_verified_subnets() -> InternetComputer {
     InternetComputer::new()
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
         .add_subnet(Subnet::fast_single_node(SubnetType::VerifiedApplication))
-}
-
-pub fn pot1_config() -> InternetComputer {
-    InternetComputer::new()
-        .add_subnet(
-            Subnet::fast_single_node(SubnetType::System)
-                .with_max_cycles_per_canister(Some(CYCLES_LIMIT_PER_CANISTER)),
-        )
-        .add_subnet(
-            Subnet::fast_single_node(SubnetType::Application)
-                .with_max_cycles_per_canister(Some(CYCLES_LIMIT_PER_CANISTER)),
-        )
 }
 
 pub fn config_many_system_subnets() -> InternetComputer {

@@ -62,7 +62,6 @@ impl CyclesAccountManagerBuilder {
     pub fn build(self) -> CyclesAccountManager {
         CyclesAccountManager::new(
             self.max_num_instructions,
-            self.cycles_limit_per_canister,
             self.subnet_type,
             self.subnet_id,
             self.config,

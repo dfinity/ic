@@ -57,10 +57,6 @@ pub struct Config {
     /// The maximum amount of memory that can be utilized by a single canister.
     pub max_canister_memory_size: NumBytes,
 
-    /// The maximum amount of cycles a canister can hold.
-    /// If set to None, the canisters have no upper limit.
-    pub max_cycles_per_canister: Option<Cycles>,
-
     /// The default value used when provisioning a canister
     /// if amount of cycles was not specified.
     pub default_provisional_cycles_balance: Cycles,
@@ -96,10 +92,6 @@ impl Default for Config {
             max_canister_memory_size: NumBytes::new(
                 MAX_STABLE_MEMORY_IN_BYTES + MAX_WASM_MEMORY_IN_BYTES,
             ),
-            // Canisters on the system subnet are not capped.
-            // They can hold an amount of cycles that goes above this limit.
-            // If this limit is set to None, canisters can hold any amount of cycles.
-            max_cycles_per_canister: None,
             default_provisional_cycles_balance: Cycles::new(100_000_000_000_000),
             // The default freeze threshold is 30 days.
             default_freeze_threshold: NumSeconds::from(30 * 24 * 60 * 60),

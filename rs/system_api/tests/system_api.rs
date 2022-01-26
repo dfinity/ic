@@ -26,7 +26,7 @@ use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext, MAX_RESPONSE_COUNT_BYTES},
     methods::{Callback, WasmClosure},
     user_error::RejectCode,
-    ComputeAllocation, CountBytes, Cycles, NumBytes, NumInstructions,
+    CountBytes, Cycles, NumBytes, NumInstructions,
 };
 use std::convert::{From, TryInto};
 
@@ -1327,112 +1327,6 @@ fn msg_cycles_accept_all_cycles_in_call_context_when_more_asked() {
     );
 
     assert_eq!(api.ic0_msg_cycles_accept(50), Ok(40));
-}
-
-/// msg_cycles_accept() can accept till max it can store
-#[test]
-fn msg_cycles_accept_accept_till_max_on_application_subnet() {
-    let cycles_account_manager = CyclesAccountManagerBuilder::new()
-        .with_cycles_limit_per_canister(Some(CYCLES_LIMIT_PER_CANISTER))
-        .build();
-    let mut system_state = SystemStateBuilder::default().build();
-    system_state
-        .call_context_manager_mut()
-        .unwrap()
-        .new_call_context(
-            CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
-            Cycles::from(40),
-        );
-
-    // Set cycles balance to max - 10.
-    cycles_account_manager.add_cycles(&mut system_state.cycles_balance, CYCLES_LIMIT_PER_CANISTER);
-    cycles_account_manager
-        .withdraw_cycles_for_transfer(
-            system_state.canister_id,
-            system_state.freeze_threshold,
-            system_state.memory_allocation,
-            NumBytes::from(0),
-            ComputeAllocation::default(),
-            &mut system_state.cycles_balance,
-            Cycles::from(10),
-        )
-        .unwrap();
-
-    let mut api = get_system_api(
-        ApiTypeBuilder::new().build_update_api(),
-        &system_state,
-        cycles_account_manager,
-    );
-
-    assert_eq!(api.ic0_msg_cycles_accept(50), Ok(10));
-}
-
-#[test]
-fn msg_cycles_accept_max_cycles_per_canister_none_on_application_subnet() {
-    let cycles = 10_000_000_000;
-    let cycles_account_manager = CyclesAccountManagerBuilder::new()
-        .with_cycles_limit_per_canister(None)
-        .build();
-    let mut system_state = SystemStateBuilder::new().build();
-    system_state
-        .call_context_manager_mut()
-        .unwrap()
-        .new_call_context(
-            CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
-            Cycles::from(cycles),
-        );
-
-    cycles_account_manager.add_cycles(&mut system_state.cycles_balance, CYCLES_LIMIT_PER_CANISTER);
-
-    let mut api = get_system_api(
-        ApiTypeBuilder::new().build_update_api(),
-        &system_state,
-        cycles_account_manager,
-    );
-
-    assert_eq!(api.ic0_msg_cycles_accept(cycles), Ok(cycles));
-    let balance = api.ic0_canister_cycle_balance().unwrap();
-    assert!(Cycles::from(balance) > CYCLES_LIMIT_PER_CANISTER);
-}
-
-/// msg_cycles_accept() can accept above max
-#[test]
-fn msg_cycles_accept_above_max_on_nns() {
-    let cycles_account_manager = CyclesAccountManagerBuilder::new()
-        .with_subnet_type(SubnetType::System)
-        .build();
-    let mut system_state = SystemStateBuilder::new().build();
-    system_state
-        .call_context_manager_mut()
-        .unwrap()
-        .new_call_context(
-            CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
-            Cycles::from(40),
-        );
-
-    // Set cycles balance to max - 10.
-    cycles_account_manager.add_cycles(&mut system_state.cycles_balance, CYCLES_LIMIT_PER_CANISTER);
-    cycles_account_manager
-        .withdraw_cycles_for_transfer(
-            system_state.canister_id,
-            system_state.freeze_threshold,
-            system_state.memory_allocation,
-            NumBytes::from(0),
-            ComputeAllocation::default(),
-            &mut system_state.cycles_balance,
-            Cycles::from(10),
-        )
-        .unwrap();
-
-    let mut api = get_system_api(
-        ApiTypeBuilder::new().build_update_api(),
-        &system_state,
-        cycles_account_manager,
-    );
-
-    assert_eq!(api.ic0_msg_cycles_accept(50), Ok(40));
-    let balance = api.ic0_canister_cycle_balance().unwrap();
-    assert!(Cycles::from(balance) > CYCLES_LIMIT_PER_CANISTER);
 }
 
 /// If call call_perform() fails because canister does not have enough
