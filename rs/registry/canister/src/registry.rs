@@ -84,7 +84,7 @@ pub struct Registry {
     /// Each entry contains a blob which is a serialized
     /// RegistryAtomicMutateRequest.  We keep the serialized version around to
     /// make sure that hash trees stay the same even if protobuf schema evolves.
-    changelog: RbTree<EncodedVersion, Vec<u8>>,
+    pub(crate) changelog: RbTree<EncodedVersion, Vec<u8>>,
 }
 
 impl Registry {
@@ -289,7 +289,7 @@ impl Registry {
             );
         }
 
-        self.check_global_invariants(mutations.as_slice());
+        self.check_global_state_invariants(mutations.as_slice());
         self.apply_mutations(mutations);
     }
 

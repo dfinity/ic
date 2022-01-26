@@ -148,6 +148,7 @@ fn canister_pre_upgrade() {
     let mut serialized = Vec::new();
     let ss = RegistryCanisterStableStorage {
         registry: Some(registry.serializable_form()),
+        pre_upgrade_version: registry.latest_version(),
     };
     ss.encode(&mut serialized)
         .expect("Error serializing to stable.");
@@ -166,10 +167,13 @@ fn canister_post_upgrade() {
     let registry = registry_mut();
     registry.from_serializable_form(ss.registry.expect("Error decoding from stable"));
 
+    assert_eq!(ss.pre_upgrade_version, registry.latest_version());
     // TODO(NNS1-1025): To be deleted after the next registry upgrade
     apply_deletion_mutation(registry);
 
-    registry.check_global_invariants(&[]);
+    registry.check_global_state_invariants(&[]);
+    registry.check_changelog_version_invariants();
+
     recertify_registry();
 }
 
