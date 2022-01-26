@@ -90,8 +90,11 @@ impl Orchestrator {
             config
         );
 
-        let registry_replicator =
-            Arc::new(RegistryReplicator::new(logger.clone(), &config, node_id));
+        let registry_replicator = Arc::new(RegistryReplicator::new(
+            logger.clone(),
+            &config,
+            Some(node_id),
+        ));
 
         if let Err(err) = registry_replicator.fetch_and_start_polling(&config).await {
             warn!(logger, "{}", err);

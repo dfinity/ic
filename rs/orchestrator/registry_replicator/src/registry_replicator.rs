@@ -50,7 +50,7 @@ mod internal_state;
 
 pub struct RegistryReplicator {
     logger: ReplicaLogger,
-    node_id: NodeId,
+    node_id: Option<NodeId>,
     registry_client: Arc<dyn RegistryClient>,
     local_store: Arc<dyn LocalStore>,
     started: Arc<AtomicBool>,
@@ -59,7 +59,7 @@ pub struct RegistryReplicator {
 }
 
 impl RegistryReplicator {
-    pub fn new(logger: ReplicaLogger, config: &Config, node_id: NodeId) -> Self {
+    pub fn new(logger: ReplicaLogger, config: &Config, node_id: Option<NodeId>) -> Self {
         let registry_client = Self::initialize_registry_client(config);
 
         // we only support the local store data provider

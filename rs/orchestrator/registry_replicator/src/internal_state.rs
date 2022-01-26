@@ -34,7 +34,7 @@ use url::Url;
 
 pub(crate) struct InternalState {
     logger: ReplicaLogger,
-    node_id: NodeId,
+    node_id: Option<NodeId>,
     registry_client: Arc<dyn RegistryClient>,
     local_store: Arc<dyn LocalStore>,
     latest_version: RegistryVersion,
@@ -47,7 +47,7 @@ pub(crate) struct InternalState {
 impl InternalState {
     pub(crate) fn new(
         logger: ReplicaLogger,
-        node_id: NodeId,
+        node_id: Option<NodeId>,
         registry_client: Arc<dyn RegistryClient>,
         local_store: Arc<dyn LocalStore>,
         poll_delay: Duration,
@@ -141,13 +141,19 @@ impl InternalState {
     /// In case of a switch-over, and if there are no failures, this function
     /// exits the process and hence does not return.
     fn start_new_nns_subnet(&mut self, latest_version: RegistryVersion) -> Result<(), String> {
+        // We can check if this node has start_as_nns set, only if node_id is set.
+        let node_id = match self.node_id {
+            Some(id) => id,
+            None => return Ok(()),
+        };
+
         fn map_to_str<E: Debug>(msg: &str, v: RegistryVersion, e: E) -> String {
             format!("{} at version {}: {:?}", msg, v, e)
         }
 
         let (subnet_id, subnet_record) = match self
             .registry_client
-            .get_listed_subnet_for_node_id(self.node_id, latest_version)
+            .get_listed_subnet_for_node_id(node_id, latest_version)
         {
             Ok(Some((id, r))) if r.start_as_nns => (id, r),
             Err(e) => {
