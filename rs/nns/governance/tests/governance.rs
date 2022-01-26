@@ -176,6 +176,16 @@ const NOTDISSOLVING_MAX_DISSOLVE_DELAY: Option<DissolveState> = Some(
     DissolveState::DissolveDelaySeconds(MAX_DISSOLVE_DELAY_SECONDS),
 );
 
+// To avoid this failure, you need to run cargo test with --features test. The
+// reason we require that flag is to ensure that release builds are within the
+// required size (3 MB). That goal is achieved by culling test-only libraries
+// (specifically, comparable).
+#[cfg(not(feature = "test"))]
+#[test]
+fn tests_must_be_run_with_test_feature_enabled() {
+    assert!(false);
+}
+
 #[cfg(feature = "test")]
 #[test]
 fn test_single_neuron_proposal_new() {
