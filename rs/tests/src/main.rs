@@ -30,7 +30,6 @@ use ic_tests::nns_canister_upgrade_test;
 use ic_tests::nns_follow_test;
 use ic_tests::nns_uninstall_code_proposal_test;
 use ic_tests::nns_voting_test;
-use ic_tests::node_removal_test;
 use ic_tests::registry_authentication_test;
 use ic_tests::replica_determinism_test;
 use ic_tests::request_auth_malicious_replica_test;
@@ -55,7 +54,6 @@ fn all_pots() -> Vec<ic_fondue::pot::Pot> {
         canister_lifecycle_memory_capacity_pot(),
         canister_lifecycle_memory_size_pot(),
         max_number_of_canisters_pot(),
-        node_removal_pot(),
         basic_health_pot(),
         consensus_liveness_with_equivocation_pot(),
         consensus_safety_pot(),
@@ -87,15 +85,6 @@ fn basic_health_pot() -> pot::Pot {
             feature_flags::ecdsa_signatures_disabled_by_default
         }
     )
-}
-
-/// In contrast to a composable test, we also have isolated tests, which
-/// are allowed to manipulate their environment. In this case,
-/// [node_removal_test::test] removes a node. Isolated tests consists of a
-/// single [node_removal_test::config] and a single [node_removal_test::test]
-/// function, which must exist in the module passed to the macro below.
-fn node_removal_pot() -> pot::Pot {
-    isolated_test!(node_removal_test)
 }
 
 fn cow_safety_pot() -> pot::Pot {

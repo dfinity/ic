@@ -27,6 +27,7 @@ use on_wire::FromWire;
 use rand_chacha::ChaCha8Rng;
 use std::convert::TryFrom;
 use std::future::Future;
+use std::time::{Duration, Instant};
 use tokio::runtime::Runtime as TRuntime;
 use url::Url;
 
@@ -472,6 +473,21 @@ pub fn get_unassinged_nodes_endpoints(handle: &IcHandle) -> Vec<&IcEndpoint> {
         .collect()
 }
 
+// This indirectly asserts a non-zero finalization rate of the subnet:
+// - We store a string in the memory by sending an `update` message to a canister
+// - We retrieve the saved string by sending `query` message to a canister
+pub(crate) async fn assert_subnet_can_make_progress(message: &[u8], endpoint: &IcEndpoint) {
+    let agent = assert_create_agent(endpoint.url.as_str()).await;
+    let universal_canister = UniversalCanister::new(&agent).await;
+    universal_canister.store_to_stable(0, message).await;
+    assert_eq!(
+        universal_canister
+            .try_read_stable(0, message.len() as u32)
+            .await,
+        message.to_vec()
+    );
+}
+
 pub(crate) fn assert_reject<T: std::fmt::Debug>(res: Result<T, AgentError>, code: RejectCode) {
     match res {
         Ok(val) => panic!("Expected call to fail but it succeeded with {:?}", val),
@@ -490,6 +506,39 @@ pub(crate) fn assert_reject<T: std::fmt::Debug>(res: Result<T, AgentError>, code
             ),
         },
     }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum EndpointsStatus {
+    AllReachable,
+    AllUnreachable,
+}
+
+pub(crate) async fn assert_endpoints_reachability(
+    endpoints: &[&IcEndpoint],
+    status: EndpointsStatus,
+) {
+    // Returns true if: either all endpoints are reachable or all unreachable (depending on the desired input status).
+    let check_reachability = || async move {
+        let hs = futures::future::join_all(endpoints.iter().map(|e| e.healthy())).await;
+        match status {
+            // For AllReachable status, we return the result of healthy().
+            EndpointsStatus::AllReachable => hs.iter().all(|x| x.as_ref().map_or(false, |x| x.0)),
+            // For AllUnreachable status, we return the NOT result of healthy().
+            EndpointsStatus::AllUnreachable => hs.iter().all(|x| x.as_ref().map_or(true, |x| !x.0)),
+        }
+    };
+
+    const TIMEOUT: Duration = Duration::from_secs(500);
+    const DELAY: Duration = Duration::from_secs(20);
+    let start = Instant::now();
+    while start.elapsed() < TIMEOUT {
+        if check_reachability().await {
+            return;
+        }
+        tokio::time::sleep(DELAY).await;
+    }
+    panic!("Not all endpoints have reached the desired reachability status {:?} within timeout {} sec.", status, TIMEOUT.as_secs());
 }
 
 pub(crate) fn assert_http_submit_fails(
