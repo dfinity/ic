@@ -62,7 +62,8 @@ pub const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
 pub const ONE_YEAR_SECONDS: u64 = (4 * 365 + 1) * ONE_DAY_SECONDS / 4;
 pub const ONE_MONTH_SECONDS: u64 = ONE_YEAR_SECONDS / 12;
 
-// The maximum amount of bytes in an NNS proposal.
+// The limits on NNS proposal title len (in bytes).
+const PROPOSAL_TITLE_BYTES_MIN: usize = 5;
 const PROPOSAL_TITLE_BYTES_MAX: usize = 256;
 // Proposal validation
 // 15000 B
@@ -4675,21 +4676,12 @@ impl Governance {
     fn validate_proposal(&mut self, proposal: &Proposal) -> Result<(), GovernanceError> {
         if proposal.topic() == Topic::Unspecified {
             return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
+                ErrorType::InvalidProposal,
                 "Topic not specified",
             ));
         }
 
-        // TODO(NNS1-798) validate that there is a title, currently we don't to
-        // that to prevent breaking downstream integrations.
-        if let Some(title) = &proposal.title {
-            if title.len() > PROPOSAL_TITLE_BYTES_MAX {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::PreconditionFailed,
-                    "Proposal title is too big",
-                ));
-            }
-        }
+        validate_proposal_title(&proposal.title)?;
 
         if !proposal.allowed_when_resources_are_low() {
             self.check_heap_can_grow()?;
@@ -6075,6 +6067,43 @@ impl Governance {
 
         Ok(rewards)
     }
+}
+
+// Returns whether the following requirements are met:
+//   1. proposal must have a title.
+//   2. title len (bytes, not characters) is between min and max.
+pub fn validate_proposal_title(title: &Option<String>) -> Result<(), GovernanceError> {
+    // Require that proposal has a title.
+    let len = title
+        .as_ref()
+        .ok_or_else(|| {
+            GovernanceError::new_with_message(ErrorType::InvalidProposal, "Proposal lacks a title")
+        })?
+        .len();
+
+    // Require that title is not too short.
+    if len < PROPOSAL_TITLE_BYTES_MIN {
+        return Err(GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            format!(
+                "Proposal title is too short (must be at least {} bytes)",
+                PROPOSAL_TITLE_BYTES_MIN,
+            ),
+        ));
+    }
+
+    // Require that title is not too long.
+    if len > PROPOSAL_TITLE_BYTES_MAX {
+        return Err(GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            format!(
+                "Proposal title is too long (can be at most {} bytes)",
+                PROPOSAL_TITLE_BYTES_MAX,
+            ),
+        ));
+    }
+
+    Ok(())
 }
 
 /// Computes the subaccount to which neuron staking transfers are made. This

@@ -648,6 +648,7 @@ impl NNS {
                 &NeuronId { id: prop.proposer },
                 &principal(prop.proposer),
                 &Proposal {
+                    title: Some("A Reasonable Title".to_string()),
                     summary,
                     action: Some(action),
                     ..Default::default()

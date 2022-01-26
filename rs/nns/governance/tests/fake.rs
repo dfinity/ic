@@ -363,6 +363,7 @@ impl ProposalNeuronBehavior {
                 &NeuronId { id: self.proposer },
                 &principal(self.proposer),
                 &Proposal {
+                    title: Some("A Reasonable Title".to_string()),
                     summary,
                     action: Some(proposal::Action::Motion(Motion {
                         motion_text: "me like proposals".to_string(),

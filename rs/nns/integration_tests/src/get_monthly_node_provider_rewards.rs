@@ -381,7 +381,7 @@ async fn add_node_provider(nns_canisters: &NnsCanisters<'_>, np: NodeProvider) {
                 )),
                 id: None,
                 command: Some(Command::MakeProposal(Box::new(Proposal {
-                    title: Some("".to_string()),
+                    title: Some("Add a Node Provider".to_string()),
                     summary: "".to_string(),
                     url: "".to_string(),
                     action: Some(Action::AddOrRemoveNodeProvider(AddOrRemoveNodeProvider {

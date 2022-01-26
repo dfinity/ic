@@ -133,6 +133,7 @@ fn test_cannot_submit_motion_in_degraded_mode() {
         // Must match neuron 1's serialized_id.
         &principal(1),
         &Proposal {
+            title: Some("A Reasonable Title".to_string()),
             summary: "proposal 1".to_string(),
             action: Some(proposal::Action::Motion(Motion {
                 motion_text: "Rabbits are cute".to_string(),
@@ -155,6 +156,7 @@ fn test_can_submit_nns_canister_upgrade_in_degraded_mode() {
             // Must match neuron 1's serialized_id.
             &principal(1),
             &Proposal {
+                title: Some("A Reasonable Title".to_string()),
                 summary: "proposal 1".to_string(),
                 action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
                     nns_function: NnsFunction::NnsCanisterUpgrade as i32,
