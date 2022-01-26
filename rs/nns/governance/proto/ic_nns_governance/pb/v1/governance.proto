@@ -551,9 +551,11 @@ message SetDefaultFollowees {
 //
 // Making a proposal implicitly votes yes.
 message Proposal {
-  // Text with the title of the proposal.
-   // Can have a max of 256 bytes.
+  // Must be present (enforced at the application layer, not by PB).
+  // A brief description of what the proposal does.
+  // Size in bytes must be in the interval [5, 256].
   optional string title = 20;
+
   // Text providing a short description of the proposal, composed
   // using a maximum of 15000 bytes of characters.
   string summary = 1;
@@ -924,7 +926,10 @@ message GovernanceError {
      // Some canister side resource is exhausted, so this operation cannot be
      // performed.
      ERROR_TYPE_RESOURCE_EXHAUSTED = 10;
-     // Some precondition for executing this method was not met.
+     // Some precondition for executing this method was not met (e.g. the
+     // neuron's desolve time is too short). There could be a change in the
+     // state of the system such that the operation becomes allowed (e.g. the
+     // owner of the neuron increases its desolve delay).
      ERROR_TYPE_PRECONDITION_FAILED = 11;
      // Executing this method failed for some reason external to the
      // governance canister.
@@ -936,7 +941,10 @@ message GovernanceError {
      ERROR_TYPE_INSUFFICIENT_FUNDS = 14;
      // The principal provided was invalid.
      ERROR_TYPE_INVALID_PRINCIPAL = 15;
-     // The proposal's parameters violate size restrictions.
+     // The proposal is defective in some way (e.g. title is too long). If the
+     // same proposal is submitted again without modification, it will be
+     // rejected regardless of changes in the system's state (e.g. increasing
+     // the neuron's desolve delay will not make the proposal acceptable).
      ERROR_TYPE_INVALID_PROPOSAL = 16;
      // The neuron attempted to join the community fund while already
      // a member.

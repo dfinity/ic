@@ -24,7 +24,7 @@ use ic_nns_governance::pb::v1::{
 };
 use ic_nns_governance::{
     governance::{
-        subaccount_from_slice, Environment, Governance, Ledger,
+        subaccount_from_slice, validate_proposal_title, Environment, Governance, Ledger,
         EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX,
         MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS, PROPOSAL_MOTION_TEXT_BYTES_MAX,
         REWARD_DISTRIBUTION_PERIOD_SECONDS, WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS,
@@ -221,6 +221,10 @@ fn test_single_neuron_proposal_new() {
                         ProposalDataChange::Proposal(OptionChange::Different(
                             None,
                             Some(vec![
+                                ProposalChange::Title(OptionChange::Different(
+                                    None,
+                                    Some("A Reasonable Title".to_string())
+                                )),
                                 ProposalChange::Summary(StringChange(
                                     "".to_string(),
                                     "the unique proposal".to_string(),
@@ -712,6 +716,7 @@ fn test_cascade_following_new() {
             // Must match neuron 1's serialized_id.
             &principal(1),
             &Proposal {
+                title: Some("A Reasonable Title".to_string()),
                 summary: "test".to_string(),
                 action: Some(proposal::Action::Motion(Motion {
                     motion_text: "dummy text".to_string(),
@@ -779,6 +784,10 @@ fn test_cascade_following_new() {
                     ProposalDataChange::Proposal(OptionChange::Different(
                         None,
                         Some(vec![
+                            ProposalChange::Title(OptionChange::Different(
+                                None,
+                                Some("A Reasonable Title".to_string()),
+                            )),
                             ProposalChange::Summary(StringChange(
                                 "".to_string(),
                                 "test".to_string(),
@@ -1154,6 +1163,7 @@ fn test_cascade_following() {
         // Must match neuron 1's serialized_id.
         &principal(1),
         &Proposal {
+            title: Some("A Reasonable Title".to_string()),
             summary: "test".to_string(),
             action: Some(proposal::Action::Motion(Motion {
                 motion_text: "dummy text".to_string(),
@@ -1288,6 +1298,7 @@ fn test_minimum_icp_xdr_conversion_rate() {
         // Must match neuron 1's serialized_id.
         &PrincipalId::try_from(b"SID1".to_vec()).unwrap(),
         &Proposal {
+            title: Some("A Reasonable Title".to_string()),
             summary: "test".to_string(),
             action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
                 nns_function: NnsFunction::IcpXdrConversionRate as i32,
@@ -1347,6 +1358,7 @@ fn test_node_provider_must_be_registered() {
         // Must match neuron 1's serialized_id.
         &PrincipalId::try_from(b"SID1".to_vec()).unwrap(),
         &Proposal {
+            title: Some("A Reasonable Title".to_string()),
             summary: "test".to_string(),
             action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
                 nns_function: NnsFunction::AssignNoid as i32,
@@ -1386,6 +1398,7 @@ fn test_sufficient_stake() {
             // Must match neuron 1's serialized_id.
             &principal(1),
             &Proposal {
+                title: Some("A Reasonable Title".to_string()),
                 summary: "test".to_string(),
                 action: Some(proposal::Action::Motion(Motion {
                     motion_text: "dummy text".to_string(),
@@ -1408,6 +1421,7 @@ fn test_sufficient_stake() {
         // Must match neuron 1's serialized_id.
         &principal(1),
         &Proposal {
+            title: Some("A Reasonable Title".to_string()),
             summary: "test".to_string(),
             action: Some(proposal::Action::Motion(Motion {
                 motion_text: "dummy text".to_string(),
@@ -1467,6 +1481,7 @@ fn test_all_follow_proposer() {
         // Must match neuron 1's serialized_id.
         &principal(1),
         &Proposal {
+            title: Some("A Reasonable Title".to_string()),
             summary: "test".to_string(),
             action: Some(proposal::Action::Motion(Motion {
                 motion_text: "dummy text".to_string(),
@@ -1507,6 +1522,7 @@ fn test_follow_negative() {
         // Must match neuron 1's serialized_id.
         &principal(1),
         &Proposal {
+            title: Some("A Reasonable Title".to_string()),
             summary: "test".to_string(),
             action: Some(proposal::Action::Motion(Motion {
                 motion_text: "dummy text".to_string(),
@@ -1800,6 +1816,7 @@ fn test_manage_neuron() {
         // Must match neuron 1's serialized_id.
         &principal(2),
         &Proposal {
+            title: Some("A Reasonable Title".to_string()),
             action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
                 neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 1 })),
                 id: None,
@@ -1890,6 +1907,7 @@ fn test_manage_neuron() {
         // Must match neuron 1's serialized_id.
         &principal(2),
         &Proposal {
+            title: Some("A Reasonable Title".to_string()),
             action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
                 neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 1 })),
                 id: None,
@@ -1965,6 +1983,7 @@ fn test_sufficient_stake_for_manage_neuron() {
             // Must match neuron 1's serialized_id.
             &principal(2),
             &Proposal {
+                title: Some("A Reasonable Title".to_string()),
                 action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
                     neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
                         id: 1
@@ -1993,6 +2012,7 @@ fn test_sufficient_stake_for_manage_neuron() {
         // Must match neuron 1's serialized_id.
         &principal(2),
         &Proposal {
+            title: Some("A Reasonable Title".to_string()),
             action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
                 neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 1 })),
                 id: None,
@@ -2059,6 +2079,7 @@ fn test_invalid_proposals_fail() {
         // Must match neuron 1's serialized_id.
         &principal(1),
         &Proposal {
+            title: Some("A Reasonable Title".to_string()),
             summary: "proposal 1".to_string(),
             action: Some(proposal::Action::Motion(Motion {
                 motion_text: long_string,
@@ -2122,6 +2143,7 @@ fn test_reward_event_proposals_last_longer_than_reward_period() {
         // Must match neuron 1's serialized_id.
         &principal(1),
         &Proposal {
+            title: Some("A Reasonable Title".to_string()),
             summary: "proposal 1".to_string(),
             action: Some(proposal::Action::Motion(Motion {
                 motion_text: "Thou shall not do bad things with the IC".to_string(),
@@ -2238,6 +2260,7 @@ fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
         // Must match neuron 1's serialized_id.
         &principal(2),
         &Proposal {
+            title: Some("A Reasonable Title".to_string()),
             action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
                 neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 1 })),
                 id: None,
@@ -2426,6 +2449,7 @@ fn test_genesis_in_the_future_in_supported() {
             // Must match neuron 1's serialized_id.
             &principal(1),
             &Proposal {
+                title: Some("A Reasonable Title".to_string()),
                 summary: "proposal 1 (long)".to_string(),
                 action: Some(proposal::Action::Motion(Motion {
                     motion_text: "a".to_string(),
@@ -2440,6 +2464,7 @@ fn test_genesis_in_the_future_in_supported() {
             // Must match neuron 1's serialized_id.
             &principal(1),
             &Proposal {
+                title: Some("A Reasonable Title".to_string()),
                 summary: "proposal 2 (short)".to_string(),
                 action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
                     nns_function: NnsFunction::IcpXdrConversionRate as i32,
@@ -2507,6 +2532,7 @@ fn test_genesis_in_the_future_in_supported() {
             // Must match neuron 1's serialized_id.
             &principal(1),
             &Proposal {
+                title: Some("A Reasonable Title".to_string()),
                 summary: "pre_genesis_proposal_that_should_settle_in_period_2".to_string(),
                 action: Some(proposal::Action::Motion(Motion {
                     motion_text: "b".to_string(),
@@ -4988,6 +5014,7 @@ fn test_not_for_profit_neurons() {
         normal_neuron.id.as_ref().unwrap(),
         normal_neuron.controller.as_ref().unwrap(),
         &Proposal {
+            title: Some("A Reasonable Title".to_string()),
             action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
                 neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
                     normal_neuron.id.as_ref().unwrap().clone(),
@@ -4998,7 +5025,6 @@ fn test_not_for_profit_neurons() {
                     to_account: None,
                 })),
             }))),
-            title: Some("".to_string()),
             summary: "".to_string(),
             url: "".to_string(),
         },
@@ -5012,6 +5038,7 @@ fn test_not_for_profit_neurons() {
         normal_neuron.id.as_ref().unwrap(),
         normal_neuron.controller.as_ref().unwrap(),
         &Proposal {
+            title: Some("A Reasonable Title".to_string()),
             action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
                 neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
                     not_for_profit_neuron.id.as_ref().unwrap().clone(),
@@ -5022,7 +5049,6 @@ fn test_not_for_profit_neurons() {
                     to_account: None,
                 })),
             }))),
-            title: Some("".to_string()),
             summary: "".to_string(),
             url: "".to_string(),
         },
@@ -6127,6 +6153,7 @@ fn fixture_for_proposals(proposal_id: ProposalId, payload: Vec<u8>) -> Governanc
         payload,
     };
     let proposal = Proposal {
+        title: Some("A Reasonable Title".to_string()),
         action: Some(proposal::Action::ExecuteNnsFunction(execute_nns_function)),
         ..Default::default()
     };
@@ -6453,6 +6480,7 @@ fn test_filter_proposals() {
                     id: Some(ProposalId { id: 1 }),
                     proposer: Some(NeuronId { id: 1 }),
                     proposal: Some(Proposal {
+                        title: Some("A Reasonable Title".to_string()),
                         summary: "summary".to_string(),
                         action: Some(proposal::Action::Motion(Motion {
                             motion_text: "me like proposals".to_string(),
@@ -6481,6 +6509,7 @@ fn test_filter_proposals() {
                     id: Some(ProposalId { id: 2 }),
                     proposer: Some(NeuronId { id: 4 }),
                     proposal: Some(Proposal {
+                        title: Some("A Reasonable Title".to_string()),
                         summary: "summary".to_string(),
                         action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
                             neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
@@ -6515,6 +6544,7 @@ fn test_filter_proposals() {
                     id: Some(ProposalId { id: 3 }),
                     proposer: Some(NeuronId { id: 1 }),
                     proposal: Some(Proposal {
+                        title: Some("A Reasonable Title".to_string()),
                         summary: "summary".to_string(),
                         action: Some(proposal::Action::Motion(Motion {
                             motion_text: "me like proposals".to_string(),
@@ -6580,6 +6610,7 @@ fn test_filter_proposals() {
                     id: Some(ProposalId { id: 4 }),
                     proposer: Some(NeuronId { id: 1 }),
                     proposal: Some(Proposal {
+                        title: Some("A Reasonable Title".to_string()),
                         summary: "summary".to_string(),
                         action: Some(proposal::Action::Motion(Motion {
                             motion_text: "me like proposals".to_string(),
@@ -6996,6 +7027,7 @@ fn test_max_number_of_proposals_with_ballots() {
             // Must match neuron 1's serialized_id.
             &principal(1),
             &Proposal {
+                title: Some("A Reasonable Title".to_string()),
                 summary: format!("proposal {} summary", i),
                 action: Some(proposal::Action::Motion(Motion {
                     motion_text: "dummy text".to_string(),
@@ -7015,6 +7047,7 @@ fn test_max_number_of_proposals_with_ballots() {
         // Must match neuron 1's serialized_id.
         &principal(1),
         &Proposal {
+            title: Some("A Reasonable Title".to_string()),
             summary: "this one should not make it though...".to_string(),
             action: Some(proposal::Action::Motion(Motion {
                 motion_text: "so many proposals!".to_string(),
@@ -7030,6 +7063,7 @@ fn test_max_number_of_proposals_with_ballots() {
             // Must match neuron 1's serialized_id.
             &principal(1),
             &Proposal {
+                title: Some("A Reasonable Title".to_string()),
                 summary: "NnsCanisterUpgrade should go through despite the limit".to_string(),
                 action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
                     nns_function: NnsFunction::NnsCanisterUpgrade as i32,
@@ -7061,6 +7095,7 @@ fn test_max_number_of_proposals_with_ballots() {
         // Must match neuron 1's serialized_id.
         &principal(1),
         &Proposal {
+            title: Some("A Reasonable Title".to_string()),
             summary: "this one should not make it though...".to_string(),
             action: Some(proposal::Action::Motion(Motion {
                 motion_text: "so many proposals!".to_string(),
@@ -7079,6 +7114,7 @@ fn test_max_number_of_proposals_with_ballots() {
         // Must match neuron 1's serialized_id.
         &principal(1),
         &Proposal {
+            title: Some("A Reasonable Title".to_string()),
             summary: "Now it should work!".to_string(),
             action: Some(proposal::Action::Motion(Motion {
                 motion_text: "did it?".to_string(),
@@ -7102,6 +7138,7 @@ fn test_proposal_gc() {
                     decided_timestamp_seconds: 60,
                     reward_event_round: 1,
                     proposal: Some(Proposal {
+                        title: Some("A Reasonable Title".to_string()),
                         action: Some(if x % 2 == 0 {
                             proposal::Action::ManageNeuron(Box::new(ManageNeuron {
                                 ..Default::default()
@@ -7180,6 +7217,7 @@ fn test_id_v1_works() {
         // Must match neuron 1's serialized_id.
         &principal(2),
         &Proposal {
+            title: Some("A Reasonable Title".to_string()),
             action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
                 neuron_id_or_subaccount: None,
                 id: Some(NeuronId { id: 1 }),
@@ -8505,6 +8543,7 @@ fn wait_for_quiet_test_helper(
             // Must match neuron 1's serialized_id.
             &principal(0),
             &Proposal {
+                title: Some("A Reasonable Title".to_string()),
                 summary: "Summary".to_string(),
                 action: Some(proposal::Action::Motion(Motion {
                     motion_text: "Some proposal".to_string(),
@@ -9395,6 +9434,7 @@ fn test_known_neurons() {
         // Must match neuron 1's serialized_id.
         &principal(3),
         &Proposal {
+            title: Some("A Reasonable Title".to_string()),
             summary: "proposal 1 summary".to_string(),
             action: Some(proposal::Action::RegisterKnownNeuron(KnownNeuron {
                 id: Some(NeuronId { id: 1 }),
@@ -9413,6 +9453,7 @@ fn test_known_neurons() {
         // Must match neuron 1's serialized_id.
         &principal(3),
         &Proposal {
+            title: Some("A Reasonable Title".to_string()),
             summary: "proposal 2 summary".to_string(),
             action: Some(proposal::Action::RegisterKnownNeuron(KnownNeuron {
                 id: Some(NeuronId { id: 2 }),
@@ -9460,6 +9501,7 @@ fn test_known_neurons() {
         // Must match neuron 1's serialized_id.
         &principal(3),
         &Proposal {
+            title: Some("A Reasonable Title".to_string()),
             summary: "proposal 3 summary".to_string(),
             action: Some(proposal::Action::RegisterKnownNeuron(KnownNeuron {
                 id: Some(NeuronId { id: 2 }),
@@ -9480,4 +9522,33 @@ fn test_known_neurons() {
             .name,
         "Zwei".to_string()
     );
+}
+
+#[test]
+fn test_no_proposal_title_is_invalid() {
+    let result = validate_proposal_title(&None);
+    assert!(!result.is_ok());
+}
+
+#[test]
+fn test_short_proposal_title_is_invalid() {
+    let result = validate_proposal_title(&Some("hi".to_string()));
+    assert!(!result.is_ok());
+}
+
+#[test]
+fn test_long_proposal_title_is_invalid() {
+    let mut long_title = String::new();
+    for _ in 0..300 {
+        long_title.push('Z');
+    }
+
+    let result = validate_proposal_title(&Some(long_title));
+    assert!(!result.is_ok());
+}
+
+#[test]
+fn test_accept_reasonable_proposal_title() {
+    let result = validate_proposal_title(&Some("When In The Course of Human Events".to_string()));
+    assert!(result.is_ok());
 }
