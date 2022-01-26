@@ -116,6 +116,7 @@ class Experiment1(workload_experiment.WorkloadExperiment):
                 t_average,
                 t_max,
                 t_min,
+                _,
                 total_requests,
                 num_success,
                 num_failure,

@@ -7,6 +7,21 @@ import pybars
 import report
 
 
+def add_plot(name: str, xlabel: str, ylabel: str, x: [str], plots: [([str], str)]):
+    """Return a dictionary representing the given plot for templating.."""
+    return {
+        f"plot-{name}": [{"y": y, "x": x, "name": name} for (y, name) in plots],
+        f"layout-{name}": {
+            "yaxis": {
+                "title": ylabel,
+                "rangemode": "tozero",
+                "autorange": "true",
+            },
+            "xaxis": {"title": xlabel},
+        },
+    }
+
+
 def add_file(base, path, alt):
     content = ""
     try:
@@ -30,6 +45,7 @@ def generate_report(base, githash, timestamp):
     report_file = os.path.join(base, "report.html")
     http_request_duration = []
     wg_http_latency = []
+    wg_http_latency_99 = []
     wg_failure_rate = []
 
     with open(report_file, "w") as outfile:
@@ -43,9 +59,17 @@ def generate_report(base, githash, timestamp):
                 files = [os.path.join(path, f) for f in os.listdir(path) if f.startswith("summary_machine_")]
                 print("Files: ", files)
                 if len(files) > 0:
-                    (failure_rate, t_median, t_average, t_max, t_min, total_requests, _, _) = report.evaluate_summaries(
-                        files
-                    )
+                    (
+                        failure_rate,
+                        t_median,
+                        t_average,
+                        t_max,
+                        t_min,
+                        t_percentile,
+                        total_requests,
+                        _,
+                        _,
+                    ) = report.evaluate_summaries(files)
 
                     compiler = pybars.Compiler()
                     template = compiler.compile(source)
@@ -57,6 +81,9 @@ def generate_report(base, githash, timestamp):
                             "failure_rate_color": "green" if failure_rate < 0.01 else "red",
                             "t_median": "{:.2f}".format(t_median),
                             "t_average": "{:.2f}".format(t_average),
+                            "t_99": "{:.2f}".format(t_percentile[99]),
+                            "t_95": "{:.2f}".format(t_percentile[95]),
+                            "t_90": "{:.2f}".format(t_percentile[90]),
                             "t_max": "{:.2f}".format(t_max),
                             "t_min": "{:.2f}".format(t_min),
                             "total_requests": total_requests,
@@ -64,6 +91,7 @@ def generate_report(base, githash, timestamp):
                     )
 
                     wg_http_latency.append(t_median)
+                    wg_http_latency_99.append(t_percentile[99])
                     wg_failure_rate.append(failure_rate * 100)
 
                 # Search for flamegraph
@@ -179,31 +207,24 @@ def generate_report(base, githash, timestamp):
         data.update(
             {
                 "experiment-details": experiment_details,
-                "plot-http-latency": [{"y": [e[1] for e in http_request_duration], "x": data["experiment"]["xlabels"]}],
-                "plot-wg-http-latency": [{"y": wg_http_latency, "x": data["experiment"]["xlabels"]}],
-                "plot-wg-failure-rate": [{"y": wg_failure_rate, "x": data["experiment"]["xlabels"]}],
-                "layout-http-latency": {
-                    "yaxis": {"title": "latency [ms]"},
-                    "xaxis": {"title": data["experiment"]["xtitle"]},
-                },
-                "layout-wg-http-latency": {
-                    "yaxis": {"title": "latency [ms]"},
-                    "xaxis": {"title": data["experiment"]["xtitle"]},
-                },
-                "layout-wg-failure-rate": {
-                    "yaxis": {"title": "failure rate [%]"},
-                    "xaxis": {"title": data["experiment"]["xtitle"]},
-                },
             }
         )
 
-        data["lscpu"] = add_file(f"{githash}/{timestamp}", ["lscpu.stdout.txt"], "lscpu data missing")
+        exp = data["experiment"]
+        plots = [([e[1] for e in http_request_duration], "http duration")]
+        data.update(add_plot("http-latency", exp["xtitle"], "latency [s]", exp["xlabels"], plots))
 
-        data["free"] = add_file(f"{githash}/{timestamp}", ["free.stdout.txt"], "free data missing")
+        plots = [(wg_failure_rate, "failure rate")]
+        data.update(add_plot("wg-failure-rate", exp["xtitle"], "failure rate [%]", exp["xlabels"], plots))
 
-        data["subnet_info"] = add_file(f"{githash}/{timestamp}", ["subnet_info.json"], "subnet info data missing")
+        plots = [(wg_http_latency, "median"), (wg_http_latency_99, "99th percentile")]
+        data.update(add_plot("wg-http-latency", exp["xtitle"], "latency [ms]", exp["xlabels"], plots))
 
-        data["topology"] = add_file(f"{githash}/{timestamp}", ["topology.json"], "topology data missing")
+        dirname = f"{githash}/{timestamp}"
+        data["lscpu"] = add_file(dirname, ["lscpu.stdout.txt"], "lscpu data missing")
+        data["free"] = add_file(dirname, ["free.stdout.txt"], "free data missing")
+        data["subnet_info"] = add_file(dirname, ["subnet_info.json"], "subnet info data missing")
+        data["topology"] = add_file(dirname, ["topology.json"], "topology data missing")
 
         output = template(data)
         outfile.write(output)

@@ -71,7 +71,7 @@ if __name__ == "__main__":
         rps.append(load_total)
         print(f"🚀 Testing with load: {load_total} and updates={exp.use_updates}")
 
-        failure_rate, t_median, _, _, _, _, num_succ, _ = exp.run_experiment(
+        failure_rate, t_median, _, _, _, _, _, num_succ, _ = exp.run_experiment(
             {
                 "load_total": load_total,
                 "payload_size": FLAGS.payload_size,

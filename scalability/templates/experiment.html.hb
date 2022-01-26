@@ -86,17 +86,17 @@
     {{{experiment-details}}}
 
     
-    <!-- <h2>HTTP request latency</h2> -->
+    <h2>HTTP request latency</h2>
 
-    <!-- This is measured by the replica -->
+    This is measured by the replica
 
-    <!-- <div id="plot-http-latency" style="width:600px;height:250px;"></div> -->
-    <!-- <script> -->
-    <!--   plot = document.getElementById('plot-http-latency'); -->
-    <!--   Plotly.newPlot( plot, {{{plot-http-latency}}}, {{{layout-http-latency}}} ); -->
-    <!-- </script> -->
+    <div id="plot-http-latency" style="width:600px;height:250px;"></div>
+    <script>
+      plot = document.getElementById('plot-http-latency');
+      Plotly.newPlot( plot, {{{plot-http-latency}}}, {{{layout-http-latency}}} );
+    </script>
     
-    <h2>Average workload generator request latency</h2>
+    <h2>Median workload generator request latency</h2>
     
     This is measured by the workload generator (client side).
     It's the median latency over all requests, including failed ones.
@@ -110,17 +110,17 @@
     Check the maximum latency in each of the iterations below to get more details.
     </div>
     
-    <div id="plot-wg-http-latency" style="width:600px;height:250px;"></div>
+    <div id="plot-wg-http-latency" style="max-height:500px;"></div>
     <script>
       plot = document.getElementById('plot-wg-http-latency');
       Plotly.newPlot( plot, {{{plot-wg-http-latency}}}, {{{layout-wg-http-latency}}} );
     </script>
-    
+
     <h2>Workload generator failure rate</h2>
 
     This is measured by the workload generator (client side).
 
-    <div id="plot-wg-failure-rate" style="width:600px;height:250px;"></div>
+    <div id="plot-wg-failure-rate" style="max-height:500px;"></div>
     <script>
       plot = document.getElementById('plot-wg-failure-rate');
       Plotly.newPlot( plot, {{{plot-wg-failure-rate}}}, {{{layout-wg-failure-rate}}} );
@@ -147,6 +147,9 @@
     Latency average: {{this.t_average}}ms<br>
     Latency max: {{this.t_max}}ms<br>
     Latency min: {{this.t_min}}ms<br>
+    99th percentile latency: {{this.t_99}}ms<br>
+    95th percentile latency: {{this.t_95}}ms<br>
+    90th percentile latency: {{this.t_90}}ms<br>
     Total number of requests executed: {{this.total_requests}}<br>
     <br>
     Median finalization rate: {{this.prometheus.finalization_rate.1}}<br>
