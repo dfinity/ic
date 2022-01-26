@@ -44,8 +44,8 @@ use ic_transport::transport::create_transport;
 use ic_types::transport::TransportErrorCode;
 use ic_types::{
     transport::{
-        FlowId, FlowTag, TransportClientType, TransportConfig, TransportFlowConfig,
-        TransportFlowInfo, TransportPayload, TransportStateChange,
+        FlowId, FlowTag, TransportConfig, TransportFlowConfig, TransportFlowInfo, TransportPayload,
+        TransportStateChange,
     },
     NodeId, PrincipalId, RegistryVersion, SubnetId,
 };
@@ -92,7 +92,6 @@ enum TestClientErrorCode {
 
 struct TestClient {
     transport: Arc<dyn Transport>,
-    client_type: TransportClientType,
     _event_handler: Arc<TestClientEventHandler>,
     prev: NodeId,
     next: NodeId,
@@ -122,8 +121,7 @@ impl TestClient {
             active_flows: active_flows.clone(),
             log: log.clone(),
         });
-        let client_type = TransportClientType::P2P;
-        if let Err(e) = transport.register_client(client_type, event_handler.clone()) {
+        if let Err(e) = transport.register_client(event_handler.clone()) {
             panic!("Failed to register client: {:?}", e);
         };
 
@@ -138,7 +136,6 @@ impl TestClient {
 
         TestClient {
             transport,
-            client_type,
             _event_handler: event_handler,
             prev: *prev,
             next: *next,
@@ -154,12 +151,7 @@ impl TestClient {
 
     fn start_connections(&self) -> Result<(), TransportErrorCode> {
         self.transport
-            .start_connections(
-                self.client_type,
-                &self.prev,
-                &self.prev_node_record,
-                self.registry_version,
-            )
+            .start_connections(&self.prev, &self.prev_node_record, self.registry_version)
             .map_err(|e| {
                 warn!(
                     self.log,
@@ -168,12 +160,7 @@ impl TestClient {
                 e
             })?;
         self.transport
-            .start_connections(
-                self.client_type,
-                &self.next,
-                &self.next_node_record,
-                self.registry_version,
-            )
+            .start_connections(&self.next, &self.next_node_record, self.registry_version)
             .map_err(|e| {
                 warn!(
                     self.log,
@@ -186,7 +173,7 @@ impl TestClient {
 
     fn stop_connections(&self) -> Result<(), TransportErrorCode> {
         self.transport
-            .stop_connections(self.client_type, &self.prev, self.registry_version)
+            .stop_connections(&self.prev, self.registry_version)
             .map_err(|e| {
                 warn!(
                     self.log,
@@ -195,7 +182,7 @@ impl TestClient {
                 e
             })?;
         self.transport
-            .stop_connections(self.client_type, &self.next, self.registry_version)
+            .stop_connections(&self.next, self.registry_version)
             .map_err(|e| {
                 warn!(
                     self.log,
@@ -260,7 +247,7 @@ impl TestClient {
             let flow_id = msg.flow_id;
             let msg_len = msg.payload.0.len();
             self.transport
-                .send(self.client_type, &self.next, flow_id.flow_tag, msg.payload)
+                .send(&self.next, flow_id.flow_tag, msg.payload)
                 .map_err(|e| {
                     warn!(
                         self.log,
@@ -287,17 +274,12 @@ impl TestClient {
         count: usize,
         flow_tag: FlowTag,
     ) -> Result<(), TestClientErrorCode> {
-        let send_flow = FlowId::new(TransportClientType::P2P, self.next, flow_tag);
-        let receive_flow = FlowId::new(TransportClientType::P2P, self.prev, flow_tag);
+        let send_flow = FlowId::new(self.next, flow_tag);
+        let receive_flow = FlowId::new(self.prev, flow_tag);
         let send_msg = TestClient::build_message();
         let send_copy = send_msg.clone();
         self.transport
-            .send(
-                self.client_type,
-                &send_flow.peer_id,
-                send_flow.flow_tag,
-                send_msg,
-            )
+            .send(&send_flow.peer_id, send_flow.flow_tag, send_msg)
             .map_err(|e| {
                 warn!(
                     self.log,

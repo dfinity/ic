@@ -73,12 +73,9 @@ use ic_interfaces::transport::{AsyncTransportEventHandler, Transport};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::node::v1::NodeRecord;
-use ic_types::transport::{
-    FlowTag, TransportClientType, TransportConfig, TransportErrorCode, TransportPayload,
-};
+use ic_types::transport::{FlowTag, TransportConfig, TransportErrorCode, TransportPayload};
 use ic_types::{NodeId, RegistryVersion};
-
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 use std::net::IpAddr;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock, Weak};
@@ -109,7 +106,7 @@ impl TransportImpl {
             control_plane_metrics: ControlPlaneMetrics::new(metrics_registry.clone()),
             send_queue_metrics: SendQueueMetrics::new(metrics_registry),
             log,
-            client_map: RwLock::new(HashMap::new()),
+            client_map: RwLock::new(None),
             weak_self: RwLock::new(Weak::new()),
         });
         *arc.weak_self.write().unwrap() = Arc::downgrade(&arc);
@@ -144,40 +141,36 @@ pub fn create_transport(
 impl Transport for TransportImpl {
     fn register_client(
         &self,
-        client_type: TransportClientType,
         event_handler: Arc<dyn AsyncTransportEventHandler>,
     ) -> Result<(), TransportErrorCode> {
-        self.init_client(client_type, event_handler)
+        self.init_client(event_handler)
     }
 
     fn start_connections(
         &self,
-        client_type: TransportClientType,
         peer_id: &NodeId,
         node_record: &NodeRecord,
         registry_version: RegistryVersion,
     ) -> Result<(), TransportErrorCode> {
-        self.start_peer_connections(peer_id, node_record, client_type, registry_version)
+        self.start_peer_connections(peer_id, node_record, registry_version)
     }
 
     fn stop_connections(
         &self,
-        client_type: TransportClientType,
         peer_id: &NodeId,
         registry_version: RegistryVersion,
     ) -> Result<(), TransportErrorCode> {
-        self.stop_peer_connections(client_type, peer_id, registry_version)
+        self.stop_peer_connections(peer_id, registry_version)
     }
 
     fn send(
         &self,
-        client_type: TransportClientType,
         peer_id: &NodeId,
         flow_tag: FlowTag,
         message: TransportPayload,
     ) -> Result<(), TransportErrorCode> {
         let client_map = self.client_map.read().unwrap();
-        let client_state = match client_map.get(&client_type) {
+        let client_state = match client_map.as_ref() {
             Some(client_state) => client_state,
             None => return Err(TransportErrorCode::TransportClientNotFound),
         };
@@ -195,11 +188,9 @@ impl Transport for TransportImpl {
         }
     }
 
-    fn clear_send_queues(&self, client_type: TransportClientType, peer_id: &NodeId) {
+    fn clear_send_queues(&self, peer_id: &NodeId) {
         let client_map = self.client_map.read().unwrap();
-        let client_state = client_map
-            .get(&client_type)
-            .expect("Transport client not found");
+        let client_state = client_map.as_ref().expect("Transport client not found");
         let peer_state = client_state
             .peer_map
             .get(peer_id)
@@ -212,16 +203,9 @@ impl Transport for TransportImpl {
             });
     }
 
-    fn clear_send_queue(
-        &self,
-        client_type: TransportClientType,
-        peer_id: &NodeId,
-        flow_tag: FlowTag,
-    ) {
+    fn clear_send_queue(&self, peer_id: &NodeId, flow_tag: FlowTag) {
         let client_map = self.client_map.read().unwrap();
-        let client_state = client_map
-            .get(&client_type)
-            .expect("Transport client not found");
+        let client_state = client_map.as_ref().expect("Transport client not found");
         let peer_state = client_state
             .peer_map
             .get(peer_id)

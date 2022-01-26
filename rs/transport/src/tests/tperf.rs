@@ -53,8 +53,8 @@ use ic_protobuf::registry::node::v1::{
 use ic_transport::transport::create_transport;
 use ic_types::{
     transport::{
-        FlowId, FlowTag, TransportClientType, TransportConfig, TransportErrorCode,
-        TransportFlowConfig, TransportFlowInfo, TransportPayload, TransportStateChange,
+        FlowId, FlowTag, TransportConfig, TransportErrorCode, TransportFlowConfig,
+        TransportFlowInfo, TransportPayload, TransportStateChange,
     },
     NodeId, RegistryVersion,
 };
@@ -167,7 +167,6 @@ impl RateLimiter for NoopRateLimiter {
 
 struct TestClient {
     transport: Arc<dyn Transport>,
-    client_type: TransportClientType,
     _event_handler: Arc<TestClientEventHandler>,
     peer: NodeId,
     peer_node_record: NodeRecord,
@@ -192,8 +191,7 @@ impl TestClient {
             active_flows: active_flows.clone(),
             log: log.clone(),
         });
-        let client_type = TransportClientType::P2P;
-        if let Err(e) = transport.register_client(client_type, event_handler.clone()) {
+        if let Err(e) = transport.register_client(event_handler.clone()) {
             warn!(log, "Failed to register client: {:?}", e);
             exit(1);
         };
@@ -204,7 +202,6 @@ impl TestClient {
 
         TestClient {
             transport,
-            client_type,
             _event_handler: event_handler,
             peer: *peer,
             peer_node_record,
@@ -217,7 +214,6 @@ impl TestClient {
 
     fn start_connections(&self) {
         if let Err(e) = self.transport.start_connections(
-            self.client_type,
             &self.peer,
             &self.peer_node_record,
             self.registry_version,
@@ -253,12 +249,10 @@ impl TestClient {
         let mut payload = TransportPayload(serialize(&message).unwrap());
         let mut qfull = 0;
         loop {
-            match self.transport.send(
-                self.client_type,
-                &self.peer,
-                FlowTag::from(FLOW_TAG),
-                payload,
-            ) {
+            match self
+                .transport
+                .send(&self.peer, FlowTag::from(FLOW_TAG), payload)
+            {
                 Ok(()) => return qfull,
                 Err(TransportErrorCode::TransportBusy(unsent)) => {
                     qfull += 1;

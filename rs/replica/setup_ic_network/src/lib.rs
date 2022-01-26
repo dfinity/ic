@@ -53,7 +53,7 @@ use ic_types::{
     filetree_sync::{FileTreeSyncArtifact, FileTreeSyncId},
     malicious_flags::MaliciousFlags,
     replica_config::ReplicaConfig,
-    transport::{FlowTag, TransportClientType, TransportConfig},
+    transport::{FlowTag, TransportConfig},
     NodeId, SubnetId,
 };
 use std::sync::{
@@ -184,7 +184,7 @@ pub fn create_networking_stack(
         fetch_gossip_config(registry_client.clone(), subnet_id),
     ));
     transport
-        .register_client(TransportClientType::P2P, event_handler.clone())
+        .register_client(event_handler.clone())
         .map_err(|e| format!("transport registration failed: {:?}", e))?;
 
     // Now we setup the Artifact Pools and the manager.

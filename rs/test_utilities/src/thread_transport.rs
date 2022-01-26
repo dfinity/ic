@@ -1,9 +1,7 @@
 use ic_interfaces::transport::{AsyncTransportEventHandler, Transport};
 use ic_logger::{info, ReplicaLogger};
 use ic_protobuf::registry::node::v1::NodeRecord;
-use ic_types::transport::{
-    FlowId, FlowTag, TransportClientType, TransportErrorCode, TransportPayload,
-};
+use ic_types::transport::{FlowId, FlowTag, TransportErrorCode, TransportPayload};
 use ic_types::{NodeId, RegistryVersion};
 
 use std::collections::{BTreeMap, HashMap};
@@ -14,7 +12,7 @@ use std::sync::{Arc, Mutex, RwLock, Weak};
 struct Deferred {
     // messages that cannot be delivered until client is registered
     // and gossip calls start nodes.
-    stash: Vec<(TransportClientType, TransportPayload)>,
+    stash: Vec<TransportPayload>,
     started: bool,
 }
 
@@ -22,7 +20,7 @@ pub struct ThreadPort {
     id: NodeId,
     // Access to full hub to route messages across threads
     hub_access: HubAccess,
-    client_map: RwLock<HashMap<TransportClientType, ClientState>>,
+    client_map: RwLock<Option<ClientState>>,
     log: ReplicaLogger,
     deferred: Mutex<HashMap<NodeId, Deferred>>,
     weak_self: RwLock<Weak<ThreadPort>>,
@@ -40,7 +38,7 @@ impl ThreadPort {
         let thread_port = Arc::new(Self {
             id,
             hub_access,
-            client_map: RwLock::new(HashMap::new()),
+            client_map: RwLock::new(None),
             log,
             deferred: Default::default(),
             weak_self: RwLock::new(Weak::new()),
@@ -49,20 +47,15 @@ impl ThreadPort {
         thread_port
     }
 
-    fn replay_deferred(&self, client_type: TransportClientType, node_id: NodeId) {
+    fn replay_deferred(&self, node_id: NodeId) {
         let replay = {
             let mut deferred_guard = self.deferred.lock().unwrap();
             let deferred_map = &mut *deferred_guard;
             let mut replay = Vec::new();
-            let mut i = 0;
+            let i = 0;
             let mut deferred = deferred_map.entry(node_id).or_default();
             while i != deferred.stash.len() {
-                let elt = &mut deferred.stash[i];
-                if elt.0 == client_type {
-                    replay.push(deferred.stash.swap_remove(i));
-                } else {
-                    i += 1;
-                }
+                replay.push(deferred.stash.swap_remove(i));
             }
             deferred.started = true;
             replay
@@ -74,7 +67,7 @@ impl ThreadPort {
             info!(
                 self.log,
                 "Replaying deferred message {:?}: From node {:?} to node {:?}",
-                elt.1.clone(),
+                elt.clone(),
                 node_id,
                 self.id
             );
@@ -83,7 +76,7 @@ impl ThreadPort {
             let id = self.id;
             tokio::task::spawn(async move {
                 if arc_self
-                    .send_helper(client_type, node_id, id, elt.1.clone())
+                    .send_helper(node_id, id, elt.clone())
                     .await
                     .is_err()
                 {
@@ -97,7 +90,6 @@ impl ThreadPort {
     // node ids
     async fn send_helper(
         &self,
-        client_type: TransportClientType,
         src_node_id: NodeId,
         dest_node_id: NodeId,
         message: TransportPayload,
@@ -125,9 +117,7 @@ impl ThreadPort {
         // 2.
         let event_handler = {
             let client_map = destination_node.client_map.write().unwrap();
-            client_map
-                .get(&client_type)
-                .map(|s| s.event_handler.clone())
+            client_map.as_ref().map(|s| s.event_handler.clone())
         };
 
         // 3.
@@ -137,11 +127,8 @@ impl ThreadPort {
 
             // Stash
             if !deferred.started || event_handler.is_none() {
-                println!(
-                    "Node {} has no client of type {:?} registered",
-                    destination_node.id, client_type
-                );
-                deferred.stash.push((client_type, message));
+                println!("Node {} is not registered", destination_node.id,);
+                deferred.stash.push(message);
                 return Ok(());
             } else {
                 event_handler.unwrap()
@@ -151,7 +138,6 @@ impl ThreadPort {
         event_handler
             .send_message(
                 FlowId {
-                    client_type,
                     peer_id: src_node_id,
                     flow_tag: FlowTag::from(0),
                 },
@@ -193,18 +179,16 @@ impl Hub {
 impl Transport for ThreadPort {
     fn register_client(
         &self,
-        client_type: TransportClientType,
         event_handler: Arc<dyn AsyncTransportEventHandler>,
     ) -> Result<(), TransportErrorCode> {
         info!(self.log, "Node{} -> Client Registered", self.id);
         let mut client_map = self.client_map.write().unwrap();
-        client_map.insert(client_type, ClientState { event_handler });
+        client_map.replace(ClientState { event_handler });
         Ok(())
     }
 
     fn start_connections(
         &self,
-        client_type: TransportClientType,
         node_id: &NodeId,
         _record: &NodeRecord,
         _registry_version: RegistryVersion,
@@ -213,7 +197,7 @@ impl Transport for ThreadPort {
             self.log,
             "Node{} -> Connections to peer {} started", self.id, node_id
         );
-        self.replay_deferred(client_type, *node_id);
+        self.replay_deferred(*node_id);
         Ok(())
     }
 
@@ -222,7 +206,6 @@ impl Transport for ThreadPort {
     /// queues for the peer will be discarded.
     fn stop_connections(
         &self,
-        _client_type: TransportClientType,
         peer_id: &NodeId,
         _registry_version: RegistryVersion,
     ) -> Result<(), TransportErrorCode> {
@@ -237,7 +220,6 @@ impl Transport for ThreadPort {
     /// into the appropriate TxQ based on the TransportQueueConfig.
     fn send(
         &self,
-        client_type: TransportClientType,
         peer_id: &NodeId,
         _flow_tag: FlowTag,
         message: TransportPayload,
@@ -246,21 +228,11 @@ impl Transport for ThreadPort {
         let id = self.id;
         let weak_self = self.weak_self.read().unwrap().clone();
         let arc_self = weak_self.upgrade().unwrap();
-        tokio::task::spawn(async move {
-            arc_self
-                .send_helper(client_type, id, peer_id, message)
-                .await
-        });
+        tokio::task::spawn(async move { arc_self.send_helper(id, peer_id, message).await });
         Ok(())
     }
 
-    fn clear_send_queues(&self, _client_type: TransportClientType, _peer_id: &NodeId) {}
+    fn clear_send_queues(&self, _peer_id: &NodeId) {}
 
-    fn clear_send_queue(
-        &self,
-        _client_type: TransportClientType,
-        _peer_id: &NodeId,
-        _flow_tag: FlowTag,
-    ) {
-    }
+    fn clear_send_queue(&self, _peer_id: &NodeId, _flow_tag: FlowTag) {}
 }

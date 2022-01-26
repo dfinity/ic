@@ -3,8 +3,7 @@
 use async_trait::async_trait;
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_types::transport::{
-    FlowId, FlowTag, TransportClientType, TransportErrorCode, TransportPayload,
-    TransportStateChange,
+    FlowId, FlowTag, TransportErrorCode, TransportPayload, TransportStateChange,
 };
 use ic_types::{NodeId, RegistryVersion};
 use std::{fmt::Debug, sync::Arc};
@@ -17,7 +16,6 @@ pub trait Transport: Send + Sync {
     /// future interactions with the transport layer.
     fn register_client(
         &self,
-        client_type: TransportClientType,
         async_event_handler: Arc<dyn AsyncTransportEventHandler>,
     ) -> Result<(), TransportErrorCode>;
 
@@ -31,7 +29,6 @@ pub trait Transport: Send + Sync {
     ///   connection requests from the peer.
     fn start_connections(
         &self,
-        client_type: TransportClientType,
         peer: &NodeId,
         node_record: &NodeRecord,
         registry_version: RegistryVersion,
@@ -42,7 +39,6 @@ pub trait Transport: Send + Sync {
     /// queues for the peer will be discarded.
     fn stop_connections(
         &self,
-        client_type: TransportClientType,
         peer_id: &NodeId,
         registry_version: RegistryVersion,
     ) -> Result<(), TransportErrorCode>;
@@ -51,23 +47,17 @@ pub trait Transport: Send + Sync {
     /// into the appropriate TxQ based on the TransportQueueConfig.
     fn send(
         &self,
-        client_type: TransportClientType,
         peer_id: &NodeId,
         flow_tag: FlowTag,
         message: TransportPayload,
     ) -> Result<(), TransportErrorCode>;
 
     /// Clear any unsent messages in all the send queues for the peer.
-    fn clear_send_queues(&self, client_type: TransportClientType, peer_id: &NodeId);
+    fn clear_send_queues(&self, peer_id: &NodeId);
 
     /// Clear any unsent messages in the send queue for the given peer and flow
     /// tag.
-    fn clear_send_queue(
-        &self,
-        client_type: TransportClientType,
-        peer_id: &NodeId,
-        flow_tag: FlowTag,
-    );
+    fn clear_send_queue(&self, peer_id: &NodeId, flow_tag: FlowTag);
 }
 
 #[derive(Debug)]
