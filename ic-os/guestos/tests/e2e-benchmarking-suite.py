@@ -95,6 +95,24 @@ def main(argv):
     subprocess.run(
         [
             "python3",
+            "max-capacity-experiment-1-inc-payload.py",
+            "--duration",
+            "10",
+            "--max_block_payload_size",
+            "50",
+            "--use_updates=True",
+            "--num_workload_generators",
+            "1",
+            "--max_iterations",
+            "1",
+        ]
+        + base_arguments,
+        check=True,
+    )
+
+    subprocess.run(
+        [
+            "python3",
             "run_experiment_2.py",
             "--duration",
             "10",

@@ -24,6 +24,7 @@ gflags.DEFINE_float("max_failure_rate", 0.2, "Maximum failure rate at which to c
 gflags.DEFINE_integer(
     "update_max_t_median", 5000, "Maximum update median latency at which to consider the iteration successful."
 )
+gflags.DEFINE_integer("max_iterations", 10, "Maximum number of iterations needed in this run.")
 
 # Maximum failure rate and median query duration limit for when to
 # stop the benchmark.
@@ -35,7 +36,7 @@ gflags.DEFINE_integer("stop_t_median", 600000, "Maximum median latency before ab
 if __name__ == "__main__":
     experiment.parse_command_line_args()
 
-    experiment_name = "System_Baseline_Maximum_Capacity_Inc_Payload"
+    experiment_name = "system-baseline-maximum-capacity-inc-payload"
     exp = run_experiment_1.Experiment1()
     exp.start_experiment()
 
@@ -61,7 +62,7 @@ if __name__ == "__main__":
         print(f"🚀 Testing with payload_size: {curr_payload_size}")
 
         t_start = int(time.time())
-        failure_rate, t_median, _, _, _, _, num_succ, _ = exp.run_experiment(
+        failure_rate, t_median, _, _, _, _, _, num_succ, _ = exp.run_experiment(
             {
                 "load_total": FLAGS.rps,
                 "duration": FLAGS.iter_duration,
@@ -103,5 +104,8 @@ if __name__ == "__main__":
         )
 
         print(f"🚀  ... maximum capacity so far is {payload_size_max}")
+
+        if iteration >= FLAGS.max_iterations:
+            break
 
     exp.end_experiment()
