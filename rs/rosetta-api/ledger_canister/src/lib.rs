@@ -730,7 +730,7 @@ pub struct Ledger {
     pub balances: LedgerBalances,
     pub blockchain: Blockchain,
     // A cap on the maximum number of accounts
-    maximum_number_of_accounts: usize,
+    pub maximum_number_of_accounts: usize,
     // When maximum number of accounts is exceeded, a specified number of
     // accounts with lowest balances are removed
     accounts_overflow_trim_quantity: usize,
@@ -774,7 +774,7 @@ impl Default for Ledger {
         Self {
             balances: LedgerBalances::default(),
             blockchain: Blockchain::default(),
-            maximum_number_of_accounts: 50_000_000,
+            maximum_number_of_accounts: 28_000_000,
             accounts_overflow_trim_quantity: 100_000,
             minting_account_id: None,
             blocks_notified: IntMap::new(),

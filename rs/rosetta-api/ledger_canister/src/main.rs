@@ -437,6 +437,7 @@ fn post_upgrade() {
         *ledger = serde_cbor::from_reader(&mut stable::StableReader::new())
             .expect("Decoding stable memory failed");
 
+        ledger.maximum_number_of_accounts = 28_000_000;
         set_certified_data(
             &ledger
                 .blockchain
