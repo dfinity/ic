@@ -10,19 +10,20 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use crate::consensus::{BasicSignature, Block, BlockPayload, MultiSignature, MultiSignatureShare};
+pub use crate::consensus::ecdsa_refs::{
+    EcdsaBlockReader, IDkgTranscriptOperationRef, IDkgTranscriptParamsRef,
+    PreSignatureQuadrupleRef, QuadrupleInCreation, RequestId, RequestIdTag,
+    ThresholdEcdsaSigInputsRef, TranscriptLookupError, TranscriptRef,
+};
+use crate::consensus::{BasicSignature, MultiSignature, MultiSignatureShare};
 use crate::crypto::{
     canister_threshold_sig::idkg::{
         IDkgDealing, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptParams, IDkgTranscriptType,
     },
-    canister_threshold_sig::{
-        PreSignatureQuadruple, ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
-        ThresholdEcdsaSigShare,
-    },
+    canister_threshold_sig::{ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigShare},
     CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator,
 };
 use crate::{Height, NodeId};
-use phantom_newtype::Id;
 
 pub type EcdsaSignature = ThresholdEcdsaCombinedSignature;
 
@@ -35,10 +36,10 @@ pub struct EcdsaDataPayload {
     pub signature_agreements: BTreeMap<RequestId, EcdsaSignature>,
 
     /// The `RequestIds` for which we are currently generating signatures.
-    pub ongoing_signatures: BTreeMap<RequestId, ThresholdEcdsaSigInputs>,
+    pub ongoing_signatures: BTreeMap<RequestId, ThresholdEcdsaSigInputsRef>,
 
     /// ECDSA transcript quadruples that we can use to create ECDSA signatures.
-    pub available_quadruples: BTreeMap<QuadrupleId, PreSignatureQuadruple>,
+    pub available_quadruples: BTreeMap<QuadrupleId, PreSignatureQuadrupleRef>,
 
     /// Ecdsa Quadruple in creation.
     pub quadruples_in_creation: BTreeMap<QuadrupleId, QuadrupleInCreation>,
@@ -48,6 +49,9 @@ pub struct EcdsaDataPayload {
 
     /// Progress of creating the next ECDSA key transcript.
     pub next_key_transcript_creation: Option<KeyTranscriptCreation>,
+
+    /// Transcripts created at this height.
+    pub idkg_transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
 }
 
 /// The creation of an ecdsa key transcript goes through one of the two paths below:
@@ -67,13 +71,13 @@ pub struct EcdsaDataPayload {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum KeyTranscriptCreation {
     // Configuration to create initial random transcript.
-    RandomTranscriptParams(RandomTranscriptParams),
+    RandomTranscriptParams(IDkgTranscriptParamsRef),
     // Configuration to create initial key transcript by resharing the random transcript.
-    ReshareOfMaskedParams(ReshareOfMaskedParams),
+    ReshareOfMaskedParams(IDkgTranscriptParamsRef),
     // Configuration to create next key transcript by resharing the current key transcript.
-    ReshareOfUnmaskedParams(ReshareOfUnmaskedParams),
+    ReshareOfUnmaskedParams(IDkgTranscriptParamsRef),
     // Created
-    Created(UnmaskedTranscript),
+    Created(TranscriptRef),
 }
 
 impl EcdsaDataPayload {
@@ -81,7 +85,7 @@ impl EcdsaDataPayload {
     /// results yet.
     pub fn iter_transcript_configs_in_creation(
         &self,
-    ) -> Box<dyn Iterator<Item = &IDkgTranscriptParams> + '_> {
+    ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
         let iter =
             self.next_key_transcript_creation
                 .iter()
@@ -106,16 +110,19 @@ impl EcdsaDataPayload {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct EcdsaSummaryPayload {
     /// The `RequestIds` for which we are currently generating signatures.
-    pub ongoing_signatures: BTreeMap<RequestId, ThresholdEcdsaSigInputs>,
+    pub ongoing_signatures: BTreeMap<RequestId, ThresholdEcdsaSigInputsRef>,
 
     /// The ECDSA key transcript used for the corresponding interval.
-    pub current_key_transcript: UnmaskedTranscript,
+    pub current_key_transcript: TranscriptRef,
 
     /// ECDSA transcript quadruples that we can use to create ECDSA signatures.
-    pub available_quadruples: BTreeMap<QuadrupleId, PreSignatureQuadruple>,
+    pub available_quadruples: BTreeMap<QuadrupleId, PreSignatureQuadrupleRef>,
 
     /// Next TranscriptId that is incremented after creating a new transcript.
     pub next_unused_transcript_id: IDkgTranscriptId,
+
+    /// Full copy of the transcripts referred to by the parent payload block.
+    pub idkg_transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
 }
 
 #[derive(
@@ -321,17 +328,13 @@ impl<T> DerefMut for Masked<T> {
     }
 }
 
-pub type ResharingTranscript = Masked<IDkgTranscript>;
-pub type MultiplicationTranscript = Masked<IDkgTranscript>;
-
 pub type RandomTranscriptParams = IDkgTranscriptParams;
 pub type ReshareOfMaskedParams = IDkgTranscriptParams;
 pub type ReshareOfUnmaskedParams = IDkgTranscriptParams;
-pub type MaskedTimesMaskedParams = IDkgTranscriptParams;
 pub type UnmaskedTimesMaskedParams = IDkgTranscriptParams;
 
-pub struct RequestIdTag;
-pub type RequestId = Id<RequestIdTag, Vec<u8>>;
+//pub struct RequestIdTag;
+//pub type RequestId = Id<RequestIdTag, Vec<u8>>;
 
 #[allow(missing_docs)]
 /// Mock module of the crypto types that are needed by consensus for threshold
@@ -351,129 +354,3 @@ pub mod ecdsa_crypto_mock {
 pub type Summary = Option<EcdsaSummaryPayload>;
 
 pub type Payload = Option<EcdsaDataPayload>;
-
-/// ECDSA Quadruple in creation.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct QuadrupleInCreation {
-    pub kappa_config: RandomTranscriptParams,
-    pub kappa_masked: Option<MaskedTranscript>,
-
-    pub lambda_config: RandomTranscriptParams,
-    pub lambda_masked: Option<MaskedTranscript>,
-
-    pub unmask_kappa_config: Option<ReshareOfMaskedParams>,
-    pub kappa_unmasked: Option<UnmaskedTranscript>,
-
-    pub key_times_lambda_config: Option<UnmaskedTimesMaskedParams>,
-    pub key_times_lambda: Option<MaskedTranscript>,
-
-    pub kappa_times_lambda_config: Option<UnmaskedTimesMaskedParams>,
-    pub kappa_times_lambda: Option<MaskedTranscript>,
-}
-
-impl QuadrupleInCreation {
-    /// Initialization with the given random param pair.
-    pub fn new(
-        kappa_config: RandomTranscriptParams,
-        lambda_config: RandomTranscriptParams,
-    ) -> Self {
-        QuadrupleInCreation {
-            kappa_config,
-            kappa_masked: None,
-            lambda_config,
-            lambda_masked: None,
-            unmask_kappa_config: None,
-            kappa_unmasked: None,
-            key_times_lambda_config: None,
-            key_times_lambda: None,
-            kappa_times_lambda_config: None,
-            kappa_times_lambda: None,
-        }
-    }
-}
-
-impl QuadrupleInCreation {
-    /// Return an iterator of all transcript configs that have no matching
-    /// results yet.
-    pub fn iter_transcript_configs_in_creation(
-        &self,
-    ) -> Box<dyn Iterator<Item = &IDkgTranscriptParams> + '_> {
-        let mut params = Vec::new();
-        if self.kappa_masked.is_none() {
-            params.push(&self.kappa_config)
-        }
-        if self.lambda_masked.is_none() {
-            params.push(&self.lambda_config)
-        }
-        if let (Some(config), None) = (&self.unmask_kappa_config, &self.kappa_unmasked) {
-            params.push(config)
-        }
-        if let (Some(config), None) = (&self.key_times_lambda_config, &self.key_times_lambda) {
-            params.push(config)
-        }
-        if let (Some(config), None) = (&self.kappa_times_lambda_config, &self.kappa_times_lambda) {
-            params.push(config)
-        }
-        Box::new(params.into_iter())
-    }
-}
-
-/// Wrapper to access the ECDSA related info from the blocks.
-pub trait EcdsaBlockReader {
-    /// Returns the height of the block
-    fn height(&self) -> Height;
-
-    /// Returns the transcripts requested by the block.
-    fn requested_transcripts(&self) -> Box<dyn Iterator<Item = &IDkgTranscriptParams> + '_>;
-
-    /// Returns the signatures requested by the block.
-    fn requested_signatures(
-        &self,
-    ) -> Box<dyn Iterator<Item = (&RequestId, &ThresholdEcdsaSigInputs)> + '_>;
-
-    // TODO: APIs for completed transcripts, etc.
-}
-
-pub struct EcdsaBlockReaderImpl {
-    height: Height,
-    ecdsa_payload: Option<EcdsaDataPayload>,
-}
-
-impl EcdsaBlockReaderImpl {
-    pub fn new(block: Block) -> Self {
-        let height = block.height;
-        let ecdsa_payload = if !block.payload.is_summary() {
-            BlockPayload::from(block.payload).into_data().ecdsa
-        } else {
-            None
-        };
-        Self {
-            height,
-            ecdsa_payload,
-        }
-    }
-}
-
-impl EcdsaBlockReader for EcdsaBlockReaderImpl {
-    fn height(&self) -> Height {
-        self.height
-    }
-
-    fn requested_transcripts(&self) -> Box<dyn Iterator<Item = &IDkgTranscriptParams> + '_> {
-        self.ecdsa_payload
-            .as_ref()
-            .map_or(Box::new(std::iter::empty()), |ecdsa_payload| {
-                ecdsa_payload.iter_transcript_configs_in_creation()
-            })
-    }
-
-    fn requested_signatures(
-        &self,
-    ) -> Box<dyn Iterator<Item = (&RequestId, &ThresholdEcdsaSigInputs)> + '_> {
-        self.ecdsa_payload
-            .as_ref()
-            .map_or(Box::new(std::iter::empty()), |ecdsa_payload| {
-                Box::new(ecdsa_payload.ongoing_signatures.iter())
-            })
-    }
-}

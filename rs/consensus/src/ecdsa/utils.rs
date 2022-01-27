@@ -1,11 +1,99 @@
 //! Common utils for the ECDSA implementation.
 use crate::consensus::ConsensusCrypto;
+use ic_interfaces::consensus_pool::ConsensusBlockChain;
 use ic_interfaces::crypto::IDkgProtocol;
 use ic_logger::{warn, ReplicaLogger};
+use ic_types::consensus::ecdsa::{EcdsaBlockReader, TranscriptRef};
+use ic_types::consensus::ecdsa::{
+    EcdsaDataPayload, IDkgTranscriptParamsRef, RequestId, ThresholdEcdsaSigInputsRef,
+    TranscriptLookupError,
+};
+use ic_types::consensus::{Block, BlockPayload, HasHeight};
 use ic_types::crypto::canister_threshold_sig::{
     error::IDkgLoadTranscriptError,
     idkg::{IDkgComplaint, IDkgTranscript},
 };
+use ic_types::Height;
+use std::sync::Arc;
+
+pub(crate) struct EcdsaBlockReaderImpl {
+    chain: Arc<dyn ConsensusBlockChain>,
+    tip: Block,
+    tip_ecdsa_payload: Option<EcdsaDataPayload>,
+}
+
+impl EcdsaBlockReaderImpl {
+    pub(crate) fn new(chain: Arc<dyn ConsensusBlockChain>) -> Self {
+        let tip = chain.tip();
+        let tip_ecdsa_payload = if !tip.payload.is_summary() {
+            BlockPayload::from(tip.clone().payload).into_data().ecdsa
+        } else {
+            None
+        };
+        Self {
+            chain,
+            tip,
+            tip_ecdsa_payload,
+        }
+    }
+}
+
+impl EcdsaBlockReader for EcdsaBlockReaderImpl {
+    fn tip_height(&self) -> Height {
+        self.tip.height()
+    }
+
+    fn requested_transcripts(&self) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
+        self.tip_ecdsa_payload
+            .as_ref()
+            .map_or(Box::new(std::iter::empty()), |ecdsa_payload| {
+                ecdsa_payload.iter_transcript_configs_in_creation()
+            })
+    }
+
+    fn requested_signatures(
+        &self,
+    ) -> Box<dyn Iterator<Item = (&RequestId, &ThresholdEcdsaSigInputsRef)> + '_> {
+        self.tip_ecdsa_payload
+            .as_ref()
+            .map_or(Box::new(std::iter::empty()), |ecdsa_payload| {
+                Box::new(ecdsa_payload.ongoing_signatures.iter())
+            })
+    }
+
+    fn transcript(
+        &self,
+        transcript_ref: &TranscriptRef,
+    ) -> Result<IDkgTranscript, TranscriptLookupError> {
+        let block = self
+            .chain
+            .block(transcript_ref.height)
+            .ok_or(TranscriptLookupError::BlockNotFound(*transcript_ref))?;
+        let is_summary_block = block.payload.is_summary();
+        let block_payload = BlockPayload::from(block.payload);
+
+        let idkg_transcripts = if is_summary_block {
+            block_payload
+                .into_summary()
+                .ecdsa
+                .ok_or(TranscriptLookupError::NoEcdsaSummary(*transcript_ref))?
+                .idkg_transcripts
+        } else {
+            block_payload
+                .into_data()
+                .ecdsa
+                .ok_or(TranscriptLookupError::NoEcdsaPayload(*transcript_ref))?
+                .idkg_transcripts
+        };
+
+        idkg_transcripts
+            .get(&transcript_ref.transcript_id)
+            .ok_or_else(|| {
+                TranscriptLookupError::TranscriptNotFound(*transcript_ref, is_summary_block)
+            })
+            .map(|entry| entry.clone())
+    }
+}
 
 // Load idkg transcript and log errors.
 pub fn crypto_load_idkg_transcript(
@@ -37,75 +125,131 @@ pub(crate) mod test_utils {
     use ic_test_utilities::consensus::fake::*;
     use ic_test_utilities::crypto::{
         dummy_idkg_dealing_for_tests, dummy_idkg_transcript_id_for_tests,
-        dummy_sig_inputs_for_tests,
     };
-    use ic_test_utilities::types::ids::NODE_1;
+    use ic_test_utilities::types::ids::{node_test_id, NODE_1};
     use ic_types::artifact::EcdsaMessageId;
     use ic_types::consensus::ecdsa::{
         EcdsaBlockReader, EcdsaDealing, EcdsaDealingSupport, EcdsaMessage, EcdsaSigShare,
-        EcdsaSignedDealing, RequestId,
+        EcdsaSignedDealing, IDkgTranscriptOperationRef, IDkgTranscriptParamsRef,
+        PreSignatureQuadrupleRef, RequestId, ThresholdEcdsaSigInputsRef, TranscriptLookupError,
+        TranscriptRef,
     };
     use ic_types::consensus::{BasicSignature, MultiSignatureShare};
     use ic_types::crypto::canister_threshold_sig::idkg::{
-        IDkgDealers, IDkgReceivers, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
+        IDkgDealers, IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
+        IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
     };
     use ic_types::crypto::canister_threshold_sig::{
-        ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
+        ExtendedDerivationPath, ThresholdEcdsaSigShare,
     };
     use ic_types::crypto::AlgorithmId;
-    use ic_types::{Height, RegistryVersion};
-    use ic_types::{NodeId, PrincipalId};
-    use std::collections::BTreeSet;
+    use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion};
+    use std::collections::{BTreeMap, BTreeSet};
     use std::convert::TryFrom;
+
+    pub(crate) struct TestTranscriptParams {
+        idkg_transcripts: BTreeMap<TranscriptRef, IDkgTranscript>,
+        transcript_params_ref: IDkgTranscriptParamsRef,
+    }
+
+    pub(crate) struct TestSigInputs {
+        pub(crate) idkg_transcripts: BTreeMap<TranscriptRef, IDkgTranscript>,
+        pub(crate) sig_inputs_ref: ThresholdEcdsaSigInputsRef,
+    }
 
     // Test implementation of EcdsaBlockReader to inject the test transcript params
     pub(crate) struct TestEcdsaBlockReader {
         height: Height,
-        requested_transcripts: Vec<IDkgTranscriptParams>,
-        requested_signatures: Vec<(RequestId, ThresholdEcdsaSigInputs)>,
+        requested_transcripts: Vec<IDkgTranscriptParamsRef>,
+        requested_signatures: Vec<(RequestId, ThresholdEcdsaSigInputsRef)>,
+        idkg_transcripts: BTreeMap<TranscriptRef, IDkgTranscript>,
     }
 
     impl TestEcdsaBlockReader {
+        pub(crate) fn new() -> Self {
+            Self {
+                height: Height::new(0),
+                requested_transcripts: Vec::new(),
+                requested_signatures: Vec::new(),
+                idkg_transcripts: BTreeMap::new(),
+            }
+        }
+
         pub(crate) fn for_pre_signer_test(
             height: Height,
-            requested_transcripts: Vec<IDkgTranscriptParams>,
+            transcript_params: Vec<TestTranscriptParams>,
         ) -> Self {
+            let mut idkg_transcripts = BTreeMap::new();
+            let mut requested_transcripts = Vec::new();
+            for t in transcript_params {
+                for (transcript_ref, transcript) in t.idkg_transcripts {
+                    idkg_transcripts.insert(transcript_ref, transcript);
+                }
+                requested_transcripts.push(t.transcript_params_ref);
+            }
+
             Self {
                 height,
                 requested_transcripts,
                 requested_signatures: vec![],
+                idkg_transcripts,
             }
         }
 
         pub(crate) fn for_signer_test(
             height: Height,
-            requested_signatures: Vec<(RequestId, ThresholdEcdsaSigInputs)>,
+            sig_inputs: Vec<(RequestId, TestSigInputs)>,
         ) -> Self {
+            let mut idkg_transcripts = BTreeMap::new();
+            let mut requested_signatures = Vec::new();
+            for (request_id, sig_inputs) in sig_inputs {
+                for (transcript_ref, transcript) in sig_inputs.idkg_transcripts {
+                    idkg_transcripts.insert(transcript_ref, transcript);
+                }
+                requested_signatures.push((request_id, sig_inputs.sig_inputs_ref));
+            }
+
             Self {
                 height,
                 requested_transcripts: vec![],
                 requested_signatures,
+                idkg_transcripts,
             }
+        }
+
+        pub(crate) fn add_transcript(
+            &mut self,
+            transcript_ref: TranscriptRef,
+            transcript: IDkgTranscript,
+        ) {
+            self.idkg_transcripts.insert(transcript_ref, transcript);
         }
     }
 
     impl EcdsaBlockReader for TestEcdsaBlockReader {
-        fn height(&self) -> Height {
+        fn tip_height(&self) -> Height {
             self.height
         }
 
-        fn requested_transcripts(&self) -> Box<dyn Iterator<Item = &IDkgTranscriptParams> + '_> {
+        fn requested_transcripts(&self) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
             Box::new(self.requested_transcripts.iter())
         }
 
         fn requested_signatures(
             &self,
-        ) -> Box<dyn Iterator<Item = (&RequestId, &ThresholdEcdsaSigInputs)> + '_> {
+        ) -> Box<dyn Iterator<Item = (&RequestId, &ThresholdEcdsaSigInputsRef)> + '_> {
             Box::new(
                 self.requested_signatures
                     .iter()
                     .map(|(id, sig_inputs)| (id, sig_inputs)),
             )
+        }
+
+        fn transcript(
+            &self,
+            transcript_ref: &TranscriptRef,
+        ) -> Result<IDkgTranscript, TranscriptLookupError> {
+            Ok(self.idkg_transcripts.get(transcript_ref).unwrap().clone())
         }
     }
 
@@ -126,7 +270,7 @@ pub(crate) mod test_utils {
 
         let pre_signer = EcdsaPreSignerImpl::new(
             NODE_1,
-            pool.get_cache(),
+            pool.get_block_cache(),
             crypto,
             metrics_registry.clone(),
             logger.clone(),
@@ -153,7 +297,7 @@ pub(crate) mod test_utils {
 
         let signer = EcdsaSignerImpl::new(
             NODE_1,
-            pool.get_cache(),
+            pool.get_block_cache(),
             crypto,
             metrics_registry.clone(),
             logger.clone(),
@@ -173,12 +317,32 @@ pub(crate) mod test_utils {
         RequestId::from(vec![id])
     }
 
+    // Creates a test transcript
+    pub(crate) fn create_transcript(
+        transcript_id: IDkgTranscriptId,
+        receiver_list: &[NodeId],
+    ) -> IDkgTranscript {
+        let mut receivers = BTreeSet::new();
+        receiver_list.iter().for_each(|val| {
+            receivers.insert(*val);
+        });
+        IDkgTranscript {
+            transcript_id,
+            receivers: IDkgReceivers::new(receivers).unwrap(),
+            registry_version: RegistryVersion::from(1),
+            verified_dealings: BTreeMap::new(),
+            transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
+            algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+            internal_transcript_raw: vec![],
+        }
+    }
+
     // Creates a test transcript param
     pub(crate) fn create_transcript_param(
         transcript_id: IDkgTranscriptId,
         dealer_list: &[NodeId],
         receiver_list: &[NodeId],
-    ) -> IDkgTranscriptParams {
+    ) -> TestTranscriptParams {
         let mut dealers = BTreeSet::new();
         dealer_list.iter().for_each(|val| {
             dealers.insert(*val);
@@ -187,15 +351,30 @@ pub(crate) mod test_utils {
         receiver_list.iter().for_each(|val| {
             receivers.insert(*val);
         });
-        IDkgTranscriptParams::new(
+
+        // The random transcript
+        let random_transcript_id = create_transcript_id(transcript_id.id() * 214365 + 1);
+        let transcript_ref = TranscriptRef::new(Height::new(0), random_transcript_id);
+        let mut idkg_transcripts = BTreeMap::new();
+        idkg_transcripts.insert(
+            transcript_ref,
+            create_transcript(random_transcript_id, dealer_list),
+        );
+
+        // The transcript that points to the random transcript
+        let transcript_params_ref = IDkgTranscriptParamsRef::new(
             transcript_id,
             IDkgDealers::new(dealers).unwrap(),
             IDkgReceivers::new(receivers).unwrap(),
             RegistryVersion::from(0),
             AlgorithmId::ThresholdEcdsaSecp256k1,
-            IDkgTranscriptOperation::Random,
-        )
-        .unwrap()
+            IDkgTranscriptOperationRef::ReshareOfMasked(transcript_ref),
+        );
+
+        TestTranscriptParams {
+            idkg_transcripts,
+            transcript_params_ref,
+        }
     }
 
     // Creates a test dealing
@@ -233,8 +412,128 @@ pub(crate) mod test_utils {
     }
 
     // Creates a test signature input
-    pub(crate) fn create_sig_inputs(caller: u8) -> ThresholdEcdsaSigInputs {
-        dummy_sig_inputs_for_tests(PrincipalId::try_from(&vec![caller]).unwrap())
+    pub(crate) fn create_sig_inputs_with_height(caller: u8, height: Height) -> TestSigInputs {
+        let transcript_id = |offset| {
+            let val = caller as usize;
+            create_transcript_id(val * 214365 + offset)
+        };
+
+        let mut nodes = BTreeSet::new();
+        nodes.insert(node_test_id(1));
+
+        let original_kappa_id = transcript_id(10);
+        let kappa_id = transcript_id(20);
+        let lambda_id = transcript_id(30);
+        let kappa_times_lambda_id = transcript_id(40);
+        let key_times_lambda_id = transcript_id(50);
+        let original_key_id = transcript_id(60);
+        let key_id = transcript_id(70);
+        let mut idkg_transcripts = BTreeMap::new();
+
+        let kappa_ref = TranscriptRef::new(height, kappa_id);
+        idkg_transcripts.insert(
+            kappa_ref,
+            IDkgTranscript {
+                transcript_id: kappa_id,
+                receivers: IDkgReceivers::new(nodes.clone()).unwrap(),
+                registry_version: RegistryVersion::from(1),
+                verified_dealings: BTreeMap::new(),
+                transcript_type: IDkgTranscriptType::Unmasked(
+                    IDkgUnmaskedTranscriptOrigin::ReshareMasked(original_kappa_id),
+                ),
+                algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+                internal_transcript_raw: vec![],
+            },
+        );
+
+        let lambda_ref = TranscriptRef::new(height, lambda_id);
+        idkg_transcripts.insert(
+            lambda_ref,
+            IDkgTranscript {
+                transcript_id: lambda_id,
+                receivers: IDkgReceivers::new(nodes.clone()).unwrap(),
+                registry_version: RegistryVersion::from(1),
+                verified_dealings: BTreeMap::new(),
+                transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
+                algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+                internal_transcript_raw: vec![],
+            },
+        );
+
+        let kappa_times_lambda_ref = TranscriptRef::new(height, kappa_times_lambda_id);
+        idkg_transcripts.insert(
+            kappa_times_lambda_ref,
+            IDkgTranscript {
+                transcript_id: kappa_times_lambda_id,
+                receivers: IDkgReceivers::new(nodes.clone()).unwrap(),
+                registry_version: RegistryVersion::from(1),
+                verified_dealings: BTreeMap::new(),
+                transcript_type: IDkgTranscriptType::Masked(
+                    IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(kappa_id, lambda_id),
+                ),
+                algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+                internal_transcript_raw: vec![],
+            },
+        );
+
+        let key_ref = TranscriptRef::new(height, key_id);
+        idkg_transcripts.insert(
+            key_ref,
+            IDkgTranscript {
+                transcript_id: key_id,
+                receivers: IDkgReceivers::new(nodes.clone()).unwrap(),
+                registry_version: RegistryVersion::from(1),
+                verified_dealings: BTreeMap::new(),
+                transcript_type: IDkgTranscriptType::Unmasked(
+                    IDkgUnmaskedTranscriptOrigin::ReshareMasked(original_key_id),
+                ),
+                algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+                internal_transcript_raw: vec![],
+            },
+        );
+
+        let key_times_lambda_ref = TranscriptRef::new(height, key_times_lambda_id);
+        idkg_transcripts.insert(
+            key_times_lambda_ref,
+            IDkgTranscript {
+                transcript_id: key_times_lambda_id,
+                receivers: IDkgReceivers::new(nodes).unwrap(),
+                registry_version: RegistryVersion::from(1),
+                verified_dealings: BTreeMap::new(),
+                transcript_type: IDkgTranscriptType::Masked(
+                    IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(key_id, lambda_id),
+                ),
+                algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+                internal_transcript_raw: vec![],
+            },
+        );
+
+        let presig_quadruple_ref = PreSignatureQuadrupleRef::new(
+            kappa_ref,
+            lambda_ref,
+            kappa_times_lambda_ref,
+            key_times_lambda_ref,
+        );
+        let sig_inputs_ref = ThresholdEcdsaSigInputsRef::new(
+            ExtendedDerivationPath {
+                caller: PrincipalId::try_from(&vec![caller]).unwrap(),
+                bip32_derivation_path: vec![],
+            },
+            vec![],
+            Randomness::from([0_u8; 32]),
+            presig_quadruple_ref,
+            key_ref,
+        );
+
+        TestSigInputs {
+            idkg_transcripts,
+            sig_inputs_ref,
+        }
+    }
+
+    // Creates a test signature input
+    pub(crate) fn create_sig_inputs(caller: u8) -> TestSigInputs {
+        create_sig_inputs_with_height(caller, Height::new(0))
     }
 
     // Creates a test signature share

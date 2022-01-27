@@ -345,6 +345,7 @@ fn setup_artifact_manager(
     );
 
     let consensus_cache = consensus_pool.read().unwrap().get_cache();
+    let consensus_block_cache = consensus_pool.read().unwrap().get_block_cache();
 
     if let P2PStateSyncClient::TestChunkingPool(client, client_on_state_change) = state_sync_client
     {
@@ -522,12 +523,12 @@ fn setup_artifact_manager(
                     (
                         ecdsa::EcdsaImpl::new(
                             consensus_replica_config.node_id,
-                            Arc::clone(&consensus_cache),
+                            Arc::clone(&consensus_block_cache),
                             Arc::clone(&consensus_crypto),
                             metrics_registry.clone(),
                             replica_logger.clone(),
                         ),
-                        ecdsa::EcdsaGossipImpl::new(Arc::clone(&consensus_cache)),
+                        ecdsa::EcdsaGossipImpl::new(Arc::clone(&consensus_block_cache)),
                     )
                 },
                 Arc::clone(&time_source) as Arc<_>,

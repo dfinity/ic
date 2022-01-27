@@ -20,6 +20,7 @@ use std::collections::BTreeMap;
 pub struct PoolReader<'a> {
     pool: &'a dyn ConsensusPool,
     pub(crate) cache: &'a dyn ConsensusPoolCache,
+    pub(crate) block_cache: &'a dyn ConsensusBlockCache,
 }
 
 impl<'a> PoolReader<'a> {
@@ -28,12 +29,18 @@ impl<'a> PoolReader<'a> {
         Self {
             pool,
             cache: pool.as_cache(),
+            block_cache: pool.as_block_cache(),
         }
     }
 
     /// Return a ConsensusPoolCache reference.
     pub fn as_cache(&self) -> &dyn ConsensusPoolCache {
         self.cache
+    }
+
+    /// Return a ConsensusBlockCache reference.
+    pub fn as_block_cache(&self) -> &dyn ConsensusBlockCache {
+        self.block_cache
     }
 
     /// Return the registry version to be used for the given height.

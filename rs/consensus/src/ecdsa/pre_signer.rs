@@ -5,16 +5,16 @@ use crate::consensus::{
     utils::RoundRobin,
     ConsensusCrypto,
 };
-use crate::ecdsa::utils::crypto_load_idkg_transcript;
-use ic_interfaces::consensus_pool::ConsensusPoolCache;
+use crate::ecdsa::utils::{crypto_load_idkg_transcript, EcdsaBlockReaderImpl};
+use ic_interfaces::consensus_pool::{ConsensusBlockCache, ConsensusBlockChain};
 use ic_interfaces::crypto::{ErrorReplication, IDkgProtocol};
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
 use ic_logger::{debug, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::ecdsa::{
-    EcdsaBlockReader, EcdsaBlockReaderImpl, EcdsaDealing, EcdsaDealingSupport, EcdsaMessage,
-    EcdsaSignedDealing, EcdsaVerifiedDealing,
+    EcdsaBlockReader, EcdsaDealing, EcdsaDealingSupport, EcdsaMessage, EcdsaSignedDealing,
+    EcdsaVerifiedDealing,
 };
 use ic_types::consensus::MultiSignature;
 use ic_types::crypto::canister_threshold_sig::idkg::{
@@ -23,6 +23,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
 };
 use ic_types::{Height, NodeId};
 
+use prometheus::IntCounterVec;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Debug, Formatter};
 use std::sync::Arc;
@@ -34,7 +35,7 @@ pub(crate) trait EcdsaPreSigner: Send {
 
 pub(crate) struct EcdsaPreSignerImpl {
     node_id: NodeId,
-    consensus_cache: Arc<dyn ConsensusPoolCache>,
+    consensus_block_cache: Arc<dyn ConsensusBlockCache>,
     crypto: Arc<dyn ConsensusCrypto>,
     schedule: RoundRobin,
     metrics: EcdsaPreSignerMetrics,
@@ -44,14 +45,14 @@ pub(crate) struct EcdsaPreSignerImpl {
 impl EcdsaPreSignerImpl {
     pub(crate) fn new(
         node_id: NodeId,
-        consensus_cache: Arc<dyn ConsensusPoolCache>,
+        consensus_block_cache: Arc<dyn ConsensusBlockCache>,
         crypto: Arc<dyn ConsensusCrypto>,
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
     ) -> Self {
         Self {
             node_id,
-            consensus_cache,
+            consensus_block_cache,
             crypto,
             schedule: RoundRobin::default(),
             metrics: EcdsaPreSignerMetrics::new(metrics_registry),
@@ -67,8 +68,15 @@ impl EcdsaPreSignerImpl {
         ecdsa_pool: &dyn EcdsaPool,
         block_reader: &dyn EcdsaBlockReader,
     ) -> EcdsaChangeSet {
-        block_reader
-            .requested_transcripts()
+        let requested_transcripts = resolve_transcript_refs(
+            block_reader,
+            "send_dealings",
+            self.metrics.pre_sign_errors.clone(),
+            &self.log,
+        );
+
+        requested_transcripts
+            .iter()
             .filter(|transcript_params| {
                 // Issue a dealing if we are in the dealer list and we haven't
                 //already issued a dealing for this transcript
@@ -90,6 +98,13 @@ impl EcdsaPreSignerImpl {
         ecdsa_pool: &dyn EcdsaPool,
         block_reader: &dyn EcdsaBlockReader,
     ) -> EcdsaChangeSet {
+        let requested_transcripts = resolve_transcript_refs(
+            block_reader,
+            "validate_dealings",
+            self.metrics.pre_sign_errors.clone(),
+            &self.log,
+        );
+
         // Pass 1: collection of <TranscriptId, DealerId>
         let mut dealing_keys = BTreeSet::new();
         let mut duplicate_keys = BTreeSet::new();
@@ -130,6 +145,7 @@ impl EcdsaPreSignerImpl {
 
             match Action::action(
                 block_reader,
+                &requested_transcripts,
                 dealing.requested_height,
                 &dealing.idkg_dealing.transcript_id,
             ) {
@@ -188,9 +204,16 @@ impl EcdsaPreSignerImpl {
         ecdsa_pool: &dyn EcdsaPool,
         block_reader: &dyn EcdsaBlockReader,
     ) -> EcdsaChangeSet {
+        let requested_transcripts = resolve_transcript_refs(
+            block_reader,
+            "send_dealing_support",
+            self.metrics.pre_sign_errors.clone(),
+            &self.log,
+        );
+
         // TranscriptId -> TranscriptParams
         let mut trancript_param_map = BTreeMap::new();
-        for transcript_params in block_reader.requested_transcripts() {
+        for transcript_params in &requested_transcripts {
             trancript_param_map.insert(transcript_params.transcript_id(), transcript_params);
         }
 
@@ -244,6 +267,13 @@ impl EcdsaPreSignerImpl {
         ecdsa_pool: &dyn EcdsaPool,
         block_reader: &dyn EcdsaBlockReader,
     ) -> EcdsaChangeSet {
+        let requested_transcripts = resolve_transcript_refs(
+            block_reader,
+            "validate_dealing_support",
+            self.metrics.pre_sign_errors.clone(),
+            &self.log,
+        );
+
         // Get the set of valid dealings <TranscriptId, DealerId>
         let mut valid_dealings = BTreeSet::new();
         for (_, signed_dealing) in ecdsa_pool.validated().signed_dealings() {
@@ -303,6 +333,7 @@ impl EcdsaPreSignerImpl {
 
             match Action::action(
                 block_reader,
+                &requested_transcripts,
                 dealing.requested_height,
                 &dealing.idkg_dealing.transcript_id,
             ) {
@@ -367,13 +398,20 @@ impl EcdsaPreSignerImpl {
         ecdsa_pool: &dyn EcdsaPool,
         block_reader: &dyn EcdsaBlockReader,
     ) -> EcdsaChangeSet {
+        let requested_transcripts = resolve_transcript_refs(
+            block_reader,
+            "purge_artifacts",
+            self.metrics.pre_sign_errors.clone(),
+            &self.log,
+        );
+
         let mut in_progress = BTreeSet::new();
-        for transcript_params in block_reader.requested_transcripts() {
+        for transcript_params in requested_transcripts {
             in_progress.insert(transcript_params.transcript_id());
         }
 
         let mut ret = Vec::new();
-        let current_height = block_reader.height();
+        let current_height = block_reader.tip_height();
 
         // Unvalidated dealings.
         let mut action = ecdsa_pool
@@ -454,7 +492,7 @@ impl EcdsaPreSignerImpl {
             }
         };
         let ecdsa_dealing = EcdsaDealing {
-            requested_height: block_reader.height(),
+            requested_height: block_reader.tip_height(),
             idkg_dealing,
         };
 
@@ -755,7 +793,7 @@ impl EcdsaPreSignerImpl {
 
 impl EcdsaPreSigner for EcdsaPreSignerImpl {
     fn on_state_change(&self, ecdsa_pool: &dyn EcdsaPool) -> EcdsaChangeSet {
-        let block_reader = EcdsaBlockReaderImpl::new(self.consensus_cache.finalized_block());
+        let block_reader = EcdsaBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let metrics = self.metrics.clone();
 
         let send_dealings = || {
@@ -808,11 +846,14 @@ impl EcdsaPreSigner for EcdsaPreSignerImpl {
 pub(crate) trait EcdsaTranscriptBuilder: Send {
     /// Returns the transcripts that can be successfully built from
     /// the current entries in the ECDSA pool
-    fn get_completed_transcripts(&self, ecdsa_pool: &dyn EcdsaPool) -> Vec<IDkgTranscript>;
+    fn get_completed_transcripts(
+        &self,
+        chain: Arc<dyn ConsensusBlockChain>,
+        ecdsa_pool: &dyn EcdsaPool,
+    ) -> Vec<IDkgTranscript>;
 }
 
 pub(crate) struct EcdsaTranscriptBuilderImpl<'a> {
-    consensus_cache: &'a dyn ConsensusPoolCache,
     crypto: &'a dyn ConsensusCrypto,
     metrics: &'a EcdsaPayloadMetrics,
     log: ReplicaLogger,
@@ -820,13 +861,11 @@ pub(crate) struct EcdsaTranscriptBuilderImpl<'a> {
 
 impl<'a> EcdsaTranscriptBuilderImpl<'a> {
     pub(crate) fn new(
-        consensus_cache: &'a dyn ConsensusPoolCache,
         crypto: &'a dyn ConsensusCrypto,
         metrics: &'a EcdsaPayloadMetrics,
         log: ReplicaLogger,
     ) -> Self {
         Self {
-            consensus_cache,
             crypto,
             metrics,
             log,
@@ -902,11 +941,22 @@ impl<'a> EcdsaTranscriptBuilderImpl<'a> {
 }
 
 impl<'a> EcdsaTranscriptBuilder for EcdsaTranscriptBuilderImpl<'a> {
-    fn get_completed_transcripts(&self, ecdsa_pool: &dyn EcdsaPool) -> Vec<IDkgTranscript> {
+    fn get_completed_transcripts(
+        &self,
+        chain: Arc<dyn ConsensusBlockChain>,
+        ecdsa_pool: &dyn EcdsaPool,
+    ) -> Vec<IDkgTranscript> {
         // TranscriptId -> TranscriptParams
-        let block_reader = EcdsaBlockReaderImpl::new(self.consensus_cache.finalized_block());
+        let block_reader = EcdsaBlockReaderImpl::new(chain);
+        let requested_transcripts = resolve_transcript_refs(
+            &block_reader,
+            "get_completed_transcripts",
+            self.metrics.payload_errors.clone(),
+            &self.log,
+        );
+
         let mut trancript_state_map = BTreeMap::new();
-        for transcript_params in block_reader.requested_transcripts() {
+        for transcript_params in &requested_transcripts {
             trancript_state_map.insert(
                 transcript_params.transcript_id(),
                 TranscriptState::new(transcript_params),
@@ -984,16 +1034,17 @@ impl<'a> Action<'a> {
     #[allow(clippy::self_named_constructors)]
     fn action(
         block_reader: &'a dyn EcdsaBlockReader,
+        requested_transcripts: &'a [IDkgTranscriptParams],
         msg_height: Height,
         msg_transcript_id: &IDkgTranscriptId,
     ) -> Action<'a> {
-        if msg_height > block_reader.height() {
+        if msg_height > block_reader.tip_height() {
             // Message is from a node ahead of us, keep it to be
             // processed later
             return Action::Defer;
         }
 
-        for transcript_params in block_reader.requested_transcripts() {
+        for transcript_params in requested_transcripts {
             if *msg_transcript_id == transcript_params.transcript_id() {
                 return Action::Process(transcript_params);
             }
@@ -1052,6 +1103,36 @@ impl<'a> TranscriptState<'a> {
     }
 }
 
+/// Resolves the IDkgTranscriptParamsRef -> IDkgTranscriptParams
+fn resolve_transcript_refs(
+    block_reader: &dyn EcdsaBlockReader,
+    reason: &str,
+    metric: IntCounterVec,
+    log: &ReplicaLogger,
+) -> Vec<IDkgTranscriptParams> {
+    let mut ret = Vec::new();
+    for transcript_params_ref in block_reader.requested_transcripts() {
+        // Translate the IDkgTranscriptParamsRef -> IDkgTranscriptParams
+        match transcript_params_ref.translate(block_reader) {
+            Ok(transcript_params) => {
+                ret.push(transcript_params);
+            }
+            Err(error) => {
+                warn!(
+                    log,
+                    "Failed to translate transcript ref: reason = {}, \
+                     transcript_params_ref = {:?}, error = {:?}",
+                    reason,
+                    transcript_params_ref,
+                    error
+                );
+                metric.with_label_values(&[reason]).inc();
+            }
+        }
+    }
+    ret
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1085,31 +1166,45 @@ mod tests {
                 create_transcript_param(id_3, &nodes, &nodes),
             ],
         );
+        let mut requested = Vec::new();
+        for transcript_params_ref in block_reader.requested_transcripts() {
+            requested.push(transcript_params_ref.translate(&block_reader).unwrap());
+        }
 
         // Message from a node ahead of us
         assert_eq!(
-            Action::action(&block_reader, Height::from(200), &id_4),
+            Action::action(&block_reader, &requested, Height::from(200), &id_4),
             Action::Defer
         );
 
         // Messages for transcripts not being currently requested
         assert_eq!(
-            Action::action(&block_reader, Height::from(100), &create_transcript_id(234)),
+            Action::action(
+                &block_reader,
+                &requested,
+                Height::from(100),
+                &create_transcript_id(234)
+            ),
             Action::Drop
         );
         assert_eq!(
-            Action::action(&block_reader, Height::from(10), &create_transcript_id(234)),
+            Action::action(
+                &block_reader,
+                &requested,
+                Height::from(10),
+                &create_transcript_id(234)
+            ),
             Action::Drop
         );
 
         // Messages for transcripts currently requested
-        let action = Action::action(&block_reader, Height::from(100), &id_1);
+        let action = Action::action(&block_reader, &requested, Height::from(100), &id_1);
         match action {
             Action::Process(_) => {}
             _ => panic!("Unexpected action: {:?}", action),
         }
 
-        let action = Action::action(&block_reader, Height::from(10), &id_2);
+        let action = Action::action(&block_reader, &requested, Height::from(10), &id_2);
         match action {
             Action::Process(_) => {}
             _ => panic!("Unexpected action: {:?}", action),
@@ -1159,12 +1254,12 @@ mod tests {
                 assert!(is_dealing_added_to_validated(
                     &change_set,
                     &id_4,
-                    block_reader.height()
+                    block_reader.tip_height()
                 ));
                 assert!(is_dealing_added_to_validated(
                     &change_set,
                     &id_5,
-                    block_reader.height()
+                    block_reader.tip_height()
                 ));
             })
         })
@@ -1194,7 +1289,7 @@ mod tests {
                 assert!(is_dealing_added_to_validated(
                     &change_set,
                     &id_1,
-                    block_reader.height()
+                    block_reader.tip_height()
                 ));
             })
         })

@@ -173,14 +173,15 @@ use crate::consensus::{
 };
 use crate::ecdsa::pre_signer::{EcdsaPreSigner, EcdsaPreSignerImpl};
 use crate::ecdsa::signer::{EcdsaSigner, EcdsaSignerImpl};
+use crate::ecdsa::utils::EcdsaBlockReaderImpl;
 
-use ic_interfaces::consensus_pool::ConsensusPoolCache;
+use ic_interfaces::consensus_pool::ConsensusBlockCache;
 use ic_interfaces::ecdsa::{Ecdsa, EcdsaChangeSet, EcdsaGossip, EcdsaPool};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_types::{
     artifact::{EcdsaMessageAttribute, EcdsaMessageId, Priority, PriorityFn},
-    consensus::ecdsa::{EcdsaBlockReader, EcdsaBlockReaderImpl},
+    consensus::ecdsa::EcdsaBlockReader,
     Height, NodeId,
 };
 
@@ -210,21 +211,21 @@ impl EcdsaImpl {
     /// Builds a new threshold ECDSA component
     pub fn new(
         node_id: NodeId,
-        consensus_cache: Arc<dyn ConsensusPoolCache>,
+        consensus_block_cache: Arc<dyn ConsensusBlockCache>,
         crypto: Arc<dyn ConsensusCrypto>,
         metrics_registry: MetricsRegistry,
         logger: ReplicaLogger,
     ) -> Self {
         let pre_signer = Box::new(EcdsaPreSignerImpl::new(
             node_id,
-            consensus_cache.clone(),
+            consensus_block_cache.clone(),
             crypto.clone(),
             metrics_registry.clone(),
             logger.clone(),
         ));
         let signer = Box::new(EcdsaSignerImpl::new(
             node_id,
-            consensus_cache,
+            consensus_block_cache,
             crypto,
             metrics_registry.clone(),
             logger.clone(),
@@ -265,13 +266,15 @@ impl Ecdsa for EcdsaImpl {
 /// `EcdsaGossipImpl` implements the priority function and other gossip related
 /// functionality
 pub struct EcdsaGossipImpl {
-    consensus_cache: Arc<dyn ConsensusPoolCache>,
+    consensus_block_cache: Arc<dyn ConsensusBlockCache>,
 }
 
 impl EcdsaGossipImpl {
     /// Builds a new EcdsaGossipImpl component
-    pub fn new(consensus_cache: Arc<dyn ConsensusPoolCache>) -> Self {
-        Self { consensus_cache }
+    pub fn new(consensus_block_cache: Arc<dyn ConsensusBlockCache>) -> Self {
+        Self {
+            consensus_block_cache,
+        }
     }
 }
 
@@ -280,8 +283,8 @@ impl EcdsaGossip for EcdsaGossipImpl {
         &self,
         _ecdsa_pool: &dyn EcdsaPool,
     ) -> PriorityFn<EcdsaMessageId, EcdsaMessageAttribute> {
-        let block_reader = EcdsaBlockReaderImpl::new(self.consensus_cache.finalized_block());
-        let cached_finalized_height = block_reader.height();
+        let block_reader = EcdsaBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
+        let cached_finalized_height = block_reader.tip_height();
         Box::new(move |_, attr: &'_ EcdsaMessageAttribute| {
             compute_priority(attr, cached_finalized_height)
         })

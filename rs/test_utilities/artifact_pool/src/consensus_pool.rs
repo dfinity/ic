@@ -6,8 +6,9 @@ use ic_consensus_message::ConsensusMessageHashable;
 use ic_interfaces::state_manager::StateManager;
 use ic_interfaces::{
     consensus_pool::{
-        ChangeAction, ChangeSet, ConsensusPool, ConsensusPoolCache, MutableConsensusPool,
-        PoolSection, UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
+        ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusPool, ConsensusPoolCache,
+        MutableConsensusPool, PoolSection, UnvalidatedConsensusArtifact,
+        ValidatedConsensusArtifact,
     },
     crypto::{MultiSigner, ThresholdSigner},
     dkg::DkgPool,
@@ -662,6 +663,10 @@ impl TestConsensusPool {
     pub fn get_cache(&self) -> Arc<dyn ConsensusPoolCache> {
         self.pool.get_cache()
     }
+
+    pub fn get_block_cache(&self) -> Arc<dyn ConsensusBlockCache> {
+        self.pool.get_block_cache()
+    }
 }
 
 impl ConsensusPool for TestConsensusPool {
@@ -675,6 +680,10 @@ impl ConsensusPool for TestConsensusPool {
 
     fn as_cache(&self) -> &dyn ConsensusPoolCache {
         self.pool.as_cache()
+    }
+
+    fn as_block_cache(&self) -> &dyn ConsensusBlockCache {
+        self.pool.as_block_cache()
     }
 }
 
