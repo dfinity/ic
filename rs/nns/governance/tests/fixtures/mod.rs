@@ -325,6 +325,12 @@ impl NeuronBuilder {
         self
     }
 
+    pub fn set_managers(mut self, managers: neuron::Followees) -> Self {
+        self.followees
+            .insert(Topic::NeuronManagement as i32, managers);
+        self
+    }
+
     pub fn do_not_create_subaccount(mut self) -> Self {
         self.do_not_create_subaccount = true;
         self
