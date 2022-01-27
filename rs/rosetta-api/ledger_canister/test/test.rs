@@ -129,6 +129,12 @@ async fn get_blocks_candid(archive: &Canister<'_>, range: std::ops::Range<u64>) 
         .expect("get_blocks call trapped")
 }
 
+async fn fetch_candid_interface(canister: &Canister<'_>) -> Result<String, String> {
+    canister
+        .query_("__get_candid_interface_tmp_hack", candid_one, ())
+        .await
+}
+
 fn assert_same_blocks(pb: &[EncodedBlock], candid: &[CandidBlock]) {
     assert_eq!(pb.len(), candid.len());
     for (pb_block, did_block) in pb.iter().zip(candid.iter()) {
@@ -268,6 +274,12 @@ fn archive_blocks_small_test() {
         for n in nodes {
             println!("[test] retrieving blocks from {}. calling iter_blocks()", n);
             let node = Canister::new(&r, n);
+
+            assert_eq!(
+                fetch_candid_interface(&node).await.unwrap(),
+                include_str!("../ledger_archive.did")
+            );
+
             let IterBlocksRes(mut blocks) = node
                 .query_(
                     "iter_blocks_pb",
@@ -1584,6 +1596,37 @@ fn only_ledger_can_append_blocks_to_archive_nodes() {
 
         Ok(())
     })
+}
+
+#[test]
+fn test_ledger_candid_interface_endpoint() {
+    local_test_e(|r| async move {
+        let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
+
+        let minting_account = create_sender(0);
+
+        let ledger = proj
+            .cargo_bin("ledger-canister", &[])
+            .install_(
+                &r,
+                CandidOne(
+                    LedgerCanisterInitPayload::builder()
+                        .minting_account(
+                            CanisterId::try_from(minting_account.get_principal_id())
+                                .unwrap()
+                                .into(),
+                        )
+                        .build()
+                        .unwrap(),
+                ),
+            )
+            .await?;
+
+        let candid_interface: String = fetch_candid_interface(&ledger).await.unwrap();
+        assert_eq!(candid_interface, include_str!("../ledger.did"));
+
+        Ok(())
+    });
 }
 
 #[test]

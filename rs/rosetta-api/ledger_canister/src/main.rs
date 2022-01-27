@@ -826,6 +826,13 @@ fn http_request() {
     ledger_canister::http_request::serve_metrics(encode_metrics);
 }
 
+#[export_name = "canister_query __get_candid_interface_tmp_hack"]
+fn get_canidid_interface() {
+    over(candid_one, |()| -> &'static str {
+        include_str!("../ledger.did")
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
