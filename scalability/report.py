@@ -15,7 +15,7 @@ def convert_duration(data: dict):
     for d in data:
         t_ms = d["secs"] * 1000 + d["nanos"] / 1000.0 / 1000.0
         times.append(t_ms)
-        assert last is None or t_ms > last
+        assert last is None or t_ms >= last
         last = t_ms
     return times
 
@@ -63,7 +63,13 @@ def evaluate_summaries(summaries):
         total_number += number
         print(colored("{} - {} - {}".format(code, is_success(code), number), "green" if is_success(code) else "red"))
 
-    percentiles = [mean([x[p] for x in t_percentile]) for p in range(0, 100)]
+    def mean_or_minus_one(x):
+        if len(x) > 0:
+            return mean(x)
+        else:
+            return -1
+
+    percentiles = [mean_or_minus_one([x[p] for x in t_percentile]) for p in range(0, 100)]
 
     failure_rate = success[False] / (success[True] + success[False])
     return (
