@@ -2780,6 +2780,7 @@ impl Governance {
     /// - Source neuron must be owned by the caller
     /// - Source neuron's kyc_verified field must match target
     /// - Source neuron's not_for_profit field must match target
+    /// - Source neuron and target neuron have the same ManageNeuron following
     /// - Cannot merge neurons that have been dedicated to the community fund
     /// - Subaccount of source neuron to be merged must be present
     /// - Subaccount of target neuron to be merged must be present
@@ -2822,6 +2823,13 @@ impl Governance {
             return Err(GovernanceError::new_with_message(
                 ErrorType::NotAuthorized,
                 "Source neuron must be owned by the caller",
+            ));
+        }
+
+        if source_neuron.neuron_managers() != target_neuron.neuron_managers() {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "ManageNeuron following of source and target does not match",
             ));
         }
 

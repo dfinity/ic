@@ -4301,6 +4301,32 @@ fn test_neuron_merge_fails() {
                 .set_maturity(icp(456))
                 .set_aging_since_timestamp(10),
         )
+        .add_neuron(
+            NeuronBuilder::new(14, icp(3_456), principal(123))
+                .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4),
+        )
+        .add_neuron(
+            NeuronBuilder::new(15, icp(3_456), principal(123))
+                .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4),
+        )
+        .add_neuron(
+            NeuronBuilder::new(16, icp(1_234), principal(123))
+                .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4)
+                .set_managers(Followees {
+                    followees: vec![NeuronId { id: 14 }],
+                }),
+        )
+        .add_neuron(
+            NeuronBuilder::new(17, icp(2_345), principal(123))
+                .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4)
+                .set_managers(Followees {
+                    followees: vec![NeuronId { id: 15 }],
+                }),
+        )
+        .add_neuron(
+            NeuronBuilder::new(18, icp(3_456), principal(123))
+                .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4),
+        )
         .create();
 
     // 1. Source id and target id cannot be the same
@@ -4418,6 +4444,20 @@ fn test_neuron_merge_fails() {
         )
         .now_or_never()
         .unwrap();
+    nns.governance
+        .manage_neuron(
+            &principal(11),
+            &ManageNeuron {
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 13 })),
+                id: None,
+                command: Some(Command::Follow(Follow {
+                    topic: Topic::NeuronManagement as i32,
+                    followees: (0..=11).map(|id| NeuronId { id }).collect(),
+                })),
+            },
+        )
+        .now_or_never()
+        .unwrap();
     let _pid = nns.propose_with_action(
         // We will have Neuron 11, not involved in the upcoming merge,
         // proposal a neuron management proposal for Neuron 12.
@@ -4473,6 +4513,28 @@ fn test_neuron_merge_fails() {
         Err(GovernanceError{error_type: code, error_message: msg})
         if code == InvalidCommand as i32 &&
            msg == "Stake of the source neuron of a merge must be greater than the fee");
+
+    // 14. Neurons with different ManageNeuron lists cannot be merged
+    assert_matches!(
+        nns.merge_neurons(
+            &NeuronId { id: 16 },
+            &principal(123),
+            &NeuronId { id: 17 },
+        ),
+        Err(GovernanceError{error_type: code, error_message: msg})
+        if code == PreconditionFailed as i32 &&
+           msg == "ManageNeuron following of source and target does not match");
+
+    // 15. Neurons with resp. without ManageNeuron cannot be merged
+    assert_matches!(
+        nns.merge_neurons(
+            &NeuronId { id: 16 },
+            &principal(123),
+            &NeuronId { id: 18 },
+        ),
+        Err(GovernanceError{error_type: code, error_message: msg})
+        if code == PreconditionFailed as i32 &&
+           msg == "ManageNeuron following of source and target does not match");
 }
 
 #[test]
@@ -4591,6 +4653,95 @@ fn test_neuron_merge() {
                             n2_maturity + n1_maturity
                         )),
                     ],
+                ),
+            ])]),
+        ])
+    );
+}
+
+#[test]
+// Test that two neurons that have the same ManageNeuron following can be merged
+fn test_neuron_merge_follow() {
+    fn icp(amount: u64) -> u64 {
+        amount * 100_000_000
+    }
+
+    let n1_stake = icp(1);
+    let n2_stake = icp(10);
+    let n3_stake = icp(10);
+
+    let mut nns = NNSBuilder::new()
+        .set_economics(NetworkEconomics::with_default_values())
+        .with_supply(0) // causes minting account to be created
+        .add_account_for(principal(1), 0)
+        // the controller
+        .add_neuron(
+            NeuronBuilder::new(1, n1_stake, principal(1))
+                .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4),
+        )
+        // the source
+        .add_neuron(
+            NeuronBuilder::new(2, n2_stake, principal(1))
+                .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4)
+                .set_aging_since_timestamp(DEFAULT_TEST_START_TIMESTAMP_SECONDS)
+                .set_managers(Followees {
+                    followees: vec![NeuronId { id: 1 }],
+                }),
+        )
+        // the target
+        .add_neuron(
+            NeuronBuilder::new(3, n3_stake, principal(1))
+                .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4)
+                .set_aging_since_timestamp(DEFAULT_TEST_START_TIMESTAMP_SECONDS)
+                .set_managers(Followees {
+                    followees: vec![NeuronId { id: 1 }],
+                }),
+        )
+        .create();
+
+    nns.governance
+        .merge_neurons(
+            &NeuronId { id: 3 },
+            &principal(1),
+            &Merge {
+                source_neuron_id: Some(NeuronId { id: 2 }),
+            },
+        )
+        .now_or_never()
+        .unwrap()
+        .unwrap();
+
+    #[cfg(feature = "test")]
+    let fee = nns
+        .governance
+        .proto
+        .economics
+        .as_ref()
+        .unwrap()
+        .transaction_fee_e8s;
+
+    #[cfg(feature = "test")]
+    assert_changes!(
+        nns,
+        Changed::Changed(vec![
+            NNSStateChange::Accounts(vec![
+                MapChange::Changed(nns.get_neuron_account_id(2), U64Change(n2_stake, 0)),
+                MapChange::Changed(
+                    nns.get_neuron_account_id(3),
+                    U64Change(n3_stake, n3_stake + n2_stake - fee),
+                ),
+            ]),
+            NNSStateChange::GovernanceProto(vec![GovernanceChange::Neurons(vec![
+                MapChange::Changed(
+                    2,
+                    vec![NeuronChange::CachedNeuronStakeE8S(U64Change(n2_stake, 0)),],
+                ),
+                MapChange::Changed(
+                    3,
+                    vec![NeuronChange::CachedNeuronStakeE8S(U64Change(
+                        n3_stake,
+                        n3_stake + n2_stake - fee,
+                    )),],
                 ),
             ])]),
         ])
