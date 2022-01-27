@@ -17,6 +17,7 @@ pub mod catchup;
 pub mod certification;
 pub mod dkg;
 pub mod ecdsa;
+mod ecdsa_refs;
 pub mod hashed;
 mod payload;
 pub mod thunk;

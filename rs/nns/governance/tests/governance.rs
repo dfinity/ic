@@ -181,6 +181,7 @@ const NOTDISSOLVING_MAX_DISSOLVE_DELAY: Option<DissolveState> = Some(
 // required size (3 MB). That goal is achieved by culling test-only libraries
 // (specifically, comparable).
 #[cfg(not(feature = "test"))]
+#[allow(clippy::assertions_on_constants)]
 #[test]
 fn tests_must_be_run_with_test_feature_enabled() {
     assert!(false);

@@ -2,7 +2,7 @@ use crate::backup::Backup;
 use crate::{
     consensus_pool_cache::{
         get_highest_catch_up_package, get_highest_finalized_block, update_summary_block,
-        ConsensusCacheImpl,
+        ConsensusBlockChainImpl, ConsensusCacheImpl,
     },
     inmemory_pool::InMemoryPoolSection,
     metrics::{LABEL_POOL_TYPE, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED},
@@ -11,9 +11,9 @@ use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
 use ic_consensus_message::ConsensusMessageHashable;
 use ic_interfaces::{
     consensus_pool::{
-        ChangeAction, ChangeSet, ConsensusPool, ConsensusPoolCache, HeightIndexedPool, HeightRange,
-        MutableConsensusPool, PoolSection, UnvalidatedConsensusArtifact,
-        ValidatedConsensusArtifact,
+        ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool,
+        ConsensusPoolCache, HeightIndexedPool, HeightRange, MutableConsensusPool, PoolSection,
+        UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
     },
     gossip_pool::{ConsensusGossipPool, GossipPool},
     time_source::TimeSource,
@@ -262,6 +262,18 @@ impl ConsensusPoolCache for UncachedConsensusPoolImpl {
     }
 }
 
+impl ConsensusBlockCache for UncachedConsensusPoolImpl {
+    fn finalized_chain(&self) -> Arc<dyn ConsensusBlockChain> {
+        let summary_block = self.summary_block();
+        let finalized_tip = self.finalized_block();
+        Arc::new(ConsensusBlockChainImpl::new(
+            self,
+            &summary_block,
+            &finalized_tip,
+        ))
+    }
+}
+
 impl ConsensusPool for UncachedConsensusPoolImpl {
     fn validated(&self) -> &dyn PoolSection<ValidatedConsensusArtifact> {
         self.validated.pool_section()
@@ -272,6 +284,10 @@ impl ConsensusPool for UncachedConsensusPoolImpl {
     }
 
     fn as_cache(&self) -> &dyn ConsensusPoolCache {
+        self
+    }
+
+    fn as_block_cache(&self) -> &dyn ConsensusBlockCache {
         self
     }
 }
@@ -376,6 +392,11 @@ impl ConsensusPoolImpl {
         Arc::clone(&self.cache) as Arc<_>
     }
 
+    /// Get a copy of ConsensusBlockCache.
+    pub fn get_block_cache(&self) -> Arc<dyn ConsensusBlockCache> {
+        Arc::clone(&self.cache) as Arc<_>
+    }
+
     fn apply_changes_validated(&mut self, ops: PoolSectionOps<ValidatedConsensusArtifact>) {
         if !ops.ops.is_empty() {
             self.validated.mutate(ops);
@@ -402,6 +423,10 @@ impl ConsensusPool for ConsensusPoolImpl {
     }
 
     fn as_cache(&self) -> &dyn ConsensusPoolCache {
+        self.cache.as_ref()
+    }
+
+    fn as_block_cache(&self) -> &dyn ConsensusBlockCache {
         self.cache.as_ref()
     }
 }
@@ -671,6 +696,16 @@ impl GossipPool<ConsensusMessage, ChangeSet> for ConsensusPoolImpl {
 }
 
 impl ConsensusGossipPool for ConsensusPoolImpl {}
+
+/// Returns the block chain cache between the given start/end
+/// blocks (inclusive)
+pub fn build_consensus_block_chain(
+    consensus_pool: &dyn ConsensusPool,
+    start: &Block,
+    end: &Block,
+) -> Arc<dyn ConsensusBlockChain> {
+    Arc::new(ConsensusBlockChainImpl::new(consensus_pool, start, end))
+}
 
 #[cfg(test)]
 mod tests {
