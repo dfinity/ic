@@ -305,6 +305,13 @@ fn http_request() {
     ledger_canister::http_request::serve_metrics(encode_metrics);
 }
 
+#[export_name = "canister_query __get_candid_interface_tmp_hack"]
+fn get_canidid_interface() {
+    dfn_core::over(candid_one, |()| -> &'static str {
+        include_str!("../ledger_archive.did")
+    })
+}
+
 #[test]
 fn check_archive_candid_interface_compatibility() {
     use candid::utils::CandidSource;
