@@ -72,13 +72,7 @@ pub fn multisign_dealing(
             })
             .collect();
 
-        let combiner_id = **params
-            .receivers()
-            .get()
-            .iter()
-            .choose_multiple(&mut thread_rng(), 1)
-            .get(0)
-            .expect("receivers is empty");
+        let combiner_id = random_receiver_id(params);
         crypto_for(combiner_id, crypto_components)
             .combine_multi_sig_individuals(signatures, params.registry_version())
             .expect("failed to combine individual signatures")
@@ -341,7 +335,7 @@ impl CanisterThresholdSigTestEnvironment {
     /// Returns an `IDkgTranscriptParams` appropriate for creating a random
     /// sharing in this environment.
     pub fn params_for_random_sharing(&self, algorithm_id: AlgorithmId) -> IDkgTranscriptParams {
-        let nodes: BTreeSet<NodeId> = self.crypto_components.keys().cloned().collect();
+        let nodes: BTreeSet<NodeId> = self.crypto_components.keys().copied().collect();
 
         IDkgTranscriptParams::new(
             random_transcript_id(),
@@ -351,7 +345,7 @@ impl CanisterThresholdSigTestEnvironment {
             algorithm_id,
             IDkgTranscriptOperation::Random,
         )
-        .expect("failed to create resharing/multiplication IDkgTranscriptParams")
+        .expect("failed to create random IDkgTranscriptParams")
     }
 
     pub fn receivers(&self) -> BTreeSet<NodeId> {
@@ -393,12 +387,11 @@ impl CanisterThresholdSigTestEnvironment {
 }
 
 pub fn random_receiver_for_inputs(inputs: &ThresholdEcdsaSigInputs) -> NodeId {
-    **inputs
+    *inputs
         .receivers()
         .get()
         .iter()
-        .choose_multiple(&mut thread_rng(), 1)
-        .get(0)
+        .choose(&mut thread_rng())
         .expect("receivers is empty")
 }
 
@@ -457,21 +450,19 @@ fn crypto_for<T>(node_id: NodeId, crypto_components: &BTreeMap<NodeId, T>) -> &T
 }
 
 pub fn random_receiver_id(params: &IDkgTranscriptParams) -> NodeId {
-    **params
+    *params
         .receivers()
         .get()
         .iter()
-        .choose_multiple(&mut thread_rng(), 1)
-        .get(0)
+        .choose(&mut thread_rng())
         .expect("receivers is empty")
 }
 
 pub fn random_dealer_id(params: &IDkgTranscriptParams) -> NodeId {
-    **params
+    *params
         .dealers()
         .get()
         .iter()
-        .choose_multiple(&mut thread_rng(), 1)
-        .get(0)
+        .choose(&mut thread_rng())
         .expect("dealers is empty")
 }
