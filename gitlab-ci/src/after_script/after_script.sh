@@ -46,7 +46,7 @@ if [[ "$CI_PIPELINE_SOURCE" == "schedule" ]] && [[ "$CI_JOB_STATUS" == "failed" 
     IFS=',' read -ra CHANNELS <<<"$SLACK_CHANNEL"
     for channel in "${CHANNELS[@]}"; do
         notify_slack/notify_slack.py \
-            "Scheduled ${debug}job \`$CI_JOB_NAME\` *failed*. <$CI_JOB_URL|log>." \
+            "Scheduled ${debug}job \`$CI_JOB_NAME\` *failed*. <$CI_JOB_URL|log>. Commit: <$CI_PROJECT_URL/-/commit/$CI_COMMIT_SHA|$CI_COMMIT_SHORT_SHA>." \
             --channel "$channel" || true
     done
 fi
