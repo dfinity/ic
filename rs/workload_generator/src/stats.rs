@@ -77,7 +77,11 @@ struct DurationStats {
 
 impl DurationStats {
     fn from_facts(facts: &[Fact]) -> DurationStats {
-        let mut sorted: Vec<Duration> = facts.iter().map(|f| f.duration).collect();
+        let mut sorted: Vec<Duration> = facts
+            .iter()
+            .filter(|f| f.success)
+            .map(|f| f.duration)
+            .collect();
         sorted.sort();
         Self { sorted }
     }
