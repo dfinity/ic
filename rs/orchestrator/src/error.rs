@@ -1,5 +1,4 @@
 use ic_http_utils::file_downloader::FileDownloadError;
-use ic_release::error::ReleaseError;
 use ic_types::replica_version::ReplicaVersionParseError;
 use ic_types::{registry::RegistryClientError, NodeId, RegistryVersion, ReplicaVersion, SubnetId};
 use std::error::Error;
@@ -52,9 +51,6 @@ pub enum OrchestratorError {
 
     /// Generic upgrade error
     UpgradeError(String),
-
-    /// An error occurred with a release package
-    ReleasePackageError(ReleaseError),
 }
 
 impl OrchestratorError {
@@ -121,9 +117,6 @@ impl fmt::Display for OrchestratorError {
             ),
             OrchestratorError::ReplicaVersionParseError(e) => {
                 write!(f, "Failed to parse replica version: {}", e)
-            }
-            OrchestratorError::ReleasePackageError(e) => {
-                write!(f, "Error with a release package: {}", e)
             }
             OrchestratorError::MakeRegistryCupError(subnet_id, registry_version) => write!(
                 f,

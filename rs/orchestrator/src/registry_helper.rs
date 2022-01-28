@@ -137,10 +137,13 @@ impl RegistryHelper {
         Arc::clone(&self.registry_client)
     }
 
-    pub(crate) fn get_replica_version_from_subnet_record(
-        subnet: SubnetRecord,
+    pub(crate) fn get_replica_version(
+        &self,
+        subnet_id: SubnetId,
+        registry_version: RegistryVersion,
     ) -> OrchestratorResult<ReplicaVersion> {
-        ReplicaVersion::try_from(subnet.replica_version_id.as_ref())
+        let subnet_record = self.get_subnet_record(subnet_id, registry_version)?;
+        ReplicaVersion::try_from(subnet_record.replica_version_id.as_ref())
             .map_err(OrchestratorError::ReplicaVersionParseError)
     }
 

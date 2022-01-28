@@ -2,10 +2,8 @@ use crate::error::{OrchestratorError, OrchestratorResult};
 use crate::registry_helper::RegistryHelper;
 use crate::utils;
 use ic_http_utils::file_downloader::FileDownloader;
-use ic_logger::{info, warn, ReplicaLogger};
-use ic_release::release::ReleaseContent;
+use ic_logger::{info, ReplicaLogger};
 use ic_types::ReplicaVersion;
-use std::convert::TryFrom;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -63,26 +61,15 @@ impl ReleasePackageProvider {
     pub(crate) async fn download_release_package(
         &self,
         replica_version: ReplicaVersion,
-    ) -> OrchestratorResult<ReleaseContent> {
+    ) -> OrchestratorResult<()> {
         self.gc_release_packages();
-
         let version_dir = self.make_version_dir(&replica_version)?;
-
         let replica_version_record = self.registry.get_replica_version_record(
             replica_version.clone(),
             self.registry.get_latest_version(),
         )?;
-
         let tar_gz_path = version_dir.join("base-os.tar.gz");
-        info!(
-            self.logger,
-            "Downloading release package for replica version {} from {} to {:?}",
-            replica_version.as_ref(),
-            &replica_version_record.release_package_url,
-            &tar_gz_path,
-        );
-
-        let tar_gz_path = version_dir.join("base-os.tar.gz");
+        let start_time = std::time::Instant::now();
         self.file_downloader
             .download_file(
                 &replica_version_record.release_package_url,
@@ -91,17 +78,13 @@ impl ReleasePackageProvider {
             )
             .await
             .map_err(OrchestratorError::from)?;
-
-        let content = ReleaseContent::try_from(version_dir.as_path());
-        if let Err(e) = &content {
-            warn!(
-                self.logger,
-                "Failed to create release content in download release package at {:?}: {:?}",
-                version_dir,
-                e
-            );
-        }
-        content.map_err(OrchestratorError::ReleasePackageError)
+        info!(
+            self.logger,
+            "Image downloading request for version {} processed in {:?}",
+            replica_version.as_ref(),
+            start_time.elapsed(),
+        );
+        Ok(())
     }
 
     /// Make a dir to store a release package for the given replica version
