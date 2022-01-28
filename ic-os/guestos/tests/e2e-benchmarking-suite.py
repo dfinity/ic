@@ -110,18 +110,19 @@ def main(argv):
         check=True,
     )
 
-    subprocess.run(
-        [
-            "python3",
-            "run_experiment_2.py",
-            "--duration",
-            "10",
-            "--initial_rps",
-            "10",
-        ]
-        + base_arguments,
-        check=True,
-    )
+    # TODO Fails due to broken workload generator.
+    # subprocess.run(
+    #     [
+    #         "python3",
+    #         "run_experiment_2.py",
+    #         "--duration",
+    #         "10",
+    #         "--initial_rps",
+    #         "10",
+    #     ]
+    #     + base_arguments,
+    #     check=True,
+    # )
 
     machines[0].stop()
     machines[1].stop()
