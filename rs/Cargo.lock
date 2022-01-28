@@ -7748,7 +7748,6 @@ dependencies = [
  "ic-registry-keys",
  "ic-registry-replicator",
  "ic-registry-routing-table",
- "ic-release",
  "ic-sys",
  "ic-test-utilities",
  "ic-types 0.8.0",
