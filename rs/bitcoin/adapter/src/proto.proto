@@ -2,15 +2,40 @@ syntax = "proto3";
 
 package btc;
 
+enum Network {
+  BITCOIN = 0;
+  TESTNET = 1;
+  SIGNET = 2;
+  REGTEST = 3;
+}
+
+message State {
+  uint32 height = 1;
+  bytes latest_stable_block_hash = 2;
+  UtxoSet utxos = 3;
+  BlockForest unstable_blocks = 4;
+}
+
 message UtxoSet {
   repeated Utxo utxos = 1;
   bool strict = 2;
+  Network network = 3;
 }
 
 message Utxo {
   OutPoint outpoint = 1;
   TxOut txout = 2;
   uint32 height = 3;
+}
+
+message BlockForest {
+  uint64 delta = 1;
+  repeated BlockTree trees = 2;
+}
+
+message BlockTree {
+  Block root = 1;
+  repeated BlockTree children = 2;
 }
 
 message Block {
@@ -51,19 +76,12 @@ message OutPoint {
   uint32 vout = 2;
 }
 
-// This message system component is sent to ask the adapter for child 
-// blocks that the adapter has discovered.
 message GetSuccessorsRequest {
-  // This field contains the block hashes that the system component would like
-  // find child blocks for.
   repeated bytes block_hashes = 1;
 }
 
-// This message is sent back to the system component with a block
-// that the adapter has found. If no block is found, null is sent back.
 message GetSuccessorsResponse {
-  // This field contains the found block information.
-  Block block = 1;
+  repeated Block blocks = 1;
 }
 
 message SendTransactionRequest {

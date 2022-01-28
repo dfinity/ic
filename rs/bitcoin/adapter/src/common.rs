@@ -79,6 +79,22 @@ pub mod test_common {
         decode_block(BLOCK_2_ENCODED)
     }
 
+    pub fn large_block() -> Block {
+        let mut block = decode_block(BLOCK_1_ENCODED);
+        let tx = block
+            .txdata
+            .get(0)
+            .cloned()
+            .expect("block 1 missing transaction");
+        for _ in 0..20_000 {
+            // 20_000 transactions will generate just a bit over a 2 MiB block
+            block.txdata.push(tx.clone());
+        }
+
+        block.header.merkle_root = block.merkle_root();
+        block
+    }
+
     /// This function creates a [Logger](slog::Logger) that discards all
     /// logging messages.
     pub fn make_logger() -> Logger {

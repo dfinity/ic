@@ -46,10 +46,10 @@ impl BtcAdapter for BtcAdapterImpl {
             .collect();
 
         let mut blocks_guard = self.blocks.lock().unwrap();
-        let maybe_block = blocks_guard.handle_client_request(block_hashes);
+        let blocks = blocks_guard.handle_client_request(block_hashes);
 
         Ok(Response::new(GetSuccessorsResponse {
-            block: maybe_block.map(|block| block_to_proto(block)),
+            blocks: blocks.iter().map(|block| block_to_proto(block)).collect(),
         }))
     }
 
