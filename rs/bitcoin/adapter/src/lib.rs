@@ -105,5 +105,5 @@ pub trait ProcessEvent {
 pub trait HandleClientRequest {
     /// This method is used to return a block from the service that handles
     /// block storage that is a successor of the given block hashes.
-    fn handle_client_request(&mut self, block_hashes: Vec<BlockHash>) -> Option<&Block>;
+    fn handle_client_request(&mut self, block_hashes: Vec<BlockHash>) -> Vec<&Block>;
 }

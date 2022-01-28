@@ -36,8 +36,14 @@ const MAX_UNSOLICITED_HEADERS: usize = 20;
 /// to a peer at a time.
 const INV_PER_GET_DATA_REQUEST: u32 = 8;
 
-/// This value represents the number of
-const FUTURE_SUCCESSORS_DEPTH: u32 = 5;
+/// How many blocks the BlockManager should look ahead when responding to a `GetSuccessors` request.
+const IMMEDIATE_SUCCESSORS_DEPTH: u32 = 10;
+
+/// How many blocks the BlockManager should look ahead when pre-fetching blocks.
+const FUTURE_SUCCESSORS_DEPTH: u32 = 20;
+
+/// Max size of the `GetSuccessorsResponse` message (2 MiB).
+const MAX_GET_SUCCESSORS_RESPONSE_BLOCKS_SIZE_BYTES: usize = 2 * 1024 * 1024;
 
 /// Block locators. Consists of starting hashes and a stop hash.
 type Locators = (Vec<BlockHash>, BlockHash);
@@ -574,38 +580,40 @@ impl BlockchainManager {
 
         self.sync_blocks();
         for command in self.outgoing_command_queue.iter() {
-            //TODO: Is it alright to use ".ok()" here? Will it ever cause the code to panic?
             channel.send(command.clone()).ok();
         }
         self.outgoing_command_queue = vec![];
     }
 
     // TODO: ER-1943: Implement "smart adapters" which prefer to return blocks in the longest chain.
-    /// This method returns the list of all successors (of at most given depth) to the given list of block hashes.
+    /// This method returns the list of all successors (up to given depth) to the given list of block hashes in order.
     /// If depth = 1, the method returns immediate successors of `block_hashes`.
     /// If depth = 2, the method returns immediate successors of `block_hashes`, and immediate successors of the immediate successors.
     ///                               | -> 2'
     /// Example: if the chain is 0 -> 1 -> 2 -> 3 -> 4 -> 5 and the block hashes received are {1, 2, 3} with a depth of 1, then {2', 4} is returned.
-    fn get_successor_block_hashes(
-        &self,
-        block_hashes: &HashSet<BlockHash>,
-        mut depth: u32,
-    ) -> HashSet<BlockHash> {
-        if depth < 1 {
-            depth = 1;
-        }
-        let mut result: HashSet<BlockHash> = block_hashes.clone();
+    fn get_successor_block_hashes(&self, predecessors: &[BlockHash], depth: u32) -> Vec<BlockHash> {
+        let levels = if depth > 1 { depth } else { 1 };
+        let mut visited: HashSet<&BlockHash> = predecessors.iter().collect();
+        let mut next_hashes: Vec<_> = predecessors.iter().collect();
+        let mut successors = vec![];
 
-        for _i in 0..depth {
-            let successors: HashSet<BlockHash> = result
-                .iter()
-                .filter_map(|block_hash| self.blockchain.get_children(block_hash))
-                .flatten()
-                .cloned()
-                .collect();
-            result.extend(&successors);
+        for _ in 0..levels {
+            let mut upcoming_hashes = vec![];
+            for hash in next_hashes {
+                if let Some(children) = self.blockchain.get_children(hash) {
+                    for child in children {
+                        if !visited.contains(child) {
+                            successors.push(*child);
+                        }
+                        visited.insert(child);
+                        upcoming_hashes.push(child);
+                    }
+                }
+            }
+            next_hashes = upcoming_hashes;
         }
-        &result - block_hashes
+
+        successors
     }
 }
 
@@ -614,19 +622,20 @@ impl HandleClientRequest for BlockchainManager {
     /// This method is called by Blockmananger::process_event when connection status with a Bitcoin node changed.
     /// If a node is disconnected, this method will remove the peer's info inside BlockChainManager.
     /// If a node is added to active peers list, this method will add the peer's info inside BlockChainManager.
-    fn handle_client_request(&mut self, block_hashes: Vec<BlockHash>) -> Option<&Block> {
+    fn handle_client_request(&mut self, block_hashes: Vec<BlockHash>) -> Vec<&Block> {
         slog::info!(
             self.logger,
             "Received a request for following block hashes from system component : {:?}",
             block_hashes
         );
-        let block_hashes_set: HashSet<BlockHash> = block_hashes.iter().cloned().collect();
         // Compute the entire set of block hashes that are immediate successors of the input `block_hashes`.
-        let immediate_successor_block_hashes: HashSet<BlockHash> =
-            self.get_successor_block_hashes(&block_hashes_set, 1);
-        // Compute the next 5 levels of successor block hashes of the input `block_hashes`.
-        let mut future_successor_block_hashes: HashSet<BlockHash> =
-            self.get_successor_block_hashes(&block_hashes_set, FUTURE_SUCCESSORS_DEPTH);
+        let immediate_successor_block_hashes =
+            self.get_successor_block_hashes(&block_hashes, IMMEDIATE_SUCCESSORS_DEPTH);
+        // Compute the next 20 levels of successor block hashes of the input `block_hashes`.
+        let mut future_successor_block_hashes: HashSet<BlockHash> = self
+            .get_successor_block_hashes(&block_hashes, FUTURE_SUCCESSORS_DEPTH)
+            .into_iter()
+            .collect();
         slog::info!(
             self.logger,
             "Successor block hashes : {:?}, Future successor block hashes : {:?}",
@@ -642,6 +651,8 @@ impl HandleClientRequest for BlockchainManager {
         for hash in &immediate_successor_block_hashes {
             if let Some(block) = self.blockchain.get_block(hash) {
                 successor_blocks.push(block);
+            } else {
+                break;
             }
         }
 
@@ -670,7 +681,20 @@ impl HandleClientRequest for BlockchainManager {
             self.blocks_to_be_synced.len()
         );
 
-        successor_blocks.get(0).cloned()
+        // Send at least 1 block if available.
+        // If more than 1 block, append blocks until we reach the max message size
+        let mut blocks_to_send = vec![];
+        let mut total_size: usize = 0;
+        for block in successor_blocks {
+            total_size = total_size.saturating_add(block.get_size());
+            if blocks_to_send.is_empty()
+                || total_size <= MAX_GET_SUCCESSORS_RESPONSE_BLOCKS_SIZE_BYTES
+            {
+                blocks_to_send.push(block);
+            }
+        }
+
+        blocks_to_send
     }
 }
 
@@ -678,7 +702,7 @@ impl HandleClientRequest for BlockchainManager {
 pub mod test {
     use super::*;
     use crate::common::test_common::{
-        generate_headers, make_logger, TestState, BLOCK_1_ENCODED, BLOCK_2_ENCODED,
+        generate_headers, large_block, make_logger, TestState, BLOCK_1_ENCODED, BLOCK_2_ENCODED,
     };
     use crate::config::test::ConfigBuilder;
     use crate::config::Config;
@@ -750,9 +774,6 @@ pub mod test {
             blockchain_manager.blockchain.genesis().header.time,
             16,
         );
-        let chain_hashes: Vec<BlockHash> = chain.iter().map(|header| header.block_hash()).collect();
-        println!("Adding block hashes {:?}", chain_hashes);
-
         let runtime = tokio::runtime::Runtime::new().expect("runtime err");
 
         let sockets = vec![
@@ -822,7 +843,6 @@ pub mod test {
             16,
         );
         let chain_hashes: Vec<BlockHash> = chain.iter().map(|header| header.block_hash()).collect();
-        println!("Adding block hashes {:?}", chain_hashes);
 
         let runtime = tokio::runtime::Runtime::new().expect("runtime err");
 
@@ -995,9 +1015,7 @@ pub mod test {
         blockchain_manager.blockchain.add_headers(&main_chain);
         blockchain_manager.blockchain.add_headers(&side_chain);
 
-        let block_hashes = vec![blockchain_manager.blockchain.genesis().header.block_hash()]
-            .into_iter()
-            .collect();
+        let block_hashes = vec![blockchain_manager.blockchain.genesis().header.block_hash()];
 
         //             |-> 1' -> 2'
         // If chain is 0 -> 1 -> 2 and block hashes are {0}  then {1, 1'} should be returned.
@@ -1010,9 +1028,7 @@ pub mod test {
         let block_hashes = vec![
             blockchain_manager.blockchain.genesis().header.block_hash(),
             test_state.block_1.block_hash(),
-        ]
-        .into_iter()
-        .collect();
+        ];
         let successor_hashes = blockchain_manager.get_successor_block_hashes(&block_hashes, 2);
 
         assert_eq!(successor_hashes.len(), 3);
@@ -1050,10 +1066,10 @@ pub mod test {
             .expect("invalid block");
 
         let hashes = vec![blockchain_manager.blockchain.genesis().header.block_hash()];
-        let maybe_block = blockchain_manager.handle_client_request(hashes);
+        let blocks = blockchain_manager.handle_client_request(hashes);
         let block_1_hash = test_state.block_1.block_hash();
         let block_2_hash = test_state.block_2.block_hash();
-        assert!(matches!(maybe_block, Some(block) if block.block_hash() == block_1_hash));
+        assert!(matches!(blocks.first(), Some(block) if block.block_hash() == block_1_hash));
         assert_eq!(blockchain_manager.blocks_to_be_synced.len(), 1);
         assert!(blockchain_manager
             .blocks_to_be_synced
@@ -1065,12 +1081,147 @@ pub mod test {
         ];
 
         blockchain_manager.sync_blocks();
-        let maybe_block = blockchain_manager.handle_client_request(hashes);
-        assert!(maybe_block.is_none());
+        let blocks = blockchain_manager.handle_client_request(hashes);
+        assert!(blocks.is_empty());
         assert!(blockchain_manager
             .blockchain
             .get_block(&block_1_hash)
             .is_none());
         assert!(blockchain_manager.blocks_to_be_synced.is_empty());
+    }
+
+    /// This tests ensures that `BlockchainManager::handle_client_request(...)` returns multiple
+    /// blocks from the main chain and a fork. Order should be preserved.
+    #[test]
+    fn test_handle_client_request_multiple_blocks() {
+        let test_state = TestState::setup();
+        let config = ConfigBuilder::new().build();
+        let mut blockchain_manager = BlockchainManager::new(&config, make_logger());
+        // Set up the following chain:
+        // |-> 1'
+        // 0 -> 1 -> 2
+        let main_chain = vec![test_state.block_1.header, test_state.block_2.header];
+        let side_chain = generate_headers(
+            blockchain_manager.blockchain.genesis().header.block_hash(),
+            blockchain_manager.blockchain.genesis().header.time,
+            0,
+        );
+        let side_1 = side_chain.get(0).cloned().expect("Should have 1 header");
+        let side_block_1 = Block {
+            header: side_1,
+            txdata: vec![],
+        };
+        blockchain_manager.blockchain.add_headers(&main_chain);
+        blockchain_manager.blockchain.add_headers(&side_chain);
+        blockchain_manager
+            .blockchain
+            .add_block(test_state.block_1.clone())
+            .expect("invalid block");
+        blockchain_manager
+            .blockchain
+            .add_block(test_state.block_2.clone())
+            .expect("invalid block");
+        blockchain_manager
+            .blockchain
+            .add_block(side_block_1.clone())
+            .expect("invalid block");
+
+        let block_hashes = vec![blockchain_manager.blockchain.genesis().header.block_hash()];
+
+        //             |-> 1'
+        // If chain is 0 -> 1 -> 2 and block hashes are {0}  then {1, 1', 2} should be returned in that order.
+        let blocks = blockchain_manager.handle_client_request(block_hashes);
+        assert_eq!(blocks.len(), 3);
+        assert!(
+            matches!(blocks.get(0), Some(block) if block.block_hash() == test_state.block_1.block_hash())
+        );
+        assert!(
+            matches!(blocks.get(1), Some(block) if block.block_hash() == side_block_1.block_hash())
+        );
+        assert!(
+            matches!(blocks.get(2), Some(block) if block.block_hash() == test_state.block_2.block_hash())
+        );
+    }
+
+    /// This tests ensures that `BlockchainManager::handle_client_request(...)` returns multiple
+    /// blocks from the main chain and a fork. Order should be preserved.
+    #[test]
+    fn test_handle_client_request_multiple_blocks_out_of_order() {
+        let test_state = TestState::setup();
+        let config = ConfigBuilder::new().build();
+        let mut blockchain_manager = BlockchainManager::new(&config, make_logger());
+        // Set up the following chain:
+        // |-> 1'
+        // 0 -> 1 -> 2
+        let main_chain = vec![test_state.block_1.header, test_state.block_2.header];
+        let side_chain = generate_headers(
+            blockchain_manager.blockchain.genesis().header.block_hash(),
+            blockchain_manager.blockchain.genesis().header.time,
+            0,
+        );
+        let side_1 = side_chain.get(0).cloned().expect("Should have 1 header");
+        let side_block_1 = Block {
+            header: side_1,
+            txdata: vec![],
+        };
+        blockchain_manager.blockchain.add_headers(&main_chain);
+        blockchain_manager.blockchain.add_headers(&side_chain);
+        blockchain_manager
+            .blockchain
+            .add_block(test_state.block_2)
+            .expect("invalid block");
+        blockchain_manager
+            .blockchain
+            .add_block(side_block_1)
+            .expect("invalid block");
+
+        let block_hashes = vec![blockchain_manager.blockchain.genesis().header.block_hash()];
+
+        //             |-> 1'
+        // If chain is 0 -> 1 -> 2 and block hashes are {0}  then {1, 1', 2} would be the successor blocks.
+        // Block 1 is not in the cache yet. The Bitcoin virtual canister requires that the blocks
+        // are received in order.
+        let blocks = blockchain_manager.handle_client_request(block_hashes);
+        assert_eq!(blocks.len(), 0);
+    }
+
+    /// This test ensures that the 2MB limit is enforced by `BlockchainManager.handle_client_request(...)`.
+    #[test]
+    fn test_handle_client_request_large_block() {
+        let large_block = large_block();
+        let test_state = TestState::setup();
+        let config = ConfigBuilder::new().build();
+        let addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
+
+        let mut block_2 = test_state.block_2;
+        block_2.header.prev_blockhash = large_block.block_hash();
+
+        let mut blockchain_manager = BlockchainManager::new(&config, make_logger());
+        blockchain_manager.add_peer(&addr);
+        blockchain_manager
+            .blockchain
+            .add_header(large_block.header)
+            .expect("invalid header");
+        blockchain_manager
+            .blockchain
+            .add_header(block_2.header)
+            .expect("invalid header");
+        blockchain_manager
+            .blockchain
+            .add_block(large_block.clone())
+            .expect("invalid block");
+        blockchain_manager
+            .blockchain
+            .add_block(block_2)
+            .expect("invalid block");
+
+        let hashes = vec![blockchain_manager.blockchain.genesis().header.block_hash()];
+        let blocks = blockchain_manager.handle_client_request(hashes);
+        let block_1_hash = large_block.block_hash();
+        assert!(
+            matches!(blocks.first(), Some(block) if block.block_hash() == block_1_hash && block.txdata.len() == large_block.txdata.len())
+        );
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blockchain_manager.blocks_to_be_synced.len(), 0);
     }
 }
