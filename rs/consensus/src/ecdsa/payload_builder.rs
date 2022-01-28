@@ -728,6 +728,7 @@ fn update_next_key_transcript(
                             ecdsa::IDkgTranscriptOperationRef::ReshareOfMasked(transcript_ref),
                         ),
                     ));
+                new_transcript = Some(transcript.clone());
             }
         }
         (None, Some(ecdsa::KeyTranscriptCreation::ReshareOfMaskedParams(config))) => {
