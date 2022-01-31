@@ -10,6 +10,7 @@ use ic_wasm_types::BinaryEncodedWasm;
 use maplit::btreemap;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::hash::{Hash, Hasher};
 use std::{
     collections::BTreeSet,
     convert::{From, TryFrom},
@@ -50,7 +51,7 @@ impl std::fmt::Debug for EmbedderCache {
 }
 
 /// An enum representing the possible values of a global variable.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum Global {
     I32(i32),
     I64(i64),
@@ -65,6 +66,30 @@ impl Global {
             Global::I64(_) => "i64",
             Global::F32(_) => "f32",
             Global::F64(_) => "f64",
+        }
+    }
+}
+
+impl Hash for Global {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let bytes = match self {
+            Global::I32(val) => val.to_le_bytes().to_vec(),
+            Global::I64(val) => val.to_le_bytes().to_vec(),
+            Global::F32(val) => val.to_le_bytes().to_vec(),
+            Global::F64(val) => val.to_le_bytes().to_vec(),
+        };
+        bytes.hash(state)
+    }
+}
+
+impl PartialEq<Global> for Global {
+    fn eq(&self, other: &Global) -> bool {
+        match (self, other) {
+            (Global::I32(val), Global::I32(other_val)) => val == other_val,
+            (Global::I64(val), Global::I64(other_val)) => val == other_val,
+            (Global::F32(val), Global::F32(other_val)) => val == other_val,
+            (Global::F64(val), Global::F64(other_val)) => val == other_val,
+            _ => false,
         }
     }
 }

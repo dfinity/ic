@@ -24,7 +24,7 @@ use ic_canister_sandbox_common::protocol::structs::{
 };
 use ic_canister_sandbox_common::{controller_service::ControllerService, protocol};
 use ic_config::embedders::PersistenceType;
-use ic_embedders::wasm_executor::DirtyPageIndices;
+use ic_embedders::wasm_executor::WasmStateChanges;
 use ic_embedders::WasmExecutionOutput;
 use ic_embedders::{
     wasm_utils::{
@@ -135,13 +135,10 @@ impl Execution {
         match wasm_result {
             Ok(_) => {
                 let state_modifications = deltas.map(
-                    |(
-                        DirtyPageIndices {
-                            wasm_memory_delta,
-                            stable_memory_delta,
-                        },
-                        globals,
-                    )| {
+                    |WasmStateChanges {
+                         dirty_page_indices,
+                         globals,
+                     }| {
                         let system_state_changes = match instance_or_system_api {
                             // Here we use `store_data_mut` instead of
                             // `into_store_data` because the later will drop the
@@ -160,8 +157,8 @@ impl Execution {
                             globals,
                             &wasm_memory,
                             &stable_memory,
-                            &wasm_memory_delta,
-                            &stable_memory_delta,
+                            &dirty_page_indices.wasm_memory_delta,
+                            &dirty_page_indices.stable_memory_delta,
                             subnet_available_memory.get(),
                             system_state_changes,
                         )

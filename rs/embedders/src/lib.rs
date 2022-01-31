@@ -9,6 +9,7 @@ use ic_sys::PageBytes;
 use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType};
 use ic_types::{ingress::WasmResult, methods::FuncRef, NumBytes, NumInstructions};
 use serde::{Deserialize, Serialize};
+use std::fmt;
 pub use wasmtime_embedder::{WasmtimeEmbedder, WasmtimeMemoryCreator};
 
 pub struct WasmExecutionInput {
@@ -25,6 +26,24 @@ pub struct WasmExecutionOutput {
     pub wasm_result: Result<Option<WasmResult>, HypervisorError>,
     pub num_instructions_left: NumInstructions,
     pub instance_stats: InstanceStats,
+}
+
+impl fmt::Display for WasmExecutionOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let wasm_result_str = match &self.wasm_result {
+            Ok(result) => match result {
+                None => "None".to_string(),
+                Some(wasm_result) => format!("{}", wasm_result),
+            },
+            Err(err) => format!("{}", err),
+        };
+        write!(f, "wasm_result => [{}], instructions left => {}, instace_stats => [ accessed pages => {}, dirty pages => {}]",
+               wasm_result_str,
+               self.num_instructions_left,
+               self.instance_stats.accessed_pages,
+               self.instance_stats.dirty_pages
+        )
+    }
 }
 
 pub struct InstanceRunResult {

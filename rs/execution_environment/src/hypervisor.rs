@@ -1,6 +1,6 @@
 use crate::QueryExecutionType;
 use ic_canister_sandbox_replica_controller::sandboxed_execution_controller::SandboxedExecutionController;
-use ic_config::feature_status::FeatureStatus;
+use ic_config::flag_status::FlagStatus;
 use ic_config::{embedders::Config as EmbeddersConfig, execution_environment::Config};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
@@ -1037,11 +1037,11 @@ impl Hypervisor {
         );
 
         let sandbox_executor = match config.canister_sandboxing_flag {
-            FeatureStatus::Enabled => Some(Arc::new(SandboxedExecutionController::new(
+            FlagStatus::Enabled => Some(Arc::new(SandboxedExecutionController::new(
                 log.clone(),
                 metrics_registry,
             ))),
-            FeatureStatus::Disabled => None,
+            FlagStatus::Disabled => None,
         };
 
         Self {

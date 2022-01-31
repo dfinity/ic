@@ -5,7 +5,7 @@ use super::errors::into_parity_wasm_error;
 
 use ic_config::{
     embedders::{Config as EmbeddersConfig, FeatureFlags},
-    feature_status::FeatureStatus,
+    flag_status::FlagStatus,
 };
 use ic_replicated_state::canister_state::execution_state::{
     CustomSection, CustomSectionType, WasmMetadata,
@@ -527,8 +527,8 @@ fn get_valid_system_apis(
     ];
 
     let experimental_apis = match feature_flags.api_cycles_u128_flag {
-        FeatureStatus::Disabled => vec![],
-        FeatureStatus::Enabled => vec![
+        FlagStatus::Disabled => vec![],
+        FlagStatus::Enabled => vec![
             (
                 "call_cycles_add128",
                 vec![(

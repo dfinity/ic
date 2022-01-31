@@ -14,11 +14,12 @@ use crate::{
     wasmtime_embedder::WasmtimeInstance,
     WasmExecutionInput, WasmExecutionOutput, WasmtimeEmbedder,
 };
+use ic_config::flag_status::FlagStatus;
 use ic_config::{embedders::Config as EmbeddersConfig, embedders::PersistenceType};
 use ic_interfaces::execution_environment::{
     ExecutionParameters, HypervisorError, HypervisorResult, InstanceStats, SystemApi,
 };
-use ic_logger::ReplicaLogger;
+use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{EmbedderCache, ExecutionState};
@@ -26,6 +27,13 @@ use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
 use ic_system_api::{system_api_empty::SystemApiEmpty, ModificationTracking, SystemApiImpl};
 use ic_types::{CanisterId, NumBytes, NumInstructions};
 use ic_wasm_types::BinaryEncodedWasm;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+
+// Please enable only for debugging.
+// If enabled, will collect and log checksums of execution results.
+// Disabled by default to avoid producing too much data.
+const EMIT_STATE_HASHES_FOR_DEBUGGING: FlagStatus = FlagStatus::Disabled;
 
 struct WasmExecutorMetrics {
     // TODO(EXC-350): Remove this metric once we confirm that no reserved functions are exported.
@@ -204,7 +212,7 @@ impl WasmExecutor {
                 )
             }
         };
-        let (wasm_execution_output, deltas, instance_or_system_api) = process(
+        let (wasm_execution_output, wasm_state_changes, instance_or_system_api) = process(
             func_ref,
             api_type,
             canister_current_memory_usage,
@@ -218,8 +226,13 @@ impl WasmExecutor {
             self.log.clone(),
         );
 
-        if let Some((_, new_globals)) = deltas {
-            execution_state.exported_globals = new_globals;
+        // Collect logs only when the flag is enabled to avoid producing too much data.
+        if EMIT_STATE_HASHES_FOR_DEBUGGING == FlagStatus::Enabled {
+            self.emit_state_hashes_for_debugging(&wasm_state_changes, &wasm_execution_output);
+        }
+
+        if let Some(wasm_state_changes) = wasm_state_changes {
+            execution_state.exported_globals = wasm_state_changes.globals;
         }
 
         let system_api = match instance_or_system_api {
@@ -269,6 +282,27 @@ impl WasmExecutor {
     pub fn compile_count_for_testing(&self) -> u64 {
         self.metrics.compile.get_sample_count()
     }
+
+    // Collecting information based on the result of the execution and wasm state changes.
+    fn emit_state_hashes_for_debugging(
+        &self,
+        wasm_state_changes: &Option<WasmStateChanges>,
+        wasm_execution_output: &WasmExecutionOutput,
+    ) {
+        // Log information only for non-empty deltas.
+        // This would automatically exclude queries.
+        if let Some(deltas) = wasm_state_changes {
+            let delta_hashes = deltas.calculate_hashes();
+            warn!(
+                self.log,
+                "Executed update call: result  => [{}], deltas hash => [ wasm memory delta => {}, stable memory delta => {}, globals => {}]",
+                wasm_execution_output,
+                delta_hashes.0,
+                delta_hashes.1,
+                delta_hashes.2,
+            );
+        };
+    }
 }
 
 /// Utility function to compute the page delta. It creates a copy of `Instance`
@@ -303,6 +337,45 @@ pub struct DirtyPageIndices {
     pub stable_memory_delta: Vec<PageIndex>,
 }
 
+// A struct which holds the changes of the wasm state resulted from execution.
+pub struct WasmStateChanges {
+    pub dirty_page_indices: DirtyPageIndices,
+    pub globals: Vec<Global>,
+}
+
+impl WasmStateChanges {
+    fn new(
+        wasm_memory_delta: Vec<PageIndex>,
+        stable_memory_delta: Vec<PageIndex>,
+        globals: Vec<Global>,
+    ) -> Self {
+        Self {
+            dirty_page_indices: DirtyPageIndices {
+                wasm_memory_delta,
+                stable_memory_delta,
+            },
+            globals,
+        }
+    }
+
+    // Only used when collecting information based on the result of message execution.
+    //
+    // See `collect_logs_after_execution`.
+    fn calculate_hashes(&self) -> (u64, u64, u64) {
+        fn hash<T: Hash>(x: &[T]) -> u64 {
+            let mut hasher = DefaultHasher::new();
+            x.hash(&mut hasher);
+            hasher.finish()
+        }
+
+        (
+            hash(&self.dirty_page_indices.stable_memory_delta),
+            hash(&self.dirty_page_indices.wasm_memory_delta),
+            hash(&self.globals),
+        )
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::type_complexity)]
 pub fn process(
@@ -319,7 +392,7 @@ pub fn process(
     logger: ReplicaLogger,
 ) -> (
     WasmExecutionOutput,
-    Option<(DirtyPageIndices, Vec<Global>)>,
+    Option<WasmStateChanges>,
     Result<WasmtimeInstance<SystemApiImpl>, SystemApiImpl>,
 ) {
     let instruction_limit = execution_parameters.instruction_limit;
@@ -372,7 +445,7 @@ pub fn process(
         .system_api
         .take_execution_result(run_result.as_ref().err());
 
-    let memory_deltas = match run_result {
+    let wasm_state_changes = match run_result {
         Ok(run_result) => {
             match modification_tracking {
                 ModificationTracking::Track => {
@@ -391,11 +464,9 @@ pub fn process(
                     );
                     stable_memory.size = run_result.stable_memory_size;
 
-                    Some((
-                        DirtyPageIndices {
-                            wasm_memory_delta,
-                            stable_memory_delta,
-                        },
+                    Some(WasmStateChanges::new(
+                        wasm_memory_delta,
+                        stable_memory_delta,
                         run_result.exported_globals,
                     ))
                 }
@@ -411,7 +482,7 @@ pub fn process(
             num_instructions_left,
             instance_stats,
         },
-        memory_deltas,
+        wasm_state_changes,
         Ok(instance),
     )
 }
