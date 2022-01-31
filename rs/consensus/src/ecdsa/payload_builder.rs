@@ -665,7 +665,6 @@ fn update_next_key_transcript(
             let dealers = IDkgDealers::new(subnet_nodes.iter().copied().collect::<BTreeSet<_>>())?;
             let receivers =
                 IDkgReceivers::new(subnet_nodes.iter().copied().collect::<BTreeSet<_>>())?;
-            let transcript_ref = ecdsa::TranscriptRef::new(height, transcript.transcript_id);
             payload.next_key_transcript_creation =
                 Some(ecdsa::KeyTranscriptCreation::ReshareOfUnmaskedParams(
                     ecdsa::IDkgTranscriptParamsRef::new(
@@ -674,7 +673,7 @@ fn update_next_key_transcript(
                         receivers,
                         summary_registry_version,
                         AlgorithmId::ThresholdEcdsaSecp256k1,
-                        ecdsa::IDkgTranscriptOperationRef::ReshareOfUnmasked(transcript_ref),
+                        ecdsa::IDkgTranscriptOperationRef::ReshareOfUnmasked(*transcript),
                     ),
                 ));
         }
@@ -1228,6 +1227,189 @@ mod tests {
                 StateManagerError::StateNotCommittedYet(_)
             ))
         );
+    }
+
+    #[test]
+    fn test_ecdsa_update_next_key_transcript() {
+        let num_of_nodes = 4;
+        let subnet_id = subnet_test_id(1);
+        let env = CanisterThresholdSigTestEnvironment::new(num_of_nodes);
+        let registry_version = env.newest_registry_version;
+        let subnet_nodes = env.receivers().into_iter().collect::<Vec<_>>();
+        let mut block_reader = TestEcdsaBlockReader::new();
+        let config_ids = |payload: &ecdsa::EcdsaDataPayload| {
+            let mut arr = payload
+                .iter_transcript_configs_in_creation()
+                .map(|x| x.transcript_id.id())
+                .collect::<Vec<_>>();
+            arr.sort_unstable();
+            arr
+        };
+
+        // 1. Nothing initially, masked transcript creation should start
+        let cur_height = Height::new(10);
+        let mut payload = empty_ecdsa_data_payload(subnet_id);
+        let mut completed = BTreeMap::new();
+        let result = update_next_key_transcript(
+            &subnet_nodes,
+            registry_version,
+            None,
+            &mut payload,
+            &mut completed,
+            cur_height,
+            &no_op_logger(),
+        );
+        matches!(result, Ok(None));
+        assert_eq!(payload.next_unused_transcript_id.id(), 1);
+        assert_eq!(payload.iter_transcript_configs_in_creation().count(), 1);
+        assert_eq!(config_ids(&payload), [0]);
+
+        // 2. Masked random transcript is created, should start reshare of the masked
+        // transcript.
+        let cur_height = Height::new(20);
+        let masked_transcript = {
+            let param = match &payload.next_key_transcript_creation {
+                Some(ecdsa::KeyTranscriptCreation::RandomTranscriptParams(param)) => param.clone(),
+                _ => panic!(
+                    "Unexpected state: {:?}",
+                    payload.next_key_transcript_creation
+                ),
+            };
+            run_idkg_and_create_transcript(
+                &param.translate(&block_reader).unwrap(),
+                &env.crypto_components,
+            )
+        };
+        completed.insert(masked_transcript.transcript_id, masked_transcript.clone());
+        let result = update_next_key_transcript(
+            &subnet_nodes,
+            registry_version,
+            None,
+            &mut payload,
+            &mut completed,
+            cur_height,
+            &no_op_logger(),
+        );
+        let completed_transcript = result.unwrap().unwrap();
+        assert_eq!(completed_transcript, masked_transcript);
+        block_reader.add_transcript(
+            ecdsa::TranscriptRef::new(cur_height, completed_transcript.transcript_id),
+            completed_transcript,
+        );
+        assert_eq!(payload.next_unused_transcript_id.id(), 2);
+        assert_eq!(payload.iter_transcript_configs_in_creation().count(), 1);
+        assert_eq!(config_ids(&payload), [1]);
+
+        // 3. Unmasked transcript is created, should complete the boot strap sequence
+        let cur_height = Height::new(30);
+        let unmasked_transcript = {
+            let param = match &payload.next_key_transcript_creation {
+                Some(ecdsa::KeyTranscriptCreation::ReshareOfMaskedParams(param)) => param.clone(),
+                _ => panic!(
+                    "Unexpected state: {:?}",
+                    payload.next_key_transcript_creation
+                ),
+            };
+            run_idkg_and_create_transcript(
+                &param.translate(&block_reader).unwrap(),
+                &env.crypto_components,
+            )
+        };
+        completed.insert(
+            unmasked_transcript.transcript_id,
+            unmasked_transcript.clone(),
+        );
+        let result = update_next_key_transcript(
+            &subnet_nodes,
+            registry_version,
+            None,
+            &mut payload,
+            &mut completed,
+            cur_height,
+            &no_op_logger(),
+        );
+        let completed_transcript = result.unwrap().unwrap();
+        assert_eq!(completed_transcript, unmasked_transcript);
+        block_reader.add_transcript(
+            ecdsa::TranscriptRef::new(cur_height, completed_transcript.transcript_id),
+            completed_transcript,
+        );
+        assert_eq!(payload.next_unused_transcript_id.id(), 2);
+        assert_eq!(payload.iter_transcript_configs_in_creation().count(), 0);
+        assert!(config_ids(&payload).is_empty());
+        let current_key_transcript =
+            ecdsa::TranscriptRef::new(cur_height, unmasked_transcript.transcript_id);
+        match &payload.next_key_transcript_creation {
+            Some(ecdsa::KeyTranscriptCreation::Created(transcript_ref)) => {
+                assert_eq!(*transcript_ref, current_key_transcript);
+            }
+            _ => panic!(
+                "Unexpected state: {:?}",
+                payload.next_key_transcript_creation
+            ),
+        }
+
+        // 4. Reshare the current key transcript to get the next one
+        let cur_height = Height::new(40);
+        payload.next_key_transcript_creation = None;
+        let result = update_next_key_transcript(
+            &subnet_nodes,
+            registry_version,
+            Some(&current_key_transcript),
+            &mut payload,
+            &mut completed,
+            cur_height,
+            &no_op_logger(),
+        );
+        matches!(result, Ok(None));
+        assert_eq!(payload.next_unused_transcript_id.id(), 3);
+        assert_eq!(payload.iter_transcript_configs_in_creation().count(), 1);
+        assert_eq!(config_ids(&payload), [2]);
+
+        // 5. Reshare completes to get the next unmasked transcript
+        let cur_height = Height::new(50);
+        let unmasked_transcript = {
+            let param = match &payload.next_key_transcript_creation {
+                Some(ecdsa::KeyTranscriptCreation::ReshareOfUnmaskedParams(param)) => param.clone(),
+                _ => panic!(
+                    "Unexpected state: {:?}",
+                    payload.next_key_transcript_creation
+                ),
+            };
+            run_idkg_and_create_transcript(
+                &param.translate(&block_reader).unwrap(),
+                &env.crypto_components,
+            )
+        };
+        completed.insert(
+            unmasked_transcript.transcript_id,
+            unmasked_transcript.clone(),
+        );
+        let result = update_next_key_transcript(
+            &subnet_nodes,
+            registry_version,
+            Some(&current_key_transcript),
+            &mut payload,
+            &mut completed,
+            cur_height,
+            &no_op_logger(),
+        );
+        let completed_transcript = result.unwrap().unwrap();
+        assert_eq!(completed_transcript, unmasked_transcript);
+        assert_eq!(payload.next_unused_transcript_id.id(), 3);
+        assert_eq!(payload.iter_transcript_configs_in_creation().count(), 0);
+        assert!(config_ids(&payload).is_empty());
+        let current_key_transcript =
+            ecdsa::TranscriptRef::new(cur_height, unmasked_transcript.transcript_id);
+        match &payload.next_key_transcript_creation {
+            Some(ecdsa::KeyTranscriptCreation::Created(transcript_ref)) => {
+                assert_eq!(*transcript_ref, current_key_transcript);
+            }
+            _ => panic!(
+                "Unexpected state: {:?}",
+                payload.next_key_transcript_creation
+            ),
+        }
     }
 
     #[test]
