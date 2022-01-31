@@ -7,8 +7,7 @@ use bitcoin::Network;
 use clap::{AppSettings, Clap};
 use serde::Deserialize;
 use slog::Level;
-use std::net::SocketAddr;
-use std::str::FromStr;
+use std::net::{SocketAddr, ToSocketAddrs};
 use std::{fs::File, io, path::PathBuf};
 use thiserror::Error;
 
@@ -71,16 +70,19 @@ impl Cli {
                 dns_seeds.extend(additional_seeds.clone());
             }
 
+            // Convert or resolve the `nodes` field to one or more `SocketAddr` values.
+            let nodes = cli_config
+                .nodes
+                .unwrap_or_else(Vec::new)
+                .iter()
+                .flat_map(|a| a.to_socket_addrs().map_or(vec![], |v| v.collect()))
+                .collect();
+
             Config {
                 network: cli_config.network,
                 dns_seeds,
                 socks_proxy: cli_config.socks_proxy,
-                nodes: cli_config
-                    .nodes
-                    .unwrap_or_else(Vec::new)
-                    .iter()
-                    .map(|node_addr| SocketAddr::from_str(node_addr).expect("Invalid node address"))
-                    .collect(),
+                nodes,
             }
         })
     }
