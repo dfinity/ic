@@ -123,6 +123,9 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         retries -= 1;
     }
 
+    block_on(node3.assert_ready(ctx));
+    block_on(node4.assert_ready(ctx));
+
     info!(
         ctx.logger,
         "App message on former NNS nodes could be retrieved!"

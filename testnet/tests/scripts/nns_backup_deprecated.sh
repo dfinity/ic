@@ -186,6 +186,8 @@ if grep -q "does not correspond" "$results_dir/backup_post_upgrade.log"; then
     exit 1
 fi
 
+ssh -o StrictHostKeyChecking=no "admin@${nns_ip}" 'journalctl -u ic-replica' >"$results_dir/replica_logs.txt"
+
 if test $SUCCESS = "1"; then
     echo "✅ Backup recovery succeeded."
 else
