@@ -678,9 +678,16 @@ fn report_last_diverged_checkpoint(
     }
 }
 
-pub type DirtyPages = BTreeMap<CanisterId, (Height, Vec<PageIndex>)>;
+type DirtyPagesMap = BTreeMap<CanisterId, (Height, Vec<PageIndex>)>;
 
-/// Get dirty pages of canister heap backed by a checkpoint file.
+#[derive(Default)]
+pub struct DirtyPages {
+    pub wasm_memory: DirtyPagesMap,
+    pub stable_memory: DirtyPagesMap,
+}
+
+/// Get dirty pages of canister heap and stable memory backed by a checkpoint
+/// file.
 pub fn get_dirty_pages(state: &ReplicatedState) -> DirtyPages {
     let mut dirty_pages: DirtyPages = Default::default();
     for canister in state.canisters_iter() {
@@ -688,13 +695,23 @@ pub fn get_dirty_pages(state: &ReplicatedState) -> DirtyPages {
             // When `base_height` is None, the page map is not backed by a checkpoint
             // and we don't know what changed since the checkpoint.
             if let Some(height) = execution_state.wasm_memory.page_map.base_height {
-                let page_delta_indexes = execution_state
+                let page_delta_indices = execution_state
                     .wasm_memory
                     .page_map
                     .get_page_delta_indices();
-                dirty_pages.insert(
+                dirty_pages.wasm_memory.insert(
                     canister.system_state.canister_id,
-                    (height, page_delta_indexes),
+                    (height, page_delta_indices),
+                );
+            }
+            if let Some(height) = execution_state.stable_memory.page_map.base_height {
+                let page_delta_indices = execution_state
+                    .stable_memory
+                    .page_map
+                    .get_page_delta_indices();
+                dirty_pages.stable_memory.insert(
+                    canister.system_state.canister_id,
+                    (height, page_delta_indices),
                 );
             }
         }
