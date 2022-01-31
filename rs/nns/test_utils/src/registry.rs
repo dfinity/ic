@@ -110,6 +110,19 @@ pub async fn insert_value<T: Message + Default>(registry: &Canister<'_>, key: &[
     );
 }
 
+pub fn routing_table_mutation(rt: &RoutingTable) -> RegistryMutation {
+    use ic_protobuf::registry::routing_table::v1 as pb;
+
+    let rt_pb = pb::RoutingTable::from(rt);
+    let mut buf = vec![];
+    rt_pb.encode(&mut buf).unwrap();
+    RegistryMutation {
+        mutation_type: Type::Upsert as i32,
+        key: make_routing_table_record_key().into_bytes(),
+        value: buf,
+    }
+}
+
 /// Returns a mutation that sets the initial state of the registry to be
 /// compliant with its invariants.
 pub fn invariant_compliant_mutation() -> Vec<RegistryMutation> {
@@ -160,10 +173,7 @@ pub fn invariant_compliant_mutation() -> Vec<RegistryMutation> {
             make_subnet_record_key(subnet_pid).as_bytes().to_vec(),
             encode_or_panic(&system_subnet),
         ),
-        insert(
-            make_routing_table_record_key().as_bytes().to_vec(),
-            encode_or_panic(&RoutingTablePB::default()),
-        ),
+        routing_table_mutation(&RoutingTable::default()),
         insert(
             make_node_record_key(node_pid).as_bytes().to_vec(),
             encode_or_panic(&node),

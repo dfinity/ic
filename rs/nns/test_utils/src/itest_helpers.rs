@@ -941,3 +941,39 @@ pub async fn forward_call_via_universal_canister(
         ),
     }
 }
+
+/// Makes the `sender` call the given method of the
+/// `receiver` handler. It is assumed that `sender` is a universal
+/// canister.
+///
+/// Return the response bytes if the receiver replied, and reject message if the
+/// call failed.
+pub async fn try_call_via_universal_canister(
+    sender: &Canister<'_>,
+    receiver: &Canister<'_>,
+    method: &str,
+    payload: Vec<u8>,
+) -> Result<Vec<u8>, String> {
+    let universal_canister_payload = universal_canister_argument_builder()
+        .call_simple(
+            receiver.canister_id(),
+            method,
+            call_args()
+                .other_side(payload)
+                .on_reply(
+                    universal_canister_argument_builder()
+                        .message_payload()
+                        .reply_data_append()
+                        .reply(),
+                )
+                .on_reject(
+                    universal_canister_argument_builder()
+                        .reject_message()
+                        .reject(),
+                ),
+        )
+        .build();
+    sender
+        .update_("update", bytes, universal_canister_payload)
+        .await
+}

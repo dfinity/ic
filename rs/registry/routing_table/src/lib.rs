@@ -269,6 +269,123 @@ impl RoutingTable {
         result
     }
 
+    /// Assigns an id range to the destination subnet.
+    ///
+    /// Notes:
+    ///   * If the canister id range is not assigned yet, a new mapping is created.
+    ///   * If the canister id range is assigned to other canisters, this function
+    ///     removes the previous mappings, splitting them if necessary.
+    ///
+    /// Complexity: O(log N)
+    pub fn assign_range(&mut self, range: CanisterIdRange, destination: SubnetId) {
+        fn make_range(start: u64, end: u64) -> CanisterIdRange {
+            CanisterIdRange {
+                start: CanisterId::from(start),
+                end: CanisterId::from(end),
+            }
+        }
+
+        let r_start = canister_id_into_u64(range.start);
+        let r_end = canister_id_into_u64(range.end);
+
+        let left_bound = match self.0.range(..=range).next_back() {
+            Some((k, _)) => *k,
+            None => range,
+        };
+        let right_bound = make_range(r_end, u64::MAX);
+
+        let mut to_remove: Vec<CanisterIdRange> = vec![];
+        let mut to_add: Vec<(CanisterIdRange, SubnetId)> = vec![];
+
+        for (k, v) in self.0.range(left_bound..=right_bound) {
+            let k_start = canister_id_into_u64(k.start);
+            let k_end = canister_id_into_u64(k.end);
+
+            //           k
+            // <------------------->
+            // |        |          |           |
+            //          <---------------------->
+            //                     range
+            if k_start < r_start && r_start <= k_end && k_end <= r_end {
+                to_remove.push(*k);
+                to_add.push((make_range(k_start, r_start - 1), *v));
+                continue;
+            }
+            //               k
+            //          <---------->
+            // |        |          |           |
+            // <------------------------------->
+            //             range
+            if r_start <= k_start && k_end <= r_end {
+                to_remove.push(*k);
+                continue;
+            }
+            //               k
+            // <------------------------------->
+            // |        |          |           |
+            //          <---------->
+            //             range
+            if k_start < r_start && r_end < k_end {
+                to_remove.push(*k);
+                to_add.push((make_range(k_start, r_start - 1), *v));
+                to_add.push((make_range(r_end + 1, k_end), *v));
+                break;
+            }
+            //                     k
+            //          <---------------------->
+            // |        |          |           |
+            // <------------------->
+            //        range
+            if r_start <= k_start && k_start <= r_end && r_end < k_end {
+                to_remove.push(*k);
+                to_add.push((make_range(r_end + 1, k_end), *v));
+                break;
+            }
+
+            assert!(
+                k_end < r_start || r_end < k_start,
+                "did not handle case k = ({}, {}), r = ({}, {})",
+                k_start,
+                k_end,
+                r_start,
+                r_end
+            );
+        }
+        debug_assert!(to_add.len() <= 2);
+
+        for k in to_remove.iter() {
+            self.0.remove(k);
+        }
+        for (k, v) in to_add {
+            self.0.insert(k, v);
+        }
+        self.0.insert(range, destination);
+
+        debug_assert_eq!(self.well_formed(), Ok(()));
+    }
+
+    /// Optimizes the internal structure of the routing table by merging
+    /// neighboring ranges with the same destination.
+    ///
+    /// Complexity: O(N * log N)
+    pub fn optimize(&mut self) {
+        let mut entries: Vec<(CanisterIdRange, SubnetId)> = Vec::with_capacity(self.0.len());
+        for (range, subnet) in std::mem::take(&mut self.0).into_iter() {
+            if let Some((last_range, last_subnet)) = entries.last_mut() {
+                let last_range_end = canister_id_into_u64(last_range.end);
+                let range_start = canister_id_into_u64(range.start);
+
+                if *last_subnet == subnet && last_range_end + 1 == range_start {
+                    last_range.end = range.end;
+                    continue;
+                }
+            }
+            entries.push((range, subnet));
+        }
+        self.0 = entries.into_iter().collect();
+        debug_assert_eq!(self.well_formed(), Ok(()));
+    }
+
     /// Removes all canister id ranges mapped to the specified subnet.
     pub fn remove_subnet(&mut self, subnet_id_to_remove: SubnetId) {
         self.0
@@ -403,254 +520,4 @@ impl IntoIterator for RoutingTable {
 }
 
 #[cfg(test)]
-mod test {
-    use super::*;
-    use assert_matches::assert_matches;
-    use ic_test_utilities::types::ids::subnet_test_id;
-    use std::{
-        collections::hash_map::DefaultHasher,
-        hash::{Hash, Hasher},
-    };
-
-    fn hash(seed: u64, counter: u32) -> u64 {
-        let mut s = DefaultHasher::new();
-        seed.hash(&mut s);
-        counter.hash(&mut s);
-        s.finish()
-    }
-
-    fn allocate_canister_id(
-        rt: &RoutingTable,
-        me: SubnetId,
-        seed: u64,
-        seq_no: &mut u32,
-        canister_find: &dyn Fn(CanisterId) -> bool,
-    ) -> CanisterId {
-        let ranges: CanisterIdRanges = rt.ranges(me);
-        // The sum of the length of all ranges.
-        let r = ranges.total_count();
-        assert!(r > 0x100);
-        // Try 1000 times
-        for _ in 0..1000 {
-            // Compute a random Canister ID h in the current range of the subnet's
-            // allocation.
-            let h = 0x100 * (hash(seed, *seq_no) as u128 % (r / 0x100));
-            // Increase the sequence number.
-            *seq_no += 1;
-            // .locate() returns the h'th Canister ID across all the ranges
-            let cid = ranges.locate(h as u64);
-            // Check that we got an application group ID.
-            assert!(canister_id_into_u64(cid).trailing_zeros() >= 8);
-            // Sanity check: the Canister ID routes to our SN.
-            assert_eq!(rt.route(cid.get()), Some(me));
-            // Check in our canister map if the Canister ID is already
-            // mapped to a canister.
-            if canister_find(cid) {
-                println!("Very unlikely event happened: a Canister ID clash for 0x{:x?} at sequence number {}!",
-                     cid, *seq_no);
-                continue;
-            }
-            return cid;
-        }
-        // Then panic.
-        panic!();
-    }
-
-    fn new_canister_id_ranges(ranges: Vec<(u64, u64)>) -> CanisterIdRanges {
-        let ranges = ranges
-            .into_iter()
-            .map(|(start, end)| CanisterIdRange {
-                start: CanisterId::from(start),
-                end: CanisterId::from(end),
-            })
-            .collect();
-        CanisterIdRanges(ranges)
-    }
-
-    fn new_routing_table(ranges: Vec<((u64, u64), u64)>) -> RoutingTable {
-        let mut map = BTreeMap::new();
-        for ((start, end), subnet_id) in ranges {
-            let range = CanisterIdRange {
-                start: CanisterId::from(start),
-                end: CanisterId::from(end),
-            };
-            map.insert(range, subnet_test_id(subnet_id));
-        }
-        RoutingTable(map)
-    }
-
-    #[test]
-    fn invalid_canister_id_ranges() {
-        let ranges = CanisterIdRanges(vec![CanisterIdRange {
-            start: CanisterId::from(1),
-            end: CanisterId::from(0),
-        }]);
-        assert_matches!(
-            ranges.well_formed(),
-            Err(WellFormedError::CanisterIdRangeNonClosedRange(_))
-        );
-
-        let ranges = CanisterIdRanges(vec![
-            CanisterIdRange {
-                start: CanisterId::from(0),
-                end: CanisterId::from(0xff),
-            },
-            CanisterIdRange {
-                start: CanisterId::from(0),
-                end: CanisterId::from(0xff),
-            },
-        ]);
-        assert_matches!(
-            ranges.well_formed(),
-            Err(WellFormedError::CanisterIdRangeNotSortedOrNotDisjoint(_))
-        );
-    }
-
-    #[test]
-    fn invalid_routing_table() {
-        // empty range
-        let rt = new_routing_table([((0x1000, 0x1ff), 0)].to_vec());
-        assert_matches!(
-            rt.well_formed(),
-            Err(WellFormedError::RoutingTableNonEmptyRange(_))
-        );
-
-        // overlaping ranges.
-        let rt = new_routing_table([((0, 0x100ff), 123), ((0x10000, 0x200ff), 7)].to_vec());
-        assert_matches!(
-            rt.well_formed(),
-            Err(WellFormedError::RoutingTableNotDisjoint(_))
-        );
-    }
-
-    #[test]
-    fn valid_example() {
-        // Valid example
-        let rt = new_routing_table(
-            [
-                ((0x100, 0x100ff), 1),
-                ((0x20000, 0x2ffff), 2),
-                ((0x50000, 0x50fff), 1),
-                ((0x80000, 0x8ffff), 8),
-                ((0x90000, 0xfffff), 9),
-                ((0x1000000000000000, 0xffffffffffffffff), 0xf),
-            ]
-            .to_vec(),
-        );
-        assert_eq!(rt.well_formed(), Ok(()));
-        assert!(rt.route(CanisterId::from(0).get()) == None);
-        assert!(rt.route(CanisterId::from(0x99).get()) == None);
-        assert!(rt.route(CanisterId::from(0x100).get()) == Some(subnet_test_id(1)));
-        assert!(rt.route(CanisterId::from(0x10000).get()) == Some(subnet_test_id(1)));
-        assert!(rt.route(CanisterId::from(0x100ff).get()) == Some(subnet_test_id(1)));
-        assert!(rt.route(CanisterId::from(0x10100).get()) == None);
-        assert!(rt.route(CanisterId::from(0x20500).get()) == Some(subnet_test_id(2)));
-        assert!(rt.route(CanisterId::from(0x50050).get()) == Some(subnet_test_id(1)));
-        assert!(rt.route(CanisterId::from(0x100000).get()) == None);
-        assert!(rt.route(CanisterId::from(0x80500).get()) == Some(subnet_test_id(8)));
-        assert!(rt.route(CanisterId::from(0x8ffff).get()) == Some(subnet_test_id(8)));
-        assert!(rt.route(CanisterId::from(0x90000).get()) == Some(subnet_test_id(9)));
-        assert!(rt.route(CanisterId::from(0xffffffffffffffff).get()) == Some(subnet_test_id(0xf)));
-        assert_eq!(rt.ranges(subnet_test_id(1)).well_formed(), Ok(()));
-        assert!(
-            rt.ranges(subnet_test_id(1)).0
-                == new_canister_id_ranges(vec![(0x100, 0x100ff), (0x50000, 0x50fff)]).0
-        );
-        let mut seq_no = 0;
-        let cid = allocate_canister_id(
-            &rt,
-            subnet_test_id(1),
-            17,
-            &mut seq_no,
-            &(|x| x <= CanisterId::from(0x100ff)),
-        );
-        println!("CID 0x{:x?}, seq_no {}", cid, seq_no);
-        assert!(cid > CanisterId::from(0x10000));
-    }
-
-    #[test]
-    fn route_when_principal_corresponds_to_subnet() {
-        // Valid routing table
-        let rt = new_routing_table(
-            [
-                ((0x100, 0x100ff), 1),
-                ((0x20000, 0x2ffff), 2),
-                ((0x50000, 0x50fff), 1),
-                ((0x80000, 0x8ffff), 8),
-                ((0x90000, 0xfffff), 9),
-                ((0x1000000000000000, 0xffffffffffffffff), 0xf),
-            ]
-            .to_vec(),
-        );
-
-        assert_eq!(rt.well_formed(), Ok(()));
-
-        // Existing subnets.
-        let subnet_id1 = subnet_test_id(1);
-        let subnet_id8 = subnet_test_id(8);
-
-        // Non existing subnets
-        let subnet_id5 = subnet_test_id(5);
-        let subnet_id12 = subnet_test_id(12);
-
-        assert_eq!(rt.route(subnet_id1.get()), Some(subnet_id1));
-        assert_eq!(rt.route(subnet_id8.get()), Some(subnet_id8));
-        assert_eq!(rt.route(subnet_id5.get()), None);
-        assert_eq!(rt.route(subnet_id12.get()), None);
-    }
-
-    #[test]
-    fn can_insert_valid_route() {
-        let mut rt = new_routing_table(vec![((1, 1000), 1)]);
-        assert_eq!(rt.well_formed(), Ok(()));
-        assert_eq!(
-            rt.insert(
-                CanisterIdRange {
-                    start: CanisterId::from(1001u64),
-                    end: CanisterId::from(2000u64)
-                },
-                subnet_test_id(2)
-            ),
-            Ok(())
-        );
-        assert_eq!(rt.well_formed(), Ok(()));
-        assert_eq!(
-            rt.route(CanisterId::from(1001u64).get()),
-            Some(subnet_test_id(2))
-        );
-    }
-
-    #[test]
-    fn cannot_insert_invalid_route() {
-        let mut rt = new_routing_table(vec![((1, 1000), 1)]);
-        assert_eq!(rt.well_formed(), Ok(()));
-        assert_matches!(
-            rt.insert(
-                CanisterIdRange {
-                    start: CanisterId::from(100u64),
-                    end: CanisterId::from(2000u64)
-                },
-                subnet_test_id(2)
-            ),
-            Err(WellFormedError::RoutingTableNotDisjoint(_))
-        );
-        assert_eq!(
-            rt.route(CanisterId::from(101u64).get()),
-            Some(subnet_test_id(1))
-        );
-        assert_eq!(rt.well_formed(), Ok(()));
-    }
-
-    #[test]
-    fn can_remove_subnet() {
-        let mut rt = new_routing_table(vec![((1, 1000), 1), ((2000, 3000), 2)]);
-        assert_eq!(rt.well_formed(), Ok(()));
-        assert_eq!(
-            rt.route(CanisterId::from(100u64).get()),
-            Some(subnet_test_id(1))
-        );
-        rt.remove_subnet(subnet_test_id(1));
-        assert_eq!(rt.well_formed(), Ok(()));
-        assert_eq!(rt.route(CanisterId::from(100u64).get()), None);
-    }
-}
+mod tests;

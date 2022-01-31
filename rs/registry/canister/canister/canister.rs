@@ -48,6 +48,7 @@ use registry_canister::{
         do_update_subnet::UpdateSubnetPayload,
         do_update_subnet_replica::UpdateSubnetReplicaVersionPayload,
         do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
+        reroute_canister_range::RerouteCanisterRangePayload,
     },
     pb::v1::RegistryCanisterStableStorage,
     proto_on_wire::protobuf,
@@ -607,6 +608,19 @@ fn get_node_providers_monthly_xdr_rewards() {
             registry().get_node_providers_monthly_xdr_rewards()
         },
     );
+}
+
+#[export_name = "canister_update reroute_canister_range"]
+fn reroute_canister_range() {
+    check_caller_is_governance_and_log("reroute_canister_range");
+    over_may_reject(candid_one, |payload: RerouteCanisterRangePayload| {
+        if let Err(msg) = registry_mut().reroute_canister_range(payload) {
+            println!("{}reject: {}", LOG_PREFIX, msg);
+            return Err(msg);
+        }
+        recertify_registry();
+        Ok(())
+    });
 }
 
 fn recertify_registry() {
