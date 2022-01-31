@@ -190,6 +190,9 @@ if [[ -n "${CI_JOB_ID:-}" ]] && [[ -n "${ROOT_PIPELINE_ID:-}" ]]; then
         --trace_id "${ROOT_PIPELINE_ID}" \
         --parent_id "${CI_JOB_ID}" \
         --type "farm-based-tests"
+    echo "!!! NOTE: Logs from tests and unstructured stdout/err output is stored away with the gitlab-job-artifacts."
+    echo "You can download the job artifacts by clicking the 'Download' button in the top right corner of the job"
+    echo "view."
 else
     SUMMARY_ARGS+=(--verbose)
 fi
