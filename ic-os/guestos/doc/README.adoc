@@ -1,0 +1,11 @@
+= IC guest OS
+
+This is the guest IC guest OS running in a VM on the IC node machines.
+
+Refer to detailed documentation on:
+
+* link:DiskLayout{outfilesuffix}[Disk layout]
+** Layout of the link:ConfigStore{outfilesuffix}[config store] partition
+* link:Boot{outfilesuffix}[Boot sequence]
+* link:Build{outfilesuffix}[Disk image build]
+* link:SELinux{outfilesuffix}[SELinux security policy]
