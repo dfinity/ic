@@ -1,6 +1,6 @@
 use crate::{
     embedders::{PersistenceType, QUERY_EXECUTION_THREADS},
-    feature_status::FeatureStatus,
+    flag_status::FlagStatus,
     subnet_config::MAX_INSTRUCTIONS_PER_MESSAGE,
 };
 use ic_base_types::NumSeconds;
@@ -68,7 +68,7 @@ pub struct Config {
     pub max_controllers: usize,
 
     /// Indicates whether canisters sandboxing is enabled or not.
-    pub canister_sandboxing_flag: FeatureStatus,
+    pub canister_sandboxing_flag: FlagStatus,
 
     /// The number of threads to use for query execution.
     pub query_execution_threads: usize,
@@ -80,9 +80,9 @@ impl Default for Config {
         // EXC-523: Sandboxing is currently available only on Linux because it
         // uses `memfd` files.
         #[cfg(target_os = "linux")]
-        let canister_sandboxing_flag = FeatureStatus::Enabled;
+        let canister_sandboxing_flag = FlagStatus::Enabled;
         #[cfg(not(target_os = "linux"))]
-        let canister_sandboxing_flag = FeatureStatus::Disabled;
+        let canister_sandboxing_flag = FlagStatus::Disabled;
 
         Self {
             persistence_type: PersistenceType::Sigsegv,

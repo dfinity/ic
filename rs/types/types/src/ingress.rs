@@ -8,9 +8,7 @@ use ic_protobuf::{
     types::v1 as pb_types,
 };
 use serde::{Deserialize, Serialize};
-
-use std::convert::TryFrom;
-use std::time::Duration;
+use std::{convert::TryFrom, fmt, time::Duration};
 
 /// This constant defines the maximum amount of time an ingress message can wait
 /// to start executing after submission before it is expired.  Hence, if an
@@ -146,6 +144,17 @@ impl WasmResult {
         match self {
             WasmResult::Reply(bytes) => bytes,
             WasmResult::Reject(string) => string.as_bytes().to_vec(),
+        }
+    }
+}
+
+impl fmt::Display for WasmResult {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self {
+            WasmResult::Reply(_) => write!(f, "reply"),
+            WasmResult::Reject(reject_str) => {
+                write!(f, "reject with error message => [{}]", reject_str)
+            }
         }
     }
 }

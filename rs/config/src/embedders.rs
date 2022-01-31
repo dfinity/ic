@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::feature_status::FeatureStatus;
+use crate::flag_status::FlagStatus;
 use ic_base_types::NumBytes;
 
 // Defining 100000 globals in a module can result in significant overhead in
@@ -21,13 +21,13 @@ pub(crate) const MAX_CUSTOM_SECTION_SIZE: NumBytes = NumBytes::new(65536);
 pub(crate) const QUERY_EXECUTION_THREADS: usize = 2;
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct FeatureFlags {
-    pub api_cycles_u128_flag: FeatureStatus,
+    pub api_cycles_u128_flag: FlagStatus,
 }
 
 impl Default for FeatureFlags {
     fn default() -> Self {
         Self {
-            api_cycles_u128_flag: FeatureStatus::Enabled,
+            api_cycles_u128_flag: FlagStatus::Enabled,
         }
     }
 }
@@ -50,7 +50,7 @@ pub struct Config {
     /// Maximum size of a custom section in bytes.
     pub max_custom_section_size: NumBytes,
 
-    /// Flags to disable or enable features that are still experimental.
+    /// Flags to enable or disable features that are still experimental.
     pub feature_flags: FeatureFlags,
 }
 
