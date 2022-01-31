@@ -15,6 +15,7 @@ use hash::{
 use ic_cow_state::{CowMemoryManager, CowMemoryManagerImpl, MappedState};
 use ic_crypto_sha::Sha256;
 use ic_logger::{error, ReplicaLogger};
+use ic_replicated_state::PageIndex;
 use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_sys::{mmap::ScopedMmap, PAGE_SIZE};
 use ic_types::{
@@ -182,8 +183,8 @@ pub struct ManifestDelta {
     pub(crate) base_height: Height,
     /// Current height
     pub(crate) target_height: Height,
-    /// Wasm memory pages that might have changed since the state at
-    /// `base_height`.
+    /// Wasm memory and stable memory pages that might have changed since the
+    /// state at `base_height`.
     pub(crate) dirty_memory_pages: DirtyPages,
 }
 
@@ -642,6 +643,51 @@ fn default_hash_plan(files: &[FileWithSize], max_chunk_size: u32) -> Vec<ChunkAc
     return vec![ChunkAction::Recompute; chunks_total];
 }
 
+fn dirty_chunks_of_file(
+    relative_path: &Path,
+    page_indices: &[PageIndex],
+    files: &[FileWithSize],
+    max_chunk_size: u32,
+    base_manifest: &Manifest,
+) -> Option<BitVec> {
+    if let Ok(index) =
+        files.binary_search_by(|FileWithSize(file_path, _)| file_path.as_path().cmp(relative_path))
+    {
+        let size_bytes = files[index].1;
+        let num_chunks = count_chunks(size_bytes, max_chunk_size);
+        let mut chunks_bitmap = BitVec::from_elem(num_chunks, false);
+
+        for page_index in page_indices {
+            // As the chunk size is a multiple of the page size, at most one chunk could
+            // possibly be affected.
+            let chunk_index = PAGE_SIZE * page_index.get() as usize / max_chunk_size as usize;
+            chunks_bitmap.set(chunk_index, true);
+        }
+
+        // NB. The code below handles the case when the file size increased, but the
+        // dirty pages do not cover the new area.  This should not happen in the current
+        // implementation of PageMap, but we don't want to rely too much on these
+        // implementation details.  So we mark the expanded area as dirty explicitly
+        // instead.
+        let base_file_index = base_manifest
+            .file_table
+            .binary_search_by(|file_info| file_info.relative_path.as_path().cmp(relative_path))
+            .expect("couldn't find a file in the base manifest");
+
+        let base_file_size = base_manifest.file_table[base_file_index].size_bytes;
+
+        if base_file_size < size_bytes {
+            let from_chunk = count_chunks(base_file_size, max_chunk_size).max(1) - 1;
+            for i in from_chunk..num_chunks {
+                chunks_bitmap.set(i, true);
+            }
+        }
+        Some(chunks_bitmap)
+    } else {
+        None
+    }
+}
+
 /// Computes the bitmap of chunks modified since the base state.
 fn dirty_pages_to_dirty_chunks(
     manifest_delta: &ManifestDelta,
@@ -668,7 +714,9 @@ fn dirty_pages_to_dirty_chunks(
         CheckpointLayout::new(PathBuf::from(checkpoint_root_path), Height::from(0))?;
 
     let mut dirty_chunks: BTreeMap<PathBuf, BitVec> = Default::default();
-    for (canister_id, (height, page_indices)) in manifest_delta.dirty_memory_pages.iter() {
+    for (canister_id, (height, page_indices)) in
+        manifest_delta.dirty_memory_pages.wasm_memory.iter()
+    {
         if *height != manifest_delta.base_height {
             continue;
         }
@@ -679,45 +727,39 @@ fn dirty_pages_to_dirty_chunks(
                 .strip_prefix(checkpoint_root_path)
                 .expect("failed to strip path prefix");
 
-            if let Ok(index) = files.binary_search_by(|FileWithSize(file_path, _)| {
-                file_path.as_path().cmp(vmemory_relative_path)
-            }) {
-                let size_bytes = files[index].1;
-                let num_chunks = count_chunks(size_bytes, max_chunk_size);
-                let mut chunks_bitmap = BitVec::from_elem(num_chunks, false);
-
-                for page_index in page_indices {
-                    // As the chunk size is multiple times of the page size, at most one chunk could
-                    // possibly be affected.
-                    let chunk_index =
-                        PAGE_SIZE * page_index.get() as usize / max_chunk_size as usize;
-                    chunks_bitmap.set(chunk_index, true);
-                }
-
-                // NB. The code below handles the case when the file size increased, but the
-                // dirty pages do not cover the new area.  This should not happen in the current
-                // implementation of PageMap, but we don't want to rely too much on these
-                // implementation details.  So we mark the expanded area as dirty explicitly
-                // instead.
-                let base_file_index = manifest_delta
-                    .base_manifest
-                    .file_table
-                    .binary_search_by(|file_info| {
-                        file_info.relative_path.as_path().cmp(vmemory_relative_path)
-                    })
-                    .expect("couldn't find a file in the base manifest");
-
-                let base_file_size =
-                    manifest_delta.base_manifest.file_table[base_file_index].size_bytes;
-
-                if base_file_size < size_bytes {
-                    let from_chunk = count_chunks(base_file_size, max_chunk_size).max(1) - 1;
-                    for i in from_chunk..num_chunks {
-                        chunks_bitmap.set(i, true);
-                    }
-                }
-
+            if let Some(chunks_bitmap) = dirty_chunks_of_file(
+                vmemory_relative_path,
+                page_indices,
+                files,
+                max_chunk_size,
+                &manifest_delta.base_manifest,
+            ) {
                 dirty_chunks.insert(vmemory_relative_path.to_path_buf(), chunks_bitmap);
+            }
+        }
+    }
+
+    for (canister_id, (height, page_indices)) in
+        manifest_delta.dirty_memory_pages.stable_memory.iter()
+    {
+        if *height != manifest_delta.base_height {
+            continue;
+        }
+
+        if let Ok(canister_layout) = checkpoint_layout.canister(canister_id) {
+            let stable_memory_blob = canister_layout.stable_memory_blob();
+            let stable_memory_relative_path = stable_memory_blob
+                .strip_prefix(checkpoint_root_path)
+                .expect("failed to strip path prefix");
+
+            if let Some(chunks_bitmap) = dirty_chunks_of_file(
+                stable_memory_relative_path,
+                page_indices,
+                files,
+                max_chunk_size,
+                &manifest_delta.base_manifest,
+            ) {
+                dirty_chunks.insert(stable_memory_relative_path.to_path_buf(), chunks_bitmap);
             }
         }
     }

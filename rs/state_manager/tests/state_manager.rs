@@ -1781,6 +1781,10 @@ fn can_get_dirty_pages() {
             (PageIndex::new(1), &[99u8; PAGE_SIZE]),
             (PageIndex::new(300), &[99u8; PAGE_SIZE]),
         ]);
+        execution_state.stable_memory.page_map.update(&[
+            (PageIndex::new(1), &[99u8; PAGE_SIZE]),
+            (PageIndex::new(300), &[99u8; PAGE_SIZE]),
+        ]);
     }
 
     fn drop_page_map(state: &mut ReplicatedState, canister_id: CanisterId) {
@@ -1799,14 +1803,24 @@ fn can_get_dirty_pages() {
         let dirty_pages = get_dirty_pages(&state);
         // dirty_pages should be empty because there is no base checkpoint for the page
         // deltas.
-        assert_eq!(dirty_pages, BTreeMap::new());
+        assert_eq!(dirty_pages.wasm_memory, BTreeMap::new());
+        assert_eq!(dirty_pages.stable_memory, BTreeMap::new());
 
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
 
         let (_height, mut state) = state_manager.take_tip();
         update_state(&mut state, canister_test_id(90));
+        let dirty_pages = get_dirty_pages(&state);
         assert_eq!(
-            get_dirty_pages(&state),
+            dirty_pages.wasm_memory,
+            btreemap! {
+                canister_test_id(80) => (height(1), vec![]),
+                canister_test_id(90) => (height(1), vec![PageIndex::new(1), PageIndex::new(300)]),
+                canister_test_id(100) => (height(1), vec![]),
+            }
+        );
+        assert_eq!(
+            dirty_pages.stable_memory,
             btreemap! {
                 canister_test_id(80) => (height(1), vec![]),
                 canister_test_id(90) => (height(1), vec![PageIndex::new(1), PageIndex::new(300)]),
@@ -1821,12 +1835,22 @@ fn can_get_dirty_pages() {
         // It could happen during canister upgrade.
         drop_page_map(&mut state, canister_test_id(100));
         update_state(&mut state, canister_test_id(100));
+        let dirty_pages = get_dirty_pages(&state);
         assert_eq!(
-            get_dirty_pages(&state),
+            dirty_pages.wasm_memory,
             btreemap! {
                 canister_test_id(80) => (height(2), vec![]),
                 canister_test_id(90) => (height(2), vec![]),
             }
+        );
+        // stable memory wasn't dropped
+        assert_eq!(
+            dirty_pages.stable_memory,
+            btreemap! {
+                    canister_test_id(80) => (height(2), vec![]),
+                    canister_test_id(90) => (height(2), vec![]),
+            canister_test_id(100) => (height(2), vec![PageIndex::new(1), PageIndex::new(300)]),
+                }
         );
 
         assert_error_counters(metrics);
@@ -1845,9 +1869,16 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
         insert_dummy_canister(&mut state, canister_test_id(1));
         let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
+
+        const NEW_WASM_PAGE: u64 = 300;
         execution_state.wasm_memory.page_map.update(&[
             (PageIndex::new(1), &[1u8; PAGE_SIZE]),
-            (PageIndex::new(300), &[2u8; PAGE_SIZE]),
+            (PageIndex::new(NEW_WASM_PAGE), &[2u8; PAGE_SIZE]),
+        ]);
+        const NEW_STABLE_PAGE: u64 = 500;
+        execution_state.stable_memory.page_map.update(&[
+            (PageIndex::new(1), &[1u8; PAGE_SIZE]),
+            (PageIndex::new(NEW_STABLE_PAGE), &[2u8; PAGE_SIZE]),
         ]);
 
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
@@ -1870,7 +1901,7 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
         // Second checkpoint can leverage heap chunks computed previously.
         let chunk_bytes = fetch_int_counter_vec(metrics, "state_manager_manifest_chunk_bytes");
         assert_eq!(
-            PAGE_SIZE as u64 * 301,
+            PAGE_SIZE as u64 * (NEW_WASM_PAGE + 1 + NEW_STABLE_PAGE + 1),
             chunk_bytes[&reused_label] + chunk_bytes[&compared_label]
         );
 
