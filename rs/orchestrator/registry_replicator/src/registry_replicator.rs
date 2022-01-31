@@ -31,16 +31,18 @@
 use crate::internal_state::InternalState;
 use ic_config::{registry_client::DataProviderConfig, Config};
 use ic_crypto_utils_threshold_sig::parse_threshold_sig_key;
-use ic_interfaces::registry::{RegistryClient, ZERO_REGISTRY_VERSION};
-use ic_logger::{debug, warn, ReplicaLogger};
+use ic_interfaces::registry::{RegistryClient, RegistryDataProvider, ZERO_REGISTRY_VERSION};
+use ic_logger::{debug, info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client::client::{create_data_provider, RegistryClientImpl};
 use ic_registry_common::local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStore, LocalStoreImpl,
 };
 use ic_registry_common::registry::RegistryCanister;
+use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{NodeId, RegistryVersion};
 use std::io::{Error, ErrorKind};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -59,10 +61,46 @@ pub struct RegistryReplicator {
 }
 
 impl RegistryReplicator {
-    pub fn new(logger: ReplicaLogger, config: &Config, node_id: Option<NodeId>) -> Self {
-        let registry_client = Self::initialize_registry_client(config);
+    pub fn new(
+        logger: ReplicaLogger,
+        node_id: Option<NodeId>,
+        data_provider: Arc<dyn RegistryDataProvider>,
+        local_store_path: PathBuf,
+        poll_delay: Duration,
+    ) -> Self {
+        let registry_client = Self::initialize_registry_client(data_provider);
+        let local_store = Arc::new(LocalStoreImpl::new(local_store_path.clone()));
+        std::fs::create_dir_all(local_store_path)
+            .expect("Could not create directory for registry local store.");
 
-        // we only support the local store data provider
+        Self {
+            logger,
+            node_id,
+            registry_client,
+            local_store,
+            started: Arc::new(AtomicBool::new(false)),
+            cancelled: Arc::new(AtomicBool::new(false)),
+            poll_delay,
+        }
+    }
+
+    pub fn new_from_config(
+        logger: ReplicaLogger,
+        node_id: Option<NodeId>,
+        config: &Config,
+    ) -> Self {
+        let data_provider = create_data_provider(
+            config
+                .registry_client
+                .data_provider
+                .as_ref()
+                .expect("No data provider was provided in the registry client configuration"),
+            // We set the NNS public key to `None` (and thus disable registry data signature
+            // verification). See the Rustdoc of `RegistryHelper` for an explanation.
+            None,
+        );
+
+        // We only support the local store data provider
         let local_store_path = if let DataProviderConfig::LocalStore(path) = config
             .registry_client
             .data_provider
@@ -74,33 +112,16 @@ impl RegistryReplicator {
             panic!("Only LocalStore is supported in the orchestrator.");
         };
 
-        let local_store = Arc::new(LocalStoreImpl::new(local_store_path));
+        let poll_delay =
+            std::time::Duration::from_millis(config.nns_registry_replicator.poll_delay_duration_ms);
 
-        Self {
-            logger,
-            node_id,
-            registry_client,
-            local_store,
-            started: Arc::new(AtomicBool::new(false)),
-            cancelled: Arc::new(AtomicBool::new(false)),
-            poll_delay: std::time::Duration::from_millis(
-                config.nns_registry_replicator.poll_delay_duration_ms,
-            ),
-        }
+        Self::new(logger, node_id, data_provider, local_store_path, poll_delay)
     }
 
-    fn initialize_registry_client(config: &Config) -> Arc<dyn RegistryClient> {
+    fn initialize_registry_client(
+        data_provider: Arc<dyn RegistryDataProvider>,
+    ) -> Arc<dyn RegistryClient> {
         let metrics_registry = MetricsRegistry::global();
-        let data_provider = create_data_provider(
-            config
-                .registry_client
-                .data_provider
-                .as_ref()
-                .expect("No data provider was provided in the registry client configuration"),
-            // We set the NNS public key to `None` (and thus disable registry data signature
-            // verification). See the Rustdoc of `RegistryHelper` for an explanation.
-            None,
-        );
         let registry_client = Arc::new(RegistryClientImpl::new(
             data_provider,
             Some(&metrics_registry),
@@ -113,42 +134,64 @@ impl RegistryReplicator {
         registry_client
     }
 
-    async fn initialize_local_store(&self, node_config: &Config) {
-        let local_store_path = if let DataProviderConfig::LocalStore(p) = node_config
-            .registry_client
-            .data_provider
-            .clone()
-            .expect("Data Provider is not configured.")
-        {
-            p
-        } else {
-            panic!("LocalStore is the only data registry provider supported.")
+    pub fn parse_registry_access_info_from_config(
+        &self,
+        config: &Config,
+    ) -> (Vec<Url>, Option<ThresholdSigPublicKey>) {
+        let nns_urls = match config.registration.nns_url.clone() {
+            None => {
+                info!(self.logger, "No NNS Url is configured.");
+                vec![]
+            }
+            Some(string) => string
+                .split(',')
+                .map(|s| match Url::parse(s) {
+                    Err(_) => {
+                        info!(
+                            self.logger,
+                            "Could not parse registration NNS url from config."
+                        );
+                        None
+                    }
+                    Ok(url) => Some(url),
+                })
+                .flatten()
+                .collect::<Vec<Url>>(),
         };
-        std::fs::create_dir_all(local_store_path)
-            .expect("Could not create directory for registry local store.");
+
+        let nns_pub_key = match config.registration.nns_pub_key_pem.clone() {
+            None => {
+                info!(self.logger, "No NNS public key is configured.");
+                None
+            }
+            Some(path) => match parse_threshold_sig_key(&path) {
+                Err(e) => {
+                    info!(
+                        self.logger,
+                        "Could not parse configured NNS Public Key file: {}", e
+                    );
+                    None
+                }
+                Ok(key) => Some(key),
+            },
+        };
+
+        (nns_urls, nns_pub_key)
+    }
+
+    async fn initialize_local_store(
+        &self,
+        nns_urls: Vec<Url>,
+        nns_pub_key: Option<ThresholdSigPublicKey>,
+    ) {
         if self
             .local_store
             .get_changelog_since_version(ZERO_REGISTRY_VERSION)
             .expect("Could not read registry local store.")
             .is_empty()
         {
-            let nns_urls = node_config
-                .registration
-                .nns_url
-                .clone()
-                .expect("Registry Local Store is empty and no NNS Url configured.")
-                .split(',')
-                .map(|s| Url::parse(s).expect("Could not parse registration NNS url from config"))
-                .collect::<Vec<Url>>();
-
-            let nns_pub_key_path = node_config
-                .registration
-                .nns_pub_key_pem
-                .clone()
-                .expect("Registry Local Store is empty and no NNS Public Key configured.");
-
-            let nns_pub_key = parse_threshold_sig_key(&nns_pub_key_path)
-                .expect("Could not parse configured NNS Public Key file.");
+            let nns_pub_key = nns_pub_key
+                .expect("Registry Local Store is empty and no NNS Public Key is provided.");
 
             let registry_canister = RegistryCanister::new(nns_urls);
             while self
@@ -202,7 +245,11 @@ impl RegistryReplicator {
     /// Calls `poll()` asynchronously and spawns a background task that
     /// continuously polls for updates. Returns the result of the first poll.
     /// The background task is stopped when the object is dropped.
-    pub async fn fetch_and_start_polling(&self, config: &Config) -> Result<(), Error> {
+    pub async fn fetch_and_start_polling(
+        &self,
+        nns_urls: Vec<Url>,
+        nns_pub_key: Option<ThresholdSigPublicKey>,
+    ) -> Result<(), Error> {
         if self.started.swap(true, Ordering::Relaxed) {
             return Err(Error::new(
                 ErrorKind::AlreadyExists,
@@ -212,7 +259,7 @@ impl RegistryReplicator {
 
         // Initialize the registry local store. Will not return if the nns is not
         // reachable.
-        self.initialize_local_store(config).await;
+        self.initialize_local_store(nns_urls, nns_pub_key).await;
 
         let mut internal_state = InternalState::new(
             self.logger.clone(),

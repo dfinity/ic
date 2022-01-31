@@ -90,13 +90,18 @@ impl Orchestrator {
             config
         );
 
-        let registry_replicator = Arc::new(RegistryReplicator::new(
+        let registry_replicator = Arc::new(RegistryReplicator::new_from_config(
             logger.clone(),
-            &config,
             Some(node_id),
+            &config,
         ));
 
-        if let Err(err) = registry_replicator.fetch_and_start_polling(&config).await {
+        let (nns_urls, nns_pub_key) =
+            registry_replicator.parse_registry_access_info_from_config(&config);
+        if let Err(err) = registry_replicator
+            .fetch_and_start_polling(nns_urls, nns_pub_key)
+            .await
+        {
             warn!(logger, "{}", err);
         }
 
