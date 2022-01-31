@@ -1,0 +1,81 @@
+= IC guest OS disk layout
+
+The (virtual) disk of the IC guest OS is structured to allow
+system upgrades with A/B partition switching (see
+link:Upgrades{outfilesuffix}[upgrades]) while ensuring system
+integrity and confidentiality for secure VMs.
+
+The partition structure is as follows:
+
+- +/dev/vda1+ *esp*: (EFI system partition)
+- +/dev/vda2+ *grub* Grub bootloader modules and config
+- +/dev/vda3+ *config* System config store
+- +/dev/vda4+ *A_boot* Boot partition for system A
+- +/dev/vda5+ *A_root* Root partition for system A
+- +/dev/vda6+ *A_var* Mutable data partition for system A
+- +/dev/vda7+ *B_boot* Boot partition for system B
+- +/dev/vda8+ *B_root* Root partition for system B
+- +/dev/vda9+ *B_var* Mutable data partition for system B
+- +/dev/vda10+ *store* Encrypted LVM for payload data
+
+== *esp*: EFI system partition
+
+This contains the primary grub bootloader itself in
++EFI/Boot/bootx64.efi+. Nothing else is on this partition.
+This bootloader is supposed to be signed and recognised by
+EFI firmware for tamper-resistance.
+
+== *grub*: Grub bootloader and configuration
+
+Contains essential grub modules below +/boot/grub/x86_64-efi+
+as well as the (static) +grub.cfg+ and the (dynamic) +grubenv+.
+
+The +grubenv+ file will at times be written by either grub
+or the booted operating system, to coordinate on partition
+switching during system upgrades.
+
+All other files in this partition are immutable (and to be
+signed for verification by grub in order to prevent
+tampering).
+
+== *config* System config store
+
+Contains the config store persisted across system upgrades.
+See link:ConfigStore{outfilesuffix}[config store] for a
+specification of its contents.
+
+== *A_boot* / *B_boot* Boot partition for system A/B
+
+Contains the linux kernel to be booted as +vmlinuz+,
+optionally a file +extra_boot_args+ that sets additional
+arguments to boot the kernel with, and a file +initrd.img+
+that is to be loaded as initial ram disk.
+
+Contents of the inactive partition are replaced on system
+upgrades, all files contained in here are supposed to
+be signed (and signature verified by grub) in order to
+prevent tampering.
+
+== *A_root* / *B_root* Root partition for system A/B
+
+This partition is to be used as the root file system for
+the booted system. Generally it is an (immutable) ext4
+filesystem, it should be set up using integrity
+protection via +dm-verity+ by the initial ram disk
+to prevent tampering.
+
+== *A_var* / *B_var* Mutable data partition for system B
+
+This partition is used as mutable +/var+ filesystem for
+the OS. It is set up as encrypted block device such that
+it is both confidentiality and integrity protected.
+It is wiped on system upgrades but will otherwise persist
+across reboots.
+
+== *store* Encrypted LVM for payload data
+
+Set up as an encrypted block device to hold multiple
+logical volumes containing the IC payload data. This
+partition does not exist yet in the initially _built_ and
+_deployed_ disk image. It will be created by the system
+on first boot.

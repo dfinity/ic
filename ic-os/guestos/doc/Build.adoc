@@ -1,0 +1,92 @@
+= IC guest OS build
+
+The Ubuntu-based IC OS is built by:
+
+* constructing the system using docker -- this is based on the official Ubuntu docker
+  image and simply adds the OS kernel plus our required services to it
+
+* converting this into filesystem images for +/+ and +/boot+
+  via +make_ext4fs+
+
+* separately building the +efi+ and +grub+ partitions
+
+* putting everything together into a pre-partitioned disk image with a layout
+  suitable for A/B system upgrades
+
+The entire disk image is built using the following command:
+
+----
+scripts/build-disk-image.sh \
+  -o disk.img \
+  -x path_to_compiled_ic_binaries \
+  -p root_password_for_console_login \
+  -v version_tag
+----
+
+"root password" is optional (must only be used for dev/debug images). "version tag" is
+optional, but must be set to something unique per build such that the
+upgrade process can distinguish different builds.
+
+See notes below on the individual build steps.
+
+== Constructing the system using docker
+
+All build instructions are contained in +rootfs/Dockerfile+.
+
+The following template directories are simply copied verbatim onto the target
+system:
+
+* +etc+
+* +opt+
+* +boot+
+
+Additional files can be deployed by dropping them into the appropriate target
+location before the build. All IC binaries are installed into +/opt/ic/bin+.
+Unit files for additional systemd services are to be dropped into +/etc/systemd/system+,
+all units found there will be activated as part of the build.
+
+The final docker image is extracted using +docker save+ at the end of this process.
+
+== Building filesystem images
+
+Two filesystem images are built for each logical OS install, the "+boot+" and
+"+root+" filesystems. "+boot+" will hold the contents of everything below
+"+/boot+" from the previous build stage (this is essentially the kernel,
+initrd and some extra boot arguments), while "+root+" holds everything below
+"+/+" except for the contents of "+/boot+". This split is to enable verified
+boot for confidential VMs later on:
+
+- the boot loader will load kernel & initrd. To cryptographically verify them,
+  each file individually(!) will be accompanied by a signature authenticating
+  it to the boot loader
+- the root filesystem itself will be protected against tampering using dm-verity
+  (not individual files a protected, but the filesystem as a whole). The root
+  hash for this needs to be stored in the initrd.
+
+Both +boot+ and +root+ filesystem images are built using +make_ext4fs+. This
+allows constructing the filesystems in a bit-by-bit deterministic fashion,
+also squashing all timestamps (that are invariably non-deterministic by
+docker). +make_ext4fs+ also assigns SELinux labels to all files in the
+filesystem during build (the file contexts of the SELinux policy are extracted
+from the system before the build.
+
+== Bootloader build
+
+Bootloader is built somewhat similarly to the Ubuntu system, but is
+kept separately (the bootloader is never changed during system upgrades).
+
+The +grub-mkimage+ utility is used to build both the EFI first stage loader
+(built as +/boot/efi/EFI/Boot/bootx64.efi+, to be placed as +/EFI/Boot/bootx64.efi+
+on the +efi+ partition) as well as grub loadable modules
+(built in +/boot/grub/x86_64-efi+, to be placed in under +/x86_64-efi+ on
+the +grub+ partition).
+
+After this is built, the sub-directories +/boot/efi+ and +/boot/grub+ are
+used to build VFAT filesystem images to go into the first two partitions
+of the final disk image.
+
+== Disk image build
+
+The final disk image is built by setting up a partition table and transferring
+the individually built filesystem images into their respective partitions.
+The layout of the partition table is described in +scripts/partitions.csv+.

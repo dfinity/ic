@@ -1,0 +1,88 @@
+= IC guest OS config store
+
+This specifies the contents of the +config+ partition (+/dev/vda3+ in the
+IC guest OS disk image). It stores information that must be preserved across
+system upgrades, and that (usually) needs to be available at early boot time
+(and therefore cannot live within the encrypted payload data partition).
+
+In the absence of a sealing key (to become available in SEV-protected
+trusted execution environments), all contents are stored in plain-text
+and without integrity protection. When a sealing key becomes available,
+this should be converted into an authenticated + integrity-protected
+data store (either for the partition in its entirety, or on a per-file
+basis).
+
+== +/boot/config/CONFIGURED+
+
+This is a tag file to mark that one-time bootstrap configuration has completed.
+If this file is not present, then boot sequence will look for a virtual
+USB stick containing injected IC node configuration.
+
+== +/boot/config/store.keyfile+
+
+This file contains the key material from which the wrapping key for all
+block device encryption is derived. It is created at first boot, and
+encrypted partitions are set up with it.
+
+It is stored in plain-text in the absence of a sealing key (to become
+available in SEV-protected trusted execution environments). When a
+sealing key is available, it should be used to wrap the contents
+of this file.
+
+== +/boot/config/ssh+
+
+Contains ssh host keys. They need to be persisted across upgrades and
+are transferred to +/etc/ssh+ during boot.
+
+== +/boot/config/accounts_ssh_authorized_keys+
+
+This is a directory that contains individual files named +backup+,
++admin+, +readonly+ and +root+ (this last one for dev/debug builds
+only). The contents of these files are used as +authorized_keys+ files
+for the respectively named role account.
+
+== +/boot/config/node_exporter+
+
+Contains node exporter TLS keys. They need to persisted across upgrades
+and are transferred to +/etc/node_exporter+ during boot.
+
+== +/boot/network.conf+
+
+Must be a text file consisting of key/value pairs (one per line).
+The following keys are recognized:
+
+- +ipv6_address+: The IPv6 address of the node. It will be used for the node to “identify” itself (via registry).
+  All public IC services are offered through this address. Will be assigned to the enp1s0 interface. If left blank, SLAAC is used on the interface.
+
+- +ipv6_gateway+: Default IPv6 gateway, only meaningful if ipv6_address is given as well.
+
+- +name_servers+: Name servers to be used. Multiple servers to be separated by spaces, if needed. Only meaningful
+  if not using dhcp / SLAAC.
+
+- +hostname+: Hostname, in principle freetext, but generally derived from
+  ID of physical host (e.g. MAC address).
+
+== +nns.conf+
+
+Must be a text file consisting of key/value pairs (one per line). The following keys are recognized:
+
+- nns_url: The URL (http) of the NNS node(s). If multiple are given, they need to be separated by whitespace.
+  If not specified at all, then http://127.0.0.1:8080 is assumed (which only works for nodes not needing to do
+  any registration).
+
+This is used when generating replica configuration to fill in the +nns_url+ placeholder.
+
+== +backup.conf+
+
+Configures usage of the backup spool directory. Must be a file of key/value pairs separated by “=”
+(one per line) with the following possible keys:
+
+- backup_retention_time_secs: The maximum age of any file or directory kept in the backup spool.
+
+- backup_purging_interval_secs: The interval at which the backup spool directory will be scanned for files to delete.
+
+These settings are used when generating replica configuration to fill in placeholders in
+the configuration template.
+
+This _must_ only be used for testnet deployments (to achieve shorter retention times) and _must_
+be missing for production deployments (where suitable prod default values are assumed).
