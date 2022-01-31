@@ -94,31 +94,42 @@ impl DurationStats {
         self.sorted.first().cloned()
     }
 
-    fn median(&self) -> Duration {
-        let mid = self.sorted.len() / 2;
-        if self.sorted.len() % 2 == 0 {
-            // even
-            (self.sorted[mid - 1] + self.sorted[mid]) / 2
+    fn median(&self) -> Option<Duration> {
+        if self.sorted.is_empty() {
+            None
         } else {
-            // odd
-            self.sorted[mid]
+            let mid = self.sorted.len() / 2;
+            if self.sorted.len() % 2 == 0 {
+                // even
+                Some((self.sorted[mid - 1] + self.sorted[mid]) / 2)
+            } else {
+                // odd
+                Some(self.sorted[mid])
+            }
         }
     }
 
-    fn average(&self) -> Duration {
-        self.total() / (self.sorted.len() as u32)
+    fn average(&self) -> Option<Duration> {
+        if self.sorted.is_empty() {
+            None
+        } else {
+            Some(self.total() / (self.sorted.len() as u32))
+        }
     }
 
-    fn stddev(&self) -> Duration {
-        let mean = self.average();
-        let MS(mean) = mean.into();
-        let summed_squares = self.sorted.iter().fold(0f64, |acc, duration| {
-            let MS(ms) = (*duration).into();
-            acc + (ms - mean).powi(2)
-        });
-        let ratio = summed_squares / (self.sorted.len() - 1) as f64;
-        let std_ms = ratio.sqrt();
-        MS(std_ms).into()
+    fn stddev(&self) -> Option<Duration> {
+        if let Some(mean) = self.average() {
+            let MS(mean) = mean.into();
+            let summed_squares = self.sorted.iter().fold(0f64, |acc, duration| {
+                let MS(ms) = (*duration).into();
+                acc + (ms - mean).powi(2)
+            });
+            let ratio = summed_squares / (self.sorted.len() - 1) as f64;
+            let std_ms = ratio.sqrt();
+            Some(MS(std_ms).into())
+        } else {
+            None
+        }
     }
 
     fn latency_histogram(&self) -> Vec<u32> {
@@ -136,6 +147,9 @@ impl DurationStats {
     }
 
     fn percentiles(&self) -> Vec<Duration> {
+        if self.sorted.is_empty() {
+            return vec![];
+        }
         (0..100)
             .map(|n| {
                 let mut index = ((f64::from(n) / 100.0) * (self.sorted.len() as f64)) as usize;
@@ -208,11 +222,11 @@ impl Summary {
     }
 
     fn from_durations(stats: &DurationStats) -> Summary {
-        let average = stats.average();
-        let stddev = stats.stddev();
-        let median = stats.median();
-        let min = stats.min().expect("Returned early if empty");
-        let max = stats.max().expect("Returned early if empty");
+        let average = stats.average().unwrap_or(Duration::MAX);
+        let stddev = stats.stddev().unwrap_or(Duration::MAX);
+        let median = stats.median().unwrap_or(Duration::MAX);
+        let min = stats.min().unwrap_or(Duration::MAX);
+        let max = stats.max().unwrap_or(Duration::MAX);
         let latency_histogram = stats.latency_histogram();
         let percentiles = stats.percentiles();
 

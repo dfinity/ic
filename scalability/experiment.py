@@ -36,6 +36,9 @@ gflags.DEFINE_string(
 gflags.DEFINE_boolean("simulate_machine_failures", False, "Simulate machine failures while testing.")
 gflags.DEFINE_string("nns_url", "", "Use the following NNS URL instead of getting it from the testnet configuration")
 gflags.DEFINE_boolean("is_ci_job", False, "This is a test run exercised by CI. Deafult to false.")
+gflags.DEFINE_string(
+    "artifacts_git_revision", "HEAD", "GIT revision to use for the artifacts (e.g. workload generator)"
+)
 
 
 def parse_command_line_args():
@@ -125,7 +128,9 @@ class Experiment:
             subprocess.run(["rm", "-rf", self.artifacts_path], check=True)
             # Download new artifacts.
             artifacts_env = os.environ.copy()
-            artifacts_env["GIT"] = subprocess.check_output(["git", "rev-parse", "origin/master"], encoding="utf-8")
+            artifacts_env["GIT"] = subprocess.check_output(
+                ["git", "rev-parse", FLAGS.artifacts_git_revision], encoding="utf-8"
+            )
             artifacts_env["GET_GUEST_OS"] = "0"
             output = subprocess.check_output(
                 ["../ic-os/guestos/scripts/get-artifacts.sh"], encoding="utf-8", env=artifacts_env
@@ -145,6 +150,7 @@ class Experiment:
         print(f"Artifacts hash is {self.artifacts_hash}")
         print(f"Found artifacts at {self.artifacts_path}")
         self.workload_generator_path = os.path.join(self.artifacts_path, "ic-workload-generator")
+        print(f"Using workload generator at {self.workload_generator_path}")
 
     def get_machine_to_instrument(self) -> str:
         """Return the machine to instrument."""
