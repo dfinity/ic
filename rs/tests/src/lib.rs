@@ -18,7 +18,6 @@ pub mod node_assign_test;
 pub mod node_graceful_leaving_test;
 pub mod node_reassignment_test;
 pub mod node_removal_from_registry_test;
-pub mod node_removal_test;
 pub mod node_restart_test;
 pub mod registry_authentication_test;
 pub mod replica_determinism_test;
