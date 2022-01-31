@@ -66,7 +66,6 @@ impl ReleasePackage {
             enabled: enabled.clone(),
         };
         release_package.confirm_boot();
-        release_package.check_for_upgrade_once().await;
         tokio::spawn(background_task(release_package));
         enabled
     }
@@ -86,21 +85,6 @@ impl ReleasePackage {
                         err
                     ))
                 })?;
-            if should_node_become_unassigned(
-                &*self.registry.registry_client,
-                self.node_id,
-                subnet_id,
-                &cup,
-            ) {
-                self.stop_replica()?;
-                remove_node_state(
-                    self.replica_config_file.clone(),
-                    self.cup_provider.get_cup_path(),
-                )
-                .map_err(OrchestratorError::UpgradeError)?;
-                info!(self.logger, "Subnet state removed");
-                return Ok(());
-            }
             (subnet_id, Some(cup))
         } else {
             match self.registry.get_subnet_id(latest_registry_version) {
@@ -114,68 +98,42 @@ impl ReleasePackage {
         };
 
         let cup = self.cup_provider.get_latest_cup(subnet_id).await?;
-
         // If the latest CUP is newer than the local one, persist it.
         if Some(cup.cup.content.height()) > local_cup.map(|cup| cup.content.height()) {
             self.cup_provider.persist_cup(&cup)?;
         }
+
+        if should_node_become_unassigned(
+            &*self.registry.registry_client,
+            self.node_id,
+            subnet_id,
+            &cup.cup,
+        ) {
+            self.stop_replica()?;
+            remove_node_state(
+                self.replica_config_file.clone(),
+                self.cup_provider.get_cup_path(),
+            )
+            .map_err(OrchestratorError::UpgradeError)?;
+            info!(self.logger, "Subnet state removed");
+            return Ok(());
+        }
+
+        self.download_registry_and_restart_if_nns_subnet_recovery(
+            subnet_id,
+            latest_registry_version,
+        )
+        .await?;
 
         // Now we know the subnet_id and we're assigned; start the replica if necessary.
         if !self.replica_process.lock().unwrap().is_running() {
             return self.start_replica(&self.replica_version, subnet_id);
         }
 
-        // Special case for when we are doing boostrap subnet recovery for
-        // nns and replacing the local registry store. Because we replace the
-        // contents of the local registry store in the process of doing this, we
-        // will not perpetually hit this case, and thus it is not important to
-        // check the height.
-        if let Some(registry_contents) = self
-            .registry
-            .registry_client
-            .get_cup_contents(subnet_id, latest_registry_version)
-            .ok()
-            .and_then(|record| record.value)
-        {
-            if registry_contents.height >= cup.cup.content.height().get() {
-                if let Some(registry_store_uri) = registry_contents.registry_store_uri {
-                    warn!(
-                        self.logger,
-                        "Downloading registry data from {} with hash {} for subnet recovery",
-                        registry_store_uri.uri,
-                        registry_store_uri.hash,
-                    );
-                    let downloader = FileDownloader::new(Some(self.logger.clone()));
-                    let local_store_location = tempfile::tempdir()
-                        .expect("temporary location for local store download could not be created")
-                        .into_path();
-                    downloader
-                        .download_and_extract_tar_gz(
-                            &registry_store_uri.uri,
-                            &local_store_location,
-                            Some(registry_store_uri.hash),
-                        )
-                        .await
-                        .map_err(OrchestratorError::FileDownloadError)?;
-                    if let Err(e) = self.stop_replica() {
-                        // Even though we fail to stop the replica, we should still
-                        // replace the registry local store, so we simply issue a warning.
-                        warn!(self.logger, "Failed to stop replica with error {:?}", e);
-                    }
-                    let new_local_store = LocalStoreImpl::new(local_store_location);
-                    self.registry_replicator
-                        .stop_polling_and_set_local_registry_data(&new_local_store);
-                    utils::reexec_current_process(&self.logger);
-                }
-            }
-        }
-
         let cup_registry_version = cup.cup.content.registry_version();
-
         let new_replica_version = self
             .registry
             .get_replica_version(subnet_id, cup_registry_version)?;
-
         if new_replica_version != self.replica_version {
             info!(
                 self.logger,
@@ -186,6 +144,56 @@ impl ReleasePackage {
 
         self.download_image_if_upgrade_scheduled(subnet_id).await?;
 
+        Ok(())
+    }
+
+    // Special case for when we are doing boostrap subnet recovery for
+    // nns and replacing the local registry store. Because we replace the
+    // contents of the local registry store in the process of doing this, we
+    // will not perpetually hit this case, and thus it is not important to
+    // check the height.
+    async fn download_registry_and_restart_if_nns_subnet_recovery(
+        &self,
+        subnet_id: SubnetId,
+        registry_version: RegistryVersion,
+    ) -> OrchestratorResult<()> {
+        if let Some(registry_contents) = self
+            .registry
+            .registry_client
+            .get_cup_contents(subnet_id, registry_version)
+            .ok()
+            .and_then(|record| record.value)
+        {
+            if let Some(registry_store_uri) = registry_contents.registry_store_uri {
+                warn!(
+                    self.logger,
+                    "Downloading registry data from {} with hash {} for subnet recovery",
+                    registry_store_uri.uri,
+                    registry_store_uri.hash,
+                );
+                let downloader = FileDownloader::new(Some(self.logger.clone()));
+                let local_store_location = tempfile::tempdir()
+                    .expect("temporary location for local store download could not be created")
+                    .into_path();
+                downloader
+                    .download_and_extract_tar_gz(
+                        &registry_store_uri.uri,
+                        &local_store_location,
+                        Some(registry_store_uri.hash),
+                    )
+                    .await
+                    .map_err(OrchestratorError::FileDownloadError)?;
+                if let Err(e) = self.stop_replica() {
+                    // Even though we fail to stop the replica, we should still
+                    // replace the registry local store, so we simply issue a warning.
+                    warn!(self.logger, "Failed to stop replica with error {:?}", e);
+                }
+                let new_local_store = LocalStoreImpl::new(local_store_location);
+                self.registry_replicator
+                    .stop_polling_and_set_local_registry_data(&new_local_store);
+                utils::reexec_current_process(&self.logger);
+            }
+        }
         Ok(())
     }
 
@@ -322,13 +330,6 @@ impl ReleasePackage {
             })
     }
 
-    async fn check_for_upgrade_once(&self) {
-        info!(self.logger, "Checking for release package");
-        if let Err(e) = self.check_for_upgrade().await {
-            warn!(self.logger, "Check for upgrade failed: {}", e);
-        };
-    }
-
     // Calls a corresponding script to "confirm" that the base OS could boot
     // successfully. With a confirmation the image will be reverted on the next
     // restart.
@@ -351,7 +352,10 @@ async fn background_task(release_package: ReleasePackage) {
         {
             return;
         }
-        release_package.check_for_upgrade_once().await;
+        info!(release_package.logger, "Checking for release package");
+        if let Err(e) = release_package.check_for_upgrade().await {
+            warn!(release_package.logger, "Check for upgrade failed: {}", e);
+        };
         tokio::time::sleep(std::time::Duration::from_secs(10)).await;
     }
 }
