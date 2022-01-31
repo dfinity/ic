@@ -1,0 +1,68 @@
+= Http Handler
+:toc:
+
+== Introduction
+
+The http handler is responsible for processing http requests as specified in the
+https://sdk.dfinity.org/docs/interface-spec/index.html#http-interface[IC specification]. Processing semantics include:
+
+* managing TCP connections
+* managing secure and insecure connections
+* safe receiving of http body
+* request validation according to the https://sdk.dfinity.org/docs/interface-spec/index.html[interface specification of the IC]
+
+In addition, the http handler serves content under /_/{dashboard|catch_up_package|pprof} for 
+operational purposes.
+
+== tower::Service FAQ
+
+=== When implementing a https://docs.rs/tower/0.4.11/tower/trait.Service.html[tower::Service], use https://docs.rs/tower/0.4.11/tower/util/struct.BoxService.html[tower::util::BoxService] as the public interface
+
+When you have an implementation of the Service trait in one crate and you want to share that implementation
+with other crates, then there are few options what to export as public interface:
+
+* (preferred) +BoxService<...>+ is concise way to define an object that implements the Service trait. 
+* The class that implements the trait. Within the code base we discourage making a struct public
+that crosses API boundaries.
+* +Arc<dyn Service ...>+. When using a Service with https://docs.rs/hyper/0.14.14/hyper[Hyper], Hyper
+takes ownership of the Service object. So, +Arc<...>+ is not the most suitable choice. 
+* +Box<dyn Service ...>+. More verbose than +BoxService<...>+, because you need to specify the
+associated types. Also, a plain BoxService object is simpler to reason about than a smart pointer
+like +Box<dyn Service...>+.
+
+=== I want my service to be shared across many threads
+
+Implementations of the Service trait are not necessary https://dfinity-lab.gitlab.io/core/ic/docs/spec/meta/rust.html#_thread_safe_types[thread-safe].
+Here the +BoxService+ comes handy because it tries to protect the caller of your service from race
+conditions. +BoxService+ doesn't implement +Clone+ nor +Copy+. Hence we can't have two copies/clones of
+the same object that we pass to different threads. You can wrap the service object in an +Arc<...>+
+but you need to call +get_mut+ which will fail as soon as you have more than one Arc.
+
+Here are few options for sharing an object that implements the Service trait:
+
+* (preferred) Use a https://docs.rs/tower/0.4.11/tower/buffer/index.html[buffer] service around the 
+object. This effectively places the service behind a multi-producer, single-consumer buffering channel.
+* Wrap the object in a +Arc<Mutex<...>>+. The caller must make sure the mutex is acquired for the whole 
+duration from calling +poll_ready+ until +call+ returns. This is effectively the same as the "buffer" approach.
+With this approach is hard to control the contention on the mutex (it is hard to know how many threads are stuck
+waiting to acquire the mutex).
+
+==== Returning errors
+
+If +Poll::Ready(Err(_))+ is returned when +poll_ready+ is called, the service is no longer able to service requests and the caller should discard the service instance. https://docs.rs/tower/0.4.11/tower/trait.Service.html#tymethod.poll_ready[[docs.rs]]
+
+Returning a +Service::Error+ to a hyper server will cause the connection to be abruptly aborted. https://docs.rs/hyper/0.14.15/src/hyper/service/http.rs.html[[docs.rs]]
+
+==== Avoid returning https://docs.rs/tower/0.4.11/tower/load_shed/struct.LoadShed.html[tower::LoadShed] as part of a public API
+
+Having LoadShed<...> as part of cross-component API just increases the API surface - the client needs reason 
+about the addition semantics LoadShed introduces. +LoadShed+ also restricts the +Service::Error+ type to be 
++BoxError+.
+
+==== Avoid driving clones of a service object ready without using them
+
+Some layers keep internal state in the form of semaphore permits. If you acquire a semaphore permit
+better use it or free it. This semantics doesn't play very well the https://docs.rs/tower/0.4.11/tower/steer/index.html[tower::Steer] service.
+For example, if we create a Steer service per TCP connection and one of the upstream services uses a buffer,
+then each connection will try to acquire a semaphore permit. However, it may be that only a small number of
+connection use that permit.
