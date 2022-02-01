@@ -6,6 +6,7 @@ use checkpoint::Checkpoint;
 pub use checkpoint::{CheckpointSerialization, MappingSerialization};
 use ic_sys::PageBytes;
 pub use ic_sys::{PageIndex, PAGE_SIZE};
+use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 pub use page_allocator::{
     allocated_pages_count, PageAllocatorSerialization, PageDeltaSerialization, PageSerialization,
 };
@@ -541,8 +542,10 @@ impl Buffer {
                 Some(bytes) => bytes,
                 None => self.page_map.get_page(page),
             };
-            dst[0..page_len]
-                .copy_from_slice(&page_contents[offset_into_page..offset_into_page + page_len]);
+            deterministic_copy_from_slice(
+                &mut dst[0..page_len],
+                &page_contents[offset_into_page..offset_into_page + page_len],
+            );
 
             offset += page_len;
             let n = dst.len();
@@ -564,8 +567,10 @@ impl Buffer {
                 .dirty_pages
                 .entry(page)
                 .or_insert(*self.page_map.get_page(page));
-            dirty_page[offset_into_page..offset_into_page + page_len]
-                .copy_from_slice(&src[0..page_len]);
+            deterministic_copy_from_slice(
+                &mut dirty_page[offset_into_page..offset_into_page + page_len],
+                &src[0..page_len],
+            );
 
             offset += page_len;
             src = &src[page_len..src.len()];
