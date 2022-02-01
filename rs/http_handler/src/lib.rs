@@ -35,7 +35,7 @@ use hyper::{server::conn::Http, Body, Request, Response, StatusCode};
 use ic_base_thread::ObservableCountingSemaphore;
 use ic_config::http_handler::Config;
 use ic_crypto_tls_interfaces::TlsHandshake;
-use ic_crypto_tree_hash::Path;
+use ic_crypto_tree_hash::{lookup_path, LabeledTree, Path};
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
     crypto::IngressSigVerifier,
@@ -52,14 +52,15 @@ use ic_types::{
     canonical_error::{invalid_argument_error, unknown_error, CanonicalError},
     malicious_flags::MaliciousFlags,
     messages::{
-        Blob, CertificateDelegation, HttpReadState, HttpReadStateContent, HttpReadStateResponse,
-        HttpRequestEnvelope, ReplicaHealthStatus,
+        Blob, Certificate, CertificateDelegation, HttpReadState, HttpReadStateContent,
+        HttpReadStateResponse, HttpRequestEnvelope, ReplicaHealthStatus,
     },
     time::current_time_and_expiry_time,
     SubnetId,
 };
 use metrics::HttpHandlerMetrics;
 use rand::Rng;
+use std::convert::TryFrom;
 use std::io::{Error, ErrorKind, Write};
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -740,7 +741,7 @@ fn load_root_delegation(
     for _ in 0..MAX_FETCH_DELEGATION_ATTEMPTS {
         info!(log, "Fetching delegation from the nns subnet...");
 
-        let log_err_and_backoff = |err: &dyn std::error::Error| {
+        fn log_err_and_backoff(log: &ReplicaLogger, err: impl std::fmt::Display) {
             // Fetching the NNS delegation failed. Do a random backoff and try again.
             let mut rng = rand::thread_rng();
             let backoff = Duration::from_secs(rng.gen_range(1..15));
@@ -752,7 +753,7 @@ fn load_root_delegation(
                 err
             );
             std::thread::sleep(backoff);
-        };
+        }
 
         let node = match get_random_node_from_nns_subnet(state_reader, nns_subnet_id) {
             Ok(node_topology) => node_topology,
@@ -810,7 +811,7 @@ fn load_root_delegation(
         {
             Ok(res) => res.bytes(),
             Err(err) => {
-                log_err_and_backoff(&err);
+                log_err_and_backoff(log, &err);
                 continue;
             }
         };
@@ -822,10 +823,46 @@ fn load_root_delegation(
                 let response: HttpReadStateResponse = match serde_cbor::from_slice(&raw_response) {
                     Ok(r) => r,
                     Err(e) => {
-                        log_err_and_backoff(&e);
+                        log_err_and_backoff(log, &e);
                         continue;
                     }
                 };
+
+                let parsed_delegation: Certificate =
+                    match serde_cbor::from_slice(&response.certificate) {
+                        Ok(r) => r,
+                        Err(e) => {
+                            log_err_and_backoff(
+                                log,
+                                &format!("failed to parse delegation certificate: {}", e),
+                            );
+                            continue;
+                        }
+                    };
+
+                let labeled_tree = match LabeledTree::try_from(parsed_delegation.tree) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        log_err_and_backoff(
+                            log,
+                            &format!("invalid hash tree in the delegation certificate: {:?}", e),
+                        );
+                        continue;
+                    }
+                };
+
+                if lookup_path(
+                    &labeled_tree,
+                    &[b"subnet", subnet_id.get_ref().as_ref(), b"public_key"],
+                )
+                .is_none()
+                {
+                    log_err_and_backoff(
+                        log,
+                        &format!("delegation does not contain current subnet {}", subnet_id),
+                    );
+                    continue;
+                }
 
                 let delegation = CertificateDelegation {
                     subnet_id: Blob(subnet_id.get().to_vec()),
@@ -837,7 +874,7 @@ fn load_root_delegation(
             }
             Err(err) => {
                 // Fetching the NNS delegation failed. Do a random backoff and try again.
-                log_err_and_backoff(&err);
+                log_err_and_backoff(log, &err);
             }
         }
     }
