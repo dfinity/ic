@@ -9,7 +9,9 @@
   # The e2e tests are flaky and impacting developer merges
   # https://dfinity.slack.com/archives/C012RDFNK7U/p1618233620112900
   variables:
-    E2E_TEST_TIMEOUT: 240
+    GUEST_OS_TEST_TIMEOUT: 2400
+    # This var is needed as some shell scripts depend on it.
+    E2E_TEST_TIMEOUT: 480
 
 e2e-workload-test:
   extends:
@@ -68,7 +70,7 @@ e2e-workload-test:
           --ic_prep_bin "$(pwd)/ic-prep" \
           --ic_workload_generator_bin "$(pwd)/ic-workload-generator" \
           --log_directory "${CI_PROJECT_DIR}/ic-os/guestos/test-out/e2e" \
-          --timeout "$E2E_TEST_TIMEOUT"
+          --timeout "$GUEST_OS_TEST_TIMEOUT"
 
 e2e-scalability-suite-test:
   extends:
@@ -144,7 +146,7 @@ e2e-scalability-suite-test:
       capsule -v -i "../ic-os/guestos/tests/*.py" -i "../gitlab-runner-tmp/**/*" -- \
       "${CI_PROJECT_DIR}/ic-os/guestos/tests/e2e-benchmarking-suite.py" \
           --vmtoolscfg=internal \
-          --timeout "$E2E_TEST_TIMEOUT" \
+          --timeout "$GUEST_OS_TEST_TIMEOUT" \
           --disk_image "$GUESTOS_IMG" \
           --ic_admin_bin "${CI_PROJECT_DIR}/artifacts/release/ic-admin" \
           --nns_canisters "${CI_PROJECT_DIR}/artifacts/canisters/" \
@@ -157,7 +159,6 @@ e2e-scalability-suite-test:
 guest-os-upgrade-from-mainnet-app-subnet-to-new-version-update-workload:
   extends:
     - .e2e-test-base
-  timeout: 20m
   needs:
     - guest-os-diskimg
     - guest-os-updateimg-build
@@ -169,12 +170,11 @@ guest-os-upgrade-from-mainnet-app-subnet-to-new-version-update-workload:
     - ic-os/guestos/test-out/e2e-upgrade-from-mainnet-app-subnet-to-new-version-update-workload
   script:
     - |
-      $SHELL_WRAPPER "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "app" "false" "update"
+      $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "app" "false" "update"
 
 guest-os-downgrade-from-new-version-to-mainnet-app-subnet-update-workload:
   extends:
     - .e2e-test-base
-  timeout: 20m
   needs:
     - guest-os-diskimg
     - guest-os-updateimg-build
@@ -186,12 +186,11 @@ guest-os-downgrade-from-new-version-to-mainnet-app-subnet-update-workload:
     - ic-os/guestos/test-out/e2e-downgrade-from-new-version-to-mainnet-app-subnet-update-workload
   script:
     - |
-      $SHELL_WRAPPER "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "app" "true" "update"
+      $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "app" "true" "update"
 
 guest-os-upgrade-from-mainnet-nns-subnet-to-new-version-update-workload:
   extends:
     - .e2e-test-base
-  timeout: 20m
   needs:
     - guest-os-diskimg
     - guest-os-updateimg-build
@@ -203,12 +202,11 @@ guest-os-upgrade-from-mainnet-nns-subnet-to-new-version-update-workload:
     - ic-os/guestos/test-out/e2e-upgrade-from-mainnet-nns-subnet-to-new-version-update-workload
   script:
     - |
-      $SHELL_WRAPPER "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "nns" "false" "update"
+      $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "nns" "false" "update"
 
 guest-os-downgrade-from-new-version-to-mainnet-nns-subnet-update-workload:
   extends:
     - .e2e-test-base
-  timeout: 20m
   needs:
     - guest-os-diskimg
     - guest-os-updateimg-build
@@ -220,12 +218,11 @@ guest-os-downgrade-from-new-version-to-mainnet-nns-subnet-update-workload:
     - ic-os/guestos/test-out/e2e-downgrade-from-new-version-to-mainnet-nns-subnet-update-workload
   script:
     - |
-      $SHELL_WRAPPER "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "nns" "true" "update"
+      $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "nns" "true" "update"
 
 guest-os-upgrade-from-mainnet-app-subnet-to-new-version-query-workload:
   extends:
     - .e2e-test-base
-  timeout: 20m
   needs:
     - guest-os-diskimg
     - guest-os-updateimg-build
@@ -237,12 +234,11 @@ guest-os-upgrade-from-mainnet-app-subnet-to-new-version-query-workload:
     - ic-os/guestos/test-out/e2e-upgrade-from-mainnet-app-subnet-to-new-version-query-workload
   script:
     - |
-      $SHELL_WRAPPER "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "app" "false" "query"
+      $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "app" "false" "query"
 
 guest-os-downgrade-from-new-version-to-mainnet-app-subnet-query-workload:
   extends:
     - .e2e-test-base
-  timeout: 20m
   needs:
     - guest-os-diskimg
     - guest-os-updateimg-build
@@ -254,12 +250,11 @@ guest-os-downgrade-from-new-version-to-mainnet-app-subnet-query-workload:
     - ic-os/guestos/test-out/e2e-downgrade-from-new-version-to-mainnet-app-subnet-query-workload
   script:
     - |
-      $SHELL_WRAPPER "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "app" "true" "query"
+      $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "app" "true" "query"
 
 guest-os-upgrade-from-mainnet-nns-subnet-to-new-version-query-workload:
   extends:
     - .e2e-test-base
-  timeout: 20m
   needs:
     - guest-os-diskimg
     - guest-os-updateimg-build
@@ -271,13 +266,12 @@ guest-os-upgrade-from-mainnet-nns-subnet-to-new-version-query-workload:
     - ic-os/guestos/test-out/e2e-upgrade-from-mainnet-nns-subnet-to-new-version-query-workload
   script:
     - |
-      $SHELL_WRAPPER "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "nns" "false" "query"
+      $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "nns" "false" "query"
 
 
 guest-os-downgrade-from-new-version-to-mainnet-nns-subnet-query-workload:
   extends:
     - .e2e-test-base
-  timeout: 20m
   needs:
     - guest-os-diskimg
     - guest-os-updateimg-build
@@ -289,7 +283,7 @@ guest-os-downgrade-from-new-version-to-mainnet-nns-subnet-query-workload:
     - ic-os/guestos/test-out/e2e-downgrade-from-new-version-to-mainnet-nns-subnet-query-workload
   script:
     - |
-      $SHELL_WRAPPER "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "nns" "true" "query"
+      $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "nns" "true" "query"
 
 .run-farm-based-test: &run-farm-based-test |
   IC_VERSION_ID=$("${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/find-build-id.sh)
@@ -324,7 +318,6 @@ guest-os-downgrade-from-new-version-to-mainnet-nns-subnet-query-workload:
     paths:
       - "test-results.json"
       - "logs/"
-  timeout: 30m
   script:
     - *run-farm-based-test
 
