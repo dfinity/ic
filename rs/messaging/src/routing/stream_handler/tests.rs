@@ -14,7 +14,7 @@ use ic_replicated_state::{
     canister_state::{ENFORCE_MESSAGE_MEMORY_USAGE, QUEUE_INDEX_NONE},
     replicated_state::{LABEL_VALUE_CANISTER_NOT_FOUND, LABEL_VALUE_OUT_OF_MEMORY},
     testing::ReplicatedStateTesting,
-    ReplicatedState, Stream,
+    CanisterState, ReplicatedState, Stream,
 };
 use ic_test_utilities::{
     metrics::{
@@ -39,8 +39,6 @@ use std::convert::TryFrom;
 const LOCAL_SUBNET: SubnetId = SUBNET_12;
 const REMOTE_SUBNET: SubnetId = SUBNET_23;
 const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
-const MAX_CANISTER_MEMORY_SIZE: NumBytes = NumBytes::new(u64::MAX / 2);
-const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(u64::MAX / 2);
 
 lazy_static! {
     static ref LOCAL_CANISTER: CanisterId = CanisterId::from(0x34);
@@ -217,18 +215,7 @@ fn induct_loopback_stream_success() {
             NumSeconds::from(100_000),
         );
         expected_state.put_canister_state(expected_canister_state);
-
-        for (_stream_index, msg) in loopback_stream.messages().iter() {
-            assert_eq!(
-                Ok(()),
-                expected_state.push_input(
-                    QUEUE_INDEX_NONE,
-                    msg.clone(),
-                    (u64::MAX / 2).into(),
-                    &mut (i64::MAX / 2)
-                )
-            );
-        }
+        push_inputs(&mut expected_state, loopback_stream.messages().iter());
 
         // ...and an empty loopback stream with begin indices advanced by 2.
         let expected_loopback_stream = generate_loopback_stream(StreamConfig {
@@ -256,6 +243,310 @@ fn induct_loopback_stream_success() {
             fetch_inducted_payload_sizes_stats(&metrics_registry).count
         );
     });
+}
+
+/// Tests that canister memory limit is enforced by
+/// `StreamHandlerImpl::induct_loopback_stream()`.
+#[test]
+fn induct_loopback_stream_with_canister_memory_limit() {
+    with_test_replica_logger(|log| {
+        // A stream handler with a canister memory limit that only allows up to 3 reservations.
+        let config = HypervisorConfig {
+            max_canister_memory_size: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
+            ..Default::default()
+        };
+        let (stream_handler, initial_state, metrics_registry) =
+            new_fixture_with_config(&log, config);
+
+        if ENFORCE_MESSAGE_MEMORY_USAGE {
+            induct_loopback_stream_with_memory_limit_impl(
+                stream_handler,
+                initial_state,
+                metrics_registry,
+            );
+        } else {
+            induct_loopback_stream_ignores_memory_limit_impl(
+                stream_handler,
+                initial_state,
+                metrics_registry,
+            );
+        }
+    });
+}
+
+/// Tests that subnet memory limit is enforced by
+/// `StreamHandlerImpl::induct_loopback_stream()`.
+#[test]
+fn induct_loopback_stream_with_subnet_memory_limit() {
+    with_test_replica_logger(|log| {
+        // A stream handler with a subnet memory limit that only allows up to 3 reservations.
+        let config = HypervisorConfig {
+            subnet_memory_capacity: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
+            ..Default::default()
+        };
+        let (stream_handler, initial_state, metrics_registry) =
+            new_fixture_with_config(&log, config);
+
+        if ENFORCE_MESSAGE_MEMORY_USAGE {
+            induct_loopback_stream_with_memory_limit_impl(
+                stream_handler,
+                initial_state,
+                metrics_registry,
+            );
+        } else {
+            induct_loopback_stream_ignores_memory_limit_impl(
+                stream_handler,
+                initial_state,
+                metrics_registry,
+            );
+        }
+    });
+}
+
+/// Tests that subnet message memory limit is enforced by
+/// `StreamHandlerImpl::induct_loopback_stream()`.
+#[test]
+fn induct_loopback_stream_with_subnet_message_memory_limit() {
+    with_test_replica_logger(|log| {
+        // A stream handler with a subnet message memory limit that only allows up to 3 reservations.
+        let config = HypervisorConfig {
+            subnet_message_memory_capacity: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
+            ..Default::default()
+        };
+        let (stream_handler, initial_state, metrics_registry) =
+            new_fixture_with_config(&log, config);
+
+        if ENFORCE_MESSAGE_MEMORY_USAGE {
+            induct_loopback_stream_with_memory_limit_impl(
+                stream_handler,
+                initial_state,
+                metrics_registry,
+            );
+        } else {
+            induct_loopback_stream_ignores_memory_limit_impl(
+                stream_handler,
+                initial_state,
+                metrics_registry,
+            );
+        }
+    });
+}
+
+/// Tests that canister memory limit is ignored by
+/// `StreamHandlerImpl::induct_loopback_stream()` for system subnets.
+#[test]
+fn system_subnet_induct_loopback_stream_ignores_canister_memory_limit() {
+    with_test_replica_logger(|log| {
+        // A stream handler with a canister memory limit that only allows up to 3 reservations.
+        let config = HypervisorConfig {
+            max_canister_memory_size: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
+            ..Default::default()
+        };
+        let (stream_handler, mut initial_state, metrics_registry) =
+            new_fixture_with_config(&log, config);
+        initial_state.metadata.own_subnet_type = SubnetType::System;
+
+        induct_loopback_stream_ignores_memory_limit_impl(
+            stream_handler,
+            initial_state,
+            metrics_registry,
+        );
+    });
+}
+
+/// Tests that subnet memory limit is ignored by
+/// `StreamHandlerImpl::induct_loopback_stream()` for system subnets.
+#[test]
+fn system_subnet_induct_loopback_stream_ignores_subnet_memory_limit() {
+    with_test_replica_logger(|log| {
+        // A stream handler with a subnet memory limit that only allows up to 3 reservations.
+        let config = HypervisorConfig {
+            subnet_memory_capacity: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
+            ..Default::default()
+        };
+        let (stream_handler, mut initial_state, metrics_registry) =
+            new_fixture_with_config(&log, config);
+        initial_state.metadata.own_subnet_type = SubnetType::System;
+
+        induct_loopback_stream_ignores_memory_limit_impl(
+            stream_handler,
+            initial_state,
+            metrics_registry,
+        );
+    });
+}
+
+/// Tests that subnet message memory limit is ignored by
+/// `StreamHandlerImpl::induct_loopback_stream()` for system subnets.
+#[test]
+fn system_subnet_induct_loopback_stream_ignores_subnet_message_memory_limit() {
+    with_test_replica_logger(|log| {
+        // A stream handler with a subnet message memory limit that only allows up to 3 reservations.
+        let config = HypervisorConfig {
+            subnet_message_memory_capacity: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
+            ..Default::default()
+        };
+        let (stream_handler, mut initial_state, metrics_registry) =
+            new_fixture_with_config(&log, config);
+        initial_state.metadata.own_subnet_type = SubnetType::System;
+
+        induct_loopback_stream_ignores_memory_limit_impl(
+            stream_handler,
+            initial_state,
+            metrics_registry,
+        );
+    });
+}
+
+/// Common implementation for `StreamHandlerImpl::induct_loopback_stream()`
+/// memory limit tests. Expects a `StreamHandlerImpl` with canister; subnet; or
+/// subnet message; memory limits only large enough for 3 in-flight requests
+/// plus epsilon at a time. Ensures that the limits are enforced when inducting
+/// the loopback stream.
+///
+/// Sets up a canister with two input queue reservations for two in-flight
+/// loopback requests and a loopback stream containing said requests. Tries to
+/// induct the loopback stream and expects the first request to be inducted; and
+/// the second request to fail to be inducted due to lack of memory.
+fn induct_loopback_stream_with_memory_limit_impl(
+    stream_handler: StreamHandlerImpl,
+    mut initial_state: ReplicatedState,
+    metrics_registry: MetricsRegistry,
+) {
+    let mut expected_state = initial_state.clone();
+
+    let (loopback_stream, expected_canister_state) =
+        induct_loopback_stream_with_memory_limit_setup(&mut initial_state);
+
+    // Expecting a canister state with the first message inducted...
+    expected_state.put_canister_state(expected_canister_state);
+    push_inputs(
+        &mut expected_state,
+        loopback_stream.messages().iter().take(1),
+    );
+
+    // ...and a loopback stream with begin indices advanced...
+    let mut expected_loopback_stream = generate_loopback_stream(StreamConfig {
+        messages_begin: 23,
+        message_count: 0,
+        signals_end: 23,
+    });
+    // ...plus a reject response.
+    let context = RejectContext::new(
+        RejectCode::SysTransient,
+        StateError::OutOfMemory {
+            requested: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64),
+            available: MAX_RESPONSE_COUNT_BYTES as i64 / 2,
+        }
+        .to_string(),
+    );
+    let msg = loopback_stream.messages().iter().nth(1).unwrap().1;
+    expected_loopback_stream.push(generate_reject_response(msg.clone(), context));
+    expected_state.with_streams(btreemap![LOCAL_SUBNET => expected_loopback_stream]);
+
+    let inducted_state = stream_handler.induct_loopback_stream(initial_state);
+
+    assert_eq!(expected_state, inducted_state);
+    assert_inducted_xnet_messages_eq(
+        metric_vec(&[
+            (
+                &[
+                    (LABEL_TYPE, LABEL_VALUE_TYPE_REQUEST),
+                    (LABEL_STATUS, LABEL_VALUE_SUCCESS),
+                ],
+                1,
+            ),
+            (
+                &[
+                    (LABEL_TYPE, LABEL_VALUE_TYPE_REQUEST),
+                    (LABEL_STATUS, LABEL_VALUE_OUT_OF_MEMORY),
+                ],
+                1,
+            ),
+        ]),
+        &metrics_registry,
+    );
+    assert_eq!(
+        1,
+        fetch_inducted_payload_sizes_stats(&metrics_registry).count
+    );
+}
+
+/// Common implementation for `StreamHandlerImpl::induct_loopback_stream()`
+/// memory limit tests. Expects a `StreamHandlerImpl` with canister; subnet; or
+/// subnet message; memory limits only large enough for 3 in-flight requests
+/// plus epsilon at a time. Ensures that the limit is ignored when inducting
+/// the loopback stream.
+///
+/// Sets up a canister with two input queue reservations for two in-flight
+/// loopback requests and a loopback stream containing said requests. Tries to
+/// induct the loopback stream and expects both requests to be inducted
+/// successfully.
+fn induct_loopback_stream_ignores_memory_limit_impl(
+    stream_handler: StreamHandlerImpl,
+    mut initial_state: ReplicatedState,
+    metrics_registry: MetricsRegistry,
+) {
+    let mut expected_state = initial_state.clone();
+
+    let (loopback_stream, expected_canister_state) =
+        induct_loopback_stream_with_memory_limit_setup(&mut initial_state);
+
+    // Expecting a canister state with the 2 requests inducted...
+    expected_state.put_canister_state(expected_canister_state);
+    push_inputs(&mut expected_state, loopback_stream.messages().iter());
+
+    // ...and a loopback stream with begin indices advanced.
+    let expected_loopback_stream = generate_loopback_stream(StreamConfig {
+        messages_begin: 23,
+        message_count: 0,
+        signals_end: 23,
+    });
+    expected_state.with_streams(btreemap![LOCAL_SUBNET => expected_loopback_stream]);
+
+    let inducted_state = stream_handler.induct_loopback_stream(initial_state);
+
+    assert_eq!(expected_state, inducted_state);
+    assert_inducted_xnet_messages_eq(
+        metric_vec(&[(
+            &[
+                (LABEL_TYPE, LABEL_VALUE_TYPE_REQUEST),
+                (LABEL_STATUS, LABEL_VALUE_SUCCESS),
+            ],
+            2,
+        )]),
+        &metrics_registry,
+    );
+    assert_eq!(
+        2,
+        fetch_inducted_payload_sizes_stats(&metrics_registry).count
+    );
+}
+
+/// Common initial state setup for `StreamHandlerImpl::induct_loopback_stream()`
+/// memory limit tests.
+fn induct_loopback_stream_with_memory_limit_setup(
+    initial_state: &mut ReplicatedState,
+) -> (Stream, CanisterState) {
+    // The initial state has a loopback stream with 2 requests...
+    let loopback_stream = generate_loopback_stream(StreamConfig {
+        messages_begin: 21,
+        message_count: 2,
+        signals_end: 21,
+    });
+    initial_state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream.clone()]);
+
+    // ...and a canister with 2 input queue reservations (for the 2 requests in the stream).
+    let mut initial_canister_state = new_canister_state(
+        *LOCAL_CANISTER,
+        user_test_id(24).get(),
+        *INITIAL_CYCLES,
+        NumSeconds::from(100_000),
+    );
+    make_input_queue_reservations(&mut initial_canister_state, 2, *LOCAL_CANISTER);
+    initial_state.put_canister_state(initial_canister_state.clone());
+
+    (loopback_stream, initial_canister_state)
 }
 
 /// Simple test to verify that a specified message is removed from the
@@ -568,10 +859,7 @@ fn induct_stream_slices_partial_success() {
             *INITIAL_CYCLES,
             NumSeconds::from(100_000),
         );
-        initial_canister_state
-            .push_output_request(test_request(*LOCAL_CANISTER, *REMOTE_CANISTER))
-            .unwrap();
-        initial_canister_state.output_into_iter().count();
+        make_input_queue_reservations(&mut initial_canister_state, 1, *REMOTE_CANISTER);
         initial_state.put_canister_state(initial_canister_state);
 
         let initial_stream = generate_outgoing_stream(StreamConfig {
@@ -597,17 +885,7 @@ fn induct_stream_slices_partial_success() {
 
         // The expected canister state must contain the 3 inducted messages...
         if let Some(messages) = stream_slice.messages() {
-            for (_stream_index, msg) in messages.iter() {
-                assert_eq!(
-                    Ok(()),
-                    expected_state.push_input(
-                        QUEUE_INDEX_NONE,
-                        msg.clone(),
-                        (u64::MAX / 2).into(),
-                        &mut (i64::MAX / 2)
-                    )
-                );
-            }
+            push_inputs(&mut expected_state, messages.iter());
         }
         // ...and signals for the 3 inducted messages in the stream.
         let mut expected_stream = generate_outgoing_stream(StreamConfig {
@@ -725,16 +1003,10 @@ fn induct_stream_slices_partial_success() {
     });
 }
 
-/// Tests that canister memory limit is enforced when inducting stream slices.
-///
-/// Sets up a stream handler with only enough canister memory for one in-flight
-/// request (plus epsilon) at a time; and a canister with one in-flight
-/// (outgoing) request. Tries to induct a slice consisting of `[request1,
-/// response, request2]`: `request1` will fail due to lack of memory; `response`
-/// will be inducted and consume the existing reservation; `request2` will be
-/// inducted successfully, as there is now available memory for one request.
+/// Tests that canister memory limit is enforced by
+/// `StreamHandlerImpl::induct_stream_slices()`.
 #[test]
-fn induct_stream_slices_canister_memory_limit() {
+fn induct_stream_slices_with_canister_memory_limit() {
     if !ENFORCE_MESSAGE_MEMORY_USAGE {
         return;
     }
@@ -744,27 +1016,23 @@ fn induct_stream_slices_canister_memory_limit() {
         let (stream_handler, initial_state, metrics_registry) = new_fixture_with_config(
             &log,
             HypervisorConfig {
-                subnet_memory_capacity: SUBNET_MEMORY_CAPACITY,
                 max_canister_memory_size: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 15 / 10),
                 ..Default::default()
             },
         );
 
-        induct_stream_slices_memory_limits_impl(stream_handler, initial_state, metrics_registry);
+        induct_stream_slices_with_memory_limit_impl(
+            stream_handler,
+            initial_state,
+            metrics_registry,
+        );
     });
 }
 
-/// Tests that subnet memory limit is enforced when inducting stream slices.
-///
-/// Sets up a stream handler with only enough subnet available memory for one
-/// in-flight request (plus epsilon) at a time; and a canister with one
-/// in-flight (outgoing) request. Tries to induct a slice consisting of
-/// `[request1, response, request2]`: `request1` will fail due to lack of
-/// memory; `response` will be inducted and consume the existing reservation;
-/// `request2` will be inducted successfully, as there is now available memory
-/// for one request.
+/// Tests that subnet memory limit is enforced by
+/// `StreamHandlerImpl::induct_stream_slices()`.
 #[test]
-fn induct_stream_slices_subnet_memory_limit() {
+fn induct_stream_slices_with_subnet_memory_limit() {
     if !ENFORCE_MESSAGE_MEMORY_USAGE {
         return;
     }
@@ -775,76 +1043,152 @@ fn induct_stream_slices_subnet_memory_limit() {
             &log,
             HypervisorConfig {
                 subnet_memory_capacity: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 15 / 10),
-                max_canister_memory_size: MAX_CANISTER_MEMORY_SIZE,
                 ..Default::default()
             },
         );
 
-        induct_stream_slices_memory_limits_impl(stream_handler, initial_state, metrics_registry);
+        induct_stream_slices_with_memory_limit_impl(
+            stream_handler,
+            initial_state,
+            metrics_registry,
+        );
     });
 }
 
-fn induct_stream_slices_memory_limits_impl(
+/// Tests that subnet message memory limit is enforced by
+/// `StreamHandlerImpl::induct_stream_slices()`.
+#[test]
+fn induct_stream_slices_with_subnet_message_memory_limit() {
+    if !ENFORCE_MESSAGE_MEMORY_USAGE {
+        return;
+    }
+
+    with_test_replica_logger(|log| {
+        // Subnet message memory limit only allows for one in-flight request (plus epsilon).
+        let (stream_handler, initial_state, metrics_registry) = new_fixture_with_config(
+            &log,
+            HypervisorConfig {
+                subnet_message_memory_capacity: NumBytes::new(
+                    MAX_RESPONSE_COUNT_BYTES as u64 * 15 / 10,
+                ),
+                ..Default::default()
+            },
+        );
+
+        induct_stream_slices_with_memory_limit_impl(
+            stream_handler,
+            initial_state,
+            metrics_registry,
+        );
+    });
+}
+
+/// Tests that canister memory limit is enforced by
+/// `StreamHandlerImpl::induct_stream_slices()` on system subnets.
+#[test]
+fn system_subnet_induct_stream_slices_with_canister_memory_limit() {
+    if !ENFORCE_MESSAGE_MEMORY_USAGE {
+        return;
+    }
+
+    with_test_replica_logger(|log| {
+        // Canister memory limit only allows for one in-flight request (plus epsilon).
+        let (stream_handler, mut initial_state, metrics_registry) = new_fixture_with_config(
+            &log,
+            HypervisorConfig {
+                max_canister_memory_size: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 15 / 10),
+                ..Default::default()
+            },
+        );
+        initial_state.metadata.own_subnet_type = SubnetType::System;
+
+        induct_stream_slices_with_memory_limit_impl(
+            stream_handler,
+            initial_state,
+            metrics_registry,
+        );
+    });
+}
+
+/// Tests that subnet memory limit is enforced by
+/// `StreamHandlerImpl::induct_stream_slices()` on system subnets.
+#[test]
+fn system_subnet_induct_stream_slices_with_subnet_memory_limit() {
+    if !ENFORCE_MESSAGE_MEMORY_USAGE {
+        return;
+    }
+
+    with_test_replica_logger(|log| {
+        // Subnet memory limit only allows for one in-flight request (plus epsilon).
+        let (stream_handler, mut initial_state, metrics_registry) = new_fixture_with_config(
+            &log,
+            HypervisorConfig {
+                subnet_memory_capacity: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 15 / 10),
+                ..Default::default()
+            },
+        );
+        initial_state.metadata.own_subnet_type = SubnetType::System;
+
+        induct_stream_slices_with_memory_limit_impl(
+            stream_handler,
+            initial_state,
+            metrics_registry,
+        );
+    });
+}
+
+/// Tests that subnet message memory limit is enforced by
+/// `StreamHandlerImpl::induct_stream_slices()` on system subnets.
+#[test]
+fn system_subnet_induct_stream_slices_with_subnet_message_memory_limit() {
+    if !ENFORCE_MESSAGE_MEMORY_USAGE {
+        return;
+    }
+
+    with_test_replica_logger(|log| {
+        // Subnet message memory limit only allows for one in-flight request (plus epsilon).
+        let (stream_handler, mut initial_state, metrics_registry) = new_fixture_with_config(
+            &log,
+            HypervisorConfig {
+                subnet_message_memory_capacity: NumBytes::new(
+                    MAX_RESPONSE_COUNT_BYTES as u64 * 15 / 10,
+                ),
+                ..Default::default()
+            },
+        );
+        initial_state.metadata.own_subnet_type = SubnetType::System;
+
+        induct_stream_slices_with_memory_limit_impl(
+            stream_handler,
+            initial_state,
+            metrics_registry,
+        );
+    });
+}
+
+/// Common implementation for memory limit tests. Expects a `StreamHandlerImpl`
+/// with canister, subnet or subnet message memory limits only large enough for
+/// one in-flight request (plus epsilon) at a time. Ensures that the limits are
+/// enforced when inducting stream slices.
+///
+/// Sets up a canister with one input queue reservation for one in-flight
+/// (outgoing) request. Tries to induct a slice consisting of `[request1,
+/// response, request2]`:
+///  * `request1` will fail to be inducted due to lack of memory;
+///  * `response` will be inducted and consume the existing reservation;
+///  * `request2` will be inducted successfully, as there is now available
+///    memory for one request.
+fn induct_stream_slices_with_memory_limit_impl(
     stream_handler: StreamHandlerImpl,
     mut initial_state: ReplicatedState,
     metrics_registry: MetricsRegistry,
 ) {
-    fn request_with_callback(callback_id: u64) -> RequestOrResponse {
-        let mut request = test_request(*REMOTE_CANISTER, *LOCAL_CANISTER);
-        // Set a callback ID that will allow us to identify the request.
-        request.sender_reply_callback = CallbackId::new(callback_id);
-        request.into()
-    }
-
-    // Canister with a reservation for one incoming response.
-    let mut initial_canister_state = new_canister_state(
-        *LOCAL_CANISTER,
-        user_test_id(24).get(),
-        *INITIAL_CYCLES,
-        NumSeconds::from(100_000),
-    );
-    initial_canister_state
-        .push_output_request(test_request(*LOCAL_CANISTER, *REMOTE_CANISTER))
-        .unwrap();
-    initial_canister_state.output_into_iter().count();
-    initial_state.put_canister_state(initial_canister_state);
-    let mut expected_state = initial_state.clone();
-
-    let initial_stream = generate_outgoing_stream(StreamConfig {
-        messages_begin: 31,
-        message_count: 3,
-        signals_end: 43,
-    });
-    let mut expected_stream = initial_stream.clone();
-    initial_state.with_streams(btreemap![REMOTE_SUBNET => initial_stream]);
-
-    // Incoming slice: `request1`, response, `request2`.
-    let mut stream_slice = generate_stream_slice(StreamSliceConfig {
-        header_begin: 43,
-        header_end: None,
-        messages_begin: 43,
-        message_count: 0,
-        signals_end: 31,
-    });
-    let request1 = request_with_callback(13);
-    stream_slice.push_message(request1.clone());
-    stream_slice.push_message(test_response(*REMOTE_CANISTER, *LOCAL_CANISTER).into());
-    let request2 = request_with_callback(14);
-    stream_slice.push_message(request2);
+    let (mut expected_state, mut expected_stream, stream_slice, request1) =
+        induct_stream_slices_with_memory_limit_setup(&mut initial_state);
 
     // The expected canister state must contain the response and `request2`...
     if let Some(messages) = stream_slice.messages() {
-        for (_stream_index, msg) in messages.iter().skip(1) {
-            assert_eq!(
-                Ok(()),
-                expected_state.push_input(
-                    QUEUE_INDEX_NONE,
-                    msg.clone(),
-                    (u64::MAX / 2).into(),
-                    &mut (i64::MAX / 2)
-                )
-            );
-        }
+        push_inputs(&mut expected_state, messages.iter().skip(1));
     }
     // ...and signals for the 3 messages plus one reject response for `request1` in
     // the output stream.
@@ -869,16 +1213,6 @@ fn induct_stream_slices_memory_limits_impl(
         .induct_stream_slices(initial_state, btreemap![REMOTE_SUBNET => stream_slice]);
 
     // Assert
-    assert_eq!(
-        expected_state.system_metadata(),
-        inducted_state.system_metadata(),
-    );
-
-    assert_eq!(
-        expected_state.canister_state(&LOCAL_CANISTER),
-        inducted_state.canister_state(&LOCAL_CANISTER),
-    );
-
     assert_eq!(expected_state, inducted_state);
 
     assert_inducted_xnet_messages_eq(
@@ -911,6 +1245,54 @@ fn induct_stream_slices_memory_limits_impl(
         2,
         fetch_inducted_payload_sizes_stats(&metrics_registry).count
     );
+}
+
+/// Common initial state setup for `StreamHandlerImpl::induct_stream_slices()`
+/// memory limit tests.
+fn induct_stream_slices_with_memory_limit_setup(
+    initial_state: &mut ReplicatedState,
+) -> (ReplicatedState, Stream, StreamSlice, RequestOrResponse) {
+    fn request_with_callback(callback_id: u64) -> RequestOrResponse {
+        let mut request = test_request(*REMOTE_CANISTER, *LOCAL_CANISTER);
+        // Set a callback ID that will allow us to identify the request.
+        request.sender_reply_callback = CallbackId::new(callback_id);
+        request.into()
+    }
+
+    // Canister with a reservation for one incoming response.
+    let mut initial_canister_state = new_canister_state(
+        *LOCAL_CANISTER,
+        user_test_id(24).get(),
+        *INITIAL_CYCLES,
+        NumSeconds::from(100_000),
+    );
+    make_input_queue_reservations(&mut initial_canister_state, 1, *REMOTE_CANISTER);
+    initial_state.put_canister_state(initial_canister_state);
+    let expected_state = initial_state.clone();
+
+    let initial_stream = generate_outgoing_stream(StreamConfig {
+        messages_begin: 31,
+        message_count: 3,
+        signals_end: 43,
+    });
+    let expected_stream = initial_stream.clone();
+    initial_state.with_streams(btreemap![REMOTE_SUBNET => initial_stream]);
+
+    // Incoming slice: `[request1, response, request2]`.
+    let mut stream_slice = generate_stream_slice(StreamSliceConfig {
+        header_begin: 43,
+        header_end: None,
+        messages_begin: 43,
+        message_count: 0,
+        signals_end: 31,
+    });
+    let request1 = request_with_callback(13);
+    stream_slice.push_message(request1.clone());
+    stream_slice.push_message(test_response(*REMOTE_CANISTER, *LOCAL_CANISTER).into());
+    let request2 = request_with_callback(14);
+    stream_slice.push_message(request2);
+
+    (expected_state, expected_stream, stream_slice, request1)
 }
 
 /// Tests that given a loopback stream and a certified stream slice,
@@ -975,30 +1357,10 @@ fn process_certified_stream_slices_success() {
         expected_state.put_canister_state(expected_canister_state);
 
         // ...the 3 loopback messages...
-        for (_stream_index, msg) in loopback_stream.messages().iter() {
-            assert_eq!(
-                Ok(()),
-                expected_state.push_input(
-                    QUEUE_INDEX_NONE,
-                    msg.clone(),
-                    (u64::MAX / 2).into(),
-                    &mut (i64::MAX / 2)
-                )
-            );
-        }
+        push_inputs(&mut expected_state, loopback_stream.messages().iter());
         // ...and the 2 incoming messages inducted.
         if let Some(messages) = stream_slice.messages() {
-            for (_stream_index, msg) in messages.iter() {
-                assert_eq!(
-                    Ok(()),
-                    expected_state.push_input(
-                        QUEUE_INDEX_NONE,
-                        msg.clone(),
-                        (u64::MAX / 2).into(),
-                        &mut (i64::MAX / 2)
-                    )
-                );
-            }
+            push_inputs(&mut expected_state, messages.iter());
         }
 
         //
@@ -1114,6 +1476,34 @@ fn new_fixture_with_config(
     state.metadata.network_topology.routing_table = routing_table;
 
     (stream_handler, state, metrics_registry)
+}
+
+/// Pushes `messages` into `state` as inputs.
+fn push_inputs<'a, I>(state: &mut ReplicatedState, messages: I)
+where
+    I: std::iter::Iterator<Item = (StreamIndex, &'a RequestOrResponse)>,
+{
+    for (_stream_index, msg) in messages {
+        assert_eq!(
+            Ok(()),
+            state.push_input(
+                QUEUE_INDEX_NONE,
+                msg.clone(),
+                (u64::MAX / 2).into(),
+                &mut (i64::MAX / 2)
+            )
+        );
+    }
+}
+
+/// Makes `count` input queue reservations for responses from `remote`.
+fn make_input_queue_reservations(canister: &mut CanisterState, count: usize, remote: CanisterId) {
+    for _ in 0..count {
+        canister
+            .push_output_request(test_request(*LOCAL_CANISTER, remote))
+            .unwrap();
+    }
+    canister.output_into_iter().count();
 }
 
 #[derive(Clone)]

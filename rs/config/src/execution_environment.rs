@@ -23,6 +23,13 @@ const GB: u64 = 1024 * 1024 * 1024;
 /// canister's data and the deltas.
 const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(300 * GB);
 
+/// This is the upper limit on how much memory can be used by all canister
+/// messages on a given subnet.
+///
+/// Message memory usage is calculated as the total size of enqueued canister
+/// responses; plus the maximum allowed response size per queue reservation.
+const SUBNET_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(50 * GB);
+
 /// This is the upper limit on how big heap deltas all the canisters together
 /// can produce on a subnet in between checkpoints. Once, the total delta size
 /// is above this limit, no more canisters will be executed till the next
@@ -53,6 +60,10 @@ pub struct Config {
     /// The maximum amount of logical storage available to all the canisters on
     /// the subnet.
     pub subnet_memory_capacity: NumBytes,
+
+    /// The maximum amount of logical storage available to canister messages
+    /// across the whole subnet.
+    pub subnet_message_memory_capacity: NumBytes,
 
     /// The maximum amount of memory that can be utilized by a single canister.
     pub max_canister_memory_size: NumBytes,
@@ -89,6 +100,7 @@ impl Default for Config {
             create_funds_whitelist: String::default(),
             max_instructions_for_message_acceptance_calls: MAX_INSTRUCTIONS_PER_MESSAGE,
             subnet_memory_capacity: SUBNET_MEMORY_CAPACITY,
+            subnet_message_memory_capacity: SUBNET_MESSAGE_MEMORY_CAPACITY,
             max_canister_memory_size: NumBytes::new(
                 MAX_STABLE_MEMORY_IN_BYTES + MAX_WASM_MEMORY_IN_BYTES,
             ),

@@ -526,9 +526,9 @@ impl SystemState {
         self.queues.filter_ingress_messages(filter);
     }
 
-    /// Returns the memory that is currently used by the `SystemState`.
-    pub fn memory_usage(&self, own_subnet_type: SubnetType) -> NumBytes {
-        if ENFORCE_MESSAGE_MEMORY_USAGE && own_subnet_type != SubnetType::System {
+    /// Returns the memory currently in use by the `SystemState`.
+    pub fn memory_usage(&self) -> NumBytes {
+        if ENFORCE_MESSAGE_MEMORY_USAGE {
             ((self.queues.memory_usage()) as u64).into()
         } else {
             NumBytes::from(0)
@@ -565,6 +565,9 @@ impl SystemState {
     ///
     /// `subnet_available_memory` is updated to reflect the change in
     /// `self.queues` memory usage.
+    ///
+    /// Available memory is ignored (but updated) for system subnets, since we
+    /// don't want to DoS system canisters due to lots of incoming requests.
     pub fn induct_messages_to_self(
         &mut self,
         canister_available_memory: i64,
@@ -577,7 +580,7 @@ impl SystemState {
             CanisterStatus::Stopped | CanisterStatus::Stopping { .. } => return,
         }
 
-        if !ENFORCE_MESSAGE_MEMORY_USAGE || own_subnet_type == SubnetType::System {
+        if !ENFORCE_MESSAGE_MEMORY_USAGE {
             while self.queues.induct_message_to_self(self.canister_id).is_ok() {}
             return;
         }
@@ -587,7 +590,7 @@ impl SystemState {
 
         while let Some(msg) = self.queues.peek_output(&self.canister_id) {
             // Ensure that enough memory is available for inducting `msg`.
-            if can_push(&*msg, available_memory).is_err() {
+            if own_subnet_type != SubnetType::System && can_push(&*msg, available_memory).is_err() {
                 // Bail out if not enough memory available for message.
                 return;
             }
@@ -632,23 +635,26 @@ pub(crate) fn push_input(
     own_subnet_type: SubnetType,
     input_queue_type: InputQueueType,
 ) -> Result<(), (StateError, RequestOrResponse)> {
-    if !ENFORCE_MESSAGE_MEMORY_USAGE || own_subnet_type == SubnetType::System {
+    if !ENFORCE_MESSAGE_MEMORY_USAGE {
         return queues.push_input(index, msg, input_queue_type);
     }
 
-    let available_memory = queues_available_memory.min(*subnet_available_memory);
-    if let Err(required_memory) = can_push(&msg, available_memory) {
-        return Err((
-            StateError::OutOfMemory {
-                requested: NumBytes::new(required_memory as u64),
-                available: available_memory,
-            },
-            msg,
-        ));
+    // Do not enforce limits for local messages on system subnets.
+    if own_subnet_type != SubnetType::System || input_queue_type != InputQueueType::LocalSubnet {
+        let available_memory = queues_available_memory.min(*subnet_available_memory);
+        if let Err(required_memory) = can_push(&msg, available_memory) {
+            return Err((
+                StateError::OutOfMemory {
+                    requested: NumBytes::new(required_memory as u64),
+                    available: available_memory,
+                },
+                msg,
+            ));
+        }
     }
 
-    // Adjust `subnet_available_memory` by `memory_usage_before -
-    // memory_usage_after`. Defer to `CanisterQueues` for the accounting, to avoid
+    // But always adjust `subnet_available_memory` by `memory_usage_before -
+    // memory_usage_after`. Defer the accounting to `CanisterQueues`, to avoid
     // duplication (and the possibility of divergence).
     *subnet_available_memory += queues.memory_usage() as i64;
     let res = queues.push_input(index, msg, input_queue_type);

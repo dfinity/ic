@@ -28,22 +28,23 @@ use std::collections::{BTreeMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-/// Input queue type: Local or Remote Subnet
+/// Input queue type: local or remote subnet.
+#[derive(Clone, Copy, Eq, Debug, PartialEq)]
 pub enum InputQueueType {
-    /// Local Subnet input messages
+    /// Local subnet input messages.
     LocalSubnet,
-    /// Remote Subnet input messages
+    /// Remote subnet input messages.
     RemoteSubnet,
 }
 
-/// Next input queue: round-robin across Local, Ingress, and Remote Subnet
+/// Next input queue: round-robin across local subnet; ingress; or remote subnet.
 #[derive(Clone, Copy, Eq, Debug, PartialEq)]
 pub enum NextInputQueue {
-    /// Local Subnet input messages
+    /// Local subnet input messages.
     LocalSubnet,
-    /// Ingress messages
+    /// Ingress messages.
     Ingress,
-    /// Remote Subnet input messages
+    /// Remote subnet input messages.
     RemoteSubnet,
 }
 
@@ -456,23 +457,53 @@ impl ReplicatedState {
     ///
     /// This accounts for the canister memory reservation, where specified; and
     /// the actual canister memory usage, where no explicit memory reservation
-    /// has been made.
+    /// has been made. Canister message memory usage is included for application
+    /// subnets only.
     pub fn total_memory_taken(&self) -> NumBytes {
+        self.total_memory_taken_impl(self.metadata.own_subnet_type != SubnetType::System)
+    }
+
+    /// Returns the total memory taken by canisters in bytes, always including
+    /// canister messages (regardless of subnet type).
+    ///
+    /// This accounts for the canister memory reservation, where specified; and
+    /// the actual canister memory usage, where no explicit memory reservation
+    /// has been made.
+    pub fn total_memory_taken_with_messages(&self) -> NumBytes {
+        self.total_memory_taken_impl(true)
+    }
+
+    /// Common implementation for `total_memory_taken()` and
+    /// `total_memory_taken_with_messages()`.
+    fn total_memory_taken_impl(&self, with_messages: bool) -> NumBytes {
         let mut memory_taken = self
             .canisters_iter()
             .map(|canister| match canister.memory_allocation() {
                 MemoryAllocation::Reserved(bytes) => bytes,
-                MemoryAllocation::BestEffort => {
-                    canister.memory_usage(self.metadata.own_subnet_type)
-                }
+                MemoryAllocation::BestEffort => canister.memory_usage_impl(with_messages),
             })
             .sum();
-        if ENFORCE_MESSAGE_MEMORY_USAGE && self.metadata.own_subnet_type != SubnetType::System {
+        if ENFORCE_MESSAGE_MEMORY_USAGE && with_messages {
             memory_taken += (self.subnet_queues.memory_usage() as u64).into();
         }
         memory_taken
     }
 
+    /// Returns the total memory taken by canister messages in bytes.
+    pub fn message_memory_taken(&self) -> NumBytes {
+        if ENFORCE_MESSAGE_MEMORY_USAGE {
+            NumBytes::new(self.subnet_queues.memory_usage() as u64)
+                + self
+                    .canisters_iter()
+                    .map(|canister| canister.system_state.memory_usage())
+                    .sum()
+        } else {
+            0.into()
+        }
+    }
+
+    /// Returns the `SubnetId` hosting the given `principal_id` (canister or
+    /// subnet).
     pub fn find_subnet_id(&self, principal_id: PrincipalId) -> Result<SubnetId, UserError> {
         let subnet_id = self
             .metadata
@@ -508,15 +539,12 @@ impl ReplicatedState {
         subnet_available_memory: &mut i64,
     ) -> Result<(), (StateError, RequestOrResponse)> {
         let own_subnet_type = self.metadata.own_subnet_type;
-        let input_queue_type = match self.find_subnet_id(*msg.sender().get_ref()) {
-            Ok(sender_subnet_id) => {
-                if self.metadata.own_subnet_id == sender_subnet_id {
-                    InputQueueType::LocalSubnet
-                } else {
-                    InputQueueType::RemoteSubnet
-                }
-            }
-            Err(_) => InputQueueType::LocalSubnet, // unknown sender is local subnet
+        let input_queue_type = if msg.sender().get_ref() == self.metadata.own_subnet_id.get_ref()
+            || self.canister_states.contains_key(&msg.sender())
+        {
+            InputQueueType::LocalSubnet
+        } else {
+            InputQueueType::RemoteSubnet
         };
         match self.canister_state_mut(&msg.receiver()) {
             Some(receiver_canister) => receiver_canister.push_input(

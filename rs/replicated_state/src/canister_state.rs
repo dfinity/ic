@@ -120,16 +120,39 @@ impl CanisterState {
         own_subnet_type: SubnetType,
         input_queue_type: InputQueueType,
     ) -> Result<(), (StateError, RequestOrResponse)> {
-        let canister_available_memory = self.memory_limit(max_canister_memory_size).get() as i64
-            - self.memory_usage(own_subnet_type).get() as i64;
         self.system_state.push_input(
             index,
             msg,
-            canister_available_memory,
+            self.available_message_memory(max_canister_memory_size, own_subnet_type),
             subnet_available_memory,
             own_subnet_type,
             input_queue_type,
         )
+    }
+
+    /// Returns the memory available for canister messages based on
+    ///  * the maximum canister memory size;
+    ///  * the canister's memory allocation (overriding the former) if any; and
+    ///  * the subnet type (accounting for execution and message memory usage on
+    ///    application subnets; but only for messages and disregarding any
+    ///    memory allocation on system subnets).
+    fn available_message_memory(
+        &self,
+        max_canister_memory_size: NumBytes,
+        own_subnet_type: SubnetType,
+    ) -> i64 {
+        if own_subnet_type == SubnetType::System {
+            // For system subnets we ignore the canister allocation, if any;
+            // and the execution memory usage; and always allow up to
+            // `max_canister_memory_size` worth of messages.
+            max_canister_memory_size.get() as i64 - self.system_state.memory_usage().get() as i64
+        } else {
+            // For application subnets allow execution plus messages to use up
+            // to the canister's memory allocation, if any; or else
+            // `max_canister_memory_size`.
+            self.memory_limit(max_canister_memory_size).get() as i64
+                - self.memory_usage(own_subnet_type).get() as i64
+        }
     }
 
     /// See `SystemState::pop_input` for documentation.
@@ -193,10 +216,8 @@ impl CanisterState {
         subnet_available_memory: &mut i64,
         own_subnet_type: SubnetType,
     ) {
-        let canister_available_memory = self.memory_limit(max_canister_memory_size).get() as i64
-            - self.memory_usage(own_subnet_type).get() as i64;
         self.system_state.induct_messages_to_self(
-            canister_available_memory,
+            self.available_message_memory(max_canister_memory_size, own_subnet_type),
             subnet_available_memory,
             own_subnet_type,
         )
@@ -240,15 +261,34 @@ impl CanisterState {
                 memory_limit
             )));
         }
+
         Ok(())
     }
 
     /// The amount of memory currently being used by the canister.
+    ///
+    /// This only includes execution memory (heap, stable, globals, Wasm) for
+    /// system subnets; and execution memory plus system state memory (canister
+    /// messages) for application subnets.
     pub fn memory_usage(&self, own_subnet_type: SubnetType) -> NumBytes {
+        self.memory_usage_impl(own_subnet_type != SubnetType::System)
+    }
+
+    /// Internal `memory_usage()` implementation that allows the caller to
+    /// explicitly select whether message memory usage should be included.
+    ///
+    /// This is still subject to the `ENFORCE_MESSAGE_MEMORY_USAGE` flag. If the
+    /// flag is unset, message memory usage will always be zero regardless.
+    pub(crate) fn memory_usage_impl(&self, with_messages: bool) -> NumBytes {
+        let message_memory_usage = if with_messages {
+            self.system_state.memory_usage()
+        } else {
+            0.into()
+        };
         self.execution_state
             .as_ref()
             .map_or(NumBytes::from(0), |es| es.memory_usage())
-            + self.system_state.memory_usage(own_subnet_type)
+            + message_memory_usage
     }
 
     /// Hack to get the dashboard templating working.
@@ -268,6 +308,8 @@ impl CanisterState {
         self.system_state.memory_allocation
     }
 
+    /// Returns the canister's memory limit: its reservation, if set; else the
+    /// provided `default_limit`.
     pub fn memory_limit(&self, default_limit: NumBytes) -> NumBytes {
         match self.memory_allocation() {
             MemoryAllocation::Reserved(bytes) => bytes,
