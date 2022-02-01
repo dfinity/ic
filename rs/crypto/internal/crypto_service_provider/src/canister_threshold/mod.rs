@@ -159,6 +159,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
     fn ecdsa_combine_sig_shares(
         &self,
         derivation_path: &ExtendedDerivationPath,
+        hashed_message: &[u8],
         nonce: &Randomness,
         key_transcript: &IDkgTranscriptInternal,
         kappa_unmasked: &IDkgTranscriptInternal,
@@ -170,6 +171,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
 
         tecdsa_combine_sig_shares(
             &derivation_path.into(),
+            hashed_message,
             *nonce,
             key_transcript,
             kappa_unmasked,

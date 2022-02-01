@@ -466,8 +466,10 @@ impl From<ThresholdEcdsaError> for ThresholdEcdsaCombineSigSharesInternalError {
 ///
 /// The signature shares must be verified prior to use, and there must
 /// be at least reconstruction_threshold many of them.
+#[allow(clippy::too_many_arguments)]
 pub fn combine_sig_shares(
     derivation_path: &DerivationPath,
+    hashed_message: &[u8],
     randomness: Randomness,
     key_transcript: &IDkgTranscriptInternal,
     presig_transcript: &IDkgTranscriptInternal,
@@ -482,6 +484,7 @@ pub fn combine_sig_shares(
 
     sign::ThresholdEcdsaCombinedSigInternal::new(
         derivation_path,
+        hashed_message,
         randomness,
         key_transcript,
         presig_transcript,

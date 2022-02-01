@@ -509,6 +509,7 @@ impl SignatureProtocolExecution {
     {
         combine_sig_shares(
             &self.derivation_path,
+            &self.hashed_message,
             self.random_beacon,
             &self.setup.key.transcript,
             &self.setup.kappa.transcript,
