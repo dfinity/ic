@@ -32,8 +32,8 @@ fn test_instrument_module_rename_memory_table() {
                         (module
                             (memory (export "mem") 1 2)
                             (table (export "tab") 2 2 anyfunc)
-                            (func $run (export "run") (result i32)
-                                (i32.const 123)
+                            (func $run (export "run") 
+                                (drop (i32.const 123))
                             )
                         )
                     "#,
@@ -48,8 +48,7 @@ fn test_instrument_module_rename_memory_table() {
         parity_wasm::elements::deserialize_buffer::<Module>(output.binary.as_slice()).unwrap();
     assert_memory_and_table_exports(&module);
     // check that instrumented module instantiates correctly
-    let result = wasmtime_simple::wasmtime_instantiate_and_call_run(&output.binary);
-    assert_eq!(result[0].i32().unwrap(), 123);
+    wasmtime_simple::wasmtime_instantiate_and_call_run(&output.binary);
 }
 
 #[test]
@@ -63,8 +62,8 @@ fn test_instrument_module_export_memory_table() {
                         (module
                             (memory 1 2)
                             (table 2 2 anyfunc)
-                            (func $run (export "run") (result i32)
-                                (i32.const 123)
+                            (func $run (export "run") 
+                                (drop (i32.const 123))
                             )
                         )
                     "#,
@@ -79,8 +78,7 @@ fn test_instrument_module_export_memory_table() {
         parity_wasm::elements::deserialize_buffer::<Module>(output.binary.as_slice()).unwrap();
     assert_memory_and_table_exports(&module);
     // check that instrumented module instantiates correctly
-    let result = wasmtime_simple::wasmtime_instantiate_and_call_run(&output.binary);
-    assert_eq!(result[0].i32().unwrap(), 123);
+    wasmtime_simple::wasmtime_instantiate_and_call_run(&output.binary);
 }
 
 #[test]
@@ -90,8 +88,8 @@ fn test_instrument_module_with_exported_global() {
             wabt::wat2wasm(
                 r#"
                 (module
-                  (func $run (export "run") (result i32)
-                    (global.get $counter)
+                  (func $run (export "run")
+                    (drop (global.get $counter))
                   )
                   (global $counter
                     (export "my_global_counter")
@@ -105,6 +103,5 @@ fn test_instrument_module_with_exported_global() {
     )
     .unwrap();
 
-    let result = wasmtime_simple::wasmtime_instantiate_and_call_run(&output.binary);
-    assert_eq!(result[0].i32().unwrap(), 123);
+    wasmtime_simple::wasmtime_instantiate_and_call_run(&output.binary);
 }

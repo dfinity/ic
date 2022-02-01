@@ -8,7 +8,7 @@ use ic_wasm_types::BinaryEncodedWasm;
 
 /// Helper function to instantiate Wasm module in Wasmtime and call "run"
 /// function. The goal is to use plain Wasmtime, without any of our additions.
-pub fn wasmtime_instantiate_and_call_run(wasm: &BinaryEncodedWasm) -> Vec<wasmtime::Val> {
+pub fn wasmtime_instantiate_and_call_run(wasm: &BinaryEncodedWasm) {
     // check that instrumented module instantiates correctly
     let mut wasmtime = WasmtimeSimple::new();
 
@@ -116,20 +116,14 @@ pub fn get_globals(mut store: Store<()>, instance: &Instance) -> Vec<wasmtime::V
         .collect()
 }
 
-pub fn invoke(
-    mut store: Store<()>,
-    instance: &Instance,
-    func_name: &str,
-    args: &[wasmtime::Val],
-) -> Vec<wasmtime::Val> {
+pub fn invoke(mut store: Store<()>, instance: &Instance, func_name: &str, args: &[wasmtime::Val]) {
     instance
         .get_export(&mut store, func_name)
         .unwrap()
         .into_func()
         .unwrap_or_else(|| panic!("{} export is not a function", func_name))
-        .call(&mut store, args)
+        .call(&mut store, args, &mut [])
         .unwrap()
-        .to_vec()
 }
 
 fn instantiate_module(
