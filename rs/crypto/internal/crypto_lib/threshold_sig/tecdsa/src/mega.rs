@@ -226,39 +226,71 @@ fn check_plaintexts_pair(
     Ok(curve_type)
 }
 
-fn format_hash_to_scalar_inputs(
+#[allow(clippy::too_many_arguments)]
+fn mega_shared_hash_to_scalars(
+    domain_sep: &'static str,
+    count: usize,
     dealer_index: usize,
     recipient_index: usize,
     associated_data: &[u8],
-    public_key: &[u8],
-    v_bytes: &[u8],
-    ubeta_bytes: &[u8],
-) -> ThresholdEcdsaResult<Vec<u8>> {
-    // The public key, v, and ubeta are all points, and so have the same length
-    if public_key.len() != v_bytes.len() || public_key.len() != ubeta_bytes.len() {
-        return Err(ThresholdEcdsaError::CurveMismatch);
-    }
+    public_key: &EccPoint,
+    ephemeral_key: &EccPoint,
+    shared_secret: &EccPoint,
+) -> ThresholdEcdsaResult<Vec<EccScalar>> {
+    let curve_type = public_key.curve_type();
+    let mut ro = ro::RandomOracle::new(domain_sep);
 
-    let point_len = public_key.len();
+    ro.add_usize("dealer_index", dealer_index)?;
+    ro.add_usize("recipient_index", recipient_index)?;
+    ro.add_bytestring("associated_data", associated_data)?;
+    ro.add_point("public_key", public_key)?;
+    ro.add_point("ephemeral_key", ephemeral_key)?;
+    ro.add_point("shared_secret", shared_secret)?;
+    ro.output_scalars(curve_type, count)
+}
 
-    // 8 byte dealer index
-    // 8 byte recipient index
-    // 3 points each of point_len bytes
-    // 8 byte length prefix for associated_data
-    // associated_data
-    let mut output = Vec::with_capacity(8 + 8 + 3 * point_len + 8 + associated_data.len());
+fn mega_hash_to_scalar(
+    dealer_index: usize,
+    recipient_index: usize,
+    associated_data: &[u8],
+    public_key: &EccPoint,
+    ephemeral_key: &EccPoint,
+    shared_secret: &EccPoint,
+) -> ThresholdEcdsaResult<EccScalar> {
+    let hm = mega_shared_hash_to_scalars(
+        MEGA_SINGLE_ENC_DOMAIN_SEPARATOR,
+        1,
+        dealer_index,
+        recipient_index,
+        associated_data,
+        public_key,
+        ephemeral_key,
+        shared_secret,
+    )?;
 
-    output.extend_from_slice(&(dealer_index as u64).to_be_bytes());
-    output.extend_from_slice(&(recipient_index as u64).to_be_bytes());
+    Ok(hm[0])
+}
 
-    output.extend_from_slice(public_key);
-    output.extend_from_slice(v_bytes);
-    output.extend_from_slice(ubeta_bytes);
+fn mega_hash_to_scalars(
+    dealer_index: usize,
+    recipient_index: usize,
+    associated_data: &[u8],
+    public_key: &EccPoint,
+    ephemeral_key: &EccPoint,
+    shared_secret: &EccPoint,
+) -> ThresholdEcdsaResult<(EccScalar, EccScalar)> {
+    let hm = mega_shared_hash_to_scalars(
+        MEGA_PAIR_ENC_DOMAIN_SEPARATOR,
+        2,
+        dealer_index,
+        recipient_index,
+        associated_data,
+        public_key,
+        ephemeral_key,
+        shared_secret,
+    )?;
 
-    output.extend_from_slice(&(associated_data.len() as u64).to_be_bytes());
-    output.extend_from_slice(associated_data);
-
-    Ok(output)
+    Ok((hm[0], hm[1]))
 }
 
 pub fn mega_encrypt_single(
@@ -274,27 +306,21 @@ pub fn mega_encrypt_single(
 
     let beta = EccScalar::random(curve_type, &mut rng)?;
     let v = EccPoint::mul_by_g(&beta)?;
-    let v_bytes = v.serialize();
 
     let mut ctexts = Vec::with_capacity(recipients.len());
 
     for (index, (pubkey, ptext)) in recipients.iter().zip(plaintexts).enumerate() {
         let ubeta = pubkey.point.scalar_mul(&beta)?;
 
-        let hash_to_scalar_input = format_hash_to_scalar_inputs(
+        let hm = mega_hash_to_scalar(
             dealer_index,
             index,
             associated_data,
-            &pubkey.serialize(),
-            &v_bytes,
-            &ubeta.serialize(),
+            &pubkey.point,
+            &v,
+            &ubeta,
         )?;
 
-        let hm = EccScalar::hash_to_scalar(
-            curve_type,
-            &hash_to_scalar_input,
-            MEGA_SINGLE_ENC_DOMAIN_SEPARATOR.as_bytes(),
-        )?;
         let ctext = hm.add(ptext)?;
 
         ctexts.push(ctext);
@@ -319,31 +345,23 @@ pub fn mega_encrypt_pair(
 
     let beta = EccScalar::random(curve_type, &mut rng)?;
     let v = EccPoint::mul_by_g(&beta)?;
-    let v_bytes = v.serialize();
 
     let mut ctexts = Vec::with_capacity(recipients.len());
 
     for (index, (pubkey, ptext)) in recipients.iter().zip(plaintexts).enumerate() {
         let ubeta = pubkey.point.scalar_mul(&beta)?;
 
-        let hash_to_scalar_input = format_hash_to_scalar_inputs(
+        let hm = mega_hash_to_scalars(
             dealer_index,
             index,
             associated_data,
-            &pubkey.serialize(),
-            &v_bytes,
-            &ubeta.serialize(),
+            &pubkey.point,
+            &v,
+            &ubeta,
         )?;
 
-        let hm = EccScalar::hash_to_several_scalars(
-            curve_type,
-            2,
-            &hash_to_scalar_input,
-            MEGA_PAIR_ENC_DOMAIN_SEPARATOR.as_bytes(),
-        )?;
-
-        let ctext0 = hm[0].add(&ptext.0)?;
-        let ctext1 = hm[1].add(&ptext.1)?;
+        let ctext0 = hm.0.add(&ptext.0)?;
+        let ctext1 = hm.1.add(&ptext.1)?;
 
         ctexts.push((ctext0, ctext1));
     }
@@ -369,22 +387,16 @@ pub fn mega_decrypt_single(
     }
 
     let ubeta = ctext.ephemeral_key.scalar_mul(&our_private_key.secret)?;
-    let v_bytes = ctext.ephemeral_key.serialize();
 
-    let hash_to_scalar_input = format_hash_to_scalar_inputs(
+    let hm = mega_hash_to_scalar(
         dealer_index,
         our_index,
         associated_data,
-        &our_public_key.serialize(),
-        &v_bytes,
-        &ubeta.serialize(),
+        &our_public_key.point,
+        &ctext.ephemeral_key,
+        &ubeta,
     )?;
 
-    let hm = EccScalar::hash_to_scalar(
-        our_private_key.curve_type(),
-        &hash_to_scalar_input,
-        MEGA_SINGLE_ENC_DOMAIN_SEPARATOR.as_bytes(),
-    )?;
     ctext.ctexts[our_index].sub(&hm)
 }
 
@@ -403,26 +415,18 @@ pub fn mega_decrypt_pair(
     }
 
     let ubeta = ctext.ephemeral_key.scalar_mul(&our_private_key.secret)?;
-    let v_bytes = ctext.ephemeral_key.serialize();
 
-    let hash_to_scalar_input = format_hash_to_scalar_inputs(
+    let hm = mega_hash_to_scalars(
         dealer_index,
         our_index,
         associated_data,
-        &our_public_key.serialize(),
-        &v_bytes,
-        &ubeta.serialize(),
+        &our_public_key.point,
+        &ctext.ephemeral_key,
+        &ubeta,
     )?;
 
-    let hm = EccScalar::hash_to_several_scalars(
-        our_private_key.curve_type(),
-        2,
-        &hash_to_scalar_input,
-        MEGA_PAIR_ENC_DOMAIN_SEPARATOR.as_bytes(),
-    )?;
-
-    let ptext0 = ctext.ctexts[our_index].0.sub(&hm[0])?;
-    let ptext1 = ctext.ctexts[our_index].1.sub(&hm[1])?;
+    let ptext0 = ctext.ctexts[our_index].0.sub(&hm.0)?;
+    let ptext1 = ctext.ctexts[our_index].1.sub(&hm.1)?;
 
     Ok((ptext0, ptext1))
 }

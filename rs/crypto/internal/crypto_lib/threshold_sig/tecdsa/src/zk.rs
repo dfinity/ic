@@ -4,38 +4,6 @@ pub const PROOF_OF_DLOG_EQUIV_DST: &str = "ic-crypto-tecdsa-zk-proof-of-dlog-eq"
 pub const PROOF_OF_EQUAL_OPENINGS_DST: &str = "ic-crypto-tecdsa-zk-proof-of-equal-openings";
 pub const PROOF_OF_PRODUCT_DST: &str = "ic-crypto-tecdsa-zk-proof-of-product";
 
-fn hash_to_challenge(
-    proof_type: &'static str,
-    inputs: &[&EccPoint],
-    associated_data: &[u8],
-) -> ThresholdEcdsaResult<EccScalar> {
-    if inputs.is_empty() {
-        return Err(ThresholdEcdsaError::InvalidArguments(
-            "At least one challenge input required".to_string(),
-        ));
-    }
-    let curve_type = inputs[0].curve_type();
-
-    // inputs.len() EC points, followed by the AD prefixed
-    // with an 8 byte length field
-    let ro_input_len = (inputs.len()) * curve_type.point_bytes() + 8 + associated_data.len();
-
-    let mut ro_input = Vec::with_capacity(ro_input_len);
-    for input in inputs {
-        if input.curve_type() != curve_type {
-            return Err(ThresholdEcdsaError::CurveMismatch);
-        }
-        ro_input.extend_from_slice(&((**input).serialize()));
-    }
-
-    ro_input.extend_from_slice(&(associated_data.len() as u64).to_be_bytes());
-    ro_input.extend_from_slice(associated_data);
-
-    let dst = format!("{}-{}", proof_type, curve_type);
-
-    EccScalar::hash_to_scalar(curve_type, &ro_input, dst.as_bytes())
-}
-
 /// A ZK proof that a Simple and Pedersen commitment are committing
 /// to the same value.
 ///
@@ -109,11 +77,14 @@ impl ProofOfEqualOpeningsInstance {
         commitment: &EccPoint,
         associated_data: &[u8],
     ) -> ThresholdEcdsaResult<EccScalar> {
-        hash_to_challenge(
-            PROOF_OF_EQUAL_OPENINGS_DST,
-            &[&self.g, &self.h, &self.a, &self.b, commitment],
-            associated_data,
-        )
+        let mut ro = ro::RandomOracle::new(PROOF_OF_EQUAL_OPENINGS_DST);
+        ro.add_bytestring("associated_data", associated_data)?;
+        ro.add_point("instance_g", &self.g)?;
+        ro.add_point("instance_h", &self.h)?;
+        ro.add_point("instance_a", &self.a)?;
+        ro.add_point("instance_b", &self.b)?;
+        ro.add_point("commitment", commitment)?;
+        ro.output_scalar(self.curve_type)
     }
 }
 
@@ -259,19 +230,16 @@ impl ProofOfProductInstance {
         c2: &EccPoint,
         associated_data: &[u8],
     ) -> ThresholdEcdsaResult<EccScalar> {
-        hash_to_challenge(
-            PROOF_OF_PRODUCT_DST,
-            &[
-                &self.g,
-                &self.h,
-                &self.lhs_com,
-                &self.rhs_com,
-                &self.product_com,
-                c1,
-                c2,
-            ],
-            associated_data,
-        )
+        let mut ro = ro::RandomOracle::new(PROOF_OF_PRODUCT_DST);
+        ro.add_bytestring("associated_data", associated_data)?;
+        ro.add_point("instance_g", &self.g)?;
+        ro.add_point("instance_h", &self.h)?;
+        ro.add_point("instance_lhs", &self.lhs_com)?;
+        ro.add_point("instance_rhs", &self.rhs_com)?;
+        ro.add_point("instance_product", &self.product_com)?;
+        ro.add_point("commitment1", c1)?;
+        ro.add_point("commitment2", c2)?;
+        ro.output_scalar(self.curve_type)
     }
 }
 
@@ -404,11 +372,15 @@ impl ProofOfDLogEquivalenceInstance {
         c2: &EccPoint,
         associated_data: &[u8],
     ) -> ThresholdEcdsaResult<EccScalar> {
-        hash_to_challenge(
-            PROOF_OF_DLOG_EQUIV_DST,
-            &[&self.g, &self.h, &self.g_x, &self.h_x, c1, c2],
-            associated_data,
-        )
+        let mut ro = ro::RandomOracle::new(PROOF_OF_DLOG_EQUIV_DST);
+        ro.add_bytestring("associated_data", associated_data)?;
+        ro.add_point("instance_g", &self.g)?;
+        ro.add_point("instance_h", &self.h)?;
+        ro.add_point("instance_g_x", &self.g_x)?;
+        ro.add_point("instance_h_x", &self.h_x)?;
+        ro.add_point("commitment1", c1)?;
+        ro.add_point("commitment2", c2)?;
+        ro.output_scalar(self.curve_type)
     }
 }
 
