@@ -70,7 +70,6 @@
 /testnet/tests/scripts/subnet_query_workload.sh            @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
 
 /testnet/tests/scripts/subnet_update_workload.sh           @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
-/testnet/tests/scripts/uninstall_canister_by_proposal_test.sh            @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/execution-owners
 /testnet/tests/scripts/xnet_slo_test.sh                    @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/message-routing-owners
 /testnet/release/                                          @dfinity-lab/teams/ic-build-qualification
 

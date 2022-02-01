@@ -12,7 +12,7 @@ pub mod nns;
 pub mod nns_canister_upgrade_test;
 pub mod nns_fault_tolerance_test;
 pub mod nns_follow_test;
-pub mod nns_uninstall_code_proposal_test;
+pub mod nns_uninstall_canister_by_proposal_test;
 pub mod nns_voting_test;
 pub mod node_assign_test;
 pub mod node_graceful_leaving_test;
