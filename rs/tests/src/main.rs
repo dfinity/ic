@@ -28,7 +28,6 @@ use ic_tests::feature_flags;
 use ic_tests::malicious_input_test;
 use ic_tests::nns_canister_upgrade_test;
 use ic_tests::nns_follow_test;
-use ic_tests::nns_uninstall_code_proposal_test;
 use ic_tests::nns_voting_test;
 use ic_tests::registry_authentication_test;
 use ic_tests::replica_determinism_test;
@@ -58,7 +57,6 @@ fn all_pots() -> Vec<ic_fondue::pot::Pot> {
         consensus_liveness_with_equivocation_pot(),
         consensus_safety_pot(),
         cow_safety_pot(),
-        nns_uninstall_pot(),
         nns_subnet_creation_pot(),
         replica_determinism_pot(),
         max_payload_pot(),
@@ -161,14 +159,6 @@ fn consensus_safety_pot() -> pot::Pot {
         "consensus_safety_pot",
         consensus::safety_test::config(),
         steps! {consensus::safety_test::test => "consensus_safety_test"}
-    )
-}
-
-fn nns_uninstall_pot() -> pot::Pot {
-    composable!(
-        "nns_uninstall_pot",
-        nns_uninstall_code_proposal_test::config(),
-        steps! {nns_uninstall_code_proposal_test::test => "nns_uninstall_code_proposal_test"}
     )
 }
 
