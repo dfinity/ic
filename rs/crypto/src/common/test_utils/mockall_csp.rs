@@ -415,6 +415,7 @@ mock! {
         fn ecdsa_combine_sig_shares(
             &self,
             derivation_path: &ExtendedDerivationPath,
+            hashed_message: &[u8],
             nonce: &Randomness,
             key: &IDkgTranscriptInternal,
             kappa_unmasked: &IDkgTranscriptInternal,

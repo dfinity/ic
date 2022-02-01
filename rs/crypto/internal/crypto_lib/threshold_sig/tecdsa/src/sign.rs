@@ -12,6 +12,7 @@ pub(crate) fn ecdsa_conversion_function(pt: &EccPoint) -> ThresholdEcdsaResult<E
 
 fn derive_rho(
     curve_type: EccCurveType,
+    hashed_message: &[u8],
     randomness: &Randomness,
     derivation_path: &DerivationPath,
     key_transcript: &IDkgTranscriptInternal,
@@ -30,6 +31,7 @@ fn derive_rho(
 
     let mut ro = ro::RandomOracle::new("ic-crypto-tecdsa-rerandomize-presig");
     ro.add_bytestring("randomness", &randomness.get())?;
+    ro.add_bytestring("hashed_message", hashed_message)?;
     ro.add_point("pre_sig", &pre_sig)?;
     ro.add_scalar("key_tweak", &key_tweak)?;
     let randomizer = ro.output_scalar(curve_type)?;
@@ -64,6 +66,7 @@ impl ThresholdEcdsaSigShareInternal {
     ) -> ThresholdEcdsaResult<Self> {
         let (rho, key_tweak, randomizer) = derive_rho(
             curve_type,
+            hashed_message,
             &randomness,
             derivation_path,
             key_transcript,
@@ -133,6 +136,7 @@ impl ThresholdEcdsaSigShareInternal {
         // Compute rho and tweak
         let (rho, key_tweak, randomizer) = derive_rho(
             curve_type,
+            hashed_message,
             &randomness,
             derivation_path,
             key_transcript,
@@ -199,8 +203,10 @@ impl ThresholdEcdsaCombinedSigInternal {
 }
 
 impl ThresholdEcdsaCombinedSigInternal {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         derivation_path: &DerivationPath,
+        hashed_message: &[u8],
         randomness: Randomness,
         key_transcript: &IDkgTranscriptInternal,
         presig_transcript: &IDkgTranscriptInternal,
@@ -215,6 +221,7 @@ impl ThresholdEcdsaCombinedSigInternal {
 
         let (rho, _key_tweak, _randomizer) = derive_rho(
             curve_type,
+            hashed_message,
             &randomness,
             derivation_path,
             key_transcript,
@@ -285,6 +292,7 @@ impl ThresholdEcdsaCombinedSigInternal {
     ) -> ThresholdEcdsaResult<bool> {
         let (rho, key_tweak, _) = derive_rho(
             curve_type,
+            hashed_message,
             &randomness,
             derivation_path,
             key_transcript,

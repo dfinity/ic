@@ -78,6 +78,7 @@ pub fn combine_sig_shares<C: CspThresholdEcdsaSigVerifier>(
 
     let internal_combined_sig = csp_client.ecdsa_combine_sig_shares(
         inputs.derivation_path(),
+        inputs.hashed_message(),
         inputs.nonce(),
         &key,
         &kappa_unmasked,
