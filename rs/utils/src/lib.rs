@@ -9,6 +9,7 @@ extern crate features;
 pub mod byte_slice_fmt;
 #[cfg(unix)]
 pub mod command;
+pub mod deterministic_operations;
 pub mod fs;
 pub mod ic_features;
 pub mod rle;

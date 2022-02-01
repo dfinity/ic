@@ -25,6 +25,7 @@ use ic_types::{
     user_error::RejectCode,
     CanisterId, Cycles, NumBytes, NumInstructions, PrincipalId, SubnetId, Time,
 };
+use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use request_in_prep::{into_request, RequestInPrep};
 use sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState, SystemStateChanges};
 use serde::{Deserialize, Serialize};
@@ -1064,7 +1065,7 @@ impl SystemApi for SystemApiImpl {
                 valid_subslice("ic0.msg_caller_copy heap", dst, size, heap)?;
                 let slice = valid_subslice("ic0.msg_caller_copy id", offset, size, id_bytes)?;
                 let (dst, size) = (dst as usize, size as usize);
-                heap[dst..dst + size].copy_from_slice(slice);
+                deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
                 Ok(())
             }
         }
@@ -1137,7 +1138,7 @@ impl SystemApi for SystemApiImpl {
                     incoming_payload,
                 )?;
                 let (dst, size) = (dst as usize, size as usize);
-                heap[dst..dst + size].copy_from_slice(payload_subslice);
+                deterministic_copy_from_slice(&mut heap[dst..dst + size], payload_subslice);
                 Ok(())
             }
         }
@@ -1186,7 +1187,7 @@ impl SystemApi for SystemApiImpl {
                     method_name.as_bytes(),
                 )?;
                 let (dst, size) = (dst as usize, size as usize);
-                heap[dst..dst + size].copy_from_slice(payload_subslice);
+                deterministic_copy_from_slice(&mut heap[dst..dst + size], payload_subslice);
                 Ok(())
             }
         }
@@ -1324,7 +1325,7 @@ impl SystemApi for SystemApiImpl {
         let msg_bytes =
             valid_subslice("ic0.msg_reject_msg_copy msg", offset, size, msg.as_bytes())?;
         let size = size as usize;
-        heap[dst..dst + size].copy_from_slice(msg_bytes);
+        deterministic_copy_from_slice(&mut heap[dst..dst + size], msg_bytes);
         Ok(())
     }
 
@@ -1373,7 +1374,7 @@ impl SystemApi for SystemApiImpl {
                 let id_bytes = canister_id.get_ref().as_slice();
                 let slice = valid_subslice("ic0.canister_self_copy id", offset, size, id_bytes)?;
                 let (dst, size) = (dst as usize, size as usize);
-                heap[dst..dst + size].copy_from_slice(slice);
+                deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
                 Ok(())
             }
         }
@@ -1421,7 +1422,7 @@ impl SystemApi for SystemApiImpl {
                 let id_bytes = controller.as_slice();
                 let slice = valid_subslice("ic0.controller_copy id", offset, size, id_bytes)?;
                 let (dst, size) = (dst as usize, size as usize);
-                heap[dst..dst + size].copy_from_slice(slice);
+                deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
                 Ok(())
             }
         }
@@ -2218,7 +2219,10 @@ impl SystemApi for SystemApiImpl {
                     }
 
                     // Copy the certificate into the canister.
-                    heap[dst..dst + size].copy_from_slice(&data_certificate[offset..offset + size]);
+                    deterministic_copy_from_slice(
+                        &mut heap[dst..dst + size],
+                        &data_certificate[offset..offset + size],
+                    );
                     Ok(())
                 }
                 None => Err(self.error_for("ic0_data_certificate_size")),
@@ -2357,7 +2361,7 @@ pub(crate) fn copy_cycles_to_heap(
             heap.len(),
         )));
     }
-    heap[dst..dst + size].copy_from_slice(&bytes);
+    deterministic_copy_from_slice(&mut heap[dst..dst + size], &bytes);
     Ok(())
 }
 
