@@ -130,9 +130,9 @@ pub(crate) mod test_utils {
     use ic_types::artifact::EcdsaMessageId;
     use ic_types::consensus::ecdsa::{
         EcdsaBlockReader, EcdsaDealing, EcdsaDealingSupport, EcdsaMessage, EcdsaSigShare,
-        EcdsaSignedDealing, IDkgTranscriptOperationRef, IDkgTranscriptParamsRef,
-        PreSignatureQuadrupleRef, RequestId, ThresholdEcdsaSigInputsRef, TranscriptLookupError,
-        TranscriptRef,
+        EcdsaSignedDealing, IDkgTranscriptParamsRef, MaskedTranscript, PreSignatureQuadrupleRef,
+        RequestId, ReshareOfMaskedParams, ThresholdEcdsaSigInputsRef, TranscriptLookupError,
+        TranscriptRef, UnmaskedTranscript,
     };
     use ic_types::consensus::{BasicSignature, MultiSignatureShare};
     use ic_types::crypto::canister_threshold_sig::idkg::{
@@ -354,26 +354,25 @@ pub(crate) mod test_utils {
 
         // The random transcript
         let random_transcript_id = create_transcript_id(transcript_id.id() * 214365 + 1);
-        let transcript_ref = TranscriptRef::new(Height::new(0), random_transcript_id);
+        let random_transcript = create_transcript(random_transcript_id, dealer_list);
+        let random_masked =
+            MaskedTranscript::try_from((Height::new(0), &random_transcript)).unwrap();
         let mut idkg_transcripts = BTreeMap::new();
-        idkg_transcripts.insert(
-            transcript_ref,
-            create_transcript(random_transcript_id, dealer_list),
-        );
+        idkg_transcripts.insert(*random_masked.as_ref(), random_transcript);
 
         // The transcript that points to the random transcript
-        let transcript_params_ref = IDkgTranscriptParamsRef::new(
+        let transcript_params_ref = ReshareOfMaskedParams::new(
             transcript_id,
             IDkgDealers::new(dealers).unwrap(),
             IDkgReceivers::new(receivers).unwrap(),
             RegistryVersion::from(0),
             AlgorithmId::ThresholdEcdsaSecp256k1,
-            IDkgTranscriptOperationRef::ReshareOfMasked(transcript_ref),
+            random_masked,
         );
 
         TestTranscriptParams {
             idkg_transcripts,
-            transcript_params_ref,
+            transcript_params_ref: transcript_params_ref.as_ref().clone(),
         }
     }
 
@@ -421,98 +420,123 @@ pub(crate) mod test_utils {
         let mut nodes = BTreeSet::new();
         nodes.insert(node_test_id(1));
 
-        let original_kappa_id = transcript_id(10);
-        let kappa_id = transcript_id(20);
-        let lambda_id = transcript_id(30);
-        let kappa_times_lambda_id = transcript_id(40);
-        let key_times_lambda_id = transcript_id(50);
-        let original_key_id = transcript_id(60);
-        let key_id = transcript_id(70);
+        let kappa_masked_id = transcript_id(10);
+        let kappa_unmasked_id = transcript_id(20);
+        let lambda_masked_id = transcript_id(30);
+        let key_masked_id = transcript_id(40);
+        let key_unmasked_id = transcript_id(50);
+        let kappa_unmasked_times_lambda_masked_id = transcript_id(60);
+        let key_unmasked_times_lambda_masked_id = transcript_id(70);
         let mut idkg_transcripts = BTreeMap::new();
 
-        let kappa_ref = TranscriptRef::new(height, kappa_id);
-        idkg_transcripts.insert(
-            kappa_ref,
-            IDkgTranscript {
-                transcript_id: kappa_id,
-                receivers: IDkgReceivers::new(nodes.clone()).unwrap(),
-                registry_version: RegistryVersion::from(1),
-                verified_dealings: BTreeMap::new(),
-                transcript_type: IDkgTranscriptType::Unmasked(
-                    IDkgUnmaskedTranscriptOrigin::ReshareMasked(original_kappa_id),
+        let kappa_masked = IDkgTranscript {
+            transcript_id: kappa_masked_id,
+            receivers: IDkgReceivers::new(nodes.clone()).unwrap(),
+            registry_version: RegistryVersion::from(1),
+            verified_dealings: BTreeMap::new(),
+            transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
+            algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+            internal_transcript_raw: vec![],
+        };
+        let kappa_masked_ref = MaskedTranscript::try_from((height, &kappa_masked)).unwrap();
+        idkg_transcripts.insert(*kappa_masked_ref.as_ref(), kappa_masked);
+
+        let kappa_unmasked = IDkgTranscript {
+            transcript_id: kappa_unmasked_id,
+            receivers: IDkgReceivers::new(nodes.clone()).unwrap(),
+            registry_version: RegistryVersion::from(1),
+            verified_dealings: BTreeMap::new(),
+            transcript_type: IDkgTranscriptType::Unmasked(
+                IDkgUnmaskedTranscriptOrigin::ReshareMasked(kappa_masked_id),
+            ),
+            algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+            internal_transcript_raw: vec![],
+        };
+        let kappa_unmasked_ref = UnmaskedTranscript::try_from((height, &kappa_unmasked)).unwrap();
+        idkg_transcripts.insert(*kappa_unmasked_ref.as_ref(), kappa_unmasked);
+
+        let lambda_masked = IDkgTranscript {
+            transcript_id: lambda_masked_id,
+            receivers: IDkgReceivers::new(nodes.clone()).unwrap(),
+            registry_version: RegistryVersion::from(1),
+            verified_dealings: BTreeMap::new(),
+            transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
+            algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+            internal_transcript_raw: vec![],
+        };
+        let lambda_masked_ref = MaskedTranscript::try_from((height, &lambda_masked)).unwrap();
+        idkg_transcripts.insert(*lambda_masked_ref.as_ref(), lambda_masked);
+
+        let key_masked = IDkgTranscript {
+            transcript_id: key_masked_id,
+            receivers: IDkgReceivers::new(nodes.clone()).unwrap(),
+            registry_version: RegistryVersion::from(1),
+            verified_dealings: BTreeMap::new(),
+            transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
+            algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+            internal_transcript_raw: vec![],
+        };
+        let key_masked_ref = MaskedTranscript::try_from((height, &key_masked)).unwrap();
+        idkg_transcripts.insert(*key_masked_ref.as_ref(), key_masked);
+
+        let key_unmasked = IDkgTranscript {
+            transcript_id: key_unmasked_id,
+            receivers: IDkgReceivers::new(nodes.clone()).unwrap(),
+            registry_version: RegistryVersion::from(1),
+            verified_dealings: BTreeMap::new(),
+            transcript_type: IDkgTranscriptType::Unmasked(
+                IDkgUnmaskedTranscriptOrigin::ReshareMasked(key_masked_id),
+            ),
+            algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+            internal_transcript_raw: vec![],
+        };
+        let key_unmasked_ref = UnmaskedTranscript::try_from((height, &key_unmasked)).unwrap();
+        idkg_transcripts.insert(*key_unmasked_ref.as_ref(), key_unmasked);
+
+        let kappa_unmasked_times_lambda_masked = IDkgTranscript {
+            transcript_id: kappa_unmasked_times_lambda_masked_id,
+            receivers: IDkgReceivers::new(nodes.clone()).unwrap(),
+            registry_version: RegistryVersion::from(1),
+            verified_dealings: BTreeMap::new(),
+            transcript_type: IDkgTranscriptType::Masked(
+                IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(
+                    kappa_unmasked_id,
+                    lambda_masked_id,
                 ),
-                algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-                internal_transcript_raw: vec![],
-            },
+            ),
+            algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+            internal_transcript_raw: vec![],
+        };
+        let kappa_unmasked_times_lambda_masked_ref =
+            MaskedTranscript::try_from((height, &kappa_unmasked_times_lambda_masked)).unwrap();
+        idkg_transcripts.insert(
+            *kappa_unmasked_times_lambda_masked_ref.as_ref(),
+            kappa_unmasked_times_lambda_masked,
         );
 
-        let lambda_ref = TranscriptRef::new(height, lambda_id);
+        let key_unmasked_times_lambda_masked = IDkgTranscript {
+            transcript_id: key_unmasked_times_lambda_masked_id,
+            receivers: IDkgReceivers::new(nodes.clone()).unwrap(),
+            registry_version: RegistryVersion::from(1),
+            verified_dealings: BTreeMap::new(),
+            transcript_type: IDkgTranscriptType::Masked(
+                IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(key_unmasked_id, lambda_masked_id),
+            ),
+            algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+            internal_transcript_raw: vec![],
+        };
+        let key_unmasked_times_lambda_masked_ref =
+            MaskedTranscript::try_from((height, &key_unmasked_times_lambda_masked)).unwrap();
         idkg_transcripts.insert(
-            lambda_ref,
-            IDkgTranscript {
-                transcript_id: lambda_id,
-                receivers: IDkgReceivers::new(nodes.clone()).unwrap(),
-                registry_version: RegistryVersion::from(1),
-                verified_dealings: BTreeMap::new(),
-                transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
-                algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-                internal_transcript_raw: vec![],
-            },
-        );
-
-        let kappa_times_lambda_ref = TranscriptRef::new(height, kappa_times_lambda_id);
-        idkg_transcripts.insert(
-            kappa_times_lambda_ref,
-            IDkgTranscript {
-                transcript_id: kappa_times_lambda_id,
-                receivers: IDkgReceivers::new(nodes.clone()).unwrap(),
-                registry_version: RegistryVersion::from(1),
-                verified_dealings: BTreeMap::new(),
-                transcript_type: IDkgTranscriptType::Masked(
-                    IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(kappa_id, lambda_id),
-                ),
-                algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-                internal_transcript_raw: vec![],
-            },
-        );
-
-        let key_ref = TranscriptRef::new(height, key_id);
-        idkg_transcripts.insert(
-            key_ref,
-            IDkgTranscript {
-                transcript_id: key_id,
-                receivers: IDkgReceivers::new(nodes.clone()).unwrap(),
-                registry_version: RegistryVersion::from(1),
-                verified_dealings: BTreeMap::new(),
-                transcript_type: IDkgTranscriptType::Unmasked(
-                    IDkgUnmaskedTranscriptOrigin::ReshareMasked(original_key_id),
-                ),
-                algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-                internal_transcript_raw: vec![],
-            },
-        );
-
-        let key_times_lambda_ref = TranscriptRef::new(height, key_times_lambda_id);
-        idkg_transcripts.insert(
-            key_times_lambda_ref,
-            IDkgTranscript {
-                transcript_id: key_times_lambda_id,
-                receivers: IDkgReceivers::new(nodes).unwrap(),
-                registry_version: RegistryVersion::from(1),
-                verified_dealings: BTreeMap::new(),
-                transcript_type: IDkgTranscriptType::Masked(
-                    IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(key_id, lambda_id),
-                ),
-                algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-                internal_transcript_raw: vec![],
-            },
+            *key_unmasked_times_lambda_masked_ref.as_ref(),
+            key_unmasked_times_lambda_masked,
         );
 
         let presig_quadruple_ref = PreSignatureQuadrupleRef::new(
-            kappa_ref,
-            lambda_ref,
-            kappa_times_lambda_ref,
-            key_times_lambda_ref,
+            kappa_unmasked_ref,
+            lambda_masked_ref,
+            kappa_unmasked_times_lambda_masked_ref,
+            key_unmasked_times_lambda_masked_ref,
         );
         let sig_inputs_ref = ThresholdEcdsaSigInputsRef::new(
             ExtendedDerivationPath {
@@ -522,7 +546,7 @@ pub(crate) mod test_utils {
             vec![],
             Randomness::from([0_u8; 32]),
             presig_quadruple_ref,
-            key_ref,
+            key_unmasked_ref,
         );
 
         TestSigInputs {

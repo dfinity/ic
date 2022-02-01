@@ -1,6 +1,7 @@
 //! Threshold ECDSA transcript references related defines.
 
 use serde::{Deserialize, Serialize};
+use std::convert::{AsMut, AsRef, TryFrom};
 
 use crate::crypto::{
     canister_threshold_sig::error::{
@@ -9,7 +10,7 @@ use crate::crypto::{
     },
     canister_threshold_sig::idkg::{
         IDkgDealers, IDkgReceivers, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation,
-        IDkgTranscriptParams,
+        IDkgTranscriptParams, IDkgTranscriptType,
     },
     canister_threshold_sig::{
         ExtendedDerivationPath, PreSignatureQuadruple, ThresholdEcdsaSigInputs,
@@ -51,30 +52,229 @@ impl TranscriptRef {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub struct TranscriptCastError {
+    pub transcript_id: IDkgTranscriptId,
+    pub from_type: IDkgTranscriptType,
+    pub expected_type: &'static str,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub struct MaskedTranscript(TranscriptRef);
+impl AsRef<TranscriptRef> for MaskedTranscript {
+    fn as_ref(&self) -> &TranscriptRef {
+        &self.0
+    }
+}
+impl AsMut<TranscriptRef> for MaskedTranscript {
+    fn as_mut(&mut self) -> &mut TranscriptRef {
+        &mut self.0
+    }
+}
+
+impl TryFrom<(Height, &IDkgTranscript)> for MaskedTranscript {
+    type Error = TranscriptCastError;
+    fn try_from((height, transcript): (Height, &IDkgTranscript)) -> Result<Self, Self::Error> {
+        match transcript.transcript_type {
+            IDkgTranscriptType::Masked(_) => {
+                Ok(Self(TranscriptRef::new(height, transcript.transcript_id)))
+            }
+            _ => Err(TranscriptCastError {
+                transcript_id: transcript.transcript_id,
+                from_type: transcript.transcript_type.clone(),
+                expected_type: "Masked",
+            }),
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub struct UnmaskedTranscript(TranscriptRef);
+impl AsRef<TranscriptRef> for UnmaskedTranscript {
+    fn as_ref(&self) -> &TranscriptRef {
+        &self.0
+    }
+}
+impl AsMut<TranscriptRef> for UnmaskedTranscript {
+    fn as_mut(&mut self) -> &mut TranscriptRef {
+        &mut self.0
+    }
+}
+
+impl TryFrom<(Height, &IDkgTranscript)> for UnmaskedTranscript {
+    type Error = TranscriptCastError;
+    fn try_from((height, transcript): (Height, &IDkgTranscript)) -> Result<Self, Self::Error> {
+        match transcript.transcript_type {
+            IDkgTranscriptType::Unmasked(_) => {
+                Ok(Self(TranscriptRef::new(height, transcript.transcript_id)))
+            }
+            _ => Err(TranscriptCastError {
+                transcript_id: transcript.transcript_id,
+                from_type: transcript.transcript_type.clone(),
+                expected_type: "Unmasked",
+            }),
+        }
+    }
+}
+
+/// Wrappers for the common types.
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub struct RandomTranscriptParams(IDkgTranscriptParamsRef);
+impl RandomTranscriptParams {
+    pub fn new(
+        transcript_id: IDkgTranscriptId,
+        dealers: IDkgDealers,
+        receivers: IDkgReceivers,
+        registry_version: RegistryVersion,
+        algorithm_id: AlgorithmId,
+    ) -> Self {
+        Self(IDkgTranscriptParamsRef::new(
+            transcript_id,
+            dealers,
+            receivers,
+            registry_version,
+            algorithm_id,
+            IDkgTranscriptOperationRef::Random,
+        ))
+    }
+}
+
+impl AsRef<IDkgTranscriptParamsRef> for RandomTranscriptParams {
+    fn as_ref(&self) -> &IDkgTranscriptParamsRef {
+        &self.0
+    }
+}
+impl AsMut<IDkgTranscriptParamsRef> for RandomTranscriptParams {
+    fn as_mut(&mut self) -> &mut IDkgTranscriptParamsRef {
+        &mut self.0
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub struct ReshareOfMaskedParams(IDkgTranscriptParamsRef);
+impl ReshareOfMaskedParams {
+    pub fn new(
+        transcript_id: IDkgTranscriptId,
+        dealers: IDkgDealers,
+        receivers: IDkgReceivers,
+        registry_version: RegistryVersion,
+        algorithm_id: AlgorithmId,
+        transcript: MaskedTranscript,
+    ) -> Self {
+        Self(IDkgTranscriptParamsRef::new(
+            transcript_id,
+            dealers,
+            receivers,
+            registry_version,
+            algorithm_id,
+            IDkgTranscriptOperationRef::ReshareOfMasked(transcript),
+        ))
+    }
+}
+
+impl AsRef<IDkgTranscriptParamsRef> for ReshareOfMaskedParams {
+    fn as_ref(&self) -> &IDkgTranscriptParamsRef {
+        &self.0
+    }
+}
+impl AsMut<IDkgTranscriptParamsRef> for ReshareOfMaskedParams {
+    fn as_mut(&mut self) -> &mut IDkgTranscriptParamsRef {
+        &mut self.0
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub struct ReshareOfUnmaskedParams(IDkgTranscriptParamsRef);
+impl ReshareOfUnmaskedParams {
+    pub fn new(
+        transcript_id: IDkgTranscriptId,
+        dealers: IDkgDealers,
+        receivers: IDkgReceivers,
+        registry_version: RegistryVersion,
+        algorithm_id: AlgorithmId,
+        transcript: UnmaskedTranscript,
+    ) -> Self {
+        Self(IDkgTranscriptParamsRef::new(
+            transcript_id,
+            dealers,
+            receivers,
+            registry_version,
+            algorithm_id,
+            IDkgTranscriptOperationRef::ReshareOfUnmasked(transcript),
+        ))
+    }
+}
+
+impl AsRef<IDkgTranscriptParamsRef> for ReshareOfUnmaskedParams {
+    fn as_ref(&self) -> &IDkgTranscriptParamsRef {
+        &self.0
+    }
+}
+impl AsMut<IDkgTranscriptParamsRef> for ReshareOfUnmaskedParams {
+    fn as_mut(&mut self) -> &mut IDkgTranscriptParamsRef {
+        &mut self.0
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub struct UnmaskedTimesMaskedParams(IDkgTranscriptParamsRef);
+impl UnmaskedTimesMaskedParams {
+    pub fn new(
+        transcript_id: IDkgTranscriptId,
+        dealers: IDkgDealers,
+        receivers: IDkgReceivers,
+        registry_version: RegistryVersion,
+        algorithm_id: AlgorithmId,
+        transcript_1: UnmaskedTranscript,
+        transcript_2: MaskedTranscript,
+    ) -> Self {
+        Self(IDkgTranscriptParamsRef::new(
+            transcript_id,
+            dealers,
+            receivers,
+            registry_version,
+            algorithm_id,
+            IDkgTranscriptOperationRef::UnmaskedTimesMasked(transcript_1, transcript_2),
+        ))
+    }
+}
+
+impl AsRef<IDkgTranscriptParamsRef> for UnmaskedTimesMaskedParams {
+    fn as_ref(&self) -> &IDkgTranscriptParamsRef {
+        &self.0
+    }
+}
+impl AsMut<IDkgTranscriptParamsRef> for UnmaskedTimesMaskedParams {
+    fn as_mut(&mut self) -> &mut IDkgTranscriptParamsRef {
+        &mut self.0
+    }
+}
+
 /// ECDSA Quadruple in creation.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct QuadrupleInCreation {
-    pub kappa_config: IDkgTranscriptParamsRef,
-    pub kappa_masked: Option<TranscriptRef>,
+    pub kappa_config: RandomTranscriptParams,
+    pub kappa_masked: Option<MaskedTranscript>,
 
-    pub lambda_config: IDkgTranscriptParamsRef,
-    pub lambda_masked: Option<TranscriptRef>,
+    pub lambda_config: RandomTranscriptParams,
+    pub lambda_masked: Option<MaskedTranscript>,
 
-    pub unmask_kappa_config: Option<IDkgTranscriptParamsRef>,
-    pub kappa_unmasked: Option<TranscriptRef>,
+    pub unmask_kappa_config: Option<ReshareOfMaskedParams>,
+    pub kappa_unmasked: Option<UnmaskedTranscript>,
 
-    pub key_times_lambda_config: Option<IDkgTranscriptParamsRef>,
-    pub key_times_lambda: Option<TranscriptRef>,
+    pub key_times_lambda_config: Option<UnmaskedTimesMaskedParams>,
+    pub key_times_lambda: Option<MaskedTranscript>,
 
-    pub kappa_times_lambda_config: Option<IDkgTranscriptParamsRef>,
-    pub kappa_times_lambda: Option<TranscriptRef>,
+    pub kappa_times_lambda_config: Option<UnmaskedTimesMaskedParams>,
+    pub kappa_times_lambda: Option<MaskedTranscript>,
 }
 
 impl QuadrupleInCreation {
     /// Initialization with the given random param pair.
     pub fn new(
-        kappa_config: IDkgTranscriptParamsRef,
-        lambda_config: IDkgTranscriptParamsRef,
+        kappa_config: RandomTranscriptParams,
+        lambda_config: RandomTranscriptParams,
     ) -> Self {
         QuadrupleInCreation {
             kappa_config,
@@ -99,19 +299,19 @@ impl QuadrupleInCreation {
     ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
         let mut params = Vec::new();
         if self.kappa_masked.is_none() {
-            params.push(&self.kappa_config)
+            params.push(self.kappa_config.as_ref())
         }
         if self.lambda_masked.is_none() {
-            params.push(&self.lambda_config)
+            params.push(self.lambda_config.as_ref())
         }
         if let (Some(config), None) = (&self.unmask_kappa_config, &self.kappa_unmasked) {
-            params.push(config)
+            params.push(config.as_ref())
         }
         if let (Some(config), None) = (&self.key_times_lambda_config, &self.key_times_lambda) {
-            params.push(config)
+            params.push(config.as_ref())
         }
         if let (Some(config), None) = (&self.kappa_times_lambda_config, &self.kappa_times_lambda) {
-            params.push(config)
+            params.push(config.as_ref())
         }
         Box::new(params.into_iter())
     }
@@ -119,35 +319,35 @@ impl QuadrupleInCreation {
     /// Returns the refs held
     pub fn get_refs(&self) -> Vec<TranscriptRef> {
         let mut ret = Vec::new();
-        ret.append(&mut self.kappa_config.get_refs());
+        ret.append(&mut self.kappa_config.as_ref().get_refs());
         if let Some(r) = &self.kappa_masked {
-            ret.push(*r);
+            ret.push(*r.as_ref());
         }
 
-        ret.append(&mut self.lambda_config.get_refs());
+        ret.append(&mut self.lambda_config.as_ref().get_refs());
         if let Some(r) = &self.lambda_masked {
-            ret.push(*r);
+            ret.push(*r.as_ref());
         }
 
         if let Some(config) = &self.unmask_kappa_config {
-            ret.append(&mut config.get_refs());
+            ret.append(&mut config.as_ref().get_refs());
         }
         if let Some(r) = &self.kappa_unmasked {
-            ret.push(*r);
+            ret.push(*r.as_ref());
         }
 
         if let Some(config) = &self.key_times_lambda_config {
-            ret.append(&mut config.get_refs());
+            ret.append(&mut config.as_ref().get_refs());
         }
         if let Some(r) = &self.key_times_lambda {
-            ret.push(*r);
+            ret.push(*r.as_ref());
         }
 
         if let Some(config) = &self.kappa_times_lambda_config {
-            ret.append(&mut config.get_refs());
+            ret.append(&mut config.as_ref().get_refs());
         }
         if let Some(r) = &self.kappa_times_lambda {
-            ret.push(*r);
+            ret.push(*r.as_ref());
         }
 
         ret
@@ -156,35 +356,35 @@ impl QuadrupleInCreation {
     /// Returns the refs held and updates the height if specified
     pub fn get_refs_and_update(&mut self, height: Option<Height>) -> Vec<TranscriptRef> {
         let mut ret = Vec::new();
-        ret.append(&mut self.kappa_config.get_refs_and_update(height));
+        ret.append(&mut self.kappa_config.as_mut().get_refs_and_update(height));
         if let Some(r) = &mut self.kappa_masked {
-            ret.push(r.get_and_update(height));
+            ret.push(r.as_mut().get_and_update(height));
         }
 
-        ret.append(&mut self.lambda_config.get_refs_and_update(height));
+        ret.append(&mut self.lambda_config.as_mut().get_refs_and_update(height));
         if let Some(r) = &mut self.lambda_masked {
-            ret.push(r.get_and_update(height));
+            ret.push(r.as_mut().get_and_update(height));
         }
 
         if let Some(config) = &mut self.unmask_kappa_config {
-            ret.append(&mut config.get_refs_and_update(height));
+            ret.append(&mut config.as_mut().get_refs_and_update(height));
         }
         if let Some(r) = &mut self.kappa_unmasked {
-            ret.push(r.get_and_update(height));
+            ret.push(r.as_mut().get_and_update(height));
         }
 
         if let Some(config) = &mut self.key_times_lambda_config {
-            ret.append(&mut config.get_refs_and_update(height));
+            ret.append(&mut config.as_mut().get_refs_and_update(height));
         }
         if let Some(r) = &mut self.key_times_lambda {
-            ret.push(r.get_and_update(height));
+            ret.push(r.as_mut().get_and_update(height));
         }
 
         if let Some(config) = &mut self.kappa_times_lambda_config {
-            ret.append(&mut config.get_refs_and_update(height));
+            ret.append(&mut config.as_mut().get_refs_and_update(height));
         }
         if let Some(r) = &mut self.kappa_times_lambda {
-            ret.push(r.get_and_update(height));
+            ret.push(r.as_mut().get_and_update(height));
         }
 
         ret
@@ -224,9 +424,9 @@ pub trait EcdsaBlockReader {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum IDkgTranscriptOperationRef {
     Random,
-    ReshareOfMasked(TranscriptRef),
-    ReshareOfUnmasked(TranscriptRef),
-    UnmaskedTimesMasked(TranscriptRef, TranscriptRef),
+    ReshareOfMasked(MaskedTranscript),
+    ReshareOfUnmasked(UnmaskedTranscript),
+    UnmaskedTimesMasked(UnmaskedTranscript, MaskedTranscript),
 }
 
 #[derive(Clone, Debug)]
@@ -247,20 +447,20 @@ impl IDkgTranscriptOperationRef {
             Self::Random => Ok(IDkgTranscriptOperation::Random),
             Self::ReshareOfMasked(r) => Ok(IDkgTranscriptOperation::ReshareOfMasked(
                 resolver
-                    .transcript(r)
+                    .transcript(r.as_ref())
                     .map_err(TranscriptOperationError::ReshareOfMasked)?,
             )),
             Self::ReshareOfUnmasked(r) => Ok(IDkgTranscriptOperation::ReshareOfUnmasked(
                 resolver
-                    .transcript(r)
+                    .transcript(r.as_ref())
                     .map_err(TranscriptOperationError::ReshareOfUnmasked)?,
             )),
             Self::UnmaskedTimesMasked(r1, r2) => Ok(IDkgTranscriptOperation::UnmaskedTimesMasked(
                 resolver
-                    .transcript(r1)
+                    .transcript(r1.as_ref())
                     .map_err(TranscriptOperationError::UnmaskedTimesMasked1)?,
                 resolver
-                    .transcript(r2)
+                    .transcript(r2.as_ref())
                     .map_err(TranscriptOperationError::UnmaskedTimesMasked2)?,
             )),
         }
@@ -270,9 +470,9 @@ impl IDkgTranscriptOperationRef {
     pub fn get_refs(&self) -> Vec<TranscriptRef> {
         match self {
             Self::Random => vec![],
-            Self::ReshareOfMasked(r) => vec![*r],
-            Self::ReshareOfUnmasked(r) => vec![*r],
-            Self::UnmaskedTimesMasked(r1, r2) => vec![*r1, *r2],
+            Self::ReshareOfMasked(r) => vec![*r.as_ref()],
+            Self::ReshareOfUnmasked(r) => vec![*r.as_ref()],
+            Self::UnmaskedTimesMasked(r1, r2) => vec![*r1.as_ref(), *r2.as_ref()],
         }
     }
 
@@ -280,36 +480,13 @@ impl IDkgTranscriptOperationRef {
     pub fn get_refs_and_update(&mut self, height: Option<Height>) -> Vec<TranscriptRef> {
         match self {
             Self::Random => vec![],
-            Self::ReshareOfMasked(r) => vec![r.get_and_update(height)],
-            Self::ReshareOfUnmasked(r) => vec![r.get_and_update(height)],
+            Self::ReshareOfMasked(r) => vec![r.as_mut().get_and_update(height)],
+            Self::ReshareOfUnmasked(r) => vec![r.as_mut().get_and_update(height)],
             Self::UnmaskedTimesMasked(r1, r2) => {
-                vec![r1.get_and_update(height), r2.get_and_update(height)]
-            }
-        }
-    }
-}
-
-impl From<(&IDkgTranscriptOperation, Height)> for IDkgTranscriptOperationRef {
-    fn from((op, height): (&IDkgTranscriptOperation, Height)) -> IDkgTranscriptOperationRef {
-        match op {
-            IDkgTranscriptOperation::Random => IDkgTranscriptOperationRef::Random,
-            IDkgTranscriptOperation::ReshareOfMasked(t) => {
-                IDkgTranscriptOperationRef::ReshareOfMasked(TranscriptRef::new(
-                    height,
-                    t.transcript_id,
-                ))
-            }
-            IDkgTranscriptOperation::ReshareOfUnmasked(t) => {
-                IDkgTranscriptOperationRef::ReshareOfUnmasked(TranscriptRef::new(
-                    height,
-                    t.transcript_id,
-                ))
-            }
-            IDkgTranscriptOperation::UnmaskedTimesMasked(t1, t2) => {
-                IDkgTranscriptOperationRef::UnmaskedTimesMasked(
-                    TranscriptRef::new(height, t1.transcript_id),
-                    TranscriptRef::new(height, t2.transcript_id),
-                )
+                vec![
+                    r1.as_mut().get_and_update(height),
+                    r2.as_mut().get_and_update(height),
+                ]
             }
         }
     }
@@ -383,27 +560,14 @@ impl IDkgTranscriptParamsRef {
     }
 }
 
-impl From<(&IDkgTranscriptParams, Height)> for IDkgTranscriptParamsRef {
-    fn from((params, height): (&IDkgTranscriptParams, Height)) -> IDkgTranscriptParamsRef {
-        IDkgTranscriptParamsRef::new(
-            params.transcript_id(),
-            params.dealers().clone(),
-            params.receivers().clone(),
-            params.registry_version(),
-            params.algorithm_id(),
-            (params.operation_type(), height).into(),
-        )
-    }
-}
-
 /// Counterpart of PreSignatureQuadruple that holds transcript references,
 /// instead of the transcripts.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct PreSignatureQuadrupleRef {
-    pub kappa_unmasked_ref: TranscriptRef,
-    pub lambda_masked_ref: TranscriptRef,
-    pub kappa_times_lambda_ref: TranscriptRef,
-    pub key_times_lambda_ref: TranscriptRef,
+    pub kappa_unmasked_ref: UnmaskedTranscript,
+    pub lambda_masked_ref: MaskedTranscript,
+    pub kappa_times_lambda_ref: MaskedTranscript,
+    pub key_times_lambda_ref: MaskedTranscript,
 }
 
 #[derive(Clone, Debug)]
@@ -417,10 +581,10 @@ pub enum PreSignatureQuadrupleError {
 
 impl PreSignatureQuadrupleRef {
     pub fn new(
-        kappa_unmasked_ref: TranscriptRef,
-        lambda_masked_ref: TranscriptRef,
-        kappa_times_lambda_ref: TranscriptRef,
-        key_times_lambda_ref: TranscriptRef,
+        kappa_unmasked_ref: UnmaskedTranscript,
+        lambda_masked_ref: MaskedTranscript,
+        kappa_times_lambda_ref: MaskedTranscript,
+        key_times_lambda_ref: MaskedTranscript,
     ) -> Self {
         Self {
             kappa_unmasked_ref,
@@ -436,16 +600,16 @@ impl PreSignatureQuadrupleRef {
         resolver: &dyn EcdsaBlockReader,
     ) -> Result<PreSignatureQuadruple, PreSignatureQuadrupleError> {
         let kappa_unmasked = resolver
-            .transcript(&self.kappa_unmasked_ref)
+            .transcript(self.kappa_unmasked_ref.as_ref())
             .map_err(PreSignatureQuadrupleError::KappaUnmasked)?;
         let lambda_masked = resolver
-            .transcript(&self.lambda_masked_ref)
+            .transcript(self.lambda_masked_ref.as_ref())
             .map_err(PreSignatureQuadrupleError::LambdaMasked)?;
         let kappa_times_lambda = resolver
-            .transcript(&self.kappa_times_lambda_ref)
+            .transcript(self.kappa_times_lambda_ref.as_ref())
             .map_err(PreSignatureQuadrupleError::KappaTimesLambda)?;
         let key_times_lambda = resolver
-            .transcript(&self.key_times_lambda_ref)
+            .transcript(self.key_times_lambda_ref.as_ref())
             .map_err(PreSignatureQuadrupleError::KeyTimesLambda)?;
         PreSignatureQuadruple::new(
             kappa_unmasked,
@@ -459,20 +623,20 @@ impl PreSignatureQuadrupleRef {
     /// Returns the refs held
     pub fn get_refs(&self) -> Vec<TranscriptRef> {
         vec![
-            self.kappa_unmasked_ref,
-            self.lambda_masked_ref,
-            self.kappa_times_lambda_ref,
-            self.key_times_lambda_ref,
+            *self.kappa_unmasked_ref.as_ref(),
+            *self.lambda_masked_ref.as_ref(),
+            *self.kappa_times_lambda_ref.as_ref(),
+            *self.key_times_lambda_ref.as_ref(),
         ]
     }
 
     /// Returns the refs held and updates the height if specified
     pub fn get_refs_and_update(&mut self, height: Option<Height>) -> Vec<TranscriptRef> {
         vec![
-            self.kappa_unmasked_ref.get_and_update(height),
-            self.lambda_masked_ref.get_and_update(height),
-            self.kappa_times_lambda_ref.get_and_update(height),
-            self.key_times_lambda_ref.get_and_update(height),
+            self.kappa_unmasked_ref.as_mut().get_and_update(height),
+            self.lambda_masked_ref.as_mut().get_and_update(height),
+            self.kappa_times_lambda_ref.as_mut().get_and_update(height),
+            self.key_times_lambda_ref.as_mut().get_and_update(height),
         ]
     }
 }
@@ -485,7 +649,7 @@ pub struct ThresholdEcdsaSigInputsRef {
     pub hashed_message: Vec<u8>,
     pub nonce: Randomness,
     pub presig_quadruple_ref: PreSignatureQuadrupleRef,
-    pub key_transcript_ref: TranscriptRef,
+    pub key_transcript_ref: UnmaskedTranscript,
 }
 
 #[derive(Clone, Debug)]
@@ -501,7 +665,7 @@ impl ThresholdEcdsaSigInputsRef {
         hashed_message: Vec<u8>,
         nonce: Randomness,
         presig_quadruple_ref: PreSignatureQuadrupleRef,
-        key_transcript_ref: TranscriptRef,
+        key_transcript_ref: UnmaskedTranscript,
     ) -> Self {
         Self {
             derivation_path,
@@ -522,7 +686,7 @@ impl ThresholdEcdsaSigInputsRef {
             .translate(resolver)
             .map_err(ThresholdEcdsaSigInputsError::PreSignatureQuadruple)?;
         let key_transcript = resolver
-            .transcript(&self.key_transcript_ref)
+            .transcript(self.key_transcript_ref.as_ref())
             .map_err(ThresholdEcdsaSigInputsError::KeyTranscript)?;
         ThresholdEcdsaSigInputs::new(
             &self.derivation_path,
@@ -537,14 +701,14 @@ impl ThresholdEcdsaSigInputsRef {
     /// Returns the refs held
     pub fn get_refs(&self) -> Vec<TranscriptRef> {
         let mut ret = self.presig_quadruple_ref.get_refs();
-        ret.push(self.key_transcript_ref);
+        ret.push(*self.key_transcript_ref.as_ref());
         ret
     }
 
     /// Returns the refs held and updates the height if specified
     pub fn get_refs_and_update(&mut self, height: Option<Height>) -> Vec<TranscriptRef> {
         let mut ret = self.presig_quadruple_ref.get_refs_and_update(height);
-        ret.push(self.key_transcript_ref.get_and_update(height));
+        ret.push(self.key_transcript_ref.as_mut().get_and_update(height));
         ret
     }
 }
