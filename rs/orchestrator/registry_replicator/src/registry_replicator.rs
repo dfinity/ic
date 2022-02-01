@@ -64,11 +64,18 @@ impl RegistryReplicator {
     pub fn new(
         logger: ReplicaLogger,
         node_id: Option<NodeId>,
-        data_provider: Arc<dyn RegistryDataProvider>,
         local_store_path: PathBuf,
         poll_delay: Duration,
     ) -> Self {
-        let registry_client = Self::initialize_registry_client(data_provider);
+        let registry_client = Self::initialize_registry_client(create_data_provider(
+            &DataProviderConfig::LocalStore(local_store_path.clone()),
+            // We set the NNS public key to `None` and thus disable registry data signature
+            // verification while reading from the local store. The verfication happens in
+            // the internal state, as the data is polled from the registry canister and
+            // before it is written to the local store.
+            None,
+        ));
+
         let local_store = Arc::new(LocalStoreImpl::new(local_store_path.clone()));
         std::fs::create_dir_all(local_store_path)
             .expect("Could not create directory for registry local store.");
@@ -89,17 +96,6 @@ impl RegistryReplicator {
         node_id: Option<NodeId>,
         config: &Config,
     ) -> Self {
-        let data_provider = create_data_provider(
-            config
-                .registry_client
-                .data_provider
-                .as_ref()
-                .expect("No data provider was provided in the registry client configuration"),
-            // We set the NNS public key to `None` (and thus disable registry data signature
-            // verification). See the Rustdoc of `RegistryHelper` for an explanation.
-            None,
-        );
-
         // We only support the local store data provider
         let local_store_path = if let DataProviderConfig::LocalStore(path) = config
             .registry_client
@@ -115,7 +111,7 @@ impl RegistryReplicator {
         let poll_delay =
             std::time::Duration::from_millis(config.nns_registry_replicator.poll_delay_duration_ms);
 
-        Self::new(logger, node_id, data_provider, local_store_path, poll_delay)
+        Self::new(logger, node_id, local_store_path, poll_delay)
     }
 
     fn initialize_registry_client(
