@@ -136,7 +136,7 @@ pub fn create_subnet_test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         "created application subnet with ID {}", new_subnet.id
     );
 
-    for (i, unassigned_endpoint) in unassigned_endpoints.into_iter().enumerate() {
+    for unassigned_endpoint in unassigned_endpoints.into_iter() {
         let new_subnet = new_subnet.clone();
 
         // [Phase III] install a canister onto that subnet and check that it is
@@ -145,14 +145,6 @@ pub fn create_subnet_test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             let newly_assigned_endpoint = unassigned_endpoint.recreate_with_subnet(new_subnet);
 
             newly_assigned_endpoint.assert_ready(ctx).await;
-
-            if i == 0 {
-                info!(
-                    ctx.logger,
-                    "Wait for 10 seconds after nodes reported healthy."
-                );
-                tokio::time::sleep(Duration::from_secs(10)).await;
-            }
 
             let agent = assert_create_agent(newly_assigned_endpoint.url.as_str()).await;
             info!(
