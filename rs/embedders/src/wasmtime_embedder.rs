@@ -59,8 +59,9 @@ fn wasmtime_error_to_hypervisor_error(err: anyhow::Error) -> HypervisorError {
                     Err(_) => "Conversion of Wasmtime error to string failed.".to_string(),
                 }
             };
-            let re_signature_mismatch = regex::Regex::new("expected \\d+ arguments, got \\d+")
-                .expect("signature mismatch regex");
+            let re_signature_mismatch =
+                regex::Regex::new("expected \\d+ (arguments|results), got \\d+")
+                    .expect("signature mismatch regex");
             if message.contains("argument type mismatch")
                 || re_signature_mismatch.is_match(&message)
             {
@@ -424,9 +425,8 @@ impl<S: SystemApi> WasmtimeInstance<S> {
         self.store.data_mut()
     }
 
-    fn invoke_export(&mut self, export: &str, args: &[Val]) -> HypervisorResult<Vec<Val>> {
-        Ok(self
-            .instance
+    fn invoke_export(&mut self, export: &str, args: &[Val]) -> HypervisorResult<()> {
+        self.instance
             .get_export(&mut self.store, export)
             .ok_or_else(|| {
                 HypervisorError::MethodNotFound(WasmMethod::try_from(export.to_string()).unwrap())
@@ -435,9 +435,8 @@ impl<S: SystemApi> WasmtimeInstance<S> {
             .ok_or_else(|| {
                 HypervisorError::ContractViolation("export is not a function".to_string())
             })?
-            .call(&mut self.store, args)
-            .map_err(wasmtime_error_to_hypervisor_error)?
-            .to_vec())
+            .call(&mut self.store, args, &mut [])
+            .map_err(wasmtime_error_to_hypervisor_error)
     }
 
     fn dirty_pages(&self) -> Vec<PageIndex> {
@@ -496,9 +495,8 @@ impl<S: SystemApi> WasmtimeInstance<S> {
                         "unexpected null function reference".to_string(),
                     )
                 })?
-                .call(&mut self.store, &[Val::I32(closure.env as i32)])
-                .map_err(wasmtime_error_to_hypervisor_error)
-                .map(|boxed_slice| boxed_slice.to_vec()),
+                .call(&mut self.store, &[Val::I32(closure.env as i32)], &mut [])
+                .map_err(wasmtime_error_to_hypervisor_error),
         }
         .map_err(|e| {
             self.store

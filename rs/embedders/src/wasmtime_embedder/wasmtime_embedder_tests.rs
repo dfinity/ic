@@ -92,6 +92,6 @@ fn test_wasmtime_system_api() {
         .expect("export not found")
         .into_func()
         .expect("export is not a function")
-        .call(&mut store, &[])
+        .call(&mut store, &[], &mut [])
         .expect("call failed");
 }

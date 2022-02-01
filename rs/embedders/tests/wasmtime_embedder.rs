@@ -126,13 +126,80 @@ mod tests {
         }
     }
 
+    /// The spec doesn't allow exported functions to have results.
+    #[test]
+    fn function_with_results_traps() {
+        let log = logger();
+        let wasm = wabt::wat2wasm(
+            r#"
+          (module
+            (func $f (export "canister_update f") (result i64)
+              (i64.const 1)
+            )
+          )
+        "#,
+        )
+        .expect("wat");
+
+        let embedder = WasmtimeEmbedder::new(ic_config::embedders::Config::default(), log.clone());
+
+        let compiled = embedder
+            .compile(
+                PersistenceType::Sigsegv,
+                &ic_wasm_types::BinaryEncodedWasm::new(wasm),
+            )
+            .expect("compiled");
+
+        let user_id = ic_test_utilities::types::ids::user_test_id(24);
+
+        let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+        let system_state = ic_test_utilities::state::SystemStateBuilder::default().build();
+        let sandbox_safe_system_state =
+            SandboxSafeSystemState::new(&system_state, cycles_account_manager);
+        let api = ic_system_api::SystemApiImpl::new(
+            ic_system_api::ApiType::init(ic_test_utilities::mock_time(), vec![], user_id.get()),
+            sandbox_safe_system_state,
+            ic_types::NumBytes::from(0),
+            execution_parameters(),
+            Memory::default(),
+            log,
+        );
+
+        let mut instance = embedder
+            .new_instance(
+                canister_test_id(1),
+                &compiled,
+                &[],
+                ic_replicated_state::NumWasmPages::from(0),
+                None,
+                ModificationTracking::Track,
+                api,
+            )
+            .map_err(|r| r.0)
+            .expect("Failed to create instance");
+
+        let result = instance.run(ic_types::methods::FuncRef::Method(
+            ic_types::methods::WasmMethod::Update("f".to_string()),
+        ));
+
+        match result {
+            Ok(_) => panic!("Expected a HypervisorError::ContractViolation"),
+            Err(err) => {
+                assert!(matches!(
+                    err,
+                    ic_interfaces::execution_environment::HypervisorError::ContractViolation(_)
+                ));
+            }
+        }
+    }
+
     #[test]
     fn stack_overflow_traps() {
         let log = logger();
         let wasm = wabt::wat2wasm(
             r#"
           (module
-            (func $f (export "canister_update f") (result i64)
+            (func $f (export "canister_update f")
               ;; define a large number of local variables to quickly overflow the stack
               (local i64) (local i64) (local i64) (local i64) (local i64)
               (local i64) (local i64) (local i64) (local i64) (local i64)
