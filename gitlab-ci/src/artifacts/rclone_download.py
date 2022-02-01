@@ -224,7 +224,7 @@ def main() -> None:
     parser.add_argument(
         "--timeout",
         action="store",
-        default=300,
+        default=600,
         help="Timeout in seconds for each clone command.",
     )
 
