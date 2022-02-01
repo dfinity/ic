@@ -372,8 +372,6 @@ fn canister_post_upgrade() {
         }
     }
     .expect("Couldn't upgrade canister.");
-
-    governance_mut().icsup_2627_adjust_neurons_age();
 }
 
 #[export_name = "canister_update update_authz"]
