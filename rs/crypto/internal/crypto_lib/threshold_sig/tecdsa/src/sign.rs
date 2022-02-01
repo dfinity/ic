@@ -28,19 +28,11 @@ fn derive_rho(
 
     let (key_tweak, _chain_key) = derivation_path.derive_tweak(&key_transcript.constant_term())?;
 
-    let mut hasher_input = Vec::new();
-
-    // For any specific curve these values are fixed length so there is no need
-    // to add length fields, etc in order to attain a prefix-free input.
-    hasher_input.extend_from_slice(&randomness.get());
-    hasher_input.extend_from_slice(&pre_sig.serialize());
-    hasher_input.extend_from_slice(&key_tweak.serialize());
-
-    let randomizer = EccScalar::hash_to_scalar(
-        curve_type,
-        &hasher_input,
-        b"ic-crypto-tecdsa-rerandomize-presig",
-    )?;
+    let mut ro = ro::RandomOracle::new("ic-crypto-tecdsa-rerandomize-presig");
+    ro.add_bytestring("randomness", &randomness.get())?;
+    ro.add_point("pre_sig", &pre_sig)?;
+    ro.add_scalar("key_tweak", &key_tweak)?;
+    let randomizer = ro.output_scalar(curve_type)?;
 
     // Rerandomize presignature
     let randomized_pre_sig =

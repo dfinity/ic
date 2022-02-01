@@ -1,14 +1,14 @@
 use tecdsa::*;
 
 fn xmd_check(msg: &str, dst: &str, want: &str) {
-    let x = expand_message_xmd(msg.as_bytes(), dst.as_bytes(), want.len() / 2);
+    let x = expand_message_xmd(msg.as_bytes(), dst.as_bytes(), want.len() / 2).expect("XMD failed");
     assert_eq!(hex::encode(x), want);
 }
 
 #[test]
 fn expand_message_xmd_test() {
     // Check we can handle lengths that are not a perfect multiple of 32.
-    let x = expand_message_xmd(b"foo", b"bar", 123);
+    let x = expand_message_xmd(b"foo", b"bar", 123).expect("XMD failed");
     assert_eq!(x.len(), 123);
 
     // Test cases from Appendix K.

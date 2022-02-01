@@ -10,6 +10,7 @@ pub use ic_types::NodeIndex;
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ThresholdEcdsaError {
     CurveMismatch,
+    InvalidRandomOracleInput,
     InconsistentCiphertext,
     InconsistentCommitments,
     InsufficientDealings,
@@ -37,6 +38,7 @@ mod hash2curve;
 mod key_derivation;
 mod mega;
 mod poly;
+pub mod ro;
 mod seed;
 pub mod sign;
 mod transcript;

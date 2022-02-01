@@ -129,7 +129,7 @@ fn hash_to_field(
     let field_len = (p_bits + security_level + 7) / 8; // "L" in spec
     let len_in_bytes = count * field_len;
 
-    let uniform_bytes = crate::xmd::expand_message_xmd(input, domain_separator, len_in_bytes);
+    let uniform_bytes = crate::xmd::expand_message_xmd(input, domain_separator, len_in_bytes)?;
 
     let mut out = Vec::with_capacity(count);
 
@@ -156,7 +156,7 @@ pub(crate) fn hash_to_scalar(
     let field_len = (s_bits + security_level + 7) / 8; // "L" in spec
     let len_in_bytes = count * field_len;
 
-    let uniform_bytes = crate::xmd::expand_message_xmd(input, domain_separator, len_in_bytes);
+    let uniform_bytes = crate::xmd::expand_message_xmd(input, domain_separator, len_in_bytes)?;
 
     let mut out = Vec::with_capacity(count);
 

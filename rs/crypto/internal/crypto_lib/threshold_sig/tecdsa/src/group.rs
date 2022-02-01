@@ -74,6 +74,16 @@ impl EccCurveType {
         }
     }
 
+    /// Return a unique small integer for this curve type
+    ///
+    /// This is used in the RandomOracle implementation
+    pub(crate) fn tag(&self) -> u8 {
+        match self {
+            EccCurveType::K256 => 1,
+            EccCurveType::P256 => 2,
+        }
+    }
+
     /// Return a vector over all available curve types
     ///
     /// This is mostly useful for tests
