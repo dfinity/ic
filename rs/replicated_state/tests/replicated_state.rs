@@ -1,7 +1,4 @@
-use std::{convert::TryFrom, sync::Arc};
-
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::replicated_state::testing::ReplicatedStateTesting;
 use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
@@ -58,6 +55,30 @@ fn assert_total_memory_taken(queues_memory_usage: usize, state: &ReplicatedState
     }
 }
 
+fn assert_total_memory_taken_with_messages(queues_memory_usage: usize, state: &ReplicatedState) {
+    if ENFORCE_MESSAGE_MEMORY_USAGE {
+        assert_eq!(
+            queues_memory_usage as u64,
+            state.total_memory_taken_with_messages().get()
+        );
+    } else {
+        // Expect zero memory used if we don't account for messages.
+        assert_eq!(0, state.total_memory_taken_with_messages().get());
+    }
+}
+
+fn assert_message_memory_taken(queues_memory_usage: usize, state: &ReplicatedState) {
+    if ENFORCE_MESSAGE_MEMORY_USAGE {
+        assert_eq!(
+            queues_memory_usage as u64,
+            state.message_memory_taken().get()
+        );
+    } else {
+        // Expect zero memory used if we don't account for messages.
+        assert_eq!(0, state.message_memory_taken().get());
+    }
+}
+
 fn assert_subnet_available_memory(
     initial_available_memory: i64,
     queues_memory_usage: usize,
@@ -98,6 +119,8 @@ fn total_memory_taken_by_canister_queues() {
 
         // Reserved memory for one response.
         assert_total_memory_taken(MAX_RESPONSE_COUNT_BYTES, &state);
+        assert_total_memory_taken_with_messages(MAX_RESPONSE_COUNT_BYTES, &state);
+        assert_message_memory_taken(MAX_RESPONSE_COUNT_BYTES, &state);
         assert_subnet_available_memory(
             SUBNET_AVAILABLE_MEMORY,
             MAX_RESPONSE_COUNT_BYTES,
@@ -112,6 +135,8 @@ fn total_memory_taken_by_canister_queues() {
 
         // Unchanged memory usage.
         assert_total_memory_taken(MAX_RESPONSE_COUNT_BYTES, &state);
+        assert_total_memory_taken_with_messages(MAX_RESPONSE_COUNT_BYTES, &state);
+        assert_message_memory_taken(MAX_RESPONSE_COUNT_BYTES, &state);
 
         // Push a response into the output queue.
         let response = ResponseBuilder::default()
@@ -125,6 +150,8 @@ fn total_memory_taken_by_canister_queues() {
 
         // Memory used by response only.
         assert_total_memory_taken(response.count_bytes(), &state);
+        assert_total_memory_taken_with_messages(response.count_bytes(), &state);
+        assert_message_memory_taken(response.count_bytes(), &state);
     })
 }
 
@@ -153,6 +180,8 @@ fn total_memory_taken_by_subnet_queues() {
 
         // Reserved memory for one response.
         assert_total_memory_taken(MAX_RESPONSE_COUNT_BYTES, &state);
+        assert_total_memory_taken_with_messages(MAX_RESPONSE_COUNT_BYTES, &state);
+        assert_message_memory_taken(MAX_RESPONSE_COUNT_BYTES, &state);
         assert_subnet_available_memory(
             SUBNET_AVAILABLE_MEMORY,
             MAX_RESPONSE_COUNT_BYTES,
@@ -163,6 +192,8 @@ fn total_memory_taken_by_subnet_queues() {
 
         // Unchanged memory usage.
         assert_total_memory_taken(MAX_RESPONSE_COUNT_BYTES, &state);
+        assert_total_memory_taken_with_messages(MAX_RESPONSE_COUNT_BYTES, &state);
+        assert_message_memory_taken(MAX_RESPONSE_COUNT_BYTES, &state);
 
         // Push a response into the subnet output queues.
         let response = ResponseBuilder::default()
@@ -173,6 +204,8 @@ fn total_memory_taken_by_subnet_queues() {
 
         // Memory used by response only.
         assert_total_memory_taken(response.count_bytes(), &state);
+        assert_total_memory_taken_with_messages(response.count_bytes(), &state);
+        assert_message_memory_taken(response.count_bytes(), &state);
     })
 }
 
@@ -202,6 +235,122 @@ fn total_memory_taken_by_stream_responses() {
 
         // Memory only used by response, not request.
         assert_total_memory_taken(response.count_bytes(), &state);
+        assert_total_memory_taken_with_messages(response.count_bytes(), &state);
+        assert_message_memory_taken(response.count_bytes(), &state);
+    })
+}
+
+#[test]
+fn system_subnet_total_memory_taken_by_canister_queues() {
+    replicated_state_test(|mut state| {
+        // Make it a system subnet.
+        state.metadata.own_subnet_type = SubnetType::System;
+
+        let mut subnet_available_memory = SUBNET_AVAILABLE_MEMORY;
+
+        // Zero memory used initially.
+        assert_eq!(0, state.total_memory_taken().get());
+
+        // Push a request into a canister input queue.
+        state
+            .push_input(
+                QueueIndex::from(0),
+                RequestBuilder::default()
+                    .sender(OTHER_CANISTER_ID)
+                    .receiver(CANISTER_ID)
+                    .build()
+                    .into(),
+                MAX_CANISTER_MEMORY_SIZE,
+                &mut subnet_available_memory,
+            )
+            .unwrap();
+
+        // System subnets don't account for messages in `total_memory_taken()`.
+        assert_total_memory_taken(0, &state);
+        // But do in other `memory_taken()` methods.
+        assert_total_memory_taken_with_messages(MAX_RESPONSE_COUNT_BYTES, &state);
+        assert_message_memory_taken(MAX_RESPONSE_COUNT_BYTES, &state);
+        // And `&mut subnet_available_memory` is updated by the push.
+        assert_subnet_available_memory(
+            SUBNET_AVAILABLE_MEMORY,
+            MAX_RESPONSE_COUNT_BYTES,
+            subnet_available_memory,
+        );
+    })
+}
+
+#[test]
+fn system_subnet_total_memory_taken_by_subnet_queues() {
+    replicated_state_test(|mut state| {
+        // Make it a system subnet.
+        state.metadata.own_subnet_type = SubnetType::System;
+
+        let mut subnet_available_memory = SUBNET_AVAILABLE_MEMORY;
+
+        // Zero memory used initially.
+        assert_eq!(0, state.total_memory_taken().get());
+
+        // Push a request into the subnet input queues. Should ignore the
+        // `max_canister_memory_size` argument.
+        state
+            .push_input(
+                QueueIndex::from(0),
+                RequestBuilder::default()
+                    .sender(CANISTER_ID)
+                    .receiver(SUBNET_ID.into())
+                    .build()
+                    .into(),
+                0.into(),
+                &mut subnet_available_memory,
+            )
+            .unwrap();
+
+        // System subnets don't account for subnet queue messages in `total_memory_taken()`.
+        assert_total_memory_taken(0, &state);
+        // But do in other `memory_taken()` methods.
+        assert_total_memory_taken_with_messages(MAX_RESPONSE_COUNT_BYTES, &state);
+        assert_message_memory_taken(MAX_RESPONSE_COUNT_BYTES, &state);
+        // And `&mut subnet_available_memory` is updated by the push.
+        assert_subnet_available_memory(
+            SUBNET_AVAILABLE_MEMORY,
+            MAX_RESPONSE_COUNT_BYTES,
+            subnet_available_memory,
+        );
+    })
+}
+
+#[test]
+fn system_subnet_total_memory_taken_by_stream_responses() {
+    replicated_state_test(|mut state| {
+        // Make it a system subnet.
+        state.metadata.own_subnet_type = SubnetType::System;
+
+        // Zero memory used initially.
+        assert_eq!(0, state.total_memory_taken().get());
+
+        // Push a request and a response into a stream.
+        let mut streams = state.take_streams();
+        streams.push(
+            SUBNET_ID,
+            RequestBuilder::default()
+                .sender(CANISTER_ID)
+                .receiver(OTHER_CANISTER_ID)
+                .build()
+                .into(),
+        );
+        let response: RequestOrResponse = ResponseBuilder::default()
+            .respondent(CANISTER_ID)
+            .originator(OTHER_CANISTER_ID)
+            .build()
+            .into();
+        streams.push(SUBNET_ID, response.clone());
+        state.put_streams(streams);
+
+        // System subnets don't account for stream responses in `total_memory_taken()`.
+        assert_total_memory_taken(0, &state);
+        // But do in other `memory_taken()` methods.
+        assert_total_memory_taken_with_messages(response.count_bytes(), &state);
+        assert_message_memory_taken(response.count_bytes(), &state);
     })
 }
 
@@ -231,6 +380,8 @@ fn push_subnet_queues_input_respects_subnet_available_memory() {
 
         // Reserved memory for one response.
         assert_total_memory_taken(MAX_RESPONSE_COUNT_BYTES, &state);
+        assert_total_memory_taken_with_messages(MAX_RESPONSE_COUNT_BYTES, &state);
+        assert_message_memory_taken(MAX_RESPONSE_COUNT_BYTES, &state);
         assert_subnet_available_memory(
             initial_available_memory,
             MAX_RESPONSE_COUNT_BYTES,
@@ -282,14 +433,12 @@ fn push_subnet_queues_input_respects_subnet_available_memory() {
 
 #[test]
 fn push_input_queues_respects_local_remote_subnet() {
-    // Local and remote ids
+    // Local and remote IDs.
     let local_canister_id = CanisterId::from_u64(1);
-    let local_canister_subnet_id = subnet_test_id(2);
+    let local_subnet_id = subnet_test_id(2);
     let remote_canister_id = CanisterId::from_u64(0x101);
-    let remote_canister_subnet_id = subnet_test_id(0x102);
-    let unknown_canister_id = CanisterId::from_u64(0x201);
 
-    // Create replicated state
+    // Create replicated state.
     let scheduler_state = SchedulerState::default();
     let system_state = SystemState::new_running(
         local_canister_id,
@@ -298,14 +447,11 @@ fn push_input_queues_respects_local_remote_subnet() {
         NumSeconds::from(100_000),
     );
     let canister_state = CanisterState::new(system_state, None, scheduler_state);
-    let mut state = ReplicatedState::new_rooted_at(
-        local_canister_subnet_id,
-        SubnetType::Application,
-        "unused".into(),
-    );
+    let mut state =
+        ReplicatedState::new_rooted_at(local_subnet_id, SubnetType::Application, "unused".into());
     state.put_canister_state(canister_state);
 
-    // Assert the queues are empty
+    // Assert the queues are empty.
     assert_eq!(
         state
             .canister_state_mut(&local_canister_id)
@@ -317,22 +463,8 @@ fn push_input_queues_respects_local_remote_subnet() {
     );
     assert_eq!(state.canister_state(&remote_canister_id), None);
 
-    // Populate routing table.
-    let routing_table = RoutingTable::try_from(maplit::btreemap! {
-        CanisterIdRange {
-            start: CanisterId::from(0x00),
-            end: CanisterId::from(0xff),
-        } => local_canister_subnet_id,
-        CanisterIdRange {
-                start: CanisterId::from(0x100),
-                end: CanisterId::from(0x1ff),
-            } => remote_canister_subnet_id
-    })
-    .unwrap();
-    state.metadata.network_topology.routing_table = Arc::new(routing_table);
-
-    // Pushing message from the remote canister, should be in the remote subnet
-    // queue
+    // Push message from the remote canister, should be in the remote subnet
+    // queue.
     state
         .push_input(
             QueueIndex::from(0),
@@ -355,7 +487,8 @@ fn push_input_queues_respects_local_remote_subnet() {
             .len(),
         1
     );
-    // Pushing message from the local canister, should be in the local subnet queue
+
+    // Push message from the local canister, should be in the local subnet queue.
     state
         .push_input(
             QueueIndex::from(0),
@@ -378,12 +511,13 @@ fn push_input_queues_respects_local_remote_subnet() {
             .len(),
         1
     );
-    // Pushing message from unknown canister, should be in the local subnet queue
+
+    // Push message from the local subnet, should be in the local subnet queue.
     state
         .push_input(
             QueueIndex::from(0),
             RequestBuilder::default()
-                .sender(unknown_canister_id)
+                .sender(CanisterId::new(local_subnet_id.get()).unwrap())
                 .receiver(local_canister_id)
                 .build()
                 .into(),

@@ -122,6 +122,7 @@ pub(crate) struct StreamHandlerImpl {
 
     max_canister_memory_size: NumBytes,
     subnet_memory_capacity: NumBytes,
+    subnet_message_memory_capacity: NumBytes,
 
     metrics: StreamHandlerMetrics,
     /// Per-destination-subnet histogram of wall time spent by messages in the
@@ -145,6 +146,7 @@ impl StreamHandlerImpl {
             subnet_id,
             max_canister_memory_size: hypervisor_config.max_canister_memory_size,
             subnet_memory_capacity: hypervisor_config.subnet_memory_capacity,
+            subnet_message_memory_capacity: hypervisor_config.subnet_message_memory_capacity,
             metrics: StreamHandlerMetrics::new(metrics_registry),
             time_in_stream_metrics,
             time_in_backlog_metrics: RefCell::new(LatencyMetrics::new_time_in_backlog(
@@ -334,8 +336,12 @@ impl StreamHandlerImpl {
         mut state: ReplicatedState,
         stream_slices: BTreeMap<SubnetId, StreamSlice>,
     ) -> ReplicatedState {
+        let subnet_available_memory = self.subnet_memory_capacity.get() as i64
+            - state.total_memory_taken_with_messages().get() as i64;
+        let subnet_available_message_memory = self.subnet_message_memory_capacity.get() as i64
+            - state.message_memory_taken().get() as i64;
         let mut subnet_available_memory =
-            self.subnet_memory_capacity.get() as i64 - state.total_memory_taken().get() as i64;
+            subnet_available_memory.min(subnet_available_message_memory);
         let mut streams = state.take_streams();
 
         for (remote_subnet_id, mut stream_slice) in stream_slices {
