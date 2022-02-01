@@ -44,15 +44,17 @@ pub mod v2 {
             }
         }
 
-        /// Given a hierarchy of regions (e.g. "North America,US,San Francisco"), returns the
-        /// reward rates for the most specific region in this hierarchy that has an entry in the
-        /// rewards table.
-        pub fn get(&self, region: &str) -> Option<NodeRewardRates> {
+        /// Given a hierarchy of regions (e.g. "North America,US,San Francisco") and a node type,
+        /// returns the reward rates for the most specific region in this hierarchy that contains
+        /// this node type, if such rates exist.
+        pub fn get_rate(&self, region: &str, node_type: &str) -> Option<NodeRewardRate> {
             let mut sub_regions: Vec<&str> = region.split(',').collect();
             while !sub_regions.is_empty() {
                 let full_region = sub_regions.join(",");
-                if let Some(rates) = self.table.get(&full_region).cloned() {
-                    return Some(rates);
+                if let Some(rates) = self.table.get(&full_region) {
+                    if let Some(rate) = rates.rates.get(node_type) {
+                        return Some(rate.clone());
+                    }
                 }
                 sub_regions.pop();
             }
@@ -69,6 +71,7 @@ pub mod v2 {
         }
     }
 
+    #[cfg(test)]
     mod tests {
         #[allow(unused_imports)]
         use super::*;
@@ -167,7 +170,7 @@ pub mod v2 {
         }
 
         #[test]
-        fn test_get() {
+        fn test_get_rate() {
             let existing_entries = btreemap! {
                 "North America,US,NY".to_string() => NodeRewardRates {
                     rates: btreemap!{
@@ -180,6 +183,9 @@ pub mod v2 {
                     rates: btreemap!{
                         "default".to_string() => NodeRewardRate {
                             xdr_permyriad_per_node_per_month: 677,
+                        },
+                        "type1".to_string() => NodeRewardRate {
+                            xdr_permyriad_per_node_per_month: 456,
                         },
                     }
                 },
@@ -196,16 +202,46 @@ pub mod v2 {
                 table: existing_entries
             };
 
-            assert_eq!(table.get("US,OR"), None);
-            assert_eq!(table.get("US"), None);
-            assert_eq!(table.get("US,NY"), None);
-            assert_eq!(table.get("NY"), None);
+            // There is no entry for "US,OR" or "US"
+            assert_rate(&table, "US,OR", "default", None);
+            assert_rate(&table, "OR", "default", None);
 
-            assert_eq!(table.get("North America,US,NY").unwrap().rates.get("default").unwrap().xdr_permyriad_per_node_per_month, 240);
-            assert_eq!(table.get("North America,US").unwrap().rates.get("default").unwrap().xdr_permyriad_per_node_per_month, 677);
-            assert_eq!(table.get("North America,US,OR").unwrap().rates.get("default").unwrap().xdr_permyriad_per_node_per_month, 677);
-            assert_eq!(table.get("North America,CA,BC").unwrap().rates.get("default").unwrap().xdr_permyriad_per_node_per_month, 801);
-            assert_eq!(table.get("North America").unwrap().rates.get("default").unwrap().xdr_permyriad_per_node_per_month, 801);
+            // There is no entry for "US,NY" or "US"
+            assert_rate(&table, "US,NY", "default", None);
+            assert_rate(&table, "NY", "default", None);
+
+            // There is an entry for "North America,US,NY" that has a "default" rate
+            assert_rate(&table, "North America,US,NY", "default", Some(240));
+
+            // "North America,US,NY" doesn't have a rate for "type1", but "North America,US" does.
+            // Assert that "North America,US"'s "type1" rate is used
+            assert_rate(&table, "North America,US,NY", "type1", Some(456));
+
+            // None of "North America,US,NY", "North America,US" or "North America" has a rate for
+            // "type2"
+            assert_rate(&table, "North America,US,NY", "type2", None);
+
+            // "North America,US" has rates for "default" and "type1"
+            assert_rate(&table, "North America,US", "default", Some(677));
+            assert_rate(&table, "North America,US", "type1", Some(456));
+
+            // There is no "default" rate for "North America,US,OR", but there is one for
+            // "North America,US"
+            assert_rate(&table, "North America,US,OR", "default", Some(677));
+
+            // There is no "default" rate for "North America,CA,BC", but there is one for
+            // "North America"
+            assert_rate(&table, "North America,CA,BC", "default", Some(801));
+
+            // There is a "default" rate for "North America"
+            assert_rate(&table, "North America", "default", Some(801));
+        }
+
+        fn assert_rate(table: &NodeRewardsTable, region: &str, node_type: &str, rate: Option<u64>) {
+            assert_eq!(
+                table.get_rate(region, node_type).map(|rate| rate.xdr_permyriad_per_node_per_month),
+                rate
+            )
         }
     }
 }
