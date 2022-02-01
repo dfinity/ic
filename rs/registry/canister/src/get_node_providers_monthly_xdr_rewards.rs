@@ -55,19 +55,13 @@ impl Registry {
                     .clone();
                 let dc = decode_or_panic::<DataCenterRecord>(dc_record_bytes);
                 let region = &dc.region;
-                let reward_rates = rewards_table.get(region).ok_or_else(|| {
-                    format!(
-                        "The Node Rewards Table does not have an entry for region '{}'",
-                        region
-                    )
-                })?;
 
                 let np_rewards = rewards.rewards.entry(node_provider_id).or_default();
                 for (node_type, node_count) in node_operator.rewardable_nodes {
-                    let rate = reward_rates.rates.get(&node_type).ok_or_else(|| {
+                    let rate = rewards_table.get_rate(region, &node_type).ok_or_else(|| {
                         format!(
                             "The Node Rewards Table does not have an entry for \
-                             node type '{}' in region '{}'",
+                             node type '{}' within region '{}' or parent region",
                             node_type, region
                         )
                     })?;
@@ -111,13 +105,14 @@ mod tests {
         // Add a Node Operator
         let rewardable_nodes_1 = btreemap! {
             "default".to_string() => 4,
+            "type1".to_string() => 1,
         };
 
         let node_operator_payload_1 = AddNodeOperatorPayload {
             node_operator_principal_id: Some(*TEST_USER1_PRINCIPAL),
             node_allowance: 5,
             node_provider_principal_id: Some(*TEST_USER1_PRINCIPAL),
-            dc_id: "AN1".into(),
+            dc_id: "NY1".into(),
             rewardable_nodes: rewardable_nodes_1,
         };
         registry.do_add_node_operator(node_operator_payload_1);
@@ -127,13 +122,13 @@ mod tests {
         let err = registry
             .get_node_providers_monthly_xdr_rewards()
             .unwrap_err();
-        assert_eq!(&err, "Data center ID 'AN1' was not found in the Registry");
+        assert_eq!(&err, "Data center ID 'NY1' was not found in the Registry");
 
         // Add Data Centers
         let data_centers_to_add = vec![
             DataCenterRecord {
-                id: "AN1".into(),
-                region: "BEL".into(),
+                id: "NY1".into(),
+                region: "North America,US,NY".into(),
                 owner: "Alice".into(),
                 gps: None,
             },
@@ -159,12 +154,12 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             &err,
-            "The Node Rewards Table does not have an entry for region 'BEL'"
+            "The Node Rewards Table does not have an entry for node type 'default' within region 'North America,US,NY' or parent region"
         );
 
         // Add regions to rewards table (but an empty map to test failure cases)
         let new_entries = btreemap! {
-            "BEL".to_string() =>  NodeRewardRates {
+            "North America,US".to_string() =>  NodeRewardRates {
                 rates: btreemap!{}
             },
         };
@@ -179,18 +174,31 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             &err,
-            "The Node Rewards Table does not have an entry for node type 'default' in region 'BEL'"
+            "The Node Rewards Table does not have an entry for node type 'default' within region 'North America,US,NY' or parent region"
         );
 
-        // Add the full rewards table
         let new_entries = btreemap! {
-            "BEL".to_string() =>  NodeRewardRates {
+            "North America,US,NY".to_string() => NodeRewardRates {
                 rates: btreemap!{
                     "default".to_string() => NodeRewardRate {
-                        xdr_permyriad_per_node_per_month: 24,
+                        xdr_permyriad_per_node_per_month: 240,
                     },
-                    "small".to_string() => NodeRewardRate {
-                        xdr_permyriad_per_node_per_month: 35,
+                }
+            },
+            "North America,US".to_string() => NodeRewardRates {
+                rates: btreemap!{
+                    "default".to_string() => NodeRewardRate {
+                        xdr_permyriad_per_node_per_month: 677,
+                    },
+                    "type1".to_string() => NodeRewardRate {
+                        xdr_permyriad_per_node_per_month: 456,
+                    },
+                }
+            },
+            "North America".to_string() => NodeRewardRates {
+                rates: btreemap!{
+                    "default".to_string() => NodeRewardRate {
+                        xdr_permyriad_per_node_per_month: 801,
                     },
                 }
             },
@@ -230,7 +238,7 @@ mod tests {
         let np2 = TEST_USER2_PRINCIPAL.to_string();
         let np2_rewards = monthly_rewards.rewards.get(&np2).unwrap();
 
-        assert_eq!(*np1_rewards, 4 * 24);
+        assert_eq!(*np1_rewards, 4 * 240 + 456);
         assert_eq!(*np2_rewards, (11 * 68) + (7 * 11));
     }
 }
