@@ -7485,6 +7485,150 @@ fn test_can_follow_by_subaccount_and_neuron_id() {
 }
 
 #[cfg(feature = "test")]
+#[test]
+fn test_icsup_2627_adjust_neurons_age() {
+    fn icp(amount: u64) -> u64 {
+        amount * 100_000_000
+    }
+
+    let start = 1_643_659_200;
+
+    let mut nns = NNSBuilder::new()
+        .set_block_height(543212234)
+        .set_start_time(start)
+        .with_supply(icp(100_000_000))
+        .add_account_for(principal(1), 100_000_000)
+        .add_neuron(
+            NeuronBuilder::new(1282604741966449439, 501_163_670_057_262, principal(7))
+                .set_dissolve_delay(MAX_DISSOLVE_DELAY_SECONDS)
+                .set_aging_since_timestamp(1641367411),
+        )
+        .add_neuron(
+            NeuronBuilder::new(13082962167835576418, 100_233_130_059_139, principal(6))
+                .set_dissolve_delay(MAX_DISSOLVE_DELAY_SECONDS)
+                .set_aging_since_timestamp(1641367416),
+        )
+        .add_neuron(
+            NeuronBuilder::new(1437542781357538246, 82_145_720_585, principal(1))
+                .set_dissolve_delay(MAX_DISSOLVE_DELAY_SECONDS)
+                .set_aging_since_timestamp(1640221162),
+        )
+        .add_neuron(
+            NeuronBuilder::new(2955073132456583295, 3_369_324_403_828, principal(4))
+                .set_dissolve_delay(MAX_DISSOLVE_DELAY_SECONDS)
+                .set_aging_since_timestamp(1632703935),
+        )
+        .add_neuron(
+            NeuronBuilder::new(4068177791186104626, 2_566_817_533_934, principal(2))
+                .set_dissolve_delay(MAX_DISSOLVE_DELAY_SECONDS)
+                .set_aging_since_timestamp(1628631279),
+        )
+        .add_neuron(
+            NeuronBuilder::new(4093399714311145480, 401_781_153_653_663, principal(9))
+                .set_dissolve_delay(MAX_DISSOLVE_DELAY_SECONDS)
+                .set_aging_since_timestamp(1641370339),
+        )
+        .add_neuron(
+            NeuronBuilder::new(4885915525555188282, 400_929_284_776_337, principal(8))
+                .set_dissolve_delay(MAX_DISSOLVE_DELAY_SECONDS)
+                .set_aging_since_timestamp(1641367405),
+        )
+        .add_neuron(
+            NeuronBuilder::new(6907521781164272364, 112_760_310_626_300, principal(10))
+                .set_dissolve_delay(MAX_DISSOLVE_DELAY_SECONDS)
+                .set_aging_since_timestamp(1641556424),
+        )
+        .add_neuron(
+            NeuronBuilder::new(8151005878770196793, 1_169_171_802_739, principal(3))
+                .set_dissolve_delay(MAX_DISSOLVE_DELAY_SECONDS)
+                .set_aging_since_timestamp(1630117762),
+        )
+        .add_neuron(
+            NeuronBuilder::new(8208398227247016178, 10_753_336_638_386, principal(5))
+                .set_dissolve_delay(MAX_DISSOLVE_DELAY_SECONDS)
+                .set_aging_since_timestamp(1625174104),
+        )
+        .set_economics(NetworkEconomics {
+            neuron_minimum_stake_e8s: 100_000_000,
+            ..Default::default()
+        })
+        .create();
+
+    nns.governance.icsup_2627_adjust_neurons_age();
+
+    assert_changes!(
+        nns,
+        Changed::Changed(vec![NNSStateChange::GovernanceProto(vec![
+            GovernanceChange::Neurons(vec![
+                MapChange::Changed(
+                    1282604741966449439,
+                    vec![NeuronChange::AgingSinceTimestampSeconds(U64Change(
+                        1641367411, 1580955082,
+                    ))],
+                ),
+                MapChange::Changed(
+                    1437542781357538246,
+                    vec![NeuronChange::AgingSinceTimestampSeconds(U64Change(
+                        1640221162, 1639165870,
+                    ))],
+                ),
+                MapChange::Changed(
+                    2955073132456583295,
+                    vec![NeuronChange::AgingSinceTimestampSeconds(U64Change(
+                        1632703935, 1632632769,
+                    ))],
+                ),
+                MapChange::Changed(
+                    4068177791186104626,
+                    vec![
+                        NeuronChange::AgingSinceTimestampSeconds(U64Change(1628631279, 1628598154)),
+                        NeuronChange::MaturityE8SEquivalent(U64Change(0, 224044)),
+                    ],
+                ),
+                MapChange::Changed(
+                    4093399714311145480,
+                    vec![NeuronChange::AgingSinceTimestampSeconds(U64Change(
+                        1641370339, 1581085849,
+                    ))],
+                ),
+                MapChange::Changed(
+                    4885915525555188282,
+                    vec![NeuronChange::AgingSinceTimestampSeconds(U64Change(
+                        1641367405, 1580826450,
+                    ))],
+                ),
+                MapChange::Changed(
+                    6907521781164272364,
+                    vec![
+                        NeuronChange::AgingSinceTimestampSeconds(U64Change(1641556424, 1583479258)),
+                        NeuronChange::MaturityE8SEquivalent(U64Change(0, 1049914606806)),
+                    ],
+                ),
+                MapChange::Changed(
+                    8151005878770196793,
+                    vec![NeuronChange::AgingSinceTimestampSeconds(U64Change(
+                        1630117762, 1630080322,
+                    ))],
+                ),
+                MapChange::Changed(
+                    8208398227247016178,
+                    vec![
+                        NeuronChange::AgingSinceTimestampSeconds(U64Change(1625174104, 1625132333)),
+                        NeuronChange::MaturityE8SEquivalent(U64Change(0, 933602)),
+                    ],
+                ),
+                MapChange::Changed(
+                    13082962167835576418,
+                    vec![NeuronChange::AgingSinceTimestampSeconds(U64Change(
+                        1641367416, 1580955325,
+                    ))],
+                ),
+            ])
+        ])])
+    );
+}
+
+#[cfg(feature = "test")]
 fn assert_merge_maturity_executes_as_expected_new(
     nns: &mut NNS,
     id: &NeuronId,
