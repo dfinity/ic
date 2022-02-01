@@ -4,22 +4,18 @@
 #![allow(dead_code)]
 
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::BTreeMap,
-    convert::TryFrom,
-    ops::{Deref, DerefMut},
-};
+use std::collections::BTreeMap;
 
 pub use crate::consensus::ecdsa_refs::{
-    EcdsaBlockReader, IDkgTranscriptOperationRef, IDkgTranscriptParamsRef,
-    PreSignatureQuadrupleRef, QuadrupleInCreation, RequestId, RequestIdTag,
-    ThresholdEcdsaSigInputsRef, TranscriptLookupError, TranscriptRef,
+    EcdsaBlockReader, IDkgTranscriptOperationRef, IDkgTranscriptParamsRef, MaskedTranscript,
+    PreSignatureQuadrupleRef, QuadrupleInCreation, RandomTranscriptParams, RequestId, RequestIdTag,
+    ReshareOfMaskedParams, ReshareOfUnmaskedParams, ThresholdEcdsaSigInputsRef,
+    TranscriptCastError, TranscriptLookupError, TranscriptRef, UnmaskedTimesMaskedParams,
+    UnmaskedTranscript,
 };
 use crate::consensus::{BasicSignature, MultiSignature, MultiSignatureShare};
 use crate::crypto::{
-    canister_threshold_sig::idkg::{
-        IDkgDealing, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptParams, IDkgTranscriptType,
-    },
+    canister_threshold_sig::idkg::{IDkgDealing, IDkgTranscript, IDkgTranscriptId},
     canister_threshold_sig::{ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigShare},
     CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator,
 };
@@ -71,13 +67,13 @@ pub struct EcdsaDataPayload {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum KeyTranscriptCreation {
     // Configuration to create initial random transcript.
-    RandomTranscriptParams(IDkgTranscriptParamsRef),
+    RandomTranscriptParams(RandomTranscriptParams),
     // Configuration to create initial key transcript by resharing the random transcript.
-    ReshareOfMaskedParams(IDkgTranscriptParamsRef),
+    ReshareOfMaskedParams(ReshareOfMaskedParams),
     // Configuration to create next key transcript by resharing the current key transcript.
-    ReshareOfUnmaskedParams(IDkgTranscriptParamsRef),
+    ReshareOfUnmaskedParams(ReshareOfUnmaskedParams),
     // Created
-    Created(TranscriptRef),
+    Created(UnmaskedTranscript),
 }
 
 impl EcdsaDataPayload {
@@ -90,9 +86,9 @@ impl EcdsaDataPayload {
             self.next_key_transcript_creation
                 .iter()
                 .filter_map(|transcript| match transcript {
-                    KeyTranscriptCreation::RandomTranscriptParams(x) => Some(x),
-                    KeyTranscriptCreation::ReshareOfMaskedParams(x) => Some(x),
-                    KeyTranscriptCreation::ReshareOfUnmaskedParams(x) => Some(x),
+                    KeyTranscriptCreation::RandomTranscriptParams(x) => Some(x.as_ref()),
+                    KeyTranscriptCreation::ReshareOfMaskedParams(x) => Some(x.as_ref()),
+                    KeyTranscriptCreation::ReshareOfUnmaskedParams(x) => Some(x.as_ref()),
                     KeyTranscriptCreation::Created(_) => None,
                 });
         Box::new(
@@ -113,7 +109,7 @@ pub struct EcdsaSummaryPayload {
     pub ongoing_signatures: BTreeMap<RequestId, ThresholdEcdsaSigInputsRef>,
 
     /// The ECDSA key transcript used for the corresponding interval.
-    pub current_key_transcript: TranscriptRef,
+    pub current_key_transcript: UnmaskedTranscript,
 
     /// ECDSA transcript quadruples that we can use to create ECDSA signatures.
     pub available_quadruples: BTreeMap<QuadrupleId, PreSignatureQuadrupleRef>,
@@ -232,109 +228,6 @@ impl From<&EcdsaMessage> for EcdsaMessageAttribute {
         }
     }
 }
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
-pub struct Unmasked<T>(T);
-pub type UnmaskedTranscript = Unmasked<IDkgTranscript>;
-
-impl UnmaskedTranscript {
-    pub fn transcript_id(&self) -> IDkgTranscriptId {
-        self.0.transcript_id
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
-pub struct TranscriptCastError {
-    pub transcript_id: IDkgTranscriptId,
-    pub from_type: IDkgTranscriptType,
-    pub expected_type: &'static str,
-}
-
-impl TryFrom<IDkgTranscript> for UnmaskedTranscript {
-    type Error = TranscriptCastError;
-    fn try_from(transcript: IDkgTranscript) -> Result<Self, Self::Error> {
-        match transcript.transcript_type {
-            IDkgTranscriptType::Unmasked(_) => Ok(Unmasked(transcript)),
-            _ => Err(TranscriptCastError {
-                transcript_id: transcript.transcript_id,
-                from_type: transcript.transcript_type,
-                expected_type: "Unmasked",
-            }),
-        }
-    }
-}
-
-impl From<UnmaskedTranscript> for IDkgTranscript {
-    fn from(unmasked: UnmaskedTranscript) -> Self {
-        unmasked.0
-    }
-}
-
-impl<T> Deref for Unmasked<T> {
-    type Target = T;
-
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T> DerefMut for Unmasked<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
-pub struct Masked<T>(T);
-pub type MaskedTranscript = Masked<IDkgTranscript>;
-
-impl MaskedTranscript {
-    pub fn transcript_id(&self) -> IDkgTranscriptId {
-        self.0.transcript_id
-    }
-}
-
-impl TryFrom<IDkgTranscript> for MaskedTranscript {
-    type Error = TranscriptCastError;
-    fn try_from(transcript: IDkgTranscript) -> Result<Self, Self::Error> {
-        match transcript.transcript_type {
-            IDkgTranscriptType::Masked(_) => Ok(Masked(transcript)),
-            _ => Err(TranscriptCastError {
-                transcript_id: transcript.transcript_id,
-                from_type: transcript.transcript_type,
-                expected_type: "Unmasked",
-            }),
-        }
-    }
-}
-
-impl From<MaskedTranscript> for IDkgTranscript {
-    fn from(masked: MaskedTranscript) -> IDkgTranscript {
-        masked.0
-    }
-}
-
-impl<T> Deref for Masked<T> {
-    type Target = T;
-
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T> DerefMut for Masked<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
-    }
-}
-
-pub type RandomTranscriptParams = IDkgTranscriptParams;
-pub type ReshareOfMaskedParams = IDkgTranscriptParams;
-pub type ReshareOfUnmaskedParams = IDkgTranscriptParams;
-pub type UnmaskedTimesMaskedParams = IDkgTranscriptParams;
-
-//pub struct RequestIdTag;
-//pub type RequestId = Id<RequestIdTag, Vec<u8>>;
 
 #[allow(missing_docs)]
 /// Mock module of the crypto types that are needed by consensus for threshold
