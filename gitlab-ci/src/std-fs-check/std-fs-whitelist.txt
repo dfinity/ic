@@ -70,8 +70,6 @@ registry/admin/src/main.rs:    convert::TryFrom,
 registry/admin/src/main.rs:    fs::{metadata, read_to_string, File},
 registry/admin/src/main.rs:use std::{
 registry/regedit/src/args.rs:use std::{collections::HashSet, fs::File, io::BufReader, path::PathBuf};
-release/src/release.rs:use std::fs::{self, File};
-release/src/release.rs:use std::os::unix::fs::PermissionsExt;
 replay/src/backup.rs:    collections::{BTreeMap, BTreeSet},
 replay/src/backup.rs:    convert::TryFrom,
 replay/src/backup.rs:    fs,

@@ -5377,25 +5377,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-release"
-version = "0.8.0"
-dependencies = [
- "assert_matches",
- "flate2",
- "hex",
- "ic-crypto-sha",
- "ic-types 0.8.0",
- "phantom_newtype",
- "rand 0.7.3",
- "serde",
- "serde_json",
- "structopt",
- "tar",
- "tempfile",
- "url",
-]
-
-[[package]]
 name = "ic-replay"
 version = "0.8.0"
 dependencies = [
@@ -5731,7 +5712,6 @@ dependencies = [
  "ic-registry-routing-table",
  "ic-registry-subnet-type",
  "ic-registry-transport",
- "ic-release",
  "ic-state-manager",
  "ic-test-identity",
  "ic-test-utilities",

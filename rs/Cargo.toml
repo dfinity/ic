@@ -116,7 +116,6 @@ members = [
   "registry/subnet_features",
   "registry/subnet_type",
   "registry/transport",
-  "release",
   "replica",
   "replica_tests",
   "replicated_state",
