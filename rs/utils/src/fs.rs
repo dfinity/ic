@@ -2,11 +2,7 @@ use std::ffi::{OsStr, OsString};
 use std::{fs, io, io::Error, io::ErrorKind::AlreadyExists, path::Path, path::PathBuf};
 
 #[cfg(target_family = "unix")]
-use std::{fs::File, io::Write};
-
-/// The character length of the random string used for temporary file names.
-#[cfg(target_family = "unix")]
-const TMP_NAME_LEN: usize = 7;
+use std::io::Write;
 
 /// Represents an action that should be run when this objects runs out of scope,
 /// unless it's explicitly deactivated.
@@ -81,7 +77,7 @@ pub fn write_atomically_using_tmp_file<PDst, PTmp, F>(
     action: F,
 ) -> io::Result<()>
 where
-    F: FnOnce(&mut io::BufWriter<&fs::File>) -> io::Result<()>,
+    F: FnOnce(&mut io::BufWriter<&std::fs::File>) -> io::Result<()>,
     PDst: AsRef<Path>,
     PTmp: AsRef<Path>,
 {
@@ -192,7 +188,7 @@ pub fn copy_file_sparse(from: &Path, to: &Path) -> io::Result<u64> {
         )
     }
 
-    let mut reader = File::open(from)?;
+    let mut reader = std::fs::File::open(from)?;
 
     let (mode, len) = {
         let metadata = reader.metadata()?;
@@ -363,7 +359,7 @@ pub fn copy_file_sparse(from: &Path, to: &Path) -> io::Result<u64> {
 #[cfg(target_family = "unix")]
 pub fn write_atomically<PDst, F>(dst: PDst, action: F) -> io::Result<()>
 where
-    F: FnOnce(&mut io::BufWriter<&fs::File>) -> io::Result<()>,
+    F: FnOnce(&mut io::BufWriter<&std::fs::File>) -> io::Result<()>,
     PDst: AsRef<Path>,
 {
     // `.parent()` returns `None` for either `/` or a prefix (e.g. 'c:\\` on
@@ -429,7 +425,7 @@ where
 /// Create and open a file exclusively with the given name.
 ///
 /// If the file already exists, attempt to remove the file and retry.
-fn create_file_exclusive_and_open<P>(f: P) -> io::Result<fs::File>
+fn create_file_exclusive_and_open<P>(f: P) -> io::Result<std::fs::File>
 where
     P: AsRef<Path>,
 {
@@ -472,7 +468,7 @@ where
 pub fn write_using_tmp_file<P, F>(dest: P, action: F) -> io::Result<()>
 where
     P: AsRef<Path>,
-    F: FnOnce(&mut io::BufWriter<&fs::File>) -> io::Result<()>,
+    F: FnOnce(&mut io::BufWriter<&std::fs::File>) -> io::Result<()>,
 {
     let dest_tmp = get_tmp_for_path(&dest);
 
@@ -493,6 +489,9 @@ where
 
 #[cfg(target_family = "unix")]
 fn tmp_name() -> String {
+    /// The character length of the random string used for temporary file names.
+    const TMP_NAME_LEN: usize = 7;
+
     use rand::{distributions::Alphanumeric, Rng};
 
     let mut rng = rand::thread_rng();
