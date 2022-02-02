@@ -450,6 +450,8 @@ enum NnsFunction {
   NNS_FUNCTION_UPDATE_UNASSIGNED_NODES_CONFIG = 22;
   // Remove Node Operator from the registry.
   NNS_FUNCTION_REMOVE_NODE_OPERATORS = 23;
+  // Update the routing table in the registry.
+  NNS_FUNCTION_REROUTE_CANISTER_RANGE = 24;
 }
 
 // Payload of a proposal that calls a function on another NNS
