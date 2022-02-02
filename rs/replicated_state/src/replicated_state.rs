@@ -23,6 +23,8 @@ use ic_types::{
     xnet::QueueId,
     CanisterId, MemoryAllocation, NumBytes, QueueIndex, SubnetId, Time,
 };
+use rand::{Rng, SeedableRng};
+use rand_chacha::ChaChaRng;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, VecDeque};
 use std::path::{Path, PathBuf};
@@ -112,15 +114,20 @@ struct OutputIterator<'a> {
 
 impl<'a> OutputIterator<'a> {
     fn new(
-        own_subnet_id: SubnetId,
         canisters: &'a mut BTreeMap<CanisterId, CanisterState>,
         subnet_queues: &'a mut CanisterQueues,
+        own_subnet_id: SubnetId,
+        seed: u64,
     ) -> Self {
         let mut canister_iterators: VecDeque<_> = canisters
             .iter_mut()
             .map(|(owner, canister)| canister.system_state.output_into_iter(*owner))
             .filter(|handle| !handle.is_empty())
             .collect();
+
+        let mut rng = ChaChaRng::seed_from_u64(seed);
+        let rotation = rng.gen_range(0, canister_iterators.len().max(1));
+        canister_iterators.rotate_left(rotation as usize);
 
         // Push the subnet queues in front in order to make sure that at least one
         // system message is always routed as long as there is space for it.
@@ -622,11 +629,17 @@ impl ReplicatedState {
     /// in the state.
     pub fn output_into_iter(&mut self) -> impl PeekableOutputIterator + '_ {
         let own_subnet_id = self.metadata.own_subnet_id;
+        let time = self.metadata.time();
 
         OutputIterator::new(
-            own_subnet_id,
             &mut self.canister_states,
             &mut self.subnet_queues,
+            own_subnet_id,
+            // We seed the output iterator with the time. We can do this because
+            // we don't need unpredictability of the rotation, and we accept that
+            // in case the same time is passed in two consecutive batches we
+            // rotate by the same amount for now.
+            time.as_nanos_since_unix_epoch(),
         )
     }
 

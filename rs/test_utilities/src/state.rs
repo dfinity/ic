@@ -806,10 +806,31 @@ prop_compose! {
         max_requests_per_canister: usize,
         max_receivers: Option<usize>,
     ) (
+        time in 1..1000_u64,
         request_queues in prop::collection::vec(prop::collection::vec(arbitrary::request(), 0..=max_requests_per_canister), 0..=max_canisters),
         num_receivers in arb_num_receivers(max_receivers)
     ) -> (ReplicatedState, VecDeque<VecDeque<RequestOrResponse>>, usize) {
-        new_replicated_state_for_test(own_subnet_id, request_queues, num_receivers)
+        use rand::{Rng, SeedableRng};
+        use rand_chacha::ChaChaRng;
+
+        let (mut replicated_state, mut raw_requests, total_requests) = new_replicated_state_for_test(own_subnet_id, request_queues, num_receivers);
+
+        // We pseudorandomly rotate the queues to match the rotation applied by the iterator.
+        // Note that subnet queues are always at the front which is why we need to pop them
+        // before the rotation and push them to the front afterwards.
+        let subnet_queue_requests = raw_requests.pop_front();
+        let mut raw_requests : VecDeque<_> = raw_requests.into_iter().filter(|requests| !requests.is_empty()).collect();
+
+        replicated_state.metadata.batch_time = Time::from_nanos_since_unix_epoch(time);
+        let mut rng = ChaChaRng::seed_from_u64(time);
+        let rotation = rng.gen_range(0, raw_requests.len().max(1));
+        raw_requests.rotate_left(rotation);
+
+        if let Some(requests) = subnet_queue_requests {
+            raw_requests.push_front(requests);
+        }
+
+        (replicated_state, raw_requests, total_requests)
     }
 }
 

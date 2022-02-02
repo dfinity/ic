@@ -588,8 +588,8 @@ proptest! {
     }
 
     #[test]
-    fn iter_yelds_correct_elements(
-       (mut replicated_state, mut raw_requests, _total_requests) in arb_replicated_state_with_queues(SUBNET_ID, 20, 20, None)
+    fn iter_yields_correct_elements(
+       (mut replicated_state, mut raw_requests, _total_requests) in arb_replicated_state_with_queues(SUBNET_ID, 20, 20, None),
     ) {
         let mut output_iter = replicated_state.output_into_iter();
 
@@ -615,7 +615,7 @@ proptest! {
     }
 
     #[test]
-    fn iter_with_ignore_yelds_correct_elements(
+    fn iter_with_ignore_yields_correct_elements(
        (mut replicated_state, mut raw_requests, total_requests) in arb_replicated_state_with_queues(SUBNET_ID, 10, 10, None),
         start in 0..=1,
         ignore_step in 2..=5,

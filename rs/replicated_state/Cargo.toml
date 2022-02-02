@@ -22,6 +22,8 @@ lazy_static = "1.4.0"
 libc = "0.2.91"
 maplit = "1.0.2"
 nix = "0.23.0"
+rand = "0.7.3"
+rand_chacha = "0.2.2"
 phantom_newtype = { path = "../phantom_newtype" }
 serde = { version = "1.0.99", features = [ "derive" ] }
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
