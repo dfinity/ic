@@ -272,7 +272,7 @@ pub fn dummy_sig_inputs_for_tests(caller: PrincipalId) -> ThresholdEcdsaSigInput
 
     let derivation_path = ExtendedDerivationPath {
         caller,
-        bip32_derivation_path: vec![],
+        derivation_path: vec![],
     };
     ThresholdEcdsaSigInputs::new(
         &derivation_path,

@@ -287,9 +287,14 @@ pub fn privately_verify_dealing(
 
 impl From<&ExtendedDerivationPath> for DerivationPath {
     fn from(extended_derivation_path: &ExtendedDerivationPath) -> Self {
-        Self::new_with_principal(
-            extended_derivation_path.caller,
-            &extended_derivation_path.bip32_derivation_path,
+        // We use generalized derivation for all path bytestrings after prepending
+        // the caller's principal. It means only big-endian encoded 4-byte values
+        // less than 2^31 are compatible with BIP-32 non-hardened derivation path.
+        Self::new_arbitrary(
+            std::iter::once(extended_derivation_path.caller.to_vec())
+                .chain(extended_derivation_path.derivation_path.clone().into_iter())
+                .map(key_derivation::DerivationIndex::Generalized)
+                .collect::<Vec<_>>(),
         )
     }
 }

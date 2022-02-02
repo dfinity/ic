@@ -541,7 +541,7 @@ pub(crate) mod test_utils {
         let sig_inputs_ref = ThresholdEcdsaSigInputsRef::new(
             ExtendedDerivationPath {
                 caller: PrincipalId::try_from(&vec![caller]).unwrap(),
-                bip32_derivation_path: vec![],
+                derivation_path: vec![],
             },
             vec![],
             Randomness::from([0_u8; 32]),

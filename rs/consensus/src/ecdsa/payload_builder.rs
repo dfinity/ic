@@ -945,20 +945,9 @@ fn build_signature_inputs(
     quadruple_ref: &ecdsa::PreSignatureQuadrupleRef,
     key_transcript_ref: &ecdsa::UnmaskedTranscript,
 ) -> ecdsa::ThresholdEcdsaSigInputsRef {
-    // TODO: decide the appropriate conversion
-    fn from_le_bytes(arr: &[u8]) -> Vec<u32> {
-        let len = arr.len() / 4;
-        let mut result = Vec::with_capacity(len);
-        for i in 0..len {
-            let mut dst = [0, 0, 0, 0];
-            dst.copy_from_slice(&arr[(i * 4)..(i * 4 + 4)]);
-            result.push(u32::from_le_bytes(dst));
-        }
-        result
-    }
     let extended_derivation_path = ExtendedDerivationPath {
         caller: context.request.sender.into(),
-        bip32_derivation_path: from_le_bytes(&context.derivation_path),
+        derivation_path: vec![context.derivation_path.clone()],
     };
     ecdsa::ThresholdEcdsaSigInputsRef::new(
         extended_derivation_path,
