@@ -1,7 +1,11 @@
 use std::ffi::{OsStr, OsString};
-use std::{fs, fs::File, io, io::Error, io::Write, path::Path, path::PathBuf};
+use std::{fs, io, io::Error, io::ErrorKind::AlreadyExists, path::Path, path::PathBuf};
+
+#[cfg(target_family = "unix")]
+use std::{fs::File, io::Write};
 
 /// The character length of the random string used for temporary file names.
+#[cfg(target_family = "unix")]
 const TMP_NAME_LEN: usize = 7;
 
 /// Represents an action that should be run when this objects runs out of scope,
@@ -167,10 +171,7 @@ pub fn copy_file_sparse(from: &Path, to: &Path) -> io::Result<u64> {
     use fs::OpenOptions;
     use io::{ErrorKind, Read};
     use libc::{ftruncate64, lseek64};
-    use std::os::unix::{
-        fs::{OpenOptionsExt, PermissionsExt},
-        io::AsRawFd,
-    };
+    use std::os::unix::{fs::OpenOptionsExt, fs::PermissionsExt, io::AsRawFd};
 
     unsafe fn copy_file_range(
         fd_in: libc::c_int,
@@ -399,6 +400,7 @@ where
     path.as_ref().with_extension(extension)
 }
 
+#[cfg(any(target_family = "unix"))]
 /// Write the given string to file `dest` in a crash-safe mannger
 pub fn write_string_using_tmp_file<P>(dest: P, content: &str) -> io::Result<()>
 where
@@ -407,6 +409,7 @@ where
     write_using_tmp_file(dest, |f| f.write_all(content.as_bytes()))
 }
 
+#[cfg(any(target_family = "unix"))]
 /// Serialize given protobuf message to file `dest` in a crash-safe manner
 pub fn write_protobuf_using_tmp_file<P>(dest: P, message: &impl prost::Message) -> io::Result<()>
 where
@@ -422,11 +425,42 @@ where
     })
 }
 
+#[cfg(any(target_family = "unix"))]
+/// Create and open a file exclusively with the given name.
+///
+/// If the file already exists, attempt to remove the file and retry.
+fn create_file_exclusive_and_open<P>(f: P) -> io::Result<fs::File>
+where
+    P: AsRef<Path>,
+{
+    loop {
+        // Important is to use create_new, which on Unix uses O_CREATE | O_EXCL
+        // https://github.com/rust-lang/rust/blob/5ab502c6d308b0ccac8127c0464e432334755a60/library/std/src/sys/unix/fs.rs#L774
+        let file = fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(f.as_ref());
+
+        match file {
+            Err(ref e) if e.kind() == AlreadyExists => {
+                std::fs::remove_file(f.as_ref())?;
+            }
+            Err(e) => {
+                return Err(e);
+            }
+            Ok(f) => {
+                return Ok(f);
+            }
+        }
+    }
+}
+
+#[cfg(any(target_family = "unix"))]
 /// Write to file `dest` using `action` in a crash-safe manner
 ///
-/// A new temporary file `dest.tmp` will be created (and truncated if it
-/// already exists). The file will then be opened and `action` executed with
-/// the BufWriter to that file.
+/// A new temporary file `dest.tmp` will be created. If it already exists,
+/// it will be deleted first. The file will be opened in exclusive mode
+/// and `action` executed with the BufWriter to that file.
 ///
 /// The buffer and file will then be fsynced followed by renaming the
 /// `dest.tmp` to `dest`. Target file `dest` will be overwritten in that
@@ -443,7 +477,7 @@ where
     let dest_tmp = get_tmp_for_path(&dest);
 
     {
-        let file = File::create(dest_tmp.as_path())?;
+        let file = create_file_exclusive_and_open(&dest_tmp)?;
         let mut w = io::BufWriter::new(&file);
         action(&mut w)?;
         w.flush()?;
