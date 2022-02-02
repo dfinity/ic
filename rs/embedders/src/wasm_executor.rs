@@ -14,8 +14,8 @@ use crate::{
     wasmtime_embedder::WasmtimeInstance,
     WasmExecutionInput, WasmExecutionOutput, WasmtimeEmbedder,
 };
+use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
-use ic_config::{embedders::Config as EmbeddersConfig, embedders::PersistenceType};
 use ic_interfaces::execution_environment::{
     ExecutionParameters, HypervisorError, HypervisorResult, InstanceStats, SystemApi,
 };
@@ -144,11 +144,7 @@ impl WasmExecutor {
         }
     }
 
-    pub fn compile(
-        &self,
-        wasm_binary: &BinaryEncodedWasm,
-        persistence_type: PersistenceType,
-    ) -> HypervisorResult<EmbedderCache> {
+    pub fn compile(&self, wasm_binary: &BinaryEncodedWasm) -> HypervisorResult<EmbedderCache> {
         let _timer = self.metrics.compile.start_timer();
         validate_wasm_binary(wasm_binary, &self.config)
             .map_err(HypervisorError::from)
@@ -161,7 +157,7 @@ impl WasmExecutor {
                 self.observe_metrics(&details.imports_details);
                 instrument(wasm_binary, &InstructionCostTable::new()).map_err(HypervisorError::from)
             })
-            .and_then(|output| self.wasm_embedder.compile(persistence_type, &output.binary))
+            .and_then(|output| self.wasm_embedder.compile(&output.binary))
     }
 
     fn get_embedder_cache(&self, wasm_binary: &WasmBinary) -> HypervisorResult<EmbedderCache> {
@@ -173,7 +169,7 @@ impl WasmExecutor {
             // instrumented so instrument it before compiling. Further, due to
             // IC upgrades, it is possible that the `validate_wasm_binary()`
             // function has changed, so also validate the binary.
-            match self.compile(&wasm_binary.binary, PersistenceType::Sigsegv) {
+            match self.compile(&wasm_binary.binary) {
                 Ok(cache) => {
                     *guard = Some(cache.clone());
                     Ok(cache)
@@ -412,7 +408,7 @@ pub fn process(
         embedder_cache,
         globals,
         wasm_memory.size,
-        Some(wasm_memory.page_map.clone()),
+        wasm_memory.page_map.clone(),
         modification_tracking,
         system_api,
     ) {
@@ -537,7 +533,7 @@ pub fn get_initial_globals_and_memory(
         embedder_cache,
         &[],
         NumWasmPages::from(0),
-        Some(wasm_page_map.clone()),
+        wasm_page_map.clone(),
         ModificationTracking::Ignore,
         system_api,
     ) {

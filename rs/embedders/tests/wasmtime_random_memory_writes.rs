@@ -1,4 +1,4 @@
-use ic_config::embedders::{Config, PersistenceType};
+use ic_config::embedders::Config;
 use ic_embedders::wasm_utils::instrumentation::{instrument, InstructionCostTable};
 use ic_embedders::WasmtimeEmbedder;
 use ic_interfaces::execution_environment::{
@@ -212,14 +212,9 @@ mod tests {
             // We will perform identical writes to wasm module's heap and this buffer.
             let mut test_heap = vec![0; TEST_HEAP_SIZE_BYTES];
             // Use SIGSEGV tracking and later compare against /proc/pic/pagemap.
-            let config = Config {
-                persistence_type: PersistenceType::Sigsegv,
-                ..Default::default()
-            };
+            let config = Config::default();
             let embedder = WasmtimeEmbedder::new(config, log);
-            let embedder_cache = embedder
-                .compile(PersistenceType::Sigsegv, &output_instrumentation.binary)
-                .unwrap();
+            let embedder_cache = embedder.compile(&output_instrumentation.binary).unwrap();
             let mut page_map = PageMap::default();
             let mut dirty_pages: BTreeSet<u64> = BTreeSet::new();
 
@@ -236,7 +231,7 @@ mod tests {
                         &embedder_cache,
                         &[],
                         NumWasmPages::from(0),
-                        Some(page_map.clone()),
+                        page_map.clone(),
                         modification_tracking,
                         api,
                     )
@@ -374,12 +369,10 @@ mod tests {
             let mut inst = embedder
                 .new_instance(
                     canister_test_id(1),
-                    &embedder
-                        .compile(PersistenceType::Sigsegv, &output_instrumentation.binary)
-                        .unwrap(),
+                    &embedder.compile(&output_instrumentation.binary).unwrap(),
                     &[],
                     NumWasmPages::from(0),
-                    Some(PageMap::default()),
+                    PageMap::default(),
                     ModificationTracking::Ignore,
                     api,
                 )
@@ -583,23 +576,17 @@ mod tests {
         let wat = make_module_wat(2 * TEST_NUM_PAGES);
         let wasm = wat2wasm(&wat).unwrap();
 
-        let config = Config {
-            persistence_type: PersistenceType::Sigsegv,
-            ..Default::default()
-        };
-
+        let config = Config::default();
         let embedder = WasmtimeEmbedder::new(config, log.clone());
         let output_instrumentation = instrument(&wasm, &InstructionCostTable::new()).unwrap();
         let api = test_api_for_update(log, None, payload, subnet_type);
         let mut inst = embedder
             .new_instance(
                 canister_test_id(1),
-                &embedder
-                    .compile(PersistenceType::Sigsegv, &output_instrumentation.binary)
-                    .unwrap(),
+                &embedder.compile(&output_instrumentation.binary).unwrap(),
                 &[],
                 NumWasmPages::from(0),
-                Some(PageMap::default()),
+                PageMap::default(),
                 ModificationTracking::Track,
                 api,
             )

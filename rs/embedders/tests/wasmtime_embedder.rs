@@ -1,4 +1,3 @@
-use ic_config::embedders::PersistenceType;
 use ic_embedders::{
     wasm_utils::instrumentation::{instrument, InstructionCostTable},
     WasmtimeEmbedder,
@@ -7,7 +6,7 @@ use ic_interfaces::execution_environment::{
     ExecutionMode, ExecutionParameters, SubnetAvailableMemory,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{Global, NumWasmPages};
+use ic_replicated_state::{Global, NumWasmPages, PageMap};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder, mock_time, state::SystemStateBuilder,
     types::ids::user_test_id,
@@ -73,9 +72,7 @@ mod tests {
         let output =
             instrument(&BinaryEncodedWasm::new(wasm), &InstructionCostTable::new()).unwrap();
 
-        let compiled = embedder
-            .compile(PersistenceType::Sigsegv, &output.binary)
-            .expect("compiled");
+        let compiled = embedder.compile(&output.binary).expect("compiled");
 
         let user_id = ic_test_utilities::types::ids::user_test_id(24);
 
@@ -98,7 +95,7 @@ mod tests {
                 &compiled,
                 &[],
                 ic_replicated_state::NumWasmPages::from(0),
-                None,
+                PageMap::default(),
                 ModificationTracking::Track,
                 api,
             )
@@ -144,10 +141,7 @@ mod tests {
         let embedder = WasmtimeEmbedder::new(ic_config::embedders::Config::default(), log.clone());
 
         let compiled = embedder
-            .compile(
-                PersistenceType::Sigsegv,
-                &ic_wasm_types::BinaryEncodedWasm::new(wasm),
-            )
+            .compile(&ic_wasm_types::BinaryEncodedWasm::new(wasm))
             .expect("compiled");
 
         let user_id = ic_test_utilities::types::ids::user_test_id(24);
@@ -171,7 +165,7 @@ mod tests {
                 &compiled,
                 &[],
                 ic_replicated_state::NumWasmPages::from(0),
-                None,
+                PageMap::default(),
                 ModificationTracking::Track,
                 api,
             )
@@ -217,10 +211,7 @@ mod tests {
         let embedder = WasmtimeEmbedder::new(ic_config::embedders::Config::default(), log.clone());
 
         let compiled = embedder
-            .compile(
-                PersistenceType::Sigsegv,
-                &ic_wasm_types::BinaryEncodedWasm::new(wasm),
-            )
+            .compile(&ic_wasm_types::BinaryEncodedWasm::new(wasm))
             .expect("compiled");
 
         let user_id = ic_test_utilities::types::ids::user_test_id(24);
@@ -244,7 +235,7 @@ mod tests {
                 &compiled,
                 &[],
                 ic_replicated_state::NumWasmPages::from(0),
-                None,
+                PageMap::default(),
                 ModificationTracking::Track,
                 api,
             )
@@ -305,10 +296,10 @@ mod tests {
         let mut inst = embedder
             .new_instance(
                 canister_test_id(1),
-                &embedder.compile(PersistenceType::Sigsegv, wasm).unwrap(),
+                &embedder.compile(wasm).unwrap(),
                 &[],
                 NumWasmPages::from(0),
-                None,
+                PageMap::default(),
                 ModificationTracking::Track,
                 api,
             )
@@ -337,10 +328,10 @@ mod tests {
         let mut inst = embedder
             .new_instance(
                 canister_test_id(1),
-                &embedder.compile(PersistenceType::Sigsegv, wasm).unwrap(),
+                &embedder.compile(wasm).unwrap(),
                 &[Global::I64(5), Global::I32(12)],
                 NumWasmPages::from(0),
-                None,
+                PageMap::default(),
                 ModificationTracking::Track,
                 api,
             )
@@ -386,10 +377,10 @@ mod tests {
         let mut inst = embedder
             .new_instance(
                 canister_test_id(1),
-                &embedder.compile(PersistenceType::Sigsegv, wasm).unwrap(),
+                &embedder.compile(wasm).unwrap(),
                 &[],
                 NumWasmPages::from(0),
-                None,
+                PageMap::default(),
                 ModificationTracking::Track,
                 api,
             )
@@ -420,10 +411,10 @@ mod tests {
         let mut inst = embedder
             .new_instance(
                 canister_test_id(1),
-                &embedder.compile(PersistenceType::Sigsegv, wasm).unwrap(),
+                &embedder.compile(wasm).unwrap(),
                 &[Global::F64(5.3), Global::F32(12.37)],
                 NumWasmPages::from(0),
-                None,
+                PageMap::default(),
                 ModificationTracking::Track,
                 api,
             )
@@ -467,10 +458,10 @@ mod tests {
         embedder
             .new_instance(
                 canister_test_id(1),
-                &embedder.compile(PersistenceType::Sigsegv, wasm).unwrap(),
+                &embedder.compile(wasm).unwrap(),
                 &[Global::I64(5), Global::I64(12)],
                 NumWasmPages::from(0),
-                None,
+                PageMap::default(),
                 ModificationTracking::Track,
                 api,
             )
@@ -512,10 +503,10 @@ mod tests {
         embedder
             .new_instance(
                 canister_test_id(1),
-                &embedder.compile(PersistenceType::Sigsegv, wasm).unwrap(),
+                &embedder.compile(wasm).unwrap(),
                 &[Global::I64(0); DEFAULT_GLOBALS_LENGTH + 1].to_vec(),
                 NumWasmPages::from(0),
-                None,
+                PageMap::default(),
                 ModificationTracking::Track,
                 api,
             )

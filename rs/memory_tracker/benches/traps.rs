@@ -1,5 +1,4 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use ic_config::embedders::PersistenceType;
 use memory_tracker::*;
 
 use libc::{self, c_void};
@@ -20,7 +19,7 @@ lazy_static! {
 struct BenchData {
     ptr: *mut c_void,
     tracker: SigsegvMemoryTracker,
-    page_map: Option<PageMap>,
+    page_map: PageMap,
 }
 
 /// Test the first execution of the sigsegv handler for a memory address.
@@ -49,15 +48,14 @@ fn criterion_fault_handler_sim_read(criterion: &mut Criterion) {
                 BenchData {
                     ptr,
                     tracker: SigsegvMemoryTracker::new(
-                        PersistenceType::Sigsegv,
                         ptr,
                         PAGE_SIZE,
                         no_op_logger(),
                         DirtyPageTracking::Track,
-                        Some(page_map.clone()),
+                        page_map.clone(),
                     )
                     .unwrap(),
-                    page_map: Some(page_map),
+                    page_map,
                 }
             },
             // Do the actual measurement
@@ -98,15 +96,14 @@ fn criterion_fault_handler_sim_write(criterion: &mut Criterion) {
                 let data = BenchData {
                     ptr,
                     tracker: SigsegvMemoryTracker::new(
-                        PersistenceType::Sigsegv,
                         ptr,
                         PAGE_SIZE,
                         no_op_logger(),
                         DirtyPageTracking::Track,
-                        Some(page_map.clone()),
+                        page_map.clone(),
                     )
                     .unwrap(),
-                    page_map: Some(page_map),
+                    page_map,
                 };
 
                 sigsegv_fault_handler_old(&data.tracker, &data.page_map, data.ptr);

@@ -1,6 +1,5 @@
 use super::SessionNonce;
 use crate::{num_bytes_try_from, NumWasmPages, PageMap};
-use ic_config::embedders::PersistenceType;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::canister_state_bits::v1 as pb,
@@ -423,11 +422,6 @@ impl ExecutionState {
     /// Returns the number of global variables in the Wasm module.
     pub fn num_wasm_globals(&self) -> usize {
         self.exported_globals.len()
-    }
-
-    /// Returns the persistence type associated with this state.
-    pub fn persistence_type(&self) -> PersistenceType {
-        PersistenceType::Sigsegv
     }
 }
 

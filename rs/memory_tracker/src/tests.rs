@@ -1,6 +1,5 @@
 use std::{io::Write, ops::Range};
 
-use ic_config::embedders::PersistenceType;
 use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::{PageIndex, PageMap};
 use ic_sys::{PageBytes, PAGE_SIZE};
@@ -50,12 +49,11 @@ fn with_setup<F>(
     };
 
     let tracker = SigsegvMemoryTracker::new(
-        PersistenceType::Sigsegv,
         memory,
         memory_pages * PAGE_SIZE,
         no_op_logger(),
         dirty_page_tracking,
-        Some(page_map.clone()),
+        page_map.clone(),
     )
     .unwrap();
     f(tracker, page_map);

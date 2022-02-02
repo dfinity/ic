@@ -14,7 +14,7 @@ use wasmtime::{unix::StoreExt, Memory, Mutability, Store, Val, ValType};
 
 use host_memory::MmapMemoryCreator;
 pub use host_memory::WasmtimeMemoryCreator;
-use ic_config::embedders::{Config as EmbeddersConfig, PersistenceType};
+use ic_config::embedders::Config as EmbeddersConfig;
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, InstanceStats, SystemApi, TrapCode,
 };
@@ -122,27 +122,15 @@ impl WasmtimeEmbedder {
         }
     }
 
-    pub fn compile(
-        &self,
-        persistence_type: PersistenceType,
-        wasm_binary: &BinaryEncodedWasm,
-    ) -> HypervisorResult<EmbedderCache> {
+    pub fn compile(&self, wasm_binary: &BinaryEncodedWasm) -> HypervisorResult<EmbedderCache> {
         let mut config = wasmtime::Config::default();
         ensure_determinism(&mut config);
-        match persistence_type {
-            PersistenceType::Sigsegv => {
-                let raw_creator = MmapMemoryCreator {};
-                let mem_creator = Arc::new(WasmtimeMemoryCreator::new(
-                    raw_creator,
-                    Arc::clone(&self.created_memories),
-                ));
-                config.with_host_memory(mem_creator);
-            }
-            PersistenceType::Pagemap => {
-                // TODO(EXC-750): Remove PersistenceType and this branch.
-                unreachable!("Invalid PersistenceType")
-            }
-        };
+        let raw_creator = MmapMemoryCreator {};
+        let mem_creator = Arc::new(WasmtimeMemoryCreator::new(
+            raw_creator,
+            Arc::clone(&self.created_memories),
+        ));
+        config.with_host_memory(mem_creator);
 
         config
             // maximum size in bytes where a linear memory is considered
@@ -174,7 +162,7 @@ impl WasmtimeEmbedder {
         cache: &EmbedderCache,
         exported_globals: &[Global],
         heap_size: NumWasmPages,
-        page_map: Option<PageMap>,
+        page_map: PageMap,
         modification_tracking: ModificationTracking,
         system_api: S,
     ) -> Result<WasmtimeInstance<S>, (HypervisorError, S)> {
@@ -313,7 +301,6 @@ impl WasmtimeEmbedder {
                         ));
                     }
                     Some(current_memory_size_in_pages) => Some(sigsegv_memory_tracker(
-                        PersistenceType::Sigsegv,
                         &instance_memory,
                         current_memory_size_in_pages,
                         &mut store,
@@ -351,11 +338,10 @@ unsafe impl Sync for StoreRef {}
 unsafe impl Send for StoreRef {}
 
 fn sigsegv_memory_tracker<S>(
-    persistence_type: PersistenceType,
     instance_memory: &wasmtime::Memory,
     current_memory_size_in_pages: MemoryPageSize,
     store: &mut wasmtime::Store<S>,
-    page_map: Option<PageMap>,
+    page_map: PageMap,
     log: ReplicaLogger,
     dirty_page_tracking: DirtyPageTracking,
 ) -> Arc<Mutex<SigsegvMemoryTracker>> {
@@ -377,15 +363,8 @@ fn sigsegv_memory_tracker<S>(
         }
 
         Arc::new(Mutex::new(
-            SigsegvMemoryTracker::new(
-                persistence_type,
-                base,
-                size,
-                log,
-                dirty_page_tracking,
-                page_map,
-            )
-            .expect("failed to instantiate SIGSEGV memory tracker"),
+            SigsegvMemoryTracker::new(base, size, log, dirty_page_tracking, page_map)
+                .expect("failed to instantiate SIGSEGV memory tracker"),
         ))
     };
 
