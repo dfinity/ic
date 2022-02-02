@@ -19,6 +19,7 @@ use ic_prep_lib::{
     subnet_configuration::SubnetConfig,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
+use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use slog::{info, warn};
 use std::io::Write;
@@ -72,6 +73,8 @@ pub fn init_ic<P: AsRef<Path>>(
         });
     info!(ctx.logger, "initial_replica: {:?}", initial_replica);
 
+    // Note: NNS subnet should be selected from the system subnets.
+    let mut nns_subnet_idx = None;
     // TopologyConfig is a structure provided by ic-prep. We translate from the
     // builder (InternetComputer) to TopologyConfig. While doing so, we allocate tcp
     // ports for the http handler, p2p and xnet. The corresponding sockets are
@@ -79,6 +82,9 @@ pub fn init_ic<P: AsRef<Path>>(
     // nodes.
     let mut ic_topology = TopologyConfig::default();
     for (subnet_idx, subnet) in ic.subnets.iter().enumerate() {
+        if subnet.subnet_type == SubnetType::System {
+            nns_subnet_idx = Some(subnet_idx as u64);
+        }
         let subnet_index = subnet_idx as u64;
         let mut nodes: BTreeMap<NodeIndex, NodeConfiguration> = BTreeMap::new();
 
@@ -137,10 +143,6 @@ pub fn init_ic<P: AsRef<Path>>(
         }
     }
 
-    // ic-prep allows a declaring any of the subnets to be the NNS subnet. In our
-    // case, however, it's always the first subnet.
-    let nns_subnet_idx = Some(0);
-
     let whitelist = ProvisionalWhitelist::All;
     let ic_config = IcConfig::new(
         working_dir.as_path(),
@@ -152,11 +154,9 @@ pub fn init_ic<P: AsRef<Path>>(
 
         /* generate_subnet_records= */
         true,
-        // We assume by default that the subnet with index 0 is the NNS subnet.
-        /* nns_subnet_index= */
         nns_subnet_idx,
-        None, // release_package_url
-        None, // release_package_sha256_hex
+        None,
+        None,
         Some(whitelist),
         ic.node_operator,
         ic.node_provider,
