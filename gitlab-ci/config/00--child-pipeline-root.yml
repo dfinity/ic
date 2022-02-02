@@ -64,7 +64,7 @@ include:
       TMP_DIR=$(mktemp -d)
       gunzip -c -d "${CI_PROJECT_DIR}/artifacts/release/canister_sandbox.gz" > "${TMP_DIR}/canister_sandbox"
       chmod +x "${TMP_DIR}/canister_sandbox"
-      export PATH=$PWD/${TMP_DIR}:$PATH
+      export PATH="${TMP_DIR}:$PATH"
 
       echo "${CARGO_TEST_FLAGS_EXTRA}"
 
@@ -126,7 +126,7 @@ include:
       TMP_DIR=$(mktemp -d)
       gunzip -c -d "${CI_PROJECT_DIR}/artifacts/release/canister_sandbox.gz" > "${TMP_DIR}/canister_sandbox"
       chmod +x "${TMP_DIR}/canister_sandbox"
-      export PATH=$PWD/${TMP_DIR}:$PATH
+      export PATH="${TMP_DIR}:$PATH"
 
       cd "${CI_PROJECT_DIR}/rs"
 
