@@ -1,6 +1,15 @@
 #! /usr/bin/env bash
 set -eu
 
+## Determine where the target lives
+case $(uname) in
+    Darwin)
+        echo "Darwin is not longer supported."
+        exit 1
+        ;;
+    Linux) RUST_TRIPLE=x86_64-unknown-linux-gnu ;;
+esac
+
 if [[ ${TMPDIR-/tmp} == /run/* ]]; then
     echo "Running in nix-shell on Linux, unsetting TMPDIR"
     export TMPDIR=
@@ -123,12 +132,6 @@ if [[ "$no_build" != true ]]; then
     echo "  + $st_build"
     echo "  - $e_build"
 fi
-
-## Determine where the target lives
-case $(uname) in
-    Darwin) RUST_TRIPLE=x86_64-apple-darwin ;;
-    Linux) RUST_TRIPLE=x86_64-unknown-linux-gnu ;;
-esac
 
 ## Sets target to the BUILD_DIR subdir of $CARGO_TARGET_DIR if this variable is set.
 ## If CARGO_TEST_DIR is not set, we use the default $(pwd)/../target instead.
