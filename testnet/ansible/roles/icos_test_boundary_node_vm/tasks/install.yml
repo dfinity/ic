@@ -226,7 +226,7 @@
   vars:
     ic: "{{ inventory_file | dirname | basename }}"
   template:
-    src: "../../boundary_node/templates/boundary-node-control-plane.service"
+    src: "boundary-node-control-plane.service"
     dest: "/lib/systemd/system/boundary-node-control-plane-{{ ic }}.service"
     owner: root
     group: root
