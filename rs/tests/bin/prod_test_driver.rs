@@ -24,8 +24,8 @@ use ic_tests::{
     cycles_minting_test, feature_flags,
     networking::firewall::{self, change_to_firewall_rules_takes_effect},
     nns_canister_upgrade_test, nns_uninstall_canister_by_proposal_test,
-    registry_authentication_test, ssh_access_to_nodes, subnet_creation,
-    transaction_ledger_correctness_test, unassigned_node_upgrade_test, wasm_generator_test,
+    registry_authentication_test, ssh_access_to_nodes, transaction_ledger_correctness_test,
+    unassigned_node_upgrade_test, wasm_generator_test,
 };
 use regex::Regex;
 use std::collections::HashMap;
@@ -198,14 +198,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "cycles_minting_pot",
                     cycles_minting_test::config,
                     par(vec![t("cycles_minting_test", cycles_minting_test::test)]),
-                ),
-                pot(
-                    "nns_subnet_creation_pot",
-                    subnet_creation::config,
-                    par(vec![t(
-                        "create_subnet_with_assigned_nodes_fails",
-                        subnet_creation::create_subnet_with_assigned_nodes_fails,
-                    )]),
                 ),
                 pot(
                     "nns_voting_fuzzing_poc_pot",
