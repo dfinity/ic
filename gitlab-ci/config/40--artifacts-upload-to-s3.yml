@@ -9,6 +9,9 @@ artifacts-upload-to-s3:
     - cargo-build-canisters
     - cargo-build-release-linux-native
     - cargo-build-release-linux-native-nd
+    # job only runs on protected branches
+    - job: cargo-build-release-darwin
+      optional: true
   script:
     - |
       set -exuo pipefail
@@ -18,6 +21,11 @@ artifacts-upload-to-s3:
 
       buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
         gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" "artifacts/release" release
+
+      if [ -d artifacts/nix-release ]; then
+        buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+          gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" "artifacts/nix-release" nix-release/x86_64-darwin
+      fi
 
       buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
         gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" "artifacts/canisters" canisters
