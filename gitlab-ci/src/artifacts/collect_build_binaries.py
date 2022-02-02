@@ -17,6 +17,7 @@ DEFAULT_BINARIES = [
     "canister_sandbox",
     "e2e-test-driver",
     "ic-admin",
+    "ic-btc-adapter",
     "ic-consensus-pool-util",
     "ic-crypto-csp",
     "ic-cup-explorer",

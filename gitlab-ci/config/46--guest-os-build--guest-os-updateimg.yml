@@ -21,7 +21,7 @@ guest-os-updateimg-build:
 
       ls -lah /var/run/docker.sock; groups
 
-      for f in replica orchestrator canister_sandbox vsock_agent state-tool ic-consensus-pool-util ic-crypto-csp ic-regedit; do
+      for f in replica orchestrator canister_sandbox vsock_agent state-tool ic-consensus-pool-util ic-crypto-csp ic-regedit ic-btc-adapter; do
         gunzip -c -d artifacts/release/$f.gz > artifacts/release/$f
       done
 

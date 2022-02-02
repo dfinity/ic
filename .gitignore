@@ -76,6 +76,7 @@ ic-os.img
 **/build-tmp
 **/boot/version.txt
 **/bin/canister_sandbox
+**/bin/ic-btc-adapter
 **/bin/ic-consensus-pool-util
 **/bin/ic-crypto-csp
 **/bin/ic-regedit

@@ -9,5 +9,6 @@ artifacts/
 **/bin/ic-consensus-pool-util
 **/bin/replica
 **/bin/ic-crypto-csp
+**/bin/ic-btc-adapter
 **/bin/state-tool
 **/disk.img

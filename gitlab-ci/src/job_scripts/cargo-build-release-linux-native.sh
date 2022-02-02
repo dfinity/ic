@@ -22,6 +22,7 @@ cargo build --target $CARGO_BUILD_TARGET --release \
     --bin boundary-node-control-plane \
     --bin canister_sandbox \
     --bin ic-admin \
+    --bin ic-btc-adapter \
     --bin ic-consensus-pool-util \
     --bin ic-crypto-csp \
     --bin ic-cup-explorer \
