@@ -142,15 +142,15 @@ if [[ ! -f "${target}/replica" ]] || [[ ! -f "${target}/orchestrator" ]]; then
     exit 1
 fi
 
-## Make a local-bin directory and link the replica and orchestrator here
-mkdir -p local-bin
-ln -fs "${target}/replica" local-bin/
-ln -fs "${target}/orchestrator" local-bin/
-ln -fs "${target}/ic-rosetta-api" local-bin/
+## Make a temp bin directory and link the replica and orchestrator here
+TMP_DIR=$(mktemp -d)
+ln -fs "${target}/replica" "${TMP_DIR}/"
+ln -fs "${target}/orchestrator" "${TMP_DIR}/"
+ln -fs "${target}/ic-rosetta-api" "${TMP_DIR}/"
 
 ## Update path; because we must run this script from the tests directory,
 ## we know local bin is in here.
-PATH="$PWD/../../ic-os/guestos/scripts:$PWD/local-bin:$PATH"
+PATH="$PWD/../../ic-os/guestos/scripts:${TMP_DIR}:$PATH"
 SUMMARY_SCRIPT="$PWD/../../gitlab-ci/src/test_results/summary.py"
 TEST_RESULTS="$(mktemp -d)/test-results.json"
 
@@ -168,3 +168,4 @@ echo "  + $st_test"
 echo "  - $e_test"
 
 remove_tmp_dirs
+rm -fr "${TMP_DIR}"

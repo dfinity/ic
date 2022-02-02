@@ -4,22 +4,22 @@ set -exuo pipefail
 
 cd "${CI_PROJECT_DIR}/rs"
 # Setup PATH
-mkdir local-bin
+TMP_DIR=$(mktemp -d)
 for f in "${CI_PROJECT_DIR}"/artifacts/release/*.gz; do
     target=$(basename "$f" .gz)
-    gunzip -c -d "$f" >"local-bin/$target"
-    chmod +x "local-bin/$target"
+    gunzip -c -d "$f" >"${TMP_DIR}/$target"
+    chmod +x "${TMP_DIR}/$target"
 done
 
 for f in "${CI_PROJECT_DIR}"/artifacts/release-malicious/*.gz; do
     target=$(basename "$f" .gz)
-    gunzip -c -d "$f" >"local-bin/$target"
-    chmod +x "local-bin/$target"
+    gunzip -c -d "$f" >"${TMP_DIR}/$target"
+    chmod +x "${TMP_DIR}/$target"
 done
 
-gunzip -c -d "${CI_PROJECT_DIR}/artifacts/release/orchestrator.gz" >"local-bin/orchestrator"
-chmod +x "local-bin/orchestrator"
-export PATH=$PWD/local-bin:$PATH
+gunzip -c -d "${CI_PROJECT_DIR}/artifacts/release/orchestrator.gz" >"${TMP_DIR}/orchestrator"
+chmod +x "${TMP_DIR}/orchestrator"
+export PATH="${TMP_DIR}:$PATH"
 
 # shellcheck source=/dev/null
 source "$CI_PROJECT_DIR/gitlab-ci/src/canisters/wasm-build-functions.sh"

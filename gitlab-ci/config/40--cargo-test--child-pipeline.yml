@@ -83,23 +83,23 @@ ic-ref-test:
 
       ls -lah
 
-      mkdir -p "${CI_PROJECT_DIR}/rs/local-bin"
+      TMP_DIR=$(mktemp -d)
       for f in replica orchestrator ic-test-bin canister_sandbox; do
         gunzip -k "$f.gz"
         chmod +x "$f"
-        mv "$f" "${CI_PROJECT_DIR}/rs/local-bin/$f"
+        mv "$f" "${TMP_DIR}"
       done
 
       for f in replica orchestrator; do
-        mv "${BASE_BIN_DIR}/$f" "${CI_PROJECT_DIR}/rs/local-bin/${f}_base"
+        mv "${BASE_BIN_DIR}/$f" "${TMP_DIR}/${f}_base"
       done
 
       cd "${CI_PROJECT_DIR}"
 
-      ls -lah rs/local-bin
+      ls -lah "${TMP_DIR}"
 
 
-      export PATH="${CI_PROJECT_DIR}/rs/local-bin:$PATH"
+      export PATH="${TMP_DIR}:$PATH"
       export LANG=C.UTF-8
 
       # IDX generally limits the nix-shell to only provide tool-chain dependencies. However, the ic-ref tests are
