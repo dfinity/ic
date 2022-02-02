@@ -24,10 +24,12 @@ use ic_types::{
     messages::{CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response},
     user_error::RejectCode,
     xnet::{StreamIndex, StreamIndexedQueue},
-    CanisterId, Cycles, SubnetId,
+    CanisterId, Cycles, SubnetId, Time,
 };
 use lazy_static::lazy_static;
 use maplit::btreemap;
+use rand::{Rng, SeedableRng};
+use rand_chacha::ChaChaRng;
 use std::{
     collections::{BTreeMap, VecDeque},
     convert::TryFrom,
@@ -184,9 +186,14 @@ fn build_streams_success() {
 
         let msgs = generate_messages_for_test(/* senders = */ 2, /* receivers = */ 2);
 
-        // Set up the expected Stream from the messages.
+        //Set up the expected Stream from the messages.
         let expected_stream = Stream::new(
-            requests_into_queue_round_robin(StreamIndex::from(0), msgs.clone(), None),
+            requests_into_queue_round_robin(
+                StreamIndex::from(0),
+                msgs.clone(),
+                None,
+                provided_state.time(),
+            ),
             Default::default(),
         );
         let expected_stream_bytes = expected_stream.count_bytes() as u64;
@@ -284,7 +291,12 @@ fn build_streams_local_canisters() {
 
         // Set up the expected Stream from the messages.
         let expected_stream = Stream::new(
-            requests_into_queue_round_robin(StreamIndex::from(0), msgs.clone(), None),
+            requests_into_queue_round_robin(
+                StreamIndex::from(0),
+                msgs.clone(),
+                None,
+                provided_state.time(),
+            ),
             Default::default(),
         );
         let expected_stream_bytes = expected_stream.count_bytes() as u64;
@@ -355,6 +367,13 @@ fn build_streams_impl_at_limit_leaves_state_untouched() {
             },
         ).unwrap());
 
+        // We put an empty stream for the destination subnet into the state because
+        // the implementation of stream builder will always allow one message if
+        // the stream does not exist yet.
+        let mut streams = provided_state.take_streams();
+        streams.get_mut_or_insert(REMOTE_SUBNET);
+        provided_state.put_streams(streams);
+
         // Set up the provided_canister_states.
         let msgs = generate_messages_for_test(/* senders = */ 2, /* receivers = */ 2);
         let provided_canister_states = generate_provided_canister_states(msgs);
@@ -369,7 +388,7 @@ fn build_streams_impl_at_limit_leaves_state_untouched() {
 
         assert_eq!(
             btreemap! {},
-            fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_BEGIN),
+            nonzero_values(fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_BEGIN)),
         );
         assert_eq!(
             btreemap! {},
@@ -387,7 +406,10 @@ fn build_streams_impl_at_limit_leaves_state_untouched() {
             ))
         );
         assert_eq!(
-            btreemap! {},
+            metric_vec(&[(
+                &[(LABEL_REMOTE, &REMOTE_SUBNET.to_string())],
+                Stream::new(StreamIndexedQueue::default(), Default::default()).count_bytes() as u64
+            )]),
             nonzero_values(fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_BYTES))
         );
         assert_eq!(
@@ -427,6 +449,7 @@ fn build_streams_impl_respects_limit() {
                 StreamIndex::from(0),
                 msgs.clone(),
                 Some(routed_messages * msg_size),
+                provided_state.time(),
             ),
             Default::default(),
         );
@@ -577,7 +600,12 @@ fn build_streams_with_messages_targeted_to_other_subnets() {
 
         // Set up the expected Stream from the messages.
         let expected_stream = Stream::new(
-            requests_into_queue_round_robin(StreamIndex::from(0), msgs.clone(), None),
+            requests_into_queue_round_robin(
+                StreamIndex::from(0),
+                msgs.clone(),
+                None,
+                provided_state.time(),
+            ),
             Default::default(),
         );
         let expected_stream_bytes = expected_stream.count_bytes() as u64;
@@ -629,8 +657,9 @@ fn build_streams_with_messages_targeted_to_other_subnets() {
 /// Sets up the `StreamHandlerImpl`, `ReplicatedState` and `Metricsregistry` to
 /// be used by a test.
 fn new_fixture(log: &ReplicaLogger) -> (StreamBuilderImpl, ReplicatedState, MetricsRegistry) {
-    let state =
+    let mut state =
         ReplicatedState::new_rooted_at(LOCAL_SUBNET, SubnetType::Application, "NOT_USED".into());
+    state.metadata.batch_time = Time::from_nanos_since_unix_epoch(5);
     let metrics_registry = MetricsRegistry::new();
     let stream_handler = StreamBuilderImpl::new(
         LOCAL_SUBNET,
@@ -646,10 +675,15 @@ fn new_fixture(log: &ReplicaLogger) -> (StreamBuilderImpl, ReplicatedState, Metr
 
 /// Simulates routing the given requests into a `StreamIndexedQueue` with the
 /// given `start` index, until `byte_limit` is reached or exceeded.
+///
+/// It takes into account the pseudorandom rotation of the canisters thats done
+/// based on the batch time, but assumes that there are no messages in subnet
+/// queues.
 fn requests_into_queue_round_robin(
     start: StreamIndex,
     requests: Vec<Request>,
     byte_limit: Option<u64>,
+    time: Time,
 ) -> StreamIndexedQueue<RequestOrResponse> {
     let mut queue = StreamIndexedQueue::with_begin(start);
 
@@ -669,6 +703,10 @@ fn requests_into_queue_round_robin(
         .into_iter()
         .map(|(canister, requests)| (canister, requests.into_iter().collect()))
         .collect();
+
+    let mut rng = ChaChaRng::seed_from_u64(time.as_nanos_since_unix_epoch());
+    let rotation = rng.gen_range(0, request_ring.len().max(1));
+    request_ring.rotate_left(rotation);
 
     let mut bytes_routed = 0;
     while let Some((src, mut requests)) = request_ring.pop_front() {

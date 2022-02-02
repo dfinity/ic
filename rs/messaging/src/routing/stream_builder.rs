@@ -1,7 +1,9 @@
 use crate::message_routing::LatencyMetrics;
+use crate::xnet_payload_builder::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_base_types::NumBytes;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::replicated_state::PeekableOutputIterator;
 use ic_replicated_state::Stream;
 use ic_replicated_state::{
@@ -17,6 +19,7 @@ use ic_types::{
 #[cfg(test)]
 use mockall::automock;
 use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};
+use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 #[cfg(test)]
@@ -229,8 +232,41 @@ impl StreamBuilderImpl {
             message
         }
 
+        /// Tests whether a stream is over the byte limit or (if directed at a
+        /// remote system subnet) over `2 * SYSTEM_SUBNET_STREAM_MSG_LIMIT`
+        fn is_at_limit(
+            stream: Option<&Stream>,
+            target_stream_size_bytes: usize,
+            is_local_message: bool,
+            destination_subnet_type: SubnetType,
+        ) -> bool {
+            let stream = match stream {
+                Some(stream) => stream,
+                None => return false,
+            };
+
+            // True if global limit, enforced across all outgoing streams, is hit.
+            let general_limit_hit = stream.count_bytes() >= target_stream_size_bytes;
+
+            // True if system subnet limit is hit. This is only enforced for non-local
+            // streams to system subnets (i.e., excluding the loopback stream on system
+            // subnets).
+            let system_subnet_limit_hit = !is_local_message
+                && destination_subnet_type == SubnetType::System
+                && stream.messages().len() >= 2 * SYSTEM_SUBNET_STREAM_MSG_LIMIT;
+
+            general_limit_hit || system_subnet_limit_hit
+        }
+
         let mut streams = state.take_streams();
         let routing_table = state.routing_table();
+        let subnet_types: BTreeMap<_, _> = state
+            .metadata
+            .network_topology
+            .subnets
+            .iter()
+            .map(|(subnet_id, topology)| (*subnet_id, topology.subnet_type))
+            .collect();
 
         let mut requests_to_reject = Vec::new();
 
@@ -264,12 +300,14 @@ impl StreamBuilderImpl {
                 match routing_table.route(dst_canister_id.get()) {
                     // Destination subnet found.
                     Some(dst_net_id) => {
-                        if streams
-                            .get(&dst_net_id)
-                            .map(Stream::count_bytes)
-                            .unwrap_or_default()
-                            >= target_stream_size_bytes
-                        {
+                        if is_at_limit(
+                            streams.get(&dst_net_id),
+                            target_stream_size_bytes,
+                            self.subnet_id == dst_net_id,
+                            *subnet_types
+                                .get(&dst_net_id)
+                                .unwrap_or(&SubnetType::Application),
+                        ) {
                             // Stream full, skip all other messagees to this destination.
                             output_iter.exclude_queue();
                             continue;
