@@ -35,7 +35,6 @@ use ic_tests::request_auth_malicious_replica_test;
 use ic_tests::request_signature_test;
 use ic_tests::security::nns_voting_fuzzing_poc_test;
 use ic_tests::security::system_api_security_test;
-use ic_tests::subnet_creation;
 use ic_tests::util::CYCLES_LIMIT_PER_CANISTER;
 
 mod cli;
@@ -57,7 +56,6 @@ fn all_pots() -> Vec<ic_fondue::pot::Pot> {
         consensus_liveness_with_equivocation_pot(),
         consensus_safety_pot(),
         cow_safety_pot(),
-        nns_subnet_creation_pot(),
         replica_determinism_pot(),
         max_payload_pot(),
         dual_workload_pot(),
@@ -159,14 +157,6 @@ fn consensus_safety_pot() -> pot::Pot {
         "consensus_safety_pot",
         consensus::safety_test::config(),
         steps! {consensus::safety_test::test => "consensus_safety_test"}
-    )
-}
-
-fn nns_subnet_creation_pot() -> pot::Pot {
-    composable!(
-        "nns_subnet_creation_pot",
-        subnet_creation::config(),
-        steps! {subnet_creation::create_subnet_with_assigned_nodes_fails}
     )
 }
 
