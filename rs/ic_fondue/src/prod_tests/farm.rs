@@ -114,7 +114,7 @@ impl Farm {
         let _resp = self.retry_until_success(rb)?;
         info!(
             self.logger,
-            "Interact with the serial console of the VM via: {}",
+            "Console: {}",
             self.url_from_path(&format!("group/{}/vm/{}/console/", group_name, vm_name)[..])
         );
         Ok(())
