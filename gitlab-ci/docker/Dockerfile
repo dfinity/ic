@@ -40,24 +40,27 @@ RUN usermod -a -G sudo ubuntu && echo "ubuntu ALL=(ALL) NOPASSWD: ALL" >> /etc/s
 
 # Install Rust and Cargo in /opt
 ENV RUSTUP_HOME=/opt/rustup \
-    CARGO_HOME=/opt/cargo \
     CARGO_TARGET_DIR=/cargo_target \
     ZSTD_LIB_DIR=/usr/lib \
     PROTOC=/usr/protoc/bin/protoc \
     PROTOC_INCLUDE=/usr/protoc/include \
     PATH=/opt/cargo/bin:$PATH
 
-# Cargo maintains a local cache of the registry index and of git checkouts of crates at CARGO_HOME
-VOLUME /cargo
-
 COPY --from=dfinity/ic-build-src /opt /tmp/src-artifacts
 RUN rsync -rav /tmp/src-artifacts/ /usr && rm -rf /tmp/src-artifacts
 
+# rustup uses $CARGO_HOME to figure out where to install itself
+ENV CARGO_HOME=/opt/cargo
 RUN curl --fail https://sh.rustup.rs -sSf \
         | sh -s -- -y --default-toolchain ${rust_version}-x86_64-unknown-linux-gnu --no-modify-path && \
     rustup default ${rust_version}-x86_64-unknown-linux-gnu && \
     rustup target add wasm32-unknown-unknown && \
     chown -R ubuntu.ubuntu ${RUSTUP_HOME} ${CARGO_HOME}
+
+# CARGO_HOME is also where the crates.io registry and git checkouts are cached.
+# We bind mount this on the CI runners, so the image needs to be able to function properly
+# even if this directory is empty.
+ENV CARGO_HOME=/cargo
 
 # Init for reaping zombies and performing signal forwarding (https://github.com/krallin/tini)
 RUN curl -fsSL https://github.com/krallin/tini/releases/download/v${tini_version}/tini -o /tini && \
