@@ -108,6 +108,7 @@ use registry_canister::mutations::{
     do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
     do_update_subnet::UpdateSubnetPayload,
     do_update_subnet_replica::UpdateSubnetReplicaVersionPayload,
+    reroute_canister_range::RerouteCanisterRangePayload,
 };
 use serde::Serialize;
 use std::collections::{BTreeMap, HashSet};
@@ -327,6 +328,8 @@ enum SubCommand {
     ProposeToStopCanister(StopCanisterCmd),
     /// Propose to remove a list of node operators from the Registry
     ProposeToRemoveNodeOperators(ProposeToRemoveNodeOperatorsCmd),
+    /// Propose to change the routing table.
+    ProposeToRerouteCanisterRange(ProposeToRerouteCanisterRangeCmd),
 }
 
 /// Indicates whether a value should be added or removed.
@@ -2125,6 +2128,42 @@ impl SubnetDescriptor {
     }
 }
 
+/// Sub-command to propose a change in the routing table.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Clap)]
+struct ProposeToRerouteCanisterRangeCmd {
+    /// The first canister in the range to reroute.
+    #[clap(long, required = true)]
+    range_start_inclusive: PrincipalId,
+    /// The last canister in the range to reroute.
+    #[clap(long, required = true)]
+    range_end_inclusive: PrincipalId,
+    /// The destination subnet for the specified canister range.
+    #[clap(long, required = true)]
+    destination_subnet: PrincipalId,
+}
+
+#[async_trait]
+impl ProposalTitleAndPayload<RerouteCanisterRangePayload> for ProposeToRerouteCanisterRangeCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!(
+                "Reroute canister range [{}, {}] to subnet {}",
+                self.range_start_inclusive, self.range_end_inclusive, self.destination_subnet
+            ),
+        }
+    }
+
+    async fn payload(&self, _: Url) -> RerouteCanisterRangePayload {
+        RerouteCanisterRangePayload {
+            range_start_inclusive: self.range_start_inclusive,
+            range_end_inclusive: self.range_end_inclusive,
+            destination_subnet: self.destination_subnet,
+        }
+    }
+}
+
 /// `main()` method for the `ic-admin` utility.
 #[tokio::main]
 async fn main() {
@@ -2710,6 +2749,15 @@ async fn main() {
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::RemoveNodeOperators,
+                opts.nns_url,
+                sender,
+            )
+            .await;
+        }
+        SubCommand::ProposeToRerouteCanisterRange(cmd) => {
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::RerouteCanisterRange,
                 opts.nns_url,
                 sender,
             )
