@@ -23,7 +23,6 @@ use ic_canister_sandbox_common::protocol::structs::{
     MemoryModifications, SandboxExecInput, SandboxExecOutput, StateModifications,
 };
 use ic_canister_sandbox_common::{controller_service::ControllerService, protocol};
-use ic_config::embedders::PersistenceType;
 use ic_embedders::wasm_executor::WasmStateChanges;
 use ic_embedders::WasmExecutionOutput;
 use ic_embedders::{
@@ -232,8 +231,7 @@ impl CanisterWasm {
             .and_then(|_| {
                 instrument(&wasm, &InstructionCostTable::new()).map_err(HypervisorError::from)
             })?;
-        let compilate =
-            embedder.compile(PersistenceType::Sigsegv, &instrumentation_output.binary)?;
+        let compilate = embedder.compile(&instrumentation_output.binary)?;
         let compilate = Arc::new(compilate);
 
         Ok(Self {

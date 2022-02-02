@@ -34,7 +34,6 @@ impl Default for FeatureFlags {
 
 #[derive(Clone, Debug)]
 pub struct Config {
-    pub persistence_type: PersistenceType,
     pub max_wasm_stack_size: usize,
     pub query_execution_threads: usize,
 
@@ -57,7 +56,6 @@ pub struct Config {
 impl Config {
     pub fn new() -> Self {
         Config {
-            persistence_type: PersistenceType::Sigsegv,
             max_wasm_stack_size: 5 * 1024 * 1024,
             query_execution_threads: QUERY_EXECUTION_THREADS,
             max_globals: MAX_GLOBALS,
@@ -73,11 +71,4 @@ impl Default for Config {
     fn default() -> Self {
         Self::new()
     }
-}
-
-#[derive(Clone, Debug, Hash, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum PersistenceType {
-    Sigsegv,
-    Pagemap,
 }

@@ -1,6 +1,5 @@
 use crate::{
-    embedders::{PersistenceType, QUERY_EXECUTION_THREADS},
-    flag_status::FlagStatus,
+    embedders::QUERY_EXECUTION_THREADS, flag_status::FlagStatus,
     subnet_config::MAX_INSTRUCTIONS_PER_MESSAGE,
 };
 use ic_base_types::NumSeconds;
@@ -48,7 +47,6 @@ pub(crate) const SUBNET_HEAP_DELTA_CAPACITY: NumBytes = NumBytes::new(200 * GB);
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(default)]
 pub struct Config {
-    pub persistence_type: PersistenceType,
     /// This is no longer used in the code.  It is not removed yet as removing
     /// this option will be a breaking change.
     pub create_funds_whitelist: String,
@@ -96,7 +94,6 @@ impl Default for Config {
         let canister_sandboxing_flag = FlagStatus::Disabled;
 
         Self {
-            persistence_type: PersistenceType::Sigsegv,
             create_funds_whitelist: String::default(),
             max_instructions_for_message_acceptance_calls: MAX_INSTRUCTIONS_PER_MESSAGE,
             subnet_memory_capacity: SUBNET_MEMORY_CAPACITY,

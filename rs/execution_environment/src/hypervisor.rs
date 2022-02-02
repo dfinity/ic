@@ -1025,7 +1025,6 @@ impl Hypervisor {
         cycles_account_manager: Arc<CyclesAccountManager>,
     ) -> Self {
         let mut embedder_config = EmbeddersConfig::new();
-        embedder_config.persistence_type = config.persistence_type;
         embedder_config.query_execution_threads = config.query_execution_threads;
 
         let wasm_embedder = WasmtimeEmbedder::new(embedder_config.clone(), log.clone());
