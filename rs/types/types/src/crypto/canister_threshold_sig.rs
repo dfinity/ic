@@ -185,7 +185,7 @@ impl PreSignatureQuadruple {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ExtendedDerivationPath {
     pub caller: PrincipalId,
-    pub bip32_derivation_path: Vec<u32>,
+    pub derivation_path: Vec<Vec<u8>>,
 }
 
 /// All inputs required to generate a canister threshold signature.

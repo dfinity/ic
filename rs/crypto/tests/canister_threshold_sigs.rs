@@ -447,7 +447,7 @@ fn should_create_signature_share_successfully_with_new_key() {
     let inputs = {
         let derivation_path = ExtendedDerivationPath {
             caller: PrincipalId::new_user_test_id(1),
-            bip32_derivation_path: vec![],
+            derivation_path: vec![],
         };
 
         let hashed_message = rng.gen::<[u8; 32]>();
@@ -485,7 +485,7 @@ fn should_fail_create_signature_if_not_receiver() {
     let inputs = {
         let derivation_path = ExtendedDerivationPath {
             caller: PrincipalId::new_user_test_id(1),
-            bip32_derivation_path: vec![],
+            derivation_path: vec![],
         };
 
         let hashed_message = rng.gen::<[u8; 32]>();
@@ -545,7 +545,7 @@ fn should_fail_create_signature_share_without_kappa_times_lambda_loaded() {
     let inputs = {
         let derivation_path = ExtendedDerivationPath {
             caller: PrincipalId::new_user_test_id(1),
-            bip32_derivation_path: vec![],
+            derivation_path: vec![],
         };
 
         let hashed_message = rng.gen::<[u8; 32]>();
@@ -605,7 +605,7 @@ fn should_fail_create_signature_share_without_key_times_lambda_loaded() {
     let inputs = {
         let derivation_path = ExtendedDerivationPath {
             caller: PrincipalId::new_user_test_id(1),
-            bip32_derivation_path: vec![],
+            derivation_path: vec![],
         };
 
         let hashed_message = rng.gen::<[u8; 32]>();
@@ -665,7 +665,7 @@ fn should_verify_sig_share_successfully() {
     let inputs = {
         let derivation_path = ExtendedDerivationPath {
             caller: PrincipalId::new_user_test_id(1),
-            bip32_derivation_path: vec![],
+            derivation_path: vec![],
         };
 
         let hashed_message = rng.gen::<[u8; 32]>();
@@ -707,7 +707,7 @@ fn should_combine_sig_shares_successfully() {
     let inputs = {
         let derivation_path = ExtendedDerivationPath {
             caller: PrincipalId::new_user_test_id(1),
-            bip32_derivation_path: vec![],
+            derivation_path: vec![],
         };
 
         let hashed_message = rng.gen::<[u8; 32]>();
@@ -759,7 +759,7 @@ fn should_fail_combine_sig_shares_with_insufficient_shares() {
     let inputs = {
         let derivation_path = ExtendedDerivationPath {
             caller: PrincipalId::new_user_test_id(1),
-            bip32_derivation_path: vec![],
+            derivation_path: vec![],
         };
 
         let hashed_message = rng.gen::<[u8; 32]>();
@@ -815,7 +815,7 @@ fn should_verify_combined_sig_successfully() {
     let inputs = {
         let derivation_path = ExtendedDerivationPath {
             caller: PrincipalId::new_user_test_id(1),
-            bip32_derivation_path: vec![],
+            derivation_path: vec![],
         };
 
         let hashed_message = rng.gen::<[u8; 32]>();
@@ -1090,7 +1090,7 @@ fn fake_sig_inputs(nodes: &BTreeSet<NodeId>) -> ThresholdEcdsaSigInputs {
 
     let derivation_path = ExtendedDerivationPath {
         caller: PrincipalId::new_user_test_id(1),
-        bip32_derivation_path: vec![],
+        derivation_path: vec![],
     };
 
     ThresholdEcdsaSigInputs::new(
