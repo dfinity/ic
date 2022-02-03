@@ -100,7 +100,7 @@ e2e-scalability-suite-test:
       done
       ls "${CI_PROJECT_DIR}/artifacts/canisters"
 
-      for f in ic-admin ic-nns-init ic-prep ic-workload-generator; do
+      for f in ic-admin ic-nns-init ic-prep ic-workload-generator e2e-test-driver; do
         gzip -d "${CI_PROJECT_DIR}/artifacts/release/$f.gz"
         chmod u+x "${CI_PROJECT_DIR}/artifacts/release/$f"
         ln -sf "${CI_PROJECT_DIR}/artifacts/release/$f" "$f"

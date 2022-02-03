@@ -123,6 +123,15 @@ def get_num_canisters_installed(testnet, hosts, timestamp):
     return json.loads(get_prometheus(payload).text)
 
 
+def get_xnet_stream_size(testnet, t_start, t_end):
+    """Get size of Xnet streams."""
+    common = f'ic="{testnet}",job="replica"'
+    q = f"mr_stream_messages{{{common}}}"
+    payload = {"start": t_start, "end": t_end, "step": "10s", "query": q}
+    r = get_prometheus_range(payload)
+    return json.loads(r.text)
+
+
 def get_http_request_duration(testnet, hosts: List[str], t_start, t_end, request_type="query"):
 
     # Dashboard:
@@ -140,7 +149,7 @@ def get_http_request_duration(testnet, hosts: List[str], t_start, t_end, request
         "query": "histogram_quantile(0.80, sum by (le) (rate({}[60s])))".format(selector),
     }
 
-    r = get_prometheus(payload)
+    r = get_prometheus_range(payload)
     return json.loads(r.text)
 
 
@@ -176,6 +185,8 @@ def get_prometheus(payload):
     """Query prometheus for metrics."""
     headers = {"Accept": "application/json"}
 
+    if "start" in payload:
+        raise Exception("Use get_prometheus_range for range queries")
     print("Executing Prometheus query: ", payload)
     r = requests.get("http://prometheus.dfinity.systems:9090/api/v1/query", headers=headers, params=payload)
     return r
@@ -188,3 +199,34 @@ def get_prometheus_range(payload):
     print("Executing Prometheus query: ", payload)
     r = requests.get("http://prometheus.dfinity.systems:9090/api/v1/query_range", headers=headers, params=payload)
     return r
+
+
+def parse(r):
+    """Parse the given json file containing Prometheus xnet-stream data."""
+    results = {}
+    num = 0
+    for entry in r["data"]["result"]:
+        subnet = entry["metric"]["ic_subnet"]
+
+        # "values": [
+        #   [
+        #     1638357985,
+        #     "0"
+        #   ],
+
+        for entry in entry["values"]:
+
+            value = int(entry[1])
+            time = float(entry[0])
+            curr_value = results[(subnet, time)] if (subnet, time) in results else 0
+            results[(subnet, time)] = curr_value + value
+            num += 1
+    for ((subnet, time), value) in results.items():
+        print(f"{subnet} {time} {value}")
+    print(num)
+
+
+if __name__ == "__main__":
+    r = get_xnet_stream_size("large04", 1638357985, 1638358627)
+    print(json.dumps(r, indent=2))
+    print(parse(r))

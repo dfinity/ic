@@ -26,14 +26,14 @@ def main(argv):
     system_image = vmtools.SystemImage.open_local(FLAGS.disk_image)
 
     ic_config = ictools.ic_prep(
-        subnets=[[machines[0].get_ipv6()], [machines[1].get_ipv6()]],
+        subnets=[[m.get_ipv6()] for m in machines],
         version=ictools.get_disk_image_version(system_image),
         root_subnet=0,
     )
 
     machine_config_images = [
         ictools.build_ic_prep_inject_config(machines[n], ic_config, n, ictools.build_ssh_extra_config())
-        for n in range(2)
+        for n in range(len(machines))
     ]
 
     vmtools.start_machines(
@@ -43,7 +43,10 @@ def main(argv):
 
     ic_url = "http://[%s]:8080" % machines[0].get_ipv6()
     ictools.wait_http_up(ic_url)
+
     ictools.nns_install(ic_config, ic_url)
+    for m in machines:
+        ictools.wait_http_up("http://[%s]:8080" % m.get_ipv6())
 
     base_arguments = [
         "--nns_url",
@@ -53,15 +56,43 @@ def main(argv):
         "--skip_generate_report=True",
         "--testnet",
         "none",
-        "--wg_testnet",
-        "none",
         "--artifacts_path",
         FLAGS.artifacts_path,
+    ]
+
+    base_arguments_load_test = base_arguments + [
+        "--wg_testnet",
+        "none",
         "--workload_generator_machines",
         str(machines[1].get_ipv6()),
         "--targets",
         str(machines[0].get_ipv6()),
     ]
+
+    # Benchmarks w/o load generation
+    # --------------------------------------------------
+    # These have to go first, since we turn of a replica for the load generator ones
+
+    out = subprocess.run(
+        [
+            "python3",
+            "run_experiment_xnet.py",
+            "--runtime",
+            "20",
+        ]
+        + base_arguments,
+        capture_output=True,
+        text=True,
+    )
+    print(out.stderr)
+    print(out.stdout)
+    # The test will not actually run due to not having enough subnetworks in this test.
+    # Just make sure everything it runs until that point.
+    assert "At least 2 subnets are required to test XNet messaging. Provided topology has 1 subnets" in out.stderr
+
+    # Benchmarks WITH load generation
+    # --------------------------------------------------
+    # Turns off replicas, so only load based benchmarks from this point onward.
 
     subprocess.run(
         [
@@ -74,7 +105,7 @@ def main(argv):
             "--num_workload_generators",
             "1",
         ]
-        + base_arguments,
+        + base_arguments_load_test,
         check=True,
     )
 
@@ -90,7 +121,7 @@ def main(argv):
             "--num_workload_generators",
             "1",
         ]
-        + base_arguments,
+        + base_arguments_load_test,
         check=True,
     )
 
@@ -108,7 +139,7 @@ def main(argv):
             "--max_iterations",
             "1",
         ]
-        + base_arguments,
+        + base_arguments_load_test,
         check=True,
     )
 
@@ -121,7 +152,7 @@ def main(argv):
             "--initial_rps",
             "10",
         ]
-        + base_arguments,
+        + base_arguments_load_test,
         check=True,
     )
 

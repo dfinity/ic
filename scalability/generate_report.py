@@ -48,6 +48,9 @@ def generate_report(base, githash, timestamp):
     wg_http_latency_99 = []
     wg_failure_rate = []
 
+    compiler = pybars.Compiler()
+    template = compiler.compile(source)
+
     with open(report_file, "w") as outfile:
         for i in sorted([int(i) for i in os.listdir(base) if i.isnumeric()]):
             path = os.path.join(base, str(i))
@@ -70,9 +73,6 @@ def generate_report(base, githash, timestamp):
                         _,
                         _,
                     ) = report.evaluate_summaries(files)
-
-                    compiler = pybars.Compiler()
-                    template = compiler.compile(source)
 
                     iter_data.update(
                         {
