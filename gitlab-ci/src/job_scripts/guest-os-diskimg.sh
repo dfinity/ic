@@ -34,13 +34,15 @@ mkdir -p "$BUILD_OUT" "$BUILD_TMP"
 echo "$VERSION" >"${BUILD_TMP}/version.txt"
 
 if [ -z "$CI_JOB_ID" ]; then
-    ./scripts/build-disk-image.sh -o "${BUILD_TMP}/disk.img" -v "$VERSION" -x ../../artifacts/release/ "$BUILD_EXTRA_ARGS"
+    # shellcheck disable=SC2086  # Expanding BUILD_EXTRA_ARGS into multiple parameters
+    ./scripts/build-disk-image.sh -o "${BUILD_TMP}/disk.img" -v "$VERSION" -x ../../artifacts/release/ $BUILD_EXTRA_ARGS
     tar --sort=name --owner=root:0 --group=root:0 --mtime='UTC 2020-01-01' --sparse \
         -cvzf "${BUILD_OUT}/disk-img.tar.gz" -C "$BUILD_TMP" disk.img version.txt
     ls -lah "$BUILD_TMP"
 else
+    # shellcheck disable=SC2086  # Expanding BUILD_EXTRA_ARGS into multiple parameters
     buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" build-disk-img -- \
-        ./scripts/build-disk-image.sh -o "${BUILD_TMP}/disk.img" -v "$VERSION" -x ../../artifacts/release/ "$BUILD_EXTRA_ARGS"
+        ./scripts/build-disk-image.sh -o "${BUILD_TMP}/disk.img" -v "$VERSION" -x ../../artifacts/release/ $BUILD_EXTRA_ARGS
     buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" tar-build-out -- \
         tar --sort=name --owner=root:0 --group=root:0 --mtime='UTC 2020-01-01' --sparse \
         -cvzf "${BUILD_OUT}/disk-img.tar.gz" -C "$BUILD_TMP" disk.img version.txt

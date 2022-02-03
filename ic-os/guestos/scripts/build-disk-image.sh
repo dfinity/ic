@@ -64,7 +64,10 @@ Usage:
   -o outfile: Name of output file; mandatory
   -t bootloader.tar: Docker save tar of the bootloader build
   -u ubuntu.tar: Docker save tar of the ubuntu system image build
-  -p password: Set root password for console access. BE CAREFUL.
+  -t image type: The type of image to build. Must be either "dev" or "prod".
+     If nothing is specified, defaults to building "prod" image.
+  -p password: Set root password for console access. This is only allowed
+     for "dev" images
   -v version: The version written into the image.
   -x execdir: Set executable source dir. Will take all required IC executables
      from source directory and install it into the correct location before
@@ -82,14 +85,11 @@ Usage:
 EOF
 }
 
-BUILD_TYPE=disk
-while getopts "o:t:u:b:r:v:p:x:" OPT; do
+BUILD_TYPE=prod
+while getopts "o:t:u:b:r:t:v:p:x:" OPT; do
     case "${OPT}" in
         o)
             OUT_FILE="${OPTARG}"
-            ;;
-        t)
-            BOOTLOADER_TAR="${OPTARG}"
             ;;
         u)
             UBUNTU_TAR="${OPTARG}"
@@ -99,6 +99,9 @@ while getopts "o:t:u:b:r:v:p:x:" OPT; do
             ;;
         r)
             IN_ROOT_IMG="${OPTARG}"
+            ;;
+        t)
+            BUILD_TYPE="${OPTARG}"
             ;;
         v)
             VERSION="${OPTARG}"
@@ -129,6 +132,8 @@ trap "rm -rf $TMPDIR" exit
 
 DISK_IMG="${OUT_FILE}"
 
+echo "${BUILD_TYPE}"
+
 # Build bootloader partitions.
 ESP_IMG="${TMPDIR}/esp.img"
 GRUB_IMG="${TMPDIR}/grub.img"
@@ -137,6 +142,7 @@ truncate --size 100M "$GRUB_IMG"
 if [ "${BOOTLOADER_TAR}" == "" ]; then
     "${BASE_DIR}"/scripts/build-docker-save.sh "${BASE_DIR}"/bootloader | build_bootloader_from_tar "$ESP_IMG" "$GRUB_IMG"
 else
+    echo "here"
     build_bootloader_from_tar "$ESP_IMG" "$GRUB_IMG" <"${BOOTLOADER_TAR}"
 fi
 
@@ -153,7 +159,7 @@ else
     BOOT_IMG="${TMPDIR}/boot.img"
     ROOT_IMG="${TMPDIR}/root.img"
     if [ "${UBUNTU_TAR}" == "" ]; then
-        "${BASE_DIR}"/scripts/build-ubuntu.sh -r "${ROOT_IMG}" -b "${BOOT_IMG}" -p "${ROOT_PASSWORD}" -x "${EXEC_SRCDIR}" -v "${VERSION}"
+        "${BASE_DIR}"/scripts/build-ubuntu.sh -r "${ROOT_IMG}" -b "${BOOT_IMG}" -p "${ROOT_PASSWORD}" -x "${EXEC_SRCDIR}" -v "${VERSION}" -t "${BUILD_TYPE}"
     else
         "${BASE_DIR}"/scripts/build-ubuntu.sh -i "${UBUNTU_TAR}" -r "${ROOT_IMG}" -b "${BOOT_IMG}"
     fi

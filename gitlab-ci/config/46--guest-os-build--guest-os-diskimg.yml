@@ -43,7 +43,7 @@ guest-os-diskimg-dev:
   extends:
     - guest-os-diskimg
   variables:
-      BUILD_EXTRA_ARGS: "-p root"
+      BUILD_EXTRA_ARGS: "-t dev -p root"
       BUILD_EXTRA_SUFFIX: "-dev"
 
 # Build malicious dev image.
@@ -54,5 +54,5 @@ guest-os-diskimg-dev-malicious:
   extends:
     - guest-os-diskimg
   variables:
-      BUILD_EXTRA_ARGS: "-p root"
+      BUILD_EXTRA_ARGS: "-t dev -p root"
       BUILD_EXTRA_SUFFIX: "-dev-malicious"

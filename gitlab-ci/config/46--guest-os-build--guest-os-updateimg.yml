@@ -56,7 +56,7 @@ guest-os-updateimg-build-dev:
   extends:
     - guest-os-updateimg-build
   variables:
-      BUILD_EXTRA_ARGS: "-p root"
+      BUILD_EXTRA_ARGS: "-t dev -p root"
       BUILD_EXTRA_SUFFIX: "-dev"
 
 # An exact dupe of the updateimg job for non-determinism testing.

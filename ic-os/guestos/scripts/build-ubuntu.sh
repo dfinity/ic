@@ -17,7 +17,10 @@ Usage:
   -i docker.tar: Points to the output of "docker save"
      of the ubuntu docker image. If not given, will implicitly call
      docker build.
-  -p password: Set root password for console access. BE CAREFUL.
+  -t image type: The type of image to build. Must be either "dev" or "prod".
+     If nothing is specified, defaults to building "prod" image.
+  -p password: Set root password for console access. This is only allowed
+     for "dev" images
   -v version: The version written into the image.
   -x execdir: Set executable source dir. Will take all required IC executables
      from source directory and install it into the correct location before
@@ -101,7 +104,11 @@ function verify_before_build() {
     fi
 }
 
-while getopts "i:r:b:p:v:x:" OPT; do
+# Default settings for command line options
+ROOT_PASSWORD=
+BUILD_TYPE=prod
+
+while getopts "i:r:b:p:t:v:x:" OPT; do
     case "${OPT}" in
         i)
             IN_FILE="${OPTARG}"
@@ -114,6 +121,9 @@ while getopts "i:r:b:p:v:x:" OPT; do
             ;;
         p)
             ROOT_PASSWORD="${OPTARG}"
+            ;;
+        t)
+            BUILD_TYPE="${OPTARG}"
             ;;
         v)
             VERSION="${OPTARG}"
@@ -128,6 +138,16 @@ while getopts "i:r:b:p:v:x:" OPT; do
     esac
 done
 
+if [ "${BUILD_TYPE}" != "dev" -a "${BUILD_TYPE}" != "prod" ]; then
+    echo "Unknown build type: ${BUILD_TYPE}"
+    exit 1
+fi
+
+if [ "${ROOT_PASSWORD}" != "" -a "${BUILD_TYPE}" != "dev" ]; then
+    echo "Root password is valid only for build type 'dev'"
+    exti 1
+fi
+
 BOOT_IMG="${OUT_BOOT_IMG}"
 ROOT_IMG="${OUT_ROOT_IMG}"
 
@@ -138,6 +158,8 @@ if [ "${OUT_BOOT_IMG}" == "" -o "${OUT_ROOT_IMG}" == "" ]; then
     usage
     exit 1
 fi
+
+BASE_IMAGE=$(cat "${BASE_DIR}/rootfs/docker-base.${BUILD_TYPE}")
 
 # Truncate to zero first to ensure there are no left-overs.
 truncate --size 0 "${BOOT_IMG}"
@@ -163,6 +185,7 @@ else
     fi
     "${BASE_DIR}"/scripts/build-docker-save.sh \
         --build-arg ROOT_PASSWORD="${ROOT_PASSWORD}" \
+        --build-arg BASE_IMAGE="${BASE_IMAGE}" \
         "${BASE_DIR}"/rootfs \
         | build_ubuntu_from_tar "${ROOT_IMG}" "${BOOT_IMG}"
 fi
