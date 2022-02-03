@@ -1,3 +1,6 @@
+ARG SRC_IMG_PATH=undefined
+FROM ${SRC_IMG_PATH} as src_img
+
 FROM ubuntu:20.04
 
 # Make sure the motoko_version corresponds to the same version in nix/sources.json
@@ -48,7 +51,7 @@ ENV RUSTUP_HOME=/opt/rustup \
     PROTOC_INCLUDE=/usr/protoc/include \
     PATH=/opt/cargo/bin:$PATH
 
-COPY --from=dfinity/ic-build-src /opt /tmp/src-artifacts
+COPY --from=src_img /opt /tmp/src-artifacts
 RUN rsync --chmod=755 -rav /tmp/src-artifacts/ /usr && rm -rf /tmp/src-artifacts
 
 # rustup uses $CARGO_HOME to figure out where to install itself

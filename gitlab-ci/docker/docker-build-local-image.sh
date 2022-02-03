@@ -47,6 +47,7 @@ DOCKER_BUILDKIT=1 docker build \
     --tag registry.gitlab.com/dfinity-lab/core/docker/ic-build:"$DOCKER_IMG_VERSION"-"$SHA1ICBUILD" \
     --build-arg USER="${USER}" \
     --build-arg UID="${SET_UID}" \
+    --build-arg SRC_IMG_PATH="dfinity/ic-build-src:$DOCKER_IMG_VERSION" \
     -f Dockerfile .
 
 # Build the container image with support for nix
@@ -58,6 +59,7 @@ DOCKER_BUILDKIT=1 docker build \
     --build-arg USER="${USER}" \
     --build-arg UID="${SET_UID}" \
     --build-arg IC_BUILD_IMG_VERSION="${LATEST}" \
+    --build-arg SRC_IMG_PATH="dfinity/ic-build-src:$DOCKER_IMG_VERSION" \
     -f Dockerfile.withnix .
 
 cd -
