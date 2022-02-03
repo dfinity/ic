@@ -14,6 +14,8 @@ deploy-guest-os-baseimg:
     cd "${CI_PROJECT_DIR}/ic-os/guestos/rootfs"
     docker build -q -t dfinity/guestos-base:"$TAG" -t dfinity/guestos-base:latest -f Dockerfile.base .
     docker push dfinity/guestos-base:"$TAG"
+    docker build -q -t dfinity/guestos-base-dev:"$TAG" -t dfinity/guestos-base:latest -f Dockerfile.base --build-args PACKAGE_FILES="packages.common packages.dev" .
+    docker push dfinity/guestos-base-dev:"$TAG"
 
     cd "${CI_PROJECT_DIR}/ic-os/generic-guestos/rootfs"
     docker build -q -t dfinity/genericos-base:"$TAG" -t dfinity/genericos-base:latest -f Dockerfile.base .
@@ -21,6 +23,8 @@ deploy-guest-os-baseimg:
 
     echo "Use the image with it's SHA256 DIGEST below for IC-OS Dockerfile"
     docker inspect --format='{{index .RepoDigests 0}}' dfinity/guestos-base:"$TAG"
+    echo "Use the image with it's SHA256 DIGEST below for IC-OS Dockerfile (dev version)"
+    docker inspect --format='{{index .RepoDigests 0}}' dfinity/guestos-base-dev:"$TAG"
     echo "Use the image with it's SHA256 DIGEST below for GENERIC IC-OS Dockerfile"
     docker inspect --format='{{index .RepoDigests 0}}' dfinity/genericos-base:"$TAG"
 

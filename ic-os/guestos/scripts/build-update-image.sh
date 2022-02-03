@@ -22,11 +22,15 @@ Usage:
      from source directory and install it into the correct location before
      building the image.
   -v version: The version written into the image.
-  -p password: Set root password for console access. BE CAREFUL.
+  -t image type: The type of image to build. Must be either "dev" or "prod".
+     If nothing is specified, defaults to building "prod" image.
+  -p password: Set root password for console access. This is only allowed
+     for "dev" images
 EOF
 }
 
-while getopts "i:o:p:v:x:" OPT; do
+BUILD_TYPE=prod
+while getopts "i:o:p:t:v:x:" OPT; do
     case "${OPT}" in
         i)
             IN_FILE="${OPTARG}"
@@ -36,6 +40,9 @@ while getopts "i:o:p:v:x:" OPT; do
             ;;
         p)
             ROOT_PASSWORD="${OPTARG}"
+            ;;
+        t)
+            BUILD_TYPE="${OPTARG}"
             ;;
         v)
             VERSION="${OPTARG}"
@@ -63,12 +70,12 @@ BOOT_IMG="${TMPDIR}"/boot.img
 ROOT_IMG="${TMPDIR}"/root.img
 
 if [ "${IN_FILE}" != "" ]; then
-    "${BASE_DIR}/scripts/build-ubuntu.sh" -i "${IN_FILE}" -r "${ROOT_IMG}" -b "${BOOT_IMG}"
+    "${BASE_DIR}/scripts/build-ubuntu.sh" -i "${IN_FILE}" -r "${ROOT_IMG}" -b "${BOOT_IMG}" -t "${BUILD_TYPE}"
     # HACK: allow running without explicitly given version, extract version
     # from rootfs. This is NOT good, but workable for the moment.
     VERSION=$(debugfs "${ROOT_IMG}" cat /opt/ic/share/version.txt)
 else
-    "${BASE_DIR}/scripts/build-ubuntu.sh" -r "${ROOT_IMG}" -b "${BOOT_IMG}" -p "${ROOT_PASSWORD}" -v "${VERSION}" -x "${EXEC_SRCDIR}"
+    "${BASE_DIR}/scripts/build-ubuntu.sh" -r "${ROOT_IMG}" -b "${BOOT_IMG}" -p "${ROOT_PASSWORD}" -v "${VERSION}" -x "${EXEC_SRCDIR}" -t "${BUILD_TYPE}"
 fi
 
 echo "${VERSION}" >"${TMPDIR}/VERSION.TXT"

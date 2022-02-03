@@ -6,6 +6,12 @@
 # First build stage:
 # - Download 3rd party tools
 #
+
+# The base images are defined in docker-base.prod and docker-base.dev. Update
+# the references there when a new base image has been built. Note that this
+# argument MUST be given by the build script, otherwise build will fail.
+ARG BASE_IMAGE=
+
 FROM ubuntu:20.04 as download
 
 ENV TZ=UTC
@@ -32,8 +38,7 @@ RUN cd /tmp/ && \
 # - Construct the actual target image (IC-OS root filesystem)
 # - Copy downloaded archives from first build stage into the target image
 #
-# Update below image when new dfinity/guestos-base image gets produced (see deploy-guest-os-baseimg CI job on master/rc).
-FROM dfinity/guestos-base@sha256:527d3ba8e12931e82350c1b58fe94133d9e1a8d1f6843a2d6e3354447eaddf85
+FROM $BASE_IMAGE
 
 RUN mkdir -p /boot/config \
              /boot/efi \
