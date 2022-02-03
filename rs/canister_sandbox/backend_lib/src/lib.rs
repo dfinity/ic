@@ -8,6 +8,14 @@ use std::sync::Arc;
 
 pub use ic_canister_sandbox_common::RUN_AS_CANISTER_SANDBOX_FLAG;
 
+fn abort_on_panic() {
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic_info| {
+        default_hook(panic_info);
+        std::process::abort();
+    }));
+}
+
 /// The `main()` of the canister sandbox binary. This function is called from
 /// binaries such as `ic-replica` and `drun` to run as a canister sandbox.
 ///
@@ -26,6 +34,11 @@ pub fn canister_sandbox_main() {
     // spawning the process -- cf. spawn_socketed_process function which
     // provides the counterpart and assures safety of this operation.
     let socket = unsafe { std::os::unix::net::UnixStream::from_raw_fd(3) };
+
+    // We abort the whole program with a core dump if a single thread panics.
+    // This way we can capture all the context if a critical error
+    // happens.
+    abort_on_panic();
 
     run_canister_sandbox(socket);
 }
@@ -68,13 +81,13 @@ pub fn run_canister_sandbox(socket: std::os::unix::net::UnixStream) {
 
     // It is fine if we fail to spawn this thread. Used for fault
     // injection only.
-    std::thread::spawn(move || {
-        let inject_failure = std::env::var("SANDBOX_TESTING_ON_MALICIOUS_SHUTDOWN_MANUAL").is_ok();
-        if inject_failure {
+    let inject_failure = std::env::var("SANDBOX_TESTING_ON_MALICIOUS_SHUTDOWN_MANUAL").is_ok();
+    if inject_failure {
+        std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(10));
             std::process::exit(1);
-        }
-    });
+        });
+    }
 
     // Run RPC operations on the stream socket.
     transport::socket_read_messages::<_, _>(
