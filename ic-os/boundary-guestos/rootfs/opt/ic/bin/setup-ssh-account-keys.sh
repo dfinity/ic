@@ -5,7 +5,7 @@ set -e
 # Set up ssh keys for the role accounts: This is required to allow
 # key-based login to these accounts
 
-# TBD (NODE-248): should only allow root ssh key for test builds
+# TBD: should only allow root ssh key for test builds
 
 mount --bind /run/ic-node/root/.ssh /root/.ssh
 

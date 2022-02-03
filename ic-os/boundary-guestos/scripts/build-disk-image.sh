@@ -13,6 +13,7 @@ set -eo pipefail
 function fstree_to_vfat() {
     FS_IMAGE="$1"
     FS_DIR="$2"
+
     mkfs.vfat -i 0 "${FS_IMAGE}"
 
     # Create all directories in sorted order
@@ -162,8 +163,8 @@ prepare_disk_image "$DISK_IMG"
 write_single_partition "$DISK_IMG" esp "$ESP_IMG"
 write_single_partition "$DISK_IMG" grub "$GRUB_IMG"
 write_single_partition "$DISK_IMG" config "$CONFIG_IMG"
-write_single_partition "$DISK_IMG" boot "$BOOT_IMG"
-write_single_partition "$DISK_IMG" root "$ROOT_IMG"
+write_single_partition "$DISK_IMG" A_boot "$BOOT_IMG"
+write_single_partition "$DISK_IMG" A_root "$ROOT_IMG"
 
 # XXX: enlarge so there is space after last partition to be used
 # -- only relevant for direct use in qemu

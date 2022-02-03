@@ -1,7 +1,7 @@
 [Unit]
 Description=Set up ssh account keys
-After=bootstrap-boundary-node.service
-Requires=bootstrap-boundary-node.service
+After=bootstrap-ic-node.service
+Requires=bootstrap-ic-node.service
 Before=ssh.service
 
 [Install]
