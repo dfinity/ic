@@ -283,12 +283,11 @@ impl CommitmentOpening {
 
         for (dealer_index, dealing) in verified_dealings {
             // Decrypt each dealing and check consistency with the commitment in the dealing
-            let opening = mega::decrypt_and_check(
-                &dealing.ciphertext,
+            let opening = dealing.ciphertext.decrypt_and_check(
                 &dealing.commitment,
                 context_data,
-                *dealer_index as usize,
-                receiver_index as usize,
+                *dealer_index,
+                receiver_index,
                 secret_key,
                 public_key,
             )?;
@@ -370,22 +369,5 @@ impl CommitmentOpening {
                 }
             }
         }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IDkgComplaintInternal {
-    pub dealer_index: NodeIndex,
-}
-
-impl IDkgComplaintInternal {
-    pub fn serialize(&self) -> ThresholdEcdsaResult<Vec<u8>> {
-        serde_cbor::to_vec(self)
-            .map_err(|e| ThresholdEcdsaError::SerializationError(format!("{}", e)))
-    }
-
-    pub fn deserialize(bytes: &[u8]) -> ThresholdEcdsaResult<Self> {
-        serde_cbor::from_slice::<Self>(bytes)
-            .map_err(|e| ThresholdEcdsaError::SerializationError(format!("{}", e)))
     }
 }

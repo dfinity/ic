@@ -104,7 +104,7 @@ fn encrypt_and_commit_single_polynomial(
     poly: &Polynomial,
     num_coefficients: usize,
     recipients: &[MEGaPublicKey],
-    dealer_index: usize,
+    dealer_index: NodeIndex,
     associated_data: &[u8],
     seed: Seed,
 ) -> ThresholdEcdsaResult<(MEGaCiphertext, PolynomialCommitment)> {
@@ -118,8 +118,13 @@ fn encrypt_and_commit_single_polynomial(
         plaintexts.push(v_s)
     }
 
-    let ciphertext =
-        mega_encrypt_single(seed, &plaintexts, recipients, dealer_index, associated_data)?;
+    let ciphertext = MEGaCiphertextSingle::encrypt(
+        seed,
+        &plaintexts,
+        recipients,
+        dealer_index,
+        associated_data,
+    )?;
 
     let commitment = SimpleCommitment::create(poly, num_coefficients)?;
 
@@ -131,7 +136,7 @@ fn encrypt_and_commit_pair_of_polynomials(
     mask: &Polynomial,
     num_coefficients: usize,
     recipients: &[MEGaPublicKey],
-    dealer_index: usize,
+    dealer_index: NodeIndex,
     associated_data: &[u8],
     seed: Seed,
 ) -> ThresholdEcdsaResult<(MEGaCiphertext, PolynomialCommitment)> {
@@ -147,7 +152,7 @@ fn encrypt_and_commit_pair_of_polynomials(
     }
 
     let ciphertext =
-        mega_encrypt_pair(seed, &plaintexts, recipients, dealer_index, associated_data)?;
+        MEGaCiphertextPair::encrypt(seed, &plaintexts, recipients, dealer_index, associated_data)?;
 
     let commitment = PedersenCommitment::create(values, mask, num_coefficients)?;
 
@@ -174,7 +179,7 @@ impl IDkgDealingInternal {
         seed: Seed,
         threshold: usize,
         recipients: &[MEGaPublicKey],
-        dealer_index: usize,
+        dealer_index: NodeIndex,
         associated_data: &[u8],
     ) -> ThresholdEcdsaResult<Self> {
         if threshold == 0 || threshold > recipients.len() {
@@ -427,12 +432,11 @@ impl IDkgDealingInternal {
             return Err(ThresholdEcdsaError::CurveMismatch);
         }
 
-        let _opening = mega::decrypt_and_check(
-            &self.ciphertext,
+        let _opening = self.ciphertext.decrypt_and_check(
             &self.commitment,
             associated_data,
-            dealer_index as usize,
-            recipient_index as usize,
+            dealer_index,
+            recipient_index,
             private_key,
             public_key,
         )?;

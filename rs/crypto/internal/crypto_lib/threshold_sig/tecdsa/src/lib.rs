@@ -18,6 +18,7 @@ pub enum ThresholdEcdsaError {
     InvalidArguments(String),
     InvalidDerivationPath,
     InvalidFieldElement,
+    InvalidComplaint,
     InvalidOpening,
     InvalidPoint,
     InvalidProof,
@@ -30,6 +31,7 @@ pub enum ThresholdEcdsaError {
 
 pub type ThresholdEcdsaResult<T> = std::result::Result<T, ThresholdEcdsaError>;
 
+mod complaints;
 mod dealings;
 mod ecdsa;
 mod fe;
@@ -45,6 +47,7 @@ mod transcript;
 mod xmd;
 pub mod zk;
 
+pub use crate::complaints::IDkgComplaintInternal;
 pub use crate::dealings::*;
 pub use crate::fe::*;
 pub use crate::group::*;
@@ -116,7 +119,7 @@ pub fn create_dealing(
         seed,
         threshold.get() as usize,
         recipients,
-        dealer_index as usize,
+        dealer_index,
         associated_data,
     )
     .map_err(|e| e.into())
@@ -557,4 +560,5 @@ pub fn verify_threshold_signature(
     Ok(())
 }
 
+pub use crate::complaints::generate_complaints;
 pub use crate::sign::derive_public_key;
