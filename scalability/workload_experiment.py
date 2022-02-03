@@ -143,6 +143,13 @@ class WorkloadExperiment(experiment.Experiment):
         else:
             return [node_ips[FLAGS.query_target_node_idx]]
 
+    def end_iteration(self, configuration={}):
+        """End benchmark iteration."""
+        super().end_iteration(configuration)
+        # Get logs from targets
+        since_time = self.t_iter_end - self.t_iter_start
+        self.get_iter_logs_from_targets(self.target_nodes, f"-{since_time}", self.iter_outdir)
+
     def get_mainnet_target(self) -> List[str]:
         """Get target if running in mainnet."""
         # If we want boundary nodes, we can see here:

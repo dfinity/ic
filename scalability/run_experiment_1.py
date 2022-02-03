@@ -126,12 +126,12 @@ class Experiment1(workload_experiment.WorkloadExperiment):
                     "duration": FLAGS.iter_duration,
                 }
             )
+            duration_in_iteration = int(time.time()) - t_start
 
             num_succ_per_iteration.append(num_success)
 
             print(f"🚀  ... failure rate for {load_total} rps was {failure_rate} median latency is {t_median}")
 
-            duration_in_iteration = int(time.time()) - t_start
             duration.append(duration_in_iteration)
 
             if len(datapoints) == 1:

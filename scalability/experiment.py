@@ -65,7 +65,7 @@ def parse_command_line_args():
     # Print all gflags for the experiment.
     print(colored("The following values will be used in the experiment.", "red"))
     for key, value in flags.items():
-        print(colored("Parameter {key} = {value.value}", "blue"))
+        print(colored(f"Parameter {key} = {value.value}", "blue"))
 
     if FLAGS.testnet == "mercury" and FLAGS.target_subnet_id is None:
         raise Exception("--target_subnet_id has to be set when running against mainnet")
@@ -216,10 +216,6 @@ class Experiment:
     def end_iteration(self, configuration={}):
         """End a new iteration of the experiment."""
         self.t_iter_end = int(time.time())
-
-        # Get logs from targets
-        since_time = self.t_iter_end - self.t_iter_start
-        self.get_iter_logs_from_targets(self.target_nodes, f"-{since_time}", self.iter_outdir)
 
         for m in self.metrics:
             m.end_iteration(self)
