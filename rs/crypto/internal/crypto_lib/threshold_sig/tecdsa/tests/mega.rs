@@ -22,7 +22,7 @@ fn mega_single_smoke_test() -> Result<(), ThresholdEcdsaError> {
 
     let seed = Seed::from_rng(&mut rng);
 
-    let ctext = mega_encrypt_single(
+    let ctext = MEGaCiphertextSingle::encrypt(
         seed,
         &[ptext_for_a, ptext_for_b],
         &[a_pk, b_pk],
@@ -30,14 +30,14 @@ fn mega_single_smoke_test() -> Result<(), ThresholdEcdsaError> {
         associated_data,
     )?;
 
-    let ptext_a = mega_decrypt_single(&ctext, associated_data, dealer_index, 0, &a_sk, &a_pk)?;
+    let ptext_a = ctext.decrypt(associated_data, dealer_index, 0, &a_sk, &a_pk)?;
 
     assert_eq!(
         hex::encode(ptext_a.serialize()),
         hex::encode(ptext_for_a.serialize())
     );
 
-    let ptext_b = mega_decrypt_single(&ctext, associated_data, dealer_index, 1, &b_sk, &b_pk)?;
+    let ptext_b = ctext.decrypt(associated_data, dealer_index, 1, &b_sk, &b_pk)?;
 
     assert_eq!(
         hex::encode(ptext_b.serialize()),
@@ -74,7 +74,7 @@ fn mega_pair_smoke_test() -> Result<(), ThresholdEcdsaError> {
 
     let dealer_index = 0;
 
-    let ctext = mega_encrypt_pair(
+    let ctext = MEGaCiphertextPair::encrypt(
         seed,
         &[ptext_for_a, ptext_for_b],
         &[a_pk, b_pk],
@@ -82,10 +82,10 @@ fn mega_pair_smoke_test() -> Result<(), ThresholdEcdsaError> {
         associated_data,
     )?;
 
-    let ptext_a = mega_decrypt_pair(&ctext, associated_data, dealer_index, 0, &a_sk, &a_pk)?;
+    let ptext_a = ctext.decrypt(associated_data, dealer_index, 0, &a_sk, &a_pk)?;
     assert_eq!(ptext_a, ptext_for_a);
 
-    let ptext_b = mega_decrypt_pair(&ctext, associated_data, dealer_index, 1, &b_sk, &b_pk)?;
+    let ptext_b = ctext.decrypt(associated_data, dealer_index, 1, &b_sk, &b_pk)?;
     assert_eq!(ptext_b, ptext_for_b);
 
     Ok(())

@@ -37,6 +37,10 @@ impl MEGaPublicKey {
     pub fn serialize(&self) -> Vec<u8> {
         self.point.serialize()
     }
+
+    pub(crate) fn public_point(&self) -> &EccPoint {
+        &self.point
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Serialize, Deserialize, Zeroize)]
@@ -70,6 +74,10 @@ impl MEGaPrivateKey {
 
     pub fn serialize(&self) -> Vec<u8> {
         self.secret.serialize()
+    }
+
+    pub fn secret_scalar(&self) -> &EccScalar {
+        &self.secret
     }
 }
 
@@ -123,6 +131,13 @@ impl MEGaCiphertext {
         }
     }
 
+    pub fn ephemeral_key(&self) -> &EccPoint {
+        match self {
+            MEGaCiphertext::Single(c) => &c.ephemeral_key,
+            MEGaCiphertext::Pairs(c) => &c.ephemeral_key,
+        }
+    }
+
     pub fn verify_is(
         &self,
         ctype: MEGaCiphertextType,
@@ -145,6 +160,47 @@ impl MEGaCiphertext {
         }
 
         Ok(())
+    }
+
+    // Decrypt a MEGa ciphertext and return the encrypted commitment opening
+    pub(crate) fn decrypt_and_check(
+        &self,
+        commitment: &PolynomialCommitment,
+        associated_data: &[u8],
+        dealer_index: NodeIndex,
+        receiver_index: NodeIndex,
+        secret_key: &MEGaPrivateKey,
+        public_key: &MEGaPublicKey,
+    ) -> ThresholdEcdsaResult<CommitmentOpening> {
+        let opening = match self {
+            MEGaCiphertext::Single(ciphertext) => {
+                let opening = ciphertext.decrypt(
+                    associated_data,
+                    dealer_index,
+                    receiver_index,
+                    secret_key,
+                    public_key,
+                )?;
+                CommitmentOpening::Simple(opening)
+            }
+
+            MEGaCiphertext::Pairs(ciphertext) => {
+                let opening = ciphertext.decrypt(
+                    associated_data,
+                    dealer_index,
+                    receiver_index,
+                    secret_key,
+                    public_key,
+                )?;
+                CommitmentOpening::Pedersen(opening.0, opening.1)
+            }
+        };
+
+        if commitment.check_opening(receiver_index, &opening)? {
+            Ok(opening)
+        } else {
+            Err(ThresholdEcdsaError::InconsistentCommitments)
+        }
     }
 }
 
@@ -230,8 +286,8 @@ fn check_plaintexts_pair(
 fn mega_shared_hash_to_scalars(
     domain_sep: &'static str,
     count: usize,
-    dealer_index: usize,
-    recipient_index: usize,
+    dealer_index: NodeIndex,
+    recipient_index: NodeIndex,
     associated_data: &[u8],
     public_key: &EccPoint,
     ephemeral_key: &EccPoint,
@@ -240,8 +296,8 @@ fn mega_shared_hash_to_scalars(
     let curve_type = public_key.curve_type();
     let mut ro = ro::RandomOracle::new(domain_sep);
 
-    ro.add_usize("dealer_index", dealer_index)?;
-    ro.add_usize("recipient_index", recipient_index)?;
+    ro.add_usize("dealer_index", dealer_index as usize)?;
+    ro.add_usize("recipient_index", recipient_index as usize)?;
     ro.add_bytestring("associated_data", associated_data)?;
     ro.add_point("public_key", public_key)?;
     ro.add_point("ephemeral_key", ephemeral_key)?;
@@ -250,8 +306,8 @@ fn mega_shared_hash_to_scalars(
 }
 
 fn mega_hash_to_scalar(
-    dealer_index: usize,
-    recipient_index: usize,
+    dealer_index: NodeIndex,
+    recipient_index: NodeIndex,
     associated_data: &[u8],
     public_key: &EccPoint,
     ephemeral_key: &EccPoint,
@@ -272,8 +328,8 @@ fn mega_hash_to_scalar(
 }
 
 fn mega_hash_to_scalars(
-    dealer_index: usize,
-    recipient_index: usize,
+    dealer_index: NodeIndex,
+    recipient_index: NodeIndex,
     associated_data: &[u8],
     public_key: &EccPoint,
     ephemeral_key: &EccPoint,
@@ -293,184 +349,179 @@ fn mega_hash_to_scalars(
     Ok((hm[0], hm[1]))
 }
 
-pub fn mega_encrypt_single(
-    seed: Seed,
-    plaintexts: &[EccScalar],
-    recipients: &[MEGaPublicKey],
-    dealer_index: usize,
-    associated_data: &[u8],
-) -> ThresholdEcdsaResult<MEGaCiphertextSingle> {
-    let curve_type = check_plaintexts(plaintexts, recipients)?;
+impl MEGaCiphertextSingle {
+    pub fn encrypt(
+        seed: Seed,
+        plaintexts: &[EccScalar],
+        recipients: &[MEGaPublicKey],
+        dealer_index: NodeIndex,
+        associated_data: &[u8],
+    ) -> ThresholdEcdsaResult<Self> {
+        let curve_type = check_plaintexts(plaintexts, recipients)?;
 
-    let mut rng = seed.derive(MEGA_SINGLE_SEED_DOMAIN_SEPARATOR).into_rng();
+        let mut rng = seed.derive(MEGA_SINGLE_SEED_DOMAIN_SEPARATOR).into_rng();
 
-    let beta = EccScalar::random(curve_type, &mut rng)?;
-    let v = EccPoint::mul_by_g(&beta)?;
+        let beta = EccScalar::random(curve_type, &mut rng)?;
+        let v = EccPoint::mul_by_g(&beta)?;
 
-    let mut ctexts = Vec::with_capacity(recipients.len());
+        let mut ctexts = Vec::with_capacity(recipients.len());
 
-    for (index, (pubkey, ptext)) in recipients.iter().zip(plaintexts).enumerate() {
-        let ubeta = pubkey.point.scalar_mul(&beta)?;
+        for (index, (pubkey, ptext)) in recipients.iter().zip(plaintexts).enumerate() {
+            let ubeta = pubkey.point.scalar_mul(&beta)?;
+
+            let hm = mega_hash_to_scalar(
+                dealer_index,
+                index as NodeIndex,
+                associated_data,
+                &pubkey.point,
+                &v,
+                &ubeta,
+            )?;
+
+            let ctext = hm.add(ptext)?;
+
+            ctexts.push(ctext);
+        }
+
+        Ok(Self {
+            ephemeral_key: v,
+            ctexts,
+        })
+    }
+
+    pub fn decrypt_from_shared_secret(
+        &self,
+        associated_data: &[u8],
+        dealer_index: NodeIndex,
+        recipient_index: NodeIndex,
+        recipient_public_key: &MEGaPublicKey,
+        shared_secret: &EccPoint,
+    ) -> ThresholdEcdsaResult<EccScalar> {
+        if self.ctexts.len() <= recipient_index as usize {
+            return Err(ThresholdEcdsaError::InvalidArguments(
+                "Invalid index".to_string(),
+            ));
+        }
 
         let hm = mega_hash_to_scalar(
             dealer_index,
-            index,
+            recipient_index,
             associated_data,
-            &pubkey.point,
-            &v,
-            &ubeta,
+            &recipient_public_key.point,
+            &self.ephemeral_key,
+            shared_secret,
         )?;
 
-        let ctext = hm.add(ptext)?;
-
-        ctexts.push(ctext);
+        self.ctexts[recipient_index as usize].sub(&hm)
     }
 
-    Ok(MEGaCiphertextSingle {
-        ephemeral_key: v,
-        ctexts,
-    })
+    pub fn decrypt(
+        &self,
+        associated_data: &[u8],
+        dealer_index: NodeIndex,
+        recipient_index: NodeIndex,
+        our_private_key: &MEGaPrivateKey,
+        recipient_public_key: &MEGaPublicKey,
+    ) -> ThresholdEcdsaResult<EccScalar> {
+        let ubeta = self.ephemeral_key.scalar_mul(&our_private_key.secret)?;
+
+        self.decrypt_from_shared_secret(
+            associated_data,
+            dealer_index,
+            recipient_index,
+            recipient_public_key,
+            &ubeta,
+        )
+    }
 }
 
-pub fn mega_encrypt_pair(
-    seed: Seed,
-    plaintexts: &[(EccScalar, EccScalar)],
-    recipients: &[MEGaPublicKey],
-    dealer_index: usize,
-    associated_data: &[u8],
-) -> ThresholdEcdsaResult<MEGaCiphertextPair> {
-    let curve_type = check_plaintexts_pair(plaintexts, recipients)?;
+impl MEGaCiphertextPair {
+    pub fn encrypt(
+        seed: Seed,
+        plaintexts: &[(EccScalar, EccScalar)],
+        recipients: &[MEGaPublicKey],
+        dealer_index: NodeIndex,
+        associated_data: &[u8],
+    ) -> ThresholdEcdsaResult<Self> {
+        let curve_type = check_plaintexts_pair(plaintexts, recipients)?;
 
-    let mut rng = seed.derive(MEGA_PAIR_SEED_DOMAIN_SEPARATOR).into_rng();
+        let mut rng = seed.derive(MEGA_PAIR_SEED_DOMAIN_SEPARATOR).into_rng();
 
-    let beta = EccScalar::random(curve_type, &mut rng)?;
-    let v = EccPoint::mul_by_g(&beta)?;
+        let beta = EccScalar::random(curve_type, &mut rng)?;
+        let v = EccPoint::mul_by_g(&beta)?;
 
-    let mut ctexts = Vec::with_capacity(recipients.len());
+        let mut ctexts = Vec::with_capacity(recipients.len());
 
-    for (index, (pubkey, ptext)) in recipients.iter().zip(plaintexts).enumerate() {
-        let ubeta = pubkey.point.scalar_mul(&beta)?;
+        for (index, (pubkey, ptext)) in recipients.iter().zip(plaintexts).enumerate() {
+            let ubeta = pubkey.point.scalar_mul(&beta)?;
+
+            let hm = mega_hash_to_scalars(
+                dealer_index,
+                index as NodeIndex,
+                associated_data,
+                &pubkey.point,
+                &v,
+                &ubeta,
+            )?;
+
+            let ctext0 = hm.0.add(&ptext.0)?;
+            let ctext1 = hm.1.add(&ptext.1)?;
+
+            ctexts.push((ctext0, ctext1));
+        }
+
+        Ok(Self {
+            ephemeral_key: v,
+            ctexts,
+        })
+    }
+
+    pub fn decrypt_from_shared_secret(
+        &self,
+        associated_data: &[u8],
+        dealer_index: NodeIndex,
+        recipient_index: NodeIndex,
+        recipient_public_key: &MEGaPublicKey,
+        shared_secret: &EccPoint,
+    ) -> ThresholdEcdsaResult<(EccScalar, EccScalar)> {
+        if self.ctexts.len() <= recipient_index as usize {
+            return Err(ThresholdEcdsaError::InvalidArguments(
+                "Invalid index".to_string(),
+            ));
+        }
 
         let hm = mega_hash_to_scalars(
             dealer_index,
-            index,
+            recipient_index,
             associated_data,
-            &pubkey.point,
-            &v,
-            &ubeta,
+            &recipient_public_key.point,
+            &self.ephemeral_key,
+            shared_secret,
         )?;
 
-        let ctext0 = hm.0.add(&ptext.0)?;
-        let ctext1 = hm.1.add(&ptext.1)?;
+        let ptext0 = self.ctexts[recipient_index as usize].0.sub(&hm.0)?;
+        let ptext1 = self.ctexts[recipient_index as usize].1.sub(&hm.1)?;
 
-        ctexts.push((ctext0, ctext1));
+        Ok((ptext0, ptext1))
     }
 
-    Ok(MEGaCiphertextPair {
-        ephemeral_key: v,
-        ctexts,
-    })
-}
+    pub fn decrypt(
+        &self,
+        associated_data: &[u8],
+        dealer_index: NodeIndex,
+        recipient_index: NodeIndex,
+        our_private_key: &MEGaPrivateKey,
+        recipient_public_key: &MEGaPublicKey,
+    ) -> ThresholdEcdsaResult<(EccScalar, EccScalar)> {
+        let ubeta = self.ephemeral_key.scalar_mul(&our_private_key.secret)?;
 
-pub fn mega_decrypt_single(
-    ctext: &MEGaCiphertextSingle,
-    associated_data: &[u8],
-    dealer_index: usize,
-    our_index: usize,
-    our_private_key: &MEGaPrivateKey,
-    our_public_key: &MEGaPublicKey,
-) -> ThresholdEcdsaResult<EccScalar> {
-    if ctext.ctexts.len() <= our_index {
-        return Err(ThresholdEcdsaError::InvalidArguments(
-            "Invalid index".to_string(),
-        ));
-    }
-
-    let ubeta = ctext.ephemeral_key.scalar_mul(&our_private_key.secret)?;
-
-    let hm = mega_hash_to_scalar(
-        dealer_index,
-        our_index,
-        associated_data,
-        &our_public_key.point,
-        &ctext.ephemeral_key,
-        &ubeta,
-    )?;
-
-    ctext.ctexts[our_index].sub(&hm)
-}
-
-pub fn mega_decrypt_pair(
-    ctext: &MEGaCiphertextPair,
-    associated_data: &[u8],
-    dealer_index: usize,
-    our_index: usize,
-    our_private_key: &MEGaPrivateKey,
-    our_public_key: &MEGaPublicKey,
-) -> ThresholdEcdsaResult<(EccScalar, EccScalar)> {
-    if ctext.ctexts.len() <= our_index {
-        return Err(ThresholdEcdsaError::InvalidArguments(
-            "Invalid index".to_string(),
-        ));
-    }
-
-    let ubeta = ctext.ephemeral_key.scalar_mul(&our_private_key.secret)?;
-
-    let hm = mega_hash_to_scalars(
-        dealer_index,
-        our_index,
-        associated_data,
-        &our_public_key.point,
-        &ctext.ephemeral_key,
-        &ubeta,
-    )?;
-
-    let ptext0 = ctext.ctexts[our_index].0.sub(&hm.0)?;
-    let ptext1 = ctext.ctexts[our_index].1.sub(&hm.1)?;
-
-    Ok((ptext0, ptext1))
-}
-
-// Decrypt a MEGa ciphertext and return the encrypted commitment opening
-pub(crate) fn decrypt_and_check(
-    ciphertext: &MEGaCiphertext,
-    commitment: &PolynomialCommitment,
-    associated_data: &[u8],
-    dealer_index: usize,
-    receiver_index: usize,
-    secret_key: &MEGaPrivateKey,
-    public_key: &MEGaPublicKey,
-) -> ThresholdEcdsaResult<CommitmentOpening> {
-    let opening = match ciphertext {
-        MEGaCiphertext::Single(ciphertext) => {
-            let opening = mega_decrypt_single(
-                ciphertext,
-                associated_data,
-                dealer_index,
-                receiver_index,
-                secret_key,
-                public_key,
-            )?;
-            CommitmentOpening::Simple(opening)
-        }
-
-        MEGaCiphertext::Pairs(ciphertext) => {
-            let opening = mega_decrypt_pair(
-                ciphertext,
-                associated_data,
-                dealer_index,
-                receiver_index,
-                secret_key,
-                public_key,
-            )?;
-            CommitmentOpening::Pedersen(opening.0, opening.1)
-        }
-    };
-
-    if commitment.check_opening(receiver_index as NodeIndex, &opening)? {
-        Ok(opening)
-    } else {
-        Err(ThresholdEcdsaError::InconsistentCommitments)
+        self.decrypt_from_shared_secret(
+            associated_data,
+            dealer_index,
+            recipient_index,
+            recipient_public_key,
+            &ubeta,
+        )
     }
 }
 
