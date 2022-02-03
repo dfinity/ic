@@ -238,3 +238,7 @@ sed -e "s@{{ ipv6_address }}@${IPV6_ADDRESS}@" \
     -e "s@{{ log_debug_overrides }}@${LOG_DEBUG_OVERRIDES}@" \
     -e "s@{{ malicious_behavior }}@${MALICIOUS_BEHAVIOR}@" \
     "${IN_FILE}" >"${OUT_FILE}"
+
+# umask for service is set to be restricted, but this file needs to be
+# world-readable
+chmod 644 "${OUT_FILE}"

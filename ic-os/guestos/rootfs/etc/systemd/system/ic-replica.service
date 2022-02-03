@@ -16,6 +16,7 @@ StartLimitBurst=5
 StartLimitIntervalSec=60
 
 [Service]
+UMask=026
 Type=simple
 User=ic-replica
 
