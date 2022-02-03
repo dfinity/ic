@@ -155,12 +155,8 @@ impl Transport for TransportImpl {
         self.start_peer_connections(peer_id, node_record, registry_version)
     }
 
-    fn stop_connections(
-        &self,
-        peer_id: &NodeId,
-        registry_version: RegistryVersion,
-    ) -> Result<(), TransportErrorCode> {
-        self.stop_peer_connections(peer_id, registry_version)
+    fn stop_connections(&self, peer_id: &NodeId) -> Result<(), TransportErrorCode> {
+        self.stop_peer_connections(peer_id)
     }
 
     fn send(
