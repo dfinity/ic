@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Build configuration for boundary node VMs based on subnet.json and transform it into removable media.
+# Build subnet based on subnet.json and transform it into removable media.
 
 # Build Requirements:
 # - Operating System: Ubuntu 20.04
@@ -12,9 +12,6 @@ set -o pipefail
 BASE_DIR="$(dirname "${BASH_SOURCE[0]}")/.."
 REPO_ROOT=$(git rev-parse --show-toplevel)
 
-# Set argument defaults
-DEBUG=0
-
 # Get keyword arguments
 for argument in "${@}"; do
     case ${argument} in
@@ -23,12 +20,13 @@ for argument in "${@}"; do
 
 Removable Media Builder for Boundary Node VMs
 
+
 Arguments:
-  -h,  --help                 show this help message and exit
-  -i=, --input=               JSON formatted input file (Default: ./subnet.json)
-  -o=, --output=              removable media output directory (Default: ./build-out/)
-  -s=, --ssh=                 specify directory holding SSH authorized_key files (Default: ../../testnet/config/ssh_authorized_keys)
-       --git-revision=        git revision for which to prepare the media
+  -h,  --help                           show this help message and exit
+  -i=, --input=                         JSON formatted input file (Default: ./subnet.json)
+  -o=, --output=                        removable media output directory (Default: ./build-out/)
+  -s=, --ssh=                           specify directory holding SSH authorized_key files (Default: ../../testnet/config/ssh_authorized_keys)
+       --git-revision=                  git revision for which to prepare the media
   -x,  --debug                enable verbose console output
 '
             exit 1
@@ -48,9 +46,6 @@ Arguments:
         --git-revision=*)
             GIT_REVISION="${argument#*=}"
             shift
-            ;;
-        -x | --debug)
-            DEBUG=1
             ;;
         *)
             echo 'Error: Argument is not supported.'
@@ -158,32 +153,22 @@ function create_tarball_structure() {
 }
 
 function generate_journalbeat_config() {
-    echo ${CONFIG} | jq -c '.datacenters[]' | while read datacenters; do
-        echo ${datacenters} | jq -c '[.nodes[],.boundary_nodes[],.aux_nodes[]][]' | while read nodes; do
-
-            local hostname=$(echo ${nodes} | jq -r '.hostname')
-            local subnet_idx=$(echo ${nodes} | jq -r '.subnet_idx')
-            local node_idx=$(echo ${nodes} | jq -r '.node_idx')
+    for n in $NODES; do
+        declare -n NODE=$n
+        if [[ "${NODE["type"]}" == "boundary" ]]; then
+            local subnet_idx=${NODE["subnet_idx"]}
+            local node_idx=${NODE["node_idx"]}
 
             # Define hostname
             NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
 
             if [ "${JOURNALBEAT_HOSTS}" != "" ]; then
                 echo "journalbeat_hosts=${JOURNALBEAT_HOSTS}" >"${CONFIG_DIR}/$NODE_PREFIX/journalbeat.conf"
-
-                if [ "${JOURNALBEAT_USERNAME}" != "" ]; then
-                    echo "journalbeat_username=${JOURNALBEAT_USERNAME}" >>"${CONFIG_DIR}/$NODE_PREFIX/journalbeat.conf"
-                fi
-
-                if [ "${JOURNALBEAT_PASSWORD}" != "" ]; then
-                    echo "journalbeat_password=${JOURNALBEAT_PASSWORD}" >>"${CONFIG_DIR}/$NODE_PREFIX/journalbeat.conf"
-                fi
             fi
-
-            if [ "${KAFKA_HOSTS}" != "" ]; then
-                echo "kafka_hosts=${KAFKA_HOSTS}" >"${CONFIG_DIR}/$NODE_PREFIX/journalbeat.conf"
+            if [ "${JOURNALBEAT_TAGS}" != "" ]; then
+                echo "journalbeat_tags=${JOURNALBEAT_TAGS}" >>"${CONFIG_DIR}/$NODE_PREFIX/journalbeat.conf"
             fi
-        done
+        fi
     done
 }
 
@@ -217,15 +202,12 @@ function generate_boundary_node_config() {
 }
 
 function generate_network_config() {
-    echo ${CONFIG} | jq -c '.datacenters[]' | while read datacenters; do
-        local ipv6_prefix=$(echo ${datacenters} | jq -r '.ipv6_prefix')
-        local ipv6_subnet=$(echo ${datacenters} | jq -r '.ipv6_subnet')
-        local ipv6_gateway="${ipv6_prefix}"::1
-        echo ${datacenters} | jq -c '[.nodes[],.boundary_nodes[],.aux_nodes[]][]' | while read nodes; do
-
-            local hostname=$(echo ${nodes} | jq -r '.hostname')
-            local subnet_idx=$(echo ${nodes} | jq -r '.subnet_idx')
-            local node_idx=$(echo ${nodes} | jq -r '.node_idx')
+    for n in $NODES; do
+        declare -n NODE=$n
+        if [[ "${NODE["type"]}" == "boundary" ]]; then
+            local hostname=${NODE["hostname"]}
+            local subnet_idx=${NODE["subnet_idx"]}
+            local node_idx=${NODE["node_idx"]}
 
             # Define hostname
             NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
@@ -236,16 +218,14 @@ function generate_network_config() {
             echo "name_servers_fallback=${NAME_SERVERS_FALLBACK}" >>"${CONFIG_DIR}/$NODE_PREFIX/network.conf"
 
             # IPv6 network configuration is obtained from the Router Advertisement.
-        done
+        fi
     done
 }
 
 function copy_ssh_keys() {
     for n in $NODES; do
         declare -n NODE=$n
-
-        if [[ "${NODE["type"]}" = "boundary" ]]; then
-
+        if [[ "${NODE["type"]}" == "boundary" ]]; then
             local subnet_idx=${NODE["subnet_idx"]}
             local node_idx=${NODE["node_idx"]}
 
@@ -265,7 +245,6 @@ function build_tarball() {
     for n in $NODES; do
         declare -n NODE=$n
         if [[ "${NODE["type"]}" == "boundary" ]]; then
-
             local subnet_idx=${NODE["subnet_idx"]}
             local node_idx=${NODE["node_idx"]}
 
@@ -285,7 +264,6 @@ function build_removable_media() {
     for n in $NODES; do
         declare -n NODE=$n
         if [[ "${NODE["type"]}" == "boundary" ]]; then
-
             local subnet_idx=${NODE["subnet_idx"]}
             local node_idx=${NODE["node_idx"]}
 
@@ -302,30 +280,19 @@ function remove_temporary_directories() {
     rm -rf ${TEMPDIR}
 }
 
-# See how we were called
-# (NODE-249) Migrate journalbeat and network config from ansible tasks to dockerfile
-if [ ${DEBUG} -eq 1 ]; then
+function main() {
+    # Establish run order
     prepare_build_directories
     download_binaries
     place_control_plane
     create_tarball_structure
     generate_boundary_node_config
-    #   generate_journalbeat_config
-    #   generate_network_config
+    generate_journalbeat_config
+    generate_network_config
     copy_ssh_keys
     build_tarball
     build_removable_media
     # remove_temporary_directories
-else
-    prepare_build_directories >/dev/null 2>&1
-    download_binaries >/dev/null 2>&1 &
-    place_control_plane >/dev/null 2>&1 &
-    create_tarball_structure >/dev/null 2>&1
-    generate_boundary_node_config >/dev/null 2>&1
-    #   generate_journalbeat_config >/dev/null 2>&1
-    #   generate_network_config >/dev/null 2>&1
-    copy_ssh_keys >/dev/null 2>&1
-    build_tarball >/dev/null 2>&1
-    build_removable_media >/dev/null 2>&1
-    remove_temporary_directories >/dev/null 2>&1
-fi
+}
+
+main

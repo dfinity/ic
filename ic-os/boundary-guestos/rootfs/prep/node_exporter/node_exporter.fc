@@ -1,5 +1,0 @@
-/etc/default/node_exporter                        -- gen_context(system_u:object_r:node_exporter_conf_t,s0)
-/etc/node_exporter/.*                             -- gen_context(system_u:object_r:node_exporter_conf_t,s0)
-/run/ic-node/etc/node_exporter/.*                 -- gen_context(system_u:object_r:node_exporter_conf_t,s0)
-/run/node_exporter/collector_textfile             -d gen_context(system_u:object_r:node_exporter_var_lib_t,s0)
-/usr/local/bin/node_exporter                      -- gen_context(system_u:object_r:node_exporter_exec_t,s0)

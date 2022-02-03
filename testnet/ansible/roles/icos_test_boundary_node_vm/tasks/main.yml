@@ -14,7 +14,3 @@
     - boundary_node_vm
 
 
-- name: import tasks monitoring
-  import_tasks: "monitor.yml"
-  tags:
-    - boundary_node_vm

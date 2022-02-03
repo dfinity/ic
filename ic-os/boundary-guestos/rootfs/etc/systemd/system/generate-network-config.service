@@ -1,6 +1,6 @@
 [Unit]
 Description=Generate network config
-After=bootstrap-boundary-node.service
+After=bootstrap-ic-node.service
 Before=systemd-networkd.service
 
 [Install]
