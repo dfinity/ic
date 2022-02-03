@@ -14,6 +14,17 @@ https://sdk.dfinity.org/docs/interface-spec/index.html#http-interface[IC specifi
 In addition, the http handler serves content under /_/{dashboard|catch_up_package|pprof} for 
 operational purposes.
 
+=== Startup
+
+The HTTP handler starts accepting requests as soon as it is instantiated. This is driven by operational needs, we want to serve
+/status, /dashboard, /catch_up_package endpoints as soon as possible.
+
+In order to serve query, read_state or call requests the replica needs to meet few preconditions.
+The precondidation are encoded in the +ic_types::messages::ReplicaHealthStatus+ enum. 
+
+If you try to send, for example a query request, before the replica enters ReplicaHealthStatus::Healthy, then
+503 Service Unavailable will be returned as part of the response.
+
 == tower::Service FAQ
 
 === When implementing a https://docs.rs/tower/0.4.11/tower/trait.Service.html[tower::Service], use https://docs.rs/tower/0.4.11/tower/util/struct.BoxService.html[tower::util::BoxService] as the public interface
@@ -47,7 +58,7 @@ duration from calling +poll_ready+ until +call+ returns. This is effectively the
 With this approach is hard to control the contention on the mutex (it is hard to know how many threads are stuck
 waiting to acquire the mutex).
 
-==== Returning errors
+=== Returning errors
 
 If +Poll::Ready(Err(_))+ is returned when +poll_ready+ is called, the service is no longer able to service requests and the caller should discard the service instance. https://docs.rs/tower/0.4.11/tower/trait.Service.html#tymethod.poll_ready[[docs.rs]]
 
@@ -59,7 +70,7 @@ Having LoadShed<...> as part of cross-component API just increases the API surfa
 about the addition semantics LoadShed introduces. +LoadShed+ also restricts the +Service::Error+ type to be 
 +BoxError+.
 
-==== Avoid driving clones of a service object ready without using them
+=== Avoid driving clones of a service object ready without using them
 
 Some layers keep internal state in the form of semaphore permits. If you acquire a semaphore permit
 better use it or free it. This semantics doesn't play very well the https://docs.rs/tower/0.4.11/tower/steer/index.html[tower::Steer] service.
