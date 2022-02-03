@@ -39,6 +39,10 @@ fn test_the_anonymous_user_cannot_bless_a_version() {
 
         let payload = BlessReplicaVersionPayload {
             replica_version_id: "version_43".to_string(),
+            binary_url: "".into(),
+            sha256_hex: "".into(),
+            node_manager_binary_url: "".into(),
+            node_manager_sha256_hex: "".into(),
             release_package_url: "".into(),
             release_package_sha256_hex: "".into(),
         };
@@ -104,6 +108,10 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_bless_a_version() {
         .await;
         let payload = BlessReplicaVersionPayload {
             replica_version_id: "version_43".to_string(),
+            binary_url: "".into(),
+            sha256_hex: "".into(),
+            node_manager_binary_url: "".into(),
+            node_manager_sha256_hex: "".into(),
             release_package_url: "".into(),
             release_package_sha256_hex: "".into(),
         };
@@ -156,6 +164,10 @@ fn test_accepted_proposal_mutates_the_registry() {
         // We can bless a new version, the version already in the registry is 42
         let payload_v43 = BlessReplicaVersionPayload {
             replica_version_id: "version_43".to_string(),
+            binary_url: "".into(),
+            sha256_hex: "".into(),
+            node_manager_binary_url: "".into(),
+            node_manager_sha256_hex: "".into(),
             release_package_url: "http://release_package.tar.gz".into(),
             release_package_sha256_hex: MOCK_HASH.into(),
         };
@@ -182,6 +194,10 @@ fn test_accepted_proposal_mutates_the_registry() {
         // Trying to mutate an existing record should have no effect.
         let payload_v42_mutate = BlessReplicaVersionPayload {
             replica_version_id: "version_42".to_string(),
+            binary_url: "".into(),
+            sha256_hex: "".into(),
+            node_manager_binary_url: "".into(),
+            node_manager_sha256_hex: "".into(),
             release_package_url: "".into(),
             release_package_sha256_hex: "".into(),
         };

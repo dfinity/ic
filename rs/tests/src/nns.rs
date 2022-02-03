@@ -552,6 +552,10 @@ async fn add_replica_version(nns_api: &'_ Runtime, version: ReplicaVersion) -> R
     let governance_canister = get_governance_canister(nns_api);
     let proposal_payload = BlessReplicaVersionPayload {
         replica_version_id: version.to_string(),
+        binary_url: "".into(),
+        sha256_hex: "".into(),
+        node_manager_binary_url: "".into(),
+        node_manager_sha256_hex: "".into(),
         release_package_url: "".to_string(),
         release_package_sha256_hex: "".to_string(),
     };
@@ -799,6 +803,10 @@ pub async fn submit_bless_replica_version_proposal(
         NnsFunction::BlessReplicaVersion,
         BlessReplicaVersionPayload {
             replica_version_id: String::from(version.clone()),
+            binary_url: "".into(),
+            sha256_hex: "".into(),
+            node_manager_binary_url: "".into(),
+            node_manager_sha256_hex: "".into(),
             release_package_url: upgrade_url,
             release_package_sha256_hex: sha256.clone(),
         },
