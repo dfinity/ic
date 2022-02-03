@@ -1,5 +1,10 @@
 # Add a Nix layer on top of the dfinity/ic-build:latest image
-FROM dfinity/ic-build:latest
+ARG IC_BUILD_IMG_VERSION=latest
+
+FROM dfinity/ic-build:$IC_BUILD_IMG_VERSION
+
+ARG USER=ubuntu
+ARG UID=1000
 
 # Another Nix version can be provided when building the image, e.g.:
 # docker build --build-arg nix_version=${NIX_VERSION} [...]
@@ -18,20 +23,20 @@ substituters = https://cache.nixos.org https://nix.dfinity.systems\n\
 builders-use-substitutes = true' > /etc/nix/nix.conf
 
 # Add Nix folders
-RUN mkdir -p /nix && chown -R 1000.1000 /nix
+RUN mkdir -p /nix && chown -R ${UID}.${UID} /nix
 
 ENV NIX_VERSION=${nix_version} \
-    PATH=/home/ubuntu/.nix-profile/bin:/cargo/bin:$PATH \
-    NIX_PATH=/home/ubuntu/.nix-defexpr/channels \
-    NIX_PROFILES="/nix/var/nix/profiles/default /home/ubuntu/.nix-profile" \
+    PATH=/home/${USER}/.nix-profile/bin:/cargo/bin:$PATH \
+    NIX_PATH=/home/${USER}/.nix-defexpr/channels \
+    NIX_PROFILES="/nix/var/nix/profiles/default /home/${USER}/.nix-profile" \
     NIX_SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
-    MANPATH="/home/ubuntu/.nix-profile/share/man:$MANPATH"
+    MANPATH="/home/${USER}/.nix-profile/share/man:$MANPATH"
 
 RUN echo 'curl --fail -L https://releases.nixos.org/nix/nix-${NIX_VERSION}/install | sh\n' \
         > /usr/bin/nix-install && \
     chmod 0755 /usr/bin/nix-install
 
-USER 1000
+USER ${UID}
 
 # Ensure that nix-shell is available in the docker container.
 RUN /usr/bin/nix-install

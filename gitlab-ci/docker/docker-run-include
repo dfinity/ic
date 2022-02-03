@@ -9,7 +9,16 @@ REPO_ROOT="$(
 )"
 
 IMAGE_TAG=${IMAGE_TAG:-$(cat "$REPO_ROOT/gitlab-ci/docker/TAG")}
-IMAGE="${IMAGE:-dfinity/ic-build:$IMAGE_TAG}"
+
+USER=$(whoami)
+if [ $USER == ubuntu ]; then
+    PREFIX=""
+else
+    SET_UID="$(id -u $USER)"
+    PREFIX="$USER-$SET_UID"
+fi
+
+IMAGE="${IMAGE:-dfinity/ic-build:$PREFIX-$IMAGE_TAG}"
 WORKDIR="/ic"
 
 DOCKER_RUN_ARGS=(
