@@ -110,15 +110,15 @@
       # Allow failure needs to be set explicitly, despite what GitLab's documentation says.
       allow_failure: true
 
-# 1. If on the RC branch and "[hotfix]" is in the commit message, then allow manual execution of
-#    prod hourly and nightly tests.
+# 1. If on the RC branch and "hotfix" (case insensitive) is in the commit message,
+#    then allow manual execution of prod hourly and nightly tests.
 # 2. Otherwise, if on the RC branch then perform automatic execution of prod hourly and nightly
 #    tests.
 # 3. Otherwise, if on any other branch and "[hotfix]" is in the commit message, then allow manual
 #    execution of prod hourly and nightly tests.
 .rules-rollout-pipeline-auto:
   rules:
-    - if: '$CI_COMMIT_BRANCH =~ /^rc--/ && $CI_COMMIT_MESSAGE =~ /\[hotfix\]/ && $CI_PIPELINE_SOURCE != "trigger"'
+    - if: '$CI_COMMIT_BRANCH =~ /^rc--/ && $CI_COMMIT_MESSAGE =~ /hotfix/i && $CI_PIPELINE_SOURCE != "trigger"'
       when: manual
       allow_failure: true
     - if: '$CI_COMMIT_BRANCH =~ /^rc--/ && $CI_PIPELINE_SOURCE != "trigger"'
