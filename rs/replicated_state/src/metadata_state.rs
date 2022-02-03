@@ -756,7 +756,7 @@ impl<'a> StreamHandle<'a> {
 /// State associated with the history of statuses of ingress messages as they
 /// traversed through the system.
 pub struct IngressHistoryState {
-    statuses: Arc<BTreeMap<MessageId, IngressStatus>>,
+    statuses: Arc<BTreeMap<MessageId, Arc<IngressStatus>>>,
     pruning_times: Arc<BTreeMap<Time, BTreeSet<MessageId>>>,
 }
 
@@ -787,14 +787,14 @@ impl From<&IngressHistoryState> for pb_ingress::IngressHistoryState {
 impl TryFrom<pb_ingress::IngressHistoryState> for IngressHistoryState {
     type Error = ProxyDecodeError;
     fn try_from(item: pb_ingress::IngressHistoryState) -> Result<Self, Self::Error> {
-        let mut statuses = BTreeMap::<MessageId, IngressStatus>::new();
+        let mut statuses = BTreeMap::<MessageId, Arc<IngressStatus>>::new();
         let mut pruning_times = BTreeMap::<Time, BTreeSet<MessageId>>::new();
 
         for entry in item.statuses {
             let msg_id = entry.message_id.as_slice().try_into()?;
             let ingres_status = try_from_option_field(entry.status, "IngressStatusEntry::status")?;
 
-            statuses.insert(msg_id, ingres_status);
+            statuses.insert(msg_id, Arc::new(ingres_status));
         }
 
         for entry in item.pruning_times {
@@ -834,13 +834,15 @@ impl IngressHistoryState {
                 .or_default()
                 .insert(message_id.clone());
         }
-        Arc::make_mut(&mut self.statuses).insert(message_id, status);
+        Arc::make_mut(&mut self.statuses).insert(message_id, Arc::new(status));
     }
 
     /// Returns an iterator over response statuses, sorted lexicographically by
     /// message id.
     pub fn statuses(&self) -> impl Iterator<Item = (&MessageId, &IngressStatus)> {
-        self.statuses.iter()
+        self.statuses
+            .iter()
+            .map(|(id, status)| (id, status.as_ref()))
     }
 
     /// Returns an iterator over pruning times statuses, sorted
@@ -851,7 +853,7 @@ impl IngressHistoryState {
 
     /// Retrieves an entry from the ingress history given a `MessageId`.
     pub fn get(&self, message_id: &MessageId) -> Option<&IngressStatus> {
-        self.statuses.get(message_id)
+        self.statuses.get(message_id).map(|status| status.as_ref())
     }
 
     /// Returns the number of statuses kept in the ingress history.
