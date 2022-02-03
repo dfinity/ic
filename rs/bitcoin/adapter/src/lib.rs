@@ -37,9 +37,6 @@ mod connectionmanager;
 mod rpc_server;
 mod stream;
 mod transaction_manager;
-/// This module contains code for utility functions like encoding and decoding
-/// Bitcoin Blocks to proto Blocks.
-mod utils;
 
 mod cli;
 

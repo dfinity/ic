@@ -1,13 +1,8 @@
 //! A parser for the configuration file.
-// Here we can crash as we cannot proceed with an invalid config.
-#![allow(clippy::expect_used)]
 
 use crate::config::Config;
-use bitcoin::Network;
 use clap::{AppSettings, Clap};
-use serde::Deserialize;
 use slog::Level;
-use std::net::{SocketAddr, ToSocketAddrs};
 use std::{fs::File, io, path::PathBuf};
 use thiserror::Error;
 
@@ -47,74 +42,10 @@ impl Cli {
     /// Loads the config from the provided `config` argument.
     pub fn get_config(&self) -> CliResult<Config> {
         // The expected JSON config.
-        //
-        // This is similar to `Config`, but additional fields are marked as optional
-        // so that they don't need to be specified in config files.
-        #[derive(Deserialize)]
-        struct CliConfig {
-            network: Network,
-            additional_seeds: Option<Vec<String>>,
-            socks_proxy: Option<SocketAddr>,
-            nodes: Option<Vec<String>>,
-        }
 
         let file = File::open(&self.config).map_err(CliError::Io)?;
-
-        let cli_config: CliResult<CliConfig> =
-            serde_json::from_reader(file).map_err(|err| CliError::Deserialize(err.to_string()));
-
-        // Convert the `CliConfig` to `Config`, adding default values where necessary.
-        cli_config.map(|cli_config| {
-            let mut dns_seeds = seeds(cli_config.network);
-            if let Some(ref additional_seeds) = cli_config.additional_seeds {
-                dns_seeds.extend(additional_seeds.clone());
-            }
-
-            // Convert or resolve the `nodes` field to one or more `SocketAddr` values.
-            let nodes = cli_config
-                .nodes
-                .unwrap_or_else(Vec::new)
-                .iter()
-                .flat_map(|a| a.to_socket_addrs().map_or(vec![], |v| v.collect()))
-                .collect();
-
-            Config {
-                network: cli_config.network,
-                dns_seeds,
-                socks_proxy: cli_config.socks_proxy,
-                nodes,
-            }
-        })
+        serde_json::from_reader(file).map_err(|err| CliError::Deserialize(err.to_string()))
     }
-}
-
-/// Returns a list of default seed addresses to use based on the Bitcoin network provided.
-/// The mainnet addresses were retrieved from [here](https://github.com/bitcoin/bitcoin/blame/master/src/chainparams.cpp#L121),
-/// and the testnet addresses were retrieved from [here](https://github.com/bitcoin/bitcoin/blame/master/src/chainparams.cpp#L233).
-fn seeds(network: Network) -> Vec<String> {
-    match network {
-        Network::Bitcoin => vec![
-            "seed.bitcoin.sipa.be",          // Pieter Wuille
-            "dnsseed.bluematt.me",           // Matt Corallo
-            "dnsseed.bitcoin.dashjr.org",    // Luke Dashjr
-            "seed.bitcoinstats.com",         // Christian Decker
-            "seed.bitcoin.jonasschnelli.ch", // Jonas Schnelli
-            "seed.btc.petertodd.org",        // Peter Todd
-            "seed.bitcoin.sprovoost.nl",     // Sjors Provoost
-            "dnsseed.emzy.de",               // Stephan Oeste
-            "seed.bitcoin.wiz.biz",          // Jason Maurice
-        ],
-        Network::Testnet => vec![
-            "testnet-seed.bitcoin.jonasschnelli.ch",
-            "seed.tbtc.petertodd.org",
-            "seed.testnet.bitcoin.sprovoost.nl",
-            "testnet-seed.bluematt.me",
-        ],
-        _ => vec![],
-    }
-    .into_iter()
-    .map(String::from)
-    .collect()
 }
 
 #[cfg(test)]
@@ -159,7 +90,7 @@ mod test {
     #[test]
     fn test_cli_get_config_error_invalid_json() {
         let cli = Cli {
-            config: PathBuf::from_str("./tests/sample/empty.config.json")
+            config: PathBuf::from_str("./src/json_configs/empty.config.json")
                 .expect("Bad file path string"),
             verbose: true,
         };
@@ -176,15 +107,30 @@ mod test {
     }
 
     #[test]
-    fn test_cli_get_config_good_baseline_json() {
+    fn test_cli_get_config_good_mainnet_json() {
         let cli = Cli {
-            config: PathBuf::from_str("./tests/sample/baseline.config.json")
+            config: PathBuf::from_str("./src/json_configs/mainnet.config.json")
                 .expect("Bad file path string"),
             verbose: true,
         };
         let result = cli.get_config();
-        assert!(result.is_ok());
         let config = result.unwrap();
         assert_eq!(config.network, Network::Bitcoin);
+        assert_eq!(config.dns_seeds.len(), 9);
+        assert_eq!(config.socks_proxy, None);
+    }
+
+    #[test]
+    fn test_cli_get_config_good_testnet_json() {
+        let cli = Cli {
+            config: PathBuf::from_str("./src/json_configs/testnet.config.json")
+                .expect("Bad file path string"),
+            verbose: true,
+        };
+        let result = cli.get_config();
+        let config = result.unwrap();
+        assert_eq!(config.network, Network::Testnet);
+        assert_eq!(config.dns_seeds.len(), 4);
+        assert_eq!(config.socks_proxy, None);
     }
 }
