@@ -27,7 +27,6 @@ mock! {
         fn stop_connections(
             &self,
             peer: &NodeId,
-            registry_version: RegistryVersion,
         ) -> Result<(), TransportErrorCode>;
 
         fn send(

@@ -37,11 +37,7 @@ pub trait Transport: Send + Sync {
     /// Remove the peer from the set of valid neighbors, and tear down the
     /// queues and connections for the peer. Any messages in the Tx and Rx
     /// queues for the peer will be discarded.
-    fn stop_connections(
-        &self,
-        peer_id: &NodeId,
-        registry_version: RegistryVersion,
-    ) -> Result<(), TransportErrorCode>;
+    fn stop_connections(&self, peer_id: &NodeId) -> Result<(), TransportErrorCode>;
 
     /// Send the message to the specified peer. The message will be enqueued
     /// into the appropriate TxQ based on the TransportQueueConfig.

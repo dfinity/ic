@@ -73,13 +73,8 @@ impl TransportImpl {
     }
 
     /// Stops connection to a peer
-    pub(crate) fn stop_peer_connections(
-        &self,
-        peer_id: &NodeId,
-        registry_version: RegistryVersion,
-    ) -> Result<(), TransportErrorCode> {
+    pub(crate) fn stop_peer_connections(&self, peer_id: &NodeId) -> Result<(), TransportErrorCode> {
         self.allowed_clients.write().unwrap().remove(peer_id);
-        *self.registry_version.write().unwrap() = registry_version;
         let mut client_map = self.client_map.write().unwrap();
         let client_state = client_map
             .as_mut()

@@ -194,7 +194,7 @@ pub(crate) trait PeerManager {
     ) -> P2PResult<()>;
 
     /// The method removes the given peer from the list of current peers.
-    fn remove_peer(&self, peer: NodeId, registry_version: RegistryVersion);
+    fn remove_peer(&self, peer: NodeId);
 }
 
 /// A node tracks the chunks it requested from each peer.
@@ -960,7 +960,7 @@ impl DownloadManagerImpl {
         // If self is not in the subnet, remove all peers.
         for peer in self.peer_manager.get_current_peer_ids().into_iter() {
             if !subnet_nodes.contains_key(&peer) || self_not_in_subnet {
-                self.remove_node(peer, latest_registry_version);
+                self.remove_node(peer);
                 self.metrics.nodes_removed.inc();
             }
         }
@@ -1013,8 +1013,8 @@ impl DownloadManagerImpl {
     }
 
     /// This method removes the given node from peer manager and clears adverts.
-    fn remove_node(&self, node: NodeId, registry_version: RegistryVersion) {
-        self.peer_manager.remove_peer(node, registry_version);
+    fn remove_node(&self, node: NodeId) {
+        self.peer_manager.remove_peer(node);
         self.receive_check_caches.write().unwrap().remove(&node);
         self.prioritizer
             .clear_peer_adverts(node, AdvertTrackerFinalAction::Abort)
@@ -1515,9 +1515,9 @@ impl PeerManager for PeerManagerImpl {
     }
 
     /// The method removes the given peer from the list of current peers.
-    fn remove_peer(&self, node_id: NodeId, registry_version: RegistryVersion) {
+    fn remove_peer(&self, node_id: NodeId) {
         let mut current_peers = self.current_peers.lock().unwrap();
-        if let Err(e) = self.transport.stop_connections(&node_id, registry_version) {
+        if let Err(e) = self.transport.stop_connections(&node_id) {
             warn!(self.log, "stop connection failed {:?}: {:?}", node_id, e);
         }
         // Remove the peer irrespective of the result of the stop_connections() call.

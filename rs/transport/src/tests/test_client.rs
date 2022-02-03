@@ -172,24 +172,20 @@ impl TestClient {
     }
 
     fn stop_connections(&self) -> Result<(), TransportErrorCode> {
-        self.transport
-            .stop_connections(&self.prev, self.registry_version)
-            .map_err(|e| {
-                warn!(
-                    self.log,
-                    "Failed to stop_connections(): peer = {:?} err = {:?}", self.prev, e
-                );
-                e
-            })?;
-        self.transport
-            .stop_connections(&self.next, self.registry_version)
-            .map_err(|e| {
-                warn!(
-                    self.log,
-                    "Failed to stop_connections(): peer = {:?} err = {:?}", self.next, e
-                );
-                e
-            })?;
+        self.transport.stop_connections(&self.prev).map_err(|e| {
+            warn!(
+                self.log,
+                "Failed to stop_connections(): peer = {:?} err = {:?}", self.prev, e
+            );
+            e
+        })?;
+        self.transport.stop_connections(&self.next).map_err(|e| {
+            warn!(
+                self.log,
+                "Failed to stop_connections(): peer = {:?} err = {:?}", self.next, e
+            );
+            e
+        })?;
         Ok(())
     }
 
