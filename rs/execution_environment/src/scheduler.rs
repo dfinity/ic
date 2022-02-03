@@ -356,6 +356,8 @@ impl SchedulerImpl {
         // per round have been consumed.
         let mut total_instructions_consumed = NumInstructions::from(0);
         let mut total_heap_delta = NumBytes::from(0);
+
+        // Start iteration loop
         let mut state = loop {
             let measurement_scope =
                 MeasurementScope::nested(&self.metrics.round_inner_iteration, &measurement_scope);
@@ -431,7 +433,11 @@ impl SchedulerImpl {
             );
             ingress_execution_results.append(&mut loop_ingress_execution_results);
 
-            total_instructions_consumed += instructions_consumed;
+            total_instructions_consumed += instructions_consumed
+                + self
+                    .config
+                    .instruction_overhead_per_canister_for_finalization
+                    * state.num_canisters() as u64;
             if instructions_consumed == NumInstructions::from(0) {
                 break state;
             } else {
@@ -454,7 +460,7 @@ impl SchedulerImpl {
             }
             is_first_iteration = false;
             drop(finalization_timer);
-        };
+        }; // end iteration loop.
 
         // We only export metrics for "executable" canisters to ensure that the metrics
         // are not polluted by canisters that haven't had any messages for a long time.
