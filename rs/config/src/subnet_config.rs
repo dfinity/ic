@@ -23,6 +23,13 @@ pub(crate) const MAX_INSTRUCTIONS_PER_MESSAGE: NumInstructions = NumInstructions
 // at most 1ms to enter and exit the Wasm engine.
 pub(crate) const INSTRUCTION_OVERHEAD_PER_MESSAGE: NumInstructions = NumInstructions::new(2 * M);
 
+// Metrics show that finalization can take 13ms when there were 5000 canisters
+// in a subnet. This comes out to about 3us per canister which comes out to
+// 6_000 instructions based on the 1 cycles unit ≅ 1 CPU cycle, 2 GHz CPU
+// calculations. Round this up to 12_000 to be on the safe side.
+pub(crate) const INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION: NumInstructions =
+    NumInstructions::new(12_000);
+
 // If messages are short, then we expect about 2B=(7B - 5B) instructions to run
 // in a round in about 1 second. Short messages followed by one long message
 // would cause the longest possible round of 7B instructions or 3.5 seconds.
@@ -88,6 +95,13 @@ pub struct SchedulerConfig {
     /// towards the round limit.
     pub instruction_overhead_per_message: NumInstructions,
 
+    /// The overhead (per canister) of running the finalization code at the end
+    /// of an iteration. This overhead is counted toward the round limit at the
+    /// end of each iteration. Since finalization is mostly looping over all
+    /// canisters, we estimate the cost per canister and multiply by the number
+    /// of active canisters to get the total overhead.
+    pub instruction_overhead_per_canister_for_finalization: NumInstructions,
+
     /// Maximum number of instructions an `install_code` message can consume.
     pub max_instructions_per_install_code: NumInstructions,
 
@@ -133,6 +147,8 @@ impl SchedulerConfig {
             max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND,
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE,
             instruction_overhead_per_message: INSTRUCTION_OVERHEAD_PER_MESSAGE,
+            instruction_overhead_per_canister_for_finalization:
+                INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION,
             max_instructions_per_install_code: MAX_INSTRUCTIONS_PER_INSTALL_CODE,
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION,
             max_message_duration_before_warn_in_seconds:
@@ -150,6 +166,8 @@ impl SchedulerConfig {
             max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND * SYSTEM_SUBNET_FACTOR,
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE * SYSTEM_SUBNET_FACTOR,
             instruction_overhead_per_message: INSTRUCTION_OVERHEAD_PER_MESSAGE,
+            instruction_overhead_per_canister_for_finalization:
+                INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION,
             max_instructions_per_install_code,
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION * SYSTEM_SUBNET_FACTOR,
             max_message_duration_before_warn_in_seconds:
@@ -168,6 +186,8 @@ impl SchedulerConfig {
             max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND,
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE,
             instruction_overhead_per_message: INSTRUCTION_OVERHEAD_PER_MESSAGE,
+            instruction_overhead_per_canister_for_finalization:
+                INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION,
             max_instructions_per_install_code: MAX_INSTRUCTIONS_PER_INSTALL_CODE,
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION,
             max_message_duration_before_warn_in_seconds:
