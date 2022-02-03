@@ -11,6 +11,10 @@ prod-generic-test:
     - .rules-parent-pipeline-prs-only
   # we modify stage in gen_gitlab_cargo_pipeline.py
   stage: prod-tests
+  tags:
+    - ic-prod-tests
+    - docker
+    - ubuntu
   needs:
     - guest-os-diskimg-dev
     - generic-guest-os-diskimg

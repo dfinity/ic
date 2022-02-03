@@ -3,6 +3,8 @@ FROM ubuntu:20.04
 # Make sure the motoko_version corresponds to the same version in nix/sources.json
 ARG tini_version=0.19.0
 ARG rust_version=1.55.0
+ARG USER=ubuntu
+ARG UID=1000
 
 # The image expects the following volumes mounted from the host:
 # /cache - holding the sccache artifacts
@@ -27,16 +29,16 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
         sudo docker-ce-cli ripgrep patchelf asciidoctor plantuml graphviz cpio nodejs npm gosu && \
     gem install asciidoctor-diagram rouge
 
-# Add the `ubuntu` user, and the required folders
-RUN useradd -ms /bin/bash -u 1000 ubuntu && \
-    mkdir -p /home/ubuntu && \
-    chown -R ubuntu.ubuntu /home/ubuntu && \
+# Add the `${USER}` user, and the required folders
+RUN useradd -ms /bin/bash -u ${UID} ${USER} && \
+    mkdir -p /home/${USER} && \
+    chown -R ${UID}.${UID} /home/${USER} && \
     mkdir -p /cargo /cargo_target /builds /builds/dfinity-lab && \
-    chown -R 1000.1000 /cargo /cargo_target /builds && \
+    chown -R ${UID}.${UID} /cargo /cargo_target /builds && \
     chmod +s /usr/sbin/gosu
 
 # Sudo is needed to run `ip tun` commands to create a virtual network for e2e tests
-RUN usermod -a -G sudo ubuntu && echo "ubuntu ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+RUN usermod -a -G sudo ${USER} && echo "${USER} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
 # Install Rust and Cargo in /opt
 ENV RUSTUP_HOME=/opt/rustup \
@@ -47,7 +49,7 @@ ENV RUSTUP_HOME=/opt/rustup \
     PATH=/opt/cargo/bin:$PATH
 
 COPY --from=dfinity/ic-build-src /opt /tmp/src-artifacts
-RUN rsync -rav /tmp/src-artifacts/ /usr && rm -rf /tmp/src-artifacts
+RUN rsync --chmod=755 -rav /tmp/src-artifacts/ /usr && rm -rf /tmp/src-artifacts
 
 # rustup uses $CARGO_HOME to figure out where to install itself
 ENV CARGO_HOME=/opt/cargo
@@ -55,7 +57,7 @@ RUN curl --fail https://sh.rustup.rs -sSf \
         | sh -s -- -y --default-toolchain ${rust_version}-x86_64-unknown-linux-gnu --no-modify-path && \
     rustup default ${rust_version}-x86_64-unknown-linux-gnu && \
     rustup target add wasm32-unknown-unknown && \
-    chown -R ubuntu.ubuntu ${RUSTUP_HOME} ${CARGO_HOME}
+    chown -R ${USER}.${USER} ${RUSTUP_HOME} ${CARGO_HOME}
 
 # CARGO_HOME is also where the crates.io registry and git checkouts are cached.
 # We bind mount this on the CI runners, so the image needs to be able to function properly
@@ -71,7 +73,7 @@ RUN gpg --batch --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 595E85A6B1
 
 RUN /usr/bin/pip3 install ansible==2.10.7 gitpython pre-commit honeycomb-beeline junit-xml paramiko python-gitlab libhoney termcolor
 
-USER 1000
+USER ${UID}
 
 ENV ROCKSDB_INCLUDE_DIR=/usr/include ROCKSDB_LIB_DIR=/usr/lib ROCKSDB_STATIC=1 \
     SNAPPY_INCLUDE_DIR=/usr/include SNAPPY_LIB_DIR=/usr/lib/x86_64-linux-gnu SNAPPY_STATIC=1 \
@@ -80,13 +82,18 @@ ENV ROCKSDB_INCLUDE_DIR=/usr/include ROCKSDB_LIB_DIR=/usr/lib ROCKSDB_STATIC=1 \
     Z_INCLUDE_DIR=/usr/include Z_LIB_DIR=/usr/lib/x86_64-linux-gnu Z_STATIC=1 \
     BZ2_INCLUDE_DIR=/usr/include BZ2_LIB_DIR=/usr/lib/x86_64-linux-gnu BZ2_STATIC=1
 
+
 # Adds the GitHub and GitLab signatures to known_hosts so that `git pull` calls don't require user approval
-RUN mkdir --mode=0700 /home/ubuntu/.ssh && \
-    printf "# github.com:22 SSH-2.0-babeld-c34a939f\n|1|TtiEWekp4T2g6QFM8DnKUWYsXdw=|Vfo6utz2X8h5YSK2kjy1NrrVDQs= ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ==\n# gitlab.com:22 SSH-2.0-OpenSSH_7.9p1 Debian-10+deb10u2\n|1|fzEEbwQf9OkgzIxxgASmZp9L0Ec=|rty0872nCLuKDCsl3fuGSEmS81U= ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCsj2bNKTBSpIYDEGk9KxsGh3mySTRgMtXL583qmBpzeQ+jqCMRgBqB98u3z++J1sKlXHWfM9dyhSevkMwSbhoR8XIq/U0tCNyokEi/ueaBMCvbcTHhO7FcwzY92WK4Yt0aGROY5qX2UKSeOvuP4D6TPqKF1onrSzH9bx9XUf2lEdWT/ia1NEKjunUqu1xOB/StKDHMoX4/OKyIzuS0q/T1zOATthvasJFoPrAjkohTyaDUz2LN5JoH839hViyEG82yB+MjcFV5MU3N1l1QL3cVUCh93xSaua1N85qivl+siMkPGbO5xR/En4iEY6K2XPASUEMaieWVNTRCtJ4S8H+9\n# gitlab.com:22 SSH-2.0-OpenSSH_7.9p1 Debian-10+deb10u2\n|1|k6eNETvB6tZStZlifmM3Y6qrmkw=|AWemKhMqEjFAPf/125ARU2xLpmk= ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBFSMqzJeV9rUzU4kWitGjeR4PWSa29SPqJ1fVkhtj3Hw9xjLVXVYrU9QlYWrOLXBpQ6KWjbjTDTdDkoohFzgbEY=\n# gitlab.com:22 SSH-2.0-OpenSSH_7.9p1 Debian-10+deb10u2\n|1|/5OjzdrCg7KAVMh9Q3xfH0OvqLY=|9Yl++Oih6L3ENgUjQCx3uqFPvfc= ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAfuCHKVTjquxvt6CM6tdG4SLp1Btn/nOeHHE5UOzRdf\n# gitlab.com:22 SSH-2.0-OpenSSH_7.9p1 Debian-10+deb10u2\n" >> /home/ubuntu/.ssh/known_hosts && chmod 0600 /home/ubuntu/.ssh/known_hosts
+RUN mkdir --mode=0700 /home/${USER}/.ssh && \
+    printf "# github.com:22 SSH-2.0-babeld-c34a939f\n|1|TtiEWekp4T2g6QFM8DnKUWYsXdw=|Vfo6utz2X8h5YSK2kjy1NrrVDQs= ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ==\n# gitlab.com:22 SSH-2.0-OpenSSH_7.9p1 Debian-10+deb10u2\n|1|fzEEbwQf9OkgzIxxgASmZp9L0Ec=|rty0872nCLuKDCsl3fuGSEmS81U= ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCsj2bNKTBSpIYDEGk9KxsGh3mySTRgMtXL583qmBpzeQ+jqCMRgBqB98u3z++J1sKlXHWfM9dyhSevkMwSbhoR8XIq/U0tCNyokEi/ueaBMCvbcTHhO7FcwzY92WK4Yt0aGROY5qX2UKSeOvuP4D6TPqKF1onrSzH9bx9XUf2lEdWT/ia1NEKjunUqu1xOB/StKDHMoX4/OKyIzuS0q/T1zOATthvasJFoPrAjkohTyaDUz2LN5JoH839hViyEG82yB+MjcFV5MU3N1l1QL3cVUCh93xSaua1N85qivl+siMkPGbO5xR/En4iEY6K2XPASUEMaieWVNTRCtJ4S8H+9\n# gitlab.com:22 SSH-2.0-OpenSSH_7.9p1 Debian-10+deb10u2\n|1|k6eNETvB6tZStZlifmM3Y6qrmkw=|AWemKhMqEjFAPf/125ARU2xLpmk= ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBFSMqzJeV9rUzU4kWitGjeR4PWSa29SPqJ1fVkhtj3Hw9xjLVXVYrU9QlYWrOLXBpQ6KWjbjTDTdDkoohFzgbEY=\n# gitlab.com:22 SSH-2.0-OpenSSH_7.9p1 Debian-10+deb10u2\n|1|/5OjzdrCg7KAVMh9Q3xfH0OvqLY=|9Yl++Oih6L3ENgUjQCx3uqFPvfc= ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAfuCHKVTjquxvt6CM6tdG4SLp1Btn/nOeHHE5UOzRdf\n# gitlab.com:22 SSH-2.0-OpenSSH_7.9p1 Debian-10+deb10u2\n" >> /home/${USER}/.ssh/known_hosts && chmod 0600 /home/${USER}/.ssh/known_hosts
 
 COPY entrypoint.sh /entrypoint.sh
 # Install config for capsules.
-COPY dot_capsules.toml /home/ubuntu/.capsules.toml
+COPY dot_capsules.toml /home/${USER}/.capsules.toml
 WORKDIR /
+
+USER 0
+
+RUN echo "USER=${USER}" > /entrypoint_user
 
 ENTRYPOINT ["/tini", "--", "/entrypoint.sh"]

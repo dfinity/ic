@@ -9,10 +9,21 @@ REPO_ROOT="$(
 )"
 cd "$REPO_ROOT"
 
-VERSION=$(cat "$REPO_ROOT/gitlab-ci/docker/TAG")
+DOCKER_IMG_VERSION=$(cat "$REPO_ROOT/gitlab-ci/docker/TAG")
 SHA1ICBUILD=$("$REPO_ROOT/gitlab-ci/src/docker_image_check/docker_sha.py" Dockerfile)
 SHA1ICBUILDSRC=$("$REPO_ROOT/gitlab-ci/src/docker_image_check/docker_sha.py" Dockerfile.src)
 SHA1ICBUILDNIX=$("$REPO_ROOT/gitlab-ci/src/docker_image_check/docker_sha.py" Dockerfile.withnix)
+
+USER=$(whoami)
+if [ $USER == ubuntu ]; then
+    SET_UID=1000
+    LATEST="latest"
+else
+    SET_UID="$(id -u $USER)"
+    PREFIX="$USER-$SET_UID"
+    DOCKER_IMG_VERSION="$PREFIX-$DOCKER_IMG_VERSION"
+    LATEST="$PREFIX-latest"
+fi
 
 # Note: This code builds the docker image via a cron job on the trusted builders
 # The trusted builders must have the gitlab registry tags on the image. Please
@@ -22,26 +33,31 @@ cd "$REPO_ROOT/gitlab-ci/docker"
 
 # Build the dependencies image
 DOCKER_BUILDKIT=1 docker build \
-    --tag ic-build-src:"$VERSION" \
-    --tag dfinity/ic-build-src:"$VERSION" \
-    --tag dfinity/ic-build-src:latest \
-    --tag registry.gitlab.com/dfinity-lab/core/docker/ic-build-src:"$VERSION"-"$SHA1ICBUILDSRC" \
+    --tag ic-build-src:"$DOCKER_IMG_VERSION" \
+    --tag dfinity/ic-build-src:"$DOCKER_IMG_VERSION" \
+    --tag dfinity/ic-build-src:"$LATEST" \
+    --tag registry.gitlab.com/dfinity-lab/core/docker/ic-build-src:"$DOCKER_IMG_VERSION"-"$SHA1ICBUILDSRC" \
     -f Dockerfile.src .
 
 # Build the container image
 DOCKER_BUILDKIT=1 docker build \
-    --tag ic-build:"$VERSION" \
-    --tag dfinity/ic-build:"$VERSION" \
-    --tag dfinity/ic-build:latest \
-    --tag registry.gitlab.com/dfinity-lab/core/docker/ic-build:"$VERSION"-"$SHA1ICBUILD" \
+    --tag ic-build:"$DOCKER_IMG_VERSION" \
+    --tag dfinity/ic-build:"$DOCKER_IMG_VERSION" \
+    --tag dfinity/ic-build:"$LATEST" \
+    --tag registry.gitlab.com/dfinity-lab/core/docker/ic-build:"$DOCKER_IMG_VERSION"-"$SHA1ICBUILD" \
+    --build-arg USER="${USER}" \
+    --build-arg UID="${SET_UID}" \
     -f Dockerfile .
 
 # Build the container image with support for nix
 DOCKER_BUILDKIT=1 docker build \
-    --tag ic-build-nix:"$VERSION" \
-    --tag dfinity/ic-build-nix:"$VERSION" \
-    --tag dfinity/ic-build-nix:latest \
-    --tag registry.gitlab.com/dfinity-lab/core/docker/ic-build-nix:"$VERSION"-"$SHA1ICBUILDNIX" \
+    --tag ic-build-nix:"$DOCKER_IMG_VERSION" \
+    --tag dfinity/ic-build-nix:"$DOCKER_IMG_VERSION" \
+    --tag dfinity/ic-build-nix:"$LATEST" \
+    --tag registry.gitlab.com/dfinity-lab/core/docker/ic-build-nix:"$DOCKER_IMG_VERSION"-"$SHA1ICBUILDNIX" \
+    --build-arg USER="${USER}" \
+    --build-arg UID="${SET_UID}" \
+    --build-arg IC_BUILD_IMG_VERSION="${LATEST}" \
     -f Dockerfile.withnix .
 
 cd -

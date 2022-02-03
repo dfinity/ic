@@ -16,6 +16,8 @@ REPO_ROOT="$(
     git rev-parse --show-toplevel
 )"
 
+"$REPO_ROOT"/gitlab-ci/docker/docker-build-local-image.sh
+
 source "$REPO_ROOT/gitlab-ci/docker/docker-run-include"
 
 set -x

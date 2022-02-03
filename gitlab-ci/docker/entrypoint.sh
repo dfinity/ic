@@ -4,7 +4,8 @@ DOCKER_SOCKET=/var/run/docker.sock
 DOCKER_GROUP=docker
 KVM_DEV=/dev/kvm
 KVM_GROUP=kvm
-USER=ubuntu
+
+eval $(cat /entrypoint_user)
 
 grep -q $DOCKER_GROUP /etc/group
 DOCKER_GREP_RET=$?
