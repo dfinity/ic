@@ -76,8 +76,7 @@ impl Registry {
 ///
 /// To decouple proposal payload and registry content, this does not directly
 /// import any part of the registry schema. However it is required that, from a
-/// BlessingProposalPayload, it is possible to construct a ReplicaVersionRecord
-/// from a BlessingProposalPayload.
+/// BlessReplicaVersionPayload, it is possible to construct a ReplicaVersionRecord.
 ///
 /// See /rs/protobuf/def/registry/replica_version/v1/replica_version.proto
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -86,6 +85,25 @@ pub struct BlessReplicaVersionPayload {
     /// part of the payload is that it will be needed in the subsequent step
     /// of upgrading individual subnets.
     pub replica_version_id: String,
+
+    /// The URL against which a HTTP GET request will return a replica binary
+    /// that corresponds to this version
+    /// DEPRECATED: Not used, kept only for compatibility.
+    pub binary_url: String,
+
+    /// The hex-formatted SHA-256 hash of the binary served by 'binary_url'
+    /// DEPRECATED: Not used, kept only for compatibility.
+    pub sha256_hex: String,
+
+    /// The URL against which a HTTP GET request will return a node manager
+    /// binary that corresponds to this version
+    /// DEPRECATED: Not used, kept only for compatibility.
+    pub node_manager_binary_url: String,
+
+    /// The hex-formatted SHA-256 hash of the binary served by
+    /// 'node_manager_binary_url'
+    /// DEPRECATED: Not used, kept only for compatibility.
+    pub node_manager_sha256_hex: String,
 
     /// The URL against which a HTTP GET request will return a release package
     /// that corresponds to this version

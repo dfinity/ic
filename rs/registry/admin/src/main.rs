@@ -724,6 +724,10 @@ impl ProposalTitleAndPayload<BlessReplicaVersionPayload> for ProposeToBlessRepli
 
         BlessReplicaVersionPayload {
             replica_version_id: self.commit_hash.clone(),
+            binary_url: "".into(),
+            sha256_hex: "".into(),
+            node_manager_binary_url: "".into(),
+            node_manager_sha256_hex: "".into(),
             release_package_url: "".into(),
             release_package_sha256_hex: "".into(),
         }
@@ -765,6 +769,10 @@ impl ProposalTitleAndPayload<BlessReplicaVersionPayload>
     async fn payload(&self, _: Url) -> BlessReplicaVersionPayload {
         BlessReplicaVersionPayload {
             replica_version_id: self.replica_version_id.clone(),
+            binary_url: "".into(),
+            sha256_hex: "".into(),
+            node_manager_binary_url: "".into(),
+            node_manager_sha256_hex: "".into(),
             release_package_url: self
                 .release_package_url
                 .clone()
