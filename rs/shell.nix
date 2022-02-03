@@ -59,6 +59,10 @@ in
 
         # A rust code-coverage tool: https://github.com/xd009642/tarpaulin
         pkgs.cargo-tarpaulin
+
+        # dependencies for coverage.py
+        pkgs.kcov
+        pkgs.python3Packages.toml
       ];
 
       buildInputs = [
