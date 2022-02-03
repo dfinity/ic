@@ -301,3 +301,7 @@ RUN chmod 0644 /etc/nginx/ic_public_key.pem
 RUN chmod 0644 /etc/nginx/nginx.conf
 RUN chmod 0644 /etc/nginx/modules-enabled/ngx_http_cbor_input_module.conf
 RUN chmod 0644 /etc/nginx/modules-enabled/ngx_http_js_module.conf
+RUN rm -rf /etc/nginx/conf.d/nginx-global.conf
+RUN rm -rf /etc/nginx/conf.d/default.conf
+RUN rm -rf /etc/nginx/sites-enabled/default
+RUN rm -rf /etc/nginx/conf.d/default
