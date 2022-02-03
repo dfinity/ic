@@ -5,8 +5,8 @@ After=syslog.target
 [Service]
 User=root
 Group=root
-WorkingDirectory=/etc/nginx/ic_networks/{{ ic }}
-ExecStart=/opt/ic/bin/boundary-node-control-plane --nns_urls {{ nns_urls }} {% if control_plane_metrics_port != 0 %}--metrics_port {{ control_plane_metrics_port }}{% endif %} {% if nns_public_key != '' %}--nns_public_key={{ nns_public_key }}{% endif %} --routes_dir /etc/nginx/ic_routes/{{ ic }}
+WorkingDirectory=/etc/nginx/ic
+ExecStart=/opt/ic/bin/boundary-node-control-plane --nns_urls {{ nns_urls }} {% if control_plane_metrics_port != 0 %}--metrics_port {{ control_plane_metrics_port }}{% endif %} {% if nns_public_key != '' %}--nns_public_key={{ nns_public_key }}{% endif %} --routes_dir /etc/nginx/ic_routes
 Restart=always
 RestartSec=10
 KillSignal=SIGINT
