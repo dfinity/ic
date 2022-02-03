@@ -26,7 +26,6 @@ use crate::{
     },
     common::DEFAULT_CHANNEL_BUFFER_SIZE,
     common::*,
-    config::NumberOfConnections,
     connection::{Connection, ConnectionConfig, ConnectionState, PingState},
     stream::{StreamConfig, StreamEvent, StreamEventKind},
     Channel, ChannelError, Command, Config, ProcessEvent, ProcessEventError,
@@ -74,9 +73,9 @@ pub struct ConnectionManager {
     /// The magic number is used to identity the type of Bitcoin network being accessed.
     magic: u32,
     /// This field contains the number of connections the connection manager can manage at one time.
-    max_connections: NumberOfConnections,
+    max_connections: usize,
     /// This field contains the number of connections the connection manager must have in order to send messages.
-    min_connections: NumberOfConnections,
+    min_connections: usize,
     /// The minimum height that nodes should have in order to be a valid
     /// connection.
     min_start_height: BlockHeight,

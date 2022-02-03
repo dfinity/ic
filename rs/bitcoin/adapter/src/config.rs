@@ -3,29 +3,26 @@ use std::net::SocketAddr;
 use bitcoin::Network;
 use serde::Deserialize;
 
-/// A type to represent a port number.
-pub type PortNumber = u16;
-/// A type used for the number of connections.
-pub type NumberOfConnections = usize;
-
-/// This struct contains configuration options for the network portion of the
-/// BTC Adapter.
+/// This struct contains configuration options for the BTC Adapter.
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
     /// The type of Bitcoin network we plan to communicate to (e.g. Mainnet, Testnet, etc.).
     pub network: Network,
     /// A list of DNS seeds for address discovery.
+    #[serde(default)]
     pub dns_seeds: Vec<String>,
     /// Addresses of nodes to connect to (in case discovery from seeds is not possible/sufficient)
+    #[serde(default)]
     pub nodes: Vec<SocketAddr>,
     /// This field determines whether or not we will be using a SOCKS proxy to communicate with
     /// the BTC network.
+    #[serde(default)]
     pub socks_proxy: Option<SocketAddr>,
 }
 
 impl Config {
     /// This function returns the port to use based on the Bitcoin network provided.
-    pub fn port(&self) -> PortNumber {
+    pub fn port(&self) -> u16 {
         match self.network {
             Network::Bitcoin => 8333,
             Network::Testnet => 18333,
