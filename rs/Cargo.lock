@@ -826,6 +826,74 @@ dependencies = [
 ]
 
 [[package]]
+name = "build-info"
+version = "0.0.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "569d94157949b69d52fd80b77a33cffa083ebcd7abf6d60999b41cc977664a32"
+dependencies = [
+ "build-info-common",
+ "build-info-proc",
+ "lazy_static",
+ "proc-macro-hack",
+]
+
+[[package]]
+name = "build-info-build"
+version = "0.0.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7975fa865b3562339bdec59ee877d2a8618c4f95dc0e4729f3d501818cae11b1"
+dependencies = [
+ "anyhow",
+ "base64 0.13.0",
+ "bincode",
+ "build-info-common",
+ "cargo_metadata 0.13.1",
+ "chrono",
+ "git2",
+ "glob 0.3.0",
+ "lazy_static",
+ "pretty_assertions 0.7.1",
+ "rustc_version 0.3.3",
+ "serde_json",
+ "xz2",
+]
+
+[[package]]
+name = "build-info-common"
+version = "0.0.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9c3210a1a81517312746d7ecad5cde4ad9d3ec20640cb6e0c9900c9c6aa6dea1"
+dependencies = [
+ "chrono",
+ "derive_more 0.99.16",
+ "semver 0.11.0",
+ "serde",
+]
+
+[[package]]
+name = "build-info-proc"
+version = "0.0.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22b0c07441c4c64c569cbf637e1e181b1c9c934764c7dcaac0ab7d8ffc8e1eba"
+dependencies = [
+ "anyhow",
+ "base64 0.13.0",
+ "bincode",
+ "build-info-common",
+ "chrono",
+ "format-buf",
+ "num-bigint 0.4.2",
+ "num-traits",
+ "proc-macro-error",
+ "proc-macro-hack",
+ "proc-macro2 1.0.27",
+ "quote 1.0.7",
+ "serde_json",
+ "syn 1.0.80",
+ "xz2",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -862,6 +930,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "90706ba19e97b90786e19dc0d5e2abd80008d99d4c0c5d1ad0b5e72cec7c494d"
 dependencies = [
  "bytes",
+]
+
+[[package]]
+name = "camino"
+version = "1.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6f3132262930b0522068049f5870a856ab8affc80c70d08b6ecb785771a6fc23"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
@@ -909,7 +986,7 @@ version = "0.8.0"
 dependencies = [
  "backoff",
  "candid",
- "cargo_metadata",
+ "cargo_metadata 0.9.1",
  "dfn_candid",
  "escargot",
  "ic-canister-client",
@@ -934,6 +1011,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cargo-platform"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cbdb825da8a5df079a43676dbe042702f1707b1109f713a01420fbb4cc71fa27"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "cargo_metadata"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -942,6 +1028,20 @@ dependencies = [
  "semver 0.9.0",
  "serde",
  "serde_derive",
+ "serde_json",
+]
+
+[[package]]
+name = "cargo_metadata"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "081e3f0755c1f380c2d010481b6fa2e02973586d5f2b24eebb7a2a1d98b143d8"
+dependencies = [
+ "camino",
+ "cargo-platform",
+ "semver 0.11.0",
+ "semver-parser 0.10.2",
+ "serde",
  "serde_json",
 ]
 
@@ -993,6 +1093,7 @@ dependencies = [
  "libc",
  "num-integer",
  "num-traits",
+ "serde",
  "time 0.1.43",
  "winapi 0.3.9",
 ]
@@ -2355,6 +2456,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "format-buf"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f7aea5a5909a74969507051a3b17adc84737e31a5f910559892aedce026f4d53"
+
+[[package]]
 name = "fragile"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2628,6 +2735,19 @@ dependencies = [
  "fallible-iterator",
  "indexmap",
  "stable_deref_trait",
+]
+
+[[package]]
+name = "git2"
+version = "0.13.25"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f29229cc1b24c0e6062f6e742aa3e256492a5323365e5ed3413599f8a5eff7d6"
+dependencies = [
+ "bitflags",
+ "libc",
+ "libgit2-sys",
+ "log",
+ "url",
 ]
 
 [[package]]
@@ -4760,6 +4880,8 @@ version = "0.8.0"
 dependencies = [
  "assert_matches",
  "async-trait",
+ "build-info",
+ "build-info-build",
  "bytes",
  "candid",
  "clap 3.0.0-beta.2",
@@ -6657,6 +6779,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd8f7255a17a627354f321ef0055d63b898c6fb27eff628af4d1b66b7331edf6"
 
 [[package]]
+name = "libgit2-sys"
+version = "0.12.26+1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "19e1c899248e606fbfe68dcb31d8b0176ebab833b103824af31bddf4b7457494"
+dependencies = [
+ "cc",
+ "libc",
+ "libz-sys",
+ "pkg-config",
+]
+
+[[package]]
 name = "libloading"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6936,6 +7070,17 @@ name = "lru"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "469898e909a1774d844793b347135a0cd344ca2f69d082013ecb8061a2229a3a"
+
+[[package]]
+name = "lzma-sys"
+version = "0.1.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bdb4b7c3eddad11d3af9e86c487607d2d2442d185d848575365c4856ba96d619"
+dependencies = [
+ "cc",
+ "libc",
+ "pkg-config",
+]
 
 [[package]]
 name = "mach"
@@ -9392,6 +9537,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f301af10236f6df4160f7c3f04eec6dbc70ace82d23326abad5edee88801c6b6"
 dependencies = [
  "semver-parser 0.10.2",
+ "serde",
 ]
 
 [[package]]
@@ -11610,6 +11756,15 @@ dependencies = [
  "rand 0.7.3",
  "rand_pcg 0.2.1",
  "serde",
+]
+
+[[package]]
+name = "xz2"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c179869f34fc7c01830d3ce7ea2086bc3a07e0d35289b667d0a8bf910258926c"
+dependencies = [
+ "lzma-sys",
 ]
 
 [[package]]

@@ -315,6 +315,7 @@ service : (Governance) -> {
   claim_or_refresh_neuron_from_account : (ClaimOrRefreshNeuronFromAccount) -> (
       ClaimOrRefreshNeuronFromAccountResponse,
     );
+  get_build_metadata : () -> (text) query;
   get_full_neuron : (nat64) -> (Result_2) query;
   get_full_neuron_by_id_or_subaccount : (NeuronIdOrSubaccount) -> (
       Result_2,

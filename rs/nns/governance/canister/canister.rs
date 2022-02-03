@@ -477,6 +477,31 @@ async fn claim_or_refresh_neuron_from_account_(
     }
 }
 
+/// Returns a string that describes how the binary was built.
+#[export_name = "canister_query get_build_metadata"]
+fn get_build_metadata() {
+    println!("{}build", LOG_PREFIX);
+    over(candid_one, |()| get_build_metadata_())
+}
+
+#[candid_method(query, rename = "get_build_metadata")]
+fn get_build_metadata_() -> &'static str {
+    build_info::format!(
+        "\
+          profile: {}\n\
+          optimization_level: {}\n\
+          crate_name: {}\n\
+          enabled_features: {}\n\
+          compiler_version: {}\n\
+        ",
+        $.profile,
+        $.optimization_level,
+        $.crate_info.name,
+        $.crate_info.enabled_features,
+        $.compiler.version
+    )
+}
+
 #[export_name = "canister_update claim_gtc_neurons"]
 fn claim_gtc_neurons() {
     println!("{}claim_gtc_neurons", LOG_PREFIX);
@@ -959,6 +984,30 @@ fn main() {
 
 #[cfg(any(target_arch = "wasm32", test))]
 fn main() {}
+
+// This needs to be run with and without --features test.
+#[test]
+fn test_get_build_metadata() {
+    let build_metadata = get_build_metadata_();
+
+    for chunk in [
+        "profile: ",
+        "optimization_level: ",
+        "crate_name: ",
+        "enabled_features: ",
+        "compiler_version: ",
+    ] {
+        assert!(
+            build_metadata.contains(chunk),
+            "\
+              chunk: {}\n\
+              build_metadata: {}\
+            ",
+            chunk,
+            build_metadata,
+        );
+    }
+}
 
 #[test]
 fn check_governance_candid_file() {
