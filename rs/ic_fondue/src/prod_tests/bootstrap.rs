@@ -73,8 +73,9 @@ pub fn init_ic<P: AsRef<Path>>(
         });
     info!(ctx.logger, "initial_replica: {:?}", initial_replica);
 
-    // Note: NNS subnet should be selected from the system subnets.
-    let mut nns_subnet_idx = None;
+    // Note: NNS subnet should be selected from among the system subnets.
+    // If there is no system subnet, fall back on choosing the first one.
+    let mut nns_subnet_idx = Some(0);
     // TopologyConfig is a structure provided by ic-prep. We translate from the
     // builder (InternetComputer) to TopologyConfig. While doing so, we allocate tcp
     // ports for the http handler, p2p and xnet. The corresponding sockets are
