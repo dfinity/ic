@@ -20,6 +20,7 @@ pub mod state_manager;
 pub mod thread_transport;
 pub mod transport;
 pub mod types;
+pub mod wasmtime_instance;
 pub mod xnet_payload_builder;
 pub use ic_universal_canister as universal_canister;
 
