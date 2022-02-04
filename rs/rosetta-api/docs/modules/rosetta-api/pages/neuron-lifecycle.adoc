@@ -27,7 +27,7 @@ A neuron has the following attributes that control its lifecycle and rewards dis
   Dissolve Delay:: is how long it will take a neuron to become "liquid" once it starts dissolving.
     If the neuron is already dissolving, the delay indicates the amount of time left before the neuron transitions to the *DISSOLVED* state.
     The dissolve delay of a newly created neuron is 0.
-    Only neurons with a dissolve delay of at least 6 months (as of 2021-07-27, the exact delay requirements are subject to change) can be used to vote on proposals.
+    Only neurons with a dissolve delay of at least 15778800 seconds (approx 6 months) can be used to vote on proposals (as of 2021-07-27, the exact delay requirements are subject to change).
     Once set, the dissolve delay cannot be reduced via management commands.
 
   Dissolve State::
