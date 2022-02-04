@@ -860,6 +860,10 @@ impl Neuron {
         }
     }
 
+    pub fn is_dissolved(&self, now_seconds: u64) -> bool {
+        self.dissolve_delay_seconds(now_seconds) == 0
+    }
+
     /// Apply the specified neuron configuration operation on this neuron.
     ///
     /// See [manage_neuron::Configure] for details.
@@ -2931,7 +2935,13 @@ impl Governance {
             .saturating_sub(source_neuron_fees_e8s);
 
         let source_age_timestamp_seconds = source_neuron_mut.aging_since_timestamp_seconds;
-        let source_age_seconds = source_neuron.age_seconds(now);
+        let source_dissolve_delay = source_neuron.dissolve_delay_seconds(now);
+        let source_age_seconds = if source_neuron.is_dissolved(now) {
+            // Do not credit age from dissolved neurons.
+            0
+        } else {
+            source_neuron.age_seconds(now)
+        };
         let source_stake_e8s = source_neuron_mut.stake_e8s();
         let source_stake_less_transaction_fee_e8s =
             source_stake_e8s.saturating_sub(transaction_fee_e8s);
@@ -3007,12 +3017,14 @@ impl Governance {
             .get_neuron_mut(id)
             .expect("Expected the target neuron to exist");
 
-        let target_age_seconds = target_neuron_mut.age_seconds(now);
         let target_dissolve_delay = target_neuron_mut.dissolve_delay_seconds(now);
-        let highest_dissolve_delay = std::cmp::max(
-            target_dissolve_delay,
-            source_neuron.dissolve_delay_seconds(now),
-        );
+        let target_age_seconds = if target_neuron_mut.is_dissolved(now) {
+            // Do not credit age from dissolved neurons.
+            0
+        } else {
+            target_neuron_mut.age_seconds(now)
+        };
+        let highest_dissolve_delay = std::cmp::max(target_dissolve_delay, source_dissolve_delay);
         let target_delta = highest_dissolve_delay.saturating_sub(target_dissolve_delay);
 
         // Set dissolve delay or when dissolved timestamp of the target to
