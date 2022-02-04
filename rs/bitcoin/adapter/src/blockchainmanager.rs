@@ -1,22 +1,23 @@
-use crate::blockchainstate::AddHeaderError;
-use crate::common::MINIMUM_VERSION_NUMBER;
-use crate::ProcessEventError;
 use crate::{
-    blockchainstate::BlockchainState, common::BlockHeight, config::Config, stream::StreamEvent,
-    stream::StreamEventKind, Channel, Command, HandleClientRequest,
+    blockchainstate::{AddHeaderError, BlockchainState},
+    common::{BlockHeight, MINIMUM_VERSION_NUMBER},
+    config::Config,
+    stream::{StreamEvent, StreamEventKind},
+    Channel, Command, HandleClientRequest, ProcessEventError,
 };
-use bitcoin::network::message::MAX_INV_SIZE;
 use bitcoin::{
-    network::message::NetworkMessage, network::message_blockdata::GetHeadersMessage,
-    network::message_blockdata::Inventory, Block, BlockHash, BlockHeader,
+    network::{
+        message::{NetworkMessage, MAX_INV_SIZE},
+        message_blockdata::{GetHeadersMessage, Inventory},
+    },
+    Block, BlockHash, BlockHeader,
 };
 use rand::prelude::*;
 use slog::Logger;
-use std::net::SocketAddr;
 use std::{
     collections::{HashMap, HashSet},
-    time::Duration,
-    time::SystemTime,
+    net::SocketAddr,
+    time::{Duration, SystemTime},
 };
 use thiserror::Error;
 
@@ -622,7 +623,7 @@ impl HandleClientRequest for BlockchainManager {
     /// This method is called by Blockmananger::process_event when connection status with a Bitcoin node changed.
     /// If a node is disconnected, this method will remove the peer's info inside BlockChainManager.
     /// If a node is added to active peers list, this method will add the peer's info inside BlockChainManager.
-    fn handle_client_request(&mut self, block_hashes: Vec<BlockHash>) -> Vec<&Block> {
+    fn handle_client_request(&mut self, block_hashes: Vec<BlockHash>) -> Vec<Block> {
         slog::info!(
             self.logger,
             "Received a request for following block hashes from system component : {:?}",
@@ -690,7 +691,7 @@ impl HandleClientRequest for BlockchainManager {
             if blocks_to_send.is_empty()
                 || total_size <= MAX_GET_SUCCESSORS_RESPONSE_BLOCKS_SIZE_BYTES
             {
-                blocks_to_send.push(block);
+                blocks_to_send.push(block.clone());
             }
         }
 
