@@ -41,7 +41,11 @@ Call the `/construction/derive` endpoint with metadata field `account_type` set 
 
 NOTE: Since version 1.3.0, you can control many neurons using the same key.
 You can differentiate between neurons by specifying different values of the `neuron_index` metadata field.
-The `neuron_index` field is supported by all neuron management operations and is equal to zero if not specified.
+The rosetta node supports `neuron_index` in all neuron management operations.
+`neuron_index` is an arbitrary integer between `0` and `2^64^ - 1` (`18446744073709551615`).
+It is equal to zero if not specified.
+If you use JavaScript to construct requests to the Rosetta node, consider using the https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt[`BigInt`] type to represent the `neuron_index`.
+The `Number` type can precisely represent only values below `2^53^ - 1` (`9007199254740991`).
 
 === Response
 

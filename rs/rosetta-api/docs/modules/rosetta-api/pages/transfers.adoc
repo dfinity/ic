@@ -29,6 +29,7 @@ Rosetta node recognizes the following optional metadata fields in https://www.ro
   * `memo` is an arbitrary 64-bit unsigned integer associated with the transaction.
     You can use it to associate your data with the transaction.
     For example, you can set the memo to a row key in a database.
+    Valid values for the `memo` field range from `0` to `2^64^ - 1` (`18446744073709551615`).
   * `ingress_start`, `ingress_end`, and `created_at_time` are 64-bit unsigned integers representing the number of nanoseconds passed from UNIX epoch in UTC timezone.
     You can use these fields to construct and sign a transaction in advance and submit the signed transaction later.
     You can submit a signed transaction within 24 hours starting from `created_at_time` (by default equal to the time when you invoke the `/construction/payloads` endpoint).
