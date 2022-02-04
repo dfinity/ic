@@ -5,6 +5,7 @@ from typing import List
 import gflags
 import metrics
 import requests
+from termcolor import colored
 
 FLAGS = gflags.FLAGS
 gflags.DEFINE_boolean("no_prometheus", False, "Set true to disable querying Prometheus.")
@@ -49,6 +50,25 @@ def extract_value(result):
 
 def extract_values(result):
     return [r["values"] for r in result["data"]["result"]]
+
+
+def parse(result):
+
+    if result["status"] != "success":
+        print(colored("Failed to parse Prometheus query:" + json.dumps(result, indent=2)), "red")
+        return None
+
+    rtype = result["data"]["resultType"]
+    if rtype == "vector":
+        results = result["data"]["result"]
+        assert isinstance(results, list)
+        return zip(
+            [r["value"] for r in results],
+            [r["metric"] for r in results],
+        )
+
+    else:
+        raise (Exception("Failed to parse Prometheus data of type " + rtype))
 
 
 def get_http_request_rate_for_timestamp(testnet, load_hosts, timestamp):
@@ -176,9 +196,14 @@ def get_common(hosts, testnet):
 
     assert isinstance(hosts, list)
 
-    # We need a very strange escaping for hostnames ..
-    metricshosts = "|".join(["\\\\[{}\\\\]:9090".format(h) for h in hosts])
-    return 'ic="{}",job="replica",instance=~"{}"'.format(testnet, metricshosts)
+    c = f'ic="{testnet}",job="replica"'
+
+    if hosts:
+        # We need a very strange escaping for hostnames ..
+        metricshosts = "|".join(["\\\\[{}\\\\]:9090".format(h) for h in hosts])
+        c += f',instance=~"{metricshosts}"'
+
+    return c
 
 
 def get_prometheus(payload):
@@ -187,7 +212,8 @@ def get_prometheus(payload):
 
     if "start" in payload:
         raise Exception("Use get_prometheus_range for range queries")
-    print("Executing Prometheus query: ", payload)
+    print("Executing Prometheus query: ", colored(json.dumps(payload, indent=2), "yellow"))
+    print(payload["query"].replace("\\\\\\\\", "\\\\"))
     r = requests.get("http://prometheus.dfinity.systems:9090/api/v1/query", headers=headers, params=payload)
     return r
 
@@ -196,12 +222,12 @@ def get_prometheus_range(payload):
     """Query prometheus for metrics."""
     headers = {"Accept": "application/json"}
 
-    print("Executing Prometheus query: ", payload)
+    print("Executing Prometheus query: ", colored(json.dumps(payload, indent=2), "yellow"))
     r = requests.get("http://prometheus.dfinity.systems:9090/api/v1/query_range", headers=headers, params=payload)
     return r
 
 
-def parse(r):
+def parse_xnet(r):
     """Parse the given json file containing Prometheus xnet-stream data."""
     results = {}
     num = 0
@@ -229,4 +255,4 @@ def parse(r):
 if __name__ == "__main__":
     r = get_xnet_stream_size("large04", 1638357985, 1638358627)
     print(json.dumps(r, indent=2))
-    print(parse(r))
+    print(parse_xnet(r))
