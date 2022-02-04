@@ -19,6 +19,8 @@ openssh-server
 
 # Runtime libraries for replica
 liblmdb0
+libunwind
+libselinux1
 
 # Smartcard support for replica
 pcsc-tools
