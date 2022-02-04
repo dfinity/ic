@@ -88,8 +88,9 @@ impl Default for Config {
         // Change this value to enable/disable canister sandboxing by default.
         // EXC-523: Sandboxing is currently available only on Linux because it
         // uses `memfd` files.
+        // TODO(EXC-883): Re-enable sandboxing on Linux after fixing crashes.
         #[cfg(target_os = "linux")]
-        let canister_sandboxing_flag = FlagStatus::Enabled;
+        let canister_sandboxing_flag = FlagStatus::Disabled;
         #[cfg(not(target_os = "linux"))]
         let canister_sandboxing_flag = FlagStatus::Disabled;
 
