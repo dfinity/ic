@@ -23,6 +23,15 @@ pub struct EcdsaPublicKey {
     pub chain_key: Vec<u8>,
 }
 
+/// A threshold ECDSA public key.
+///
+/// The public key itself is stored as raw bytes.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct MasterEcdsaPublicKey {
+    pub algorithm_id: AlgorithmId,
+    pub public_key: Vec<u8>,
+}
+
 /// A combined threshold ECDSA signature.
 ///
 /// The signature itself is stored as raw bytes.

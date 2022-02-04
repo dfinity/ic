@@ -1,3 +1,4 @@
+use ic_types::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
 use ic_types::crypto::AlgorithmId;
 use ic_types::*;
 use rand::Rng;
@@ -431,7 +432,11 @@ impl SignatureProtocolSetup {
     }
 
     pub fn public_key(&self, path: &DerivationPath) -> Result<EcdsaPublicKey, ThresholdEcdsaError> {
-        derive_public_key(&self.key.transcript, path, self.setup.alg)
+        let master_public_key = MasterEcdsaPublicKey {
+            algorithm_id: AlgorithmId::EcdsaSecp256k1,
+            public_key: self.key.transcript.constant_term().serialize(),
+        };
+        tecdsa::sign::derive_public_key(&master_public_key, path)
     }
 }
 

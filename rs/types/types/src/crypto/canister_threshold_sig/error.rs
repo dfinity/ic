@@ -47,7 +47,10 @@ pub enum IDkgParamsValidationError {
 impl_display_using_debug!(IDkgParamsValidationError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ThresholdEcdsaGetPublicKeyError {}
+pub enum ThresholdEcdsaGetPublicKeyError {
+    InvalidArgument(String),
+    InternalError(String),
+}
 impl_display_using_debug!(ThresholdEcdsaGetPublicKeyError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

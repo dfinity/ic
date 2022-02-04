@@ -25,6 +25,7 @@ pub use sign::utils::{
     threshold_sig_public_key_to_der, user_public_key_from_bytes, verify_combined_threshold_sig,
     KeyBytesContentType,
 };
+pub use sign::{derive_tecdsa_public_key, get_tecdsa_master_public_key};
 
 use crate::common::utils::{derive_node_id, TempCryptoComponent};
 use crate::sign::ThresholdSigDataStoreImpl;

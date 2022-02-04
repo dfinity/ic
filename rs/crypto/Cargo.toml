@@ -72,6 +72,7 @@ criterion = "0.3.4"
 ic-base-types = { path = "../types/base_types" }
 ic-crypto-internal-basic-sig-der-utils = { path = "internal/crypto_lib/basic_sig/der_utils" }
 ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { path = "internal/crypto_lib/basic_sig/ecdsa_secp256r1" }
+ic-crypto-internal-basic-sig-ecdsa-secp256k1 = { path = "internal/crypto_lib/basic_sig/ecdsa_secp256k1" }
 ic-crypto-internal-basic-sig-rsa-pkcs1 = { path = "internal/crypto_lib/basic_sig/rsa_pkcs1" }
 ic-crypto-internal-csp-test-utils = { path = "internal/csp_test_utils" }
 ic-crypto-test-utils = { path = "test_utils" }
