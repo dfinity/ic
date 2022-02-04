@@ -18,9 +18,9 @@ use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::governance::governance_minting_account;
 #[cfg(feature = "test")]
 use ic_nns_governance::pb::v1::{
-    governance::GovernanceCachedMetricsChange, proposal::ActionDesc, BallotChange,
-    BallotInfoChange, GovernanceChange, NeuronChange, ProposalChange, ProposalDataChange,
-    TallyChange, WaitForQuietStateDesc,
+    governance::GovernanceCachedMetricsChange, neuron::DissolveStateChange, proposal::ActionDesc,
+    BallotChange, BallotInfoChange, GovernanceChange, NeuronChange, ProposalChange,
+    ProposalDataChange, TallyChange, WaitForQuietStateDesc,
 };
 use ic_nns_governance::{
     governance::{
@@ -70,6 +70,7 @@ use ic_nns_governance::{
 use ledger_canister::{AccountIdentifier, Memo, Tokens};
 use maplit::hashmap;
 use proptest::prelude::proptest;
+use proptest::prop_assert_eq;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 
 use std::cmp::Ordering;
@@ -84,7 +85,7 @@ use std::path::PathBuf;
 use dfn_protobuf::ToProto;
 use ic_nns_governance::governance::{
     MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS, MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
-    ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
+    ONE_DAY_SECONDS, ONE_YEAR_SECONDS,
 };
 use ic_nns_governance::pb::v1::governance::GovernanceCachedMetrics;
 use ic_nns_governance::pb::v1::governance_error::ErrorType::{NotFound, ResourceExhausted};
@@ -4188,7 +4189,7 @@ fn test_neuron_split() {
 /// * the list of all neurons is unchanged
 /// * the list of accounts is unchanged
 #[test]
-fn test_neuron_merge_fails() {
+fn test_merge_neurons_fails() {
     fn icp(amount: u64) -> u64 {
         amount * 100_000_000
     }
@@ -4538,44 +4539,48 @@ fn test_neuron_merge_fails() {
            msg == "ManageNeuron following of source and target does not match");
 }
 
+proptest! {
+
+#[allow(clippy::vec_init_then_push)]
 #[test]
-fn test_neuron_merge() {
-    fn icp(amount: u64) -> u64 {
-        amount * 100_000_000
-    }
-
-    let n1_stake = icp(1_230);
-    let n1_maturity = icp(123);
-    let n1_fees = icp(13);
-    let n2_stake = icp(4_560);
-    let n2_maturity = icp(456);
-    let n2_fees = icp(21);
-
+fn test_merge_neurons(
+    n1_stake in 100_000_000u64..500_000_000_000,
+    n1_maturity in 0u64..500_000_000_000,
+    n1_fees in 0u64..99_000_000,
+    n1_dissolve in 0u64..MAX_DISSOLVE_DELAY_SECONDS,
+    n1_age in 0u64..315_360_000,
+    n2_stake in 100_000_000u64..500_000_000_000,
+    n2_maturity in 0u64..500_000_000_000,
+    n2_fees in 0u64..99_000_000,
+    n2_dissolve in 0u64..MAX_DISSOLVE_DELAY_SECONDS,
+    n2_age in 0u64..315_360_000
+) {
+    // Start the NNS 20 years after genesis, to give lots of time for aging.
+    let epoch = DEFAULT_TEST_START_TIMESTAMP_SECONDS + (20 * ONE_YEAR_SECONDS);
     let mut nns = NNSBuilder::new()
+        .set_start_time(epoch)
         .set_economics(NetworkEconomics::with_default_values())
         .with_supply(0) // causes minting account to be created
         .add_account_for(principal(1), 0)
         // the source
         .add_neuron(
             NeuronBuilder::new(1, n1_stake, principal(1))
-                .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS)
+                .set_dissolve_delay(n1_dissolve)
                 .set_maturity(n1_maturity)
                 .set_neuron_fees(n1_fees)
-                .set_aging_since_timestamp(DEFAULT_TEST_START_TIMESTAMP_SECONDS),
+                .set_aging_since_timestamp(epoch.saturating_sub(n1_age)),
         )
         // the target
         .add_neuron(
             NeuronBuilder::new(2, n2_stake, principal(1))
-                .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4)
+                .set_dissolve_delay(n2_dissolve)
                 .set_maturity(n2_maturity)
                 .set_neuron_fees(n2_fees)
-                .set_aging_since_timestamp(
-                    DEFAULT_TEST_START_TIMESTAMP_SECONDS + ONE_MONTH_SECONDS,
-                ),
+                .set_aging_since_timestamp(epoch.saturating_sub(n2_age)),
         )
         .create();
 
-    // ensure that both the source and target have lots of age
+    // advance by a year, just to spice things up
     nns.advance_time_by(ONE_YEAR_SECONDS);
 
     nns.governance
@@ -4600,64 +4605,100 @@ fn test_neuron_merge() {
         .transaction_fee_e8s;
 
     #[cfg(feature = "test")]
-    assert_changes!(
+    prop_assert_changes!(
         nns,
         Changed::Changed(vec![
-            NNSStateChange::Now(U64Change(
-                DEFAULT_TEST_START_TIMESTAMP_SECONDS,
-                DEFAULT_TEST_START_TIMESTAMP_SECONDS + ONE_YEAR_SECONDS
-            )),
-            NNSStateChange::Accounts(vec![
-                MapChange::Changed(
+            NNSStateChange::Now(U64Change(epoch, epoch + ONE_YEAR_SECONDS)),
+            NNSStateChange::Accounts({
+                let account1 = MapChange::Changed(
                     nns.get_neuron_account_id(2),
                     U64Change(n2_stake, n2_stake + (n1_stake - n1_fees) - fee),
-                ),
-                MapChange::Changed(governance_minting_account(), U64Change(0, n1_fees)),
-                MapChange::Changed(nns.get_neuron_account_id(1), U64Change(n1_stake, 0)),
-            ]),
+                );
+                let account2 = MapChange::Changed(
+                    nns.get_neuron_account_id(1),
+                    U64Change(n1_stake, if n1_fees > fee { 0 } else { n1_fees }),
+                );
+                let minting =
+                    MapChange::Changed(governance_minting_account(), U64Change(0, n1_fees));
+                let mut changes = Vec::new();
+                changes.push(account1);
+                if n1_fees > fee {
+                    changes.push(minting);
+                }
+                changes.push(account2);
+                changes
+            }),
             NNSStateChange::GovernanceProto(vec![GovernanceChange::Neurons(vec![
-                MapChange::Changed(
-                    1,
-                    vec![
-                        NeuronChange::CachedNeuronStakeE8S(U64Change(n1_stake, 0)),
-                        NeuronChange::NeuronFeesE8S(U64Change(n1_fees, 0)),
-                        NeuronChange::AgingSinceTimestampSeconds(U64Change(
-                            DEFAULT_TEST_START_TIMESTAMP_SECONDS,
-                            nns.now()
+                MapChange::Changed(1, {
+                    let stake = NeuronChange::CachedNeuronStakeE8S(U64Change(n1_stake, 0));
+                    let fees = NeuronChange::NeuronFeesE8S(U64Change(n1_fees, 0));
+                    let aging = NeuronChange::AgingSinceTimestampSeconds(U64Change(
+                        epoch.saturating_sub(n1_age),
+                        nns.now(),
+                    ));
+                    let maturity = NeuronChange::MaturityE8SEquivalent(U64Change(n1_maturity, 0));
+                    let mut changes = Vec::new();
+                    changes.push(stake);
+                    if n1_fees > 0 {
+                        changes.push(fees);
+                    }
+                    changes.push(aging);
+                    if n1_maturity > 0 {
+                        changes.push(maturity);
+                    }
+                    changes
+                }),
+                MapChange::Changed(2, {
+                    let stake = NeuronChange::CachedNeuronStakeE8S(U64Change(
+                        n2_stake,
+                        n2_stake + (n1_stake - n1_fees) - fee,
+                    ));
+                    let old_age = epoch.saturating_sub(n2_age);
+                    let new_age = {
+                        let n1_age_seconds = nns.now().saturating_sub(epoch.saturating_sub(n1_age));
+                        let n2_age_seconds = nns.now().saturating_sub(old_age);
+                        let (_new_stake, new_age_seconds) =
+                            ic_nns_governance::governance::combine_aged_stakes(
+                                n2_stake,
+                                n2_age_seconds,
+                                (n1_stake - n1_fees) - fee,
+                                n1_age_seconds,
+                            );
+                        if n2_age == n1_age {
+                            prop_assert_eq!(n2_age_seconds, new_age_seconds);
+                        }
+                        nns.now().saturating_sub(new_age_seconds)
+                    };
+                    let aging =
+                        NeuronChange::AgingSinceTimestampSeconds(U64Change(old_age, new_age));
+                    let maturity = NeuronChange::MaturityE8SEquivalent(U64Change(
+                        n2_maturity,
+                        n2_maturity + n1_maturity,
+                    ));
+                    let dissolve = NeuronChange::DissolveState(OptionChange::BothSome(
+                        DissolveStateChange::BothDissolveDelaySeconds(U64Change(
+                            n2_dissolve,
+                            n1_dissolve,
                         )),
-                        NeuronChange::MaturityE8SEquivalent(U64Change(n1_maturity, 0)),
-                    ],
-                ),
-                MapChange::Changed(
-                    2,
-                    vec![
-                        NeuronChange::CachedNeuronStakeE8S(U64Change(
-                            n2_stake,
-                            n2_stake + (n1_stake - n1_fees) - fee,
-                        )),
-                        NeuronChange::AgingSinceTimestampSeconds(U64Change(
-                            DEFAULT_TEST_START_TIMESTAMP_SECONDS + ONE_MONTH_SECONDS,
-                            {
-                                let n1_age = nns
-                                    .now()
-                                    .saturating_sub(DEFAULT_TEST_START_TIMESTAMP_SECONDS);
-                                let n2_age = nns.now().saturating_sub(
-                                    DEFAULT_TEST_START_TIMESTAMP_SECONDS + ONE_MONTH_SECONDS,
-                                );
-                                nns.now()
-                                    - ((n1_stake - n1_fees) * n1_age + n2_stake * n2_age)
-                                        / ((n1_stake - n1_fees) + n2_stake)
-                            }
-                        )),
-                        NeuronChange::MaturityE8SEquivalent(U64Change(
-                            n2_maturity,
-                            n2_maturity + n1_maturity
-                        )),
-                    ],
-                ),
+                    ));
+                    let mut changes = Vec::new();
+                    changes.push(stake);
+                    if old_age != new_age {
+                        changes.push(aging);
+                    }
+                    if n1_maturity > 0 {
+                        changes.push(maturity);
+                    }
+                    if n1_dissolve > n2_dissolve {
+                        changes.push(dissolve);
+                    }
+                    changes
+                })
             ])]),
         ])
     );
+}
+
 }
 
 #[test]
