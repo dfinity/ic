@@ -15,8 +15,10 @@ pub fn expand_message_xmd(
             "Requested XMD output too large".to_string(),
         ));
     }
+
+    // len ≤ 8160 ⭢ ell ≤ 255
+    // thus values ≤ ell can be safely cast to u8
     let ell = (len - 1) / 32 + 1;
-    assert!(ell <= 255, "L must not exceed 255");
 
     let xmd = |dst| {
         let mut out = Vec::with_capacity(ell * 32);

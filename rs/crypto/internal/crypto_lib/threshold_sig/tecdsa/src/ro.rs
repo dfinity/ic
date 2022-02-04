@@ -180,8 +180,6 @@ impl RandomOracle {
             input.extend_from_slice(data); // already prefixed with length/tag
         }
 
-        assert_eq!(input.len(), self.input_size);
-
         Ok(input)
     }
 
