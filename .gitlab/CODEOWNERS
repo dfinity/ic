@@ -172,4 +172,5 @@
 /nix/overlays/haskell.nix @dfinity-lab/teams/ic-testing-verification
 
 [Capsule]
-Capsule.toml             @dfinity-lab/teams/idx
+Capsule.toml              @dfinity-lab/teams/idx
+/**/Capsule.toml          @dfinity-lab/teams/idx
