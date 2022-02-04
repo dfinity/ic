@@ -3007,20 +3007,7 @@ impl Governance {
             .get_neuron_mut(id)
             .expect("Expected the target neuron to exist");
 
-        // Move the source's stake (net fees) and any accumulated
-        // neuron age from the source neuron into target.
-        let (new_stake_e8s, new_age_seconds) = combine_aged_stakes(
-            target_neuron_mut.cached_neuron_stake_e8s,
-            target_neuron_mut.age_seconds(now),
-            source_stake_less_transaction_fee_e8s,
-            source_age_seconds,
-        );
-        target_neuron_mut.cached_neuron_stake_e8s = new_stake_e8s;
-        target_neuron_mut.aging_since_timestamp_seconds = now.saturating_sub(new_age_seconds);
-
-        // Move maturity from source neuron to target
-        target_neuron_mut.maturity_e8s_equivalent += source_maturity;
-
+        let target_age_seconds = target_neuron_mut.age_seconds(now);
         let target_dissolve_delay = target_neuron_mut.dissolve_delay_seconds(now);
         let highest_dissolve_delay = std::cmp::max(
             target_dissolve_delay,
@@ -3030,9 +3017,29 @@ impl Governance {
 
         // Set dissolve delay or when dissolved timestamp of the target to
         // whichever is the greater between the source and target neurons.
+        // Note that this must happen before the
+        // `aging_since_timestamp_seconds` is updated, because of the various
+        // ways in which this call to `increase_dissolve_delay` might change
+        // that value. We already know what the aggregate age of the merged
+        // neurons should be, so we ignore the changes that this function may
+        // make.
         if target_delta > 0 {
             target_neuron_mut.increase_dissolve_delay(now, target_delta.try_into().unwrap())?;
         }
+
+        // Move the source's stake (net fees) and any accumulated
+        // neuron age from the source neuron into target.
+        let (new_stake_e8s, new_age_seconds) = combine_aged_stakes(
+            target_neuron_mut.cached_neuron_stake_e8s,
+            target_age_seconds,
+            source_stake_less_transaction_fee_e8s,
+            source_age_seconds,
+        );
+        target_neuron_mut.cached_neuron_stake_e8s = new_stake_e8s;
+        target_neuron_mut.aging_since_timestamp_seconds = now.saturating_sub(new_age_seconds);
+
+        // Move maturity from source neuron to target
+        target_neuron_mut.maturity_e8s_equivalent += source_maturity;
 
         println!(
             "{}Merged neuron {} into {} at {:?}",
