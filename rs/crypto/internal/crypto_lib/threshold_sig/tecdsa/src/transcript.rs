@@ -22,7 +22,7 @@ impl IDkgTranscriptInternal {
             .map_err(|e| ThresholdEcdsaError::SerializationError(format!("{}", e)))
     }
 
-    pub(crate) fn constant_term(&self) -> EccPoint {
+    pub fn constant_term(&self) -> EccPoint {
         self.combined_commitment.commitment().constant_term()
     }
 

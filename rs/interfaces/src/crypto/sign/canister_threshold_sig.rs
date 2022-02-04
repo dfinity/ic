@@ -2,13 +2,11 @@
 //! (and the associated I-DKG)
 
 use ic_base_types::NodeId;
-use ic_base_types::PrincipalId;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
     IDkgLoadTranscriptWithOpeningsError, IDkgOpenTranscriptError, IDkgVerifyComplaintError,
     IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError, IDkgVerifyOpeningError,
-    IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError,
-    ThresholdEcdsaGetPublicKeyError, ThresholdEcdsaSignShareError,
+    IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
     ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
@@ -16,8 +14,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgTranscriptParams,
 };
 use ic_types::crypto::canister_threshold_sig::{
-    EcdsaPublicKey, ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
-    ThresholdEcdsaSigShare,
+    ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
 };
 use std::collections::BTreeMap;
 
@@ -194,11 +191,4 @@ pub trait ThresholdEcdsaSigVerifier {
         inputs: &ThresholdEcdsaSigInputs,
         signature: &ThresholdEcdsaCombinedSignature,
     ) -> Result<(), ThresholdEcdsaVerifyCombinedSignatureError>;
-
-    /// Get the master public key for the given canister.
-    fn get_public_key(
-        &self,
-        canister_id: PrincipalId,
-        key_transcript: IDkgTranscript,
-    ) -> Result<EcdsaPublicKey, ThresholdEcdsaGetPublicKeyError>;
 }

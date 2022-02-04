@@ -631,18 +631,6 @@ impl ThresholdEcdsaSigVerifier for CryptoReturningOk {
     ) -> Result<(), ThresholdEcdsaVerifyCombinedSignatureError> {
         Ok(())
     }
-
-    fn get_public_key(
-        &self,
-        _canister_id: PrincipalId,
-        _key_transcript: IDkgTranscript,
-    ) -> Result<EcdsaPublicKey, ThresholdEcdsaGetPublicKeyError> {
-        Ok(EcdsaPublicKey {
-            algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-            public_key: vec![],
-            chain_key: vec![],
-        })
-    }
 }
 
 pub fn mock_random_number_generator() -> Box<dyn RngCore> {

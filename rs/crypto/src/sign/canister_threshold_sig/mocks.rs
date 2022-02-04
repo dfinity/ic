@@ -1,15 +1,11 @@
 use ic_types::crypto::canister_threshold_sig::error::{
-    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaGetPublicKeyError,
-    ThresholdEcdsaSignShareError, ThresholdEcdsaVerifyCombinedSignatureError,
-    ThresholdEcdsaVerifySigShareError,
+    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+    ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
 };
-use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscript;
 use ic_types::crypto::canister_threshold_sig::{
-    EcdsaPublicKey, ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
-    ThresholdEcdsaSigShare,
+    ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
 };
-use ic_types::crypto::AlgorithmId;
-use ic_types::{NodeId, PrincipalId};
+use ic_types::NodeId;
 use std::collections::BTreeMap;
 
 #[allow(dead_code)]
@@ -42,15 +38,4 @@ pub fn verify_combined_sig(
     _signature: &ThresholdEcdsaCombinedSignature,
 ) -> Result<(), ThresholdEcdsaVerifyCombinedSignatureError> {
     Ok(())
-}
-
-pub fn get_public_key(
-    _canister_id: PrincipalId,
-    _key_transcript: IDkgTranscript,
-) -> Result<EcdsaPublicKey, ThresholdEcdsaGetPublicKeyError> {
-    Ok(EcdsaPublicKey {
-        algorithm_id: AlgorithmId::EcdsaSecp256k1,
-        public_key: vec![],
-        chain_key: vec![],
-    })
 }

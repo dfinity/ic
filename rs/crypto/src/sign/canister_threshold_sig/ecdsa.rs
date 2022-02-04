@@ -1,15 +1,24 @@
 //! Implementations of ThresholdEcdsaSigner
 use ic_crypto_internal_csp::api::{CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner};
 use ic_types::crypto::canister_threshold_sig::error::{
-    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaGetPublicKeyError,
+    ThresholdEcdsaSignShareError,
 };
+use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptType::{Masked, Unmasked};
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgReceivers, IDkgTranscript};
 use ic_types::crypto::canister_threshold_sig::{
-    ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
+    EcdsaPublicKey, ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
+    ThresholdEcdsaSigShare,
 };
+use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterEcdsaPublicKey};
+use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeId, NodeIndex};
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
-use tecdsa::{IDkgTranscriptInternal, ThresholdEcdsaSigShareInternal};
+use std::convert::TryFrom;
+use tecdsa::{
+    IDkgTranscriptInternal, ThresholdEcdsaDerivePublicKeyError, ThresholdEcdsaSigShareInternal,
+};
 
 pub fn sign_share<C: CspThresholdEcdsaSigner>(
     csp_client: &C,
@@ -89,6 +98,61 @@ pub fn combine_sig_shares<C: CspThresholdEcdsaSigVerifier>(
 
     Ok(ThresholdEcdsaCombinedSignature {
         signature: internal_combined_sig.serialize(),
+    })
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum MasterPublicKeyExtractionError {
+    UnsupportedAlgorithm(String),
+    SerializationError(String),
+    CannotExtractFromMasked,
+}
+
+/// Extracts the master public key from the given `idkg_transcript`.
+#[allow(dead_code)]
+pub fn get_tecdsa_master_public_key(
+    idkg_transcript: &IDkgTranscript,
+) -> Result<MasterEcdsaPublicKey, MasterPublicKeyExtractionError> {
+    match idkg_transcript.transcript_type {
+        Unmasked(_) => {
+            let internal_transcript =
+                IDkgTranscriptInternal::try_from(idkg_transcript).map_err(|e| {
+                    MasterPublicKeyExtractionError::SerializationError(format!("{:?}", e))
+                })?;
+            let pub_key = internal_transcript.constant_term();
+            let algorithm_id = match idkg_transcript.algorithm_id {
+                AlgorithmId::ThresholdEcdsaSecp256k1 => AlgorithmId::EcdsaSecp256k1,
+                _ => {
+                    return Err(MasterPublicKeyExtractionError::UnsupportedAlgorithm(
+                        format!("{:?}", idkg_transcript.algorithm_id),
+                    ))
+                }
+            };
+            Ok(MasterEcdsaPublicKey {
+                algorithm_id,
+                public_key: pub_key.serialize(),
+            })
+        }
+        Masked(_) => Err(MasterPublicKeyExtractionError::CannotExtractFromMasked),
+    }
+}
+
+/// Derives the ECDSA public key from the specified `master_public_key` for
+/// the given `extended_derivation_path`.
+#[allow(dead_code)]
+pub fn derive_tecdsa_public_key(
+    master_public_key: &MasterEcdsaPublicKey,
+    extended_derivation_path: &ExtendedDerivationPath,
+) -> Result<EcdsaPublicKey, ThresholdEcdsaGetPublicKeyError> {
+    tecdsa::derive_public_key(master_public_key, &extended_derivation_path.into()).map_err(|e| {
+        match e {
+            ThresholdEcdsaDerivePublicKeyError::InvalidArgument(s) => {
+                ThresholdEcdsaGetPublicKeyError::InvalidArgument(s)
+            }
+            ThresholdEcdsaDerivePublicKeyError::InternalError(e) => {
+                ThresholdEcdsaGetPublicKeyError::InternalError(format!("{:?}", e))
+            }
+        }
     })
 }
 

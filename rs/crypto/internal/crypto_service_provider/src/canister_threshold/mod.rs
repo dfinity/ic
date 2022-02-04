@@ -4,6 +4,9 @@
 //! including the secret key store and random number generator, and the
 //! stateless crypto lib.
 
+#[cfg(test)]
+mod tests;
+
 use crate::api::{
     CspCreateMEGaKeyError, CspIDkgProtocol, CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner,
 };

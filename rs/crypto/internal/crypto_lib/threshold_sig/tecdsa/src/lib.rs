@@ -1,4 +1,4 @@
-use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
+use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterEcdsaPublicKey};
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NumberOfNodes, Randomness};
 use serde::{Deserialize, Serialize};
@@ -560,5 +560,45 @@ pub fn verify_threshold_signature(
     Ok(())
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum ThresholdEcdsaDerivePublicKeyError {
+    InvalidArgument(String),
+    InternalError(ThresholdEcdsaError),
+}
+
+impl From<ThresholdEcdsaError> for ThresholdEcdsaDerivePublicKeyError {
+    fn from(e: ThresholdEcdsaError) -> Self {
+        match e {
+            ThresholdEcdsaError::InvalidArguments(s) => Self::InvalidArgument(s),
+            ThresholdEcdsaError::CurveMismatch
+            | ThresholdEcdsaError::InconsistentCiphertext
+            | ThresholdEcdsaError::InconsistentCommitments
+            | ThresholdEcdsaError::InsufficientDealings
+            | ThresholdEcdsaError::InterpolationError
+            | ThresholdEcdsaError::InvalidComplaint
+            | ThresholdEcdsaError::InvalidDerivationPath
+            | ThresholdEcdsaError::InvalidFieldElement
+            | ThresholdEcdsaError::InvalidOpening
+            | ThresholdEcdsaError::InvalidPoint
+            | ThresholdEcdsaError::InvalidProof
+            | ThresholdEcdsaError::InvalidRecipients
+            | ThresholdEcdsaError::InvalidScalar
+            | ThresholdEcdsaError::InvalidSecretShare
+            | ThresholdEcdsaError::InvalidRandomOracleInput
+            | ThresholdEcdsaError::InvalidThreshold(_, _)
+            | ThresholdEcdsaError::SerializationError(_) => Self::InternalError(e),
+        }
+    }
+}
+
+pub fn derive_public_key(
+    master_public_key: &MasterEcdsaPublicKey,
+    derivation_path: &DerivationPath,
+) -> Result<EcdsaPublicKey, ThresholdEcdsaDerivePublicKeyError> {
+    Ok(crate::sign::derive_public_key(
+        master_public_key,
+        derivation_path,
+    )?)
+}
+
 pub use crate::complaints::generate_complaints;
-pub use crate::sign::derive_public_key;

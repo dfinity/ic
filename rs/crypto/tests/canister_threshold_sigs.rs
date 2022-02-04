@@ -1,5 +1,6 @@
 use ic_base_types::PrincipalId;
 use ic_crypto::utils::TempCryptoComponent;
+use ic_crypto::{derive_tecdsa_public_key, get_tecdsa_master_public_key};
 use ic_crypto_test_utils_canister_threshold_sigs::{
     build_params_from_previous, create_dealing, create_dealings, generate_key_transcript,
     generate_presig_quadruple, load_input_transcripts, load_transcript, multisign_dealings,
@@ -30,6 +31,7 @@ use ic_types::crypto::{AlgorithmId, CombinedMultiSig, CombinedMultiSigOf, Crypto
 use ic_types::{Height, NodeId, Randomness, RegistryVersion};
 use rand::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
+use std::convert::TryFrom;
 use std::sync::Arc;
 
 #[test]
@@ -803,6 +805,7 @@ fn should_fail_combine_sig_shares_with_insufficient_shares() {
 
 #[test]
 fn should_verify_combined_sig_successfully() {
+    use ic_crypto_internal_basic_sig_ecdsa_secp256k1 as ecdsa_secp256k1;
     let mut rng = thread_rng();
 
     let subnet_size = rng.gen_range(1, 10);
@@ -812,7 +815,9 @@ fn should_verify_combined_sig_successfully() {
     let quadruple =
         generate_presig_quadruple(&env, AlgorithmId::ThresholdEcdsaSecp256k1, &key_transcript);
 
-    let inputs = {
+    let master_public_key =
+        get_tecdsa_master_public_key(&key_transcript).expect("Master key extraction failed");
+    let (inputs, public_key) = {
         let derivation_path = ExtendedDerivationPath {
             caller: PrincipalId::new_user_test_id(1),
             derivation_path: vec![],
@@ -821,14 +826,17 @@ fn should_verify_combined_sig_successfully() {
         let hashed_message = rng.gen::<[u8; 32]>();
         let seed = Randomness::from(rng.gen::<[u8; 32]>());
 
-        ThresholdEcdsaSigInputs::new(
+        let inputs = ThresholdEcdsaSigInputs::new(
             &derivation_path,
             &hashed_message,
             seed,
             quadruple,
             key_transcript,
         )
-        .expect("failed to create signature inputs")
+        .expect("failed to create signature inputs");
+        let public_key = derive_tecdsa_public_key(&master_public_key, &derivation_path)
+            .expect("Public key derivation failed");
+        (inputs, public_key)
     };
 
     let sig_shares = inputs
@@ -854,6 +862,112 @@ fn should_verify_combined_sig_successfully() {
     let result =
         crypto_for(verifier_id, &env.crypto_components).verify_combined_sig(&inputs, &combined_sig);
     assert!(result.is_ok());
+    let ecdsa_sig = ecdsa_secp256k1::types::SignatureBytes(
+        <[u8; 64]>::try_from(combined_sig.signature).expect("Expected 64 bytes"),
+    );
+    let ecdsa_pk = ecdsa_secp256k1::types::PublicKeyBytes(public_key.public_key);
+    assert!(
+        ecdsa_secp256k1::api::verify(&ecdsa_sig, inputs.hashed_message(), &ecdsa_pk).is_ok(),
+        "ECDSA sig verification failed"
+    );
+}
+
+#[test]
+fn should_return_ecdsa_public_key() {
+    let mut rng = thread_rng();
+
+    let subnet_size = rng.gen_range(1, 10);
+    let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
+
+    let key_transcript = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1);
+    let result = get_tecdsa_master_public_key(&key_transcript);
+    assert!(result.is_ok());
+    let master_public_key = result.expect("Master key extraction failed");
+    assert_eq!(master_public_key.algorithm_id, AlgorithmId::EcdsaSecp256k1);
+    assert_eq!(master_public_key.public_key.len(), 33); // 1 byte header + 32 bytes of field element
+}
+
+#[test]
+fn should_derive_equal_ecdsa_public_keys() {
+    let mut rng = thread_rng();
+
+    let subnet_size = rng.gen_range(1, 10);
+    let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
+
+    let key_transcript = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1);
+    let master_public_key =
+        get_tecdsa_master_public_key(&key_transcript).expect("Master key extraction failed");
+
+    let derivation_path_1 = ExtendedDerivationPath {
+        caller: PrincipalId::new_user_test_id(42),
+        derivation_path: vec![],
+    };
+    let derivation_path_2 = ExtendedDerivationPath {
+        caller: PrincipalId::new_user_test_id(42),
+        derivation_path: vec![],
+    };
+
+    assert_eq!(derivation_path_1, derivation_path_2);
+    let derived_pk_1 = derive_tecdsa_public_key(&master_public_key, &derivation_path_1)
+        .expect("Public key derivation failed ");
+    let derived_pk_2 = derive_tecdsa_public_key(&master_public_key, &derivation_path_2)
+        .expect("Public key derivation failed ");
+    assert_eq!(derived_pk_1, derived_pk_2);
+}
+
+#[test]
+fn should_derive_differing_ecdsa_public_keys() {
+    let mut rng = thread_rng();
+
+    let subnet_size = rng.gen_range(1, 10);
+    let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
+
+    let key_transcript = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1);
+    let master_public_key =
+        get_tecdsa_master_public_key(&key_transcript).expect("Master key extraction failed");
+
+    let derivation_paths = [
+        ExtendedDerivationPath {
+            caller: PrincipalId::new_user_test_id(1),
+            derivation_path: vec![],
+        },
+        ExtendedDerivationPath {
+            caller: PrincipalId::new_user_test_id(2),
+            derivation_path: vec![],
+        },
+        ExtendedDerivationPath {
+            caller: PrincipalId::new_user_test_id(3),
+            derivation_path: vec![],
+        },
+        ExtendedDerivationPath {
+            caller: PrincipalId::new_user_test_id(3),
+            derivation_path: vec![vec![1, 2, 3, 4]],
+        },
+        ExtendedDerivationPath {
+            caller: PrincipalId::new_user_test_id(3),
+            derivation_path: vec![vec![1, 2, 3, 5]],
+        },
+    ];
+    let mut derived_keys = std::collections::HashSet::new();
+    for derivation_path in &derivation_paths {
+        let derived_pk = derive_tecdsa_public_key(&master_public_key, derivation_path)
+            .unwrap_or_else(|_| {
+                panic!(
+                    "Public key derivation failed for derivation path {:?}",
+                    derivation_path
+                )
+            });
+        assert!(
+            derived_keys.insert(derived_pk),
+            "Duplicate derived key for derivation path {:?}",
+            derivation_path
+        );
+    }
+    assert_eq!(
+        derived_keys.len(),
+        derivation_paths.len(),
+        "# of derived keys does not match # of derivation paths"
+    );
 }
 
 #[test]
@@ -941,15 +1055,6 @@ fn should_run_load_transcript_with_openings() {
 fn should_run_retain_active_transcripts() {
     let crypto_components = temp_crypto_components_for(&[NODE_1]);
     crypto_for(NODE_1, &crypto_components).retain_active_transcripts(&[]);
-}
-
-#[test]
-fn should_run_get_public_key() {
-    let crypto_components = temp_crypto_components_for(&[NODE_1]);
-    let key_transcript = fake_transcript();
-    let result = crypto_for(NODE_1, &crypto_components)
-        .get_public_key(PrincipalId::new_user_test_id(1), key_transcript);
-    assert!(result.is_ok());
 }
 
 fn fake_params_for(node_id: NodeId) -> IDkgTranscriptParams {
