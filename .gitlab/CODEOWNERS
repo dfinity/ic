@@ -173,4 +173,4 @@
 
 [Capsule]
 Capsule.toml              @dfinity-lab/teams/idx
-/**/Capsule.toml          @dfinity-lab/teams/idx
+**/Capsule.toml           @dfinity-lab/teams/idx
