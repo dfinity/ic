@@ -1,10 +1,11 @@
-use std::io::stdout;
-
 use clap::Clap;
+use ic_btc_adapter::{spawn_adapter, spawn_grpc_server, AdapterRequest, Cli};
 use slog::{error, slog_o, Drain, Logger};
-
-use ic_btc_adapter::Adapter;
-use ic_btc_adapter::Cli;
+use std::io::stdout;
+use tokio::{
+    sync::oneshot,
+    time::{sleep, Duration},
+};
 
 #[tokio::main]
 pub async fn main() {
@@ -27,12 +28,23 @@ pub async fn main() {
         }
     };
 
-    match Adapter::new(&config, logger.clone()) {
-        Ok(mut adapter) => {
-            adapter.run();
-        }
+    let sender = match spawn_adapter(&config, logger.clone()) {
+        Ok(sender) => sender,
         Err(err) => {
             error!(logger, "Error initializing the adapter: {}", err);
+            return;
         }
+    };
+    spawn_grpc_server(sender.clone());
+
+    loop {
+        let (tx, rx) = oneshot::channel();
+        sender
+            .send((AdapterRequest::Tick, tx))
+            .unwrap_or_else(|_e| error!(logger, "Sending tick request failed."));
+        if let Err(_err) = rx.await {
+            error!(logger, "Receiving tick response failed.");
+        }
+        sleep(Duration::from_millis(100)).await;
     }
 }
