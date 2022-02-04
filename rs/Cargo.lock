@@ -5867,6 +5867,90 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-sns-governance"
+version = "0.8.0"
+dependencies = [
+ "assert_matches",
+ "async-trait",
+ "bytes",
+ "candid",
+ "clap 3.0.0-beta.2",
+ "comparable",
+ "criterion",
+ "csv",
+ "dfn_candid",
+ "dfn_core",
+ "dfn_protobuf",
+ "futures",
+ "ic-base-types",
+ "ic-config",
+ "ic-crypto-sha",
+ "ic-nns-common",
+ "ic-nns-constants",
+ "ic-nns-governance",
+ "ic-protobuf",
+ "ic-sns-governance",
+ "ic-types 0.8.0",
+ "ledger-canister",
+ "maplit",
+ "on_wire",
+ "pretty_assertions 1.0.0",
+ "proptest 1.0.0",
+ "prost",
+ "prost-build",
+ "rand 0.7.3",
+ "rand_core 0.5.1",
+ "registry-canister",
+ "serde",
+ "strum 0.18.0",
+ "strum_macros 0.18.0",
+]
+
+[[package]]
+name = "ic-sns-integration-tests"
+version = "0.8.0"
+dependencies = [
+ "candid",
+ "dfn_candid",
+ "dfn_core",
+ "dfn_json",
+ "dfn_protobuf",
+ "ic-base-types",
+ "ic-canister-client",
+ "ic-crypto",
+ "ic-crypto-sha",
+ "ic-nns-constants",
+ "ic-sns-governance",
+ "ic-sns-test-utils",
+ "ic-types 0.8.0",
+ "ledger-canister",
+]
+
+[[package]]
+name = "ic-sns-test-utils"
+version = "0.8.0"
+dependencies = [
+ "candid",
+ "canister-test",
+ "dfn_candid",
+ "ed25519-dalek",
+ "futures",
+ "ic-canister-client",
+ "ic-config",
+ "ic-registry-transport",
+ "ic-sns-governance",
+ "ic-types 0.8.0",
+ "ic-utils 0.8.0",
+ "lazy_static",
+ "ledger-canister",
+ "on_wire",
+ "prost",
+ "rand_chacha 0.2.2",
+ "rand_core 0.5.1",
+ "registry-canister",
+]
+
+[[package]]
 name = "ic-starter"
 version = "0.8.0"
 dependencies = [
@@ -10221,6 +10305,12 @@ dependencies = [
 
 [[package]]
 name = "strum"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57bd81eb48f4c437cadc685403cad539345bf703d78e63707418431cecd4522b"
+
+[[package]]
+name = "strum"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7318c509b5ba57f18533982607f24070a55d353e90d4cae30c467cdb2ad5ac5c"
@@ -10230,6 +10320,18 @@ name = "strum"
 version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cae14b91c7d11c9a851d3fbc80a963198998c2a64eec840477fa92d8ce9b70bb"
+
+[[package]]
+name = "strum_macros"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "87c85aa3f8ea653bfd3ddf25f7ee357ee4d204731f6aa9ad04002306f6e2774c"
+dependencies = [
+ "heck",
+ "proc-macro2 1.0.27",
+ "quote 1.0.7",
+ "syn 1.0.80",
+]
 
 [[package]]
 name = "strum_macros"

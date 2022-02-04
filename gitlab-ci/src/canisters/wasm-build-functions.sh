@@ -24,6 +24,7 @@ wasm_canister_list=(
     pmap_canister
     registry-canister
     root-canister
+    sns-governance-canister
     stable
     statesync-test-canister
     test-notified
