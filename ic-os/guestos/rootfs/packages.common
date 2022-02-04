@@ -19,7 +19,7 @@ openssh-server
 
 # Runtime libraries for replica
 liblmdb0
-libunwind
+libunwind8
 libselinux1
 
 # Smartcard support for replica
