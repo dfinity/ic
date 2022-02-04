@@ -1,0 +1,62 @@
+[package]
+name = "ic-sns-governance"
+version = "0.8.0"
+edition = "2018"
+
+[[bin]]
+name = "sns-governance-canister"
+path = "canister/canister.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+async-trait = "0.1.42"
+candid = "0.7.4"
+dfn_core = { path = "../../rust_canisters/dfn_core" }
+dfn_candid = { path = "../../rust_canisters/dfn_candid" }
+dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
+futures = "0.3.13"
+ic-base-types = { path = "../../types/base_types" }
+ic-crypto-sha = {path = "../../crypto/sha/"}
+ic-nns-common = { path = "../../nns/common" }
+ic-nns-constants = { path = "../../nns/constants" }
+ic-nns-governance = { path = "../../nns/governance" }
+ic-protobuf = { path = "../../protobuf" }
+ledger-canister = { path = "../../rosetta-api/ledger_canister" }
+on_wire = { path = "../../rust_canisters/on_wire" }
+prost = "0.9.0"
+serde = { version = "1.0", features = ["derive"] }
+rand = "0.7.3"
+rand_core = "0.5.1"
+registry-canister = { path = "../../registry/canister" }
+bytes = "1.0.1"
+strum_macros = "0.18.0"
+strum = "0.18.0"
+comparable = { version = "0.5", features = ["derive"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+clap = "3.0.0-beta.2"
+csv = "1.1"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+assert_matches = "1.3.0"
+ic-types = { path = "../../types/types" }
+maplit = "1.0.2"
+
+[build-dependencies]
+ic-base-types = { path = "../../types/base_types" }
+prost-build = "0.9.0"
+
+[dev-dependencies]
+criterion = "0.3"
+ic-config = { path = "../../config" }
+proptest = "1.0"
+pretty_assertions = "1.0"
+ic-base-types = { path = "../../types/base_types", features = ["test"] }
+ic-nns-common = { path = "../../nns/common", features = ["test"] }
+ledger-canister = { path = "../../rosetta-api/ledger_canister", features = ["test"] }
+ic-sns-governance = { path = ".", features = ["test"] }
+
+[features]
+test = ["ic-base-types/test", "ledger-canister/test"]
