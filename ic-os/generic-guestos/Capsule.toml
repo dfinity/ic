@@ -1,5 +1,5 @@
 [generic-guest-os-diskimg]
-input_files = [
+input = [
     "scripts/build-disk-image.sh",
     "../../artifacts/release/boundary-node-control-plane",
     "scripts/partitions.sh",
