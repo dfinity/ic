@@ -8,12 +8,20 @@ use ic_types::transport::{
 use ic_types::{NodeId, RegistryVersion};
 use std::{fmt::Debug, sync::Arc};
 
-/// Transport layer APIs.
+/// Transport component API
+/// The Transport component provides peer-to-peer connectivity with other peers.
+/// It exposes an interface for sending and receiving messages from peers, as well
+/// as for tracking the state of connections.
+/// The provided interface does not have the notion of clients and servers, as
+/// in peer to peer networks, there is no such definition of clients and servers.
+/// Therefore, Transport hides these semantics from the components above it
+/// (which are called 'Transport clients').
 pub trait Transport: Send + Sync {
-    /// Register the transport client of the specified type. No more than one
-    /// module can register against a particular client type. This returns a
-    /// handle to the client's context, which should be supplied in all the
-    /// future interactions with the transport layer.
+    /// Register the given Transport client, providing an event handler with the
+    /// corresponding implementation of the required callbacks for Transport to
+    /// call the client on events.
+    /// Note that a Transport client is another component (e.g., p2p). It should
+    /// not be confused with the notion of a client in a client-server communication.
     fn register_client(
         &self,
         async_event_handler: Arc<dyn AsyncTransportEventHandler>,
@@ -27,6 +35,8 @@ pub trait Transport: Send + Sync {
     ///   server ports.
     /// - 3. If the peer is the client, set up the connection state to accept
     ///   connection requests from the peer.
+    /// These are all implementation details that should not bother the
+    /// components that are using Transport (the Transport clients).
     fn start_connections(
         &self,
         peer: &NodeId,
@@ -63,11 +73,17 @@ pub enum SendError {
     EndpointNotFound,
 }
 
-/// Async version of the transport event handler
+/// An event handler for Transport clients. The event handler defines a set
+/// of callback functions to be used by Transport for notifications to the
+/// client.
 #[async_trait]
 pub trait AsyncTransportEventHandler: Send + Sync {
+    /// Send a received message to the client
     async fn send_message(&self, flow: FlowId, message: TransportPayload) -> Result<(), SendError>;
+
+    /// Notify the client of a change in a connection state
     async fn state_changed(&self, state_change: TransportStateChange);
 
+    /// Notify the client of an error that occurred while a connection is active
     async fn error(&self, flow: FlowId, error: TransportErrorCode);
 }
