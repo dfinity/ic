@@ -7,6 +7,8 @@ import ssh
 FLAGS = gflags.FLAGS
 gflags.DEFINE_boolean("no_flamegraphs", False, "Set true to disable generating flamegraphs.")
 
+TARGET_DIR = "/var/lib/ic/data/flamegraph"
+
 
 class Flamegraph(metrics.Metric):
     """Flamegraph abstraction. Can be started and stopped."""
@@ -69,10 +71,11 @@ class Flamegraph(metrics.Metric):
         self.flamegraph_pid = ssh.run_ssh_with_t(
             self.target,
             (
-                "sudo rm -f /tmp/flamegraph.svg; "
-                "rm -f perf.data perf.data.old; "
-                "cp -f flamegraph /tmp; cd /tmp; "
-                "sudo ./flamegraph -p $(pidof replica) --root --no-inline -o /tmp/flamegraph.svg"
+                f"sudo rm -rf {TARGET_DIR}; "
+                f"sudo mkdir {TARGET_DIR}; "
+                f"sudo chmod 0777 {TARGET_DIR}; "
+                f"cp -f flamegraph {TARGET_DIR}; cd {TARGET_DIR}; "
+                f"sudo ./flamegraph -p $(pidof replica) --root --no-inline -o {TARGET_DIR}/flamegraph.svg"
             ),
             os.path.join(outdir, "flamegraph-{}.stdout.log".format(self.target)),
             os.path.join(outdir, "flamegraph-{}.stderr.log".format(self.target)),
@@ -90,7 +93,7 @@ class Flamegraph(metrics.Metric):
         ssh.run_ssh(self.target, "sudo kill $(pidof perf)")
         r = self.flamegraph_pid.wait()
         r = ssh.scp_file(
-            f"admin@[{self.target}]:/tmp/flamegraph.svg", f"{exp.iter_outdir}/flamegraph_{self.target}.svg"
+            f"admin@[{self.target}]:{TARGET_DIR}/flamegraph.svg", f"{exp.iter_outdir}/flamegraph_{self.target}.svg"
         ).wait()
         if r != 0:
             print("❌ Failed to fetch flamegraph, continuing")
