@@ -1,5 +1,5 @@
 [legacy-system-tests]
-input_files = [
+input = [
   "artifacts/**/*",
   "gitlab-ci/src/canisters/wasm-build-functions.sh",
   "gitlab-ci/src/artifacts/collect_core_dumps.sh",
@@ -8,7 +8,7 @@ input_files = [
 ]
 
 [system-tests-pre-master]
-input_files = [
+input = [
   "artifacts/release/*.gz",
   "artifacts/canisters/nns-ui-canister.wasm.gz",
   "rs/tests/run-farm-based-system-tests.sh",
@@ -21,7 +21,7 @@ input_files = [
 # Any job that wants to use build-id should depend on at least binaries and canisters.
 # TODO: this duplicates ic/ic-os-/guestos/Capsule.toml, which needs to be fixed somehow.
 [build-id]
-input_files = [
+input = [
         # Binaries
         "artifacts/release/replica.gz",
         "artifacts/release/orchestrator.gz",

@@ -1,5 +1,5 @@
 [guest-os-diskimg]
-input_files = [
+input = [
     "../../artifacts/release/replica.gz",
     "../../artifacts/release/orchestrator.gz",
     "../../artifacts/release/canister_sandbox.gz",
@@ -16,7 +16,7 @@ input_files = [
 
 # This is repeated verbatim. Maybe we need to use YAML instead of TOML to avoid this.
 [guest-os-diskimg-dev]
-input_files = [
+input = [
     "../../artifacts/release/replica.gz",
     "../../artifacts/release/orchestrator.gz",
     "../../artifacts/release/canister_sandbox.gz",
@@ -33,7 +33,7 @@ input_files = [
 
 # This is repeated verbatim again.
 [guest-os-diskimg-dev-malicious]
-input_files = [
+input = [
     "../../artifacts/release/replica.gz",
     "../../artifacts/release/orchestrator.gz",
     "../../artifacts/release/canister_sandbox.gz",
@@ -49,7 +49,7 @@ input_files = [
 ]
 
 [guest-os-updateimg-build]
-input_files = [
+input = [
     "../../artifacts/release/replica.gz",
     "../../artifacts/release/orchestrator.gz",
     "../../artifacts/release/canister_sandbox.gz",
@@ -66,7 +66,7 @@ input_files = [
 
 
 [guest-os-updateimg-build-dev]
-input_files = [
+input = [
     "../../artifacts/release/replica.gz",
     "../../artifacts/release/orchestrator.gz",
     "../../artifacts/release/canister_sandbox.gz",
