@@ -1,11 +1,15 @@
 import json
+import logging
 import os
 import re
 import subprocess
+import time
+from statistics import mean
 from typing import List
 
 import experiment
 import gflags
+import prometheus
 import report
 import ssh
 from termcolor import colored
@@ -143,12 +147,55 @@ class WorkloadExperiment(experiment.Experiment):
         else:
             return [node_ips[FLAGS.query_target_node_idx]]
 
+    def wait_for_quiet(self, max_num_iterations: int = 60, quiet_rate_rps: int = 2, sleep_per_iteration_s: int = 10):
+        """
+        Wait until target subnetwork recovered.
+
+        Wait until the HTTP request rate reported by replicas is below quiet_rate_rps.
+        Sleep sleep_per_iteration_s seconds after each check. Check at most
+        max_num_iterations times and return unconditionally once reached.
+        """
+        recovered = False
+        curr_i = 0
+
+        if FLAGS.no_instrument or FLAGS.no_prometheus:
+            time.sleep(60)
+            return
+
+        while not recovered and curr_i < max_num_iterations:
+            curr_i += 1
+            try:
+                r = prometheus.get_http_request_rate_for_timestamp(self.testnet, [], int(time.time()))
+                v = [float(value[1]) for (value, _) in prometheus.parse(r)]
+                rate_rps = mean(v)
+
+                print(
+                    (
+                        f"{curr_i}/{max_num_iterations} Current mean HTTP rate of {self.testnet} "
+                        f"{rate_rps} (want < {quiet_rate_rps})"
+                    )
+                )
+
+                if rate_rps <= quiet_rate_rps:
+                    recovered = True
+
+            except Exception as ex:
+                print(f"Failed to query http request rate from targets: {ex}")
+                logging.error(logging.traceback.format_exc())
+
+            time.sleep(sleep_per_iteration_s)
+
     def end_iteration(self, configuration={}):
         """End benchmark iteration."""
         super().end_iteration(configuration)
         # Get logs from targets
         since_time = self.t_iter_end - self.t_iter_start
         self.get_iter_logs_from_targets(self.target_nodes, f"-{since_time}", self.iter_outdir)
+
+    def start_iteration(self):
+        """Start a new iteration of the experiment."""
+        super().start_iteration()
+        self.wait_for_quiet()
 
     def get_mainnet_target(self) -> List[str]:
         """Get target if running in mainnet."""
