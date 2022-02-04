@@ -70,7 +70,6 @@ use ic_nns_governance::{
 use ledger_canister::{AccountIdentifier, Memo, Tokens};
 use maplit::hashmap;
 use proptest::prelude::proptest;
-use proptest::prop_assert_eq;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 
 use std::cmp::Ordering;
@@ -4557,6 +4556,7 @@ fn test_merge_neurons(
 ) {
     // Start the NNS 20 years after genesis, to give lots of time for aging.
     let epoch = DEFAULT_TEST_START_TIMESTAMP_SECONDS + (20 * ONE_YEAR_SECONDS);
+
     let mut nns = NNSBuilder::new()
         .set_start_time(epoch)
         .set_economics(NetworkEconomics::with_default_values())
@@ -4655,8 +4655,16 @@ fn test_merge_neurons(
                     ));
                     let old_age = epoch.saturating_sub(n2_age);
                     let new_age = {
-                        let n1_age_seconds = nns.now().saturating_sub(epoch.saturating_sub(n1_age));
-                        let n2_age_seconds = nns.now().saturating_sub(old_age);
+                        let n1_age_seconds = if n1_dissolve == 0 {
+                            0
+                        } else {
+                            nns.now().saturating_sub(epoch.saturating_sub(n1_age))
+                        };
+                        let n2_age_seconds = if n2_dissolve == 0 {
+                            0
+                        } else {
+                            nns.now().saturating_sub(old_age)
+                        };
                         let (_new_stake, new_age_seconds) =
                             ic_nns_governance::governance::combine_aged_stakes(
                                 n2_stake,
@@ -4664,9 +4672,6 @@ fn test_merge_neurons(
                                 (n1_stake - n1_fees) - fee,
                                 n1_age_seconds,
                             );
-                        if n2_age == n1_age {
-                            prop_assert_eq!(n2_age_seconds, new_age_seconds);
-                        }
                         nns.now().saturating_sub(new_age_seconds)
                     };
                     let aging =
