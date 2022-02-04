@@ -186,3 +186,4 @@
       changes:
         - ic-os/generic-guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/Dockerfile.base
+        - ic-os/guestos/rootfs/packages.common
