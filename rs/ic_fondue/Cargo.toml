@@ -11,6 +11,7 @@ canister-test = { path = "../rust_canisters/canister_test" }
 chrono = "0.4.19"
 crossbeam-channel = "0.5.0"
 either = "1.6"
+flate2 = "1.0.22"
 fs_extra = "1.2.0"
 futures = "0.3.6"
 hex = "0.4.2"
@@ -57,7 +58,6 @@ tempfile = "3.1"
 thiserror = "1.0"
 tokio = "1.15.0"
 url = "2.1.1"
-zstd = "0.6.1"
 
 [dev-dependencies]
 ic-test-utilities = { path = "../test_utilities" }

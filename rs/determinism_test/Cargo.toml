@@ -29,4 +29,5 @@ slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "rel
 slog-async = "2.5.0"
 slog-term = "2.6.0"
 tokio = "1.15.0"
-wabt = "0.10.0"
+wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" }
+

@@ -78,8 +78,12 @@ pub async fn test_impl(
         println!("Warning: cycles_per_subnet will be ignored when not specifying wallet_canisters");
     }
 
-    // (Build and) load the xnet-test canister.
-    let wasm = load_canister_bin("xnet_test", "xnet-test-canister");
+    // Load the xnet-test-canister.
+    let wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
+        "rust_canisters/xnet_test",
+        "xnet-test-canister",
+        &[],
+    );
 
     // Map subnets to wallet canisters (if provided) and retain those subnets with
     // wallet canisters only.
@@ -344,18 +348,6 @@ pub async fn test_impl(
     }
 
     assert!(success, "Test failed.");
-}
-
-/// (Builds and) loads the given canister binary from the given package within
-/// the given `rust_canisters` subdirectory.
-pub fn load_canister_bin(dir: &str, bin: &str) -> Wasm {
-    println!("👉 Building {} canister binary", bin);
-    let cargo_manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("..")
-        .join("rust_canisters")
-        .join(dir);
-
-    Project { cargo_manifest_dir }.cargo_bin(bin, &[])
 }
 
 pub async fn stop_chatters(canisters: &[Canister<'_>], on_error: fn(&str) -> ()) {

@@ -36,7 +36,7 @@ guest-os-updateimg-build:
       # Create a second upgrade image with different version number to ease testing with self upgrades
       # shellcheck disable=SC2086  # Expanding BUILD_EXTRA_ARGS into multiple parameters
       buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" build-disk-upgrade-img -- \
-      capsule -v -t "$(openssl sha256 <<<${BUILD_EXTRA_ARGS}${BUILD_EXTRA_SUFFIX})" -t "${CI_JOB_IMAGE:-docker}" -t "${VERSION}" -o "${BUILD_OUT}/update-img-test.tar.gz" -- \
+      capsule -v -t "$(openssl sha256 <<<${BUILD_EXTRA_ARGS}${BUILD_EXTRA_SUFFIX})" -t "${VERSION}-test" -o "${BUILD_OUT}/update-img-test.tar.gz" -- \
       ./scripts/build-update-image.sh -o "${BUILD_OUT}"/update-img-test.tar.gz -v "${VERSION}-test" -x ../../artifacts/release ${BUILD_EXTRA_ARGS}
 
       ls -lah "${BUILD_OUT}"

@@ -1,7 +1,9 @@
 use anyhow::bail;
+use flate2::{write::GzEncoder, Compression};
 use std::{
     collections::BTreeMap,
     fs::File,
+    io,
     net::SocketAddr,
     path::{Path, PathBuf},
     process::Command,
@@ -38,7 +40,7 @@ pub type NodeVms = BTreeMap<NodeId, AllocatedVm>;
 const CONF_IMG_FNAME: &str = "config_disk.img";
 
 fn mk_compressed_img_path() -> std::string::String {
-    return format!("{}.zst", CONF_IMG_FNAME);
+    return format!("{}.gz", CONF_IMG_FNAME);
 }
 
 pub fn init_ic<P: AsRef<Path>>(
@@ -292,10 +294,14 @@ pub fn create_config_disk_image(
         bail!("could not spawn image creation process");
     }
 
-    let img_file = File::open(img_path)?;
+    let mut img_file = File::open(img_path)?;
     let compressed_img_path = PathBuf::from(&node.node_path).join(mk_compressed_img_path());
     let compressed_img_file = File::create(compressed_img_path.clone())?;
-    zstd::stream::copy_encode(img_file, compressed_img_file, 0)?;
+
+    let mut encoder = GzEncoder::new(compressed_img_file, Compression::default());
+    let _ = io::copy(&mut img_file, &mut encoder)?;
+    let mut write_stream = encoder.finish()?;
+    write_stream.flush()?;
 
     let mut cmd = Command::new("sha256sum");
     cmd.arg(compressed_img_path);

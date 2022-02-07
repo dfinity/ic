@@ -54,9 +54,12 @@ fn crypto_nidkg_benchmarks(criterion: &mut Criterion) {
         },
     ];
 
-    let toplevel_path: PathBuf = [env!("CARGO_MANIFEST_DIR"), "benches/test_vectors_nidkg"]
-        .iter()
-        .collect();
+    let toplevel_path: PathBuf = [
+        &std::env::var("CARGO_MANIFEST_DIR").unwrap(),
+        "benches/test_vectors_nidkg",
+    ]
+    .iter()
+    .collect();
     let data_mgr = NiDkgBenchDataManager::new(toplevel_path);
 
     data_mgr.recreate_if_requested(&test_cases);

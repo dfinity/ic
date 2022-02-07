@@ -1,6 +1,5 @@
 use crate::api::handle::Ic;
-use crate::tests::testcase_4_3_xnet_slo::load_canister_bin;
-use canister_test::Canister;
+use canister_test::{Canister, Project};
 use chrono::Utc;
 use std::time::Duration;
 
@@ -26,8 +25,12 @@ pub async fn test_impl(
     size_level: Option<u64>,
     random_seed: Option<u64>,
 ) {
-    // (Build and) load the statesync-test canister.
-    let wasm = load_canister_bin("statesync_test", "statesync-test-canister");
+    // Load the statesync-test-canister.
+    let wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
+        "rust_canisters/statesync_test",
+        "statesync-test-canister",
+        &[],
+    );
 
     println!("UTC before installing canisters is: {}", Utc::now());
     let num_canisters = num_canisters.unwrap_or(NUM_CANISTERS as u64) as usize;

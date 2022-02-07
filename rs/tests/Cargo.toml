@@ -85,14 +85,13 @@ serde_cbor = "0.11.1"
 serde_json = "1.0"
 serde_millis =  "0.1"
 slog = { version = "2.5.2", features = ["max_level_trace", "release_max_level_trace"] }
-ssh2 = "0.9.3"
+ssh2 = { git = "https://github.com/dfinity-lab/ssh2-rs", branch = "master" }
 structopt = "0.3"
 tempfile = "3.1.0"
 tokio = {version = "1.15.0", features = ["full"]}
 tree-deserializer = { path = "../tree_deserializer" }
 url = "2.1.1"
-wabt = "0.10.0"
-zstd = "0.6.1"
+wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" }
 
 
 ic-agent = "=0.6.0"

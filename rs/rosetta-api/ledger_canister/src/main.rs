@@ -881,7 +881,8 @@ mod tests {
         let new_interface = __export_service();
 
         // check the public interface against the actual one
-        let old_interface = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ledger.did");
+        let old_interface =
+            PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("ledger.did");
 
         check_service_compatible(
             "actual ledger candid interface",

@@ -5,7 +5,7 @@ use dfn_core::bytes;
 #[test]
 fn test_panic_hook_single_method() {
     local_test_e(|runtime| async move {
-        let canister = Project::new(env!("CARGO_MANIFEST_DIR"))
+        let canister = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap())
             .cargo_bin("panics", &[])
             .install_(&runtime, Vec::new())
             .await
@@ -20,7 +20,7 @@ fn test_panic_hook_single_method() {
 #[test]
 fn test_panic_hook_across_methods() {
     local_test_e(|runtime| async move {
-        let canister = Project::new(env!("CARGO_MANIFEST_DIR"))
+        let canister = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap())
             .cargo_bin("panics", &[])
             .install_(&runtime, Vec::new())
             .await

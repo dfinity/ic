@@ -6,7 +6,6 @@ legacy-system-tests:
   needs:
     - cargo-build-canisters
     - cargo-build-release-linux-native
-    - cargo-build-release-linux-native-nd
     - cargo-build-release-linux-native-malicious
   artifacts:
     paths:
@@ -35,7 +34,6 @@ ic-ref-test:
   retry: 2
   needs:
     - cargo-build-release-linux-native
-    - cargo-build-release-linux-native-nd
   artifacts:
     when: always
     paths:

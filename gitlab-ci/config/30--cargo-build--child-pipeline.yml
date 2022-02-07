@@ -11,7 +11,7 @@ cargo-clippy-darwin:
 cargo-build-debug-linux:
   extends: .cargo-build-docker
   variables:
-    BUILD_COMMAND: "placebo -i Cargo.lock -i './**/Cargo.toml' -i './**/*.rs'  -o \"$${CARGO_TARGET_DIR}/x86_64-unknown-linux-gnu/debug/*\" -- cargo build"
+    BUILD_COMMAND: "cargo build"
 
 cargo-build-debug-darwin:
   extends: .cargo-build-macos
@@ -27,7 +27,7 @@ cargo-build-release-linux:
     paths:
       - artifacts/nix-release/*
   variables:
-    BUILD_COMMAND: "placebo -i Cargo.lock -i './**/Cargo.toml' -i './**/*.rs' -o \"$${CARGO_TARGET_DIR}/x86_64-unknown-linux-gnu/release/*\" -- cargo build --release"
+    BUILD_COMMAND: "cargo build --release"
 
 cargo-build-release-darwin:
   extends: .cargo-build-macos
@@ -44,7 +44,7 @@ cargo-build-release-linux-native:
     - .rules-parent-pipeline-autorun-on-trigger
   image:
     # Use the docker image without nix-shell
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:2022-02-04-749ba72d-6fe090fd802a4e00d6b1fad0d109bfde31611099"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:2022-02-06-56db77a4-a9fd8a0768663d5eb3776933d9ec2233ccfe940d"
   variables:
     BUILD_COMMAND: ""
     ARTIFACT_EXT: ""
@@ -55,7 +55,7 @@ cargo-build-release-linux-native:
     - |
       set -exuo pipefail
 
-      cd "$CI_PROJECT_DIR/rs" || exit 1
+      cd "${CI_PROJECT_DIR}/rs" || exit 1
 
       if [[ -z "${BUILD_COMMAND}" ]]; then
         buildevents cmd "${PARENT_PIPELINE_ID}" "${CI_JOB_ID}" cargo-build -- \
@@ -72,11 +72,6 @@ cargo-build-release-linux-native:
       "$RUSTC_WRAPPER" --show-stats || true
       echo -e "\e[0Ksection_end:$(date +%s):sccache_stats\r\e[0K"
 
-cargo-build-release-linux-native-nd:
-  extends: cargo-build-release-linux-native
-  variables:
-    BUILD_COMMAND: "cargo build --target x86_64-unknown-linux-gnu --release -p tests -p ic-nns-init -p ic-scenario-tests"
-
 cargo-build-release-linux-native-malicious:
   extends: cargo-build-release-linux-native
   variables:
@@ -91,7 +86,7 @@ cargo-build-canisters:
     ARTIFACT_EXT: ""
   image:
     # Use the docker image without nix-shell
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:2022-02-04-749ba72d-6fe090fd802a4e00d6b1fad0d109bfde31611099"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:2022-02-06-56db77a4-a9fd8a0768663d5eb3776933d9ec2233ccfe940d"
   artifacts:
     paths:
       - "artifacts/canisters${ARTIFACT_EXT}/*"
