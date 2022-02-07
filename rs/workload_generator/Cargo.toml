@@ -36,7 +36,7 @@ slog-scope = "4.1.2"
 slog-term = "2.6.0"
 tokio = { version = "1.15.0", features = ["full"] }
 url = "2.1.1"
-wabt = "0.10.0"
+wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" }
 
 [[bin]]
 name = "ic-workload-generator"

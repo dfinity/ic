@@ -6,7 +6,7 @@ use on_wire::BytesS;
 #[test]
 fn candid_test() {
     local_test_e(|r| async move {
-        let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
+        let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
 
         let canister = proj
             .cargo_bin("wasm", &[])

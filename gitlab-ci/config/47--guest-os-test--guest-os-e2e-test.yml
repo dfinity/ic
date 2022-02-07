@@ -78,7 +78,6 @@ e2e-scalability-suite-test:
   needs:
     - guest-os-diskimg
     - cargo-build-release-linux-native
-    - cargo-build-release-linux-native-nd
     - cargo-build-canisters
   artifacts:
     paths:
@@ -163,14 +162,15 @@ guest-os-upgrade-from-mainnet-app-subnet-to-new-version-update-workload:
     - guest-os-diskimg
     - guest-os-updateimg-build
     - cargo-build-release-linux-native
-    - cargo-build-release-linux-native-nd
     - cargo-build-canisters
   artifacts:
     paths:
     - ic-os/guestos/test-out/e2e-upgrade-from-mainnet-app-subnet-to-new-version-update-workload
   script:
     - |
-      $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "app" "false" "update"
+      $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" \
+      capsule -v -i 'ic-os/guestos/build-out/**/*.gz' -i 'artifacts/**/*.gz' -i 'ic-os/guestos/tests/**/*' -- \
+      "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "app" "false" "update"
 
 guest-os-downgrade-from-new-version-to-mainnet-app-subnet-update-workload:
   extends:
@@ -179,14 +179,15 @@ guest-os-downgrade-from-new-version-to-mainnet-app-subnet-update-workload:
     - guest-os-diskimg
     - guest-os-updateimg-build
     - cargo-build-release-linux-native
-    - cargo-build-release-linux-native-nd
     - cargo-build-canisters
   artifacts:
     paths:
     - ic-os/guestos/test-out/e2e-downgrade-from-new-version-to-mainnet-app-subnet-update-workload
   script:
     - |
-      $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "app" "true" "update"
+      $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" \
+      capsule -v -i 'ic-os/guestos/build-out/**/*.gz' -i 'artifacts/**/*.gz' -i 'ic-os/guestos/tests/**/*' -- \
+      "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "app" "true" "update"
 
 guest-os-upgrade-from-mainnet-nns-subnet-to-new-version-update-workload:
   extends:
@@ -195,14 +196,15 @@ guest-os-upgrade-from-mainnet-nns-subnet-to-new-version-update-workload:
     - guest-os-diskimg
     - guest-os-updateimg-build
     - cargo-build-release-linux-native
-    - cargo-build-release-linux-native-nd
     - cargo-build-canisters
   artifacts:
     paths:
     - ic-os/guestos/test-out/e2e-upgrade-from-mainnet-nns-subnet-to-new-version-update-workload
   script:
     - |
-      $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "nns" "false" "update"
+      $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" \
+      capsule -v -i 'ic-os/guestos/build-out/**/*.gz' -i 'artifacts/**/*.gz' -i 'ic-os/guestos/tests/**/*' -- \
+      "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "nns" "false" "update"
 
 guest-os-downgrade-from-new-version-to-mainnet-nns-subnet-update-workload:
   extends:
@@ -211,14 +213,15 @@ guest-os-downgrade-from-new-version-to-mainnet-nns-subnet-update-workload:
     - guest-os-diskimg
     - guest-os-updateimg-build
     - cargo-build-release-linux-native
-    - cargo-build-release-linux-native-nd
     - cargo-build-canisters
   artifacts:
     paths:
     - ic-os/guestos/test-out/e2e-downgrade-from-new-version-to-mainnet-nns-subnet-update-workload
   script:
     - |
-      $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "nns" "true" "update"
+      $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" \
+      capsule -v -i 'ic-os/guestos/build-out/**/*.gz' -i 'artifacts/**/*.gz' -i 'ic-os/guestos/tests/**/*' -- \
+      "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "nns" "true" "update"
 
 guest-os-upgrade-from-mainnet-app-subnet-to-new-version-query-workload:
   extends:
@@ -227,14 +230,15 @@ guest-os-upgrade-from-mainnet-app-subnet-to-new-version-query-workload:
     - guest-os-diskimg
     - guest-os-updateimg-build
     - cargo-build-release-linux-native
-    - cargo-build-release-linux-native-nd
     - cargo-build-canisters
   artifacts:
     paths:
     - ic-os/guestos/test-out/e2e-upgrade-from-mainnet-app-subnet-to-new-version-query-workload
   script:
     - |
-      $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "app" "false" "query"
+      $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" \
+      capsule -v -i 'ic-os/guestos/build-out/**/*.gz' -i 'artifacts/**/*.gz' -i 'ic-os/guestos/tests/**/*' -- \
+      "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "app" "false" "query"
 
 guest-os-downgrade-from-new-version-to-mainnet-app-subnet-query-workload:
   extends:
@@ -243,14 +247,15 @@ guest-os-downgrade-from-new-version-to-mainnet-app-subnet-query-workload:
     - guest-os-diskimg
     - guest-os-updateimg-build
     - cargo-build-release-linux-native
-    - cargo-build-release-linux-native-nd
     - cargo-build-canisters
   artifacts:
     paths:
     - ic-os/guestos/test-out/e2e-downgrade-from-new-version-to-mainnet-app-subnet-query-workload
   script:
     - |
-      $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "app" "true" "query"
+      $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" \
+      capsule -v -i 'ic-os/guestos/build-out/**/*.gz' -i 'artifacts/**/*.gz' -i 'ic-os/guestos/tests/**/*' -- \
+      "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "app" "true" "query"
 
 guest-os-upgrade-from-mainnet-nns-subnet-to-new-version-query-workload:
   extends:
@@ -259,14 +264,15 @@ guest-os-upgrade-from-mainnet-nns-subnet-to-new-version-query-workload:
     - guest-os-diskimg
     - guest-os-updateimg-build
     - cargo-build-release-linux-native
-    - cargo-build-release-linux-native-nd
     - cargo-build-canisters
   artifacts:
     paths:
     - ic-os/guestos/test-out/e2e-upgrade-from-mainnet-nns-subnet-to-new-version-query-workload
   script:
     - |
-      $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "nns" "false" "query"
+      $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" \
+      capsule -v -i 'ic-os/guestos/build-out/**/*.gz' -i 'artifacts/**/*.gz' -i 'ic-os/guestos/tests/**/*' -- \
+      "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "nns" "false" "query"
 
 
 guest-os-downgrade-from-new-version-to-mainnet-nns-subnet-query-workload:
@@ -276,14 +282,15 @@ guest-os-downgrade-from-new-version-to-mainnet-nns-subnet-query-workload:
     - guest-os-diskimg
     - guest-os-updateimg-build
     - cargo-build-release-linux-native
-    - cargo-build-release-linux-native-nd
     - cargo-build-canisters
   artifacts:
     paths:
     - ic-os/guestos/test-out/e2e-downgrade-from-new-version-to-mainnet-nns-subnet-query-workload
   script:
     - |
-      $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "nns" "true" "query"
+      $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" \
+      capsule -v -i 'ic-os/guestos/build-out/**/*.gz' -i 'artifacts/**/*.gz' -i 'ic-os/guestos/tests/**/*' -- \
+      "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "nns" "true" "query"
 
 .run-farm-based-test: &run-farm-based-test |
   IC_VERSION_ID=$("${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/find-build-id.sh)
@@ -295,7 +302,7 @@ guest-os-downgrade-from-new-version-to-mainnet-nns-subnet-query-workload:
   # are forwarded to a separate file.
   # All lines produced by the logger share the same structure: e.g. "Nov 10 13:20:30.931 INFO ...".
   # Hence, the fourth column can be used to distinguish structured from unstructerd logs.
-  $SHELL_WRAPPER capsule -v -t "${IC_VERSION_ID}" -i 'ic-os/guestos/build-out/**/*' -- \
+  $SHELL_WRAPPER capsule -v -t "${IC_VERSION_ID}" -t "${SUITE_NAME}" -i 'ic-os/guestos/build-out/**/*.gz' -- \
   "${CI_PROJECT_DIR}/rs/tests/run-farm-based-system-tests.sh" \
     --suite "${SUITE_NAME}" \
     --log-base-dir "${BASE_DIR}" \
@@ -310,7 +317,6 @@ guest-os-downgrade-from-new-version-to-mainnet-nns-subnet-query-workload:
     - guest-os-diskimg-dev
     - guest-os-diskimg-dev-malicious
     - cargo-build-release-linux-native
-    - cargo-build-release-linux-native-nd
     - cargo-build-canisters
     - artifacts-upload-to-s3
   artifacts:

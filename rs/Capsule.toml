@@ -1,10 +1,11 @@
 [cargo-build-release-linux-native]
-input_files = [
+input = [
   "./Cargo.lock",
   "./**/Cargo.toml",
   "./**/*.rs",
+  "../gitlab-ci/src/job_scripts/**/*",
 ]
-output_files = [
+output = [
   "/cargo_target/x86_64-unknown-linux-gnu/release/boundary-node-control-plane",
   "/cargo_target/x86_64-unknown-linux-gnu/release/canister_sandbox",
   "/cargo_target/x86_64-unknown-linux-gnu/release/ic-admin",
@@ -24,4 +25,9 @@ output_files = [
   "/cargo_target/x86_64-unknown-linux-gnu/release/replica",
   "/cargo_target/x86_64-unknown-linux-gnu/release/state-tool",
   "/cargo_target/x86_64-unknown-linux-gnu/release/vsock_agent",
+  "/cargo_target/x86_64-unknown-linux-gnu/release/system-tests",
+  "/cargo_target/x86_64-unknown-linux-gnu/release/ic-test-bin",
+  "/cargo_target/x86_64-unknown-linux-gnu/release/prod-test-driver",
+  "/cargo_target/x86_64-unknown-linux-gnu/release/e2e-test-driver",
+  "/cargo_target/x86_64-unknown-linux-gnu/release/ic-nns-init",
 ]

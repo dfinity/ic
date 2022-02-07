@@ -67,7 +67,7 @@ canister-test = { path = "../rust_canisters/canister_test" }
 criterion = "0.3"
 ic-test-utilities = { path = "../test_utilities" }
 predicates = "1.0.1"
-wabt = "0.10.0"
+wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" }
 
 [[bench]]
 name = "calls"

@@ -55,7 +55,7 @@ impl Project {
     /// test/binary that uses it.
     fn new_from_path_relative_to_rs(relative_path_from_rs: impl AsRef<Path>) -> Self {
         // This fn should remain private, because it will panic on CI.
-        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR").to_owned());
+        let dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
         let canonical = dir.canonicalize().unwrap();
         let rs = {
             let mut d = canonical.as_path();

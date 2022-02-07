@@ -2405,9 +2405,9 @@ checksum = "398ea4fabe40b9b0d885340a2a991a44c8a645624075ad966d21f88688e2b69e"
 
 [[package]]
 name = "flate2"
-version = "1.0.20"
+version = "1.0.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd3aec53de10fe96d7d8c565eb17f2c687bb5518a2ec453b5b1252964526abe0"
+checksum = "1e6988e897c1c9c485f43b47a529cef42fde0547f9d8d41a7062518f1d8fc53f"
 dependencies = [
  "cfg-if 1.0.0",
  "crc32fast",
@@ -4533,6 +4533,7 @@ dependencies = [
  "chrono",
  "crossbeam-channel 0.5.1",
  "either",
+ "flate2",
  "fs_extra",
  "futures",
  "hex",
@@ -4580,7 +4581,6 @@ dependencies = [
  "thiserror",
  "tokio",
  "url",
- "zstd",
 ]
 
 [[package]]
@@ -6964,8 +6964,7 @@ dependencies = [
 [[package]]
 name = "libssh2-sys"
 version = "0.2.23"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b094a36eb4b8b8c8a7b4b8ae43b2944502be3e59cd87687595cf6b0a71b3f4ca"
+source = "git+https://github.com/dfinity-lab/ssh2-rs?branch=master#ba2fde924046aa5fc0999ae2c62442bcadb347b0"
 dependencies = [
  "cc",
  "libc",
@@ -10121,8 +10120,7 @@ dependencies = [
 [[package]]
 name = "ssh2"
 version = "0.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "269343e64430067a14937ae0e3c4ec604c178fb896dde0964b1acd22b3e2eeb1"
+source = "git+https://github.com/dfinity-lab/ssh2-rs?branch=master#ba2fde924046aa5fc0999ae2c62442bcadb347b0"
 dependencies = [
  "bitflags",
  "libc",
@@ -10737,7 +10735,6 @@ dependencies = [
  "tree-deserializer",
  "url",
  "wabt",
- "zstd",
 ]
 
 [[package]]
@@ -11398,8 +11395,7 @@ dependencies = [
 [[package]]
 name = "wabt"
 version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00bef93d5e6c81a293bccf107cf43aa47239382f455ba14869d36695d8963b9c"
+source = "git+https://github.com/dfinity-lab/wabt-rs?tag=0.10.0-dfinity#3dc380a4584ec24d6ae03eceed99b0a1e8890830"
 dependencies = [
  "serde",
  "serde_derive",
@@ -11410,8 +11406,7 @@ dependencies = [
 [[package]]
 name = "wabt-sys"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1a4e043159f63e16986e713e9b5e1c06043df4848565bf672e27c523864c7791"
+source = "git+https://github.com/dfinity-lab/wabt-rs?tag=0.10.0-dfinity#3dc380a4584ec24d6ae03eceed99b0a1e8890830"
 dependencies = [
  "cc",
  "cmake",
@@ -11904,33 +11899,4 @@ dependencies = [
  "quote 1.0.7",
  "syn 1.0.80",
  "synstructure",
-]
-
-[[package]]
-name = "zstd"
-version = "0.6.1+zstd.1.4.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5de55e77f798f205d8561b8fe2ef57abfb6e0ff2abe7fd3c089e119cdb5631a3"
-dependencies = [
- "zstd-safe",
-]
-
-[[package]]
-name = "zstd-safe"
-version = "3.0.1+zstd.1.4.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1387cabcd938127b30ce78c4bf00b30387dddf704e3f0881dbc4ff62b5566f8c"
-dependencies = [
- "libc",
- "zstd-sys",
-]
-
-[[package]]
-name = "zstd-sys"
-version = "1.4.20+zstd.1.4.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ebd5b733d7cf2d9447e2c3e76a5589b4f5e5ae065c22a2bc0b023cbc331b6c8e"
-dependencies = [
- "cc",
- "libc",
 ]

@@ -72,7 +72,7 @@ async fn test() {
     // follows ...
 
     // assuming we have a canister binary called 'json'
-    let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
+    let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
 
     // the canister object `json` provides the method familiar from the
     // canister test framework
@@ -80,7 +80,7 @@ async fn test() {
 
     // if you want to pull in canister binaries from other crates, you
     // might need pass a different path in place of
-    // `env!("CARGO_MANIFEST_DIR")`
+    // `std::env::var("CARGO_MANIFEST_DIR")`
 
     // install with api from subnet(0) node(0)
     json.install(api);

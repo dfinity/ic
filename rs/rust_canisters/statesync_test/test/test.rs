@@ -3,7 +3,7 @@ use canister_test::*;
 #[test]
 fn test_statesync_test_canisters() {
     local_test_e(|r| async move {
-        let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
+        let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
 
         println!("Start installing statesync test canister");
         let canister = proj

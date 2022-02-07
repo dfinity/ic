@@ -15,8 +15,7 @@ export CI_PROJECT_DIR
 export CARGO_BUILD_TARGET
 
 cd "$ROOT_DIR"/rs || exit 1
-# we exclude build non-deterministic binaries (job cargo-build-release-linux-native-nd)
-# this must match output_files in `rs/Capsule.toml`
+# this must match 'output' in `rs/Capsule.toml:cargo-build-release-linux-native`
 cargo build --target $CARGO_BUILD_TARGET --release \
     --bin ic-rosetta-api \
     --bin boundary-node-control-plane \
@@ -37,7 +36,12 @@ cargo build --target $CARGO_BUILD_TARGET --release \
     --bin orchestrator \
     --bin replica \
     --bin state-tool \
-    --bin vsock_agent
+    --bin vsock_agent \
+    --bin system-tests \
+    --bin ic-test-bin \
+    --bin prod-test-driver \
+    --bin e2e-test-driver \
+    --bin ic-nns-init
 
 ls -l "$CARGO_TARGET_DIR"/x86_64-unknown-linux-gnu/release
 

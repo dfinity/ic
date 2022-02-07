@@ -13,14 +13,12 @@ build-determinism-binaries:
       cd artifacts/release
       # Build Determinism for GLOBIGNORE files will be handled by NNS and Testing & Verification team
       (
-          GLOBIGNORE="ic-nns-init.gz:prod-test-driver.gz:e2e-test-driver.gz:ic-test-bin.gz:system-tests.gz"
           sha256sum -- *.gz | tee SHAS
       )
       cd -
       echo "docker-build-ic:"
       cd artifacts/docker-build-ic/release
       (
-          GLOBIGNORE="ic-nns-init.gz:prod-test-driver.gz:e2e-test-driver.gz:ic-test-bin.gz:system-tests.gz"
           sha256sum -- *.gz | tee SHAS
       )
       cd -

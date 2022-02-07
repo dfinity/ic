@@ -160,7 +160,7 @@ fn make_accounts(num_accounts: u64, num_subaccounts: u8) -> HashMap<AccountIdent
 #[test]
 fn upgrade_test() {
     local_test_e(|r| async move {
-        let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
+        let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
 
         let accounts = make_accounts(5, 4);
 
@@ -194,7 +194,7 @@ fn upgrade_test() {
 #[test]
 fn archive_blocks_small_test() {
     local_test_e(|r| async move {
-        let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
+        let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
 
         // 12 blocks
         let accounts = make_accounts(4, 3);
@@ -308,7 +308,7 @@ fn archive_blocks_small_test() {
 #[test]
 fn archive_blocks_large_test() {
     local_test_e(|r| async move {
-        let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
+        let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
 
         // 4096 blocks
         let accounts = make_accounts(64, 64);
@@ -437,7 +437,7 @@ fn archive_blocks_large_test() {
 #[test]
 fn notify_timeout_test() {
     local_test_e(|r| async move {
-        let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
+        let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
         let mut accounts = HashMap::new();
         let sender = create_sender(100);
         accounts.insert(
@@ -517,7 +517,7 @@ fn notify_timeout_test() {
 #[test]
 fn notify_test() {
     local_test_e(|r| async move {
-        let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
+        let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
         let mut accounts = HashMap::new();
         let sender = create_sender(100);
         accounts.insert(
@@ -696,7 +696,7 @@ fn notify_test() {
 #[test]
 fn notify_disabled_test() {
     local_test_e(|r| async move {
-        let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
+        let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
         let mut accounts = HashMap::new();
         let sender = create_sender(100);
         accounts.insert(
@@ -822,7 +822,7 @@ fn notify_disabled_test() {
 #[test]
 fn sub_account_test() {
     local_test_e(|r| async move {
-        let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
+        let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
 
         let mut initial_values = HashMap::new();
 
@@ -910,7 +910,7 @@ fn sub_account_test() {
 #[should_panic(expected = "Sending from 2vxsx-fae is not allowed")]
 fn check_anonymous_cannot_send() {
     local_test_e(|r| async move {
-        let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
+        let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
         let sub_account = |x| Some(Subaccount([x; 32]));
         // The principal ID of the test runner
         let us = PrincipalId::new_anonymous();
@@ -985,7 +985,7 @@ fn transfer_fee_test() {
 #[test]
 fn transaction_test() {
     local_test_e(|r| async move {
-        let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
+        let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
 
         let minting_account = create_sender(0);
         let acc1 = create_sender(1);
@@ -1162,7 +1162,7 @@ fn transaction_test() {
 #[test]
 fn get_block_test() {
     local_test_e(|r| async move {
-        let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
+        let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
 
         // For printing and comparing blocks since they're now hidden behind a
         // trait
@@ -1327,7 +1327,7 @@ fn get_block_test() {
 #[test]
 fn get_multiple_blocks_test() {
     local_test_e(|r| async move {
-        let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
+        let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
 
         let minting_account = create_sender(0);
 
@@ -1508,7 +1508,7 @@ fn get_multiple_blocks_test() {
 #[test]
 fn only_ledger_can_append_blocks_to_archive_nodes() {
     local_test_e(|r| async move {
-        let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
+        let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
 
         let minting_account = create_sender(0);
 
@@ -1632,7 +1632,7 @@ fn test_ledger_candid_interface_endpoint() {
 #[test]
 fn test_transfer_candid() {
     local_test_e(|r| async move {
-        let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
+        let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
 
         let minting_account = create_sender(0);
         let acc1 = create_sender(1);
@@ -1814,7 +1814,7 @@ fn test_transfer_candid() {
 #[test]
 fn test_transfer_u64_overflow() {
     local_test_e(|r| async move {
-        let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
+        let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
 
         let minting_account = create_sender(0);
         let acc1 = create_sender(1);
@@ -1894,7 +1894,7 @@ async fn ledger_assert_num_nodes(ledger: &Canister<'_>, num_expected: usize) -> 
 #[test]
 fn call_with_cleanup() {
     local_test_e(|r| async move {
-        let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
+        let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
 
         let test_canister = proj
             .cargo_bin("test-notified", &[])

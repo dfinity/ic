@@ -9,7 +9,7 @@ ARG sdk_version=0.8.0
 ARG protoc_version=3.18.1
 ARG sccache_version=0.2.19-alpha+dfinity
 ARG buildevents_version=0.6.0
-ARG capsule_version=0.2.19
+ARG capsule_version=0.2.21
 
 ARG cdk_opt_sha=5807d2f7b523f630eddd69acd4b245a8b129eff9
 ARG rocksdb_sha=0a9a05ae12943b1529ef1eabbca5ce5a71c986bf

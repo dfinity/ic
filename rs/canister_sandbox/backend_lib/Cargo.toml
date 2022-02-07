@@ -26,4 +26,4 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-test-utilities = { path = "../../test_utilities" }
 mockall = "0.7.2"
 nix = "0.23.0"
-wabt = "0.10.0"
+wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" }

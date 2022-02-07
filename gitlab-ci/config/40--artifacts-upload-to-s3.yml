@@ -8,7 +8,6 @@ artifacts-upload-to-s3:
   needs:
     - cargo-build-canisters
     - cargo-build-release-linux-native
-    - cargo-build-release-linux-native-nd
     # job only runs on protected branches
     - job: cargo-build-release-darwin
       optional: true

@@ -6,7 +6,7 @@ use std::time::{Duration, SystemTime};
 #[test]
 fn nan_canonicalized() {
     local_test_e(|r| async move {
-        let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
+        let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
 
         let canister = proj
             .cargo_bin("nan_canonicalized", &[])
@@ -24,7 +24,7 @@ fn nan_canonicalized() {
 #[test]
 fn stable() {
     local_test_e(|r| async move {
-        let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
+        let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
 
         let stable = proj
             .cargo_bin("stable", &[])
@@ -43,7 +43,7 @@ fn what_time_is_it() {
         t1 + one_minute > t2 && t1 - one_minute < t2
     }
     local_test_e(|r| async move {
-        let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
+        let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
 
         let stable = proj.cargo_bin("time", &[]).install_(&r, Vec::new()).await?;
 
@@ -58,7 +58,7 @@ fn what_time_is_it() {
 #[test]
 fn call_nonesistent_method_should_not_panic() {
     local_test_e(|r| async move {
-        let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
+        let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
 
         let canister = proj
             .cargo_bin("inter_canister_error_handling", &[])
