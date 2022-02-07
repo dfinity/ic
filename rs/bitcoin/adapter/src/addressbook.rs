@@ -1,3 +1,4 @@
+use crate::Config;
 use bitcoin::{
     network::{constants::ServiceFlags, Address},
     Network,
@@ -12,8 +13,6 @@ use std::{
     net::{SocketAddr, ToSocketAddrs},
 };
 use thiserror::Error;
-
-use crate::Config;
 
 /// Starting with version 31402, addresses are prefixed with a timestamp.
 /// If no timestamp is present, the addresses should not be relayed to other peers,

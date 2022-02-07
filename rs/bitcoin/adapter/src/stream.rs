@@ -1,17 +1,17 @@
-use bitcoin::consensus::serialize;
-use bitcoin::network::message::RawNetworkMessage;
-use bitcoin::{consensus::encode, network::message::NetworkMessage};
+use bitcoin::{
+    consensus::serialize,
+    network::message::RawNetworkMessage,
+    {consensus::encode, network::message::NetworkMessage},
+};
 use slog::Logger;
-use std::io;
-use std::net::SocketAddr;
-use std::pin::Pin;
-use std::time::Duration;
-use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
-use tokio::sync::mpsc::{Sender, UnboundedReceiver};
-use tokio::time::timeout;
-
+use std::{io, net::SocketAddr, pin::Pin, time::Duration};
 use thiserror::Error;
-use tokio::net::TcpStream;
+use tokio::{
+    io::{AsyncRead, AsyncWrite, AsyncWriteExt},
+    net::TcpStream,
+    sync::mpsc::{Sender, UnboundedReceiver},
+    time::timeout,
+};
 use tokio_socks::{tcp::Socks5Stream, Error as SocksError};
 
 /// This provides a default amount of time to wait before a timeout occurs while

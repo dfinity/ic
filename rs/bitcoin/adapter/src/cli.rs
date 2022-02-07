@@ -1,5 +1,4 @@
-//! A parser for the configuration file.
-
+//! A parser for the command line flags and configuration file.
 use crate::config::Config;
 use clap::{AppSettings, Clap};
 use slog::Level;
@@ -13,8 +12,6 @@ pub enum CliError {
     #[error("An error occurred while deserialized the provided configuration: {0}")]
     Deserialize(String),
 }
-
-pub type CliResult<T> = Result<T, CliError>;
 
 /// This struct is use to provide a command line interface to the adapter.
 #[derive(Clap)]
@@ -40,9 +37,8 @@ impl Cli {
     }
 
     /// Loads the config from the provided `config` argument.
-    pub fn get_config(&self) -> CliResult<Config> {
+    pub fn get_config(&self) -> Result<Config, CliError> {
         // The expected JSON config.
-
         let file = File::open(&self.config).map_err(CliError::Io)?;
         serde_json::from_reader(file).map_err(|err| CliError::Deserialize(err.to_string()))
     }
@@ -50,12 +46,9 @@ impl Cli {
 
 #[cfg(test)]
 mod test {
-
-    use std::str::FromStr;
-
-    use bitcoin::Network;
-
     use super::*;
+    use bitcoin::Network;
+    use std::str::FromStr;
 
     /// This function tests the `Cli::get_logging_level()` function.
     #[test]

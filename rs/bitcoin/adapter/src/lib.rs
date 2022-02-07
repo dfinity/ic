@@ -46,7 +46,7 @@ mod proto {
     tonic::include_proto!("btc");
 }
 
-pub use adapter::{spawn_adapter, AdapterRequest};
+pub use adapter::Adapter;
 pub use cli::Cli;
 pub use config::Config;
 pub use rpc_server::spawn_grpc_server;

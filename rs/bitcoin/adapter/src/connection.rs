@@ -1,10 +1,8 @@
-use std::time::{Duration, SystemTime};
-
+use crate::addressbook::AddressEntry;
 use bitcoin::network::message::NetworkMessage;
+use std::time::{Duration, SystemTime};
 use thiserror::Error;
 use tokio::{sync::mpsc::UnboundedSender, task::JoinHandle};
-
-use crate::addressbook::AddressEntry;
 
 /// This const represents how often a ping should be sent.
 const PING_INTERVAL: Duration = Duration::from_secs(120);
