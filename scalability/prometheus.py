@@ -1,5 +1,6 @@
 import json
 import os
+import traceback
 from typing import List
 
 import gflags
@@ -21,10 +22,10 @@ class Prometheus(metrics.Metric):
         print("Getting Prometheus metrics .. ")
         r = get_finalization_rate(exp.testnet, [exp.get_machine_to_instrument()], exp.t_iter_start, exp.t_iter_end)
         finalization_rate = extract_value(r)[0]
-        r = get_http_request_duration(
+
+        http_request_duration = get_http_request_duration(
             exp.testnet, [exp.get_machine_to_instrument()], exp.t_iter_start, exp.t_iter_end, exp.request_type
         )
-        http_request_duration = extract_value(r)
 
         r = get_http_request_rate(
             exp.testnet, [exp.get_machine_to_instrument()], exp.t_iter_start, exp.t_iter_end, exp.request_type
@@ -44,8 +45,28 @@ class Prometheus(metrics.Metric):
             )
 
 
+def verify_timestamps(result, exp):
+    """Verify that the timestamps in the given Prometheus result fall into the duration of the last iteration."""
+    for values, _ in result:
+        for v in values:
+            if v[0] < exp.t_iter_start or v[0] > exp.t_iter_end:
+                print(
+                    colored(
+                        (
+                            f"Warning, got timestamp {v[0]} outside of [{exp.t_iter_start} .. {exp.t_iter_end}] "
+                            "when querying prometheus",
+                            "red",
+                        )
+                    )
+                )
+
+
 def extract_value(result):
-    return [r["value"] for r in result["data"]["result"]]
+    if False in ["value" in r for r in result["data"]["result"]]:
+        traceback.print_stack()
+        print(colored("Query failed or incomplete, response: " + json.dumps(result, indent=2), "red"))
+
+    return [r["value"] if "value" in r else None for r in result["data"]["result"]]
 
 
 def extract_values(result):
@@ -53,7 +74,6 @@ def extract_values(result):
 
 
 def parse(result):
-
     if result["status"] != "success":
         print(colored("Failed to parse Prometheus query:" + json.dumps(result, indent=2)), "red")
         return None
@@ -65,6 +85,15 @@ def parse(result):
         return zip(
             [r["value"] for r in results],
             [r["metric"] for r in results],
+        )
+    elif rtype == "matrix":
+        results = result["data"]["result"]
+        assert isinstance(results, list)
+        return list(
+            zip(
+                [r["values"] for r in results],
+                [r["metric"] for r in results],
+            )
         )
 
     else:
@@ -152,12 +181,12 @@ def get_xnet_stream_size(testnet, t_start, t_end):
     return json.loads(r.text)
 
 
-def get_http_request_duration(testnet, hosts: List[str], t_start, t_end, request_type="query"):
+def get_http_request_duration(testnet, hosts: List[str], t_start, t_end, request_type="query", step=60):
 
     # Dashboard:
     # https://grafana.dfinity.systems/d/rnF_68BGk/http-handler?viewPanel=6&orgId=1&from=now-15m&to=now&var-ic=mercury&var-ic_subnet=All&var-request_type=All&var-group_by=request_type
     print(f"Request duration has been: {t_end - t_start}")
-    assert t_end - t_start > 60
+    assert t_end - t_start > step
 
     metric = "replica_http_request_duration_seconds"
     selector = '{}_bucket{{{},request_type="{}"}}'.format(metric, get_common(hosts, testnet), request_type)
@@ -165,12 +194,18 @@ def get_http_request_duration(testnet, hosts: List[str], t_start, t_end, request
     payload = {
         "start": t_start,
         "end": t_end,
-        "step": "60s",
+        "step": f"{step}s",
         "query": "histogram_quantile(0.80, sum by (le) (rate({}[60s])))".format(selector),
     }
 
     r = get_prometheus_range(payload)
-    return json.loads(r.text)
+    data = json.loads(r.text)
+
+    r = parse(data)
+    values, metric = r[0]
+
+    http_request_duration = [val[1] for val in values]
+    return http_request_duration
 
 
 def get_finalization_rate(testnet, hosts, t_start, t_end):
@@ -199,9 +234,13 @@ def get_common(hosts, testnet):
     c = f'ic="{testnet}",job="replica"'
 
     if hosts:
-        # We need a very strange escaping for hostnames ..
-        metricshosts = "|".join(["\\\\[{}\\\\]:9090".format(h) for h in hosts])
-        c += f',instance=~"{metricshosts}"'
+        if len(hosts) > 1:
+            # We need a very strange escaping for hostnames ..
+            metricshosts = "|".join(["\\\\[{}\\\\]:9090".format(h) for h in hosts])
+            c += f',instance=~"{metricshosts}"'
+        else:
+            metricshost = "[{}]:9090".format(hosts[0])
+            c += f',instance="{metricshost}"'
 
     return c
 
