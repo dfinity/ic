@@ -2,7 +2,7 @@
 set -xeuo pipefail
 
 cd "$CI_PROJECT_DIR/rs"
-cargo fmt --all -- --check
+cargo fmt -- --check
 cargo clippy --locked --all-features --tests --benches -- -D warnings -D clippy::all -D clippy::mem_forget -C debug-assertions=off
 
 if cargo tree -e features | grep -q 'serde feature "rc"'; then
