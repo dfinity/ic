@@ -14,7 +14,7 @@ deploy-guest-os-baseimg:
     cd "${CI_PROJECT_DIR}/ic-os/guestos/rootfs"
     docker build -q -t dfinity/guestos-base:"$TAG" -t dfinity/guestos-base:latest -f Dockerfile.base .
     docker push dfinity/guestos-base:"$TAG"
-    docker build -q -t dfinity/guestos-base-dev:"$TAG" -t dfinity/guestos-base:latest -f Dockerfile.base --build-args PACKAGE_FILES="packages.common packages.dev" .
+    docker build -q -t dfinity/guestos-base-dev:"$TAG" -t dfinity/guestos-base-dev:latest -f Dockerfile.base --build-args PACKAGE_FILES="packages.common packages.dev" .
     docker push dfinity/guestos-base-dev:"$TAG"
 
     cd "${CI_PROJECT_DIR}/ic-os/generic-guestos/rootfs"
