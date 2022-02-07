@@ -358,9 +358,9 @@ mod test {
 
         let last_cached = added_headers.last().unwrap();
         assert_eq!(last_cached.header.block_hash(), last_hash);
-        assert_eq!(last_cached.height, 17);
+        assert_eq!(last_cached.height, 16);
         let tip = state.get_active_chain_tip();
-        assert_eq!(tip.height, 17);
+        assert_eq!(tip.height, 16);
         assert_eq!(tip.header.block_hash(), last_hash);
     }
 
@@ -406,7 +406,7 @@ mod test {
         assert_eq!(state.tips.len(), 2);
         assert_eq!(state.tips[0].header.block_hash(), *last_chain_hash);
         assert_eq!(state.tips[1].header.block_hash(), *last_fork_hash);
-        assert_eq!(state.get_active_chain_tip().height, 28);
+        assert_eq!(state.get_active_chain_tip().height, 27);
     }
 
     /// Tests `BlockchainState::add_headers(...)` with an empty set of headers.
@@ -439,11 +439,11 @@ mod test {
 
         let (added_headers, maybe_err) = state.add_headers(&chain);
         assert!(maybe_err.is_none());
-        assert_eq!(added_headers.len(), 17);
+        assert_eq!(added_headers.len(), 16);
 
         let last_cached = added_headers.last().unwrap();
         assert_eq!(last_cached.header.block_hash(), last_hash);
-        assert_eq!(last_cached.height, 17);
+        assert_eq!(last_cached.height, 16);
 
         let (added_headers, maybe_err) = state.add_headers(&chain);
         assert!(maybe_err.is_none());

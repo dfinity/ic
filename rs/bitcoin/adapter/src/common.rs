@@ -108,12 +108,16 @@ pub mod test_common {
         limit: BlockHeight,
     ) -> Vec<BlockHeader> {
         let mut headers = vec![];
+        if limit == 0 {
+            return headers;
+        }
+
         let first = generate_header(initial_blockhash, initial_time);
         let mut prev_blockhash = first.block_hash();
         let mut prev_time = first.time;
         headers.push(first);
 
-        for _ in 0..limit {
+        for _ in 0..limit - 1 {
             let header = generate_header(prev_blockhash, prev_time);
             headers.push(header);
             prev_blockhash = header.block_hash();

@@ -815,10 +815,10 @@ pub mod test {
 
                     assert!(blockchain_manager.process_event(&event).is_ok());
                     let peer = blockchain_manager.peer_info.get(socket).unwrap();
-                    assert_eq!(peer.height, 17, "Height of peer {} is not correct", socket);
+                    assert_eq!(peer.height, 16, "Height of peer {} is not correct", socket);
                     assert_eq!(
                         blockchain_manager.blockchain.get_active_chain_tip().height,
-                        17,
+                        16,
                         "Height of the blockchain is not matching after adding the headers"
                     );
                     blockchain_manager.outgoing_command_queue.remove(0);
@@ -863,7 +863,7 @@ pub mod test {
 
             assert_eq!(
                 blockchain_manager.blockchain.get_active_chain_tip().height,
-                17,
+                16,
                 "Height of the blockchain is not matching after adding the headers"
             );
 
@@ -1105,7 +1105,7 @@ pub mod test {
         let side_chain = generate_headers(
             blockchain_manager.blockchain.genesis().header.block_hash(),
             blockchain_manager.blockchain.genesis().header.time,
-            0,
+            1,
         );
         let side_1 = side_chain.get(0).cloned().expect("Should have 1 header");
         let side_block_1 = Block {
@@ -1158,7 +1158,7 @@ pub mod test {
         let side_chain = generate_headers(
             blockchain_manager.blockchain.genesis().header.block_hash(),
             blockchain_manager.blockchain.genesis().header.time,
-            0,
+            1,
         );
         let side_1 = side_chain.get(0).cloned().expect("Should have 1 header");
         let side_block_1 = Block {
