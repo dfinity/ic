@@ -68,6 +68,11 @@ const MEMORY_CAPACITY: NumBytes = NumBytes::new(8 * 1024 * 1024 * 1024); // 8GiB
 const MAX_CONTROLLERS: usize = 10;
 const WASM_PAGE_SIZE_IN_BYTES: u64 = 64 * 1024; // 64KiB
 const MAX_NUMBER_OF_CANISTERS: u64 = 0;
+// The simplest valid WASM binary: "(module)"
+const MINIMAL_WASM: [u8; 8] = [
+    0, 97, 115, 109, // \0ASM - magic
+    1, 0, 0, 0, //  0x01 - version
+];
 
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
@@ -3661,5 +3666,159 @@ fn test_upgrade_preserves_stable_memory() {
         );
         state.put_canister_state(canister);
         assert_eq!(result.unwrap(), Some(WasmResult::Reply(data)));
+    })
+}
+
+// Create many Canisters and spawn Sandboxes
+fn create_canisters(
+    canisters: usize,
+    hypervisor: &Hypervisor,
+    canister_manager: &CanisterManager,
+    state: &mut ReplicatedState,
+    subnet_id: SubnetId,
+) {
+    // Increase subnet size
+    let routing_table = Arc::new(
+            RoutingTable::try_from(btreemap! {
+                CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xffffff) } => subnet_id,
+            })
+            .unwrap(),
+        );
+    state.metadata.network_topology.routing_table = routing_table;
+    let sender = canister_test_id(100).get();
+    for _ in 1..=canisters {
+        let canister_id = canister_manager
+            .create_canister(
+                sender,
+                subnet_id,
+                *INITIAL_CYCLES,
+                CanisterSettings::default(),
+                0,
+                state,
+            )
+            .0
+            .unwrap();
+        // Spawn a new Sandbox
+        if let Err(err) = hypervisor.create_execution_state(
+            MINIMAL_WASM.into(),
+            state.path().to_path_buf(),
+            canister_id,
+        ) {
+            eprintln!("Error creating Canister {} State: {:?}", canister_id, err);
+        }
+    }
+}
+
+#[test]
+pub fn test_can_create_10_canisters() {
+    with_hypervisor(|hypervisor, canister_manager, mut state, subnet_id| {
+        create_canisters(10, hypervisor, &canister_manager, &mut state, subnet_id);
+    })
+}
+
+// The following tests are expensive to run, so enable them explicitly:
+// perf stat cargo t test_can_create_125_canisters -- --include-ignored --nocapture
+// Test results: https://docs.google.com/spreadsheets/d/14tBO0vg508tW_r4t4_btH4iQdia9BMIJeV8IAuWc_sg
+#[test]
+#[ignore]
+pub fn test_can_create_125_canisters() {
+    with_hypervisor(|hypervisor, canister_manager, mut state, subnet_id| {
+        create_canisters(125, hypervisor, &canister_manager, &mut state, subnet_id);
+    })
+}
+
+#[test]
+#[ignore]
+pub fn test_can_create_250_canisters() {
+    with_hypervisor(|hypervisor, canister_manager, mut state, subnet_id| {
+        create_canisters(250, hypervisor, &canister_manager, &mut state, subnet_id);
+    })
+}
+
+#[test]
+#[ignore]
+pub fn test_can_create_500_canisters() {
+    with_hypervisor(|hypervisor, canister_manager, mut state, subnet_id| {
+        create_canisters(500, hypervisor, &canister_manager, &mut state, subnet_id);
+    })
+}
+
+#[test]
+#[ignore]
+pub fn test_can_create_1000_canisters() {
+    with_hypervisor(|hypervisor, canister_manager, mut state, subnet_id| {
+        create_canisters(1_000, hypervisor, &canister_manager, &mut state, subnet_id);
+    })
+}
+
+#[test]
+#[ignore]
+pub fn test_can_create_2000_canisters() {
+    with_hypervisor(|hypervisor, canister_manager, mut state, subnet_id| {
+        create_canisters(2_000, hypervisor, &canister_manager, &mut state, subnet_id);
+    })
+}
+
+#[test]
+#[ignore]
+pub fn test_can_create_3000_canisters() {
+    with_hypervisor(|hypervisor, canister_manager, mut state, subnet_id| {
+        create_canisters(3_000, hypervisor, &canister_manager, &mut state, subnet_id);
+    })
+}
+
+#[test]
+#[ignore]
+pub fn test_can_create_4000_canisters() {
+    with_hypervisor(|hypervisor, canister_manager, mut state, subnet_id| {
+        create_canisters(4_000, hypervisor, &canister_manager, &mut state, subnet_id);
+    })
+}
+
+#[test]
+#[ignore]
+pub fn test_can_create_5000_canisters() {
+    with_hypervisor(|hypervisor, canister_manager, mut state, subnet_id| {
+        create_canisters(5_000, hypervisor, &canister_manager, &mut state, subnet_id);
+    })
+}
+
+#[test]
+#[ignore]
+pub fn test_can_create_6000_canisters() {
+    with_hypervisor(|hypervisor, canister_manager, mut state, subnet_id| {
+        create_canisters(6_000, hypervisor, &canister_manager, &mut state, subnet_id);
+    })
+}
+
+#[test]
+#[ignore]
+pub fn test_can_create_7000_canisters() {
+    with_hypervisor(|hypervisor, canister_manager, mut state, subnet_id| {
+        create_canisters(7_000, hypervisor, &canister_manager, &mut state, subnet_id);
+    })
+}
+
+#[test]
+#[ignore]
+pub fn test_can_create_8000_canisters() {
+    with_hypervisor(|hypervisor, canister_manager, mut state, subnet_id| {
+        create_canisters(8_000, hypervisor, &canister_manager, &mut state, subnet_id);
+    })
+}
+
+#[test]
+#[ignore]
+pub fn test_can_create_9000_canisters() {
+    with_hypervisor(|hypervisor, canister_manager, mut state, subnet_id| {
+        create_canisters(9_000, hypervisor, &canister_manager, &mut state, subnet_id);
+    })
+}
+
+#[test]
+#[ignore]
+pub fn test_can_create_10000_canisters() {
+    with_hypervisor(|hypervisor, canister_manager, mut state, subnet_id| {
+        create_canisters(10_000, hypervisor, &canister_manager, &mut state, subnet_id);
     })
 }
