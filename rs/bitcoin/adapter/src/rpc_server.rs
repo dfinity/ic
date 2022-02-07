@@ -1,5 +1,5 @@
 use crate::{
-    adapter::{AdapterRequest, AdapterRequestWithCallback, AdapterResponse},
+    adapter::Adapter,
     proto::{
         self,
         btc_adapter_server::{BtcAdapter, BtcAdapterServer},
@@ -8,13 +8,12 @@ use crate::{
     },
 };
 use bitcoin::{hashes::Hash, Block, BlockHash};
-use std::fmt::Debug;
-use tokio::sync::{mpsc::UnboundedSender, oneshot};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use tonic::{transport::Server, Request, Response, Status};
 
-#[derive(Debug)]
 struct BtcAdapterImpl {
-    sender: UnboundedSender<AdapterRequestWithCallback>,
+    adapter: Arc<Mutex<Adapter>>,
 }
 
 /// Converts a `Block` into a protobuf struct.
@@ -72,17 +71,10 @@ impl BtcAdapter for BtcAdapterImpl {
             .iter()
             .filter_map(|hash| BlockHash::from_slice(hash.as_slice()).ok())
             .collect();
-        let (tx, rx) = oneshot::channel();
-        self.sender
-            .send((AdapterRequest::GetSuccessors(block_hashes), tx))
-            .map_err(|e| Status::internal(format!("{}", e)))?;
-        let res = rx.await.map_err(|e| Status::internal(format!("{}", e)))?;
-        match res {
-            AdapterResponse::GetSuccessors(blocks) => Ok(Response::new(GetSuccessorsResponse {
-                blocks: blocks.iter().map(|block| block_to_proto(block)).collect(),
-            })),
-            _ => Err(Status::internal("Adapter returned mismaching response?!")),
-        }
+        let blocks = self.adapter.lock().await.get_successors(block_hashes);
+        Ok(Response::new(GetSuccessorsResponse {
+            blocks: blocks.iter().map(|block| block_to_proto(block)).collect(),
+        }))
     }
 
     async fn send_transaction(
@@ -90,26 +82,19 @@ impl BtcAdapter for BtcAdapterImpl {
         request: Request<SendTransactionRequest>,
     ) -> Result<Response<SendTransactionResponse>, Status> {
         let transaction = request.into_inner().raw_tx;
-        let (tx, rx) = oneshot::channel();
-        self.sender
-            .send((AdapterRequest::SendTransaction(transaction), tx))
-            .map_err(|e| Status::internal(format!("{}", e)))?;
-        let res = rx.await.map_err(|e| Status::internal(format!("{}", e)))?;
-        match res {
-            AdapterResponse::SendTransaction => Ok(Response::new(SendTransactionResponse {})),
-            _ => Err(Status::internal("Adapter returned mismaching response?!")),
-        }
+        self.adapter.lock().await.send_transaction(transaction);
+        Ok(Response::new(SendTransactionResponse {}))
     }
 }
 
 /// Spawns in a separate Tokio task the BTC adapter gRPC service.
-pub fn spawn_grpc_server(sender: UnboundedSender<AdapterRequestWithCallback>) {
+pub fn spawn_grpc_server(adapter: Arc<Mutex<Adapter>>) {
     // TODO: ER-2125: gRPC server needs configuration values
     let addr = "0.0.0.0:34254"
         .parse()
         .expect("Failed to parse gRPC address");
     tokio::spawn(async move {
-        let btc_adapter_impl = BtcAdapterImpl { sender };
+        let btc_adapter_impl = BtcAdapterImpl { adapter };
 
         Server::builder()
             .add_service(BtcAdapterServer::new(btc_adapter_impl))

@@ -1,4 +1,4 @@
-use crate::{common::*, config::Config};
+use crate::{common::BlockHeight, config::Config};
 use bitcoin::{blockdata::constants::genesis_block, Block, BlockHash, BlockHeader};
 use std::collections::HashMap;
 use thiserror::Error;
@@ -306,15 +306,12 @@ impl BlockchainState {
 
 #[cfg(test)]
 mod test {
-
-    use std::collections::HashSet;
-
+    use super::*;
     use crate::{
         common::test_common::{block_1, block_2, generate_headers, TestState},
         config::test::ConfigBuilder,
     };
-
-    use super::*;
+    use std::collections::HashSet;
 
     #[test]
     fn test_get_block() {
