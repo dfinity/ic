@@ -17,6 +17,7 @@ fi
 cd "$REPO_ROOT"
 docker image build -t ic-build-src:$TAG -f- . <<EOF
 FROM dfinity/ic-build:$DOCKER_IMG_VERSION
+USER $SET_UID
 COPY --chown=${USER:-ubuntu}:${USER:-ubuntu} . /ic
 EOF
 
