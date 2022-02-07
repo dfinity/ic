@@ -409,6 +409,12 @@ class Experiment:
                     cid = canister_id[0].split()[7]
                     self.canister_ids.append(cid)
                     print("Found canister ID: ", cid)
+                    print(
+                        colored(
+                            f"Cannister installed successfully (to reuse across runs, specify --canister_id={cid})",
+                            "yellow",
+                        )
+                    )
             wg_err_output = p.stderr.decode("utf-8").strip()
             for line in wg_err_output.split("\n"):
                 print("Output (stderr):", line)
