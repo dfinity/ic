@@ -1711,9 +1711,10 @@ pub mod tests {
         instance_id: u32,
         hub: Arc<Mutex<Hub>>,
         logger: &LoggerImpl,
+        rt_handle: tokio::runtime::Handle,
     ) -> Arc<ThreadPort> {
         let log: ReplicaLogger = logger.root.clone().into();
-        ThreadPort::new(node_test_id(instance_id as u64), hub, log)
+        ThreadPort::new(node_test_id(instance_id as u64), hub, log, rt_handle)
     }
 
     fn new_test_download_manager_with_registry(
@@ -1721,6 +1722,7 @@ pub mod tests {
         logger: &LoggerImpl,
         registry_client: Arc<dyn RegistryClient>,
         consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
+        rt_handle: tokio::runtime::Handle,
     ) -> DownloadManagerImpl {
         let log: ReplicaLogger = logger.root.clone().into();
         let artifact_manager = TestArtifactManager {
@@ -1731,7 +1733,8 @@ pub mod tests {
         // Set up transport.
         let hub_access: HubAccess = Arc::new(Mutex::new(Default::default()));
         for instance_id in 0..num_replicas {
-            let thread_port = get_transport(instance_id, hub_access.clone(), logger);
+            let thread_port =
+                get_transport(instance_id, hub_access.clone(), logger, rt_handle.clone());
             hub_access
                 .lock()
                 .unwrap()
@@ -1764,7 +1767,11 @@ pub mod tests {
         )
     }
 
-    fn new_test_download_manager(num_replicas: u32, logger: &LoggerImpl) -> DownloadManagerImpl {
+    fn new_test_download_manager(
+        num_replicas: u32,
+        logger: &LoggerImpl,
+        rt_handle: tokio::runtime::Handle,
+    ) -> DownloadManagerImpl {
         let allocated_ports = allocate_ports("127.0.0.1", num_replicas as u16)
             .expect("Port allocation for test failed");
         let node_port_allocation: Vec<u16> = allocated_ports.iter().map(|np| np.port).collect();
@@ -1786,6 +1793,7 @@ pub mod tests {
             logger,
             registry_client,
             consensus_pool_cache,
+            rt_handle,
         )
     }
 
@@ -1823,7 +1831,8 @@ pub mod tests {
     #[tokio::test]
     async fn build_new_download_manager() {
         let logger = p2p_test_setup_logger();
-        let _download_manager = new_test_download_manager(1, &logger);
+        let _download_manager =
+            new_test_download_manager(1, &logger, tokio::runtime::Handle::current());
     }
 
     /// This function tests the functionality to add adverts to the
@@ -1864,6 +1873,7 @@ pub mod tests {
             &logger,
             Arc::clone(&registry_client) as Arc<_>,
             Arc::clone(&consensus_pool_cache) as Arc<_>,
+            tokio::runtime::Handle::current(),
         );
         // Add new subnet record with one less replica and at version 2.
         let node_nums: Vec<u64> = (0..((node_port_allocation.len() - 1) as u64)).collect();
@@ -1938,7 +1948,8 @@ pub mod tests {
     #[tokio::test]
     async fn download_manager_add_adverts() {
         let logger = p2p_test_setup_logger();
-        let download_manager = new_test_download_manager(2, &logger);
+        let download_manager =
+            new_test_download_manager(2, &logger, tokio::runtime::Handle::current());
         test_add_adverts(&download_manager, 0..1000, node_test_id(1));
     }
 
@@ -1949,7 +1960,8 @@ pub mod tests {
     async fn download_manager_compute_work_basic() {
         let logger = p2p_test_setup_logger();
         let num_replicas = 2;
-        let download_manager = new_test_download_manager(num_replicas, &logger);
+        let download_manager =
+            new_test_download_manager(num_replicas, &logger, tokio::runtime::Handle::current());
         test_add_adverts(
             &download_manager,
             0..1000,
@@ -1984,7 +1996,8 @@ pub mod tests {
         // The total number of replicas is 4 in this test.
         let num_replicas = 4;
         let logger = p2p_test_setup_logger();
-        let mut download_manager = new_test_download_manager(num_replicas, &logger);
+        let mut download_manager =
+            new_test_download_manager(num_replicas, &logger, tokio::runtime::Handle::current());
         download_manager.gossip_config.max_chunk_wait_ms = 1000;
 
         let test_assert_compute_work_len =
@@ -2062,7 +2075,8 @@ pub mod tests {
         // There are 3 nodes in total, Node 1 and 2 are actively used in the test.
         let num_replicas = 3;
         let logger = p2p_test_setup_logger();
-        let mut download_manager = new_test_download_manager(num_replicas, &logger);
+        let mut download_manager =
+            new_test_download_manager(num_replicas, &logger, tokio::runtime::Handle::current());
         download_manager.gossip_config.max_artifact_streams_per_peer = 1;
         download_manager.gossip_config.max_chunk_wait_ms = 1000;
         // Node 1 and 2 both advertise advert 1 and 2.
@@ -2147,7 +2161,8 @@ pub mod tests {
         // Each peer has 20 download slots available for transport.
         let num_peers = 3;
         let logger = p2p_test_setup_logger();
-        let mut download_manager = new_test_download_manager(num_peers, &logger);
+        let mut download_manager =
+            new_test_download_manager(num_peers, &logger, tokio::runtime::Handle::current());
         let request_queue_size = download_manager.gossip_config.max_artifact_streams_per_peer;
         download_manager.artifact_manager = Arc::new(TestArtifactManager {
             quota: 2 * 1024 * 1024 * 1024,
@@ -2277,7 +2292,8 @@ pub mod tests {
     async fn receive_check_test() {
         // Initialize the logger and download manager for the test.
         let logger = p2p_test_setup_logger();
-        let download_manager = new_test_download_manager(2, &logger);
+        let download_manager =
+            new_test_download_manager(2, &logger, tokio::runtime::Handle::current());
         let node_id = node_test_id(1);
         let max_adverts = download_manager.gossip_config.max_artifact_streams_per_peer;
         let mut adverts = receive_check_test_create_adverts(0..max_adverts);
@@ -2340,7 +2356,8 @@ pub mod tests {
     async fn integrity_hash_test() {
         // Initialize the logger and download manager for the test.
         let logger = p2p_test_setup_logger();
-        let download_manager = new_test_download_manager(2, &logger);
+        let download_manager =
+            new_test_download_manager(2, &logger, tokio::runtime::Handle::current());
         let node_id = node_test_id(1);
         let max_adverts = 20;
         let adverts = receive_check_test_create_adverts(0..max_adverts);
@@ -2388,7 +2405,8 @@ pub mod tests {
             peers in arb_peer_list(0)
         ) {
             // Tokio context is required here because some functions still assume it exists.
-            let _rt_guard = tokio::runtime::Runtime::new().unwrap().enter();
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let _rt_guard = rt.enter();
             let peers_dictionary: PeerContextDictionary = peers
                 .iter()
                 .map(|node_id| (*node_id, PeerContext::from(node_id.to_owned())))
@@ -2399,7 +2417,7 @@ pub mod tests {
 
             // Transport:
             let hub_access: HubAccess = Arc::new(Mutex::new(Default::default()));
-            let transport = get_transport(0, hub_access, &logger);
+            let transport = get_transport(0, hub_access, &logger, rt.handle().clone());
 
             // Context:
             transport.register_client(Arc::new(new_test_event_handler( MAX_ADVERT_BUFFER, node_test_id(0)))).unwrap();
@@ -2423,7 +2441,8 @@ pub mod tests {
             peer_list in arb_peer_list(3)
         ) {
             // Tokio context is required here because some functions still assume it exists.
-            let _rt_guard = tokio::runtime::Runtime::new().unwrap().enter();
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let _rt_guard = rt.enter();
             // Get the original peer list, split into three: a + b + c
             // then produce:
             // old = a + b
@@ -2447,7 +2466,7 @@ pub mod tests {
 
             let logger = p2p_test_setup_logger();
             let hub_access: HubAccess = Arc::new(Mutex::new(Default::default()));
-            let transport = get_transport(0, hub_access, &logger);
+            let transport = get_transport(0, hub_access, &logger, rt.handle().clone());
 
             // Context
             transport.register_client(Arc::new(new_test_event_handler(MAX_ADVERT_BUFFER, node_test_id(0)))).unwrap();

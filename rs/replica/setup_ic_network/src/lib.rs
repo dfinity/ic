@@ -9,7 +9,6 @@ use ic_artifact_pool::{
     dkg_pool::DkgPoolImpl, ecdsa_pool::EcdsaPoolImpl,
     ensure_persistent_pool_replica_version_compatibility, ingress_pool::IngressPoolImpl,
 };
-use ic_base_thread::async_safe_block_on_await;
 use ic_config::{artifact_pool::ArtifactPoolConfig, consensus::ConsensusConfig};
 use ic_consensus::{
     certification,
@@ -60,8 +59,8 @@ use std::sync::{
     atomic::{AtomicBool, Ordering::SeqCst},
     Arc, Mutex, RwLock,
 };
+use std::thread::JoinHandle;
 use std::time::Duration;
-use tokio::task::JoinHandle;
 use tower::{util::BoxService, ServiceBuilder};
 
 /// Periodic timer duration in milliseconds between polling calls to the P2P
@@ -88,12 +87,10 @@ const MAX_INGRESS_MESSAGES_PER_SECOND: u64 = 100;
 struct P2P {
     /// The logger.
     pub(crate) log: ReplicaLogger,
-    /// Handle to the Tokio runtime to be used by p2p.
-    rt_handle: tokio::runtime::Handle,
     /// The *Gossip* struct with automatic reference counting.
     gossip: Arc<GossipImpl>,
     /// The task handles.
-    task_handles: Vec<JoinHandle<()>>,
+    task_handles: Option<JoinHandle<()>>,
     /// Flag indicating if P2P has been terminated.
     killed: Arc<AtomicBool>,
     /// The P2P event handler control with automatic reference counting.
@@ -166,7 +163,7 @@ pub fn create_networking_stack(
             registry_client.get_latest_version(),
             metrics_registry.clone(),
             tls_handshake,
-            tokio::runtime::Handle::current(),
+            rt_handle.clone(),
             log.clone(),
         )
     });
@@ -177,7 +174,6 @@ pub fn create_networking_stack(
         .collect();
 
     let event_handler = Arc::new(P2PEventHandlerImpl::new(
-        rt_handle.clone(),
         node_id,
         log.clone(),
         &metrics_registry,
@@ -232,19 +228,15 @@ pub fn create_networking_stack(
 
     let p2p = P2P {
         log,
-        rt_handle: rt_handle.clone(),
         gossip: gossip.clone(),
-        task_handles: Vec::new(),
+        task_handles: None,
         killed: Arc::new(AtomicBool::new(false)),
         event_handler,
     };
 
-    let ingress_event_handler = BoxService::new(IngressEventHandler::new(
-        rt_handle,
-        ingress_throttle,
-        gossip,
-        node_id,
-    ));
+    let ingress_event_handler =
+        BoxService::new(IngressEventHandler::new(ingress_throttle, gossip, node_id));
+
     let ingress_ingestion_service = BoxService::new(
         ServiceBuilder::new()
             .concurrency_limit(MAX_INFLIGHT_INGRESS_MESSAGES)
@@ -268,16 +260,19 @@ impl P2PRunner for P2P {
         let event_handler = self.event_handler.clone();
         let log = self.log.clone();
         let killed = Arc::clone(&self.killed);
-        let handle = self.rt_handle.spawn_blocking(move || {
-            debug!(log, "P2P::p2p_timer(): started processing",);
+        let handle = std::thread::Builder::new()
+            .name("P2P_OnTimer".into())
+            .spawn(move || {
+                debug!(log, "P2P::p2p_timer(): started processing",);
 
-            let timer_duration = Duration::from_millis(P2P_TIMER_DURATION_MS);
-            while !killed.load(SeqCst) {
-                std::thread::sleep(timer_duration);
-                gossip.on_timer(Arc::clone(&event_handler));
-            }
-        });
-        self.task_handles.push(handle);
+                let timer_duration = Duration::from_millis(P2P_TIMER_DURATION_MS);
+                while !killed.load(SeqCst) {
+                    std::thread::sleep(timer_duration);
+                    gossip.on_timer(Arc::clone(&event_handler));
+                }
+            })
+            .unwrap();
+        self.task_handles.replace(handle);
     }
 }
 
@@ -285,10 +280,9 @@ impl Drop for P2P {
     /// The method signals the tasks to exit and waits for them to complete.
     fn drop(&mut self) {
         self.killed.store(true, SeqCst);
-        while let Some(handle) = self.task_handles.pop() {
-            async_safe_block_on_await(handle).ok();
+        if let Some(handle) = self.task_handles.take() {
+            handle.join().unwrap();
         }
-        self.event_handler.stop();
     }
 }
 

@@ -52,8 +52,10 @@ fn execute_test(
     test_synchronizer: P2PTestSynchronizer,
     log: ReplicaLogger,
     test: Box<impl FnOnce(&mut P2PTestContext) + Send + Sync + 'static>,
+    rt_handle: tokio::runtime::Handle,
 ) {
     ic_test_utilities::artifact_pool_config::with_test_pool_config(|artifact_pool_config| {
+        let _rt_guard = rt_handle.enter();
         let metrics_registry = MetricsRegistry::new();
         let state_manager = Arc::new(FakeStateManager::new());
         let node_id = replica_config.node_id;
@@ -84,7 +86,7 @@ fn execute_test(
         let (_, p2p_runner, _) = create_networking_stack(
             metrics_registry.clone(),
             log.clone(),
-            tokio::runtime::Handle::current(),
+            rt_handle,
             transport_config,
             artifact_pool_config,
             Default::default(),
@@ -199,8 +201,10 @@ fn execute_test_chunking_pool(
     test_synchronizer: P2PTestSynchronizer,
     log: ReplicaLogger,
     test: impl FnOnce(&mut P2PTestContext) + Send + Sync + 'static,
+    rt_handle: tokio::runtime::Handle,
 ) {
     ic_test_utilities::artifact_pool_config::with_test_pool_config(|artifact_pool_config| {
+        let _rt_guard = rt_handle.enter();
         let metrics_registry = MetricsRegistry::new();
         let state_manager = Arc::new(FakeStateManager::new());
         let node_id = replica_config.node_id;
@@ -236,7 +240,7 @@ fn execute_test_chunking_pool(
         let (_a, p2p_runner, _) = create_networking_stack(
             metrics_registry.clone(),
             log.clone(),
-            tokio::runtime::Handle::current(),
+            rt_handle,
             transport_config,
             artifact_pool_config,
             Default::default(),
@@ -295,6 +299,8 @@ pub fn spawn_replicas_as_threads(
     test: impl FnOnce(&mut P2PTestContext) + Copy + Send + Sync + 'static,
 ) {
     // Create a directory inside of `std::env::temp_dir()`
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let _rt_guard = rt.enter();
     let temp_dir = Builder::new()
         .prefix("p2p_tests")
         .tempdir()
@@ -335,6 +341,7 @@ pub fn spawn_replicas_as_threads(
             node_test_id(instance_id as u64),
             hub_access.clone(),
             log.clone(),
+            rt.handle().clone(),
         );
         hub_access
             .lock()
@@ -359,11 +366,10 @@ pub fn spawn_replicas_as_threads(
         };
         let mut replica_test_synchronizer = test_synchronizer.clone();
         replica_test_synchronizer.node_id = node_test_id(i as u64);
+        let rt_handle = rt.handle().clone();
         let jh = std::thread::Builder::new()
             .name(format!("Thread Node {}", i))
             .spawn(move || {
-                let rt = tokio::runtime::Runtime::new().unwrap();
-                let _rt_guard = rt.enter();
                 // Spawn System
                 if real_artifact_pool {
                     execute_test(
@@ -374,6 +380,7 @@ pub fn spawn_replicas_as_threads(
                         replica_test_synchronizer,
                         replica_log.clone(),
                         test,
+                        rt_handle,
                     );
                 } else {
                     execute_test_chunking_pool(
@@ -384,6 +391,7 @@ pub fn spawn_replicas_as_threads(
                         replica_test_synchronizer,
                         replica_log,
                         test,
+                        rt_handle,
                     );
                 }
             })
