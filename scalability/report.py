@@ -65,6 +65,7 @@ def evaluate_summaries(summaries):
 
     def mean_or_minus_one(x):
         if len(x) > 0:
+            # XXX Consider if mean is the correct metric here.
             return mean(x)
         else:
             return -1
@@ -74,10 +75,10 @@ def evaluate_summaries(summaries):
     failure_rate = success[False] / (success[True] + success[False])
     return (
         failure_rate,
-        max(t_median),  # Just to be conservatie, use the maximum median from all workload generators
-        max(t_average),
-        max(t_max),
-        min(t_min),
+        t_median,
+        t_average,
+        t_max,
+        t_min,
         percentiles,
         total_number,
         success[True],

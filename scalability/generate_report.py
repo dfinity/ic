@@ -74,18 +74,25 @@ def generate_report(base, githash, timestamp):
                         _,
                     ) = report.evaluate_summaries(files)
 
+                    from statistics import mean
+
+                    t_median_agg = mean(t_median)
+                    t_average_agg = max(t_average)
+                    t_max_agg = max(t_max)
+                    t_min_agg = max(t_min)
+
                     iter_data.update(
                         {
                             "header": i,
                             "failure_rate": "{:.2f}".format(failure_rate * 100),
                             "failure_rate_color": "green" if failure_rate < 0.01 else "red",
-                            "t_median": "{:.2f}".format(t_median),
-                            "t_average": "{:.2f}".format(t_average),
+                            "t_median": "{:.2f}".format(t_median_agg),
+                            "t_average": "{:.2f}".format(t_average_agg),
                             "t_99": "{:.2f}".format(t_percentile[99]),
                             "t_95": "{:.2f}".format(t_percentile[95]),
                             "t_90": "{:.2f}".format(t_percentile[90]),
-                            "t_max": "{:.2f}".format(t_max),
-                            "t_min": "{:.2f}".format(t_min),
+                            "t_max": "{:.2f}".format(t_max_agg),
+                            "t_min": "{:.2f}".format(t_min_agg),
                             "total_requests": total_requests,
                         }
                     )
@@ -233,4 +240,5 @@ def generate_report(base, githash, timestamp):
 
 
 if __name__ == "__main__":
-    generate_report(sys.argv[1], sys.argv[2])
+    base = sys.argv[3] if len(sys.argv) > 3 else os.path.join(sys.argv[1], sys.argv[2])
+    generate_report(base, sys.argv[1], sys.argv[2])
