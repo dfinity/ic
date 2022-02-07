@@ -3,6 +3,7 @@
 // Specifically relevant to the Vec<> parameter.
 #![allow(clippy::ptr_arg)]
 
+use ic_base_types::NumBytes;
 use ic_cycles_account_manager::{
     CyclesAccountManager, IngressInductionCost, IngressInductionCostError,
 };
@@ -25,7 +26,7 @@ use ic_types::{
     user_error::{ErrorCode, UserError},
     CanisterStatusType, SubnetId, Time,
 };
-use prometheus::{Histogram, HistogramVec, IntCounterVec};
+use prometheus::{Histogram, HistogramVec, IntCounterVec, IntGauge};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -38,12 +39,16 @@ struct VsrMetrics {
     /// The latency metric is unreliable because we assume expiry time
     /// was set by 'current_time_and_expiry_time'.
     unreliable_induct_ingress_message_duration: HistogramVec,
+    /// Memory currently used by the ingress history (including reservations
+    /// for statuses that may still change).
+    ingress_history_size: IntGauge,
 }
 
 const METRIC_INDUCTED_INGRESS_MESSAGES: &str = "mr_inducted_ingress_message_count";
 const METRIC_INDUCTED_INGRESS_PAYLOAD_SIZES: &str = "mr_inducted_ingress_payload_size_bytes";
 const METRIC_UNRELIABLE_INDUCT_INGRESS_MESSAGE_DURATION: &str =
     "mr_unreliable_induct_ingress_message_duration_seconds";
+const METRIC_INGRESS_HISTORY_SIZE: &str = "mr_ingress_history_size_bytes";
 
 const LABEL_STATUS: &str = "status";
 
@@ -69,6 +74,12 @@ impl VsrMetrics {
             linear_buckets(0.0, 0.5, 20),
             &[LABEL_STATUS],
         );
+        let ingress_history_size = metrics_registry.int_gauge(
+            METRIC_INGRESS_HISTORY_SIZE,
+            "Memory currently used by the ingress history (including \
+            `MAX_RESPONSE_COUNT_BYTES` bytes reservation for each status \
+            that may still change).",
+        );
 
         // Initialize all `inducted_ingress_messages` counters with zero, so they are
         // all exported from process start (`IntCounterVec` is really a map).
@@ -89,6 +100,7 @@ impl VsrMetrics {
             inducted_ingress_messages,
             inducted_ingress_payload_sizes,
             unreliable_induct_ingress_message_duration,
+            ingress_history_size,
         }
     }
 }
@@ -227,6 +239,11 @@ impl ValidSetRuleImpl {
             .observe(delta_in_nanos.as_secs_f64());
     }
 
+    /// Records the memory currently used for the ingress history.
+    fn observe_ingress_history_size(&self, bytes: NumBytes) {
+        self.metrics.ingress_history_size.set(bytes.get() as i64);
+    }
+
     // Enqueues an ingress message into input queues.
     fn enqueue(
         &self,
@@ -302,6 +319,7 @@ impl ValidSetRule for ValidSetRuleImpl {
                 debug!(self.log, "Didn't induct duplicate message {}", message_id);
             }
         }
+        self.observe_ingress_history_size(state.total_ingress_memory_taken());
     }
 }
 

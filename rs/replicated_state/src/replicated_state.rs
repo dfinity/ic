@@ -509,6 +509,11 @@ impl ReplicatedState {
         }
     }
 
+    /// Returns the total memory taken by the ingress history in bytes.
+    pub fn total_ingress_memory_taken(&self) -> NumBytes {
+        self.metadata.ingress_history.memory_usage()
+    }
+
     /// Returns the `SubnetId` hosting the given `principal_id` (canister or
     /// subnet).
     pub fn find_subnet_id(&self, principal_id: PrincipalId) -> Result<SubnetId, UserError> {

@@ -1,6 +1,7 @@
 //! Ingress types.
 
-use crate::{CanisterId, PrincipalId, Time, UserId};
+use crate::messages::MAX_RESPONSE_COUNT_BYTES;
+use crate::{CanisterId, CountBytes, PrincipalId, Time, UserId};
 use ic_error_types::{ErrorCode, UserError};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -127,6 +128,22 @@ impl IngressStatus {
     }
 }
 
+impl CountBytes for IngressStatus {
+    /// For "terminal" statuses the actual size is returned, whereas `MAX_RESPONSE_COUNT_BYTES` is
+    /// returned for statuses that can still go to `Completed` or `Failed`.
+    fn count_bytes(&self) -> usize {
+        std::mem::size_of::<IngressStatus>()
+            + match self {
+                IngressStatus::Completed { result, .. } => result.count_bytes(),
+                IngressStatus::Failed { error, .. } => error.description().as_bytes().len(),
+                IngressStatus::Received { .. } | IngressStatus::Processing { .. } => {
+                    MAX_RESPONSE_COUNT_BYTES
+                }
+                IngressStatus::Unknown => 0,
+            }
+    }
+}
+
 /// This struct describes the different types that executing a Wasm function in
 /// a canister can produce
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -136,6 +153,15 @@ pub enum WasmResult {
     /// Returned with an error message when the canister decides to reject the
     /// message
     Reject(String),
+}
+
+impl CountBytes for WasmResult {
+    fn count_bytes(&self) -> usize {
+        match self {
+            WasmResult::Reply(bytes) => bytes.len(),
+            WasmResult::Reject(string) => string.as_bytes().len(),
+        }
+    }
 }
 
 impl WasmResult {
