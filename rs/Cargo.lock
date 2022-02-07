@@ -6964,7 +6964,7 @@ dependencies = [
 [[package]]
 name = "libssh2-sys"
 version = "0.2.23"
-source = "git+https://github.com/dfinity-lab/ssh2-rs?branch=master#ba2fde924046aa5fc0999ae2c62442bcadb347b0"
+source = "git+https://github.com/dfinity-lab/ssh2-rs?branch=master#f842906afaa2443206b8365d51950ed3ef85c940"
 dependencies = [
  "cc",
  "libc",
@@ -10120,7 +10120,7 @@ dependencies = [
 [[package]]
 name = "ssh2"
 version = "0.9.3"
-source = "git+https://github.com/dfinity-lab/ssh2-rs?branch=master#ba2fde924046aa5fc0999ae2c62442bcadb347b0"
+source = "git+https://github.com/dfinity-lab/ssh2-rs?branch=master#f842906afaa2443206b8365d51950ed3ef85c940"
 dependencies = [
  "bitflags",
  "libc",
