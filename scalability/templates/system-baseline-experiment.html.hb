@@ -1,50 +1,61 @@
 <h1>Experiment 1: System baseline under load</h1>
 
-<p>Purpose: Measure system overhead using a canister that does
-essentially nothing for typical application subnetworks. Do so for a
-canister in Rust and Motoko.</p>
+<p>
+  Purpose: Measure system overhead using the counter canister (written in wat).
+  The counter caniste can be considered a no-op canister, since it almost immediately returns,
+  making it useful to measure the system overhead.
+</p>
 
 <pre class="w3-light-gray">
-Deploy one instance of canister c
-Run workload generators on multiple machines, increasing requests of given type until a given threshold of errors on client side
+Deploy one instance of counter canister c
+Run workload generators on multiple machines, iteratively increasing requests of given type
 Measure and determine per iteration:
-  Requests / second
+  Requests rate (requests/s)
   Error rate
   Request latency
   Flamegraph
+  Workload generator metrics per iteration
 Measure and determine globally:
   Maximum capacity max_cap (maximum number of successful requests per second given acceptable latency and failure rate)
-  Workload generator metrics per iteration
   Prometheus metrics (externally)
 </pre>
 
 <p>
-Suggested success criteria (Queries):<br />
-Maximum number of queries not be below yyy queries per second with less than 20% failure and a maximum latency of 5000ms
+The system is considered healthy iff:
+<ul>
+  <li>The failure rate perceived by the workload generators is less than:
+    <span class="w3-tag w3-light-grey exp_value">{{experiment_details.max_failure_rate}}</span>
+  <li>The median latency is less than:
+    <span class="w3-tag w3-light-grey exp_value">{{experiment_details.max_t_median}}</span>
+</ul>
 </p>
 
 <p>
-Suggested success criteria (Updates):<br />
-Maximum number of queries not be below xxx queries per second with less than 20% failure and a maximum latency of 10000ms
-</p>
-
-<p>
-Measure system overhead using a canister that does essentially nothing for typical application subnetworks. Do so for a canister in Rust and Motoko.<br>
-</p>
-
-<p>
-  The result of this benchmark is the maximum capacity for {{type}} calls.
-  It is defined as the highest successful number of query calls per second 
+  The result of this benchmark is the maximum capacity for <span class="w3-tag w3-light-grey exp_value">{{type}}</span> calls.
+  It is calculated from the number of successful request in one benchmark iteration divided by the duration of that iteration.
+  An iteration is only considered for maximum capacity if the system is still healthy according to the defintion above.
 </p>
 
 <div>
-  Request type: <b>{{type}}</b> on workload <b>{{workload}}</b> with requests per second <b>{{experiment_details.rps}}</b>
+  <ul>
+    <li>Request type: <span class="w3-tag w3-light-grey exp_value">{{type}}</span>
+    <li>Workload: <span class="w3-tag w3-light-grey exp_value">{{workload}}</span>
+    <li>Requests per second: <span class="w3-tag w3-light-grey exp_value">{{experiment_details.rps}}</span>
+    <li>Duration of load generation in each iteration:
+      <span class="w3-tag w3-light-grey exp_value">{{experiment_details.duration}}</span> vs. target duration of
+      <span class="w3-tag w3-light-grey exp_value">{{experiment_details.target_duration}}</span>
+  </ul>
 </div>
 
 <div>
-  Maximum capacity determined so far:
+  <div>
+    Maximum capacity determined:
+    <div class="w3-tag w3-blue w3-round">
+      <span class="w3-xlarge">{{experiment_details.rps_max}}</span> {{type}} / second
+    </div>
+    (achieved in iteration with {{experiment_details.rps_max_in}} requests per second)
+  </div>
   
-  <div class="w3-tag w3-blue w3-round"> <span class="w3-xlarge">{{experiment_details.rps_max}}</span> {{type}} / second</div>
   
   <div class="w3-panel w3-leftbar w3-border-orange w3-sand">
     This is determined by the number of successful request the workload generator has recorded divided by the length

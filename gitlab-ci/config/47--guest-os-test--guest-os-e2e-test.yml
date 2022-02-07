@@ -129,8 +129,6 @@ e2e-scalability-suite-test:
       sudo ip addr add fd00:2:1:1:1::1/64 dev ipv6_ic
 
       mkdir -p "${CI_PROJECT_DIR}/ic-os/guestos/test-out/e2e"
-      # Actual test script, sets up VMs and drives the test.
-
       mkdir -p "${CI_PROJECT_DIR}/ic-os/guestos/test-out/e2e-scalability-suite-test"
 
       # Write GIT revision number in artifacts directory, otherwise benchmark suite will
@@ -140,6 +138,7 @@ e2e-scalability-suite-test:
 
       GUESTOS_IMG="$(pwd)/disk.img"
       cd "${CI_PROJECT_DIR}/scalability"
+
       # Actual test script, sets up VMs and drives the test.
       pip3 install --user -r requirements.txt
       capsule -v -i "../ic-os/guestos/tests/*.py" -i "../gitlab-runner-tmp/**/*" -- \
