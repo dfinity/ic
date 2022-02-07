@@ -5,16 +5,6 @@
     <script src="https://cdn.plot.ly/plotly-2.4.2.min.js"></script>
     <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
-    <style>
-      plot {
-          width: 100%;
-      }
-
-      .exp_value {
-          min-width: 1em;
-          min-height: 1em;
-      }
-    </style>
   </head>
 <body>
   <div class="w3-container">
@@ -139,24 +129,25 @@
     <h2>Iterations</h2>
 
     Experiments run in iteration.
-    In each experiment iteration, we increase stress on tye system.
+    Each iteration of the experiment runs for a certain amount of time.
+    In each experiment iteration, we increase the workload in requests per second that we send to the Internet Computer.
     
     We collect metrics for those iterations individually.
     
     {{#each iterations}} 
 
     <h3>Iteration {{this.header}} with total load: {{this.configuration.configuration.load_total}}</h3>
-    99th percentile latency: {{this.t_99}}ms (mean from all workload generators)<br>
-    Latency median: {{this.t_median}}ms (maximum from all workload generators)<br>
     <button onclick="showAccordion('iteration-{{this.header}}')" class="w3-btn w3-green">📂 Show details for iteration {{this.header}}</button><br />
     <div id="iteration-{{this.header}}" class="w3-container w3-hide">
 
     Failure rate:
     <span class="w3-tag w3-round w3-{{this.failure_rate_color}}">
       {{this.failure_rate}}%</span><br>
+    Latency median: {{this.t_median}}ms<br>
     Latency average: {{this.t_average}}ms<br>
     Latency max: {{this.t_max}}ms<br>
     Latency min: {{this.t_min}}ms<br>
+    99th percentile latency: {{this.t_99}}ms<br>
     95th percentile latency: {{this.t_95}}ms<br>
     90th percentile latency: {{this.t_90}}ms<br>
     Total number of requests executed: {{this.total_requests}}<br>

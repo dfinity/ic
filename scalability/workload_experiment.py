@@ -123,15 +123,7 @@ class WorkloadExperiment(experiment.Experiment):
             r = json.loads(self.get_subnet_info(subnet))
             for node_id in r["records"][0]["value"]["membership"]:
                 if self.get_node_ip_address(node_id) == target:
-                    print(
-                        colored(
-                            (
-                                f"Node {target} is in subnet {subnet} "
-                                f"(to speed up suite for this deployment in the future, use --target_subnet_id={subnet})"
-                            ),
-                            "yellow",
-                        )
-                    )
+                    print(f"Node {target} is in subnet {subnet}")
                     return subnet
         raise Exception("Could not find subnet for benchmark target")
 
