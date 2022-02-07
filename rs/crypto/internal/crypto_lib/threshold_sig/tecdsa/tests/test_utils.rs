@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use ic_types::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
 use ic_types::crypto::AlgorithmId;
 use ic_types::*;
@@ -102,6 +104,7 @@ pub struct ProtocolRound {
     pub commitment: PolynomialCommitment,
     pub transcript: IDkgTranscriptInternal,
     pub openings: Vec<CommitmentOpening>,
+    pub dealings: BTreeMap<NodeIndex, IDkgDealingInternal>,
 }
 
 impl ProtocolRound {
@@ -119,6 +122,7 @@ impl ProtocolRound {
             commitment,
             transcript,
             openings,
+            dealings,
         }
     }
 
@@ -562,11 +566,11 @@ impl ProtocolRound {
 #[derive(Clone, Debug)]
 pub struct SignatureProtocolSetup {
     setup: ProtocolSetup,
-    key: ProtocolRound,
-    kappa: ProtocolRound,
-    lambda: ProtocolRound,
-    key_times_lambda: ProtocolRound,
-    kappa_times_lambda: ProtocolRound,
+    pub key: ProtocolRound,
+    pub kappa: ProtocolRound,
+    pub lambda: ProtocolRound,
+    pub key_times_lambda: ProtocolRound,
+    pub kappa_times_lambda: ProtocolRound,
 }
 
 impl SignatureProtocolSetup {
