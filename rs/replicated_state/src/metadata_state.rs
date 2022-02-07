@@ -758,6 +758,7 @@ impl<'a> StreamHandle<'a> {
 pub struct IngressHistoryState {
     statuses: Arc<BTreeMap<MessageId, Arc<IngressStatus>>>,
     pruning_times: Arc<BTreeMap<Time, BTreeSet<MessageId>>>,
+    memory_usage: usize,
 }
 
 impl From<&IngressHistoryState> for pb_ingress::IngressHistoryState {
@@ -808,9 +809,12 @@ impl TryFrom<pb_ingress::IngressHistoryState> for IngressHistoryState {
             pruning_times.insert(time, messages);
         }
 
+        let memory_usage = IngressHistoryState::compute_memory_usage(&statuses);
+
         Ok(IngressHistoryState {
             statuses: Arc::new(statuses),
             pruning_times: Arc::new(pruning_times),
+            memory_usage,
         })
     }
 }
@@ -820,6 +824,7 @@ impl IngressHistoryState {
         Self {
             statuses: Arc::new(BTreeMap::new()),
             pruning_times: Arc::new(BTreeMap::new()),
+            memory_usage: 0,
         }
     }
 
@@ -834,7 +839,15 @@ impl IngressHistoryState {
                 .or_default()
                 .insert(message_id.clone());
         }
-        Arc::make_mut(&mut self.statuses).insert(message_id, Arc::new(status));
+        self.memory_usage += status.count_bytes();
+        if let Some(old) = Arc::make_mut(&mut self.statuses).insert(message_id, Arc::new(status)) {
+            self.memory_usage -= old.count_bytes();
+        }
+
+        debug_assert_eq!(
+            Self::compute_memory_usage(&self.statuses),
+            self.memory_usage
+        );
     }
 
     /// Returns an iterator over response statuses, sorted lexicographically by
@@ -874,11 +887,28 @@ impl IngressHistoryState {
         let statuses = Arc::make_mut(&mut self.statuses);
         for t in self.pruning_times.as_ref().keys() {
             for message_id in self.pruning_times.get(t).unwrap() {
-                statuses.remove(message_id);
+                if let Some(removed) = statuses.remove(message_id) {
+                    self.memory_usage -= removed.count_bytes();
+                }
             }
         }
-
         self.pruning_times = Arc::new(new_pruning_times);
+
+        debug_assert_eq!(
+            Self::compute_memory_usage(&self.statuses),
+            self.memory_usage
+        );
+    }
+
+    /// Returns the memory usage of the statuses in the ingress history. See the
+    /// documentation of `IngressStatus` for how the byte size of an individual
+    /// `IngressStatus` is computed.
+    pub fn memory_usage(&self) -> NumBytes {
+        NumBytes::new(self.memory_usage as u64)
+    }
+
+    fn compute_memory_usage(statuses: &BTreeMap<MessageId, Arc<IngressStatus>>) -> usize {
+        statuses.values().map(|status| status.count_bytes()).sum()
     }
 }
 
