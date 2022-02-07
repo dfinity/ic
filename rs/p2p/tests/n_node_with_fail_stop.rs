@@ -15,8 +15,8 @@ const MAX_HEIGHT: u64 = 3;
 /// `1/INVERSE_RATIO_FAILSTOP_NODES` nodes fail.
 /// The test succeeds if the remaining nodes manage to run up to the height
 /// `MAX_HEIGHT`.
-#[tokio::test]
-async fn n_node_gossip_with_failstop() {
+#[test]
+fn n_node_gossip_with_failstop() {
     framework::spawn_replicas_as_threads(true, NUM_TEST_INSTANCES, |p2p_test_context| {
         std::println!("Node id: {}", p2p_test_context.node_id);
         // Every ith node fails where i = INVERSE_RATIO_FAILSTOP_NODES.

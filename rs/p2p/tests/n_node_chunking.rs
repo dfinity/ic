@@ -26,8 +26,8 @@ const NUM_TEST_INSTANCES: u16 = 3;
 
 /// In this test, `NUM_TEST_INSTANCES` peers exchange chunks until each peer has
 /// received the single artifact from each other peer.
-#[tokio::test]
-async fn n_node_chunking() {
+#[test]
+fn n_node_chunking() {
     framework::spawn_replicas_as_threads(false, NUM_TEST_INSTANCES, |p2p_test_context| {
         p2p_test_context.p2p.run();
         let mut iter = 0;

@@ -5174,6 +5174,7 @@ dependencies = [
  "strum 0.23.0",
  "strum_macros 0.23.1",
  "tempfile",
+ "threadpool",
  "tokio",
  "tower-service",
 ]
@@ -5621,7 +5622,6 @@ version = "0.8.0"
 dependencies = [
  "ic-artifact-manager",
  "ic-artifact-pool",
- "ic-base-thread",
  "ic-config",
  "ic-consensus",
  "ic-crypto-tls-interfaces",

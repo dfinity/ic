@@ -24,6 +24,7 @@ pub struct ThreadPort {
     log: ReplicaLogger,
     deferred: Mutex<HashMap<NodeId, Deferred>>,
     weak_self: RwLock<Weak<ThreadPort>>,
+    rt_handle: tokio::runtime::Handle,
 }
 
 impl Debug for ThreadPort {
@@ -34,7 +35,12 @@ impl Debug for ThreadPort {
 
 #[allow(dead_code)]
 impl ThreadPort {
-    pub fn new(id: NodeId, hub_access: HubAccess, log: ReplicaLogger) -> Arc<Self> {
+    pub fn new(
+        id: NodeId,
+        hub_access: HubAccess,
+        log: ReplicaLogger,
+        rt_handle: tokio::runtime::Handle,
+    ) -> Arc<Self> {
         let thread_port = Arc::new(Self {
             id,
             hub_access,
@@ -42,6 +48,7 @@ impl ThreadPort {
             log,
             deferred: Default::default(),
             weak_self: RwLock::new(Weak::new()),
+            rt_handle,
         });
         *thread_port.weak_self.write().unwrap() = Arc::downgrade(&thread_port);
         thread_port
@@ -74,7 +81,7 @@ impl ThreadPort {
 
             let arc_self = arc_self.clone();
             let id = self.id;
-            tokio::task::spawn(async move {
+            self.rt_handle.spawn(async move {
                 if arc_self
                     .send_helper(node_id, id, elt.clone())
                     .await
@@ -224,7 +231,8 @@ impl Transport for ThreadPort {
         let id = self.id;
         let weak_self = self.weak_self.read().unwrap().clone();
         let arc_self = weak_self.upgrade().unwrap();
-        tokio::task::spawn(async move { arc_self.send_helper(id, peer_id, message).await });
+        self.rt_handle
+            .spawn(async move { arc_self.send_helper(id, peer_id, message).await });
         Ok(())
     }
 
