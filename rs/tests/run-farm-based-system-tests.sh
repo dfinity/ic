@@ -12,13 +12,13 @@ function log() {
 function usage() {
     cat <<EOF
 Usage:
-  run-farm-based-system-tests.sh [--git-use-current-commit] {test-driver-arguments}
+  run-farm-based-system-tests.sh {test-driver-arguments}
 
-  Run upgraded system tests [farm-based].
+  Run (Farm-based) system tests.
 
   --help
 
-    Displays this help message and the help-message of test driver.
+    Displays this help message and the help message of the test driver.
 
 
   Environment Variables:
@@ -32,19 +32,9 @@ Usage:
     origin and a corresponding MR has to be created. As of now, the version id
     must be fetched manually.
 
-    If this environment variable is not set, the latest available version for
-    branch specified in the variable TEST_BRANCH will be used (see below).
-
-    E.g.,
+  Example: 
     
-      $ IC_VERSION_ID=<a1ffee..> ./run-farm-based-system-tests.sh ...
-
-  TEST_BRANCH (default: origin/master)
-
-    If specified, the latest published version of build artifacts of that
-    branch will be used.
-
-    If TEST_BRANCH is unspecified, 'origin/master' is assumed.
+      $ IC_VERSION_ID=<a1ffee..> ./run-farm-based-system-tests.sh --suite hourly --include-pattern basic_health_test
 
 EOF
 }
@@ -101,21 +91,20 @@ for arg in "$@"; do
         usage
         $SHELL_WRAPPER "${RUN_CMD}" "${ADDITIONAL_ARGS[@]}" "--help"
         exit 0
-    fi
-    if [ "$arg" == "--git-use-current-commit" ]; then
-        IC_VERSION_ID=$(git log --pretty=format:'%H' -n 1)
     else
         RUNNER_ARGS+=("$arg")
     fi
 done
 
 if [ -z "${IC_VERSION_ID:-}" ]; then
-    TEST_BRANCH="${TEST_BRANCH:-origin/master}"
-    log "Newest available build artifacts are used for branch ${RED}$TEST_BRANCH"
-
-    SCRIPT="$CI_PROJECT_DIR/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh"
-    IC_VERSION_ID=$("$SCRIPT" "$TEST_BRANCH")
-    export IC_VERSION_ID
+    log "${RED}You must specify GuestOS image version via IC_VERSION_ID. You have two options:"
+    log "${RED}1) To obtain a GuestOS image version for your commit, please push your branch to origin and create an MR. See http://go/guestos-image-version"
+    log "${RED}2) To obtain the latest GuestOS image version for origin/master (e.g., if your changes are withing ic/rs/tests), use the following command: "
+    log "${RED}   $ ic/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh origin/master"
+    log "${RED}   Note: this command is not guaranteed to be deterministic."
+    exit 1
+else
+    log "Using GuestOS image version $IC_VERSION_ID"
 fi
 
 if [ -z "${SSH_KEY_DIR:-}" ]; then
