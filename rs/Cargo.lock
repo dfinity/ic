@@ -11393,27 +11393,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "wabt"
-version = "0.10.0"
-source = "git+https://github.com/dfinity-lab/wabt-rs?tag=0.10.0-dfinity#3dc380a4584ec24d6ae03eceed99b0a1e8890830"
-dependencies = [
- "serde",
- "serde_derive",
- "serde_json",
- "wabt-sys",
-]
-
-[[package]]
-name = "wabt-sys"
-version = "0.8.0"
-source = "git+https://github.com/dfinity-lab/wabt-rs?tag=0.10.0-dfinity#3dc380a4584ec24d6ae03eceed99b0a1e8890830"
-dependencies = [
- "cc",
- "cmake",
- "glob 0.2.11",
-]
-
-[[package]]
 name = "wait-timeout"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
