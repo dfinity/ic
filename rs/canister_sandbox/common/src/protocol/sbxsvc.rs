@@ -194,6 +194,7 @@ pub struct CreateExecutionStateRequest {
     #[serde(with = "serde_bytes")]
     pub wasm_binary: Vec<u8>,
     pub wasm_page_map: PageMapSerialization,
+    pub next_wasm_memory_id: MemoryId,
     pub canister_id: CanisterId,
 }
 
@@ -205,7 +206,7 @@ impl EnumerateInnerFileDescriptors for CreateExecutionStateRequest {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CreateExecutionStateSuccessReply {
-    pub wasm_memory: MemoryModifications,
+    pub wasm_memory_modifications: MemoryModifications,
     pub exported_globals: Vec<Global>,
     pub exported_functions: BTreeSet<WasmMethod>,
 }

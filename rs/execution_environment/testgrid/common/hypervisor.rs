@@ -15,7 +15,7 @@ use ic_replicated_state::{
     testing::CanisterQueuesTesting, CallContextAction, CallOrigin, CanisterState, Global,
     NumWasmPages, SystemState,
 };
-use ic_replicated_state::{ExportedFunctions, PageIndex, PageMap};
+use ic_replicated_state::{ExportedFunctions, PageIndex};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::ApiType;
 use ic_test_utilities::types::messages::{IngressBuilder, RequestBuilder};
@@ -4568,10 +4568,9 @@ impl MemoryAccessor {
         let wat = memory_module_wat(wasm_pages);
         let wasm = wabt::wat2wasm(wat).unwrap();
         let canister_id = canister_test_id(42);
-        let mut execution_state = hypervisor
+        let execution_state = hypervisor
             .create_execution_state(wasm, tmp_path, canister_id)
             .unwrap();
-        execution_state.wasm_memory.page_map = PageMap::default();
 
         let canister = canister_from_exec_state(execution_state, canister_id);
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
