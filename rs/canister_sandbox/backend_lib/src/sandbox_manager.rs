@@ -124,7 +124,7 @@ impl Execution {
             exec_input.execution_parameters,
             exec_input.sandox_safe_system_state,
             &self.canister_wasm.compilate,
-            &self.canister_wasm.embedder,
+            &self.sandbox_manager.embedder,
             &mut wasm_memory,
             &mut stable_memory,
             &exec_input.globals,
@@ -212,7 +212,6 @@ impl Execution {
 /// Represents a wasm object of a canister. This is the executable code
 /// of the canister.
 struct CanisterWasm {
-    embedder: Arc<WasmtimeEmbedder>,
     compilate: Arc<EmbedderCache>,
 }
 
@@ -220,12 +219,10 @@ impl CanisterWasm {
     /// Validates and compiles the given Wasm binary.
     pub fn compile(
         config: &ic_config::embedders::Config,
+        embedder: &Arc<WasmtimeEmbedder>,
         wasm_src: Vec<u8>,
     ) -> HypervisorResult<Self> {
         let wasm = BinaryEncodedWasm::new(wasm_src);
-        let log = ic_logger::replica_logger::no_op_logger();
-        // TODO(EXC-756): Cache WasmtimeEmbedder instance.
-        let embedder = Arc::new(WasmtimeEmbedder::new(config.clone(), log));
         let instrumentation_output = validate_wasm_binary(&wasm, config)
             .map_err(HypervisorError::from)
             .and_then(|_| {
@@ -234,10 +231,7 @@ impl CanisterWasm {
         let compilate = embedder.compile(&instrumentation_output.binary)?;
         let compilate = Arc::new(compilate);
 
-        Ok(Self {
-            embedder,
-            compilate,
-        })
+        Ok(Self { compilate })
     }
 }
 
@@ -247,6 +241,7 @@ impl CanisterWasm {
 pub struct SandboxManager {
     repr: Mutex<SandboxManagerInt>,
     controller: Arc<dyn ControllerService>,
+    embedder: Arc<WasmtimeEmbedder>,
     config: ic_config::embedders::Config,
 }
 struct SandboxManagerInt {
@@ -264,6 +259,8 @@ impl SandboxManager {
     pub fn new(controller: Arc<dyn ControllerService>) -> Self {
         // TODO(EXC-755): Use the proper embedder config.
         let config = ic_config::embedders::Config::default();
+        let log = ic_logger::replica_logger::no_op_logger();
+        let embedder = Arc::new(WasmtimeEmbedder::new(config.clone(), log));
         SandboxManager {
             repr: Mutex::new(SandboxManagerInt {
                 canister_wasms: HashMap::new(),
@@ -275,6 +272,7 @@ impl SandboxManager {
                 workers_for_cleanup: threadpool::ThreadPool::new(1),
             }),
             controller,
+            embedder,
             config,
         }
     }
@@ -288,7 +286,7 @@ impl SandboxManager {
             "Failed to open wasm session {}: id is already in use",
             wasm_id,
         );
-        let wasm = CanisterWasm::compile(&self.config, wasm_src)?;
+        let wasm = CanisterWasm::compile(&self.config, &self.embedder, wasm_src)?;
         guard.canister_wasms.insert(wasm_id, Arc::new(wasm));
         Ok(())
     }
@@ -407,7 +405,7 @@ impl SandboxManager {
             });
             (
                 Arc::clone(&canister_wasm.compilate),
-                Arc::clone(&canister_wasm.embedder),
+                Arc::clone(&self.embedder),
             )
         };
 
