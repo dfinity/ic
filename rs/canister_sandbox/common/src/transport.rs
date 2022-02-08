@@ -217,6 +217,9 @@ impl<Message: 'static + Serialize + Send + EnumerateInnerFileDescriptors>
                     if guard.buf.is_empty() {
                         guard.sending = false;
                         guard = self.trigger_send.wait(guard).unwrap();
+                        if guard.quit {
+                            return;
+                        }
                     } else {
                         break (guard.buf.split(), std::mem::take(&mut guard.fds));
                     }
@@ -311,6 +314,10 @@ impl<Message: 'static + Serialize + Send + EnumerateInnerFileDescriptors>
         &self,
     ) -> Arc<dyn MessageSink<M> + Sync + Send> {
         self.repr.clone()
+    }
+
+    pub fn stop(&self) {
+        self.repr.stop();
     }
 }
 

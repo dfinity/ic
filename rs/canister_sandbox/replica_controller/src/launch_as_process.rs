@@ -114,6 +114,9 @@ pub fn spawn_canister_sandbox_process(
             },
             socket,
         );
+        // Send a notification to the writer thread to stop.
+        // Otherwise, the writer thread will remain waiting forever.
+        out.stop();
     });
 
     Ok((svc, child_handle, thread_handle))

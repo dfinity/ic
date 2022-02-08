@@ -29,7 +29,7 @@ impl SandboxServer {
 
 impl SandboxService for SandboxServer {
     fn terminate(&self, _req: TerminateRequest) -> rpc::Call<TerminateReply> {
-        rpc::Call::new_resolved(Ok(TerminateReply {}))
+        std::process::exit(0);
     }
 
     fn open_wasm(&self, req: OpenWasmRequest) -> rpc::Call<OpenWasmReply> {

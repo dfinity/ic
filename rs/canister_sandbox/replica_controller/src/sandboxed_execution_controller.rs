@@ -25,6 +25,7 @@ use std::sync::{
     atomic::{AtomicU64, Ordering},
     Arc, Mutex,
 };
+use std::time::Duration;
 
 use crate::active_execution_state_registry::ActiveExecutionStateRegistry;
 use crate::controller_service_impl::ControllerServiceImpl;
@@ -32,6 +33,9 @@ use crate::launch_as_process::{create_sandbox_argv, create_sandbox_process};
 use crate::process_os_metrics;
 use std::process::Child;
 use std::thread;
+
+const SANDBOX_PROCESS_INACTIVE_TIME_BEFORE_EVICTION: Duration = Duration::from_secs(0);
+const SANDBOX_PROCESS_UPDATE_INTERVAL: Duration = Duration::from_secs(10);
 
 struct SandboxedExecutionMetrics {
     sandboxed_execution_replica_execute_duration: HistogramVec,
@@ -114,6 +118,14 @@ pub struct SandboxProcess {
     pid: u32,
 }
 
+impl Drop for SandboxProcess {
+    fn drop(&mut self) {
+        self.sandbox_service
+            .terminate(protocol::sbxsvc::TerminateRequest {})
+            .on_completion(|_| {});
+    }
+}
+
 /// Manages the lifetime of a remote compiled Wasm and provides its id.
 ///
 /// It keeps a weak reference to the sandbox service to allow early
@@ -193,10 +205,21 @@ impl std::fmt::Debug for OpenedMemory {
     }
 }
 
+enum Backend {
+    Active {
+        sandbox_process: Arc<SandboxProcess>,
+        last_used: std::time::Instant,
+    },
+    Evicted {
+        sandbox_process: Weak<SandboxProcess>,
+    },
+    Empty,
+}
+
 /// Manages sandboxed processes, forwards requests to the appropriate
 /// process.
 pub struct SandboxedExecutionController {
-    backends: Arc<Mutex<HashMap<CanisterId, Arc<SandboxProcess>>>>,
+    backends: Arc<Mutex<HashMap<CanisterId, Backend>>>,
     logger: ReplicaLogger,
     /// Executuable and arguments to be passed to `canister_sandbox` which are
     /// the same for all canisters.
@@ -218,7 +241,7 @@ impl SandboxedExecutionController {
         let logger_copy = logger.clone();
 
         std::thread::spawn(move || {
-            SandboxedExecutionController::collect_process_metrics(
+            SandboxedExecutionController::monitor_and_evict_sandbox_processes(
                 logger_copy,
                 backends_copy,
                 metrics_copy,
@@ -234,42 +257,33 @@ impl SandboxedExecutionController {
         }
     }
 
-    // Walk through all our backend processes and fetch information about them
-    // from kernel. Publish these as metrics.
-    fn collect_process_metrics(
+    // Periodically walk through all the backend processes and:
+    // - evict inactive processes,
+    // - update memory usage metrics.
+    fn monitor_and_evict_sandbox_processes(
         logger: ReplicaLogger,
-        backends: Arc<Mutex<HashMap<CanisterId, Arc<SandboxProcess>>>>,
+        backends: Arc<Mutex<HashMap<CanisterId, Backend>>>,
         metrics: Arc<SandboxedExecutionMetrics>,
     ) {
         loop {
-            // Collect pids while having list of backend processes locked, but
-            // ensure that we only hold the lock long enough for the collection
-            // to finish. This ensures that metrics collection does not unduly
-            // lock out normal operation, at the risk that metrics may be
-            // temporarily stale (but that is something to be expected anyways).
-            let pids = {
-                let mut pids = Vec::<u32>::new();
-                for sandbox_process in backends.lock().unwrap().values() {
-                    pids.push(sandbox_process.pid);
-                }
-                pids
-            };
+            let sandbox_processes = scavenge_sandbox_processes(&backends);
 
             let mut total_anon_rss: u64 = 0;
             let mut total_memfd_rss: u64 = 0;
 
             // For all processes requested, get their memory usage and report
             // it keyed by pid. Ignore processes failures to get
-            for pid in &pids {
-                if let Ok(kib) = process_os_metrics::get_nonshared_rss(*pid) {
+            for sandbox_process in &sandbox_processes {
+                let pid = sandbox_process.pid;
+                if let Ok(kib) = process_os_metrics::get_anon_rss(pid) {
                     total_anon_rss += kib;
                 } else {
-                    warn!(logger, "Unable to get anon RSS for pid {}", *pid);
+                    warn!(logger, "Unable to get anon RSS for pid {}", pid);
                 }
-                if let Ok(kib) = process_os_metrics::get_memfd_rss(*pid) {
+                if let Ok(kib) = process_os_metrics::get_memfd_rss(pid) {
                     total_memfd_rss += kib;
                 } else {
-                    warn!(logger, "Unable to get memfd RSS for pid {}", *pid);
+                    warn!(logger, "Unable to get memfd RSS for pid {}", pid);
                 }
             }
 
@@ -281,59 +295,90 @@ impl SandboxedExecutionController {
                 .sandboxed_execution_subprocess_memfd_rss_total
                 .set(total_memfd_rss.try_into().unwrap());
 
-            // Collect metrics sufficiently infrequently that it does not use
-            // excessive compute resources. It might be sensible to scale this
-            // based on the time measured to perform the collection and e.g.
-            // ensure that we are 99% idle instead of using a static duration
-            // here.
-            std::thread::sleep(std::time::Duration::from_secs(5));
+            // Scavenge and collect metrics sufficiently infrequently that it
+            // does not use excessive compute resources. It might be sensible to
+            // scale this based on the time measured to perform the collection
+            // and e.g.  ensure that we are 99% idle instead of using a static
+            // duration here.
+            std::thread::sleep(SANDBOX_PROCESS_UPDATE_INTERVAL);
         }
     }
 
     fn get_sandbox_process(&self, canister_id: &CanisterId) -> Arc<SandboxProcess> {
         let mut guard = self.backends.lock().unwrap();
 
-        if let Some(sandbox_process) = (*guard).get(canister_id) {
-            // Sandbox backend running for this canister already.
-            Arc::clone(sandbox_process)
-        } else {
-            let _timer = self.metrics.sandboxed_execution_spawn_process.start_timer();
-            // No sandbox backend found for this canister. Start a new
-            // one and register it.
-            let reg = Arc::new(ActiveExecutionStateRegistry::new());
-            let controller_service =
-                ControllerServiceImpl::new(Arc::clone(&reg), self.logger.clone());
-
-            let (sandbox_service, child_handle) = create_sandbox_process(
-                controller_service,
-                canister_id,
-                self.sandbox_exec_argv.clone(),
-            )
-            .unwrap();
-
-            let sandbox_process = Arc::new(SandboxProcess {
-                execution_states: reg,
-                sandbox_service,
-                pid: child_handle.id(),
-            });
-            (*guard).insert(*canister_id, Arc::clone(&sandbox_process));
-
-            self.observe_sandbox_process(child_handle, *canister_id);
-
-            sandbox_process
+        if let Some(backend) = (*guard).get_mut(canister_id) {
+            let old = std::mem::replace(backend, Backend::Empty);
+            let sandbox_process = match old {
+                Backend::Active {
+                    sandbox_process, ..
+                } => Some(sandbox_process),
+                Backend::Evicted { sandbox_process } => sandbox_process.upgrade(),
+                Backend::Empty => None,
+            };
+            if let Some(sandbox_process) = sandbox_process {
+                if SANDBOX_PROCESS_INACTIVE_TIME_BEFORE_EVICTION.as_secs() > 0 {
+                    let now = std::time::Instant::now();
+                    *backend = Backend::Active {
+                        sandbox_process: Arc::clone(&sandbox_process),
+                        last_used: now,
+                    };
+                } else {
+                    *backend = Backend::Evicted {
+                        sandbox_process: Arc::downgrade(&sandbox_process),
+                    };
+                }
+                return sandbox_process;
+            }
         }
+
+        let _timer = self.metrics.sandboxed_execution_spawn_process.start_timer();
+        // No sandbox process found for this canister. Start a new one and register it.
+        let reg = Arc::new(ActiveExecutionStateRegistry::new());
+        let controller_service = ControllerServiceImpl::new(Arc::clone(&reg), self.logger.clone());
+
+        let (sandbox_service, child_handle) = create_sandbox_process(
+            controller_service,
+            canister_id,
+            self.sandbox_exec_argv.clone(),
+        )
+        .unwrap();
+
+        let sandbox_process = Arc::new(SandboxProcess {
+            execution_states: reg,
+            sandbox_service,
+            pid: child_handle.id(),
+        });
+
+        let now = std::time::Instant::now();
+        let backend = Backend::Active {
+            sandbox_process: Arc::clone(&sandbox_process),
+            last_used: now,
+        };
+        let weak_reference = Arc::downgrade(&sandbox_process);
+        (*guard).insert(*canister_id, backend);
+
+        self.observe_sandbox_process(child_handle, *canister_id, weak_reference);
+
+        sandbox_process
     }
 
     // Observes the exit of a sandbox process and cleans up the entry in backends
-    fn observe_sandbox_process(&self, mut child_handle: Child, canister_id: CanisterId) {
+    fn observe_sandbox_process(
+        &self,
+        mut child_handle: Child,
+        canister_id: CanisterId,
+        sandbox_process: Weak<SandboxProcess>,
+    ) {
         // We spawn a thread to wait for the exit notification of a sandbox process
         thread::spawn(move || {
             let pid = child_handle.id();
             let output = child_handle.wait().unwrap();
-
-            // Panic due to the fact that we do not expect that a sandbox process ever
-            // exits for now.
-            panic_due_to_sandbox_exit(output.code(), output.signal(), canister_id, pid);
+            if sandbox_process.upgrade().is_some() {
+                // The object tracking the sandbox process is still alive,
+                // so the process exit was unexpected.
+                panic_due_to_sandbox_exit(output.code(), output.signal(), canister_id, pid);
+            }
         });
     }
 
@@ -655,6 +700,49 @@ fn panic_due_to_sandbox_exit(
             ),
         },
     }
+}
+
+// Evicts inactive process and returns all processes that are still alive.
+fn scavenge_sandbox_processes(
+    backends: &Arc<Mutex<HashMap<CanisterId, Backend>>>,
+) -> Vec<Arc<SandboxProcess>> {
+    let mut guard = backends.lock().unwrap();
+    let now = std::time::Instant::now();
+    let mut result = vec![];
+    for backend in guard.values_mut() {
+        let old = std::mem::replace(backend, Backend::Empty);
+        let new = match old {
+            Backend::Active {
+                sandbox_process,
+                last_used,
+            } => {
+                result.push(Arc::clone(&sandbox_process));
+                let inactive_time = now
+                    .checked_duration_since(last_used)
+                    .unwrap_or_else(|| std::time::Duration::from_secs(0));
+                if inactive_time > SANDBOX_PROCESS_INACTIVE_TIME_BEFORE_EVICTION {
+                    Backend::Evicted {
+                        sandbox_process: Arc::downgrade(&sandbox_process),
+                    }
+                } else {
+                    Backend::Active {
+                        sandbox_process,
+                        last_used,
+                    }
+                }
+            }
+            Backend::Evicted { sandbox_process } => match sandbox_process.upgrade() {
+                Some(strong_reference) => {
+                    result.push(strong_reference);
+                    Backend::Evicted { sandbox_process }
+                }
+                None => Backend::Empty,
+            },
+            Backend::Empty => Backend::Empty,
+        };
+        *backend = new;
+    }
+    result
 }
 
 #[cfg(test)]
