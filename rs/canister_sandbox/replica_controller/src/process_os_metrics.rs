@@ -8,7 +8,7 @@ use lazy_static::lazy_static;
 // other shared mappings.
 //
 // The size is returned in Kib units.
-pub fn get_nonshared_rss(pid: u32) -> std::io::Result<u64> {
+pub fn get_anon_rss(pid: u32) -> std::io::Result<u64> {
     let path = std::path::Path::new("/proc")
         .join(pid.to_string())
         .join("status");
