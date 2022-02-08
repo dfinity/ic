@@ -208,16 +208,22 @@ fn serialize_empty_page_map() {
 
 #[test]
 fn serialize_page_map() {
+    let mut replica = PageMap::default();
+    // The replica process sends the page map to the sandbox process.
+    let serialized_page_map = duplicate_file_descriptors(replica.serialize());
+    let mut sandbox = PageMap::deserialize(serialized_page_map).unwrap();
+    // The sandbox process allocates new pages.
     let page_1 = [1u8; PAGE_SIZE];
     let page_3 = [3u8; PAGE_SIZE];
     let page_7 = [7u8; PAGE_SIZE];
     let pages = &[(PageIndex::new(1), &page_1), (PageIndex::new(3), &page_3)];
-    let mut original_page_map = PageMap::default();
-    original_page_map.update(pages);
-    original_page_map.strip_round_delta();
-    original_page_map.update(&[(PageIndex::new(7), &page_7)]);
-
-    let serialized_page_map = duplicate_file_descriptors(original_page_map.serialize());
-    let deserialized_page_map = PageMap::deserialize(serialized_page_map).unwrap();
-    assert_equal_page_maps(&original_page_map, &deserialized_page_map);
+    sandbox.update(pages);
+    sandbox.strip_round_delta();
+    sandbox.update(&[(PageIndex::new(7), &page_7)]);
+    // The sandbox process sends the dirty pages to the replica process.
+    let page_delta =
+        sandbox.serialize_delta(&[PageIndex::new(1), PageIndex::new(3), PageIndex::new(7)]);
+    replica.deserialize_delta(page_delta);
+    // The page deltas must be in sync.
+    assert_equal_page_maps(&replica, &sandbox);
 }

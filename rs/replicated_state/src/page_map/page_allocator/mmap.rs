@@ -4,7 +4,7 @@ use super::{
     MmapPageSerialization, Page, PageAllocatorInner, PageAllocatorSerialization,
     PageDeltaSerialization, PageInner, PageValidation, ALLOCATED_PAGES,
 };
-use cvt::cvt_r;
+use cvt::{cvt, cvt_r};
 use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
 use libc::{c_void, close, ftruncate64};
 use nix::sys::memfd::{memfd_create, MemFdCreateFlag};
@@ -234,7 +234,7 @@ impl PageAllocatorInner for MmapBasedPageAllocator {
                     })
                     .collect()
             }
-            PageDeltaSerialization::Empty | PageDeltaSerialization::Heap(_) => {
+            PageDeltaSerialization::Heap(_) => {
                 // This is really unreachable. See `serialize_page_delta()`.
                 unreachable!("Unexpected serialization of page-delta in MmapBasedPageAllocator");
             }
@@ -410,6 +410,13 @@ impl MmapBasedPageAllocatorCore {
     }
 
     fn open(file_descriptor: FileDescriptor, backing_file_owner: BackingFileOwner) -> Self {
+        // SAFETY: The file descriptor is valid.
+        let file_len = unsafe { get_file_length(file_descriptor.fd) };
+        // The page allocator can be created only with an empty file.
+        assert_eq!(
+            file_len, 0,
+            "The page allocator was initialized with non-empty file"
+        );
         Self {
             allocation_area: Default::default(),
             allocated_pages: 0,
@@ -452,6 +459,13 @@ impl MmapBasedPageAllocatorCore {
         let mmap_pages = self.get_amortized_chunk_size_in_pages();
         let mmap_size = mmap_pages * PAGE_SIZE;
         let mmap_file_offset = self.file_len;
+
+        // SAFETY: The file descriptor is valid.
+        let file_len = unsafe { get_file_length(self.file_descriptor) };
+
+        // Allocation is the only operation that modifies the file size.
+        // Ensure that the file size did not change since the last allocation.
+        assert_eq!(file_len, self.file_len);
 
         self.file_len += mmap_size as i64;
         // SAFETY: The file descriptor is valid.  We need `cvt_r` to handle `EINTR`.
@@ -502,10 +516,15 @@ impl MmapBasedPageAllocatorCore {
     // Ensures that that last chunk of the file up to the given length is
     // memory-mapped to allow deserialization of pages.
     fn grow_for_deserialization(&mut self, file_len: FileOffset) {
-        if file_len <= self.file_len {
+        assert!(
+            file_len >= self.file_len,
+            "The page allocator file was truncated: new file_len = {}, old file_len = {}",
+            file_len,
+            self.file_len
+        );
+        if file_len == self.file_len {
             return;
         }
-
         let mmap_size = (file_len - self.file_len) as usize;
         let mmap_file_offset = self.file_len;
         self.file_len = file_len;
@@ -637,6 +656,17 @@ fn free_pages(mut pages: Vec<PagePtr>) {
     // Free the last page range.
     // SAFETY: the range consists of pages that mapped as shared and writable.
     unsafe { madvise_remove(start_ptr, end_ptr) }
+}
+
+unsafe fn get_file_length(fd: RawFd) -> FileOffset {
+    let mut stat = std::mem::MaybeUninit::<libc::stat64>::uninit();
+    cvt(libc::fstat64(fd, stat.as_mut_ptr())).unwrap_or_else(|err| {
+        panic!(
+            "MmapPageAllocator failed get the length of the file #{}: {}",
+            fd, err
+        )
+    });
+    stat.assume_init().st_size
 }
 
 #[cfg(test)]

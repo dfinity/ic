@@ -275,7 +275,6 @@ pub struct MmapPageSerialization {
 /// It contains sufficient information to reconstruct the page-delta
 /// in another process. Note that pages are created using a page allocator,
 /// so the three cases here correspond to the three cases in `PageAllocator`:
-/// - `Empty`: the page delta is empty and the page allocator doesn't exist.
 /// - `Heap`: the pages are allocated on the Rust heap and can be sent to
 ///   another process only by copying the bytes.
 /// - `Mmap`: the pages are backed by the file owned by the page allocator. Each
@@ -284,12 +283,20 @@ pub struct MmapPageSerialization {
 ///   offsets of all pages are smaller than the length of the file.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum PageDeltaSerialization {
-    Empty,
     Heap(Vec<PageSerialization>),
     Mmap {
         file_len: FileOffset,
         pages: Vec<MmapPageSerialization>,
     },
+}
+
+impl PageDeltaSerialization {
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Self::Heap(pages) => pages.is_empty(),
+            Self::Mmap { file_len, pages } => *file_len == 0 && pages.is_empty(),
+        }
+    }
 }
 
 #[cfg(test)]

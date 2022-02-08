@@ -98,7 +98,7 @@ impl PageAllocatorInner for HeapBasedPageAllocator {
                 .into_iter()
                 .map(|page| (page.index, Page(Arc::new(HeapBasedPage(page.bytes)))))
                 .collect(),
-            PageDeltaSerialization::Empty | PageDeltaSerialization::Mmap { .. } => {
+            PageDeltaSerialization::Mmap { .. } => {
                 // This is really unreachable. See `serialize_page_delta()`.
                 unreachable!("Unexpected serialization of page-delta in HeapBasedPageAllocator.");
             }
