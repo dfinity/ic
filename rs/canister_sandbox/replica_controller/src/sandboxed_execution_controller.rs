@@ -102,7 +102,6 @@ impl SandboxedExecutionMetrics {
     }
 }
 
-#[derive(Clone)]
 pub struct SandboxProcess {
     /// Registry for all executions that are currently running on
     /// this backend process.
@@ -120,14 +119,14 @@ pub struct SandboxProcess {
 /// It keeps a weak reference to the sandbox service to allow early
 /// termination of the sandbox process when it becomes inactive.
 pub struct OpenedWasm {
-    sandbox_service: Weak<dyn SandboxService>,
+    sandbox_process: Weak<SandboxProcess>,
     wasm_id: WasmId,
 }
 
 impl OpenedWasm {
-    fn new(sandbox_service: Weak<dyn SandboxService>, wasm_id: WasmId) -> Self {
+    fn new(sandbox_process: Weak<SandboxProcess>, wasm_id: WasmId) -> Self {
         Self {
-            sandbox_service,
+            sandbox_process,
             wasm_id,
         }
     }
@@ -135,8 +134,9 @@ impl OpenedWasm {
 
 impl Drop for OpenedWasm {
     fn drop(&mut self) {
-        if let Some(sandbox_service) = self.sandbox_service.upgrade() {
-            sandbox_service
+        if let Some(sandbox_process) = self.sandbox_process.upgrade() {
+            sandbox_process
+                .sandbox_service
                 .close_wasm(protocol::sbxsvc::CloseWasmRequest {
                     wasm_id: self.wasm_id,
                 })
@@ -155,14 +155,14 @@ impl std::fmt::Debug for OpenedWasm {
 
 /// Manages the lifetime of a remote sandbox memory and provides its id.
 pub struct OpenedMemory {
-    sandbox_service: Arc<dyn SandboxService>,
+    sandbox_process: Arc<SandboxProcess>,
     memory_id: MemoryId,
 }
 
 impl OpenedMemory {
-    fn new(sandbox_service: Arc<dyn SandboxService>, memory_id: MemoryId) -> Self {
+    fn new(sandbox_process: Arc<SandboxProcess>, memory_id: MemoryId) -> Self {
         Self {
-            sandbox_service,
+            sandbox_process,
             memory_id,
         }
     }
@@ -176,7 +176,8 @@ impl SandboxMemoryOwner for OpenedMemory {
 
 impl Drop for OpenedMemory {
     fn drop(&mut self) {
-        self.sandbox_service
+        self.sandbox_process
+            .sandbox_service
             .close_memory(protocol::sbxsvc::CloseMemoryRequest {
                 memory_id: self.memory_id,
             })
@@ -195,7 +196,7 @@ impl std::fmt::Debug for OpenedMemory {
 /// Manages sandboxed processes, forwards requests to the appropriate
 /// process.
 pub struct SandboxedExecutionController {
-    backends: Arc<Mutex<HashMap<CanisterId, SandboxProcess>>>,
+    backends: Arc<Mutex<HashMap<CanisterId, Arc<SandboxProcess>>>>,
     logger: ReplicaLogger,
     /// Executuable and arguments to be passed to `canister_sandbox` which are
     /// the same for all canisters.
@@ -237,7 +238,7 @@ impl SandboxedExecutionController {
     // from kernel. Publish these as metrics.
     fn collect_process_metrics(
         logger: ReplicaLogger,
-        backends: Arc<Mutex<HashMap<CanisterId, SandboxProcess>>>,
+        backends: Arc<Mutex<HashMap<CanisterId, Arc<SandboxProcess>>>>,
         metrics: Arc<SandboxedExecutionMetrics>,
     ) {
         loop {
@@ -289,12 +290,12 @@ impl SandboxedExecutionController {
         }
     }
 
-    fn get_sandbox_process(&self, canister_id: &CanisterId) -> SandboxProcess {
+    fn get_sandbox_process(&self, canister_id: &CanisterId) -> Arc<SandboxProcess> {
         let mut guard = self.backends.lock().unwrap();
 
         if let Some(sandbox_process) = (*guard).get(canister_id) {
             // Sandbox backend running for this canister already.
-            sandbox_process.clone()
+            Arc::clone(sandbox_process)
         } else {
             let _timer = self.metrics.sandboxed_execution_spawn_process.start_timer();
             // No sandbox backend found for this canister. Start a new
@@ -310,12 +311,12 @@ impl SandboxedExecutionController {
             )
             .unwrap();
 
-            let sandbox_process = SandboxProcess {
+            let sandbox_process = Arc::new(SandboxProcess {
                 execution_states: reg,
                 sandbox_service,
                 pid: child_handle.id(),
-            };
-            (*guard).insert(*canister_id, sandbox_process.clone());
+            });
+            (*guard).insert(*canister_id, Arc::clone(&sandbox_process));
 
             self.observe_sandbox_process(child_handle, *canister_id);
 
@@ -363,26 +364,24 @@ impl SandboxedExecutionController {
         let sandbox_process = self.get_sandbox_process(&sandbox_safe_system_state.canister_id());
 
         // Ensure that Wasm is compiled.
-        let (wasm_id, compile_count) = match open_wasm(
-            &sandbox_process.sandbox_service,
-            &*execution_state.wasm_binary,
-        ) {
-            Ok((wasm_id, compile_count)) => (wasm_id, compile_count),
-            Err(err) => {
-                return (
-                    WasmExecutionOutput {
-                        wasm_result: Err(err),
-                        num_instructions_left: NumInstructions::from(0),
-                        instance_stats: InstanceStats {
-                            accessed_pages: 0,
-                            dirty_pages: 0,
+        let (wasm_id, compile_count) =
+            match open_wasm(&sandbox_process, &*execution_state.wasm_binary) {
+                Ok((wasm_id, compile_count)) => (wasm_id, compile_count),
+                Err(err) => {
+                    return (
+                        WasmExecutionOutput {
+                            wasm_result: Err(err),
+                            num_instructions_left: NumInstructions::from(0),
+                            instance_stats: InstanceStats {
+                                accessed_pages: 0,
+                                dirty_pages: 0,
+                            },
                         },
-                    },
-                    execution_state,
-                    SystemStateChanges::default(),
-                );
-            }
-        };
+                        execution_state,
+                        SystemStateChanges::default(),
+                    );
+                }
+            };
 
         if compile_count > 0 {
             self.compile_count_for_testing
@@ -405,17 +404,12 @@ impl SandboxedExecutionController {
                 });
 
         // Now set up resources on the sandbox to drive the execution.
-        let wasm_memory_handle = open_remote_memory(
-            &sandbox_process.sandbox_service,
-            &execution_state.wasm_memory,
-        );
+        let wasm_memory_handle = open_remote_memory(&sandbox_process, &execution_state.wasm_memory);
         let wasm_memory_id = MemoryId::from(wasm_memory_handle.get_id());
         let next_wasm_memory_id = MemoryId::new();
 
-        let stable_memory_handle = open_remote_memory(
-            &sandbox_process.sandbox_service,
-            &execution_state.stable_memory,
-        );
+        let stable_memory_handle =
+            open_remote_memory(&sandbox_process, &execution_state.stable_memory);
         let stable_memory_id = MemoryId::from(stable_memory_handle.get_id());
         let next_stable_memory_id = MemoryId::new();
 
@@ -469,7 +463,7 @@ impl SandboxedExecutionController {
                     .deserialize_delta(state_modifications.wasm_memory.page_delta);
                 execution_state.wasm_memory.size = state_modifications.wasm_memory.size;
                 execution_state.wasm_memory.sandbox_memory = SandboxMemory::synced(
-                    wrap_remote_memory(&sandbox_process.sandbox_service, next_wasm_memory_id),
+                    wrap_remote_memory(&sandbox_process, next_wasm_memory_id),
                 );
 
                 execution_state
@@ -478,7 +472,7 @@ impl SandboxedExecutionController {
                     .deserialize_delta(state_modifications.stable_memory.page_delta);
                 execution_state.stable_memory.size = state_modifications.stable_memory.size;
                 execution_state.stable_memory.sandbox_memory = SandboxMemory::synced(
-                    wrap_remote_memory(&sandbox_process.sandbox_service, next_stable_memory_id),
+                    wrap_remote_memory(&sandbox_process, next_stable_memory_id),
                 );
 
                 execution_state.exported_globals = state_modifications.globals;
@@ -519,7 +513,7 @@ impl SandboxedExecutionController {
         // Step 1: Compile Wasm binary and cache it.
         let binary_encoded_wasm = BinaryEncodedWasm::new(wasm_source.clone());
         let wasm_binary = WasmBinary::new(binary_encoded_wasm);
-        let (wasm_id, compile_count) = open_wasm(&sandbox_process.sandbox_service, &wasm_binary)?;
+        let (wasm_id, compile_count) = open_wasm(&sandbox_process, &wasm_binary)?;
         if compile_count > 0 {
             self.compile_count_for_testing
                 .fetch_add(compile_count, Ordering::Relaxed);
@@ -546,10 +540,8 @@ impl SandboxedExecutionController {
         wasm_memory
             .page_map
             .deserialize_delta(reply.wasm_memory_modifications.page_delta);
-        wasm_memory.sandbox_memory = SandboxMemory::synced(wrap_remote_memory(
-            &sandbox_process.sandbox_service,
-            next_wasm_memory_id,
-        ));
+        wasm_memory.sandbox_memory =
+            SandboxMemory::synced(wrap_remote_memory(&sandbox_process, next_wasm_memory_id));
 
         let stable_memory = Memory::default();
         let execution_state = ExecutionState::new(
@@ -571,23 +563,21 @@ impl SandboxedExecutionController {
 // Get compiled wasm object in sandbox. Ask cache first, upload + compile if
 // needed.
 fn open_wasm(
-    sandbox_service: &Arc<dyn SandboxService>,
+    sandbox_process: &Arc<SandboxProcess>,
     wasm_binary: &WasmBinary,
 ) -> HypervisorResult<(WasmId, u64)> {
     let mut embedder_cache = wasm_binary.embedder_cache.lock().unwrap();
     if let Some(cache) = embedder_cache.as_ref() {
         if let Some(opened_wasm) = cache.downcast::<OpenedWasm>() {
-            if let Some(cached_sandbox_service) = opened_wasm.sandbox_service.upgrade() {
-                assert_eq!(
-                    data_pointer(cached_sandbox_service.as_ref()),
-                    data_pointer(sandbox_service.as_ref())
-                );
+            if let Some(cached_sandbox_process) = opened_wasm.sandbox_process.upgrade() {
+                assert!(Arc::ptr_eq(&cached_sandbox_process, sandbox_process));
                 return Ok((opened_wasm.wasm_id, 0));
             }
         }
     }
     let wasm_id = WasmId::new();
-    sandbox_service
+    sandbox_process
+        .sandbox_service
         .open_wasm(protocol::sbxsvc::OpenWasmRequest {
             wasm_id,
             wasm_src: wasm_binary.binary.as_slice().to_vec(),
@@ -595,7 +585,7 @@ fn open_wasm(
         .sync()
         .unwrap()
         .0?;
-    let opened_wasm = OpenedWasm::new(Arc::downgrade(sandbox_service), wasm_id);
+    let opened_wasm = OpenedWasm::new(Arc::downgrade(sandbox_process), wasm_id);
     *embedder_cache = Some(EmbedderCache::new(opened_wasm));
     Ok((wasm_id, 1))
 }
@@ -603,7 +593,7 @@ fn open_wasm(
 // Returns the id of the remote memory after making sure that the remote memory
 // is in sync with the local memory.
 fn open_remote_memory(
-    sandbox_service: &Arc<dyn SandboxService>,
+    sandbox_process: &Arc<SandboxProcess>,
     memory: &Memory,
 ) -> SandboxMemoryHandle {
     let mut guard = memory.sandbox_memory.lock().unwrap();
@@ -621,13 +611,14 @@ fn open_remote_memory(
                 num_wasm_pages: memory.size,
             };
             let memory_id = MemoryId::new();
-            sandbox_service
+            sandbox_process
+                .sandbox_service
                 .open_memory(protocol::sbxsvc::OpenMemoryRequest {
                     memory_id,
                     memory: serialized_memory,
                 })
                 .on_completion(|_| {});
-            let handle = wrap_remote_memory(sandbox_service, memory_id);
+            let handle = wrap_remote_memory(sandbox_process, memory_id);
             *guard = SandboxMemory::Synced(handle.clone());
             handle
         }
@@ -635,10 +626,10 @@ fn open_remote_memory(
 }
 
 fn wrap_remote_memory(
-    sandbox_service: &Arc<dyn SandboxService>,
+    sandbox_process: &Arc<SandboxProcess>,
     memory_id: MemoryId,
 ) -> SandboxMemoryHandle {
-    let opened_memory = OpenedMemory::new(Arc::clone(sandbox_service), memory_id);
+    let opened_memory = OpenedMemory::new(Arc::clone(sandbox_process), memory_id);
     SandboxMemoryHandle::new(Arc::new(opened_memory))
 }
 
@@ -664,11 +655,6 @@ fn panic_due_to_sandbox_exit(
             ),
         },
     }
-}
-
-// Extracts the data pointer from the given fat pointer.
-fn data_pointer(sandbox_service: &dyn SandboxService) -> *const u8 {
-    sandbox_service as *const dyn SandboxService as *const u8
 }
 
 #[cfg(test)]
