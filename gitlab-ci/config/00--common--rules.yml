@@ -127,7 +127,7 @@
       when: manual
       allow_failure: true
 
-#  If on the RC branch, whether "[hotfix]" is in the commit message or not, 
+#  If on the RC branch, whether "[hotfix]" is in the commit message or not,
 #  always perfrom automatic execution of the prod hotfix tests. This means that, hotfix
 #  tests are not only exercised on hotfix pipelines, but are also exercised on nightly
 #  release qualification pipelines to ensure the hotfix tests are always working.
@@ -187,3 +187,4 @@
         - ic-os/generic-guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/packages.common
+        - ic-os/guestos/rootfs/packages.dev

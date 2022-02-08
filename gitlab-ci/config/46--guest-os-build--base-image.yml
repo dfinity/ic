@@ -14,7 +14,7 @@ deploy-guest-os-baseimg:
     cd "${CI_PROJECT_DIR}/ic-os/guestos/rootfs"
     docker build -q -t dfinity/guestos-base:"$TAG" -t dfinity/guestos-base:latest -f Dockerfile.base .
     docker push dfinity/guestos-base:"$TAG"
-    docker build -q -t dfinity/guestos-base-dev:"$TAG" -t dfinity/guestos-base-dev:latest -f Dockerfile.base --build-args PACKAGE_FILES="packages.common packages.dev" .
+    docker build -q -t dfinity/guestos-base-dev:"$TAG" -t dfinity/guestos-base-dev:latest --build-arg PACKAGE_FILES="packages.common packages.dev" -f Dockerfile.base .
     docker push dfinity/guestos-base-dev:"$TAG"
 
     cd "${CI_PROJECT_DIR}/ic-os/generic-guestos/rootfs"
@@ -41,6 +41,7 @@ build-guest-os-baseimg:
     TAG=$(date '+%Y-%m-%d-%H%M')
     cd "${CI_PROJECT_DIR}/ic-os/guestos/rootfs"
     docker build -t dfinity/guestos-base:"$TAG" -t dfinity/guestos-base:latest -f Dockerfile.base .
+    docker build -t dfinity/guestos-base-dev:"$TAG" -t dfinity/guestos-base-dev:latest --build-arg PACKAGE_FILES="packages.common packages.dev" -f Dockerfile.base .
 
     cd "${CI_PROJECT_DIR}/ic-os/generic-guestos/rootfs"
     docker build -t dfinity/genericos-base:"$TAG" -t dfinity/genericos-base:latest -f Dockerfile.base .
