@@ -18,6 +18,7 @@ use ic_wasm_types::BinaryEncodedWasm;
 use prometheus::{Histogram, HistogramVec, IntGauge};
 use std::collections::HashMap;
 use std::convert::TryInto;
+use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
 use std::sync::{
     atomic::{AtomicU64, Ordering},
@@ -29,7 +30,6 @@ use crate::controller_service_impl::ControllerServiceImpl;
 use crate::launch_as_process::{create_sandbox_argv, create_sandbox_process};
 use crate::process_os_metrics;
 use std::process::Child;
-use std::process::ExitStatus;
 use std::thread;
 
 struct SandboxedExecutionMetrics {
@@ -326,7 +326,7 @@ impl SandboxedExecutionController {
 
             // Panic due to the fact that we do not expect that a sandbox process ever
             // exits for now.
-            panic_due_to_sandbox_exit(output, canister_id, pid);
+            panic_due_to_sandbox_exit(output.code(), output.signal(), canister_id, pid);
         });
     }
 
@@ -616,16 +616,27 @@ fn wrap_remote_memory(
     SandboxMemoryHandle::new(Arc::new(opened_memory))
 }
 
-fn panic_due_to_sandbox_exit(output: ExitStatus, canister_id: CanisterId, pid: u32) {
-    match output.code() {
+fn panic_due_to_sandbox_exit(
+    code: Option<i32>,
+    signal: Option<i32>,
+    canister_id: CanisterId,
+    pid: u32,
+) {
+    match code {
         Some(code) => panic!(
             "Canister {}, pid {} exited with status code: {}",
             canister_id, pid, code
         ),
-        None => panic!(
-            "Canister {}, pid {} exited due to signal!",
-            canister_id, pid
-        ),
+        None => match signal {
+            Some(signal) => panic!(
+                "Canister {}, pid {} exited due to signal {}",
+                canister_id, pid, signal
+            ),
+            None => panic!(
+                "Canister {}, pid {} exited for unknown reason",
+                canister_id, pid
+            ),
+        },
     }
 }
 
@@ -637,7 +648,7 @@ mod tests {
     use std::convert::TryInto;
 
     #[test]
-    #[should_panic(expected = "exited due to signal!")]
+    #[should_panic(expected = "exited due to signal 9")]
     fn controller_handles_killed_sandbox_process() {
         let sandbox_exec_argv = create_sandbox_argv().unwrap();
         let logger = no_op_logger();
@@ -655,6 +666,7 @@ mod tests {
             kill(pid.try_into().unwrap(), libc::SIGKILL);
         }
         let output = child_handle.wait().unwrap();
-        panic_due_to_sandbox_exit(output, canister_id, pid);
+        let maybe_signal = output.signal();
+        panic_due_to_sandbox_exit(output.code(), maybe_signal, canister_id, pid);
     }
 }
