@@ -144,7 +144,7 @@ pub trait TarpcCspVault {
         receiver_index: NodeIndex,
         key_id: KeyId,
         transcript: IDkgTranscriptInternal,
-    ) -> Result<Vec<IDkgComplaintInternal>, IDkgLoadTranscriptError>;
+    ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError>;
 
     // Corresponds to `IDkgProtocolCspVault.idkg_gen_mega_key_pair`
     async fn idkg_gen_mega_key_pair(

@@ -438,7 +438,7 @@ pub trait IDkgProtocolCspVault {
         receiver_index: NodeIndex,
         key_id: &KeyId,
         transcript: &IDkgTranscriptInternal,
-    ) -> Result<Vec<IDkgComplaintInternal>, IDkgLoadTranscriptError>;
+    ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError>;
 
     /// Generate a MEGa keypair, for encrypting/decrypting IDkg dealing shares.
     fn idkg_gen_mega_key_pair(

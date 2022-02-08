@@ -340,7 +340,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
         receiver_index: NodeIndex,
         key_id: &KeyId,
         transcript: &IDkgTranscriptInternal,
-    ) -> Result<Vec<IDkgComplaintInternal>, IDkgLoadTranscriptError> {
+    ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError> {
         block_on(self.tarpc_csp_client.idkg_load_transcript(
             tarpc::context::current(),
             dealings.clone(),

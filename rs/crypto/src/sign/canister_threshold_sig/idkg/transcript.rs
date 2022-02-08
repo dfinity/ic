@@ -9,7 +9,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgComplaint, IDkgDealers, IDkgMultiSignedDealing, IDkgReceivers, IDkgTranscript,
-    IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType,
+    IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType,
 };
 use ic_types::{NodeId, NodeIndex, RegistryVersion};
 use std::collections::BTreeMap;
@@ -104,11 +104,7 @@ pub fn load_transcript<C: CspIDkgProtocol>(
         &self_mega_pubkey,
         &internal_transcript,
     )?;
-    let complaints = complaints_from_internal_complaints(
-        &internal_complaints,
-        transcript.transcript_id,
-        &transcript.verified_dealings,
-    )?;
+    let complaints = complaints_from_internal_complaints(&internal_complaints, transcript)?;
 
     Ok(complaints)
 }
@@ -313,32 +309,25 @@ fn internal_dealings_from_verified_dealings(
 /// Builds IDkgComplaint's from IDkgComplaintInternal's
 /// (which translates a dealer's NodeIndex to a NodeId)
 fn complaints_from_internal_complaints(
-    internal_complaints: &[IDkgComplaintInternal],
-    transcript_id: IDkgTranscriptId,
-    verified_dealings: &BTreeMap<NodeIndex, IDkgMultiSignedDealing>,
+    internal_complaints: &BTreeMap<NodeIndex, IDkgComplaintInternal>,
+    transcript: &IDkgTranscript,
 ) -> Result<Vec<IDkgComplaint>, IDkgLoadTranscriptError> {
-    fn dealer_id_from_index(
-        index: NodeIndex,
-        verified_dealings: &BTreeMap<NodeIndex, IDkgMultiSignedDealing>,
-    ) -> Result<NodeId, IDkgLoadTranscriptError> {
-        let verified_dealing = verified_dealings
-            .get(&index)
-            .expect("We already know this is proper dealer");
-        Ok(verified_dealing.dealing.idkg_dealing.dealer_id)
-    }
-
     internal_complaints
         .iter()
-        .map(|c| {
-            let internal_complaint_raw =
-                c.serialize()
-                    .map_err(|e| IDkgLoadTranscriptError::SerializationError {
-                        internal_error: format!("{:?}", e),
-                    })?;
-            let dealer_id = dealer_id_from_index(c.dealer_index, verified_dealings)?;
+        .map(|(dealer_index, internal_complaint)| {
+            let internal_complaint_raw = internal_complaint.serialize().map_err(|e| {
+                IDkgLoadTranscriptError::SerializationError {
+                    internal_error: format!("{:?}", e),
+                }
+            })?;
+            let dealer_id = transcript
+                .dealer_id_for_index(*dealer_index)
+                .ok_or_else(|| IDkgLoadTranscriptError::InternalError {
+                    internal_error: format!("failed to get dealer ID for index {}", dealer_index),
+                })?;
 
             Ok(IDkgComplaint {
-                transcript_id,
+                transcript_id: transcript.transcript_id,
                 dealer_id,
                 internal_complaint_raw,
             })

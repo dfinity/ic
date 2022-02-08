@@ -247,7 +247,7 @@ impl TarpcCspVault for TarpcCspVaultServerWorker {
         receiver_index: NodeIndex,
         key_id: KeyId,
         transcript: IDkgTranscriptInternal,
-    ) -> Result<Vec<IDkgComplaintInternal>, IDkgLoadTranscriptError> {
+    ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError> {
         self.local_csp_vault.idkg_load_transcript(
             &dealings,
             &context_data,

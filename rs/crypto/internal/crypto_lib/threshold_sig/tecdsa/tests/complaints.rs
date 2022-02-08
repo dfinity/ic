@@ -88,7 +88,8 @@ fn should_complaint_system_work() -> ThresholdEcdsaResult<()> {
         &sk0,
         &pk0,
         Seed::from_rng(&mut rng),
-    )?;
+    )
+    .expect("failed to generate complaints");
 
     assert_eq!(complaints.len(), 1);
 
@@ -191,13 +192,8 @@ fn should_complaint_verification_reject_spurious_complaints() -> ThresholdEcdsaR
         associated_data,
     )?;
 
-    let complaint = IDkgComplaintInternal::new(
-        Seed::from_rng(&mut rng),
-        &dealing,
-        dealer_index,
-        &sk,
-        associated_data,
-    )?;
+    let complaint =
+        IDkgComplaintInternal::new(Seed::from_rng(&mut rng), &dealing, &sk, associated_data)?;
 
     assert!(complaint
         .verify(&dealing, dealer_index, 0, &pk, associated_data)

@@ -4,7 +4,6 @@ use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IDkgComplaintInternal {
-    pub dealer_index: NodeIndex,
     proof: zk::ProofOfDLogEquivalence,
     shared_secret: EccPoint,
 }
@@ -21,15 +20,6 @@ impl IDkgComplaintInternal {
     }
 }
 
-/// The generate_complaints interface decrypts every dealing and
-/// checks the resulting plaintext against the dealing.
-///
-/// For all incorrect plaintexts it creates a complaint that includes a
-/// proof of equivalence of discrete log, showing that the plaintext
-/// was wrong.
-///
-/// This function assumes there is at least one erronous complaint in
-/// the dealings.
 pub fn generate_complaints(
     verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
     associated_data: &[u8],
@@ -57,13 +47,8 @@ pub fn generate_complaints(
                 dealer_index
             ));
 
-            let complaint = IDkgComplaintInternal::new(
-                complaint_seed,
-                dealing,
-                *dealer_index,
-                secret_key,
-                associated_data,
-            )?;
+            let complaint =
+                IDkgComplaintInternal::new(complaint_seed, dealing, secret_key, associated_data)?;
 
             complaints.insert(*dealer_index, complaint);
         }
@@ -87,7 +72,6 @@ impl IDkgComplaintInternal {
     pub fn new(
         seed: Seed,
         dealing: &IDkgDealingInternal,
-        dealer_index: NodeIndex,
         secret_key: &MEGaPrivateKey,
         associated_data: &[u8],
     ) -> ThresholdEcdsaResult<Self> {
@@ -105,7 +89,6 @@ impl IDkgComplaintInternal {
         )?;
 
         Ok(Self {
-            dealer_index,
             shared_secret,
             proof,
         })

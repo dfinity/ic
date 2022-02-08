@@ -16,10 +16,10 @@ use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use tecdsa::{
     compute_secret_shares, create_dealing as tecdsa_create_dealing, gen_keypair,
-    CommitmentOpeningBytes, EccCurveType, IDkgComplaintInternal, IDkgDealingInternal,
-    IDkgTranscriptInternal, IDkgTranscriptOperationInternal, MEGaKeySetK256Bytes, MEGaPrivateKey,
-    MEGaPrivateKeyK256Bytes, MEGaPublicKey, MEGaPublicKeyK256Bytes, PolynomialCommitment,
-    SecretShares,
+    generate_complaints, CommitmentOpeningBytes, EccCurveType, IDkgComplaintInternal,
+    IDkgComputeSecretSharesInternalError, IDkgDealingInternal, IDkgTranscriptInternal,
+    IDkgTranscriptOperationInternal, MEGaKeySetK256Bytes, MEGaPrivateKey, MEGaPrivateKeyK256Bytes,
+    MEGaPublicKey, MEGaPublicKeyK256Bytes, PolynomialCommitment, SecretShares, Seed,
 };
 
 const COMMITMENT_KEY_ID_DOMAIN: &str = "ic-key-id-idkg-commitment";
@@ -63,41 +63,57 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
         receiver_index: NodeIndex,
         key_id: &KeyId,
         transcript: &IDkgTranscriptInternal,
-    ) -> Result<Vec<IDkgComplaintInternal>, IDkgLoadTranscriptError> {
+    ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError> {
         // If secret share has already been stored in the C-SKS, nothing to do
         if self
             .commitment_opening_from_sks(transcript.combined_commitment.commitment())
             .is_ok()
         {
-            return Ok(vec![]);
+            return Ok(BTreeMap::new());
         }
 
         let (public_key, private_key) = self.mega_keyset_from_sks(key_id)?;
 
-        let commitment_opening = compute_secret_shares(
+        let compute_secret_shares_result = compute_secret_shares(
             dealings,
             transcript,
             context_data,
             receiver_index,
             &private_key,
             &public_key,
-        )
-        .map_err(|e| IDkgLoadTranscriptError::InternalError {
-            internal_error: format!("{:?}", e),
-        })?;
-
-        let commitment_opening_bytes = CommitmentOpeningBytes::try_from(&commitment_opening)
-            .map_err(|e| IDkgLoadTranscriptError::SerializationError {
-                internal_error: format!("{:?}", e),
-            })?;
-        self.store_canister_secret_key_or_panic(
-            CspSecretKey::IDkgCommitmentOpening(commitment_opening_bytes),
-            commitment_key_id(transcript.combined_commitment.commitment()),
         );
 
-        // TODO (CRP-1282): We don't generate complaints, yet
-
-        Ok(vec![])
+        match compute_secret_shares_result {
+            Ok(opening) => {
+                let opening_bytes = CommitmentOpeningBytes::try_from(&opening).map_err(|e| {
+                    IDkgLoadTranscriptError::SerializationError {
+                        internal_error: format!("{:?}", e),
+                    }
+                })?;
+                self.store_canister_secret_key_or_panic(
+                    CspSecretKey::IDkgCommitmentOpening(opening_bytes),
+                    commitment_key_id(transcript.combined_commitment.commitment()),
+                );
+                Ok(BTreeMap::new())
+            }
+            Err(IDkgComputeSecretSharesInternalError::InconsistentCommitments) => {
+                let seed = Seed::from_rng(&mut *self.csprng.write());
+                let complaints = generate_complaints(
+                    dealings,
+                    context_data,
+                    receiver_index,
+                    &private_key,
+                    &public_key,
+                    seed,
+                )?;
+                Ok(complaints)
+            }
+            Err(IDkgComputeSecretSharesInternalError::InternalError(e)) => {
+                Err(IDkgLoadTranscriptError::InternalError {
+                    internal_error: format!("{:?}", e),
+                })
+            }
+        }
     }
 
     fn idkg_gen_mega_key_pair(

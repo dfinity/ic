@@ -49,7 +49,7 @@ pub trait CspIDkgProtocol {
         receiver_index: NodeIndex,
         public_key: &MEGaPublicKey,
         transcript: &IDkgTranscriptInternal,
-    ) -> Result<Vec<IDkgComplaintInternal>, IDkgLoadTranscriptError>;
+    ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError>;
 
     /// Generate a MEGa encryption key pair used to encrypt threshold key shares
     /// in transmission.
