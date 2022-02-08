@@ -6004,6 +6004,7 @@ fn test_manage_and_reward_multiple_node_providers() {
                         })),
                     },
                 ],
+                use_registry_derived_rewards: Some(false),
             })),
         }))),
     };

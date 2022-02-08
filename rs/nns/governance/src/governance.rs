@@ -4243,8 +4243,25 @@ impl Governance {
     }
 
     /// Rewards multiple node providers.
-    async fn reward_node_providers(&mut self, pid: u64, rewards: Vec<RewardNodeProvider>) {
+    async fn reward_node_providers(&mut self, pid: u64, reward_nps: RewardNodeProviders) {
+        let mut rewards = reward_nps.rewards;
         let mut result = Ok(());
+
+        if reward_nps.use_registry_derived_rewards == Some(true) {
+            match self.get_monthly_node_provider_rewards().await {
+                Ok(mut registry_derived_rewards) => {
+                    rewards.append(&mut registry_derived_rewards.rewards)
+                }
+                Err(e) => {
+                    println!(
+                        "Failed to get monthly node provider rewards from the Registry: {:?}",
+                        e
+                    );
+                    result = Err(e);
+                }
+            }
+        }
+
         for reward in rewards {
             let reward_result = self.reward_node_provider_helper(&reward).await;
             if reward_result.is_err() {
@@ -4460,7 +4477,7 @@ impl Governance {
                 self.set_proposal_execution_status(pid, Ok(()));
             }
             proposal::Action::RewardNodeProviders(proposal) => {
-                self.reward_node_providers(pid, proposal.rewards).await;
+                self.reward_node_providers(pid, proposal).await;
             }
             proposal::Action::RegisterKnownNeuron(known_neuron) => {
                 let result = self.register_neuron(known_neuron);
