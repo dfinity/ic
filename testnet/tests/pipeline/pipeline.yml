@@ -648,7 +648,7 @@ benchmark-1-maximum-capacity-experiment1-query:
       $SHELL_WRAPPER timeout 30m ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION"
       cd ./scalability
       $SHELL_WRAPPER pip3 install --user -r requirements.txt
-      $SHELL_WRAPPER python3 max-capacity-experiment-1.py --testnet $TESTNET --wg_testnet $TESTNET --skip_generate_report=True --is_ci_job=True
+      $SHELL_WRAPPER python3 max-capacity-experiment-1.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --skip_generate_report=True --is_ci_job=True
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 gzip
       cd -
 
@@ -670,7 +670,7 @@ benchmark-1-maximum-capacity-experiment1-update:
       $SHELL_WRAPPER timeout 30m ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION"
       cd ./scalability
       $SHELL_WRAPPER pip3 install --user -r requirements.txt
-      $SHELL_WRAPPER python3 max-capacity-experiment-1.py --testnet $TESTNET --wg_testnet $TESTNET --use_updates=True --skip_generate_report=True --is_ci_job=True
+      $SHELL_WRAPPER python3 max-capacity-experiment-1.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --use_updates=True --skip_generate_report=True --is_ci_job=True
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 gzip
       cd -
 
@@ -692,7 +692,7 @@ benchmark-2-maximum-capacity-experiment-query:
       $SHELL_WRAPPER timeout 30m ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION"
       cd ./scalability
       $SHELL_WRAPPER pip3 install --user -r requirements.txt
-      $SHELL_WRAPPER python3 max-capacity-experiment-2.py --testnet $TESTNET --wg_testnet $TESTNET --skip_generate_report=True --is_ci_job=True
+      $SHELL_WRAPPER python3 max-capacity-experiment-2.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --skip_generate_report=True --is_ci_job=True
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 gzip
       cd -
 
@@ -714,7 +714,7 @@ benchmark-2-maximum-capacity-experiment-update:
       $SHELL_WRAPPER timeout 30m ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION"
       cd ./scalability
       $SHELL_WRAPPER pip3 install --user -r requirements.txt
-      $SHELL_WRAPPER python3 max-capacity-experiment-2.py --testnet $TESTNET --wg_testnet $TESTNET --skip_generate_report=True --use_updates=True --is_ci_job=True
+      $SHELL_WRAPPER python3 max-capacity-experiment-2.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --skip_generate_report=True --use_updates=True --is_ci_job=True
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 gzip
       cd -
 
