@@ -26,6 +26,56 @@ legacy-system-tests:
       # Capsule for system tests is configured in Capsule.toml
       capsule -v -- "${CI_PROJECT_DIR}/gitlab-ci/src/job_scripts/system-tests.sh"
 
+check-bins-linux:
+  extends:
+    - .rules-parent-pipeline
+  stage: cargo-test
+  needs:
+    - dfx-build-release-linux
+  image:
+    # 21.04
+    name: ubuntu@sha256:b5a61709a9a44284d88fb12e5c48db0409cfad5b69d4ff8224077c57302df9cf
+  before_script: /bin/true
+  after_script: /bin/true
+  script:
+    - |
+      set -exuo pipefail
+
+      gunzip < artifacts/sdk-release/replica.gz > /tmp/replica
+      chmod +x /tmp/replica
+      ldd /tmp/replica
+      /tmp/replica --print-sample-config --replica-version 1 >/dev/null
+
+      gunzip < artifacts/sdk-release/ic-starter.gz > /tmp/ic-starter
+      chmod +x /tmp/ic-starter
+      ldd /tmp/ic-starter
+      /tmp/ic-starter --version
+
+check-bins-darwin:
+  extends:
+    - .rules-parent-pipeline-protected-branch-only
+  stage: cargo-test
+  needs:
+    - dfx-build-release-darwin
+  tags:
+    - dfinity
+    - macos
+  before_script: /usr/bin/true
+  after_script: /usr/bin/true
+  script:
+    - |
+      set -exuo pipefail
+
+      gunzip < artifacts/sdk-release/replica.gz > /tmp/replica
+      chmod +x /tmp/replica
+      otool -L /tmp/replica
+      /tmp/replica --print-sample-config --replica-version 1 >/dev/null
+
+      gunzip < artifacts/sdk-release/ic-starter.gz > /tmp/ic-starter
+      chmod +x /tmp/ic-starter
+      otool -L /tmp/ic-starter
+      /tmp/ic-starter --version
+
 ic-ref-test:
   extends:
     - .ubuntu-nix-docker

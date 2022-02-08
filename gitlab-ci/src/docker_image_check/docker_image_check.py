@@ -45,6 +45,10 @@ def validate_docker_image(filepath: str, shalist):
                         sha = ""
                     elif value in ["dfinity/ic-build:latest", "dfinity/ic-build-nix:latest"]:
                         continue
+                    elif "@sha256:" in value:
+                        # if the sha256 is specified inline, we can assume it's correct
+                        # (otherwise the docker pull would fail anyway)
+                        continue
                     else:
                         sha = value.split("-")[-1]  # grab sha1 value from end of image name
 

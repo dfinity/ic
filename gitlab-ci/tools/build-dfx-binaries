@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+
+set -exuo pipefail
+
+ROOT_DIR=$(git rev-parse --show-toplevel)
+cd "$ROOT_DIR/rs" || exit 1
+
+DFX_BINS=(
+    replica
+    ic-starter
+    canister_sandbox
+)
+
+function bins() {
+    for c in "${DFX_BINS[@]}"; do
+        echo -n " --bin $c"
+    done
+}
+
+cargo build --release $(bins)
