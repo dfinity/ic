@@ -96,6 +96,9 @@ impl_display_using_debug!(IDkgOpenTranscriptError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgLoadTranscriptError {
+    InvalidArguments {
+        internal_error: String,
+    },
     PublicKeyNotFound {
         node_id: NodeId,
         registry_version: RegistryVersion,

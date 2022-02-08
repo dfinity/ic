@@ -391,7 +391,7 @@ mock! {
             receiver_index: NodeIndex,
             public_key: &MEGaPublicKey,
             transcript: &IDkgTranscriptInternal,
-        ) -> Result<Vec<IDkgComplaintInternal>, IDkgLoadTranscriptError>;
+        ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError>;
 
         fn idkg_create_mega_key_pair(&mut self, algorithm_id: AlgorithmId) -> Result<MEGaPublicKey, CspCreateMEGaKeyError>;
     }

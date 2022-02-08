@@ -91,7 +91,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp
         receiver_index: NodeIndex,
         public_key: &MEGaPublicKey,
         transcript: &IDkgTranscriptInternal,
-    ) -> Result<Vec<IDkgComplaintInternal>, IDkgLoadTranscriptError> {
+    ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError> {
         debug!(self.logger; crypto.method_name => "idkg_load_transcript");
 
         let key_id = mega_key_id(public_key);

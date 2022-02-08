@@ -4,6 +4,7 @@ use ic_types::{NumberOfNodes, Randomness};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+use ic_types::crypto::canister_threshold_sig::error::IDkgLoadTranscriptError;
 pub use ic_types::crypto::canister_threshold_sig::EcdsaPublicKey;
 pub use ic_types::NodeIndex;
 
@@ -166,24 +167,27 @@ pub fn create_transcript(
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub enum IDkgLoadTranscriptInternalError {
-    UnsupportedAlgorithm,
+pub enum IDkgComputeSecretSharesInternalError {
     InconsistentCommitments,
-    InsufficientDealings,
     InternalError(String),
 }
 
-impl From<ThresholdEcdsaError> for IDkgLoadTranscriptInternalError {
+impl From<ThresholdEcdsaError> for IDkgComputeSecretSharesInternalError {
     fn from(e: ThresholdEcdsaError) -> Self {
         match e {
             ThresholdEcdsaError::CurveMismatch => Self::InconsistentCommitments,
             ThresholdEcdsaError::InconsistentCommitments => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InsufficientDealings => Self::InsufficientDealings,
             x => Self::InternalError(format!("{:?}", x)),
         }
     }
 }
 
+/// Computes secret shares (in the form of commitment openings) from
+/// the given dealings.
+///
+/// # Errors
+/// * `InconsistentCommitments` if the commitments are inconsistent. This
+///   indicates that complaints can be created with [`generate_complaints`].
 pub fn compute_secret_shares(
     verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
     transcript: &IDkgTranscriptInternal,
@@ -191,7 +195,7 @@ pub fn compute_secret_shares(
     receiver_index: NodeIndex,
     secret_key: &MEGaPrivateKey,
     public_key: &MEGaPublicKey,
-) -> Result<CommitmentOpening, IDkgLoadTranscriptInternalError> {
+) -> Result<CommitmentOpening, IDkgComputeSecretSharesInternalError> {
     CommitmentOpening::from_dealings(
         verified_dealings,
         transcript,
@@ -200,7 +204,7 @@ pub fn compute_secret_shares(
         secret_key,
         public_key,
     )
-    .map_err(|e| e.into())
+    .map_err(IDkgComputeSecretSharesInternalError::from)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -601,4 +605,61 @@ pub fn derive_public_key(
     )?)
 }
 
-pub use crate::complaints::generate_complaints;
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum IDkgGenerateComplaintsInternalError {
+    InvalidArguments(String),
+    InternalError(String),
+}
+
+impl From<IDkgGenerateComplaintsInternalError> for IDkgLoadTranscriptError {
+    fn from(generate_complaints_internal_error: IDkgGenerateComplaintsInternalError) -> Self {
+        type Igcie = IDkgGenerateComplaintsInternalError;
+        type Ilte = IDkgLoadTranscriptError;
+        match generate_complaints_internal_error {
+            Igcie::InvalidArguments(internal_error) => Ilte::InvalidArguments { internal_error },
+            Igcie::InternalError(internal_error) => Ilte::InternalError { internal_error },
+        }
+    }
+}
+
+impl From<ThresholdEcdsaError> for IDkgGenerateComplaintsInternalError {
+    fn from(threshold_ecdsa_error: ThresholdEcdsaError) -> Self {
+        type Tee = ThresholdEcdsaError;
+        match threshold_ecdsa_error {
+            Tee::InvalidArguments(err) => Self::InvalidArguments(err),
+            Tee::CurveMismatch => Self::InvalidArguments("curve mismatch".to_string()),
+            Tee::InvalidRandomOracleInput => {
+                Self::InvalidArguments("invalid random oracle input".to_string())
+            }
+            Tee::InvalidScalar => Self::InvalidArguments("invalid scalar".to_string()),
+            other => Self::InternalError(format!("{:?}", other)),
+        }
+    }
+}
+
+/// The generate_complaints interface decrypts every dealing and
+/// checks the resulting plaintext against the dealing.
+///
+/// For all incorrect plaintexts it creates a complaint that includes a
+/// proof of equivalence of discrete log, showing that the plaintext
+/// was wrong.
+///
+/// This function assumes there is at least one erroneous dealing that
+/// requires complaining.
+pub fn generate_complaints(
+    verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+    associated_data: &[u8],
+    receiver_index: NodeIndex,
+    secret_key: &MEGaPrivateKey,
+    public_key: &MEGaPublicKey,
+    seed: Seed,
+) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgGenerateComplaintsInternalError> {
+    Ok(complaints::generate_complaints(
+        verified_dealings,
+        associated_data,
+        receiver_index,
+        secret_key,
+        public_key,
+        seed,
+    )?)
+}

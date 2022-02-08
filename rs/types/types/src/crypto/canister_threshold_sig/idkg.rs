@@ -521,6 +521,13 @@ impl IDkgTranscript {
             self.algorithm_id,
         )
     }
+
+    /// Returns the dealer ID for the given node index, or `None` if there is no such dealer.
+    pub fn dealer_id_for_index(&self, index: NodeIndex) -> Option<NodeId> {
+        self.verified_dealings
+            .get(&index)
+            .map(|signed_dealing| signed_dealing.dealing.idkg_dealing.dealer_id)
+    }
 }
 
 /// Dealing of an IDkg sharing.
