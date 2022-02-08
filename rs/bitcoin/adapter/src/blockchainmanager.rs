@@ -1041,26 +1041,22 @@ pub mod test {
     /// This tests ensures that `BlockchainManager::handle_client_request(...)` does the following:
     /// 1. Retrieves immediate successor hashes and returns block 1.
     /// 2. Adds block 2 to `blockchain_manager.blocks_to_be_synced`.
-    /// 3. Sync the blocks.
-    /// 4. Retrieves with a set of hashes containing block 1.
-    ///     a. No block is returned
-    ///     b. Block 1 has been pruned from the cache.
-    ///     c. Block 2 is no longer in the `blockchain_manager.blocks_to_be_synced` field.
+    /// 3. Syncs the blocks.
+    /// 4. Retrieves an empty set of blocks when provided a set of hashes containing block 1's hash.
+    ///     a. Ensure that no blocks are returned as block 2 has yet to be retrieved.
+    ///     b. Ensure Block 1 has been pruned from the block cache.
+    ///     c. Ensure Block 2 is no longer in the `blockchain_manager.blocks_to_be_synced` field as it has been requested.
     #[test]
     fn test_handle_client_request() {
         let test_state = TestState::setup();
         let config = ConfigBuilder::new().build();
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
+        let headers = vec![test_state.block_1.header, test_state.block_2.header];
         let mut blockchain_manager = BlockchainManager::new(&config, make_logger());
         blockchain_manager.add_peer(&addr);
-        blockchain_manager
-            .blockchain
-            .add_header(test_state.block_1.header)
-            .expect("invalid header");
-        blockchain_manager
-            .blockchain
-            .add_header(test_state.block_2.header)
-            .expect("invalid header");
+        let (added_headers, _) = blockchain_manager.blockchain.add_headers(&headers);
+        assert_eq!(added_headers.len(), 2);
+
         blockchain_manager
             .blockchain
             .add_block(test_state.block_1.clone())
@@ -1196,17 +1192,13 @@ pub mod test {
 
         let mut block_2 = test_state.block_2;
         block_2.header.prev_blockhash = large_block.block_hash();
+        let headers = vec![large_block.header, block_2.header];
 
         let mut blockchain_manager = BlockchainManager::new(&config, make_logger());
         blockchain_manager.add_peer(&addr);
-        blockchain_manager
-            .blockchain
-            .add_header(large_block.header)
-            .expect("invalid header");
-        blockchain_manager
-            .blockchain
-            .add_header(block_2.header)
-            .expect("invalid header");
+        let (added_headers, _) = blockchain_manager.blockchain.add_headers(&headers);
+        assert_eq!(added_headers.len(), 2);
+
         blockchain_manager
             .blockchain
             .add_block(large_block.clone())

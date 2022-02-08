@@ -5,6 +5,18 @@ use thiserror::Error;
 /// This field contains the datatype used to store "work" of a Bitcoin blockchain
 pub type Work = bitcoin::util::uint::Uint256;
 
+/// Contains the necessary information about a tip.
+#[derive(Debug, Clone)]
+pub struct Tip {
+    /// This field stores a Bitcoin header.
+    pub header: BlockHeader,
+    /// This field stores the height of the Bitcoin header stored in the field `header`.
+    pub height: BlockHeight,
+    /// This field stores the work of the Blockchain leading up to this tip.
+    /// That is, this field is the sum of work of the above header and all its ancestors.
+    pub work: Work,
+}
+
 /// This struct stores a BlockHeader along with its height in the Bitcoin Blockchain.
 #[derive(Debug, Clone)]
 pub struct CachedHeader {
@@ -70,7 +82,7 @@ pub struct BlockchainState {
     cached_genesis: CachedHeader,
 
     /// This field contains the known tips of the header cache.
-    tips: Vec<CachedHeader>,
+    tips: Vec<Tip>,
 }
 
 impl BlockchainState {
@@ -91,7 +103,11 @@ impl BlockchainState {
 
         let block_cache = HashMap::new();
         let children = HashMap::new();
-        let tips = vec![cached_genesis.clone()];
+        let tips = vec![Tip {
+            header: cached_genesis.header,
+            height: 0,
+            work: cached_genesis.work,
+        }];
 
         BlockchainState {
             header_cache,
@@ -144,12 +160,15 @@ impl BlockchainState {
             }
         }
 
+        // Sort the tips by the total work
+        self.tips.sort_unstable_by(|a, b| b.work.cmp(&a.work));
+
         (added_headers, None)
     }
 
     /// This method adds the input header to the `header_cache`.
     #[allow(clippy::indexing_slicing)]
-    pub fn add_header(&mut self, header: BlockHeader) -> Result<AddHeaderResult, AddHeaderError> {
+    fn add_header(&mut self, header: BlockHeader) -> Result<AddHeaderResult, AddHeaderError> {
         let block_hash = header.block_hash();
 
         // If the header already exists in the cache,
@@ -192,17 +211,23 @@ impl BlockchainState {
         let maybe_cached_header_idx = self
             .tips
             .iter()
-            .position(|cached| cached.header.block_hash() == prev_hash);
+            .position(|tip| tip.header.block_hash() == prev_hash);
+        let tip = Tip {
+            header,
+            height,
+            work,
+        };
 
         match maybe_cached_header_idx {
             Some(idx) => {
-                self.tips[idx] = cached_header.clone();
+                self.tips[idx] = tip;
             }
             None => {
                 // If the previous header is not a tip, then add the `cached_header` as a tip.
-                self.tips.push(cached_header.clone());
+                self.tips.push(tip);
             }
         };
+
         Ok(AddHeaderResult::HeaderAdded(cached_header))
     }
 
@@ -229,22 +254,13 @@ impl BlockchainState {
         })
     }
 
-    ///This method returns the tip header with the highest cumulative work.
+    /// This method returns the tip header with the highest cumulative work.
     #[allow(clippy::indexing_slicing)]
-    pub fn get_active_chain_tip(&self) -> &CachedHeader {
+    pub fn get_active_chain_tip(&self) -> &Tip {
         // `self.tips` is initialized in the new() method with the initial header.
-
-        let mut max_index = 0;
-        let mut max_work = Work::default();
-
-        for (i, cached) in self.tips.iter().enumerate() {
-            if cached.work > max_work {
-                max_index = i;
-                max_work = cached.work;
-            }
-        }
-
-        &self.tips[max_index]
+        // `add_headers` sorts the tips by total work. The zero index will always be
+        // the active tip.
+        &self.tips[0]
     }
 
     /// This method is used to remove old blocks in the `header_cache`
@@ -259,21 +275,22 @@ impl BlockchainState {
     /// tip - (8 + 2), tip - (8 + 2 + 4), tip - (8 + 2 + 4 + 8), tip - (8 + 2 + 4 + 8 + 16) ..., tip - (8 + 2 + 4 + 8 + ... + 4096), adapter_gensis_hash
     pub fn locator_hashes(&self) -> Vec<BlockHash> {
         let mut hashes = Vec::new();
-        let mut current_header = self.get_active_chain_tip();
-        let mut current_hash = current_header.header.block_hash();
+        let tip = self.get_active_chain_tip();
+        let mut current_header = tip.header;
+        let mut current_hash = current_header.block_hash();
         let mut step: u32 = 1;
         let mut last_hash = current_hash;
         let genesis_hash = self.genesis().header.block_hash();
         // Push the most recent 8 block hashes start from the tip of the active chain.
         for i in 0..22 {
-            current_hash = current_header.header.block_hash();
+            current_hash = current_header.block_hash();
             last_hash = current_hash;
             hashes.push(current_hash);
             for _j in 0..step {
-                let prev_hash = current_header.header.prev_blockhash;
+                let prev_hash = current_header.prev_blockhash;
                 //If the prev header does not exist, then simply return the `hashes` vector.
-                if let Some(header) = self.header_cache.get(&prev_hash) {
-                    current_header = header;
+                if let Some(cached) = self.header_cache.get(&prev_hash) {
+                    current_header = cached.header;
                 } else {
                     if last_hash != genesis_hash {
                         hashes.push(genesis_hash);
@@ -404,8 +421,8 @@ mod test {
         );
 
         assert_eq!(state.tips.len(), 2);
-        assert_eq!(state.tips[0].header.block_hash(), *last_chain_hash);
-        assert_eq!(state.tips[1].header.block_hash(), *last_fork_hash);
+        assert_eq!(state.tips[0].header.block_hash(), *last_fork_hash);
+        assert_eq!(state.tips[1].header.block_hash(), *last_chain_hash);
         assert_eq!(state.get_active_chain_tip().height, 27);
     }
 
