@@ -51,5 +51,5 @@
   args:
     executable: /bin/bash
   register: script_res
-  changed_when: "'Destroying VM ' in (script_res.stddout | default('')) or 'Un-defining VM ' in (script_res.stddout | default(''))"
+  changed_when: "'Destroying VM ' in (script_res.stdout | default('')) or 'Un-defining VM ' in (script_res.stdout | default(''))"
   tags: [ "ic_guest" ]
