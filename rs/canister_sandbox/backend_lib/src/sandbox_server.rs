@@ -575,7 +575,7 @@ mod tests {
     /// Verify that state is set up correctly with given page contents
     /// such that memory reads yield the correct data.
     #[test]
-    fn test_memory_read_state() {
+    fn test_memory_read_after_write_state() {
         let exec_finished_sync =
             Arc::new(SyncCell::<protocol::ctlsvc::ExecutionFinishedRequest>::new());
 
@@ -593,18 +593,15 @@ mod tests {
             .unwrap();
         assert!(rep.0.is_ok());
 
-        let mut wasm_memory = PageMap::default();
-        // Create state setting up initial memory to have a couple
-        // bytes set to particular values.
-        let mut page_data = [0; 4096];
-        page_data[42] = 1;
-        page_data[43] = 2;
-        wasm_memory.update(&[(PageIndex::from(0), &page_data)]);
-        let wasm_memory_id = open_memory(&srv, &wasm_memory, 1);
+        let wasm_memory = PageMap::default();
+        let wasm_memory_id = open_memory(&srv, &wasm_memory, 0);
         let stable_memory = PageMap::default();
         let stable_memory_id = open_memory(&srv, &stable_memory, 0);
 
-        // Issue a read of size 4 against address 40.
+        let next_wasm_memory_id = MemoryId::new();
+        let next_stable_memory_id = MemoryId::new();
+
+        // Issue a write of bytes [1, 2, 3, 4] at address 16.
         let exec_id = ExecId::new();
         let rep = srv
             .start_execution(protocol::sbxsvc::StartExecutionRequest {
@@ -612,7 +609,28 @@ mod tests {
                 wasm_id,
                 wasm_memory_id,
                 stable_memory_id,
-                exec_input: exec_input_for_query("read", &[40, 0, 0, 0, 4, 0, 0, 0], vec![]),
+                exec_input: exec_input_for_update(
+                    "write",
+                    &[16, 0, 0, 0, 1, 2, 3, 4],
+                    vec![],
+                    next_wasm_memory_id,
+                    next_stable_memory_id,
+                ),
+            })
+            .sync()
+            .unwrap();
+        assert!(rep.success);
+        exec_finished_sync.get();
+
+        // Issue a read of size 4 against address 16.
+        let exec_id = ExecId::new();
+        let rep = srv
+            .start_execution(protocol::sbxsvc::StartExecutionRequest {
+                exec_id,
+                wasm_id,
+                wasm_memory_id: next_wasm_memory_id,
+                stable_memory_id: next_stable_memory_id,
+                exec_input: exec_input_for_query("read", &[16, 0, 0, 0, 4, 0, 0, 0], vec![]),
             })
             .sync()
             .unwrap();
@@ -620,7 +638,7 @@ mod tests {
 
         let result = exec_finished_sync.get();
         let wasm_result = result.exec_output.wasm.wasm_result.unwrap().unwrap();
-        assert_eq!(WasmResult::Reply([0, 0, 1, 2].to_vec()), wasm_result);
+        assert_eq!(WasmResult::Reply([1, 2, 3, 4].to_vec()), wasm_result);
     }
 
     /// Verifies that we can create a simple canister and run multiple
@@ -808,7 +826,7 @@ mod tests {
     /// Verify that state is set up correctly with given page contents
     /// such that memory reads yield the correct data.
     #[test]
-    fn test_stable_memory_read_state() {
+    fn test_stable_memory_read_after_write_state() {
         let exec_finished_sync =
             Arc::new(SyncCell::<protocol::ctlsvc::ExecutionFinishedRequest>::new());
 
@@ -828,16 +846,13 @@ mod tests {
 
         let wasm_memory = PageMap::default();
         let wasm_memory_id = open_memory(&srv, &wasm_memory, 0);
-        let mut stable_memory = PageMap::default();
-        // Create state setting up initial memory to have a couple
-        // bytes set to particular values.
-        let mut page_data = [0; 4096];
-        page_data[42] = 1;
-        page_data[43] = 2;
-        stable_memory.update(&[(PageIndex::new(0), &page_data)]);
+        let stable_memory = PageMap::default();
         let stable_memory_id = open_memory(&srv, &stable_memory, 1);
 
-        // Issue a read of size 4 against address 40.
+        let next_wasm_memory_id = MemoryId::new();
+        let next_stable_memory_id = MemoryId::new();
+
+        // Issue a write of bytes [1, 2, 3, 4] at address 16.
         let exec_id = ExecId::new();
         let rep = srv
             .start_execution(protocol::sbxsvc::StartExecutionRequest {
@@ -845,7 +860,28 @@ mod tests {
                 wasm_id,
                 wasm_memory_id,
                 stable_memory_id,
-                exec_input: exec_input_for_query("read_stable", &[40, 0, 0, 0, 4, 0, 0, 0], vec![]),
+                exec_input: exec_input_for_update(
+                    "write_stable",
+                    &[16, 0, 0, 0, 1, 2, 3, 4],
+                    vec![],
+                    next_wasm_memory_id,
+                    next_stable_memory_id,
+                ),
+            })
+            .sync()
+            .unwrap();
+        assert!(rep.success);
+        exec_finished_sync.get();
+
+        // Issue a read of size 4 against address 16.
+        let exec_id = ExecId::new();
+        let rep = srv
+            .start_execution(protocol::sbxsvc::StartExecutionRequest {
+                exec_id,
+                wasm_id,
+                wasm_memory_id: next_wasm_memory_id,
+                stable_memory_id: next_stable_memory_id,
+                exec_input: exec_input_for_query("read_stable", &[16, 0, 0, 0, 4, 0, 0, 0], vec![]),
             })
             .sync()
             .unwrap();
@@ -853,7 +889,7 @@ mod tests {
 
         let result = exec_finished_sync.get();
         let wasm_result = result.exec_output.wasm.wasm_result.unwrap().unwrap();
-        assert_eq!(WasmResult::Reply([0, 0, 1, 2].to_vec()), wasm_result);
+        assert_eq!(WasmResult::Reply([1, 2, 3, 4].to_vec()), wasm_result);
     }
 
     #[test]

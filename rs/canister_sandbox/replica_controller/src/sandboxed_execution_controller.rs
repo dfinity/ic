@@ -599,6 +599,11 @@ fn open_remote_memory(
         SandboxMemory::Synced(id) => id.clone(),
         SandboxMemory::Unsynced => {
             let serialized_page_map = memory.page_map.serialize();
+            // Only clean memory without any dirty pages can be unsynced.
+            // That is because all dirty pages are created by the sandbox and
+            // they are automatically synced using `wrap_remote_memory`.
+            assert!(serialized_page_map.page_delta.is_empty());
+            assert!(serialized_page_map.round_delta.is_empty());
             let serialized_memory = MemorySerialization {
                 page_map: serialized_page_map,
                 num_wasm_pages: memory.size,
