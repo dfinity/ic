@@ -539,6 +539,10 @@ message RewardNodeProvider {
 
 message RewardNodeProviders {
   repeated RewardNodeProvider rewards = 1;
+
+  // If true, reward Node Providers with the rewards returned by the Registry's
+  // get_node_providers_monthly_xdr_rewards method
+  optional bool use_registry_derived_rewards = 2;
 }
 
 // Changes the default followees to match the one provided.

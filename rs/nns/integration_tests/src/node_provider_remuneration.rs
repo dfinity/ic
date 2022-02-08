@@ -27,14 +27,16 @@ use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 
 use cycles_minting_canister::IcpXdrConversionRateCertifiedResponse;
 use dfn_candid::candid_one;
+use dfn_protobuf::protobuf;
+use ic_nns_common::pb::v1::NeuronId as ProtoNeuronId;
 use ic_nns_governance::pb::v1::reward_node_provider::{RewardMode, RewardToAccount};
 use ic_types::PrincipalId;
-use ledger_canister::{AccountIdentifier, TOKEN_SUBDIVIDABLE_BY};
+use ledger_canister::{AccountBalanceArgs, AccountIdentifier, Tokens, TOKEN_SUBDIVIDABLE_BY};
 use std::collections::BTreeMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
-fn test_get_monthly_node_provider_rewards() {
+fn test_automated_node_provider_remuneration() {
     local_test_on_nns_subnet(|runtime| async move {
         let nns_init_payload = NnsInitPayloadsBuilder::new()
             .with_initial_invariant_compliant_mutations()
@@ -48,12 +50,13 @@ fn test_get_monthly_node_provider_rewards() {
         // Define the set of node operators and node providers
         let node_operator_id_1 = *TEST_USER1_PRINCIPAL;
         let node_provider_id_1 = *TEST_USER2_PRINCIPAL;
+        let node_provider_1_account = AccountIdentifier::from(node_provider_id_1);
         let node_provider_1 = NodeProvider {
             id: Some(node_provider_id_1),
             reward_account: None,
         };
         let reward_mode_1 = Some(RewardMode::RewardToAccount(RewardToAccount {
-            to_account: Some(AccountIdentifier::from(node_provider_id_1).into()),
+            to_account: Some(node_provider_1_account.into()),
         }));
         let expected_rewards_e8s_1 =
             (((10 * 24_000) + (21 * 68_000) + (6 * 11_000)) * TOKEN_SUBDIVIDABLE_BY) / 155_000;
@@ -66,12 +69,13 @@ fn test_get_monthly_node_provider_rewards() {
 
         let node_operator_id_2 = *TEST_USER3_PRINCIPAL;
         let node_provider_id_2 = *TEST_USER4_PRINCIPAL;
+        let node_provider_2_account = AccountIdentifier::from(node_provider_id_2);
         let node_provider_2 = NodeProvider {
             id: Some(node_provider_id_2),
             reward_account: None,
         };
         let reward_mode_2 = Some(RewardMode::RewardToAccount(RewardToAccount {
-            to_account: Some(AccountIdentifier::from(node_provider_id_2).into()),
+            to_account: Some(node_provider_2_account.into()),
         }));
         let expected_rewards_e8s_2 =
             (((35 * 68_000) + (17 * 11_000)) * TOKEN_SUBDIVIDABLE_BY) / 155_000;
@@ -84,12 +88,13 @@ fn test_get_monthly_node_provider_rewards() {
 
         let node_operator_id_3 = *TEST_USER5_PRINCIPAL;
         let node_provider_id_3 = *TEST_USER6_PRINCIPAL;
+        let node_provider_3_account = AccountIdentifier::from(*TEST_USER7_PRINCIPAL);
         let node_provider_3 = NodeProvider {
             id: Some(node_provider_id_3),
-            reward_account: Some(AccountIdentifier::from(*TEST_USER7_PRINCIPAL).into()),
+            reward_account: Some(node_provider_3_account.into()),
         };
         let reward_mode_3 = Some(RewardMode::RewardToAccount(RewardToAccount {
-            to_account: Some(AccountIdentifier::from(*TEST_USER7_PRINCIPAL).into()),
+            to_account: Some(node_provider_3_account.into()),
         }));
         let expected_rewards_e8s_3 =
             (((19 * 234_000) + (33 * 907_000) + (4 * 103_000)) * TOKEN_SUBDIVIDABLE_BY) / 155_000;
@@ -206,8 +211,99 @@ fn test_get_monthly_node_provider_rewards() {
             .rewards
             .contains(&expected_node_provider_reward_3));
 
+        // Assert account balances are 0
+        assert_account_balance(&nns_canisters, node_provider_1_account, 0).await;
+        assert_account_balance(&nns_canisters, node_provider_2_account, 0).await;
+        assert_account_balance(&nns_canisters, node_provider_3_account, 0).await;
+
+        // Submit and execute proposal to pay NPs via Registry-driven rewards
+        reward_node_providers_via_registry(&nns_canisters).await;
+
+        // Assert account balances are as expected
+        assert_account_balance(
+            &nns_canisters,
+            node_provider_1_account,
+            expected_node_provider_reward_1.amount_e8s,
+        )
+        .await;
+        assert_account_balance(
+            &nns_canisters,
+            node_provider_2_account,
+            expected_node_provider_reward_2.amount_e8s,
+        )
+        .await;
+        assert_account_balance(
+            &nns_canisters,
+            node_provider_3_account,
+            expected_node_provider_reward_3.amount_e8s,
+        )
+        .await;
+
         Ok(())
     });
+}
+
+/// Submit and execute a RewardNodeProviders proposal with the `use_registry_derived_rewards`
+/// flag set to `true`. This causes Node Providers to be rewarded with the rewards returned
+/// by Governance's `get_monthly_node_provider_rewards` method.
+async fn reward_node_providers_via_registry(nns_canisters: &NnsCanisters<'_>) {
+    let sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
+
+    let result: ManageNeuronResponse = nns_canisters
+        .governance
+        .update_from_sender(
+            "manage_neuron",
+            candid_one,
+            ManageNeuron {
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(ProtoNeuronId {
+                    id: TEST_NEURON_1_ID,
+                })),
+                id: None,
+                command: Some(Command::MakeProposal(Box::new(Proposal {
+                    title: Some("Reward NPs".to_string()),
+                    summary: "".to_string(),
+                    url: "".to_string(),
+                    action: Some(Action::RewardNodeProviders(RewardNodeProviders {
+                        rewards: vec![],
+                        use_registry_derived_rewards: Some(true),
+                    })),
+                }))),
+            },
+            &sender,
+        )
+        .await
+        .expect("Error calling the manage_neuron api.");
+
+    let pid = match result.expect("Error making proposal").command.unwrap() {
+        CommandResponse::MakeProposal(resp) => resp.proposal_id.unwrap(),
+        _ => panic!("Invalid response"),
+    };
+
+    // Wait for the proposal to be accepted and executed.
+    assert_eq!(
+        wait_for_final_state(&nns_canisters.governance, ProposalId::from(pid))
+            .await
+            .status(),
+        ProposalStatus::Executed
+    );
+}
+
+/// Assert the given account has the given token balance on the Ledger
+async fn assert_account_balance(
+    nns_canisters: &NnsCanisters<'_>,
+    account: AccountIdentifier,
+    e8s: u64,
+) {
+    let user_balance: Tokens = nns_canisters
+        .ledger
+        .query_(
+            "account_balance_pb",
+            protobuf,
+            AccountBalanceArgs { account },
+        )
+        .await
+        .unwrap();
+    assert_eq!(Tokens::from_e8s(e8s), user_balance);
 }
 
 /// Add test Data Centers to the Registry

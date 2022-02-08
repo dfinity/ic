@@ -292,7 +292,10 @@ type RewardNodeProvider = record {
   reward_mode : opt RewardMode;
   amount_e8s : nat64;
 };
-type RewardNodeProviders = record { rewards : vec RewardNodeProvider };
+type RewardNodeProviders = record {
+  use_registry_derived_rewards : opt bool;
+  rewards : vec RewardNodeProvider;
+};
 type RewardToAccount = record { to_account : opt AccountIdentifier };
 type RewardToNeuron = record { dissolve_delay_seconds : nat64 };
 type SetDefaultFollowees = record {
