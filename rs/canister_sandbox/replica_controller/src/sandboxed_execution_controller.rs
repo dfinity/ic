@@ -520,13 +520,15 @@ impl SandboxedExecutionController {
         }
 
         // Steps 2, 3, 4 are performed by the sandbox process.
-        let mut wasm_page_map = PageMap::default();
+        let wasm_page_map = PageMap::default();
+        let next_wasm_memory_id = MemoryId::new();
         let reply = sandbox_process
             .sandbox_service
             .create_execution_state(protocol::sbxsvc::CreateExecutionStateRequest {
                 wasm_id,
                 wasm_binary: wasm_source,
                 wasm_page_map: wasm_page_map.serialize(),
+                next_wasm_memory_id,
                 canister_id,
             })
             .sync()
@@ -534,8 +536,15 @@ impl SandboxedExecutionController {
             .0?;
 
         // Step 5. Create the execution state.
-        wasm_page_map.deserialize_delta(reply.wasm_memory.page_delta);
-        let wasm_memory = Memory::new(wasm_page_map, reply.wasm_memory.size);
+        let mut wasm_memory = Memory::new(wasm_page_map, reply.wasm_memory_modifications.size);
+        wasm_memory
+            .page_map
+            .deserialize_delta(reply.wasm_memory_modifications.page_delta);
+        wasm_memory.sandbox_memory = SandboxMemory::synced(wrap_remote_memory(
+            &sandbox_process.sandbox_service,
+            next_wasm_memory_id,
+        ));
+
         let stable_memory = Memory::default();
         let execution_state = ExecutionState::new(
             canister_root,

@@ -391,6 +391,7 @@ impl SandboxManager {
         wasm_id: WasmId,
         wasm_source: Vec<u8>,
         wasm_page_map: PageMapSerialization,
+        next_wasm_memory_id: MemoryId,
         canister_id: CanisterId,
     ) -> HypervisorResult<CreateExecutionStateSuccessReply> {
         // Get the compiled binary from the cache.
@@ -421,14 +422,19 @@ impl SandboxManager {
                 canister_id,
             )?;
 
+        let wasm_memory = Memory::new(wasm_page_map, wasm_memory_size);
+
         // Send all necessary data for creating the execution state to replica.
-        let wasm_memory = MemoryModifications {
-            page_delta: wasm_page_map.serialize_delta(&wasm_memory_delta),
+        let wasm_memory_modifications = MemoryModifications {
+            page_delta: wasm_memory.page_map.serialize_delta(&wasm_memory_delta),
             size: wasm_memory_size,
         };
 
+        // Save the memory for future message executions.
+        self.add_memory(next_wasm_memory_id, wasm_memory);
+
         Ok(CreateExecutionStateSuccessReply {
-            wasm_memory,
+            wasm_memory_modifications,
             exported_globals,
             exported_functions,
         })
