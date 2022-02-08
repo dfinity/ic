@@ -84,13 +84,15 @@ use ic_logger::{info, replica_logger::ReplicaLogger, trace};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy, registry::subnet::v1::GossipConfig};
 use ic_registry_client::helper::subnet::SubnetRegistry;
-use ic_types::transport::{TransportError, TransportErrorCode, TransportFlowInfo};
 use ic_types::{
     artifact::AdvertClass,
     canonical_error::{unavailable_error, CanonicalError},
     messages::SignedIngress,
     p2p::GossipAdvert,
-    transport::{FlowId, TransportNotification, TransportPayload, TransportStateChange},
+    transport::{
+        FlowId, TransportError, TransportErrorCode, TransportNotification, TransportPayload,
+        TransportStateChange,
+    },
     NodeId, SubnetId,
 };
 use std::{
@@ -561,7 +563,7 @@ impl AsyncTransportEventHandler for P2PEventHandlerImpl {
             sender
                 .send(PerFlowMsg::Item((
                     TransportNotification::TransportError(TransportError::TransportSendError(
-                        TransportFlowInfo {
+                        FlowId {
                             peer_id: flow.peer_id,
                             flow_tag: flow.flow_tag,
                         },

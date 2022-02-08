@@ -21,10 +21,6 @@ pub enum TransportNotification {
     TransportError(TransportError),
 }
 
-/// Represents a blob.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct Bytes(#[serde(with = "serde_bytes")] pub Vec<u8>);
-
 /// FlowId is the unique key for the flows being managed
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct FlowId {
@@ -62,26 +58,16 @@ pub struct TransportFlowConfig {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum TransportStateChange {
     /// Peer flow was established
-    PeerFlowUp(TransportFlowInfo),
+    PeerFlowUp(FlowId),
 
     /// Peer flow went down
-    PeerFlowDown(TransportFlowInfo),
+    PeerFlowDown(FlowId),
 }
 
 /// Errors that are returned by the transport layer.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum TransportError {
-    TransportSendError(TransportFlowInfo),
-}
-
-/// Information that can be used to identify a transport flow.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct TransportFlowInfo {
-    /// The peer for the connection
-    pub peer_id: NodeId,
-
-    /// The flow tag for the connection
-    pub flow_tag: FlowTag,
+    TransportSendError(FlowId),
 }
 
 /// Error codes returned by transport manager functions.
