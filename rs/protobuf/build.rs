@@ -2,19 +2,6 @@ use prost_build::Config;
 use std::env;
 use std::path::PathBuf;
 
-fn out_dir() -> PathBuf {
-    env::var("OUT_DIR")
-        .expect("OUT_DIR not set in build script")
-        .into()
-}
-
-// protobuf doesn't actually check whether the out_dir exists before attempting
-// to use it
-fn set_out_dir(config: &mut Config, path: PathBuf) {
-    config.out_dir(&path);
-    std::fs::create_dir_all(path).expect("could not create out dir");
-}
-
 /// Creates a base Config, which should always be used in lieu of Config::new(),
 /// to avoid any risk of non-determinism. Indeed, with Config::new(), the
 /// generated code for proto's "map" fields are HashMaps. use `base_config()` to
@@ -26,7 +13,8 @@ fn base_config() -> Config {
     config.file_descriptor_set_path(
         // OUT_DIR is set by cargo
         // https://doc.rust-lang.org/cargo/reference/environment-variables.html
-        out_dir().join("protoc_file_descriptor_set.bin"),
+        PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR environment variable not set"))
+            .join("protoc_file_descriptor_set.bin"),
     );
     config
 }
@@ -66,7 +54,7 @@ fn main() {
 /// Generates Rust structs from logging Protobuf messages.
 fn build_log_proto() {
     let mut config = base_config();
-    set_out_dir(&mut config, out_dir().join("log"));
+    config.out_dir("gen/log");
 
     config.type_attribute(
         "log.log_entry.v1.LogEntry",
@@ -196,7 +184,7 @@ fn build_log_proto() {
 /// Generates Rust structs from registry Protobuf messages.
 fn build_registry_proto() {
     let mut config = base_config();
-    set_out_dir(&mut config, out_dir().join("registry"));
+    config.out_dir("gen/registry");
 
     config.type_attribute(
         ".registry.conversion_rate",
@@ -281,7 +269,7 @@ fn build_registry_proto() {
 /// Generates Rust structs from messaging Protobuf messages.
 fn build_messaging_proto() {
     let mut config = base_config();
-    set_out_dir(&mut config, out_dir().join("messaging"));
+    config.out_dir("gen/messaging");
     config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
 
     let messaging_files = [
@@ -298,7 +286,7 @@ fn build_messaging_proto() {
 /// Generates Rust structs from state Protobuf messages.
 fn build_state_proto() {
     let mut config = base_config();
-    set_out_dir(&mut config, out_dir().join("state"));
+    config.out_dir("gen/state");
 
     let state_files = [
         "def/state/ingress/v1/ingress.proto",
@@ -315,7 +303,7 @@ fn build_state_proto() {
 /// Generates Rust structs from types Protobuf messages.
 fn build_types_proto() {
     let mut config = base_config();
-    set_out_dir(&mut config, out_dir().join("types"));
+    config.out_dir("gen/types");
     config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
     config.type_attribute(".types.v1.CatchUpPackage", "#[derive(Eq, Hash)]");
     config.type_attribute(".types.v1.SubnetId", "#[derive(Eq, Hash)]");
@@ -332,7 +320,7 @@ fn build_types_proto() {
 /// Generates Rust structs from crypto Protobuf messages.
 fn build_crypto_proto() {
     let mut config = base_config();
-    set_out_dir(&mut config, out_dir().join("crypto"));
+    config.out_dir("gen/crypto");
     config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
     let files = ["def/crypto/v1/crypto.proto"];
     compile_protos(config, &files);
@@ -341,7 +329,7 @@ fn build_crypto_proto() {
 /// Generates Rust structs from crypto Protobuf messages.
 fn build_p2p_proto() {
     let mut config = base_config();
-    set_out_dir(&mut config, out_dir().join("p2p"));
+    config.out_dir("gen/p2p");
     config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
     let files = ["def/p2p/v1/p2p.proto"];
     compile_protos(config, &files);

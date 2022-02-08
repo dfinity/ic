@@ -4,6 +4,6 @@ pub mod queues;
 pub mod sync;
 pub mod system_metadata;
 
-pub mod v1 {
-    include!(concat!(env!("OUT_DIR"), "/state/state.v1.rs"));
-}
+#[path = "../../gen/state/state.v1.rs"]
+#[rustfmt::skip]
+pub mod v1;
