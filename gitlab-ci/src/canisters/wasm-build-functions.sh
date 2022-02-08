@@ -8,6 +8,7 @@ wasm_canister_list=(
     cycles-minting-canister
     genesis-token-canister
     governance-canister
+    governance-canister_test
     governance-mem-test-canister
     identity-canister
     inter_canister_error_handling

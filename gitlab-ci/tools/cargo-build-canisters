@@ -78,6 +78,7 @@ function wasm_canisters_cargo_args() {
 }
 
 build_with_features ledger-canister notify-method ledger-canister_notify-method
+build_with_features governance-canister test governance-canister_test
 
 # We need to build and optimize ledger archive node before we build the ledger
 # because the ledger embeds the Wasm file of the archive.
@@ -98,6 +99,7 @@ echo "Building of Wasm canisters finished"
 cd "$ROOT_DIR" || exit 1
 
 optimize_wasm ledger-canister_notify-method
+optimize_wasm governance-canister_test
 
 for wasm in "${wasm_canister_build_list[@]}"; do
     optimize_wasm "$wasm"
