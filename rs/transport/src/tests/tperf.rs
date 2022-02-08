@@ -54,7 +54,7 @@ use ic_transport::transport::create_transport;
 use ic_types::{
     transport::{
         FlowId, FlowTag, TransportConfig, TransportErrorCode, TransportFlowConfig,
-        TransportFlowInfo, TransportPayload, TransportStateChange,
+        TransportPayload, TransportStateChange,
     },
     NodeId, RegistryVersion,
 };
@@ -170,7 +170,7 @@ struct TestClient {
     _event_handler: Arc<TestClientEventHandler>,
     peer: NodeId,
     peer_node_record: NodeRecord,
-    active_flows: Arc<Mutex<HashSet<TransportFlowInfo>>>,
+    active_flows: Arc<Mutex<HashSet<FlowId>>>,
     receiver: MpscReceiver,
     registry_version: RegistryVersion,
     log: ReplicaLogger,
@@ -505,7 +505,7 @@ impl TestClient {
 
 struct TestClientEventHandler {
     sender: MpscSender,
-    active_flows: Arc<Mutex<HashSet<TransportFlowInfo>>>,
+    active_flows: Arc<Mutex<HashSet<FlowId>>>,
     log: ReplicaLogger,
 }
 

@@ -25,9 +25,7 @@ use crate::types::{
 use ic_crypto_tls_interfaces::{TlsReadHalf, TlsWriteHalf};
 use ic_interfaces::transport::AsyncTransportEventHandler;
 use ic_logger::warn;
-use ic_types::transport::{
-    FlowId, TransportErrorCode, TransportFlowInfo, TransportPayload, TransportStateChange,
-};
+use ic_types::transport::{FlowId, TransportErrorCode, TransportPayload, TransportStateChange};
 
 use futures::future::{AbortHandle, Abortable, Aborted};
 use std::convert::TryInto;
@@ -369,7 +367,7 @@ impl TransportImpl {
             client_state.event_handler.clone()
         };
         event_handler
-            .state_changed(TransportStateChange::PeerFlowDown(TransportFlowInfo {
+            .state_changed(TransportStateChange::PeerFlowDown(FlowId {
                 peer_id: flow_id.peer_id,
                 flow_tag: flow_id.flow_tag,
             }))
@@ -487,7 +485,7 @@ impl TransportImpl {
     ) -> Result<(), TransportErrorCode> {
         self.on_connect_setup(flow_id, role, peer_addr, reader, writer)?
             // Notify the client that peer flow is up.
-            .state_changed(TransportStateChange::PeerFlowUp(TransportFlowInfo {
+            .state_changed(TransportStateChange::PeerFlowUp(FlowId {
                 peer_id: flow_id.peer_id,
                 flow_tag: flow_id.flow_tag,
             }))
