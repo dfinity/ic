@@ -455,6 +455,21 @@ pub fn get_random_node_endpoint_of_init_subnet_type<'a>(
         .unwrap()
 }
 
+pub fn get_other_subnet_nodes<'a>(
+    handle: &'a IcHandle,
+    endpoint: &'a IcEndpoint,
+) -> Vec<&'a IcEndpoint> {
+    handle
+        .public_api_endpoints
+        .iter()
+        .filter(|ep| {
+            ep.subnet.is_some()
+                && ep.subnet_id() == endpoint.subnet_id()
+                && ep.node_id != endpoint.node_id
+        })
+        .collect()
+}
+
 pub fn get_random_unassigned_node_endpoint<'a>(
     handle: &'a IcHandle,
     rng: &mut ChaCha8Rng,
@@ -797,7 +812,7 @@ pub(crate) fn escape_for_wat(id: &Principal) -> String {
 }
 
 #[allow(dead_code)] // Not all image types are used yet.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub(crate) enum UpdateImageType {
     Image,
     ImageTest,

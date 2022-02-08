@@ -391,7 +391,7 @@ pub fn cannot_add_more_than_max_number_of_readonly_or_backup_keys(
     ));
 }
 
-fn get_updatesubnetpayload(
+pub fn get_updatesubnetpayload(
     subnet_id: SubnetId,
     readonly_keys: Option<Vec<String>>,
     backup_keys: Option<Vec<String>>,
@@ -428,7 +428,7 @@ fn get_updatesubnetpayload(
     }
 }
 
-async fn update_the_subnet_record(nns_endpoint: &IcEndpoint, payload: UpdateSubnetPayload) {
+pub async fn update_the_subnet_record(nns_endpoint: &IcEndpoint, payload: UpdateSubnetPayload) {
     let r = runtime_from_url(nns_endpoint.url.clone());
     let gov_can = get_governance_canister(&r);
 
