@@ -7,8 +7,6 @@ After=network-online.target
 # state files and may also be needed to obtain network config.
 After=bootstrap-ic-node.service
 Wants=bootstrap-ic-node.service
-# Only start Journalbeat if configuration file exists
-ConditionPathExists=/boot/config/journalbeat.conf
 
 [Service]
 User=journalbeat
