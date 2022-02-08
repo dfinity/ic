@@ -103,3 +103,39 @@ cargo-build-canisters:
       echo -e "\e[0Ksection_start:$(date +%s):sccache_stats[collapsed=true]\r\e[0KClick here to see the sccache stats"
       "$RUSTC_WRAPPER" --show-stats
       echo -e "\e[0Ksection_end:$(date +%s):sccache_stats\r\e[0K"
+
+dfx-build-release-darwin:
+  extends: .cargo-build-macos
+  artifacts:
+    paths:
+      - artifacts/sdk-release/*
+  variables:
+    BUILD_COMMAND: "${CI_PROJECT_DIR}/gitlab-ci/tools/build-dfx-binaries"
+    BUILD_COMMAND_POST: "${CI_PROJECT_DIR}/gitlab-ci/src/artifacts/collect_build_binaries.py artifacts/sdk-release x86_64-darwin/"
+
+dfx-build-release-linux:
+  extends:
+    - .cargo-build-docker-protected
+    - .rules-parent-pipeline-autorun-on-trigger
+  image:
+    # Use the docker image without nix-shell
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:2022-02-06-56db77a4-a9fd8a0768663d5eb3776933d9ec2233ccfe940d"
+  variables:
+    BUILD_COMMAND: ""
+    CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
+    OPENSSL_INCLUDE_DIR: /usr/include/x86_64-linux-gnu
+    OPENSSL_LIB_DIR: /usr/lib/x86_64-linux-gnu
+    OPENSSL_STATIC: "1"
+  script:
+    - |
+      set -eExuo pipefail
+
+      # the pkg-config crate ignores requests to link statically if a dylib is available
+      sudo rm /usr/lib/x86_64-linux-gnu/liblmdb.so*
+
+      "${CI_PROJECT_DIR}/gitlab-ci/tools/build-dfx-binaries"
+
+      "${CI_PROJECT_DIR}/gitlab-ci/src/artifacts/collect_build_binaries.py" artifacts/sdk-release x86_64-linux/
+  artifacts:
+    paths:
+      - artifacts/sdk-release/*
