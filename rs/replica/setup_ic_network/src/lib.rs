@@ -182,6 +182,11 @@ pub fn create_networking_stack(
     transport
         .register_client(event_handler.clone())
         .map_err(|e| format!("transport registration failed: {:?}", e))?;
+    let advert_subscriber = AdvertSubscriber::new(
+        log.clone(),
+        &metrics_registry,
+        fetch_gossip_config(registry_client.clone(), subnet_id),
+    );
 
     // Now we setup the Artifact Pools and the manager.
     let (artifact_manager, consensus_pool_cache, ingress_throttle) = setup_artifact_manager(
@@ -207,7 +212,7 @@ pub fn create_networking_stack(
         cycles_account_manager,
         local_store_time_reader,
         registry_poll_delay_duration_ms,
-        Arc::clone(&event_handler) as Arc<_>,
+        advert_subscriber.clone(),
     )
     .unwrap();
 
@@ -225,6 +230,7 @@ pub fn create_networking_stack(
         malicious_flags,
     ));
     event_handler.start(gossip.clone());
+    advert_subscriber.start(gossip.clone());
 
     let p2p = P2P {
         log,
@@ -315,7 +321,7 @@ fn setup_artifact_manager(
     cycles_account_manager: Arc<CyclesAccountManager>,
     local_store_time_reader: Option<Arc<dyn LocalStoreCertifiedTimeReader>>,
     registry_poll_delay_duration_ms: u64,
-    event_handler: Arc<dyn AdvertSubscriber + Send + Sync>,
+    event_handler: AdvertSubscriber,
 ) -> std::io::Result<(
     Arc<dyn ArtifactManager>,
     Arc<dyn ConsensusPoolCache>,

@@ -148,6 +148,7 @@ pub(crate) mod advert_utils {
 
     /// Maps the P2P client advert send requests to the internal format,
     /// based on the config
+    #[derive(Clone)]
     pub(crate) struct AdvertRequestBuilder {
         pub(crate) advert_config: Option<GossipAdvertConfig>,
         adverts_by_class: IntCounterVec,

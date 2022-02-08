@@ -1752,7 +1752,7 @@ pub mod tests {
 
         // Create fake peers.
         let artifact_manager = Arc::new(artifact_manager);
-        let event_handler = Arc::new(new_test_event_handler(MAX_ADVERT_BUFFER, node_test_id(0)));
+        let event_handler = Arc::new(new_test_event_handler(MAX_ADVERT_BUFFER, node_test_id(0)).0);
         DownloadManagerImpl::new(
             node_test_id(0),
             subnet_test_id(0),
@@ -1912,7 +1912,7 @@ pub mod tests {
 
         // Add adverts from the peer that is removed in the latest registry version
         test_add_adverts(&download_manager, 0..5, removed_peer);
-        let event_handler = new_test_event_handler(MAX_ADVERT_BUFFER, node_test_id(0));
+        let event_handler = new_test_event_handler(MAX_ADVERT_BUFFER, node_test_id(0)).0;
         let event_handler_arc = Arc::new(event_handler) as Arc<dyn P2PEventHandlerControl>;
 
         // Refresh registry to get latest version.
@@ -2420,7 +2420,7 @@ pub mod tests {
             let transport = get_transport(0, hub_access, &logger, rt.handle().clone());
 
             // Context:
-            transport.register_client(Arc::new(new_test_event_handler( MAX_ADVERT_BUFFER, node_test_id(0)))).unwrap();
+            transport.register_client(Arc::new(new_test_event_handler( MAX_ADVERT_BUFFER, node_test_id(0)).0)).unwrap();
             let peer_manager = PeerManagerImpl {
                 node_id: node_test_id(0),
                 log: p2p_test_setup_logger().root.clone().into(),
@@ -2469,7 +2469,7 @@ pub mod tests {
             let transport = get_transport(0, hub_access, &logger, rt.handle().clone());
 
             // Context
-            transport.register_client(Arc::new(new_test_event_handler(MAX_ADVERT_BUFFER, node_test_id(0)))).unwrap();
+            transport.register_client(Arc::new(new_test_event_handler(MAX_ADVERT_BUFFER, node_test_id(0)).0)).unwrap();
             let peer_manager = PeerManagerImpl {
                 node_id: node_test_id(0),
                 log: p2p_test_setup_logger().root.clone().into(),
