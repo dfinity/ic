@@ -341,3 +341,14 @@ rosetta-pre-master:
       # shellcheck disable=SC1090
       . "${CI_PROJECT_DIR}/rs/tests/prepare-rosetta-deps.sh"
     - *run-farm-based-test
+
+upgrade-compatibility-pre-master:
+  extends: .system-tests
+  variables:
+    SUITE_NAME: "upgrade_compatibility"
+  script:
+    - |
+      # Set the proper environment variables with versions
+      MASTER_GIT_REVISION=$("${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh origin/master)
+      export MASTER_GIT_REVISION
+    - *run-farm-based-test

@@ -21,7 +21,7 @@ use ic_tests::{
     node_reassignment_test::{self, test as node_reassignment_test},
 };
 use ic_tests::{
-    cycles_minting_test, feature_flags,
+    cup_fetching_across_upgrades, cycles_minting_test, feature_flags,
     networking::firewall::{self, change_to_firewall_rules_takes_effect},
     nns_canister_upgrade_test, nns_uninstall_canister_by_proposal_test,
     registry_authentication_test, ssh_access_to_nodes, transaction_ledger_correctness_test,
@@ -356,6 +356,22 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 wasm_generator_test::config,
                 par(vec![t("wasm_generator_test", wasm_generator_test::test)]),
                 Duration::from_secs(7200),
+            )],
+        ),
+    );
+
+    m.insert(
+        "upgrade_compatibility".to_string(),
+        suite(
+            "upgrade_compatibility",
+            vec![pot_with_time_limit(
+                "cup_fetching_across_upgrades",
+                cup_fetching_across_upgrades::config,
+                par(vec![t(
+                    "cup_fetching_across_upgrades",
+                    cup_fetching_across_upgrades::test,
+                )]),
+                Duration::from_secs(1800),
             )],
         ),
     );

@@ -252,10 +252,8 @@ impl<'a> IcHandle {
 }
 
 impl<'a> IcEndpoint {
-    /// Returns true if [IcEndpoint] is healthy, i.e. up and running and ready
-    /// for interaction. A status of the endpoint is requested from the
-    /// public API.
-    pub async fn healthy(&self) -> Result<(bool, Option<Vec<u8>>)> {
+    /// Returns the status of a replica. It is requested from a public API.
+    pub async fn status(&self) -> Result<HttpStatusResponse> {
         let response = reqwest::Client::builder()
             .timeout(READY_RESPONSE_TIMEOUT)
             .build()
@@ -279,6 +277,17 @@ impl<'a> IcEndpoint {
         .expect("response is not encoded as cbor");
         let status = serde_cbor::value::from_value::<HttpStatusResponse>(cbor_response)
             .expect("failed to deserialize a response to HttpStatusResponse");
+
+        Ok(status)
+    }
+
+    /// Returns true if [IcEndpoint] is healthy, i.e. up and running and ready
+    /// for interaction. A status of the endpoint is requested from the
+    /// public API.
+    pub async fn healthy(&self) -> Result<(bool, Option<Vec<u8>>)> {
+        //        pub async fn healthy(&self) -> Result<bool> {
+        let status = self.status().await?;
+        //Ok(Some(ReplicaHealthStatus::Healthy) == status.replica_health_status)
         let root_key = status.root_key.map(|x| x.0);
         let is_healthy = Some(ReplicaHealthStatus::Healthy) == status.replica_health_status;
         Ok((is_healthy, root_key))

@@ -163,7 +163,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     info!(ctx.logger, "Test finished successfully");
 }
 
-async fn store_message(url: &Url, msg: &str) -> Principal {
+pub async fn store_message(url: &Url, msg: &str) -> Principal {
     let bytes = msg.as_bytes();
     let agent = assert_create_agent(url.as_str()).await;
     let ucan = UniversalCanister::new(&agent).await;
@@ -172,7 +172,12 @@ async fn store_message(url: &Url, msg: &str) -> Principal {
     ucan.canister_id()
 }
 
-async fn can_read_msg(log: &slog::Logger, url: &Url, canister_id: Principal, msg: &str) -> bool {
+pub async fn can_read_msg(
+    log: &slog::Logger,
+    url: &Url,
+    canister_id: Principal,
+    msg: &str,
+) -> bool {
     let bytes = msg.as_bytes();
     let agent = match create_agent(url.as_str()).await {
         Ok(val) => val,

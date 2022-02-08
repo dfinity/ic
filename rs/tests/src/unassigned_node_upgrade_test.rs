@@ -112,7 +112,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         info!(ctx.logger, "Registry version: {}", reg_ver);
         let blessed_versions = blessed_replica_versions(&registry_canister).await;
         info!(ctx.logger, "Initial: {:?}", blessed_versions);
-        let sha256 = fetch_update_file_sha256(&sha_url).await;
+        let sha256 = fetch_update_file_sha256(&sha_url, true).await;
         info!(ctx.logger, "Update image SHA256: {}", sha256);
 
         // prepare for the 1. proposal
@@ -186,7 +186,9 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     assert_eq!(actual_version, Some(target_version));
 }
 
-async fn blessed_replica_versions(registry_canister: &RegistryCanister) -> BlessedReplicaVersions {
+pub async fn blessed_replica_versions(
+    registry_canister: &RegistryCanister,
+) -> BlessedReplicaVersions {
     let blessed_vers_result = registry_canister
         .get_value(make_blessed_replica_version_key().as_bytes().to_vec(), None)
         .await
@@ -204,7 +206,7 @@ fn fetch_node_version(
     Ok(version)
 }
 
-async fn fetch_update_file_sha256(sha_url: &str) -> String {
+pub async fn fetch_update_file_sha256(sha_url: &str, is_test_img: bool) -> String {
     let tmp_dir = tempfile::tempdir().unwrap().into_path();
     let mut tmp_file = tmp_dir.clone();
     tmp_file.push("SHA256.txt");
@@ -217,7 +219,12 @@ async fn fetch_update_file_sha256(sha_url: &str) -> String {
     let contents = fs::read_to_string(tmp_file).expect("Something went wrong reading the file");
     for line in contents.lines() {
         let words: Vec<&str> = line.split(char::is_whitespace).collect();
-        if words.len() == 2 && words[1].ends_with("-img-test.tar.gz") {
+        let suffix = if is_test_img {
+            "-img-test.tar.gz"
+        } else {
+            "-img.tar.gz"
+        };
+        if words.len() == 2 && words[1].ends_with(suffix) {
             return words[0].to_string();
         }
     }

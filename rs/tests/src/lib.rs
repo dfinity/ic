@@ -3,6 +3,7 @@ pub mod cli;
 pub mod consensus;
 pub mod cow_safety_test;
 pub mod create_subnet;
+pub mod cup_fetching_across_upgrades;
 pub mod cycles_minting_test;
 pub mod execution;
 pub mod feature_flags;
