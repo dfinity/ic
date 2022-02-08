@@ -19,6 +19,7 @@ use prometheus::{Histogram, HistogramVec, IntGauge};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::path::PathBuf;
+use std::sync::Weak;
 use std::sync::{
     atomic::{AtomicU64, Ordering},
     Arc, Mutex,
@@ -115,13 +116,16 @@ pub struct SandboxProcess {
 }
 
 /// Manages the lifetime of a remote compiled Wasm and provides its id.
+///
+/// It keeps a weak reference to the sandbox service to allow early
+/// termination of the sandbox process when it becomes inactive.
 pub struct OpenedWasm {
-    sandbox_service: Arc<dyn SandboxService>,
+    sandbox_service: Weak<dyn SandboxService>,
     wasm_id: WasmId,
 }
 
 impl OpenedWasm {
-    fn new(sandbox_service: Arc<dyn SandboxService>, wasm_id: WasmId) -> Self {
+    fn new(sandbox_service: Weak<dyn SandboxService>, wasm_id: WasmId) -> Self {
         Self {
             sandbox_service,
             wasm_id,
@@ -131,11 +135,13 @@ impl OpenedWasm {
 
 impl Drop for OpenedWasm {
     fn drop(&mut self) {
-        self.sandbox_service
-            .close_wasm(protocol::sbxsvc::CloseWasmRequest {
-                wasm_id: self.wasm_id,
-            })
-            .on_completion(|_| {});
+        if let Some(sandbox_service) = self.sandbox_service.upgrade() {
+            sandbox_service
+                .close_wasm(protocol::sbxsvc::CloseWasmRequest {
+                    wasm_id: self.wasm_id,
+                })
+                .on_completion(|_| {});
+        }
     }
 }
 
@@ -571,7 +577,13 @@ fn open_wasm(
     let mut embedder_cache = wasm_binary.embedder_cache.lock().unwrap();
     if let Some(cache) = embedder_cache.as_ref() {
         if let Some(opened_wasm) = cache.downcast::<OpenedWasm>() {
-            return Ok((opened_wasm.wasm_id, 0));
+            if let Some(cached_sandbox_service) = opened_wasm.sandbox_service.upgrade() {
+                assert_eq!(
+                    data_pointer(cached_sandbox_service.as_ref()),
+                    data_pointer(sandbox_service.as_ref())
+                );
+                return Ok((opened_wasm.wasm_id, 0));
+            }
         }
     }
     let wasm_id = WasmId::new();
@@ -583,7 +595,7 @@ fn open_wasm(
         .sync()
         .unwrap()
         .0?;
-    let opened_wasm = OpenedWasm::new(Arc::clone(sandbox_service), wasm_id);
+    let opened_wasm = OpenedWasm::new(Arc::downgrade(sandbox_service), wasm_id);
     *embedder_cache = Some(EmbedderCache::new(opened_wasm));
     Ok((wasm_id, 1))
 }
@@ -641,6 +653,11 @@ fn panic_due_to_sandbox_exit(output: ExitStatus, canister_id: CanisterId, pid: u
             canister_id, pid
         ),
     }
+}
+
+// Extracts the data pointer from the given fat pointer.
+fn data_pointer(sandbox_service: &dyn SandboxService) -> *const u8 {
+    sandbox_service as *const dyn SandboxService as *const u8
 }
 
 #[cfg(test)]
