@@ -149,7 +149,7 @@ fn canister_pre_upgrade() {
     let mut serialized = Vec::new();
     let ss = RegistryCanisterStableStorage {
         registry: Some(registry.serializable_form()),
-        pre_upgrade_version: registry.latest_version(),
+        pre_upgrade_version: Some(registry.latest_version()),
     };
     ss.encode(&mut serialized)
         .expect("Error serializing to stable.");
@@ -168,7 +168,20 @@ fn canister_post_upgrade() {
     let registry = registry_mut();
     registry.from_serializable_form(ss.registry.expect("Error decoding from stable"));
 
-    assert_eq!(ss.pre_upgrade_version, registry.latest_version());
+    // Before we upgrade to a registry version that contains this field it'll
+    // come back as None.
+    if ss.pre_upgrade_version.is_some() {
+        let pre_upgrade_version = ss.pre_upgrade_version.unwrap();
+        assert_eq!(
+            pre_upgrade_version,
+            registry.latest_version(),
+            "The serialized last version watermark doesn't match what's found in the records. \
+                     Watermark: {:?}, Last version: {:?}",
+            pre_upgrade_version,
+            registry.latest_version()
+        );
+    }
+
     // TODO(NNS1-1025): To be deleted after the next registry upgrade
     apply_deletion_mutation(registry);
 

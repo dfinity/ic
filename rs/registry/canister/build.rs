@@ -25,6 +25,8 @@ fn main() {
     };
 
     let mut config = Config::new();
+    config.protoc_arg("--experimental_allow_proto3_optional");
+
     config.extern_path(
         ".ic_registry_transport.pb.v1",
         "::ic-registry-transport::pb::v1",
