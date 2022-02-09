@@ -168,7 +168,6 @@ guest-os-upgrade-from-mainnet-app-subnet-to-new-version-update-workload:
   script:
     - |
       $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" \
-      capsule -v -i 'ic-os/guestos/build-out/**/*.gz' -i 'artifacts/**/*.gz' -i 'ic-os/guestos/tests/**/*' -- \
       "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "app" "false" "update"
 
 guest-os-downgrade-from-new-version-to-mainnet-app-subnet-update-workload:
@@ -185,7 +184,6 @@ guest-os-downgrade-from-new-version-to-mainnet-app-subnet-update-workload:
   script:
     - |
       $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" \
-      capsule -v -i 'ic-os/guestos/build-out/**/*.gz' -i 'artifacts/**/*.gz' -i 'ic-os/guestos/tests/**/*' -- \
       "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "app" "true" "update"
 
 guest-os-upgrade-from-mainnet-nns-subnet-to-new-version-update-workload:
@@ -202,7 +200,6 @@ guest-os-upgrade-from-mainnet-nns-subnet-to-new-version-update-workload:
   script:
     - |
       $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" \
-      capsule -v -i 'ic-os/guestos/build-out/**/*.gz' -i 'artifacts/**/*.gz' -i 'ic-os/guestos/tests/**/*' -- \
       "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "nns" "false" "update"
 
 guest-os-downgrade-from-new-version-to-mainnet-nns-subnet-update-workload:
@@ -219,7 +216,6 @@ guest-os-downgrade-from-new-version-to-mainnet-nns-subnet-update-workload:
   script:
     - |
       $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" \
-      capsule -v -i 'ic-os/guestos/build-out/**/*.gz' -i 'artifacts/**/*.gz' -i 'ic-os/guestos/tests/**/*' -- \
       "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "nns" "true" "update"
 
 guest-os-upgrade-from-mainnet-app-subnet-to-new-version-query-workload:
@@ -236,7 +232,6 @@ guest-os-upgrade-from-mainnet-app-subnet-to-new-version-query-workload:
   script:
     - |
       $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" \
-      capsule -v -i 'ic-os/guestos/build-out/**/*.gz' -i 'artifacts/**/*.gz' -i 'ic-os/guestos/tests/**/*' -- \
       "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "app" "false" "query"
 
 guest-os-downgrade-from-new-version-to-mainnet-app-subnet-query-workload:
@@ -253,7 +248,6 @@ guest-os-downgrade-from-new-version-to-mainnet-app-subnet-query-workload:
   script:
     - |
       $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" \
-      capsule -v -i 'ic-os/guestos/build-out/**/*.gz' -i 'artifacts/**/*.gz' -i 'ic-os/guestos/tests/**/*' -- \
       "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "app" "true" "query"
 
 guest-os-upgrade-from-mainnet-nns-subnet-to-new-version-query-workload:
@@ -270,7 +264,6 @@ guest-os-upgrade-from-mainnet-nns-subnet-to-new-version-query-workload:
   script:
     - |
       $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" \
-      capsule -v -i 'ic-os/guestos/build-out/**/*.gz' -i 'artifacts/**/*.gz' -i 'ic-os/guestos/tests/**/*' -- \
       "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "nns" "false" "query"
 
 
@@ -288,7 +281,6 @@ guest-os-downgrade-from-new-version-to-mainnet-nns-subnet-query-workload:
   script:
     - |
       $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" \
-      capsule -v -i 'ic-os/guestos/build-out/**/*.gz' -i 'artifacts/**/*.gz' -i 'ic-os/guestos/tests/**/*' -- \
       "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "nns" "true" "query"
 
 .run-farm-based-test: &run-farm-based-test |

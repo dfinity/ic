@@ -176,7 +176,7 @@ else
 fi
 
 # Actual test script, sets up VMs and drives the test.
-capsule -v -i "../ic-os/guestos/tests/*.py" -i "**/*" -t "${UPGRADE_IMG_TAG}" -- \
+capsule -v -i "../ic-os/guestos/tests/*.py" -i "**/*" -i "../artifacts/canisters/*" -t "${UPGRADE_IMG_TAG}" -- \
     "${ci_project_dir}/ic-os/guestos/tests/${upgrade_script}" \
     --vmtoolscfg=internal \
     --disk_image "${GUESTOS_IMG}" \
