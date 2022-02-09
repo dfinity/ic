@@ -1,7 +1,6 @@
 use ic_interfaces::registry::{RegistryDataProvider, RegistryTransportRecord};
 
 use crate::registry::RegistryCanister;
-use ic_base_thread::async_safe_block_on_await;
 use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey, registry::RegistryDataProviderError,
     RegistryVersion,
@@ -30,37 +29,40 @@ impl RegistryDataProvider for NnsDataProvider {
         &self,
         version: RegistryVersion,
     ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
-        async_safe_block_on_await({
-            let registry_canister = Arc::clone(&self.registry_canister);
-            async move {
-                match registry_canister.get_changes_since(version.get()).await {
-                    Ok((deltas, _last_version)) => {
-                        let mut changes: Vec<RegistryTransportRecord> = vec![];
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on({
+                let registry_canister = Arc::clone(&self.registry_canister);
+                async move {
+                    match registry_canister.get_changes_since(version.get()).await {
+                        Ok((deltas, _last_version)) => {
+                            let mut changes: Vec<RegistryTransportRecord> = vec![];
 
-                        for delta in &deltas {
-                            let key: String = std::str::from_utf8(&delta.key).unwrap().to_string();
+                            for delta in &deltas {
+                                let key: String =
+                                    std::str::from_utf8(&delta.key).unwrap().to_string();
 
-                            for value in &delta.values {
-                                let version = RegistryVersion::from(value.version);
-                                let record = RegistryTransportRecord {
-                                    key: key.clone(),
-                                    version,
-                                    value: if value.deletion_marker {
-                                        None
-                                    } else {
-                                        Some(value.value.clone())
-                                    },
-                                };
+                                for value in &delta.values {
+                                    let version = RegistryVersion::from(value.version);
+                                    let record = RegistryTransportRecord {
+                                        key: key.clone(),
+                                        version,
+                                        value: if value.deletion_marker {
+                                            None
+                                        } else {
+                                            Some(value.value.clone())
+                                        },
+                                    };
 
-                                changes.push(record);
+                                    changes.push(record);
+                                }
                             }
-                        }
 
-                        Ok(changes)
+                            Ok(changes)
+                        }
+                        Err(source) => Err(RegistryDataProviderError::Transfer { source }),
                     }
-                    Err(source) => Err(RegistryDataProviderError::Transfer { source }),
                 }
-            }
+            })
         })
     }
 }
@@ -79,15 +81,17 @@ impl RegistryDataProvider for CertifiedNnsDataProvider {
         &self,
         version: RegistryVersion,
     ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
-        let (records, _version, _time) = async_safe_block_on_await({
-            let registry_canister = Arc::clone(&self.registry_canister);
-            let nns_public_key = Arc::clone(&self.nns_public_key);
-            async move {
-                registry_canister
-                    .get_certified_changes_since(version.get(), &nns_public_key)
-                    .await
-                    .map_err(|source| RegistryDataProviderError::Transfer { source })
-            }
+        let (records, _version, _time) = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on({
+                let registry_canister = Arc::clone(&self.registry_canister);
+                let nns_public_key = Arc::clone(&self.nns_public_key);
+                async move {
+                    registry_canister
+                        .get_certified_changes_since(version.get(), &nns_public_key)
+                        .await
+                        .map_err(|source| RegistryDataProviderError::Transfer { source })
+                }
+            })
         })?;
         Ok(records)
     }

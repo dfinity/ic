@@ -1,4 +1,3 @@
-use ic_base_thread::async_safe_block_on_await;
 use ic_interfaces::registry::{RegistryClient, ZERO_REGISTRY_VERSION};
 use ic_logger::{warn, ReplicaLogger};
 use ic_protobuf::{
@@ -85,10 +84,11 @@ impl InternalState {
             let nns_pub_key = self
                 .nns_pub_key
                 .expect("registry canister is set => pub key is set");
-            let (mut resp, t) = match async_safe_block_on_await(async move {
-                registry_canister
-                    .get_certified_changes_since(latest_version.get(), &nns_pub_key)
-                    .await
+            let (mut resp, t) = match tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(
+                    registry_canister
+                        .get_certified_changes_since(latest_version.get(), &nns_pub_key),
+                )
             }) {
                 Ok((records, _, t)) => (records, t),
                 Err(e) => {
