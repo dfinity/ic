@@ -82,7 +82,7 @@ message RegistryCanisterStableStorage {
 
   // Used to check that the latest version of the registry has not been rolled
   // back after an upgrade
-  uint64 pre_upgrade_version = 3;
+  optional uint64 pre_upgrade_version = 3;
 
   reserved 1;
 }
