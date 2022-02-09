@@ -11,7 +11,6 @@ mod remove_node_operators;
 mod remove_nodes;
 mod remove_nodes_from_subnet;
 mod reroute_canister_range;
-mod update_icp_xdr_conversion_rate;
 mod update_node_operator_config;
 mod update_node_rewards_table;
 mod update_subnet;
