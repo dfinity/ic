@@ -1,10 +1,12 @@
 #[cfg(test)]
 mod tests;
 
+use crate::StateError;
 use ic_interfaces::{execution_environment::HypervisorError, messages::RequestOrIngress};
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_protobuf::types::v1 as pb_types;
+use ic_types::messages::Response;
 use ic_types::{
     ingress::WasmResult,
     messages::{CallContextId, CallbackId, MessageId},
@@ -310,6 +312,53 @@ impl CallContextManager {
     /// Returns the `Callback`s maintained by this `CallContextManager`.
     pub fn callbacks(&self) -> &BTreeMap<CallbackId, Callback> {
         &self.callbacks
+    }
+
+    /// Returns a reference to the callback with `callback_id`.
+    pub fn callback(&self, callback_id: &CallbackId) -> Option<&Callback> {
+        self.callbacks.get(callback_id)
+    }
+
+    /// Validates the given response before inducting it into the queue.
+    /// Verifies that the stored respondent and originator associated with the
+    /// `callback_id` match with details provided by the response.
+    ///
+    /// Returns a `StateError::NonMatchingResponse` if could not find the `callback_id` or
+    /// if the response is not valid.
+    pub(crate) fn validate_response(&self, response: &Response) -> Result<(), StateError> {
+        match self.callback(&response.originator_reply_callback) {
+            Some(callback) => {
+                // (EXC-877) Once this is deployed in production,
+                // it's safe to make `respondent` and `originator` non-optional.
+                // Currently optional to ensure backwards compatibility.
+                match (callback.respondent, callback.originator) {
+                    (Some(respondent), Some(originator))
+                        if response.respondent != respondent
+                            || response.originator != originator =>
+                    {
+                        return Err(StateError::NonMatchingResponse {
+                                err_str: format!(
+                                    "invalid details, expected => [originator => {}, respondent => {}], but got response with",
+                                    originator, respondent,
+                                ),
+                                originator: response.originator,
+                                callback_id: response.originator_reply_callback,
+                                respondent: response.respondent,
+                            });
+                    }
+                    _ => Ok(()),
+                }
+            }
+            None => {
+                // Received an unknown callback ID.
+                Err(StateError::NonMatchingResponse {
+                    err_str: "unknown callback id".to_string(),
+                    originator: response.originator,
+                    callback_id: response.originator_reply_callback,
+                    respondent: response.respondent,
+                })
+            }
+        }
     }
 
     /// Accepts a canister result and produces an action that should be taken

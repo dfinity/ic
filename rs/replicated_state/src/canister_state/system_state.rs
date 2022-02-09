@@ -451,16 +451,34 @@ impl SystemState {
             }
 
             // Everything else is accepted iff there is available memory and queue slots.
-            (_, CanisterStatus::Running { .. })
-            | (RequestOrResponse::Response(_), CanisterStatus::Stopping { .. }) => push_input(
-                &mut self.queues,
-                index,
-                msg,
-                canister_available_memory,
-                subnet_available_memory,
-                own_subnet_type,
-                input_queue_type,
-            ),
+            (
+                _,
+                CanisterStatus::Running {
+                    call_context_manager,
+                },
+            )
+            | (
+                RequestOrResponse::Response(_),
+                CanisterStatus::Stopping {
+                    call_context_manager,
+                    ..
+                },
+            ) => {
+                if let RequestOrResponse::Response(response) = &msg {
+                    call_context_manager
+                        .validate_response(response)
+                        .map_err(|err| (err, msg.clone()))?;
+                }
+                push_input(
+                    &mut self.queues,
+                    index,
+                    msg,
+                    canister_available_memory,
+                    subnet_available_memory,
+                    own_subnet_type,
+                    input_queue_type,
+                )
+            }
         }
     }
 

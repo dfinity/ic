@@ -1,8 +1,13 @@
 use super::*;
+use crate::CallOrigin;
 use ic_base_types::NumSeconds;
 use ic_test_utilities::types::{
     ids::user_test_id,
     messages::{RequestBuilder, ResponseBuilder},
+};
+use ic_types::{
+    messages::CallbackId,
+    methods::{Callback, WasmClosure},
 };
 use ic_types::{messages::MAX_RESPONSE_COUNT_BYTES, CountBytes, Cycles};
 use ic_wasm_types::BinaryEncodedWasm;
@@ -50,8 +55,32 @@ fn canister_state_push_input_request_success() {
 #[test]
 fn canister_state_push_input_response_no_reservation() {
     canister_state_test(|mut canister_state| {
+        let call_context_id = canister_state
+            .system_state
+            .call_context_manager_mut()
+            .unwrap()
+            .new_call_context(
+                CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1)),
+                Cycles::zero(),
+            );
+        let callback_id = canister_state
+            .system_state
+            .call_context_manager_mut()
+            .unwrap()
+            .register_callback(Callback::new(
+                call_context_id,
+                Some(CANISTER_ID),
+                Some(OTHER_CANISTER_ID),
+                Cycles::from(0),
+                WasmClosure::new(0, 2),
+                WasmClosure::new(0, 2),
+                None,
+            ));
+
         let response: RequestOrResponse = ResponseBuilder::default()
             .originator(CANISTER_ID)
+            .respondent(OTHER_CANISTER_ID)
+            .originator_reply_callback(callback_id)
             .build()
             .into();
 
@@ -83,12 +112,35 @@ fn canister_state_push_input_response_success() {
             .unwrap();
         canister_state.output_into_iter().count();
 
+        let call_context_id = canister_state
+            .system_state
+            .call_context_manager_mut()
+            .unwrap()
+            .new_call_context(
+                CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1)),
+                Cycles::zero(),
+            );
+        let callback_id = canister_state
+            .system_state
+            .call_context_manager_mut()
+            .unwrap()
+            .register_callback(Callback::new(
+                call_context_id,
+                Some(CANISTER_ID),
+                Some(OTHER_CANISTER_ID),
+                Cycles::from(0),
+                WasmClosure::new(0, 2),
+                WasmClosure::new(0, 2),
+                None,
+            ));
+
         canister_state
             .push_input(
                 QueueIndex::from(0),
                 ResponseBuilder::default()
                     .respondent(OTHER_CANISTER_ID)
                     .originator(CANISTER_ID)
+                    .originator_reply_callback(callback_id)
                     .build()
                     .into(),
                 MAX_CANISTER_MEMORY_SIZE,
@@ -389,9 +441,32 @@ fn canister_state_push_input_response_memory_limit_test_impl(
             .unwrap();
         canister_state.output_into_iter().count();
 
+        let call_context_id = canister_state
+            .system_state
+            .call_context_manager_mut()
+            .unwrap()
+            .new_call_context(
+                CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1)),
+                Cycles::zero(),
+            );
+        let callback_id = canister_state
+            .system_state
+            .call_context_manager_mut()
+            .unwrap()
+            .register_callback(Callback::new(
+                call_context_id,
+                Some(CANISTER_ID),
+                Some(OTHER_CANISTER_ID),
+                Cycles::from(0),
+                WasmClosure::new(0, 2),
+                WasmClosure::new(0, 2),
+                None,
+            ));
+
         let response: RequestOrResponse = ResponseBuilder::default()
             .respondent(OTHER_CANISTER_ID)
             .originator(CANISTER_ID)
+            .originator_reply_callback(callback_id)
             .build()
             .into();
 

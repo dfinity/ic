@@ -179,7 +179,8 @@ impl ValidSetRuleImpl {
                     StateError::InvalidSubnetPayload => ErrorCode::CanisterOutOfCycles,
                     StateError::QueueFull { .. }
                     | StateError::OutOfMemory { .. }
-                    | StateError::InvariantBroken { .. } => {
+                    | StateError::InvariantBroken { .. }
+                    | StateError::NonMatchingResponse { .. } => {
                         unreachable!("Unexpected error: {}", err)
                     }
                 };

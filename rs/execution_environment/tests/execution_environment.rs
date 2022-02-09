@@ -740,18 +740,20 @@ fn test_response_message_side_effects_1() {
         .build();
     let origin_id = canister_test_id(33);
     let origin_cb_id = CallbackId::from(5);
-    let cc_id = system_state
+    let call_context_id = system_state
         .call_context_manager_mut()
         .unwrap()
         .new_call_context(
             CallOrigin::CanisterUpdate(origin_id, origin_cb_id),
             Cycles::from(50),
         );
-    let cb_id = system_state
+    let callback_id = system_state
         .call_context_manager_mut()
         .unwrap()
         .register_callback(Callback::new(
-            cc_id,
+            call_context_id,
+            Some(origin_id),
+            Some(canister_id),
             Cycles::from(0),
             WasmClosure::new(0, 2),
             WasmClosure::new(0, 2),
@@ -761,7 +763,7 @@ fn test_response_message_side_effects_1() {
         system_state
             .call_context_manager_mut()
             .unwrap()
-            .call_origin(cc_id)
+            .call_origin(call_context_id)
             .unwrap(),
         CallOrigin::CanisterUpdate(origin_id, origin_cb_id)
     );
@@ -781,7 +783,7 @@ fn test_response_message_side_effects_1() {
         .unwrap();
     system_state.queues_mut().pop_input().unwrap();
 
-    inject_response(&mut system_state, cb_id);
+    inject_response(&mut system_state, callback_id);
     test_outgoing_messages(
         system_state,
         REJECT_IN_CALLBACK_WAT,
@@ -835,18 +837,20 @@ fn test_repeated_response() {
     let mut system_state = SystemStateBuilder::default()
         .canister_id(canister_id)
         .build();
-    let cc_id = system_state
+    let call_context_id = system_state
         .call_context_manager_mut()
         .unwrap()
         .new_call_context(
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(888)),
             Cycles::from(42),
         );
-    let cb_id = system_state
+    let callback_id = system_state
         .call_context_manager_mut()
         .unwrap()
         .register_callback(Callback::new(
-            cc_id,
+            call_context_id,
+            Some(canister_test_id(33)),
+            Some(canister_id),
             Cycles::from(0),
             WasmClosure::new(0, 2),
             WasmClosure::new(0, 2),
@@ -856,9 +860,9 @@ fn test_repeated_response() {
     system_state
         .call_context_manager_mut()
         .unwrap()
-        .on_canister_result(cc_id, Ok(Some(WasmResult::Reply(vec![]))));
+        .on_canister_result(call_context_id, Ok(Some(WasmResult::Reply(vec![]))));
 
-    inject_response(&mut system_state, cb_id);
+    inject_response(&mut system_state, callback_id);
     test_outgoing_messages(
         system_state,
         REJECT_IN_CALLBACK_WAT,

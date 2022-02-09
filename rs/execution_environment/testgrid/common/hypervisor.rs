@@ -4199,6 +4199,8 @@ fn cannot_execute_callback_on_stopped_canister() {
                     &CallOrigin::CanisterUpdate(canister_test_id(0), CallbackId::from(0)),
                     Callback::new(
                         call_context_test_id(0),
+                        None,
+                        None,
                         Cycles::from(0),
                         WasmClosure::new(0, 0),
                         WasmClosure::new(0, 0),

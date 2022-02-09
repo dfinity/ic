@@ -1536,6 +1536,8 @@ impl SystemApi for SystemApiImpl {
                     self.sandbox_safe_system_state
                         .register_callback(Callback::new(
                             *call_context_id,
+                            Some(self.sandbox_safe_system_state.canister_id),
+                            Some(callee),
                             Cycles::from(0),
                             on_reply,
                             on_reject,

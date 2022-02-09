@@ -20,6 +20,8 @@ use ic_replicated_state::{
     CallContext, CallOrigin, CanisterState, CanisterStatus, ExecutionState, ExportedFunctions,
     InputQueueType, Memory, NumWasmPages, ReplicatedState, SchedulerState, SystemState,
 };
+use ic_types::messages::CallbackId;
+use ic_types::methods::{Callback, WasmClosure};
 use ic_types::{
     messages::{Ingress, Request, RequestOrResponse},
     xnet::{QueueId, StreamIndex, StreamIndexedQueue},
@@ -570,6 +572,33 @@ pub fn new_canister_state(
     let system_state =
         SystemState::new_running(canister_id, controller, initial_cycles, freeze_threshold);
     CanisterState::new(system_state, None, scheduler_state)
+}
+
+/// Helper function to register a callback.
+pub fn register_callback(
+    canister_state: &mut CanisterState,
+    originator: CanisterId,
+    respondent: CanisterId,
+    callback_id: CallbackId,
+) {
+    let call_context_manager = canister_state
+        .system_state
+        .call_context_manager_mut()
+        .unwrap();
+    let call_context_id = call_context_manager.new_call_context(
+        CallOrigin::CanisterUpdate(originator, callback_id),
+        Cycles::zero(),
+    );
+
+    call_context_manager.register_callback(Callback::new(
+        call_context_id,
+        Some(originator),
+        Some(respondent),
+        Cycles::zero(),
+        WasmClosure::new(0, 2),
+        WasmClosure::new(0, 2),
+        None,
+    ));
 }
 
 /// Helper function to insert a canister in the provided `ReplicatedState`.

@@ -21,7 +21,7 @@ use ic_test_utilities::{
         fetch_histogram_stats, fetch_histogram_vec_count, fetch_int_counter, fetch_int_counter_vec,
         fetch_int_gauge_vec, metric_vec, nonzero_values, HistogramStats, MetricVec,
     },
-    state::new_canister_state,
+    state::{new_canister_state, register_callback},
     types::ids::{user_test_id, SUBNET_12, SUBNET_23},
     types::messages::{RequestBuilder, ResponseBuilder},
     types::xnet::{StreamHeaderBuilder, StreamSliceBuilder},
@@ -1499,9 +1499,14 @@ where
 /// Makes `count` input queue reservations for responses from `remote`.
 fn make_input_queue_reservations(canister: &mut CanisterState, count: usize, remote: CanisterId) {
     for _ in 0..count {
-        canister
-            .push_output_request(test_request(*LOCAL_CANISTER, remote))
-            .unwrap();
+        let msg = test_request(*LOCAL_CANISTER, remote);
+        register_callback(
+            canister,
+            msg.sender,
+            msg.receiver,
+            msg.sender_reply_callback,
+        );
+        canister.push_output_request(msg).unwrap();
     }
     canister.output_into_iter().count();
 }
@@ -1614,7 +1619,7 @@ fn test_request(sender: CanisterId, receiver: CanisterId) -> Request {
     RequestBuilder::new()
         .receiver(receiver)
         .sender(sender)
-        .sender_reply_callback(CallbackId::from(0))
+        .sender_reply_callback(CallbackId::from(1))
         .payment(Cycles::zero())
         .method_name("name".to_string())
         .method_payload(Vec::new())
@@ -1625,6 +1630,7 @@ fn test_response(respondent: CanisterId, originator: CanisterId) -> Response {
     ResponseBuilder::new()
         .respondent(respondent)
         .originator(originator)
+        .originator_reply_callback(CallbackId::from(1))
         .refund(Cycles::zero())
         .response_payload(Payload::Data(Vec::new()))
         .build()

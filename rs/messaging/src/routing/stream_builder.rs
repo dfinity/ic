@@ -176,6 +176,8 @@ impl StreamBuilderImpl {
                 NumBytes::new(i64::MAX as u64 / 2),
                 &mut (i64::MAX / 2),
             )
+            // Enqueuing a response for a local request.
+            // There should never be the case of getting `CanisterStopped` or `CanisterStopping`.
             .unwrap();
     }
 
@@ -308,7 +310,7 @@ impl StreamBuilderImpl {
                                 .get(&dst_net_id)
                                 .unwrap_or(&SubnetType::Application),
                         ) {
-                            // Stream full, skip all other messagees to this destination.
+                            // Stream full, skip all other messages to this destination.
                             output_iter.exclude_queue();
                             continue;
                         }
