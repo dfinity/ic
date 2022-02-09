@@ -91,4 +91,7 @@ mod wait_for_quiet;
 mod governance_neurons;
 
 #[cfg(test)]
+mod governance_time_warp;
+
+#[cfg(test)]
 mod known_neurons;

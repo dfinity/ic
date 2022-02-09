@@ -106,6 +106,7 @@ fn make_and_process_proposal(gov: &mut Governance) {
         // Must match neuron 1's serialized_id.
         &PrincipalId::try_from(b"SID0".to_vec()).unwrap(),
         &Proposal {
+            title: Some("Celebrate Good Times".to_string()),
             summary: "test".to_string(),
             action: Some(proposal::Action::Motion(Motion {
                 motion_text: "dummy text".to_string(),

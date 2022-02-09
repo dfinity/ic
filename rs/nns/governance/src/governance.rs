@@ -1738,6 +1738,11 @@ pub trait Environment: Send + Sync {
     /// Returns the current time, in seconds since the epoch.
     fn now(&self) -> u64;
 
+    // An optional feature that is currently only used by CanisterEnv.
+    fn set_time_warp(&mut self, _new_time_warp: TimeWarp) {
+        panic!("Not implemented.");
+    }
+
     /// Returns a random number.
     ///
     /// This number is the same in all replicas.
@@ -2488,10 +2493,11 @@ impl Governance {
         }
 
         // Add the neuron's id to the set of neurons with ongoing ledger updates.
+        let now = self.env.now();
         let _neuron_lock = self.lock_neuron_for_command(
             id.id,
             NeuronInFlightCommand {
-                timestamp: self.env.now(),
+                timestamp: now,
                 command: Some(InFlightCommand::Disburse(disburse.clone())),
             },
         )?;
@@ -2506,6 +2512,7 @@ impl Governance {
         // a transaction fee, as the ledger doesn't support burn transfers for
         // an amount less than the transaction fee.
         if fees_amount_e8s > transaction_fee_e8s {
+            let now = self.env.now();
             let _result = self
                 .ledger
                 .transfer_funds(
@@ -2513,7 +2520,7 @@ impl Governance {
                     0, // Burning transfers don't pay a fee.
                     Some(from_subaccount),
                     governance_minting_account(),
-                    self.env.now(),
+                    now,
                 )
                 .await?;
         }
@@ -2535,6 +2542,7 @@ impl Governance {
         // Transfer 2 - Disburse to the chosen account. This may fail if the
         // user told us to disburse more than they had in their account (but
         // the burn still happened).
+        let now = self.env.now();
         let block_height = self
             .ledger
             .transfer_funds(
@@ -2542,7 +2550,7 @@ impl Governance {
                 transaction_fee_e8s,
                 Some(from_subaccount),
                 to_account,
-                self.env.now(),
+                now,
             )
             .await?;
 
@@ -2555,6 +2563,7 @@ impl Governance {
         // as the ledger doesn't support ledger transfers for an amount less than the
         // transaction fee.
         if rewards_amount_e8s > transaction_fee_e8s {
+            let now = self.env.now();
             let _ = self
                 .ledger
                 .transfer_funds(
@@ -2562,7 +2571,7 @@ impl Governance {
                     0, // Minting transfer don't pay a fee.
                     None,
                     to_account,
-                    self.env.now(),
+                    now,
                 )
                 .await?;
         }
@@ -2728,7 +2737,7 @@ impl Governance {
 
         // Do the transfer.
 
-        let memo = self.env.now();
+        let now = self.env.now();
         let result: Result<u64, GovernanceError> = self
             .ledger
             .transfer_funds(
@@ -2736,7 +2745,7 @@ impl Governance {
                 transaction_fee_e8s,
                 Some(from_subaccount),
                 neuron_subaccount(to_subaccount),
-                memo,
+                now,
             )
             .await;
 
@@ -3191,7 +3200,7 @@ impl Governance {
         // Do the transfer, this is a minting transfer, from the governance canister's
         // (which is also the minting canister) main account into the new neuron's
         // subaccount.
-        let memo = self.env.now();
+        let now = self.env.now();
         let result: Result<u64, GovernanceError> = self
             .ledger
             .transfer_funds(
@@ -3199,7 +3208,7 @@ impl Governance {
                 0, // Minting transfer don't pay a fee.
                 None,
                 neuron_subaccount(to_subaccount),
-                memo,
+                now,
             )
             .await;
 
@@ -3639,7 +3648,8 @@ impl Governance {
             .neurons
             .get(&id.id)
             .ok_or_else(|| GovernanceError::new(ErrorType::NotFound))?;
-        Ok(neuron.get_neuron_info(self.env.now()))
+        let now = self.env.now();
+        Ok(neuron.get_neuron_info(now))
     }
 
     /// Returns the neuron info for a neuron identified by id or subaccount.
@@ -3650,7 +3660,8 @@ impl Governance {
         by: &NeuronIdOrSubaccount,
     ) -> Result<NeuronInfo, GovernanceError> {
         let neuron = self.find_neuron(by)?;
-        Ok(neuron.get_neuron_info(self.env.now()))
+        let now = self.env.now();
+        Ok(neuron.get_neuron_info(now))
     }
 
     /// Returns the complete neuron data for a given neuron `id` or
@@ -5447,15 +5458,15 @@ impl Governance {
         subaccount: Subaccount,
         claim_or_refresh: &ClaimOrRefresh,
     ) -> Result<NeuronId, GovernanceError> {
-        let now = self.env.now();
         let account = neuron_subaccount(subaccount);
         // We need to lock the neuron to make sure it doesn't undergo
         // concurrent changes while we're checking the balance and
         // refreshing the stake.
+        let now = self.env.now();
         let _neuron_lock = self.lock_neuron_for_command(
             nid.id,
             NeuronInFlightCommand {
-                timestamp: self.env.now(),
+                timestamp: now,
                 command: Some(InFlightCommand::ClaimOrRefreshNeuron(
                     claim_or_refresh.clone(),
                 )),
@@ -5860,7 +5871,8 @@ impl Governance {
                     if self.should_distribute_rewards() {
                         self.distribute_rewards(supply);
                     } else if self.should_compute_cached_metrics() {
-                        let metrics = self.proto.compute_cached_metrics(self.env.now(), supply);
+                        let now = self.env.now();
+                        let metrics = self.proto.compute_cached_metrics(now, supply);
                         self.proto.metrics = Some(metrics);
                     }
                 }
@@ -5873,10 +5885,11 @@ impl Governance {
 
     /// Return `true` if rewards should be distributed, `false` otherwise
     fn should_distribute_rewards(&self) -> bool {
-        self.env.now()
-            >= self.proto.genesis_timestamp_seconds
-                + (self.latest_reward_event().day_after_genesis + 1)
-                    * REWARD_DISTRIBUTION_PERIOD_SECONDS
+        let reward_available_at = self.proto.genesis_timestamp_seconds
+            + (self.latest_reward_event().day_after_genesis + 1)
+                * REWARD_DISTRIBUTION_PERIOD_SECONDS;
+
+        self.env.now() >= reward_available_at
     }
 
     /// Create a reward event.
@@ -6013,7 +6026,8 @@ impl Governance {
     /// Recompute cached metrics once per day
     pub fn should_compute_cached_metrics(&self) -> bool {
         if let Some(metrics) = self.proto.metrics.as_ref() {
-            self.env.now() - metrics.timestamp_seconds > ONE_DAY_SECONDS
+            let metrics_age_s = self.env.now() - metrics.timestamp_seconds;
+            metrics_age_s > ONE_DAY_SECONDS
         } else {
             true
         }
@@ -6260,4 +6274,34 @@ fn get_node_provider_reward(
     } else {
         None
     }
+}
+
+/// Affects the perception of time by users of CanisterEnv (i.e. Governance).
+///
+/// Specifically, the time time that Governance sees is the real time + delta.
+#[derive(PartialEq, Clone, Copy, Debug, candid::CandidType, serde::Deserialize)]
+pub struct TimeWarp {
+    pub delta_s: i64,
+}
+
+impl TimeWarp {
+    pub fn apply(&self, timestamp_s: u64) -> u64 {
+        if self.delta_s >= 0 {
+            timestamp_s + (self.delta_s as u64)
+        } else {
+            timestamp_s - ((-self.delta_s) as u64)
+        }
+    }
+}
+
+#[test]
+fn test_time_warp() {
+    let w = TimeWarp { delta_s: 0_i64 };
+    assert_eq!(w.apply(100_u64), 100);
+
+    let w = TimeWarp { delta_s: 42_i64 };
+    assert_eq!(w.apply(100_u64), 142);
+
+    let w = TimeWarp { delta_s: -42_i64 };
+    assert_eq!(w.apply(100_u64), 58);
 }

@@ -76,11 +76,19 @@ impl Wasm {
             }
             Err(env::VarError::NotPresent) => {
                 if env::var("CI").is_ok() {
+                    println!("Environment variables with name containing \"CANISTER\":");
+                    for (k, v) in env::vars() {
+                        if k.contains("CANISTER") {
+                            println!("  {}: {}", k, v);
+                        }
+                    }
+
                     panic!(
                         "Running on CI and expected canister env var {0}\n\
                          Please add {1} to the following locations:\n\
                         \tgitlab-ci/tools/cargo-build-canisters\n\
-                        \tgitlab-ci/src/canisters/wasm-build-functions.sh",
+                        \tgitlab-ci/src/canisters/wasm-build-functions.sh\n\
+                        \trs/nns/constants/src/lib.rs\n",
                         var_name, bin_name
                     )
                 }
