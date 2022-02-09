@@ -126,6 +126,17 @@ fn should_complaint_system_work() -> ThresholdEcdsaResult<()> {
                 associated_data,
             )
             .is_err());
+
+        // the complaint is invalid if we change the dealer ID
+        assert!(complaint
+            .verify(
+                dealings.get(&dealer_index).unwrap(),
+                dealer_index + 1,
+                corruption_target,
+                &pk0,
+                associated_data,
+            )
+            .is_err());
     }
 
     // a complaint against a dealing with modified ephemeral key will not verify
@@ -180,6 +191,7 @@ fn should_complaint_verification_reject_spurious_complaints() -> ThresholdEcdsaR
     let pk = sk.public_key()?;
 
     let dealer_index = 0;
+    let receiver_index = 0;
     let threshold = 1;
 
     let dealing = IDkgDealingInternal::new(
@@ -192,8 +204,15 @@ fn should_complaint_verification_reject_spurious_complaints() -> ThresholdEcdsaR
         associated_data,
     )?;
 
-    let complaint =
-        IDkgComplaintInternal::new(Seed::from_rng(&mut rng), &dealing, &sk, associated_data)?;
+    let complaint = IDkgComplaintInternal::new(
+        Seed::from_rng(&mut rng),
+        &dealing,
+        dealer_index,
+        receiver_index,
+        &sk,
+        &pk,
+        associated_data,
+    )?;
 
     assert!(complaint
         .verify(&dealing, dealer_index, 0, &pk, associated_data)

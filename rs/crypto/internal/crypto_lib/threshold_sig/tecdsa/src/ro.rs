@@ -165,6 +165,13 @@ impl RandomOracle {
         self.add_u64(name, i as u64)
     }
 
+    /// Add an integer to the input
+    ///
+    /// The name must be a unique identifier for this random oracle invocation
+    pub fn add_u32(&mut self, name: &'static str, i: u32) -> ThresholdEcdsaResult<()> {
+        self.add_u64(name, i as u64)
+    }
+
     fn form_ro_input(&self) -> ThresholdEcdsaResult<Vec<u8>> {
         if self.inputs.is_empty() {
             return Err(ThresholdEcdsaError::InvalidRandomOracleInput);
