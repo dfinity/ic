@@ -336,5 +336,5 @@ service : (Governance) -> {
   list_proposals : (ListProposalInfo) -> (ListProposalInfoResponse) query;
   manage_neuron : (ManageNeuron) -> (ManageNeuronResponse);
   transfer_gtc_neuron : (NeuronId, NeuronId) -> (Result);
-  update_node_provider : (UpdateNodeProvider) -> (Result) query;
+  update_node_provider : (UpdateNodeProvider) -> (Result);
 }
