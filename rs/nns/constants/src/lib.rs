@@ -31,11 +31,12 @@ pub const IDENTITY_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 7;
 pub const NNS_UI_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 8;
 
 /// The names of all expected .wasm files to set up the NNS.
-pub const NNS_CANISTER_WASMS: [&str; 9] = [
+pub const NNS_CANISTER_WASMS: [&str; 10] = [
     // The lifeline is not present! Because its wasm is embedded in the source code using
     // include_bytes, it is not provided on the path. We want to change that, though.
     "registry-canister",
     "governance-canister",
+    "governance-canister_test",
     "ledger-canister_notify-method",
     "root-canister",
     "cycles-minting-canister",
@@ -53,7 +54,7 @@ lazy_static! {
     );
 }
 
-pub const NUM_NNS_CANISTERS: usize = NNS_CANISTER_WASMS.len();
+pub const NUM_NNS_CANISTERS: usize = ALL_NNS_CANISTER_IDS.len();
 
 pub const REGISTRY_CANISTER_ID: CanisterId =
     CanisterId::from_u64(REGISTRY_CANISTER_INDEX_IN_NNS_SUBNET);

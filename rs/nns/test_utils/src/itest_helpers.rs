@@ -419,7 +419,7 @@ pub async fn install_governance_canister(canister: &mut Canister<'_>, init_paylo
         canister,
         "nns/governance",
         "governance-canister",
-        &[],
+        &["test"],
         Some(serialized),
     )
     .await;
