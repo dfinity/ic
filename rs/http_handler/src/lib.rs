@@ -6,6 +6,7 @@
 /// naming used in the [Interface
 /// Specification](https://sdk.dfinity.org/docs/interface-spec/index.html)
 mod body;
+mod call;
 mod catch_up_package;
 mod common;
 mod dashboard;
@@ -14,11 +15,11 @@ mod pprof;
 mod query;
 mod read_state;
 mod status;
-mod submit;
 mod types;
 
 use crate::{
     body::BodyReceiverLayer,
+    call::CallService,
     catch_up_package::CatchUpPackageService,
     common::{get_cors_headers, map_box_error_to_response},
     dashboard::DashboardService,
@@ -28,7 +29,6 @@ use crate::{
     query::QueryService,
     read_state::ReadStateService,
     status::StatusService,
-    submit::CallService,
     types::*,
 };
 use hyper::{server::conn::Http, Body, Request, Response, StatusCode};
@@ -60,12 +60,14 @@ use ic_types::{
 };
 use metrics::HttpHandlerMetrics;
 use rand::Rng;
-use std::convert::TryFrom;
-use std::io::{Error, ErrorKind, Write};
-use std::net::SocketAddr;
-use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
-use std::time::Duration;
+use std::{
+    convert::TryFrom,
+    io::{Error, ErrorKind, Write},
+    net::SocketAddr,
+    path::PathBuf,
+    sync::{Arc, RwLock},
+    time::Duration,
+};
 use tempfile::NamedTempFile;
 use tokio::{
     net::{TcpListener, TcpStream},

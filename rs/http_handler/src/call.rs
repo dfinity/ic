@@ -138,7 +138,7 @@ impl Service<Vec<u8>> for CallService {
             Ok(msg) => msg,
             Err(e) => {
                 let res = make_response(invalid_argument_error(format!(
-                    "Could not parse body as submit message: {}",
+                    "Could not parse body as call message: {}",
                     e
                 )));
                 return Box::pin(async move { Ok(res) });
