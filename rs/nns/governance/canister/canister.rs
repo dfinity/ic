@@ -807,7 +807,7 @@ fn update_node_provider() {
     over(candid_one, update_node_provider_)
 }
 
-#[candid_method(query, rename = "update_node_provider")]
+#[candid_method(update, rename = "update_node_provider")]
 fn update_node_provider_(req: UpdateNodeProvider) -> Result<(), GovernanceError> {
     governance_mut().update_node_provider(&caller(), req)
 }
