@@ -114,6 +114,12 @@ The sha256 hash sum of the base image."#
     )]
     pub journalbeat_hosts: Option<String>,
     #[structopt(
+        long = "log-debug-overrides",
+        help = r#"A string containing debug overrides in terms of ic.json5.template 
+        (e.g. "ic_consensus::consensus::batch_delivery,ic_artifact_manager::processors")"#
+    )]
+    pub log_debug_overrides: Option<String>,
+    #[structopt(
     long = "pot-timeout",
     default_value = "600s",
     parse(try_from_str = parse_duration),
@@ -162,6 +168,8 @@ impl CliArgs {
 
         let journalbeat_hosts = parse_journalbeat_hosts(self.journalbeat_hosts)?;
 
+        let log_debug_overrides = parse_log_debug_overrides(self.log_debug_overrides)?;
+
         Ok(ValidatedCliArgs {
             log_base_dir: self.log_base_dir,
             log_level,
@@ -179,6 +187,7 @@ impl CliArgs {
             skip_pattern,
             authorized_ssh_accounts,
             journalbeat_hosts,
+            log_debug_overrides,
             pot_timeout: self.pot_timeout,
         })
     }
@@ -210,6 +219,7 @@ pub struct ValidatedCliArgs {
     pub skip_pattern: Option<Regex>,
     pub authorized_ssh_accounts: Vec<AuthorizedSshAccount>,
     pub journalbeat_hosts: Vec<String>,
+    pub log_debug_overrides: Vec<String>,
     pub pot_timeout: Duration,
 }
 
@@ -281,6 +291,23 @@ fn parse_journalbeat_hosts(s: Option<String>) -> Result<Vec<String>> {
     for target in s.trim().split(',') {
         if !rgx.is_match(target) {
             bail!("Invalid journalbeat host: '{}'", s);
+        }
+        res.push(target.to_string());
+    }
+    Ok(res)
+}
+
+fn parse_log_debug_overrides(s: Option<String>) -> Result<Vec<String>> {
+    let s = match s {
+        Some(s) => s,
+        None => return Ok(vec![]),
+    };
+    let rgx = r#"^([\w]+::)+[\w]+$"#.to_string();
+    let rgx = Regex::new(&rgx).unwrap();
+    let mut res = vec![];
+    for target in s.trim().split(',') {
+        if !rgx.is_match(target) {
+            bail!("Invalid log_debug_overrides: '{}'", s);
         }
         res.push(target.to_string());
     }

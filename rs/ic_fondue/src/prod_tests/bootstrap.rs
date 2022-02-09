@@ -285,6 +285,19 @@ pub fn create_config_disk_image(
             .arg(ctx.journalbeat_hosts.join(" "));
     }
 
+    if !ctx.log_debug_overrides.is_empty() {
+        let log_debug_overrides_val = format!(
+            "[{}]",
+            ctx.log_debug_overrides
+                .iter()
+                .map(|component_unquoted| format!("\"{}\"", component_unquoted))
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+        cmd.arg("--log_debug_overrides")
+            .arg(log_debug_overrides_val);
+    }
+
     let output = cmd.output()?;
 
     std::io::stdout().write_all(&output.stdout)?;
