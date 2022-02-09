@@ -12,7 +12,7 @@
 //!   constraint that mandate fixed-precision.
 //!
 //! * Floating point makes code easier since the reward pool is specified as a
-//!   fraction of the total ICP supply.
+//!   fraction of the total Token supply.
 
 use std::ops::{Add, Div, Mul, Sub};
 
@@ -48,11 +48,11 @@ pub const ONE_DAY: Duration = Duration { days: 1.0 };
 ///
 /// "relative rate" means that it's a ratio where:
 /// * the numerator is dimensionless (it's a fraction, to be multiplied by the
-///   ICP supply)
+///   Token supply)
 /// * the denominator is a duration
 ///
 /// Note that this is not a "growth rate", at least not directly, because reward
-/// distribution does not directly increase ICP supply. (It does indirectly,
+/// distribution does not directly increase the Token supply. (It does indirectly,
 /// when neuron owners spawn neurons). Therefore there is no automatic
 /// compounding.
 pub const INITIAL_VOTING_REWARD_RELATIVE_RATE: InverseDuration = InverseDuration {
@@ -70,7 +70,7 @@ pub const REWARD_FLATTENING_DATE: IcTimestamp = IcTimestamp {
     days_since_ic_genesis: 8.0 * AVERAGE_DAYS_PER_YEAR,
 };
 
-/// Computes the reward to distribute, as a fraction of the ICP supply, for one
+/// Computes the reward to distribute, as a fraction of the Token supply, for one
 /// day.
 pub fn rewards_pool_to_distribute_in_supply_fraction_for_one_day(
     days_since_ic_genesis: u64,
@@ -104,12 +104,12 @@ pub fn rewards_pool_to_distribute_in_supply_fraction_for_one_day(
 // The relevant extract from the spec is:
 //
 // -------------------------------------------------------------------------
-// We derive the nominal maximum quantity of ICP that can be
-// minted and distributed as rewards from the current ICP supply and
+// We derive the nominal maximum quantity of Tokens that can be
+// minted and distributed as rewards from the current Token supply and
 // the days since Genesis. To begin with, this is equal to 10% of the
-// ICP supply divided by the number of days in the year (365 normally,
+// Token supply divided by the number of days in the year (365 normally,
 // 366 in a leap year). Over 8 years, this falls to 5%. Note that since
-// the supply of ICP might grow (or even in theory fall) during this time,
+// the supply of Tokens might grow (or even in theory fall) during this time,
 // voting rewards may not halve in practice.
 //
 // * We want the rate at genesis to be 10% per year
