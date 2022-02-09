@@ -159,9 +159,9 @@
 /rs/validator/                       @dfinity-lab/teams/execution-owners
 /rs/workload_generator/              @dfinity-lab/teams/node-team
 
-# Scalability suite is currently owned by both node-team and testing team
+# Scalability suite is currently owned by both node-team and networking team
 # Most individual benchmarks are owned by individual teams
-/scalability                         @dfinity-lab/teams/node-team @dfinity-lab/teams/ic-testing-verification
+/scalability                         @dfinity-lab/teams/node-team @dfinity-lab/teams/networking-team
 /scalability/max-capacity-experiment-2.py                         @dfinity-lab/teams/execution-owners
 /scalability/run_experiment_2.py                                  @dfinity-lab/teams/execution-owners
 /scalability/run_experiment_4.py                                  @dfinity-lab/teams/networking-team
