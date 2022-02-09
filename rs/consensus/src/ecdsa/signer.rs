@@ -5,7 +5,8 @@ use crate::consensus::{
     utils::RoundRobin,
     ConsensusCrypto,
 };
-use crate::ecdsa::utils::{crypto_load_idkg_transcript, EcdsaBlockReaderImpl};
+use crate::ecdsa::complaints::EcdsaTranscriptLoader;
+use crate::ecdsa::utils::{load_transcripts, EcdsaBlockReaderImpl};
 use ic_interfaces::consensus_pool::{ConsensusBlockCache, ConsensusBlockChain};
 use ic_interfaces::crypto::{ErrorReplication, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner};
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
@@ -15,9 +16,7 @@ use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::ecdsa::{
     EcdsaBlockReader, EcdsaMessage, EcdsaSigShare, EcdsaSignature, RequestId,
 };
-use ic_types::crypto::canister_threshold_sig::{
-    error::IDkgLoadTranscriptError, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
-};
+use ic_types::crypto::canister_threshold_sig::{ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare};
 use ic_types::{Height, NodeId};
 
 use prometheus::IntCounterVec;
@@ -27,7 +26,11 @@ use std::sync::Arc;
 
 pub(crate) trait EcdsaSigner: Send {
     /// The on_state_change() called from the main ECDSA path.
-    fn on_state_change(&self, ecdsa_pool: &dyn EcdsaPool) -> EcdsaChangeSet;
+    fn on_state_change(
+        &self,
+        ecdsa_pool: &dyn EcdsaPool,
+        transcript_loader: &dyn EcdsaTranscriptLoader,
+    ) -> EcdsaChangeSet;
 }
 
 pub(crate) struct EcdsaSignerImpl {
@@ -61,6 +64,7 @@ impl EcdsaSignerImpl {
     fn send_signature_shares(
         &self,
         ecdsa_pool: &dyn EcdsaPool,
+        transcript_loader: &dyn EcdsaTranscriptLoader,
         block_reader: &dyn EcdsaBlockReader,
     ) -> EcdsaChangeSet {
         let requested_signatures = resolve_sig_inputs_refs(
@@ -76,7 +80,13 @@ impl EcdsaSignerImpl {
                 !self.signer_has_issued_signature_share(ecdsa_pool, &self.node_id, request_id)
             })
             .map(|(request_id, sig_inputs)| {
-                self.crypto_create_signature_share(block_reader, request_id, sig_inputs)
+                self.crypto_create_signature_share(
+                    ecdsa_pool,
+                    transcript_loader,
+                    block_reader,
+                    request_id,
+                    sig_inputs,
+                )
             })
             .flatten()
             .collect()
@@ -201,47 +211,45 @@ impl EcdsaSignerImpl {
     }
 
     /// Load necessary transcripts for the inputs
-    fn crypto_load_transcript(
+    fn load_dependencies(
         &self,
+        ecdsa_pool: &dyn EcdsaPool,
+        transcript_loader: &dyn EcdsaTranscriptLoader,
         inputs: &ThresholdEcdsaSigInputs,
-    ) -> Result<(), IDkgLoadTranscriptError> {
-        crypto_load_idkg_transcript(
-            &*self.crypto,
-            inputs.presig_quadruple().kappa_unmasked(),
-            &self.log,
-        )?;
-        crypto_load_idkg_transcript(
-            &*self.crypto,
-            inputs.presig_quadruple().lambda_masked(),
-            &self.log,
-        )?;
-        crypto_load_idkg_transcript(
-            &*self.crypto,
-            inputs.presig_quadruple().kappa_times_lambda(),
-            &self.log,
-        )?;
-        crypto_load_idkg_transcript(
-            &*self.crypto,
-            inputs.presig_quadruple().key_times_lambda(),
-            &self.log,
-        )?;
-        crypto_load_idkg_transcript(&*self.crypto, inputs.key_transcript(), &self.log)?;
-        Ok(())
+        height: Height,
+    ) -> Option<EcdsaChangeSet> {
+        load_transcripts(
+            ecdsa_pool,
+            transcript_loader,
+            &[
+                inputs.presig_quadruple().kappa_unmasked(),
+                inputs.presig_quadruple().lambda_masked(),
+                inputs.presig_quadruple().kappa_times_lambda(),
+                inputs.presig_quadruple().key_times_lambda(),
+                inputs.key_transcript(),
+            ],
+            height,
+        )
     }
 
     /// Helper to create the signature share
     fn crypto_create_signature_share(
         &self,
+        ecdsa_pool: &dyn EcdsaPool,
+        transcript_loader: &dyn EcdsaTranscriptLoader,
         block_reader: &dyn EcdsaBlockReader,
         request_id: &RequestId,
         sig_inputs: &ThresholdEcdsaSigInputs,
     ) -> EcdsaChangeSet {
-        if self.crypto_load_transcript(sig_inputs).is_err() {
-            self.metrics.sign_errors_inc("load_transcript");
-            return Default::default();
-        } else {
-            self.metrics.sign_metrics_inc("transcript_loaded");
+        if let Some(changes) = self.load_dependencies(
+            ecdsa_pool,
+            transcript_loader,
+            sig_inputs,
+            block_reader.tip_height(),
+        ) {
+            return changes;
         }
+
         ThresholdEcdsaSigner::sign_share(&*self.crypto, sig_inputs).map_or_else(
             |error| {
                 warn!(
@@ -339,14 +347,18 @@ impl EcdsaSignerImpl {
 }
 
 impl EcdsaSigner for EcdsaSignerImpl {
-    fn on_state_change(&self, ecdsa_pool: &dyn EcdsaPool) -> EcdsaChangeSet {
+    fn on_state_change(
+        &self,
+        ecdsa_pool: &dyn EcdsaPool,
+        transcript_loader: &dyn EcdsaTranscriptLoader,
+    ) -> EcdsaChangeSet {
         let block_reader = EcdsaBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let metrics = self.metrics.clone();
 
         let send_signature_shares = || {
             timed_call(
                 "send_signature_shares",
-                || self.send_signature_shares(ecdsa_pool, &block_reader),
+                || self.send_signature_shares(ecdsa_pool, transcript_loader, &block_reader),
                 &metrics.on_state_change_duration,
             )
         };
@@ -708,7 +720,11 @@ mod tests {
 
                 // Since request 1 is already in progress, we should issue
                 // shares only for transcripts 4, 5
-                let change_set = signer.send_signature_shares(&ecdsa_pool, &block_reader);
+                let change_set = signer.send_signature_shares(
+                    &ecdsa_pool,
+                    &TestEcdsaTranscriptLoader::new(),
+                    &block_reader,
+                );
                 assert_eq!(change_set.len(), 2);
                 assert!(is_signature_share_added_to_validated(
                     &change_set,

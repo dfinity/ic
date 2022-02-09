@@ -1,19 +1,17 @@
 //! Common utils for the ECDSA implementation.
-use crate::consensus::ConsensusCrypto;
+
+use crate::ecdsa::complaints::{EcdsaTranscriptLoader, TranscriptLoadStatus};
 use ic_interfaces::consensus_pool::ConsensusBlockChain;
-use ic_interfaces::crypto::IDkgProtocol;
-use ic_logger::{warn, ReplicaLogger};
+use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
 use ic_types::consensus::ecdsa::{EcdsaBlockReader, TranscriptRef};
 use ic_types::consensus::ecdsa::{
-    EcdsaDataPayload, IDkgTranscriptParamsRef, RequestId, ThresholdEcdsaSigInputsRef,
+    EcdsaDataPayload, EcdsaMessage, IDkgTranscriptParamsRef, RequestId, ThresholdEcdsaSigInputsRef,
     TranscriptLookupError,
 };
 use ic_types::consensus::{Block, BlockPayload, HasHeight};
-use ic_types::crypto::canister_threshold_sig::{
-    error::IDkgLoadTranscriptError,
-    idkg::{IDkgComplaint, IDkgTranscript},
-};
+use ic_types::crypto::canister_threshold_sig::idkg::{IDkgTranscript, IDkgTranscriptId};
 use ic_types::Height;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 pub(crate) struct EcdsaBlockReaderImpl {
@@ -61,6 +59,33 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
             })
     }
 
+    fn active_transcripts(&self) -> BTreeMap<IDkgTranscriptId, TranscriptRef> {
+        self.tip_ecdsa_payload
+            .as_ref()
+            .map_or(BTreeMap::new(), |ecdsa_payload| {
+                let mut active_refs = Vec::new();
+
+                for obj in ecdsa_payload.ongoing_signatures.values() {
+                    active_refs.append(&mut obj.get_refs());
+                }
+                for obj in ecdsa_payload.available_quadruples.values() {
+                    active_refs.append(&mut obj.get_refs());
+                }
+                for obj in ecdsa_payload.quadruples_in_creation.values() {
+                    active_refs.append(&mut obj.get_refs());
+                }
+                if let Some(key) = &ecdsa_payload.next_key_transcript_creation {
+                    active_refs.append(&mut key.get_refs());
+                }
+
+                let mut ret = BTreeMap::new();
+                for active_ref in active_refs {
+                    ret.insert(active_ref.transcript_id, active_ref);
+                }
+                ret
+            })
+    }
+
     fn transcript(
         &self,
         transcript_ref: &TranscriptRef,
@@ -95,31 +120,46 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
     }
 }
 
-// Load idkg transcript and log errors.
-pub fn crypto_load_idkg_transcript(
-    crypto: &dyn ConsensusCrypto,
-    transcript: &IDkgTranscript,
-    log: &ReplicaLogger,
-) -> Result<Vec<IDkgComplaint>, IDkgLoadTranscriptError> {
-    IDkgProtocol::load_transcript(crypto, transcript).map_err(|error| {
-        warn!(
-            log,
-            "Failed to load transcript: transcript_id = {:?}, error = {:?}",
-            transcript.transcript_id,
-            error
-        );
-        error
-    })
+/// Load the given transcripts
+/// Returns None if all the transcripts could be loaded successfully.
+/// Otherwise, returns the complaint change set to be added to the pool
+pub(crate) fn load_transcripts(
+    ecdsa_pool: &dyn EcdsaPool,
+    transcript_loader: &dyn EcdsaTranscriptLoader,
+    transcripts: &[&IDkgTranscript],
+    height: Height,
+) -> Option<EcdsaChangeSet> {
+    let mut new_complaints = Vec::new();
+    for transcript in transcripts {
+        match transcript_loader.load_transcript(ecdsa_pool, transcript, height) {
+            TranscriptLoadStatus::Success => (),
+            TranscriptLoadStatus::Failure => return Some(Default::default()),
+            TranscriptLoadStatus::Complaints(complaints) => {
+                for complaint in complaints {
+                    new_complaints.push(EcdsaChangeAction::AddToValidated(
+                        EcdsaMessage::EcdsaComplaint(complaint),
+                    ));
+                }
+            }
+        }
+    }
+
+    if new_complaints.is_empty() {
+        None
+    } else {
+        Some(new_complaints)
+    }
 }
 
 #[cfg(test)]
 pub(crate) mod test_utils {
     use crate::consensus::mocks::{dependencies, Dependencies};
+    use crate::ecdsa::complaints::{EcdsaTranscriptLoader, TranscriptLoadStatus};
     use crate::ecdsa::pre_signer::EcdsaPreSignerImpl;
     use crate::ecdsa::signer::EcdsaSignerImpl;
     use ic_artifact_pool::ecdsa_pool::EcdsaPoolImpl;
     use ic_config::artifact_pool::ArtifactPoolConfig;
-    use ic_interfaces::ecdsa::EcdsaChangeAction;
+    use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaPool};
     use ic_logger::ReplicaLogger;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::consensus::fake::*;
@@ -250,6 +290,28 @@ pub(crate) mod test_utils {
             transcript_ref: &TranscriptRef,
         ) -> Result<IDkgTranscript, TranscriptLookupError> {
             Ok(self.idkg_transcripts.get(transcript_ref).unwrap().clone())
+        }
+
+        fn active_transcripts(&self) -> BTreeMap<IDkgTranscriptId, TranscriptRef> {
+            BTreeMap::new()
+        }
+    }
+
+    pub(crate) struct TestEcdsaTranscriptLoader;
+    impl TestEcdsaTranscriptLoader {
+        pub(crate) fn new() -> Self {
+            Self
+        }
+    }
+
+    impl EcdsaTranscriptLoader for TestEcdsaTranscriptLoader {
+        fn load_transcript(
+            &self,
+            _ecdsa_pool: &dyn EcdsaPool,
+            _transcript: &IDkgTranscript,
+            _height: Height,
+        ) -> TranscriptLoadStatus {
+            TranscriptLoadStatus::Success
         }
     }
 

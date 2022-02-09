@@ -586,7 +586,7 @@ impl IDkgProtocol for CryptoReturningOk {
 
     fn load_transcript_with_openings(
         &self,
-        _transcript: IDkgTranscript,
+        _transcript: &IDkgTranscript,
         _openings: BTreeMap<IDkgComplaint, BTreeMap<NodeId, IDkgOpening>>,
     ) -> Result<(), IDkgLoadTranscriptWithOpeningsError> {
         Ok(())

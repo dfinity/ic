@@ -465,7 +465,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for TempCryptoComponentGeneric<C> {
 
     fn load_transcript_with_openings(
         &self,
-        transcript: IDkgTranscript,
+        transcript: &IDkgTranscript,
         openings: BTreeMap<IDkgComplaint, BTreeMap<NodeId, IDkgOpening>>,
     ) -> Result<(), IDkgLoadTranscriptWithOpeningsError> {
         self.crypto_component

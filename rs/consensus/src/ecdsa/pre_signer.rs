@@ -5,7 +5,8 @@ use crate::consensus::{
     utils::RoundRobin,
     ConsensusCrypto,
 };
-use crate::ecdsa::utils::{crypto_load_idkg_transcript, EcdsaBlockReaderImpl};
+use crate::ecdsa::complaints::EcdsaTranscriptLoader;
+use crate::ecdsa::utils::{load_transcripts, EcdsaBlockReaderImpl};
 use ic_interfaces::consensus_pool::{ConsensusBlockCache, ConsensusBlockChain};
 use ic_interfaces::crypto::{ErrorReplication, IDkgProtocol};
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
@@ -30,7 +31,11 @@ use std::sync::Arc;
 
 pub(crate) trait EcdsaPreSigner: Send {
     /// The on_state_change() called from the main ECDSA path.
-    fn on_state_change(&self, ecdsa_pool: &dyn EcdsaPool) -> EcdsaChangeSet;
+    fn on_state_change(
+        &self,
+        ecdsa_pool: &dyn EcdsaPool,
+        transcript_loader: &dyn EcdsaTranscriptLoader,
+    ) -> EcdsaChangeSet;
 }
 
 pub(crate) struct EcdsaPreSignerImpl {
@@ -66,6 +71,7 @@ impl EcdsaPreSignerImpl {
     fn send_dealings(
         &self,
         ecdsa_pool: &dyn EcdsaPool,
+        transcript_loader: &dyn EcdsaTranscriptLoader,
         block_reader: &dyn EcdsaBlockReader,
     ) -> EcdsaChangeSet {
         let requested_transcripts = resolve_transcript_refs(
@@ -87,7 +93,14 @@ impl EcdsaPreSignerImpl {
                         &self.node_id,
                     )
             })
-            .map(|transcript_params| self.crypto_create_dealing(block_reader, transcript_params))
+            .map(|transcript_params| {
+                self.crypto_create_dealing(
+                    ecdsa_pool,
+                    transcript_loader,
+                    block_reader,
+                    transcript_params,
+                )
+            })
             .flatten()
             .collect()
     }
@@ -463,11 +476,18 @@ impl EcdsaPreSignerImpl {
     /// Helper to create dealing
     fn crypto_create_dealing(
         &self,
+        ecdsa_pool: &dyn EcdsaPool,
+        transcript_loader: &dyn EcdsaTranscriptLoader,
         block_reader: &dyn EcdsaBlockReader,
         transcript_params: &IDkgTranscriptParams,
     ) -> EcdsaChangeSet {
-        if !self.crypto_load_dependencies(transcript_params) {
-            return Default::default();
+        if let Some(changes) = self.load_dependencies(
+            ecdsa_pool,
+            transcript_loader,
+            transcript_params,
+            block_reader.tip_height(),
+        ) {
+            return changes;
         }
 
         // Create the dealing
@@ -719,26 +739,24 @@ impl EcdsaPreSignerImpl {
 
     /// Helper to load the transcripts the given transcript is dependent on.
     /// Returns true if the dependencies were loaded successfully.
-    fn crypto_load_dependencies(&self, transcript_params: &IDkgTranscriptParams) -> bool {
+    fn load_dependencies(
+        &self,
+        ecdsa_pool: &dyn EcdsaPool,
+        transcript_loader: &dyn EcdsaTranscriptLoader,
+        transcript_params: &IDkgTranscriptParams,
+        height: Height,
+    ) -> Option<EcdsaChangeSet> {
         match &transcript_params.operation_type() {
-            IDkgTranscriptOperation::Random => true,
-            IDkgTranscriptOperation::ReshareOfMasked(t) => self.crypto_load_transcript(t),
-            IDkgTranscriptOperation::ReshareOfUnmasked(t) => self.crypto_load_transcript(t),
-            IDkgTranscriptOperation::UnmaskedTimesMasked(t1, t2) => {
-                self.crypto_load_transcript(t1) && self.crypto_load_transcript(t2)
+            IDkgTranscriptOperation::Random => None,
+            IDkgTranscriptOperation::ReshareOfMasked(t) => {
+                load_transcripts(ecdsa_pool, transcript_loader, &[t], height)
             }
-        }
-    }
-
-    /// Helper to load the given transcript.
-    /// Returns true if the transcript was loaded successfully.
-    fn crypto_load_transcript(&self, transcript: &IDkgTranscript) -> bool {
-        if crypto_load_idkg_transcript(&*self.crypto, transcript, &self.log).is_err() {
-            self.metrics.pre_sign_errors_inc("load_transcript");
-            false
-        } else {
-            self.metrics.pre_sign_metrics_inc("transcript_loaded");
-            true
+            IDkgTranscriptOperation::ReshareOfUnmasked(t) => {
+                load_transcripts(ecdsa_pool, transcript_loader, &[t], height)
+            }
+            IDkgTranscriptOperation::UnmaskedTimesMasked(t1, t2) => {
+                load_transcripts(ecdsa_pool, transcript_loader, &[t1, t2], height)
+            }
         }
     }
 
@@ -792,14 +810,18 @@ impl EcdsaPreSignerImpl {
 }
 
 impl EcdsaPreSigner for EcdsaPreSignerImpl {
-    fn on_state_change(&self, ecdsa_pool: &dyn EcdsaPool) -> EcdsaChangeSet {
+    fn on_state_change(
+        &self,
+        ecdsa_pool: &dyn EcdsaPool,
+        transcript_loader: &dyn EcdsaTranscriptLoader,
+    ) -> EcdsaChangeSet {
         let block_reader = EcdsaBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let metrics = self.metrics.clone();
 
         let send_dealings = || {
             timed_call(
                 "send_dealings",
-                || self.send_dealings(ecdsa_pool, &block_reader),
+                || self.send_dealings(ecdsa_pool, transcript_loader, &block_reader),
                 &metrics.on_state_change_duration,
             )
         };
@@ -1249,7 +1271,11 @@ mod tests {
 
                 // Since transcript 1 is already in progress, we should issue
                 // dealings only for transcripts 4, 5
-                let change_set = pre_signer.send_dealings(&ecdsa_pool, &block_reader);
+                let change_set = pre_signer.send_dealings(
+                    &ecdsa_pool,
+                    &TestEcdsaTranscriptLoader::new(),
+                    &block_reader,
+                );
                 assert_eq!(change_set.len(), 2);
                 assert!(is_dealing_added_to_validated(
                     &change_set,
@@ -1284,7 +1310,11 @@ mod tests {
                 let block_reader =
                     TestEcdsaBlockReader::for_pre_signer_test(Height::from(100), vec![t1, t2]);
 
-                let change_set = pre_signer.send_dealings(&ecdsa_pool, &block_reader);
+                let change_set = pre_signer.send_dealings(
+                    &ecdsa_pool,
+                    &TestEcdsaTranscriptLoader::new(),
+                    &block_reader,
+                );
                 assert_eq!(change_set.len(), 1);
                 assert!(is_dealing_added_to_validated(
                     &change_set,

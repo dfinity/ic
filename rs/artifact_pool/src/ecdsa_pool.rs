@@ -19,7 +19,8 @@ use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::ecdsa::{
-    EcdsaDealingSupport, EcdsaMessage, EcdsaMessageHash, EcdsaSigShare, EcdsaSignedDealing,
+    EcdsaComplaint, EcdsaDealingSupport, EcdsaMessage, EcdsaMessageHash, EcdsaOpening,
+    EcdsaSigShare, EcdsaSignedDealing,
 };
 use ic_types::crypto::CryptoHashOf;
 
@@ -76,6 +77,8 @@ struct EcdsaPoolSectionImpl {
     signed_dealings: EcdsaObjectPool<EcdsaSignedDealing>,
     dealing_support: EcdsaObjectPool<EcdsaDealingSupport>,
     sig_shares: EcdsaObjectPool<EcdsaSigShare>,
+    complaints: EcdsaObjectPool<EcdsaComplaint>,
+    openings: EcdsaObjectPool<EcdsaOpening>,
 }
 
 impl EcdsaPoolSectionImpl {
@@ -84,7 +87,9 @@ impl EcdsaPoolSectionImpl {
         Self {
             signed_dealings: EcdsaObjectPool::new(metrics.clone()),
             dealing_support: EcdsaObjectPool::new(metrics.clone()),
-            sig_shares: EcdsaObjectPool::new(metrics),
+            sig_shares: EcdsaObjectPool::new(metrics.clone()),
+            complaints: EcdsaObjectPool::new(metrics.clone()),
+            openings: EcdsaObjectPool::new(metrics),
         }
     }
 
@@ -93,6 +98,8 @@ impl EcdsaPoolSectionImpl {
             EcdsaMessage::EcdsaSignedDealing(object) => self.signed_dealings.insert_object(object),
             EcdsaMessage::EcdsaDealingSupport(object) => self.dealing_support.insert_object(object),
             EcdsaMessage::EcdsaSigShare(object) => self.sig_shares.insert_object(object),
+            EcdsaMessage::EcdsaComplaint(object) => self.complaints.insert_object(object),
+            EcdsaMessage::EcdsaOpening(object) => self.openings.insert_object(object),
         }
     }
 
@@ -110,6 +117,14 @@ impl EcdsaPoolSectionImpl {
                 .sig_shares
                 .get_object(&EcdsaSigShare::key_from_outer_hash(id))
                 .map(|object| object.into_outer()),
+            EcdsaMessageHash::EcdsaComplaint(_) => self
+                .complaints
+                .get_object(&EcdsaComplaint::key_from_outer_hash(id))
+                .map(|object| object.into_outer()),
+            EcdsaMessageHash::EcdsaOpening(_) => self
+                .openings
+                .get_object(&EcdsaOpening::key_from_outer_hash(id))
+                .map(|object| object.into_outer()),
         }
     }
 
@@ -126,6 +141,14 @@ impl EcdsaPoolSectionImpl {
             EcdsaMessageHash::EcdsaSigShare(_) => self
                 .sig_shares
                 .remove_object(&EcdsaSigShare::key_from_outer_hash(id))
+                .map(|object| object.into_outer()),
+            EcdsaMessageHash::EcdsaComplaint(_) => self
+                .complaints
+                .remove_object(&EcdsaComplaint::key_from_outer_hash(id))
+                .map(|object| object.into_outer()),
+            EcdsaMessageHash::EcdsaOpening(_) => self
+                .openings
+                .remove_object(&EcdsaOpening::key_from_outer_hash(id))
                 .map(|object| object.into_outer()),
         }
     }
@@ -161,6 +184,22 @@ impl EcdsaPoolSection for EcdsaPoolSectionImpl {
             self.sig_shares
                 .iter()
                 .map(|(inner_hash, object)| (EcdsaSigShare::key_to_outer_hash(inner_hash), object)),
+        )
+    }
+
+    fn complaints(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, &EcdsaComplaint)> + '_> {
+        Box::new(
+            self.complaints.iter().map(|(inner_hash, object)| {
+                (EcdsaComplaint::key_to_outer_hash(inner_hash), object)
+            }),
+        )
+    }
+
+    fn openings(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, &EcdsaOpening)> + '_> {
+        Box::new(
+            self.openings
+                .iter()
+                .map(|(inner_hash, object)| (EcdsaOpening::key_to_outer_hash(inner_hash), object)),
         )
     }
 }

@@ -1,6 +1,6 @@
 use crate::consensus::prelude::*;
 use ic_interfaces::{crypto::*, validation::ValidationResult};
-use ic_types::consensus::ecdsa::EcdsaDealing;
+use ic_types::consensus::ecdsa::{EcdsaComplaintContent, EcdsaDealing, EcdsaOpeningContent};
 use ic_types::crypto::threshold_sig::ni_dkg::{DkgId, NiDkgId};
 use ic_types::crypto::CryptoError;
 
@@ -266,6 +266,8 @@ pub trait ConsensusCrypto:
     + SignVerify<FinalizationContent, MultiSignatureShare<FinalizationContent>, RegistryVersion>
     + SignVerify<EcdsaDealing, MultiSignatureShare<EcdsaDealing>, RegistryVersion>
     + SignVerify<EcdsaDealing, BasicSignature<EcdsaDealing>, RegistryVersion>
+    + SignVerify<EcdsaComplaintContent, BasicSignature<EcdsaComplaintContent>, RegistryVersion>
+    + SignVerify<EcdsaOpeningContent, BasicSignature<EcdsaOpeningContent>, RegistryVersion>
     + SignVerify<RandomBeaconContent, ThresholdSignatureShare<RandomBeaconContent>, NiDkgId>
     + SignVerify<RandomTapeContent, ThresholdSignatureShare<RandomTapeContent>, NiDkgId>
     + SignVerify<CatchUpContent, ThresholdSignatureShare<CatchUpContent>, NiDkgId>

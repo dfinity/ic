@@ -35,8 +35,9 @@ pub use sign::canister_threshold_sig::*;
 use ic_types::consensus::certification::CertificationContent;
 use ic_types::consensus::dkg as consensus_dkg;
 use ic_types::consensus::{
-    ecdsa::EcdsaDealing, Block, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
-    NotarizationContent, RandomBeaconContent, RandomTapeContent,
+    ecdsa::{EcdsaComplaintContent, EcdsaDealing, EcdsaOpeningContent},
+    Block, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent, NotarizationContent,
+    RandomBeaconContent, RandomTapeContent,
 };
 use ic_types::messages::{MessageId, WebAuthnEnvelope};
 
@@ -67,6 +68,12 @@ pub trait Crypto:
     // EcdsaSignedDealing
     + BasicSigner<EcdsaDealing>
     + BasicSigVerifier<EcdsaDealing>
+    // EcdsaComplaintContent
+    + BasicSigner<EcdsaComplaintContent>
+    + BasicSigVerifier<EcdsaComplaintContent>
+    // EcdsaOpeningContent
+    + BasicSigner<EcdsaOpeningContent>
+    + BasicSigVerifier<EcdsaOpeningContent>
     + IDkgProtocol
     + ThresholdEcdsaSigner
     + ThresholdEcdsaSigVerifier
@@ -119,6 +126,10 @@ impl<T> Crypto for T where
         + MultiSigVerifier<EcdsaDealing>
         + BasicSigner<EcdsaDealing>
         + BasicSigVerifier<EcdsaDealing>
+        + BasicSigner<EcdsaComplaintContent>
+        + BasicSigVerifier<EcdsaComplaintContent>
+        + BasicSigner<EcdsaOpeningContent>
+        + BasicSigVerifier<EcdsaOpeningContent>
         + IDkgProtocol
         + ThresholdEcdsaSigner
         + ThresholdEcdsaSigVerifier

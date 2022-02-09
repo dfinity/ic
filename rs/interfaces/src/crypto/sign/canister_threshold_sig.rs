@@ -147,7 +147,7 @@ pub trait IDkgProtocol {
     ///   `verify_opening(transcript, opener, opening, complaint).is_ok()`
     fn load_transcript_with_openings(
         &self,
-        transcript: IDkgTranscript,
+        transcript: &IDkgTranscript,
         openings: BTreeMap<IDkgComplaint, BTreeMap<NodeId, IDkgOpening>>,
     ) -> Result<(), IDkgLoadTranscriptWithOpeningsError>;
 

@@ -3,7 +3,10 @@ use ic_types::consensus::certification::CertificationMessage;
 use ic_types::consensus::dkg as consensus_dkg;
 use ic_types::consensus::{
     certification::{Certification, CertificationContent, CertificationShare},
-    ecdsa::{EcdsaDealing, EcdsaMessage, EcdsaSigShare, EcdsaTranscript},
+    ecdsa::{
+        EcdsaComplaintContent, EcdsaDealing, EcdsaMessage, EcdsaOpeningContent, EcdsaSigShare,
+        EcdsaTranscript,
+    },
     BasicSignature, Block, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes,
     CatchUpShareContent, ConsensusMessage, FinalizationContent, HashedBlock, MultiSignature,
     MultiSignatureShare, NotarizationContent, RandomBeaconContent, RandomTapeContent,
@@ -69,6 +72,11 @@ const DOMAIN_ECDSA_DEALING_SUPPORT: &str = "ic-threshold-ecdsa-dealing-support-d
 const DOMAIN_ECDSA_VERIFIED_DEALING: &str = "ic-threshold-ecdsa-verified-dealing-domain";
 const DOMAIN_ECDSA_TRANSCRIPT: &str = "ic-idkg-transcript-domain";
 const DOMAIN_ECDSA_SIG_SHARE: &str = "ic-threshold-ecdsa-sig-share-domain";
+pub(crate) const DOMAIN_ECDSA_COMPLAINT_CONTENT: &str =
+    "ic-threshold-ecdsa-complaint-content-domain";
+pub const DOMAIN_ECDSA_COMPLAINT: &str = "ic-threshold-ecdsa-complaint-domain";
+pub(crate) const DOMAIN_ECDSA_OPENING_CONTENT: &str = "ic-threshold-ecdsa-opening-content-domain";
+pub const DOMAIN_ECDSA_OPENING: &str = "ic-threshold-ecdsa-opening-domain";
 
 /// A cryptographically hashable type.
 pub trait CryptoHashable: CryptoHashDomain + Hash {}
@@ -148,12 +156,20 @@ mod private {
     impl CryptoHashDomainSeal for CertificationMessage {}
 
     impl CryptoHashDomainSeal for EcdsaMessage {}
+
     impl CryptoHashDomainSeal for EcdsaDealing {}
     impl CryptoHashDomainSeal for Signed<EcdsaDealing, BasicSignature<EcdsaDealing>> {}
     impl CryptoHashDomainSeal for Signed<EcdsaDealing, MultiSignatureShare<EcdsaDealing>> {}
     impl CryptoHashDomainSeal for Signed<EcdsaDealing, MultiSignature<EcdsaDealing>> {}
+
     impl CryptoHashDomainSeal for EcdsaTranscript {}
     impl CryptoHashDomainSeal for EcdsaSigShare {}
+
+    impl CryptoHashDomainSeal for EcdsaComplaintContent {}
+    impl CryptoHashDomainSeal for Signed<EcdsaComplaintContent, BasicSignature<EcdsaComplaintContent>> {}
+
+    impl CryptoHashDomainSeal for EcdsaOpeningContent {}
+    impl CryptoHashDomainSeal for Signed<EcdsaOpeningContent, BasicSignature<EcdsaOpeningContent>> {}
 
     impl CryptoHashDomainSeal for CryptoHashableTestDummy {}
 }
@@ -385,6 +401,30 @@ impl CryptoHashDomain for EcdsaTranscript {
 impl CryptoHashDomain for EcdsaSigShare {
     fn domain(&self) -> String {
         DOMAIN_ECDSA_SIG_SHARE.to_string()
+    }
+}
+
+impl CryptoHashDomain for EcdsaComplaintContent {
+    fn domain(&self) -> String {
+        DOMAIN_ECDSA_COMPLAINT_CONTENT.to_string()
+    }
+}
+
+impl CryptoHashDomain for Signed<EcdsaComplaintContent, BasicSignature<EcdsaComplaintContent>> {
+    fn domain(&self) -> String {
+        DOMAIN_ECDSA_COMPLAINT.to_string()
+    }
+}
+
+impl CryptoHashDomain for EcdsaOpeningContent {
+    fn domain(&self) -> String {
+        DOMAIN_ECDSA_OPENING_CONTENT.to_string()
+    }
+}
+
+impl CryptoHashDomain for Signed<EcdsaOpeningContent, BasicSignature<EcdsaOpeningContent>> {
+    fn domain(&self) -> String {
+        DOMAIN_ECDSA_OPENING.to_string()
     }
 }
 
