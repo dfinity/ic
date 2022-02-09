@@ -1104,7 +1104,7 @@ fn should_run_load_transcript_with_openings() {
     let complaint = fake_complaint();
     openings.insert(complaint, BTreeMap::new());
     let result =
-        crypto_for(NODE_1, &crypto_components).load_transcript_with_openings(transcript, openings);
+        crypto_for(NODE_1, &crypto_components).load_transcript_with_openings(&transcript, openings);
     assert!(result.is_ok());
 }
 

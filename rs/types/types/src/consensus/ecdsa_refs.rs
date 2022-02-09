@@ -1,6 +1,7 @@
 //! Threshold ECDSA transcript references related defines.
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::convert::{AsMut, AsRef, TryFrom};
 
 use crate::crypto::{
@@ -411,6 +412,9 @@ pub trait EcdsaBlockReader {
     fn requested_signatures(
         &self,
     ) -> Box<dyn Iterator<Item = (&RequestId, &ThresholdEcdsaSigInputsRef)> + '_>;
+
+    /// Returns the set of all the active references.
+    fn active_transcripts(&self) -> BTreeMap<IDkgTranscriptId, TranscriptRef>;
 
     /// Looks up the transcript for the given transcript ref.
     fn transcript(

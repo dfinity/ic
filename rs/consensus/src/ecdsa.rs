@@ -171,6 +171,7 @@ use crate::consensus::{
     utils::RoundRobin,
     ConsensusCrypto,
 };
+use crate::ecdsa::complaints::{EcdsaComplaintHandler, EcdsaComplaintHandlerImpl};
 use crate::ecdsa::pre_signer::{EcdsaPreSigner, EcdsaPreSignerImpl};
 use crate::ecdsa::signer::{EcdsaSigner, EcdsaSignerImpl};
 use crate::ecdsa::utils::EcdsaBlockReaderImpl;
@@ -187,6 +188,7 @@ use ic_types::{
 
 use std::sync::Arc;
 
+pub(crate) mod complaints;
 pub(crate) mod payload_builder;
 pub(crate) mod pre_signer;
 pub(crate) mod signer;
@@ -202,6 +204,7 @@ const LOOK_AHEAD: u64 = 10;
 pub struct EcdsaImpl {
     pre_signer: Box<dyn EcdsaPreSigner>,
     signer: Box<dyn EcdsaSigner>,
+    complaint_handler: Box<dyn EcdsaComplaintHandler>,
     schedule: RoundRobin,
     metrics: EcdsaClientMetrics,
     logger: ReplicaLogger,
@@ -225,6 +228,13 @@ impl EcdsaImpl {
         ));
         let signer = Box::new(EcdsaSignerImpl::new(
             node_id,
+            consensus_block_cache.clone(),
+            crypto.clone(),
+            metrics_registry.clone(),
+            logger.clone(),
+        ));
+        let complaint_handler = Box::new(EcdsaComplaintHandlerImpl::new(
+            node_id,
             consensus_block_cache,
             crypto,
             metrics_registry.clone(),
@@ -233,6 +243,7 @@ impl EcdsaImpl {
         Self {
             pre_signer,
             signer,
+            complaint_handler,
             schedule: RoundRobin::default(),
             metrics: EcdsaClientMetrics::new(metrics_registry),
             logger,
@@ -246,19 +257,32 @@ impl Ecdsa for EcdsaImpl {
         let pre_signer = || {
             timed_call(
                 "pre_signer",
-                || self.pre_signer.on_state_change(ecdsa_pool),
+                || {
+                    self.pre_signer
+                        .on_state_change(ecdsa_pool, self.complaint_handler.as_transcript_loader())
+                },
                 &metrics.on_state_change_duration,
             )
         };
         let signer = || {
             timed_call(
                 "signer",
-                || self.signer.on_state_change(ecdsa_pool),
+                || {
+                    self.signer
+                        .on_state_change(ecdsa_pool, self.complaint_handler.as_transcript_loader())
+                },
+                &metrics.on_state_change_duration,
+            )
+        };
+        let complaint_handler = || {
+            timed_call(
+                "complaint_handler",
+                || self.complaint_handler.on_state_change(ecdsa_pool),
                 &metrics.on_state_change_duration,
             )
         };
 
-        let calls: [&'_ dyn Fn() -> EcdsaChangeSet; 2] = [&pre_signer, &signer];
+        let calls: [&'_ dyn Fn() -> EcdsaChangeSet; 3] = [&pre_signer, &signer, &complaint_handler];
         self.schedule.call_next(&calls)
     }
 }
@@ -302,28 +326,18 @@ impl EcdsaGossip for EcdsaGossipImpl {
 // But this would require more processing per call to priority function, and
 // cause extra lock contention for the main processing paths.
 fn compute_priority(attr: &EcdsaMessageAttribute, cached_finalized_height: Height) -> Priority {
-    match attr {
-        EcdsaMessageAttribute::EcdsaSignedDealing(height) => {
-            if *height < cached_finalized_height + Height::from(LOOK_AHEAD) {
-                Priority::Fetch
-            } else {
-                Priority::Stash
-            }
-        }
-        EcdsaMessageAttribute::EcdsaDealingSupport(height) => {
-            if *height < cached_finalized_height + Height::from(LOOK_AHEAD) {
-                Priority::Fetch
-            } else {
-                Priority::Stash
-            }
-        }
-        EcdsaMessageAttribute::EcdsaSigShare(height) => {
-            if *height < cached_finalized_height + Height::from(LOOK_AHEAD) {
-                Priority::Fetch
-            } else {
-                Priority::Stash
-            }
-        }
+    let height = match attr {
+        EcdsaMessageAttribute::EcdsaSignedDealing(height) => *height,
+        EcdsaMessageAttribute::EcdsaDealingSupport(height) => *height,
+        EcdsaMessageAttribute::EcdsaSigShare(height) => *height,
+        EcdsaMessageAttribute::EcdsaComplaint(height) => *height,
+        EcdsaMessageAttribute::EcdsaOpening(height) => *height,
+    };
+
+    if height < cached_finalized_height + Height::from(LOOK_AHEAD) {
+        Priority::Fetch
+    } else {
+        Priority::Stash
     }
 }
 

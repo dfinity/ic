@@ -383,7 +383,6 @@ impl EcdsaPreSignerMetrics {
 }
 
 #[derive(Clone)]
-
 pub struct EcdsaSignerMetrics {
     pub on_state_change_duration: HistogramVec,
     pub sign_metrics: IntCounterVec,
@@ -462,4 +461,44 @@ where
 {
     let _timer = metric.with_label_values(&[label]).start_timer();
     (call_fn)()
+}
+
+#[derive(Clone)]
+pub struct EcdsaComplaintMetrics {
+    pub on_state_change_duration: HistogramVec,
+    pub complaint_metrics: IntCounterVec,
+    pub complaint_errors: IntCounterVec,
+}
+
+impl EcdsaComplaintMetrics {
+    pub fn new(metrics_registry: MetricsRegistry) -> Self {
+        Self {
+            on_state_change_duration: metrics_registry.histogram_vec(
+                "ecdsa_complaint_on_state_change_duration_seconds",
+                "The time it took to execute complaint on_state_change(), in seconds",
+                // 0.1ms, 0.2ms, 0.5ms, 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, 100ms, 200ms, 500ms,
+                // 1s, 2s, 5s, 10s, 20s, 50s, 100s, 200s, 500s
+                decimal_buckets(-4, 2),
+                &["sub_component"],
+            ),
+            complaint_metrics: metrics_registry.int_counter_vec(
+                "ecdsa_complaint_metrics",
+                "Complaint related metrics",
+                &["type"],
+            ),
+            complaint_errors: metrics_registry.int_counter_vec(
+                "ecdsa_complaint_errors",
+                "Complaint related errors",
+                &["type"],
+            ),
+        }
+    }
+
+    pub fn complaint_metrics_inc(&self, label: &str) {
+        self.complaint_metrics.with_label_values(&[label]).inc();
+    }
+
+    pub fn complaint_errors_inc(&self, label: &str) {
+        self.complaint_errors.with_label_values(&[label]).inc();
+    }
 }

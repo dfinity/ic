@@ -227,7 +227,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
 
     fn load_transcript_with_openings(
         &self,
-        transcript: IDkgTranscript,
+        transcript: &IDkgTranscript,
         openings: BTreeMap<IDkgComplaint, BTreeMap<NodeId, IDkgOpening>>,
     ) -> Result<(), IDkgLoadTranscriptWithOpeningsError> {
         let logger = new_logger!(&self.logger;
@@ -237,7 +237,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         debug!(logger;
             crypto.description => "start",
         );
-        let result = mocks::load_transcript_with_openings(transcript, openings);
+        let result = mocks::load_transcript_with_openings(transcript.clone(), openings);
         debug!(logger;
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),

@@ -565,6 +565,7 @@ impl IDkgComplaint {
 }
 
 /// Opening created in response to an IDkgComplaint.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 pub struct IDkgOpening {
     pub transcript_id: IDkgTranscriptId,
     pub dealer_id: NodeId,
