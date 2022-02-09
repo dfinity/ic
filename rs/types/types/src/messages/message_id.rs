@@ -166,8 +166,6 @@ fn hash_key_val(key: String, val: RawHttpRequestVal) -> Vec<u8> {
 }
 
 /// Describes `hash_of_map` as specified in the public spec.
-// TODO(EXC-234): Generalize this method and move to a more appropriate
-// location.
 pub(crate) fn hash_of_map<S: ToString>(map: &BTreeMap<S, RawHttpRequestVal>) -> [u8; 32] {
     let mut hashes: Vec<Vec<u8>> = Vec::new();
     for (key, val) in map.iter() {
