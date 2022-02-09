@@ -1006,8 +1006,10 @@ dependencies = [
 name = "canister_sandbox"
 version = "0.8.0"
 dependencies = [
+ "cc",
  "ic-canister-sandbox-backend-lib",
  "ic-test-utilities",
+ "libc",
 ]
 
 [[package]]

@@ -53,6 +53,8 @@ in
       ++ pkgs.lib.optionals pkgs.stdenv.isLinux [
         # provides the `taskset` command, which we use to fix core affinity in the shell
         pkgs.utillinux
+        pkgs.libselinux
+        pkgs.libunwind
 
         # this tool is used by cargo-flamegraph
         pkgs.linuxPackages.perf

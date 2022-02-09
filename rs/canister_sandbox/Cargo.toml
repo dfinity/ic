@@ -3,8 +3,12 @@ name = "canister_sandbox"
 version = "0.8.0"
 edition = "2018"
 
+[build-dependencies]
+cc = "1.0"
+
 [dependencies]
 ic-canister-sandbox-backend-lib = { path = "backend_lib" }
+libc = "0.2.91"
 
 [dev-dependencies]
 # This makes the dependecies of the binary more consistent
