@@ -8,19 +8,19 @@ NOTE: Parts of the canister interface are for internal consumption only, and the
 === Overview & terminology ===
 
 
-In brief, the Ledger canister maintains a set of accounts owned by IC principals; each account has associated an ICP tokens balance. Account owners can initiate the transfer of tokens from the accounts they control to any other ledger account.
-All transfer operations are recorded on an append-only transaction ledger.  The interface of the ledger canister also allows minting and burning of tokens, which are additional transactions which are recorded on the transaction ledger.
+In brief, the Ledger canister maintains a set of accounts owned by IC principals; each account has associated a Tokens balance. Account owners can initiate the transfer of tokens from the accounts they control to any other ledger account.
+All transfer operations are recorded on an append-only transaction ledger.  The interface of the Ledger canister also allows minting and burning of tokens, which are additional transactions which are recorded on the transaction ledger.
 // A privileged API supports minting new ICP tokens.
 //The Ledger canister leverages certified variables to authenticate to third parties the content of the transaction ledger.
 
 
-
-==== Internet Computer Protocol tokens (ICP) ====
-ICP tokens are the utility tokens of the Internet Computer Protocol. The smallest indivisible unit of ICP are "e8"s: one e8 is 10^-8^ ICP.
+==== Tokens ====
+There can be multiple utility Tokens in the IC at once. The utility Tokens used by the IC Governance is the Internet Computer Protocol tokens (ICP).
+The smallest indivisible unit of Tokens are "e8"s: one e8 is 10^-8^ Tokens.
 
 
 ==== Accounts ====
-The ledger canister keeps track of accounts:
+The Ledger canister keeps track of accounts:
 
 * Every account belongs to (and is controlled by) an IC principal
 * Each account has precisely one owner (i.e. no “joint accounts”)
@@ -42,13 +42,13 @@ The domain separator consists of a string (here "account-id") prepended by a sin
 
 ** For any principle, we refer to the account which corresponds to the all-0 subaccount_identifier as the default account of a principle.
 
-** The default account of the governance canister plays an important role in minting/burning tokens (see below), and we refer to it as the `minting_account_id`.
+** The default account of the Governance canister plays an important role in minting/burning tokens (see below), and we refer to it as the `minting_account_id`.
 
 
 
 ==== Operations, transactions, blocks , transaction ledger ====
 
-Account balances change as the result of one of three operations: sending tokens from one account to another, minting tokens to an account and burning tokens from an account.  Each operation is triggered by a call to the ledger and is recorded as a transaction: in addition to the details of the operation a transaction includes a Memo field (a 64 bit number), and a timestamp indicating the time at which the transaction was created.
+Account balances change as the result of one of three operations: sending tokens from one account to another, minting tokens to an account and burning tokens from an account.  Each operation is triggered by a call to the Ledger canister and is recorded as a transaction: in addition to the details of the operation a transaction includes a Memo field (a 64 bit number), and a timestamp indicating the time at which the transaction was created.
 
 
 Each transaction is included in a block (there is only one transaction per block) and blocks are "chained" by including in each block the hash of the previous block.  The position of a block in the ledger is called the block index;  counting starting from 0.
@@ -115,14 +115,14 @@ type Ledger = vec Block
 ....
 == Methods ==
 
-The ledger canister implements methods to:
+The Ledger canister implements methods to:
 
 * transfer ICP from one account to another
-* to get the balance of a ledger account
+* get the balance of a ledger account
 // * fetch a block of the chain, specified through its position in the ledger, aka its height.
 
 ==== Transferring tokens ====
-The owner of an account can transfer tokens from that account to any other account using the `transfer` method.
+The owner of an account can transfer Tokens from that account to any other account using the `transfer` method.
 The inputs to the method are as follows:
 
 * `amount`: the amount of tokens to be transferred
@@ -133,7 +133,7 @@ The inputs to the method are as follows:
 * `created_at_time`: a timestamp indicating when the transaction was created by the caller -- if it is not specified by the caller then this is set to the current IC time.
 
 
-The ledger canister executes a `transfer` call as follows:
+The Ledger canister executes a `transfer` call as follows:
 
 * checks that the destination is a well-formed account identifier
 * checks that the transaction is recent enough (has been created within the last 24 hours) and is not "in the future" (`created_at_time` is in the future by more than an allowed time drift, specified by a parameter in the IC, currently set at 60 seconds)
@@ -148,7 +148,7 @@ The ledger canister executes a `transfer` call as follows:
 
 
 
-==== Burning and minting tokens ====
+==== Burning and minting Tokens ====
 Typical transfers move ICP from one account to another.
 An important exception is when either the source or the destination of a transfer is the special  `minting_account_id`.
 The effect of a transfer to the minting account is that the tokens are simply removed from the source account and not deposited anywhere; the tokens are burned.
@@ -157,7 +157,7 @@ Importantly, the fee for a burn transfer is 0, but the amount of tokens to be bu
 
 The effect of a transfer from the `minting_account_id` account is that tokens are simply added to the destination account; the tokens are minted.
 When invoked, the transaction `(Mint(to,amount))` is added to the transaction ledger.
-Notice that the `minting_account_id` is controlled by the Governance canister which makes minting tokens a privileged operation only available to this  canister.
+Notice that the `minting_account_id` is controlled by the Governance canister which makes minting tokens a privileged operation only available to this canister.
 
 
 The candid signature of the `transfer` method, together with some additional required datatypes is below.
@@ -173,7 +173,7 @@ type TransferArgs = record {
     amount: Tokens;
     fee: Tokens;
     from_subaccount: opt SubAccount;
-    to: Address;
+    to: AccountIdentifier;
     created_at_time: opt TimeStamp;
 };
 
@@ -211,7 +211,7 @@ The balance of the account with account identifier `minting_account_id` is alway
 
 ----
 type AccountBalanceArgs = record {
-    account: Address;
+    account: AccountIdentifier;
 };
 
 service : {
