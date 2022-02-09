@@ -47,8 +47,15 @@ pub fn generate_complaints(
                 dealer_index
             ));
 
-            let complaint =
-                IDkgComplaintInternal::new(complaint_seed, dealing, secret_key, associated_data)?;
+            let complaint = IDkgComplaintInternal::new(
+                complaint_seed,
+                dealing,
+                *dealer_index,
+                receiver_index,
+                secret_key,
+                public_key,
+                associated_data,
+            )?;
 
             complaints.insert(*dealer_index, complaint);
         }
@@ -72,7 +79,10 @@ impl IDkgComplaintInternal {
     pub fn new(
         seed: Seed,
         dealing: &IDkgDealingInternal,
+        dealer_index: NodeIndex,
+        receiver_index: NodeIndex,
         secret_key: &MEGaPrivateKey,
+        public_key: &MEGaPublicKey,
         associated_data: &[u8],
     ) -> ThresholdEcdsaResult<Self> {
         let shared_secret = dealing
@@ -80,12 +90,19 @@ impl IDkgComplaintInternal {
             .ephemeral_key()
             .scalar_mul(secret_key.secret_scalar())?;
 
+        let proof_assoc_data = Self::create_proof_assoc_data(
+            associated_data,
+            receiver_index,
+            dealer_index,
+            public_key,
+        )?;
+
         let proof = zk::ProofOfDLogEquivalence::create(
             seed,
             secret_key.secret_scalar(),
             &EccPoint::generator_g(secret_key.secret_scalar().curve_type())?,
             dealing.ciphertext.ephemeral_key(),
-            associated_data,
+            &proof_assoc_data,
         )?;
 
         Ok(Self {
@@ -112,12 +129,19 @@ impl IDkgComplaintInternal {
         associated_data: &[u8],
     ) -> ThresholdEcdsaResult<()> {
         // Verify the enclosed proof
+        let proof_assoc_data = Self::create_proof_assoc_data(
+            associated_data,
+            complainer_index,
+            dealer_index,
+            complainer_key,
+        )?;
+
         self.proof.verify(
             &EccPoint::generator_g(self.shared_secret.curve_type())?,
             dealing.ciphertext.ephemeral_key(),
             complainer_key.public_point(),
             &self.shared_secret,
-            associated_data,
+            &proof_assoc_data,
         )?;
 
         // Decrypt the ciphertext using the proven shared secret
@@ -158,5 +182,21 @@ impl IDkgComplaintInternal {
         }
 
         Ok(())
+    }
+
+    fn create_proof_assoc_data(
+        associated_data: &[u8],
+        receiver_index: NodeIndex,
+        dealer_index: NodeIndex,
+        public_key: &MEGaPublicKey,
+    ) -> ThresholdEcdsaResult<Vec<u8>> {
+        let mut ro = ro::RandomOracle::new("ic-crypto-tecdsa-complaint-proof-assoc-data");
+
+        ro.add_bytestring("associated_data", associated_data)?;
+        ro.add_u32("receiver_index", receiver_index)?;
+        ro.add_u32("dealer_index", dealer_index)?;
+        ro.add_point("receiver_public_key", public_key.public_point())?;
+
+        ro.output_bytestring(32)
     }
 }
