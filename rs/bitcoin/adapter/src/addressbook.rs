@@ -78,6 +78,10 @@ impl AddressEntry {
 /// non-utilized addresses.
 #[cfg_attr(test, derive(Debug))]
 pub struct AddressBook {
+    /// The DNS seeds provided by the configuration. These are used to build the seed queue.
+    dns_seeds: Vec<String>,
+    /// The port that should be targeted based on the provided configuration.
+    port: u16,
     /// This field contains the addresses that are already in use.
     active_addresses: HashSet<SocketAddr>,
     /// This field contains the addresses that will be used for connections.
@@ -90,7 +94,6 @@ pub struct AddressBook {
     max_addresses: usize,
     /// This field contains the addresses that will be used for the address discovery
     /// on initial startup and when the adapter is running low on addresses.
-    ///
     seed_queue: VecDeque<SocketAddr>,
 }
 
@@ -102,38 +105,39 @@ impl AddressBook {
     /// cannot be made without an address. If not enough addresses are found to
     /// meet the minimum number of connections, a panic will be issued.
     pub fn new(config: &Config, logger: Logger) -> AddressBookResult<Self> {
-        let seed_queue = Self::build_seed_queue(config);
         let (min_addresses, max_addresses) = address_limits(config.network);
-
         let known_addresses: HashSet<SocketAddr> = config.nodes.iter().cloned().collect();
-
-        if seed_queue.is_empty() && known_addresses.is_empty() {
-            return Err(AddressBookError::NoAddressesFound);
-        }
-
-        Ok(AddressBook {
+        let mut book = AddressBook {
+            dns_seeds: config.dns_seeds.clone(),
+            port: config.port(),
             active_addresses: HashSet::new(),
             known_addresses,
             logger,
             min_addresses,
             max_addresses,
-            seed_queue,
-        })
+            seed_queue: VecDeque::new(),
+        };
+
+        book.build_seed_queue();
+
+        if book.seed_queue.is_empty() && book.known_addresses.is_empty() {
+            return Err(AddressBookError::NoAddressesFound);
+        }
+
+        Ok(book)
     }
 
-    /// This function takes a config and pulls the seed address from a set of
-    /// domains that can be used for discovering new addresses.
-    fn build_seed_queue(config: &Config) -> VecDeque<SocketAddr> {
+    fn build_seed_queue(&mut self) {
         let mut rng = StdRng::from_entropy();
-        let dns_seeds = config
+        let dns_seeds = self
             .dns_seeds
             .iter()
-            .map(|seed| format_addr(seed, config.port()));
+            .map(|seed| format_addr(seed, self.port));
         let mut addresses = dns_seeds
             .flat_map(|seed| seed.to_socket_addrs().map_or(vec![], |v| v.collect()))
             .collect::<Vec<SocketAddr>>();
         addresses.shuffle(&mut rng);
-        addresses.into_iter().collect()
+        self.seed_queue = addresses.into_iter().collect();
     }
 
     /// This function is used to determine how many entries are in the address book.
@@ -233,18 +237,16 @@ impl AddressBook {
     }
 
     /// This function retrieves the next seed address from the seed queue.
+    /// If no seeds are found, the seed queue is rebuilt from the DNS seeds.
     pub fn pop_seed(&mut self) -> AddressBookResult<AddressEntry> {
-        // TODO: ER-2132: seed queue should be drained of addresses then a new queue completely rebuilt once empty
+        if self.seed_queue.is_empty() {
+            self.build_seed_queue();
+        }
 
-        // The address that is popped is always pushed back on to the queue.
-        // The connection manager will always check to ensure there is at least
-        // one seed address.
-        #[allow(clippy::expect_used)]
         let address = self
             .seed_queue
             .pop_front()
             .ok_or(AddressBookError::NoSeedAddressesFound)?;
-        self.seed_queue.push_back(address);
         Ok(AddressEntry::Seed(address))
     }
 
@@ -409,7 +411,7 @@ mod cfg {
     #[test]
     fn test_discard_address() {
         let config = ConfigBuilder::new()
-            .with_dns_seeds(vec![String::from("127.0.0.1")])
+            .with_dns_seeds(vec![String::from("127.0.0.1"), String::from("192.168.1.1")])
             .build();
         let mut book = AddressBook::new(&config, make_logger()).expect("invalid init");
         let seed = book.pop_seed().expect("there should be 1 seed");
@@ -428,8 +430,16 @@ mod cfg {
         assert_eq!(book.active_addresses.len() + book.known_addresses.len(), 1);
         assert_eq!(book.known_addresses.len(), 0);
 
+        // If there are seed addresses, then toss away the address.
         book.discard(&entry);
         assert_eq!(book.known_addresses.len(), 0);
+        assert_eq!(book.active_addresses.len(), 0);
+
+        // If there a no more seeds, then the address is added back into the known addresses pool.
+        // Used for connecting to a regtest node.
+        book.pop_seed().expect("there should be 1 seed");
+        book.discard(&entry);
+        assert_eq!(book.known_addresses.len(), 1);
         assert_eq!(book.active_addresses.len(), 0);
     }
 
@@ -460,23 +470,22 @@ mod cfg {
             .with_dns_seeds(vec![String::from("127.0.0.1"), String::from("192.168.1.1")])
             .build();
         let mut book = AddressBook::new(&config, make_logger()).expect("invalid init");
-        let seed1 = book.pop_seed().expect("there should be 1 seed");
-        // Ensure seed address is pushed back on to queue after being popped from the front.
-        assert_eq!(book.seed_queue.len(), 2);
-        assert_eq!(
-            book.seed_queue.back().expect("queue should not be empty"),
-            seed1.addr()
-        );
+        book.pop_seed().expect("there should be 1 seed");
+        assert_eq!(book.seed_queue.len(), 1);
 
-        let seed2 = book.pop_seed().expect("there should be 1 seed");
-        assert_eq!(book.seed_queue.len(), 2);
-        assert_eq!(
-            book.seed_queue.back().expect("queue should not be empty"),
-            seed2.addr()
-        );
-        assert_eq!(
-            book.seed_queue.front().expect("queue should not be empty"),
-            seed1.addr()
-        );
+        book.pop_seed().expect("there should be 1 seed");
+        assert_eq!(book.seed_queue.len(), 0);
+
+        book.pop_seed().expect("pop_seed should rebuild seed queue");
+        assert_eq!(book.seed_queue.len(), 1);
+
+        // Remove the remaining seed address and then empty the dns_seeds.
+        book.pop_seed().expect("there should be 1 seed");
+        book.dns_seeds.clear();
+        // `pop_seed` should now cause the AddressBookError::NoSeedAddressesFound error.
+        assert!(matches!(
+            book.pop_seed(),
+            Err(AddressBookError::NoSeedAddressesFound)
+        ));
     }
 }
