@@ -16,6 +16,7 @@ use ic_interfaces::{
 };
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
+use ic_types::messages::CallbackId;
 use ic_types::{
     ingress::IngressStatus,
     messages::{is_subnet_message, MessageId, RequestOrResponse, Response, SignedIngressContent},
@@ -78,6 +79,14 @@ pub enum StateError {
 
     /// Message enqueuing failed due to calling an unknown subnet method.
     UnknownSubnetMethod(String),
+
+    /// Response enqueuing failed due to not matching the expected response.
+    NonMatchingResponse {
+        err_str: String,
+        originator: CanisterId,
+        callback_id: CallbackId,
+        respondent: CanisterId,
+    },
 
     /// Message enqueuing failed due to calling a subnet method with
     /// an invalid payload.
@@ -214,6 +223,7 @@ pub const LABEL_VALUE_CANISTER_STOPPING: &str = "CanisterStopping";
 pub const LABEL_VALUE_CANISTER_OUT_OF_CYCLES: &str = "CanisterOutOfCycles";
 pub const LABEL_VALUE_INVARIANT_BROKEN: &str = "InvariantBroken";
 pub const LABEL_VALUE_UNKNOWN_SUBNET_METHOD: &str = "UnknownSubnetMethod";
+pub const LABEL_VALUE_INVALID_RESPONSE: &str = "InvalidResponse";
 pub const LABEL_VALUE_INVALID_SUBNET_PAYLOAD: &str = "InvalidSubnetPayload";
 pub const LABEL_VALUE_OUT_OF_MEMORY: &str = "OutOfMemory";
 
@@ -229,6 +239,7 @@ impl StateError {
             StateError::CanisterOutOfCycles(_) => LABEL_VALUE_CANISTER_OUT_OF_CYCLES,
             StateError::InvariantBroken(_) => LABEL_VALUE_INVARIANT_BROKEN,
             StateError::UnknownSubnetMethod(_) => LABEL_VALUE_UNKNOWN_SUBNET_METHOD,
+            StateError::NonMatchingResponse { .. } => LABEL_VALUE_INVALID_RESPONSE,
             StateError::InvalidSubnetPayload => LABEL_VALUE_INVALID_SUBNET_PAYLOAD,
             StateError::OutOfMemory { .. } => LABEL_VALUE_OUT_OF_MEMORY,
         }
@@ -261,6 +272,11 @@ impl std::fmt::Display for StateError {
                 f,
                 "Cannot enqueue management message. Method {} is unknown.",
                 method
+            ),
+            StateError::NonMatchingResponse {err_str, originator, callback_id, respondent} => write!(
+                f,
+                "Cannot enqueue response with callback id {} due to {} : originator => {}, respondent => {}",
+                callback_id, err_str, originator, respondent
             ),
             StateError::InvalidSubnetPayload => write!(
                 f,

@@ -2,8 +2,10 @@
 //! various types of methods in the IC.
 
 use crate::{messages::CallContextId, Cycles};
+use ic_base_types::CanisterId;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::{canister_state_bits::v1 as pb, queues::v1::Cycles as PbCycles};
+use ic_protobuf::types::v1 as pb_types;
 use serde::{Deserialize, Serialize};
 use std::{
     convert::{From, TryFrom},
@@ -197,10 +199,19 @@ impl WasmClosure {
     }
 }
 
-/// References to functions executed when a response is received.
+/// Callback holds references to functions executed when a response is received.
+/// It also tracks information about the origin of the request.
+/// This information is used to validate the response when it is received.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Callback {
     pub call_context_id: CallContextId,
+    // (EXC-877) Once this is deployed in production,
+    // it's safe to make `respondent` and `originator` non-optional.
+    // Currently optional to ensure backwards compatibility.
+    /// The request's sender id.
+    pub originator: Option<CanisterId>,
+    /// The id of the principal that the request was addressed to.
+    pub respondent: Option<CanisterId>,
     /// The number of cycles that were sent in the original request.
     pub cycles_sent: Cycles,
     /// A closure to be executed if the call succeeded.
@@ -215,6 +226,8 @@ pub struct Callback {
 impl Callback {
     pub fn new(
         call_context_id: CallContextId,
+        originator: Option<CanisterId>,
+        respondent: Option<CanisterId>,
         cycles_sent: Cycles,
         on_reply: WasmClosure,
         on_reject: WasmClosure,
@@ -222,6 +235,8 @@ impl Callback {
     ) -> Self {
         Self {
             call_context_id,
+            originator,
+            respondent,
             cycles_sent,
             on_reply,
             on_reject,
@@ -234,6 +249,14 @@ impl From<&Callback> for pb::Callback {
     fn from(item: &Callback) -> Self {
         Self {
             call_context_id: item.call_context_id.get(),
+            originator: item
+                .originator
+                .as_ref()
+                .map(|originator| pb_types::CanisterId::from(*originator)),
+            respondent: item
+                .respondent
+                .as_ref()
+                .map(|respondent| pb_types::CanisterId::from(*respondent)),
             cycles_sent: Some(item.cycles_sent.into()),
             on_reply: Some(pb::WasmClosure {
                 func_idx: item.on_reply.func_idx,
@@ -264,6 +287,8 @@ impl TryFrom<pb::Callback> for Callback {
 
         Ok(Self {
             call_context_id: CallContextId::from(value.call_context_id),
+            originator: try_from_option_field(value.originator, "Callback::originator").ok(),
+            respondent: try_from_option_field(value.respondent, "Callback::respondent").ok(),
             cycles_sent: Cycles::from(cycles_sent),
             on_reply: WasmClosure {
                 func_idx: on_reply.func_idx,

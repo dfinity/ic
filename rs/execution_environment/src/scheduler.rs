@@ -10,7 +10,7 @@ use ic_interfaces::{
     execution_environment::{IngressHistoryWriter, Scheduler, SubnetAvailableMemory},
     messages::CanisterInputMessage,
 };
-use ic_logger::{debug, fatal, info, new_logger, warn, ReplicaLogger};
+use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::RoutingTable;
@@ -821,7 +821,12 @@ impl SchedulerImpl {
                             state.metadata.own_subnet_type,
                             InputQueueType::LocalSubnet,
                         )
-                        .map_err(|_| ()),
+                        .map_err(|(err, msg)| {
+                            error!(
+                                self.log,
+                                "Inducting {:?} on same subnet failed with error '{}'.", &msg, &err
+                            );
+                        }),
 
                     None => Err(()),
                 });

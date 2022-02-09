@@ -331,7 +331,7 @@ impl<'a> QueryContext<'a> {
             .unwrap_or_else(|| {
                 fatal!(
                     self.log,
-                    "Canister {}: Expected to find a CallContextmanager",
+                    "Canister {}: Expected to find a CallContextManager",
                     canister_id
                 )
             });

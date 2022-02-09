@@ -12,7 +12,7 @@ use ic_test_utilities::{
         fetch_histogram_stats, fetch_int_counter_vec, fetch_int_gauge_vec, metric_vec,
         nonzero_values, MetricVec,
     },
-    state::new_canister_state,
+    state::{new_canister_state, register_callback},
     types::{
         ids::{canister_test_id, user_test_id, SUBNET_27, SUBNET_42},
         messages::RequestBuilder,
@@ -64,7 +64,19 @@ fn reject_local_request() {
 
         // With a reservation on an input queue.
         let payment = Cycles::from(100);
-        let msg = generate_message_for_test(sender, receiver, "method".to_string(), payment);
+        let msg = generate_message_for_test(
+            sender,
+            receiver,
+            CallbackId::from(1),
+            "method".to_string(),
+            payment,
+        );
+        register_callback(
+            &mut canister_state,
+            msg.sender,
+            msg.receiver,
+            msg.sender_reply_callback,
+        );
 
         canister_state.push_output_request(msg.clone()).unwrap();
         canister_state
@@ -123,6 +135,7 @@ fn reject_local_request_for_subnet() {
         let msg = generate_message_for_test(
             subnet_id_as_canister_id,
             canister_test_id(0),
+            CallbackId::from(1),
             "method".to_string(),
             payment,
         );
@@ -584,6 +597,7 @@ fn build_streams_with_messages_targeted_to_other_subnets() {
         let msgs = vec![generate_message_for_test(
             canister_test_id(0),
             CanisterId::from(REMOTE_SUBNET),
+            CallbackId::from(1),
             Method::CanisterStatus.to_string(),
             Cycles::new(0),
         )];
@@ -654,7 +668,7 @@ fn build_streams_with_messages_targeted_to_other_subnets() {
     });
 }
 
-/// Sets up the `StreamHandlerImpl`, `ReplicatedState` and `Metricsregistry` to
+/// Sets up the `StreamHandlerImpl`, `ReplicatedState` and `MetricsRegistry` to
 /// be used by a test.
 fn new_fixture(log: &ReplicaLogger) -> (StreamBuilderImpl, ReplicatedState, MetricsRegistry) {
     let mut state =
@@ -735,13 +749,16 @@ fn generate_messages_for_test(senders: u64, receivers: u64) -> Vec<Request> {
     let mut messages = Vec::new();
     for snd in 3..(3 + senders) {
         let sender = canister_test_id(snd);
+        let mut next_callback_id = 0;
         let payment = Cycles::from(100);
         for rcv in 700..(700 + receivers) {
             let receiver = canister_test_id(rcv);
             for i in snd..2 * snd {
+                next_callback_id += 1;
                 messages.push(generate_message_for_test(
                     sender,
                     receiver,
+                    CallbackId::from(next_callback_id),
                     format!("req_{}_{}_{}", snd, rcv, i),
                     payment,
                 ));
@@ -754,15 +771,16 @@ fn generate_messages_for_test(senders: u64, receivers: u64) -> Vec<Request> {
 fn generate_message_for_test(
     sender: CanisterId,
     receiver: CanisterId,
+    callback_id: CallbackId,
     method_name: String,
     payment: Cycles,
 ) -> Request {
     RequestBuilder::default()
         .sender(sender)
         .receiver(receiver)
+        .sender_reply_callback(callback_id)
         .method_name(method_name)
         .payment(payment)
-        .sender_reply_callback(CallbackId::from(999))
         .build()
 }
 
@@ -772,17 +790,22 @@ fn generate_provided_canister_states(msgs: Vec<Request>) -> BTreeMap<CanisterId,
     let mut provided_canister_states = BTreeMap::<CanisterId, CanisterState>::new();
 
     for msg in msgs {
-        let provided_canister_state =
-            provided_canister_states
-                .entry(msg.sender)
-                .or_insert_with(|| {
-                    new_canister_state(
-                        msg.sender,
-                        msg.sender.get(),
-                        *INITIAL_CYCLES,
-                        NumSeconds::from(100_000),
-                    )
-                });
+        let mut provided_canister_state = provided_canister_states
+            .entry(msg.sender)
+            .or_insert_with(|| {
+                new_canister_state(
+                    msg.sender,
+                    msg.sender.get(),
+                    *INITIAL_CYCLES,
+                    NumSeconds::from(100_000),
+                )
+            });
+        register_callback(
+            &mut provided_canister_state,
+            msg.sender,
+            msg.receiver,
+            msg.sender_reply_callback,
+        );
         provided_canister_state.push_output_request(msg).unwrap();
     }
 
@@ -795,21 +818,26 @@ fn generate_expected_canister_states(msgs: Vec<Request>) -> BTreeMap<CanisterId,
     let mut expected_canister_states = BTreeMap::<CanisterId, CanisterState>::new();
 
     for msg in msgs {
-        let expected_canister_state =
-            expected_canister_states
-                .entry(msg.sender)
-                .or_insert_with(|| {
-                    new_canister_state(
-                        msg.sender,
-                        msg.sender.get(),
-                        *INITIAL_CYCLES,
-                        NumSeconds::from(100_000),
-                    )
-                });
+        let mut expected_canister_state = expected_canister_states
+            .entry(msg.sender)
+            .or_insert_with(|| {
+                new_canister_state(
+                    msg.sender,
+                    msg.sender.get(),
+                    *INITIAL_CYCLES,
+                    NumSeconds::from(100_000),
+                )
+            });
 
         // The output_queue can only be constructed with index = 0, so push and pop
         // each message to bump its next queue index.
         let receiver = msg.receiver;
+        register_callback(
+            &mut expected_canister_state,
+            msg.sender,
+            msg.receiver,
+            msg.sender_reply_callback,
+        );
         expected_canister_state.push_output_request(msg).unwrap();
         expected_canister_state
             .system_state

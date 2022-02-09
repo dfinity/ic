@@ -1468,16 +1468,18 @@ fn push_output_request_respects_memory_limits() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut sandbox_safe_system_state =
         SandboxSafeSystemState::new(&system_state, cycles_account_manager);
+    let own_canister_id = system_state.canister_id;
     let callback_id = sandbox_safe_system_state
         .register_callback(Callback::new(
             call_context_test_id(0),
+            Some(own_canister_id),
+            Some(canister_test_id(0)),
             Cycles::from(0),
             WasmClosure::new(0, 0),
             WasmClosure::new(0, 0),
             None,
         ))
         .unwrap();
-    let own_canister_id = system_state.canister_id;
     let mut api = SystemApiImpl::new(
         ApiTypeBuilder::new().build_update_api(),
         sandbox_safe_system_state,
@@ -1541,16 +1543,18 @@ fn push_output_request_oversized_request_memory_limits() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut sandbox_safe_system_state =
         SandboxSafeSystemState::new(&system_state, cycles_account_manager);
+    let own_canister_id = system_state.canister_id;
     let callback_id = sandbox_safe_system_state
         .register_callback(Callback::new(
             call_context_test_id(0),
+            Some(own_canister_id),
+            Some(canister_test_id(0)),
             Cycles::from(0),
             WasmClosure::new(0, 0),
             WasmClosure::new(0, 0),
             None,
         ))
         .unwrap();
-    let own_canister_id = system_state.canister_id;
     let mut api = SystemApiImpl::new(
         ApiTypeBuilder::new().build_update_api(),
         sandbox_safe_system_state,

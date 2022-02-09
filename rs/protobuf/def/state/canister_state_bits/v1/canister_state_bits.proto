@@ -42,6 +42,8 @@ message Callback {
   WasmClosure on_reject = 3;
   WasmClosure on_cleanup = 4;
   state.queues.v1.Cycles cycles_sent = 5;
+  types.v1.CanisterId originator = 6;
+  types.v1.CanisterId respondent = 7;
 }
 
 message CallbackEntry {
