@@ -85,6 +85,10 @@ function process_bootstrap() {
     done
 
     rm -rf "${TMPDIR}"
+
+    # Synchronize the above cached writes to persistent storage
+    # to make sure the system can boot successfully after a hard shutdown.
+    sync
 }
 
 MAX_TRIES=10
