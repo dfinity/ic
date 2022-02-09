@@ -1,9 +1,7 @@
 /**
  * Implement the HttpRequest to Canisters Proposal.
- *
- * TODO: Add support for streaming.
  */
-import { Actor, HttpAgent } from '@dfinity/agent';
+import { Actor, HttpAgent, QueryResponseStatus } from '@dfinity/agent';
 import { IDL } from '@dfinity/candid';
 import { Principal } from '@dfinity/principal';
 import { validateBody } from './validation';
@@ -154,8 +152,28 @@ function maybeResolveCanisterIdFromHttpRequest(request: Request, isLocal: boolea
   );
 }
 
+const StreamingCallbackToken = IDL.Record({
+  key: IDL.Text,
+  sha256: IDL.Opt(IDL.Vec(IDL.Nat8)),
+  index: IDL.Nat,
+  content_encoding: IDL.Text,
+});
+const StreamingCallbackHttpResponse = IDL.Record({
+  token: IDL.Opt(StreamingCallbackToken),
+  body: IDL.Vec(IDL.Nat8),
+});
 const canisterIdlFactory: IDL.InterfaceFactory = ({ IDL }) => {
   const HeaderField = IDL.Tuple(IDL.Text, IDL.Text);
+  const StreamingStrategy = IDL.Variant({
+    Callback: IDL.Record({
+      token: StreamingCallbackToken,
+      callback: IDL.Func(
+        [StreamingCallbackToken],
+        [IDL.Opt(StreamingCallbackHttpResponse)],
+        ["query"]
+      ),
+    }),
+  });
   const HttpRequest = IDL.Record({
     method: IDL.Text,
     url: IDL.Text,
@@ -166,7 +184,7 @@ const canisterIdlFactory: IDL.InterfaceFactory = ({ IDL }) => {
     status_code: IDL.Nat16,
     headers: IDL.Vec(HeaderField),
     body: IDL.Vec(IDL.Nat8),
-    // TODO: Support streaming in JavaScript.
+    streaming_strategy: IDL.Opt(StreamingStrategy),
   });
 
   return IDL.Service({
@@ -191,6 +209,64 @@ function decodeBody(body: Uint8Array, encoding: string): Uint8Array {
     default:
       throw new Error(`Unsupported encoding: "${encoding}"`);
   }
+}
+
+/**
+ * Fetch and merge body chunks
+ * @param canisterId Canister which contains chunks
+ * @param agent Existing HttpAgent
+ * @param httpResponse HttpResponse idl. Result of http_request query call
+ */
+ export async function fetchBody(
+  canisterId: Principal,
+  agent: HttpAgent,
+  httpResponse: any
+): Promise<Uint8Array> {
+  let body = new Uint8Array(httpResponse.body);
+
+  if (!('streaming_strategy' in httpResponse)) {
+    return body;
+  }
+
+  const strategy = httpResponse.streaming_strategy[0];
+  if (!strategy) {
+    return body;
+  }
+
+  const [_, methodName]: [any, string] = strategy.Callback?.callback || [];
+
+  let token = strategy.Callback?.token;
+  while (!!token) {
+    try {
+      const encodedResponse = await agent.query(canisterId, {
+        methodName,
+        arg: IDL.encode([StreamingCallbackToken], [token]),
+      });
+
+      if (encodedResponse.status == QueryResponseStatus.Rejected) {
+        throw `${encodedResponse.reject_code}: ${encodedResponse.reject_message}`;
+      }
+
+      const [decodedResponse]: any = IDL.decode(
+        [StreamingCallbackHttpResponse],
+        encodedResponse.reply.arg
+      );
+
+      const bytes: number[] = decodedResponse?.body || [];
+
+      const mergedBody = new Uint8Array(body.length + bytes.length);
+      mergedBody.set(body);
+      mergedBody.set(bytes, body.length);
+      body = mergedBody;
+
+      token = decodedResponse.token ? decodedResponse.token[0] : undefined;
+    } catch (e) {
+      body = new Uint8Array(httpResponse.body);
+      break;
+    }
+  }
+
+  return body;
 }
 
 /**
@@ -230,7 +306,10 @@ export async function handleRequest(request: Request): Promise<Response> {
   if (maybeCanisterId) {
     try {
       const replicaUrl = new URL(url.origin);
-      const agent = new HttpAgent({ host: replicaUrl.toString() });
+      const agent = new HttpAgent({
+        host: replicaUrl.toString(),
+        fetch: self.fetch.bind(self),
+      });
       const actor = Actor.createActor(canisterIdlFactory, {
         agent,
         canisterId: maybeCanisterId,
@@ -281,7 +360,7 @@ export async function handleRequest(request: Request): Promise<Response> {
         headers.append(key, value);
       }
 
-      const body = new Uint8Array(httpResponse.body);
+      const body = await fetchBody(maybeCanisterId, agent, httpResponse);
       const identity = decodeBody(body, encoding);
 
       let bodyValid = false;

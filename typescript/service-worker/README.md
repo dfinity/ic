@@ -32,6 +32,23 @@ To start the local development instance: `npm start`. This will start serving th
 
 It's important to not use `webpack-dev-server` (even if it's available) as it is not fully compatible with Service Workers.
 
+
+## Local develop with existing replica
+
+**TESTED**
+
+You will need to build the the repo first (see Build section above).
+
+Start a replica in another place and set port to `devServer.proxy` inside `webpack.config.js` (default 8000)
+
+Deploy any canister with type `assets` and copy canisterId
+
+Start a dev mode webpack with `npm run develop`.
+
+Open `http://localhost:8080/?canisterId=DEPLOYED_CANISTER_ID` in browser
+
+After any change in service-worker source code make "reload without cache"
+
 ## Commit
 
 You may find it useful to install a pre-commit hook that formats the code.  See: `.husky/pre-commit`

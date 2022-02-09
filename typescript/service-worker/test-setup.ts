@@ -7,3 +7,5 @@
 require('jest-fetch-mock').enableMocks();
 global.TextEncoder = require('text-encoding').TextEncoder;
 global.TextDecoder = require('text-encoding').TextDecoder;
+// @ts-expect-error
+global.self = { location: { toString: () => 'http://localhost' } };

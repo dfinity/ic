@@ -3,6 +3,11 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 const webpack = require('webpack');
 
 module.exports = {
+  devServer: {
+    proxy: {
+      "/api": "http://localhost:8000",
+    },
+  },
   entry: {
     bundle: path.join(__dirname, 'src/index.ts'),
   },
