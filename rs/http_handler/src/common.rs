@@ -1,5 +1,3 @@
-// Common code for both submit.rs and read.rs
-
 use hyper::{Body, HeaderMap, Response, StatusCode};
 use ic_crypto_tree_hash::Path;
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label};
@@ -14,7 +12,6 @@ use ic_types::{
     messages::MessageId,
 };
 use ic_validator::RequestValidationError;
-use prost::Message;
 use serde::Serialize;
 use std::sync::Arc;
 use tower::{load_shed::error::Overloaded, BoxError};
@@ -93,23 +90,6 @@ pub(crate) fn cbor_response<R: Serialize>(r: &R) -> Response<Body> {
 pub(crate) fn empty_response() -> Response<Body> {
     let mut response = Response::new(Body::from(""));
     *response.status_mut() = StatusCode::NO_CONTENT;
-    response
-}
-
-/// Write the provided prost::Message as a serialized protobuf into a Response
-/// object.
-pub(crate) fn protobuf_response<R: Message>(r: &R) -> Response<Body> {
-    use hyper::header;
-    let mut buf = Vec::<u8>::new();
-    r.encode(&mut buf)
-        .expect("impossible: Serialization failed");
-    let mut response = Response::new(Body::from(buf));
-    *response.status_mut() = StatusCode::OK;
-    *response.headers_mut() = get_cors_headers();
-    response.headers_mut().insert(
-        header::CONTENT_TYPE,
-        header::HeaderValue::from_static(CONTENT_TYPE_PROTOBUF),
-    );
     response
 }
 

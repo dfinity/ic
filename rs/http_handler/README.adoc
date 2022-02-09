@@ -25,6 +25,10 @@ The precondidation are encoded in the +ic_types::messages::ReplicaHealthStatus+ 
 If you try to send, for example a query request, before the replica enters ReplicaHealthStatus::Healthy, then
 503 Service Unavailable will be returned as part of the response.
 
+=== Code structure
+
+For each HTTP(s) endpoint there is a module that processes the corresponding requests. (e.g. query.rs, call.rs)
+
 == tower::Service FAQ
 
 === When implementing a https://docs.rs/tower/0.4.11/tower/trait.Service.html[tower::Service], use https://docs.rs/tower/0.4.11/tower/util/struct.BoxService.html[tower::util::BoxService] as the public interface

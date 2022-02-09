@@ -5,9 +5,10 @@ use crate::{
     types::{ApiReqType, RequestType},
     HttpHandlerMetrics, UNKNOWN_LABEL,
 };
-use hyper::{Body, Response};
+use hyper::{Body, Response, StatusCode};
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_types::{canonical_error::invalid_argument_error, consensus::catchup::CatchUpPackageParam};
+use prost::Message;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -32,6 +33,23 @@ impl CatchUpPackageService {
     }
 }
 
+/// Write the provided prost::Message as a serialized protobuf into a Response
+/// object.
+fn protobuf_response<R: Message>(r: &R) -> Response<Body> {
+    use hyper::header;
+    let mut buf = Vec::<u8>::new();
+    r.encode(&mut buf)
+        .expect("impossible: Serialization failed");
+    let mut response = Response::new(Body::from(buf));
+    *response.status_mut() = StatusCode::OK;
+    *response.headers_mut() = common::get_cors_headers();
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        header::HeaderValue::from_static(common::CONTENT_TYPE_PROTOBUF),
+    );
+    response
+}
+
 impl Service<Vec<u8>> for CatchUpPackageService {
     type Response = Response<Body>;
     type Error = BoxError;
@@ -54,12 +72,12 @@ impl Service<Vec<u8>> for CatchUpPackageService {
 
         let cup = self.consensus_pool_cache.cup_with_protobuf();
         let res = if body.is_empty() {
-            Ok(common::protobuf_response(&cup.protobuf))
+            Ok(protobuf_response(&cup.protobuf))
         } else {
             match serde_cbor::from_slice::<CatchUpPackageParam>(&body) {
                 Ok(param) => {
                     if CatchUpPackageParam::from(&cup.cup) > param {
-                        Ok(common::protobuf_response(&cup.protobuf))
+                        Ok(protobuf_response(&cup.protobuf))
                     } else {
                         Ok(common::empty_response())
                     }
