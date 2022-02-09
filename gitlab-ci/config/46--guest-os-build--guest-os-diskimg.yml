@@ -23,7 +23,7 @@ guest-os-diskimg:
       # artifacts/release dir with binaries come from cargo-build-release-linux-native
       cd "${CI_PROJECT_DIR}"/ic-os/guestos
       # shellcheck disable=SC2086  # Expanding BUILD_EXTRA_ARGS into multiple parameters
-      capsule -v -t "$(openssl sha256 <<<${BUILD_EXTRA_ARGS}${BUILD_EXTRA_SUFFIX})" -t "${VERSION}" -o "${BUILD_OUT}/**/*" -- \
+      capsule --passive -v -t "$(openssl sha256 <<<${BUILD_EXTRA_ARGS}${BUILD_EXTRA_SUFFIX})" -t "${VERSION}" -o "${BUILD_OUT}/**/*" -- \
       "${CI_PROJECT_DIR}"/gitlab-ci/src/job_scripts/guest-os-diskimg.sh \
         "$BUILD_OUT" "$BUILD_TMP" "$UPLOAD_TARGET" "$VERSION" "$CDPRNET"
       buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" rclone -- \

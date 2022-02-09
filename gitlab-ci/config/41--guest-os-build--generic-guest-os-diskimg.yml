@@ -21,7 +21,7 @@ generic-guest-os-diskimg:
 
       mkdir -p build-out/disk-img/ build-tmp/
       buildevents cmd  "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" build-disk-img -- \
-      capsule -v -t "${VERSION}" -o build-tmp/disk.img -- \
+      capsule --passive -v -t "${VERSION}" -o build-tmp/disk.img -- \
       ./scripts/build-disk-image.sh -o build-tmp/disk.img -p root -v "${VERSION}" -x ../../artifacts/release/
       echo "${VERSION}" > build-tmp/version.txt
       ls -lah build-tmp
