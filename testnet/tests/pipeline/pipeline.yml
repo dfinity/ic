@@ -823,9 +823,15 @@ icos-continuous-upgrade-nightly:
   # are forwarded to a separate file.
   # All lines produced by the logger share the same structure: e.g. "Nov 10 13:20:30.931 INFO ...".
   # Hence, the fourth column can be used to distinguish structured from unstructured logs.
+  if [ -n "$LOG_DEBUG_OVERRIDES" ]; then
+    LOG_DEBUG_OVERRIDES_OPTS=("--log-debug-overrides" "${LOG_DEBUG_OVERRIDES}")
+  else
+    LOG_DEBUG_OVERRIDES_OPTS=()
+  fi
   $SHELL_WRAPPER "${CI_PROJECT_DIR}/rs/tests/run-farm-based-system-tests.sh" \
     --suite "${SUITE_NAME}" \
     --log-base-dir "${BASE_DIR}" \
+    "${LOG_DEBUG_OVERRIDES_OPTS[@]}" \
   | tee "${BASE_DIR}/unstructured-logs.log" \
   | awk '$4 ~ /CRIT|ERRO|WARN|INFO|DEBG|TRCE/'
 
@@ -838,8 +844,15 @@ icos-continuous-upgrade-nightly:
       - "$CI_PROJECT_DIR/logs/"
   allow_failure: true
 
+.with-monitoring:
+  variables:
+    # we need debug-level logs from the following components for IC policy monitoring
+    LOG_DEBUG_OVERRIDES: "ic_consensus::consensus::batch_delivery,ic_artifact_manager::processors,ic_consensus::consensus,ic_transport::control_plane"
+
 system-tests-hourly:
-  extends: .system-tests
+  extends: 
+    - .system-tests
+    - .with-monitoring
   variables:
     SUITE_NAME: "hourly"
     cd_target_env: "HOURLY"
@@ -847,7 +860,9 @@ system-tests-hourly:
     - *run-farm-based-test
 
 rosetta-hourly:
-  extends: .system-tests
+  extends: 
+    - .system-tests
+    - .with-monitoring
   variables:
     SUITE_NAME: "rosetta"
     cd_target_env: "HOURLY"
@@ -871,7 +886,9 @@ rosetta-hourly:
     - *run-farm-based-test
 
 wasm-generator-hourly:
-  extends: .system-tests-wasm-generator
+  extends:
+    - .system-tests-wasm-generator
+    - .with-monitoring
   variables:
     cd_target_env: "HOURLY"
     NUMBER_OF_CANISTERS: 100
