@@ -77,6 +77,7 @@ pub fn create_driver_context_from_cli(
         authorized_ssh_accounts_dir: ssh_key_dir,
         authorized_ssh_accounts: cli_args.authorized_ssh_accounts,
         journalbeat_hosts: cli_args.journalbeat_hosts,
+        log_debug_overrides: cli_args.log_debug_overrides,
         pot_timeout: cli_args.pot_timeout,
     }
 }
@@ -150,6 +151,7 @@ pub struct DriverContext {
     pub authorized_ssh_accounts_dir: Arc<TempDir>,
     pub authorized_ssh_accounts: Vec<AuthorizedSshAccount>,
     pub journalbeat_hosts: Vec<String>,
+    pub log_debug_overrides: Vec<String>,
     pub pot_timeout: Duration,
 }
 
