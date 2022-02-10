@@ -9,8 +9,7 @@ use crate::util;
 use ic_base_types::CanisterId;
 use ic_fondue::ic_manager::IcHandle;
 use ic_types::messages::{
-    Blob, HttpCanisterUpdate, HttpQueryContent, HttpRequestEnvelope, HttpSubmitContent,
-    HttpUserQuery,
+    Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpRequestEnvelope, HttpUserQuery,
 };
 use rand::RngCore;
 use reqwest::StatusCode;
@@ -158,7 +157,7 @@ fn test_valid_update_followed_by_garbage(handle: &IcHandle, ctx: &ic_fondue::pot
     let canister_id = CanisterId::from_u64(123456789);
     // Create a valid update request.
     let envelope = HttpRequestEnvelope {
-        content: HttpSubmitContent::Call {
+        content: HttpCallContent::Call {
             update: HttpCanisterUpdate {
                 canister_id: Blob(canister_id.get().as_slice().to_vec()),
                 method_name: "update".to_string(),

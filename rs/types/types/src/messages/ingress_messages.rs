@@ -5,8 +5,8 @@ use crate::{
     ic00::IC_00,
     messages::message_id::hash_of_map,
     messages::{
-        Authentication, HasCanisterId, HttpCanisterUpdate, HttpRequest, HttpRequestContent,
-        HttpRequestEnvelope, HttpRequestError, HttpSubmitContent, SignedRequestBytes,
+        Authentication, HasCanisterId, HttpCallContent, HttpCanisterUpdate, HttpRequest,
+        HttpRequestContent, HttpRequestEnvelope, HttpRequestError, SignedRequestBytes,
     },
     CanisterId, CountBytes, PrincipalId, SubnetId, Time, UserId,
 };
@@ -264,19 +264,19 @@ impl TryFrom<SignedRequestBytes> for SignedIngress {
     type Error = HttpRequestError;
 
     fn try_from(binary: SignedRequestBytes) -> Result<Self, Self::Error> {
-        let request: HttpRequestEnvelope<HttpSubmitContent> = (&binary).try_into()?;
+        let request: HttpRequestEnvelope<HttpCallContent> = (&binary).try_into()?;
         let signed = request.try_into()?;
         Ok(SignedIngress { signed, binary })
     }
 }
 
-/// The conversion from 'HttpRequestEnvelope<HttpSubmitContent>' to
+/// The conversion from 'HttpRequestEnvelope<HttpCallContent>' to
 /// 'SignedIngress' goes through serialization first, because the
 /// actual encoded bytes has to be part of 'SignedIngress'.
-impl TryFrom<HttpRequestEnvelope<HttpSubmitContent>> for SignedIngress {
+impl TryFrom<HttpRequestEnvelope<HttpCallContent>> for SignedIngress {
     type Error = HttpRequestError;
 
-    fn try_from(request: HttpRequestEnvelope<HttpSubmitContent>) -> Result<Self, Self::Error> {
+    fn try_from(request: HttpRequestEnvelope<HttpCallContent>) -> Result<Self, Self::Error> {
         let bytes = SignedRequestBytes::try_from(request)?;
         SignedIngress::try_from(bytes)
     }

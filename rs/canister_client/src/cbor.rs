@@ -3,9 +3,9 @@ use ic_crypto_tree_hash::{LabeledTree, Path};
 use ic_types::Time;
 use ic_types::{
     messages::{
-        Blob, Certificate, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
-        HttpReadStateContent, HttpReadStateResponse, HttpRequestEnvelope, HttpSubmitContent,
-        HttpUserQuery, MessageId, SignedRequestBytes,
+        Blob, Certificate, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
+        HttpReadStateContent, HttpReadStateResponse, HttpRequestEnvelope, HttpUserQuery, MessageId,
+        SignedRequestBytes,
     },
     time::current_time_and_expiry_time,
     CanisterId,
@@ -145,8 +145,8 @@ impl Agent {
         arguments: Vec<u8>,
         nonce: Vec<u8>,
         ingress_expiry: Time,
-    ) -> Result<(HttpRequestEnvelope<HttpSubmitContent>, MessageId), Box<dyn Error>> {
-        let content = HttpSubmitContent::Call {
+    ) -> Result<(HttpRequestEnvelope<HttpCallContent>, MessageId), Box<dyn Error>> {
+        let content = HttpCallContent::Call {
             update: HttpCanisterUpdate {
                 canister_id: to_blob(canister_id),
                 method_name: method.to_string(),

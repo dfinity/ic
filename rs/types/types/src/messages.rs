@@ -9,11 +9,11 @@ mod read_state;
 mod webauthn;
 
 pub use self::http::{
-    Authentication, Certificate, CertificateDelegation, Delegation, HasCanisterId,
+    Authentication, Certificate, CertificateDelegation, Delegation, HasCanisterId, HttpCallContent,
     HttpCanisterUpdate, HttpQueryContent, HttpQueryResponse, HttpQueryResponseReply, HttpReadState,
     HttpReadStateContent, HttpReadStateResponse, HttpReply, HttpRequest, HttpRequestContent,
-    HttpRequestEnvelope, HttpRequestError, HttpResponseStatus, HttpStatusResponse,
-    HttpSubmitContent, HttpUserQuery, RawHttpRequestVal, ReplicaHealthStatus, SignedDelegation,
+    HttpRequestEnvelope, HttpRequestError, HttpResponseStatus, HttpStatusResponse, HttpUserQuery,
+    RawHttpRequestVal, ReplicaHealthStatus, SignedDelegation,
 };
 use crate::{user_id_into_protobuf, user_id_try_from_protobuf, Cycles, Funds, NumBytes, UserId};
 pub use blob::Blob;
@@ -341,7 +341,7 @@ mod tests {
         // the hell out of it to make sure no enum constructors are added which are
         // not handled by the conversion.
         fn request_id_conversion_does_not_panic(
-            submit: HttpRequestEnvelope::<HttpSubmitContent>)
+            submit: HttpRequestEnvelope::<HttpCallContent>)
         {
             let _ = HttpRequest::try_from(submit).unwrap();
         }
@@ -351,8 +351,8 @@ mod tests {
     fn decoding_submit_call() {
         let (_, expiry_time) = current_time_and_expiry_time();
         assert_cbor_de_equal(
-            &HttpRequestEnvelope::<HttpSubmitContent> {
-                content: HttpSubmitContent::Call {
+            &HttpRequestEnvelope::<HttpCallContent> {
+                content: HttpCallContent::Call {
                     update: HttpCanisterUpdate {
                         canister_id: Blob(vec![42; 8]),
                         method_name: "some_method".to_string(),
@@ -385,8 +385,8 @@ mod tests {
     fn decoding_submit_call_arg() {
         let (_, expiry_time) = current_time_and_expiry_time();
         assert_cbor_de_equal(
-            &HttpRequestEnvelope::<HttpSubmitContent> {
-                content: HttpSubmitContent::Call {
+            &HttpRequestEnvelope::<HttpCallContent> {
+                content: HttpCallContent::Call {
                     update: HttpCanisterUpdate {
                         canister_id: Blob(vec![42; 8]),
                         method_name: "some_method".to_string(),
@@ -419,8 +419,8 @@ mod tests {
     fn decoding_submit_call_with_nonce() {
         let (_, expiry_time) = current_time_and_expiry_time();
         assert_cbor_de_equal(
-            &HttpRequestEnvelope::<HttpSubmitContent> {
-                content: HttpSubmitContent::Call {
+            &HttpRequestEnvelope::<HttpCallContent> {
+                content: HttpCallContent::Call {
                     update: HttpCanisterUpdate {
                         canister_id: Blob(vec![42; 8]),
                         method_name: "some_method".to_string(),
@@ -453,8 +453,8 @@ mod tests {
     #[test]
     fn serialize_via_bincode() {
         let expiry_time = current_time_and_expiry_time().1;
-        let update = HttpRequestEnvelope::<HttpSubmitContent> {
-            content: HttpSubmitContent::Call {
+        let update = HttpRequestEnvelope::<HttpCallContent> {
+            content: HttpCallContent::Call {
                 update: HttpCanisterUpdate {
                     canister_id: Blob(vec![42; 8]),
                     method_name: "some_method".to_string(),
@@ -477,8 +477,8 @@ mod tests {
     #[test]
     fn serialize_via_bincode_without_signature() {
         let expiry_time = current_time_and_expiry_time().1;
-        let update = HttpRequestEnvelope::<HttpSubmitContent> {
-            content: HttpSubmitContent::Call {
+        let update = HttpRequestEnvelope::<HttpCallContent> {
+            content: HttpCallContent::Call {
                 update: HttpCanisterUpdate {
                     canister_id: Blob(vec![42; 8]),
                     method_name: "some_method".to_string(),

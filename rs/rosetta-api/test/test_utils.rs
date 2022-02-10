@@ -25,7 +25,7 @@ use ic_rosetta_api::ledger_client::{Blocks, LedgerAccess};
 use ic_rosetta_api::rosetta_server::RosettaApiServer;
 use ic_rosetta_api::{store::HashedBlock, RosettaRequestHandler, DEFAULT_TOKEN_NAME};
 use ic_types::{
-    messages::{HttpCanisterUpdate, HttpSubmitContent},
+    messages::{HttpCallContent, HttpCanisterUpdate},
     PrincipalId,
 };
 use std::collections::BTreeMap;
@@ -171,7 +171,7 @@ impl LedgerAccess for TestLedger {
             let EnvelopePair { update, .. } = &request[0];
 
             let HttpCanisterUpdate { arg, sender, .. } = match update.content.clone() {
-                HttpSubmitContent::Call { update } => update,
+                HttpCallContent::Call { update } => update,
             };
 
             let from = PrincipalId::try_from(sender.0)

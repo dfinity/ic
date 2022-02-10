@@ -34,7 +34,7 @@ use ic_nns_governance::pb::v1::{
     ClaimOrRefreshNeuronFromAccount, ManageNeuron,
 };
 use ic_types::messages::{
-    Blob, HttpCanisterUpdate, HttpReadStateContent, HttpRequestEnvelope, HttpSubmitContent,
+    Blob, HttpCallContent, HttpCanisterUpdate, HttpReadStateContent, HttpRequestEnvelope,
 };
 use ic_types::{messages::MessageId, CanisterId, PrincipalId};
 use on_wire::IntoWire;
@@ -349,8 +349,8 @@ impl RosettaRequestHandler {
                 assert_eq!(transaction_signature.signature_type, SignatureType::Ed25519);
                 assert_eq!(read_state_signature.signature_type, SignatureType::Ed25519);
 
-                let envelope = HttpRequestEnvelope::<HttpSubmitContent> {
-                    content: HttpSubmitContent::Call { update },
+                let envelope = HttpRequestEnvelope::<HttpCallContent> {
+                    content: HttpCallContent::Call { update },
                     sender_pubkey: Some(Blob(ic_canister_client::ed25519_public_key_to_der(
                         from_public_key(&transaction_signature.public_key)?,
                     ))),
@@ -480,7 +480,7 @@ impl RosettaRequestHandler {
                 .iter()
                 .map(
                     |(request_type, updates)| match updates[0].update.content.clone() {
-                        HttpSubmitContent::Call { update } => (*request_type, update),
+                        HttpCallContent::Call { update } => (*request_type, update),
                     },
                 )
                 .collect(),

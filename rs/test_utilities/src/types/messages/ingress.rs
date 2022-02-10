@@ -4,7 +4,7 @@ use ic_canister_client::Sender;
 use ic_interfaces::crypto::DOMAIN_IC_REQUEST;
 use ic_types::{
     messages::{
-        Blob, HttpCanisterUpdate, HttpRequestEnvelope, HttpSubmitContent, Ingress, MessageId,
+        Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, Ingress, MessageId,
         SignedIngress,
     },
     time::current_time_and_expiry_time,
@@ -188,12 +188,12 @@ impl SignedIngressBuilder {
     pub fn build(&self) -> SignedIngress {
         // TODO(NNS1-502): Consider panicking if expiry_time() was not called
 
-        let content = HttpSubmitContent::Call {
+        let content = HttpCallContent::Call {
             update: self.update.clone(),
         };
         let sender_pubkey = self.sender_pubkey.as_ref().map(|key| Blob(key.clone()));
         let sender_sig = self.sender_sig.as_ref().map(|sig| Blob(sig.clone()));
-        let envelope = HttpRequestEnvelope::<HttpSubmitContent> {
+        let envelope = HttpRequestEnvelope::<HttpCallContent> {
             content,
             sender_pubkey,
             sender_sig,
