@@ -31,8 +31,8 @@ pub const E8S_PER_TOKEN: u64 = TOKEN_SUBDIVIDABLE_BY;
 impl NervousSystemParameters {
     pub fn with_default_values() -> Self {
         Self {
-            reject_cost_e8s: Some(E8S_PER_TOKEN),          // 1 ICP
-            neuron_minimum_stake_e8s: Some(E8S_PER_TOKEN), // 1 ICP
+            reject_cost_e8s: Some(E8S_PER_TOKEN),          // 1 Token
+            neuron_minimum_stake_e8s: Some(E8S_PER_TOKEN), // 1 Token
             transaction_fee_e8s: Some(DEFAULT_TRANSFER_FEE.get_e8s()),
             max_proposals_to_keep_per_action: Some(100),
             initial_voting_period: Some(2 * ONE_DAY_SECONDS),
