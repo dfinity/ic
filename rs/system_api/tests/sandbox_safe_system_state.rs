@@ -165,7 +165,7 @@ fn correct_charging_source_canister_for_a_request() {
         NumSeconds::from(100_000),
     );
 
-    let initial_cycles_balance = system_state.cycles_balance;
+    let initial_cycles_balance = system_state.balance();
 
     let mut sandbox_safe_system_state =
         SandboxSafeSystemState::new(&system_state, cycles_account_manager);
@@ -213,7 +213,7 @@ fn correct_charging_source_canister_for_a_request() {
             + cycles_account_manager.xnet_call_bytes_transmitted_fee(
                 MAX_INTER_CANISTER_PAYLOAD_IN_BYTES - response.response_payload.size_of()
             ),
-        system_state.cycles_balance
+        system_state.balance()
     );
 }
 
@@ -245,7 +245,7 @@ fn mint_cycles_large_value() {
         .build();
 
     cycles_account_manager.add_cycles(
-        &mut system_state.cycles_balance,
+        system_state.balance_mut(),
         Cycles::from(1_000_000_000_000_000_u128),
     );
 

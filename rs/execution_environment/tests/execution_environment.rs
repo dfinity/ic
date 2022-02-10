@@ -2528,7 +2528,7 @@ fn can_update_canisters_cycles_account_when_an_ingress_is_executed() {
         SubnetType::Application,
         |exec_env, _, _, routing_table, subnet_records| {
             let canister = get_running_canister(canister_test_id(0));
-            let initial_cycles_balance = canister.system_state.cycles_balance;
+            let initial_cycles_balance = canister.system_state.balance();
             let ingress = IngressBuilder::new().build();
 
             let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
@@ -2543,7 +2543,7 @@ fn can_update_canisters_cycles_account_when_an_ingress_is_executed() {
             );
 
             assert_eq!(
-                result.canister.system_state.cycles_balance,
+                result.canister.system_state.balance(),
                 initial_cycles_balance
                     - cycles_account_manager
                         .execution_cost(MAX_NUM_INSTRUCTIONS - result.num_instructions_left,),
@@ -2618,10 +2618,7 @@ fn can_reject_a_request_when_canister_is_out_of_cycles() {
             })
         );
             // Verify the canister's cycles balance is still the same.
-            assert_eq!(
-                result.canister.system_state.cycles_balance,
-                Cycles::from(1000)
-            );
+            assert_eq!(result.canister.system_state.balance(), Cycles::from(1000));
         },
     );
 }
@@ -2668,10 +2665,7 @@ fn can_reject_an_ingress_when_canister_is_out_of_cycles() {
             }))
         );
             // Verify the canister's cycles balance is still the same.
-            assert_eq!(
-                result.canister.system_state.cycles_balance,
-                Cycles::from(1000)
-            );
+            assert_eq!(result.canister.system_state.balance(), Cycles::from(1000));
         },
     );
 }

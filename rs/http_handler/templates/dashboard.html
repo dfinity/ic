@@ -133,7 +133,7 @@
                         <tr><td>freeze_threshold (seconds)</td><td>{{ c.system_state.freeze_threshold }}</td></tr>
                         <tr><td>memory_usage</td><td>{{ c.memory_usage_ref(subnet_type) }}</td></tr>
                         <tr><td>accumulated_priority</td><td>{{ c.scheduler_state.accumulated_priority.value() }} </td></tr>
-                        <tr><td>Cycles balance</td><td>{{ c.system_state.cycles_balance }}</td></tr>
+                        <tr><td>Cycles balance</td><td>{{ c.system_state.balance() }}</td></tr>
                     </table>
                 </div>
             </details>

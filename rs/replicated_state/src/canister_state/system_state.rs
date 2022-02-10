@@ -78,8 +78,7 @@ pub struct SystemState {
     pub certified_data: Vec<u8>,
     pub canister_metrics: CanisterMetrics,
 
-    /// Should only be modified using the methods of a `CyclesAccountManager` or
-    /// by applying the updates from a `SystemStateChanges`.
+    /// Should only be modified through `CyclesAccountManager`.
     ///
     /// A canister's state has an associated cycles balance, and may `send` a
     /// part of this cycles balance to another canister.
@@ -92,7 +91,7 @@ pub struct SystemState {
     ///     1. reserving maximum cycles the operation can require
     ///     2. executing the operation and return `cycles_spent`
     ///     3. reimburse the canister with `cycles_reserved` - `cycles_spent`
-    pub cycles_balance: Cycles,
+    cycles_balance: Cycles,
 }
 
 /// A wrapper around the different canister statuses.
@@ -288,6 +287,16 @@ impl SystemState {
 
     pub fn canister_id(&self) -> CanisterId {
         self.canister_id
+    }
+
+    /// Returns a mutable reference to the balance of the canister.
+    pub fn balance_mut(&mut self) -> &mut Cycles {
+        &mut self.cycles_balance
+    }
+
+    /// Returns the amount of cycles that the balance holds.
+    pub fn balance(&self) -> Cycles {
+        self.cycles_balance
     }
 
     /// This method is used for maintaining the backwards compatibility.

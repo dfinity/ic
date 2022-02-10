@@ -186,13 +186,17 @@ impl CyclesAccountManager {
         cycles_balance: &mut Cycles,
         cycles: Cycles,
     ) -> Result<(), CanisterOutOfCyclesError> {
-        let threshold = self.freeze_threshold_cycles(
-            freeze_threshold,
-            memory_allocation,
-            canister_current_memory_usage,
-            canister_compute_allocation,
-        );
-        self.withdraw_with_threshold(canister_id, cycles_balance, cycles, threshold)
+        self.withdraw_with_threshold(
+            canister_id,
+            cycles_balance,
+            cycles,
+            self.freeze_threshold_cycles(
+                freeze_threshold,
+                memory_allocation,
+                canister_current_memory_usage,
+                canister_compute_allocation,
+            ),
+        )
     }
 
     /// Withdraws and consumes cycles from the canister's balance.
@@ -507,10 +511,10 @@ impl CyclesAccountManager {
             canister_compute_allocation,
         );
 
-        if threshold + requested > system_state.cycles_balance {
+        if threshold + requested > system_state.balance() {
             Err(CanisterOutOfCyclesError {
                 canister_id: system_state.canister_id(),
-                available: system_state.cycles_balance,
+                available: system_state.balance(),
                 requested,
                 threshold,
             })
@@ -522,7 +526,7 @@ impl CyclesAccountManager {
     /// Note that this function is made public only for the tests.
     #[doc(hidden)]
     pub fn refund_cycles(&self, system_state: &mut SystemState, cycles: Cycles) {
-        system_state.cycles_balance += cycles;
+        *system_state.balance_mut() += cycles;
         system_state
             .canister_metrics
             .consumed_cycles_since_replica_started -= NominalCycles::from_cycles(cycles);
@@ -538,7 +542,7 @@ impl CyclesAccountManager {
     ) -> Result<(), CanisterOutOfCyclesError> {
         self.withdraw_with_threshold(
             system_state.canister_id,
-            &mut system_state.cycles_balance,
+            &mut system_state.balance_mut(),
             cycles,
             threshold,
         )
@@ -548,6 +552,11 @@ impl CyclesAccountManager {
     /// Subtracts `cycles` worth of cycles from the canister's balance as long
     /// as there's enough above the provided `threshold`. This call should be
     /// used when the withdrawn cycles are sent somewhere else.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `CanisterOutOfCyclesError` if the
+    /// requested amount is greater than the currently available.
     // #[doc(hidden)] // pub for usage in tests
     pub fn withdraw_with_threshold(
         &self,

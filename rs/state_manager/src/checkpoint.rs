@@ -125,7 +125,7 @@ fn serialize_canister_to_tip(
                 accumulated_priority: canister_state.scheduler_state.accumulated_priority,
                 memory_allocation: canister_state.system_state.memory_allocation,
                 freeze_threshold: canister_state.system_state.freeze_threshold,
-                cycles_balance: canister_state.system_state.cycles_balance,
+                cycles_balance: canister_state.system_state.balance(),
                 execution_state_bits,
                 status: canister_state.system_state.status.clone(),
                 scheduled_as_first: canister_state

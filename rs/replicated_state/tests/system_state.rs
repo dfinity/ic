@@ -33,7 +33,7 @@ fn correct_charging_target_canister_for_a_response() {
         initial_cycles,
         freeze_threshold,
     );
-    let initial_cycles_balance = system_state.cycles_balance;
+    let initial_cycles_balance = system_state.balance();
 
     let request = RequestOrResponse::Request(
         RequestBuilder::default()
@@ -58,7 +58,7 @@ fn correct_charging_target_canister_for_a_response() {
 
     // Target canister should not be charged for receiving the request or sending
     // the response
-    assert_eq!(initial_cycles_balance, system_state.cycles_balance);
+    assert_eq!(initial_cycles_balance, system_state.balance());
 }
 
 #[test]

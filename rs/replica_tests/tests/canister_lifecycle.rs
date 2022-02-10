@@ -477,10 +477,8 @@ fn can_create_canister_with_cycles_from_another_canister() {
         let canister_id =
             test.create_universal_canister_with_args(vec![], num_cycles.try_into().unwrap());
 
-        let old_canister_cycles_balance_before = test
-            .canister_state(&canister_id)
-            .system_state
-            .cycles_balance;
+        let old_canister_cycles_balance_before =
+            test.canister_state(&canister_id).system_state.balance();
 
         // Create another canister with some cycles.
         let cycles_for_new_canister = CANISTER_CREATION_FEE + Cycles::from(100_000_000);
@@ -502,18 +500,14 @@ fn can_create_canister_with_cycles_from_another_canister() {
             .unwrap()
             .get_canister_id();
 
-        let old_canister_cycles_balance_after = test
-            .canister_state(&canister_id)
-            .system_state
-            .cycles_balance;
+        let old_canister_cycles_balance_after =
+            test.canister_state(&canister_id).system_state.balance();
         println!(
             "old canister balance after: {}",
             old_canister_cycles_balance_after
         );
-        let new_canister_cycles_balance = test
-            .canister_state(&new_canister_id)
-            .system_state
-            .cycles_balance;
+        let new_canister_cycles_balance =
+            test.canister_state(&new_canister_id).system_state.balance();
 
         // Check that the balance of the sending canister after creating a new canister
         // is at most its previous balance minus the cycles transferred.
@@ -551,7 +545,7 @@ fn provisional_create_canister_with_cycles_and_top_up() {
         let canister_a_cycles_before: u64 = test
             .canister_state(&canister_a_id)
             .system_state
-            .cycles_balance
+            .balance()
             .into();
         let canister_b_cycles_init = canister_a_cycles_before / 2; // Create with 1/2 * cycles of canister_a
         let canister_b_cycles_top_up = canister_b_cycles_init; // Top-Up with just as many cycles
@@ -582,7 +576,7 @@ fn provisional_create_canister_with_cycles_and_top_up() {
         let canister_b_cycles: u64 = test
             .canister_state(&canister_b_id)
             .system_state
-            .cycles_balance
+            .balance()
             .into();
 
         assert_eq!(canister_b_cycles, canister_b_cycles_init);
@@ -609,7 +603,7 @@ fn provisional_create_canister_with_cycles_and_top_up() {
         let canister_b_cycles_after_top_up: u64 = test
             .canister_state(&canister_b_id)
             .system_state
-            .cycles_balance
+            .balance()
             .into();
 
         // Canister B now has (init + top-up) cycles
@@ -639,10 +633,7 @@ fn provisional_create_canister_with_cycles_and_top_up() {
             .unwrap()
             .get_canister_id();
 
-        let canister_c_cycles = test
-            .canister_state(&canister_c_id)
-            .system_state
-            .cycles_balance;
+        let canister_c_cycles = test.canister_state(&canister_c_id).system_state.balance();
 
         assert_eq!(
             canister_c_cycles,
