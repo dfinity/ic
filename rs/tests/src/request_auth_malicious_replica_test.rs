@@ -37,7 +37,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::crypto::SignedBytesWithoutDomainSeparator;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::messages::{
-    Blob, Delegation, HttpCanisterUpdate, HttpRequestEnvelope, HttpSubmitContent, SignedDelegation,
+    Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SignedDelegation,
 };
 use ic_types::{CanisterId, Time};
 use ic_universal_canister::wasm;
@@ -234,7 +234,7 @@ async fn test_request_with_no_signature_and_no_pubkey<T: Identity + 'static>(
     canister_id: Principal,
 ) {
     // An update call to set the global data to [4, 5, 6].
-    let content = HttpSubmitContent::Call {
+    let content = HttpCallContent::Call {
         update: HttpCanisterUpdate {
             canister_id: Blob(canister_id.as_slice().to_vec()),
             method_name: "update".to_string(),
@@ -279,7 +279,7 @@ async fn test_request_with_correct_signature_and_incorrect_pubkey<T: Identity + 
     let wrong_identity = random_ed25519_identity();
 
     // An update call to set the global data to [4, 5, 6].
-    let content = HttpSubmitContent::Call {
+    let content = HttpCallContent::Call {
         update: HttpCanisterUpdate {
             canister_id: Blob(canister_id.as_slice().to_vec()),
             method_name: "update".to_string(),
@@ -326,7 +326,7 @@ async fn test_request_with_incorrect_signature_and_correct_pubkey<T: Identity + 
     let wrong_identity = random_ed25519_identity();
 
     // An update call to set the global data to [4, 5, 6].
-    let content = HttpSubmitContent::Call {
+    let content = HttpCallContent::Call {
         update: HttpCanisterUpdate {
             canister_id: Blob(canister_id.as_slice().to_vec()),
             method_name: "update".to_string(),
@@ -373,7 +373,7 @@ async fn test_request_with_incorrect_sender<T: Identity + 'static>(
     let wrong_identity = random_ed25519_identity();
 
     // An update call to set the global data to [4, 5, 6].
-    let content = HttpSubmitContent::Call {
+    let content = HttpCallContent::Call {
         update: HttpCanisterUpdate {
             canister_id: Blob(canister_id.as_slice().to_vec()),
             method_name: "update".to_string(),
@@ -417,7 +417,7 @@ async fn test_request_with_expired_ingress<T: Identity + 'static>(
     canister_id: Principal,
 ) {
     // An update call to set the global data to [4, 5, 6].
-    let content = HttpSubmitContent::Call {
+    let content = HttpCallContent::Call {
         update: HttpCanisterUpdate {
             canister_id: Blob(canister_id.as_slice().to_vec()),
             method_name: "update".to_string(),
@@ -465,7 +465,7 @@ async fn test_request_with_delegation<T: Identity + 'static>(
     let identity2 = random_ed25519_identity();
 
     // An update call to set the global data to [4, 5, 6].
-    let content = HttpSubmitContent::Call {
+    let content = HttpCallContent::Call {
         update: HttpCanisterUpdate {
             canister_id: Blob(canister_id.as_slice().to_vec()),
             method_name: "update".to_string(),

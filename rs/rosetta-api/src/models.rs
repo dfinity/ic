@@ -4,7 +4,7 @@ use crate::{
     transaction_id::TransactionIdentifier,
 };
 use ic_types::{
-    messages::{HttpCanisterUpdate, HttpReadStateContent, HttpRequestEnvelope, HttpSubmitContent},
+    messages::{HttpCallContent, HttpCanisterUpdate, HttpReadStateContent, HttpRequestEnvelope},
     CanisterId,
 };
 use serde::{Deserialize, Serialize};
@@ -547,14 +547,14 @@ pub type Request = (RequestType, Vec<EnvelopePair>);
 /// a particular ingress window.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EnvelopePair {
-    pub update: HttpRequestEnvelope<HttpSubmitContent>,
+    pub update: HttpRequestEnvelope<HttpCallContent>,
     pub read_state: HttpRequestEnvelope<HttpReadStateContent>,
 }
 
 impl EnvelopePair {
     pub fn update_content(&self) -> &HttpCanisterUpdate {
         match self.update.content {
-            HttpSubmitContent::Call { ref update } => update,
+            HttpCallContent::Call { ref update } => update,
         }
     }
 }

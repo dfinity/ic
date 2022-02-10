@@ -66,14 +66,14 @@ impl HttpCanisterUpdate {
 #[cfg_attr(test, derive(Arbitrary))]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "request_type")]
-pub enum HttpSubmitContent {
+pub enum HttpCallContent {
     Call {
         #[serde(flatten)]
         update: HttpCanisterUpdate,
     },
 }
 
-impl HttpSubmitContent {
+impl HttpCallContent {
     /// Returns the representation-independent hash.
     pub fn representation_independent_hash(&self) -> [u8; 32] {
         let Self::Call { update } = self;
@@ -213,7 +213,7 @@ impl HttpReadState {
 /// A request envelope as defined in
 /// https://sdk.dfinity.org/docs/interface-spec/index.html#authentication.
 ///
-/// The content is either [`HttpSubmitContent`], [`HttpQueryContent`] or
+/// The content is either [`HttpCallContent`], [`HttpQueryContent`] or
 /// [`HttpReadStateContent`].
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(test, derive(Arbitrary))]
@@ -374,13 +374,13 @@ impl TryFrom<HttpRequestEnvelope<HttpReadStateContent>> for HttpRequest<ReadStat
     }
 }
 
-impl TryFrom<HttpRequestEnvelope<HttpSubmitContent>> for HttpRequest<SignedIngressContent> {
+impl TryFrom<HttpRequestEnvelope<HttpCallContent>> for HttpRequest<SignedIngressContent> {
     type Error = HttpRequestError;
 
-    fn try_from(envelope: HttpRequestEnvelope<HttpSubmitContent>) -> Result<Self, Self::Error> {
+    fn try_from(envelope: HttpRequestEnvelope<HttpCallContent>) -> Result<Self, Self::Error> {
         let auth = Authentication::try_from(&envelope)?;
         match envelope.content {
-            HttpSubmitContent::Call { update } => Ok(HttpRequest {
+            HttpCallContent::Call { update } => Ok(HttpRequest {
                 content: SignedIngressContent::try_from(update)?,
                 auth,
             }),

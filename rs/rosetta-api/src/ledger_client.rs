@@ -23,7 +23,7 @@ use ic_nns_governance::pb::v1::{
     governance_error, manage_neuron::NeuronIdOrSubaccount, manage_neuron_response,
     ClaimOrRefreshNeuronFromAccountResponse, GovernanceError, ManageNeuronResponse, NeuronInfo,
 };
-use ic_types::messages::{HttpSubmitContent, MessageId};
+use ic_types::messages::{HttpCallContent, MessageId};
 use ic_types::CanisterId;
 use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, messages::SignedRequestBytes};
 use ledger_canister::protobuf::{ArchiveIndexEntry, ArchiveIndexResponse};
@@ -577,14 +577,13 @@ impl LedgerClient {
             .ok_or(ApiError::TransactionExpired)?;
 
         let canister_id = match &update.content {
-            HttpSubmitContent::Call { update } => {
-                CanisterId::try_from(update.canister_id.0.clone()).map_err(|e| {
+            HttpCallContent::Call { update } => CanisterId::try_from(update.canister_id.0.clone())
+                .map_err(|e| {
                     ApiError::internal_error(format!(
                         "Cannot parse canister ID found in submit call: {}",
                         e
                     ))
-                })?
-            }
+                })?,
         };
 
         let request_id = MessageId::from(update.content.representation_independent_hash());

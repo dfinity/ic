@@ -1,7 +1,7 @@
 use std::{convert::TryFrom, str::FromStr};
 
 use ic_types::{
-    messages::{HttpRequestEnvelope, HttpSubmitContent},
+    messages::{HttpCallContent, HttpRequestEnvelope},
     PrincipalId,
 };
 use ledger_canister::{HashOf, SendArgs, Transaction};
@@ -32,16 +32,16 @@ impl TransactionIdentifier {
         self.hash != NEURON_MANAGEMEN_PSEUDO_HASH
     }
 
-    /// This could be `TryFrom<&HttpRequestEnvelope<HttpSubmitContent>>`,
+    /// This could be `TryFrom<&HttpRequestEnvelope<HttpCallContent>>`,
     /// but double checking `RequestType` instead of using the canister method
     /// string is nice.
     pub fn try_from_envelope(
         request_type: RequestType,
-        signed_transaction: &HttpRequestEnvelope<HttpSubmitContent>,
+        signed_transaction: &HttpRequestEnvelope<HttpCallContent>,
     ) -> Result<TransactionIdentifier, ApiError> {
         match request_type {
             RequestType::Send => {
-                let HttpSubmitContent::Call { update } = &signed_transaction.content;
+                let HttpCallContent::Call { update } = &signed_transaction.content;
                 let from = PrincipalId::try_from(update.sender.clone().0)
                     .map_err(|e| ApiError::internal_error(e.to_string()))?;
                 let SendArgs {

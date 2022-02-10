@@ -12,8 +12,8 @@ use ic_protobuf::types::v1 as pb;
 use ic_types::{
     consensus::catchup::CatchUpPackageParam,
     messages::{
-        Blob, HttpQueryContent, HttpReadStateContent, HttpRequestEnvelope, HttpStatusResponse,
-        HttpSubmitContent, MessageId, ReplicaHealthStatus,
+        Blob, HttpCallContent, HttpQueryContent, HttpReadStateContent, HttpRequestEnvelope,
+        HttpStatusResponse, MessageId, ReplicaHealthStatus,
     },
     CanisterId, PrincipalId,
 };
@@ -533,21 +533,21 @@ pub fn ed25519_public_key_to_der(mut key: Vec<u8>) -> Vec<u8> {
 /// Prerequisite: `content` contains a `sender` field that is compatible with
 /// the `keypair` argument.
 pub fn sign_submit(
-    content: HttpSubmitContent,
+    content: HttpCallContent,
     sender: &Sender,
-) -> Result<(HttpRequestEnvelope<HttpSubmitContent>, MessageId), Box<dyn Error>> {
+) -> Result<(HttpRequestEnvelope<HttpCallContent>, MessageId), Box<dyn Error>> {
     // Open question: should this also set the `sender` field of the `content`? The
     // two are linked, but it's a bit weird for a function that presents itself
     // as 'wrapping a content into an envelope' to mess up with the content.
 
     let message_id = match &content {
-        HttpSubmitContent::Call { update } => update.id(),
+        HttpCallContent::Call { update } => update.id(),
     };
 
     let pub_key_der = sender.sender_pubkey_der().map(Blob);
     let sender_sig = sender.sign_message_id(&message_id)?.map(Blob);
 
-    let envelope = HttpRequestEnvelope::<HttpSubmitContent> {
+    let envelope = HttpRequestEnvelope::<HttpCallContent> {
         content,
         sender_pubkey: pub_key_der,
         sender_sig,
@@ -649,7 +649,7 @@ mod tests {
             let mut rng = ChaChaRng::seed_from_u64(789_u64);
             ed25519_dalek::Keypair::generate(&mut rng)
         };
-        let content = HttpSubmitContent::Call {
+        let content = HttpCallContent::Call {
             update: HttpCanisterUpdate {
                 canister_id: Blob(vec![51]),
                 method_name: "foo".to_string(),
@@ -709,7 +709,7 @@ mod tests {
             )
             .expect("DER encoding failed"),
         ));
-        let content = HttpSubmitContent::Call {
+        let content = HttpCallContent::Call {
             update: HttpCanisterUpdate {
                 canister_id: Blob(vec![51]),
                 method_name: "foo".to_string(),
@@ -750,7 +750,7 @@ mod tests {
         let expiry_time = test_start_time + Duration::from_secs(4 * 60);
 
         // Set up an arbitrary legal input
-        let content = HttpSubmitContent::Call {
+        let content = HttpCallContent::Call {
             update: HttpCanisterUpdate {
                 canister_id: Blob(vec![51]),
                 method_name: "foo".to_string(),

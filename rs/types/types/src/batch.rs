@@ -369,7 +369,7 @@ mod tests {
     use super::*;
     use crate::{
         messages::{
-            Blob, Delegation, HttpCanisterUpdate, HttpRequestEnvelope, HttpSubmitContent,
+            Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope,
             SignedDelegation, SignedIngress,
         },
         time::current_time_and_expiry_time,
@@ -380,7 +380,7 @@ mod tests {
     #[test]
     fn into_ingress_payload_and_back() {
         let ingress_expiry = current_time_and_expiry_time().1;
-        let content = HttpSubmitContent::Call {
+        let content = HttpCallContent::Call {
             update: HttpCanisterUpdate {
                 canister_id: Blob(vec![42; 8]),
                 method_name: "some_method".to_string(),
@@ -391,19 +391,19 @@ mod tests {
             },
         };
         let update_messages = vec![
-            HttpRequestEnvelope::<HttpSubmitContent> {
+            HttpRequestEnvelope::<HttpCallContent> {
                 content: content.clone(),
                 sender_pubkey: Some(Blob(vec![2; 32])),
                 sender_sig: Some(Blob(vec![1; 32])),
                 sender_delegation: None,
             },
-            HttpRequestEnvelope::<HttpSubmitContent> {
+            HttpRequestEnvelope::<HttpCallContent> {
                 content: content.clone(),
                 sender_pubkey: None,
                 sender_sig: None,
                 sender_delegation: None,
             },
-            HttpRequestEnvelope::<HttpSubmitContent> {
+            HttpRequestEnvelope::<HttpCallContent> {
                 content,
                 sender_pubkey: Some(Blob(vec![2; 32])),
                 sender_sig: Some(Blob(vec![1; 32])),

@@ -9,8 +9,7 @@ use ic_agent::{identity::AnonymousIdentity, Identity, Signature};
 use ic_fondue::{ic_instance::InternetComputer, ic_manager::IcHandle};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::{
-    Blob, HttpCanisterUpdate, HttpQueryContent, HttpRequestEnvelope, HttpSubmitContent,
-    HttpUserQuery,
+    Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpRequestEnvelope, HttpUserQuery,
 };
 use ic_universal_canister::wasm;
 use slog::{debug, info};
@@ -267,7 +266,7 @@ async fn test_request_with_empty_signature_fails<T: Identity + 'static>(
     assert_eq!(res.status(), 400);
 
     // Now try an update.
-    let content = HttpSubmitContent::Call {
+    let content = HttpCallContent::Call {
         update: HttpCanisterUpdate {
             canister_id: Blob(canister_id.as_slice().to_vec()),
             method_name: "update".to_string(),
@@ -344,7 +343,7 @@ async fn test_request_signed_by_another_identity_fails<
     assert_eq!(res.status(), 403);
 
     // Test an update.
-    let content = HttpSubmitContent::Call {
+    let content = HttpCallContent::Call {
         update: HttpCanisterUpdate {
             canister_id: Blob(canister_id.as_slice().to_vec()),
             method_name: "update".to_string(),
@@ -420,7 +419,7 @@ async fn test_request_with_valid_signature_but_wrong_sender_fails<
 
     assert_eq!(res.status(), 403);
 
-    let content = HttpSubmitContent::Call {
+    let content = HttpCallContent::Call {
         update: HttpCanisterUpdate {
             canister_id: Blob(canister_id.as_slice().to_vec()),
             method_name: "update".to_string(),
@@ -460,7 +459,7 @@ fn sign_query(content: &HttpQueryContent, identity: &impl Identity) -> Signature
     identity.sign(&msg).unwrap()
 }
 
-pub fn sign_update(content: &HttpSubmitContent, identity: &impl Identity) -> Signature {
+pub fn sign_update(content: &HttpCallContent, identity: &impl Identity) -> Signature {
     let mut msg = b"\x0Aic-request".to_vec();
     msg.extend(&content.representation_independent_hash());
     identity.sign(&msg).unwrap()

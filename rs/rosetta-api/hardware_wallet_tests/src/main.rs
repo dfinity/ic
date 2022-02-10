@@ -8,7 +8,7 @@ use ic_rosetta_api::{
 };
 use ic_types::{
     messages::{
-        Blob, HttpCanisterUpdate, HttpRequestEnvelope, HttpSubmitContent, SignedRequestBytes,
+        Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SignedRequestBytes,
     },
     PrincipalId,
 };
@@ -111,8 +111,8 @@ pub fn generate_zondax_test(
         hex_bytes,
     };
 
-    let envelope = HttpRequestEnvelope::<HttpSubmitContent> {
-        content: HttpSubmitContent::Call { update },
+    let envelope = HttpRequestEnvelope::<HttpCallContent> {
+        content: HttpCallContent::Call { update },
         sender_pubkey: Some(Blob(ic_canister_client::ed25519_public_key_to_der(
             from_public_key(&transaction_signature.public_key).unwrap(),
         ))),

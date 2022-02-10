@@ -242,7 +242,7 @@ impl From<MessageIdError> for ProxyDecodeError {
 #[cfg(test)]
 mod tests {
     use super::super::{
-        Blob, HttpCanisterUpdate, HttpRequestEnvelope, HttpSubmitContent, RawHttpRequestVal,
+        Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, RawHttpRequestVal,
         SignedIngress,
     };
     use super::*;
@@ -435,8 +435,8 @@ mod tests {
             ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
             nonce: None,
         };
-        let content = HttpSubmitContent::Call { update };
-        let envelope = HttpRequestEnvelope::<HttpSubmitContent> {
+        let content = HttpCallContent::Call { update };
+        let envelope = HttpRequestEnvelope::<HttpCallContent> {
             content,
             sender_pubkey: Some(Blob(sender_pubkey)),
             sender_sig: Some(Blob(sender_sig)),

@@ -251,7 +251,7 @@ fn make_accepted_response() -> Response<Body> {
 mod test {
     use super::*;
     use ic_types::{
-        messages::{Blob, HttpCanisterUpdate, HttpRequestEnvelope, HttpSubmitContent},
+        messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope},
         time::current_time_and_expiry_time,
     };
     use std::convert::TryFrom;
@@ -259,7 +259,7 @@ mod test {
     #[test]
     fn check_request_id() {
         let expiry_time = current_time_and_expiry_time().1;
-        let content = HttpSubmitContent::Call {
+        let content = HttpCallContent::Call {
             update: HttpCanisterUpdate {
                 canister_id: Blob(vec![42; 8]),
                 method_name: "".to_string(),
@@ -269,14 +269,14 @@ mod test {
                 ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
             },
         };
-        let request1 = HttpRequestEnvelope::<HttpSubmitContent> {
+        let request1 = HttpRequestEnvelope::<HttpCallContent> {
             content,
             sender_sig: Some(Blob(vec![])),
             sender_pubkey: Some(Blob(vec![])),
             sender_delegation: None,
         };
 
-        let content = HttpSubmitContent::Call {
+        let content = HttpCallContent::Call {
             update: HttpCanisterUpdate {
                 canister_id: Blob(vec![42; 8]),
                 method_name: "".to_string(),
@@ -286,7 +286,7 @@ mod test {
                 ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
             },
         };
-        let request2 = HttpRequestEnvelope::<HttpSubmitContent> {
+        let request2 = HttpRequestEnvelope::<HttpCallContent> {
             content,
             sender_sig: Some(Blob(b"yes this is a signature".to_vec())),
             sender_pubkey: Some(Blob(b"yes this is a public key: prove it is not!".to_vec())),
