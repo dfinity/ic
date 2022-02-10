@@ -110,13 +110,6 @@ class Collector:
             help="Where to place processed binaries",
         )
         parser.add_argument(
-            "publish_suffix",
-            nargs="?",
-            metavar="SUFFIX",
-            default="",
-            help="Additional text to add to the publish filepath (before the filename)",
-        )
-        parser.add_argument(
             "files",
             metavar="BINARY",
             nargs="*",

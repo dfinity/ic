@@ -8,8 +8,12 @@ artifacts-upload-to-s3:
   needs:
     - cargo-build-canisters
     - cargo-build-release-linux-native
-    # job only runs on protected branches
+    - dfx-build-release-linux
+
+    # these jobs only run on protected branches
     - job: cargo-build-release-darwin
+      optional: true
+    - job: dfx-build-release-darwin
       optional: true
   script:
     - |
@@ -25,6 +29,9 @@ artifacts-upload-to-s3:
         buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
           gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" "artifacts/nix-release" nix-release/x86_64-darwin
       fi
+
+      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+        gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" "artifacts/sdk-release" sdk-release
 
       buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
         gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" "artifacts/canisters" canisters
