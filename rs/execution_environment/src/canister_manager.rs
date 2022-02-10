@@ -877,27 +877,27 @@ impl CanisterManager {
         let mut total_heap_delta = NumBytes::from(0);
 
         // Run (start)
-        let (new_canister, instruction_limit, result) = self
+        let (new_canister, instructions_left, result) = self
             .hypervisor
             .execute_canister_start(new_canister, execution_parameters.clone());
         info!(
             self.log,
             "Executing (start) on canister {} consumed {} instructions.  {} instructions are left.",
             canister_id,
-            execution_parameters.instruction_limit - instruction_limit,
-            instruction_limit
+            execution_parameters.instruction_limit - instructions_left,
+            instructions_left
         );
         match result {
             Ok(heap_delta) => {
                 total_heap_delta += heap_delta;
             }
-            Err(err) => return (instruction_limit, Err((canister_id, err).into())),
+            Err(err) => return (instructions_left, Err((canister_id, err).into())),
         }
 
-        execution_parameters.instruction_limit = instruction_limit;
+        execution_parameters.instruction_limit = instructions_left;
 
         // Run canister_init
-        let (new_canister, instruction_limit, result) = self.hypervisor.execute_canister_init(
+        let (new_canister, instructions_left, result) = self.hypervisor.execute_canister_init(
             new_canister,
             context.sender,
             context.arg.as_slice(),
@@ -908,15 +908,15 @@ impl CanisterManager {
             self.log,
             "Executing (canister_init) on canister {} consumed {} instructions.  {} instructions are left.",
             canister_id,
-            execution_parameters.instruction_limit - instruction_limit,
-            instruction_limit
+            execution_parameters.instruction_limit - instructions_left,
+            instructions_left
         );
         match result {
             Ok(heap_delta) => {
                 total_heap_delta += heap_delta;
-                (instruction_limit, Ok((total_heap_delta, new_canister)))
+                (instructions_left, Ok((total_heap_delta, new_canister)))
             }
-            Err(err) => (instruction_limit, Err((canister_id, err).into())),
+            Err(err) => (instructions_left, Err((canister_id, err).into())),
         }
     }
 
@@ -935,7 +935,7 @@ impl CanisterManager {
         let new_canister = old_canister.clone();
         let mut total_heap_delta = NumBytes::from(0);
         // Call pre-upgrade hook on the canister.
-        let (mut new_canister, instructions_limit, res) =
+        let (mut new_canister, instructions_left, res) =
             self.hypervisor.execute_canister_pre_upgrade(
                 new_canister,
                 context.sender,
@@ -946,15 +946,15 @@ impl CanisterManager {
             self.log,
             "Executing (canister_pre_upgrade) on canister {} consumed {} instructions.  {} instructions are left.",
             canister_id,
-            execution_parameters.instruction_limit - instructions_limit,
-            instructions_limit
+            execution_parameters.instruction_limit - instructions_left,
+            instructions_left
         );
-        execution_parameters.instruction_limit = instructions_limit;
+        execution_parameters.instruction_limit = instructions_left;
         match res {
             Ok(heap_delta) => {
                 total_heap_delta += heap_delta;
             }
-            Err(err) => return (instructions_limit, Err((canister_id, err).into())),
+            Err(err) => return (instructions_left, Err((canister_id, err).into())),
         }
 
         // Replace the execution state of the canister with a new execution state, but
@@ -965,7 +965,7 @@ impl CanisterManager {
             layout.raw_path(),
             canister_id,
         ) {
-            Err(err) => return (instructions_limit, Err((canister_id, err).into())),
+            Err(err) => return (instructions_left, Err((canister_id, err).into())),
             Ok(mut execution_state) => {
                 let stable_memory = match new_canister.execution_state {
                     Some(es) => es.stable_memory,
@@ -994,7 +994,7 @@ impl CanisterManager {
         if let MemoryAllocation::Reserved(bytes) = desired_memory_allocation {
             if bytes < new_canister.memory_usage(self.config.own_subnet_type) {
                 return (
-                    instructions_limit,
+                    instructions_left,
                     Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
                         canister_id,
                         memory_allocation_given: desired_memory_allocation,
@@ -1007,22 +1007,22 @@ impl CanisterManager {
         new_canister.system_state.memory_allocation = desired_memory_allocation;
 
         // Run (start)
-        let (new_canister, instructions_limit, result) = self
+        let (new_canister, instructions_left, result) = self
             .hypervisor
             .execute_canister_start(new_canister, execution_parameters.clone());
         info!(
             self.log,
             "Executing (start) on canister {} consumed {} instructions.  {} instructions are left.",
             canister_id,
-            execution_parameters.instruction_limit - instructions_limit,
-            instructions_limit
+            execution_parameters.instruction_limit - instructions_left,
+            instructions_left
         );
-        execution_parameters.instruction_limit = instructions_limit;
+        execution_parameters.instruction_limit = instructions_left;
         match result {
             Ok(heap_delta) => {
                 total_heap_delta += heap_delta;
             }
-            Err(err) => return (instructions_limit, Err((context.canister_id, err).into())),
+            Err(err) => return (instructions_left, Err((context.canister_id, err).into())),
         }
 
         // Call post-upgrade hook on the upgraded canister.
@@ -1038,8 +1038,8 @@ impl CanisterManager {
             self.log,
             "Executing (canister_post_upgrade) on canister {} consumed {} instructions.  {} instructions are left.",
             canister_id,
-            execution_parameters.instruction_limit - instructions_limit,
-            instructions_limit
+            execution_parameters.instruction_limit - instructions_left,
+            instructions_left
         );
         match result {
             Ok(heap_delta) => {
