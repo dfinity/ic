@@ -1065,7 +1065,7 @@ impl Proposal {
                             }
                             NnsFunction::IcpXdrConversionRate => Topic::ExchangeRate,
                             NnsFunction::ClearProvisionalWhitelist => Topic::NetworkEconomics,
-                            NnsFunction::SetAuthorizedSubnetworks => Topic::Governance,
+                            NnsFunction::SetAuthorizedSubnetworks => Topic::SubnetManagement,
                             NnsFunction::SetFirewallConfig => Topic::SubnetManagement,
                             NnsFunction::UninstallCode => Topic::Governance,
                             NnsFunction::UpdateNodeRewardsTable => Topic::NetworkEconomics,
@@ -1472,6 +1472,28 @@ impl ProposalRewardStatus {
             self,
             ProposalRewardStatus::Settled | ProposalRewardStatus::Ineligible
         )
+    }
+}
+
+impl Topic {
+    /// When voting rewards are distributed, the voting power of
+    /// neurons voting on proposals are weighted by this amount. The
+    /// weights are designed to encourage active participation from
+    /// neuron holders.
+    fn reward_weight(&self) -> f64 {
+        match self {
+            // Default following is not enabled for proposals on the
+            // governance topic. Thus, we provide significantly higher
+            // voting rewards for neuron holders who actively vote on
+            // these.
+            Topic::Governance => 20.0,
+            // There are several (typically over 100) exchange rate
+            // proposals per day.
+            Topic::ExchangeRate => 0.01,
+            // Other topics are unit weighted. Typically a handful of
+            // proposals per day (excluding weekends).
+            _ => 1.0,
+        }
     }
 }
 
@@ -5114,9 +5136,14 @@ impl Governance {
                             if let Some(more_followers) = topic_cache.and_then(|x| x.get(k)) {
                                 all_followers.append(&mut more_followers.clone());
                             }
-                            // Insert followers from 'Unspecified' (default followers)
-                            if let Some(more_followers) = unspecified_cache.and_then(|x| x.get(k)) {
-                                all_followers.append(&mut more_followers.clone());
+                            // Default following doesn't apply to governance proposals.
+                            if topic != Topic::Governance {
+                                // Insert followers from 'Unspecified' (default followers)
+                                if let Some(more_followers) =
+                                    unspecified_cache.and_then(|x| x.get(k))
+                                {
+                                    all_followers.append(&mut more_followers.clone());
+                                }
                             }
                         } else {
                             // The voting neuron not found in the
@@ -5181,6 +5208,12 @@ impl Governance {
             //
             // Note that it does not matter if X has followers. As X
             // doesn't vote, its followers are not considered.
+            //
+            // The above argument also shows how the algorithm deals
+            // with cycles in the following graph: votes are
+            // propagated through the graph in a manner similar to the
+            // breadth-first search (BFS) algorithm. A node is
+            // explored when it has voted yes or no.
         }
     }
 
@@ -5266,6 +5299,8 @@ impl Governance {
         // The implementation of this method is complicated by the
         // fact that we have to maintain a reverse index of all follow
         // relationships, i.e., the `topic_followee_index`.
+
+        // Find the neuron to modify.
         let neuron = self.proto.neurons.get_mut(&id.id).ok_or_else(||
             // The specified neuron is not present.
             GovernanceError::new_with_message(ErrorType::NotFound, &format!("Leader neuron not found: {}", id.id)))?;
@@ -5624,8 +5659,8 @@ impl Governance {
                 // acquired and we can investigate.
                 panic!(
                     "When attempting to stake a neuron with ID {:?} and stake {:?},\
-	             the neuron disappeared while the operation was in flight.\
-	             Please try again: {:?}",
+                    the neuron disappeared while the operation was in flight.\
+                    Please try again: {:?}",
                     nid,
                     balance.get_e8s(),
                     err
@@ -5981,14 +6016,16 @@ impl Governance {
 
             for pid in considered_proposals.iter() {
                 if let Some(proposal) = self.get_proposal_data(*pid) {
+                    let reward_weight = proposal.topic().reward_weight();
                     for (voter, ballot) in proposal.ballots.iter() {
                         if !Vote::from(ballot.vote).eligible_for_rewards() {
                             continue;
                         }
+                        let voting_rights = (ballot.voting_power as f64) * reward_weight;
                         *voters_to_used_voting_right
                             .entry(NeuronId { id: *voter })
-                            .or_insert(0f64) += ballot.voting_power as f64;
-                        total_voting_rights += ballot.voting_power as f64;
+                            .or_insert(0f64) += voting_rights;
+                        total_voting_rights += voting_rights;
                     }
                 }
             }

@@ -242,8 +242,8 @@ fn test_single_neuron_proposal_new() {
                                 )),
                                 ProposalChange::Action(OptionChange::Different(
                                     None,
-                                    Some(ActionDesc::Motion(Motion {
-                                        motion_text: "me like proposals".to_string(),
+                                    Some(ActionDesc::ManageNetworkEconomics(NetworkEconomics {
+                                        ..Default::default()
                                     })),
                                 )),
                             ]),
@@ -664,7 +664,7 @@ fn fixture_for_following_new() -> NNS {
             NeuronBuilder::new_without_owner(2, 1_000_000_000)
                 .set_dissolve_delay(31557600)
                 .add_followees(
-                    Topic::Governance as i32,
+                    Topic::NetworkEconomics as i32,
                     neuron::Followees {
                         followees: [NeuronId { id: 1 }, NeuronId { id: 3 }, NeuronId { id: 4 }]
                             .to_vec(),
@@ -693,8 +693,8 @@ fn fixture_for_following_new() -> NNS {
 
 /// *Test scenario*
 ///
-/// - Neuron 1 makes a proposal (Motion of topic Governance) and implicitly
-///   votes yes.
+/// - Neuron 1 makes a proposal (on topic NetworkEconomics) and implicitly votes
+///   yes.
 ///
 /// - Neurons 5 and 6 vote yes.
 ///
@@ -713,7 +713,7 @@ fn fixture_for_following_new() -> NNS {
 /// - As neuron 3 follows neurons 5 and 6 on the unknown topic, 3 should vote
 ///   yes.
 ///
-/// - As neuron 2 follows neurons 1 and 3 on the Governance topic, 2 should vote
+/// - As neuron 2 follows neurons 1 and 3 on the NetworkEconomics topic, 2 should vote
 ///   yes as 1 votes implicitly by proposing and 3 votes by following 5 and 6.
 #[cfg(feature = "test")]
 #[test]
@@ -729,8 +729,8 @@ fn test_cascade_following_new() {
             &Proposal {
                 title: Some("A Reasonable Title".to_string()),
                 summary: "test".to_string(),
-                action: Some(proposal::Action::Motion(Motion {
-                    motion_text: "dummy text".to_string(),
+                action: Some(proposal::Action::ManageNetworkEconomics(NetworkEconomics {
+                    ..Default::default()
                 })),
                 ..Default::default()
             },
@@ -805,8 +805,8 @@ fn test_cascade_following_new() {
                             )),
                             ProposalChange::Action(OptionChange::Different(
                                 None,
-                                Some(ActionDesc::Motion(Motion {
-                                    motion_text: "dummy text".to_string(),
+                                Some(ActionDesc::ManageNetworkEconomics(NetworkEconomics {
+                                    ..Default::default()
                                 })),
                             )),
                         ]),
@@ -1052,10 +1052,11 @@ fn test_cascade_following_new() {
 ///   period of 1 year, so the same voting power. Thus, 5 out of 9 need to vote
 ///   to reach a verdict.
 ///
-/// - Neuron 2 follows 1, 3, 4 on topic Governance and neuron 3 follows 5, 6, 7
-///   on topic Unknown = all topics without specific override
+/// - Neuron 2 follows 1, 3, 4 on topic NetworkEconomics and neuron 3 follows 5,
+///   6, 7 on topic Unknown = all topics (except governance) without specific
+///   override
 ///
-/// - Neurons 1, 5, 6 have a controller set and can vote.
+/// - Neurons 1, 5, 6, 7, and 8 have a controller set and can vote.
 fn fixture_for_following() -> GovernanceProto {
     let mut driver = fake::FakeDriver::default();
     // A 'default' neuron, extended with additional fields below.
@@ -1083,7 +1084,7 @@ fn fixture_for_following() -> GovernanceProto {
                 2,
                 Neuron {
                     followees: [(
-                        Topic::Governance as i32,
+                        Topic::NetworkEconomics as i32,
                         neuron::Followees {
                             followees: [NeuronId { id: 1 }, NeuronId { id: 3 }, NeuronId { id: 4 }]
                                 .to_vec(),
@@ -1126,8 +1127,20 @@ fn fixture_for_following() -> GovernanceProto {
                     ..neuron(6)
                 },
             ),
-            (7, neuron(7)),
-            (8, neuron(8)),
+            (
+                7,
+                Neuron {
+                    controller: Some(principal(7)),
+                    ..neuron(7)
+                },
+            ),
+            (
+                8,
+                Neuron {
+                    controller: Some(principal(8)),
+                    ..neuron(8)
+                },
+            ),
             (9, neuron(9)),
         ]
         .to_vec()
@@ -1159,8 +1172,9 @@ fn fixture_for_following() -> GovernanceProto {
 /// - As neuron 3 follows neurons 5 and 6 on the unknown topic, 3 should vote
 ///   yes.
 ///
-/// - As neuron 2 follows neurons 1 and 3 on the Governance topic, 2 should vote
-///   yes as 1 votes implicitly by proposing and 3 votes by following 5 and 6.
+/// - As neuron 2 follows neurons 1 and 3 on the NetworkEconomics topic, 2
+///   should vote yes as 1 votes implicitly by proposing and 3 votes by
+///   following 5 and 6.
 #[test]
 fn test_cascade_following() {
     let driver = fake::FakeDriver::default();
@@ -1176,8 +1190,8 @@ fn test_cascade_following() {
         &Proposal {
             title: Some("A Reasonable Title".to_string()),
             summary: "test".to_string(),
-            action: Some(proposal::Action::Motion(Motion {
-                motion_text: "dummy text".to_string(),
+            action: Some(proposal::Action::ManageNetworkEconomics(NetworkEconomics {
+                ..Default::default()
             })),
             ..Default::default()
         },
@@ -1434,8 +1448,8 @@ fn test_sufficient_stake() {
         &Proposal {
             title: Some("A Reasonable Title".to_string()),
             summary: "test".to_string(),
-            action: Some(proposal::Action::Motion(Motion {
-                motion_text: "dummy text".to_string(),
+            action: Some(proposal::Action::ManageNetworkEconomics(NetworkEconomics {
+                ..Default::default()
             })),
             ..Default::default()
         },
@@ -1494,8 +1508,8 @@ fn test_all_follow_proposer() {
         &Proposal {
             title: Some("A Reasonable Title".to_string()),
             summary: "test".to_string(),
-            action: Some(proposal::Action::Motion(Motion {
-                motion_text: "dummy text".to_string(),
+            action: Some(proposal::Action::ManageNetworkEconomics(NetworkEconomics {
+                ..Default::default()
             })),
             ..Default::default()
         },
@@ -1535,8 +1549,8 @@ fn test_follow_negative() {
         &Proposal {
             title: Some("A Reasonable Title".to_string()),
             summary: "test".to_string(),
-            action: Some(proposal::Action::Motion(Motion {
-                motion_text: "dummy text".to_string(),
+            action: Some(proposal::Action::ManageNetworkEconomics(NetworkEconomics {
+                ..Default::default()
             })),
             ..Default::default()
         },
@@ -1592,6 +1606,72 @@ fn test_follow_negative() {
     assert_eq!(
         gov.proto.neurons.get(&1).unwrap().neuron_fees_e8s,
         gov.proto.economics.unwrap().reject_cost_e8s
+    );
+}
+
+/// Here we test that following doesn't apply to the Governance topic.
+///
+/// Neuron 1 makes a proposal.
+///
+/// Neurons 5, 6, 7, 8 vote yes.
+///
+/// As no following applies, the proposal should not be adopted until
+/// neuron 8 votes yes as default following is disabled for governance
+/// proposals.
+#[test]
+fn test_no_default_follow_for_governance() {
+    let driver = fake::FakeDriver::default();
+    let mut gov = Governance::new(
+        fixture_for_following(),
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+    );
+    gov.make_proposal(
+        &NeuronId { id: 1 },
+        // Must match neuron 1's serialized_id.
+        &principal(1),
+        &Proposal {
+            title: Some("dummy title".to_string()),
+            summary: "test".to_string(),
+            action: Some(proposal::Action::Motion(Motion {
+                motion_text: "dummy text".to_string(),
+            })),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    // Now vote yes for neurons 5-7.
+    for i in 5..=7 {
+        fake::register_vote_assert_success(
+            &mut gov,
+            principal(i),
+            NeuronId { id: i },
+            ProposalId { id: 1 },
+            Vote::Yes,
+        );
+        // The proposal should still be open
+        assert_eq!(
+            ProposalStatus::Open,
+            gov.get_proposal_data(ProposalId { id: 1 })
+                .unwrap()
+                .status()
+        );
+    }
+    // When neuron 8 votes, the proposal should be adopted and
+    // executed.
+    fake::register_vote_assert_success(
+        &mut gov,
+        principal(8),
+        NeuronId { id: 8 },
+        ProposalId { id: 1 },
+        Vote::Yes,
+    );
+    // The proposal should now be executed.
+    assert_eq!(
+        ProposalStatus::Executed,
+        gov.get_proposal_data(ProposalId { id: 1 })
+            .unwrap()
+            .status()
     );
 }
 
@@ -2638,8 +2718,10 @@ fn test_genesis_in_the_future_in_supported() {
     );
 }
 
-/// Test helper where several proposals are created and voted on by various
-/// neurons. The final maturities are returned.
+/// Test helper where several proposals are created and voted on by
+/// various neurons. 100 e8s of voting rewards are distributed and the
+/// final maturities are returned, truncated to the nearest integer
+/// (so they don't have to add up to 100).
 ///
 /// In this test, all proposals last 1 second, which is smaller than the reward
 /// period. This allows to have tests where everything interesting happens in
@@ -2727,6 +2809,52 @@ fn compute_maturities(
         .collect()
 }
 
+proptest! {
+
+/// Check that voting a Governance proposal yields 20x more maturity
+/// than voting on a network economics proposal.
+#[cfg(feature = "test")]
+#[test]
+fn test_topic_weights(stake in 1u64..1_000_000_000) {
+    // Neuron 0 proposes and votes on a governance proposal. Neuron 1
+    // proposes and votes on five network economics proposals. Neuron
+    // 0 gets 20 times the voting power and neuron 1 gets 5 tives the
+    // voting power. Thus, their ratio of voting rewards ought to be
+    // 20:5 or 4:1 or 80:20 regardless of the stakes.
+    //
+    // Note that compute_maturities returns the resulting maturities
+    // when 100 e8s of voting rewards are distributed.
+    assert_eq!(
+        compute_maturities(vec![stake, stake], vec!["P-G", "-PN", "-PN", "-PN", "-PN", "-PN"]),
+        vec![80, 20]
+    );
+    // Make sure that, when voting on proposals of the same type in
+    // the ratio 1:5, they get voting rewards in the ratio 1:5
+    // instead. Note that the maturities are truncated: 16.(6) to 16
+    // and 83.(3) to 83.
+    assert_eq!(
+        compute_maturities(vec![stake, stake], vec!["P-N", "-P", "-P", "-P", "-P", "-P"]),
+        vec![16, 83]
+    );
+    assert_eq!(
+        compute_maturities(vec![stake, stake], vec!["P-G", "-PG", "-PG", "-PG", "-PG", "-PG"]),
+        vec![16, 83]
+    );
+    assert_eq!(
+        compute_maturities(vec![stake, stake], vec!["P-E", "-PE", "-PE", "-PE", "-PE", "-PE"]),
+        vec![16, 83]
+    );
+    // Ensure that voting on an exchange rate proposal gives 1% of the
+    // voting rewards. Note that the maturities are truncated:
+    // 99.(0099) to 99 and 0.(0099) to 0.
+    assert_eq!(
+        compute_maturities(vec![stake, stake], vec!["P-N", "-PE"]),
+        vec![99, 0]
+    );
+}
+
+}
+
 /// Check that, if all stakes are scaled uniformly, the maturities are
 /// unchanged.
 #[test]
@@ -2737,7 +2865,7 @@ fn test_maturities_are_invariant_by_stake_scaling() {
 }
 
 /// Check that, if there is no proposal in the reward period, maturities do not
-/// increases.
+/// increase.
 #[test]
 fn test_no_maturity_increase_if_no_proposal() {
     // Single neuron
@@ -2787,7 +2915,7 @@ fn test_active_neuron_gets_more_mature_than_less_active_one() {
     );
     assert_eq!(
         compute_maturities(
-            vec![2, 1, 1], // First neuron has more stake to not trigger wait for quiet.
+            vec![2, 1, 1], // First neuron has more stake not to trigger wait for quiet.
             vec!["P--", "P--", "Py-", "P-y", "Pn-", "P-n", "Pyn"]
         ),
         vec![70, 15, 15] /* first neuron votes 7 times with double the stake, second 3 times,
@@ -5322,7 +5450,7 @@ fn test_hot_keys_cant_change_followees_of_manage_neuron_topic() {
                     first_neuron.id.as_ref().unwrap().clone(),
                 )),
                 command: Some(manage_neuron::Command::Follow(manage_neuron::Follow {
-                    topic: Topic::Governance as i32,
+                    topic: Topic::NetworkEconomics as i32,
                     followees: vec![second_neuron.id.as_ref().unwrap().clone()],
                 })),
             },

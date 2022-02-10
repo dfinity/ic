@@ -437,7 +437,7 @@ fn main() {
         "ic_nns_governance.pb.v1.NetworkEconomics",
         [
             "#[derive(candid::CandidType, candid::Deserialize)]",
-            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
+            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable), self_describing)]",
         ]
         .join(" "),
     );
