@@ -17,6 +17,7 @@ impl Default for BatchBuilder {
                 requires_full_state_hash: false,
                 payload: super::payload::PayloadBuilder::default().build(),
                 randomness: Randomness::from([0; 32]),
+                ecdsa_subnet_public_key: None,
                 registry_version: RegistryVersion::from(1),
                 time: mock_time(),
                 consensus_responses: vec![],

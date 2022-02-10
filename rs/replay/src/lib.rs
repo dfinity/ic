@@ -538,6 +538,7 @@ impl Player {
             payload: BatchPayload::default(),
             // Use a fake randomness here since we don't have random tape for extra messages
             randomness,
+            ecdsa_subnet_public_key: None,
             registry_version,
             time,
             consensus_responses: Vec::new(),

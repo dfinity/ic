@@ -7,6 +7,9 @@ use crate::consensus::{
     prelude::*,
     utils::{crypto_hashable_to_seed, get_block_hash_string, lookup_replica_version},
 };
+use crate::ecdsa::utils::EcdsaBlockReaderImpl;
+use ic_artifact_pool::consensus_pool::build_consensus_block_chain;
+use ic_crypto::get_tecdsa_master_public_key;
 use ic_crypto::utils::ni_dkg::initial_ni_dkg_transcript_record_from_transcript;
 use ic_interfaces::{
     messaging::{MessageRouting, MessageRoutingError},
@@ -18,6 +21,7 @@ use ic_protobuf::log::consensus_log_entry::v1::ConsensusLogEntry;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_replicated_state::{metadata_state::subnet_call_context_manager::*, ReplicatedState};
 use ic_types::{
+    consensus::ecdsa::EcdsaBlockReader,
     crypto::threshold_sig::ni_dkg::{
         NiDkgId, NiDkgTag, NiDkgTargetSubnet::Remote, NiDkgTranscript,
     },
@@ -123,8 +127,19 @@ pub fn deliver_batches(
 
                 let block_hash = get_block_hash_string(&block);
                 let block_height = block.height().get();
-
                 let randomness = Randomness::from(crypto_hashable_to_seed(&tape));
+                let ecdsa_subnet_public_key = pool.dkg_summary_block(&block).and_then(|summary| {
+                    let ecdsa_summary = summary.payload.as_ref().as_summary().ecdsa.as_ref();
+                    ecdsa_summary.and_then(|ecdsa| {
+                        let chain = build_consensus_block_chain(pool.pool(), &summary, &block);
+                        let block_reader = EcdsaBlockReaderImpl::new(chain);
+                        block_reader
+                            .transcript(ecdsa.current_key_transcript.as_ref())
+                            .ok()
+                            .and_then(|transcript| get_tecdsa_master_public_key(&transcript).ok())
+                    })
+                });
+
                 // This flag can only be true, if we've called deliver_batches with a height
                 // limit.  In this case we also want to have a checkpoint for that last height.
                 let persist_batch = Some(h) == max_batch_height_to_deliver;
@@ -137,6 +152,7 @@ pub fn deliver_batches(
                         BlockPayload::from(block.payload).into_data().batch
                     },
                     randomness,
+                    ecdsa_subnet_public_key,
                     registry_version: block.context.registry_version,
                     time: block.context.time,
                     consensus_responses,

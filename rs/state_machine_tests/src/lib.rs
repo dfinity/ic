@@ -265,6 +265,7 @@ impl StateMachine {
                 self_validating: SelfValidatingPayload::default(),
             },
             randomness: Randomness::from([0; 32]),
+            ecdsa_subnet_public_key: None,
             registry_version: RegistryVersion::from(1),
             time: self.time.get(),
             consensus_responses: vec![],

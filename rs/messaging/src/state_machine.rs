@@ -97,6 +97,7 @@ impl StateMachine for StateMachineImpl {
         let state_after_execution = self.scheduler.execute_round(
             state_with_messages,
             batch.randomness,
+            batch.ecdsa_subnet_public_key,
             ExecutionRound::from(batch.batch_number.get()),
             provisional_whitelist,
             max_number_of_canisters,
