@@ -17,7 +17,7 @@ use ic_crypto_internal_types::scope::{ConstScope, Scope};
 use ic_logger::debug;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
-    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+    IDkgVerifyComplaintError, ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::AlgorithmId;
@@ -26,9 +26,9 @@ use rand::{CryptoRng, Rng};
 use std::collections::BTreeMap;
 use tecdsa::{
     combine_sig_shares as tecdsa_combine_sig_shares, create_transcript as tecdsa_create_transcript,
-    IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
-    IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaCombinedSigInternal,
-    ThresholdEcdsaSigShareInternal,
+    verify_complaint as tecdsa_verify_complaint, IDkgComplaintInternal, IDkgDealingInternal,
+    IDkgTranscriptInternal, IDkgTranscriptOperationInternal, MEGaPublicKey,
+    ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSigShareInternal,
 };
 
 pub const IDKG_MEGA_SCOPE: Scope = Scope::Const(ConstScope::IDkgMEGaEncryptionKeys);
@@ -39,7 +39,6 @@ pub const IDKG_MEGA_SCOPE: Scope = Scope::Const(ConstScope::IDkgMEGaEncryptionKe
 impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> CspIDkgProtocol
     for Csp<R, S, C>
 {
-    /// Generate a share of a dealing for a single receiver.
     fn idkg_create_dealing(
         &self,
         algorithm_id: AlgorithmId,
@@ -61,7 +60,6 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp
         )
     }
 
-    /// Generate an IDkg transcript from verified IDkg dealings
     fn idkg_create_transcript(
         &self,
         algorithm_id: AlgorithmId,
@@ -82,8 +80,6 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp
         })
     }
 
-    /// Compute secret from transcript and store in SKS, generating complaints
-    /// if necessary.
     fn idkg_load_transcript(
         &self,
         dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
@@ -105,8 +101,6 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp
         )
     }
 
-    /// Creates a key pair for encrypting threshold key shares in transmission
-    /// from dealers to receivers.
     fn idkg_create_mega_key_pair(
         &mut self,
         algorithm_id: AlgorithmId,
@@ -114,6 +108,27 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp
         debug!(self.logger; crypto.method_name => "idkg_create_mega_key_pair");
 
         self.csp_vault.idkg_gen_mega_key_pair(algorithm_id)
+    }
+
+    fn idkg_verify_complaint(
+        &self,
+        complaint: &IDkgComplaintInternal,
+        complainer_index: NodeIndex,
+        complainer_key: &MEGaPublicKey,
+        dealing: &IDkgDealingInternal,
+        dealer_index: NodeIndex,
+        context_data: &[u8],
+    ) -> Result<(), IDkgVerifyComplaintError> {
+        debug!(self.logger; crypto.method_name => "idkg_verify_complaint");
+
+        Ok(tecdsa_verify_complaint(
+            complaint,
+            complainer_index,
+            complainer_key,
+            dealing,
+            dealer_index,
+            context_data,
+        )?)
     }
 }
 
@@ -123,7 +138,6 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp
 impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> CspThresholdEcdsaSigner
     for Csp<R, S, C>
 {
-    /// Generate a signature share.
     fn ecdsa_sign_share(
         &self,
         derivation_path: &ExtendedDerivationPath,
@@ -158,7 +172,6 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp
 impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
     CspThresholdEcdsaSigVerifier for Csp<R, S, C>
 {
-    /// Combine signature shares.
     fn ecdsa_combine_sig_shares(
         &self,
         derivation_path: &ExtendedDerivationPath,

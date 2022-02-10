@@ -16,6 +16,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
 use ic_types::NodeId;
 use std::collections::BTreeMap;
 
+mod complaint;
 mod dealing;
 mod mocks;
 mod transcript;
@@ -162,7 +163,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
     fn verify_complaint(
         &self,
         transcript: &IDkgTranscript,
-        complainer: NodeId,
+        complainer_id: NodeId,
         complaint: &IDkgComplaint,
     ) -> Result<(), IDkgVerifyComplaintError> {
         let logger = new_logger!(&self.logger;
@@ -172,7 +173,13 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         debug!(logger;
             crypto.description => "start",
         );
-        let result = mocks::verify_complaint(transcript, complainer, complaint);
+        let result = complaint::verify_complaint(
+            &self.csp,
+            &self.registry_client,
+            transcript,
+            complaint,
+            complainer_id,
+        );
         debug!(logger;
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),

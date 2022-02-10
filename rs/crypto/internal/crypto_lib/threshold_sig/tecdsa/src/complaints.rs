@@ -1,8 +1,10 @@
 use crate::*;
+use ic_types::crypto::canister_threshold_sig::idkg::IDkgComplaint;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::convert::TryFrom;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IDkgComplaintInternal {
     proof: zk::ProofOfDLogEquivalence,
     shared_secret: EccPoint,
@@ -198,5 +200,13 @@ impl IDkgComplaintInternal {
         ro.add_point("receiver_public_key", public_key.public_point())?;
 
         ro.output_bytestring(32)
+    }
+}
+
+impl TryFrom<&IDkgComplaint> for IDkgComplaintInternal {
+    type Error = ThresholdEcdsaError;
+
+    fn try_from(complaint: &IDkgComplaint) -> ThresholdEcdsaResult<Self> {
+        Self::deserialize(&complaint.internal_complaint_raw)
     }
 }

@@ -458,6 +458,22 @@ pub fn random_receiver_id(params: &IDkgTranscriptParams) -> NodeId {
         .expect("receivers is empty")
 }
 
+pub fn random_receiver_id_excluding(receivers: &IDkgReceivers, exclusion: NodeId) -> NodeId {
+    if receivers.get().len() == 1 {
+        let (_receiver_idx, receiver_id) = receivers.iter().next().unwrap();
+        if receiver_id == exclusion {
+            panic!("the only possible receiver is excluded")
+        }
+    }
+    let rng = &mut thread_rng();
+    loop {
+        let random_receiver_id = *receivers.get().iter().choose(rng).expect("receivers empty");
+        if random_receiver_id != exclusion {
+            return random_receiver_id;
+        }
+    }
+}
+
 pub fn random_dealer_id(params: &IDkgTranscriptParams) -> NodeId {
     *params
         .dealers()

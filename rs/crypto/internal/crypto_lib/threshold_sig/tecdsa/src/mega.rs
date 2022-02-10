@@ -90,27 +90,27 @@ impl Debug for MEGaPrivateKey {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MEGaCiphertextSingle {
     pub ephemeral_key: EccPoint, // "v" in the paper
     pub ctexts: Vec<EccScalar>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MEGaCiphertextPair {
     pub ephemeral_key: EccPoint, // "v" in the paper
     pub ctexts: Vec<(EccScalar, EccScalar)>,
 }
 
 /// The type of MEGa ciphertext
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MEGaCiphertextType {
     Single,
     Pairs,
 }
 
 /// Some type of MEGa ciphertext
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MEGaCiphertext {
     Single(MEGaCiphertextSingle),
     Pairs(MEGaCiphertextPair),

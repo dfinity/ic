@@ -46,19 +46,9 @@ impl ErrorReplication for CryptoError {
             CryptoError::AlgorithmNotSupported { .. } => true,
             // false, as the result may change if the DKG transcript is reloaded.
             CryptoError::ThresholdSigDataNotFound { .. } => false,
-            CryptoError::RegistryClient(registry_client_error) => match registry_client_error {
-                // false, as depends on the data available to the registry
-                RegistryClientError::VersionNotAvailable { .. } => false,
-                // false in both cases, these may be transient errors
-                RegistryClientError::DataProviderQueryFailed { source } => match source {
-                    ic_types::registry::RegistryDataProviderError::Timeout => false,
-                    ic_types::registry::RegistryDataProviderError::Transfer { .. } => false,
-                },
-                // may be a transient error
-                RegistryClientError::PollLockFailed { .. } => false,
-                // may be transient errors
-                RegistryClientError::PollingLatestVersionFailed { .. } => false,
-            },
+            CryptoError::RegistryClient(registry_client_error) => {
+                error_replication_of_registry_client_error(registry_client_error)
+            }
             // true, as the registry is guaranteed to be consistent across replicas
             CryptoError::DkgTranscriptNotFound { .. } => true,
             // true, as the registry is guaranteed to be consistent across replicas
@@ -82,19 +72,7 @@ impl ErrorReplication for DkgVerifyDealingError {
                 true
             }
             DkgVerifyDealingError::Registry(registry_client_error) => {
-                match registry_client_error {
-                    // false, as depends on the data available to the registry
-                    RegistryClientError::VersionNotAvailable { .. } => false,
-                    // false in both cases, these may be transient errors
-                    RegistryClientError::DataProviderQueryFailed { source } => match source {
-                        ic_types::registry::RegistryDataProviderError::Timeout => false,
-                        ic_types::registry::RegistryDataProviderError::Transfer { .. } => false,
-                    },
-                    // may be a transient error
-                    RegistryClientError::PollLockFailed { .. } => false,
-                    // may be transient errors
-                    RegistryClientError::PollingLatestVersionFailed { .. } => false,
-                }
+                error_replication_of_registry_client_error(registry_client_error)
             }
             DkgVerifyDealingError::MalformedFsEncryptionPublicKey(_) => {
                 // true, as the encryption public key is fetched from the registry and the
@@ -138,6 +116,41 @@ impl ErrorReplication for IDkgVerifyDealingPublicError {
     }
 }
 
+impl ErrorReplication for IDkgVerifyComplaintError {
+    fn is_replicated(&self) -> bool {
+        // The match below is intentionally explicit on all possible values,
+        // to avoid defaults, which might be error-prone.
+        // Upon addition of any new error this match has to be updated.
+        match self {
+            // true, as the complaint does not become valid through retrying
+            IDkgVerifyComplaintError::InvalidComplaint => true,
+            // true, as validity checks of arguments are stable across replicas
+            IDkgVerifyComplaintError::InvalidArgument { .. } => true,
+            // true, as validity checks of arguments are stable across replicas
+            IDkgVerifyComplaintError::InvalidArgumentMismatchingTranscriptIDs => true,
+            // true, as validity checks of arguments are stable across replicas
+            IDkgVerifyComplaintError::InvalidArgumentMissingDealingInTranscript { .. } => true,
+            // true, as validity checks of arguments are stable across replicas
+            IDkgVerifyComplaintError::InvalidArgumentMissingComplainerInTranscript { .. } => true,
+            // true, as the registry is guaranteed to be consistent across replicas
+            IDkgVerifyComplaintError::ComplainerPublicKeyNotInRegistry { .. } => true,
+            // true, as the public key is fetched from the registry and the
+            // registry is guaranteed to be consistent across replicas
+            IDkgVerifyComplaintError::MalformedComplainerPublicKey { .. } => true,
+            // true, as the set of supported algorithms is stable (bound to code version)
+            IDkgVerifyComplaintError::UnsupportedComplainerPublicKeyAlgorithm { .. } => true,
+            // true, as (de)serialization is stable across replicas
+            IDkgVerifyComplaintError::SerializationError { .. } => true,
+            IDkgVerifyComplaintError::Registry(registry_client_error) => {
+                error_replication_of_registry_client_error(registry_client_error)
+            }
+            // true, as the types of internal errors that may occur during complaint
+            // verification are stable
+            IDkgVerifyComplaintError::InternalError { .. } => true,
+        }
+    }
+}
+
 impl ErrorReplication for IDkgVerifyDealingPrivateError {
     fn is_replicated(&self) -> bool {
         // The match below is intentionally explicit on all possible values,
@@ -159,16 +172,25 @@ impl ErrorReplication for ThresholdEcdsaVerifySigShareError {
     }
 }
 
-impl ErrorReplication for IDkgVerifyComplaintError {
+impl ErrorReplication for IDkgVerifyOpeningError {
     fn is_replicated(&self) -> bool {
         // TODO correctly implement this function
         false
     }
 }
 
-impl ErrorReplication for IDkgVerifyOpeningError {
-    fn is_replicated(&self) -> bool {
-        // TODO correctly implement this function
-        false
+fn error_replication_of_registry_client_error(registry_client_error: &RegistryClientError) -> bool {
+    match registry_client_error {
+        // false, as depends on the data available to the registry
+        RegistryClientError::VersionNotAvailable { .. } => false,
+        // false in both cases, these may be transient errors
+        RegistryClientError::DataProviderQueryFailed { source } => match source {
+            ic_types::registry::RegistryDataProviderError::Timeout => false,
+            ic_types::registry::RegistryDataProviderError::Transfer { .. } => false,
+        },
+        // may be a transient error
+        RegistryClientError::PollLockFailed { .. } => false,
+        // may be transient errors
+        RegistryClientError::PollingLatestVersionFailed { .. } => false,
     }
 }

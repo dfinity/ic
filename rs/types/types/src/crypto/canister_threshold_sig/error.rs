@@ -171,8 +171,39 @@ impl_display_using_debug!(IDkgVerifyDealingPrivateError);
 pub enum IDkgComplaintParsingError {}
 impl_display_using_debug!(IDkgComplaintParsingError);
 
+/// Occurs if verifying a complaint using `IDkgProtocol::verify_complaint` fails.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum IDkgVerifyComplaintError {}
+pub enum IDkgVerifyComplaintError {
+    InvalidComplaint,
+    InvalidArgument {
+        internal_error: String,
+    },
+    InvalidArgumentMismatchingTranscriptIDs,
+    InvalidArgumentMissingDealingInTranscript {
+        dealer_id: NodeId,
+    },
+    InvalidArgumentMissingComplainerInTranscript {
+        complainer_id: NodeId,
+    },
+    ComplainerPublicKeyNotInRegistry {
+        node_id: NodeId,
+        registry_version: RegistryVersion,
+    },
+    MalformedComplainerPublicKey {
+        node_id: NodeId,
+        key_bytes: Vec<u8>,
+    },
+    UnsupportedComplainerPublicKeyAlgorithm {
+        algorithm_id: Option<AlgorithmIdProto>,
+    },
+    SerializationError {
+        internal_error: String,
+    },
+    Registry(RegistryClientError),
+    InternalError {
+        internal_error: String,
+    },
+}
 impl_display_using_debug!(IDkgVerifyComplaintError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

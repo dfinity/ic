@@ -17,7 +17,7 @@ pub const PROOF_OF_PRODUCT_DST: &str = "ic-crypto-tecdsa-zk-proof-of-product";
 /// - `a=b`
 ///
 /// Note that this proof does not prove knowledge of `a` and `b`, but just the equality of the openings.
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProofOfEqualOpenings {
     challenge: EccScalar,
     response: EccScalar,
@@ -149,7 +149,7 @@ impl ProofOfEqualOpenings {
 /// Note: in the IDKG protocol it is not necessary to explicitly prove
 /// knowledge of `b`, as in the security proof this is already known
 /// by the simulator.
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProofOfProduct {
     challenge: EccScalar,
     response1: EccScalar,
@@ -308,7 +308,7 @@ impl ProofOfProduct {
 /// Witness = `x` ∈  Zₚ,
 /// such that:
 /// `A = g*x` and `B = h*x`
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProofOfDLogEquivalence {
     challenge: EccScalar,
     response: EccScalar,
