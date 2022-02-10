@@ -4,8 +4,8 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <string.h>
-#include <ucontext.h>
 #include <sys/ucontext.h>
+#include <ucontext.h>
 #include <unistd.h>
 
 #include <libunwind.h>
@@ -37,7 +37,7 @@ push_string(const char* s, char* pos, char* limit)
     return pos;
 }
 
-static const char HEXDIGITS[16] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
+static const char HEXDIGITS[16] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
 
 static char*
 push_hex(uintptr_t addr, char* pos, char* limit)
@@ -109,7 +109,7 @@ dump_memory(uintptr_t around, char* pos, char* limit)
     // This will try to read from memory, but return with EFAULT rather
     // than sigsegv. If it returns we know that it is safe to read this
     // memory.
-    ssize_t write_result = write(fds[1], (void*) low, NUM_BYTES);
+    ssize_t write_result = write(fds[1], (void*)low, NUM_BYTES);
     close(fds[0]);
     close(fds[1]);
 
@@ -135,7 +135,7 @@ dump_memory(uintptr_t around, char* pos, char* limit)
     return pos;
 }
 
-extern const char * const sys_siglist[];
+extern const char* const sys_siglist[];
 
 void handler(int signo, siginfo_t* info, void* detail)
 {
@@ -150,7 +150,7 @@ void handler(int signo, siginfo_t* info, void* detail)
     char buffer[256];
     // Limit of buffer, reserve byte for \n at the end. We want each written
     // message terminated by \n to ensure logger can process correctly.
-    char *limit = buffer + sizeof(buffer) - 1;
+    char* limit = buffer + sizeof(buffer) - 1;
 
     // All writes are done directly using syscall to write to file descriptor
     // number 2, bypassing all standard library. This is necessary to ensure
@@ -167,17 +167,18 @@ void handler(int signo, siginfo_t* info, void* detail)
         pos = push_string(") at 0x", pos, limit);
         pos = push_hex((uintptr_t)info->si_addr, pos, limit);
         *pos++ = '\n';
-        write(2, buffer, pos - buffer);
+        // Ignore write errors as there is not much we can do...
+        (void)write(2, buffer, pos - buffer);
     }
 
     // Dump registers
-    struct ucontext_t* uctx = (struct ucontext_t*) detail;
+    struct ucontext_t* uctx = (struct ucontext_t*)detail;
     {
         char* pos = buffer;
         pos = push_reg(&uctx->uc_mcontext, REG_RIP, "rip", pos, limit);
         pos = push_reg(&uctx->uc_mcontext, REG_EFL, "efl", pos, limit);
         *pos++ = '\n';
-        write(2, buffer, pos - buffer);
+        (void)write(2, buffer, pos - buffer);
     }
     {
         char* pos = buffer;
@@ -186,7 +187,7 @@ void handler(int signo, siginfo_t* info, void* detail)
         pos = push_reg(&uctx->uc_mcontext, REG_RCX, "rcx", pos, limit);
         pos = push_reg(&uctx->uc_mcontext, REG_RDX, "rdx", pos, limit);
         *pos++ = '\n';
-        write(2, buffer, pos - buffer);
+        (void)write(2, buffer, pos - buffer);
     }
     {
         char* pos = buffer;
@@ -195,7 +196,7 @@ void handler(int signo, siginfo_t* info, void* detail)
         pos = push_reg(&uctx->uc_mcontext, REG_RSI, "rsi", pos, limit);
         pos = push_reg(&uctx->uc_mcontext, REG_RDX, "rdi", pos, limit);
         *pos++ = '\n';
-        write(2, buffer, pos - buffer);
+        (void)write(2, buffer, pos - buffer);
     }
     {
         char* pos = buffer;
@@ -204,7 +205,7 @@ void handler(int signo, siginfo_t* info, void* detail)
         pos = push_reg(&uctx->uc_mcontext, REG_R10, "r10", pos, limit);
         pos = push_reg(&uctx->uc_mcontext, REG_R11, "r11", pos, limit);
         *pos++ = '\n';
-        write(2, buffer, pos - buffer);
+        (void)write(2, buffer, pos - buffer);
     }
     {
         char* pos = buffer;
@@ -213,7 +214,7 @@ void handler(int signo, siginfo_t* info, void* detail)
         pos = push_reg(&uctx->uc_mcontext, REG_R14, "r14", pos, limit);
         pos = push_reg(&uctx->uc_mcontext, REG_R15, "r15", pos, limit);
         *pos++ = '\n';
-        write(2, buffer, pos - buffer);
+        (void)write(2, buffer, pos - buffer);
     }
 
     // Dump memory around rip / rsp
@@ -222,19 +223,18 @@ void handler(int signo, siginfo_t* info, void* detail)
         pos = push_string("mem@rip:", pos, limit);
         pos = dump_memory(uctx->uc_mcontext.gregs[REG_RIP], pos, limit);
         *pos++ = '\n';
-
-        write(2, buffer, pos - buffer);
+        (void)write(2, buffer, pos - buffer);
     }
     {
         char* pos = buffer;
         pos = push_string("mem@rsp:", pos, limit);
         pos = dump_memory(uctx->uc_mcontext.gregs[REG_RSP], pos, limit);
         *pos++ = '\n';
-        write(2, buffer, pos - buffer);
+        (void)write(2, buffer, pos - buffer);
     }
     // Collect and format stack trace. We may not be able to resolve
     // symbols, but addresses may help already.
-    write(2, "Backtrace:\n", 11);
+    (void)write(2, "Backtrace:\n", 11);
     unw_cursor_t cursor;
     unw_context_t context;
     unw_getcontext(&context);
@@ -268,7 +268,7 @@ void handler(int signo, siginfo_t* info, void* detail)
         pos = push_hex(off, pos, limit);
         *pos++ = '\n';
         // Write directly via syscall to stderr.
-        write(2, buffer, pos - buffer);
+        (void)write(2, buffer, pos - buffer);
     }
 
     // Forcibly restore the default handler for this signal: The default
@@ -284,8 +284,7 @@ void handler(int signo, siginfo_t* info, void* detail)
     // process will terminate.
 }
 
-void
-install_backtrace_handler()
+void install_backtrace_handler()
 {
     struct sigaction sa;
     sa.sa_sigaction = handler;
