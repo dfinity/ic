@@ -106,14 +106,14 @@ impl SystemStateChanges {
         // Verify total cycle change is not positive and update cycles balance.
         assert!(self.cycle_change_is_valid(system_state.canister_id == CYCLES_MINTING_CANISTER_ID));
         if self.cycles_balance_change >= 0 {
-            system_state.cycles_balance += Cycles::from(self.cycles_balance_change as u128);
+            *system_state.balance_mut() += Cycles::from(self.cycles_balance_change as u128);
         } else {
             let new_balance = system_state
-                .cycles_balance
+                .balance()
                 .get()
                 .checked_sub(-self.cycles_balance_change as u128)
                 .unwrap();
-            system_state.cycles_balance = Cycles::from(new_balance);
+            *system_state.balance_mut() = Cycles::from(new_balance);
         }
 
         // Observe consumed cycles.
@@ -243,7 +243,7 @@ impl SandboxSafeSystemState {
             CanisterStatusView::from_full_status(&system_state.status),
             system_state.freeze_threshold,
             system_state.memory_allocation,
-            system_state.cycles_balance,
+            system_state.balance(),
             call_context_balances,
             cycles_account_manager,
             system_state
@@ -403,7 +403,7 @@ impl SandboxSafeSystemState {
         amount_to_accept
     }
 
-    pub(super) fn canister_cycles_withdraw(
+    pub(super) fn withdraw_cycles_for_transfer(
         &mut self,
         canister_current_memory_usage: NumBytes,
         compute_allocation: ComputeAllocation,

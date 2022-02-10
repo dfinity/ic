@@ -985,7 +985,7 @@ impl ExecutionEnvironmentImpl {
 
             Some(canister_state) => {
                 self.cycles_account_manager.add_cycles(
-                    &mut canister_state.system_state.cycles_balance,
+                    &mut canister_state.system_state.balance_mut(),
                     msg.take_cycles(),
                 );
                 (Ok(EmptyBlob::encode()), Cycles::from(0))
@@ -1162,7 +1162,7 @@ impl ExecutionEnvironmentImpl {
         };
 
         self.cycles_account_manager
-            .add_cycles(&mut canister.system_state.cycles_balance, refunded_cycles);
+            .add_cycles(&mut canister.system_state.balance_mut(), refunded_cycles);
 
         // The canister that sends a request must also pay the fee for
         // the transmission of the response. As we do not know how big

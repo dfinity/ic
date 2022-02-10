@@ -1360,7 +1360,7 @@ fn call_perform_not_enough_cycles_resets_state() {
     assert_eq!(api.ic0_call_perform().unwrap(), 2);
     let system_state_changes = api.into_system_state_changes();
     system_state_changes.apply_changes(&mut system_state);
-    assert_eq!(system_state.cycles_balance, initial_cycles);
+    assert_eq!(system_state.balance(), initial_cycles);
     let call_context_manager = system_state.call_context_manager().unwrap();
     assert_eq!(call_context_manager.call_contexts().len(), 1);
     assert_eq!(call_context_manager.callbacks().len(), 0);

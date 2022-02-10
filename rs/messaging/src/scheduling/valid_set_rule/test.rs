@@ -511,7 +511,7 @@ fn canister_on_application_subnet_charges_for_ingress() {
         .get(&canister_test_id(0))
         .unwrap()
         .system_state
-        .cycles_balance;
+        .balance();
 
     valid_set_rule.induct_messages(&mut state, vec![msg]);
 
@@ -520,7 +520,7 @@ fn canister_on_application_subnet_charges_for_ingress() {
         .get(&canister_test_id(0))
         .unwrap()
         .system_state
-        .cycles_balance;
+        .balance();
 
     assert_eq!(balance_after, balance_before - cost_of_ingress);
 }
@@ -558,7 +558,7 @@ fn canister_on_system_subnet_does_not_charge_for_ingress() {
         .get(&canister_test_id(0))
         .unwrap()
         .system_state
-        .cycles_balance;
+        .balance();
 
     let msg = SignedIngressBuilder::new()
         .canister_id(canister_test_id(0))
@@ -571,7 +571,7 @@ fn canister_on_system_subnet_does_not_charge_for_ingress() {
         .get(&canister_test_id(0))
         .unwrap()
         .system_state
-        .cycles_balance;
+        .balance();
 
     assert_eq!(balance_after, balance_before);
 }
@@ -667,7 +667,7 @@ fn running_canister_on_application_subnet_accepts_and_charges_for_ingress() {
         );
         let canister_id = canister_test_id(0);
         let canister = get_running_canister(canister_id);
-        let balance_before = canister.system_state.cycles_balance;
+        let balance_before = canister.system_state.balance();
         state.put_canister_state(canister);
 
         let ingress = SignedIngressBuilder::new().build().into();
@@ -682,7 +682,7 @@ fn running_canister_on_application_subnet_accepts_and_charges_for_ingress() {
             .canister_state(&canister_id)
             .unwrap()
             .system_state
-            .cycles_balance;
+            .balance();
 
         assert_eq!(balance_after, balance_before - cost);
     });
@@ -716,7 +716,7 @@ fn running_canister_on_system_subnet_accepts_and_does_not_charge_for_ingress() {
         );
         let canister_id = canister_test_id(0);
         let canister = get_running_canister(canister_id);
-        let balance_before = canister.system_state.cycles_balance;
+        let balance_before = canister.system_state.balance();
         state.put_canister_state(canister);
 
         let ingress = SignedIngressBuilder::new().build().into();
@@ -726,7 +726,7 @@ fn running_canister_on_system_subnet_accepts_and_does_not_charge_for_ingress() {
             .canister_state(&canister_id)
             .unwrap()
             .system_state
-            .cycles_balance;
+            .balance();
 
         assert_eq!(balance_after, balance_before);
     });

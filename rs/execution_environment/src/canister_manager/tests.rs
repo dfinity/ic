@@ -1029,7 +1029,7 @@ fn create_canister_updates_consumed_cycles_metric_correctly() {
             creation_fee.get()
         );
         assert_eq!(
-            canister.system_state.cycles_balance,
+            canister.system_state.balance(),
             *INITIAL_CYCLES - creation_fee
         )
     });
@@ -1058,7 +1058,7 @@ fn provisional_create_canister_has_no_creation_fee() {
                 .get(),
             NominalCycles::default().get()
         );
-        assert_eq!(canister.system_state.cycles_balance, *INITIAL_CYCLES)
+        assert_eq!(canister.system_state.balance(), *INITIAL_CYCLES)
     });
 }
 
@@ -2067,16 +2067,16 @@ fn deposit_cycles_succeeds_with_enough_cycles() {
         let sender = canister_test_id(1).get();
         let mut canister = get_running_canister_with_args(canister_id, sender, *INITIAL_CYCLES);
 
-        let cycles_balance_before = canister.system_state.cycles_balance;
+        let cycles_balance_before = canister.system_state.balance();
         let cycles = Cycles::from(100);
 
         canister_manager
             .cycles_account_manager
-            .add_cycles(&mut canister.system_state.cycles_balance, cycles);
+            .add_cycles(&mut canister.system_state.balance_mut(), cycles);
 
         // Assert that state has changed
         assert_eq!(
-            canister.system_state.cycles_balance,
+            canister.system_state.balance(),
             cycles_balance_before + cycles,
         );
     });
@@ -2112,7 +2112,7 @@ fn create_canister_with_cycles_sender_in_whitelist() {
     let canister = state.take_canister_state(&canister_id).unwrap();
 
     // Verify cycles are set as expected.
-    assert_eq!(canister.system_state.cycles_balance, Cycles::from(123));
+    assert_eq!(canister.system_state.balance(), Cycles::from(123));
 }
 
 #[test]
@@ -2151,7 +2151,7 @@ fn add_cycles_sender_in_whitelist() {
 
     let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
     let mut state = initial_state(tmpdir.path(), subnet_id);
-    let initial_cycles = canister.system_state.cycles_balance;
+    let initial_cycles = canister.system_state.balance();
     state.put_canister_state(canister);
 
     let mut canister = state.canister_state_mut(&canister_id).unwrap();
@@ -2167,7 +2167,7 @@ fn add_cycles_sender_in_whitelist() {
     // Verify cycles are set as expected.
     let canister = state.take_canister_state(&canister_id).unwrap();
     assert_eq!(
-        canister.system_state.cycles_balance,
+        canister.system_state.balance(),
         initial_cycles + Cycles::from(123),
     );
 }

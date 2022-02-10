@@ -1092,10 +1092,7 @@ fn only_charge_for_allocation_after_specified_duration() {
                 MAX_NUMBER_OF_CANISTERS,
             );
             let canister_state = state.canisters_iter().next().unwrap();
-            assert_eq!(
-                canister_state.system_state.cycles_balance.get(),
-                initial_cycles
-            );
+            assert_eq!(canister_state.system_state.balance().get(), initial_cycles);
 
             // The time of the current batch is now long enough that allocation charging
             // should be triggered.
@@ -1109,7 +1106,7 @@ fn only_charge_for_allocation_after_specified_duration() {
             );
             let canister_state = state.canisters_iter().next().unwrap();
             assert_eq!(
-                canister_state.system_state.cycles_balance.get(),
+                canister_state.system_state.balance().get(),
                 initial_cycles - 10
             );
         },

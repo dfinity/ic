@@ -831,11 +831,12 @@ impl SystemApiImpl {
                     method_name
                 ))),
                 Some(request) => {
-                    self.sandbox_safe_system_state.canister_cycles_withdraw(
-                        self.memory_usage.current_usage,
-                        self.execution_parameters.compute_allocation,
-                        amount,
-                    )?;
+                    self.sandbox_safe_system_state
+                        .withdraw_cycles_for_transfer(
+                            self.memory_usage.current_usage,
+                            self.execution_parameters.compute_allocation,
+                            amount,
+                        )?;
                     request.add_cycles(amount);
                     Ok(())
                 }

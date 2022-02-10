@@ -700,7 +700,7 @@ impl CanisterManager {
             *controller,
             controllers,
             canister.memory_usage(self.config.own_subnet_type),
-            canister.system_state.cycles_balance.get(),
+            canister.system_state.balance().get(),
             canister.scheduler_state.compute_allocation.as_percent(),
             Some(canister.memory_allocation().bytes().get()),
             canister.system_state.freeze_threshold.get(),
@@ -1166,7 +1166,7 @@ impl CanisterManager {
         };
 
         self.cycles_account_manager
-            .add_cycles(&mut canister.system_state.cycles_balance, cycles_amount);
+            .add_cycles(canister.system_state.balance_mut(), cycles_amount);
 
         Ok(())
     }

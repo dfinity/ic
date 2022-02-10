@@ -22,18 +22,9 @@ fn can_refund_when_having_nested_calls() {
         let canister_b_id = test.create_universal_canister_with_args(vec![], num_cycles_u64);
         let canister_c_id = test.create_universal_canister_with_args(vec![], num_cycles_u64);
 
-        let a_cycles_balance_before = test
-            .canister_state(&canister_a_id)
-            .system_state
-            .cycles_balance;
-        let b_cycles_balance_before = test
-            .canister_state(&canister_b_id)
-            .system_state
-            .cycles_balance;
-        let c_cycles_balance_before = test
-            .canister_state(&canister_c_id)
-            .system_state
-            .cycles_balance;
+        let a_cycles_balance_before = test.canister_state(&canister_a_id).system_state.balance();
+        let b_cycles_balance_before = test.canister_state(&canister_b_id).system_state.balance();
+        let c_cycles_balance_before = test.canister_state(&canister_c_id).system_state.balance();
 
         // A sends a message to B including 10^9 cycles and 10 ICP tokens.
         // B sends a message to C including 5*10^8 cycles and 5 ICP tokens.
@@ -61,18 +52,9 @@ fn can_refund_when_having_nested_calls() {
         )
         .unwrap();
 
-        let a_cycles_balance_after = test
-            .canister_state(&canister_a_id)
-            .system_state
-            .cycles_balance;
-        let b_cycles_balance_after = test
-            .canister_state(&canister_b_id)
-            .system_state
-            .cycles_balance;
-        let c_cycles_balance_after = test
-            .canister_state(&canister_c_id)
-            .system_state
-            .cycles_balance;
+        let a_cycles_balance_after = test.canister_state(&canister_a_id).system_state.balance();
+        let b_cycles_balance_after = test.canister_state(&canister_b_id).system_state.balance();
+        let c_cycles_balance_after = test.canister_state(&canister_c_id).system_state.balance();
 
         assert_balance_equals(
             a_cycles_balance_before,
@@ -120,14 +102,10 @@ fn can_deposit_cycles_via_the_management_canister() {
             .unwrap()
             .get_canister_id();
 
-        let old_canister_cycles_balance_before = test
-            .canister_state(&canister_id)
-            .system_state
-            .cycles_balance;
-        let new_canister_cycles_balance_before = test
-            .canister_state(&new_canister_id)
-            .system_state
-            .cycles_balance;
+        let old_canister_cycles_balance_before =
+            test.canister_state(&canister_id).system_state.balance();
+        let new_canister_cycles_balance_before =
+            test.canister_state(&new_canister_id).system_state.balance();
 
         // Deposit cycles to the new canister.
         let cycles_to_deposit = 200_000_000;
@@ -143,14 +121,10 @@ fn can_deposit_cycles_via_the_management_canister() {
         )
         .unwrap();
 
-        let old_canister_cycles_balance_after = test
-            .canister_state(&canister_id)
-            .system_state
-            .cycles_balance;
-        let new_canister_cycles_balance_after = test
-            .canister_state(&new_canister_id)
-            .system_state
-            .cycles_balance;
+        let old_canister_cycles_balance_after =
+            test.canister_state(&canister_id).system_state.balance();
+        let new_canister_cycles_balance_after =
+            test.canister_state(&new_canister_id).system_state.balance();
 
         // Check cycles balances.
         assert_balance_equals(
