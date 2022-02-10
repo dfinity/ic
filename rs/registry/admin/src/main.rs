@@ -6,7 +6,6 @@ mod types;
 extern crate chrono;
 use async_trait::async_trait;
 use candid::{CandidType, Decode, Encode};
-use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 use clap::Clap;
 use cycles_minting_canister::SetAuthorizedSubnetworkListArgs;
 use ed25519_dalek::Keypair;
@@ -56,7 +55,6 @@ use ic_protobuf::registry::node_rewards::v2::{
     NodeRewardsTable, UpdateNodeRewardsTableProposalPayload,
 };
 use ic_protobuf::registry::{
-    conversion_rate::v1::IcpXdrConversionRateRecord,
     crypto::v1::{PublicKey, X509PublicKeyCert},
     node::v1::NodeRecord,
     node_operator::v1::NodeOperatorRecord,
@@ -80,10 +78,9 @@ use ic_registry_common::registry::RegistryCanister;
 use ic_registry_keys::{
     get_node_record_node_id, is_node_record_key, make_blessed_replica_version_key,
     make_crypto_node_key, make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
-    make_data_center_record_key, make_icp_xdr_conversion_rate_record_key,
-    make_node_operator_record_key, make_node_record_key, make_provisional_whitelist_record_key,
-    make_replica_version_key, make_routing_table_record_key, make_subnet_list_record_key,
-    make_subnet_record_key, make_unassigned_nodes_config_record_key,
+    make_data_center_record_key, make_node_operator_record_key, make_node_record_key,
+    make_provisional_whitelist_record_key, make_replica_version_key, make_routing_table_record_key,
+    make_subnet_list_record_key, make_subnet_record_key, make_unassigned_nodes_config_record_key,
     NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_subnet_features::SubnetFeatures;
@@ -237,8 +234,6 @@ enum SubCommand {
     GetSubnetList,
     /// Get info about a Replica version
     GetReplicaVersion(GetReplicaVersionCmd),
-    /// Get the ICP/XDR conversion rate (the value of 1 ICP measured in XDR).
-    GetIcpXdrConversionRate,
     /// Propose updating a subnet's Replica version
     ProposeToUpdateSubnetReplicaVersion(ProposeToUpdateSubnetReplicaVersionCmd),
     /// Get the list of blessed Replica versions.
@@ -2426,24 +2421,6 @@ async fn main() {
 
             if !success {
                 exit(1);
-            }
-        }
-        SubCommand::GetIcpXdrConversionRate => {
-            let key = make_icp_xdr_conversion_rate_record_key()
-                .as_bytes()
-                .to_vec();
-            let value = registry_canister.get_value(key.clone(), None).await;
-            if let Ok((bytes, _version)) = value {
-                let value = IcpXdrConversionRateRecord::decode(&bytes[..])
-                    .expect("Error decoding conversion rate from registry.");
-                // Convert the UNIX epoch timestamp to date and (UTC) time:
-                let date_time = NaiveDateTime::from_timestamp(value.timestamp_seconds as i64, 0);
-                let date_time: DateTime<Utc> = DateTime::from_utc(date_time, Utc);
-                println!(
-                    "ICP/XDR conversion rate at {}: {}",
-                    date_time,
-                    value.xdr_permyriad_per_icp as f64 / 10_000.
-                );
             }
         }
         SubCommand::ProposeToUpdateSubnetReplicaVersion(cmd) => {
