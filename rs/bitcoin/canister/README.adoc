@@ -1,0 +1,153 @@
+= The Bitcoin Canister
+
+== Overview
+
+The Bitcoin canister is the core component of the Bitcoin integration project.
+It enables other canisters deployed on the Internet Computer to use Bitcoin and interact with the Bitcoin network.
+
+To this end, it provides a low-level API with a small set of functions, which
+serve as the foundation to build powerful Bitcoin libraries and other development tools,
+and Bitcoin smart contracts running on the Internet Computer.
+
+== API
+
+The Bitcoin canister exposes the following functions:
+
+- <<Get Unspent Transaction Outputs of a Bitcoin Address,`get_utxos`>>: The function returns the unspent transaction outputs (UTXOs) of a given Bitcoin address.
+- <<Get the Balance of a Bitcoin Address,`get_balance`>>: The function returns the balance of a given Bitcoin address.
+- <<Send a Bitcoin Transaction,`send_transaction`>>: The function sends the given transaction to the Bitcoin network.
+
+Note that only canisters can call these functions, incurring a cost in cycles.
+In other words, it is not possible for a developer to invoke the functions using a non-canister
+principal ID.
+
+The full interface description can be found link:candid.did[here],
+expressed in https://github.com/dfinity/candid/blob/master/spec/Candid.md[Candid syntax].
+
+More details about the functions are provided below.
+
+=== Get Unspent Transaction Outputs of a Bitcoin Address
+
+Given a https://en.bitcoin.it/wiki/Base58Check_encoding[base58-encoded] address as part of a
+`GetUtxosRequest`, the function returns all UTXOs associated with the
+provided address.
+
+```
+type Satoshi = nat64;
+
+type OutPoint = record {
+  txid : blob;
+  vout : nat32
+};
+
+type Utxo = record {
+  outpoint: OutPoint;
+  value: Satoshi;
+  height: nat32;
+  confirmations: nat32;
+};
+
+type GetUtxosRequest = record {
+  address : text;
+  min_confirmations: opt nat32;
+  offset: opt nat32;
+};
+
+type GetUtxosError = variant {
+  MalformedAddress;
+  // More error types to be added here.
+};
+
+get_utxos: (GetUtxosRequest) -> (variant {
+  Ok : record {
+    utxos: vec Utxo;
+    total_count: nat32;
+  };
+  Err : opt GetUtxosError;
+});
+```
+
+If the call fails, e.g., because the address is malformed, a `GetUtxosError` is returned,
+indicating the reason for the failed call.
+
+The optional `min_confirmations` parameter can be used to limit the returned UTXOs to those with at
+least the provided number of confirmations.
+If this parameter is not used, the default value is 0.
+
+The optional `offset` parameter can be used to specify a starting offset in the list of UTXOs.
+This parameter is useful for addresses with many UTXOs. +
+Note that there is no guarantee that the set of UTXOs will remain unchanged between function calls with different
+offsets, i.e., every call will return the UTXOs starting from the provided offset based on the
+current view.
+If this parameter is not used, the default value is 0.
+
+=== Get the Balance of a Bitcoin Address
+
+Given a https://en.bitcoin.it/wiki/Base58Check_encoding[base58-encoded] address as part of a
+`GetBalanceRequest` , the function returns the current balance of this address in `Satoshi` (100,000,000 Satoshi = 1 Bitcoin).
+
+```
+type GetBalanceRequest = record {
+  address : text;
+  min_confirmations: opt nat32;
+};
+
+type GetBalanceError = variant {
+  MalformedAddress;
+  // More error types to be added here.
+};
+
+get_balance: (GetBalanceRequest) -> (variant {
+  Ok : Satoshi;
+  Err: opt GetBalanceError;
+});
+```
+
+If the call fails, e.g., because the address is malformed, a `GetBalanceError` is returned,
+indicating the reason for the failed call.
+
+The optional `min_confirmations` parameter can be used to limit the set of considered UTXOs
+for the calculation of the balance to those with at least the provided number of confirmations.
+
+=== Send a Bitcoin Transaction
+
+Given a `SendTransactionRequest` containing the the raw bytes of a Bitcoin transaction,
+the transaction is forwarded to the Bitcoin network if it passes a set of validity checks.
+
+```
+type SendTransactionRequest = record {
+  transaction: blob;
+};
+
+type SendTransactionError = variant {
+  MalformedTransaction;
+  // More error types to be added here.
+};
+
+send_transaction: (SendTransactionRequest) -> (variant {
+  Ok : null;
+  Err : opt SendTransactionError;
+});
+```
+
+The following validity checks are performed:
+
+- The transaction is well-formed.
+- The transaction only consumes unspent outputs.
+- All signatures are correct.
+- There is a positive transaction fee.
+- The transaction does not create dust, i.e., an output that holds a smaller Bitcoin amount
+than it costs to spend the Bitcoin in the output.
+
+NOTE: The Bitcoin canister provided as part of the developer preview *only* checks that the
+transaction is well-formed.
+
+If at least one of these checks fails, a `SendTransactionError` is returned,
+indicating the reason for the failed call.
+
+The Bitcoin canister caches the transaction and periodically forwards the transaction
+until the transaction appears in a block or the transaction
+times out after 24 hours, at which point the transaction is removed from the cache.
+
+NOTE: The Bitcoin canister provided as part of the developer preview does *not*
+cache transactions.

@@ -2331,6 +2331,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7360491ce676a36bf9bb3c56c1aa791658183a54d2744120f27285738d90465a"
 
 [[package]]
+name = "fastrand"
+version = "1.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3fcf0cee53519c866c09b5de1f6c56ff9d647101f81c1964fa632e148896cdf"
+dependencies = [
+ "instant",
+]
+
+[[package]]
 name = "features"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3334,6 +3343,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-btc-canister"
+version = "0.1.0"
+dependencies = [
+ "bitcoin",
+ "byteorder",
+ "candid",
+ "ic-btc-types",
+ "lazy_static",
+ "maplit",
+ "prost",
+ "prost-build",
+ "serde",
+ "tempfile",
+]
+
+[[package]]
 name = "ic-btc-consensus"
 version = "0.1.0"
 dependencies = [
@@ -3345,6 +3370,14 @@ dependencies = [
  "prometheus",
  "slog",
  "thiserror",
+]
+
+[[package]]
+name = "ic-btc-types"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "serde",
 ]
 
 [[package]]
@@ -9649,9 +9682,9 @@ dependencies = [
 
 [[package]]
 name = "serde"
-version = "1.0.130"
+version = "1.0.136"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f12d06de37cf59146fbdecab66aa99f9fe4f78722e3607577a5375d66bd0c913"
+checksum = "ce31e24b01e1e524df96f1c2fdd054405f8d7376249a5110886fb4b658484789"
 dependencies = [
  "serde_derive",
 ]
@@ -9698,9 +9731,9 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.130"
+version = "1.0.136"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7bc1a1ab1961464eae040d96713baa5a724a8152c1222492465b54322ec508b"
+checksum = "08597e7152fcd306f41838ed3e37be9eaeed2b61c42e2117266a554fab4662f9"
 dependencies = [
  "proc-macro2 1.0.27",
  "quote 1.0.7",
@@ -10551,14 +10584,14 @@ dependencies = [
 
 [[package]]
 name = "tempfile"
-version = "3.1.0"
+version = "3.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a6e24d9338a0a5be79593e2fa15a648add6138caa803e2d5bc782c371732ca9"
+checksum = "5cdb1ef4eaeeaddc8fbd371e5017057064af0911902ef36b39801f67cc6d79e4"
 dependencies = [
- "cfg-if 0.1.10",
+ "cfg-if 1.0.0",
+ "fastrand",
  "libc",
- "rand 0.7.3",
- "redox_syscall 0.1.56",
+ "redox_syscall 0.2.10",
  "remove_dir_all",
  "winapi 0.3.9",
 ]
