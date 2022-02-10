@@ -160,9 +160,10 @@ impl CanisterManager {
             // are not allowed to send.
             Err(_)
             | Ok(Ic00Method::CreateCanister)
+            | Ok(Ic00Method::GetECDSAPublicKey)
+            | Ok(Ic00Method::GetMockECDSAPublicKey)
             | Ok(Ic00Method::SetupInitialDKG)
             | Ok(Ic00Method::SignWithECDSA)
-            | Ok(Ic00Method::GetMockECDSAPublicKey)
             | Ok(Ic00Method::SignWithMockECDSA)
             // "DepositCycles" can be called by anyone however as ingress message
             // cannot carry cycles, it does not make sense to allow them from users.

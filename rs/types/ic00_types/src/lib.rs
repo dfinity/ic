@@ -24,6 +24,7 @@ pub enum Method {
     CreateCanister,
     DeleteCanister,
     DepositCycles,
+    GetECDSAPublicKey,
     InstallCode,
     RawRand,
     SetController,
@@ -633,3 +634,35 @@ impl SignWithECDSAArgs {
         }
     }
 }
+
+/// Represents the argument of the get_ecdsa_public_key API.
+/// ```text
+/// (record {
+///   canister_id : opt canister_id;
+///   derivation_path : vec blob;
+///   key_id : text;
+/// })
+/// ```
+#[derive(CandidType, Deserialize, Debug)]
+pub struct GetECDSAPublicKeyArgs {
+    pub canister_id: Option<CanisterId>,
+    pub derivation_path: Vec<Vec<u8>>,
+    pub key_id: String,
+}
+
+impl Payload<'_> for GetECDSAPublicKeyArgs {}
+
+/// Represents the response of the get_ecdsa_public_key API.
+/// ```text
+/// (record {
+///   public_key : blob;
+///   chain_code : blob;
+/// })
+/// ```
+#[derive(CandidType, Deserialize, Debug)]
+pub struct GetECDSAPublicKeyResponse {
+    pub public_key: Vec<u8>,
+    pub chain_code: Vec<u8>,
+}
+
+impl Payload<'_> for GetECDSAPublicKeyResponse {}

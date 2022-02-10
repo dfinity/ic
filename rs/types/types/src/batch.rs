@@ -6,6 +6,7 @@ use super::{
     xnet::CertifiedStreamSlice,
     CountBytes, Height, Randomness, RegistryVersion, SubnetId, Time,
 };
+use crate::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
 use ic_protobuf::messaging::xnet::v1 as messaging_pb;
 use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
@@ -25,6 +26,8 @@ pub struct Batch {
     pub payload: BatchPayload,
     /// A source of randomness for processing the Batch.
     pub randomness: Randomness,
+    /// The ECDSA public key of the subnet.
+    pub ecdsa_subnet_public_key: Option<MasterEcdsaPublicKey>,
     /// The version of the registry to be referenced when processing the batch.
     pub registry_version: RegistryVersion,
     /// A clock time to be used for processing messages.

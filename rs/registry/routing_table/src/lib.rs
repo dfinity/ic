@@ -35,6 +35,7 @@ pub fn resolve_destination(
         Ok(Ic00Method::CreateCanister)
         | Ok(Ic00Method::RawRand)
         | Ok(Ic00Method::ProvisionalCreateCanisterWithCycles)
+        | Ok(Ic00Method::GetECDSAPublicKey)
         | Ok(Ic00Method::GetMockECDSAPublicKey)
         | Ok(Ic00Method::SignWithMockECDSA)
         | Ok(Ic00Method::SignWithECDSA) => Ok(own_subnet),

@@ -8,12 +8,13 @@ use crate::{
 use candid::Encode;
 use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
+use ic_crypto::derive_tecdsa_public_key;
 use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost};
 use ic_ic00_types::{
-    CanisterIdRecord, CanisterSettingsArgs, CreateCanisterArgs, EmptyBlob, InstallCodeArgs,
-    Method as Ic00Method, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
-    ProvisionalTopUpCanisterArgs, SetControllerArgs, SetupInitialDKGArgs, SignWithECDSAArgs,
-    UpdateSettingsArgs, IC_00,
+    CanisterIdRecord, CanisterSettingsArgs, CreateCanisterArgs, EmptyBlob, GetECDSAPublicKeyArgs,
+    GetECDSAPublicKeyResponse, InstallCodeArgs, Method as Ic00Method, Payload as Ic00Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SetControllerArgs,
+    SetupInitialDKGArgs, SignWithECDSAArgs, UpdateSettingsArgs, IC_00,
 };
 use ic_interfaces::{
     execution_environment::{
@@ -33,6 +34,7 @@ use ic_replicated_state::{
 };
 use ic_types::{
     canonical_error::{not_found_error, permission_denied_error, CanonicalError},
+    crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterEcdsaPublicKey},
     crypto::threshold_sig::ni_dkg::NiDkgTargetId,
     ingress::{IngressStatus, WasmResult},
     messages::{
@@ -73,6 +75,7 @@ pub trait ExecutionEnvironment: Sync + Send {
         state: ReplicatedState,
         instructions_limit: NumInstructions,
         rng: &mut (dyn RngCore + 'static),
+        ecdsa_subnet_public_key: &Option<MasterEcdsaPublicKey>,
         provisional_whitelist: &ProvisionalWhitelist,
         subnet_available_memory: SubnetAvailableMemory,
         max_number_of_canisters: u64,
@@ -155,6 +158,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
         mut state: ReplicatedState,
         instructions_limit: NumInstructions,
         rng: &mut (dyn RngCore + 'static),
+        ecdsa_subnet_public_key: &Option<MasterEcdsaPublicKey>,
         provisional_whitelist: &ProvisionalWhitelist,
         subnet_available_memory: SubnetAvailableMemory,
         max_number_of_canisters: u64,
@@ -547,6 +551,46 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                         Some(UserError::new(ErrorCode::CanisterContractViolation, error_string))
                     }
                 }.map(|err| (Err(err), msg.take_cycles()));
+                (res, instructions_limit)
+            }
+
+            Ok(Ic00Method::GetECDSAPublicKey) => {
+                let res = match &msg {
+                    RequestOrIngress::Request(_request) => {
+                        if !state.metadata.own_subnet_features.ecdsa_signatures {
+                            Some(Err(UserError::new(ErrorCode::CanisterContractViolation,
+                              "This API is not enabled on this subnet".to_string())))
+                        }
+                        else {
+                            match GetECDSAPublicKeyArgs::decode(payload) {
+                                Err(err) => Some(Err(err.into())),
+                                Ok(args) => match ecdsa_subnet_public_key {
+                                    None => Some(Err(UserError::new(ErrorCode::CanisterRejectedMessage,
+                                              "Subnet ECDSA public key is not yet available.".to_string()))),
+                                    Some(pubkey) => {
+                                      let canister_id = match args.canister_id {
+                                        Some(id) => id.into(),
+                                        None => *msg.sender(),
+                                      };
+                                      Some(self.get_ecdsa_public_key(
+                                        pubkey,
+                                        canister_id,
+                                        args.derivation_path,
+                                        ).map(|res| res.encode()))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    RequestOrIngress::Ingress(_) => {
+                        error!(self.log, "[EXC-BUG] Ingress messages to GetECDSAPublicKey should've been filtered earlier.");
+                        let error_string = format!(
+                            "GetECDSAPublicKey is called by user {}. It can only be called by a canister.",
+                            msg.sender()
+                        );
+                        Some(Err(UserError::new(ErrorCode::CanisterContractViolation, error_string)))
+                    }
+                }.map(|res| (res, msg.take_cycles()));
                 (res, instructions_limit)
             }
 
@@ -1834,6 +1878,30 @@ impl ExecutionEnvironmentImpl {
                 Ok(())
             }
         }
+    }
+
+    fn get_ecdsa_public_key(
+        &self,
+        subnet_public_key: &MasterEcdsaPublicKey,
+        principal_id: PrincipalId,
+        derivation_path: Vec<Vec<u8>>,
+    ) -> Result<GetECDSAPublicKeyResponse, UserError> {
+        let _ = CanisterId::new(principal_id).map_err(|err| {
+            UserError::new(
+                ErrorCode::CanisterContractViolation,
+                format!("Not a canister id: {}", err),
+            )
+        })?;
+        let path = ExtendedDerivationPath {
+            caller: principal_id,
+            derivation_path,
+        };
+        derive_tecdsa_public_key(subnet_public_key, &path)
+            .map_err(|err| UserError::new(ErrorCode::CanisterRejectedMessage, format!("{}", err)))
+            .map(|res| GetECDSAPublicKeyResponse {
+                public_key: res.public_key,
+                chain_code: res.chain_key,
+            })
     }
 
     fn sign_with_ecdsa(

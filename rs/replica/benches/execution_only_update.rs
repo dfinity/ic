@@ -119,6 +119,7 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
             self_validating: SelfValidatingPayload::default(),
         },
         randomness: Randomness::from([0; 32]),
+        ecdsa_subnet_public_key: None,
         registry_version: RegistryVersion::from(1),
         time: mock_time(),
         consensus_responses: vec![],

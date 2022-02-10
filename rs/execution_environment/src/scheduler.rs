@@ -20,6 +20,7 @@ use ic_replicated_state::{
     ReplicatedState,
 };
 use ic_types::{
+    crypto::canister_threshold_sig::MasterEcdsaPublicKey,
     ic00::{EmptyBlob, InstallCodeArgs, Payload as _, IC_00},
     ingress::{IngressStatus, WasmResult},
     messages::{Ingress, MessageId, Payload, Response, StopCanisterContext},
@@ -874,6 +875,7 @@ impl Scheduler for SchedulerImpl {
         &self,
         mut state: ReplicatedState,
         randomness: Randomness,
+        ecdsa_subnet_public_key: Option<MasterEcdsaPublicKey>,
         current_round: ExecutionRound,
         provisional_whitelist: ProvisionalWhitelist,
         max_number_of_canisters: u64,
@@ -949,6 +951,7 @@ impl Scheduler for SchedulerImpl {
                     state,
                     self.config.max_instructions_per_message,
                     &mut csprng,
+                    &ecdsa_subnet_public_key,
                     &provisional_whitelist,
                     subnet_available_memory.clone(),
                     max_number_of_canisters,
@@ -987,6 +990,7 @@ impl Scheduler for SchedulerImpl {
                     state,
                     instructions_limit_per_message,
                     &mut csprng,
+                    &ecdsa_subnet_public_key,
                     &provisional_whitelist,
                     subnet_available_memory.clone(),
                     max_number_of_canisters,
@@ -1438,11 +1442,12 @@ fn get_instructions_limit_for_subnet_message(
             | CreateCanister
             | DeleteCanister
             | DepositCycles
+            | GetECDSAPublicKey
+            | GetMockECDSAPublicKey
             | RawRand
             | SetController
             | SetupInitialDKG
             | SignWithECDSA
-            | GetMockECDSAPublicKey
             | SignWithMockECDSA
             | StartCanister
             | StopCanister
