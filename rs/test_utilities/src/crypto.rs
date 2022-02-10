@@ -560,7 +560,7 @@ impl IDkgProtocol for CryptoReturningOk {
     fn verify_complaint(
         &self,
         _transcript: &IDkgTranscript,
-        _complainer: NodeId,
+        _complainer_id: NodeId,
         _complaint: &IDkgComplaint,
     ) -> Result<(), IDkgVerifyComplaintError> {
         Ok(())

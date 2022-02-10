@@ -4,7 +4,9 @@ use ic_types::{NumberOfNodes, Randomness};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-use ic_types::crypto::canister_threshold_sig::error::IDkgLoadTranscriptError;
+use ic_types::crypto::canister_threshold_sig::error::{
+    IDkgLoadTranscriptError, IDkgVerifyComplaintError,
+};
 pub use ic_types::crypto::canister_threshold_sig::EcdsaPublicKey;
 pub use ic_types::NodeIndex;
 
@@ -661,5 +663,54 @@ pub fn generate_complaints(
         secret_key,
         public_key,
         seed,
+    )?)
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum IDkgVerifyComplaintInternalError {
+    InvalidComplaint,
+    InvalidArgument(String),
+    InternalError(String),
+}
+
+impl From<ThresholdEcdsaError> for IDkgVerifyComplaintInternalError {
+    fn from(e: ThresholdEcdsaError) -> Self {
+        match e {
+            ThresholdEcdsaError::InvalidProof => Self::InvalidComplaint,
+            ThresholdEcdsaError::InvalidComplaint => Self::InvalidComplaint,
+            ThresholdEcdsaError::CurveMismatch => Self::InvalidComplaint,
+            ThresholdEcdsaError::InvalidArguments(e) => Self::InvalidArgument(e),
+            other => Self::InternalError(format!("{:?}", other)),
+        }
+    }
+}
+
+impl From<IDkgVerifyComplaintInternalError> for IDkgVerifyComplaintError {
+    fn from(verify_complaint_internal_error: IDkgVerifyComplaintInternalError) -> Self {
+        type Vcie = IDkgVerifyComplaintInternalError;
+        type Vce = IDkgVerifyComplaintError;
+        match verify_complaint_internal_error {
+            Vcie::InvalidComplaint => Vce::InvalidComplaint,
+            Vcie::InternalError(internal_error) => Vce::InternalError { internal_error },
+            Vcie::InvalidArgument(internal_error) => Vce::InvalidArgument { internal_error },
+        }
+    }
+}
+
+/// Verifies a complaint against a dealing.
+pub fn verify_complaint(
+    complaint: &IDkgComplaintInternal,
+    complainer_index: NodeIndex,
+    complainer_key: &MEGaPublicKey,
+    dealing: &IDkgDealingInternal,
+    dealer_index: NodeIndex,
+    associated_data: &[u8],
+) -> Result<(), IDkgVerifyComplaintInternalError> {
+    Ok(complaint.verify(
+        dealing,
+        dealer_index,
+        complainer_index,
+        complainer_key,
+        associated_data,
     )?)
 }

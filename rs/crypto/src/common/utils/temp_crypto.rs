@@ -437,11 +437,11 @@ impl<C: CryptoServiceProvider> IDkgProtocol for TempCryptoComponentGeneric<C> {
     fn verify_complaint(
         &self,
         transcript: &IDkgTranscript,
-        complainer: NodeId,
+        complainer_id: NodeId,
         complaint: &IDkgComplaint,
     ) -> Result<(), IDkgVerifyComplaintError> {
         self.crypto_component
-            .verify_complaint(transcript, complainer, complaint)
+            .verify_complaint(transcript, complainer_id, complaint)
     }
 
     fn open_transcript(

@@ -2,7 +2,7 @@
 
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
-    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+    IDkgVerifyComplaintError, ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::AlgorithmId;
@@ -20,7 +20,7 @@ pub use errors::*;
 /// Crypto service provider (CSP) client for interactive distributed key
 /// generation (IDkg) for canister threshold signatures.
 pub trait CspIDkgProtocol {
-    /// Generate an IDkg dealing.
+    /// Generates a share of a dealing for a single receiver.
     fn idkg_create_dealing(
         &self,
         algorithm_id: AlgorithmId,
@@ -31,7 +31,7 @@ pub trait CspIDkgProtocol {
         transcript_operation: &IDkgTranscriptOperationInternal,
     ) -> Result<IDkgDealingInternal, IDkgCreateDealingError>;
 
-    /// Generate an IDkg transcript from verified IDkg dealings
+    /// Generates an IDkg transcript from verified IDkg dealings
     fn idkg_create_transcript(
         &self,
         algorithm_id: AlgorithmId,
@@ -51,12 +51,24 @@ pub trait CspIDkgProtocol {
         transcript: &IDkgTranscriptInternal,
     ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError>;
 
-    /// Generate a MEGa encryption key pair used to encrypt threshold key shares
-    /// in transmission.
+    /// Generate a MEGa key pair for encrypting threshold key shares in transmission
+    /// from dealers to receivers.
     fn idkg_create_mega_key_pair(
         &mut self,
         algorithm_id: AlgorithmId,
     ) -> Result<MEGaPublicKey, CspCreateMEGaKeyError>;
+
+    /// Verifies that the given `complaint` about `dealing` is correct/justified.
+    /// A complaint is created, e.g., when loading of a transcript fails.
+    fn idkg_verify_complaint(
+        &self,
+        complaint: &IDkgComplaintInternal,
+        complainer_index: NodeIndex,
+        complainer_key: &MEGaPublicKey,
+        dealing: &IDkgDealingInternal,
+        dealer_index: NodeIndex,
+        context_data: &[u8],
+    ) -> Result<(), IDkgVerifyComplaintError>;
 }
 
 /// Crypto service provider (CSP) client for threshold ECDSA signature share

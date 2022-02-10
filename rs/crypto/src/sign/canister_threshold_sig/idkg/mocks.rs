@@ -86,9 +86,9 @@ pub fn load_transcript(
     Ok(vec![])
 }
 
+#[allow(dead_code)]
 pub fn verify_complaint(
     _transcript: &IDkgTranscript,
-    _complainer: NodeId,
     _complaint: &IDkgComplaint,
 ) -> Result<(), IDkgVerifyComplaintError> {
     Ok(())

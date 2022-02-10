@@ -36,7 +36,7 @@ use ic_crypto_tls_interfaces::{TlsPublicKeyCert, TlsStream};
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
-    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+    IDkgVerifyComplaintError, ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
@@ -394,6 +394,16 @@ mock! {
         ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError>;
 
         fn idkg_create_mega_key_pair(&mut self, algorithm_id: AlgorithmId) -> Result<MEGaPublicKey, CspCreateMEGaKeyError>;
+
+        fn idkg_verify_complaint(
+            &self,
+            complaint: &IDkgComplaintInternal,
+            complainer_index: NodeIndex,
+            complainer_key: &MEGaPublicKey,
+            dealing: &IDkgDealingInternal,
+            dealer_index: NodeIndex,
+            context_data: &[u8],
+        ) -> Result<(), IDkgVerifyComplaintError>;
     }
 
     pub trait CspThresholdEcdsaSigner {

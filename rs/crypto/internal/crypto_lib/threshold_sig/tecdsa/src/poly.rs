@@ -476,7 +476,7 @@ pub enum PolynomialCommitmentType {
 }
 
 /// Some type of commitment to a polynomial
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PolynomialCommitment {
     Simple(SimpleCommitment),
     Pedersen(PedersenCommitment),

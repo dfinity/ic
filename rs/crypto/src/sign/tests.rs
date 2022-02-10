@@ -85,7 +85,27 @@ pub fn dealing_encryption_pk_record_with(
             key_purpose: KeyPurpose::DkgDealingEncryption,
         },
         value: PublicKeyProto {
-            algorithm: AlgorithmId::Groth20_Bls12_381 as i32,
+            algorithm: AlgorithmIdProto::Groth20Bls12381 as i32,
+            key_value,
+            version: 0,
+            proof_data: None,
+        },
+        registry_version,
+    }
+}
+
+pub fn mega_encryption_pk_record_with(
+    node_id: NodeId,
+    key_value: Vec<u8>,
+    registry_version: RegistryVersion,
+) -> CryptoRegistryRecord {
+    CryptoRegistryRecord {
+        key: CryptoRegistryKey {
+            node_id,
+            key_purpose: KeyPurpose::IDkgMEGaEncryption,
+        },
+        value: PublicKeyProto {
+            algorithm: AlgorithmIdProto::MegaSecp256k1 as i32,
             key_value,
             version: 0,
             proof_data: None,
