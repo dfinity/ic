@@ -37,16 +37,18 @@ check-bins-linux:
     name: ubuntu@sha256:b5a61709a9a44284d88fb12e5c48db0409cfad5b69d4ff8224077c57302df9cf
   before_script: /bin/true
   after_script: /bin/true
+  variables:
+    ARTIFACT_PREFIX: artifacts/sdk-release/x86_64-linux
   script:
     - |
       set -exuo pipefail
 
-      gunzip < artifacts/sdk-release/replica.gz > /tmp/replica
+      gunzip < "$ARTIFACT_PREFIX/replica.gz" > /tmp/replica
       chmod +x /tmp/replica
       ldd /tmp/replica
       /tmp/replica --print-sample-config --replica-version 1 >/dev/null
 
-      gunzip < artifacts/sdk-release/ic-starter.gz > /tmp/ic-starter
+      gunzip < "$ARTIFACT_PREFIX/ic-starter.gz" > /tmp/ic-starter
       chmod +x /tmp/ic-starter
       ldd /tmp/ic-starter
       /tmp/ic-starter --version
@@ -62,16 +64,18 @@ check-bins-darwin:
     - macos
   before_script: /usr/bin/true
   after_script: /usr/bin/true
+  variables:
+    ARTIFACT_PREFIX: artifacts/sdk-release/x86_64-darwin
   script:
     - |
       set -exuo pipefail
 
-      gunzip < artifacts/sdk-release/replica.gz > /tmp/replica
+      gunzip < "$ARTIFACT_PREFIX/replica.gz" > /tmp/replica
       chmod +x /tmp/replica
       otool -L /tmp/replica
       /tmp/replica --print-sample-config --replica-version 1 >/dev/null
 
-      gunzip < artifacts/sdk-release/ic-starter.gz > /tmp/ic-starter
+      gunzip < "$ARTIFACT_PREFIX/ic-starter.gz" > /tmp/ic-starter
       chmod +x /tmp/ic-starter
       otool -L /tmp/ic-starter
       /tmp/ic-starter --version

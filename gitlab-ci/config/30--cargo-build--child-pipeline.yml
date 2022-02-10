@@ -36,7 +36,7 @@ cargo-build-release-darwin:
       - artifacts/nix-release/*
   variables:
     BUILD_COMMAND: "cargo build --release"
-    BUILD_COMMAND_POST: "${CI_PROJECT_DIR}/gitlab-ci/src/artifacts/collect_build_binaries.py artifacts/nix-release x86_64-darwin/"
+    BUILD_COMMAND_POST: "${CI_PROJECT_DIR}/gitlab-ci/src/artifacts/collect_build_binaries.py artifacts/nix-release"
 
 cargo-build-release-linux-native:
   extends:
@@ -66,7 +66,7 @@ cargo-build-release-linux-native:
 
       ls -l "$CARGO_TARGET_DIR"/x86_64-unknown-linux-gnu/release
 
-      CARGO_BUILD_TARGET=x86_64-unknown-linux-gnu buildevents cmd "${PARENT_PIPELINE_ID}" "${CI_JOB_ID}" collect-artifacts -- "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/collect_build_binaries.py "artifacts/release${ARTIFACT_EXT}" ''
+      CARGO_BUILD_TARGET=x86_64-unknown-linux-gnu buildevents cmd "${PARENT_PIPELINE_ID}" "${CI_JOB_ID}" collect-artifacts -- "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/collect_build_binaries.py "artifacts/release${ARTIFACT_EXT}"
 
       echo -e "\e[0Ksection_start:$(date +%s):sccache_stats[collapsed=true]\r\e[0KClick here to see the sccache stats"
       "$RUSTC_WRAPPER" --show-stats || true
@@ -111,12 +111,15 @@ dfx-build-release-darwin:
       - artifacts/sdk-release/*
   variables:
     BUILD_COMMAND: "${CI_PROJECT_DIR}/gitlab-ci/tools/build-dfx-binaries"
-    BUILD_COMMAND_POST: "${CI_PROJECT_DIR}/gitlab-ci/src/artifacts/collect_build_binaries.py artifacts/sdk-release x86_64-darwin/"
+    BUILD_COMMAND_POST: "${CI_PROJECT_DIR}/gitlab-ci/src/artifacts/collect_build_binaries.py artifacts/sdk-release/x86_64-darwin"
 
 dfx-build-release-linux:
   extends:
     - .cargo-build-docker-protected
     - .rules-parent-pipeline-autorun-on-trigger
+  artifacts:
+    paths:
+      - artifacts/sdk-release/*
   image:
     # Use the docker image without nix-shell
     name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:2022-02-06-56db77a4-a9fd8a0768663d5eb3776933d9ec2233ccfe940d"
@@ -135,7 +138,4 @@ dfx-build-release-linux:
 
       "${CI_PROJECT_DIR}/gitlab-ci/tools/build-dfx-binaries"
 
-      "${CI_PROJECT_DIR}/gitlab-ci/src/artifacts/collect_build_binaries.py" artifacts/sdk-release x86_64-linux/
-  artifacts:
-    paths:
-      - artifacts/sdk-release/*
+      "${CI_PROJECT_DIR}/gitlab-ci/src/artifacts/collect_build_binaries.py" artifacts/sdk-release/x86_64-linux
