@@ -53,7 +53,6 @@
 
 use crate::{
     download_management::{DownloadManager, DownloadManagerImpl},
-    event_handler::P2PEventHandlerImpl,
     metrics::GossipMetrics,
     use_gossip_malicious_behavior_on_chunk_request,
     utils::FlowMapper,
@@ -262,7 +261,6 @@ impl GossipImpl {
         registry_client: Arc<dyn RegistryClient>,
         artifact_manager: Arc<dyn ArtifactManager>,
         transport: Arc<dyn Transport>,
-        event_handler: Arc<P2PEventHandlerImpl>,
         flow_tags: Vec<FlowTag>,
         log: ReplicaLogger,
         metrics_registry: &MetricsRegistry,
@@ -275,7 +273,6 @@ impl GossipImpl {
             registry_client.clone(),
             artifact_manager.clone(),
             transport.clone(),
-            event_handler,
             Arc::new(FlowMapper::new(flow_tags)),
             log.clone(),
             metrics_registry,
@@ -377,8 +374,8 @@ impl GossipImpl {
     ///
     /// In short, the method is a catch-all for a periodic and
     /// holistic refresh of IC state.
-    pub fn on_timer(&self, event_handler: Arc<P2PEventHandlerImpl>) {
-        self.download_manager.on_timer(event_handler);
+    pub fn on_timer(&self) {
+        self.download_manager.on_timer();
     }
 }
 

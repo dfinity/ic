@@ -223,7 +223,6 @@ pub fn create_networking_stack(
         registry_client.clone(),
         artifact_manager.clone(),
         transport.clone(),
-        event_handler.clone(),
         p2p_flow_tags,
         log.clone(),
         &metrics_registry,
@@ -263,7 +262,6 @@ impl P2PRunner for P2P {
     /// The method starts the P2P timer task in the background.
     fn run(&mut self) {
         let gossip = self.gossip.clone();
-        let event_handler = self.event_handler.clone();
         let log = self.log.clone();
         let killed = Arc::clone(&self.killed);
         let handle = std::thread::Builder::new()
@@ -274,7 +272,7 @@ impl P2PRunner for P2P {
                 let timer_duration = Duration::from_millis(P2P_TIMER_DURATION_MS);
                 while !killed.load(SeqCst) {
                     std::thread::sleep(timer_duration);
-                    gossip.on_timer(Arc::clone(&event_handler));
+                    gossip.on_timer();
                 }
             })
             .unwrap();

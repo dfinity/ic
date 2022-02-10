@@ -117,20 +117,6 @@ use tower_service::Service;
 
 const P2P_MAX_INGRESS_THREADS: usize = 2;
 
-/// The trait for P2P event handler control, exposing methods to start and stop
-/// control, as well as add nodes.
-#[async_trait]
-pub(crate) trait P2PEventHandlerControl: Send + Sync {
-    /// The method adds/registers a peer node with the event handler.
-    ///
-    /// The P2P event handler implementation maintains per-peer-per-flow queues
-    /// to process messages. Each flow type is backed by a dedicated
-    /// processing thread. Messages from nodes that have not been registered
-    /// are dropped. Thus, valid nodes must be added to the event handler
-    /// before any network processing starts.
-    fn add_node(&self, node_id: NodeId);
-}
-
 /// Fetch the Gossip configuration from the registry.
 pub fn fetch_gossip_config(
     registry_client: Arc<dyn RegistryClient>,
@@ -437,6 +423,12 @@ impl P2PEventHandlerImpl {
         peer_id: NodeId,
         msg: T,
     ) -> Result<(), SendError> {
+        // Add the node to the semaphore map if it doesn't exists yet.
+        let insert_node = !sem_map.read().unwrap().contains_key(&peer_id);
+        if insert_node {
+            self.peer_flows.add_node(peer_id, &self.channel_config);
+        }
+
         let sem = sem_map
             .read()
             .unwrap()
@@ -457,14 +449,6 @@ impl P2PEventHandlerImpl {
             .send(PerFlowMsg::Item((msg, peer_id, permit)))
             .unwrap();
         Ok(())
-    }
-}
-
-impl P2PEventHandlerControl for P2PEventHandlerImpl {
-    /// The method adds a node to the event handler. Messages from nodes that
-    /// are not found in the peer flow maps are not processed.
-    fn add_node(&self, node_id: NodeId) {
-        self.peer_flows.add_node(node_id, &self.channel_config);
     }
 }
 
@@ -928,9 +912,6 @@ pub mod tests {
         let node_id = node_test_id(0);
         let handler = Arc::new(new_test_event_handler(1, node_id).0);
 
-        for node_idx in 0..64 {
-            handler.add_node(node_test_id(node_idx));
-        }
         handler.start(Arc::new(TestGossip::new(Duration::from_secs(0), node_id)));
         send_advert(100, &handler, node_id).await;
     }
