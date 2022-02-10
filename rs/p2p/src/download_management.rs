@@ -84,7 +84,6 @@ use crate::{
         AdvertTracker, AdvertTrackerFinalAction, DownloadAttemptTracker, DownloadPrioritizer,
         DownloadPrioritizerImpl,
     },
-    event_handler::P2PEventHandlerControl,
     gossip_protocol::{
         GossipAdvertAction, GossipAdvertSendRequest, GossipChunk, GossipChunkRequest,
         GossipMessage, GossipRetransmissionRequest, Percentage,
@@ -170,7 +169,7 @@ pub(crate) trait DownloadManager {
     /// changes.</br>
     /// b) Check for chunk download timeouts.</br>
     /// c) Poll the registry for subnet membership changes.
-    fn on_timer(&self, event_handler: Arc<dyn P2PEventHandlerControl>);
+    fn on_timer(&self);
 }
 
 /// The peer manager manages the list of current peers.
@@ -190,7 +189,6 @@ pub(crate) trait PeerManager {
         peer: NodeId,
         node_record: &NodeRecord,
         registry_version: RegistryVersion,
-        event_handler: &Arc<dyn P2PEventHandlerControl>,
     ) -> P2PResult<()>;
 
     /// The method removes the given peer from the list of current peers.
@@ -794,7 +792,7 @@ impl DownloadManager for DownloadManagerImpl {
 
     /// The method is invoked periodically by the *Gossip* component to perform
     /// P2P book keeping tasks.
-    fn on_timer(&self, event_handler: Arc<dyn P2PEventHandlerControl>) {
+    fn on_timer(&self) {
         let (update_priority_fns, retransmission_request, refresh_registry) =
             self.get_timer_tasks();
         if update_priority_fns {
@@ -817,7 +815,7 @@ impl DownloadManager for DownloadManagerImpl {
         }
 
         if refresh_registry {
-            self.refresh_registry(&event_handler);
+            self.refresh_registry();
         }
 
         // Collect the peers with timed-out requests.
@@ -855,7 +853,6 @@ impl DownloadManagerImpl {
         registry_client: Arc<dyn RegistryClient>,
         artifact_manager: Arc<dyn ArtifactManager>,
         transport: Arc<dyn Transport>,
-        event_handler: Arc<dyn P2PEventHandlerControl>,
         flow_mapper: Arc<FlowMapper>,
         log: ReplicaLogger,
         metrics_registry: &MetricsRegistry,
@@ -896,7 +893,7 @@ impl DownloadManagerImpl {
             registry_refresh_instant: Mutex::new(Instant::now()),
             retransmission_request_instant: Mutex::new(Instant::now()),
         };
-        download_manager.refresh_registry(&event_handler);
+        download_manager.refresh_registry();
         download_manager
     }
 
@@ -947,7 +944,7 @@ impl DownloadManagerImpl {
     }
 
     // Update the peer manager state based on the latest registry value.
-    pub fn refresh_registry(&self, event_handler: &Arc<dyn P2PEventHandlerControl>) {
+    pub fn refresh_registry(&self) {
         let latest_registry_version = self.registry_client.get_latest_version();
         self.metrics
             .registry_version_used
@@ -972,12 +969,7 @@ impl DownloadManagerImpl {
         for (node_id, node_record) in subnet_nodes.iter() {
             if self
                 .peer_manager
-                .add_peer(
-                    *node_id,
-                    node_record,
-                    latest_registry_version,
-                    event_handler,
-                )
+                .add_peer(*node_id, node_record, latest_registry_version)
                 .is_ok()
             {
                 self.receive_check_caches.write().unwrap().insert(
@@ -1467,7 +1459,6 @@ impl PeerManager for PeerManagerImpl {
         node_id: NodeId,
         node_record: &NodeRecord,
         registry_version: RegistryVersion,
-        event_handler: &Arc<dyn P2PEventHandlerControl>,
     ) -> P2PResult<()> {
         // Only add other peers to the peer list.
         if node_id == self.node_id {
@@ -1489,7 +1480,6 @@ impl PeerManager for PeerManagerImpl {
                 current_peers
                     .entry(node_id)
                     .or_insert_with(|| PeerContext::from(node_id.to_owned()));
-                event_handler.add_node(node_id);
                 info!(self.log, "Nodes {:0} added", node_id);
                 Ok(())
             }?;
@@ -1752,7 +1742,6 @@ pub mod tests {
 
         // Create fake peers.
         let artifact_manager = Arc::new(artifact_manager);
-        let event_handler = Arc::new(new_test_event_handler(MAX_ADVERT_BUFFER, node_test_id(0)).0);
         DownloadManagerImpl::new(
             node_test_id(0),
             subnet_test_id(0),
@@ -1760,7 +1749,6 @@ pub mod tests {
             registry_client,
             artifact_manager,
             tp,
-            event_handler,
             flow_mapper,
             log,
             &metrics_registry,
@@ -1825,14 +1813,6 @@ pub mod tests {
         let peer_context = current_peers.get_mut(node_id).unwrap();
         download_manager.process_timed_out_requests(node_id, peer_context);
         assert_eq!(peer_context.requested.len(), 0);
-    }
-
-    /// This test function builds a new download manager.
-    #[tokio::test]
-    async fn build_new_download_manager() {
-        let logger = p2p_test_setup_logger();
-        let _download_manager =
-            new_test_download_manager(1, &logger, tokio::runtime::Handle::current());
     }
 
     /// This function tests the functionality to add adverts to the
@@ -1912,11 +1892,9 @@ pub mod tests {
 
         // Add adverts from the peer that is removed in the latest registry version
         test_add_adverts(&download_manager, 0..5, removed_peer);
-        let event_handler = new_test_event_handler(MAX_ADVERT_BUFFER, node_test_id(0)).0;
-        let event_handler_arc = Arc::new(event_handler) as Arc<dyn P2PEventHandlerControl>;
 
         // Refresh registry to get latest version.
-        download_manager.refresh_registry(&event_handler_arc);
+        download_manager.refresh_registry();
         // Assert number of peers has been decreased by one.
         assert_eq!(
             (num_peers - 1) as usize,
