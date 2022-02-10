@@ -469,7 +469,7 @@ def _generate_tests_may_raise_exception(
         )
     else:
         force_pipeline = git_changes.get_changed_files(git_root, [guestos_workspace]) or git_changes.get_changed_files(
-            git_root, ["testnet", "ic-os", "rs/workload_generator", "rs/registry/client"]
+            git_root, ["testnet", "ic-os", "scalability", "rs/workload_generator", "rs/registry/client"]
         )
 
         if not force_pipeline:
