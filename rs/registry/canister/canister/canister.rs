@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use prost::Message;
 
 use candid::{candid_method, Decode};
@@ -8,7 +6,7 @@ use dfn_core::{
     api::{arg_data, data_certificate, reply, set_certified_data},
     over, over_async, over_may_reject, stable,
 };
-use ic_base_types::{NodeId, PrincipalId};
+use ic_base_types::NodeId;
 use ic_certified_map::{AsHashTree, HashTree};
 use ic_nns_common::{
     access_control::check_caller_is_root, pb::v1::CanisterAuthzInfo, types::MethodAuthzChange,
@@ -18,9 +16,8 @@ use ic_protobuf::registry::{
     dc::v1::AddOrRemoveDataCentersProposalPayload,
     node_rewards::v2::UpdateNodeRewardsTableProposalPayload,
 };
-use ic_registry_keys::make_node_record_key;
 use ic_registry_transport::{
-    delete, deserialize_atomic_mutate_request, deserialize_get_changes_since_request,
+    deserialize_atomic_mutate_request, deserialize_get_changes_since_request,
     deserialize_get_value_request,
     pb::v1::{
         registry_error::Code, CertifiedResponse, RegistryAtomicMutateResponse, RegistryDelta,
@@ -164,8 +161,13 @@ fn canister_post_upgrade() {
     let registry = registry_mut();
     registry.from_serializable_form(ss.registry.expect("Error decoding from stable"));
 
-    // Before we upgrade to a registry version that contains this field it'll
-    // come back as None.
+    registry.check_global_state_invariants(&[]);
+    registry.check_changelog_version_invariants();
+
+    recertify_registry();
+
+    // ANYTHING BELOW THIS LINE SHOULD NOT MUTATE STATE
+
     if ss.pre_upgrade_version.is_some() {
         let pre_upgrade_version = ss.pre_upgrade_version.unwrap();
         assert_eq!(
@@ -177,33 +179,6 @@ fn canister_post_upgrade() {
             registry.latest_version()
         );
     }
-
-    // TODO(NNS1-1025): To be deleted after the next registry upgrade
-    apply_deletion_mutation(registry);
-
-    registry.check_global_state_invariants(&[]);
-    registry.check_changelog_version_invariants();
-
-    recertify_registry();
-}
-
-fn apply_deletion_mutation(registry: &mut Registry) {
-    // Hard-coded keys that should be deleted
-    let keys_to_delete = vec![make_node_record_key(NodeId::new(
-        PrincipalId::from_str("hwywo-g5rog-wwern-wtt6d-ds6fb-jvh6j-mwlha-pj2ul-2m4dj-6mdqq-gqe")
-            .unwrap(),
-    ))];
-    let mutations = keys_to_delete
-        .into_iter()
-        .filter_map(|key| {
-            registry
-                .get(key.as_bytes(), registry.latest_version())
-                .map(|_| delete(key))
-        })
-        .collect();
-
-    // Delete specified records and check global invariants are not violated
-    registry.maybe_apply_mutation_internal(mutations);
 }
 
 #[export_name = "canister_update update_authz"]

@@ -16,5 +16,3 @@ mod update_node_rewards_table;
 mod update_subnet;
 mod update_subnet_and_bless_replica_version;
 mod update_unassigned_nodes_config;
-
-mod short_lived_delete_record_on_upgrade;
