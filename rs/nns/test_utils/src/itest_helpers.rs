@@ -30,7 +30,6 @@ use dfn_candid::{candid_one, CandidOne};
 use ic_base_types::{CanisterId, CanisterInstallMode};
 use ic_canister_client::Sender;
 use ic_config::{subnet_config::SubnetConfig, Config};
-use ic_nns_common::registry::encode_or_panic;
 use ic_nns_common::{
     init::{LifelineCanisterInitPayload, LifelineCanisterInitPayloadBuilder},
     types::NeuronId,
@@ -50,9 +49,6 @@ use ic_nns_handler_root::{
     },
     init::{RootCanisterInitPayload, RootCanisterInitPayloadBuilder},
 };
-use ic_protobuf::registry::conversion_rate::v1::IcpXdrConversionRateRecord;
-use ic_registry_keys::make_icp_xdr_conversion_rate_record_key;
-use ic_registry_transport::insert;
 use ic_registry_transport::pb::v1::{RegistryAtomicMutateRequest, RegistryMutation};
 use ic_test_utilities::universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
@@ -185,24 +181,6 @@ impl NnsInitPayloadsBuilder {
         self.registry
             .push_init_mutate_request(RegistryAtomicMutateRequest {
                 mutations: invariant_compliant_mutation(),
-                preconditions: vec![],
-            });
-        self
-    }
-
-    /// Add an `IcpXdrConversionRateRecord` to the Registry
-    pub fn with_registry_icp_xdr_conversion_rate(
-        &mut self,
-        icp_xdr_conversion_rate: &IcpXdrConversionRateRecord,
-    ) -> &mut Self {
-        self.registry
-            .push_init_mutate_request(RegistryAtomicMutateRequest {
-                mutations: vec![insert(
-                    make_icp_xdr_conversion_rate_record_key()
-                        .as_bytes()
-                        .to_vec(),
-                    encode_or_panic(icp_xdr_conversion_rate),
-                )],
                 preconditions: vec![],
             });
         self
