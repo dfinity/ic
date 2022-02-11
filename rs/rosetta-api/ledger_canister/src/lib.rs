@@ -163,11 +163,11 @@ impl<'de, T> Deserialize<'de> for HashOf<T> {
     Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash,
 )]
 #[serde(transparent)]
-pub struct EncodedBlock(pub Box<[u8]>);
+pub struct EncodedBlock(pub serde_bytes::ByteBuf);
 
-impl From<Box<[u8]>> for EncodedBlock {
-    fn from(bytes: Box<[u8]>) -> Self {
-        Self(bytes)
+impl From<Vec<u8>> for EncodedBlock {
+    fn from(bytes: Vec<u8>) -> Self {
+        Self::from_vec(bytes)
     }
 }
 
@@ -181,6 +181,14 @@ impl EncodedBlock {
     pub fn decode(&self) -> Result<Block, String> {
         let bytes = self.0.to_vec();
         Ok(ProtoBuf::from_bytes(bytes)?.get())
+    }
+
+    pub fn from_vec(bytes: Vec<u8>) -> Self {
+        Self(serde_bytes::ByteBuf::from(bytes))
+    }
+
+    pub fn into_vec(self) -> Vec<u8> {
+        self.0.to_vec()
     }
 
     pub fn size_bytes(&self) -> usize {
@@ -504,8 +512,8 @@ impl Block {
     }
 
     pub fn encode(self) -> Result<EncodedBlock, String> {
-        let slice = ProtoBuf::new(self).into_bytes()?.into_boxed_slice();
-        Ok(EncodedBlock(slice))
+        let bytes = ProtoBuf::new(self).into_bytes()?;
+        Ok(EncodedBlock::from(bytes))
     }
 
     pub fn parent_hash(&self) -> Option<HashOf<EncodedBlock>> {

@@ -185,7 +185,7 @@ impl SQLiteStore {
         connection
             .execute(
                 "INSERT INTO blocks (hash, block, parent_hash, idx, verified) VALUES (?1, ?2, ?3, ?4, FALSE)",
-                params![hash, hb.block.0, parent_hash, hb.index],
+                params![hash, hb.block.into_vec(), parent_hash, hb.index],
             )
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         Ok(())
@@ -339,9 +339,7 @@ impl SQLiteStore {
             .query_map(params![index], |row| {
                 Ok(HashedBlock {
                     hash: row.get(0).map(|bytes| HashOf::new(vec_into_array(bytes)))?,
-                    block: row
-                        .get(1)
-                        .map(|bytes: Vec<u8>| EncodedBlock::from(bytes.into_boxed_slice()))?,
+                    block: row.get(1).map(EncodedBlock::from_vec)?,
                     parent_hash: row.get(2).map(|opt_bytes: Option<Vec<u8>>| {
                         opt_bytes.map(|bytes| HashOf::new(vec_into_array(bytes)))
                     })?,
@@ -370,9 +368,7 @@ impl SQLiteStore {
             .query_map(params![range.start, range.end], |row| {
                 Ok(HashedBlock {
                     hash: row.get(0).map(|bytes| HashOf::new(vec_into_array(bytes)))?,
-                    block: row
-                        .get(1)
-                        .map(|bytes: Vec<u8>| EncodedBlock::from(bytes.into_boxed_slice()))?,
+                    block: row.get(1).map(EncodedBlock::from_vec)?,
                     parent_hash: row.get(2).map(|opt_bytes: Option<Vec<u8>>| {
                         opt_bytes.map(|bytes| HashOf::new(vec_into_array(bytes)))
                     })?,

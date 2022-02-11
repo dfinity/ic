@@ -180,7 +180,7 @@ impl ToProto for GetBlocksRes {
             }) => {
                 let blocks: Vec<EncodedBlock> = blocks
                     .into_iter()
-                    .map(|protobuf::EncodedBlock { block }| EncodedBlock(block.into_boxed_slice()))
+                    .map(|protobuf::EncodedBlock { block }| EncodedBlock::from(block))
                     .collect();
                 Ok(GetBlocksRes(Ok(blocks)))
             }
@@ -196,7 +196,7 @@ impl ToProto for GetBlocksRes {
                 let blocks = blocks
                     .into_iter()
                     .map(|b| protobuf::EncodedBlock {
-                        block: b.0.into_vec(),
+                        block: b.into_vec(),
                     })
                     .collect();
                 protobuf::GetBlocksResponse {
@@ -246,7 +246,7 @@ impl ToProto for IterBlocksRes {
         let blocks: Vec<EncodedBlock> = pb
             .blocks
             .into_iter()
-            .map(|protobuf::EncodedBlock { block }| EncodedBlock(block.into_boxed_slice()))
+            .map(|protobuf::EncodedBlock { block }| EncodedBlock::from(block))
             .collect();
         Ok(IterBlocksRes(blocks))
     }
@@ -256,7 +256,7 @@ impl ToProto for IterBlocksRes {
             .0
             .into_iter()
             .map(|b| protobuf::EncodedBlock {
-                block: b.0.into_vec(),
+                block: b.into_vec(),
             })
             .collect();
         protobuf::IterBlocksResponse { blocks }
@@ -285,7 +285,7 @@ impl ToProto for BlockRes {
         match pb.block_content {
             Some(protobuf::block_response::BlockContent::Block(protobuf::EncodedBlock {
                 block,
-            })) => Ok(BlockRes(Some(Ok(EncodedBlock(block.into_boxed_slice()))))),
+            })) => Ok(BlockRes(Some(Ok(EncodedBlock::from(block))))),
             Some(protobuf::block_response::BlockContent::CanisterId(canister_id)) => {
                 Ok(BlockRes(Some(Err(CanisterId::new(canister_id).unwrap()))))
             }
