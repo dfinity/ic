@@ -33,14 +33,14 @@
     Target Machine: <br>
     <ul>
       {{#each experiment.target_machines}}
-      <li>{{this}}
+      <li>{{this.name}} ({{this.host}} {{this.country}})
       {{/each}}
     </ul>
     
     Load Generator Machines: <br>
     <ul>
       {{#each experiment.load_generator_machines}}
-      <li>{{this}}
+      <li>{{this.name}} ({{this.host}} {{this.country}})
       {{/each}}
     </ul>
     Time experiment start: {{experiment.t_experiment_start}}<br>
@@ -145,15 +145,14 @@
     
     {{#each iterations}} 
 
-    <h3>Iteration {{this.header}} with total load: {{this.configuration.configuration.load_total}}</h3>
+    <h3>Iteration {{this.header}} ({{../experiment.xtitle}}: {{this.configuration.configuration.load_total}})</h3>
     99th percentile latency: {{this.t_99}}ms (mean from all workload generators)<br>
-    Latency median: {{this.t_median}}ms (maximum from all workload generators)<br>
+    Median latency: {{this.t_median}}ms (maximum from all workload generators)<br>
+    Failure rate: <span class="w3-tag w3-round w3-{{this.failure_rate_color}}">
+      {{this.failure_rate}}%</span><br>
     <button onclick="showAccordion('iteration-{{this.header}}')" class="w3-btn w3-green">📂 Show details for iteration {{this.header}}</button><br />
     <div id="iteration-{{this.header}}" class="w3-container w3-hide">
 
-    Failure rate:
-    <span class="w3-tag w3-round w3-{{this.failure_rate_color}}">
-      {{this.failure_rate}}%</span><br>
     Latency average: {{this.t_average}}ms<br>
     Latency max: {{this.t_max}}ms<br>
     Latency min: {{this.t_min}}ms<br>

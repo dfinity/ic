@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import traceback
+from statistics import mean
 
 from termcolor import colored
 
@@ -157,3 +158,10 @@ def get_threshold_approaching_datapoints(threshold, num_exp_points, num_lin_poin
         datapoints.append(start + i * lin_step)
 
     return datapoints
+
+
+def mean_or_minus_one(x):
+    if len(x) > 0:
+        return mean(x)
+    else:
+        return -1

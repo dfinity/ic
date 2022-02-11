@@ -278,8 +278,11 @@ class WorkloadExperiment(experiment.Experiment):
         f_stdout = os.path.join(curr_outdir, "workload-generator-{}.stdout.txt")
         f_stderr = os.path.join(curr_outdir, "workload-generator-{}.stderr.txt")
 
-        # Set timeout to 2x the duration.
-        ssh.run_all_ssh_in_parallel(machines, commands, f_stdout, f_stderr, 2 * duration)
+        # Set timeout to 2 + len(targets) of the duration.
+        # E.g. timeout will linearly increase as target machines number incrase
+        timeout = (len(targets) / 10 + 2) * duration
+        print(f"Setting workload generator timeout to: {timeout}")
+        ssh.run_all_ssh_in_parallel(machines, commands, f_stdout, f_stderr, timeout)
 
         print("Fetching workload generator results")
 

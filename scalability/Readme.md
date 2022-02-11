@@ -26,11 +26,11 @@ The code is as follows:
    - `prometheus.py`: Downloads metrics collected during benchmark execution on Prometheus.
 - `ssh.py`: Helpers to execute commands remotely via SSH
 - `experiment.py`: Base class for experiments. Implements common functionality like installing canisters or running the workload generator.
-   - `workload_experiment.py`: Base class for workload generator based experiments. In addition to `experiment.py`, those experiments have built-in support for running the workload generator.
-   - `run_experiment_{1,2,3}.py`: Implements the given experiments as described in the IC-562
-   - `max-capacity-experiment-1.py`: Maximum capacity variants of the experiments - increases loads iteratively until the system starts to fail. Currently only experiment 1 is implemented.
+   - `load_experiment.py`: Base class for workload generator based experiments. In addition to `experiment.py`, those experiments have built-in support for running the workload generator.
+   - `run_experiment*.py`: Each of those implement a single benchmark as descrobed in IC-562
+   - `max-capacity-experiment*.py`: Maximum capacity variants of the experiments - increases loads iteratively until the system starts to fail.
  - `report.py` and `generate_report.py`: Scripts to generate HTML reports out of collected measurements from experiment executions.
-   - `templates/`: folder for storing templates to generate HTML reports. There is one main`experiment.html.hb` is the main experiment report template, with `experiment_{1,2,3}.html.hb` defining the template for the experiment-specific part of the report.
+   - `templates/`: folder for storing templates to generate HTML reports. There is one main`experiment.html.hb` is the main experiment report template, with `experiment_*.html.hb` defining the template for the experiment-specific part of the report. The name of the template file has to match what's given as first argument to `write_summary_file`.
 
 
 # Install dependencies
