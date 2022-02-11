@@ -175,7 +175,7 @@ impl AddressBook {
                 break;
             }
 
-            if validate_address(address) {
+            if validate_services(&address.services) {
                 if let Ok(address) = address.socket_addr() {
                     if *sender == address {
                         continue;
@@ -288,7 +288,7 @@ impl AddressBook {
     }
 }
 
-/// This function is used to validate an address. To determine if the address
+/// This function is used to validate service flags . To determine if the address
 /// is valid, we check the service flags that have been presented with the
 /// address.
 ///
@@ -296,10 +296,8 @@ impl AddressBook {
 /// * Network Limited: BIP-0159: The node is running in pruned mode storing
 /// only the most recent 288 blocks. These nodes can still relay blocks from
 /// full nodes.
-pub fn validate_address(address: &Address) -> bool {
-    address
-        .services
-        .has(ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED)
+pub fn validate_services(services: &ServiceFlags) -> bool {
+    services.has(ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED)
 }
 
 /// This is a simple utility function for creating a string that is a valid string
@@ -367,16 +365,12 @@ mod cfg {
     /// This function tests the `AddressManager::validate_address(...)` function to ensure
     /// that the service flags for an address are network and network limited.
     #[test]
-    fn test_address_manager_validate_address() {
-        let socket = SocketAddr::from_str("127.0.0.1:8444").expect("bad address format");
-        let address = Address::new(
-            &socket,
-            ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED,
-        );
-        assert!(validate_address(&address));
+    fn test_address_manager_validate_services() {
+        let services = ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED;
+        assert!(validate_services(&services));
 
-        let address = Address::new(&socket, ServiceFlags::NETWORK_LIMITED);
-        assert!(!validate_address(&address));
+        let services = ServiceFlags::NETWORK;
+        assert!(!validate_services(&services));
     }
 
     /// This function tests the `AddressManager::add_many(...)` function to ensure

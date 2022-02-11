@@ -22,7 +22,7 @@ use tokio::{
 
 use crate::{
     addressbook::{
-        validate_address, AddressBook, AddressBookError, AddressEntry, AddressTimestamp,
+        validate_services, AddressBook, AddressBookError, AddressEntry, AddressTimestamp,
     },
     common::DEFAULT_CHANNEL_BUFFER_SIZE,
     common::*,
@@ -520,7 +520,6 @@ impl ConnectionManager {
         Ok(())
     }
 
-    // TODO: ER-2123: Version validation should use the services flag instead of the sender.
     /// This function validates a received version message based on the following criteria:
     ///
     /// * The sender address is advertising the services the adapter is looking for.
@@ -528,10 +527,9 @@ impl ConnectionManager {
     /// * The version is at least the configured minimum.
     /// * The services in the main message match the sender services.
     fn validate_received_version(&self, message: &VersionMessage) -> bool {
-        validate_address(&message.sender)
+        validate_services(&message.services)
             && message.start_height >= self.min_start_height as i32
             && message.version >= MINIMUM_VERSION_NUMBER
-            && message.sender.services == message.services
     }
 }
 
@@ -657,7 +655,10 @@ mod test {
         let services = ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED;
         let receiver = Address::new(&socket_1, services);
         let sender = Address::new(&socket_2, ServiceFlags::NONE);
-        let version_message = VersionMessage::new(
+        let config = ConfigBuilder::new()
+            .with_dns_seeds(vec![String::from("127.0.0.1")])
+            .build();
+        let mut version_message = VersionMessage::new(
             services,
             0,
             receiver,
@@ -666,12 +667,9 @@ mod test {
             String::from("test"),
             60000,
         );
+        version_message.version = MINIMUM_VERSION_NUMBER - 1;
 
-        let config = ConfigBuilder::new()
-            .with_dns_seeds(vec![String::from("127.0.0.1")])
-            .build();
         let manager = ConnectionManager::new(&config, make_logger()).expect("invalid init");
-
         assert!(!manager.validate_received_version(&version_message));
     }
 
@@ -689,13 +687,14 @@ mod test {
             sender,
             1,
             String::from("test"),
-            60000,
+            60_000,
         );
 
         let config = ConfigBuilder::new()
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
-        let manager = ConnectionManager::new(&config, make_logger()).expect("invalid init");
+        let mut manager = ConnectionManager::new(&config, make_logger()).expect("invalid init");
+        manager.min_start_height = 100_000;
 
         assert!(!manager.validate_received_version(&version_message));
     }
@@ -704,8 +703,8 @@ mod test {
     fn validate_received_version_service_flags_do_not_match() {
         let socket_1 = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
         let socket_2 = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
-        let services = ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED;
-        let receiver = Address::new(&socket_1, ServiceFlags::WITNESS);
+        let services = ServiceFlags::WITNESS;
+        let receiver = Address::new(&socket_1, ServiceFlags::NONE);
         let sender = Address::new(&socket_2, ServiceFlags::NONE);
         let version_message = VersionMessage::new(
             services,
@@ -714,7 +713,7 @@ mod test {
             sender,
             1,
             String::from("test"),
-            60000,
+            60_000,
         );
 
         let config = ConfigBuilder::new()
