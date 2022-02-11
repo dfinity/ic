@@ -143,6 +143,16 @@ impl ConnectionManager {
         }
     }
 
+    /// This method is used when the adapter is no longer receiving RPC calls from the replica.
+    /// Cleans up all active connections.
+    pub fn make_idle(&mut self) {
+        for conn in self.connections.values_mut() {
+            conn.disconnect();
+        }
+        self.reap_disconnected();
+        self.address_book.clear();
+    }
+
     /// This function will remove disconnects and establish new connections.
     fn manage_connections<T>(
         &mut self,
@@ -408,6 +418,11 @@ impl ConnectionManager {
             self.send_getaddr(address).ok();
         }
 
+        Ok(())
+    }
+
+    fn process_verack_message(&mut self, address: &SocketAddr) -> Result<(), ProcessEventError> {
+        slog::info!(self.logger, "Received verack from {}", address);
         if let Ok(conn) = self.get_connection(address) {
             match conn.address_entry() {
                 AddressEntry::Seed(_) => conn.awaiting_addresses(),
@@ -431,6 +446,7 @@ impl ConnectionManager {
     ) -> Result<(), ProcessEventError> {
         // If we cannot find the connection, the connection has been cleaned up before the
         // message has been received. It can be skipped.
+        slog::debug!(self.logger, "Received ping from {}", address);
         self.send_pong(address, nonce).ok();
         Ok(())
     }
@@ -596,10 +612,7 @@ impl ProcessEvent for ConnectionManager {
                 NetworkMessage::Version(version_message) => {
                     self.process_version_message(&event.address, version_message)
                 }
-                NetworkMessage::Verack => {
-                    slog::info!(self.logger, "Received verack from {}", event.address);
-                    Ok(())
-                }
+                NetworkMessage::Verack => self.process_verack_message(&event.address),
                 NetworkMessage::Addr(addresses) => {
                     self.process_addr_message(&event.address, addresses)
                 }
@@ -947,6 +960,49 @@ mod test {
             // Connection 1 has been removed as expected
             let result = manager.get_connection(&addr);
             assert!(result.is_err());
+        });
+    }
+
+    /// This test ensures that the idle function disconnects all connections and reaps the
+    /// connections from the `ConnectionManager.connections` field.
+    #[test]
+    fn test_make_idle() {
+        let runtime = tokio::runtime::Runtime::new().expect("runtime err");
+        let addr = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
+        let addr2 = SocketAddr::from_str("192.168.1.1:8333").expect("invalid address");
+        let config = ConfigBuilder::new()
+            .with_dns_seeds(vec![String::from("127.0.0.1")])
+            .build();
+        let mut manager = ConnectionManager::new(&config, make_logger()).expect("invalid init");
+        let timestamp1 = SystemTime::now() - Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
+        let timestamp2 = SystemTime::now() + Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
+        let (writer, _) = unbounded_channel();
+        runtime.block_on(async {
+            let conn = Connection::new_with_state(
+                ConnectionConfig {
+                    address_entry: AddressEntry::Seed(addr),
+                    handle: task::spawn(async {}),
+                    writer: writer.clone(),
+                },
+                ConnectionState::AwaitingAddresses {
+                    timestamp: timestamp1,
+                },
+            );
+            manager.connections.insert(addr, conn);
+            let conn2 = Connection::new_with_state(
+                ConnectionConfig {
+                    address_entry: AddressEntry::Seed(addr2),
+                    handle: task::spawn(async {}),
+                    writer,
+                },
+                ConnectionState::HandshakeComplete {
+                    timestamp: timestamp2,
+                },
+            );
+            manager.connections.insert(addr2, conn2);
+
+            manager.make_idle();
+            assert!(manager.connections.is_empty());
         });
     }
 }

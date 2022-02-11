@@ -109,6 +109,13 @@ impl TransactionManager {
         }
     }
 
+    /// This method is used when the adapter is no longer receiving RPC calls from the replica.
+    /// Clears all transactions the adapter is currently caching.
+    pub fn make_idle(&mut self) {
+        self.transactions.clear();
+        self.outgoing_command_queue.clear();
+    }
+
     /// Clear out transactions that have been held on to for more than the transaction timeout period.
     fn reap(&mut self) {
         slog::debug!(self.logger, "Reaping old transactions");
@@ -386,5 +393,29 @@ mod test {
         info.timeout_at = SystemTime::now() - Duration::from_secs(TX_CACHE_TIMEOUT_PERIOD_SECS);
         manager.tick(&mut channel);
         assert_eq!(manager.transactions.len(), 0);
+    }
+
+    /// Test to ensure that when `TransactionManager.idle(...)` is called that the `transactions`
+    /// and `outgoing_command_queue` fields are cleared.
+    #[test]
+    fn test_make_idle() {
+        let mut manager = make_transaction_manager();
+        let transaction = get_transaction();
+        let raw_tx = serialize(&transaction);
+        let txid = transaction.txid();
+        let address = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
+        let inventory = vec![Inventory::Transaction(txid)];
+
+        manager.send_transaction(&raw_tx);
+        manager.process_getdata_message(&address, &inventory);
+
+        assert_eq!(manager.transactions.len(), 1);
+        assert!(manager.transactions.contains_key(&txid));
+        assert_eq!(manager.outgoing_command_queue.len(), 1);
+
+        manager.make_idle();
+        assert_eq!(manager.transactions.len(), 0);
+        assert!(!manager.transactions.contains_key(&txid));
+        assert_eq!(manager.outgoing_command_queue.len(), 0);
     }
 }

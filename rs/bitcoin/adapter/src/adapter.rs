@@ -7,8 +7,13 @@ use crate::{
 };
 use bitcoin::{Block, BlockHash};
 use slog::{error, Logger};
-use std::net::SocketAddr;
+use std::{net::SocketAddr, time::Instant};
 use thiserror::Error;
+
+enum AdapterState {
+    Idle,
+    ActiveSince(Instant),
+}
 
 #[derive(Debug, Error)]
 pub enum AdapterError {
@@ -26,6 +31,10 @@ pub struct Adapter {
     connection_manager: ConnectionManager,
     /// This field is used to relay transactions from the replica state to the BTC network.
     transaction_manager: TransactionManager,
+    /// This field contains the timestamp when the last RPC call was received from the adapter.
+    update_state: AdapterState,
+    /// This field contains the how long the adapter should wait to enter the [AdapterState::Idle](AdapterState::Idle) state.
+    idle_seconds: u64,
 }
 
 impl Adapter {
@@ -40,6 +49,8 @@ impl Adapter {
             blockchain_manager,
             connection_manager,
             transaction_manager,
+            update_state: AdapterState::Idle,
+            idle_seconds: config.idle_seconds,
         })
     }
 
@@ -49,6 +60,16 @@ impl Adapter {
 
     /// Function to called periodically for updating the adapter's state.
     pub fn tick(&mut self) {
+        if let AdapterState::ActiveSince(last_received_at) = self.update_state {
+            if last_received_at.elapsed().as_secs() > self.idle_seconds {
+                self.make_idle();
+            }
+        }
+
+        if let AdapterState::Idle = self.update_state {
+            return;
+        }
+
         if let Some(event) = self.connection_manager.receive_stream_event() {
             if let Err(ProcessEventError::InvalidMessage) =
                 self.connection_manager.process_event(&event)
@@ -78,11 +99,30 @@ impl Adapter {
 
     /// Gets successors from the configured  bitcoin network.
     pub fn get_successors(&mut self, block_hashes: Vec<BlockHash>) -> Vec<Block> {
+        self.received_rpc_call();
         self.blockchain_manager.handle_client_request(block_hashes)
     }
 
     /// Sends transaction to the configured bitcoin network.
     pub fn send_transaction(&mut self, raw_tx: Vec<u8>) {
+        self.received_rpc_call();
         self.transaction_manager.send_transaction(&raw_tx)
+    }
+
+    /// Set the state to `Active` with the current timestamp.
+    fn received_rpc_call(&mut self) {
+        self.update_state = AdapterState::ActiveSince(Instant::now());
+    }
+
+    /// When the adapter has not received a RPC call, this method is called.
+    /// It does the following:
+    /// * Close all connections and empty out the address book
+    /// * Clean up the block cache
+    /// * Clean up transaction state
+    fn make_idle(&mut self) {
+        self.update_state = AdapterState::Idle;
+        self.connection_manager.make_idle();
+        self.blockchain_manager.make_idle();
+        self.transaction_manager.make_idle();
     }
 }

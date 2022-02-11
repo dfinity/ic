@@ -127,6 +127,8 @@ impl AddressBook {
         Ok(book)
     }
 
+    /// This function takes the DNS seeds and creates a new queue of socket addresses to connect to
+    /// for the address discovery process.
     fn build_seed_queue(&mut self) {
         let mut rng = StdRng::from_entropy();
         let dns_seeds = self
@@ -138,6 +140,23 @@ impl AddressBook {
             .collect::<Vec<SocketAddr>>();
         addresses.shuffle(&mut rng);
         self.seed_queue = addresses.into_iter().collect();
+    }
+
+    /// This function is used when the adapter idles. It clears out the seed queue and active addresses.
+    /// If the address book has seeds, it will also clear the known addresses.
+    pub fn clear(&mut self) {
+        if self.has_seeds() {
+            self.known_addresses = HashSet::new();
+        } else {
+            self.known_addresses = self
+                .known_addresses
+                .union(&self.active_addresses)
+                .into_iter()
+                .cloned()
+                .collect();
+        }
+        self.active_addresses = HashSet::new();
+        self.seed_queue = VecDeque::new();
     }
 
     /// This function is used to determine how many entries are in the address book.
@@ -252,7 +271,7 @@ impl AddressBook {
 
     /// Returns true if the AddressBook has seeds in the queue.
     pub fn has_seeds(&self) -> bool {
-        !self.seed_queue.is_empty()
+        !self.dns_seeds.is_empty()
     }
 
     /// This function takes a socket address and puts it into the active
@@ -318,7 +337,7 @@ fn address_limits(network: Network) -> (usize, usize) {
 }
 
 #[cfg(test)]
-mod cfg {
+mod test {
 
     use std::str::FromStr;
 
@@ -431,7 +450,7 @@ mod cfg {
 
         // If there a no more seeds, then the address is added back into the known addresses pool.
         // Used for connecting to a regtest node.
-        book.pop_seed().expect("there should be 1 seed");
+        book.dns_seeds.clear();
         book.discard(&entry);
         assert_eq!(book.known_addresses.len(), 1);
         assert_eq!(book.active_addresses.len(), 0);
@@ -481,5 +500,46 @@ mod cfg {
             book.pop_seed(),
             Err(AddressBookError::NoSeedAddressesFound)
         ));
+    }
+
+    /// This test exercises `AddressBook::clear(...)` by checking the following:
+    /// 1. If there are DNS seeds, the known, active addresses, and seed queue should be emptied.
+    /// 2. If there are no DNS seeds, the seed queue and active addresses is emptied.
+    #[test]
+    fn test_clear() {
+        let config = ConfigBuilder::new()
+            .with_dns_seeds(vec![String::from("127.0.0.1"), String::from("192.168.1.1")])
+            .build();
+        let mut book = AddressBook::new(&config, make_logger()).expect("invalid init");
+        let seed = book.pop_seed().expect("there should be 1 seed");
+        let socket = SocketAddr::from_str("127.0.0.1:8444").expect("bad address format");
+        let address = Address::new(
+            &socket,
+            ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED,
+        );
+
+        let addresses = vec![(0, address)];
+        book.add_many(seed.addr(), &addresses)
+            .expect("should not cause an error");
+
+        book.mark_as_active(&socket);
+        assert_eq!(book.known_addresses.len(), 0);
+        assert_eq!(book.active_addresses.len(), 1);
+
+        book.clear();
+        assert_eq!(book.known_addresses.len(), 0);
+        assert_eq!(book.active_addresses.len(), 0);
+
+        book.dns_seeds.clear();
+        book.add_many(seed.addr(), &addresses)
+            .expect("should not cause an error");
+
+        book.mark_as_active(&socket);
+        assert_eq!(book.known_addresses.len(), 0);
+        assert_eq!(book.active_addresses.len(), 1);
+
+        book.clear();
+        assert_eq!(book.known_addresses.len(), 1);
+        assert_eq!(book.active_addresses.len(), 0);
     }
 }
