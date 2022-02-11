@@ -49,6 +49,7 @@ fn test_the_anonymous_user_cannot_update_a_subnets_configuration() {
         let payload = UpdateSubnetPayload {
             subnet_id,
             max_ingress_bytes_per_message: None,
+            max_ingress_messages_per_block: None,
             max_block_payload_size: None,
             unit_delay_millis: None,
             initial_notary_delay_millis: None,
@@ -121,8 +122,8 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_update_a_subnets_con
         let initial_subnet_record = SubnetRecord {
             membership: vec![],
             max_ingress_bytes_per_message: 60 * 1024 * 1024,
-            max_block_payload_size: 4 * 1024 * 1024,
             max_ingress_messages_per_block: 1000,
+            max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
             replica_version_id: "version_42".to_string(),
@@ -170,6 +171,7 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_update_a_subnets_con
         let payload = UpdateSubnetPayload {
             subnet_id,
             max_ingress_bytes_per_message: None,
+            max_ingress_messages_per_block: None,
             max_block_payload_size: None,
             unit_delay_millis: None,
             initial_notary_delay_millis: None,
@@ -243,8 +245,8 @@ fn test_the_proposals_canister_can_update_a_subnets_configuration() {
                         encode_or_panic(&SubnetRecord {
                             membership: vec![],
                             max_ingress_bytes_per_message: 60 * 1024 * 1024,
-                            max_block_payload_size: 4 * 1024 * 1024,
                             max_ingress_messages_per_block: 1000,
+                            max_block_payload_size: 4 * 1024 * 1024,
                             unit_delay_millis: 500,
                             initial_notary_delay_millis: 1500,
                             replica_version_id: "version_42".to_string(),
@@ -283,6 +285,7 @@ fn test_the_proposals_canister_can_update_a_subnets_configuration() {
         let payload = UpdateSubnetPayload {
             subnet_id,
             max_ingress_bytes_per_message: None,
+            max_ingress_messages_per_block: None,
             max_block_payload_size: None,
             unit_delay_millis: Some(100),
             initial_notary_delay_millis: None,

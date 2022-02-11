@@ -53,6 +53,7 @@ pub struct UpdateSubnetPayload {
     pub subnet_id: SubnetId,
 
     pub max_ingress_bytes_per_message: Option<u64>,
+    pub max_ingress_messages_per_block: Option<u64>,
     pub max_block_payload_size: Option<u64>,
     pub unit_delay_millis: Option<u64>,
     pub initial_notary_delay_millis: Option<u64>,
@@ -147,6 +148,7 @@ fn merge_subnet_record(
     let UpdateSubnetPayload {
         subnet_id: _subnet_id,
         max_ingress_bytes_per_message,
+        max_ingress_messages_per_block,
         max_block_payload_size,
         unit_delay_millis,
         initial_notary_delay_millis,
@@ -176,6 +178,7 @@ fn merge_subnet_record(
     } = payload;
 
     maybe_set!(subnet_record, max_ingress_bytes_per_message);
+    maybe_set!(subnet_record, max_ingress_messages_per_block);
     maybe_set!(subnet_record, max_block_payload_size);
     maybe_set!(subnet_record, unit_delay_millis);
     maybe_set!(subnet_record, initial_notary_delay_millis);
@@ -243,8 +246,8 @@ mod tests {
         let subnet_record = SubnetRecord {
             membership: vec![],
             max_ingress_bytes_per_message: 60 * 1024 * 1024,
-            max_block_payload_size: 4 * 1024 * 1024,
             max_ingress_messages_per_block: 1000,
+            max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
             replica_version_id: "version_42".to_string(),
@@ -282,6 +285,7 @@ mod tests {
                 .unwrap(),
             ),
             max_ingress_bytes_per_message: Some(256),
+            max_ingress_messages_per_block: Some(256),
             max_block_payload_size: Some(200),
             unit_delay_millis: Some(300),
             initial_notary_delay_millis: Some(200),
@@ -321,7 +325,7 @@ mod tests {
             SubnetRecord {
                 membership: vec![],
                 max_ingress_bytes_per_message: 256,
-                max_ingress_messages_per_block: 1000,
+                max_ingress_messages_per_block: 256,
                 max_block_payload_size: 200,
                 unit_delay_millis: 300,
                 initial_notary_delay_millis: 200,
@@ -370,8 +374,8 @@ mod tests {
         let subnet_record = SubnetRecord {
             membership: vec![],
             max_ingress_bytes_per_message: 60 * 1024 * 1024,
-            max_block_payload_size: 4 * 1024 * 1024,
             max_ingress_messages_per_block: 1000,
+            max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
             replica_version_id: "version_42".to_string(),
@@ -411,6 +415,7 @@ mod tests {
                 .unwrap(),
             ),
             max_ingress_bytes_per_message: None,
+            max_ingress_messages_per_block: None,
             max_block_payload_size: None,
             unit_delay_millis: Some(100),
             initial_notary_delay_millis: None,
@@ -444,8 +449,8 @@ mod tests {
             SubnetRecord {
                 membership: vec![],
                 max_ingress_bytes_per_message: 60 * 1024 * 1024,
-                max_block_payload_size: 4 * 1024 * 1024,
                 max_ingress_messages_per_block: 1000,
+                max_block_payload_size: 4 * 1024 * 1024,
                 unit_delay_millis: 100,
                 initial_notary_delay_millis: 1500,
                 replica_version_id: "version_42".to_string(),
@@ -486,8 +491,8 @@ mod tests {
         let subnet_record = SubnetRecord {
             membership: vec![],
             max_ingress_bytes_per_message: 60 * 1024 * 1024,
-            max_block_payload_size: 4 * 1024 * 1024,
             max_ingress_messages_per_block: 1000,
+            max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
             replica_version_id: "version_42".to_string(),
@@ -515,6 +520,7 @@ mod tests {
                 .unwrap(),
             ),
             max_ingress_bytes_per_message: None,
+            max_ingress_messages_per_block: None,
             max_block_payload_size: None,
             unit_delay_millis: Some(100),
             initial_notary_delay_millis: None,
@@ -551,8 +557,8 @@ mod tests {
         let subnet_record = SubnetRecord {
             membership: vec![],
             max_ingress_bytes_per_message: 60 * 1024 * 1024,
-            max_block_payload_size: 4 * 1024 * 1024,
             max_ingress_messages_per_block: 1000,
+            max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
             replica_version_id: "version_42".to_string(),
@@ -580,6 +586,7 @@ mod tests {
                 .unwrap(),
             ),
             max_ingress_bytes_per_message: None,
+            max_ingress_messages_per_block: None,
             max_block_payload_size: None,
             unit_delay_millis: None,
             initial_notary_delay_millis: None,
@@ -613,8 +620,8 @@ mod tests {
             SubnetRecord {
                 membership: vec![],
                 max_ingress_bytes_per_message: 60 * 1024 * 1024,
-                max_block_payload_size: 4 * 1024 * 1024,
                 max_ingress_messages_per_block: 1000,
+                max_block_payload_size: 4 * 1024 * 1024,
                 unit_delay_millis: 500,
                 initial_notary_delay_millis: 1500,
                 replica_version_id: "version_42".to_string(),
@@ -653,8 +660,8 @@ mod tests {
         let subnet_record = SubnetRecord {
             membership: vec![],
             max_ingress_bytes_per_message: 60 * 1024 * 1024,
-            max_block_payload_size: 4 * 1024 * 1024,
             max_ingress_messages_per_block: 1000,
+            max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
             replica_version_id: "version_42".to_string(),
@@ -694,6 +701,7 @@ mod tests {
                 .unwrap(),
             ),
             max_ingress_bytes_per_message: None,
+            max_ingress_messages_per_block: None,
             max_block_payload_size: None,
             unit_delay_millis: Some(100),
             initial_notary_delay_millis: None,
@@ -727,8 +735,8 @@ mod tests {
             SubnetRecord {
                 membership: vec![],
                 max_ingress_bytes_per_message: 60 * 1024 * 1024,
-                max_block_payload_size: 4 * 1024 * 1024,
                 max_ingress_messages_per_block: 1000,
+                max_block_payload_size: 4 * 1024 * 1024,
                 unit_delay_millis: 100,
                 initial_notary_delay_millis: 1500,
                 replica_version_id: "version_42".to_string(),

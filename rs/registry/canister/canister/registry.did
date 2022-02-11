@@ -134,6 +134,7 @@ type UpdateSubnetPayload = record {
   max_instructions_per_install_code : opt nat64;
   start_as_nns : opt bool;
   is_halted : opt bool;
+  max_ingress_messages_per_block : opt nat64;
   max_number_of_canisters : opt nat64;
   ecdsa_config : opt EcdsaConfig;
   advert_best_effort_percentage : opt nat32;

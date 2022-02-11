@@ -11,7 +11,7 @@ use ic_interfaces::{
     execution_environment::IngressHistoryReader, registry::RegistryClient,
     state_manager::StateManager,
 };
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_registry_client::helper::subnet::{IngressMessageSettings, SubnetRegistry};
 use ic_replicated_state::ReplicatedState;
@@ -129,7 +129,18 @@ impl IngressManager {
                 );
                 None
             }
-            Ok(settings) => settings,
+            Ok(settings) => settings.map(|mut settings| {
+                // Make sure that we always allow a single message per block
+                if settings.max_ingress_messages_per_block == 0 {
+                    warn!(
+                        every_n_seconds => 300,
+                        self.log,
+                        "max_ingress_messages_per_block configured incorrectly (set to 0, should be set to at least 1)"
+                    );
+                    settings.max_ingress_messages_per_block = 1;
+                }
+                settings
+            }),
         }
     }
 }
