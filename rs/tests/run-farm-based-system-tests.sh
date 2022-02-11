@@ -182,12 +182,17 @@ if [[ -n "${CI_JOB_ID:-}" ]] && [[ -n "${ROOT_PIPELINE_ID:-}" ]]; then
     echo "!!! NOTE: Logs from tests and unstructured stdout/err output is stored away with the gitlab-job-artifacts."
     echo "You can download the job artifacts by clicking the 'Download' button in the top right corner of the job"
     echo "view."
+    # Push notifications to Slack for all failed pots, if a job is run periodically.
+    if [[ ${CI_PIPELINE_SOURCE:-} == "schedule" ]]; then
+        SUMMARY_ARGS+=(--slack_message "Pot {} *failed*. <${CI_JOB_URL:-}|log>. Commit: <${CI_PROJECT_URL:-}/-/commit/${CI_COMMIT_SHA:-}|${CI_COMMIT_SHORT_SHA:-}>.")
+    fi
 else
     SUMMARY_ARGS+=(--verbose)
 fi
 
 # Print a summary of the executed test suite.
 # Do not propagate errors, if the script fails.
+export PYTHONPATH="${CI_PROJECT_DIR}/gitlab-ci/src/notify_slack":"${PYTHONPATH:-}"
 python3 "${CI_PROJECT_DIR}/gitlab-ci/src/test_results/summary.py" "${SUMMARY_ARGS[@]}" 1>&2 || true
 
 cleanup_dirs

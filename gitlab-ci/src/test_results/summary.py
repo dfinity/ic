@@ -14,13 +14,20 @@ NODE_LOGS = "/app/kibana#/discover?_g=(time:(from:now-1y,to:now))&_a=(columns:!(
 KIBANA_BASE_URL = "https://kibana.testnet.dfinity.systems"
 
 
-def summarize(root, verbose):
+def summarize(root, verbose, message):
     """Print an execution summary for a given test results tree."""
     print_statistics(root)
     pots = root.children
     for p in pots:
         if verbose or p.result == "Failed":
             pot_summary(p)
+            if message:
+                import notify_slack
+
+                notify_slack.send_message(
+                    message=message.format(p.name),
+                    channel="#test-failure-alerts",
+                )
 
 
 def pot_summary(p):
@@ -81,10 +88,15 @@ def main():
         action="store_true",
         help="If true, list all pots contained in a test suite, instead of only failing ones.",
     )
+    parser.add_argument(
+        "--slack_message",
+        type=str,
+        help="If set, message to push to a slack channel, in form of a notification, for failed pots.",
+    )
     args = parser.parse_args()
 
     results = input.read_test_results(args.test_results)
-    summarize(results, args.verbose)
+    summarize(results, args.verbose, args.slack_message)
 
 
 if __name__ == "__main__":
