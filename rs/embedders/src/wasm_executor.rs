@@ -10,7 +10,7 @@ use prometheus::{Histogram, IntCounter};
 
 use crate::{
     wasm_utils::instrumentation::{instrument, InstructionCostTable},
-    wasm_utils::validation::{validate_wasm_binary, WasmImportsDetails},
+    wasm_utils::validation::{validate_wasm_binary, WasmImportsDetails, WasmValidationDetails},
     wasmtime_embedder::WasmtimeInstance,
     WasmExecutionInput, WasmExecutionOutput, WasmtimeEmbedder,
 };
@@ -252,15 +252,20 @@ impl WasmExecutor {
         let embedder_cache = self.get_embedder_cache(&wasm_binary)?;
         let mut wasm_page_map = PageMap::default();
 
-        let (exported_functions, globals, _wasm_page_delta, wasm_memory_size) =
-            get_initial_globals_and_memory(
-                &binary_encoded_wasm,
-                &embedder_cache,
-                &self.wasm_embedder,
-                &self.config,
-                &mut wasm_page_map,
-                canister_id,
-            )?;
+        let (
+            exported_functions,
+            globals,
+            _wasm_page_delta,
+            wasm_memory_size,
+            wasm_validation_details,
+        ) = get_initial_globals_and_memory(
+            &binary_encoded_wasm,
+            &embedder_cache,
+            &self.wasm_embedder,
+            &self.config,
+            &mut wasm_page_map,
+            canister_id,
+        )?;
 
         // Create the execution state.
         let stable_memory = Memory::default();
@@ -271,6 +276,7 @@ impl WasmExecutor {
             Memory::new(wasm_page_map, wasm_memory_size),
             stable_memory,
             globals,
+            wasm_validation_details.wasm_metadata,
         );
         Ok(execution_state)
     }
@@ -501,9 +507,10 @@ pub fn get_initial_globals_and_memory(
     Vec<Global>,
     Vec<PageIndex>,
     NumWasmPages,
+    WasmValidationDetails,
 )> {
     // Step 1. Get data from instrumentation output.
-    validate_wasm_binary(binary_encoded_wasm, config)?;
+    let wasm_validation_details = validate_wasm_binary(binary_encoded_wasm, config)?;
     let instrumentation_output = instrument(binary_encoded_wasm, &InstructionCostTable::new())?;
     let exported_functions = instrumentation_output.exported_functions;
     let wasm_memory_pages = instrumentation_output.data.as_pages();
@@ -548,5 +555,6 @@ pub fn get_initial_globals_and_memory(
         instance.get_exported_globals(),
         wasm_memory_delta,
         instance.heap_size(),
+        wasm_validation_details,
     ))
 }

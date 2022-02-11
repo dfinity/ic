@@ -596,6 +596,7 @@ impl SandboxedExecutionController {
             wasm_memory,
             stable_memory,
             reply.exported_globals,
+            reply.wasm_metadata,
         );
         Ok(execution_state)
     }
