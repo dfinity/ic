@@ -85,6 +85,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
             let proposal_payload = UpdateSubnetPayload {
                 subnet_id,
                 max_ingress_bytes_per_message: Some(10 * 1024 * 1024),
+                max_ingress_messages_per_block: None,
                 max_block_payload_size: None,
                 unit_delay_millis: None,
                 initial_notary_delay_millis: None,

@@ -1129,6 +1129,12 @@ struct ProposeToUpdateSubnetCmd {
     /// If set, the created proposal will contain a desired override of that
     /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
     /// of this field.
+    pub max_ingress_messages_per_block: Option<u64>,
+
+    #[clap(long)]
+    /// If set, the created proposal will contain a desired override of that
+    /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
+    /// of this field.
     pub max_block_payload_size: Option<u64>,
 
     #[clap(long)]
@@ -1284,6 +1290,7 @@ impl ProposalTitleAndPayload<UpdateSubnetPayload> for ProposeToUpdateSubnetCmd {
         UpdateSubnetPayload {
             subnet_id,
             max_ingress_bytes_per_message: self.max_ingress_bytes_per_message,
+            max_ingress_messages_per_block: self.max_ingress_messages_per_block,
             max_block_payload_size: self.max_block_payload_size,
             unit_delay_millis: self.unit_delay_millis,
             initial_notary_delay_millis: self.initial_notary_delay_millis,
