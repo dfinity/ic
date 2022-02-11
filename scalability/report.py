@@ -1,6 +1,6 @@
 import json
-from statistics import mean
 
+from misc import mean_or_minus_one
 from termcolor import colored
 
 
@@ -62,13 +62,6 @@ def evaluate_summaries(summaries):
         success[is_success(code)] += number
         total_number += number
         print(colored("{} - {} - {}".format(code, is_success(code), number), "green" if is_success(code) else "red"))
-
-    def mean_or_minus_one(x):
-        if len(x) > 0:
-            # XXX Consider if mean is the correct metric here.
-            return mean(x)
-        else:
-            return -1
 
     percentiles = [mean_or_minus_one([x[p] for x in t_percentile]) for p in range(0, 100)]
 

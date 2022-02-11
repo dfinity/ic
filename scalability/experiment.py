@@ -53,7 +53,7 @@ def parse_command_line_args():
             continue
         # gflags with default=None are required arguments. (SK: that's not true, optional flags with None as default values are not required)
         if value.default is None:
-            parser.add_argument(f"--{key}", required=True, help=colored("Required field. {value.help}", "red"))
+            parser.add_argument(f"--{key}", required=True, help=colored(f"Required field. {value.help}", "red"))
         else:
             parser.add_argument(
                 f"--{key}", required=False, default=value.default, help=f"{value.help}; default={value.default}"
@@ -238,13 +238,15 @@ class Experiment:
 
     def end_experiment(self):
         """End the experiment."""
-        print(
-            "Experiment finished. Generating report like: python3 generate_report.py {} {}".format(
-                self.git_hash, self.out_dir_timestamp
-            )
-        )
         if not FLAGS.skip_generate_report:
+            print(
+                "Experiment finished. Generating report like: python3 generate_report.py {} {}".format(
+                    self.git_hash, self.out_dir_timestamp
+                )
+            )
             generate_report.generate_report(self.out_dir, self.git_hash, self.out_dir_timestamp)
+        else:
+            print("Experiment finished. Skipping generating report.")
 
     def get_ic_admin_path(self):
         """Return path to ic-admin."""

@@ -2,7 +2,9 @@
 import json
 import os
 import sys
+import traceback
 
+import ansible
 import pybars
 import report
 
@@ -20,6 +22,25 @@ def add_plot(name: str, xlabel: str, ylabel: str, x: [str], plots: [([str], str)
             "xaxis": {"title": xlabel},
         },
     }
+
+
+def resolve_ip_addresses(ips: [str], testnet: str):
+    load_generators = []
+    country = {
+        "fr": "🇩🇪",
+        "sf": "🇺🇸",
+    }
+    print(ips)
+    try:
+        for machine in ips:
+            host = ansible.get_host_for_ip(testnet, machine)
+            host_prefix = host[:2]
+            load_generators.append(
+                {"name": machine, "host": host, "country": country[host_prefix] if host_prefix in country else ""}
+            )
+    except Exception:
+        traceback.print_exc()
+    return load_generators
 
 
 def add_file(base, path, alt):
@@ -200,6 +221,13 @@ def generate_report(base, githash, timestamp):
         print("Experiment template file is: {}".format(experiment_template_file))
         experiment_source = open(experiment_template_file, mode="r").read()
 
+        data["experiment"]["load_generator_machines"] = resolve_ip_addresses(
+            data["experiment"]["load_generator_machines"], data["experiment"]["wg_testnet"]
+        )
+        data["experiment"]["target_machines"] = resolve_ip_addresses(
+            data["experiment"]["target_machines"], data["experiment"]["wg_testnet"]
+        )
+
         experiment_template = compiler.compile(experiment_source)
         experiment_data = data["experiment"]
         experiment_data["experiment_details"]["rps_max"] = (
@@ -218,13 +246,24 @@ def generate_report(base, githash, timestamp):
         )
 
         exp = data["experiment"]
-        plots = [([e[1] for e in http_request_duration], "http duration")]
+        plots = [(http_request_duration, "http duration")]
         data.update(add_plot("http-latency", exp["xtitle"], "latency [s]", exp["xlabels"], plots))
 
         plots = [(wg_failure_rate, "failure rate")]
         data.update(add_plot("wg-failure-rate", exp["xtitle"], "failure rate [%]", exp["xlabels"], plots))
 
-        plots = [(wg_http_latency, "median"), (wg_http_latency_99, "99th percentile")]
+        plots = []
+        if len(wg_http_latency) > 0:
+            num_results = len(wg_http_latency[0])
+            for workload_generator_id in range(num_results):
+                plots.append(
+                    (
+                        [x[workload_generator_id] for x in wg_http_latency],
+                        f"median workload gen #{workload_generator_id}",
+                    )
+                )
+
+        plots.append((wg_http_latency_99, "mean 99th percentile"))
         data.update(add_plot("wg-http-latency", exp["xtitle"], "latency [ms]", exp["xlabels"], plots))
 
         dirname = f"{githash}/{timestamp}"

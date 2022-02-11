@@ -146,6 +146,17 @@ def main(argv):
     subprocess.run(
         [
             "python3",
+            "run_experiment_gossip.py",
+            "--duration",
+            "10",
+        ]
+        + base_arguments_load_test,
+        check=True,
+    )
+
+    subprocess.run(
+        [
+            "python3",
             "run_experiment_2.py",
             "--duration",
             "10",
