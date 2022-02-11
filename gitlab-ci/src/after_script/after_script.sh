@@ -38,7 +38,7 @@ if [[ -f "$CARGO_TEST_JUNIT_XML" ]]; then
 fi
 git checkout --detach --force "$CI_COMMIT_SHA"
 
-if [[ "$CI_PIPELINE_SOURCE" == "schedule" ]] && [[ "$CI_JOB_STATUS" == "failed" ]] && [ -n "$SLACK_CHANNEL" ]; then
+if [[ "$CI_PIPELINE_SOURCE" == "schedule" ]] && [[ "$CI_JOB_STATUS" == "failed" ]] && [ -n "$SLACK_CHANNEL" ] && [[ "${FARM_BASED:-}" != "true" ]]; then
     cd "${CI_PROJECT_DIR}/gitlab-ci/src" || true
     # We support multiple comma separated slack channels in the SLACK_CHANNEL variable.
     debug=""

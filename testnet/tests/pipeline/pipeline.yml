@@ -836,6 +836,7 @@ icos-continuous-upgrade-nightly:
           --is_upgrade_test
 
 .run-farm-based-test: &run-farm-based-test |
+  export FARM_BASED="true"
   BASE_DIR="${CI_PROJECT_DIR}/logs/$(date +%Y%m%d_%H%M%S)"
   mkdir -p "$BASE_DIR"
   IC_VERSION_ID=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
