@@ -13,6 +13,7 @@ use ic_nns_governance::stable_mem_utils::{BufferedStableMemReader, BufferedStabl
 use rand::rngs::StdRng;
 use rand_core::{RngCore, SeedableRng};
 use std::boxed::Box;
+use std::convert::TryFrom;
 use std::time::SystemTime;
 
 use async_trait::async_trait;
@@ -22,13 +23,13 @@ use candid::candid_method;
 use dfn_candid::{candid, candid_one};
 use dfn_core::api::{call_with_callbacks, reject_message};
 use dfn_core::{
-    api::{arg_data, caller, now},
+    api::{arg_data, caller, id, now},
     call, over, over_async, println,
 };
 use dfn_protobuf::protobuf;
 
 use ic_base_types::CanisterId;
-use ic_sns_governance::governance::Governance;
+use ic_sns_governance::governance::{log_prefix, Governance};
 use ic_sns_governance::pb::v1::proposal::Action;
 use ic_sns_governance::pb::v1::{
     governance_error::ErrorType, ExecuteNervousSystemFunction, GetNeuron, GetNeuronResponse,
@@ -49,15 +50,6 @@ use ledger_canister::{
 /// Larger buffer size means we may not be able to serialize the heap fully in
 /// some cases.
 const STABLE_MEM_BUFFER_SIZE: u32 = 100 * 1024 * 1024; // 100MiB
-
-// TODO NNS1-1018
-// this should be set using dynamic CanisterId addressing
-pub const LEDGER_CANISTER_ID: CanisterId = CanisterId::from_u64(2);
-
-// TODO NNS1-1018
-// Include the CanisterId in the LOG_PREFIX as set by dynamic CanisterId
-// addressing
-pub(crate) const LOG_PREFIX: &str = "[Governance] ";
 
 static mut GOVERNANCE: Option<Governance> = None;
 
@@ -189,13 +181,15 @@ impl Environment for CanisterEnv {
         unimplemented!("CanisterEnv can only be used with wasm32 environment.");
     }
 
-    /// Return the CanisterId that the SNS is deployed to
+    /// Return this canister's ID
     fn canister_id(&self) -> CanisterId {
-        todo!()
+        id()
     }
 }
 
-struct LedgerCanister {}
+struct LedgerCanister {
+    id: CanisterId,
+}
 
 #[async_trait]
 impl Ledger for LedgerCanister {
@@ -215,7 +209,7 @@ impl Ledger for LedgerCanister {
         // can cover BOTH of these amounts, otherwise there
         // will be an error.
         let result: Result<u64, (Option<i32>, String)> = call(
-            LEDGER_CANISTER_ID,
+            self.id,
             "send_pb",
             protobuf,
             SendArgs {
@@ -241,13 +235,8 @@ impl Ledger for LedgerCanister {
     }
 
     async fn total_supply(&self) -> Result<Tokens, GovernanceError> {
-        let result: Result<Tokens, (Option<i32>, String)> = call(
-            LEDGER_CANISTER_ID,
-            "total_supply_pb",
-            protobuf,
-            TotalSupplyArgs {},
-        )
-        .await;
+        let result: Result<Tokens, (Option<i32>, String)> =
+            call(self.id, "total_supply_pb", protobuf, TotalSupplyArgs {}).await;
 
         result.map_err(|(code, msg)| {
             GovernanceError::new_with_message(
@@ -262,7 +251,7 @@ impl Ledger for LedgerCanister {
 
     async fn account_balance(&self, account: AccountIdentifier) -> Result<Tokens, GovernanceError> {
         let result: Result<Tokens, (Option<i32>, String)> = call(
-            LEDGER_CANISTER_ID,
+            self.id,
             "account_balance_pb",
             protobuf,
             AccountBalanceArgs { account },
@@ -308,22 +297,31 @@ fn canister_init_(init_payload: GovernanceProto) {
     println!(
         "{}canister_init: Initializing with: \
               {:?}, genesis_timestamp_seconds: {}, neuron count: {}",
-        LOG_PREFIX,
+        log_prefix(),
         init_payload.parameters,
         init_payload.genesis_timestamp_seconds,
         init_payload.neurons.len()
     );
 
+    let ledger_canister_id = CanisterId::try_from(
+        init_payload
+            .ledger_canister_id
+            .expect("Governance must be initialized with a Ledger canister ID"),
+    )
+    .expect("Failed to parse ledger_canister_id as a CanisterId");
+
     unsafe {
         assert!(
             GOVERNANCE.is_none(),
             "{}Trying to initialize an already-initialized governance canister!",
-            LOG_PREFIX
+            log_prefix()
         );
         GOVERNANCE = Some(Governance::new(
             init_payload,
             Box::new(CanisterEnv::new()),
-            Box::new(LedgerCanister {}),
+            Box::new(LedgerCanister {
+                id: ledger_canister_id,
+            }),
         ));
     }
     governance()
@@ -334,7 +332,7 @@ fn canister_init_(init_payload: GovernanceProto) {
 /// Executes logic before executing the upgrade
 #[export_name = "canister_pre_upgrade"]
 fn canister_pre_upgrade() {
-    println!("{}Executing pre upgrade", LOG_PREFIX);
+    println!("{}Executing pre upgrade", log_prefix());
 
     let mut writer = BufferedStableMemWriter::new(STABLE_MEM_BUFFER_SIZE);
 
@@ -350,7 +348,7 @@ fn canister_pre_upgrade() {
 #[export_name = "canister_post_upgrade"]
 fn canister_post_upgrade() {
     dfn_core::printer::hook();
-    println!("{}Executing post upgrade", LOG_PREFIX);
+    println!("{}Executing post upgrade", log_prefix());
 
     let reader = BufferedStableMemReader::new(STABLE_MEM_BUFFER_SIZE);
 
@@ -376,7 +374,7 @@ fn canister_post_upgrade() {
 /// if the caller is authorized.
 #[export_name = "canister_update manage_neuron"]
 fn manage_neuron() {
-    println!("{}manage_neuron", LOG_PREFIX);
+    println!("{}manage_neuron", log_prefix());
     over_async(candid_one, manage_neuron_)
 }
 
@@ -393,7 +391,7 @@ async fn manage_neuron_(manage_neuron: ManageNeuron) -> ManageNeuronResponse {
 /// Returns the full neuron corresponding to the `neuron_id`.
 #[export_name = "canister_query get_neuron"]
 fn get_neuron() {
-    println!("{}get_neuron", LOG_PREFIX);
+    println!("{}get_neuron", log_prefix());
     over(candid_one, get_neuron_)
 }
 
@@ -408,7 +406,7 @@ fn get_neuron_(get_neuron: GetNeuron) -> GetNeuronResponse {
 /// PrincipalId has permissions. The list returned is not certified.
 #[export_name = "canister_query list_neurons"]
 fn list_neurons() {
-    println!("{}list_neurons", LOG_PREFIX);
+    println!("{}list_neurons", log_prefix());
     over(candid_one, list_neurons_)
 }
 
@@ -423,7 +421,7 @@ fn list_neurons_(list_neurons: ListNeurons) -> ListNeuronsResponse {
 /// Returns the full proposal corresponding to the `proposal_id`.
 #[export_name = "canister_query get_proposal"]
 fn get_proposal() {
-    println!("{}get_proposal", LOG_PREFIX);
+    println!("{}get_proposal", log_prefix());
     over(candid_one, get_proposal_)
 }
 
@@ -438,7 +436,7 @@ fn get_proposal_(get_proposal: GetProposal) -> GetProposalResponse {
 /// request. The list returned is not certified.
 #[export_name = "canister_query list_proposals"]
 fn list_proposals() {
-    println!("{}list_proposals", LOG_PREFIX);
+    println!("{}list_proposals", log_prefix());
     over(candid_one, list_proposals_)
 }
 
@@ -455,7 +453,11 @@ fn list_proposals_(list_proposals: ListProposals) -> ListProposalsResponse {
 fn get_latest_reward_event() {
     over(candid, |()| -> RewardEvent {
         let event = governance().latest_reward_event();
-        println!("{}get_latest_reward_event returns {}; ", LOG_PREFIX, event);
+        println!(
+            "{}get_latest_reward_event returns {}; ",
+            log_prefix(),
+            event
+        );
         event
     });
 }
@@ -525,7 +527,7 @@ fn check_governance_candid_file() {
     if governance_did != expected {
         panic!(
             "Generated candid definition does not match canister/governance.did. \
-            Run `cargo run --bin governance-canister > canister/governance.did` in \
+            Run `cargo run --bin sns-governance-canister > canister/governance.did` in \
             rs/sns/governance to update canister/governance.did."
         )
     }

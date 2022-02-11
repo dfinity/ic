@@ -10,7 +10,7 @@ use rand_core::{RngCore, SeedableRng};
 use crate::pb::v1::{
     Governance, NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionType,
 };
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 
 #[allow(dead_code)]
 pub struct GovernanceCanisterInitPayloadBuilder {
@@ -53,6 +53,11 @@ impl GovernanceCanisterInitPayloadBuilder {
         let neurons = self.proto.neurons.clone();
         self.proto = proto;
         self.proto.neurons.extend(neurons);
+        self
+    }
+
+    pub fn with_ledger_canister_id(&mut self, ledger_canister_id: CanisterId) -> &mut Self {
+        self.proto.ledger_canister_id = Some(ledger_canister_id.get());
         self
     }
 

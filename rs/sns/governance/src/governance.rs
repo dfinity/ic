@@ -24,7 +24,7 @@ use crate::pb::v1::{
     NervousSystemParameters, Neuron, NeuronId, NeuronPermissionType, Proposal, ProposalData,
     ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RewardEvent, Tally, Vote,
 };
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::PrincipalId;
 use ic_crypto_sha::Sha256;
 use ledger_canister::{AccountIdentifier, Subaccount};
 
@@ -43,7 +43,7 @@ use crate::proposal::{
 use crate::types::{
     EmptyEnvironment, EmptyLedger, Environment, HeapGrowthPotential, Ledger, LedgerUpdateLock,
 };
-use dfn_core::api::spawn;
+use dfn_core::api::{id, spawn};
 use ledger_canister::Tokens;
 
 // When `list_proposals` is called, for each proposal if a payload exceeds
@@ -60,10 +60,18 @@ const WASM32_PAGE_SIZE_IN_KIB: usize = 64;
 pub const HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES: usize =
     MAX_HEAP_SIZE_IN_KIB / WASM32_PAGE_SIZE_IN_KIB * 7 / 8;
 
-pub(crate) const LOG_PREFIX: &str = "[Governance] ";
+/// Prefixes each log line for this canister
+#[cfg(not(test))]
+pub fn log_prefix() -> String {
+    format!("[{}][Governance] ", id())
+}
 
-// TODO this should be calculated using dynamic canister Id addressing
-pub const GOVERNANCE_CANISTER_ID: CanisterId = CanisterId::from_u64(1);
+/// Prefixes each log line for this canister. Note that `id()` panics when not called
+/// within a canister env, so we remove its use in the test env.
+#[cfg(test)]
+pub fn log_prefix() -> String {
+    "[Governance] ".into()
+}
 
 impl GovernanceProto {
     /// From the `neurons` part of this `Governance` struct, build the
@@ -273,11 +281,11 @@ pub struct Governance {
 }
 
 pub fn governance_minting_account() -> AccountIdentifier {
-    AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), None)
+    AccountIdentifier::new(id().get(), None)
 }
 
 pub fn neuron_account_id(subaccount: Subaccount) -> AccountIdentifier {
-    AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(subaccount))
+    AccountIdentifier::new(id().get(), Some(subaccount))
 }
 
 impl Governance {
@@ -1135,7 +1143,9 @@ impl Governance {
                 // just log this information to aid debugging.
                 println!(
                     "{}Proposal {:?} not found when attempt to set execution result to {:?}",
-                    LOG_PREFIX, pid, result
+                    log_prefix(),
+                    pid,
+                    result
                 );
             }
         }
@@ -2078,7 +2088,7 @@ impl Governance {
                     "{}ERROR. Neuron cached stake was inconsistent.\
                      Neuron account: {} has less e8s: {} than the cached neuron stake: {}.\
                      Stake adjusted.",
-                    LOG_PREFIX,
+                    log_prefix(),
                     account,
                     balance.get_e8s(),
                     neuron.cached_neuron_stake_e8s
@@ -2296,7 +2306,8 @@ impl Governance {
         self.latest_gc_timestamp_seconds = self.env.now();
         println!(
             "{}Running GC now at timestamp {} seconds",
-            LOG_PREFIX, self.latest_gc_timestamp_seconds
+            log_prefix(),
+            self.latest_gc_timestamp_seconds
         );
         let max_proposals = self
             .nervous_system_parameters()
@@ -2321,7 +2332,7 @@ impl Governance {
             let voting_period_seconds = self.voting_period_seconds()();
             println!(
                 "{}GC - proposal_type {:#?} max {} current {}",
-                LOG_PREFIX,
+                log_prefix(),
                 proposal_type,
                 max_proposals,
                 props.len()
@@ -2361,7 +2372,8 @@ impl Governance {
                 }
                 Err(e) => println!(
                     "{}Error when getting total governance token supply: {}",
-                    LOG_PREFIX, e
+                    log_prefix(),
+                    e
                 ),
             }
         }
@@ -2390,7 +2402,7 @@ impl Governance {
     /// not yet been considered in a reward event.
     /// * Associate those proposals to the new reward event
     fn distribute_rewards(&mut self, supply: Tokens) {
-        println!("{}distribute_rewards. Supply: {:?}", LOG_PREFIX, supply);
+        println!("{}distribute_rewards. Supply: {:?}", log_prefix(), supply);
 
         let reward_distribution_period_seconds = self
             .nervous_system_parameters()
@@ -2412,7 +2424,7 @@ impl Governance {
                 "{}Some reward distribution should have happened, but were missed.\
                       It is now {} full days since genesis, and the last distribution\
                       nominally happened at {} full days since genesis.",
-                LOG_PREFIX,
+                log_prefix(),
                 day_after_genesis,
                 self.latest_reward_event().day_after_genesis
             );
@@ -2474,7 +2486,10 @@ impl Governance {
                         distributed to this neuron is simply skipped, so the total amount \
                         of distributed reward for this period will be lower than the maximum \
                         allowed. Underlying error: {:?}.",
-                    LOG_PREFIX, neuron_id.id, used_voting_rights, e
+                    log_prefix(),
+                    neuron_id.id,
+                    used_voting_rights,
+                    e
                 ),
             }
         }
@@ -2489,14 +2504,14 @@ impl Governance {
             match self.get_proposal_data_mut(*pid) {
                 None =>  println!(
                     "{}Cannot find proposal {}, despite it being considered for rewards distribution.",
-                    LOG_PREFIX, pid.id
+                    log_prefix(), pid.id
                 ),
                 Some(p) => {
                     if p.status() == ProposalDecisionStatus::ProposalStatusOpen {
                         println!("{}Proposal {} was considered for reward distribution despite \
                           being open. This code line is expected not to be reachable. We need to \
                           clear the ballots here to avoid a risk of the memory getting too large. \
-                          In doubt, reject the proposal", LOG_PREFIX, pid.id);
+                          In doubt, reject the proposal", log_prefix(), pid.id);
                         p.decided_timestamp_seconds = now;
                         p.latest_tally = Some(Tally {
                             timestamp_seconds: now,
@@ -2565,6 +2580,7 @@ impl Default for Governance {
                 metrics: None,
                 first_principal_neuron_permissions: vec![],
                 other_principal_neuron_permissions: vec![],
+                ledger_canister_id: None,
             },
             env: Box::new(EmptyEnvironment {}),
             ledger: Box::new(EmptyLedger {}),

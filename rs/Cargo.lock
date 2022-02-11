@@ -5973,7 +5973,6 @@ dependencies = [
  "futures",
  "ic-canister-client",
  "ic-config",
- "ic-registry-transport",
  "ic-sns-governance",
  "ic-types 0.8.0",
  "ic-utils 0.8.0",
@@ -5983,7 +5982,6 @@ dependencies = [
  "prost",
  "rand_chacha 0.2.2",
  "rand_core 0.5.1",
- "registry-canister",
 ]
 
 [[package]]

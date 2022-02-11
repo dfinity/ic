@@ -1,4 +1,4 @@
-use crate::governance::LOG_PREFIX;
+use crate::governance::log_prefix;
 use crate::pb::v1::{
     Proposal, ProposalData, ProposalDecisionStatus, ProposalRewardStatus, Tally, Vote,
 };
@@ -191,7 +191,7 @@ impl ProposalData {
         if new_deadline != current_deadline {
             println!(
                 "{}Updating WFQ deadline for proposal: {:?}. Old: {}, New: {}, Ext: {}",
-                LOG_PREFIX,
+                log_prefix(),
                 self.id.as_ref().unwrap(),
                 current_deadline,
                 new_deadline,
@@ -290,7 +290,7 @@ impl ProposalData {
             if let Some(reason) = decision_reason {
                 println!(
                     "{}Proposal {} decided, thanks to {}. Tally at decision time: {:?}",
-                    LOG_PREFIX,
+                    log_prefix(),
                     self.id
                         .as_ref()
                         .map_or("unknown".to_string(), |i| format!("{}", i.id)),
