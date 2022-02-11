@@ -235,9 +235,9 @@ fn get_blocks_candid_() {
 #[export_name = "canister_post_upgrade"]
 fn post_upgrade() {
     over_init(|_: BytesS| {
+        let bytes = stable::get();
         let mut state = ARCHIVE_STATE.write().unwrap();
-        *state = serde_cbor::from_reader(&mut stable::StableReader::new())
-            .expect("Decoding stable memory failed");
+        *state = serde_cbor::from_slice(&bytes).expect("Decoding stable memory failed");
         state.last_upgrade_timestamp = dfn_core::api::time_nanos();
     });
 }
