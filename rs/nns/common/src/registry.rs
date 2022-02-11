@@ -5,11 +5,8 @@ use prost::Message;
 use dfn_core::api::call;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_protobuf::registry::conversion_rate::v1::IcpXdrConversionRateRecord;
 use ic_protobuf::registry::subnet::v1::{SubnetListRecord, SubnetRecord};
-use ic_registry_keys::{
-    make_icp_xdr_conversion_rate_record_key, make_subnet_list_record_key, make_subnet_record_key,
-};
+use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
 use ic_registry_transport::pb::v1::{Precondition, RegistryAtomicMutateResponse, RegistryMutation};
 use ic_registry_transport::{
     deserialize_get_latest_version_response, deserialize_get_value_response,
@@ -116,24 +113,6 @@ pub fn get_subnet_ids_from_subnet_list(subnet_list: SubnetListRecord) -> Vec<Sub
         .iter()
         .map(|subnet_id_vec| SubnetId::new(PrincipalId::try_from(subnet_id_vec).unwrap()))
         .collect()
-}
-
-pub async fn get_icp_xdr_conversion_rate_record() -> Option<(IcpXdrConversionRateRecord, u64)> {
-    match get_value::<IcpXdrConversionRateRecord>(
-        make_icp_xdr_conversion_rate_record_key().as_bytes(),
-        None,
-    )
-    .await
-    {
-        Ok((conversion_rate, version)) => Some((conversion_rate, version)),
-        Err(error) => match error {
-            Error::KeyNotPresent(_) => None,
-            _ => panic!(
-                "Error while fetching current ICP/XDR conversion rate: {:?}",
-                error
-            ),
-        },
-    }
 }
 
 /// Returns the latest version of the registry

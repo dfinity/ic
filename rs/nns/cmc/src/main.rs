@@ -482,20 +482,15 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
     let xdr_permyriad_per_icp = if let Some(rate) = conversion_rate_option {
         rate.xdr_permyriad_per_icp
     } else {
-        match ic_nns_common::registry::get_icp_xdr_conversion_rate_record().await {
-            None => {
-                print(format!(
-                    "[cycles] No conversion rate found in CMC or Registry, transaction {:?} by {} refunded",
-                    tn, caller
-                ));
-                let refund_block = refund(&tn, &ledger_canister_id, Tokens::ZERO).await?;
-                return Ok(CyclesResponse::Refunded(
-                    "No conversion rate found in CMC or Registry, amount refunded".to_string(),
-                    refund_block,
-                ));
-            }
-            Some((rate_record, _)) => rate_record.xdr_permyriad_per_icp,
-        }
+        print(format!(
+            "[cycles] No conversion rate found in CMC, transaction {:?} by {} refunded",
+            tn, caller
+        ));
+        let refund_block = refund(&tn, &ledger_canister_id, Tokens::ZERO).await?;
+        return Ok(CyclesResponse::Refunded(
+            "No conversion rate found in CMC or Registry, amount refunded".to_string(),
+            refund_block,
+        ));
     };
 
     let cycles = TokensToCycles {

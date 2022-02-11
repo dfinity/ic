@@ -17,7 +17,6 @@ use ic_nns_test_utils::{
     ids::TEST_NEURON_1_ID,
     itest_helpers::{local_test_on_nns_subnet, NnsCanisters, NnsInitPayloadsBuilder},
 };
-use ic_protobuf::registry::conversion_rate::v1::IcpXdrConversionRateRecord;
 use ledger_canister::{
     AccountBalanceArgs, AccountIdentifier, BlockHeight, CyclesResponse, Memo, NotifyCanisterArgs,
     SendArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
@@ -167,85 +166,6 @@ fn test_cmc_refunds_on_failure_to_get_exchange_rate() {
     });
 }
 
-/// Test that we can top-up the Governance canister with cycles
-#[test]
-fn test_cmc_mints_cycles_when_registry_has_exchange_rate() {
-    local_test_on_nns_subnet(|runtime| async move {
-        let account = AccountIdentifier::new(*TEST_USER1_PRINCIPAL, None);
-        let icpts = Tokens::new(100, 0).unwrap();
-        let rate = IcpXdrConversionRateRecord {
-            timestamp_seconds: 0,
-            xdr_permyriad_per_icp: 10_000,
-        };
-
-        // The CMC subaccount to send ICP to. In this test we try to top-up an existing
-        // canister, and Governance is simply a convenient pre-existing canister.
-        let subaccount: Subaccount = GOVERNANCE_CANISTER_ID.get_ref().into();
-
-        let nns_init_payload = NnsInitPayloadsBuilder::new()
-            .with_initial_invariant_compliant_mutations()
-            .with_test_neurons()
-            .with_ledger_account(account, icpts)
-            .with_registry_icp_xdr_conversion_rate(&rate)
-            .build();
-
-        let nns_canisters = NnsCanisters::set_up(&runtime, nns_init_payload).await;
-
-        let total_cycles_minted_initial: u64 = nns_canisters
-            .cycles_minting
-            .query_("total_cycles_minted", protobuf, ())
-            .await
-            .unwrap();
-
-        // Top-up the Governance canister
-        let cycles_response = send_cycles(
-            icpts,
-            &nns_canisters.ledger,
-            MEMO_TOP_UP_CANISTER,
-            &subaccount,
-        )
-        .await;
-
-        match cycles_response {
-            CyclesResponse::ToppedUp(_) => (),
-            _ => panic!("Failed to top up canister"),
-        }
-
-        // Assert that the correct amount of TEST_USER1's ICP was used to create cycles
-        let final_balance: Tokens = nns_canisters
-            .ledger
-            .query_from_sender(
-                "account_balance_pb",
-                protobuf,
-                AccountBalanceArgs { account },
-                &Sender::from_keypair(&TEST_USER1_KEYPAIR),
-            )
-            .await
-            .unwrap();
-
-        let mut expected_final_balance = icpts;
-        expected_final_balance = (expected_final_balance - Tokens::new(10, 0).unwrap()).unwrap();
-        expected_final_balance = (expected_final_balance
-            - (DEFAULT_TRANSFER_FEE + DEFAULT_TRANSFER_FEE).unwrap())
-        .unwrap();
-        assert_eq!(final_balance, expected_final_balance);
-
-        let total_cycles_minted_final: u64 = nns_canisters
-            .cycles_minting
-            .query_("total_cycles_minted", protobuf, ())
-            .await
-            .unwrap();
-
-        // Assert that the expected amount of cycles were minted
-        assert_eq!(
-            total_cycles_minted_final - total_cycles_minted_initial,
-            10000000000000
-        );
-
-        Ok(())
-    });
-}
-
 /// Test that we can top-up the Governance canister with cycles when the CMC has
 /// a set exchange rate
 #[test]
@@ -253,10 +173,6 @@ fn test_cmc_mints_cycles_when_cmc_has_exchange_rate() {
     local_test_on_nns_subnet(|runtime| async move {
         let account = AccountIdentifier::new(*TEST_USER1_PRINCIPAL, None);
         let icpts = Tokens::new(100, 0).unwrap();
-        let registry_rate = IcpXdrConversionRateRecord {
-            timestamp_seconds: 0,
-            xdr_permyriad_per_icp: 10_000,
-        };
 
         // The CMC subaccount to send ICP to. In this test we try to top-up an existing
         // canister, and Governance is simply a convenient pre-existing canister.
@@ -266,7 +182,6 @@ fn test_cmc_mints_cycles_when_cmc_has_exchange_rate() {
             .with_initial_invariant_compliant_mutations()
             .with_test_neurons()
             .with_ledger_account(account, icpts)
-            .with_registry_icp_xdr_conversion_rate(&registry_rate)
             .build();
 
         let nns_canisters = NnsCanisters::set_up(&runtime, nns_init_payload).await;
