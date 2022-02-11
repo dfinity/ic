@@ -1,4 +1,3 @@
-use candid::Encode;
 use canister_test::{local_test_with_config_e, Canister, Project, Runtime};
 use dfn_candid::CandidOne;
 use futures::future::join_all;
@@ -16,16 +15,14 @@ use std::path::Path;
 use std::time::{Duration, SystemTime};
 
 use crate::{
-    memory_allocation_of, ALL_SNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID,
-    NUM_SNS_CANISTERS, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
+    memory_allocation_of, ALL_SNS_CANISTER_IDS, NUM_SNS_CANISTERS, TEST_GOVERNANCE_CANISTER_ID,
+    TEST_LEDGER_CANISTER_ID, TEST_ROOT_CANISTER_ID,
 };
-use registry_canister::init::{RegistryCanisterInitPayload, RegistryCanisterInitPayloadBuilder};
 
 /// All the SNS canisters
 #[derive(Clone)]
 pub struct SnsCanisters<'a> {
-    // Canisters here are listed in creation order.
-    pub registry: Canister<'a>,
+    pub root: Canister<'a>,
     pub governance: Canister<'a>,
     pub ledger: Canister<'a>,
 }
@@ -33,14 +30,12 @@ pub struct SnsCanisters<'a> {
 /// Payloads for all the canisters
 #[derive(Clone)]
 pub struct SnsInitPayloads {
-    pub registry: RegistryCanisterInitPayload,
     pub governance: Governance,
     pub ledger: LedgerCanisterInitPayload,
 }
 
 /// Builder to help create the initial payloads for the SNS canisters.
 pub struct SnsInitPayloadsBuilder {
-    pub registry: RegistryCanisterInitPayloadBuilder,
     pub governance: GovernanceCanisterInitPayloadBuilder,
     pub ledger: LedgerCanisterInitPayload,
 }
@@ -49,10 +44,9 @@ pub struct SnsInitPayloadsBuilder {
 impl SnsInitPayloadsBuilder {
     pub fn new() -> SnsInitPayloadsBuilder {
         SnsInitPayloadsBuilder {
-            registry: RegistryCanisterInitPayloadBuilder::new(),
             governance: GovernanceCanisterInitPayloadBuilder::new(),
             ledger: LedgerCanisterInitPayload {
-                minting_account: GOVERNANCE_CANISTER_ID.get().into(),
+                minting_account: TEST_GOVERNANCE_CANISTER_ID.get().into(),
                 initial_values: HashMap::new(),
                 archive_options: Some(ledger::ArchiveOptions {
                     trigger_threshold: 2000,
@@ -61,7 +55,7 @@ impl SnsInitPayloadsBuilder {
                     node_max_memory_size_bytes: Some(1024 * 1024 * 1024),
                     // 128kb
                     max_message_size_bytes: Some(128 * 1024),
-                    controller_id: ROOT_CANISTER_ID,
+                    controller_id: TEST_ROOT_CANISTER_ID,
                 }),
                 max_message_size_bytes: Some(128 * 1024),
                 // 24 hour transaction window
@@ -104,14 +98,14 @@ impl SnsInitPayloadsBuilder {
         assert!(self
             .ledger
             .initial_values
-            .get(&GOVERNANCE_CANISTER_ID.get().into())
+            .get(&TEST_GOVERNANCE_CANISTER_ID.get().into())
             .is_none());
 
         for n in self.governance.proto.neurons.values() {
             let sub = n
                 .subaccount()
                 .unwrap_or_else(|e| panic!("Couldn't calculate subaccount from neuron: {}", e));
-            let aid = ledger::AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(sub));
+            let aid = ledger::AccountIdentifier::new(TEST_GOVERNANCE_CANISTER_ID.get(), Some(sub));
             let previous_value = self
                 .ledger
                 .initial_values
@@ -120,8 +114,10 @@ impl SnsInitPayloadsBuilder {
             assert_eq!(previous_value, None);
         }
 
+        self.governance
+            .with_ledger_canister_id(TEST_LEDGER_CANISTER_ID);
+
         SnsInitPayloads {
-            registry: self.registry.build(),
             governance: self.governance.build(),
             ledger: self.ledger.clone(),
         }
@@ -148,13 +144,12 @@ impl SnsCanisters<'_> {
         maybe_canisters.unwrap_or_else(|e| panic!("At least one canister creation failed: {}", e));
         eprintln!("SNS canisters created after {:.1} s", since_start_secs());
 
-        let mut registry = Canister::new(runtime, REGISTRY_CANISTER_ID);
-        let mut governance = Canister::new(runtime, GOVERNANCE_CANISTER_ID);
-        let mut ledger = Canister::new(runtime, LEDGER_CANISTER_ID);
+        let root = Canister::new(runtime, TEST_ROOT_CANISTER_ID);
+        let mut governance = Canister::new(runtime, TEST_GOVERNANCE_CANISTER_ID);
+        let mut ledger = Canister::new(runtime, TEST_LEDGER_CANISTER_ID);
 
         // Install canisters
         futures::join!(
-            install_registry_canister(&mut registry, init_payloads.registry.clone()),
             install_governance_canister(&mut governance, init_payloads.governance.clone()),
             install_ledger_canister(&mut ledger, init_payloads.ledger),
         );
@@ -164,23 +159,22 @@ impl SnsCanisters<'_> {
         // We can set all the controllers at once. Several -- or all -- may go
         // into the same block, this makes setup faster.
         futures::try_join!(
-            registry.set_controller_with_retries(ROOT_CANISTER_ID.get()),
-            governance.set_controller_with_retries(ROOT_CANISTER_ID.get()),
-            ledger.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            governance.set_controller_with_retries(TEST_ROOT_CANISTER_ID.get()),
+            ledger.set_controller_with_retries(TEST_ROOT_CANISTER_ID.get()),
         )
         .unwrap();
 
         eprintln!("SNS canisters set up after {:.1} s", since_start_secs());
 
         SnsCanisters {
-            registry,
+            root,
             governance,
             ledger,
         }
     }
 
     pub fn all_canisters(&self) -> [&Canister<'_>; NUM_SNS_CANISTERS] {
-        [&self.registry, &self.governance, &self.ledger]
+        [&self.root, &self.governance, &self.ledger]
     }
 }
 
@@ -267,32 +261,6 @@ pub async fn set_up_governance_canister(
 ) -> Canister<'_> {
     let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
     install_governance_canister(&mut canister, init_payload).await;
-    canister
-}
-
-/// Compiles the registry canister, builds it's initial payload and installs it
-pub async fn install_registry_canister(
-    canister: &mut Canister<'_>,
-    init_payload: RegistryCanisterInitPayload,
-) {
-    let encoded = Encode!(&init_payload).unwrap();
-    install_rust_canister(
-        canister,
-        "registry/canister",
-        "registry-canister",
-        &[],
-        Some(encoded),
-    )
-    .await;
-}
-
-/// Creates and installs the registry canister.
-pub async fn set_up_registry_canister(
-    runtime: &'_ Runtime,
-    init_payload: RegistryCanisterInitPayload,
-) -> Canister<'_> {
-    let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
-    install_registry_canister(&mut canister, init_payload).await;
     canister
 }
 

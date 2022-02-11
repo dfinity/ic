@@ -65,6 +65,7 @@ type Governance = record {
   metrics : opt GovernanceCachedMetrics;
   parameters : opt NervousSystemParameters;
   latest_reward_event : opt RewardEvent;
+  ledger_canister_id : opt principal;
   first_principal_neuron_permissions : vec int32;
   proposals : vec record { nat64; ProposalData };
   in_flight_commands : vec record { nat64; NeuronInFlightCommand };

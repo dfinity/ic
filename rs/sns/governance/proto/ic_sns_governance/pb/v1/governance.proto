@@ -665,6 +665,9 @@ message Governance {
   // Permissions allowed to be given by the principal that created
   // the neuron to other principals.
   repeated NeuronPermissionType other_principal_neuron_permissions = 15;
+
+  // The canister ID of the Ledger
+  ic_base_types.pb.v1.PrincipalId ledger_canister_id = 16;
 }
 
 // Empty message to use in oneof fields that represent empty

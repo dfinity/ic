@@ -5,7 +5,6 @@ use ic_canister_client::Sender;
 use ic_crypto_sha::Sha256;
 use ic_nns_constants::ids::TEST_USER1_KEYPAIR;
 use ic_sns_governance::pb::v1::manage_neuron_response::Command as CommandResponse;
-use std::collections::HashMap;
 
 use ic_sns_governance::pb::v1::manage_neuron::claim_or_refresh::{By, MemoAndController};
 use ic_sns_governance::pb::v1::manage_neuron::{ClaimOrRefresh, Command, Disburse};
@@ -13,10 +12,9 @@ use ic_sns_governance::pb::v1::{ManageNeuron, ManageNeuronResponse, NeuronId};
 use ic_sns_test_utils::itest_helpers::{
     local_test_on_sns_subnet, SnsCanisters, SnsInitPayloadsBuilder,
 };
-use ic_sns_test_utils::{ALL_SNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID};
+use ic_sns_test_utils::TEST_GOVERNANCE_CANISTER_ID;
 use ledger_canister::{
-    AccountBalanceArgs, AccountIdentifier, LedgerCanisterInitPayload, Memo, SendArgs, Subaccount,
-    Tokens, DEFAULT_TRANSFER_FEE,
+    AccountBalanceArgs, AccountIdentifier, Memo, SendArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
 };
 
 // This tests the whole neuron lifecycle in integration with the ledger. Namely
@@ -30,17 +28,9 @@ fn test_stake_and_disburse_neuron_with_notification() {
             let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
 
             let alloc = Tokens::from_tokens(1000).unwrap();
-            let mut ledger_init_state = HashMap::new();
-            ledger_init_state.insert(user.get_principal_id().into(), alloc);
-            let init_args = LedgerCanisterInitPayload::builder()
-                .minting_account(GOVERNANCE_CANISTER_ID.into())
-                .initial_values(ledger_init_state)
-                .send_whitelist(ALL_SNS_CANISTER_IDS.iter().map(|&x| *x).collect())
-                .build()
-                .unwrap();
 
             let sns_init_payload = SnsInitPayloadsBuilder::new()
-                .with_ledger_init_state(init_args)
+                .with_ledger_account(user.get_principal_id().into(), alloc)
                 .build();
 
             let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
@@ -87,7 +77,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
                         fee: DEFAULT_TRANSFER_FEE,
                         from_subaccount: None,
                         to: AccountIdentifier::new(
-                            PrincipalId::from(GOVERNANCE_CANISTER_ID),
+                            PrincipalId::from(TEST_GOVERNANCE_CANISTER_ID),
                             Some(to_subaccount),
                         ),
                         created_at_time: None,

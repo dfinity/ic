@@ -1,4 +1,4 @@
-use crate::governance::{Governance, LOG_PREFIX};
+use crate::governance::{log_prefix, Governance};
 use crate::pb::v1::governance_error::ErrorType;
 use crate::pb::v1::manage_neuron_response::MergeMaturityResponse;
 use crate::pb::v1::proposal::Action;
@@ -78,7 +78,8 @@ impl From<i32> for Vote {
             None => {
                 println!(
                     "{}Vote::from invoked with unexpected value {}.",
-                    LOG_PREFIX, vote_integer
+                    log_prefix(),
+                    vote_integer
                 );
                 Vote::Unspecified
             }

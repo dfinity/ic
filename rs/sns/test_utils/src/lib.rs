@@ -6,15 +6,14 @@ pub mod itest_helpers;
 
 pub const NUM_SNS_CANISTERS: usize = 3;
 
-pub const REGISTRY_CANISTER_ID: CanisterId = CanisterId::from_u64(0);
-pub const GOVERNANCE_CANISTER_ID: CanisterId = CanisterId::from_u64(1);
-pub const LEDGER_CANISTER_ID: CanisterId = CanisterId::from_u64(2);
-pub const ROOT_CANISTER_ID: CanisterId = CanisterId::from_u64(3);
+pub const TEST_ROOT_CANISTER_ID: CanisterId = CanisterId::from_u64(0);
+pub const TEST_GOVERNANCE_CANISTER_ID: CanisterId = CanisterId::from_u64(1);
+pub const TEST_LEDGER_CANISTER_ID: CanisterId = CanisterId::from_u64(2);
 
 pub const ALL_SNS_CANISTER_IDS: [&CanisterId; 3] = [
-    &REGISTRY_CANISTER_ID,
-    &GOVERNANCE_CANISTER_ID,
-    &LEDGER_CANISTER_ID,
+    &TEST_ROOT_CANISTER_ID,
+    &TEST_GOVERNANCE_CANISTER_ID,
+    &TEST_LEDGER_CANISTER_ID,
 ];
 
 // The memory allocation for the ledger, governance and registry canisters
@@ -27,9 +26,9 @@ const SNS_DEFAULT_CANISTER_MEMORY_ALLOCATION_IN_BYTES: u64 = 1024 * 1024 * 1024;
 /// Returns the memory allocation of the given sns canister.
 pub fn memory_allocation_of(canister_id: CanisterId) -> u64 {
     if [
-        LEDGER_CANISTER_ID,
-        GOVERNANCE_CANISTER_ID,
-        REGISTRY_CANISTER_ID,
+        TEST_LEDGER_CANISTER_ID,
+        TEST_GOVERNANCE_CANISTER_ID,
+        TEST_ROOT_CANISTER_ID,
     ]
     .contains(&canister_id)
     {
