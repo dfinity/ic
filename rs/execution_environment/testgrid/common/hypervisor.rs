@@ -10,6 +10,7 @@ use ic_metrics::MetricsRegistry;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::execution_state::CustomSectionType;
 use ic_replicated_state::page_map::MemoryRegion;
 use ic_replicated_state::{
     testing::CanisterQueuesTesting, CallContextAction, CallOrigin, CanisterState, Global,
@@ -5002,5 +5003,51 @@ fn can_extract_exported_functions() {
             execution_state.exports,
             ExportedFunctions::new(expected_exports)
         );
+    });
+}
+
+#[test]
+fn can_extract_exported_custom_sections() {
+    with_hypervisor(|hypervisor, tmp_path| {
+        // The wasm file below contains the following custom sections
+        // Custom start=0x0002586a end=0x00028d92 (size=0x00003528) "name"
+        // Custom start=0x00028d98 end=0x00028ddc (size=0x00000044) "icp:public candid:service"
+        // Custom start=0x00028de2 end=0x00028dfc (size=0x0000001a) "icp:private candid:args"
+        // Custom start=0x00028e02 end=0x00028e30 (size=0x0000002e) "icp:private motoko:stable-types"
+
+        let wasm = include_bytes!("test-data/custom_sections.wasm").to_vec();
+        let execution_state = hypervisor
+            .create_execution_state(wasm, tmp_path, canister_test_id(0))
+            .unwrap();
+
+        assert_eq!(
+            execution_state
+                .metadata
+                .custom_sections()
+                .get("candid:service")
+                .unwrap()
+                .visibility,
+            CustomSectionType::Public
+        );
+        assert_eq!(
+            execution_state
+                .metadata
+                .custom_sections()
+                .get("candid:args")
+                .unwrap()
+                .visibility,
+            CustomSectionType::Private
+        );
+        assert_eq!(
+            execution_state
+                .metadata
+                .custom_sections()
+                .get("motoko:stable-types")
+                .unwrap()
+                .visibility,
+            CustomSectionType::Private
+        );
+        // Only the valid custom sections names are extracted: icp:public <name> or icp:private <name>.
+        assert_eq!(execution_state.metadata.custom_sections().len(), 3);
     });
 }

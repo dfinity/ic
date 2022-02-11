@@ -387,6 +387,7 @@ impl ExecutionState {
         wasm_memory: Memory,
         stable_memory: Memory,
         exported_globals: Vec<Global>,
+        wasm_metadata: WasmMetadata,
     ) -> Self {
         Self {
             canister_root,
@@ -396,7 +397,7 @@ impl ExecutionState {
             wasm_memory,
             stable_memory,
             exported_globals,
-            metadata: WasmMetadata::default(),
+            metadata: wasm_metadata,
             last_executed_round: ExecutionRound::from(0),
         }
     }
