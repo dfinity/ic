@@ -18,6 +18,14 @@ pub struct Config {
     /// the BTC network.
     #[serde(default)]
     pub socks_proxy: Option<SocketAddr>,
+    /// The number of seconds that need to pass for the adapter to enter the
+    /// `Idle` state.
+    #[serde(default = "default_idle_seconds")]
+    pub idle_seconds: u64,
+}
+
+fn default_idle_seconds() -> u64 {
+    5
 }
 
 impl Config {
@@ -38,6 +46,7 @@ impl Default for Config {
             network: Network::Bitcoin,
             socks_proxy: Default::default(),
             nodes: vec![],
+            idle_seconds: 5,
         }
     }
 }

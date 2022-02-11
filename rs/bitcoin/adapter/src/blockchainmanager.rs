@@ -176,13 +176,24 @@ impl BlockchainManager {
         }
     }
 
+    /// This method is used when the adapter is no longer receiving RPC calls from the replica.
+    /// Clears the block cache, peer info, the blocks to be synced, outgoing command queue, and
+    /// the `getdata` request info.
+    pub fn make_idle(&mut self) {
+        self.outgoing_command_queue.clear();
+        self.blocks_to_be_synced.clear();
+        self.get_data_request_info.clear();
+        self.peer_info.clear();
+        self.blockchain.clear_blocks();
+    }
+
     /// This method sends `getheaders` command to the adapter.
     /// The adapter then sends the `getheaders` request to the Bitcoin node.
     fn send_getheaders(&mut self, addr: &SocketAddr, locators: Locators, on_timeout: OnTimeout) {
         // TODO: ER-1394: Timeouts must for getheaders calls must be handled.
         //If the peer address is not stored in peer_info, then return;
         if let Some(peer_info) = self.peer_info.get_mut(addr) {
-            slog::debug!(
+            slog::info!(
                 self.logger,
                 "Sending GetHeaders to {} : Locator hashes {:?}, Stop hash {}",
                 addr,
@@ -262,7 +273,12 @@ impl BlockchainManager {
             .peer_info
             .get_mut(addr)
             .ok_or(ReceivedHeadersMessageError::UnknownPeer)?;
-
+        slog::info!(
+            self.logger,
+            "Received headers from {}: {}",
+            addr,
+            headers.len()
+        );
         // If no `getheaders` request was sent to the peer, the `headers` message is unsolicited.
         // Don't accept more than a few headers in that case.
         if headers.len() > MAX_UNSOLICITED_HEADERS && peer.last_asked.is_none() {
@@ -426,7 +442,7 @@ impl BlockchainManager {
 
     /// This function adds a new peer to `peer_info`
     /// and initiates sync with the peer by sending `getheaders` message.
-    pub fn remove_peer(&mut self, addr: &SocketAddr) {
+    fn remove_peer(&mut self, addr: &SocketAddr) {
         slog::info!(self.logger, "Removing peer_info with addr : {} ", addr);
         self.peer_info.remove(addr);
         // Removing all the `GetData` requests that have been sent to the peer before.
@@ -440,7 +456,7 @@ impl BlockchainManager {
             .retain(|_, request| request.sent_at + timeout_period > now);
     }
 
-    pub fn sync_blocks(&mut self) {
+    fn sync_blocks(&mut self) {
         if self.blocks_to_be_synced.is_empty() {
             return;
         }
@@ -1216,5 +1232,50 @@ pub mod test {
         );
         assert_eq!(blocks.len(), 1);
         assert_eq!(blockchain_manager.blocks_to_be_synced.len(), 0);
+    }
+
+    /// Tests the `BlockchainManager::idle(...)` function to ensure it clears the state from the
+    /// BlockchainManager.
+    #[test]
+    fn test_make_idle() {
+        let peer_addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
+        // Mainnet block 00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048
+        let encoded_block_1 = Vec::from_hex(BLOCK_1_ENCODED).expect("unable to make vec from hex");
+        // Mainnet block 000000006a625f06636b8bb6ac7b960a8d03705d1ace08b1a19da3fdcc99ddbd
+        let encoded_block_2 = Vec::from_hex(BLOCK_2_ENCODED).expect("unable to make vec from hex");
+        let block_1: Block = deserialize(&encoded_block_1).expect("failed to decoded block 1");
+        let block_2: Block = deserialize(&encoded_block_2).expect("failed to decoded block 2");
+        let block_2_hash = block_2.block_hash();
+
+        let config = Config::default();
+        let mut blockchain_manager = BlockchainManager::new(&config, make_logger());
+        let headers = vec![block_1.header, block_2.header];
+        // Initialize the blockchain manager state
+        let (added_headers, maybe_err) = blockchain_manager.blockchain.add_headers(&headers);
+        assert_eq!(added_headers.len(), headers.len());
+        assert!(maybe_err.is_none());
+        blockchain_manager
+            .blocks_to_be_synced
+            .insert(block_1.block_hash());
+        blockchain_manager
+            .blockchain
+            .add_block(block_2)
+            .expect("invalid block");
+        blockchain_manager.add_peer(&peer_addr);
+
+        assert_eq!(blockchain_manager.blocks_to_be_synced.len(), 1);
+        assert!(blockchain_manager
+            .blockchain
+            .get_block(&block_2_hash)
+            .is_some());
+        assert_eq!(blockchain_manager.peer_info.len(), 1);
+
+        blockchain_manager.make_idle();
+        assert_eq!(blockchain_manager.blocks_to_be_synced.len(), 0);
+        assert!(blockchain_manager
+            .blockchain
+            .get_block(&block_2_hash)
+            .is_none());
+        assert_eq!(blockchain_manager.peer_info.len(), 0);
     }
 }

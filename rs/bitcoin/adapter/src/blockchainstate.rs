@@ -319,6 +319,11 @@ impl BlockchainState {
     pub fn get_block(&self, block_hash: &BlockHash) -> Option<&Block> {
         self.block_cache.get(block_hash)
     }
+
+    /// Used when the adapter is shutdown and no longer requires holding on to blocks.
+    pub fn clear_blocks(&mut self) {
+        self.block_cache = HashMap::new();
+    }
 }
 
 #[cfg(test)]
