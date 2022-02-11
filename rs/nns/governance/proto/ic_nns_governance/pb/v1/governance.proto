@@ -656,6 +656,7 @@ message ManageNeuron {
   // The dissolve delay of a neuron can be increased up to a maximum
   // of 8 years.
   message IncreaseDissolveDelay {
+    option (ic_base_types.pb.v1.tui_signed_message) = true;
     uint32 additional_dissolve_delay_seconds = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
   }
   message StartDissolving {}
@@ -667,15 +668,18 @@ message ManageNeuron {
   // WebAuthn key that is maintained inside a user device, such as a
   // smartphone.
   message AddHotKey {
+    option (ic_base_types.pb.v1.tui_signed_message) = true;
     ic_base_types.pb.v1.PrincipalId new_hot_key = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
   }
   // Remove a hot key that has been previously assigned to the neuron.
   message RemoveHotKey {
+    option (ic_base_types.pb.v1.tui_signed_message) = true;
     ic_base_types.pb.v1.PrincipalId hot_key_to_remove = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
   }
   // An (idempotent) alternative to IncreaseDissolveDelay where the dissolve delay
   // is passed as an absolute timestamp in seconds since the unix epoch.
   message SetDissolveTimestamp {
+    option (ic_base_types.pb.v1.tui_signed_message) = true;
     uint64 dissolve_timestamp_seconds = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
   }
   // Join the Internet Computer's community fund with this neuron's
@@ -730,6 +734,7 @@ message ManageNeuron {
   // remain controlled by the same principal as its parent, or be
   // assigned to a new principal.
   message Spawn {
+    option (ic_base_types.pb.v1.tui_signed_message) = true;
     // If not set, the spawned neuron will have the same controller as
     // this neuron.
     ic_base_types.pb.v1.PrincipalId new_controller = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
@@ -743,8 +748,9 @@ message ManageNeuron {
   // the existing stake. The resulting amount to merge must be greater than
   // or equal to the transaction fee.
   message MergeMaturity {
+    option (ic_base_types.pb.v1.tui_signed_message) = true;
     // The percentage to merge, from 1 to 100
-    uint32 percentage_to_merge = 1;
+    uint32 percentage_to_merge = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
   }
 
   // Disburse a portion of this neuron's stake into another neuron.
@@ -786,15 +792,17 @@ message ManageNeuron {
   // If the list 'followees' is empty, this removes following for a
   // specific topic.
   message Follow {
+    option (ic_base_types.pb.v1.tui_signed_message) = true;
     // Topic UNSPECIFIED means add following for the 'catch all'.
-    Topic topic = 1;
-    repeated ic_nns_common.pb.v1.NeuronId followees = 2;
+    Topic topic = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+    repeated ic_nns_common.pb.v1.NeuronId followees = 2 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
   }
   // Have the neuron vote to either adopt or reject a proposal with a specified
   // id.
   message RegisterVote {
-    ic_nns_common.pb.v1.ProposalId proposal = 1;
-    Vote vote = 2;
+    option (ic_base_types.pb.v1.tui_signed_message) = true;
+    ic_nns_common.pb.v1.ProposalId proposal = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+    Vote vote = 2 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
   }
 
   // Claim a new neuron or refresh the stake of an existing neuron.
