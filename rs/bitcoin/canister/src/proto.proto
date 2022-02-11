@@ -11,9 +11,8 @@ enum Network {
 
 message State {
   uint32 height = 1;
-  bytes latest_stable_block_hash = 2;
-  UtxoSet utxos = 3;
-  BlockForest unstable_blocks = 4;
+  UtxoSet utxos = 2;
+  BlockForest unstable_blocks = 3;
 }
 
 message UtxoSet {
@@ -30,7 +29,7 @@ message Utxo {
 
 message BlockForest {
   uint64 delta = 1;
-  repeated BlockTree trees = 2;
+  BlockTree tree = 2;
 }
 
 message BlockTree {

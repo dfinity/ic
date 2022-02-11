@@ -92,14 +92,11 @@ pub fn send_transaction(request: SendTransactionRequest) -> Result<(), SendTrans
 pub fn get_successors_request() -> Vec<u8> {
     let block_hashes = STATE.with(|state| {
         let state = state.borrow();
-        let mut block_hashes: Vec<Vec<u8>> = state
+        state
             .get_unstable_blocks()
             .iter()
             .map(|b| b.block_hash().to_vec())
-            .collect();
-
-        block_hashes.push(state.anchor_hash().to_vec());
-        block_hashes
+            .collect()
     });
 
     println!("block hashes: {:?}", block_hashes);
@@ -125,7 +122,13 @@ pub fn get_successors_response(response_vec: Vec<u8>) -> u32 {
         println!("Processing block with hash: {}", block.block_hash());
 
         STATE.with(|state| {
-            state.borrow_mut().insert_block(block);
+            let block_hash = block.block_hash();
+            if state.borrow_mut().insert_block(block).is_err() {
+                println!(
+                    "Received block that doesn't extend existing blocks: {}",
+                    block_hash
+                );
+            }
         });
     }
 
@@ -287,7 +290,7 @@ mod test {
             // Set the state.
             STATE.with(|s| {
                 s.replace(State::new(2, *network, block_0));
-                s.borrow_mut().insert_block(block_1);
+                s.borrow_mut().insert_block(block_1).unwrap();
             });
 
             // With up to one confirmation, expect address 2 to have a balance 1000, and
@@ -388,7 +391,7 @@ mod test {
             // Set the state.
             STATE.with(|s| {
                 s.replace(State::new(2, *network, block_0));
-                s.borrow_mut().insert_block(block_1);
+                s.borrow_mut().insert_block(block_1).unwrap();
             });
 
             // With up to one confirmation, expect address 2 to have one UTXO, and

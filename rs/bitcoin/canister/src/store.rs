@@ -1,6 +1,9 @@
-use crate::{blockforest::BlockForest, proto, utxoset::UtxoSet};
-use bitcoin::hashes::Hash;
-use bitcoin::{Block, BlockHash, Network, OutPoint, TxOut, Txid};
+use crate::{
+    blockforest::{BlockForest, BlockNotPartOfTreeError},
+    proto,
+    utxoset::UtxoSet,
+};
+use bitcoin::{Block, Network, OutPoint, TxOut, Txid};
 use lazy_static::lazy_static;
 use std::collections::HashSet;
 use std::str::FromStr;
@@ -21,9 +24,6 @@ pub struct State {
     // The height of the latest block marked as stable.
     height: Height,
 
-    // The hash of the latest stable block.
-    latest_stable_block_hash: BlockHash,
-
     // The UTXOs of all stable blocks since genesis.
     utxos: UtxoSet,
 
@@ -38,19 +38,11 @@ impl State {
     /// it is considered stable. Stable blocks are assumed to be final and are never
     /// removed.
     pub fn new(delta: u64, network: Network, genesis_block: Block) -> Self {
-        let mut state = Self {
-            height: 1,
-            latest_stable_block_hash: genesis_block.block_hash(),
+        Self {
+            height: 0,
             utxos: UtxoSet::new(true, network),
-            unstable_blocks: BlockForest::new(delta),
-        };
-
-        // Process the txs in the genesis block to include them in the UTXOs.
-        for tx in genesis_block.txdata {
-            state.utxos.insert_tx(&tx, 1);
+            unstable_blocks: BlockForest::new(delta, genesis_block),
         }
-
-        state
     }
 
     /// Returns the balance of a bitcoin address.
@@ -76,12 +68,7 @@ impl State {
         let mut address_utxos = self.utxos.get_utxos(address);
 
         // Apply unstable blocks to the UTXO set.
-        for (i, block) in self
-            .unstable_blocks
-            .get_current_chain(&self.latest_stable_block_hash)
-            .iter()
-            .enumerate()
-        {
+        for (i, block) in self.unstable_blocks.get_current_chain().iter().enumerate() {
             let block_height = self.stable_height() + (i as u32) + 1;
             let confirmations = self.main_chain_height() - block_height + 1;
 
@@ -107,27 +94,22 @@ impl State {
     }
 
     /// Insert a block into the blockchain.
-    pub fn insert_block(&mut self, block: Block) {
+    /// Returns an error if the block doesn't extend any known block in the state.
+    pub fn insert_block(&mut self, block: Block) -> Result<(), BlockNotPartOfTreeError> {
         // The block is first inserted into the unstable blocks.
-        self.unstable_blocks.push(block);
+        self.unstable_blocks.push(block)?;
 
         // Process a stable block, if any.
-        if let Some(new_stable_block) = self.unstable_blocks.pop(&self.latest_stable_block_hash) {
-            // Verify the block is extending the previous block.
-            assert_eq!(
-                new_stable_block.header.prev_blockhash, self.latest_stable_block_hash,
-                "Invalid block hash at height: {}",
-                self.height
-            );
-
-            self.latest_stable_block_hash = new_stable_block.block_hash();
-
+        // TODO(EXC-932): Process all stable blocks, not just one.
+        if let Some(new_stable_block) = self.unstable_blocks.pop() {
             for tx in &new_stable_block.txdata {
                 self.utxos.insert_tx(tx, self.height);
             }
 
             self.height += 1;
         }
+
+        Ok(())
     }
 
     pub fn stable_height(&self) -> Height {
@@ -135,10 +117,7 @@ impl State {
     }
 
     pub fn main_chain_height(&self) -> Height {
-        self.unstable_blocks
-            .get_current_chain(&self.latest_stable_block_hash)
-            .len() as u32
-            + self.height
+        self.unstable_blocks.get_current_chain().len() as u32 + self.height
     }
 
     pub fn get_unstable_blocks(&self) -> Vec<&Block> {
@@ -148,7 +127,6 @@ impl State {
     pub fn to_proto(&self) -> proto::State {
         proto::State {
             height: self.height,
-            latest_stable_block_hash: self.latest_stable_block_hash.to_vec(),
             utxos: Some(self.utxos.to_proto()),
             unstable_blocks: Some(self.unstable_blocks.to_proto()),
         }
@@ -157,16 +135,9 @@ impl State {
     pub fn from_proto(proto_state: proto::State) -> Self {
         Self {
             height: proto_state.height,
-            latest_stable_block_hash: BlockHash::from_hash(
-                Hash::from_slice(&proto_state.latest_stable_block_hash).unwrap(),
-            ),
             utxos: UtxoSet::from_proto(proto_state.utxos.unwrap()),
             unstable_blocks: BlockForest::from_proto(proto_state.unstable_blocks.unwrap()),
         }
-    }
-
-    pub fn anchor_hash(&self) -> BlockHash {
-        self.latest_stable_block_hash
     }
 }
 
@@ -227,7 +198,7 @@ mod test {
         println!("Built chain with length: {}", chain.len());
 
         for block in chain.into_iter() {
-            state.insert_block(block);
+            state.insert_block(block).unwrap();
         }
     }
 
@@ -243,7 +214,7 @@ mod test {
             block = BlockBuilder::with_prev_header(block.header)
                 .with_transaction(TransactionBuilder::coinbase().build())
                 .build();
-            state.insert_block(block.clone());
+            state.insert_block(block.clone()).unwrap();
         }
 
         let state_proto = state.to_proto();
@@ -312,7 +283,7 @@ mod test {
             .with_transaction(tx.clone())
             .build();
 
-        state.insert_block(block_1);
+        state.insert_block(block_1).unwrap();
 
         // address 2 should now have the UTXO while address 1 has no UTXOs.
         assert_eq!(
@@ -339,7 +310,7 @@ mod test {
         let block_1_prime = BlockBuilder::with_prev_header(block_0.header)
             .with_transaction(tx.clone())
             .build();
-        state.insert_block(block_1_prime.clone());
+        state.insert_block(block_1_prime.clone()).unwrap();
 
         // Because block 1 and block 1' contest with each other, neither of them are included
         // in the UTXOs. Only the UTXOs of block 0 are returned.
@@ -356,7 +327,7 @@ mod test {
         let block_2_prime = BlockBuilder::with_prev_header(block_1_prime.header)
             .with_transaction(tx.clone())
             .build();
-        state.insert_block(block_2_prime);
+        state.insert_block(block_2_prime).unwrap();
 
         // Address 1 has no UTXOs since they were spent on the current chain.
         assert_eq!(state.get_utxos(&address_1.to_string(), 0), hashset! {});
@@ -529,7 +500,7 @@ mod test {
                 .build();
 
             let mut state = State::new(2, *network, block_0);
-            state.insert_block(block_1);
+            state.insert_block(block_1).unwrap();
 
             // Address 1 should have no UTXOs at zero confirmations.
             assert_eq!(

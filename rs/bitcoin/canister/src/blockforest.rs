@@ -9,87 +9,70 @@ use bitcoin::{Block, BlockHash};
 #[cfg_attr(test, derive(Debug, PartialEq))]
 pub struct BlockForest {
     delta: u64,
-    trees: Vec<BlockTree>,
+    tree: BlockTree,
 }
 
 impl BlockForest {
-    pub fn new(delta: u64) -> Self {
+    pub fn new(delta: u64, anchor: Block) -> Self {
         Self {
             delta,
-            trees: vec![],
+            tree: BlockTree::new(anchor),
         }
     }
 
-    /// Pop a block that is a successor to the `anchor` iff the block is stable.
-    pub fn pop(&mut self, anchor: &BlockHash) -> Option<Block> {
-        let (mut attached_trees, detached_trees): (Vec<_>, Vec<_>) =
-            std::mem::take(&mut self.trees)
-                .into_iter()
-                .partition(|t| t.root().header.prev_blockhash == *anchor);
+    /// Pops the `anchor` block iff ∃ a child `C` of the `anchor` block that
+    /// is delta-stable. The child `C` becomes the new `anchor` block, and all
+    /// its siblings are discarded.
+    pub fn pop(&mut self) -> Option<Block> {
+        // Take all the children of the anchor.
+        let mut anchor_child_trees = std::mem::take(&mut self.tree.children);
 
-        // Sort the attached trees by depth.
-        attached_trees.sort_by(|a, b| a.depth().partial_cmp(&b.depth()).unwrap());
+        // Sort them by depth.
+        anchor_child_trees.sort_by_key(|a| a.depth());
 
-        match attached_trees.last() {
-            Some(deepest_tree) => {
-                if deepest_tree.depth() < self.delta {
+        match anchor_child_trees.last() {
+            Some(deepest_child_tree) => {
+                // The deepest child tree must have a depth >= delta.
+                if deepest_child_tree.depth() < self.delta {
                     // Need a depth of at least >= delta
-                    self.trees = concat(attached_trees, detached_trees);
+                    self.tree.children = anchor_child_trees;
                     return None;
                 }
 
-                if attached_trees.len() >= 2 {
-                    if let Some(second_deepest_tree) = attached_trees.get(attached_trees.len() - 2)
+                // If there is more than one child, the difference in depth
+                // between the deepest child and all the others must be >= delta.
+                if anchor_child_trees.len() >= 2 {
+                    if let Some(second_deepest_child_tree) =
+                        anchor_child_trees.get(anchor_child_trees.len() - 2)
                     {
-                        if deepest_tree.depth() - second_deepest_tree.depth() < self.delta {
+                        if deepest_child_tree.depth() - second_deepest_child_tree.depth()
+                            < self.delta
+                        {
                             // Difference must be >= delta
-                            self.trees = concat(attached_trees, detached_trees);
+                            self.tree.children = anchor_child_trees;
                             return None;
                         }
                     }
                 }
 
-                // The deepest tree is delta-stable.
-                // Pop the root of the tree, remove all other attached_trees.
-                let deepest_tree = attached_trees.pop().unwrap();
-                let (stable_block, subtrees) = deepest_tree.pop();
-
-                self.trees = concat(detached_trees, subtrees);
-                Some(stable_block)
+                // The deepest child tree is delta-stable. This becomes the new
+                // tree, with its root being the new `anchor` block.
+                // All its siblings are discarded.
+                let deepest_child_tree = anchor_child_trees.pop().unwrap();
+                let old_anchor = self.tree.root.clone();
+                self.tree = deepest_child_tree;
+                Some(old_anchor)
             }
             None => {
-                self.trees = concat(attached_trees, detached_trees);
+                // The anchor has no children. Nothing to return.
                 None
             }
         }
     }
 
     /// Push a new block into the store.
-    pub fn push(&mut self, mut block: Block) {
-        let block_hash = block.block_hash();
-        let successor_tree = self.take_tree(&block_hash);
-
-        for i in 0..self.trees.len() {
-            match self.trees[i].extend(block) {
-                Ok(()) => {
-                    if let Some(successor_tree) = successor_tree {
-                        let block = self.trees[i].find_mut(&block_hash).unwrap();
-                        block.children.push(successor_tree);
-                    }
-
-                    return;
-                }
-                Err(BlockNotPartOfTreeError(block_)) => {
-                    block = block_;
-                }
-            }
-        }
-
-        let mut new_block_tree = BlockTree::new(block);
-        if let Some(successor_tree) = successor_tree {
-            new_block_tree.children.push(successor_tree);
-        }
-        self.trees.push(new_block_tree);
+    pub fn push(&mut self, block: Block) -> Result<(), BlockNotPartOfTreeError> {
+        self.tree.extend(block)
     }
 
     /// Returns the best guess on what the "current" blockchain is.
@@ -97,22 +80,9 @@ impl BlockForest {
     /// The most likely chain to be "current", we hypothesize, is the longest
     /// chain of blocks with an "uncontested" tip. As in, there exists no other
     /// block at the same height as the tip.
-    pub fn get_current_chain(&self, anchor: &BlockHash) -> BlockChain {
+    pub fn get_current_chain(&self) -> BlockChain {
         // Get all the blockchains that extend the anchor.
-        let blockchains: Vec<BlockChain> = self
-            .trees
-            .iter()
-            .filter(|t| t.root().header.prev_blockhash == *anchor)
-            .map(|t| t.blockchains())
-            .flatten()
-            .collect();
-
-        if blockchains.is_empty() {
-            // No attached blockchains found.
-            // NOTE: this if condition isn't strictly required, as the following code should
-            // handle the empty case gracefully. Nonetheless, it's added out of paranoia.
-            return vec![];
-        }
+        let blockchains: Vec<BlockChain> = self.tree.blockchains();
 
         // Find the length of the longest blockchain.
         let mut longest_blockchain_len = 0;
@@ -145,44 +115,30 @@ impl BlockForest {
         current_chain
     }
 
-    fn take_tree(&mut self, root_block_hash: &BlockHash) -> Option<BlockTree> {
-        for i in 0..self.trees.len() {
-            if &self.trees[i].root().header.prev_blockhash == root_block_hash {
-                return Some(self.trees.remove(i));
-            }
-        }
-        None
-    }
-
     pub fn get_blocks(&self) -> Vec<&Block> {
-        self.trees
-            .iter()
-            .map(|t| t.blockchains())
-            .flatten()
-            .flatten()
-            .collect()
+        self.tree.blockchains().into_iter().flatten().collect()
     }
 
     pub fn to_proto(&self) -> proto::BlockForest {
         proto::BlockForest {
             delta: self.delta,
-            trees: self.trees.iter().map(|t| t.to_proto()).collect(),
+            tree: Some(self.tree.to_proto()),
         }
     }
 
     pub fn from_proto(block_forest_proto: proto::BlockForest) -> Self {
         Self {
             delta: block_forest_proto.delta,
-            trees: block_forest_proto
-                .trees
-                .into_iter()
-                .map(BlockTree::from_proto)
-                .collect(),
+            tree: BlockTree::from_proto(
+                block_forest_proto
+                    .tree
+                    .expect("BlockTree must be present in the proto"),
+            ),
         }
     }
 }
 
-// Maintains a tree of connected blocks.
+/// Maintains a tree of connected blocks.
 #[cfg_attr(test, derive(Debug, PartialEq))]
 struct BlockTree {
     root: Block,
@@ -191,10 +147,10 @@ struct BlockTree {
 
 type BlockChain<'a> = Vec<&'a Block>;
 
-// An error thrown when trying to add a block that is not part of the tree.
-// See `BlockTree.insert` for more information.
+/// An error thrown when trying to add a block that is not part of the tree.
+/// See `BlockTree.insert` for more information.
 #[derive(Debug)]
-struct BlockNotPartOfTreeError(pub Block);
+pub struct BlockNotPartOfTreeError(pub Block);
 
 impl BlockTree {
     // Create a new `BlockTree` with the given block as its root.
@@ -226,14 +182,6 @@ impl BlockTree {
             }
             None => Err(BlockNotPartOfTreeError(block)),
         }
-    }
-
-    fn root(&self) -> &Block {
-        &self.root
-    }
-
-    fn pop(self) -> (Block, Vec<BlockTree>) {
-        (self.root, self.children)
     }
 
     // Returns a `BlockTree` where the hash of the root block matches the provided `block_hash`
@@ -332,10 +280,10 @@ mod test {
 
     #[test]
     fn empty() {
-        let block_0 = BlockBuilder::genesis().build();
+        let anchor = BlockBuilder::genesis().build();
 
-        let mut forest = BlockForest::new(1);
-        assert_eq!(forest.pop(&block_0.block_hash()), None);
+        let mut forest = BlockForest::new(1, anchor);
+        assert_eq!(forest.pop(), None);
     }
 
     #[test]
@@ -344,110 +292,48 @@ mod test {
         let block_1 = BlockBuilder::with_prev_header(block_0.header).build();
         let block_2 = BlockBuilder::with_prev_header(block_1.header).build();
 
-        let mut forest = BlockForest::new(1);
+        let mut forest = BlockForest::new(1, block_0.clone());
 
-        forest.push(block_1.clone());
-        assert_eq!(forest.pop(&block_0.block_hash()), None);
+        forest.push(block_1).unwrap();
+        assert_eq!(forest.pop(), None);
 
-        forest.push(block_2);
-        assert_eq!(forest.pop(&block_0.block_hash()), Some(block_1));
+        forest.push(block_2).unwrap();
+
+        // Block 0 (the anchor) now has one stable child (Block 1).
+        // Block 0 should be returned when calling `pop`.
+        assert_eq!(forest.pop(), Some(block_0));
+
+        // Block 1 is now the anchor. It doesn't have children yet,
+        // so calling `pop` should return `None`.
+        assert_eq!(forest.pop(), None);
     }
 
     #[test]
     fn forks() {
         let genesis_block = BlockBuilder::genesis().build();
-        let fork_1 = BlockBuilder::with_prev_header(genesis_block.header).build();
-        let fork_2 = BlockBuilder::with_prev_header(genesis_block.header).build();
+        let block = BlockBuilder::with_prev_header(genesis_block.header).build();
+        let forked_block = BlockBuilder::with_prev_header(genesis_block.header).build();
 
-        let mut forest = BlockForest::new(1);
+        let mut forest = BlockForest::new(1, genesis_block.clone());
 
-        forest.push(fork_1);
-        forest.push(fork_2.clone());
+        forest.push(block).unwrap();
+        forest.push(forked_block.clone()).unwrap();
 
-        // Neither blocks are 1-stable, so we shouldn't get anything.
-        assert_eq!(forest.pop(&genesis_block.block_hash()), None);
+        // Neither forks are 1-stable, so we shouldn't get anything.
+        assert_eq!(forest.pop(), None);
 
         // Extend fork2 by another block.
-        forest.push(BlockBuilder::with_prev_header(fork_2.header).build());
+        forest
+            .push(BlockBuilder::with_prev_header(forked_block.header).build())
+            .unwrap();
 
-        // Now fork2 should be 1-stable.
-        assert_eq!(
-            forest.pop(&genesis_block.block_hash()),
-            Some(fork_2.clone())
-        );
+        // Now fork2 should be 1-stable. The anchor should be returned on `pop`
+        // and fork2 becomes the new anchor.
+        assert_eq!(forest.pop(), Some(genesis_block));
+        assert_eq!(forest.tree.root, forked_block);
 
-        // No more 1-stable blocks
-        assert_eq!(forest.pop(&fork_2.block_hash()), None);
-    }
-
-    // Test creating a forest that looks like this, where `i` is the successor of block `i - 1`:
-    //
-    // * -> 3
-    // * -> 1
-    //
-    // And then we add "2". We expect the trees 1, 2, and 3 to all get merged.
-    #[test]
-    fn detached_blocks() {
-        let block_0 = BlockBuilder::genesis().build();
-        let block_1 = BlockBuilder::with_prev_header(block_0.header).build();
-        let block_2 = BlockBuilder::with_prev_header(block_1.header).build();
-        let block_3 = BlockBuilder::with_prev_header(block_2.header).build();
-
-        let mut forest = BlockForest::new(1);
-
-        forest.push(block_3);
-        forest.push(block_1.clone());
-        assert_eq!(forest.pop(&block_0.block_hash()), None);
-
-        // There are two trees in the forest.
-        assert_eq!(forest.trees.len(), 2);
-
-        // Add block2, which should result in all the blocks merging into a single tree.
-        forest.push(block_2.clone());
-        assert_eq!(forest.trees.len(), 1);
-
-        // Getting the blocks should work as expected.
-        assert_eq!(forest.pop(&block_0.block_hash()), Some(block_1.clone()));
-        assert_eq!(forest.pop(&block_1.block_hash()), Some(block_2.clone()));
-        assert_eq!(forest.pop(&block_2.block_hash()), None);
-    }
-
-    // Test creating a forest that looks like this:
-    //
-    // * -> 3
-    // * -> 0
-    //
-    // And then we add "1" and "2". All the trees should be merged into one.
-    #[test]
-    fn detached_blocks_2() {
-        let block_0 = BlockBuilder::genesis().build();
-        let block_1 = BlockBuilder::with_prev_header(block_0.header).build();
-        let block_2 = BlockBuilder::with_prev_header(block_1.header).build();
-        let block_3 = BlockBuilder::with_prev_header(block_2.header).build();
-
-        let mut forest = BlockForest::new(1);
-
-        forest.push(block_3);
-        forest.push(block_0);
-        forest.push(block_1);
-        forest.push(block_2);
-
-        // There is only one tree in the forest.
-        assert_eq!(forest.trees.len(), 1);
-    }
-
-    #[test]
-    fn insert_predecessor() {
-        let block_0 = BlockBuilder::genesis().build();
-        let block_1 = BlockBuilder::with_prev_header(block_0.header).build();
-
-        let mut forest = BlockForest::new(1);
-
-        forest.push(block_1);
-        forest.push(block_0);
-
-        // There is only one tree in the forest.
-        assert_eq!(forest.trees.len(), 1);
+        // No stable children for fork 2
+        assert_eq!(forest.pop(), None);
     }
 
     #[test]
@@ -456,32 +342,13 @@ mod test {
         let block_1 = BlockBuilder::with_prev_header(block_0.header).build();
         let block_2 = BlockBuilder::with_prev_header(block_1.header).build();
 
-        let mut forest = BlockForest::new(0);
-        forest.push(block_1.clone());
-        forest.push(block_2.clone());
+        let mut forest = BlockForest::new(0, block_0.clone());
+        forest.push(block_1.clone()).unwrap();
+        forest.push(block_2).unwrap();
 
-        // There is only one tree in the forest.
-        assert_eq!(forest.trees.len(), 1);
-        assert_eq!(forest.pop(&block_0.block_hash()), Some(block_1.clone()));
-        assert_eq!(forest.pop(&block_1.block_hash()), Some(block_2.clone()));
-        assert_eq!(forest.pop(&block_2.block_hash()), None);
-    }
-
-    #[test]
-    fn insert_in_reverse_order() {
-        let block_0 = BlockBuilder::genesis().build();
-        let block_1 = BlockBuilder::with_prev_header(block_0.header).build();
-        let block_2 = BlockBuilder::with_prev_header(block_1.header).build();
-
-        let mut forest = BlockForest::new(0);
-        forest.push(block_2.clone());
-        forest.push(block_1.clone());
-
-        // There is only one tree in the forest.
-        assert_eq!(forest.trees.len(), 1);
-        assert_eq!(forest.pop(&block_0.block_hash()), Some(block_1.clone()));
-        assert_eq!(forest.pop(&block_1.block_hash()), Some(block_2.clone()));
-        assert_eq!(forest.pop(&block_2.block_hash()), None);
+        assert_eq!(forest.pop(), Some(block_0));
+        assert_eq!(forest.pop(), Some(block_1));
+        assert_eq!(forest.pop(), None);
     }
 
     #[test]
@@ -521,13 +388,13 @@ mod test {
         let block_1 = BlockBuilder::with_prev_header(block_0.header).build();
         let block_2 = BlockBuilder::with_prev_header(block_1.header).build();
 
-        let mut forest = BlockForest::new(1);
+        let mut forest = BlockForest::new(1, block_0.clone());
 
-        forest.push(block_1.clone());
-        forest.push(block_2.clone());
+        forest.push(block_1.clone()).unwrap();
+        forest.push(block_2.clone()).unwrap();
         assert_eq!(
-            forest.get_current_chain(&block_0.block_hash()),
-            vec![&block_1, &block_2]
+            forest.get_current_chain(),
+            vec![&block_0, &block_1, &block_2]
         );
     }
 
@@ -543,14 +410,11 @@ mod test {
         let block_1 = BlockBuilder::with_prev_header(block_0.header).build();
         let block_2 = BlockBuilder::with_prev_header(block_0.header).build();
 
-        let mut forest = BlockForest::new(1);
+        let mut forest = BlockForest::new(1, block_0.clone());
 
-        forest.push(block_1);
-        forest.push(block_2);
-        assert_eq!(
-            forest.get_current_chain(&block_0.block_hash()),
-            Vec::<&Block>::new()
-        );
+        forest.push(block_1).unwrap();
+        forest.push(block_2).unwrap();
+        assert_eq!(forest.get_current_chain(), vec![&block_0]);
     }
 
     // Creating the following forest:
@@ -566,14 +430,14 @@ mod test {
         let block_2 = BlockBuilder::with_prev_header(block_0.header).build();
         let block_3 = BlockBuilder::with_prev_header(block_2.header).build();
 
-        let mut forest = BlockForest::new(1);
+        let mut forest = BlockForest::new(1, block_0.clone());
 
-        forest.push(block_1);
-        forest.push(block_2.clone());
-        forest.push(block_3.clone());
+        forest.push(block_1).unwrap();
+        forest.push(block_2.clone()).unwrap();
+        forest.push(block_3.clone()).unwrap();
         assert_eq!(
-            forest.get_current_chain(&block_0.block_hash()),
-            vec![&block_2, &block_3]
+            forest.get_current_chain(),
+            vec![&block_0, &block_2, &block_3]
         );
     }
 
@@ -593,17 +457,14 @@ mod test {
         let block_a = BlockBuilder::with_prev_header(block_1.header).build();
         let block_b = BlockBuilder::with_prev_header(block_a.header).build();
 
-        let mut forest = BlockForest::new(1);
+        let mut forest = BlockForest::new(1, block_0.clone());
 
-        forest.push(block_1.clone());
-        forest.push(block_2);
-        forest.push(block_3);
-        forest.push(block_a);
-        forest.push(block_b);
-        assert_eq!(
-            forest.get_current_chain(&block_0.block_hash()),
-            vec![&block_1]
-        );
+        forest.push(block_1.clone()).unwrap();
+        forest.push(block_2).unwrap();
+        forest.push(block_3).unwrap();
+        forest.push(block_a).unwrap();
+        forest.push(block_b).unwrap();
+        assert_eq!(forest.get_current_chain(), vec![&block_0, &block_1]);
     }
 
     // Creating the following forest:
@@ -629,29 +490,26 @@ mod test {
         let block_y = BlockBuilder::with_prev_header(block_x.header).build();
         let block_z = BlockBuilder::with_prev_header(block_y.header).build();
 
-        let mut forest = BlockForest::new(1);
+        let mut forest = BlockForest::new(1, block_0.clone());
 
-        forest.push(block_x);
-        forest.push(block_y);
-        forest.push(block_z);
-        forest.push(block_1.clone());
-        forest.push(block_2);
-        forest.push(block_3);
-        forest.push(block_a.clone());
-        forest.push(block_b.clone());
-        assert_eq!(
-            forest.get_current_chain(&block_0.block_hash()),
-            Vec::<&Block>::new()
-        );
+        forest.push(block_x).unwrap();
+        forest.push(block_y).unwrap();
+        forest.push(block_z).unwrap();
+        forest.push(block_1.clone()).unwrap();
+        forest.push(block_2).unwrap();
+        forest.push(block_3).unwrap();
+        forest.push(block_a.clone()).unwrap();
+        forest.push(block_b.clone()).unwrap();
+        assert_eq!(forest.get_current_chain(), vec![&block_0]);
 
         // Now add block c to b.
         let block_c = BlockBuilder::with_prev_header(block_b.header).build();
-        forest.push(block_c.clone());
+        forest.push(block_c.clone()).unwrap();
 
         // Now the current chain should be "1 -> a -> b -> c"
         assert_eq!(
-            forest.get_current_chain(&block_0.block_hash()),
-            vec![&block_1, &block_a, &block_b, &block_c]
+            forest.get_current_chain(),
+            vec![&block_0, &block_1, &block_a, &block_b, &block_c]
         );
     }
 
@@ -668,30 +526,24 @@ mod test {
         let block_y = BlockBuilder::with_prev_header(block_x.header).build();
         let block_z = BlockBuilder::with_prev_header(block_y.header).build();
 
-        let mut forest = BlockForest::new(1);
+        let mut forest = BlockForest::new(1, block_0.clone());
 
-        forest.push(block_1);
-        forest.push(block_2);
-        forest.push(block_3);
-        forest.push(block_a);
-        forest.push(block_b);
-        forest.push(block_x);
-        forest.push(block_y);
-        forest.push(block_z);
-        assert_eq!(
-            forest.get_current_chain(&block_0.block_hash()),
-            Vec::<&Block>::new()
-        );
+        forest.push(block_1).unwrap();
+        forest.push(block_2).unwrap();
+        forest.push(block_3).unwrap();
+        forest.push(block_a).unwrap();
+        forest.push(block_b).unwrap();
+        forest.push(block_x).unwrap();
+        forest.push(block_y).unwrap();
+        forest.push(block_z).unwrap();
+        assert_eq!(forest.get_current_chain(), vec![&block_0]);
     }
 
     #[test]
-    fn get_current_chain_empty() {
+    fn get_current_chain_anchor_only() {
         let block_0 = BlockBuilder::genesis().build();
-        let forest = BlockForest::new(1);
+        let forest = BlockForest::new(1, block_0.clone());
 
-        assert_eq!(
-            forest.get_current_chain(&block_0.block_hash()),
-            Vec::<&Block>::new()
-        );
+        assert_eq!(forest.get_current_chain(), vec![&block_0]);
     }
 }
