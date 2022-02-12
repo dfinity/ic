@@ -230,7 +230,10 @@ export async function handleRequest(request: Request): Promise<Response> {
   if (maybeCanisterId) {
     try {
       const replicaUrl = new URL(url.origin);
-      const agent = new HttpAgent({ host: replicaUrl.toString() });
+      const agent = new HttpAgent({
+        host: replicaUrl.toString(),
+        fetch: self.fetch.bind(self),
+      });
       const actor = Actor.createActor(canisterIdlFactory, {
         agent,
         canisterId: maybeCanisterId,
