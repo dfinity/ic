@@ -41,6 +41,9 @@ const INCOMPLETE_HANDSHAKE_TIMEOUT_SECS: u64 = 5;
 /// responding.
 const SEED_ADDR_RETRIEVED_TIMEOUT_SECS: u64 = 5;
 
+/// This constant represents how many connections can be made during the address discovery process.
+const MAX_CONNECTIONS_DURING_ADDRESS_DISCOVERY: usize = 8;
+
 /// This enum represents the possible errors that the connection manager may encounter.
 #[derive(Debug, Error)]
 pub enum ConnectionManagerError {
@@ -53,6 +56,10 @@ pub enum ConnectionManagerError {
     AddressBook(AddressBookError),
     #[error("The system time has fallen behind.")]
     SystemTimeIsBehind,
+    /// The address already exists in the ConnectionManager's `connections` field.
+    /// This can happen from recycling the DNS seed queue addresses.
+    #[error("Address {0} is already connected")]
+    AlreadyConnected(SocketAddr),
 }
 
 /// This type is a simple wrapper for results created by a connection manager.
@@ -177,7 +184,7 @@ impl ConnectionManager {
     /// adapter does not overwhelm the network with connections.
     fn get_max_number_of_connections(&self) -> usize {
         if self.initial_address_discovery {
-            1
+            MAX_CONNECTIONS_DURING_ADDRESS_DISCOVERY
         } else {
             self.max_connections
         }
@@ -279,10 +286,14 @@ impl ConnectionManager {
             self.address_book.pop()
         };
         let address_entry = address_entry_result.map_err(ConnectionManagerError::AddressBook)?;
+        let address = *address_entry.addr();
+        if self.connections.contains_key(&address) {
+            return Err(ConnectionManagerError::AlreadyConnected(address));
+        }
         let socks_proxy = self.socks_proxy;
         let (writer, network_message_receiver) = unbounded_channel();
         let stream_event_sender = self.stream_event_sender.clone();
-        let address = *address_entry.addr();
+
         let stream_config = StreamConfig {
             address,
             logger: self.logger.clone(),
@@ -827,11 +838,13 @@ mod test {
 
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
         assert!(manager.initial_address_discovery);
-        assert_eq!(manager.get_max_number_of_connections(), 1);
+        assert_eq!(
+            manager.get_max_number_of_connections(),
+            MAX_CONNECTIONS_DURING_ADDRESS_DISCOVERY
+        );
 
         runtime.block_on(async {
             manager.tick(simple_handle);
-            assert_eq!(manager.connections.len(), 1);
             for i in 0..4u8 {
                 let event = manager
                     .stream_event_receiver
