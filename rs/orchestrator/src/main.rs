@@ -1,4 +1,4 @@
-use ic_base_server::shutdown_signal;
+use ic_async_utils::shutdown_signal;
 use orchestrator::args::OrchestratorArgs;
 use orchestrator::orchestrator::Orchestrator;
 use structopt::StructOpt;

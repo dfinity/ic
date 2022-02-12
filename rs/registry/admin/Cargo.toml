@@ -17,7 +17,6 @@ lazy_static = "1.4.0"
 cycles-minting-canister = { path ="../../nns/cmc" }
 ic-admin-derive = { path = "../admin-derive"}
 ic-nns-init = { path="../../nns/init" }
-ic-base-thread = { path = "../../base/thread" }
 ic-base-types = { path="../../types/base_types" }
 ic-canister-client = { path = "../../canister_client" }
 ic-config = { path = "../../config" }

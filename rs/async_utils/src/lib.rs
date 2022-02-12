@@ -1,5 +1,9 @@
 use slog::{info, Logger};
 
+mod observable_counting_semaphore;
+
+pub use observable_counting_semaphore::*;
+
 /// Returns a `Future` that completes when the service should gracefully
 /// shutdown. Completion happens if either of `SIGINT` or `SIGTERM` are
 /// received.

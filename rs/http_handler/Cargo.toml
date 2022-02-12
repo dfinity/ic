@@ -10,7 +10,7 @@ http = "0.2.5"
 futures = "0.3.13"
 futures-util = "0.3.13"
 hyper = { version = "0.14.16", features = ["full"] }
-ic-base-thread = { path = "../base/thread" }
+ic-async-utils = { path = "../async_utils" }
 ic-config = { path = "../config" }
 ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }

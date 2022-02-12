@@ -1,5 +1,5 @@
 [package]
-name = "ic-base-thread"
+name = "ic-async-utils"
 version = "0.8.0"
 edition = "2018"
 
@@ -8,3 +8,5 @@ crossbeam-channel =  "0.5.1"
 futures = "0.3.13"
 prometheus = { version = "0.12.0", features = [ "process" ] }
 tokio = { version = "1.15.0", features = ["full"] }
+slog = "2.5.2"
+

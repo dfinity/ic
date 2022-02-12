@@ -3129,7 +3129,6 @@ dependencies = [
  "futures",
  "hex",
  "ic-admin-derive",
- "ic-base-thread",
  "ic-base-types",
  "ic-canister-client",
  "ic-config",
@@ -3222,7 +3221,6 @@ dependencies = [
  "bincode",
  "crossbeam-channel 0.5.1",
  "ic-artifact-pool",
- "ic-base-thread",
  "ic-config",
  "ic-consensus-message",
  "ic-crypto",
@@ -3279,20 +3277,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-base-server"
-version = "0.8.0"
-dependencies = [
- "slog",
- "tokio",
-]
-
-[[package]]
-name = "ic-base-thread"
+name = "ic-async-utils"
 version = "0.8.0"
 dependencies = [
  "crossbeam-channel 0.5.1",
  "futures",
  "prometheus",
+ "slog",
  "tokio",
 ]
 
@@ -4629,7 +4620,7 @@ dependencies = [
  "hex",
  "http",
  "hyper",
- "ic-base-thread",
+ "ic-async-utils",
  "ic-config",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tree-hash",
@@ -5227,7 +5218,7 @@ dependencies = [
  "humantime 2.0.1",
  "humantime-serde",
  "hyper",
- "ic-base-server",
+ "ic-async-utils",
  "ic-crypto-utils-threshold-sig",
  "ic-metrics",
  "ic-p8s-service-discovery-log",
@@ -5417,7 +5408,6 @@ dependencies = [
  "futures",
  "hyper",
  "hyper-tls",
- "ic-base-thread",
  "ic-canister-client",
  "ic-certified-vars",
  "ic-crypto",
@@ -5468,7 +5458,6 @@ dependencies = [
 name = "ic-registry-replicator"
 version = "0.1.0"
 dependencies = [
- "ic-base-thread",
  "ic-config",
  "ic-crypto-utils-threshold-sig",
  "ic-interfaces",
@@ -5594,7 +5583,7 @@ dependencies = [
  "canister-test",
  "criterion",
  "hex",
- "ic-base-server",
+ "ic-async-utils",
  "ic-btc-consensus",
  "ic-config",
  "ic-consensus",
@@ -7996,8 +7985,7 @@ dependencies = [
  "http",
  "hyper",
  "hyper-tls",
- "ic-base-server",
- "ic-base-thread",
+ "ic-async-utils",
  "ic-canister-client",
  "ic-config",
  "ic-consensus",
