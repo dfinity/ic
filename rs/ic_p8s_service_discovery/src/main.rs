@@ -20,7 +20,7 @@ use slog::{error, info, o};
 
 use ecs::SetTo;
 use elastic_common_schema::{self as ecs, process_fields::WithCurrentProcess};
-use ic_base_server::shutdown_signal;
+use ic_async_utils::shutdown_signal;
 use ic_metrics::MetricsRegistry;
 use ic_registry_client::client::{create_data_provider, DataProviderConfig, RegistryClientImpl};
 

@@ -3,8 +3,7 @@
 members = [
   "artifact_manager",
   "artifact_pool",
-  "base/server",
-  "base/thread",
+  "async_utils",
   "bitcoin/adapter",
   "bitcoin/canister",
   "bitcoin/consensus",

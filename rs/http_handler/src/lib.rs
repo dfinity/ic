@@ -32,7 +32,7 @@ use crate::{
     types::*,
 };
 use hyper::{server::conn::Http, Body, Request, Response, StatusCode};
-use ic_base_thread::ObservableCountingSemaphore;
+use ic_async_utils::ObservableCountingSemaphore;
 use ic_config::http_handler::Config;
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_crypto_tree_hash::{lookup_path, LabeledTree, Path};

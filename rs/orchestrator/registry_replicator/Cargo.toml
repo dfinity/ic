@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2018"
 
 [dependencies]
-ic-base-thread = { path = "../../base/thread" }
 ic-config = { path = "../../config" }
 ic-crypto-utils-threshold-sig = { path = "../../crypto/utils/threshold_sig" }
 ic-interfaces = { path = "../../interfaces" }

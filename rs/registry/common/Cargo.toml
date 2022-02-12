@@ -4,7 +4,6 @@ version = "0.8.0"
 edition = "2018"
 
 [dependencies]
-ic-base-thread = { path = "../../base/thread" }
 ic-canister-client = { path = "../../canister_client" }
 ic-certified-vars = { path = "../../certified_vars" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }

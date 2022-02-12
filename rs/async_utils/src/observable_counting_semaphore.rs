@@ -19,7 +19,7 @@ use std::sync::Arc;
 ///     async fn example() {
 ///         let gauge = prometheus::IntGauge::new("name", "help").unwrap();
 ///         let sem =
-///             ic_base_thread::ObservableCountingSemaphore::new(2, gauge);
+///             ic_async_utils::ObservableCountingSemaphore::new(2, gauge);
 ///         let mut jhs = Vec::new();
 ///         for _i in 1..10 {
 ///             let _permit = sem.acquire().await;

@@ -1,6 +1,6 @@
 //! Replica -- Internet Computer
 
-use ic_base_server::shutdown_signal;
+use ic_async_utils::shutdown_signal;
 use ic_config::registry_client::DataProviderConfig;
 use ic_config::{subnet_config::SubnetConfigs, Config};
 use ic_crypto_sha::Sha256;

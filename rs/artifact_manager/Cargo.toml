@@ -5,7 +5,6 @@ edition = "2018"
 
 [dependencies]
 bincode = "1.2.1"
-ic-base-thread = { path = "../base/thread" }
 ic-consensus-message = { path = "../consensus/message" }
 ic-crypto = { path = "../crypto" }
 ic-ecdsa-object = { path = "../consensus/ecdsa_object" }

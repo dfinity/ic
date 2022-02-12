@@ -13,7 +13,7 @@ gflags-derive = "0.1"
 humantime = "2.0"
 humantime-serde = "1.0"
 hyper = { version ="0.14.16", features = ["full"] }
-ic-base-server = { path = "../base/server" }
+ic-async-utils = { path = "../async_utils" }
 ic-p8s-service-discovery-log = { path = "./log" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
