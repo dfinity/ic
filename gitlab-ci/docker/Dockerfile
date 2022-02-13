@@ -3,12 +3,6 @@ FROM ${SRC_IMG_PATH} as src_img
 
 FROM ubuntu:20.04
 
-# Make sure the motoko_version corresponds to the same version in nix/sources.json
-ARG tini_version=0.19.0
-ARG rust_version=1.55.0
-ARG USER=ubuntu
-ARG UID=1000
-
 # The image expects the following volumes mounted from the host:
 # /cache - holding the sccache artifacts
 # /cargo - is the CARGO_HOME, holding cargo binaries and cloned repos
@@ -33,6 +27,8 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
     gem install asciidoctor-diagram rouge
 
 # Add the `${USER}` user, and the required folders
+ARG USER=ubuntu
+ARG UID=1000
 RUN useradd -ms /bin/bash -u ${UID} ${USER} && \
     mkdir -p /home/${USER} && \
     chown -R ${UID}.${UID} /home/${USER} && \
@@ -55,6 +51,7 @@ COPY --from=src_img /opt /tmp/src-artifacts
 RUN rsync --chmod=755 -rav /tmp/src-artifacts/ /usr && rm -rf /tmp/src-artifacts
 
 # rustup uses $CARGO_HOME to figure out where to install itself
+ARG rust_version=1.55.0
 ENV CARGO_HOME=/opt/cargo
 RUN curl --fail https://sh.rustup.rs -sSf \
         | sh -s -- -y --default-toolchain ${rust_version}-x86_64-unknown-linux-gnu --no-modify-path && \
@@ -68,6 +65,7 @@ RUN curl --fail https://sh.rustup.rs -sSf \
 ENV CARGO_HOME=/cargo
 
 # Init for reaping zombies and performing signal forwarding (https://github.com/krallin/tini)
+ARG tini_version=0.19.0
 RUN curl -fsSL https://github.com/krallin/tini/releases/download/v${tini_version}/tini -o /tini && \
     curl -fsSL https://github.com/krallin/tini/releases/download/v${tini_version}/tini.asc -o /tini.asc && \
     chmod +x /tini
@@ -75,6 +73,13 @@ RUN gpg --batch --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 595E85A6B1
     gpg --batch --verify /tini.asc /tini && chmod +x /tini
 
 RUN /usr/bin/pip3 install ansible==2.10.7 gitpython pre-commit honeycomb-beeline junit-xml paramiko python-gitlab libhoney termcolor
+
+ARG didc_release_date=2022-01-06
+RUN curl --fail \
+         --location https://github.com/dfinity/candid/releases/download/${didc_release_date}/didc-linux64 \
+         --output /usr/bin/didc-linux64 \
+  && \
+    chmod +x /usr/bin/didc-linux64
 
 USER ${UID}
 
