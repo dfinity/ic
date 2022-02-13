@@ -4,44 +4,42 @@
 
 FROM ubuntu:20.04
 
-ARG motoko_version=0.5.10
-ARG sdk_version=0.8.0
-ARG protoc_version=3.18.1
-ARG sccache_version=0.2.19-alpha+dfinity
-ARG buildevents_version=0.6.0
-ARG capsule_version=0.2.22
-
-ARG cdk_opt_sha=5807d2f7b523f630eddd69acd4b245a8b129eff9
-ARG rocksdb_sha=0a9a05ae12943b1529ef1eabbca5ce5a71c986bf
-ARG idl2json_sha=bcb27ac567eba7a7c14c9d70aedd3fb777af281b
-
 RUN apt -y update && DEBIAN_FRONTEND=noninteractive apt -y install curl unzip gpg build-essential cmake git
 
 RUN mkdir -p /opt/bin
 
+ARG protoc_version=3.18.1
 RUN cd $(mktemp -d) && curl -fLO https://github.com/protocolbuffers/protobuf/releases/download/v${protoc_version}/protoc-${protoc_version}-linux-x86_64.zip && unzip * -d /opt/protoc && chmod -R 755 /opt/protoc/bin && chmod -R u+rwX,go+rX,go-w /opt/protoc/include
 
+ARG sccache_version=0.2.19-alpha+dfinity
 RUN curl -fsSL https://gitlab.com/api/v4/projects/30166821/packages/generic/sccache/v${sccache_version}/sccache -o /opt/bin/sccache && \
     chmod +x /opt/bin/sccache && \
     # has to match the path in the new dockerfile, not this one
     ln -s /usr/bin/sccache /opt/bin/sccache-run
 
+ARG buildevents_version=0.6.0
 RUN curl -fsSL https://github.com/honeycombio/buildevents/releases/download/v${buildevents_version}/buildevents-linux-amd64 -o /opt/bin/buildevents && \
     chmod +x /opt/bin/buildevents
 
+ARG motoko_version=0.5.10
 RUN curl -fsSL https://download.dfinity.systems/motoko/${motoko_version}/x86_64-linux/motoko-${motoko_version}.tar.gz | tar -xz -C /opt/bin && chmod +x /opt/bin/moc
 
+ARG sdk_version=0.8.0
 RUN curl -fsSL https://download.dfinity.systems/sdk/dfx/${sdk_version}/x86_64-linux/dfx-${sdk_version}.tar.gz | tar -xz -C /opt/bin && chmod +x /opt/bin/dfx
 
+ARG idl2json_sha=bcb27ac567eba7a7c14c9d70aedd3fb777af281b
 RUN curl -fsSL https://download.dfinity.systems/idl2json/bcb27ac567eba7a7c14c9d70aedd3fb777af281b/idl2json-linux-amd64.gz | gunzip > /opt/bin/idl2json && chmod +x /opt/bin/idl2json
 
+ARG cdk_opt_sha=5807d2f7b523f630eddd69acd4b245a8b129eff9
 RUN curl --fail -sL https://download.dfinity.systems/cdk-rs/${cdk_opt_sha}/ic-cdk-optimizer-linux-amd64.gz | gunzip > /opt/bin/ic-cdk-optimizer && \
     chmod 0755 /opt/bin/ic-cdk-optimizer
 
+ARG capsule_version=0.2.22
 RUN curl -fsSL https://gitlab.com/api/v4/projects/29782482/packages/generic/capsule/${capsule_version}/capsule-linux-amd64 -o /opt/bin/capsule && \
     chmod +x /opt/bin/capsule && ln -s /usr/bin/capsule /opt/bin/placebo
 RUN curl -fsSL https://gitlab.com/api/v4/projects/29782482/packages/generic/capsule/${capsule_version}/cargo-capsule-test-linux-amd64 -o /opt/bin/cargo-capsule-test && chmod +x /opt/bin/cargo-capsule-test
 
+ARG rocksdb_sha=0a9a05ae12943b1529ef1eabbca5ce5a71c986bf
 RUN mkdir /tmp/rocksdb && curl -fsSL https://github.com/facebook/rocksdb/archive/${rocksdb_sha}.tar.gz | tar -xz -C /tmp/rocksdb --strip-components 1
 WORKDIR /tmp/rocksdb
 
