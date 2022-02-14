@@ -87,6 +87,12 @@ const LABEL_VALUE_HASHED: &str = "hashed";
 const LABEL_VALUE_HASHED_AND_COMPARED: &str = "hashed_and_compared";
 const LABEL_VALUE_REUSED: &str = "reused";
 
+/// Lables for state sync metrics
+const LABEL_FETCH: &str = "fetch";
+const LABEL_COPY_FILES: &str = "copy_files";
+const LABEL_COPY_CHUNKS: &str = "copy_chunks";
+const LABEL_PREALLOCATE: &str = "preallocate";
+
 #[derive(Clone)]
 pub struct StateManagerMetrics {
     state_manager_error_count: IntCounterVec,
@@ -115,8 +121,10 @@ pub struct ManifestMetrics {
 pub struct StateSyncMetrics {
     state_sync_size: IntCounterVec,
     state_sync_duration: HistogramVec,
+    state_sync_step_duration: HistogramVec,
     state_sync_remaining: IntGauge,
-    state_sync_corrupted_chunks: IntCounter,
+    state_sync_corrupted_chunks_critical: IntCounter,
+    state_sync_corrupted_chunks: IntCounterVec,
 }
 
 #[derive(Clone)]
@@ -264,12 +272,17 @@ impl StateSyncMetrics {
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         let state_sync_size = metrics_registry.int_counter_vec(
             "state_sync_size_bytes_total",
-            "Size of chunks synchronized by different operations ('fetch', 'copy', 'preallocate') during all the state sync in bytes.",
+            "Size of chunks synchronized by different operations ('fetch', 'copy_files', 'copy_chunks', 'preallocate') during all the state sync in bytes.",
             &["op"],
         );
 
         // Note [Metrics preallocation]
-        for op in &["fetch", "copy"] {
+        for op in &[
+            LABEL_FETCH,
+            LABEL_COPY_FILES,
+            LABEL_COPY_CHUNKS,
+            LABEL_PREALLOCATE,
+        ] {
             state_sync_size.with_label_values(&[*op]);
         }
 
@@ -280,24 +293,57 @@ impl StateSyncMetrics {
 
         let state_sync_duration = metrics_registry.histogram_vec(
             "state_sync_duration_seconds",
-            "Duration of state sync in seconds indexed by status ('ok', 'already_exists', 'unrecoverable', 'io_err').",
+            "Duration of state sync in seconds indexed by status ('ok', 'already_exists', 'unrecoverable', 'io_err', 'aborted', 'aborted_blank').",
             // 1s, 2s, 5s, 10s, 20s, 50s, …, 1000s, 2000s, 5000s
             decimal_buckets(0, 3),
             &["status"],
         );
 
         // Note [Metrics preallocation]
-        for status in &["ok", "already_exists", "unrecoverable", "io_err"] {
+        for status in &[
+            "ok",
+            "already_exists",
+            "unrecoverable",
+            "io_err",
+            "aborted",
+            "aborted_blank",
+        ] {
             state_sync_duration.with_label_values(&[*status]);
         }
 
-        let state_sync_corrupted_chunks =
+        let state_sync_step_duration = metrics_registry.histogram_vec(
+            "state_sync_step_duration_seconds",
+            "Duration of state sync sub-steps in seconds indexed by step ('copy_files', 'copy_chunks')",
+            // 0.1s, 0.2s, 0.5s, 1s, 2s, 5s, …, 1000s, 2000s, 5000s
+            decimal_buckets(-1, 3),
+            &["step"],
+        );
+
+        // Note [Metrics preallocation]
+        for step in &[LABEL_COPY_FILES, LABEL_COPY_CHUNKS] {
+            state_sync_step_duration.with_label_values(&[*step]);
+        }
+
+        let state_sync_corrupted_chunks_critical =
             metrics_registry.error_counter(CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS);
+
+        let state_sync_corrupted_chunks = metrics_registry.int_counter_vec(
+            "state_sync_corrupted_chunks",
+            "Number of chunks not copied during state sync due to hash mismatch by source ('fetch', copy_files', 'copy_chunks')",
+            &["source"],
+        );
+
+        // Note [Metrics preallocation]
+        for source in &[LABEL_FETCH, LABEL_COPY_FILES, LABEL_COPY_CHUNKS] {
+            state_sync_corrupted_chunks.with_label_values(&[*source]);
+        }
 
         Self {
             state_sync_size,
             state_sync_duration,
+            state_sync_step_duration,
             state_sync_remaining,
+            state_sync_corrupted_chunks_critical,
             state_sync_corrupted_chunks,
         }
     }
@@ -1595,6 +1641,14 @@ impl StateManagerImpl {
                 certification: None,
             },
         );
+
+        let state_size_bytes: i64 = manifest
+            .file_table
+            .iter()
+            .map(|f| f.size_bytes as i64)
+            .sum();
+
+        self.metrics.state_size.set(state_size_bytes);
 
         states.states_metadata.insert(
             height,
