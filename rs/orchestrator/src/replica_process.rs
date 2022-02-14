@@ -181,28 +181,6 @@ impl ReplicaProcess {
         }
         Ok(())
     }
-
-    pub(crate) fn spawn_wait_and_restart(replica_process: Arc<Mutex<ReplicaProcess>>) {
-        tokio::task::spawn_blocking(move || loop {
-            std::thread::sleep(std::time::Duration::from_secs(5));
-            let join_handle = replica_process.lock().unwrap().join_handle.take();
-            if let Some(join_handle) = join_handle {
-                join_handle.join().expect("join failed");
-            };
-            let mut replica_process_guard = replica_process.lock().unwrap();
-            if replica_process_guard.stopping {
-                break;
-            }
-            if let Some(command) = replica_process_guard.command.clone() {
-                let e = replica_process_guard.start(
-                    command.replica_binary.clone(),
-                    &command.replica_version,
-                    command.args,
-                );
-                warn!(replica_process_guard.log, "Replica exited, {:?}", e);
-            }
-        });
-    }
 }
 
 /// Wait for the child process to return, log the exit status and send

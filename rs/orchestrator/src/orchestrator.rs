@@ -5,17 +5,16 @@ use crate::firewall::Firewall;
 use crate::metrics::OrchestratorMetrics;
 use crate::registration::NodeRegistration;
 use crate::registry_helper::RegistryHelper;
-use crate::release_package::ReleasePackage;
 use crate::release_package_provider::ReleasePackageProvider;
 use crate::replica_process::ReplicaProcess;
 use crate::ssh_access_manager::SshAccessManager;
+use crate::upgrade::Upgrade;
 use crate::utils;
 use ic_config::{
     metrics::{Config as MetricsConfig, Exporter},
     Config,
 };
 use ic_crypto::utils::get_node_keys_or_generate_if_missing;
-use ic_crypto::CryptoComponentForNonReplicaProcess;
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces::{crypto::KeyManager, registry::RegistryClient};
 use ic_logger::{error, info, new_replica_logger, warn, LoggerImpl, ReplicaLogger};
@@ -24,22 +23,26 @@ use ic_metrics_exporter::MetricsRuntimeImpl;
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::ReplicaVersion;
 use slog_async::AsyncGuard;
-use std::convert::TryFrom;
 use std::env;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::{convert::TryFrom, time::Duration};
+use tokio::{sync::RwLock, task::JoinHandle};
+
+const CHECK_INTERVAL_SECS: Duration = Duration::from_secs(10);
 
 pub struct Orchestrator {
     pub logger: ReplicaLogger,
     _async_log_guard: AsyncGuard,
     _metrics_runtime: MetricsRuntimeImpl,
-    _crypto: Arc<dyn CryptoComponentForNonReplicaProcess + Send + Sync>,
-    // for tokio 1.0+ we can use `tokio::task::JoinHandle`
-    release_package: Arc<std::sync::atomic::AtomicBool>,
-    firewall: Arc<std::sync::atomic::AtomicBool>,
-    ssh_access_manager: Arc<std::sync::atomic::AtomicBool>,
-    replica_process: Arc<Mutex<ReplicaProcess>>,
+    upgrade: Option<Upgrade>,
+    firewall: Option<Firewall>,
+    ssh_access_manager: Option<SshAccessManager>,
+    // A flag used to communicate to async tasks, that their job is done.
+    exit_signal: Arc<RwLock<bool>>,
+    // Handles of async tasks used to wait for their completion
+    task_handles: Vec<JoinHandle<()>>,
 }
 
 // Loads the replica version from the file specified as argument on node
@@ -60,18 +63,7 @@ fn load_version_from_file(logger: &ReplicaLogger, path: &Path) -> Result<Replica
 }
 
 impl Orchestrator {
-    /// Start the Orchestrator
-    ///
-    /// This starts 2 tasks for upgrades: one which runs and monitors
-    /// a Replica process, and another that constantly monitors for a
-    /// new release package that this node should upgrade to and
-    /// executes the upgrade to this new release.
-    ///
-    /// It spawns a third task that monitors the registry for new
-    /// data centers. If a new data center is added, orchestrator will
-    /// generate a new firewall configuration allowing access from the
-    /// IP range specified in the DC record.
-    pub async fn start(args: OrchestratorArgs) -> Result<Self, ()> {
+    pub async fn new(args: OrchestratorArgs) -> Result<Self, ()> {
         args.create_dirs();
         let metrics_addr = args.get_metrics_addr();
         let config = args.get_ic_config();
@@ -156,19 +148,18 @@ impl Orchestrator {
 
         let replica_version = load_version_from_file(&logger, &args.version_file)?;
 
-        let release_package = ReleasePackage::start(
+        let upgrade = Some(Upgrade::new(
             Arc::clone(&registry),
-            replica_process.clone(),
+            replica_process,
             release_package_provider,
             cup_provider,
             replica_version,
             args.replica_config_file.clone(),
             node_id,
-            ic_binary_directory.clone(),
+            ic_binary_directory,
             registry_replicator,
             logger.clone(),
-        )
-        .await;
+        ));
 
         let (metrics, _metrics_runtime) = Self::get_metrics(
             metrics_addr,
@@ -179,50 +170,113 @@ impl Orchestrator {
         );
         let metrics = Arc::new(metrics);
 
-        let firewall = Firewall::new(
+        let firewall = Some(Firewall::new(
             Arc::clone(&registry),
             Arc::clone(&metrics),
             config.firewall.clone(),
             logger.clone(),
-        )
-        .start();
-        let ssh_access_manager =
-            SshAccessManager::new(Arc::clone(&registry), Arc::clone(&metrics), logger.clone())
-                .start();
+        ));
+        let ssh_access_manager = Some(SshAccessManager::new(
+            Arc::clone(&registry),
+            Arc::clone(&metrics),
+            logger.clone(),
+        ));
         Ok(Self {
             logger,
             _async_log_guard,
             _metrics_runtime,
-            _crypto: crypto,
-            release_package,
-            replica_process,
+            upgrade,
             firewall,
             ssh_access_manager,
+            exit_signal: Default::default(),
+            task_handles: Default::default(),
         })
     }
 
-    pub fn spawn_wait_and_restart_replica(&self) {
-        ReplicaProcess::spawn_wait_and_restart(self.replica_process.clone());
+    /// Starts two asynchronous tasks:
+    ///
+    /// 1. One that constantly monitors for a new CUP pointing to a newer replica version and
+    /// executes the upgrade to this version if such a CUP was found.
+    ///
+    /// 2. Second task is doing two things sequentially. First, it  monitors the registry for new SSH readonly
+    /// keys and deploys the detected keys into OS. Second, it monitors the registry for new data centers.
+    /// If a new data center is added, orchestrator will generate a new firewall configuration allowing access
+    /// from the IP range specified in the DC record.
+    pub fn spawn_tasks(&mut self) {
+        async fn upgrade_checks(
+            log: ReplicaLogger,
+            exit_signal: Arc<RwLock<bool>>,
+            upgrade: Upgrade,
+        ) {
+            while !*exit_signal.read().await {
+                if let Err(e) = upgrade.check().await {
+                    warn!(log, "Check for upgrade failed: {}", e);
+                };
+                tokio::time::sleep(CHECK_INTERVAL_SECS).await;
+            }
+            info!(log, "Shut down the upgrade loop");
+            if let Err(e) = upgrade.stop_replica() {
+                warn!(log, "{}", e);
+            }
+            info!(log, "Shut down the replica process");
+        }
+
+        async fn ssh_key_and_firewall_rules_checks(
+            log: ReplicaLogger,
+            exit_signal: Arc<RwLock<bool>>,
+            mut ssh_access_manager: SshAccessManager,
+            mut firewall: Firewall,
+        ) {
+            while !*exit_signal.read().await {
+                // Check if new SSH keys need to be deployed
+                ssh_access_manager.check_for_keyset_changes().await;
+                // Check and update the firewall rules
+                firewall.check_and_update();
+                tokio::time::sleep(CHECK_INTERVAL_SECS).await;
+            }
+            info!(log, "Shut down the ssh keys & firewall monitoring loop");
+        }
+
+        if let Some(upgrade) = self.upgrade.take() {
+            info!(self.logger, "Spawning the upgrade loop");
+            self.task_handles.push(tokio::spawn(upgrade_checks(
+                self.logger.clone(),
+                Arc::clone(&self.exit_signal),
+                upgrade,
+            )));
+        }
+
+        if let (Some(ssh), Some(firewall)) = (self.ssh_access_manager.take(), self.firewall.take())
+        {
+            info!(
+                self.logger,
+                "Spawning the ssh-key and firewall rules check loop"
+            );
+            self.task_handles
+                .push(tokio::spawn(ssh_key_and_firewall_rules_checks(
+                    self.logger.clone(),
+                    Arc::clone(&self.exit_signal),
+                    ssh,
+                    firewall,
+                )));
+        }
     }
 
-    pub fn stop_replica(&mut self) {
-        // Stop checking for new releases.
-        self.release_package
-            .as_ref()
-            .store(false, std::sync::atomic::Ordering::Relaxed);
-        self.firewall
-            .as_ref()
-            .store(false, std::sync::atomic::Ordering::Relaxed);
-        self.ssh_access_manager
-            .as_ref()
-            .store(false, std::sync::atomic::Ordering::Relaxed);
-        let e = self.replica_process.clone().lock().unwrap().stop();
-        warn!(self.logger, "unable to stop replica: {:?}", e);
+    /// Shuts down the orchestrator: stops async tasks and the replica process
+    pub async fn shutdown(self) {
+        info!(self.logger, "Shutting down orchestrator...");
+        // Communicate to async tasks that the y should exit.
+        *self.exit_signal.write().await = true;
+        // Wait until tasks are done.
+        for handle in self.task_handles {
+            let _ = handle.await;
+        }
+        info!(self.logger, "Orchestrator shut down");
     }
 
-    /// Construct a `ReplicaLogger` and its `AsyncGuard`. If this `AsyncGuard`
-    /// is dropped, all asynchronously logged messages will no longer be
-    /// output.
+    // Construct a `ReplicaLogger` and its `AsyncGuard`. If this `AsyncGuard`
+    // is dropped, all asynchronously logged messages will no longer be
+    // output.
     fn get_logger(config: &Config) -> (ReplicaLogger, AsyncGuard) {
         let base_logger = LoggerImpl::new(&config.orchestrator_logger, "orchestrator".into());
         let logger = new_replica_logger(base_logger.root.clone(), &config.orchestrator_logger);
@@ -230,9 +284,9 @@ impl Orchestrator {
         (logger, base_logger.async_log_guard)
     }
 
-    /// Construct a `OrchestratorMetrics` and its `MetricsRuntimeImpl`. If this
-    /// `MetricsRuntimeImpl` is dropped, metrics will no longer be
-    /// collected.
+    // Construct a `OrchestratorMetrics` and its `MetricsRuntimeImpl`. If this
+    // `MetricsRuntimeImpl` is dropped, metrics will no longer be
+    // collected.
     fn get_metrics(
         metrics_addr: SocketAddr,
         logger: &slog::Logger,
