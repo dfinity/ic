@@ -1,22 +1,23 @@
 [Unit]
 Description=Journalbeat ships systemd journal entries to Elasticsearch or Logstash.
-Documentation=https://www.elastic.co/beats/journalbeat
+Documentation=https://www.elastic.co/products/beats/journalbeat
 Wants=network-online.target
 After=network-online.target
 # We must wait for IC bootstrap to complete: It writes various
 # state files and may also be needed to obtain network config.
 After=bootstrap-ic-node.service
 Wants=bootstrap-ic-node.service
+# Only start Journalbeat if configuration file exists
+ConditionPathExists=/boot/config/journalbeat.conf
 
 [Service]
 User=journalbeat
 Group=journalbeat
-Environment="GODEBUG='madvdontneed=1'"
-Environment="BEAT_LOG_OPTS="
+Environment="BEAT_LOG_OPTS=-e"
 Environment="BEAT_CONFIG_OPTS=-c /run/ic-node/etc/journalbeat/journalbeat.yml"
-Environment="BEAT_PATH_OPTS=--path.home /usr/share/journalbeat --path.config /run/ic-node/etc/journalbeat/journalbeat --path.data /var/lib/journalbeat --path.logs /var/log/journalbeat"
+Environment="BEAT_PATH_OPTS=-path.home /home/journalbeat -path.config /run/ic-node/etc/journalbeat/journalbeat -path.data /var/lib/journalbeat -path.logs /var/log/journalbeat"
 ExecStartPre=+/opt/ic/bin/generate-journalbeat-config.sh -j /boot/config/journalbeat.conf -i /etc/journalbeat/journalbeat.yml.template -o /run/ic-node/etc/journalbeat/journalbeat.yml
-ExecStart=/usr/local/bin/journalbeat --environment systemd $BEAT_LOG_OPTS $BEAT_CONFIG_OPTS $BEAT_PATH_OPTS
+ExecStart=/usr/local/bin/journalbeat $BEAT_LOG_OPTS $BEAT_CONFIG_OPTS $BEAT_PATH_OPTS
 Restart=always
 
 [Install]
