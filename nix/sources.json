@@ -86,12 +86,6 @@
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz",
         "version": "0.1.2"
     },
-    "common": {
-        "branch": "master",
-        "repo": "ssh://git@github.com/dfinity-lab/common",
-        "rev": "d865c0cfd64d765a8daf6a31c76dca21a5d4d203",
-        "type": "git"
-    },
     "dfx-x86_64-darwin": {
         "builtin": false,
         "name": "dfx",
@@ -187,6 +181,45 @@
         "rev": "43f3547ccbf7d48e5d25e1bf5222f11df8df2940",
         "tag": "0.5.10",
         "type": "git"
+    },
+    "naersk": {
+        "branch": "master",
+        "builtin": false,
+        "description": "Fast, flexible and eco-friendly Nix shipping of cargo crates since 2019",
+        "homepage": null,
+        "owner": "nmattia",
+        "repo": "naersk",
+        "rev": "df71f5e4babda41cd919a8684b72218e2e809fa9",
+        "sha256": "0k1pk2ixnxl6njjrgy750gm6m1nkkdsah383n3wp4ybrzacnav5h",
+        "type": "tarball",
+        "url": "https://github.com/nmattia/naersk/archive/df71f5e4babda41cd919a8684b72218e2e809fa9.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    },
+    "niv": {
+        "branch": "master",
+        "builtin": false,
+        "description": "Easy dependency management for Nix projects",
+        "homepage": "https://github.com/nmattia/niv",
+        "owner": "nmattia",
+        "repo": "niv",
+        "rev": "ba57d5a29b4e0f2085917010380ef3ddc3cf380f",
+        "sha256": "1kpsvc53x821cmjg1khvp1nz7906gczq8mp83664cr15h94sh8i4",
+        "type": "tarball",
+        "url": "https://github.com/nmattia/niv/archive/ba57d5a29b4e0f2085917010380ef3ddc3cf380f.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    },
+    "nixpkgs": {
+        "branch": "big-sur-backport",
+        "builtin": true,
+        "description": "Nixpkgs/NixOS branches that track the Nixpkgs/NixOS channels",
+        "homepage": null,
+        "owner": "dfinity-lab",
+        "repo": "nixpkgs",
+        "rev": "fff5699f89ee1bc7523855a55c8ea125885932f4",
+        "sha256": "0dj0yvl3az6j5z0ikwj9rqc5riwch4bfja4im0vz8inyjjb5a7y1",
+        "type": "tarball",
+        "url": "https://github.com/dfinity-lab/nixpkgs/archive/fff5699f89ee1bc7523855a55c8ea125885932f4.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
     "rosetta-cli-x86_64-darwin": {
         "builtin": false,
