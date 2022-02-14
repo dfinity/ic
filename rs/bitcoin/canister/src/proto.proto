@@ -12,7 +12,7 @@ enum Network {
 message State {
   uint32 height = 1;
   UtxoSet utxos = 2;
-  BlockForest unstable_blocks = 3;
+  UnstableBlocks unstable_blocks = 3;
 }
 
 message UtxoSet {
@@ -27,8 +27,8 @@ message Utxo {
   uint32 height = 3;
 }
 
-message BlockForest {
-  uint64 delta = 1;
+message UnstableBlocks {
+  uint64 stability_threshold = 1;
   BlockTree tree = 2;
 }
 

@@ -1,7 +1,5 @@
 use crate::{
-    blockforest::{BlockForest, BlockNotPartOfTreeError},
-    proto,
-    utxoset::UtxoSet,
+    blocktree::BlockDoesNotExtendTree, proto, unstable_blocks::UnstableBlocks, utxoset::UtxoSet,
 };
 use bitcoin::{Block, Network, OutPoint, TxOut, Txid};
 use lazy_static::lazy_static;
@@ -28,20 +26,20 @@ pub struct State {
     utxos: UtxoSet,
 
     // Blocks inserted, but are not considered stable yet.
-    unstable_blocks: BlockForest,
+    unstable_blocks: UnstableBlocks,
 }
 
 impl State {
     /// Create a new blockchain.
     ///
-    /// The `delta` parameter specifies how many confirmations a block needs before
-    /// it is considered stable. Stable blocks are assumed to be final and are never
-    /// removed.
-    pub fn new(delta: u64, network: Network, genesis_block: Block) -> Self {
+    /// The `stability_threshold` parameter specifies how many confirmations a
+    /// block needs before it is considered stable. Stable blocks are assumed
+    /// to be final and are never removed.
+    pub fn new(stability_threshold: u64, network: Network, genesis_block: Block) -> Self {
         Self {
             height: 0,
             utxos: UtxoSet::new(true, network),
-            unstable_blocks: BlockForest::new(delta, genesis_block),
+            unstable_blocks: UnstableBlocks::new(stability_threshold, genesis_block),
         }
     }
 
@@ -95,7 +93,7 @@ impl State {
 
     /// Insert a block into the blockchain.
     /// Returns an error if the block doesn't extend any known block in the state.
-    pub fn insert_block(&mut self, block: Block) -> Result<(), BlockNotPartOfTreeError> {
+    pub fn insert_block(&mut self, block: Block) -> Result<(), BlockDoesNotExtendTree> {
         // The block is first inserted into the unstable blocks.
         self.unstable_blocks.push(block)?;
 
@@ -136,7 +134,7 @@ impl State {
         Self {
             height: proto_state.height,
             utxos: UtxoSet::from_proto(proto_state.utxos.unwrap()),
-            unstable_blocks: BlockForest::from_proto(proto_state.unstable_blocks.unwrap()),
+            unstable_blocks: UnstableBlocks::from_proto(proto_state.unstable_blocks.unwrap()),
         }
     }
 }

@@ -1,7 +1,8 @@
 pub mod block;
-mod blockforest;
+mod blocktree;
 pub mod store;
 pub mod test_builder;
+mod unstable_blocks;
 mod utxoset;
 
 pub mod proto {
