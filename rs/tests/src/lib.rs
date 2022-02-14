@@ -1,3 +1,4 @@
+pub mod api;
 pub mod basic_health_test;
 pub mod cli;
 pub mod consensus;

@@ -10706,6 +10706,7 @@ dependencies = [
  "ic-nns-test-utils",
  "ic-prep",
  "ic-protobuf",
+ "ic-registry-client",
  "ic-registry-common",
  "ic-registry-keys",
  "ic-registry-provisional-whitelist",
