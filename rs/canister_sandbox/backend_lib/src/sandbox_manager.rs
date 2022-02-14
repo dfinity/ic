@@ -129,6 +129,7 @@ impl Execution {
             &mut stable_memory,
             &exec_input.globals,
             no_op_logger(),
+            exec_input.wasm_reserved_pages,
         );
 
         match wasm_result {
