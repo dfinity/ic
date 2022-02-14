@@ -1,8 +1,7 @@
 { pkgs ? import ../nix { inherit system; }
 , system ? builtins.currentSystem
 }:
-pkgs.mkCiShell {
-
+pkgs.mkShell {
   buildInputs = [
     pkgs.python3
     pkgs.rsync

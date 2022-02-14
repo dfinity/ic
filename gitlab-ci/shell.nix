@@ -29,7 +29,7 @@ let
   );
   python3-with-packages = pkgs.python3.withPackages python3-packages;
 in
-pkgs.mkCiShell {
+pkgs.mkShell {
   buildInputs = [
     pkgs.buf
     pkgs.binutils # Provides objcopy, used to strip symbols from binaries.

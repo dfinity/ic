@@ -21,11 +21,9 @@ let
     sha256 = "0a2rhxli7ss4wixppfwks0hy3zpazwm9l3y2v9krrnyiska3qfrw";
   };
 
-  pkgs = import (sources.common + "/pkgs") {
-    inherit system crossSystem config isMaster labels;
-    repoRoot = ../.;
-    extraSources = sources;
-    overlays = import ./overlays ++ overlays;
+  pkgs = import sources.nixpkgs {
+    inherit system crossSystem;
+    overlays = import ./overlays sources ++ overlays;
   };
 in
 pkgs

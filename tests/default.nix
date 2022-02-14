@@ -8,7 +8,7 @@
   ic-ref-test = import ./ic-ref-test { inherit pkgs rs; };
   ic-workloadgen-test = import ./ic-workloadgen-test { inherit pkgs verbose; };
 
-  shell = pkgs.mkCompositeShell {
+  shell = pkgs.mkShell {
     nativeBuildInputs = [
       pkgs.ic-ref
 

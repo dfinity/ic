@@ -1,5 +1,5 @@
 { pkgs ? import ../nix { inherit system; }, system ? builtins.currentSystem }:
-pkgs.mkCiShell {
+pkgs.mkShell {
   buildInputs = [
     (pkgs.python3.withPackages (ps: with ps; [ cbor GitPython paramiko requests pyyaml ansible ]))
     pkgs.ansible
