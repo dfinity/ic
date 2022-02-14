@@ -20,7 +20,7 @@ pre-commit:
         echo "(brew|pip) install pre-commit"
         echo "pre-commit install"
         echo
-        echo "b) for one-off runs it's enough to either use sorri or to enter the top-level nix-shell."
+        echo "b) for one-off runs it's enough to either use sorri or to enter the nix-shell in ic/gitlab-ci."
         echo
         echo "Then, to fix the checks in this branch, run:"
         echo "pre-commit run --from-ref=\$(git merge-base HEAD master) --to-ref=HEAD"
