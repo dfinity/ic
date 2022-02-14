@@ -47,6 +47,11 @@ struct SandboxedExecutionMetrics {
     sandboxed_execution_spawn_process: Histogram,
     sandboxed_execution_subprocess_anon_rss_total: IntGauge,
     sandboxed_execution_subprocess_memfd_rss_total: IntGauge,
+    sandboxed_execution_subprocess_anon_rss: Histogram,
+    sandboxed_execution_subprocess_memfd_rss: Histogram,
+    sandboxed_execution_subprocess_rss: Histogram,
+    sandboxed_execution_subprocess_active_last_used: Histogram,
+    sandboxed_execution_subprocess_evicted_last_used: Histogram,
 }
 
 impl SandboxedExecutionMetrics {
@@ -101,6 +106,31 @@ impl SandboxedExecutionMetrics {
             sandboxed_execution_subprocess_memfd_rss_total: metrics_registry.int_gauge(
                 "sandboxed_execution_subprocess_memfd_rss_total_kib",
                 "The resident shared memory for all canister sandbox processes in KiB"
+            ),
+            sandboxed_execution_subprocess_anon_rss: metrics_registry.histogram(
+                "sandboxed_execution_subprocess_anon_rss_kib",
+                "The resident anonymous memory for a canister sandbox process in KiB",
+                decimal_buckets_with_zero(1, 7), // 10KiB - 50GiB.
+            ),
+            sandboxed_execution_subprocess_memfd_rss: metrics_registry.histogram(
+                "sandboxed_execution_subprocess_memfd_rss_kib",
+                "The resident shared memory for a canister sandbox process in KiB",
+                decimal_buckets_with_zero(1, 7), // 10KiB - 50GiB.
+            ),
+            sandboxed_execution_subprocess_rss: metrics_registry.histogram(
+                "sandboxed_execution_subprocess_rss_kib",
+                "The resident memory of a canister sandbox process in KiB",
+                decimal_buckets_with_zero(1, 7), // 10KiB - 50GiB.
+            ),
+            sandboxed_execution_subprocess_active_last_used: metrics_registry.histogram(
+                "sandboxed_execution_subprocess_active_last_used_duration_seconds",
+                "Time since the last usage of an active sandbox process in seconds",
+                decimal_buckets_with_zero(-1, 4), // 0.1s - 13h.
+            ),
+            sandboxed_execution_subprocess_evicted_last_used: metrics_registry.histogram(
+                "sandboxed_execution_subprocess_evicted_last_used_duration_seconds",
+                "Time since the last usage of an evicted sandbox process in seconds",
+                decimal_buckets_with_zero(-1, 4), // 0.1s - 13h.
             ),
         }
     }
@@ -212,8 +242,19 @@ enum Backend {
     },
     Evicted {
         sandbox_process: Weak<SandboxProcess>,
+        last_used: std::time::Instant,
     },
     Empty,
+}
+
+enum SandboxProcessStatus {
+    Active,
+    Evicted,
+}
+
+struct SandboxProcessStats {
+    time_since_last_usage: std::time::Duration,
+    status: SandboxProcessStatus,
 }
 
 /// Manages sandboxed processes, forwards requests to the appropriate
@@ -273,17 +314,41 @@ impl SandboxedExecutionController {
 
             // For all processes requested, get their memory usage and report
             // it keyed by pid. Ignore processes failures to get
-            for sandbox_process in &sandbox_processes {
+            for (sandbox_process, stats) in &sandbox_processes {
                 let pid = sandbox_process.pid;
+                let mut process_rss = 0;
                 if let Ok(kib) = process_os_metrics::get_anon_rss(pid) {
                     total_anon_rss += kib;
+                    process_rss += kib;
+                    metrics
+                        .sandboxed_execution_subprocess_anon_rss
+                        .observe(kib as f64);
                 } else {
                     warn!(logger, "Unable to get anon RSS for pid {}", pid);
                 }
                 if let Ok(kib) = process_os_metrics::get_memfd_rss(pid) {
                     total_memfd_rss += kib;
+                    process_rss += kib;
+                    metrics
+                        .sandboxed_execution_subprocess_memfd_rss
+                        .observe(kib as f64);
                 } else {
                     warn!(logger, "Unable to get memfd RSS for pid {}", pid);
+                }
+                metrics
+                    .sandboxed_execution_subprocess_rss
+                    .observe(process_rss as f64);
+                match stats.status {
+                    SandboxProcessStatus::Active => {
+                        metrics
+                            .sandboxed_execution_subprocess_active_last_used
+                            .observe(stats.time_since_last_usage.as_secs_f64());
+                    }
+                    SandboxProcessStatus::Evicted => {
+                        metrics
+                            .sandboxed_execution_subprocess_evicted_last_used
+                            .observe(stats.time_since_last_usage.as_secs_f64());
+                    }
                 }
             }
 
@@ -313,12 +378,14 @@ impl SandboxedExecutionController {
                 Backend::Active {
                     sandbox_process, ..
                 } => Some(sandbox_process),
-                Backend::Evicted { sandbox_process } => sandbox_process.upgrade(),
+                Backend::Evicted {
+                    sandbox_process, ..
+                } => sandbox_process.upgrade(),
                 Backend::Empty => None,
             };
             if let Some(sandbox_process) = sandbox_process {
+                let now = std::time::Instant::now();
                 if SANDBOX_PROCESS_INACTIVE_TIME_BEFORE_EVICTION.as_secs() > 0 {
-                    let now = std::time::Instant::now();
                     *backend = Backend::Active {
                         sandbox_process: Arc::clone(&sandbox_process),
                         last_used: now,
@@ -326,6 +393,7 @@ impl SandboxedExecutionController {
                 } else {
                     *backend = Backend::Evicted {
                         sandbox_process: Arc::downgrade(&sandbox_process),
+                        last_used: now,
                     };
                 }
                 return sandbox_process;
@@ -706,7 +774,7 @@ fn panic_due_to_sandbox_exit(
 // Evicts inactive process and returns all processes that are still alive.
 fn scavenge_sandbox_processes(
     backends: &Arc<Mutex<HashMap<CanisterId, Backend>>>,
-) -> Vec<Arc<SandboxProcess>> {
+) -> Vec<(Arc<SandboxProcess>, SandboxProcessStats)> {
     let mut guard = backends.lock().unwrap();
     let now = std::time::Instant::now();
     let mut result = vec![];
@@ -717,25 +785,54 @@ fn scavenge_sandbox_processes(
                 sandbox_process,
                 last_used,
             } => {
-                result.push(Arc::clone(&sandbox_process));
                 let inactive_time = now
                     .checked_duration_since(last_used)
                     .unwrap_or_else(|| std::time::Duration::from_secs(0));
                 if inactive_time > SANDBOX_PROCESS_INACTIVE_TIME_BEFORE_EVICTION {
+                    result.push((
+                        Arc::clone(&sandbox_process),
+                        SandboxProcessStats {
+                            time_since_last_usage: inactive_time,
+                            status: SandboxProcessStatus::Evicted,
+                        },
+                    ));
                     Backend::Evicted {
                         sandbox_process: Arc::downgrade(&sandbox_process),
+                        last_used,
                     }
                 } else {
+                    result.push((
+                        Arc::clone(&sandbox_process),
+                        SandboxProcessStats {
+                            time_since_last_usage: inactive_time,
+                            status: SandboxProcessStatus::Active,
+                        },
+                    ));
                     Backend::Active {
                         sandbox_process,
                         last_used,
                     }
                 }
             }
-            Backend::Evicted { sandbox_process } => match sandbox_process.upgrade() {
+            Backend::Evicted {
+                sandbox_process,
+                last_used,
+            } => match sandbox_process.upgrade() {
                 Some(strong_reference) => {
-                    result.push(strong_reference);
-                    Backend::Evicted { sandbox_process }
+                    let inactive_time = now
+                        .checked_duration_since(last_used)
+                        .unwrap_or_else(|| std::time::Duration::from_secs(0));
+                    result.push((
+                        strong_reference,
+                        SandboxProcessStats {
+                            time_since_last_usage: inactive_time,
+                            status: SandboxProcessStatus::Evicted,
+                        },
+                    ));
+                    Backend::Evicted {
+                        sandbox_process,
+                        last_used,
+                    }
                 }
                 None => Backend::Empty,
             },
