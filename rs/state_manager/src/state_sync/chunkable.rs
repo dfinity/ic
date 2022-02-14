@@ -1,6 +1,7 @@
 use crate::{
     manifest::{filter_out_zero_chunks, DiffScript},
     CheckpointRef, StateSyncMetrics, StateSyncRefs, CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS,
+    LABEL_COPY_CHUNKS, LABEL_COPY_FILES, LABEL_FETCH, LABEL_PREALLOCATE,
 };
 use ic_logger::{debug, error, fatal, info, trace, warn, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
@@ -80,6 +81,30 @@ impl Drop for IncompleteState {
                 self.log,
                 "State sync refs does not contain incomplete state @{}.", self.height,
             );
+        }
+
+        // If state sync is aborted before completion we need to
+        // measure the total duration here
+        let elapsed = self.started_at.elapsed();
+        match &self.state {
+            DownloadState::Blank => {
+                self.metrics
+                    .state_sync_duration
+                    .with_label_values(&["aborted_blank"])
+                    .observe(elapsed.as_secs_f64());
+            }
+            DownloadState::Loading {
+                manifest: _,
+                fetch_chunks: _,
+            } => {
+                self.metrics
+                    .state_sync_duration
+                    .with_label_values(&["aborted"])
+                    .observe(elapsed.as_secs_f64());
+            }
+            DownloadState::Complete(_) => {
+                // state sync duration already recorded earlier in make_checkpoint
+            }
         }
 
         if let DownloadState::Loading {
@@ -207,6 +232,11 @@ impl IncompleteState {
         validate_data: bool,
         fetch_chunks: &mut HashSet<usize>,
     ) {
+        let _timer = metrics
+            .state_sync_step_duration
+            .with_label_values(&[LABEL_COPY_FILES])
+            .start_timer();
+
         info!(
             log,
             "state sync: copy_files for {} files {} validation",
@@ -279,8 +309,9 @@ impl IncompleteState {
                                         CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS,
                                         idx,
                                     );
-                                    metrics.state_sync_corrupted_chunks.inc();
+                                    metrics.state_sync_corrupted_chunks_critical.inc();
                                 }
+                                metrics.state_sync_corrupted_chunks.with_label_values(&[LABEL_COPY_FILES]).inc();
                                 continue;
                             }
 
@@ -310,8 +341,9 @@ impl IncompleteState {
                                         CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS,
                                         idx,
                                     );
-                                    metrics.state_sync_corrupted_chunks.inc();
+                                    metrics.state_sync_corrupted_chunks_critical.inc();
                                 }
+                                metrics.state_sync_corrupted_chunks.with_label_values(&[LABEL_COPY_FILES]).inc();
                             }
                         }
 
@@ -410,6 +442,11 @@ impl IncompleteState {
         validate_data: bool,
         fetch_chunks: &mut HashSet<usize>,
     ) {
+        let _timer = metrics
+            .state_sync_step_duration
+            .with_label_values(&[LABEL_COPY_CHUNKS])
+            .start_timer();
+
         info!(
             log,
             "state sync: copy_chunks for {} chunks {} validation",
@@ -512,8 +549,12 @@ impl IncompleteState {
                                         CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS,
                                         *src_chunk_index,
                                     );
-                                    metrics.state_sync_corrupted_chunks.inc();
+                                    metrics.state_sync_corrupted_chunks_critical.inc();
                                 }
+                                metrics
+                                    .state_sync_corrupted_chunks
+                                    .with_label_values(&[LABEL_COPY_CHUNKS])
+                                    .inc();
                                 continue;
                             }
                         }
@@ -677,12 +718,22 @@ impl IncompleteState {
     fn initialize_state_on_disk(&mut self, manifest_new: &Manifest) -> HashSet<usize> {
         Self::preallocate_layout(&self.log, &self.root, manifest_new);
 
-        let state_sync_size_fetch = self.metrics.state_sync_size.with_label_values(&["fetch"]);
-        let state_sync_size_copy = self.metrics.state_sync_size.with_label_values(&["copy"]);
+        let state_sync_size_fetch = self
+            .metrics
+            .state_sync_size
+            .with_label_values(&[LABEL_FETCH]);
+        let state_sync_size_copy_files = self
+            .metrics
+            .state_sync_size
+            .with_label_values(&[LABEL_COPY_FILES]);
+        let state_sync_size_copy_chunks = self
+            .metrics
+            .state_sync_size
+            .with_label_values(&[LABEL_COPY_CHUNKS]);
         let state_sync_size_preallocate = self
             .metrics
             .state_sync_size
-            .with_label_values(&["preallocate"]);
+            .with_label_values(&[LABEL_PREALLOCATE]);
         let total_bytes: u64 = manifest_new.file_table.iter().map(|f| f.size_bytes).sum();
 
         self.metrics
@@ -817,6 +868,33 @@ impl IncompleteState {
             // shifted by 1
             let mut fetch_chunks = diff_script.fetch_chunks.iter().map(|i| *i + 1).collect();
 
+            let diff_bytes: u64 = diff_script
+                .fetch_chunks
+                .iter()
+                .map(|i| manifest_new.chunk_table[*i].size_bytes as u64)
+                .sum();
+
+            let preallocate_bytes: u64 =
+                (diff_script.zeros_chunks * crate::manifest::DEFAULT_CHUNK_SIZE) as u64;
+
+            let copy_files_bytes: u64 = diff_script
+                .copy_files
+                .iter()
+                .map(|(i, _)| manifest_new.file_table[*i].size_bytes as u64)
+                .sum();
+
+            let copy_chunks_bytes: u64 =
+                total_bytes - diff_bytes - preallocate_bytes - copy_files_bytes;
+
+            state_sync_size_fetch.inc_by(diff_bytes);
+            state_sync_size_preallocate.inc_by(preallocate_bytes);
+            state_sync_size_copy_files.inc_by(copy_files_bytes);
+            state_sync_size_copy_chunks.inc_by(copy_chunks_bytes);
+
+            self.metrics
+                .state_sync_remaining
+                .sub(diff_script.zeros_chunks as i64);
+
             let mut thread_pool = self.thread_pool.lock().unwrap();
             Self::copy_files(
                 &self.log,
@@ -843,22 +921,6 @@ impl IncompleteState {
                 validate_data,
                 &mut fetch_chunks,
             );
-
-            let diff_bytes: u64 = diff_script
-                .fetch_chunks
-                .iter()
-                .map(|i| manifest_new.chunk_table[*i].size_bytes as u64)
-                .sum();
-
-            let preallocate_bytes = diff_script.zeros_chunks * crate::manifest::DEFAULT_CHUNK_SIZE;
-
-            state_sync_size_fetch.inc_by(diff_bytes);
-            state_sync_size_preallocate.inc_by(preallocate_bytes as u64);
-            state_sync_size_copy.inc_by(total_bytes - diff_bytes - preallocate_bytes as u64);
-
-            self.metrics
-                .state_sync_remaining
-                .sub(diff_script.zeros_chunks as i64);
 
             fetch_chunks
         } else {
@@ -1028,9 +1090,14 @@ impl Chunkable for IncompleteState {
                 let chunk_table_index = ix - 1;
 
                 let log = &self.log;
+                let metrics = &self.metrics;
                 crate::manifest::validate_chunk(chunk_table_index, payload, manifest).map_err(
                     |err| {
                         warn!(log, "Received invalid chunk: {}", err);
+                        metrics
+                            .state_sync_corrupted_chunks
+                            .with_label_values(&[LABEL_FETCH])
+                            .inc();
                         ChunkVerificationFailed
                     },
                 )?;
