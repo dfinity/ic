@@ -33,7 +33,7 @@ docker-build-ic-img:
       echo "Pipeline source: ${CI_PIPELINE_SOURCE}"
       VERSION=$("${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/find-build-id.sh)
       export VERSION
-      capsule --passive -v -t "${VERSION}" -o artifacts/docker-build-ic/icos/update-img.tar.gz -- \
+      capsule -v -t "${VERSION}" -o artifacts/docker-build-ic/icos/update-img.tar.gz -- \
       gitlab-ci/tools/docker-build-ic -a=i
       # we only collect artifacts/docker-build-ic/icos
       rm -rf artifacts/docker-build-ic/{canisters,release}

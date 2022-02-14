@@ -20,9 +20,9 @@ end::catalog[]
 DOC
 
 if (($# < 4)); then
-    echo >&2 "Usage: guest-os-e2e-upgrade.sh <ci_project_dir> <subnet> <downgrade> <request_type>\n
-    Example #1: guest-os-e2e-upgrade.sh \"/builds/git/JgGsR4vA/4/dfinity-lab/public/ic\" nns false query
-    Example #2: guest-ose-e2e-upgrade.sh \"/builds/git/JgGsR4vA/4/dfinity-lab/public/ic\" app true update"
+    echo >&2 "Usage: guest-os-e2e-upgrade.sh <ci_project_dir> <subnet> <downgrade> <request_type> <mainnet_revision>\n
+    Example #1: guest-os-e2e-upgrade.sh \"/builds/git/JgGsR4vA/4/dfinity-lab/public/ic\" nns false query <rev>
+    Example #2: guest-ose-e2e-upgrade.sh \"/builds/git/JgGsR4vA/4/dfinity-lab/public/ic\" app true update <rev>"
     exit 1
 fi
 
@@ -30,6 +30,7 @@ ci_project_dir="$1"
 subnet="$2"
 downgrade="$3"
 request_type="$4"
+revision="$5"
 
 # Make sure the host has mounted necessary devices into the docker container.
 # And check dependencies.
@@ -39,15 +40,13 @@ mkdir -p gitlab-runner-tmp
 cd gitlab-runner-tmp
 
 ls "${ci_project_dir}/artifacts/canisters"
-for canister in "${ci_project_dir}"/artifacts/canisters/*.gz; do
-    gzip -d "${canister}"
+for canister in registry-canister governance-canister governance-canister_test ledger-canister_notify-method root-canister cycles-minting-canister lifeline genesis-token-canister identity-canister nns-ui-canister; do
+    gunzip -c "${ci_project_dir}/artifacts/canisters/${canister}.wasm.gz" >"${canister}.wasm"
 done
-ls "${ci_project_dir}/artifacts/canisters"
 
-for f in ic-prep ic-admin ic-nns-init ic-workload-generator; do
-    gzip -d "${ci_project_dir}/artifacts/release/$f.gz"
-    chmod u+x "${ci_project_dir}/artifacts/release/$f"
-    ln -sf "${ci_project_dir}/artifacts/release/$f" "$f"
+for tool in ic-prep ic-admin ic-nns-init ic-workload-generator; do
+    gunzip -c "${ci_project_dir}/artifacts/release/$tool.gz" >"${tool}"
+    chmod u+x "${tool}"
 done
 
 if [[ $downgrade = "true" ]]; then
@@ -56,36 +55,6 @@ if [[ $downgrade = "true" ]]; then
 else
     local_image_name="update-img"
     remote_image_name="disk-img"
-fi
-
-# Find replica revision of the subnet from mainnet
-mainnet_nns="https://ic0.app/"
-nns_subnet_id="tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
-if [[ $subnet == "app" ]]; then
-    # Find oldest app subnet revision
-    max_distance=-1
-    revision=""
-    subnets=$(
-        "$(pwd)"/ic-admin --nns-url "$mainnet_nns" get-subnet-list | jq -r '.[]'
-    )
-    for sn in $subnets; do
-        if [[ $sn == $nns_subnet_id ]]; then
-            # Skip NNS subnet when retrieving oldest revision from app subnets
-            continue
-        fi
-        sn_revision=$("$(pwd)"/ic-admin --nns-url "$mainnet_nns" get-subnet "$sn" | jq '.records[0].value.replica_version_id' | xargs)
-        depth=$(($(git rev-list --count "$sn_revision"..HEAD) - 1))
-
-        if ((depth > max_depth)); then
-            max_depth=$depth
-            revision=$sn_revision
-        fi
-    done
-    echo "Mainnet subnet $sn has oldest revision $revision with depth of $depth."
-else
-    # Find oldest NNS subnet revision
-    revision=$("$(pwd)"/ic-admin --nns-url "$mainnet_nns" get-subnet $nns_subnet_id | jq '.records[0].value.replica_version_id' | xargs)
-    echo "NNS subnet on mainnet has revision $revision"
 fi
 
 # Download Guest OS images matching mainnet revision
@@ -106,19 +75,27 @@ ls "guestos-$subnet-subnet"
 ls -R "guestos-$subnet-subnet"
 
 # Get tools and NNS canisters of mainnet subnet
-mkdir -p "artifacts-$subnet-subnet"
-mkdir -p "canisters-$subnet-subnet"
-"${ci_project_dir}"/gitlab-ci/src/artifacts/rclone_download.py --git-rev="$revision" --remote-path=release --out="artifacts-$subnet-subnet" --latest-to
-"${ci_project_dir}"/gitlab-ci/src/artifacts/rclone_download.py --git-rev="$revision" --remote-path=canisters --out="canisters-$subnet-subnet" --latest-to
-
+tmp_dir=$(mktemp -d)
+artifacts_tmp="${tmp_dir}/artifacts-$subnet-subnet"
+mkdir -p "${artifacts_tmp}"
+canisters_tmp="${tmp_dir}/canisters-$subnet-subnet"
+mkdir -p "${canisters_tmp}"
+"${ci_project_dir}"/gitlab-ci/src/artifacts/rclone_download.py --git-rev="$revision" --remote-path=release --out="${artifacts_tmp}"
+"${ci_project_dir}"/gitlab-ci/src/artifacts/rclone_download.py --git-rev="$revision" --remote-path=canisters --out="${canisters_tmp}" --latest-to
 (
+    mkdir "artifacts-$subnet-subnet"
     cd "artifacts-$subnet-subnet"
-    for f in *.gz; do gunzip "$f"; done
-    chmod u+x ./*
+    for tool in ic-prep ic-admin ic-nns-init ic-workload-generator; do
+        gunzip -c "${artifacts_tmp}/${tool}.gz" >"${tool}"
+        chmod +x "${tool}"
+    done
 )
 (
+    mkdir "canisters-$subnet-subnet"
     cd "canisters-$subnet-subnet"
-    for f in *.gz; do gunzip "$f"; done
+    for canister in registry-canister governance-canister governance-canister_test ledger-canister_notify-method root-canister cycles-minting-canister lifeline genesis-token-canister identity-canister nns-ui-canister; do
+        gunzip -c "${canisters_tmp}/${canister}.wasm.gz" >"${canister}.wasm"
+    done
 )
 ls -R "artifacts-$subnet-subnet"
 ls -R "canisters-$subnet-subnet"
@@ -176,15 +153,14 @@ else
 fi
 
 # Actual test script, sets up VMs and drives the test.
-capsule -v -i "../ic-os/guestos/tests/*.py" -i "**/*" -i "../artifacts/canisters/*" -t "${UPGRADE_IMG_TAG}" -- \
-    "${ci_project_dir}/ic-os/guestos/tests/${upgrade_script}" \
+"${ci_project_dir}/ic-os/guestos/tests/${upgrade_script}" \
     --vmtoolscfg=internal \
     --disk_image "${GUESTOS_IMG}" \
     --ic_prep_bin "$(pwd)/ic-prep" \
     --install_nns_bin "$(pwd)/ic-nns-init" \
     --upgrade_tar "${UPGRADE_IMG}" \
     --ic_admin_bin "$(pwd)/ic-admin" \
-    --nns_canisters "${ci_project_dir}/artifacts/canisters/" \
+    --nns_canisters "$(pwd)" \
     --log_directory "${ci_project_dir}/ic-os/guestos/test-out/$out_dir" \
     --timeout "$E2E_TEST_TIMEOUT" \
     --ic_workload_generator_bin "$(pwd)/ic-workload-generator" \

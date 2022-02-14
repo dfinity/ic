@@ -154,7 +154,7 @@ e2e-scalability-suite-test:
           --log_directory "${CI_PROJECT_DIR}/ic-os/guestos/test-out/e2e-scalability-suite-test"
 
 
-guest-os-upgrade-from-mainnet-app-subnet-to-new-version-update-workload:
+.guest-os-upgrade-downgrade-test:
   extends:
     - .e2e-test-base
   needs:
@@ -165,123 +165,108 @@ guest-os-upgrade-from-mainnet-app-subnet-to-new-version-update-workload:
   artifacts:
     paths:
     - ic-os/guestos/test-out/e2e-upgrade-from-mainnet-app-subnet-to-new-version-update-workload
+  variables:
+    TEST_SUBNET: ""
+    DOWNGRADE: ""
+    REQUEST_TYPE: ""
   script:
     - |
+      mkdir -p test-tools-tmp
+      IC_ADMIN="test-tools-tmp/ic-admin"
+      gunzip -c "artifacts/release/ic-admin.gz" > "${IC_ADMIN}"
+      chmod +x "${IC_ADMIN}"
+
+      # sets the variable $revision
+      # shellcheck source=/dev/null
+      source ic-os/guestos/tests/mainnet-revision.sh
+      # shellcheck disable=SC2154
       $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" \
-      "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "app" "false" "update"
+      capsule -v \
+         -i "ic-os/guestos/tests/*" \
+         -i "ic-os/guestos/scripts/*" \
+         -i "ic-os/guestos/build-out/disk-img/SHA256SUMS" \
+         -i "ic-os/guestos/build-out/update-img/SHA256SUMS" \
+         -i "artifacts/canisters/registry-canister.wasm.gz" \
+         -i "artifacts/canisters/governance-canister.wasm.gz" \
+         -i "artifacts/canisters/governance-canister_test.wasm.gz" \
+         -i "artifacts/canisters/ledger-canister_notify-method.wasm.gz" \
+         -i "artifacts/canisters/root-canister.wasm.gz" \
+         -i "artifacts/canisters/cycles-minting-canister.wasm.gz" \
+         -i "artifacts/canisters/lifeline.wasm.gz" \
+         -i "artifacts/canisters/genesis-token-canister.wasm.gz" \
+         -i "artifacts/canisters/identity-canister.wasm.gz" \
+         -i "artifacts/canisters/nns-ui-canister.wasm.gz" \
+         -i "artifacts/release/ic-prep.gz" \
+         -i "artifacts/release/ic-admin.gz" \
+         -i "artifacts/release/ic-nns-init.gz" \
+         -i "artifacts/release/ic-workload-generator.gz" \
+         -t "mainnet-${revision}" -- \
+      "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "$TEST_SUBNET" "$DOWNGRADE" "$REQUEST_TYPE" "$revision"
+
+guest-os-upgrade-from-mainnet-app-subnet-to-new-version-update-workload:
+  extends:
+    .guest-os-upgrade-downgrade-test
+  variables:
+    TEST_SUBNET: "app"
+    DOWNGRADE: "false"
+    REQUEST_TYPE: "update"
 
 guest-os-downgrade-from-new-version-to-mainnet-app-subnet-update-workload:
   extends:
-    - .e2e-test-base
-  needs:
-    - guest-os-diskimg
-    - guest-os-updateimg-build
-    - cargo-build-release-linux-native
-    - cargo-build-canisters
-  artifacts:
-    paths:
-    - ic-os/guestos/test-out/e2e-downgrade-from-new-version-to-mainnet-app-subnet-update-workload
-  script:
-    - |
-      $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" \
-      "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "app" "true" "update"
+    .guest-os-upgrade-downgrade-test
+  variables:
+    TEST_SUBNET: "app"
+    DOWNGRADE: "true"
+    REQUEST_TYPE: "update"
 
 guest-os-upgrade-from-mainnet-nns-subnet-to-new-version-update-workload:
   extends:
-    - .e2e-test-base
-  needs:
-    - guest-os-diskimg
-    - guest-os-updateimg-build
-    - cargo-build-release-linux-native
-    - cargo-build-canisters
-  artifacts:
-    paths:
-    - ic-os/guestos/test-out/e2e-upgrade-from-mainnet-nns-subnet-to-new-version-update-workload
-  script:
-    - |
-      $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" \
-      "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "nns" "false" "update"
+    .guest-os-upgrade-downgrade-test
+  variables:
+    TEST_SUBNET: "nns"
+    DOWNGRADE: "false"
+    REQUEST_TYPE: "update"
 
 guest-os-downgrade-from-new-version-to-mainnet-nns-subnet-update-workload:
   extends:
-    - .e2e-test-base
-  needs:
-    - guest-os-diskimg
-    - guest-os-updateimg-build
-    - cargo-build-release-linux-native
-    - cargo-build-canisters
-  artifacts:
-    paths:
-    - ic-os/guestos/test-out/e2e-downgrade-from-new-version-to-mainnet-nns-subnet-update-workload
-  script:
-    - |
-      $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" \
-      "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "nns" "true" "update"
+    .guest-os-upgrade-downgrade-test
+  variables:
+    TEST_SUBNET: "nns"
+    DOWNGRADE: "true"
+    REQUEST_TYPE: "update"
 
 guest-os-upgrade-from-mainnet-app-subnet-to-new-version-query-workload:
   extends:
-    - .e2e-test-base
-  needs:
-    - guest-os-diskimg
-    - guest-os-updateimg-build
-    - cargo-build-release-linux-native
-    - cargo-build-canisters
-  artifacts:
-    paths:
-    - ic-os/guestos/test-out/e2e-upgrade-from-mainnet-app-subnet-to-new-version-query-workload
-  script:
-    - |
-      $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" \
-      "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "app" "false" "query"
+    .guest-os-upgrade-downgrade-test
+  variables:
+    TEST_SUBNET: "app"
+    DOWNGRADE: "false"
+    REQUEST_TYPE: "query"
 
 guest-os-downgrade-from-new-version-to-mainnet-app-subnet-query-workload:
   extends:
-    - .e2e-test-base
-  needs:
-    - guest-os-diskimg
-    - guest-os-updateimg-build
-    - cargo-build-release-linux-native
-    - cargo-build-canisters
-  artifacts:
-    paths:
-    - ic-os/guestos/test-out/e2e-downgrade-from-new-version-to-mainnet-app-subnet-query-workload
-  script:
-    - |
-      $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" \
-      "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "app" "true" "query"
+    .guest-os-upgrade-downgrade-test
+  variables:
+    TEST_SUBNET: "app"
+    DOWNGRADE: "true"
+    REQUEST_TYPE: "query"
 
 guest-os-upgrade-from-mainnet-nns-subnet-to-new-version-query-workload:
   extends:
-    - .e2e-test-base
-  needs:
-    - guest-os-diskimg
-    - guest-os-updateimg-build
-    - cargo-build-release-linux-native
-    - cargo-build-canisters
-  artifacts:
-    paths:
-    - ic-os/guestos/test-out/e2e-upgrade-from-mainnet-nns-subnet-to-new-version-query-workload
-  script:
-    - |
-      $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" \
-      "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "nns" "false" "query"
-
+    .guest-os-upgrade-downgrade-test
+  variables:
+    TEST_SUBNET: "nns"
+    DOWNGRADE: "false"
+    REQUEST_TYPE: "query"
 
 guest-os-downgrade-from-new-version-to-mainnet-nns-subnet-query-workload:
   extends:
-    - .e2e-test-base
-  needs:
-    - guest-os-diskimg
-    - guest-os-updateimg-build
-    - cargo-build-release-linux-native
-    - cargo-build-canisters
-  artifacts:
-    paths:
-    - ic-os/guestos/test-out/e2e-downgrade-from-new-version-to-mainnet-nns-subnet-query-workload
-  script:
-    - |
-      $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" \
-      "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "nns" "true" "query"
+    .guest-os-upgrade-downgrade-test
+  variables:
+    TEST_SUBNET: "nns"
+    DOWNGRADE: "true"
+    REQUEST_TYPE: "query"
+
 
 .run-farm-based-test: &run-farm-based-test |
   export FARM_BASED="true"
