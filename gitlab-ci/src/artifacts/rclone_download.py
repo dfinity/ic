@@ -299,11 +299,7 @@ def main() -> None:
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose mode")
 
     args = parser.parse_args()
-
-    if args.verbose:
-        logging.basicConfig(level=logging.DEBUG)
-    else:
-        logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
 
     ra = RcloneDownload(
         args.config,

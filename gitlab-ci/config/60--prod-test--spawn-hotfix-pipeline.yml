@@ -4,7 +4,7 @@ prod-hotfix-pipeline:
   inherit:
     variables: [PARENT_PIPELINE_ID]
   stage: prod-tests
-  needs: ["generic-guest-os-diskimg", "guest-os-diskimg", "guest-os-updateimg-build"]
+  needs: ["artifacts-upload-to-s3"]
   variables:
     CD_ENV: "HOTFIX"
     TESTNET1: "cdhotfix01"
