@@ -71,7 +71,7 @@ use std::{
 use tempfile::NamedTempFile;
 use tokio::{
     net::{TcpListener, TcpStream},
-    time::{timeout, Instant},
+    time::{sleep, timeout, Instant},
 };
 use tower::{
     load_shed::LoadShed, service_fn, util::BoxService, BoxError, Service, ServiceBuilder,
@@ -167,8 +167,9 @@ fn start_server_initialization(
     log: ReplicaLogger,
     delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
     health_status: Arc<RwLock<ReplicaHealthStatus>>,
+    rt_handle: tokio::runtime::Handle,
 ) {
-    tokio::task::spawn_blocking(move || {
+    rt_handle.spawn(async move {
         info!(log, "Initializing HTTP server...");
         let mut check_count: i32 = 0;
         // Sleep one second between retries, only log every 10th round.
@@ -179,13 +180,13 @@ fn start_server_initialization(
             if check_count % 10 == 0 {
                 info!(log, "Certified state is not yet available...");
             }
-            std::thread::sleep(Duration::from_secs(1));
+            sleep(Duration::from_secs(1)).await;
         }
         info!(log, "Certified state is now available.");
         // Fetch the delegation from the NNS for this subnet to be
         // able to issue certificates.
         *health_status.write().unwrap() = ReplicaHealthStatus::WaitingForRootDelegation;
-        match load_root_delegation(state_reader.as_ref(), subnet_id, nns_subnet_id, &log) {
+        match load_root_delegation(state_reader.as_ref(), subnet_id, nns_subnet_id, &log).await {
             Err(err) => {
                 error!(log, "Could not load nns delegation: {}", err);
             }
@@ -264,6 +265,7 @@ pub async fn start_server(
     backup_spool_path: Option<PathBuf>,
     subnet_type: SubnetType,
     malicious_flags: MaliciousFlags,
+    rt_handle: tokio::runtime::Handle,
 ) -> Result<(), Error> {
     let metrics = HttpHandlerMetrics::new(&metrics_registry);
 
@@ -314,6 +316,7 @@ pub async fn start_server(
         http_handler.log.clone(),
         Arc::clone(&http_handler.delegation_from_nns),
         Arc::clone(&http_handler.health_status),
+        rt_handle,
     );
 
     let outstanding_connections =
@@ -728,7 +731,7 @@ async fn make_router(
 
 // Fetches a delegation from the NNS subnet to allow this subnet to issue
 // certificates on its behalf. On the NNS subnet this method is a no-op.
-fn load_root_delegation(
+async fn load_root_delegation(
     state_reader: &dyn StateReader<State = ReplicatedState>,
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
@@ -743,10 +746,9 @@ fn load_root_delegation(
     for _ in 0..MAX_FETCH_DELEGATION_ATTEMPTS {
         info!(log, "Fetching delegation from the nns subnet...");
 
-        fn log_err_and_backoff(log: &ReplicaLogger, err: impl std::fmt::Display) {
+        async fn log_err_and_backoff(log: &ReplicaLogger, err: impl std::fmt::Display) {
             // Fetching the NNS delegation failed. Do a random backoff and try again.
-            let mut rng = rand::thread_rng();
-            let backoff = Duration::from_secs(rng.gen_range(1..15));
+            let backoff = Duration::from_secs(rand::thread_rng().gen_range(1..15));
             warn!(
                 log,
                 "Fetching delegation from nns subnet failed. Retrying again in {} seconds...\n\
@@ -754,7 +756,7 @@ fn load_root_delegation(
                 backoff.as_secs(),
                 err
             );
-            std::thread::sleep(backoff);
+            sleep(backoff).await
         }
 
         let node = match get_random_node_from_nns_subnet(state_reader, nns_subnet_id) {
@@ -813,7 +815,7 @@ fn load_root_delegation(
         {
             Ok(res) => res.bytes(),
             Err(err) => {
-                log_err_and_backoff(log, &err);
+                log_err_and_backoff(log, &err).await;
                 continue;
             }
         };
@@ -825,7 +827,7 @@ fn load_root_delegation(
                 let response: HttpReadStateResponse = match serde_cbor::from_slice(&raw_response) {
                     Ok(r) => r,
                     Err(e) => {
-                        log_err_and_backoff(log, &e);
+                        log_err_and_backoff(log, &e).await;
                         continue;
                     }
                 };
@@ -837,7 +839,8 @@ fn load_root_delegation(
                             log_err_and_backoff(
                                 log,
                                 &format!("failed to parse delegation certificate: {}", e),
-                            );
+                            )
+                            .await;
                             continue;
                         }
                     };
@@ -848,7 +851,8 @@ fn load_root_delegation(
                         log_err_and_backoff(
                             log,
                             &format!("invalid hash tree in the delegation certificate: {:?}", e),
-                        );
+                        )
+                        .await;
                         continue;
                     }
                 };
@@ -862,7 +866,8 @@ fn load_root_delegation(
                     log_err_and_backoff(
                         log,
                         &format!("delegation does not contain current subnet {}", subnet_id),
-                    );
+                    )
+                    .await;
                     continue;
                 }
 
@@ -876,7 +881,7 @@ fn load_root_delegation(
             }
             Err(err) => {
                 // Fetching the NNS delegation failed. Do a random backoff and try again.
-                log_err_and_backoff(log, &err);
+                log_err_and_backoff(log, &err).await;
             }
         }
     }

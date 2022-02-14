@@ -324,6 +324,7 @@ async fn run() -> io::Result<()> {
         config.artifact_pool.backup.map(|config| config.spool_path),
         subnet_type,
         malicious_behaviour.malicious_flags.clone(),
+        tokio::runtime::Handle::current(),
     ));
 
     tokio::time::sleep(Duration::from_millis(5000)).await;
