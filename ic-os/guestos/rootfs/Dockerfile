@@ -23,8 +23,8 @@ RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommend
 
 # Download and verify journalbeat
 RUN cd /tmp/ && \
-    curl -L -O https://artifacts.elastic.co/downloads/beats/journalbeat/journalbeat-oss-7.14.0-linux-x86_64.tar.gz && \
-    echo "3c97e8706bd0d2e30678beee7537b6fe6807cf858a0dd2e7cfce5beccb621eb0fefe6871027bc7b55e2ea98d7fe2ca03d4d92a7b264abbb0d6d54ecfa6f6a305  journalbeat-oss-7.14.0-linux-x86_64.tar.gz" > journalbeat.sha512 && \
+    curl -L -O https://artifacts.elastic.co/downloads/beats/journalbeat/journalbeat-oss-7.5.1-linux-x86_64.tar.gz && \
+    echo "b1c4c12a5ea8b0e95ed78243ad08dc6e82dc414186da8324d86833c5114846c6edf06590b45cf6c0f29f57e4631c4bf4163e0020d466cf3a2cb65910540f39c5  journalbeat-oss-7.5.1-linux-x86_64.tar.gz" > journalbeat.sha512 && \
     shasum -c journalbeat.sha512
 
 # Download and verify node_exporter
@@ -182,14 +182,14 @@ RUN addgroup node_exporter && \
     adduser node_exporter node_exporter
 
 # Install journalbeat
-COPY --from=download /tmp/journalbeat-oss-7.14.0-linux-x86_64.tar.gz /tmp/journalbeat-oss-7.14.0-linux-x86_64.tar.gz
+COPY --from=download /tmp/journalbeat-oss-7.5.1-linux-x86_64.tar.gz /tmp/journalbeat-oss-7.5.1-linux-x86_64.tar.gz
 RUN cd /tmp/ && \
     mkdir -p /etc/journalbeat \
              /var/lib/journalbeat \
              /var/log/journalbeat && \
-    tar --strip-components=1 -C /etc/journalbeat/ -zvxf journalbeat-oss-7.14.0-linux-x86_64.tar.gz journalbeat-7.14.0-linux-x86_64/fields.yml && \
-    tar --strip-components=1 -C /etc/journalbeat/ -zvxf journalbeat-oss-7.14.0-linux-x86_64.tar.gz journalbeat-7.14.0-linux-x86_64/journalbeat.reference.yml && \
-    tar --strip-components=1 -C /usr/local/bin/ -zvxf journalbeat-oss-7.14.0-linux-x86_64.tar.gz journalbeat-7.14.0-linux-x86_64/journalbeat && \
+    tar --strip-components=1 -C /etc/journalbeat/ -zvxf journalbeat-oss-7.5.1-linux-x86_64.tar.gz journalbeat-7.5.1-linux-x86_64/fields.yml && \
+    tar --strip-components=1 -C /etc/journalbeat/ -zvxf journalbeat-oss-7.5.1-linux-x86_64.tar.gz journalbeat-7.5.1-linux-x86_64/journalbeat.reference.yml && \
+    tar --strip-components=1 -C /usr/local/bin/ -zvxf journalbeat-oss-7.5.1-linux-x86_64.tar.gz journalbeat-7.5.1-linux-x86_64/journalbeat && \
     chown root:root /etc/journalbeat/*.yml \
                     /usr/local/bin/journalbeat && \
     chown journalbeat:journalbeat /var/lib/journalbeat \
@@ -198,7 +198,7 @@ RUN cd /tmp/ && \
     chmod 0750 /var/lib/journalbeat \
                /var/log/journalbeat && \
     chmod 0644 /etc/journalbeat/*.yml && \
-    rm /tmp/journalbeat-oss-7.14.0-linux-x86_64.tar.gz
+    rm /tmp/journalbeat-oss-7.5.1-linux-x86_64.tar.gz
 
 # Install node_exporter
 COPY --from=download /tmp/node_exporter-1.3.1.linux-amd64.tar.gz /tmp/node_exporter-1.3.1.linux-amd64.tar.gz
