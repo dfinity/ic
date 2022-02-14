@@ -199,6 +199,7 @@ mod tests {
             next_wasm_memory_id,
             next_stable_memory_id,
             sandox_safe_system_state: sandbox_safe_system_state(),
+            wasm_reserved_pages: NumWasmPages::from(0),
         }
     }
 
@@ -221,6 +222,7 @@ mod tests {
             next_wasm_memory_id: MemoryId::new(),
             next_stable_memory_id: MemoryId::new(),
             sandox_safe_system_state: sandbox_safe_system_state(),
+            wasm_reserved_pages: NumWasmPages::from(0),
         }
     }
 
