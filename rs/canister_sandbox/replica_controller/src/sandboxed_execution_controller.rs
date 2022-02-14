@@ -6,7 +6,7 @@ use ic_canister_sandbox_common::sandbox_service::SandboxService;
 use ic_embedders::wasm_executor::get_wasm_reserved_pages;
 use ic_embedders::{WasmExecutionInput, WasmExecutionOutput};
 use ic_interfaces::execution_environment::{HypervisorResult, InstanceStats};
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::canister_state::execution_state::{
@@ -17,7 +17,7 @@ use ic_system_api::sandbox_safe_system_state::SystemStateChanges;
 use ic_types::{CanisterId, NumInstructions};
 use ic_wasm_types::BinaryEncodedWasm;
 use prometheus::{Histogram, HistogramVec, IntGauge};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::convert::TryInto;
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
@@ -137,6 +137,43 @@ impl SandboxedExecutionMetrics {
     }
 }
 
+/// Keeps history of the N most recent calls made to the sandbox backend
+/// process. It will normally not be logged, but in case of an
+/// unexpected sandbox process crash we can replay and log the history
+/// to get a better idea of what led to this situation.
+/// This is purely a debugging aid. Nothing functionally depends on it.
+struct SandboxProcessRequestHistory {
+    entries: Mutex<VecDeque<String>>,
+    limit: usize,
+}
+
+impl SandboxProcessRequestHistory {
+    fn new() -> Self {
+        Self {
+            entries: Default::default(),
+            limit: 20,
+        }
+    }
+
+    /// Records an entry of an action performed on a sandbox process.
+    fn record(&self, msg: String) {
+        let mut guard = self.entries.lock().unwrap();
+        guard.push_back(msg);
+        if guard.len() > self.limit {
+            guard.pop_front();
+        }
+    }
+
+    /// Replays the last actions recorded for this sandbox process to
+    /// the given logger.
+    fn replay(&self, logger: &ReplicaLogger, pid: u32) {
+        let guard = self.entries.lock().unwrap();
+        for entry in &*guard {
+            error!(logger, "History for {}: {}", pid, entry);
+        }
+    }
+}
+
 pub struct SandboxProcess {
     /// Registry for all executions that are currently running on
     /// this backend process.
@@ -147,10 +184,15 @@ pub struct SandboxProcess {
 
     /// Process id of the backend process.
     pid: u32,
+
+    /// History of operations sent to sandbox process (for crash
+    /// diagnostics).
+    history: SandboxProcessRequestHistory,
 }
 
 impl Drop for SandboxProcess {
     fn drop(&mut self) {
+        self.history.record("Terminate()".to_string());
         self.sandbox_service
             .terminate(protocol::sbxsvc::TerminateRequest {})
             .on_completion(|_| {});
@@ -178,6 +220,9 @@ impl OpenedWasm {
 impl Drop for OpenedWasm {
     fn drop(&mut self) {
         if let Some(sandbox_process) = self.sandbox_process.upgrade() {
+            sandbox_process
+                .history
+                .record(format!("CloseWasm(wasm_id={})", self.wasm_id));
             sandbox_process
                 .sandbox_service
                 .close_wasm(protocol::sbxsvc::CloseWasmRequest {
@@ -219,6 +264,9 @@ impl SandboxMemoryOwner for OpenedMemory {
 
 impl Drop for OpenedMemory {
     fn drop(&mut self) {
+        self.sandbox_process
+            .history
+            .record(format!("CloseMemory(memory_id={})", self.memory_id));
         self.sandbox_process
             .sandbox_service
             .close_memory(protocol::sbxsvc::CloseMemoryRequest {
@@ -417,6 +465,7 @@ impl SandboxedExecutionController {
             execution_states: reg,
             sandbox_service,
             pid: child_handle.id(),
+            history: SandboxProcessRequestHistory::new(),
         });
 
         let now = std::time::Instant::now();
@@ -440,12 +489,14 @@ impl SandboxedExecutionController {
         sandbox_process: Weak<SandboxProcess>,
     ) {
         // We spawn a thread to wait for the exit notification of a sandbox process
+        let logger = self.logger.clone();
         thread::spawn(move || {
             let pid = child_handle.id();
             let output = child_handle.wait().unwrap();
-            if sandbox_process.upgrade().is_some() {
+            if let Some(sandbox_process) = sandbox_process.upgrade() {
                 // The object tracking the sandbox process is still alive,
                 // so the process exit was unexpected.
+                sandbox_process.history.replay(&logger, pid);
                 panic_due_to_sandbox_exit(output.code(), output.signal(), canister_id, pid);
             }
         });
@@ -510,10 +561,16 @@ impl SandboxedExecutionController {
         // Generate an ID for this execution, register it. We need to
         // pass the system state accessor as well as the completion
         // function that gets our result back in the end.
+        let sandbox_process_weakref = Arc::downgrade(&sandbox_process);
         let exec_id =
             sandbox_process
                 .execution_states
-                .register_execution(move |_id, exec_output| {
+                .register_execution(move |exec_id, exec_output| {
+                    if let Some(sandbox_process) = sandbox_process_weakref.upgrade() {
+                        sandbox_process
+                            .history
+                            .record(format!("Completion(exec_id={})", exec_id));
+                    }
                     tx.send(exec_output).unwrap();
                 });
 
@@ -529,6 +586,9 @@ impl SandboxedExecutionController {
 
         let subnet_available_memory = execution_parameters.subnet_available_memory.clone();
 
+        sandbox_process.history.record(
+            format!("StartExecution(exec_id={} wasm_id={} wasm_memory_id={} stable_member_id={} api_type={}, next_wasm_memory_id={} next_stable_memory_id={}",
+                exec_id, wasm_id, wasm_memory_id, stable_memory_id, api_type.as_str(), next_wasm_memory_id, next_stable_memory_id));
         sandbox_process
             .sandbox_service
             .start_execution(protocol::sbxsvc::StartExecutionRequest {
@@ -637,6 +697,10 @@ impl SandboxedExecutionController {
         // Steps 2, 3, 4 are performed by the sandbox process.
         let wasm_page_map = PageMap::default();
         let next_wasm_memory_id = MemoryId::new();
+        sandbox_process.history.record(format!(
+            "CreateExecutionState(wasm_id={}, next_wasm_memory_id={})",
+            wasm_id, next_wasm_memory_id
+        ));
         let reply = sandbox_process
             .sandbox_service
             .create_execution_state(protocol::sbxsvc::CreateExecutionStateRequest {
@@ -693,6 +757,9 @@ fn open_wasm(
     }
     let wasm_id = WasmId::new();
     sandbox_process
+        .history
+        .record(format!("OpenWasm(wasm_id={})", wasm_id));
+    sandbox_process
         .sandbox_service
         .open_wasm(protocol::sbxsvc::OpenWasmRequest {
             wasm_id,
@@ -727,6 +794,9 @@ fn open_remote_memory(
                 num_wasm_pages: memory.size,
             };
             let memory_id = MemoryId::new();
+            sandbox_process
+                .history
+                .record(format!("OpenMemory(memory_id={})", memory_id));
             sandbox_process
                 .sandbox_service
                 .open_memory(protocol::sbxsvc::OpenMemoryRequest {
