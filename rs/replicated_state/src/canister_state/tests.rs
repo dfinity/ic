@@ -1,4 +1,5 @@
 use super::*;
+use crate::canister_state::execution_state::WasmMetadata;
 use crate::CallOrigin;
 use ic_base_types::NumSeconds;
 use ic_test_utilities::types::{
@@ -353,6 +354,7 @@ fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execut
             Default::default(),
             Default::default(),
             vec![Global::I64(14)],
+            WasmMetadata::default(),
         ));
         assert!(canister_state.memory_usage(own_subnet_type).get() > 0);
         let initial_memory_usage = canister_state.memory_usage_impl(true);

@@ -162,6 +162,9 @@ pub enum HypervisorError {
         cleanup_err: Box<HypervisorError>,
     },
     WasmEngineError(WasmEngineError),
+    /// The canister is close to running out of Wasm memory and
+    /// attempted to allocate reserved Wasm pages.
+    WasmReservedPages,
 }
 
 impl From<WasmInstrumentationError> for HypervisorError {
@@ -268,6 +271,13 @@ impl HypervisorError {
                     canister_id
                 ),
             ),
+            Self::WasmReservedPages => UserError::new(
+                E::CanisterOutOfMemory,
+                format!(
+                    "Canister {} ran out of available Wasm memory.",
+                    canister_id
+                ),
+            ),
             Self::CanisterStopped => UserError::new(
                 E::CanisterStopped,
                 format!("Canister {} is stopped", canister_id,),
@@ -340,6 +350,7 @@ impl HypervisorError {
             HypervisorError::InsufficientCyclesBalance { .. } => "InsufficientCyclesBalance",
             HypervisorError::Cleanup { .. } => "Cleanup",
             HypervisorError::WasmEngineError(_) => "WasmEngineError",
+            HypervisorError::WasmReservedPages => "WasmReservedPages",
         }
     }
 
@@ -369,7 +380,8 @@ impl HypervisorError {
             | HypervisorError::InvalidPrincipalId(_)
             | HypervisorError::InvalidCanisterId(_)
             | HypervisorError::MessageRejected
-            | HypervisorError::InsufficientCyclesBalance(_) => false,
+            | HypervisorError::InsufficientCyclesBalance(_)
+            | HypervisorError::WasmReservedPages => false,
         }
     }
 }

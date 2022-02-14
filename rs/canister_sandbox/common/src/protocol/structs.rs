@@ -27,6 +27,7 @@ pub struct SandboxExecInput {
     // View of the system_state that is safe for the sandboxed process to
     // access.
     pub sandox_safe_system_state: SandboxSafeSystemState,
+    pub wasm_reserved_pages: NumWasmPages,
 }
 
 #[derive(Serialize, Deserialize, Clone)]

@@ -129,6 +129,7 @@ impl Execution {
             &mut stable_memory,
             &exec_input.globals,
             no_op_logger(),
+            exec_input.wasm_reserved_pages,
         );
 
         match wasm_result {
@@ -412,15 +413,20 @@ impl SandboxManager {
 
         let mut wasm_page_map = PageMap::deserialize(wasm_page_map).unwrap();
 
-        let (exported_functions, exported_globals, wasm_memory_delta, wasm_memory_size) =
-            ic_embedders::wasm_executor::get_initial_globals_and_memory(
-                &binary_encoded_wasm,
-                &embedder_cache,
-                &embedder,
-                &self.config,
-                &mut wasm_page_map,
-                canister_id,
-            )?;
+        let (
+            exported_functions,
+            exported_globals,
+            wasm_memory_delta,
+            wasm_memory_size,
+            wasm_validation_details,
+        ) = ic_embedders::wasm_executor::get_initial_globals_and_memory(
+            &binary_encoded_wasm,
+            &embedder_cache,
+            &embedder,
+            &self.config,
+            &mut wasm_page_map,
+            canister_id,
+        )?;
 
         let wasm_memory = Memory::new(wasm_page_map, wasm_memory_size);
 
@@ -437,6 +443,7 @@ impl SandboxManager {
             wasm_memory_modifications,
             exported_globals,
             exported_functions,
+            wasm_metadata: wasm_validation_details.wasm_metadata,
         })
     }
 }
