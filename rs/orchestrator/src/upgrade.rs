@@ -23,7 +23,7 @@ use std::sync::{Arc, Mutex};
 /// Continuously checks the Registry to determine if this node should upgrade
 /// to a new release package, and if so, downloads and extracts this release
 /// package and exec's the orchestrator binary contained within
-pub(crate) struct ReleasePackage {
+pub(crate) struct Upgrade {
     registry: Arc<RegistryHelper>,
     replica_process: Arc<Mutex<ReplicaProcess>>,
     release_package_provider: Arc<ReleasePackageProvider>,
@@ -34,12 +34,11 @@ pub(crate) struct ReleasePackage {
     registry_replicator: Arc<RegistryReplicator>,
     logger: ReplicaLogger,
     node_id: NodeId,
-    enabled: Arc<std::sync::atomic::AtomicBool>,
 }
 
-impl ReleasePackage {
+impl Upgrade {
     #[allow(clippy::too_many_arguments)]
-    pub(crate) async fn start(
+    pub(crate) fn new(
         registry: Arc<RegistryHelper>,
         replica_process: Arc<Mutex<ReplicaProcess>>,
         release_package_provider: Arc<ReleasePackageProvider>,
@@ -50,9 +49,8 @@ impl ReleasePackage {
         ic_binary_dir: PathBuf,
         registry_replicator: Arc<RegistryReplicator>,
         logger: ReplicaLogger,
-    ) -> Arc<std::sync::atomic::AtomicBool> {
-        let enabled = Arc::new(std::sync::atomic::AtomicBool::new(true));
-        let release_package = Self {
+    ) -> Self {
+        let value = Self {
             registry,
             replica_process,
             release_package_provider,
@@ -63,16 +61,14 @@ impl ReleasePackage {
             ic_binary_dir,
             registry_replicator,
             logger,
-            enabled: enabled.clone(),
         };
-        release_package.confirm_boot();
-        tokio::spawn(background_task(release_package));
-        enabled
+        value.confirm_boot();
+        value
     }
 
     /// Checks for a new release package, and if found, upgrades to this release
     /// package
-    pub(crate) async fn check_for_upgrade(&self) -> OrchestratorResult<()> {
+    pub(crate) async fn check(&self) -> OrchestratorResult<()> {
         let latest_registry_version = self.registry.get_latest_version();
         // Determine the subnet_id using the local CUP.
         let (subnet_id, local_cup) = if let Some(cup_with_proto) = self.cup_provider.get_local_cup()
@@ -97,12 +93,17 @@ impl ReleasePackage {
             }
         };
 
+        // When we arrived here, we are an assigned node.
+
+        // Get the latest available cup from the disk, peears or registry and
+        // if the latest CUP is newer than the local one, persist it.
         let cup = self.cup_provider.get_latest_cup(subnet_id).await?;
-        // If the latest CUP is newer than the local one, persist it.
         if Some(cup.cup.content.height()) > local_cup.map(|cup| cup.content.height()) {
             self.cup_provider.persist_cup(&cup)?;
         }
 
+        // Now when we have the most recent CUP, we check if we're still assigned.
+        // If not, go into unassigned state.
         if should_node_become_unassigned(
             &*self.registry.registry_client,
             self.node_id,
@@ -119,17 +120,15 @@ impl ReleasePackage {
             return Ok(());
         }
 
+        // Check if we're in an NNS subnet recovery case.
         self.download_registry_and_restart_if_nns_subnet_recovery(
             subnet_id,
             latest_registry_version,
         )
         .await?;
 
-        // Now we know the subnet_id and we're assigned; start the replica if necessary.
-        if !self.replica_process.lock().unwrap().is_running() {
-            return self.start_replica(&self.replica_version, subnet_id);
-        }
-
+        // If we arrived here, we have the newest CUP and we're still assigned.
+        // Now we check if this CUP requires a new replica verison.
         let cup_registry_version = cup.cup.content.registry_version();
         let new_replica_version = self
             .registry
@@ -142,6 +141,11 @@ impl ReleasePackage {
             return self.download_and_upgrade(&new_replica_version).await;
         }
 
+        // This will start a new replica process if none is running.
+        self.ensure_replica_is_running(&self.replica_version, subnet_id)?;
+
+        // This will trigger an image download if one is already scheduled but we did not arrive at
+        // the corresponding CUP yet.
         self.download_image_if_upgrade_scheduled(subnet_id).await?;
 
         Ok(())
@@ -285,7 +289,8 @@ impl ReleasePackage {
         }
     }
 
-    fn stop_replica(&self) -> OrchestratorResult<()> {
+    /// Stop the current replica process.
+    pub fn stop_replica(&self) -> OrchestratorResult<()> {
         self.replica_process.lock().unwrap().stop().map_err(|e| {
             OrchestratorError::IoError(
                 "Error when attempting to stop replica during upgrade".into(),
@@ -294,12 +299,15 @@ impl ReleasePackage {
         })
     }
 
-    // Stop the current Replica and start a new Replica command
-    fn start_replica(
+    // Start the replica process if not running already
+    fn ensure_replica_is_running(
         &self,
         replica_version: &ReplicaVersion,
         subnet_id: SubnetId,
     ) -> OrchestratorResult<()> {
+        if self.replica_process.lock().unwrap().is_running() {
+            return Ok(());
+        }
         info!(self.logger, "Starting new replica process due to upgrade");
         let cup_path = self.cup_provider.get_cup_path();
         let replica_binary = self
@@ -341,22 +349,6 @@ impl ReleasePackage {
         {
             error!(self.logger, "Could not confirm the boot: {:?}", err);
         }
-    }
-}
-
-async fn background_task(release_package: ReleasePackage) {
-    loop {
-        if !release_package
-            .enabled
-            .load(std::sync::atomic::Ordering::Relaxed)
-        {
-            return;
-        }
-        info!(release_package.logger, "Checking for release package");
-        if let Err(e) = release_package.check_for_upgrade().await {
-            warn!(release_package.logger, "Check for upgrade failed: {}", e);
-        };
-        tokio::time::sleep(std::time::Duration::from_secs(10)).await;
     }
 }
 

@@ -10,9 +10,6 @@ use ic_types::RegistryVersion;
 use ic_utils::fs::write_string_using_tmp_file;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
-
-const FIREWALL_CHECK_INTERVAL: Duration = Duration::from_secs(2);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum DataSource {
@@ -26,16 +23,14 @@ enum DataSource {
 pub(crate) struct Firewall {
     registry: Arc<RegistryHelper>,
     metrics: Arc<OrchestratorMetrics>,
+    logger: ReplicaLogger,
     configuration: FirewallConfig,
     source: DataSource,
-    logger: ReplicaLogger,
     compiled_config: String,
-
     // If true, write the file content even if no change was detected in registry, i.e. first time
     must_write: bool,
-
-    // If false, do not start or terminate the background task
-    enabled: Arc<std::sync::atomic::AtomicBool>,
+    // If false, do not update the firewall rules (test mode)
+    enabled: bool,
 }
 
 impl Firewall {
@@ -59,23 +54,16 @@ impl Firewall {
             );
         }
 
-        let enabled = Arc::new(std::sync::atomic::AtomicBool::new(enabled));
         Self {
             registry,
             metrics,
             configuration: config,
             source: DataSource::Config,
             logger,
-            compiled_config: "".to_string(),
+            compiled_config: Default::default(),
             must_write: true,
             enabled,
         }
-    }
-
-    pub(crate) fn start(self) -> Arc<std::sync::atomic::AtomicBool> {
-        let result = self.enabled.clone();
-        tokio::spawn(background_task(self));
-        result
     }
 
     fn update_config_from_pb(&mut self, pb: FirewallConfigPB) {
@@ -84,9 +72,7 @@ impl Firewall {
         self.configuration.ipv6_prefixes = pb.ipv6_prefixes;
     }
 
-    /// Checks for new firewall config, and if found, update local firewall
-    /// rules
-    pub(crate) fn check_for_firewall_config(
+    fn check_for_firewall_config(
         &mut self,
         registry_version: RegistryVersion,
     ) -> OrchestratorResult<()> {
@@ -165,31 +151,28 @@ impl Firewall {
             .map(|prefix| prefix.replace(",", "").replace("\n", ""))
             .collect()
     }
-}
 
-async fn background_task(mut firewall: Firewall) {
-    loop {
-        if !firewall.enabled.load(std::sync::atomic::Ordering::Relaxed) {
+    /// Checks for new firewall config, and if found, update local firewall
+    /// rules
+    pub fn check_and_update(&mut self) {
+        if !self.enabled {
             return;
         }
-
-        let registry_version = firewall.registry.get_latest_version();
+        let registry_version = self.registry.get_latest_version();
         debug!(
-            firewall.logger,
+            self.logger,
             "Checking for firewall config registry version: {}", registry_version
         );
 
-        match firewall.check_for_firewall_config(registry_version) {
-            Ok(()) => firewall
+        match self.check_for_firewall_config(registry_version) {
+            Ok(()) => self
                 .metrics
                 .datacenter_registry_version
                 .set(registry_version.get() as i64),
             Err(e) => info!(
-                firewall.logger,
+                self.logger,
                 "Failed to check for firewall config at version {}: {}", registry_version, e
             ),
         };
-
-        tokio::time::sleep(FIREWALL_CHECK_INTERVAL).await;
     }
 }
