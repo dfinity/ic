@@ -10,7 +10,7 @@ use prometheus::{Histogram, IntCounter};
 
 use crate::{
     wasm_utils::instrumentation::{instrument, InstructionCostTable},
-    wasm_utils::validation::{validate_wasm_binary, WasmImportsDetails},
+    wasm_utils::validation::{validate_wasm_binary, WasmImportsDetails, WasmValidationDetails},
     wasmtime_embedder::WasmtimeInstance,
     WasmExecutionInput, WasmExecutionOutput, WasmtimeEmbedder,
 };
@@ -208,6 +208,9 @@ impl WasmExecutor {
                 )
             }
         };
+
+        let wasm_reserved_pages = get_wasm_reserved_pages(&execution_state);
+
         let (wasm_execution_output, wasm_state_changes, instance_or_system_api) = process(
             func_ref,
             api_type,
@@ -220,6 +223,7 @@ impl WasmExecutor {
             &mut execution_state.stable_memory,
             &execution_state.exported_globals,
             self.log.clone(),
+            wasm_reserved_pages,
         );
 
         // Collect logs only when the flag is enabled to avoid producing too much data.
@@ -252,15 +256,20 @@ impl WasmExecutor {
         let embedder_cache = self.get_embedder_cache(&wasm_binary)?;
         let mut wasm_page_map = PageMap::default();
 
-        let (exported_functions, globals, _wasm_page_delta, wasm_memory_size) =
-            get_initial_globals_and_memory(
-                &binary_encoded_wasm,
-                &embedder_cache,
-                &self.wasm_embedder,
-                &self.config,
-                &mut wasm_page_map,
-                canister_id,
-            )?;
+        let (
+            exported_functions,
+            globals,
+            _wasm_page_delta,
+            wasm_memory_size,
+            wasm_validation_details,
+        ) = get_initial_globals_and_memory(
+            &binary_encoded_wasm,
+            &embedder_cache,
+            &self.wasm_embedder,
+            &self.config,
+            &mut wasm_page_map,
+            canister_id,
+        )?;
 
         // Create the execution state.
         let stable_memory = Memory::default();
@@ -271,6 +280,7 @@ impl WasmExecutor {
             Memory::new(wasm_page_map, wasm_memory_size),
             stable_memory,
             globals,
+            wasm_validation_details.wasm_metadata,
         );
         Ok(execution_state)
     }
@@ -372,6 +382,28 @@ impl WasmStateChanges {
     }
 }
 
+/// The returns the number guard pages reserved at the end of 4GiB Wasm address
+/// space. Message execution fails with an out-of-memory error if it attempts to
+/// use the reserved pages.
+/// Currently the pages are reserved only for canisters compiled with a Motoko
+/// compiler version 0.6.20 or older.
+pub fn get_wasm_reserved_pages(execution_state: &ExecutionState) -> NumWasmPages {
+    let motoko_marker = WasmMethod::Update("__motoko_async_helper".to_string());
+    let motoko_compiler = "motoko:compiler";
+    let is_motoko_canister = execution_state.exports_method(&motoko_marker);
+    // Motoko compiler at or before 0.6.20 does not emit "motoko:compiler" section.
+    let is_recent_motoko_compiler = execution_state
+        .metadata
+        .custom_sections()
+        .contains_key(motoko_compiler);
+    if is_motoko_canister && !is_recent_motoko_compiler {
+        // The threshold of 16 Wasm pages was chosen after consulting with
+        // the Motoko team.
+        return NumWasmPages::from(16);
+    }
+    NumWasmPages::from(0)
+}
+
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::type_complexity)]
 pub fn process(
@@ -386,6 +418,7 @@ pub fn process(
     stable_memory: &mut Memory,
     globals: &[Global],
     logger: ReplicaLogger,
+    wasm_reserved_pages: NumWasmPages,
 ) -> (
     WasmExecutionOutput,
     Option<WasmStateChanges>,
@@ -436,10 +469,18 @@ pub fn process(
 
     // Has the side effect up deallocating memory if message failed and
     // returning cycles from a request that wasn't sent.
-    let wasm_result = instance
+    let mut wasm_result = instance
         .store_data_mut()
         .system_api
         .take_execution_result(run_result.as_ref().err());
+
+    let wasm_heap_size_after = instance.heap_size();
+    let wasm_heap_limit =
+        NumWasmPages::from(wasmtime_environ::WASM32_MAX_PAGES as usize) - wasm_reserved_pages;
+
+    if wasm_heap_size_after > wasm_heap_limit {
+        wasm_result = Err(HypervisorError::WasmReservedPages);
+    }
 
     let wasm_state_changes = match run_result {
         Ok(run_result) => {
@@ -501,9 +542,10 @@ pub fn get_initial_globals_and_memory(
     Vec<Global>,
     Vec<PageIndex>,
     NumWasmPages,
+    WasmValidationDetails,
 )> {
     // Step 1. Get data from instrumentation output.
-    validate_wasm_binary(binary_encoded_wasm, config)?;
+    let wasm_validation_details = validate_wasm_binary(binary_encoded_wasm, config)?;
     let instrumentation_output = instrument(binary_encoded_wasm, &InstructionCostTable::new())?;
     let exported_functions = instrumentation_output.exported_functions;
     let wasm_memory_pages = instrumentation_output.data.as_pages();
@@ -548,5 +590,6 @@ pub fn get_initial_globals_and_memory(
         instance.get_exported_globals(),
         wasm_memory_delta,
         instance.heap_size(),
+        wasm_validation_details,
     ))
 }

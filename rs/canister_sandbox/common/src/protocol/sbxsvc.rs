@@ -17,6 +17,7 @@ use super::{
     id::{ExecId, MemoryId, WasmId},
     structs::{MemoryModifications, SandboxExecInput},
 };
+use ic_replicated_state::canister_state::execution_state::WasmMetadata;
 
 /// This defines the RPC service methods offered by the sandbox process
 /// (used by the controller) as well as the expected replies.
@@ -209,6 +210,7 @@ pub struct CreateExecutionStateSuccessReply {
     pub wasm_memory_modifications: MemoryModifications,
     pub exported_globals: Vec<Global>,
     pub exported_functions: BTreeSet<WasmMethod>,
+    pub wasm_metadata: WasmMetadata,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

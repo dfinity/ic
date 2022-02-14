@@ -3,6 +3,7 @@ use ic_canister_sandbox_common::protocol::id::{MemoryId, WasmId};
 use ic_canister_sandbox_common::protocol::sbxsvc::MemorySerialization;
 use ic_canister_sandbox_common::protocol::structs::SandboxExecInput;
 use ic_canister_sandbox_common::sandbox_service::SandboxService;
+use ic_embedders::wasm_executor::get_wasm_reserved_pages;
 use ic_embedders::{WasmExecutionInput, WasmExecutionOutput};
 use ic_interfaces::execution_environment::{HypervisorResult, InstanceStats};
 use ic_logger::{warn, ReplicaLogger};
@@ -476,6 +477,7 @@ impl SandboxedExecutionController {
                     next_wasm_memory_id,
                     next_stable_memory_id,
                     sandox_safe_system_state: sandbox_safe_system_state,
+                    wasm_reserved_pages: get_wasm_reserved_pages(&execution_state),
                 },
             })
             .on_completion(|_| {});
@@ -596,6 +598,7 @@ impl SandboxedExecutionController {
             wasm_memory,
             stable_memory,
             reply.exported_globals,
+            reply.wasm_metadata,
         );
         Ok(execution_state)
     }
