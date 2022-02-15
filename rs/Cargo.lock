@@ -3299,6 +3299,7 @@ dependencies = [
  "prometheus",
  "slog",
  "tokio",
+ "tonic",
 ]
 
 [[package]]

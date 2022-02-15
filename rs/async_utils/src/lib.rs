@@ -1,8 +1,10 @@
 use slog::{info, Logger};
 
 mod observable_counting_semaphore;
+mod unix;
 
 pub use observable_counting_semaphore::*;
+pub use unix::{ensure_single_named_systemd_socket, listener_from_first_systemd_socket};
 
 /// Returns a `Future` that completes when the service should gracefully
 /// shutdown. Completion happens if either of `SIGINT` or `SIGTERM` are
