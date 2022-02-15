@@ -8,6 +8,7 @@ ic-artifact-pool = { path = "../artifact_pool" }
 ic-config = { path = "../config" }
 ic-consensus-message = { path = "./message" }
 ic-crypto = { path = "../crypto" }
+ic-ic00-types = { path = "../types/ic00_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-common = { path = "../registry/common" }

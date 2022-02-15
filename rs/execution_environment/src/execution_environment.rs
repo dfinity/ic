@@ -496,9 +496,10 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                         Err(err) => Some((Err(err.into()), msg.take_cycles())),
                         Ok(args) => self
                             .sign_with_ecdsa(
-                                request,
-                                &args.message_hash,
-                                &args.derivation_path,
+                                request.clone(),
+                                args.message_hash,
+                                args.derivation_path,
+                                &args.key_id,
                                 false,
                                 &mut state,
                                 rng,
@@ -532,9 +533,10 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                                 Err(err) => Some(err.into()),
                                 Ok(args) => self
                                     .sign_with_ecdsa(
-                                        request,
-                                        &args.message_hash,
-                                        &args.derivation_path,
+                                        request.clone(),
+                                        args.message_hash,
+                                        args.derivation_path,
+                                        &args.key_id,
                                         true,
                                         &mut state,
                                         rng,
@@ -576,6 +578,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                                         pubkey,
                                         canister_id,
                                         args.derivation_path,
+                                        &args.key_id,
                                         ).map(|res| res.encode()))
                                     }
                                 }
@@ -1885,6 +1888,7 @@ impl ExecutionEnvironmentImpl {
         subnet_public_key: &MasterEcdsaPublicKey,
         principal_id: PrincipalId,
         derivation_path: Vec<Vec<u8>>,
+        key_id: &str,
     ) -> Result<GetECDSAPublicKeyResponse, UserError> {
         let _ = CanisterId::new(principal_id).map_err(|err| {
             UserError::new(
@@ -1892,6 +1896,12 @@ impl ExecutionEnvironmentImpl {
                 format!("Not a canister id: {}", err),
             )
         })?;
+        if key_id != "secp256k1" {
+            return Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                "key_id must be \"secp256k1\"",
+            ));
+        };
         let path = ExtendedDerivationPath {
             caller: principal_id,
             derivation_path,
@@ -1904,15 +1914,30 @@ impl ExecutionEnvironmentImpl {
             })
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn sign_with_ecdsa(
         &self,
-        request: &Request,
-        message_hash: &[u8],
-        derivation_path: &[u8],
+        request: Request,
+        message_hash: Vec<u8>,
+        derivation_path: Vec<Vec<u8>>,
+        key_id: &str,
         is_mock: bool,
         state: &mut ReplicatedState,
         rng: &mut (dyn RngCore + 'static),
     ) -> Result<(), UserError> {
+        if message_hash.len() != 32 {
+            return Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                "message_hash must be 32 bytes",
+            ));
+        }
+        if key_id != "secp256k1" {
+            return Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                "key_id must be \"secp256k1\"",
+            ));
+        };
+
         let mut pseudo_random_id = [0u8; 32];
         rng.fill_bytes(&mut pseudo_random_id);
 
@@ -1927,9 +1952,9 @@ impl ExecutionEnvironmentImpl {
             .subnet_call_context_manager
             .push_sign_with_ecdsa_request(
                 SignWithEcdsaContext {
-                    request: request.clone(),
-                    message_hash: message_hash.to_vec(),
-                    derivation_path: derivation_path.to_vec(),
+                    request,
+                    message_hash,
+                    derivation_path,
                     pseudo_random_id,
                     batch_time: state.metadata.batch_time,
                 },

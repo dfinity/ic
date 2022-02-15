@@ -33,6 +33,7 @@ use ic_types::{
         },
         AlgorithmId,
     },
+    messages::CallbackId,
     registry::RegistryClientError,
     Height, NodeId, RegistryVersion, SubnetId,
 };
@@ -149,6 +150,7 @@ pub(crate) fn create_summary_payload(
                 }) != Some(key_transcript.as_ref().transcript_id);
             let mut summary = ecdsa::EcdsaSummaryPayload {
                 current_key_transcript: key_transcript,
+                signature_agreements: payload.signature_agreements.clone(),
                 ongoing_signatures: if is_new_key_transcript {
                     BTreeMap::new()
                 } else {
@@ -323,7 +325,16 @@ pub(crate) fn create_data_payload(
                 let parent_chain =
                     build_consensus_block_chain(pool_reader.pool(), &summary_block, parent_block);
                 if let Some(key_transcript) = current_key_transcript {
+                    let state = state_manager.get_state_at(context.certified_height)?;
+                    let signing_requests = get_signing_requests(
+                        &state
+                            .get_ref()
+                            .metadata
+                            .subnet_call_context_manager
+                            .sign_with_ecdsa_contexts,
+                    );
                     update_signature_agreements(
+                        &signing_requests,
                         parent_chain.clone(),
                         ecdsa_pool.clone(),
                         crypto,
@@ -332,8 +343,7 @@ pub(crate) fn create_data_payload(
                         log.clone(),
                     );
                     let count = update_signing_requests(
-                        state_manager,
-                        context,
+                        &signing_requests,
                         key_transcript,
                         &mut payload,
                         log.clone(),
@@ -518,11 +528,28 @@ fn start_making_new_quadruples(
     Ok(())
 }
 
+/// Turn the given sign_with_ecdsa_contexts into a mapping with request id as the key.
+fn get_signing_requests(
+    sign_with_ecdsa_contexts: &BTreeMap<CallbackId, SignWithEcdsaContext>,
+) -> BTreeMap<ecdsa::RequestId, &SignWithEcdsaContext> {
+    sign_with_ecdsa_contexts
+        .values()
+        .map(|context| {
+            (
+                // request_id is just pseudo_random_id which is guaranteed to be always unique.
+                ecdsa::RequestId::from(context.pseudo_random_id.to_vec()),
+                context,
+            )
+        })
+        .collect()
+}
+
 // Update signature agreements in the data payload by combining
 // shares in the ECDSA pool.
 // TODO: As an optimization we could also use the signatures we
 // are looking for to avoid traversing everything in the pool.
 fn update_signature_agreements(
+    signing_requests: &BTreeMap<ecdsa::RequestId, &SignWithEcdsaContext>,
     chain: Arc<dyn ConsensusBlockChain>,
     ecdsa_pool: Arc<RwLock<dyn EcdsaPool>>,
     crypto: &dyn ConsensusCrypto,
@@ -532,6 +559,20 @@ fn update_signature_agreements(
 ) {
     let ecdsa_pool = ecdsa_pool.read().unwrap();
     let builder = EcdsaSignatureBuilderImpl::new(crypto, metrics, log.clone());
+    // We first clean up the existing signature_agreements by keeping those
+    // that can still be found in the signing_requests for dedup purpose.
+    // We only need the "Reported" status because they would have already
+    // been reported when the previous block become finalized.
+    let mut agreements = BTreeMap::new();
+    std::mem::swap(&mut payload.signature_agreements, &mut agreements);
+    for (request_id, _) in agreements.into_iter() {
+        if signing_requests.contains_key(&request_id) {
+            payload
+                .signature_agreements
+                .insert(request_id, ecdsa::CompletedSignature::ReportedToExecution);
+        }
+    }
+    // Then we collect new signatures into the signature_agreements
     for (request_id, signature) in builder.get_completed_signatures(chain, ecdsa_pool.deref()) {
         if payload.ongoing_signatures.remove(&request_id).is_none() {
             warn!(
@@ -540,7 +581,9 @@ fn update_signature_agreements(
                 request_id
             );
         } else {
-            payload.signature_agreements.insert(request_id, signature);
+            payload
+                .signature_agreements
+                .insert(request_id, ecdsa::CompletedSignature::Unreported(signature));
         }
     }
 }
@@ -555,8 +598,7 @@ fn update_signature_agreements(
 /// equivalently, the number of quadruples that are consumed).
 // Return new signing requests initiated from canisters.
 fn update_signing_requests(
-    state_manager: &dyn StateManager<State = ReplicatedState>,
-    context: &ValidationContext,
+    signing_requests: &BTreeMap<ecdsa::RequestId, &SignWithEcdsaContext>,
     key_transcript: &ecdsa::UnmaskedTranscript,
     payload: &mut ecdsa::EcdsaDataPayload,
     log: ReplicaLogger,
@@ -569,11 +611,10 @@ fn update_signing_requests(
         .chain(payload.ongoing_signatures.keys())
         .collect::<BTreeSet<_>>();
     let new_requests = get_new_signing_requests(
-        state_manager,
+        signing_requests,
         &existing_requests,
         &mut payload.available_quadruples,
         key_transcript,
-        context.certified_height,
     )?;
     debug!(
         log,
@@ -591,38 +632,19 @@ fn update_signing_requests(
 
 // Return new signing requests initiated from canisters.
 fn get_new_signing_requests(
-    state_manager: &dyn StateManager<State = ReplicatedState>,
+    signing_requests: &BTreeMap<ecdsa::RequestId, &SignWithEcdsaContext>,
     existing_requests: &BTreeSet<&ecdsa::RequestId>,
     available_quadruples: &mut BTreeMap<ecdsa::QuadrupleId, ecdsa::PreSignatureQuadrupleRef>,
     key_transcript: &ecdsa::UnmaskedTranscript,
-    height: Height,
 ) -> Result<Vec<(ecdsa::RequestId, ecdsa::ThresholdEcdsaSigInputsRef)>, EcdsaPayloadError> {
-    let state = state_manager.get_state_at(height)?;
-    let contexts = &state
-        .get_ref()
-        .metadata
-        .subnet_call_context_manager
-        .sign_with_ecdsa_contexts;
-    let new_requests = contexts
+    let new_requests = signing_requests
         .iter()
-        .filter_map(|(_callback_id, context)| {
-            let SignWithEcdsaContext {
-                pseudo_random_id, ..
-            } = context;
-            // request_id is just pseudo_random_id which is guaranteed to be always unique.
-            let request_id = ecdsa::RequestId::from(pseudo_random_id.to_vec());
-            if !existing_requests.contains(&request_id) {
-                Some((request_id, context))
-            } else {
-                None
-            }
-        })
-        .collect::<Vec<_>>();
+        .filter(|(request_id, _)| !existing_requests.contains(request_id));
 
     let mut ret = Vec::new();
     let mut consumed_quadruples = Vec::new();
     for ((request_id, context), (quadruple_id, quadruple)) in
-        new_requests.iter().zip(available_quadruples.iter())
+        new_requests.zip(available_quadruples.iter())
     {
         let sign_inputs = build_signature_inputs(context, quadruple, key_transcript);
         ret.push((request_id.clone(), sign_inputs));
@@ -947,7 +969,7 @@ fn build_signature_inputs(
 ) -> ecdsa::ThresholdEcdsaSigInputsRef {
     let extended_derivation_path = ExtendedDerivationPath {
         caller: context.request.sender.into(),
-        derivation_path: vec![context.derivation_path.clone()],
+        derivation_path: context.derivation_path.clone(),
     };
     ecdsa::ThresholdEcdsaSigInputsRef::new(
         extended_derivation_path,
@@ -973,7 +995,6 @@ mod tests {
     use ic_test_utilities::{
         mock_time,
         state::ReplicatedStateBuilder,
-        state_manager::MockStateManager,
         types::{
             ids::{node_test_id, subnet_test_id},
             messages::RequestBuilder,
@@ -985,13 +1006,13 @@ mod tests {
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
     use ic_types::{messages::CallbackId, Height, RegistryVersion};
     use std::collections::BTreeSet;
-    use std::sync::Arc;
 
     fn empty_ecdsa_summary_payload(
         subnet_id: SubnetId,
         current_key_transcript: ecdsa::UnmaskedTranscript,
     ) -> ecdsa::EcdsaSummaryPayload {
         ecdsa::EcdsaSummaryPayload {
+            signature_agreements: BTreeMap::new(),
             ongoing_signatures: BTreeMap::new(),
             current_key_transcript,
             available_quadruples: BTreeMap::new(),
@@ -1155,16 +1176,12 @@ mod tests {
                     batch_time: mock_time(),
                 },
             );
-        let state = Arc::new(state);
-        let mut state_manager = MockStateManager::new();
-        let height = Height::new(10);
-        state_manager.expect_get_state_at().returning(move |h| {
-            if h == height {
-                Ok(ic_interfaces::state_manager::Labeled::new(h, state.clone()))
-            } else {
-                Err(StateManagerError::StateNotCommittedYet(h))
-            }
-        });
+        let signing_requests = get_signing_requests(
+            &state
+                .metadata
+                .subnet_call_context_manager
+                .sign_with_ecdsa_contexts,
+        );
         // Success case
         let mut requests = BTreeSet::new();
         let sig_inputs = create_sig_inputs(10);
@@ -1173,11 +1190,10 @@ mod tests {
         let mut available_quadruples = BTreeMap::new();
         available_quadruples.insert(ecdsa::QuadrupleId(0), quadruple_ref.clone());
         let result = get_new_signing_requests(
-            &state_manager,
+            &signing_requests,
             &requests,
             &mut available_quadruples,
             ecdsa_transcript_ref,
-            height,
         );
         assert!(result.is_ok());
         let new_requests = result.unwrap();
@@ -1186,29 +1202,14 @@ mod tests {
         let request_id = ecdsa::RequestId::from(pseudo_random_id.to_vec());
         requests.insert(&request_id);
         let result = get_new_signing_requests(
-            &state_manager,
+            &signing_requests,
             &requests,
             &mut available_quadruples,
             ecdsa_transcript_ref,
-            height,
         );
         assert!(result.is_ok());
         let new_requests = result.unwrap();
         assert_eq!(new_requests.len(), 0);
-        // Failure case
-        let result = get_new_signing_requests(
-            &state_manager,
-            &requests,
-            &mut available_quadruples,
-            ecdsa_transcript_ref,
-            height.increment(),
-        );
-        assert_matches!(
-            result,
-            Err(EcdsaPayloadError::StateManagerError(
-                StateManagerError::StateNotCommittedYet(_)
-            ))
-        );
     }
 
     #[test]
@@ -1691,6 +1692,7 @@ mod tests {
             // Add a summary block after the payload block
             let new_summary_height = parent_block_height.increment();
             let mut summary = ecdsa::EcdsaSummaryPayload {
+                signature_agreements: ecdsa_payload.signature_agreements.clone(),
                 current_key_transcript: key_transcript_ref,
                 ongoing_signatures: ecdsa_payload.ongoing_signatures.clone(),
                 available_quadruples: ecdsa_payload.available_quadruples.clone(),
