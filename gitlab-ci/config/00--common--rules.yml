@@ -147,19 +147,9 @@
 
 .rules-benchmark-tests:
   rules:
-    - if: '$CD_ENV == $cd_target_env && $CI_MERGE_REQUEST_TITLE =~ /\[benchmark\]/'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\[benchmark\]/'
       when: manual
       allow_failure: true
-    - if: '$CD_ENV == "BENCHMARK_SUITE"'
-      when: always
-
-.rules-benchmark-nightly-tests:
-  rules:
-    - if: '$CD_ENV == $cd_target_env && $CI_MERGE_REQUEST_TITLE =~ /\[benchmark\]/'
-      when: manual
-      allow_failure: true
-    - if: '$CD_ENV == "BENCHMARK_NIGHTLY"'
-      when: always
 
 .rules-prod-tests:
   rules:

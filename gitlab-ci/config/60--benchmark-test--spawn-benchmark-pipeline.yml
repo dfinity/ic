@@ -158,7 +158,7 @@ large-subnet-gossip-experiment:
 .benchmark-nightly-test:
   extends:
     - .ubuntu-nix-docker
-    - .rules-benchmark-nightly-tests
+    - .rules-benchmark-tests
   stage: benchmark-nightly-tests
   resource_group: $TESTNET
   dependencies: []  # don't copy artifacts from other jobs by default
