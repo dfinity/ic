@@ -145,6 +145,22 @@
       when: manual
       allow_failure: true  # the pipeline continues running even if the manual job is not run
 
+.rules-benchmark-tests:
+  rules:
+    - if: '$CD_ENV == $cd_target_env && $CI_MERGE_REQUEST_TITLE =~ /\[benchmark\]/'
+      when: manual
+      allow_failure: true
+    - if: '$CD_ENV == "BENCHMARK_SUITE"'
+      when: always
+
+.rules-benchmark-nightly-tests:
+  rules:
+    - if: '$CD_ENV == $cd_target_env && $CI_MERGE_REQUEST_TITLE =~ /\[benchmark\]/'
+      when: manual
+      allow_failure: true
+    - if: '$CD_ENV == "BENCHMARK_NIGHTLY"'
+      when: always
+
 .rules-prod-tests:
   rules:
     - if: '$CD_ENV == $cd_target_env && $CI_COMMIT_BRANCH =~ /^rc--/ && $CI_COMMIT_MESSAGE =~ /\[hotfix\]/'
@@ -153,13 +169,13 @@
     - if: '$CD_ENV == $cd_target_env && $CI_MERGE_REQUEST_TITLE =~ /\[rc\]/'
       when: manual
       allow_failure: true
-    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "web" && $CD_ENV != "BENCHMARK_SUITE"'
       when: manual
       allow_failure: true  # the pipeline continues running even if the manual job is not run
       # Run debug targets on the debug pipeline, when it is enabled (DEBUG_PIPELINE == 'true')
       # If this is not the DEBUG_PIPELINE, we must ignore '$cd_debug_target' so that it
       # gets included in any case.
-    - if: '$CD_ENV == $cd_target_env && ($DEBUG_PIPELINE != "true" || $cd_debug_target == "true")'
+    - if: '$CD_ENV == $cd_target_env && ($DEBUG_PIPELINE != "true" || $cd_debug_target == "true") && $CD_ENV != "BENCHMARK_SUITE"'
       when: always
 
 .rules-simple-prober:

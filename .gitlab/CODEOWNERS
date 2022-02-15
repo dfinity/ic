@@ -23,6 +23,8 @@
 /.pre-commit-config.yaml  @dfinity-lab/teams/idx
 /gitlab-ci/               @dfinity-lab/teams/idx
 /gitlab-ci/src/std-fs-check/ @dfinity-lab/teams/node-team
+/gitlab-ci/config/00--benchmark-test-child-pipeline.yml    @dfinity-lab/teams/networking-team @dfinity-lab/teams/node-team
+/gitlab-ci/config/60--benchmark-test--spawn-benchmark-pipeline.yml    @dfinity-lab/teams/networking-team @dfinity-lab/teams/node-team
 /rs/gitlab-ci-config.yml @dfinity-lab/teams/idx
 
 # Release management
