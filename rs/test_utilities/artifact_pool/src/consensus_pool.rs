@@ -21,6 +21,7 @@ use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
 use ic_test_utilities::{consensus::fake::*, crypto::CryptoReturningOk, mock_time};
 use ic_types::batch::ValidationContext;
 use ic_types::crypto::threshold_sig::ni_dkg::DkgId;
+use ic_types::signature::*;
 use ic_types::{consensus::*, crypto::*, *};
 use std::sync::Arc;
 use std::sync::RwLock;

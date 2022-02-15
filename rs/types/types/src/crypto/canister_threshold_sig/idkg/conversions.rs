@@ -2,8 +2,8 @@
 
 use super::*;
 use crate::consensus::ecdsa::EcdsaDealing;
-use crate::consensus::MultiSignature;
 use crate::crypto::Signed;
+use crate::signature::MultiSignature;
 
 impl From<Signed<EcdsaDealing, MultiSignature<EcdsaDealing>>> for IDkgMultiSignedDealing {
     fn from(signed: Signed<EcdsaDealing, MultiSignature<EcdsaDealing>>) -> Self {

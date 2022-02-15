@@ -14,6 +14,7 @@ use ic_types::{
     consensus::*,
     crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
     crypto::*,
+    signature::*,
     *,
 };
 use serde::{Deserialize, Serialize};

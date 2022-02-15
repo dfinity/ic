@@ -600,16 +600,14 @@ mod tests {
     use ic_types::consensus::certification::CertificationMessageHash;
     use ic_types::{
         artifact::Priority,
-        consensus::{
-            certification::{
-                Certification, CertificationContent, CertificationMessage, CertificationShare,
-            },
-            ThresholdSignature, ThresholdSignatureShare,
+        consensus::certification::{
+            Certification, CertificationContent, CertificationMessage, CertificationShare,
         },
         crypto::{
             threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
             CryptoHash, CryptoHashOf,
         },
+        signature::*,
         CryptoHashOfPartialState, Height,
     };
 

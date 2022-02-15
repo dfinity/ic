@@ -1,4 +1,5 @@
 use ic_types::artifact::StateSyncMessage;
+use ic_types::canister_http::CanisterHttpResponseContent;
 use ic_types::consensus::certification::CertificationMessage;
 use ic_types::consensus::dkg as consensus_dkg;
 use ic_types::consensus::{
@@ -7,13 +8,16 @@ use ic_types::consensus::{
         EcdsaComplaintContent, EcdsaDealing, EcdsaMessage, EcdsaOpeningContent, EcdsaSigShare,
         EcdsaTranscript,
     },
-    BasicSignature, Block, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes,
-    CatchUpShareContent, ConsensusMessage, FinalizationContent, HashedBlock, MultiSignature,
-    MultiSignatureShare, NotarizationContent, RandomBeaconContent, RandomTapeContent,
-    ThresholdSignature, ThresholdSignatureShare,
+    Block, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes, CatchUpShareContent,
+    ConsensusMessage, FinalizationContent, HashedBlock, NotarizationContent, RandomBeaconContent,
+    RandomTapeContent,
 };
 use ic_types::crypto::Signed;
 use ic_types::messages::{HttpCanisterUpdate, MessageId, SignedRequestBytes};
+use ic_types::signature::{
+    BasicSignature, MultiSignature, MultiSignatureShare, ThresholdSignature,
+    ThresholdSignatureShare,
+};
 use std::hash::Hash;
 
 /// The domain separator to be used when calculating the sender signature for a
@@ -78,6 +82,10 @@ pub const DOMAIN_ECDSA_COMPLAINT: &str = "ic-threshold-ecdsa-complaint-domain";
 pub(crate) const DOMAIN_ECDSA_OPENING_CONTENT: &str = "ic-threshold-ecdsa-opening-content-domain";
 pub const DOMAIN_ECDSA_OPENING: &str = "ic-threshold-ecdsa-opening-domain";
 
+pub(crate) const DOMAIN_CANISTER_HTTP_RESPONSE: &str = "ic-canister-http-response-domain";
+pub(crate) const DOMAIN_CRYPTO_HASH_OF_CANISTER_HTTP_RESPONSE: &str =
+    "ic-crypto-hash-of-canister-http-response-domain";
+
 /// A cryptographically hashable type.
 pub trait CryptoHashable: CryptoHashDomain + Hash {}
 impl<T> CryptoHashable for T where T: CryptoHashDomain + Hash {}
@@ -94,6 +102,7 @@ pub trait CryptoHashDomain: private::CryptoHashDomainSeal {
     fn domain(&self) -> String;
 }
 mod private {
+
     use super::*;
 
     pub trait CryptoHashDomainSeal {}
@@ -171,7 +180,22 @@ mod private {
     impl CryptoHashDomainSeal for EcdsaOpeningContent {}
     impl CryptoHashDomainSeal for Signed<EcdsaOpeningContent, BasicSignature<EcdsaOpeningContent>> {}
 
+    impl CryptoHashDomainSeal for CanisterHttpResponseContent {}
+    impl CryptoHashDomainSeal for ic_types::crypto::CryptoHashOf<CanisterHttpResponseContent> {}
+
     impl CryptoHashDomainSeal for CryptoHashableTestDummy {}
+}
+
+impl CryptoHashDomain for CanisterHttpResponseContent {
+    fn domain(&self) -> String {
+        DOMAIN_CANISTER_HTTP_RESPONSE.to_string()
+    }
+}
+
+impl CryptoHashDomain for ic_types::crypto::CryptoHashOf<CanisterHttpResponseContent> {
+    fn domain(&self) -> String {
+        DOMAIN_CRYPTO_HASH_OF_CANISTER_HTTP_RESPONSE.to_string()
+    }
 }
 
 impl CryptoHashDomain for NotarizationContent {

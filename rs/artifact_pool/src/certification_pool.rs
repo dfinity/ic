@@ -328,16 +328,14 @@ mod tests {
     use ic_test_utilities::consensus::fake::{Fake, FakeSigner};
     use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
-        consensus::{
-            certification::{
-                Certification, CertificationContent, CertificationMessage, CertificationShare,
-            },
-            ThresholdSignature, ThresholdSignatureShare,
+        consensus::certification::{
+            Certification, CertificationContent, CertificationMessage, CertificationShare,
         },
         crypto::{
             threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
             CryptoHash, Signed,
         },
+        signature::*,
         CryptoHashOfPartialState, Height,
     };
 

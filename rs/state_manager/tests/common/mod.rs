@@ -24,11 +24,9 @@ use ic_types::{
         ArtifactErrorCode::{ChunkVerificationFailed, ChunksMoreNeeded},
         ChunkId, Chunkable, ChunkableArtifact,
     },
-    consensus::{
-        certification::{Certification, CertificationContent},
-        ThresholdSignature,
-    },
+    consensus::certification::{Certification, CertificationContent},
     crypto::Signed,
+    signature::ThresholdSignature,
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
     CanisterId, CryptoHashOfState, Cycles, Height, RegistryVersion, SubnetId,
 };

@@ -1,7 +1,9 @@
 pub use crate::consensus::crypto::*;
 pub use ic_consensus_message::ConsensusMessageHashable;
 pub use ic_interfaces::consensus_pool::{ChangeAction, ChangeSet, ChangeSetOperation};
-pub use ic_types::{batch::*, consensus::*, crypto::*, *};
+pub use ic_types::{
+    batch::*, consensus::*, crypto::threshold_sig::ni_dkg::NiDkgId, crypto::*, signature::*, *,
+};
 
 // In some cases, expected_height might fall too much behind the finalized
 // height; for example, when a node is attempting to catch up via a CUP during

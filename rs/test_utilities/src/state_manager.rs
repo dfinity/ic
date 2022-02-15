@@ -433,8 +433,9 @@ impl CertifiedStreamStore for FakeStateManager {
         byte_limit: Option<usize>,
     ) -> Result<CertifiedStreamSlice, EncodeStreamError> {
         use ic_types::{
-            consensus::{certification::CertificationContent, ThresholdSignature},
+            consensus::certification::CertificationContent,
             crypto::{CombinedThresholdSig, CombinedThresholdSigOf, Signed},
+            signature::ThresholdSignature,
         };
 
         let state = self.get_latest_state();

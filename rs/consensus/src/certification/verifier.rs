@@ -45,14 +45,12 @@ mod tests {
         consensus::fake::*, crypto::CryptoReturningOk, types::ids::subnet_test_id,
     };
     use ic_types::{
-        consensus::{
-            certification::{Certification, CertificationContent},
-            ThresholdSignature,
-        },
+        consensus::certification::{Certification, CertificationContent},
         crypto::{
             threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
             CryptoHash, Signed,
         },
+        signature::ThresholdSignature,
         CryptoHashOfPartialState, Height,
     };
 

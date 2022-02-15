@@ -174,7 +174,6 @@ pub(crate) mod test_utils {
         RequestId, ReshareOfMaskedParams, ThresholdEcdsaSigInputsRef, TranscriptLookupError,
         TranscriptRef, UnmaskedTranscript,
     };
-    use ic_types::consensus::{BasicSignature, MultiSignatureShare};
     use ic_types::crypto::canister_threshold_sig::idkg::{
         IDkgDealers, IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
         IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
@@ -183,6 +182,7 @@ pub(crate) mod test_utils {
         ExtendedDerivationPath, ThresholdEcdsaSigShare,
     };
     use ic_types::crypto::AlgorithmId;
+    use ic_types::signature::*;
     use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion};
     use std::collections::{BTreeMap, BTreeSet};
     use std::convert::TryFrom;

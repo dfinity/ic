@@ -51,6 +51,7 @@ use ic_types::{
     crypto::Signed,
     ic00::IC_00,
     ingress::{IngressStatus, MAX_INGRESS_TTL},
+    signature::*,
     Height, PrincipalId, RegistryVersion, Time, UserId,
 };
 use std::sync::Arc;

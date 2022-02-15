@@ -1,13 +1,11 @@
 #![allow(clippy::redundant_clone)]
 use crate::{
-    consensus::{
-        certification::{Certification, CertificationContent},
-        ThresholdSignature,
-    },
+    consensus::certification::{Certification, CertificationContent},
     crypto::{
         threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
     },
+    signature::ThresholdSignature,
     xnet::CertifiedStreamSlice,
     CryptoHashOfPartialState, Height, PrincipalId, PrincipalIdBlobParseError, SubnetId,
 };

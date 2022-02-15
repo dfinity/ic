@@ -20,12 +20,13 @@ use ic_types::{
     batch::ValidationContext,
     consensus::{
         catchup::CUPWithOriginalProtobuf, dkg, Block, CatchUpContent, CatchUpPackage, HasHeight,
-        HashedBlock, HashedRandomBeacon, Payload, RandomBeaconContent, Rank, ThresholdSignature,
+        HashedBlock, HashedRandomBeacon, Payload, RandomBeaconContent, Rank,
     },
     crypto::{
         threshold_sig::ni_dkg::NiDkgTag, CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash,
         Signed,
     },
+    signature::ThresholdSignature,
     time::UNIX_EPOCH,
     Height, SubnetId, Time,
 };
