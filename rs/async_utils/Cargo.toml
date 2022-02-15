@@ -8,5 +8,6 @@ crossbeam-channel =  "0.5.1"
 futures = "0.3.13"
 prometheus = { version = "0.12.0", features = [ "process" ] }
 tokio = { version = "1.15.0", features = ["full"] }
+tonic = "0.6.2"
 slog = "2.5.2"
 
