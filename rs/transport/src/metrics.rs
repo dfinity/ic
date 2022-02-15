@@ -1,7 +1,7 @@
 //! Transport related metrics
 
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
-use prometheus::{HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
+use prometheus::{HistogramOpts, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 
 #[derive(Clone)]
 pub(crate) struct ControlPlaneMetrics {
@@ -114,32 +114,50 @@ impl DataPlaneMetrics {
                 "Passing read payload to client failed",
                 &["flow_peer_id", "flow_tag"],
             ),
-            client_send_time_msec: metrics_registry.histogram_vec(
-                "transport_client_send_time_msec",
-                "Time spent in client message callback, in milliseconds",
-                // 1ms, 2ms, 5ms - 100 sec, 200 sec, 500 sec
-                decimal_buckets(0, 5),
+            // TODO: (NET-867)
+            client_send_time_msec: HistogramVec::new(
+                HistogramOpts::new(
+                    "transport_client_send_time_msec",
+                    "Time spent in client message callback, in milliseconds",
+                )
+                .buckets(
+                    // 1ms, 2ms, 5ms - 100 sec, 200 sec, 500 sec
+                    decimal_buckets(0, 5),
+                ),
                 &["flow_peer_id", "flow_tag"],
-            ),
+            )
+            .unwrap(),
             socket_write_bytes: metrics_registry.int_counter_vec(
                 "transport_socket_write_bytes",
                 "Bytes written to sockets",
                 &["flow_peer_id", "flow_tag"],
             ),
-            socket_write_size: metrics_registry.histogram_vec(
-                "transport_socket_write_size",
-                "Bytes written per socket write",
-                // 1K, 2K, 5K - 1MB, 2MB, 5MB
-                decimal_buckets(3, 6),
+            // TODO: (NET-867)
+            socket_write_size: HistogramVec::new(
+                HistogramOpts::new(
+                    "transport_socket_write_size",
+                    "Bytes written per socket write",
+                )
+                .buckets(
+                    // 1K, 2K, 5K - 1MB, 2MB, 5MB
+                    decimal_buckets(3, 6),
+                ),
                 &["flow_peer_id", "flow_tag"],
-            ),
-            socket_write_time_msec: metrics_registry.histogram_vec(
-                "transport_socket_write_time_msec",
-                "Socket write time, in milliseconds",
-                // 1ms, 2ms, 5ms - 100 sec, 200 sec, 500 sec
-                decimal_buckets(0, 5),
+            )
+            .unwrap(),
+            // TODO: (NET-867)
+            socket_write_time_msec: HistogramVec::new(
+                HistogramOpts::new(
+                    "transport_socket_write_time_msec",
+                    "Socket write time, in milliseconds",
+                )
+                .buckets(
+                    // 1ms, 2ms, 5ms - 100 sec, 200 sec, 500 sec
+                    decimal_buckets(0, 5),
+                ),
                 &["flow_peer_id", "flow_tag"],
-            ),
+            )
+            .unwrap(),
             socket_read_bytes: metrics_registry.int_counter_vec(
                 "transport_socket_read_bytes",
                 "Bytes read from sockets",
@@ -169,13 +187,19 @@ impl DataPlaneMetrics {
                 .int_gauge("transport_write_tasks", "Active data plane write tasks"),
             read_tasks: metrics_registry
                 .int_gauge("transport_read_tasks", "Active data plane read tasks"),
-            write_task_overhead_time_msec: metrics_registry.histogram_vec(
-                "transport_write_task_overhead_time_msec",
-                "Time before socket write, in milliseconds",
-                // 1ms, 2ms, 5ms - 100 sec, 200 sec, 500 sec
-                decimal_buckets(0, 5),
+            // TODO: (NET-867)
+            write_task_overhead_time_msec: HistogramVec::new(
+                HistogramOpts::new(
+                    "transport_write_task_overhead_time_msec",
+                    "Time before socket write, in milliseconds",
+                )
+                .buckets(
+                    // 1ms, 2ms, 5ms - 100 sec, 200 sec, 500 sec
+                    decimal_buckets(0, 5),
+                ),
                 &["flow_peer_id", "flow_tag"],
-            ),
+            )
+            .unwrap(),
         }
     }
 }
@@ -238,13 +262,19 @@ impl SendQueueMetrics {
                 "Channel receive end update count",
                 &["flow_peer_id", "flow_tag"],
             ),
-            queue_time_msec: metrics_registry.histogram_vec(
-                "transport_send_queue_time_msec",
-                "Time spent in the send queue, in milliseconds",
-                // 1ms, 2ms, 5ms - 100 sec, 200 sec, 500 sec
-                decimal_buckets(0, 5),
+            // TODO: (NET-867)
+            queue_time_msec: HistogramVec::new(
+                HistogramOpts::new(
+                    "transport_send_queue_time_msec",
+                    "Time spent in the send queue, in milliseconds",
+                )
+                .buckets(
+                    // 1ms, 2ms, 5ms - 100 sec, 200 sec, 500 sec
+                    decimal_buckets(0, 5),
+                ),
                 &["flow_peer_id", "flow_tag"],
-            ),
+            )
+            .unwrap(),
             no_receiver: metrics_registry.int_counter_vec(
                 "transport_send_no_receiver",
                 "Message send failed as receive channel end closed",
