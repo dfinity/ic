@@ -24,15 +24,22 @@ use crate::crypto::{
 };
 use crate::{Height, NodeId};
 
-pub type EcdsaSignature = ThresholdEcdsaCombinedSignature;
+/// For completed signature requests, we differentiate between those
+/// that have already been reported and those that have not. This is
+/// to prevent signatures from being reported more than once.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum CompletedSignature {
+    ReportedToExecution,
+    Unreported(ThresholdEcdsaCombinedSignature),
+}
 
 /// The payload information necessary for ECDSA threshold signatures, that is
 /// published on every consensus round. It represents the current state of
 /// the protocol since the summary block.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct EcdsaDataPayload {
-    /// Signatures that we agreed upon in this round.
-    pub signature_agreements: BTreeMap<RequestId, EcdsaSignature>,
+    /// Collection of completed signatures.
+    pub signature_agreements: BTreeMap<RequestId, CompletedSignature>,
 
     /// The `RequestIds` for which we are currently generating signatures.
     pub ongoing_signatures: BTreeMap<RequestId, ThresholdEcdsaSigInputsRef>,
@@ -119,6 +126,9 @@ impl EcdsaDataPayload {
 /// published on summary blocks.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct EcdsaSummaryPayload {
+    /// Carry over completed signatures from the previous data payload.
+    pub signature_agreements: BTreeMap<RequestId, CompletedSignature>,
+
     /// The `RequestIds` for which we are currently generating signatures.
     pub ongoing_signatures: BTreeMap<RequestId, ThresholdEcdsaSigInputsRef>,
 

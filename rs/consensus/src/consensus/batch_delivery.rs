@@ -21,7 +21,7 @@ use ic_protobuf::log::consensus_log_entry::v1::ConsensusLogEntry;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_replicated_state::{metadata_state::subnet_call_context_manager::*, ReplicatedState};
 use ic_types::{
-    consensus::ecdsa::EcdsaBlockReader,
+    consensus::ecdsa::{CompletedSignature, EcdsaBlockReader},
     crypto::threshold_sig::ni_dkg::{
         NiDkgId, NiDkgTag, NiDkgTargetSubnet::Remote, NiDkgTranscript,
     },
@@ -83,25 +83,12 @@ pub fn deliver_batches(
                     "Finalized height";
                     consensus => ConsensusLogEntry { height: Some(h.get()), hash: Some(get_block_hash_string(&block)) }
                 );
-                let mut consensus_responses = Vec::<Response>::new();
-                if block.payload.is_summary() {
-                    let summary = block.payload.as_ref().as_summary();
-                    info!(
-                        log,
-                        "New DKG summary with config ids created: {:?}",
-                        summary.dkg.configs.keys().collect::<Vec<_>>()
-                    );
-                    // Compute consensus' responses to subnet calls.
-                    consensus_responses = generate_responses_to_subnet_calls(
-                        &*state_manager,
-                        block.context.certified_height,
-                        summary.dkg.transcripts_for_new_subnets(),
-                        block.context.time,
-                        log,
-                    );
-                }
+                // Compute consensus' responses to subnet calls.
+                let consensus_responses =
+                    generate_responses_to_subnet_calls(&*state_manager, &block, log);
+
                 // When we are not deliverying CUP block, we must check replica_version
-                else {
+                if !block.payload.is_summary() {
                     match pool.registry_version(h).and_then(|registry_version| {
                         lookup_replica_version(registry_client, subnet_id, log, registry_version)
                     }) {
@@ -210,26 +197,47 @@ pub fn deliver_batches(
 }
 
 /// This function creates responses to the system calls that are redirected to
-/// consensus.
+/// consensus. There are two types of calls being handled here:
+/// - Initial NiDKG transcript creation, where a response may come from summary payloads.
+/// - Threshold ECDSA signature creation, where a response may from from data payloads.
 pub fn generate_responses_to_subnet_calls(
     state_manager: &dyn StateManager<State = ReplicatedState>,
-    certified_height: Height,
-    transcripts_for_new_subnets: &BTreeMap<NiDkgId, Result<NiDkgTranscript, String>>,
-    batch_time: Time,
+    block: &Block,
     log: &ReplicaLogger,
 ) -> Vec<Response> {
     let mut consensus_responses = Vec::<Response>::new();
-    if let Ok(state) = state_manager.get_state_at(certified_height) {
+    let block_payload = &block.payload;
+    if let Ok(state) = state_manager.get_state_at(block.context.certified_height) {
         let setup_initial_dkg_contexts = &state
             .get_ref()
             .metadata
             .subnet_call_context_manager
             .setup_initial_dkg_contexts;
-        consensus_responses.append(&mut generate_responses_to_setup_initial_dkg_calls(
-            setup_initial_dkg_contexts,
-            transcripts_for_new_subnets,
-            log,
-        ));
+        if block_payload.is_summary() {
+            let summary = block_payload.as_ref().as_summary();
+            info!(
+                log,
+                "New DKG summary with config ids created: {:?}",
+                summary.dkg.configs.keys().collect::<Vec<_>>()
+            );
+
+            consensus_responses.append(&mut generate_responses_to_setup_initial_dkg_calls(
+                setup_initial_dkg_contexts,
+                summary.dkg.transcripts_for_new_subnets(),
+                log,
+            ));
+        } else if let Some(ecdsa_payload) = &block_payload.as_ref().as_data().ecdsa {
+            let sign_with_ecdsa_contexts = &state
+                .get_ref()
+                .metadata
+                .subnet_call_context_manager
+                .sign_with_ecdsa_contexts;
+            consensus_responses.append(&mut generate_responses_to_sign_with_ecdsa_calls(
+                sign_with_ecdsa_contexts,
+                ecdsa_payload,
+            ));
+        }
+
         let sign_with_mock_ecdsa_contexts = &state
             .get_ref()
             .metadata
@@ -237,7 +245,7 @@ pub fn generate_responses_to_subnet_calls(
             .sign_with_mock_ecdsa_contexts;
         consensus_responses.append(&mut generate_responses_to_sign_with_mock_ecdsa_calls(
             sign_with_mock_ecdsa_contexts,
-            batch_time,
+            block.context.time,
         ));
     }
     consensus_responses
@@ -359,6 +367,36 @@ pub fn generate_responses_to_sign_with_mock_ecdsa_calls(
                 originator_reply_callback: *callback_id,
                 refund: Cycles::zero(),
                 response_payload,
+            });
+        }
+    }
+    consensus_responses
+}
+
+/// Creates responses to `SignWithECDSA` system calls with the computed
+/// signature.
+pub fn generate_responses_to_sign_with_ecdsa_calls(
+    contexts: &BTreeMap<CallbackId, SignWithEcdsaContext>,
+    ecdsa_payload: &ecdsa::EcdsaDataPayload,
+) -> Vec<Response> {
+    use ic_ic00_types::{Payload, SignWithECDSAReply};
+    let mut consensus_responses = Vec::<Response>::new();
+    for (callback_id, context) in contexts.iter() {
+        let request_id = ecdsa::RequestId::from(context.pseudo_random_id.to_vec());
+        if let Some(CompletedSignature::Unreported(response)) =
+            ecdsa_payload.signature_agreements.get(&request_id).cloned()
+        {
+            consensus_responses.push(Response {
+                originator: context.request.sender,
+                respondent: CanisterId::ic_00(),
+                originator_reply_callback: *callback_id,
+                refund: Cycles::zero(),
+                response_payload: messages::Payload::Data(
+                    SignWithECDSAReply {
+                        signature: response.signature,
+                    }
+                    .encode(),
+                ),
             });
         }
     }

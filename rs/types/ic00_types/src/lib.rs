@@ -613,27 +613,30 @@ impl ProvisionalTopUpCanisterArgs {
 
 impl Payload<'_> for ProvisionalTopUpCanisterArgs {}
 
-/// Struct used for encoding/decoding
-/// `(record {
-/// message_hash : blob;
-/// derivation_path : blob;
-/// })`
+/// Represents the argument of the sign_with_ecdsa API.
+/// ```text
+/// (record {
+///   message_hash : blob;
+///   derivation_path : vec blob;
+///   key_id : text;
+/// })
+/// ```
 #[derive(CandidType, Deserialize, Debug)]
 pub struct SignWithECDSAArgs {
     pub message_hash: Vec<u8>,
-    pub derivation_path: Vec<u8>,
+    pub derivation_path: Vec<Vec<u8>>,
+    pub key_id: String,
 }
 
 impl Payload<'_> for SignWithECDSAArgs {}
 
-impl SignWithECDSAArgs {
-    pub fn new(message_hash: Vec<u8>, derivation_path: Vec<u8>) -> Self {
-        Self {
-            message_hash,
-            derivation_path,
-        }
-    }
+/// Struct used to return an ECDSA signature.
+#[derive(CandidType, Deserialize, Debug)]
+pub struct SignWithECDSAReply {
+    pub signature: Vec<u8>,
 }
+
+impl Payload<'_> for SignWithECDSAReply {}
 
 /// Represents the argument of the get_ecdsa_public_key API.
 /// ```text

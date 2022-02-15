@@ -60,11 +60,11 @@ impl SubnetCallContextManager {
                     .remove(&callback_id)
                     .map(|context| {
                         info!(
-                    logger,
-                    "Received the response for SignWithECDSA request with id {:?} from {:?}",
-                    context.pseudo_random_id,
-                    context.request.sender
-                );
+                            logger,
+                            "Received the response for SignWithECDSA request with id {:?} from {:?}",
+                            context.pseudo_random_id,
+                            context.request.sender
+                        );
                         context.request
                     })
             })
@@ -73,11 +73,11 @@ impl SubnetCallContextManager {
                     .remove(&callback_id)
                     .map(|context| {
                         info!(
-                    logger,
-                    "Received the response for SignWithMockECDSA request with id {:?} from {:?}",
-                    context.pseudo_random_id,
-                    context.request.sender
-                );
+                            logger,
+                            "Received the response for SignWithMockECDSA request with id {:?} from {:?}",
+                            context.pseudo_random_id,
+                            context.request.sender
+                        );
                         context.request
                     })
             })
@@ -198,7 +198,7 @@ impl TryFrom<pb_metadata::SetupInitialDkgContext> for SetupInitialDkgContext {
 pub struct SignWithEcdsaContext {
     pub request: Request,
     pub message_hash: Vec<u8>,
-    pub derivation_path: Vec<u8>,
+    pub derivation_path: Vec<Vec<u8>>,
     pub pseudo_random_id: [u8; 32],
     pub batch_time: Time,
 }
@@ -208,7 +208,7 @@ impl From<&SignWithEcdsaContext> for pb_metadata::SignWithEcdsaContext {
         pb_metadata::SignWithEcdsaContext {
             request: Some((&context.request).into()),
             message_hash: context.message_hash.to_vec(),
-            derivation_path: context.derivation_path.to_vec(),
+            derivation_path_vec: context.derivation_path.clone(),
             pseudo_random_id: context.pseudo_random_id.to_vec(),
             batch_time: context.batch_time.as_nanos_since_unix_epoch(),
         }
@@ -222,7 +222,7 @@ impl TryFrom<pb_metadata::SignWithEcdsaContext> for SignWithEcdsaContext {
             try_from_option_field(context.request, "SignWithEcdsaContext::request")?;
         Ok(SignWithEcdsaContext {
             message_hash: context.message_hash,
-            derivation_path: context.derivation_path,
+            derivation_path: context.derivation_path_vec,
             request,
             pseudo_random_id: {
                 if context.pseudo_random_id.len() != 32 {

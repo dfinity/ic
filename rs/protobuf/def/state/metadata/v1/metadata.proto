@@ -54,8 +54,10 @@ message SignWithEcdsaContext {
     state.queues.v1.Request request = 1;
     bytes pseudo_random_id = 2;
     bytes message_hash = 3;
-    bytes derivation_path = 4;
+    reserved 4;
+    reserved "derivation_path";
     uint64 batch_time = 5;
+    repeated bytes derivation_path_vec = 6;
 }
 
 message SignWithEcdsaContextTree {

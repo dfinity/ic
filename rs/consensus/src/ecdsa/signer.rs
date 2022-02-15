@@ -13,10 +13,10 @@ use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
 use ic_logger::{debug, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::artifact::EcdsaMessageId;
-use ic_types::consensus::ecdsa::{
-    EcdsaBlockReader, EcdsaMessage, EcdsaSigShare, EcdsaSignature, RequestId,
+use ic_types::consensus::ecdsa::{EcdsaBlockReader, EcdsaMessage, EcdsaSigShare, RequestId};
+use ic_types::crypto::canister_threshold_sig::{
+    ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
 };
-use ic_types::crypto::canister_threshold_sig::{ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare};
 use ic_types::{Height, NodeId};
 
 use prometheus::IntCounterVec;
@@ -394,7 +394,7 @@ pub(crate) trait EcdsaSignatureBuilder: Send {
         &self,
         chain: Arc<dyn ConsensusBlockChain>,
         ecdsa_pool: &dyn EcdsaPool,
-    ) -> Vec<(RequestId, EcdsaSignature)>;
+    ) -> Vec<(RequestId, ThresholdEcdsaCombinedSignature)>;
 }
 
 pub(crate) struct EcdsaSignatureBuilderImpl<'a> {
@@ -421,7 +421,7 @@ impl<'a> EcdsaSignatureBuilderImpl<'a> {
         request_id: &RequestId,
         inputs: &ThresholdEcdsaSigInputs,
         shares: &BTreeMap<NodeId, ThresholdEcdsaSigShare>,
-    ) -> Option<EcdsaSignature> {
+    ) -> Option<ThresholdEcdsaCombinedSignature> {
         ThresholdEcdsaSigVerifier::combine_sig_shares(&*self.crypto, inputs, shares).map_or_else(
             |error| {
                 warn!(
@@ -446,7 +446,7 @@ impl<'a> EcdsaSignatureBuilder for EcdsaSignatureBuilderImpl<'a> {
         &self,
         chain: Arc<dyn ConsensusBlockChain>,
         ecdsa_pool: &dyn EcdsaPool,
-    ) -> Vec<(RequestId, EcdsaSignature)> {
+    ) -> Vec<(RequestId, ThresholdEcdsaCombinedSignature)> {
         let block_reader = EcdsaBlockReaderImpl::new(chain);
         let requested_signatures = resolve_sig_inputs_refs(
             &block_reader,

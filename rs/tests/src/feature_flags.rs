@@ -25,7 +25,11 @@ pub fn ecdsa_signatures_disabled_by_default(handle: IcHandle, ctx: &ic_fondue::p
         endpoint.assert_ready(ctx).await;
         let agent = assert_create_agent(endpoint.url.as_str()).await;
 
-        let request = SignWithECDSAArgs::new([0u8; 32].to_vec(), [0u8; 32].to_vec());
+        let request = SignWithECDSAArgs {
+            message_hash: [0u8; 32].to_vec(),
+            derivation_path: Vec::new(),
+            key_id: "secp256k1".to_string(),
+        };
 
         let uni_can = UniversalCanister::new(&agent).await;
         let res = uni_can
@@ -62,7 +66,11 @@ pub fn mock_ecdsa_signatures_are_supported(handle: IcHandle, ctx: &ic_fondue::po
         let agent = assert_create_agent(endpoint.url.as_str()).await;
 
         let message_hash = [0xabu8; 32];
-        let request = SignWithECDSAArgs::new(message_hash.to_vec(), [0u8; 32].to_vec());
+        let request = SignWithECDSAArgs {
+            message_hash: message_hash.to_vec(),
+            derivation_path: Vec::new(),
+            key_id: "secp256k1".to_string(),
+        };
 
         // Ask for a signature:
         let uni_can = UniversalCanister::new(&agent).await;

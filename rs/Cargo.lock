@@ -3580,6 +3580,7 @@ dependencies = [
  "ic-cycles-account-manager",
  "ic-ecdsa-object",
  "ic-execution-environment",
+ "ic-ic00-types",
  "ic-ingress-manager",
  "ic-interfaces",
  "ic-logger",

@@ -349,7 +349,7 @@ impl Finalizer {
 mod tests {
     //! Finalizer unit tests
     use super::*;
-    use crate::consensus::generate_responses_to_subnet_calls;
+    use crate::consensus::batch_delivery::generate_responses_to_setup_initial_dkg_calls;
     use crate::consensus::mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
     use ic_interfaces::state_manager::Labeled;
     use ic_logger::replica_logger::no_op_logger;
@@ -647,11 +647,16 @@ mod tests {
         .collect::<BTreeMap<_, _>>();
 
         // Run the function
-        let result = generate_responses_to_subnet_calls(
-            &state_manager,
-            Height::from(1),
+        use ic_interfaces::state_manager::StateReader;
+        let state = state_manager.get_state_at(Height::from(1)).unwrap();
+        let setup_initial_dkg_contexts = &state
+            .get_ref()
+            .metadata
+            .subnet_call_context_manager
+            .setup_initial_dkg_contexts;
+        let result = generate_responses_to_setup_initial_dkg_calls(
+            setup_initial_dkg_contexts,
             &transcripts_for_new_subnets,
-            ic_test_utilities::mock_time(),
             &no_op_logger(),
         );
         assert_eq!(result.len(), 1);
