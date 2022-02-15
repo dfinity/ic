@@ -5,7 +5,7 @@ use ledger_canister::{
 
 use candid::candid_method;
 use dfn_candid::candid_one;
-use dfn_core::api::stable_memory_size_in_pages;
+use dfn_core::api::{print, stable_memory_size_in_pages};
 use dfn_core::{over_init, stable, BytesS};
 use dfn_protobuf::protobuf;
 use serde::{Deserialize, Serialize};
@@ -45,14 +45,6 @@ impl ArchiveNodeState {
             last_upgrade_timestamp: 0,
         }
     }
-}
-
-// Helper to print messages in cyan
-fn print<S: std::convert::AsRef<str>>(s: S)
-where
-    yansi::Paint<S>: std::string::ToString,
-{
-    dfn_core::api::print(yansi::Paint::cyan(s).to_string());
 }
 
 // Append the Blocks to the internal Vec

@@ -23,7 +23,6 @@ byteorder = "1.4"
 serde_bytes = "0.11"
 serde_cbor = "0.11"
 ic-base-types = {path="../../types/base_types"}
-yansi = "0.5.0"
 on_wire = {path = "../../rust_canisters/on_wire"}
 intmap = "0.7.0"
 crc32fast = "1.2.0"

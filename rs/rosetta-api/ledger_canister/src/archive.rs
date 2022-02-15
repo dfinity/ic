@@ -1,5 +1,6 @@
 use crate::{spawn, EncodedBlock};
 use candid::CandidType;
+use dfn_core::api::print;
 use ic_types::ic00::{Method, IC_00};
 use ic_types::CanisterId;
 use serde::{Deserialize, Serialize};
@@ -335,14 +336,6 @@ fn take_prefix(blocks: &mut VecDeque<EncodedBlock>, mut max_size: usize) -> Vec<
         result.push(blocks.pop_front().unwrap());
     }
     result
-}
-
-// Helper to print messages in green
-fn print<S: std::convert::AsRef<str>>(s: S)
-where
-    yansi::Paint<S>: std::string::ToString,
-{
-    dfn_core::api::print(yansi::Paint::green(s).to_string());
 }
 
 /// This error type should only be returned in the case where an await has been
