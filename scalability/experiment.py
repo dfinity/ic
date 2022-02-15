@@ -78,9 +78,6 @@ class Experiment:
 
     def __init__(self, request_type="query"):
         """Init."""
-        sys.path.insert(1, "../ic-os/guestos/tests")  # for ictools
-        import ictools
-
         self.load_artifacts()
 
         self.testnet = FLAGS.testnet
@@ -93,12 +90,16 @@ class Experiment:
 
         self.request_type = request_type
 
-        self.git_hash = ictools.get_ic_version(
-            "http://[{}]:8080/api/v2/status".format(self.get_machine_to_instrument())
-        )
+    def get_ic_version(self, m):
+        """Retrieve the IC version from the given machine m."""
+        sys.path.insert(1, "../ic-os/guestos/tests")
+        import ictools
+
+        return ictools.get_ic_version("http://[{}]:8080/api/v2/status".format(m))
 
     def init(self):
         """Initialize experiment."""
+        self.git_hash = self.get_ic_version(self.get_machine_to_instrument())
         print(f"Running against an IC with git hash: {self.git_hash}")
 
         self.out_dir_timestamp = int(time.time())
