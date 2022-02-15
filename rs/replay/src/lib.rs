@@ -767,7 +767,7 @@ impl Player {
                         self.consensus_pool.as_mut().unwrap(),
                     );
                 }
-                // When we run into a proposal referencing a newer registry version, we need to dump
+                // When we run into an NNS block referencing a newer registry version, we need to dump
                 // all changes from the registry canister into the local store and apply them.
                 backup::ExitPoint::NewerRegistryVersion(new_version) => {
                     self.update_registry_local_store();

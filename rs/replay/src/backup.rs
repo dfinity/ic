@@ -13,6 +13,7 @@ use ic_interfaces::{
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_protobuf::types::v1 as pb;
+use ic_registry_client::helper::subnet::SubnetRegistry;
 use ic_types::{
     consensus::{
         certification::Certification, BlockProposal, CatchUpContentProtobufBytes, CatchUpPackage,
@@ -282,16 +283,27 @@ pub(crate) fn deserialize_consensus_artifacts(
             }
 
             let block_registry_version = validation_context.registry_version;
-            // If the block references newer registry version, that we have, we exit.
             if block_registry_version > registry_client.get_latest_version() {
                 println!(
                     "Found a block with a newer registry version {:?} at height {:?}",
                     block_registry_version,
                     proposal.content.as_ref().height,
                 );
-                height_to_batches.insert(height, height_artifacts);
-                return ExitPoint::NewerRegistryVersion(block_registry_version);
+                // If an NNS block references a newer registry version than that we have,
+                // we exit to apply all changes from the registry canister into the local
+                // store. Otherwise, we cannot progress until we sync the local store.
+                let root_subnet_id = registry_client
+                    .get_root_subnet_id(registry_version)
+                    .unwrap()
+                    .unwrap();
+                if subnet_id == root_subnet_id {
+                    height_to_batches.insert(height, height_artifacts);
+                    return ExitPoint::NewerRegistryVersion(block_registry_version);
+                } else {
+                    return ExitPoint::Done;
+                }
             }
+
             artifacts.push(proposal.into_message());
         }
 
