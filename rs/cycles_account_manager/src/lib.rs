@@ -348,6 +348,9 @@ impl CyclesAccountManager {
                 | Ok(Method::GetMockECDSAPublicKey)
                 | Ok(Method::SignWithECDSA)
                 | Ok(Method::SignWithMockECDSA)
+                | Ok(Method::BitcoinTestnetGetBalance)
+                | Ok(Method::BitcoinTestnetGetUtxos)
+                | Ok(Method::BitcoinTestnetSendTransaction)
                 | Err(_) => {
                     return Err(IngressInductionCostError::UnknownSubnetMethod);
                 }

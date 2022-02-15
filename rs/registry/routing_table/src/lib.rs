@@ -91,6 +91,13 @@ pub fn resolve_destination(
                 )
             })
         }
+        Ok(Ic00Method::BitcoinTestnetGetBalance)
+        | Ok(Ic00Method::BitcoinTestnetGetUtxos)
+        | Ok(Ic00Method::BitcoinTestnetSendTransaction) => {
+            // TODO(EXC-939): Route requests to the appropriate subnet.
+            // For now, we return our own subnet ID.
+            Ok(own_subnet)
+        }
         Err(_) => Err(ResolveDestinationError::MethodNotFound(
             method_name.to_string(),
         )),
