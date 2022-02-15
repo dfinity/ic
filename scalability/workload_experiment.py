@@ -47,6 +47,7 @@ class WorkloadExperiment(experiment.Experiment):
 
         self.wg_testnet = FLAGS.wg_testnet
         self.use_updates = FLAGS.use_updates
+        self.num_workload_gen = num_workload_gen
 
         print(
             (
@@ -55,6 +56,9 @@ class WorkloadExperiment(experiment.Experiment):
             )
         )
 
+    def init(self):
+        """More init."""
+        super().init()
         self.target_nodes = self.get_mainnet_targets() if self.testnet == "mercury" else self.get_targets()
 
         workload_generator_machines = (
@@ -62,22 +66,21 @@ class WorkloadExperiment(experiment.Experiment):
             if len(FLAGS.workload_generator_machines) > 0
             else self.get_hostnames(self.wg_testnet, FLAGS.wg_subnet)
         )
-        if num_workload_gen > len(workload_generator_machines):
+        if self.num_workload_gen > len(workload_generator_machines):
             raise Exception(
                 "Not enough machines in testnet {}'s subnet {} to run {} workload generators".format(
-                    self.wg_testnet, FLAGS.wg_subnet, num_workload_gen
+                    self.wg_testnet, FLAGS.wg_subnet, self.num_workload_gen
                 )
             )
 
-        self.machines = workload_generator_machines[:num_workload_gen]
-        self.num_workload_gen = num_workload_gen
+        self.machines = workload_generator_machines[: self.num_workload_gen]
         self.subnet_id = (
             FLAGS.target_subnet_id
             if FLAGS.target_subnet_id is not None and len(FLAGS.target_subnet_id) > 0
             else self.get_subnet_for_target()
         )
 
-        print(f"Running against an IC {self.target_nodes} with git hash: {self.git_hash} from {self.machines}")
+        print(f"Running against an IC {self.target_nodes} from {self.machines}")
 
     def init_experiment(self):
         """Initialize the experiment."""
