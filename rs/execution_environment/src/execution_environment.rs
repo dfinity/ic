@@ -661,7 +661,11 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                 (Some((res, Cycles::zero())), instructions_limit)
             }
 
-            Err(ParseError::VariantNotFound) => {
+            // TODO(EXC-940): Send Bitcoin requests to the Bitcoin canister.
+            Ok(Ic00Method::BitcoinTestnetGetBalance)
+            | Ok(Ic00Method::BitcoinTestnetGetUtxos)
+            | Ok(Ic00Method::BitcoinTestnetSendTransaction)
+            | Err(ParseError::VariantNotFound) => {
                 let res = Err(UserError::new(
                     ErrorCode::CanisterMethodNotFound,
                     format!("Management canister has no method '{}'", msg.method_name()),

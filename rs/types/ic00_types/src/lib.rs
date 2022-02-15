@@ -35,6 +35,11 @@ pub enum Method {
     UninstallCode,
     UpdateSettings,
 
+    // Bitcoin Testnet Canister
+    BitcoinTestnetGetBalance,
+    BitcoinTestnetGetUtxos,
+    BitcoinTestnetSendTransaction,
+
     // These methods are added for the Mercury I release.
     // They should be removed afterwards.
     ProvisionalCreateCanisterWithCycles,

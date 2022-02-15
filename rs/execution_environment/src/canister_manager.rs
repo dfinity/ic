@@ -196,6 +196,11 @@ impl CanisterManager {
             // Nobody pays for `raw_rand`, so this cannot be used via ingress messages
             Ok(Ic00Method::RawRand) => rejected_canister_err,
 
+            // Bitcoin messages require cycles, so we reject all ingress messages.
+            Ok(Ic00Method::BitcoinTestnetGetBalance)
+                | Ok(Ic00Method::BitcoinTestnetGetUtxos)
+                | Ok(Ic00Method::BitcoinTestnetSendTransaction) => rejected_canister_err,
+
             Ok(Ic00Method::ProvisionalCreateCanisterWithCycles)
             | Ok(Ic00Method::ProvisionalTopUpCanister) => {
                 if provisional_whitelist.contains(sender.get_ref()) {
