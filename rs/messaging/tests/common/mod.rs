@@ -23,11 +23,9 @@ use ic_test_utilities::{
     types::ids::{SUBNET_1, SUBNET_42},
 };
 use ic_types::{
-    consensus::{
-        certification::{Certification, CertificationContent},
-        ThresholdSignature,
-    },
+    consensus::certification::{Certification, CertificationContent},
     crypto::Signed,
+    signature::ThresholdSignature,
     xnet::{CertifiedStreamSlice, StreamIndex},
     Height, SubnetId,
 };

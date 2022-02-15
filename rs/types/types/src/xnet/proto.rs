@@ -3,12 +3,10 @@
 //! wire format.
 
 use crate::{
-    consensus::{
-        certification::{Certification, CertificationContent},
-        ThresholdSignature,
-    },
+    consensus::certification::{Certification, CertificationContent},
     crypto::{CombinedThresholdSig, CombinedThresholdSigOf, Signed},
     replica_version::ReplicaVersionParseError,
+    signature::ThresholdSignature,
     xnet::CertifiedStreamSlice,
     Height,
 };

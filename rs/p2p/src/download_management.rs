@@ -1537,11 +1537,11 @@ pub mod tests {
     };
     use ic_types::artifact::{DkgMessage, DkgMessageAttribute};
     use ic_types::consensus::dkg::DealingContent;
-    use ic_types::consensus::BasicSignature;
     use ic_types::crypto::threshold_sig::ni_dkg::{
         NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet,
     };
     use ic_types::crypto::{CryptoHash, CryptoHashOf};
+    use ic_types::signature::BasicSignature;
     use ic_types::{
         artifact,
         artifact::{Artifact, ArtifactAttribute, ArtifactPriorityFn, Priority},

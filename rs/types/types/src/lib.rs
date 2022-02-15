@@ -56,6 +56,7 @@
 
 pub mod artifact;
 pub mod batch;
+pub mod canister_http;
 pub mod canonical_error;
 pub mod chunkable;
 pub mod consensus;
@@ -73,6 +74,7 @@ pub mod p2p;
 pub mod registry;
 pub mod replica_config;
 pub mod replica_version;
+pub mod signature;
 pub mod state_sync;
 pub mod time;
 pub mod transport;

@@ -22,11 +22,11 @@ use ic_types::{
     artifact::{ConsensusMessage, ConsensusMessageId},
     consensus::{
         dkg::Summary, Block, BlockPayload, BlockProposal, Finalization, FinalizationContent,
-        FinalizationShare, MultiSignature, MultiSignatureShare, Notarization, NotarizationContent,
-        NotarizationShare, RandomBeacon, RandomBeaconContent, RandomBeaconShare, RandomTape,
-        RandomTapeContent, RandomTapeShare, ThresholdSignatureShare,
+        FinalizationShare, Notarization, NotarizationContent, NotarizationShare, RandomBeacon,
+        RandomBeaconContent, RandomBeaconShare, RandomTape, RandomTapeContent, RandomTapeShare,
     },
     crypto::{ThresholdSigShare, ThresholdSigShareOf},
+    signature::*,
     Height,
 };
 use std::{

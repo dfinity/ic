@@ -324,8 +324,8 @@ mod tests {
     use ic_test_utilities::types::ids::NODE_1;
     use ic_test_utilities::FastForwardTimeSource;
     use ic_types::consensus::ecdsa::EcdsaDealing;
-    use ic_types::consensus::BasicSignature;
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
+    use ic_types::signature::BasicSignature;
     use ic_types::Height;
     use std::collections::BTreeSet;
 

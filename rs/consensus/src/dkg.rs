@@ -28,7 +28,7 @@ use ic_types::{
         dkg,
         dkg::{DealingContent, Message, Summary},
         get_faults_tolerated, Block, BlockPayload, CatchUpContent, CatchUpPackage, HashedBlock,
-        HashedRandomBeacon, Payload, RandomBeaconContent, Rank, ThresholdSignature,
+        HashedRandomBeacon, Payload, RandomBeaconContent, Rank,
     },
     crypto::{
         threshold_sig::ni_dkg::{
@@ -42,6 +42,7 @@ use ic_types::{
         CryptoError, Signed,
     },
     registry::RegistryClientError,
+    signature::ThresholdSignature,
     Height, NodeId, NumberOfNodes, RegistryVersion, SubnetId, Time,
 };
 

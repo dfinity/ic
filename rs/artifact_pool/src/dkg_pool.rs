@@ -261,8 +261,8 @@ mod test {
         types::ids::{node_test_id, subnet_test_id},
     };
     use ic_types::{
-        consensus::BasicSignature,
         crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        signature::BasicSignature,
     };
     use std::ops::Add;
     use std::ops::Sub;

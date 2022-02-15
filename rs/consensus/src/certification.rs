@@ -3,9 +3,9 @@
 //! layers by signing state hashes.
 use crate::consensus::crypto::{Aggregate, SignVerify};
 use ic_interfaces::crypto::{Crypto, ThresholdSigner};
+use ic_types::signature::*;
 use ic_types::{
-    consensus::{certification::CertificationContent, ThresholdSignature, ThresholdSignatureShare},
-    crypto::threshold_sig::ni_dkg::NiDkgId,
+    consensus::certification::CertificationContent, crypto::threshold_sig::ni_dkg::NiDkgId,
 };
 
 mod certifier;

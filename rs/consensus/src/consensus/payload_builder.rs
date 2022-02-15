@@ -402,10 +402,11 @@ mod test {
         consensus::{
             certification::{Certification, CertificationContent},
             dkg::Dealings,
-            DataPayload, Payload, ThresholdSignature,
+            DataPayload, Payload,
         },
         crypto::{CryptoHash, Signed},
         messages::SignedIngress,
+        signature::ThresholdSignature,
         xnet::CertifiedStreamSlice,
         CryptoHashOfPartialState, RegistryVersion,
     };

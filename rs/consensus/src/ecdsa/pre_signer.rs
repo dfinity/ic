@@ -17,11 +17,11 @@ use ic_types::consensus::ecdsa::{
     EcdsaBlockReader, EcdsaDealing, EcdsaDealingSupport, EcdsaMessage, EcdsaSignedDealing,
     EcdsaVerifiedDealing,
 };
-use ic_types::consensus::MultiSignature;
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgMultiSignedDealing, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation,
     IDkgTranscriptParams,
 };
+use ic_types::signature::MultiSignature;
 use ic_types::{Height, NodeId};
 
 use prometheus::IntCounterVec;
