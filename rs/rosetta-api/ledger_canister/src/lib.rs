@@ -45,14 +45,6 @@ pub use account_identifier::{AccountIdentifier, Subaccount};
 pub use protobuf::TimeStamp;
 pub use tokens::{Tokens, DECIMAL_PLACES, DEFAULT_TRANSFER_FEE, TOKEN_SUBDIVIDABLE_BY};
 
-// Helper to print messages in magenta
-pub fn print<S: std::convert::AsRef<str>>(s: S)
-where
-    yansi::Paint<S>: std::string::ToString,
-{
-    dfn_core::api::print(yansi::Paint::magenta(s).to_string());
-}
-
 pub const HASH_LENGTH: usize = 32;
 pub const MAX_BLOCKS_PER_REQUEST: usize = 2000;
 
@@ -645,13 +637,13 @@ impl Blockchain {
         let blocks_to_archive: VecDeque<EncodedBlock> =
             VecDeque::from(self.blocks[0..num_blocks_to_archive.min(num_blocks_before)].to_vec());
 
-        print(format!(
+        println!(
             "get_blocks_for_archiving(): trigger_threshold: {}, num_blocks: {}, blocks before archiving: {}, blocks to archive: {}",
             trigger_threshold,
             num_blocks_to_archive,
             num_blocks_before,
             blocks_to_archive.len(),
-        ));
+        );
 
         blocks_to_archive
     }

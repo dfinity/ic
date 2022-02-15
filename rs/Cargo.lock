@@ -6877,7 +6877,6 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
- "yansi",
 ]
 
 [[package]]

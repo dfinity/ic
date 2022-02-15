@@ -2,7 +2,7 @@ use archive::FailedToArchiveBlocks;
 use candid::candid_method;
 use dfn_candid::{candid, candid_one, CandidOne};
 use dfn_core::{
-    api::{caller, data_certificate, set_certified_data, trap_with},
+    api::{caller, data_certificate, print, set_certified_data, trap_with},
     over, over_async, over_init, printer, setup, stable, BytesS,
 };
 use dfn_protobuf::protobuf;
@@ -13,14 +13,6 @@ use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, RwLock},
 };
-
-// Helper to print messages in magenta
-fn print<S: std::convert::AsRef<str>>(s: S)
-where
-    yansi::Paint<S>: std::string::ToString,
-{
-    dfn_core::api::print(yansi::Paint::magenta(s).to_string());
-}
 
 /// Initialize the ledger canister
 ///
