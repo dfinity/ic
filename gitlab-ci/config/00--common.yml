@@ -20,7 +20,8 @@ stages:             # Files from the given stage should be prefixed with:
   - prod-tests-03
   - prod-tests-04
   - prod-tests-05
-  - prod-tests-06
+  - benchmark-tests
+  - benchmark-nightly-tests
   - push-branches       # 75--
   - finalize            # 100--
 

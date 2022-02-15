@@ -20,6 +20,7 @@ include:
   - local: /gitlab-ci/config/20--test--shellcheck.yml
   - local: /gitlab-ci/config/40--cargo-test--benchmarks.yml
   - local: /gitlab-ci/config/60--prod-test--spawn-test-pipeline.yml
+  - local: /gitlab-ci/config/60--benchmark-test--spawn-benchmark-pipeline.yml
   - local: /gitlab-ci/config/75--push-branches--push.yml
   - local: /gitlab-ci/config/100--finalize--notify.yml
   - local: /testnet/tests/pipeline/pipeline.yml

@@ -1,0 +1,3 @@
+include:
+- local: /gitlab-ci/config/00--common.yml
+- local: /gitlab-ci/config/60--benchmark-test--spawn-benchmark-pipeline.yml
