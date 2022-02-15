@@ -168,7 +168,7 @@ void handler(int signo, siginfo_t* info, void* detail)
         pos = push_hex((uintptr_t)info->si_addr, pos, limit);
         *pos++ = '\n';
         // Ignore write errors as there is not much we can do...
-        (void)write(2, buffer, pos - buffer);
+        __attribute__((unused)) ssize_t ret = write(2, buffer, pos - buffer);
     }
 
     // Dump registers
@@ -178,7 +178,7 @@ void handler(int signo, siginfo_t* info, void* detail)
         pos = push_reg(&uctx->uc_mcontext, REG_RIP, "rip", pos, limit);
         pos = push_reg(&uctx->uc_mcontext, REG_EFL, "efl", pos, limit);
         *pos++ = '\n';
-        (void)write(2, buffer, pos - buffer);
+        __attribute__((unused)) ssize_t ret = write(2, buffer, pos - buffer);
     }
     {
         char* pos = buffer;
@@ -187,7 +187,7 @@ void handler(int signo, siginfo_t* info, void* detail)
         pos = push_reg(&uctx->uc_mcontext, REG_RCX, "rcx", pos, limit);
         pos = push_reg(&uctx->uc_mcontext, REG_RDX, "rdx", pos, limit);
         *pos++ = '\n';
-        (void)write(2, buffer, pos - buffer);
+        __attribute__((unused)) ssize_t ret = write(2, buffer, pos - buffer);
     }
     {
         char* pos = buffer;
@@ -196,7 +196,7 @@ void handler(int signo, siginfo_t* info, void* detail)
         pos = push_reg(&uctx->uc_mcontext, REG_RSI, "rsi", pos, limit);
         pos = push_reg(&uctx->uc_mcontext, REG_RDX, "rdi", pos, limit);
         *pos++ = '\n';
-        (void)write(2, buffer, pos - buffer);
+        __attribute__((unused)) ssize_t ret = write(2, buffer, pos - buffer);
     }
     {
         char* pos = buffer;
@@ -205,7 +205,7 @@ void handler(int signo, siginfo_t* info, void* detail)
         pos = push_reg(&uctx->uc_mcontext, REG_R10, "r10", pos, limit);
         pos = push_reg(&uctx->uc_mcontext, REG_R11, "r11", pos, limit);
         *pos++ = '\n';
-        (void)write(2, buffer, pos - buffer);
+        __attribute__((unused)) ssize_t ret = write(2, buffer, pos - buffer);
     }
     {
         char* pos = buffer;
@@ -214,7 +214,7 @@ void handler(int signo, siginfo_t* info, void* detail)
         pos = push_reg(&uctx->uc_mcontext, REG_R14, "r14", pos, limit);
         pos = push_reg(&uctx->uc_mcontext, REG_R15, "r15", pos, limit);
         *pos++ = '\n';
-        (void)write(2, buffer, pos - buffer);
+        __attribute__((unused)) ssize_t ret = write(2, buffer, pos - buffer);
     }
 
     // Dump memory around rip / rsp
@@ -223,18 +223,18 @@ void handler(int signo, siginfo_t* info, void* detail)
         pos = push_string("mem@rip:", pos, limit);
         pos = dump_memory(uctx->uc_mcontext.gregs[REG_RIP], pos, limit);
         *pos++ = '\n';
-        (void)write(2, buffer, pos - buffer);
+        __attribute__((unused)) ssize_t ret = write(2, buffer, pos - buffer);
     }
     {
         char* pos = buffer;
         pos = push_string("mem@rsp:", pos, limit);
         pos = dump_memory(uctx->uc_mcontext.gregs[REG_RSP], pos, limit);
         *pos++ = '\n';
-        (void)write(2, buffer, pos - buffer);
+        __attribute__((unused)) ssize_t ret = write(2, buffer, pos - buffer);
     }
     // Collect and format stack trace. We may not be able to resolve
     // symbols, but addresses may help already.
-    (void)write(2, "Backtrace:\n", 11);
+    __attribute__((unused)) ssize_t ret = write(2, "Backtrace:\n", 11);
     unw_cursor_t cursor;
     unw_context_t context;
     unw_getcontext(&context);
@@ -268,7 +268,7 @@ void handler(int signo, siginfo_t* info, void* detail)
         pos = push_hex(off, pos, limit);
         *pos++ = '\n';
         // Write directly via syscall to stderr.
-        (void)write(2, buffer, pos - buffer);
+        __attribute__((unused)) ssize_t ret = write(2, buffer, pos - buffer);
     }
 
     // Forcibly restore the default handler for this signal: The default
