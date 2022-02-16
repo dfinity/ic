@@ -1,0 +1,22 @@
+// Test data for candid_changes_are_backwards_compatible.py --self-test
+
+type Request = record {
+  emotion : variant { malaise; happy; sad };
+};
+
+type DanceRequest = record {
+  existing_required_request_field : int;
+  existing_optional_request_field : opt int;
+  // Insert DanceRequest fields here.
+};
+
+type DanceResponse = record {
+  existing_required_response_field : int;
+  existing_optional_response_field : opt int;
+  // Insert DanceResponse fields here.
+};
+
+service : {
+  do_stuff : (Request) -> ();
+  dance : (DanceRequest) -> (DanceResponse);
+}
