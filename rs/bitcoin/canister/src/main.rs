@@ -2,10 +2,10 @@ use bitcoin::{
     blockdata::constants::genesis_block, util::psbt::serialize::Deserialize, Address, Network,
     Transaction,
 };
-use candid::candid_method;
 use ic_btc_canister::{
     proto::{GetSuccessorsRequest, GetSuccessorsResponse},
-    store::State,
+    state::State,
+    store,
 };
 use ic_btc_types::{
     GetBalanceError, GetBalanceRequest, GetUtxosError, GetUtxosRequest, GetUtxosResponse, OutPoint,
@@ -21,55 +21,52 @@ thread_local! {
     static OUTGOING_TRANSACTIONS: RefCell<VecDeque<Vec<u8>>> = RefCell::new(VecDeque::new());
 }
 
-// Retrieves the balance of the given Bitcoin address.
-//
-// NOTE: While this endpoint could've been a query, it is exposed as an update call
-//       for security reasons.
-#[candid_method(update)]
-pub fn get_balance(request: GetBalanceRequest) -> Result<u64, GetBalanceError> {
+/// Retrieves the balance of the given Bitcoin address.
+pub fn get_balance(state: &State, request: GetBalanceRequest) -> Result<u64, GetBalanceError> {
     if Address::from_str(&request.address).is_err() {
         return Err(GetBalanceError::MalformedAddress);
     }
 
     let min_confirmations = request.min_confirmations.unwrap_or(0);
 
-    Ok(STATE.with(|s| s.borrow().get_balance(&request.address, min_confirmations)))
+    Ok(store::get_balance(
+        state,
+        &request.address,
+        min_confirmations,
+    ))
 }
 
-#[candid_method(update)]
-pub fn get_utxos(request: GetUtxosRequest) -> Result<GetUtxosResponse, GetUtxosError> {
+pub fn get_utxos(
+    state: &State,
+    request: GetUtxosRequest,
+) -> Result<GetUtxosResponse, GetUtxosError> {
     if Address::from_str(&request.address).is_err() {
         return Err(GetUtxosError::MalformedAddress);
     }
 
     let min_confirmations = request.min_confirmations.unwrap_or(0);
 
-    STATE.with(|s| {
-        let main_chain_height = s.borrow().main_chain_height();
+    let main_chain_height = store::main_chain_height(state);
 
-        let utxos: Vec<Utxo> = s
-            .borrow()
-            .get_utxos(&request.address, min_confirmations)
-            .into_iter()
-            .map(|(outpoint, txout, height)| Utxo {
-                outpoint: OutPoint {
-                    txid: outpoint.txid.to_vec(),
-                    vout: outpoint.vout,
-                },
-                value: txout.value,
-                height,
-                confirmations: main_chain_height - height + 1,
-            })
-            .collect();
-
-        Ok(GetUtxosResponse {
-            total_count: utxos.len() as u32,
-            utxos,
+    let utxos: Vec<Utxo> = store::get_utxos(state, &request.address, min_confirmations)
+        .into_iter()
+        .map(|(outpoint, txout, height)| Utxo {
+            outpoint: OutPoint {
+                txid: outpoint.txid.to_vec(),
+                vout: outpoint.vout,
+            },
+            value: txout.value,
+            height,
+            confirmations: main_chain_height - height + 1,
         })
+        .collect();
+
+    Ok(GetUtxosResponse {
+        total_count: utxos.len() as u32,
+        utxos,
     })
 }
 
-#[candid_method(update)]
 pub fn send_transaction(request: SendTransactionRequest) -> Result<(), SendTransactionError> {
     if Transaction::deserialize(&request.transaction).is_err() {
         return Err(SendTransactionError::MalformedTransaction);
@@ -89,15 +86,11 @@ pub fn send_transaction(request: SendTransactionRequest) -> Result<(), SendTrans
 // release.
 
 // Retrieves a `GetSuccessorsRequest` to send to the adapter.
-pub fn get_successors_request() -> Vec<u8> {
-    let block_hashes = STATE.with(|state| {
-        let state = state.borrow();
-        state
-            .get_unstable_blocks()
-            .iter()
-            .map(|b| b.block_hash().to_vec())
-            .collect()
-    });
+pub fn get_successors_request(state: &State) -> Vec<u8> {
+    let block_hashes = store::get_unstable_blocks(state)
+        .iter()
+        .map(|b| b.block_hash().to_vec())
+        .collect();
 
     println!("block hashes: {:?}", block_hashes);
     GetSuccessorsRequest { block_hashes }.encode_to_vec()
@@ -114,25 +107,23 @@ pub fn get_outgoing_transaction() -> Option<Vec<u8>> {
 
 // Process a (binary) `GetSuccessorsResponse` received from the adapter.
 // Returns the height of the chain after the response is processed.
-pub fn get_successors_response(response_vec: Vec<u8>) -> u32 {
+pub fn get_successors_response(state: &mut State, response_vec: Vec<u8>) -> u32 {
     let response = GetSuccessorsResponse::decode(&*response_vec).unwrap();
 
     for block_proto in response.blocks {
         let block = ic_btc_canister::block::from_proto(&block_proto);
         println!("Processing block with hash: {}", block.block_hash());
 
-        STATE.with(|state| {
-            let block_hash = block.block_hash();
-            if state.borrow_mut().insert_block(block).is_err() {
-                println!(
-                    "Received block that doesn't extend existing blocks: {}",
-                    block_hash
-                );
-            }
-        });
+        let block_hash = block.block_hash();
+        if store::insert_block(state, block).is_err() {
+            println!(
+                "Received block that doesn't extend existing blocks: {}",
+                block_hash
+            );
+        }
     }
 
-    STATE.with(|state| state.borrow().main_chain_height())
+    store::main_chain_height(state)
 }
 
 fn main() {}
@@ -145,37 +136,9 @@ mod test {
     use bitcoin::{Address, PublicKey};
     use ic_btc_canister::test_builder::{BlockBuilder, TransactionBuilder};
 
-    #[test]
-    fn check_candid_interface_compatibility() {
-        use candid::types::subtype::{subtype, Gamma};
-        use candid::types::Type;
-        use candid::{self};
-        use std::io::Write;
-        use std::path::PathBuf;
-
-        candid::export_service!();
-
-        let actual_interface = __export_service();
-        println!("Generated DID:\n {}", actual_interface);
-        let mut tmp = tempfile::NamedTempFile::new().expect("failed to create a temporary file");
-        write!(tmp, "{}", actual_interface).expect("failed to write interface to a temporary file");
-        let (mut env1, t1) =
-            candid::pretty_check_file(tmp.path()).expect("failed to check generated candid file");
-        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("candid.did");
-        let (env2, t2) =
-            candid::pretty_check_file(path.as_path()).expect("failed to open candid.did file");
-
-        let (t1_ref, t2) = match (t1.as_ref().unwrap(), t2.unwrap()) {
-            (Type::Class(_, s1), Type::Class(_, s2)) => (s1.as_ref(), *s2),
-            (Type::Class(_, s1), s2 @ Type::Service(_)) => (s1.as_ref(), s2),
-            (s1 @ Type::Service(_), Type::Class(_, s2)) => (s1, *s2),
-            (t1, t2) => (t1, t2),
-        };
-
-        let mut gamma = Gamma::new();
-        let t2 = env1.merge_type(env2, t2);
-        subtype(&mut gamma, &env1, t1_ref, &t2)
-            .expect("bitcoin canister interface is not compatible with the candid.did file");
+    // A default state to use for tests.
+    fn default_state() -> State {
+        State::new(1, Network::Regtest, genesis_block(Network::Regtest))
     }
 
     #[test]
@@ -204,13 +167,16 @@ mod test {
                 .build();
 
             // Set the state.
-            STATE.with(|s| s.replace(State::new(0, *network, genesis_block)));
+            let state = State::new(0, *network, genesis_block);
 
             assert_eq!(
-                get_utxos(GetUtxosRequest {
-                    address: address.to_string(),
-                    min_confirmations: None
-                }),
+                get_utxos(
+                    &state,
+                    GetUtxosRequest {
+                        address: address.to_string(),
+                        min_confirmations: None
+                    },
+                ),
                 Ok(GetUtxosResponse {
                     utxos: vec![Utxo {
                         outpoint: OutPoint {
@@ -230,10 +196,13 @@ mod test {
     #[test]
     fn get_balance_malformed_address() {
         assert_eq!(
-            get_balance(GetBalanceRequest {
-                address: String::from("not an address"),
-                min_confirmations: None
-            }),
+            get_balance(
+                &default_state(),
+                GetBalanceRequest {
+                    address: String::from("not an address"),
+                    min_confirmations: None
+                },
+            ),
             Err(GetBalanceError::MalformedAddress)
         );
     }
@@ -241,10 +210,13 @@ mod test {
     #[test]
     fn get_utxos_malformed_address() {
         assert_eq!(
-            get_utxos(GetUtxosRequest {
-                address: String::from("not an address"),
-                min_confirmations: None
-            }),
+            get_utxos(
+                &default_state(),
+                GetUtxosRequest {
+                    address: String::from("not an address"),
+                    min_confirmations: None
+                },
+            ),
             Err(GetUtxosError::MalformedAddress)
         );
     }
@@ -288,27 +260,31 @@ mod test {
                 .build();
 
             // Set the state.
-            STATE.with(|s| {
-                s.replace(State::new(2, *network, block_0));
-                s.borrow_mut().insert_block(block_1).unwrap();
-            });
+            let mut state = State::new(2, *network, block_0);
+            store::insert_block(&mut state, block_1).unwrap();
 
             // With up to one confirmation, expect address 2 to have a balance 1000, and
             // address 1 to have a balance of 0.
             for min_confirmations in [None, Some(0), Some(1)].iter() {
                 assert_eq!(
-                    get_balance(GetBalanceRequest {
-                        address: address_2.to_string(),
-                        min_confirmations: *min_confirmations
-                    }),
+                    get_balance(
+                        &state,
+                        GetBalanceRequest {
+                            address: address_2.to_string(),
+                            min_confirmations: *min_confirmations
+                        },
+                    ),
                     Ok(1000)
                 );
 
                 assert_eq!(
-                    get_balance(GetBalanceRequest {
-                        address: address_1.to_string(),
-                        min_confirmations: *min_confirmations
-                    }),
+                    get_balance(
+                        &state,
+                        GetBalanceRequest {
+                            address: address_1.to_string(),
+                            min_confirmations: *min_confirmations
+                        },
+                    ),
                     Ok(0)
                 );
             }
@@ -316,34 +292,46 @@ mod test {
             // With two confirmations, expect address 2 to have a balance of 0, and address 1 to
             // have a balance of 1000.
             assert_eq!(
-                get_balance(GetBalanceRequest {
-                    address: address_2.to_string(),
-                    min_confirmations: Some(2)
-                }),
+                get_balance(
+                    &state,
+                    GetBalanceRequest {
+                        address: address_2.to_string(),
+                        min_confirmations: Some(2)
+                    },
+                ),
                 Ok(0)
             );
             assert_eq!(
-                get_balance(GetBalanceRequest {
-                    address: address_1.to_string(),
-                    min_confirmations: Some(2)
-                }),
+                get_balance(
+                    &state,
+                    GetBalanceRequest {
+                        address: address_1.to_string(),
+                        min_confirmations: Some(2)
+                    },
+                ),
                 Ok(1000)
             );
 
             // With >= 2 confirmations, both addresses should have an empty UTXO set.
             for i in 3..10 {
                 assert_eq!(
-                    get_balance(GetBalanceRequest {
-                        address: address_2.to_string(),
-                        min_confirmations: Some(i)
-                    }),
+                    get_balance(
+                        &state,
+                        GetBalanceRequest {
+                            address: address_2.to_string(),
+                            min_confirmations: Some(i)
+                        },
+                    ),
                     Ok(0)
                 );
                 assert_eq!(
-                    get_balance(GetBalanceRequest {
-                        address: address_1.to_string(),
-                        min_confirmations: Some(i)
-                    }),
+                    get_balance(
+                        &state,
+                        GetBalanceRequest {
+                            address: address_1.to_string(),
+                            min_confirmations: Some(i)
+                        },
+                    ),
                     Ok(0)
                 );
             }
@@ -389,19 +377,20 @@ mod test {
                 .build();
 
             // Set the state.
-            STATE.with(|s| {
-                s.replace(State::new(2, *network, block_0));
-                s.borrow_mut().insert_block(block_1).unwrap();
-            });
+            let mut state = State::new(2, *network, block_0);
+            store::insert_block(&mut state, block_1).unwrap();
 
             // With up to one confirmation, expect address 2 to have one UTXO, and
             // address 1 to have no UTXOs.
             for min_confirmations in [None, Some(0), Some(1)].iter() {
                 assert_eq!(
-                    get_utxos(GetUtxosRequest {
-                        address: address_2.to_string(),
-                        min_confirmations: *min_confirmations
-                    }),
+                    get_utxos(
+                        &state,
+                        GetUtxosRequest {
+                            address: address_2.to_string(),
+                            min_confirmations: *min_confirmations
+                        },
+                    ),
                     Ok(GetUtxosResponse {
                         utxos: vec![Utxo {
                             outpoint: OutPoint {
@@ -417,10 +406,13 @@ mod test {
                 );
 
                 assert_eq!(
-                    get_utxos(GetUtxosRequest {
-                        address: address_1.to_string(),
-                        min_confirmations: *min_confirmations
-                    }),
+                    get_utxos(
+                        &state,
+                        GetUtxosRequest {
+                            address: address_1.to_string(),
+                            min_confirmations: *min_confirmations
+                        },
+                    ),
                     Ok(GetUtxosResponse {
                         utxos: vec![],
                         total_count: 0
@@ -431,20 +423,26 @@ mod test {
             // With two confirmations, expect address 2 to have no UTXOs, and address 1 to
             // have one UTXO.
             assert_eq!(
-                get_utxos(GetUtxosRequest {
-                    address: address_2.to_string(),
-                    min_confirmations: Some(2)
-                }),
+                get_utxos(
+                    &state,
+                    GetUtxosRequest {
+                        address: address_2.to_string(),
+                        min_confirmations: Some(2)
+                    },
+                ),
                 Ok(GetUtxosResponse {
                     utxos: vec![],
                     total_count: 0
                 })
             );
             assert_eq!(
-                get_utxos(GetUtxosRequest {
-                    address: address_1.to_string(),
-                    min_confirmations: Some(2)
-                }),
+                get_utxos(
+                    &state,
+                    GetUtxosRequest {
+                        address: address_1.to_string(),
+                        min_confirmations: Some(2)
+                    },
+                ),
                 Ok(GetUtxosResponse {
                     utxos: vec![Utxo {
                         outpoint: OutPoint {
@@ -462,20 +460,26 @@ mod test {
             // With >= 2 confirmations, both addresses should have an empty UTXO set.
             for i in 3..10 {
                 assert_eq!(
-                    get_utxos(GetUtxosRequest {
-                        address: address_2.to_string(),
-                        min_confirmations: Some(i)
-                    }),
+                    get_utxos(
+                        &state,
+                        GetUtxosRequest {
+                            address: address_2.to_string(),
+                            min_confirmations: Some(i)
+                        },
+                    ),
                     Ok(GetUtxosResponse {
                         utxos: vec![],
                         total_count: 0
                     })
                 );
                 assert_eq!(
-                    get_utxos(GetUtxosRequest {
-                        address: address_1.to_string(),
-                        min_confirmations: Some(i)
-                    }),
+                    get_utxos(
+                        &state,
+                        GetUtxosRequest {
+                            address: address_1.to_string(),
+                            min_confirmations: Some(i)
+                        },
+                    ),
                     Ok(GetUtxosResponse {
                         utxos: vec![],
                         total_count: 0

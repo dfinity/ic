@@ -1,7 +1,9 @@
 use crate::{
-    blocktree::BlockDoesNotExtendTree, proto, unstable_blocks::UnstableBlocks, utxoset::UtxoSet,
+    blocktree::BlockDoesNotExtendTree,
+    state::{Height, State},
+    unstable_blocks, utxoset,
 };
-use bitcoin::{Block, Network, OutPoint, TxOut, Txid};
+use bitcoin::{Block, OutPoint, TxOut, Txid};
 use lazy_static::lazy_static;
 use std::collections::HashSet;
 use std::str::FromStr;
@@ -13,136 +15,92 @@ lazy_static! {
     ];
 }
 
-type Height = u32;
 type Satoshi = u64;
 
-// A structure used to maintain the entire state.
-#[cfg_attr(test, derive(Debug, PartialEq))]
-pub struct State {
-    // The height of the latest block marked as stable.
-    height: Height,
+/// Returns the balance of a bitcoin address.
+pub fn get_balance(state: &State, address: &str, min_confirmations: u32) -> Satoshi {
+    // NOTE: It is safe to sum up the balances here without the risk of overflow.
+    // The maximum number of bitcoins is 2.1 * 10^7, which is 2.1* 10^15 satoshis.
+    // That is well below the max value of a `u64`.
+    let mut balance = 0;
+    for (_, output, _) in get_utxos(state, address, min_confirmations) {
+        balance += output.value;
+    }
 
-    // The UTXOs of all stable blocks since genesis.
-    utxos: UtxoSet,
-
-    // Blocks inserted, but are not considered stable yet.
-    unstable_blocks: UnstableBlocks,
+    balance
 }
 
-impl State {
-    /// Create a new blockchain.
-    ///
-    /// The `stability_threshold` parameter specifies how many confirmations a
-    /// block needs before it is considered stable. Stable blocks are assumed
-    /// to be final and are never removed.
-    pub fn new(stability_threshold: u64, network: Network, genesis_block: Block) -> Self {
-        Self {
-            height: 0,
-            utxos: UtxoSet::new(true, network),
-            unstable_blocks: UnstableBlocks::new(stability_threshold, genesis_block),
+/// Returns the set of UTXOs for a given bitcoin address.
+/// Transactions with confirmations < `min_confirmations` are not considered.
+pub fn get_utxos(
+    state: &State,
+    address: &str,
+    min_confirmations: u32,
+) -> HashSet<(OutPoint, TxOut, Height)> {
+    let mut address_utxos = utxoset::get_utxos(&state.utxos, address);
+
+    // Apply unstable blocks to the UTXO set.
+    for (i, block) in unstable_blocks::get_current_chain(&state.unstable_blocks)
+        .iter()
+        .enumerate()
+    {
+        let block_height = state.height + (i as u32) + 1;
+        let confirmations = main_chain_height(state) - block_height + 1;
+
+        if confirmations < min_confirmations {
+            // The block has fewer confirmations than requested.
+            // We can stop now since all remaining blocks will have fewer confirmations.
+            break;
+        }
+
+        for tx in &block.txdata {
+            utxoset::insert_tx(&mut address_utxos, tx, block_height);
         }
     }
 
-    /// Returns the balance of a bitcoin address.
-    pub fn get_balance(&self, address: &str, min_confirmations: u32) -> Satoshi {
-        // NOTE: It is safe to sum up the balances here without the risk of overflow.
-        // The maximum number of bitcoins is 2.1 * 10^7, which is 2.1* 10^15 satoshis.
-        // That is well below the max value of a `u64`.
-        let mut balance = 0;
-        for (_, output, _) in self.get_utxos(address, min_confirmations) {
-            balance += output.value;
+    // Filter out UTXOs added in unstable blocks that are not for the given address.
+    utxoset::get_utxos(&address_utxos, address)
+        .into_set()
+        .into_iter()
+        // Filter out UTXOs that are below the `min_confirmations` threshold.
+        .filter(|(_, _, height)| main_chain_height(state) - height + 1 >= min_confirmations)
+        .collect()
+}
+
+/// Inserts a block into the state.
+/// Returns an error if the block doesn't extend any known block in the state.
+pub fn insert_block(state: &mut State, block: Block) -> Result<(), BlockDoesNotExtendTree> {
+    // The block is first inserted into the unstable blocks.
+    unstable_blocks::push(&mut state.unstable_blocks, block)?;
+
+    // Process a stable block, if any.
+    // TODO(EXC-932): Process all stable blocks, not just one.
+    if let Some(new_stable_block) = unstable_blocks::pop(&mut state.unstable_blocks) {
+        for tx in &new_stable_block.txdata {
+            utxoset::insert_tx(&mut state.utxos, tx, state.height);
         }
 
-        balance
+        state.height += 1;
     }
 
-    /// Returns the set of UTXOs for a given bitcoin address.
-    /// Transactions with confirmations < `min_confirmations` are not considered.
-    pub fn get_utxos(
-        &self,
-        address: &str,
-        min_confirmations: u32,
-    ) -> HashSet<(OutPoint, TxOut, Height)> {
-        let mut address_utxos = self.utxos.get_utxos(address);
+    Ok(())
+}
 
-        // Apply unstable blocks to the UTXO set.
-        for (i, block) in self.unstable_blocks.get_current_chain().iter().enumerate() {
-            let block_height = self.stable_height() + (i as u32) + 1;
-            let confirmations = self.main_chain_height() - block_height + 1;
+pub fn main_chain_height(state: &State) -> Height {
+    unstable_blocks::get_current_chain(&state.unstable_blocks).len() as u32 + state.height
+}
 
-            if confirmations < min_confirmations {
-                // The block has fewer confirmations than requested.
-                // We can stop now since all remaining blocks will have fewer confirmations.
-                break;
-            }
-
-            for tx in &block.txdata {
-                address_utxos.insert_tx(tx, block_height);
-            }
-        }
-
-        address_utxos
-            // Filter out UTXOs added in unstable blocks that are not for the given address.
-            .get_utxos(address)
-            .into_set()
-            .into_iter()
-            // Filter out UTXOs that are below the `min_confirmations` threshold.
-            .filter(|(_, _, height)| self.main_chain_height() - height + 1 >= min_confirmations)
-            .collect()
-    }
-
-    /// Insert a block into the blockchain.
-    /// Returns an error if the block doesn't extend any known block in the state.
-    pub fn insert_block(&mut self, block: Block) -> Result<(), BlockDoesNotExtendTree> {
-        // The block is first inserted into the unstable blocks.
-        self.unstable_blocks.push(block)?;
-
-        // Process a stable block, if any.
-        // TODO(EXC-932): Process all stable blocks, not just one.
-        if let Some(new_stable_block) = self.unstable_blocks.pop() {
-            for tx in &new_stable_block.txdata {
-                self.utxos.insert_tx(tx, self.height);
-            }
-
-            self.height += 1;
-        }
-
-        Ok(())
-    }
-
-    pub fn stable_height(&self) -> Height {
-        self.height
-    }
-
-    pub fn main_chain_height(&self) -> Height {
-        self.unstable_blocks.get_current_chain().len() as u32 + self.height
-    }
-
-    pub fn get_unstable_blocks(&self) -> Vec<&Block> {
-        self.unstable_blocks.get_blocks()
-    }
-
-    pub fn to_proto(&self) -> proto::State {
-        proto::State {
-            height: self.height,
-            utxos: Some(self.utxos.to_proto()),
-            unstable_blocks: Some(self.unstable_blocks.to_proto()),
-        }
-    }
-
-    pub fn from_proto(proto_state: proto::State) -> Self {
-        Self {
-            height: proto_state.height,
-            utxos: UtxoSet::from_proto(proto_state.utxos.unwrap()),
-            unstable_blocks: UnstableBlocks::from_proto(proto_state.unstable_blocks.unwrap()),
-        }
-    }
+pub fn get_unstable_blocks(state: &State) -> Vec<&Block> {
+    unstable_blocks::get_blocks(&state.unstable_blocks)
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::test_builder::{BlockBuilder, TransactionBuilder};
+    use crate::{
+        proto,
+        test_builder::{BlockBuilder, TransactionBuilder},
+    };
     use bitcoin::blockdata::constants::genesis_block;
     use bitcoin::secp256k1::rand::rngs::OsRng;
     use bitcoin::secp256k1::Secp256k1;
@@ -196,7 +154,7 @@ mod test {
         println!("Built chain with length: {}", chain.len());
 
         for block in chain.into_iter() {
-            state.insert_block(block).unwrap();
+            insert_block(state, block).unwrap();
         }
     }
 
@@ -212,7 +170,7 @@ mod test {
             block = BlockBuilder::with_prev_header(block.header)
                 .with_transaction(TransactionBuilder::coinbase().build())
                 .build();
-            state.insert_block(block.clone()).unwrap();
+            insert_block(&mut state, block.clone()).unwrap();
         }
 
         let state_proto = state.to_proto();
@@ -271,7 +229,7 @@ mod test {
         };
 
         // Assert that the UTXOs of address 1 are present.
-        assert_eq!(state.get_utxos(&address_1.to_string(), 0), block_0_utxos);
+        assert_eq!(get_utxos(&state, &address_1.to_string(), 0), block_0_utxos);
 
         // Extend block 0 with block 1 that spends the 1000 satoshis and gives them to address 2.
         let tx = TransactionBuilder::with_input(OutPoint::new(coinbase_tx.txid(), 0))
@@ -281,11 +239,11 @@ mod test {
             .with_transaction(tx.clone())
             .build();
 
-        state.insert_block(block_1).unwrap();
+        insert_block(&mut state, block_1).unwrap();
 
         // address 2 should now have the UTXO while address 1 has no UTXOs.
         assert_eq!(
-            state.get_utxos(&address_2.to_string(), 0),
+            get_utxos(&state, &address_2.to_string(), 0),
             hashset! {
                 (
                     OutPoint::new(tx.txid(), 0),
@@ -298,7 +256,7 @@ mod test {
             }
         );
 
-        assert_eq!(state.get_utxos(&address_1.to_string(), 0), hashset! {});
+        assert_eq!(get_utxos(&state, &address_1.to_string(), 0), hashset! {});
 
         // Extend block 0 (again) with block 1 that spends the 1000 satoshis to address 3
         // This causes a fork.
@@ -308,13 +266,13 @@ mod test {
         let block_1_prime = BlockBuilder::with_prev_header(block_0.header)
             .with_transaction(tx.clone())
             .build();
-        state.insert_block(block_1_prime.clone()).unwrap();
+        insert_block(&mut state, block_1_prime.clone()).unwrap();
 
         // Because block 1 and block 1' contest with each other, neither of them are included
         // in the UTXOs. Only the UTXOs of block 0 are returned.
-        assert_eq!(state.get_utxos(&address_2.to_string(), 0), hashset! {});
-        assert_eq!(state.get_utxos(&address_3.to_string(), 0), hashset! {});
-        assert_eq!(state.get_utxos(&address_1.to_string(), 0), block_0_utxos);
+        assert_eq!(get_utxos(&state, &address_2.to_string(), 0), hashset! {});
+        assert_eq!(get_utxos(&state, &address_3.to_string(), 0), hashset! {});
+        assert_eq!(get_utxos(&state, &address_1.to_string(), 0), block_0_utxos);
 
         // Now extend block 1' with another block that transfers the funds to address 4.
         // In this case, the fork of [block 1', block 2'] will be considered the "current"
@@ -325,15 +283,15 @@ mod test {
         let block_2_prime = BlockBuilder::with_prev_header(block_1_prime.header)
             .with_transaction(tx.clone())
             .build();
-        state.insert_block(block_2_prime).unwrap();
+        insert_block(&mut state, block_2_prime).unwrap();
 
         // Address 1 has no UTXOs since they were spent on the current chain.
-        assert_eq!(state.get_utxos(&address_1.to_string(), 0), hashset! {});
-        assert_eq!(state.get_utxos(&address_2.to_string(), 0), hashset! {});
-        assert_eq!(state.get_utxos(&address_3.to_string(), 0), hashset! {});
+        assert_eq!(get_utxos(&state, &address_1.to_string(), 0), hashset! {});
+        assert_eq!(get_utxos(&state, &address_2.to_string(), 0), hashset! {});
+        assert_eq!(get_utxos(&state, &address_3.to_string(), 0), hashset! {});
         // The funds are now with address 4.
         assert_eq!(
-            state.get_utxos(&address_4.to_string(), 0),
+            get_utxos(&state, &address_4.to_string(), 0),
             hashset! {
                 (
                     OutPoint {
@@ -372,11 +330,11 @@ mod test {
 
         // https://blockexplorer.one/bitcoin/mainnet/address/1PgZsaGjvssNCqHHisshLoCFeUjxPhutTh
         assert_eq!(
-            state.get_balance("1PgZsaGjvssNCqHHisshLoCFeUjxPhutTh", 0),
+            get_balance(&state, "1PgZsaGjvssNCqHHisshLoCFeUjxPhutTh", 0),
             4000000
         );
         assert_eq!(
-            state.get_utxos("1PgZsaGjvssNCqHHisshLoCFeUjxPhutTh", 0),
+            get_utxos(&state, "1PgZsaGjvssNCqHHisshLoCFeUjxPhutTh", 0),
             maplit::hashset! {
                 (
                     OutPoint {
@@ -399,11 +357,11 @@ mod test {
 
         // https://blockexplorer.one/bitcoin/mainnet/address/12tGGuawKdkw5NeDEzS3UANhCRa1XggBbK
         assert_eq!(
-            state.get_balance("12tGGuawKdkw5NeDEzS3UANhCRa1XggBbK", 0),
+            get_balance(&state, "12tGGuawKdkw5NeDEzS3UANhCRa1XggBbK", 0),
             500000000
         );
         assert_eq!(
-            state.get_utxos("12tGGuawKdkw5NeDEzS3UANhCRa1XggBbK", 0),
+            get_utxos(&state, "12tGGuawKdkw5NeDEzS3UANhCRa1XggBbK", 0),
             maplit::hashset! {
                 (
                     OutPoint {
@@ -454,8 +412,8 @@ mod test {
             let state = State::new(1, *network, block_0);
 
             // Expect an empty UTXO set.
-            assert_eq!(state.main_chain_height(), 1);
-            assert_eq!(state.get_utxos(&address_1.to_string(), 2), HashSet::new());
+            assert_eq!(main_chain_height(&state), 1);
+            assert_eq!(get_utxos(&state, &address_1.to_string(), 2), HashSet::new());
         }
     }
 
@@ -498,11 +456,11 @@ mod test {
                 .build();
 
             let mut state = State::new(2, *network, block_0);
-            state.insert_block(block_1).unwrap();
+            insert_block(&mut state, block_1).unwrap();
 
             // Address 1 should have no UTXOs at zero confirmations.
             assert_eq!(
-                state.get_utxos(&address_1.to_string(), 0),
+                get_utxos(&state, &address_1.to_string(), 0),
                 maplit::hashset! {}
             );
         }

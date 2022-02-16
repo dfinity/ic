@@ -1,5 +1,6 @@
 pub mod block;
 mod blocktree;
+pub mod state;
 pub mod store;
 pub mod test_builder;
 mod unstable_blocks;
