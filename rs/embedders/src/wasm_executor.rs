@@ -12,12 +12,13 @@ use crate::{
     wasm_utils::instrumentation::{instrument, InstructionCostTable},
     wasm_utils::validation::{validate_wasm_binary, WasmImportsDetails, WasmValidationDetails},
     wasmtime_embedder::WasmtimeInstance,
-    WasmExecutionInput, WasmExecutionOutput, WasmtimeEmbedder,
+    WasmExecutionInput, WasmtimeEmbedder,
 };
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::{
     ExecutionParameters, HypervisorError, HypervisorResult, InstanceStats, SystemApi,
+    WasmExecutionOutput,
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::buckets::decimal_buckets_with_zero;

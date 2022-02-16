@@ -1,5 +1,7 @@
 use nix::unistd::Pid;
-use std::os::unix::{io::AsRawFd, net::UnixStream};
+use std::os::unix::io::AsRawFd;
+use std::os::unix::prelude::{CommandExt, RawFd};
+use std::process::{Child, Command};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::{
@@ -9,64 +11,39 @@ use crate::{
 
 use std::sync::Arc;
 
-pub struct SocketedProcess {
-    pub pid: libc::pid_t,
-    pub control_stream: UnixStream,
-}
-
-/// Spawns a subprocess and passes an (anonymous) unix domain socket to
+/// Spawns a subprocess and passes the given unix domain socket to
 /// it for control. The socket will arrive as file descriptor 3 in the
-/// target process, and the other end of the socket will be returned
-/// in this call to control the process.
+/// target process.
 pub fn spawn_socketed_process(
     exec_path: &str,
     argv: &[String],
-) -> std::io::Result<SocketedProcess> {
-    let (sock_controller, sock_sandbox) = std::os::unix::net::UnixStream::pair()?;
+    socket: RawFd,
+) -> std::io::Result<Child> {
+    let mut cmd = Command::new(exec_path);
 
-    let exec_path = std::ffi::CString::new(exec_path.as_bytes())?;
+    cmd.args(argv);
 
-    let mut env = collect_env();
-    let envp = make_null_terminated_string_array(&mut env);
+    // In case of Command we inherit the current process's environment. This should
+    // particularly include things such as Rust backtrace flags. It might be
+    // advisable to filter/configure that (in case there might be information in
+    // env that the sandbox process should not be privy to).
 
-    let mut argv = collect_argv(argv);
-    let argvp = make_null_terminated_string_array(&mut argv);
+    // The following block duplicates sock_sandbox fd under fd 3, errors are
+    // handled.
+    unsafe {
+        cmd.pre_exec(move || {
+            let fd = libc::dup2(socket, 3);
 
-    let pid = unsafe {
-        // Unsafe section required due to raw call to libc posix_spawn function
-        // as well as raw handling of raw file descriptor.
-        // Safety is assured, cf. posix_spawn API.
-        let mut pid = std::mem::MaybeUninit::<libc::pid_t>::uninit();
-        let file_actions = std::ptr::null_mut::<libc::posix_spawn_file_actions_t>();
-        let attr = std::ptr::null_mut::<libc::posix_spawnattr_t>();
-
-        libc::posix_spawn_file_actions_init(file_actions);
-        libc::posix_spawn_file_actions_adddup2(file_actions, sock_sandbox.as_raw_fd(), 3);
-        libc::posix_spawnattr_init(attr);
-
-        let spawn_result = libc::posix_spawn(
-            pid.as_mut_ptr(),
-            exec_path.as_ptr(),
-            file_actions,
-            attr,
-            argvp.as_ptr(),
-            envp.as_ptr(),
-        );
-
-        libc::posix_spawn_file_actions_destroy(file_actions);
-        libc::posix_spawnattr_destroy(attr);
-
-        if spawn_result != 0 {
-            return Err(std::io::Error::last_os_error());
-        }
-
-        pid.assume_init()
+            if fd != 3 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        })
     };
 
-    Ok(SocketedProcess {
-        pid,
-        control_stream: sock_controller,
-    })
+    let child_handle = cmd.spawn()?;
+
+    Ok(child_handle)
 }
 
 /// Spawn a canister sandbox process and yield RPC interface object to
@@ -99,10 +76,8 @@ pub fn spawn_canister_sandbox_process_with_factory(
     controller_service: Arc<dyn rpc::DemuxServer<ctlsvc::Request, ctlsvc::Reply> + Send + Sync>,
     safe_shutdown: Arc<AtomicBool>,
 ) -> std::io::Result<(Arc<dyn SandboxService>, Pid, std::thread::JoinHandle<()>)> {
-    let SocketedProcess {
-        pid,
-        control_stream: socket,
-    } = spawn_socketed_process(exec_path, argv)?;
+    let (socket, sock_sandbox) = std::os::unix::net::UnixStream::pair()?;
+    let pid = spawn_socketed_process(exec_path, argv, sock_sandbox.as_raw_fd())?.id() as i32;
 
     let socket = Arc::new(socket);
 
@@ -163,46 +138,6 @@ fn abort_and_shutdown() {
             libc::exit(1);
         }
     }
-}
-
-// Collects environment variables as vector of strings of "key=value"
-// pairs (as is expected on process spawn).
-fn collect_env() -> Vec<std::ffi::CString> {
-    use std::os::unix::ffi::OsStrExt;
-    std::env::vars_os()
-        .map(|(key, value)| {
-            std::ffi::CString::new(
-                [
-                    key.as_os_str().as_bytes(),
-                    &[b'='],
-                    value.as_os_str().as_bytes(),
-                ]
-                .concat(),
-            )
-            .unwrap()
-        })
-        .collect::<Vec<std::ffi::CString>>()
-}
-
-// Collects strings as FFI strings (for use to convert argv array).
-fn collect_argv(argv: &[String]) -> Vec<std::ffi::CString> {
-    argv.iter()
-        .map(|s| std::ffi::CString::new(s.as_bytes()).unwrap())
-        .collect::<Vec<std::ffi::CString>>()
-}
-
-// Produces a null-terminated array of pointers from strings
-// (i.e. "char* const*" for use in execve-like calls).
-fn make_null_terminated_string_array(
-    strings: &mut Vec<std::ffi::CString>,
-) -> Vec<*mut libc::c_char> {
-    let mut result = Vec::<*mut libc::c_char>::new();
-    for s in strings {
-        result.push(s.as_ptr() as *mut libc::c_char);
-    }
-    result.push(std::ptr::null::<libc::c_char>() as *mut libc::c_char);
-
-    result
 }
 
 /// Build path to the sandbox executable relative to this executable's

@@ -1,0 +1,23 @@
+[package]
+name = "ic-canister-sandbox-launcher"
+version = "0.8.0"
+edition = "2018"
+
+[build-dependencies]
+cc = "1.0"
+
+[dependencies]
+ic-canister-sandbox-common = { path = "../common" }
+ic-types = { path = "../../types/types" }
+nix = "0.23.0"
+
+[dev-dependencies]
+# This makes the dependecies of the binary more consistent
+# with the dependencies of execution environment tests and
+# allows the binary to reuse most of the build artifacts
+# produced by `cargo test`.
+ic-test-utilities = { path = "../../test_utilities" }
+
+[[bin]]
+name = "sandbox_launcher"
+path = "bin/sandbox_launcher.rs"

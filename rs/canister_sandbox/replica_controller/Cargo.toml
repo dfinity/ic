@@ -25,4 +25,9 @@ slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "rel
 which = "4.2.2"
 
 [dev-dependencies]
+ic-config = { path = "../../config" }
 ic-test-utilities = { path = "../../test_utilities" }
+slog-async = { version = "2.5", features = ["nested-values"] }
+slog-term = "2.6.0"
+tempfile = "3.1.0"
+wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" }

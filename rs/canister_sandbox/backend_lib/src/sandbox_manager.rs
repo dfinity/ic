@@ -23,16 +23,17 @@ use ic_canister_sandbox_common::protocol::structs::{
     MemoryModifications, SandboxExecInput, SandboxExecOutput, StateModifications,
 };
 use ic_canister_sandbox_common::{controller_service::ControllerService, protocol};
-use ic_embedders::wasm_executor::WasmStateChanges;
-use ic_embedders::WasmExecutionOutput;
 use ic_embedders::{
+    wasm_executor::WasmStateChanges,
     wasm_utils::{
         instrumentation::{instrument, InstructionCostTable},
         validation::validate_wasm_binary,
     },
     WasmtimeEmbedder,
 };
-use ic_interfaces::execution_environment::{ExecutionMode, HypervisorError, HypervisorResult};
+use ic_interfaces::execution_environment::{
+    ExecutionMode, HypervisorError, HypervisorResult, WasmExecutionOutput,
+};
 use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::page_map::PageMapSerialization;
 use ic_replicated_state::{EmbedderCache, Memory, PageMap};

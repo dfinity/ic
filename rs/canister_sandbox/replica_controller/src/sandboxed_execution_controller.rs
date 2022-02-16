@@ -1,11 +1,13 @@
-use ic_canister_sandbox_common::protocol;
+use ic_canister_sandbox_common::controller_launcher_service::ControllerLauncherService;
+use ic_canister_sandbox_common::launcher_service::LauncherService;
 use ic_canister_sandbox_common::protocol::id::{MemoryId, WasmId};
 use ic_canister_sandbox_common::protocol::sbxsvc::MemorySerialization;
 use ic_canister_sandbox_common::protocol::structs::SandboxExecInput;
 use ic_canister_sandbox_common::sandbox_service::SandboxService;
+use ic_canister_sandbox_common::{protocol, rpc};
 use ic_embedders::wasm_executor::get_wasm_reserved_pages;
-use ic_embedders::{WasmExecutionInput, WasmExecutionOutput};
-use ic_interfaces::execution_environment::{HypervisorResult, InstanceStats};
+use ic_embedders::WasmExecutionInput;
+use ic_interfaces::execution_environment::{HypervisorResult, InstanceStats, WasmExecutionOutput};
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::MetricsRegistry;
@@ -19,21 +21,21 @@ use ic_wasm_types::BinaryEncodedWasm;
 use prometheus::{Histogram, HistogramVec, IntGauge};
 use std::collections::{HashMap, VecDeque};
 use std::convert::TryInto;
-use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
+use std::process::ExitStatus;
 use std::sync::Weak;
 use std::sync::{
     atomic::{AtomicU64, Ordering},
     Arc, Mutex,
 };
+use std::thread;
 use std::time::Duration;
 
 use crate::active_execution_state_registry::ActiveExecutionStateRegistry;
 use crate::controller_service_impl::ControllerServiceImpl;
-use crate::launch_as_process::{create_sandbox_argv, create_sandbox_process};
+use crate::launch_as_process::{create_sandbox_process, spawn_launcher_process};
+use crate::process_exe_and_args::{create_launcher_argv, create_sandbox_argv};
 use crate::process_os_metrics;
-use std::process::Child;
-use std::thread;
 
 const SANDBOX_PROCESS_INACTIVE_TIME_BEFORE_EVICTION: Duration = Duration::from_secs(0);
 const SANDBOX_PROCESS_UPDATE_INTERVAL: Duration = Duration::from_secs(10);
@@ -166,10 +168,13 @@ impl SandboxProcessRequestHistory {
 
     /// Replays the last actions recorded for this sandbox process to
     /// the given logger.
-    fn replay(&self, logger: &ReplicaLogger, pid: u32) {
+    fn replay(&self, logger: &ReplicaLogger, canister_id: CanisterId, pid: u32) {
         let guard = self.entries.lock().unwrap();
         for entry in &*guard {
-            error!(logger, "History for {}: {}", pid, entry);
+            error!(
+                logger,
+                "History for canister {} with pid {}: {}", canister_id, pid, entry
+            );
         }
     }
 }
@@ -316,12 +321,14 @@ pub struct SandboxedExecutionController {
     sandbox_exec_argv: Vec<String>,
     compile_count_for_testing: AtomicU64,
     metrics: Arc<SandboxedExecutionMetrics>,
+    launcher_service: Box<dyn LauncherService>,
 }
 
 impl SandboxedExecutionController {
     /// Create a new sandboxed execution controller. It provides the
     /// same interface as the `WasmExecutor`.
-    pub fn new(logger: ReplicaLogger, metrics_registry: &MetricsRegistry) -> Self {
+    pub fn new(logger: ReplicaLogger, metrics_registry: &MetricsRegistry) -> std::io::Result<Self> {
+        let launcher_exec_argv = create_launcher_argv().expect("No sandbox_launcher binary found");
         let sandbox_exec_argv = create_sandbox_argv().expect("No canister_sandbox binary found");
         let backends = Arc::new(Mutex::new(HashMap::new()));
         let metrics = Arc::new(SandboxedExecutionMetrics::new(metrics_registry));
@@ -338,13 +345,34 @@ impl SandboxedExecutionController {
             );
         });
 
-        Self {
+        let exit_watcher = Arc::new(ExitWatcher {
+            logger: logger.clone(),
+            backends: Arc::clone(&backends),
+        });
+
+        let (launcher_service, mut child) = spawn_launcher_process(
+            &launcher_exec_argv[0],
+            &launcher_exec_argv[1..],
+            exit_watcher,
+        )?;
+
+        // We spawn a thread to wait for the exit notification of the launcher
+        // process.
+        thread::spawn(move || {
+            let pid = child.id();
+            let output = child.wait().unwrap();
+
+            panic_due_to_exit(output, pid);
+        });
+
+        Ok(Self {
             backends,
             logger,
             compile_count_for_testing: AtomicU64::new(0),
             sandbox_exec_argv,
             metrics,
-        }
+            launcher_service,
+        })
     }
 
     // Periodically walk through all the backend processes and:
@@ -418,10 +446,10 @@ impl SandboxedExecutionController {
         }
     }
 
-    fn get_sandbox_process(&self, canister_id: &CanisterId) -> Arc<SandboxProcess> {
+    fn get_sandbox_process(&self, canister_id: CanisterId) -> Arc<SandboxProcess> {
         let mut guard = self.backends.lock().unwrap();
 
-        if let Some(backend) = (*guard).get_mut(canister_id) {
+        if let Some(backend) = (*guard).get_mut(&canister_id) {
             let old = std::mem::replace(backend, Backend::Empty);
             let sandbox_process = match old {
                 Backend::Active {
@@ -454,8 +482,9 @@ impl SandboxedExecutionController {
         let reg = Arc::new(ActiveExecutionStateRegistry::new());
         let controller_service = ControllerServiceImpl::new(Arc::clone(&reg), self.logger.clone());
 
-        let (sandbox_service, child_handle) = create_sandbox_process(
+        let (sandbox_service, pid) = create_sandbox_process(
             controller_service,
+            &*self.launcher_service,
             canister_id,
             self.sandbox_exec_argv.clone(),
         )
@@ -464,7 +493,7 @@ impl SandboxedExecutionController {
         let sandbox_process = Arc::new(SandboxProcess {
             execution_states: reg,
             sandbox_service,
-            pid: child_handle.id(),
+            pid,
             history: SandboxProcessRequestHistory::new(),
         });
 
@@ -473,33 +502,9 @@ impl SandboxedExecutionController {
             sandbox_process: Arc::clone(&sandbox_process),
             last_used: now,
         };
-        let weak_reference = Arc::downgrade(&sandbox_process);
-        (*guard).insert(*canister_id, backend);
-
-        self.observe_sandbox_process(child_handle, *canister_id, weak_reference);
+        (*guard).insert(canister_id, backend);
 
         sandbox_process
-    }
-
-    // Observes the exit of a sandbox process and cleans up the entry in backends
-    fn observe_sandbox_process(
-        &self,
-        mut child_handle: Child,
-        canister_id: CanisterId,
-        sandbox_process: Weak<SandboxProcess>,
-    ) {
-        // We spawn a thread to wait for the exit notification of a sandbox process
-        let logger = self.logger.clone();
-        thread::spawn(move || {
-            let pid = child_handle.id();
-            let output = child_handle.wait().unwrap();
-            if let Some(sandbox_process) = sandbox_process.upgrade() {
-                // The object tracking the sandbox process is still alive,
-                // so the process exit was unexpected.
-                sandbox_process.history.replay(&logger, pid);
-                panic_due_to_sandbox_exit(output.code(), output.signal(), canister_id, pid);
-            }
-        });
     }
 
     pub fn process(
@@ -526,7 +531,7 @@ impl SandboxedExecutionController {
             .start_timer();
 
         // Determine which process we want to run this on.
-        let sandbox_process = self.get_sandbox_process(&sandbox_safe_system_state.canister_id());
+        let sandbox_process = self.get_sandbox_process(sandbox_safe_system_state.canister_id());
 
         // Ensure that Wasm is compiled.
         let (wasm_id, compile_count) =
@@ -683,7 +688,7 @@ impl SandboxedExecutionController {
         canister_root: PathBuf,
         canister_id: CanisterId,
     ) -> HypervisorResult<ExecutionState> {
-        let sandbox_process = self.get_sandbox_process(&canister_id);
+        let sandbox_process = self.get_sandbox_process(canister_id);
 
         // Step 1: Compile Wasm binary and cache it.
         let binary_encoded_wasm = BinaryEncodedWasm::new(wasm_source.clone());
@@ -819,30 +824,6 @@ fn wrap_remote_memory(
     SandboxMemoryHandle::new(Arc::new(opened_memory))
 }
 
-fn panic_due_to_sandbox_exit(
-    code: Option<i32>,
-    signal: Option<i32>,
-    canister_id: CanisterId,
-    pid: u32,
-) {
-    match code {
-        Some(code) => panic!(
-            "Canister {}, pid {} exited with status code: {}",
-            canister_id, pid, code
-        ),
-        None => match signal {
-            Some(signal) => panic!(
-                "Canister {}, pid {} exited due to signal {}",
-                canister_id, pid, signal
-            ),
-            None => panic!(
-                "Canister {}, pid {} exited for unknown reason",
-                canister_id, pid
-            ),
-        },
-    }
-}
-
 // Evicts inactive process and returns all processes that are still alive.
 fn scavenge_sandbox_processes(
     backends: &Arc<Mutex<HashMap<CanisterId, Backend>>>,
@@ -915,33 +896,139 @@ fn scavenge_sandbox_processes(
     result
 }
 
+pub fn panic_due_to_exit(output: ExitStatus, pid: u32) {
+    match output.code() {
+        Some(code) => panic!(
+            "Error from launcher process, pid {} exited with status code: {}",
+            pid, code
+        ),
+        None => panic!(
+            "Error from launcher process, pid {} exited due to signal!",
+            pid
+        ),
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::fs::{self, File};
+
     use super::*;
-    use ic_logger::replica_logger::no_op_logger;
+    use ic_config::logger::Config as LoggerConfig;
+    use ic_logger::{new_replica_logger, replica_logger::no_op_logger};
+    use ic_test_utilities::types::ids::canister_test_id;
     use libc::kill;
-    use std::convert::TryInto;
+    use slog::{o, Drain};
 
     #[test]
-    #[should_panic(expected = "exited due to signal 9")]
-    fn controller_handles_killed_sandbox_process() {
-        let sandbox_exec_argv = create_sandbox_argv().unwrap();
-        let logger = no_op_logger();
-        let canister_id = CanisterId::from_u64(42);
-        let reg = Arc::new(ActiveExecutionStateRegistry::new());
+    #[should_panic(expected = "exited due to signal!")]
+    fn controller_handles_killed_launcher_process() {
+        let launcher_exec_argv = create_launcher_argv().unwrap();
+        let exit_watcher = Arc::new(ExitWatcher {
+            logger: no_op_logger(),
+            backends: Arc::new(Mutex::new(HashMap::new())),
+        });
 
-        let controller_service = ControllerServiceImpl::new(Arc::clone(&reg), logger);
+        let (_launcher_service, mut child) = spawn_launcher_process(
+            &launcher_exec_argv[0],
+            &launcher_exec_argv[1..],
+            exit_watcher,
+        )
+        .unwrap();
 
-        let (_sandbox_service, mut child_handle) =
-            create_sandbox_process(controller_service, &canister_id, sandbox_exec_argv).unwrap();
-
-        let pid = child_handle.id();
+        let pid = child.id();
 
         unsafe {
             kill(pid.try_into().unwrap(), libc::SIGKILL);
         }
-        let output = child_handle.wait().unwrap();
-        let maybe_signal = output.signal();
-        panic_due_to_sandbox_exit(output.code(), maybe_signal, canister_id, pid);
+        let output = child.wait().unwrap();
+        panic_due_to_exit(output, pid);
+    }
+
+    #[test]
+    fn sandbox_history_logged_on_sandbox_crash() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let log_path = tempdir.path().join("log");
+        let file = File::create(&log_path).unwrap();
+
+        let decorator = slog_term::PlainDecorator::new(file);
+        let drain = slog_term::FullFormat::new(decorator).build().fuse();
+        let drain = slog_async::Async::new(drain).build().fuse();
+
+        let root = slog::Logger::root(drain, o!());
+        let logger = new_replica_logger(root, &LoggerConfig::default());
+
+        let controller =
+            SandboxedExecutionController::new(logger, &MetricsRegistry::new()).unwrap();
+
+        let wat = "(module)";
+        let wasm_source = wabt::wat2wasm(wat).unwrap();
+        let canister_id = canister_test_id(0);
+        controller
+            .create_execution_state(wasm_source, PathBuf::new(), canister_id)
+            .unwrap();
+        let sandbox_pid = match controller
+            .backends
+            .lock()
+            .unwrap()
+            .get(&canister_id)
+            .unwrap()
+        {
+            Backend::Active {
+                sandbox_process, ..
+            } => sandbox_process.pid,
+            Backend::Evicted { .. } | Backend::Empty => panic!("sandbox should be active"),
+        };
+
+        unsafe {
+            kill(sandbox_pid.try_into().unwrap(), libc::SIGKILL);
+        }
+
+        let mut logs = String::new();
+        while logs.is_empty() {
+            thread::sleep(Duration::from_millis(100));
+            logs = fs::read_to_string(&log_path).unwrap();
+        }
+        assert!(logs.contains(&format!(
+            "History for canister {} with pid {}: OpenWasm",
+            canister_id, sandbox_pid
+        )));
+        assert!(logs.contains(&format!(
+            "History for canister {} with pid {}: CreateExecutionState",
+            canister_id, sandbox_pid
+        )));
+    }
+}
+
+/// Service responsible for printing the history of a canister's activity when
+/// it unexpectedly exits.
+struct ExitWatcher {
+    logger: ReplicaLogger,
+    backends: Arc<Mutex<HashMap<CanisterId, Backend>>>,
+}
+
+impl ControllerLauncherService for ExitWatcher {
+    fn sandbox_exited(
+        &self,
+        req: protocol::ctllaunchersvc::SandboxExitedRequest,
+    ) -> ic_canister_sandbox_common::rpc::Call<protocol::ctllaunchersvc::SandboxExitedReply> {
+        let guard = self.backends.lock().unwrap();
+        let sandbox_process = match guard.get(&req.canister_id).unwrap_or_else(|| {
+            panic!(
+                "Sandbox exited for unrecognized canister id {}",
+                req.canister_id,
+            )
+        }) {
+            Backend::Active {
+                sandbox_process, ..
+            } => sandbox_process,
+            Backend::Evicted { .. } | Backend::Empty => {
+                return rpc::Call::new_resolved(Ok(protocol::ctllaunchersvc::SandboxExitedReply));
+            }
+        };
+        sandbox_process
+            .history
+            .replay(&self.logger, req.canister_id, sandbox_process.pid);
+        rpc::Call::new_resolved(Ok(protocol::ctllaunchersvc::SandboxExitedReply))
     }
 }

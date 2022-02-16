@@ -128,6 +128,10 @@ ic-ref-test:
       for f in replica orchestrator canister_sandbox; do
         gunzip "$f.gz"
         chmod +x "$f"
+      if [ -f sandbox_launcher.gz ]; then
+        gunzip sandbox_launcher.gz
+        chmod +x sandbox_launcher
+      fi
       done
       popd
 
@@ -136,7 +140,7 @@ ic-ref-test:
       ls -lah
 
       TMP_DIR=$(mktemp -d)
-      for f in replica orchestrator ic-test-bin canister_sandbox; do
+      for f in replica orchestrator ic-test-bin canister_sandbox sandbox_launcher; do
         gunzip -k "$f.gz"
         chmod +x "$f"
         mv "$f" "${TMP_DIR}"

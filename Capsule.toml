@@ -26,6 +26,7 @@ input = [
         "artifacts/release/replica.gz",
         "artifacts/release/orchestrator.gz",
         "artifacts/release/canister_sandbox.gz",
+        "artifacts/release/sandbox_launcher.gz",
         "artifacts/release/vsock_agent.gz",
         "artifacts/release/state-tool.gz",
         "artifacts/release/ic-consensus-pool-util.gz",

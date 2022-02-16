@@ -1,55 +1,41 @@
 use crate::fdenum::EnumerateInnerFileDescriptors;
-use crate::protocol::{ctlsvc, sbxsvc};
+use crate::protocol::{ctllaunchersvc, ctlsvc, launchersvc, sbxsvc};
 use serde::{Deserialize, Serialize};
 use std::os::unix::io::RawFd;
 
 #[derive(Serialize, Deserialize, Clone)]
-pub enum ControllerToSandboxMessage {
-    Request(sbxsvc::Request),
-    Reply(ctlsvc::Reply),
+pub enum Message<Request, Reply> {
+    Request(Request),
+    Reply(Reply),
 }
 
-impl EnumerateInnerFileDescriptors for ControllerToSandboxMessage {
+impl<Request: EnumerateInnerFileDescriptors, Reply: EnumerateInnerFileDescriptors>
+    EnumerateInnerFileDescriptors for Message<Request, Reply>
+{
     fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut RawFd>) {
         match self {
-            ControllerToSandboxMessage::Request(req) => {
-                req.enumerate_fds(fds);
-            }
-            ControllerToSandboxMessage::Reply(_) => (),
+            Message::Request(req) => req.enumerate_fds(fds),
+            Message::Reply(rep) => rep.enumerate_fds(fds),
         }
     }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct ControllerToSandbox {
+pub struct WireMessage<Request, Reply> {
     pub cookie: u64,
-    pub msg: ControllerToSandboxMessage,
+    pub msg: Message<Request, Reply>,
 }
 
-impl EnumerateInnerFileDescriptors for ControllerToSandbox {
+impl<Request, Reply> EnumerateInnerFileDescriptors for WireMessage<Request, Reply>
+where
+    Message<Request, Reply>: EnumerateInnerFileDescriptors,
+{
     fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut RawFd>) {
         self.msg.enumerate_fds(fds);
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
-pub enum SandboxToControllerMessage {
-    Request(ctlsvc::Request),
-    Reply(sbxsvc::Reply),
-}
-
-impl EnumerateInnerFileDescriptors for SandboxToControllerMessage {
-    fn enumerate_fds<'a>(&'a mut self, _fds: &mut Vec<&'a mut RawFd>) {}
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-pub struct SandboxToController {
-    pub cookie: u64,
-    pub msg: SandboxToControllerMessage,
-}
-
-impl EnumerateInnerFileDescriptors for SandboxToController {
-    fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut RawFd>) {
-        self.msg.enumerate_fds(fds);
-    }
-}
+pub type ControllerToSandbox = WireMessage<sbxsvc::Request, ctlsvc::Reply>;
+pub type SandboxToController = WireMessage<ctlsvc::Request, sbxsvc::Reply>;
+pub type ControllerToLauncher = WireMessage<launchersvc::Request, ctllaunchersvc::Reply>;
+pub type LauncherToController = WireMessage<ctllaunchersvc::Request, launchersvc::Reply>;

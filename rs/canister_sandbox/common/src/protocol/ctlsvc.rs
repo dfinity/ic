@@ -1,4 +1,4 @@
-use crate::protocol::logging::LogRequest;
+use crate::{fdenum::EnumerateInnerFileDescriptors, protocol::logging::LogRequest};
 use serde::{Deserialize, Serialize};
 
 use super::{id::ExecId, structs::SandboxExecOutput};
@@ -28,6 +28,10 @@ pub enum Request {
     LogViaReplica(LogRequest),
 }
 
+impl EnumerateInnerFileDescriptors for Request {
+    fn enumerate_fds<'a>(&'a mut self, _fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {}
+}
+
 /// We reply to the replica controller that either the execution was
 /// finished or the request failed.
 #[allow(clippy::large_enum_variant)]
@@ -35,4 +39,8 @@ pub enum Request {
 pub enum Reply {
     ExecutionFinished(ExecutionFinishedReply),
     LogViaReplica(()),
+}
+
+impl EnumerateInnerFileDescriptors for Reply {
+    fn enumerate_fds<'a>(&'a mut self, _fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {}
 }

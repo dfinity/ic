@@ -10,6 +10,7 @@ hex = "0.4.2"
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-canister-client = { path = "../canister_client" }
 ic-canister-sandbox-backend-lib = { path = "../canister_sandbox/backend_lib" }
+ic-canister-sandbox-launcher = { path = "../canister_sandbox/sandbox_launcher" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-consensus-message = { path = "../consensus/message" }
