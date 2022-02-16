@@ -183,10 +183,10 @@ pub fn dummy_idkg_complaint_for_tests() -> IDkgComplaint {
     }
 }
 
-pub fn dummy_idkg_opening_for_tests() -> IDkgOpening {
+pub fn dummy_idkg_opening_for_tests(complaint: &IDkgComplaint) -> IDkgOpening {
     IDkgOpening {
-        transcript_id: IDkgTranscriptId::new(SubnetId::from(PrincipalId::new_subnet_test_id(1)), 1),
-        dealer_id: NodeId::from(PrincipalId::new_node_test_id(0)),
+        transcript_id: complaint.transcript_id,
+        dealer_id: complaint.dealer_id,
         internal_opening_raw: vec![],
     }
 }
@@ -569,9 +569,9 @@ impl IDkgProtocol for CryptoReturningOk {
     fn open_transcript(
         &self,
         _transcript: &IDkgTranscript,
-        _complaint: &IDkgComplaint,
+        complaint: &IDkgComplaint,
     ) -> Result<IDkgOpening, IDkgOpenTranscriptError> {
-        Ok(dummy_idkg_opening_for_tests())
+        Ok(dummy_idkg_opening_for_tests(complaint))
     }
 
     fn verify_opening(
