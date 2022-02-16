@@ -58,8 +58,8 @@ class WorkloadExperiment(experiment.Experiment):
 
     def init(self):
         """More init."""
-        super().init()
         self.target_nodes = self.get_mainnet_targets() if self.testnet == "mercury" else self.get_targets()
+        super().init()
 
         workload_generator_machines = (
             FLAGS.workload_generator_machines.split(",")
