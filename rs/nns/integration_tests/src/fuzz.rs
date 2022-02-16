@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::convert::TryFrom;
@@ -982,14 +983,14 @@ impl LocalNnsFuzzDriver {
         fn dfs(
             key: u64,
             adj: &BTreeMap<u64, BTreeSet<u64>>,
-            mut visited: &mut BTreeSet<u64>,
-            mut component: &mut BTreeSet<u64>,
+            visited: &mut BTreeSet<u64>,
+            component: &mut BTreeSet<u64>,
         ) {
             visited.insert(key);
             component.insert(key);
             for value in adj.get(&key).unwrap() {
                 if !visited.contains(value) {
-                    dfs(*value, adj, &mut visited, &mut component);
+                    dfs(*value, adj, visited, component);
                 }
             }
         }

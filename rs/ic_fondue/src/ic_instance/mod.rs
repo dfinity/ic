@@ -17,7 +17,7 @@ pub mod port_allocator;
 
 /// Builder object to declare a topology of an InternetComputer. Used as input
 /// to the IC Manager.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct InternetComputer {
     pub initial_version: Option<NodeSoftwareVersion>,
     pub vm_allocation: Option<VmAllocation>,
@@ -106,22 +106,6 @@ impl InternetComputer {
         let my_id = s.join("");
 
         format!("{}{}", exp_prefix, my_id)
-    }
-}
-
-impl Default for InternetComputer {
-    fn default() -> Self {
-        Self {
-            initial_version: None,
-            vm_allocation: None,
-            subnets: vec![],
-            malicious_behaviours: Default::default(),
-            node_operator: None,
-            node_provider: None,
-            experimental_vm_test: false,
-            unassigned_nodes: vec![],
-            ssh_readonly_access_to_unassigned_nodes: vec![],
-        }
     }
 }
 
@@ -363,7 +347,7 @@ pub enum VCPUs {}
 pub enum MemoryKiB {}
 
 /// A builder for the initial configuration of a node.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Node {
     pub malicious_behaviour: Option<MaliciousBehaviour>,
     pub vcpus: Option<NrOfVCPUs>,
@@ -378,15 +362,5 @@ impl Node {
     pub fn with_malicious_behaviour(mut self, malicious_behaviour: MaliciousBehaviour) -> Self {
         self.malicious_behaviour = Some(malicious_behaviour);
         self
-    }
-}
-
-impl Default for Node {
-    fn default() -> Self {
-        Self {
-            malicious_behaviour: None,
-            vcpus: None,
-            memory_kibibytes: None,
-        }
     }
 }

@@ -1775,9 +1775,9 @@ fn get_canister_status_with_incorrect_controller() {
 
         // Get the status of the canister by a sender who isn't the controller.
         let other_sender = user_test_id(1).get();
-        let mut canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state_mut(&canister_id).unwrap();
         assert_eq!(
-            canister_manager.get_canister_status(other_sender, &mut canister),
+            canister_manager.get_canister_status(other_sender, canister),
             Err(CanisterManagerError::CanisterInvalidController {
                 canister_id,
                 controllers_expected: btreeset! {sender},
@@ -1804,9 +1804,9 @@ fn get_canister_status_of_running_canister() {
             .0
             .unwrap();
 
-        let mut canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state_mut(&canister_id).unwrap();
         let status = canister_manager
-            .get_canister_status(sender, &mut canister)
+            .get_canister_status(sender, canister)
             .unwrap()
             .status();
         assert_eq!(status, CanisterStatusType::Running);
@@ -1821,9 +1821,9 @@ fn get_canister_status_of_stopped_canister() {
         let canister = get_stopped_canister(canister_id);
         state.put_canister_state(canister);
 
-        let mut canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state_mut(&canister_id).unwrap();
         let status = canister_manager
-            .get_canister_status(sender, &mut canister)
+            .get_canister_status(sender, canister)
             .unwrap()
             .status();
         assert_eq!(status, CanisterStatusType::Stopped);
@@ -1838,9 +1838,9 @@ fn get_canister_status_of_stopping_canister() {
         let canister = get_stopping_canister(canister_id);
         state.put_canister_state(canister);
 
-        let mut canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state_mut(&canister_id).unwrap();
         let status = canister_manager
-            .get_canister_status(sender, &mut canister)
+            .get_canister_status(sender, canister)
             .unwrap()
             .status();
         assert_eq!(status, CanisterStatusType::Stopping);
@@ -2072,7 +2072,7 @@ fn deposit_cycles_succeeds_with_enough_cycles() {
 
         canister_manager
             .cycles_account_manager
-            .add_cycles(&mut canister.system_state.balance_mut(), cycles);
+            .add_cycles(canister.system_state.balance_mut(), cycles);
 
         // Assert that state has changed
         assert_eq!(
@@ -2124,9 +2124,9 @@ fn can_get_canister_balance() {
         let canister = get_running_canister_with_args(canister_id, sender, gas);
         state.put_canister_state(canister);
 
-        let mut canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state_mut(&canister_id).unwrap();
         assert_matches!(
-            canister_manager.get_canister_status( sender, &mut canister),
+            canister_manager.get_canister_status( sender, canister),
             Ok(res) if res.cycles() == gas.get()
         );
     });
@@ -2154,12 +2154,12 @@ fn add_cycles_sender_in_whitelist() {
     let initial_cycles = canister.system_state.balance();
     state.put_canister_state(canister);
 
-    let mut canister = state.canister_state_mut(&canister_id).unwrap();
+    let canister = state.canister_state_mut(&canister_id).unwrap();
     canister_manager
         .add_cycles(
             sender,
             Some(123),
-            &mut canister,
+            canister,
             &ProvisionalWhitelist::Set(btreeset! { canister_test_id(1).get() }),
         )
         .unwrap();
@@ -2183,12 +2183,12 @@ fn add_cycles_sender_not_in_whitelist() {
 
         // By default, the `CanisterManager`'s whitelist is set to `None`.
         // A call to `add_cycles` should fail.
-        let mut canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state_mut(&canister_id).unwrap();
         assert_eq!(
             canister_manager.add_cycles(
                 sender,
                 Some(123),
-                &mut canister,
+                canister,
                 &ProvisionalWhitelist::Set(BTreeSet::new()),
             ),
             Err(CanisterManagerError::SenderNotInWhitelist(sender))
@@ -2933,13 +2933,13 @@ fn lower_memory_allocation_than_usage_fails() {
 
         let compute_allocation_used = state.total_compute_allocation();
         let memory_allocation_used = state.total_memory_taken();
-        let mut canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state_mut(&canister_id).unwrap();
 
         assert_matches!(
             canister_manager.update_settings(
                 sender,
                 settings,
-                &mut canister,
+                canister,
                 compute_allocation_used,
                 memory_allocation_used
             ),
@@ -3006,13 +3006,13 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
 
         let compute_allocation_used = state.total_compute_allocation();
         let memory_allocation_used = state.total_memory_taken();
-        let mut canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state_mut(&canister_id).unwrap();
 
         canister_manager
             .update_settings(
                 sender,
                 settings,
-                &mut canister,
+                canister,
                 compute_allocation_used,
                 memory_allocation_used,
             )
@@ -3129,13 +3129,13 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
 
         let compute_allocation_used = state.total_compute_allocation();
         let memory_allocation_used = state.total_memory_taken();
-        let mut canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state_mut(&canister_id).unwrap();
 
         canister_manager
             .update_settings(
                 sender,
                 settings,
-                &mut canister,
+                canister,
                 compute_allocation_used,
                 memory_allocation_used,
             )
@@ -3231,13 +3231,13 @@ fn test_install_when_setting_memory_allocation_to_zero() {
 
         let compute_allocation_used = state.total_compute_allocation();
         let memory_allocation_used = state.total_memory_taken();
-        let mut canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state_mut(&canister_id).unwrap();
 
         canister_manager
             .update_settings(
                 sender,
                 settings,
-                &mut canister,
+                canister,
                 compute_allocation_used,
                 memory_allocation_used,
             )
@@ -3317,13 +3317,13 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
 
         let compute_allocation_used = state.total_compute_allocation();
         let memory_allocation_used = state.total_memory_taken();
-        let mut canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state_mut(&canister_id).unwrap();
 
         canister_manager
             .update_settings(
                 sender,
                 settings,
-                &mut canister,
+                canister,
                 compute_allocation_used,
                 memory_allocation_used,
             )

@@ -18,7 +18,7 @@ enum Command {
 
 fn help_str() -> String {
     Command::iter().fold("Subcommands:\n".to_string(), |accumulator, next| {
-        format!("{}{}\n", accumulator, next.to_string())
+        format!("{}{}\n", accumulator, next)
     })
 }
 

@@ -24,7 +24,10 @@ pub(crate) struct InvariantCheckError {
 
 impl Display for InvariantCheckError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "InvariantCheckError: {:?}", self.msg)
+        match &self.source {
+            Some(source) => write!(f, "InvariantCheckError: {}, cause: {}", self.msg, source),
+            None => write!(f, "InvariantCheckError: {}", self.msg),
+        }
     }
 }
 

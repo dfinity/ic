@@ -17,7 +17,7 @@ impl From<io::Error> for Error {
 
 impl From<serde_json::error::Error> for Error {
     fn from(error: serde_json::error::Error) -> Self {
-        Error::Io(format!("serde_json error: {}", error.to_string()))
+        Error::Io(format!("serde_json error: {}", error))
     }
 }
 

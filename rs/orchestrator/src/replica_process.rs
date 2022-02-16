@@ -11,9 +11,9 @@ type PIDCell = Arc<Mutex<Option<Pid>>>;
 
 #[derive(Clone, Debug)]
 pub(crate) struct ReplicaCommand {
-    pub(crate) replica_binary: String,
+    pub(crate) _replica_binary: String,
     pub(crate) replica_version: ReplicaVersion,
-    pub(crate) args: Vec<String>,
+    pub(crate) _args: Vec<String>,
 }
 
 /// Runs and monitors a Replica process and accepts requests to stop the current
@@ -131,9 +131,9 @@ impl ReplicaProcess {
         }
 
         self.command = Some(ReplicaCommand {
-            replica_binary: replica_binary.clone(),
+            _replica_binary: replica_binary.clone(),
             replica_version: replica_version.clone(),
-            args: args.clone(),
+            _args: args.clone(),
         });
 
         debug!(

@@ -749,9 +749,9 @@ impl SlotMgr {
         physical_slot: u64,
         overwritten_physical_slot: u64,
     ) {
-        writing(self, "SlotMgr::put_mapping", |mut rw_txn| {
+        writing(self, "SlotMgr::put_mapping", |rw_txn| {
             self.update_mappings(
-                &mut rw_txn,
+                rw_txn,
                 logical_slot,
                 physical_slot,
                 overwritten_physical_slot,
@@ -760,10 +760,10 @@ impl SlotMgr {
     }
 
     pub fn put_all_mappings(&self, mappings: HashMap<u64, (u64, u64)>) {
-        writing(self, "SlotMgr::put_all_mappings", |mut rw_txn| {
+        writing(self, "SlotMgr::put_all_mappings", |rw_txn| {
             for (logical_slot, (physical_slot, overwritten_physical_slot)) in mappings {
                 self.update_mappings(
-                    &mut rw_txn,
+                    rw_txn,
                     logical_slot,
                     physical_slot,
                     overwritten_physical_slot,

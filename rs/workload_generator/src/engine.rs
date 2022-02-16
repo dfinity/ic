@@ -77,7 +77,7 @@ pub struct CallResult {
 #[derive(Clone)]
 pub struct Engine {
     agents: Vec<Agent>, // List of agents to be used in round-robin fashion when sending requests.
-    sender: AgentSender,
+    _sender: AgentSender,
 }
 
 impl Engine {
@@ -103,7 +103,7 @@ impl Engine {
         agents.extend(current_batch);
         Engine {
             agents,
-            sender: agent_sender,
+            _sender: agent_sender,
         }
     }
 

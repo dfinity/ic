@@ -460,12 +460,12 @@ mod tests {
         assert_eq!(expected_time, actual_time);
     }
 
-    fn get_random_changelog(n: usize, mut rng: &mut ThreadRng) -> Changelog {
+    fn get_random_changelog(n: usize, rng: &mut ThreadRng) -> Changelog {
         // some pseudo random entries
         (0..n)
             .map(|_i| {
                 let k = rng.gen::<usize>() % 64 + 2;
-                (0..(k + 2)).map(|k| key_mutation(k, &mut rng)).collect()
+                (0..(k + 2)).map(|k| key_mutation(k, rng)).collect()
             })
             .collect()
     }

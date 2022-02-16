@@ -423,20 +423,10 @@ impl RosettaApiServer {
     }
 }
 
+#[derive(Default)]
 pub struct RosettaApiServerOpt {
     pub exit_on_sync: bool,
     pub offline: bool,
     pub mainnet: bool,
     pub not_whitelisted: bool,
-}
-
-impl Default for RosettaApiServerOpt {
-    fn default() -> RosettaApiServerOpt {
-        RosettaApiServerOpt {
-            exit_on_sync: false,
-            offline: false,
-            mainnet: false,
-            not_whitelisted: false,
-        }
-    }
 }

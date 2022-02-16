@@ -225,7 +225,7 @@ impl SubnetConfig {
         Self {
             subnet_index,
             membership,
-            replica_version_id: replica_version_id.unwrap_or_else(ReplicaVersion::default),
+            replica_version_id: replica_version_id.unwrap_or_default(),
             ingress_bytes_per_block_soft_cap: ingress_bytes_per_block_soft_cap
                 .unwrap_or(config.ingress_bytes_per_block_soft_cap),
             max_ingress_bytes_per_message: max_ingress_bytes_per_message

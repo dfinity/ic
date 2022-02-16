@@ -225,7 +225,7 @@ pub struct CanisterStateBits {
 #[derive(Clone)]
 pub struct StateLayout {
     cp_manager: Arc<dyn CheckpointManager>,
-    log: ReplicaLogger,
+    _log: ReplicaLogger,
 }
 
 impl StateLayout {
@@ -233,7 +233,7 @@ impl StateLayout {
     pub fn new(log: ReplicaLogger, root: PathBuf) -> Self {
         Self {
             cp_manager: Arc::new(BasicCheckpointManager::new(log.clone(), root)),
-            log,
+            _log: log,
         }
     }
 

@@ -2,6 +2,7 @@
 // and more code in future from governance.rs to here, and that code will
 // likely need many of the imports that are currently unused below.
 #![allow(unused_imports)]
+#![allow(dead_code)]
 
 use assert_matches::assert_matches;
 use async_trait::async_trait;
@@ -114,16 +115,9 @@ pub fn prorated_neuron_age(
 }
 
 /// The LedgerFixture allows for independent testing of Ledger functionality.
+#[derive(Default)]
 pub struct LedgerFixture {
     accounts: LedgerMap,
-}
-
-impl Default for LedgerFixture {
-    fn default() -> Self {
-        LedgerFixture {
-            accounts: Default::default(),
-        }
-    }
 }
 
 impl LedgerFixture {
@@ -132,16 +126,9 @@ impl LedgerFixture {
     }
 }
 
+#[derive(Default)]
 pub struct LedgerBuilder {
     ledger_fixture: LedgerFixture,
-}
-
-impl Default for LedgerBuilder {
-    fn default() -> Self {
-        LedgerBuilder {
-            ledger_fixture: LedgerFixture::default(),
-        }
-    }
 }
 
 impl LedgerBuilder {
@@ -490,7 +477,7 @@ impl Environment for NNSFixture {
 /// The NNSState is used to capture all of the salient details of the NNS
 /// environment, so that we can compute the "delta", or what changed between
 /// actions.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 #[cfg_attr(feature = "test", derive(comparable::Comparable), compare_default)]
 pub struct NNSState {
     now: u64,
@@ -498,17 +485,6 @@ pub struct NNSState {
     governance_proto: GovernanceProto,
     // Attributes from `Governance`, which itself is not clonable
     latest_gc_num_proposals: usize,
-}
-
-impl Default for NNSState {
-    fn default() -> Self {
-        NNSState {
-            now: 0,
-            accounts: Default::default(),
-            governance_proto: GovernanceProto::default(),
-            latest_gc_num_proposals: 0,
-        }
-    }
 }
 
 /// When testing proposals, three different proposal topics available:

@@ -77,6 +77,7 @@ impl XNetEndpointMetrics {
 }
 
 /// The messages processed by the background worker.
+#[allow(clippy::large_enum_variant)]
 enum WorkerMessage {
     /// Handle a request and send the result to the reply channel.
     HandleRequest {

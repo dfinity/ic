@@ -84,9 +84,7 @@ impl UtilityCommand {
                 format!(
                     "Error while running '{}': {}",
                     self,
-                    std::str::from_utf8(output.stderr.as_slice())
-                        .unwrap()
-                        .to_string()
+                    std::str::from_utf8(output.stderr.as_slice()).unwrap()
                 ),
                 output.status,
             ))

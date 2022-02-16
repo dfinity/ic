@@ -122,7 +122,7 @@ pub struct GetDataRequestInfo {
     /// This field contains the time at which the GetData request was sent.  
     sent_at: SystemTime,
     /// This field contains the action to take if the request is expired.
-    on_timeout: OnTimeout,
+    _on_timeout: OnTimeout,
 }
 
 /// The BlockChainManager struct handles interactions that involve the headers.
@@ -530,7 +530,7 @@ impl BlockchainManager {
                     GetDataRequestInfo {
                         socket: peer.socket,
                         sent_at: SystemTime::now(),
-                        on_timeout: OnTimeout::Ignore,
+                        _on_timeout: OnTimeout::Ignore,
                     },
                 );
 

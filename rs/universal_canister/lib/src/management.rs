@@ -292,25 +292,13 @@ pub struct UpdateSettings {
     settings: CanisterSettings,
 }
 
-#[derive(CandidType)]
+#[derive(CandidType, Default)]
 pub struct CanisterSettings {
     pub controller: Option<Principal>,
     pub controllers: Option<Vec<Principal>>,
     pub compute_allocation: Option<candid::Nat>,
     pub memory_allocation: Option<candid::Nat>,
     pub freezing_threshold: Option<candid::Nat>,
-}
-
-impl Default for CanisterSettings {
-    fn default() -> Self {
-        Self {
-            controller: None,
-            controllers: None,
-            compute_allocation: None,
-            memory_allocation: None,
-            freezing_threshold: None,
-        }
-    }
 }
 
 // A call to the management canister with the following candid args:

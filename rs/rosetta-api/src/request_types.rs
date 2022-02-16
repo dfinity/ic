@@ -1052,20 +1052,12 @@ impl From<MergeMaturityMetadata> for Object {
 
 /// Transaction is a bit of a misnomer, since operations can succeed or fail
 /// independently from a Transaction.
+#[derive(Default)]
 pub struct TransactionBuilder {
     /// The next `OperationIdentifier` `index`.
     /// TODO Why is `OperationIdentifier.index` a signed integer?
     op_index: i64,
     ops: Vec<Operation>,
-}
-
-impl Default for TransactionBuilder {
-    fn default() -> Self {
-        Self {
-            op_index: 0,
-            ops: Vec::default(),
-        }
-    }
 }
 
 impl TransactionBuilder {

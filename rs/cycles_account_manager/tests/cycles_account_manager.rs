@@ -121,7 +121,7 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
                 system_state.memory_allocation,
                 NumBytes::from(0),
                 ComputeAllocation::default(),
-                &mut system_state.balance_mut(),
+                system_state.balance_mut(),
                 amount,
             ),
             Ok(())
@@ -153,7 +153,7 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
                     system_state.memory_allocation,
                     memory_usage,
                     ComputeAllocation::default(),
-                    &mut system_state.balance_mut(),
+                    system_state.balance_mut(),
                     amount,
                 ),
             Ok(())
@@ -182,7 +182,7 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
                 system_state.memory_allocation,
                 memory_usage,
                 ComputeAllocation::default(),
-                &mut system_state.balance_mut(),
+                system_state.balance_mut(),
                 amount,
             ),
             Err(CanisterOutOfCyclesError {

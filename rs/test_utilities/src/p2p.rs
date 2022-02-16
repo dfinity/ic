@@ -109,7 +109,7 @@ pub struct P2PTestSynchronizer {
     test_dir_path: std::path::PathBuf,
     pub node_id: NodeId,
     num_replicas: u16,
-    node_port_allocation: Arc<Vec<u16>>,
+    _node_port_allocation: Arc<Vec<u16>>,
 }
 
 impl P2PTestSynchronizer {
@@ -117,14 +117,14 @@ impl P2PTestSynchronizer {
         test_dir_path: std::path::PathBuf,
         node_id: NodeId,
         num_replicas: u16,
-        node_port_allocation: Arc<Vec<u16>>,
+        _node_port_allocation: Arc<Vec<u16>>,
     ) -> Self {
         P2PTestSynchronizer {
             test_id: std::process::id(),
             test_dir_path,
             node_id,
             num_replicas,
-            node_port_allocation,
+            _node_port_allocation,
         }
     }
 

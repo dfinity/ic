@@ -329,7 +329,7 @@ impl LoggerImpl {
             binary_name,
             timestamp.to_rfc3339_opts(SecondsFormat::Millis, true),
             process_id,
-            level.to_string()
+            level,
         );
 
         let log_path: PathBuf = [log_dir, &PathBuf::from(filename)].iter().collect();
@@ -340,7 +340,7 @@ impl LoggerImpl {
             .open(&log_path)
             .expect("open failed");
 
-        let symlink_name = format!("{}.{}.log", binary_name, level.to_string());
+        let symlink_name = format!("{}.{}.log", binary_name, level);
         let symlink_path: PathBuf = [log_dir, &PathBuf::from(symlink_name)].iter().collect();
         if let Err(e) = fs::remove_file(&symlink_path) {
             match e.kind() {

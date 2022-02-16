@@ -43,6 +43,7 @@ const CHUNKID_UNIT_CHUNK: u32 = 0;
 
 /// The data contained in an artifact chunk.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[allow(clippy::large_enum_variant)]
 pub enum ArtifactChunkData {
     UnitChunkData(Artifact), // Unit chunk data has 1:1 mapping with real artifacts
     SemiStructuredChunkData(Vec<u8>),

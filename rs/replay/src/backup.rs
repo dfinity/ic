@@ -384,7 +384,7 @@ pub(crate) fn deserialize_consensus_artifacts(
                     Some(replica_version) if &replica_version != current_replica_version => {
                         println!(
                             "⚠️  Please use the replay tool of version {} to continue backup recovery from height {:?}",
-                            replica_version.to_string(), cup_height
+                            replica_version, cup_height
                         );
                     }
                     _ => {}

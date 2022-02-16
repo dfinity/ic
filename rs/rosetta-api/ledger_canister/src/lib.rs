@@ -189,15 +189,20 @@ impl EncodedBlock {
 }
 
 #[derive(
-    Serialize, Deserialize, CandidType, Clone, Copy, Hash, Debug, PartialEq, Eq, PartialOrd, Ord,
+    Serialize,
+    Deserialize,
+    CandidType,
+    Clone,
+    Copy,
+    Default,
+    Hash,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
 )]
 pub struct Memo(pub u64);
-
-impl Default for Memo {
-    fn default() -> Memo {
-        Memo(0)
-    }
-}
 
 /// Position of a block in the chain. The first block has position 0.
 pub type BlockHeight = u64;

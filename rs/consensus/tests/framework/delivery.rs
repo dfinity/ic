@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use super::types::*;
 use ic_logger::trace;
 use rand::seq::SliceRandom;

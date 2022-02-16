@@ -259,7 +259,7 @@ pub(crate) fn get_registry_and_urls_for_test(
         let xnet_port = 2197 + i as u16;
         let expected_index = expected_indices
             .remove(&subnet_id)
-            .unwrap_or_else(Default::default)
+            .unwrap_or_default()
             .message_index;
 
         subnets.push(subnet_id.get().into_vec());

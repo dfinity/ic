@@ -172,11 +172,11 @@ impl Wasm {
     /// Installs this wasm onto a pre-existing canister.
     pub async fn install_onto_canister(
         self,
-        mut canister: &mut Canister<'_>,
+        canister: &mut Canister<'_>,
         canister_init_payload: Option<Vec<u8>>,
     ) -> Result<(), String> {
         self.install(canister.runtime)
-            .install(&mut canister, canister_init_payload.unwrap_or_default())
+            .install(canister, canister_init_payload.unwrap_or_default())
             .await
     }
 
@@ -185,7 +185,7 @@ impl Wasm {
     /// for which transient errors may happen.
     pub async fn install_with_retries_onto_canister(
         self,
-        mut canister: &mut Canister<'_>,
+        canister: &mut Canister<'_>,
         canister_init_payload: Option<Vec<u8>>,
         memory_allocation: Option<u64>,
     ) -> Result<(), String> {
@@ -207,7 +207,7 @@ impl Wasm {
                 "Attempting to install wasm into canister with ID: {}",
                 canister_id
             );
-            match install.install(&mut canister, init_payload.clone()).await {
+            match install.install(canister, init_payload.clone()).await {
                 Ok(()) => {
                     println!(
                         "Successfully installed wasm into canister with ID: {}",

@@ -79,10 +79,9 @@ where
     if let Some(v) = f(value) {
         *value = v;
     } else if let Some(a) = value.as_array_mut() {
-        a.iter_mut().for_each(|mut v| mangle_json_value(&mut v, f));
+        a.iter_mut().for_each(|v| mangle_json_value(v, f));
     } else if let Some(o) = value.as_object_mut() {
-        o.iter_mut()
-            .for_each(|(_, mut v)| mangle_json_value(&mut v, f));
+        o.iter_mut().for_each(|(_, v)| mangle_json_value(v, f));
     }
 }
 

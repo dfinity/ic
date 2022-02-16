@@ -305,7 +305,7 @@ impl CliArgs {
         let cargo_opts = self.cargo_opts;
 
         // check whether state_dir exists; create it if needed.
-        let (state_dir, state_dir_holder) = if self.state_dir.is_none() {
+        let (state_dir, _state_dir_holder) = if self.state_dir.is_none() {
             let maybe_dir = tempfile::tempdir();
             if maybe_dir.is_err() {
                 return Err(io::Error::new(
@@ -453,7 +453,7 @@ impl CliArgs {
             crypto_root,
             state_manager_root,
             registry_local_store_path,
-            state_dir_holder,
+            _state_dir_holder,
             unit_delay,
             initial_notary_delay,
             dkg_interval_length: self.dkg_interval_length.map(Height::from),
@@ -486,7 +486,7 @@ struct ValidatedConfig {
     consensus_pool_backend: Option<String>,
 
     // Not intended to ever be read: role is to keep the temp dir from being deleted.
-    state_dir_holder: Option<TempDir>,
+    _state_dir_holder: Option<TempDir>,
 }
 
 impl ValidatedConfig {

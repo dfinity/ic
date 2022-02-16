@@ -40,7 +40,7 @@ pub struct Fact {
     duration: Duration,
     content_length: ContentLength,
     success: bool,
-    request_type: RequestType,
+    _request_type: RequestType,
 }
 
 impl Fact {
@@ -61,7 +61,7 @@ impl Fact {
             duration,
             content_length,
             success,
-            request_type,
+            _request_type: request_type,
         }
     }
 }

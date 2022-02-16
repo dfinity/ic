@@ -790,18 +790,19 @@ fn generate_provided_canister_states(msgs: Vec<Request>) -> BTreeMap<CanisterId,
     let mut provided_canister_states = BTreeMap::<CanisterId, CanisterState>::new();
 
     for msg in msgs {
-        let mut provided_canister_state = provided_canister_states
-            .entry(msg.sender)
-            .or_insert_with(|| {
-                new_canister_state(
-                    msg.sender,
-                    msg.sender.get(),
-                    *INITIAL_CYCLES,
-                    NumSeconds::from(100_000),
-                )
-            });
+        let provided_canister_state =
+            provided_canister_states
+                .entry(msg.sender)
+                .or_insert_with(|| {
+                    new_canister_state(
+                        msg.sender,
+                        msg.sender.get(),
+                        *INITIAL_CYCLES,
+                        NumSeconds::from(100_000),
+                    )
+                });
         register_callback(
-            &mut provided_canister_state,
+            provided_canister_state,
             msg.sender,
             msg.receiver,
             msg.sender_reply_callback,
@@ -818,22 +819,23 @@ fn generate_expected_canister_states(msgs: Vec<Request>) -> BTreeMap<CanisterId,
     let mut expected_canister_states = BTreeMap::<CanisterId, CanisterState>::new();
 
     for msg in msgs {
-        let mut expected_canister_state = expected_canister_states
-            .entry(msg.sender)
-            .or_insert_with(|| {
-                new_canister_state(
-                    msg.sender,
-                    msg.sender.get(),
-                    *INITIAL_CYCLES,
-                    NumSeconds::from(100_000),
-                )
-            });
+        let expected_canister_state =
+            expected_canister_states
+                .entry(msg.sender)
+                .or_insert_with(|| {
+                    new_canister_state(
+                        msg.sender,
+                        msg.sender.get(),
+                        *INITIAL_CYCLES,
+                        NumSeconds::from(100_000),
+                    )
+                });
 
         // The output_queue can only be constructed with index = 0, so push and pop
         // each message to bump its next queue index.
         let receiver = msg.receiver;
         register_callback(
-            &mut expected_canister_state,
+            expected_canister_state,
             msg.sender,
             msg.receiver,
             msg.sender_reply_callback,

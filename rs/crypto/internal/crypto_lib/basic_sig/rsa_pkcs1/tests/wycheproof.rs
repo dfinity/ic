@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use ic_crypto_internal_basic_sig_rsa_pkcs1::*;
 use serde::{de::Error, Deserialize, Deserializer};
 use std::collections::{HashMap, HashSet};

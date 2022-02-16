@@ -32,6 +32,7 @@ use std::time::Instant;
 /// fed into the passive pipeline are either events from a replica or
 /// a fondue's [Event].
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum Event {
     FromPid(Pid, NodeEvent),
     Stop(i32),
@@ -43,6 +44,7 @@ pub enum Event {
 /// it needs two injections implemented by the means of `From`
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(tag = "type", content = "event")]
+#[allow(clippy::large_enum_variant)]
 pub enum NodeEvent {
     Log {
         src: InputSource,
@@ -94,19 +96,10 @@ impl From<process_pool::Event> for Event {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct IcManagerSettings {
     pub tee_replica_logs_base_dir: Option<PathBuf>,
     pub existing_endpoints: Option<Vec<IcEndpoint>>,
-}
-
-impl Default for IcManagerSettings {
-    fn default() -> Self {
-        IcManagerSettings {
-            tee_replica_logs_base_dir: None,
-            existing_endpoints: None,
-        }
-    }
 }
 
 impl IcManagerSettings {

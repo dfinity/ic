@@ -654,9 +654,8 @@ fn add_node() {
     // Note that for now, once a node record has been added, it MUST not be
     // modified, as P2P and Transport rely on this data to stay the same
     println!(
-        "{}call: {} from: {}",
+        "{}call: add_node from: {}",
         LOG_PREFIX,
-        "add_node".to_string(),
         dfn_core::api::caller()
     );
     over_may_reject(candid_one, add_node_);
@@ -673,9 +672,8 @@ fn add_node_(payload: AddNodePayload) -> Result<NodeId, String> {
 fn remove_node_directly() {
     // This method can be called by anyone
     println!(
-        "{}call: {} from: {}",
+        "{}call: remove_node_directly from: {}",
         LOG_PREFIX,
-        "remove_node_directly".to_string(),
         dfn_core::api::caller()
     );
     over(candid_one, |payload: RemoveNodeDirectlyPayload| {

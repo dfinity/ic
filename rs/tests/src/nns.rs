@@ -77,7 +77,7 @@ fn read_initial_mutations_from_local_store_dir<P: AsRef<Path>>(
         .unwrap_or_else(|e| {
             panic!(
                 "Could not read the content of the local store at {} due to: {}",
-                local_store_dir.as_ref().to_str().unwrap_or("").to_string(),
+                local_store_dir.as_ref().to_str().unwrap_or(""),
                 e
             )
         });

@@ -6,7 +6,7 @@ pub type BalanceBook = ledger_canister::Balances<ClientBalancesStore>;
 
 const EMPTY_HISTORY: [(BlockHeight, Tokens); 0] = [];
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BalanceHistory {
     // TODO consider switching to VecDeque, to have more efficient pruning
     // Unfortunately binary_search on VecDeque is only available on nightly,
@@ -18,15 +18,6 @@ pub struct BalanceHistory {
     // necessary involve a transaction on this account
     inner: Vec<(BlockHeight, Tokens)>,
     pub num_pruned_transactions: usize,
-}
-
-impl Default for BalanceHistory {
-    fn default() -> Self {
-        Self {
-            inner: Vec::default(),
-            num_pruned_transactions: 0,
-        }
-    }
 }
 
 impl BalanceHistory {

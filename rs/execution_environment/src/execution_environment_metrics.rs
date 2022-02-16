@@ -57,7 +57,7 @@ impl ExecutionEnvironmentMetrics {
         res: &Result<Vec<u8>, UserError>,
     ) {
         let method_name_label = if let Ok(method_name) = ic00::Method::from_str(method_name) {
-            format!("ic00_{}", method_name.to_string())
+            format!("ic00_{}", method_name)
         } else {
             String::from("unknown_method")
         };

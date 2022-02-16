@@ -750,6 +750,7 @@ impl EcdsaTranscriptLoader for EcdsaComplaintHandlerImpl {
 
 /// Specifies how to handle a received message
 #[derive(Eq, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 enum Action {
     /// The message is relevant to our current state, process it
     /// immediately.
