@@ -28,13 +28,7 @@ pub async fn main() {
         }
     };
 
-    let adapter = match Adapter::new(&config, logger.clone()) {
-        Ok(adapter) => Arc::new(Mutex::new(adapter)),
-        Err(err) => {
-            error!(logger, "Error initializing the adapter: {}", err);
-            return;
-        }
-    };
+    let adapter = Arc::new(Mutex::new(Adapter::new(&config, logger.clone())));
     spawn_grpc_server(Arc::clone(&adapter));
 
     loop {

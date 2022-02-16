@@ -35,8 +35,6 @@ pub enum AddressBookError {
     /// found in the seed queue. This occurs due to improper configuration.
     #[error("Could not find any available seed address.")]
     NoSeedAddressesFound,
-    #[error("Could not find any available addresses.")]
-    NoAddressesFound,
     /// This variant is used when the address manager receives more than
     /// [MAX_ADDRESSES](crate::addressmanager::MAX_ADDRESSES).
     #[error("Received too many addresses in `addr` message.")]
@@ -104,10 +102,10 @@ impl AddressBook {
     /// config provided. If no addresses found, a panic will be issued as a connection
     /// cannot be made without an address. If not enough addresses are found to
     /// meet the minimum number of connections, a panic will be issued.
-    pub fn new(config: &Config, logger: Logger) -> AddressBookResult<Self> {
+    pub fn new(config: &Config, logger: Logger) -> Self {
         let (min_addresses, max_addresses) = address_limits(config.network);
         let known_addresses: HashSet<SocketAddr> = config.nodes.iter().cloned().collect();
-        let mut book = AddressBook {
+        Self {
             dns_seeds: config.dns_seeds.clone(),
             port: config.port(),
             active_addresses: HashSet::new(),
@@ -116,15 +114,7 @@ impl AddressBook {
             min_addresses,
             max_addresses,
             seed_queue: VecDeque::new(),
-        };
-
-        book.build_seed_queue();
-
-        if book.seed_queue.is_empty() && book.known_addresses.is_empty() {
-            return Err(AddressBookError::NoAddressesFound);
         }
-
-        Ok(book)
     }
 
     /// This function takes the DNS seeds and creates a new queue of socket addresses to connect to
@@ -345,16 +335,6 @@ mod test {
 
     use super::*;
 
-    #[test]
-    /// This function tests the initialization of the address book.
-    fn test_address_book_init() {
-        let config = ConfigBuilder::new().with_network(Network::Signet).build();
-        let result = AddressBook::new(&config, make_logger());
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(matches!(err, AddressBookError::NoAddressesFound));
-    }
-
     /// This function tests the address manager basic interactions `mark_as_active`
     /// and `remove_from_active`.
     #[test]
@@ -362,7 +342,7 @@ mod test {
         let config = ConfigBuilder::new()
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
-        let mut book = AddressBook::new(&config, make_logger()).expect("invalid init");
+        let mut book = AddressBook::new(&config, make_logger());
         // Check if the address from the known_addresses.json has been loaded.
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
 
@@ -399,7 +379,7 @@ mod test {
         let config = ConfigBuilder::new()
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
-        let mut book = AddressBook::new(&config, make_logger()).expect("invalid init");
+        let mut book = AddressBook::new(&config, make_logger());
 
         let seed = book.pop_seed().expect("there should be 1 seed");
         let socket_1 = SocketAddr::from_str("127.0.0.1:8444").expect("bad address format");
@@ -426,7 +406,7 @@ mod test {
         let config = ConfigBuilder::new()
             .with_dns_seeds(vec![String::from("127.0.0.1"), String::from("192.168.1.1")])
             .build();
-        let mut book = AddressBook::new(&config, make_logger()).expect("invalid init");
+        let mut book = AddressBook::new(&config, make_logger());
         let seed = book.pop_seed().expect("there should be 1 seed");
         let socket = SocketAddr::from_str("127.0.0.1:8444").expect("bad address format");
         let address = Address::new(
@@ -462,7 +442,7 @@ mod test {
             .with_network(Network::Regtest)
             .with_nodes(vec![SocketAddr::from_str("127.0.0.1:8333").unwrap()])
             .build();
-        let mut book = AddressBook::new(&config, make_logger()).expect("invalid init");
+        let mut book = AddressBook::new(&config, make_logger());
         let entry = book.pop().expect("address from nodes should be there");
         assert_eq!(book.active_addresses.len(), 1);
 
@@ -482,7 +462,7 @@ mod test {
             .with_network(Network::Signet)
             .with_dns_seeds(vec![String::from("127.0.0.1"), String::from("192.168.1.1")])
             .build();
-        let mut book = AddressBook::new(&config, make_logger()).expect("invalid init");
+        let mut book = AddressBook::new(&config, make_logger());
         book.pop_seed().expect("there should be 1 seed");
         assert_eq!(book.seed_queue.len(), 1);
 
@@ -510,7 +490,7 @@ mod test {
         let config = ConfigBuilder::new()
             .with_dns_seeds(vec![String::from("127.0.0.1"), String::from("192.168.1.1")])
             .build();
-        let mut book = AddressBook::new(&config, make_logger()).expect("invalid init");
+        let mut book = AddressBook::new(&config, make_logger());
         let seed = book.pop_seed().expect("there should be 1 seed");
         let socket = SocketAddr::from_str("127.0.0.1:8444").expect("bad address format");
         let address = Address::new(
