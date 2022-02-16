@@ -27,6 +27,7 @@ cargo build --target $CARGO_BUILD_TARGET --release \
     --bin ic-cup-explorer \
     --bin ic-get-neuron-ids \
     --bin ic-p8s-service-discovery \
+    --bin ic-p8s-sd \
     --bin ic-prep \
     --bin ic-regedit \
     --bin ic-replay \

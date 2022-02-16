@@ -170,3 +170,12 @@ ic-ref-test-use-app-subnet:
     USE_APP_SUBNET: "true"
     ALLOW_FAILURE: "true"
   allow_failure: true
+
+ic-p8s-sd-e2e-test:
+  extends: .cargo-build-docker
+  needs:
+    - cargo-build-release-linux-native
+  stage: cargo-test
+  script:
+    - |
+      $SHELL_WRAPPER python3 "${CI_PROJECT_DIR}"/rs/ic_p8s_service_discovery/tests/e2e-test.py

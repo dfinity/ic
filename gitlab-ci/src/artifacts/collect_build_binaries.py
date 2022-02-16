@@ -24,6 +24,7 @@ DEFAULT_BINARIES = [
     "ic-get-neuron-ids",
     "ic-nns-init",
     "ic-p8s-service-discovery",
+    "ic-p8s-sd",
     "ic-prep",
     "ic-regedit",
     "ic-replay",
