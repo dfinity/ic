@@ -3,6 +3,8 @@
 ///
 /// Existing socket systemd configurations can be found
 /// ic-os/guestos/rootfs/etc/systemd/system/*.socket.
+use async_stream::AsyncStream;
+use futures::TryFutureExt;
 use std::{
     os::unix::io::FromRawFd,
     pin::Pin,
@@ -15,7 +17,7 @@ use tonic::transport::server::Connected;
 /// listener_from_first_systemd_socket() takes the first FD(3) passed by systemd. It does not check if
 /// more FDs are passed to the process. Make sure to call ensure_single_named_systemd_socket() before!
 /// To ensure that only one listener on the socket exists this function should only be called once!
-pub fn listener_from_first_systemd_socket() -> tokio::net::UnixListener {
+fn listener_from_first_systemd_socket() -> tokio::net::UnixListener {
     const SD_LISTEN_FDS_START: i32 = 3; // see https://www.freedesktop.org/software/systemd/man/sd_listen_fds.html
 
     let std_unix_listener = unsafe {
@@ -50,6 +52,20 @@ pub fn ensure_single_named_systemd_socket(socket_name: &str) {
             "Expected to receive a single systemd socket named '{}' but instead got '{}'",
             socket_name, systemd_socket_names
         );
+    }
+}
+
+/// Creates an incoming async stream using the first systemd socket.
+pub fn incoming_from_first_systemd_socket(
+) -> AsyncStream<Result<UnixStream, std::io::Error>, impl futures::Future<Output = ()>> {
+    let uds = listener_from_first_systemd_socket();
+
+    async_stream::stream! {
+        loop {
+            let item = uds.accept().map_ok(|(st, _)| UnixStream(st)).await;
+
+            yield item;
+        }
     }
 }
 

@@ -8,6 +8,7 @@ use crate::{
     },
 };
 use bitcoin::{hashes::Hash, Block, BlockHash};
+use ic_async_utils::{ensure_single_named_systemd_socket, incoming_from_first_systemd_socket};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tonic::{transport::Server, Request, Response, Status};
@@ -87,18 +88,19 @@ impl BtcAdapter for BtcAdapterImpl {
     }
 }
 
+const IC_BTC_ADAPTER_SOCKET_NAME: &str = "ic-btc-adapter.socket";
+
 /// Spawns in a separate Tokio task the BTC adapter gRPC service.
 pub fn spawn_grpc_server(adapter: Arc<Mutex<Adapter>>) {
-    // TODO: ER-2125: gRPC server needs configuration values
-    let addr = "0.0.0.0:34254"
-        .parse()
-        .expect("Failed to parse gRPC address");
+    // make sure we receive the correct socket from systemd (and only one)
+    ensure_single_named_systemd_socket(IC_BTC_ADAPTER_SOCKET_NAME);
+
     tokio::spawn(async move {
         let btc_adapter_impl = BtcAdapterImpl { adapter };
 
         Server::builder()
             .add_service(BtcAdapterServer::new(btc_adapter_impl))
-            .serve(addr)
+            .serve_with_incoming(incoming_from_first_systemd_socket())
             .await
             .expect("gRPC server crashed");
     });
