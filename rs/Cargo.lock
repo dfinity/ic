@@ -3294,6 +3294,7 @@ dependencies = [
 name = "ic-async-utils"
 version = "0.8.0"
 dependencies = [
+ "async-stream",
  "crossbeam-channel 0.5.1",
  "futures",
  "prometheus",
@@ -3334,6 +3335,7 @@ dependencies = [
  "clap 3.0.0-beta.2",
  "futures",
  "hex",
+ "ic-async-utils",
  "prost",
  "prost-build",
  "rand 0.8.3",
