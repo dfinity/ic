@@ -155,6 +155,8 @@
 /rs/types/types/                     @dfinity-lab/teams/interface-owners
 /rs/types/types/src/consensus.rs     @dfinity-lab/teams/consensus-owners
 /rs/types/types/src/consensus/       @dfinity-lab/teams/consensus-owners
+/rs/types/types/src/signature.rs     @dfinity-lab/teams/consensus-owners
+/rs/types/types/src/signature/       @dfinity-lab/teams/consensus-owners
 /rs/types/types/src/crypto.rs        @dfinity-lab/teams/crypto-owners
 /rs/types/types/src/crypto/          @dfinity-lab/teams/crypto-owners
 /rs/types/types/src/ic00.rs          @dfinity-lab/teams/execution-owners
