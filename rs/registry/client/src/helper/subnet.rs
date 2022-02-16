@@ -83,7 +83,7 @@ pub trait SubnetRegistry {
         &self,
         subnet_id: SubnetId,
         version: RegistryVersion,
-    ) -> RegistryClientResult<Option<EcdsaConfig>>;
+    ) -> RegistryClientResult<EcdsaConfig>;
 
     /// Returns notarization delay settings:
     /// - the unit delay for blockmaker;
@@ -252,10 +252,10 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
         &self,
         subnet_id: SubnetId,
         version: RegistryVersion,
-    ) -> RegistryClientResult<Option<EcdsaConfig>> {
+    ) -> RegistryClientResult<EcdsaConfig> {
         let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
         let subnet = deserialize_registry_value::<SubnetRecord>(bytes)?;
-        Ok(subnet.map(|subnet| subnet.ecdsa_config))
+        Ok(subnet.and_then(|subnet| subnet.ecdsa_config))
     }
 
     fn get_notarization_delay_settings(

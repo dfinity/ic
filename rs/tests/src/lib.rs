@@ -29,6 +29,7 @@ pub mod rosetta_test;
 pub mod security;
 pub mod ssh_access_to_nodes;
 pub mod ssh_access_utils;
+pub mod tecdsa_signature_test;
 pub mod token_balance_test;
 pub mod transaction_ledger_correctness_test;
 pub mod types;
