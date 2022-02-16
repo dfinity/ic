@@ -5,6 +5,8 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1.0.31"
+crossbeam = "0.8.0"
+crossbeam-channel = "0.5.1"
 elastic_common_schema = { path = "../elastic_common_schema" }
 erased-serde = "0.3.11"
 futures-util = "0.3.5"
@@ -14,10 +16,14 @@ humantime = "2.0"
 humantime-serde = "1.0"
 hyper = { version ="0.14.16", features = ["full"] }
 ic-async-utils = { path = "../async_utils" }
+ic-config = { path = "../config" }
+ic-interfaces = { path = "../interfaces" }
 ic-p8s-service-discovery-log = { path = "./log" }
 ic-metrics = { path = "../monitoring/metrics" }
+ic-metrics-exporter = { path = "../monitoring/metrics_exporter" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-client = { path = "../registry/client" }
+ic-registry-common = { path = "../registry/common" }
 ic-types = { path = "../types/types" }
 lazy_static = "1.4.0"
 parse_int = "0.4.0"
@@ -26,7 +32,10 @@ serde = { version = "1.0.115", features = ["derive"] }
 serde_json = "1.0.54"
 tempfile = "3.1.0"
 slog = { version = "2.5.2", features = ["nested-values"] }
+slog-async = { version = "2.5", features = ["nested-values"] }
+slog-term = "2.6.0"
 slog_derive = "0.2.0"
+structopt = { version = "0.3", default-features = false }
 strum = "0.23.0"
 strum_macros = "0.23.0"
 thiserror = "1.0"
@@ -36,4 +45,9 @@ ic-crypto-utils-threshold-sig = { path = "../crypto/utils/threshold_sig" }
 
 [dev-dependencies]
 ic-test-utilities = { path = "../test_utilities" }
-ic-registry-common = { path = "../registry/common" }
+itertools = "0.10.0"
+
+
+[[bin]]
+name = "ic-p8s-sd"
+path = "src/titanium/main.rs"

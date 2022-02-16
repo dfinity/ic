@@ -15,6 +15,7 @@ output = [
   "/cargo_target/x86_64-unknown-linux-gnu/release/ic-cup-explorer",
   "/cargo_target/x86_64-unknown-linux-gnu/release/ic-get-neuron-ids",
   "/cargo_target/x86_64-unknown-linux-gnu/release/ic-p8s-service-discovery",
+  "/cargo_target/x86_64-unknown-linux-gnu/release/ic-p8s-sd",
   "/cargo_target/x86_64-unknown-linux-gnu/release/ic-prep",
   "/cargo_target/x86_64-unknown-linux-gnu/release/ic-regedit",
   "/cargo_target/x86_64-unknown-linux-gnu/release/ic-replay",
