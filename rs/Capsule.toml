@@ -7,6 +7,7 @@ input = [
 ]
 output = [
   "/cargo_target/x86_64-unknown-linux-gnu/release/boundary-node-control-plane",
+  "/cargo_target/x86_64-unknown-linux-gnu/release/boundary-node-prober",
   "/cargo_target/x86_64-unknown-linux-gnu/release/canister_sandbox",
   "/cargo_target/x86_64-unknown-linux-gnu/release/ic-admin",
   "/cargo_target/x86_64-unknown-linux-gnu/release/ic-btc-adapter",

@@ -38,6 +38,98 @@
   tags:
     - boundary_node_vm
 
+- name: create directory /etc/nginx/ic_routes
+  file:
+    state: directory
+    path: "/etc/nginx/ic_routes"
+    mode: "0755"
+    owner: "root"
+    group: "root"
+  tags:
+    - boundary_node_vm
+
+- name: create directory /etc/nginx/ic_wallets
+  file:
+    state: directory
+    path: "/etc/nginx/ic_wallets"
+    mode: "0755"
+    owner: "root"
+    group: "root"
+  tags:
+    - boundary_node_vm
+
+- name: create directory under /etc/nginx/ic_wallets for ic network
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  file:
+    state: directory
+    path: "/etc/nginx/ic_wallets/{{ ic }}"
+    mode: "0755"
+    owner: "root"
+    group: "root"
+  tags:
+    - boundary_node_vm
+
+- name: copy wallets file
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  copy:
+    src: "../../boundary_node/files/ic.wallets"
+    dest: "/etc/nginx/ic_wallets/{{ ic }}/"
+    mode: "0644"
+    owner: "root"
+    group: "root"
+  register: ic_wallets
+  tags:
+    - boundary_node_vm
+
+- name: copy identity files
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  copy:
+    src: "../../boundary_node/files/identity.pem"
+    dest: "/etc/nginx/ic_wallets/{{ ic }}/"
+    mode: "0755"
+    owner: "root"
+    group: "root"
+  register: identity_pem
+  tags:
+    - boundary_node_vm
+
+- name: create directory under /etc/nginx/ic_routes for ic network
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  file:
+    state: directory
+    path: "/etc/nginx/ic_routes/{{ ic }}"
+    mode: "0755"
+    owner: "root"
+    group: "root"
+  tags:
+    - boundary_node_vm
+
+- name: create cache directory /var/cache/nginx
+  file:
+    state: directory
+    path: "/var/cache/nginx/ic"
+    mode: "0755"
+    owner: "root"
+    group: "root"
+  tags:
+    - boundary_node_vm
+
+- name: create directory under /var/cache/nginx for ic network
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  file:
+    state: directory
+    path: "/var/cache/nginx/ic/{{ ic }}"
+    mode: "0750"
+    owner: "www-data"
+    group: "www-data"
+  tags:
+    - boundary_node_vm
+
 # This throws an error right now, need to figure out why
 - name: Extract nns-url for icos_test
   block:
@@ -68,6 +160,41 @@
     name: "boundary-node-control-plane"
     state: restarted
   when: boundary_node_control_plane_service.changed or boundary_node_control_plane.changed
+  tags:
+    - boundary_node_vm
+
+- name: create file boundary-node-prober service for ic network
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  template:
+    src: "../../boundary_node/templates/boundary-node-prober.service"
+    dest: "/lib/systemd/system/boundary-node-prober-{{ ic }}.service"
+    owner: root
+    group: root
+    mode: 0644
+  register: boundary_node_prober_service
+  tags:
+    - boundary_node_vm
+
+- name: restart service boundary-node-prober for ic network
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  service:
+    daemon_reload: yes
+    name: "boundary-node-prober-{{ ic }}"
+    state: restarted
+  when: boundary_node_prober_service.changed or boundary_node_prober.changed
+  tags:
+    - boundary_node_vm
+
+- name: start service boundary-node-prober for ic network
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  service:
+    state: started
+    enabled: yes
+    name: "boundary-node-prober-{{ ic }}"
+    daemon_reload: yes
   tags:
     - boundary_node_vm
 

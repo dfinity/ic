@@ -128,8 +128,8 @@ Validation schema can be found at https://github.com/dfinity-lab/dfinity/blob/ma
   },
   "rand": {
     "owners": [
-      {"email": "robin.kunzler@dfinity.org", "versions": ["0.4.6", "0.7.3", "0.8.3"]},
-      {"email": "franzstefan@dfinity.org", "versions": ["0.4.6", "0.7.3", "0.8.3"]},
+      {"email": "robin.kunzler@dfinity.org", "versions": ["0.4.6", "0.7.3", "0.8.4"]},
+      {"email": "franzstefan@dfinity.org", "versions": ["0.4.6", "0.7.3", "0.8.4"]},
     ],
     "description": "Random number generators and other randomness functionality.",
     "keywords": ["randomness"],

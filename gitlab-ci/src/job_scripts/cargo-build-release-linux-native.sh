@@ -19,6 +19,7 @@ cd "$ROOT_DIR"/rs || exit 1
 cargo build --target $CARGO_BUILD_TARGET --release \
     --bin ic-rosetta-api \
     --bin boundary-node-control-plane \
+    --bin boundary-node-prober \
     --bin canister_sandbox \
     --bin ic-admin \
     --bin ic-btc-adapter \

@@ -1,0 +1,38 @@
+[package]
+name = "boundary-node-prober"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+async-trait = "0.1.51"
+anyhow = "1.0.31"
+boundary-node-control-plane = { path = "../control_plane" }
+ed25519-dalek = "1.0.1"
+garcon = "0.2"
+gflags = "0.3.7"
+hyper = "0.14.5"
+native-tls = "0.2.7"
+ic-utils = "0.11.1"
+ic-agent = "0.11.1"
+candid = "0.7.6"
+ic-crypto = { path = "../../crypto" }
+ic-crypto-utils-basic-sig = { path = "../../crypto/utils/basic_sig" }
+ic-crypto-utils-threshold-sig = { path = "../../crypto/utils/threshold_sig" }
+ic-config = { path = "../../config" }
+ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
+ic-interfaces = { path = "../../interfaces" }
+ic-metrics = { path = "../../monitoring/metrics" }
+ic-metrics-exporter = { path = "../../monitoring/metrics_exporter" }
+ic-types = { path = "../../types/types" }
+lazy_static = "1.4.0"
+mockall = "0.7.2"
+openssl = "0.10.0"
+prometheus = { version = "0.12.0", features = [ "process" ] }
+serde = { version = "1.0.115", features = ["derive"] }
+serde_json = "1.0.54"
+slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
+slog-scope = "4.1.2"
+slog-term = "2.6.0"
+tokio = { version = "1.15.0", features = ["full"] }
+tokio-openssl = "0.6.0"
+wabt = "0.10.0"

@@ -52,7 +52,7 @@ function build_ubuntu_from_tar() {
     rm -rf "$FAKEROOT_STATE_FILE" "$FS_TMPDIR"
 }
 
-declare -a IC_EXECUTABLES=(boundary-node-control-plane)
+declare -a IC_EXECUTABLES=(boundary-node-control-plane boundary-node-prober)
 
 # Install IC executables from source to target
 #
