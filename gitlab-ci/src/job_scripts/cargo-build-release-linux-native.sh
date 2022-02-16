@@ -35,6 +35,7 @@ cargo build --target $CARGO_BUILD_TARGET --release \
     --bin ic-workload-generator \
     --bin orchestrator \
     --bin replica \
+    --bin sandbox_launcher \
     --bin state-tool \
     --bin vsock_agent \
     --bin system-tests \

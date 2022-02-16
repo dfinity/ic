@@ -2,22 +2,15 @@ pub mod logging;
 pub mod sandbox_manager;
 pub mod sandbox_server;
 
-use ic_canister_sandbox_common::{controller_client_stub, protocol, rpc, transport};
-use std::os::unix::io::FromRawFd;
+use ic_canister_sandbox_common::{
+    child_process_initialization, controller_client_stub, protocol, rpc, transport,
+};
 use std::sync::Arc;
 
-pub use ic_canister_sandbox_common::RUN_AS_CANISTER_SANDBOX_FLAG;
-
-fn abort_on_panic() {
-    let default_hook = std::panic::take_hook();
-    std::panic::set_hook(Box::new(move |panic_info| {
-        default_hook(panic_info);
-        std::process::abort();
-    }));
-}
+pub use ic_canister_sandbox_common::{RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_SANDBOX_LAUNCHER_FLAG};
 
 /// The `main()` of the canister sandbox binary. This function is called from
-/// binaries such as `ic-replica` and `drun` to run as a canister sandbox.
+/// binaries such as `ic-replay` and `drun` to run as a canister sandbox.
 ///
 /// It sets up for operation and then hands over control to the
 /// RPC management system.
@@ -30,16 +23,7 @@ fn abort_on_panic() {
 /// process, and it calls for system call and execution state change
 /// operations into the controller.
 pub fn canister_sandbox_main() {
-    // The unsafe section is required to accept  the raw file descriptor received by
-    // spawning the process -- cf. spawn_socketed_process function which
-    // provides the counterpart and assures safety of this operation.
-    let socket = unsafe { std::os::unix::net::UnixStream::from_raw_fd(3) };
-
-    // We abort the whole program with a core dump if a single thread panics.
-    // This way we can capture all the context if a critical error
-    // happens.
-    abort_on_panic();
-
+    let socket = child_process_initialization();
     run_canister_sandbox(socket);
 }
 

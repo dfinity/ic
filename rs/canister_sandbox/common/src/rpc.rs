@@ -18,6 +18,12 @@ pub enum Error {
 }
 pub type RPCResult<T> = Result<T, Error>;
 
+impl From<Error> for std::io::Error {
+    fn from(err: Error) -> Self {
+        std::io::Error::new(std::io::ErrorKind::Other, format!("IPC error: {:?}", err))
+    }
+}
+
 /// Sink for messages (exchanged at transport layer). Note that this
 /// always includes capabilities for exchange across threads.
 // Improvement: Handle to be improved by SCL-215.

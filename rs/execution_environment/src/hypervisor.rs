@@ -3,11 +3,9 @@ use ic_canister_sandbox_replica_controller::sandboxed_execution_controller::Sand
 use ic_config::flag_status::FlagStatus;
 use ic_config::{embedders::Config as EmbeddersConfig, execution_environment::Config};
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_embedders::{
-    wasm_executor::WasmExecutor, WasmExecutionInput, WasmExecutionOutput, WasmtimeEmbedder,
-};
+use ic_embedders::{wasm_executor::WasmExecutor, WasmExecutionInput, WasmtimeEmbedder};
 use ic_interfaces::execution_environment::{
-    ExecutionParameters, HypervisorError, HypervisorResult,
+    ExecutionParameters, HypervisorError, HypervisorResult, WasmExecutionOutput,
 };
 use ic_interfaces::messages::RequestOrIngress;
 use ic_logger::{debug, fatal, ReplicaLogger};
@@ -1036,10 +1034,10 @@ impl Hypervisor {
         );
 
         let sandbox_executor = match config.canister_sandboxing_flag {
-            FlagStatus::Enabled => Some(Arc::new(SandboxedExecutionController::new(
-                log.clone(),
-                metrics_registry,
-            ))),
+            FlagStatus::Enabled => Some(Arc::new(
+                SandboxedExecutionController::new(log.clone(), metrics_registry)
+                    .expect("Failed to start sandboxed execution controller"),
+            )),
             FlagStatus::Disabled => None,
         };
 

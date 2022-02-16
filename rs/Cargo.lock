@@ -3451,6 +3451,7 @@ dependencies = [
  "ic-types 0.8.0",
  "ic-utils 0.8.0",
  "ic-wasm-types",
+ "libc",
  "memory_tracker",
  "mockall 0.7.2",
  "nix 0.23.0",
@@ -3478,11 +3479,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-canister-sandbox-launcher"
+version = "0.8.0"
+dependencies = [
+ "cc",
+ "ic-canister-sandbox-common",
+ "ic-test-utilities",
+ "ic-types 0.8.0",
+ "nix 0.23.0",
+]
+
+[[package]]
 name = "ic-canister-sandbox-replica-controller"
 version = "0.8.0"
 dependencies = [
  "ic-canister-sandbox-backend-lib",
  "ic-canister-sandbox-common",
+ "ic-config",
  "ic-embedders",
  "ic-interfaces",
  "ic-logger",
@@ -3500,6 +3513,10 @@ dependencies = [
  "prometheus",
  "regex",
  "slog",
+ "slog-async",
+ "slog-term",
+ "tempfile",
+ "wabt",
  "which 4.2.2",
 ]
 
@@ -4418,6 +4435,7 @@ dependencies = [
  "clap 2.33.3",
  "hex",
  "ic-canister-sandbox-backend-lib",
+ "ic-canister-sandbox-launcher",
  "ic-config",
  "ic-cycles-account-manager",
  "ic-execution-environment",
@@ -5553,6 +5571,7 @@ dependencies = [
  "ic-artifact-pool",
  "ic-canister-client",
  "ic-canister-sandbox-backend-lib",
+ "ic-canister-sandbox-launcher",
  "ic-config",
  "ic-consensus",
  "ic-consensus-message",

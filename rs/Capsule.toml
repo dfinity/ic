@@ -24,6 +24,7 @@ output = [
   "/cargo_target/x86_64-unknown-linux-gnu/release/orchestrator",
   "/cargo_target/x86_64-unknown-linux-gnu/release/replica",
   "/cargo_target/x86_64-unknown-linux-gnu/release/state-tool",
+  "/cargo_target/x86_64-unknown-linux-gnu/release/sandbox_launcher",
   "/cargo_target/x86_64-unknown-linux-gnu/release/vsock_agent",
   "/cargo_target/x86_64-unknown-linux-gnu/release/system-tests",
   "/cargo_target/x86_64-unknown-linux-gnu/release/ic-test-bin",

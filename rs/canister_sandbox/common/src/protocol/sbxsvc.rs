@@ -1,3 +1,6 @@
+//! This defines the RPC service methods offered by the sandbox process
+//! (used by the controller) as well as the expected replies.
+
 use std::collections::BTreeSet;
 
 use crate::fdenum::EnumerateInnerFileDescriptors;
@@ -19,9 +22,6 @@ use super::{
 };
 use ic_replicated_state::canister_state::execution_state::WasmMetadata;
 
-/// This defines the RPC service methods offered by the sandbox process
-/// (used by the controller) as well as the expected replies.
-///
 /// Instruct sandbox process to terminate: Sandbox process should take
 /// all necessary steps for graceful termination (sync all files etc.)
 /// and quit voluntarily. It is still expected to generate a reply to
@@ -254,4 +254,8 @@ pub enum Reply {
     CloseMemory(CloseMemoryReply),
     StartExecution(StartExecutionReply),
     CreateExecutionState(CreateExecutionStateReply),
+}
+
+impl EnumerateInnerFileDescriptors for Reply {
+    fn enumerate_fds<'a>(&'a mut self, _fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {}
 }

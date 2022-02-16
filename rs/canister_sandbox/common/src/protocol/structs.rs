@@ -1,5 +1,4 @@
-use ic_embedders::WasmExecutionOutput;
-use ic_interfaces::execution_environment::ExecutionParameters;
+use ic_interfaces::execution_environment::{ExecutionParameters, WasmExecutionOutput};
 use ic_replicated_state::{
     page_map::PageDeltaSerialization, Global, Memory, NumWasmPages, PageIndex,
 };

@@ -34,6 +34,7 @@ DEFAULT_BINARIES = [
     "orchestrator",
     "prod-test-driver",
     "replica",
+    "sandbox_launcher",
     "state-tool",
     "system-tests",
     "vsock_agent",
