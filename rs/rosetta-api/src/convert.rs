@@ -270,14 +270,22 @@ impl State {
         account: ledger_canister::AccountIdentifier,
         neuron_index: u64,
         spawned_neuron_index: u64,
+        percentage_to_spawn: Option<u32>,
         controller: Option<PrincipalId>,
     ) -> Result<(), ApiError> {
+        if let Some(pct) = percentage_to_spawn {
+            if !(1..=100).contains(&pct) {
+                let msg = format!("Invalid percentage to spawn: {}", pct);
+                let err = ApiError::InvalidTransaction(false, msg.into());
+                return Err(err);
+            }
+        }
         self.flush()?;
-
         self.actions.push(Request::Spawn(Spawn {
             account,
             spawned_neuron_index,
             controller,
+            percentage_to_spawn,
             neuron_index,
         }));
 
@@ -424,10 +432,17 @@ pub fn from_operations(
                 let SpawnMetadata {
                     neuron_index,
                     controller,
+                    percentage_to_spawn,
                     spawned_neuron_index,
                 } = o.metadata.clone().try_into()?;
                 validate_neuron_management_op()?;
-                state.spawn(account, neuron_index, spawned_neuron_index, controller)?;
+                state.spawn(
+                    account,
+                    neuron_index,
+                    spawned_neuron_index,
+                    percentage_to_spawn,
+                    controller,
+                )?;
             }
             MERGE_MATURITY => {
                 let MergeMaturityMetadata {

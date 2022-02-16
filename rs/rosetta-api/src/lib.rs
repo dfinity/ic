@@ -674,6 +674,7 @@ impl RosettaRequestHandler {
                     if let Some(Command::Spawn(manage_neuron::Spawn {
                         new_controller,
                         nonce,
+                        percentage_to_spawn,
                     })) = manage.command
                     {
                         if let Some(spawned_neuron_index) = nonce {
@@ -681,6 +682,7 @@ impl RosettaRequestHandler {
                                 account: from,
                                 spawned_neuron_index,
                                 controller: new_controller,
+                                percentage_to_spawn,
                                 neuron_index,
                             }));
                         } else {
@@ -1097,10 +1099,12 @@ impl RosettaRequestHandler {
                     account,
                     spawned_neuron_index,
                     controller,
+                    percentage_to_spawn,
                     neuron_index,
                 }) => {
                     let command = Command::Spawn(manage_neuron::Spawn {
                         new_controller: controller,
+                        percentage_to_spawn,
                         nonce: Some(spawned_neuron_index),
                     });
                     add_neuron_management_payload(
