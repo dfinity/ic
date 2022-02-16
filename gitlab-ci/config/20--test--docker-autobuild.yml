@@ -25,7 +25,7 @@ docker-autobuild-protected:
         echo "Image $IMAGE_NAME already present!"
       else
         echo -e "\e[0Ksection_start:$(date +%s):docker_build_script[collapsed=true]\r\e[0KClick here to see the docker_build_script"
-        ./gitlab-ci/docker/docker-build-local-image.sh
+        ./gitlab-ci/docker/docker-build-local-image.sh --nix
         echo -e "\e[0Ksection_end:$(date +%s):docker_build_script\r\e[0K"
       fi 
 
