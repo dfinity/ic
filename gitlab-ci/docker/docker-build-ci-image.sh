@@ -30,7 +30,7 @@ find . -type f \( -name "*.yml" \) -exec sed --in-place \
     -e "s/ic-build:$VERSION.*$/ic-build:$NEWVERSION-$SHA1ICBUILD\"/" \
     '{}' +
 
-"$REPO_ROOT/gitlab-ci/docker/docker-build-local-image.sh"
+"$REPO_ROOT/gitlab-ci/docker/docker-build-local-image.sh" --nix
 
 if [ -n "$NOPUSH" ]; then
     echo >&2 "--no-push is set, exiting now"

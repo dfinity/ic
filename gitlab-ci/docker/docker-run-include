@@ -15,10 +15,10 @@ if [ $USER == ubuntu ]; then
     PREFIX=""
 else
     SET_UID="$(id -u $USER)"
-    PREFIX="$USER-$SET_UID"
+    PREFIX="$USER-$SET_UID-"
 fi
 
-IMAGE="${IMAGE:-dfinity/ic-build:$PREFIX-$IMAGE_TAG}"
+IMAGE="${IMAGE:-dfinity/ic-build:$PREFIX$IMAGE_TAG}"
 WORKDIR="/ic"
 
 DOCKER_RUN_ARGS=(
