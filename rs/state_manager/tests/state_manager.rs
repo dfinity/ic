@@ -56,14 +56,14 @@ fn make_mutable(path: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-fn write_at(path: &Path, buf: &[u8], offset: u64) -> std::io::Result<()> {
+fn write_all_at(path: &Path, buf: &[u8], offset: u64) -> std::io::Result<()> {
     use std::os::unix::fs::FileExt;
 
     let f = std::fs::OpenOptions::new()
         .write(true)
         .create(true)
         .open(path)?;
-    f.write_at(buf, offset)?;
+    f.write_all_at(buf, offset)?;
     Ok(())
 }
 
@@ -1666,17 +1666,17 @@ fn can_recover_from_corruption_on_state_sync() {
 
             let canister_90_raw_pb = canister_90_layout.canister().raw_path().to_path_buf();
             make_mutable(&canister_90_raw_pb).unwrap();
-            write_at(&canister_90_raw_pb, b"Garbage", 0).unwrap();
+            write_all_at(&canister_90_raw_pb, b"Garbage", 0).unwrap();
 
             let canister_100_layout = mutable_cp_layout.canister(&canister_test_id(100)).unwrap();
 
             let canister_100_memory = canister_100_layout.vmemory_0();
             make_mutable(&canister_100_memory).unwrap();
-            write_at(&canister_100_memory, &[3u8; PAGE_SIZE], 4).unwrap();
+            write_all_at(&canister_100_memory, &[3u8; PAGE_SIZE], 4).unwrap();
 
             let canister_100_stable_memory = canister_100_layout.stable_memory_blob();
             make_mutable(&canister_100_stable_memory).unwrap();
-            write_at(
+            write_all_at(
                 &canister_100_stable_memory,
                 &[3u8; PAGE_SIZE],
                 PAGE_SIZE as u64,
