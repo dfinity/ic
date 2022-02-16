@@ -251,9 +251,9 @@ pub(crate) fn create_data_payload(
             )?;
         let ecdsa_config = registry_client
             .get_ecdsa_config(subnet_id, summary_registry_version)?
-            .ok_or(EcdsaPayloadError::EcdsaConfigNotFound(
-                summary_registry_version,
-            ))?;
+            .unwrap_or(EcdsaConfig {
+                quadruples_to_create_in_advance: 1, // default value
+            });
         match &summary.ecdsa {
             None => {
                 // bootstrap ECDSA payload
@@ -274,7 +274,7 @@ pub(crate) fn create_data_payload(
                     &node_ids,
                     summary_registry_version,
                     ecdsa_summary,
-                    ecdsa_config.as_ref(),
+                    &ecdsa_config,
                     &mut next_unused_transcript_id,
                 )?;
                 // TODO: if membership is going to change in the next summary block, we need
@@ -458,7 +458,7 @@ fn next_quadruples_in_creation(
     subnet_nodes: &[NodeId],
     summary_registry_version: RegistryVersion,
     summary: &ecdsa::EcdsaSummaryPayload,
-    ecdsa_config: Option<&EcdsaConfig>,
+    ecdsa_config: &EcdsaConfig,
     next_unused_transcript_id: &mut IDkgTranscriptId,
 ) -> Result<BTreeMap<ecdsa::QuadrupleId, ecdsa::QuadrupleInCreation>, EcdsaPayloadError> {
     let next_available_quadruple_id = summary
@@ -470,9 +470,7 @@ fn next_quadruples_in_creation(
         .unwrap_or_default();
     let mut quadruples = BTreeMap::new();
     let num_quadruples = summary.available_quadruples.len();
-    let mut to_create = ecdsa_config
-        .map(|config| config.quadruples_to_create_in_advance as usize)
-        .unwrap_or_default();
+    let mut to_create = ecdsa_config.quadruples_to_create_in_advance as usize;
     if to_create > num_quadruples {
         to_create -= num_quadruples;
     } else {
@@ -1122,7 +1120,7 @@ mod tests {
             &subnet_nodes,
             summary_registry_version,
             &summary,
-            Some(&ecdsa_config),
+            &ecdsa_config,
             &mut next_unused_transcript_id,
         );
         assert!(result.is_ok());
@@ -1147,7 +1145,7 @@ mod tests {
             &[],
             summary_registry_version,
             &summary,
-            Some(&ecdsa_config),
+            &ecdsa_config,
             &mut next_unused_transcript_id,
         );
         assert_matches!(

@@ -24,8 +24,8 @@ use ic_tests::{
     cup_fetching_across_upgrades, cycles_minting_test, feature_flags,
     networking::firewall::{self, change_to_firewall_rules_takes_effect},
     nns_canister_upgrade_test, nns_uninstall_canister_by_proposal_test,
-    registry_authentication_test, ssh_access_to_nodes, transaction_ledger_correctness_test,
-    unassigned_node_upgrade_test, wasm_generator_test,
+    registry_authentication_test, ssh_access_to_nodes, tecdsa_signature_test,
+    transaction_ledger_correctness_test, unassigned_node_upgrade_test, wasm_generator_test,
 };
 use regex::Regex;
 use std::collections::HashMap;
@@ -339,6 +339,14 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     par(vec![t(
                         "mock_ecdsa_signatures_are_supported",
                         feature_flags::mock_ecdsa_signatures_are_supported,
+                    )]),
+                ),
+                pot(
+                    "tecdsa_signature_test_pot",
+                    tecdsa_signature_test::enable_ecdsa_signatures_feature,
+                    par(vec![t(
+                        "test_threshold_ecdsa_signature",
+                        tecdsa_signature_test::test_threshold_ecdsa_signature,
                     )]),
                 ),
             ],
