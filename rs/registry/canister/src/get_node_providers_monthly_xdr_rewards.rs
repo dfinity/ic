@@ -29,8 +29,11 @@ impl Registry {
 
         for (key, values) in self.store.iter() {
             if key.starts_with(NODE_OPERATOR_RECORD_KEY_PREFIX.as_bytes()) {
-                let value = values.back().unwrap().value.clone();
-                let node_operator = decode_or_panic::<NodeOperatorRecord>(value);
+                let value = values.back().unwrap();
+                if value.deletion_marker {
+                    continue;
+                }
+                let node_operator = decode_or_panic::<NodeOperatorRecord>(value.value.clone());
 
                 let node_provider_id =
                     PrincipalId::try_from(&node_operator.node_provider_principal_id)
@@ -49,7 +52,12 @@ impl Registry {
                 let dc_record_bytes = self
                     .get(dc_key.as_bytes(), self.latest_version())
                     .ok_or_else(|| {
-                        format!("Data center ID '{}' was not found in the Registry", dc_id)
+                        format!(
+                            "Node Operator with key '{:?}' has data center ID '{}' \
+                            not found in the Registry",
+                            from_utf8(key.as_slice()),
+                            dc_id
+                        )
                     })?
                     .value
                     .clone();
@@ -84,7 +92,48 @@ mod tests {
     use ic_protobuf::registry::node_rewards::v2::{
         NodeRewardRate, NodeRewardRates, UpdateNodeRewardsTableProposalPayload,
     };
+    use ic_registry_keys::make_node_operator_record_key;
+    use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
     use maplit::btreemap;
+
+    /// Assert that `get_node_providers_monthly_xdr_rewards` returns success in the case
+    /// where deleted Node Operators exist.
+    #[test]
+    fn test_get_node_providers_monthly_xdr_rewards_ignores_deleted_keys() {
+        let mut registry = Registry::new();
+        registry.maybe_apply_mutation_internal(invariant_compliant_mutation());
+
+        // Add empty Node Rewards table to test failure cases
+        let node_rewards_payload = UpdateNodeRewardsTableProposalPayload::default();
+        registry.do_update_node_rewards_table(node_rewards_payload);
+
+        let node_operator_payload = AddNodeOperatorPayload {
+            node_operator_principal_id: Some(*TEST_USER1_PRINCIPAL),
+            node_allowance: 5,
+            node_provider_principal_id: Some(*TEST_USER1_PRINCIPAL),
+            dc_id: "NY1".into(),
+            rewardable_nodes: btreemap! {},
+        };
+
+        registry.do_add_node_operator(node_operator_payload);
+
+        let key = make_node_operator_record_key(*TEST_USER1_PRINCIPAL).into_bytes();
+
+        let mutations = vec![RegistryMutation {
+            mutation_type: registry_mutation::Type::Delete as i32,
+            key,
+            value: vec![],
+        }];
+
+        // Check invariants before applying mutations
+        registry.maybe_apply_mutation_internal(mutations);
+
+        assert!(registry
+            .get_node_providers_monthly_xdr_rewards()
+            .unwrap()
+            .rewards
+            .is_empty());
+    }
 
     #[test]
     fn test_get_node_providers_monthly_xdr_rewards() {
@@ -122,7 +171,7 @@ mod tests {
         let err = registry
             .get_node_providers_monthly_xdr_rewards()
             .unwrap_err();
-        assert_eq!(&err, "Data center ID 'NY1' was not found in the Registry");
+        assert!(err.contains("has data center ID 'NY1' not found in the Registry"));
 
         // Add Data Centers
         let data_centers_to_add = vec![
