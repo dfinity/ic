@@ -2954,7 +2954,7 @@ impl Governance {
 
         let source_neuron_fees_e8s = self.get_neuron(source_id)?.neuron_fees_e8s;
 
-        // Before transfering stake from the source to the target, burn any
+        // Before transferring stake from the source to the target, burn any
         // fees present in the source neuron.
         if source_neuron_fees_e8s > transaction_fee_e8s {
             let _result = self
@@ -3139,6 +3139,19 @@ impl Governance {
             return Err(GovernanceError::new(ErrorType::NotAuthorized));
         }
 
+        let percentage: u32 = spawn.percentage_to_spawn.unwrap_or(100);
+        if percentage > 100 || percentage == 0 {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "The percentage of maturity to spawn must be a value between 1 and 100 (inclusive)."));
+        }
+
+        let maturity_to_spawn = parent_neuron
+            .maturity_e8s_equivalent
+            .checked_mul(percentage as u64)
+            .expect("Overflow while processing maturity to spawn.");
+        let maturity_to_spawn = maturity_to_spawn / 100;
+
         // Validate that if a child neuron controller was provided, it is a valid
         // principal.
         let child_controller = if let Some(child_controller_) = &spawn.new_controller {
@@ -3151,7 +3164,7 @@ impl Governance {
         };
 
         // Calculate the stake of the new neuron.
-        let child_stake_e8s = parent_neuron.maturity_e8s_equivalent;
+        let child_stake_e8s = maturity_to_spawn;
 
         let economics = self
             .proto

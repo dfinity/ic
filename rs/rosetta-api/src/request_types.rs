@@ -620,6 +620,7 @@ impl TryFrom<&models::Request> for Request {
                 if let Some(Command::Spawn(manage_neuron::Spawn {
                     new_controller,
                     nonce,
+                    percentage_to_spawn,
                 })) = manage_neuron()?
                 {
                     if let Some(spawned_neuron_index) = nonce {
@@ -627,6 +628,7 @@ impl TryFrom<&models::Request> for Request {
                             account,
                             spawned_neuron_index,
                             controller: new_controller,
+                            percentage_to_spawn,
                             neuron_index: *neuron_index,
                         }))
                     } else {
@@ -774,6 +776,7 @@ pub struct Spawn {
     pub account: ledger_canister::AccountIdentifier,
     pub spawned_neuron_index: u64,
     pub controller: Option<PrincipalId>,
+    pub percentage_to_spawn: Option<u32>,
     #[serde(default)]
     pub neuron_index: u64,
 }
@@ -992,6 +995,10 @@ pub struct SpawnMetadata {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub controller: Option<PrincipalId>,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub percentage_to_spawn: Option<u32>,
 
     #[serde(rename = "spawned_neuron_index")]
     pub spawned_neuron_index: u64,
@@ -1305,6 +1312,7 @@ impl TransactionBuilder {
             account,
             spawned_neuron_index,
             controller,
+            percentage_to_spawn,
             neuron_index,
         } = spawn;
         let operation_identifier = self.allocate_op_id();
@@ -1320,6 +1328,7 @@ impl TransactionBuilder {
                 SpawnMetadata {
                     controller: *controller,
                     neuron_index: *neuron_index,
+                    percentage_to_spawn: *percentage_to_spawn,
                     spawned_neuron_index: *spawned_neuron_index,
                 }
                 .into(),

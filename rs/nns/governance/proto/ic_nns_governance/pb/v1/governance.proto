@@ -738,9 +738,10 @@ message ManageNeuron {
     // If not set, the spawned neuron will have the same controller as
     // this neuron.
     ic_base_types.pb.v1.PrincipalId new_controller = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
-
     // The nonce with which to create the subaccount.
     optional uint64 nonce = 2;
+    // The percentage to spawn, from 1 to 100 (inclusive).
+    optional uint32 percentage_to_spawn = 3;
   }
 
   // Merge the maturity of a neuron into the current stake.
@@ -749,7 +750,7 @@ message ManageNeuron {
   // or equal to the transaction fee.
   message MergeMaturity {
     option (ic_base_types.pb.v1.tui_signed_message) = true;
-    // The percentage to merge, from 1 to 100
+    // The percentage to merge, from 1 to 100 (inclusive).
     uint32 percentage_to_merge = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
   }
 
@@ -1175,7 +1176,7 @@ message NetworkEconomics {
   // The fee does not apply for ManageNeuron proposals.
   uint64 reject_cost_e8s = 1;
 
-  // The minium number of E8s that can be staked in a neuron.
+  // The minimum number of E8s that can be staked in a neuron.
   uint64 neuron_minimum_stake_e8s = 2;
 
   // The number of E8s (10E-8 of an ICP token) that it costs to
