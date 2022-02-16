@@ -300,7 +300,9 @@ fn poly_lagrange_coefficients_at_zero_are_correct() {
         .map(|(numerator, denominator)| numerator.mul(&denominator.invert().unwrap()).unwrap())
         .collect::<Vec<EccScalar>>();
 
-    let observed = lagrange_coefficients_at_zero(&x_values)
+    let zero = EccScalar::zero(curve);
+
+    let observed = lagrange_coefficients_at_value(&zero, &x_values)
         .expect("Failed even though coordinates were distinct");
 
     assert_eq!(computed, observed);
@@ -328,6 +330,34 @@ fn poly_point_interpolation_at_zero() -> ThresholdEcdsaResult<()> {
 
             let g0 = EccPoint::interpolation_at_zero(&samples)?;
             assert_eq!(g0, pk);
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
+fn poly_scalar_interpolation_at_value() -> ThresholdEcdsaResult<()> {
+    let mut rng = rand::thread_rng();
+
+    for curve in EccCurveType::all() {
+        for num_coefficients in 1..30 {
+            let value = EccScalar::random(curve, &mut rng)?;
+
+            let poly = Polynomial::random(curve, num_coefficients, &mut rng)?;
+
+            let mut samples = Vec::with_capacity(num_coefficients);
+
+            for _i in 0..num_coefficients {
+                let x = EccScalar::random(curve, &mut rng)?;
+                let p_x = poly.evaluate_at(&x)?;
+                samples.push((x, p_x));
+            }
+
+            assert_eq!(
+                EccScalar::interpolation_at_value(&value, &samples)?,
+                poly.evaluate_at(&value)?
+            );
         }
     }
 

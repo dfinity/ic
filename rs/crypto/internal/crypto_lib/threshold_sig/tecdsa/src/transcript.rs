@@ -269,10 +269,131 @@ impl IDkgTranscriptInternal {
     }
 }
 
+fn reconstruct_share_from_openings(
+    dealing: &IDkgDealingInternal,
+    openings: &BTreeMap<NodeIndex, CommitmentOpening>,
+    share_index: NodeIndex,
+) -> ThresholdEcdsaResult<CommitmentOpening> {
+    let reconstruction_threshold = dealing.commitment.len();
+
+    if openings.len() < reconstruction_threshold {
+        return Err(ThresholdEcdsaError::InsufficientOpenings);
+    }
+
+    let curve = dealing.commitment.curve_type();
+    let index = EccScalar::from_node_index(curve, share_index);
+
+    match &dealing.commitment {
+        PolynomialCommitment::Simple(_) => {
+            let mut values = Vec::with_capacity(openings.len());
+            for (dealer_index, opening) in openings {
+                if let CommitmentOpening::Simple(value) = opening {
+                    values.push((EccScalar::from_node_index(curve, *dealer_index), *value));
+                } else {
+                    return Err(ThresholdEcdsaError::InconsistentCommitments);
+                }
+            }
+
+            let combined_value = EccScalar::interpolation_at_value(&index, &values)?;
+            let combined_opening = CommitmentOpening::Simple(combined_value);
+
+            dealing
+                .commitment
+                .return_opening_if_consistent(share_index, &combined_opening)
+        }
+        PolynomialCommitment::Pedersen(_) => {
+            let mut values = Vec::with_capacity(openings.len());
+            let mut masks = Vec::with_capacity(openings.len());
+
+            for (dealer_index, opening) in openings {
+                if let CommitmentOpening::Pedersen(value, mask) = opening {
+                    values.push((EccScalar::from_node_index(curve, *dealer_index), *value));
+                    masks.push((EccScalar::from_node_index(curve, *dealer_index), *mask));
+                } else {
+                    return Err(ThresholdEcdsaError::InconsistentCommitments);
+                }
+            }
+
+            // We could optimize this to compute the Lagrange coefficients just
+            // once as the indexes are the same. Since complaints are a
+            // rarely/never used portion of the protocol it does not seem
+            // important to optimize this at this time.
+            let combined_value = EccScalar::interpolation_at_value(&index, &values)?;
+            let combined_mask = EccScalar::interpolation_at_value(&index, &masks)?;
+            let combined_opening = CommitmentOpening::Pedersen(combined_value, combined_mask);
+
+            dealing
+                .commitment
+                .return_opening_if_consistent(share_index, &combined_opening)
+        }
+    }
+}
+
 impl CommitmentOpening {
+    /// Creates a commitment opening using dealings and openings
+    ///
+    /// The MEGa secret and public keys is our node's keypair. The
+    /// `receiver_index` indicates our place within the dealings.
+    ///
+    /// # Preconditions
+    /// * The dealings must have already been verified
+    /// * The openings must have already been verified
+    ///
+    /// # Errors
+    /// * `InsufficientOpenings` if we require openings for a corrupted dealing but
+    ///   do not have sufficiently many openings for that dealing.
+    /// * `InconsistentCommitments` if the commitments are inconsistent. This
+    ///   indicates that there is a corrupted dealing for which we have no openings
+    ///   at all.
+    pub(crate) fn from_dealings_and_openings(
+        verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+        provided_openings: &BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
+        transcript_commitment: &CombinedCommitment,
+        context_data: &[u8],
+        receiver_index: NodeIndex,
+        secret_key: &MEGaPrivateKey,
+        public_key: &MEGaPublicKey,
+    ) -> ThresholdEcdsaResult<Self> {
+        let curve = secret_key.curve_type();
+        let mut openings = Vec::with_capacity(verified_dealings.len());
+
+        for (dealer_index, dealing) in verified_dealings {
+            // If provided_openings contains an entry for dealer_index,
+            // reconstruct the share, otherwise attempt to decrypt the dealing
+            let opening = if let Some(shares) = provided_openings.get(dealer_index) {
+                reconstruct_share_from_openings(dealing, shares, receiver_index)?
+            } else {
+                dealing.ciphertext.decrypt_and_check(
+                    &dealing.commitment,
+                    context_data,
+                    *dealer_index,
+                    receiver_index,
+                    secret_key,
+                    public_key,
+                )?
+            };
+
+            let dealer_index = EccScalar::from_node_index(curve, *dealer_index);
+            openings.push((dealer_index, opening));
+        }
+
+        Self::from_openings(&openings, transcript_commitment, receiver_index, curve)
+    }
+
+    /// Creates a commitment opening using dealings and openings
+    ///
+    /// The MEGa secret and public keys is our node's keypair. The
+    /// `receiver_index` indicates our place within the dealings.
+    ///
+    /// # Preconditions
+    /// * The dealings must have already been verified
+    ///
+    /// # Errors
+    /// * `InconsistentCommitments` if the commitments are inconsistent. This
+    ///   indicates we should issue a complaint and collect openings.
     pub(crate) fn from_dealings(
         verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
-        transcript: &IDkgTranscriptInternal,
+        transcript_commitment: &CombinedCommitment,
         context_data: &[u8],
         receiver_index: NodeIndex,
         secret_key: &MEGaPrivateKey,
@@ -296,8 +417,17 @@ impl CommitmentOpening {
             openings.push((dealer_index, opening));
         }
 
+        Self::from_openings(&openings, transcript_commitment, receiver_index, curve)
+    }
+
+    fn from_openings(
+        openings: &[(EccScalar, CommitmentOpening)],
+        transcript_commitment: &CombinedCommitment,
+        receiver_index: NodeIndex,
+        curve: EccCurveType,
+    ) -> ThresholdEcdsaResult<Self> {
         // Recombine the openings according to the type of combined polynomial
-        match &transcript.combined_commitment {
+        match transcript_commitment {
             CombinedCommitment::BySummation(commitment) => {
                 // Recombine secret by summation
                 let mut combined_value = EccScalar::zero(curve);
@@ -305,8 +435,8 @@ impl CommitmentOpening {
 
                 for (_dealer_index, opening) in openings {
                     if let Self::Pedersen(value, mask) = opening {
-                        combined_value = combined_value.add(&value)?;
-                        combined_mask = combined_mask.add(&mask)?;
+                        combined_value = combined_value.add(value)?;
+                        combined_mask = combined_mask.add(mask)?;
                     } else {
                         return Err(ThresholdEcdsaError::InconsistentCommitments);
                     }
@@ -315,11 +445,7 @@ impl CommitmentOpening {
                 let combined_opening = Self::Pedersen(combined_value, combined_mask);
 
                 // Check reconstructed opening matches the commitment
-                if commitment.check_opening(receiver_index, &combined_opening)? {
-                    Ok(combined_opening)
-                } else {
-                    Err(ThresholdEcdsaError::InconsistentCommitments)
-                }
+                commitment.return_opening_if_consistent(receiver_index, &combined_opening)
             }
 
             CombinedCommitment::ByInterpolation(PolynomialCommitment::Pedersen(commitment)) => {
@@ -328,8 +454,8 @@ impl CommitmentOpening {
 
                 for (dealer_index, opening) in openings {
                     if let Self::Pedersen(value, mask) = opening {
-                        values.push((dealer_index, value));
-                        masks.push((dealer_index, mask));
+                        values.push((*dealer_index, *value));
+                        masks.push((*dealer_index, *mask));
                     } else {
                         return Err(ThresholdEcdsaError::InconsistentCommitments);
                     }
@@ -352,7 +478,7 @@ impl CommitmentOpening {
 
                 for (dealer_index, opening) in openings {
                     if let Self::Simple(value) = opening {
-                        values.push((dealer_index, value))
+                        values.push((*dealer_index, *value))
                     } else {
                         return Err(ThresholdEcdsaError::InconsistentCommitments);
                     }

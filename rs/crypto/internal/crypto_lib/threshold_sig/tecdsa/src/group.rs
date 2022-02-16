@@ -393,8 +393,21 @@ impl EccScalar {
             return Err(ThresholdEcdsaError::InterpolationError);
         }
 
+        let zero = EccScalar::zero(samples[0].0.curve_type());
+
+        Self::interpolation_at_value(&zero, samples)
+    }
+
+    pub fn interpolation_at_value(
+        value: &EccScalar,
+        samples: &[(EccScalar, EccScalar)],
+    ) -> ThresholdEcdsaResult<Self> {
+        if samples.is_empty() {
+            return Err(ThresholdEcdsaError::InterpolationError);
+        }
+
         let (all_x, all_y): (Vec<_>, Vec<_>) = samples.iter().cloned().unzip();
-        let coefficients = lagrange_coefficients_at_zero(&all_x)?;
+        let coefficients = lagrange_coefficients_at_value(value, &all_x)?;
 
         let curve = coefficients[0].curve_type();
         let mut result = EccScalar::zero(curve);
@@ -543,10 +556,12 @@ impl EccPoint {
             return Err(ThresholdEcdsaError::InterpolationError);
         }
 
-        let (all_x, all_y): (Vec<_>, Vec<_>) = samples.iter().cloned().unzip();
-        let coefficients = lagrange_coefficients_at_zero(&all_x)?;
+        let curve_type = samples[0].0.curve_type();
 
-        let mut result = EccPoint::identity(coefficients[0].curve_type());
+        let (all_x, all_y): (Vec<_>, Vec<_>) = samples.iter().cloned().unzip();
+        let coefficients = lagrange_coefficients_at_value(&EccScalar::zero(curve_type), &all_x)?;
+
+        let mut result = EccPoint::identity(curve_type);
         for (coefficient, sample) in coefficients.iter().zip(all_y) {
             result = result.add_points(&sample.scalar_mul(coefficient)?)?;
         }
