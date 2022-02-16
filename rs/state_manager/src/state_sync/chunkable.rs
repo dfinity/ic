@@ -391,7 +391,7 @@ impl IncompleteState {
                                 let chunk = &manifest_old.chunk_table[idx];
                                 let data = &src_data[chunk.byte_range()];
 
-                                dst.write_at(data, chunk.offset).unwrap_or_else(|err| {
+                                dst.write_all_at(data, chunk.offset).unwrap_or_else(|err| {
                                     fatal!(
                                         log,
                                         "Failed to write chunk (offset = {}, size = {}) to file {}: {}",
@@ -559,7 +559,7 @@ impl IncompleteState {
                             }
                         }
 
-                        dst.write_at(src_data, dst_chunk.offset)
+                        dst.write_all_at(src_data, dst_chunk.offset)
                             .unwrap_or_else(|err| {
                                 fatal!(
                                     log,
@@ -598,7 +598,7 @@ impl IncompleteState {
             .create(false)
             .open(&path)
             .unwrap_or_else(|err| fatal!(log, "Failed to open file {}: {}", path.display(), err));
-        f.write_at(bytes, chunk.offset).unwrap_or_else(|err| {
+        f.write_all_at(bytes, chunk.offset).unwrap_or_else(|err| {
             fatal!(
                 log,
                 "Failed to write chunk (offset = {}, size = {}) to file {}: {}",
