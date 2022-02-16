@@ -269,7 +269,6 @@ guest-os-downgrade-from-new-version-to-mainnet-nns-subnet-query-workload:
 
 
 .run-farm-based-test: &run-farm-based-test |
-  export FARM_BASED="true"
   IC_VERSION_ID=$("${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/find-build-id.sh)
   export IC_VERSION_ID
   BASE_DIR="${CI_PROJECT_DIR}/logs/$(date +%Y%m%d_%H%M%S)"
