@@ -17,6 +17,9 @@ pub struct SubnetFeatures {
     /// This feature flag controls whether canisters of this subnet are capable of
     /// performing http(s) requests to the web2.
     pub http_requests: bool,
+
+    /// Whether or not this subnet should be syncing the state of the Bitcoin testnet.
+    pub bitcoin_testnet: Option<bool>,
 }
 
 impl From<SubnetFeatures> for pb::SubnetFeatures {
@@ -25,6 +28,7 @@ impl From<SubnetFeatures> for pb::SubnetFeatures {
             ecdsa_signatures: features.ecdsa_signatures,
             canister_sandboxing: features.canister_sandboxing,
             http_requests: features.http_requests,
+            bitcoin_testnet: features.bitcoin_testnet,
         }
     }
 }
@@ -35,6 +39,7 @@ impl From<pb::SubnetFeatures> for SubnetFeatures {
             ecdsa_signatures: features.ecdsa_signatures,
             canister_sandboxing: features.canister_sandboxing,
             http_requests: features.http_requests,
+            bitcoin_testnet: features.bitcoin_testnet,
         }
     }
 }
@@ -55,6 +60,7 @@ impl FromStr for SubnetFeatures {
                 "ecdsa_signatures" => features.ecdsa_signatures = true,
                 "canister_sandboxing" => features.canister_sandboxing = true,
                 "http_requests" => features.http_requests = true,
+                "bitcoin_testnet" => features.bitcoin_testnet = Some(true),
                 _ => return Err(format!("Unknown feature {:?} in {:?}", feature, string)),
             }
         }
@@ -88,14 +94,17 @@ mod tests {
 
     #[test]
     fn test_all_can_be_set_true() {
-        let result =
-            SubnetFeatures::from_str("ecdsa_signatures,canister_sandboxing,http_requests").unwrap();
+        let result = SubnetFeatures::from_str(
+            "ecdsa_signatures,canister_sandboxing,http_requests,bitcoin_testnet",
+        )
+        .unwrap();
         assert_eq!(
             result,
             SubnetFeatures {
                 ecdsa_signatures: true,
                 canister_sandboxing: true,
                 http_requests: true,
+                bitcoin_testnet: Some(true),
             }
         );
     }

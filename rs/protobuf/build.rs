@@ -16,6 +16,7 @@ fn base_config() -> Config {
         PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR environment variable not set"))
             .join("protoc_file_descriptor_set.bin"),
     );
+    config.protoc_arg("--experimental_allow_proto3_optional");
     config
 }
 

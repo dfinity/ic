@@ -203,6 +203,8 @@ message SubnetFeatures {
     // This feature flag controls whether canisters of this subnet are capable of
     // performing http(s) requests to the web2.
     bool http_requests = 3;
+    // Whether or not this subnet should be syncing the state of the Bitcoin testnet.
+    optional bool bitcoin_testnet = 4;
 }
 
 // Per subnet P2P configuration
