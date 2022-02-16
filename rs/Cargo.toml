@@ -10,6 +10,7 @@ members = [
   "bitcoin/validation",
   "bitcoin/types",
   "boundary_node/control_plane",
+  "boundary_node/prober",
   "canister_client",
   "cycles_account_manager",
   "canister_sandbox",

@@ -2,6 +2,7 @@
 input = [
     "scripts/build-disk-image.sh",
     "../../artifacts/release/boundary-node-control-plane",
+    "../../artifacts/release/boundary-node-prober",
     "scripts/partitions.sh",
     "scripts/partitions.csv",
     "scripts/build-docker-save.sh",

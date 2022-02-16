@@ -9,6 +9,7 @@ custom_domains: []
 icx_proxy_debug: False
 icx_proxy_trace: False
 control_plane_metrics_port: 0
+prober_metrics_port: 0
 service_worker_domain: ""
 redirect_to_dashboard_regex: ""
 journalbeat_version: "7.5.1"

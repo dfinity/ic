@@ -1,0 +1,18 @@
+[Unit]
+Description=Boundary Node Prober
+After=syslog.target
+
+[Service]
+User=root
+Group=root
+WorkingDirectory=/etc/nginx/ic_networks/{{ ic }}
+ExecStart=/etc/nginx/ic_networks/{{ ic }}/boundary-node-prober {% if prober_metrics_port != 0 %}--metrics_port {{ prober_metrics_port }}{% endif %} {% if ic == 'mainnet' %}--mainnet {% endif %} --routes_dir /etc/nginx/ic_routes/{{ ic }} --wallets_dir /etc/nginx/ic_wallets/{{ ic }}
+
+Restart=always
+RestartSec=10
+KillSignal=SIGINT
+StartLimitBurst=5
+StartLimitInterval=0
+
+[Install]
+WantedBy=multi-user.target

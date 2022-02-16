@@ -16,6 +16,7 @@ generic-guest-os-diskimg:
       ls -lah /var/run/docker.sock; groups
 
       gunzip -c -d artifacts/release/boundary-node-control-plane.gz > artifacts/release/boundary-node-control-plane
+      gunzip -c -d artifacts/release/boundary-node-prober.gz > artifacts/release/boundary-node-prober
 
       cd ic-os/generic-guestos
 

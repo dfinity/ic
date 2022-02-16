@@ -138,6 +138,7 @@ function download_binaries() {
 
 function place_control_plane() {
     cp -a "${IC_PREP_DIR}/bin/boundary-node-control-plane" "$REPO_ROOT/ic-os/boundary-guestos/rootfs/opt/ic/bin/boundary-node-control-plane"
+    cp -a "${IC_PREP_DIR}/bin/boundary-node-prober" "$REPO_ROOT/ic-os/boundary-guestos/rootfs/opt/ic/bin/boundary-node-prober"
 }
 
 function create_tarball_structure() {

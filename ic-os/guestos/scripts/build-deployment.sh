@@ -196,6 +196,7 @@ function generate_subnet_config() {
     cp -a ${IC_PREP_DIR}/bin/replica "$REPO_ROOT/ic-os/guestos/rootfs/opt/ic/bin/replica"
     cp -a ${IC_PREP_DIR}/bin/orchestrator "$REPO_ROOT/ic-os/guestos/rootfs/opt/ic/bin/orchestrator"
     cp -a ${IC_PREP_DIR}/bin/boundary-node-control-plane "$REPO_ROOT/ic-os/generic-guestos/rootfs/opt/dfinity/boundary-node-control-plane"
+    cp -a ${IC_PREP_DIR}/bin/boundary-node-prober "$REPO_ROOT/ic-os/generic-guestos/rootfs/opt/dfinity/boundary-node-prober"
 
     NODES_NNS=()
     NODES_APP=()

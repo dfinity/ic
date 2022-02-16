@@ -14,6 +14,7 @@ from typing import overload
 
 DEFAULT_BINARIES = [
     "boundary-node-control-plane",
+    "boundary-node-prober",
     "canister_sandbox",
     "e2e-test-driver",
     "ic-admin",

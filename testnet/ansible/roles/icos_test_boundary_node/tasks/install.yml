@@ -127,6 +127,21 @@
   tags:
     - boundary_node
 
+- name: copy boundary-node-prober for icos_test
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  copy:
+    src: "/opt/dfinity/boundary-node-prober"
+    dest: "/etc/nginx/ic_networks/{{ ic }}/boundary-node-prober"
+    mode: "0755"
+    owner: "root"
+    group: "root"
+    remote_src: yes
+  register: boundary_node_prober
+#  notify: restart service boundary_node
+  tags:
+    - boundary_node
+
 - name: create templated nginx.conf for ic network
   vars:
     ic: "{{ inventory_file | dirname | basename }}"
@@ -282,6 +297,54 @@
   tags:
     - boundary_node
 
+- name: create directory /etc/nginx/ic_wallets
+  file:
+    state: directory
+    path: "/etc/nginx/ic_wallets"
+    mode: "0755"
+    owner: "root"
+    group: "root"
+  tags:
+    - boundary_node
+
+- name: create directory under /etc/nginx/ic_wallets for ic network
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  file:
+    state: directory
+    path: "/etc/nginx/ic_wallets/{{ ic }}"
+    mode: "0755"
+    owner: "root"
+    group: "root"
+  tags:
+    - boundary_node
+
+- name: copy wallets file
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  copy:
+    src: "../../boundary_node/files/ic.wallets"
+    dest: "/etc/nginx/ic_wallets/{{ ic }}/"
+    mode: "0644"
+    owner: "root"
+    group: "root"
+  register: ic_wallets
+  tags:
+    - boundary_node
+
+- name: copy identity files
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  copy:
+    src: "../../boundary_node/files/identity.pem"
+    dest: "/etc/nginx/ic_wallets/{{ ic }}/"
+    mode: "0755"
+    owner: "root"
+    group: "root"
+  register: identity_pem
+  tags:
+    - boundary_node
+
 - name: create cache directory /var/cache/nginx
   file:
     state: directory
@@ -347,6 +410,41 @@
     state: started
     enabled: yes
     name: "boundary-node-control-plane-{{ ic }}"
+    daemon_reload: yes
+  tags:
+    - boundary_node
+
+- name: create file boundary-node-prober service for ic network
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  template:
+    src: "../../boundary_node/templates/boundary-node-prober.service"
+    dest: "/lib/systemd/system/boundary-node-prober-{{ ic }}.service"
+    owner: root
+    group: root
+    mode: 0644
+  register: boundary_node_prober_service
+  tags:
+    - boundary_node
+
+- name: restart service boundary-node-prober for ic network
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  service:
+    daemon_reload: yes
+    name: "boundary-node-prober-{{ ic }}"
+    state: restarted
+  when: boundary_node_prober_service.changed or boundary_node_prober.changed
+  tags:
+    - boundary_node
+
+- name: start service boundary-node-prober for ic network
+  vars:
+    ic: "{{ inventory_file | dirname | basename }}"
+  service:
+    state: started
+    enabled: yes
+    name: "boundary-node-prober-{{ ic }}"
     daemon_reload: yes
   tags:
     - boundary_node

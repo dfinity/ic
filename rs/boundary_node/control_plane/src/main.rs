@@ -3,6 +3,7 @@
 //! See README.md for details.
 use anyhow::Result;
 use async_trait::async_trait;
+use boundary_node_control_plane::{CanisterRoute, NodeRoute, Routes, SubnetRoute};
 use futures::future::join_all;
 use hyper::{
     body::HttpBody, client::HttpConnector, server::conn::Http, service::service_fn, Body, Client,
@@ -41,7 +42,6 @@ use prometheus::{
 };
 
 use fix_hidden_lifetime_bug::fix_hidden_lifetime_bug;
-use serde::Serialize;
 use slog::{error, slog_o, trace, warn, Drain, Logger};
 use std::convert::TryInto;
 
@@ -263,34 +263,6 @@ async fn main() -> Result<()> {
         eprintln!("error: {}", error);
     }
     Ok(())
-}
-
-#[derive(Debug, Serialize, Default)]
-struct NodeRoute {
-    node_id: String,
-    socket_addr: String,
-    tls_certificate_pem: String,
-}
-
-#[derive(Debug, Serialize, Default)]
-struct SubnetRoute {
-    subnet_id: String,
-    nodes: Vec<NodeRoute>,
-}
-
-#[derive(Debug, Serialize, Default)]
-struct CanisterRoute {
-    start_canister_id: String,
-    end_canister_id: String,
-    subnet_id: String,
-}
-
-#[derive(Debug, Serialize, Default)]
-struct Routes {
-    registry_version: u64,
-    nns_subnet_id: String,
-    canister_routes: Vec<CanisterRoute>,
-    subnets: Vec<SubnetRoute>,
 }
 
 type HttpsClient = Client<HttpsConnector<HttpConnector>>;
