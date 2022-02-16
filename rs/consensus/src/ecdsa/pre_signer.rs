@@ -1268,14 +1268,12 @@ mod tests {
                 let t3 = create_transcript_param(id_5, &[NODE_1], &[NODE_4]);
                 let block_reader =
                     TestEcdsaBlockReader::for_pre_signer_test(Height::from(100), vec![t1, t2, t3]);
+                let transcript_loader: TestEcdsaTranscriptLoader = Default::default();
 
                 // Since transcript 1 is already in progress, we should issue
                 // dealings only for transcripts 4, 5
-                let change_set = pre_signer.send_dealings(
-                    &ecdsa_pool,
-                    &TestEcdsaTranscriptLoader::new(),
-                    &block_reader,
-                );
+                let change_set =
+                    pre_signer.send_dealings(&ecdsa_pool, &transcript_loader, &block_reader);
                 assert_eq!(change_set.len(), 2);
                 assert!(is_dealing_added_to_validated(
                     &change_set,
@@ -1309,18 +1307,56 @@ mod tests {
                 // Transcript 2 should not result in a dealing
                 let block_reader =
                     TestEcdsaBlockReader::for_pre_signer_test(Height::from(100), vec![t1, t2]);
+                let transcript_loader: TestEcdsaTranscriptLoader = Default::default();
 
-                let change_set = pre_signer.send_dealings(
-                    &ecdsa_pool,
-                    &TestEcdsaTranscriptLoader::new(),
-                    &block_reader,
-                );
+                let change_set =
+                    pre_signer.send_dealings(&ecdsa_pool, &transcript_loader, &block_reader);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_dealing_added_to_validated(
                     &change_set,
                     &id_1,
                     block_reader.tip_height()
                 ));
+            })
+        })
+    }
+
+    // Tests that complaints are generated and added to the pool if loading transcript
+    // results in complaints.
+    #[test]
+    fn test_ecdsa_send_dealings_with_complaints() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (ecdsa_pool, pre_signer) = create_pre_signer_dependencies(pool_config, logger);
+                let (id_1, id_2, id_3) = (
+                    create_transcript_id(1),
+                    create_transcript_id(2),
+                    create_transcript_id(3),
+                );
+
+                // Set up the transcript creation request
+                // The block requests transcripts 1, 2, 3
+                let t1 = create_transcript_param(id_1, &[NODE_1], &[NODE_2]);
+                let t2 = create_transcript_param(id_2, &[NODE_1], &[NODE_3]);
+                let t3 = create_transcript_param(id_3, &[NODE_1], &[NODE_4]);
+                let block_reader =
+                    TestEcdsaBlockReader::for_pre_signer_test(Height::from(100), vec![t1, t2, t3]);
+                let transcript_loader =
+                    TestEcdsaTranscriptLoader::new(TestTranscriptLoadStatus::Complaints);
+
+                let change_set =
+                    pre_signer.send_dealings(&ecdsa_pool, &transcript_loader, &block_reader);
+                let complaints = transcript_loader.returned_complaints();
+                assert_eq!(change_set.len(), complaints.len());
+                assert_eq!(change_set.len(), 3);
+                for complaint in complaints {
+                    assert!(is_complaint_added_to_validated(
+                        &change_set,
+                        &complaint.content.idkg_complaint.transcript_id,
+                        &NODE_1,
+                        &NODE_1,
+                    ));
+                }
             })
         })
     }

@@ -717,14 +717,12 @@ mod tests {
                         (id_5.clone(), create_sig_inputs(5)),
                     ],
                 );
+                let transcript_loader: TestEcdsaTranscriptLoader = Default::default();
 
                 // Since request 1 is already in progress, we should issue
                 // shares only for transcripts 4, 5
-                let change_set = signer.send_signature_shares(
-                    &ecdsa_pool,
-                    &TestEcdsaTranscriptLoader::new(),
-                    &block_reader,
-                );
+                let change_set =
+                    signer.send_signature_shares(&ecdsa_pool, &transcript_loader, &block_reader);
                 assert_eq!(change_set.len(), 2);
                 assert!(is_signature_share_added_to_validated(
                     &change_set,
@@ -736,6 +734,49 @@ mod tests {
                     &id_5,
                     block_reader.tip_height()
                 ));
+            })
+        })
+    }
+
+    // Tests that complaints are generated and added to the pool if loading transcript
+    // results in complaints.
+    #[test]
+    fn test_ecdsa_send_signature_shares_with_complaints() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (ecdsa_pool, signer) = create_signer_dependencies(pool_config, logger);
+                let (id_1, id_2, id_3) = (
+                    create_request_id(1),
+                    create_request_id(2),
+                    create_request_id(3),
+                );
+
+                // Set up the signature requests
+                // The block requests signatures 1, 2, 3
+                let block_reader = TestEcdsaBlockReader::for_signer_test(
+                    Height::from(100),
+                    vec![
+                        (id_1, create_sig_inputs(1)),
+                        (id_2, create_sig_inputs(2)),
+                        (id_3, create_sig_inputs(3)),
+                    ],
+                );
+                let transcript_loader =
+                    TestEcdsaTranscriptLoader::new(TestTranscriptLoadStatus::Complaints);
+
+                let change_set =
+                    signer.send_signature_shares(&ecdsa_pool, &transcript_loader, &block_reader);
+                let complaints = transcript_loader.returned_complaints();
+                assert_eq!(change_set.len(), complaints.len());
+                assert_eq!(change_set.len(), 15);
+                for complaint in complaints {
+                    assert!(is_complaint_added_to_validated(
+                        &change_set,
+                        &complaint.content.idkg_complaint.transcript_id,
+                        &NODE_1,
+                        &NODE_1,
+                    ));
+                }
             })
         })
     }
