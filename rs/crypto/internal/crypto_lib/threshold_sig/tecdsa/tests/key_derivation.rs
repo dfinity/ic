@@ -26,9 +26,9 @@ fn test_that_key_derivation_on_secp256r1_currently_fails() -> Result<(), Thresho
 
 #[test]
 fn should_bip32_derivation_match_external_lib() -> Result<(), ThresholdEcdsaError> {
-    let nodes = 6;
+    let nodes = 9;
     let threshold = 2;
-    let setup = SignatureProtocolSetup::new(EccCurveType::K256, nodes, threshold)?;
+    let setup = SignatureProtocolSetup::new(EccCurveType::K256, nodes, threshold, random_seed())?;
 
     let key_1 = setup.public_key(&DerivationPath::new_bip32(&[1]))?;
     let key_1_2 = setup.public_key(&DerivationPath::new_bip32(&[1, 2]))?;

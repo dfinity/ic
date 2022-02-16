@@ -293,6 +293,41 @@ pub enum CommitmentOpening {
     Pedersen(EccScalar, EccScalar),
 }
 
+impl CommitmentOpening {
+    pub fn open_dealing(
+        verified_dealing: &IDkgDealingInternal,
+        associated_data: &[u8],
+        dealer_index: NodeIndex,
+        opener_index: NodeIndex,
+        opener_secret_key: &MEGaPrivateKey,
+        opener_public_key: &MEGaPublicKey,
+    ) -> ThresholdEcdsaResult<Self> {
+        match &verified_dealing.ciphertext {
+            MEGaCiphertext::Single(ciphertext) => {
+                let opening = ciphertext.decrypt(
+                    associated_data,
+                    dealer_index,
+                    opener_index,
+                    opener_secret_key,
+                    opener_public_key,
+                )?;
+                Ok(Self::Simple(opening))
+            }
+
+            MEGaCiphertext::Pairs(ciphertext) => {
+                let opening = ciphertext.decrypt(
+                    associated_data,
+                    dealer_index,
+                    opener_index,
+                    opener_secret_key,
+                    opener_public_key,
+                )?;
+                Ok(Self::Pedersen(opening.0, opening.1))
+            }
+        }
+    }
+}
+
 impl Debug for CommitmentOpening {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
@@ -535,6 +570,18 @@ impl PolynomialCommitment {
         self.constant_term().curve_type()
     }
 
+    pub(crate) fn return_opening_if_consistent(
+        &self,
+        index: NodeIndex,
+        opening: &CommitmentOpening,
+    ) -> ThresholdEcdsaResult<CommitmentOpening> {
+        if self.check_opening(index, opening)? {
+            Ok(opening.clone())
+        } else {
+            Err(ThresholdEcdsaError::InconsistentCommitments)
+        }
+    }
+
     pub fn verify_is(
         &self,
         ctype: PolynomialCommitmentType,
@@ -570,19 +617,15 @@ impl PolynomialCommitment {
     }
 }
 
-/// Compute the Lagrange coefficients at x=0.
+/// Computes Lagrange polynomials evaluated at a given value.
 ///
-/// # Arguments
-/// * `samples` is a list of values x_0, x_1, ...x_n.
-/// # Result
-/// * `[lagrange_0, lagrange_1, ..., lagrange_n]` where:
+/// Namely it computes the following values:
 ///    * lagrange_i = numerator_i/denominator_i
-///    * numerator_i = x_0 * x_1 * ... * x_(i-1) * x_(i+1) * ... * x_n
+///    * numerator_i = (x_0-value) * (x_1-value) * ... * (x_(i-1)-value) *(x_(i+1)-value) * ... *(x_n-value)
 ///    * denominator_i = (x_0 - x_i) * (x_1 - x_i) * ... * (x_(i-1) - x_i) *
 ///      (x_(i+1) - x_i) * ... * (x_n - x_i)
-/// # Errors
-/// This will return an error if the denominator is zero.
-pub fn lagrange_coefficients_at_zero(
+pub fn lagrange_coefficients_at_value(
+    value: &EccScalar,
     samples: &[EccScalar],
 ) -> Result<Vec<EccScalar>, ThresholdEcdsaError> {
     if samples.is_empty() {
@@ -605,23 +648,21 @@ pub fn lagrange_coefficients_at_zero(
         return Err(ThresholdEcdsaError::InterpolationError);
     }
 
-    // The j'th numerator is the product of all `x_prod[i]` for `i!=j`.
-    // Note: The usual subtractions can be omitted as we are computing the Lagrange
-    // coefficient at zero.
-    let mut x_prod = Vec::with_capacity(samples.len());
+    let mut numerator = Vec::with_capacity(samples.len());
     let mut tmp = EccScalar::one(curve);
-    x_prod.push(tmp);
+    numerator.push(tmp);
     for x in samples.iter().take(samples.len() - 1) {
-        tmp = tmp.mul(x)?;
-        x_prod.push(tmp);
-    }
-    tmp = EccScalar::one(curve);
-    for (i, x) in samples[1..].iter().enumerate().rev() {
-        tmp = tmp.mul(x)?;
-        x_prod[i] = x_prod[i].mul(&tmp)?;
+        tmp = tmp.mul(&x.sub(value)?)?;
+        numerator.push(tmp);
     }
 
-    for (lagrange_i, x_i) in x_prod.iter_mut().zip(samples) {
+    tmp = EccScalar::one(curve);
+    for (i, x) in samples[1..].iter().enumerate().rev() {
+        tmp = tmp.mul(&x.sub(value)?)?;
+        numerator[i] = numerator[i].mul(&tmp)?;
+    }
+
+    for (lagrange_i, x_i) in numerator.iter_mut().zip(samples) {
         // Compute the value at 0 of the i-th Lagrange polynomial that is `0` at the
         // other data points but `1` at `x_i`.
         let mut denom = EccScalar::one(curve);
@@ -637,5 +678,5 @@ pub fn lagrange_coefficients_at_zero(
 
         *lagrange_i = lagrange_i.mul(&inv)?;
     }
-    Ok(x_prod)
+    Ok(numerator)
 }

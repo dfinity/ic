@@ -2,50 +2,6 @@ use rand::Rng;
 use std::collections::BTreeMap;
 use tecdsa::*;
 
-fn corrupt_ciphertext_single(
-    ctext: &[EccScalar],
-    corruption_target: usize,
-) -> ThresholdEcdsaResult<Vec<EccScalar>> {
-    let mut ctext = ctext.to_vec();
-    let curve_type = ctext[corruption_target].curve_type();
-    let randomizer = EccScalar::one(curve_type);
-    ctext[corruption_target] = ctext[corruption_target].add(&randomizer)?;
-    Ok(ctext)
-}
-
-fn corrupt_ciphertext_pairs(
-    ctext: &[(EccScalar, EccScalar)],
-    corruption_target: usize,
-) -> ThresholdEcdsaResult<Vec<(EccScalar, EccScalar)>> {
-    let mut ctext = ctext.to_vec();
-    let curve_type = ctext[corruption_target].0.curve_type();
-    let randomizer = EccScalar::one(curve_type);
-    ctext[corruption_target].0 = ctext[corruption_target].0.add(&randomizer)?;
-    Ok(ctext)
-}
-
-fn corrupt_dealing(
-    dealing: &IDkgDealingInternal,
-    corruption_target: usize,
-) -> ThresholdEcdsaResult<IDkgDealingInternal> {
-    let ciphertext = match &dealing.ciphertext {
-        MEGaCiphertext::Single(c) => MEGaCiphertext::Single(MEGaCiphertextSingle {
-            ephemeral_key: c.ephemeral_key,
-            ctexts: corrupt_ciphertext_single(&c.ctexts, corruption_target)?,
-        }),
-        MEGaCiphertext::Pairs(c) => MEGaCiphertext::Pairs(MEGaCiphertextPair {
-            ephemeral_key: c.ephemeral_key,
-            ctexts: corrupt_ciphertext_pairs(&c.ctexts, corruption_target)?,
-        }),
-    };
-
-    Ok(IDkgDealingInternal {
-        ciphertext,
-        commitment: dealing.commitment.clone(),
-        proof: dealing.proof.clone(),
-    })
-}
-
 #[test]
 fn should_complaint_system_work() -> ThresholdEcdsaResult<()> {
     let curve = EccCurveType::K256;
@@ -78,7 +34,7 @@ fn should_complaint_system_work() -> ThresholdEcdsaResult<()> {
 
     dealings.insert(
         dealer_index,
-        corrupt_dealing(&dealing, corruption_target as usize)?,
+        test_utils::corrupt_dealing(&dealing, &[corruption_target], &mut rng)?,
     );
 
     let complaints = generate_complaints(
@@ -94,10 +50,12 @@ fn should_complaint_system_work() -> ThresholdEcdsaResult<()> {
     assert_eq!(complaints.len(), 1);
 
     for complaint in complaints.values() {
+        let dealing = dealings.get(&dealer_index).unwrap();
+
         // the complaint is valid:
         complaint
             .verify(
-                dealings.get(&dealer_index).unwrap(),
+                dealing,
                 dealer_index,
                 corruption_target,
                 &pk0,
@@ -108,7 +66,7 @@ fn should_complaint_system_work() -> ThresholdEcdsaResult<()> {
         // the complaint is invalid if we change the AD:
         assert!(complaint
             .verify(
-                dealings.get(&dealer_index).unwrap(),
+                dealing,
                 dealer_index,
                 corruption_target,
                 &pk0,
@@ -119,7 +77,7 @@ fn should_complaint_system_work() -> ThresholdEcdsaResult<()> {
         // the complaint is invalid if we change the complainer public key:
         assert!(complaint
             .verify(
-                dealings.get(&dealer_index).unwrap(),
+                dealing,
                 dealer_index,
                 corruption_target,
                 &pk1,
@@ -137,6 +95,20 @@ fn should_complaint_system_work() -> ThresholdEcdsaResult<()> {
                 associated_data,
             )
             .is_err());
+
+        let opener_index = 1;
+
+        let opening = open_dealing(
+            dealing,
+            associated_data,
+            dealer_index,
+            opener_index,
+            &sk1,
+            &pk1,
+        )
+        .expect("Unable to open dealing");
+
+        assert!(verify_dealing_opening(dealing, opener_index, &opening).is_ok());
     }
 
     // a complaint against a dealing with modified ephemeral key will not verify

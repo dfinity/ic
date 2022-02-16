@@ -13,6 +13,8 @@ pub struct ProtocolSetup {
     ad: Vec<u8>,
     pk: Vec<MEGaPublicKey>,
     sk: Vec<MEGaPrivateKey>,
+    seed: Seed,
+    protocol_round: std::cell::Cell<usize>,
 }
 
 impl ProtocolSetup {
@@ -20,6 +22,7 @@ impl ProtocolSetup {
         curve: EccCurveType,
         receivers: usize,
         threshold: usize,
+        seed: Seed,
     ) -> Result<Self, ThresholdEcdsaError> {
         let alg = match curve {
             EccCurveType::K256 => AlgorithmId::ThresholdEcdsaSecp256k1,
@@ -30,7 +33,7 @@ impl ProtocolSetup {
             }
         };
 
-        let mut rng = rand::thread_rng();
+        let mut rng = seed.into_rng();
         let ad = rng.gen::<[u8; 32]>().to_vec();
 
         let mut sk = Vec::with_capacity(receivers);
@@ -51,7 +54,21 @@ impl ProtocolSetup {
             ad,
             pk,
             sk,
+            seed: Seed::from_rng(&mut rng),
+            protocol_round: std::cell::Cell::new(0),
         })
+    }
+
+    pub fn next_dealing_seed(&self) -> Seed {
+        let round = self.protocol_round.get();
+
+        let seed = self
+            .seed
+            .derive(&format!("ic-crypto-tecdsa-round-{}", round));
+
+        self.protocol_round.set(round + 1);
+
+        seed
     }
 
     pub fn remove_nodes(&mut self, removing: usize) {
@@ -105,13 +122,27 @@ impl ProtocolRound {
         }
     }
 
-    /// Runs a `ProtocolRound` for a `Random` transcript with `dealers` many
+    /// Runs a `ProtocolRound` for a `Random` transcript with `number_of_dealers` many
     /// distinct dealers.
-    pub fn random(setup: &ProtocolSetup, dealers: usize) -> ThresholdEcdsaResult<Self> {
-        let shares = vec![SecretShares::Random; dealers as usize];
+    ///
+    /// If `number_of_dealings_corrupted` is > 0 then some number of the dealings
+    /// with be randomly corrupted.
+    pub fn random(
+        setup: &ProtocolSetup,
+        number_of_dealers: usize,
+        number_of_dealings_corrupted: usize,
+    ) -> ThresholdEcdsaResult<Self> {
+        let shares = vec![SecretShares::Random; number_of_dealers as usize];
         let mode = IDkgTranscriptOperationInternal::Random;
 
-        let dealings = Self::create_dealings(setup, &shares, dealers, &mode);
+        let dealings = Self::create_dealings(
+            setup,
+            &shares,
+            number_of_dealers,
+            number_of_dealings_corrupted,
+            &mode,
+            setup.next_dealing_seed(),
+        );
         let transcript = Self::create_transcript(setup, &dealings, &mode)?;
 
         match transcript.combined_commitment {
@@ -122,12 +153,16 @@ impl ProtocolRound {
         Ok(Self::new(setup, dealings, transcript))
     }
 
-    /// Runs a `ProtocolRound` for a `ReshareOfMasked` transcript with `dealers`
+    /// Runs a `ProtocolRound` for a `ReshareOfMasked` transcript with `number_of_dealers`
     /// many distinct dealers.
+    ///
+    /// If `number_of_dealings_corrupted` is > 0 then some number of the dealings
+    /// with be randomly corrupted.
     pub fn reshare_of_masked(
         setup: &ProtocolSetup,
         masked: &ProtocolRound,
-        dealers: usize,
+        number_of_dealers: usize,
+        number_of_dealings_corrupted: usize,
     ) -> ThresholdEcdsaResult<Self> {
         let mut shares = Vec::with_capacity(masked.openings.len());
         for opening in &masked.openings {
@@ -141,7 +176,14 @@ impl ProtocolRound {
 
         let mode = IDkgTranscriptOperationInternal::ReshareOfMasked(masked.commitment.clone());
 
-        let dealings = Self::create_dealings(setup, &shares, dealers, &mode);
+        let dealings = Self::create_dealings(
+            setup,
+            &shares,
+            number_of_dealers,
+            number_of_dealings_corrupted,
+            &mode,
+            setup.next_dealing_seed(),
+        );
         let transcript = Self::create_transcript(setup, &dealings, &mode)?;
 
         match transcript.combined_commitment {
@@ -153,11 +195,15 @@ impl ProtocolRound {
     }
 
     /// Runs a `ProtocolRound` for a `ReshareOfUnmasked` transcript with
-    /// `dealers` many distinct dealers.
+    /// `number_of_dealers` many distinct dealers.
+    ///
+    /// If `number_of_dealings_corrupted` is > 0 then some number of the dealings
+    /// with be randomly corrupted.
     pub fn reshare_of_unmasked(
         setup: &ProtocolSetup,
         unmasked: &ProtocolRound,
-        dealers: usize,
+        number_of_dealers: usize,
+        number_of_dealings_corrupted: usize,
     ) -> ThresholdEcdsaResult<Self> {
         let mut shares = Vec::with_capacity(unmasked.openings.len());
         for opening in &unmasked.openings {
@@ -171,7 +217,14 @@ impl ProtocolRound {
 
         let mode = IDkgTranscriptOperationInternal::ReshareOfUnmasked(unmasked.commitment.clone());
 
-        let dealings = Self::create_dealings(setup, &shares, dealers, &mode);
+        let dealings = Self::create_dealings(
+            setup,
+            &shares,
+            number_of_dealers,
+            number_of_dealings_corrupted,
+            &mode,
+            setup.next_dealing_seed(),
+        );
         let transcript = Self::create_transcript(setup, &dealings, &mode)?;
 
         match transcript.combined_commitment {
@@ -189,12 +242,16 @@ impl ProtocolRound {
     }
 
     /// Runs a `ProtocolRound` for a `UnmaskedTimesMasked` transcript with
-    /// `dealers` many distinct dealers.
+    /// `number_of_dealers` many distinct dealers.
+    ///
+    /// If `number_of_dealings_corrupted` is > 0 then some number of the dealings
+    /// with be randomly corrupted.
     pub fn multiply(
         setup: &ProtocolSetup,
         masked: &ProtocolRound,
         unmasked: &ProtocolRound,
-        dealers: usize,
+        number_of_dealers: usize,
+        number_of_dealings_corrupted: usize,
     ) -> ThresholdEcdsaResult<Self> {
         let mut shares = Vec::with_capacity(unmasked.openings.len());
         for opening in unmasked.openings.iter().zip(masked.openings.iter()) {
@@ -211,7 +268,14 @@ impl ProtocolRound {
             masked.commitment.clone(),
         );
 
-        let dealings = Self::create_dealings(setup, &shares, dealers, &mode);
+        let dealings = Self::create_dealings(
+            setup,
+            &shares,
+            number_of_dealers,
+            number_of_dealings_corrupted,
+            &mode,
+            setup.next_dealing_seed(),
+        );
         let transcript = Self::create_transcript(setup, &dealings, &mode)?;
 
         match transcript.combined_commitment {
@@ -290,12 +354,86 @@ impl ProtocolRound {
                 receiver as NodeIndex,
                 &setup.sk[receiver],
                 &setup.pk[receiver],
-            )
-            .expect("unable to compute secret shares");
+            );
 
-            openings.push(opening);
+            if let Ok(opening) = opening {
+                openings.push(opening);
+            } else {
+                // Generate a complaint:
+                let complaints = generate_complaints(
+                    dealings,
+                    &setup.ad,
+                    receiver as NodeIndex,
+                    &setup.sk[receiver],
+                    &setup.pk[receiver],
+                    setup.next_dealing_seed(),
+                )
+                .expect("Unable to generate complaints");
+
+                let mut provided_openings = BTreeMap::new();
+
+                for (dealer_index, complaint) in &complaints {
+                    let dealing = dealings.get(dealer_index).unwrap();
+                    // the complaints must be valid
+                    assert!(complaint
+                        .verify(
+                            dealing,
+                            *dealer_index,
+                            receiver as NodeIndex, /* complainer index */
+                            &setup.pk[receiver],
+                            &setup.ad
+                        )
+                        .is_ok());
+
+                    let mut openings_for_this_dealing = BTreeMap::new();
+
+                    // create openings in response to the complaints
+                    for opener in 0..setup.receivers {
+                        if opener == receiver {
+                            continue;
+                        }
+
+                        let dopening = open_dealing(
+                            dealing,
+                            &setup.ad,
+                            *dealer_index,
+                            opener as NodeIndex,
+                            &setup.sk[opener],
+                            &setup.pk[opener],
+                        )
+                        .expect("Unable to open dealing");
+
+                        // The openings must be valid:
+                        assert!(
+                            verify_dealing_opening(dealing, opener as NodeIndex, &dopening).is_ok()
+                        );
+
+                        openings_for_this_dealing.insert(opener as NodeIndex, dopening);
+                    }
+
+                    provided_openings.insert(*dealer_index, openings_for_this_dealing);
+                }
+
+                let opening = compute_secret_shares_with_openings(
+                    dealings,
+                    &provided_openings,
+                    transcript,
+                    &setup.ad,
+                    receiver as NodeIndex,
+                    &setup.sk[receiver],
+                    &setup.pk[receiver],
+                )
+                .expect("Unable to open dealing using provided openings");
+
+                openings.push(opening);
+            }
         }
 
+        assert_eq!(
+            openings.len(),
+            setup.receivers,
+            "Expected number of openings"
+        );
         openings
     }
 
@@ -316,20 +454,25 @@ impl ProtocolRound {
         }
     }
 
-    /// Create dealings generated by `dealings_returned` random dealers.
+    /// Create dealings generated by `number_of_dealers` random dealers.
     fn create_dealings(
         setup: &ProtocolSetup,
         shares: &[SecretShares],
-        dealings_returned: usize,
+        number_of_dealers: usize,
+        number_of_dealings_corrupted: usize,
         transcript_type: &IDkgTranscriptOperationInternal,
+        seed: Seed,
     ) -> BTreeMap<NodeIndex, IDkgDealingInternal> {
-        let mut rng = rand::thread_rng();
+        assert!(number_of_dealers <= shares.len());
+        assert!(number_of_dealings_corrupted <= number_of_dealers);
+
+        let mut rng = seed.into_rng();
 
         let mut dealings = BTreeMap::new();
 
         let number_of_receivers = NumberOfNodes::from(setup.receivers as u32);
 
-        for (dealer_index, share) in shares[..setup.receivers].iter().enumerate() {
+        for (dealer_index, share) in shares.iter().enumerate() {
             let dealing_randomness = Randomness::from(rng.gen::<[u8; 32]>());
             let dealer_index = dealer_index as u32;
 
@@ -379,10 +522,33 @@ impl ProtocolRound {
             dealings.insert(dealer_index, dealing);
         }
 
-        // Potentially remove some of the dealings at random
-        while dealings.len() > dealings_returned {
+        // Discard some of the dealings at random
+        while dealings.len() > number_of_dealers {
             let index = rng.gen::<usize>() % shares.len();
             dealings.remove(&(index as u32));
+        }
+
+        if number_of_dealings_corrupted > 0 {
+            let mut damaged_dealings = std::collections::BTreeSet::new();
+            while damaged_dealings.len() != number_of_dealings_corrupted {
+                let index = rng.gen::<usize>() % setup.receivers;
+
+                if dealings.contains_key(&(index as u32)) {
+                    damaged_dealings.insert(index);
+                }
+            }
+
+            for i in damaged_dealings {
+                let corrupted_recip = rng.gen::<usize>() % setup.receivers;
+
+                let dealing = dealings.get(&(i as u32)).unwrap();
+                let bad_dealing =
+                    test_utils::corrupt_dealing(dealing, &[corrupted_recip as NodeIndex], &mut rng)
+                        .unwrap();
+
+                // replace the dealing with a corrupted one
+                dealings.insert(i as NodeIndex, bad_dealing);
+            }
         }
 
         dealings
@@ -406,20 +572,46 @@ pub struct SignatureProtocolSetup {
 impl SignatureProtocolSetup {
     pub fn new(
         curve: EccCurveType,
-        dealers: usize,
+        number_of_dealers: usize,
         threshold: usize,
+        seed: Seed,
     ) -> ThresholdEcdsaResult<Self> {
-        let setup = ProtocolSetup::new(curve, dealers, threshold)?;
+        let setup = ProtocolSetup::new(curve, number_of_dealers, threshold, seed)?;
 
-        let key = ProtocolRound::random(&setup, dealers)?;
-        let kappa = ProtocolRound::random(&setup, dealers)?;
-        let lambda = ProtocolRound::random(&setup, dealers)?;
+        let number_of_dealings_corrupted = threshold;
 
-        let key = ProtocolRound::reshare_of_masked(&setup, &key, dealers)?;
-        let kappa = ProtocolRound::reshare_of_masked(&setup, &kappa, dealers)?;
+        let key = ProtocolRound::random(&setup, number_of_dealers, number_of_dealings_corrupted)?;
+        let kappa = ProtocolRound::random(&setup, number_of_dealers, number_of_dealings_corrupted)?;
+        let lambda =
+            ProtocolRound::random(&setup, number_of_dealers, number_of_dealings_corrupted)?;
 
-        let key_times_lambda = ProtocolRound::multiply(&setup, &lambda, &key, dealers)?;
-        let kappa_times_lambda = ProtocolRound::multiply(&setup, &lambda, &kappa, dealers)?;
+        let key = ProtocolRound::reshare_of_masked(
+            &setup,
+            &key,
+            number_of_dealers,
+            number_of_dealings_corrupted,
+        )?;
+        let kappa = ProtocolRound::reshare_of_masked(
+            &setup,
+            &kappa,
+            number_of_dealers,
+            number_of_dealings_corrupted,
+        )?;
+
+        let key_times_lambda = ProtocolRound::multiply(
+            &setup,
+            &lambda,
+            &key,
+            number_of_dealers,
+            number_of_dealings_corrupted,
+        )?;
+        let kappa_times_lambda = ProtocolRound::multiply(
+            &setup,
+            &lambda,
+            &kappa,
+            number_of_dealers,
+            number_of_dealings_corrupted,
+        )?;
 
         Ok(Self {
             setup,
@@ -553,4 +745,9 @@ impl SignatureProtocolExecution {
 
         Ok(())
     }
+}
+
+pub fn random_seed() -> Seed {
+    let mut rng = rand::thread_rng();
+    Seed::from_rng(&mut rng)
 }

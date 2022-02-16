@@ -17,6 +17,7 @@ pub enum ThresholdEcdsaError {
     InconsistentCiphertext,
     InconsistentCommitments,
     InsufficientDealings,
+    InsufficientOpenings,
     InterpolationError,
     InvalidArguments(String),
     InvalidDerivationPath,
@@ -46,6 +47,7 @@ mod poly;
 pub mod ro;
 mod seed;
 pub mod sign;
+pub mod test_utils;
 mod transcript;
 mod xmd;
 pub mod zk;
@@ -200,13 +202,48 @@ pub fn compute_secret_shares(
 ) -> Result<CommitmentOpening, IDkgComputeSecretSharesInternalError> {
     CommitmentOpening::from_dealings(
         verified_dealings,
-        transcript,
+        &transcript.combined_commitment,
         context_data,
         receiver_index,
         secret_key,
         public_key,
     )
     .map_err(IDkgComputeSecretSharesInternalError::from)
+}
+
+/// Computes secret shares (in the form of commitment openings) from
+/// the given dealings and openings.
+///
+/// # Preconditions
+/// * The openings have all been verified to be valid.
+/// * There are sufficient valid openings (at least `reconstruction_threshold`
+///   many) for each corrupted dealing.
+///
+/// # Errors
+/// * `InsufficientOpenings` if we require openings for a corrupted dealing but
+///   do not have sufficiently many openings for that dealing.
+/// * `InconsistentCommitments` if the commitments are inconsistent. This
+///   indicates that there is a corrupted dealing for which we have no openings
+///   at all.
+pub fn compute_secret_shares_with_openings(
+    verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+    openings: &BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
+    transcript: &IDkgTranscriptInternal,
+    context_data: &[u8],
+    receiver_index: NodeIndex,
+    secret_key: &MEGaPrivateKey,
+    public_key: &MEGaPublicKey,
+) -> Result<CommitmentOpening, IDkgComputeSecretSharesInternalError> {
+    CommitmentOpening::from_dealings_and_openings(
+        verified_dealings,
+        openings,
+        &transcript.combined_commitment,
+        context_data,
+        receiver_index,
+        secret_key,
+        public_key,
+    )
+    .map_err(|e| e.into())
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -229,13 +266,12 @@ impl From<ThresholdEcdsaError> for IDkgVerifyDealingInternalError {
     }
 }
 
-/// Verify a dealing using public information
+/// Verifies a dealing using public information
 ///
-/// Verify that the dealing has the expected type of ciphertext
-/// and commitment (depending on the type of dealing)
+/// This function checks that the dealing has the expected type of
+/// ciphertext and commitment (depending on the type of dealing)
 ///
-/// When CRP-1158 is completed this will also verify the zero
-/// knowledge proofs
+/// It also verifies zero knowledge proofs attached to the dealing.
 pub fn publicly_verify_dealing(
     algorithm_id: AlgorithmId,
     dealing: &IDkgDealingInternal,
@@ -580,6 +616,7 @@ impl From<ThresholdEcdsaError> for ThresholdEcdsaDerivePublicKeyError {
             | ThresholdEcdsaError::InconsistentCiphertext
             | ThresholdEcdsaError::InconsistentCommitments
             | ThresholdEcdsaError::InsufficientDealings
+            | ThresholdEcdsaError::InsufficientOpenings
             | ThresholdEcdsaError::InterpolationError
             | ThresholdEcdsaError::InvalidComplaint
             | ThresholdEcdsaError::InvalidDerivationPath
@@ -713,4 +750,79 @@ pub fn verify_complaint(
         complainer_key,
         associated_data,
     )?)
+}
+
+#[derive(Clone, Debug)]
+pub enum ThresholdOpenDealingInternalError {
+    InternalError(String),
+}
+
+impl From<ThresholdEcdsaError> for ThresholdOpenDealingInternalError {
+    fn from(e: ThresholdEcdsaError) -> Self {
+        Self::InternalError(format!("{:?}", e))
+    }
+}
+
+/// Opens a dealing in response to a complaint
+///
+/// The opening is done with respect to information available to this opener,
+/// given by `opener_index`, which is the openers index within the
+/// dealing. Normally several openings are needed in order to reconstruct the
+/// opening for the dealing commitment.
+///
+/// # Preconditions
+/// * The dealing has already been publically verified
+/// * The complaint which caused us to provide an opening for this dealing has
+///   already been verified to be valid.
+pub fn open_dealing(
+    verified_dealing: &IDkgDealingInternal,
+    associated_data: &[u8],
+    dealer_index: NodeIndex,
+    opener_index: NodeIndex,
+    opener_secret_key: &MEGaPrivateKey,
+    opener_public_key: &MEGaPublicKey,
+) -> Result<CommitmentOpening, ThresholdOpenDealingInternalError> {
+    CommitmentOpening::open_dealing(
+        verified_dealing,
+        associated_data,
+        dealer_index,
+        opener_index,
+        opener_secret_key,
+        opener_public_key,
+    )
+    .map_err(|e| e.into())
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum ThresholdVerifyOpeningInternalError {
+    InconsistentCommitments,
+    InternalError(String),
+}
+
+impl From<ThresholdEcdsaError> for ThresholdVerifyOpeningInternalError {
+    fn from(e: ThresholdEcdsaError) -> Self {
+        match e {
+            ThresholdEcdsaError::InconsistentCommitments => Self::InconsistentCommitments,
+            x => Self::InternalError(format!("{:?}", x)),
+        }
+    }
+}
+
+/// Verifies an opening of a dealing
+///
+/// This checks that the opening received by a peer in response to a
+/// complaint is a valid opening for the dealing.
+///
+/// # Preconditions
+/// * The dealing has already been publically verified
+pub fn verify_dealing_opening(
+    verified_dealing: &IDkgDealingInternal,
+    opener_index: NodeIndex,
+    opening: &CommitmentOpening,
+) -> Result<(), ThresholdVerifyOpeningInternalError> {
+    verified_dealing
+        .commitment
+        .check_opening(opener_index, opening)?;
+
+    Ok(())
 }

@@ -1,4 +1,5 @@
 use crate::expand_message_xmd;
+use core::fmt::{self, Debug};
 use rand_core::{CryptoRng, RngCore, SeedableRng};
 use std::convert::TryInto;
 
@@ -18,6 +19,12 @@ const SEED_LEN: usize = 32;
 #[derive(Clone)]
 pub struct Seed {
     value: [u8; SEED_LEN],
+}
+
+impl Debug for Seed {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Seed - REDACTED")
+    }
 }
 
 impl Seed {
