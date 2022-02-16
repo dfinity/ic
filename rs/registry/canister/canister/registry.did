@@ -106,6 +106,7 @@ type SetFirewallConfigPayload = record {
 };
 type SubnetFeatures = record {
   canister_sandboxing : bool;
+  bitcoin_testnet : opt bool;
   http_requests : bool;
   ecdsa_signatures : bool;
 };
