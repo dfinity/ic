@@ -101,15 +101,14 @@ pub struct ConnectionManager {
 
 impl ConnectionManager {
     /// This function is used to create a new connection manager with a provided config.
-    pub fn new(config: &Config, logger: Logger) -> ConnectionManagerResult<Self> {
-        let address_book = AddressBook::new(config, logger.clone())
-            .map_err(ConnectionManagerError::AddressBook)?;
+    pub fn new(config: &Config, logger: Logger) -> Self {
+        let address_book = AddressBook::new(config, logger.clone());
         let (stream_event_sender, stream_event_receiver) =
             channel::<StreamEvent>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
         let (min_connections, max_connections) = connection_limits(&address_book);
 
-        Ok(Self {
+        Self {
             initial_address_discovery: !address_book.has_enough_addresses(),
             address_book,
             logger,
@@ -122,7 +121,7 @@ impl ConnectionManager {
             socks_proxy: config.socks_proxy,
             stream_event_sender,
             stream_event_receiver,
-        })
+        }
     }
 
     /// If there is an issue with a misbehaving node, the node is marked as
@@ -660,19 +659,6 @@ mod test {
     use super::*;
 
     #[test]
-    /// This function tests the initialization of the address book.
-    fn test_address_book_init() {
-        let config = ConfigBuilder::new().with_network(Network::Signet).build();
-        let result = ConnectionManager::new(&config, make_logger());
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(matches!(
-            err,
-            ConnectionManagerError::AddressBook(AddressBookError::NoAddressesFound)
-        ));
-    }
-
-    #[test]
     fn validate_received_version_bad_version_number() {
         let socket_1 = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
         let socket_2 = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
@@ -693,7 +679,7 @@ mod test {
         );
         version_message.version = MINIMUM_VERSION_NUMBER - 1;
 
-        let manager = ConnectionManager::new(&config, make_logger()).expect("invalid init");
+        let manager = ConnectionManager::new(&config, make_logger());
         assert!(!manager.validate_received_version(&version_message));
     }
 
@@ -717,7 +703,7 @@ mod test {
         let config = ConfigBuilder::new()
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
-        let mut manager = ConnectionManager::new(&config, make_logger()).expect("invalid init");
+        let mut manager = ConnectionManager::new(&config, make_logger());
         manager.min_start_height = 100_000;
 
         assert!(!manager.validate_received_version(&version_message));
@@ -743,7 +729,7 @@ mod test {
         let config = ConfigBuilder::new()
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
-        let manager = ConnectionManager::new(&config, make_logger()).expect("invalid init");
+        let manager = ConnectionManager::new(&config, make_logger());
 
         assert!(!manager.validate_received_version(&version_message));
     }
@@ -834,7 +820,7 @@ mod test {
             .with_network(Network::Signet)
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
-        let mut manager = ConnectionManager::new(&config, make_logger()).expect("invalid init");
+        let mut manager = ConnectionManager::new(&config, make_logger());
 
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
         assert!(manager.initial_address_discovery);
@@ -888,7 +874,7 @@ mod test {
         let config = ConfigBuilder::new()
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
-        let mut manager = ConnectionManager::new(&config, make_logger()).expect("invalid init");
+        let mut manager = ConnectionManager::new(&config, make_logger());
         let timestamp = SystemTime::now() - Duration::from_secs(60);
         let (writer, _) = unbounded_channel();
         runtime.block_on(async {
@@ -925,7 +911,7 @@ mod test {
         let config = ConfigBuilder::new()
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
-        let mut manager = ConnectionManager::new(&config, make_logger()).expect("invalid init");
+        let mut manager = ConnectionManager::new(&config, make_logger());
         let timestamp1 = SystemTime::now() - Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
         let timestamp2 = SystemTime::now() + Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
         let (writer, _) = unbounded_channel();
@@ -986,7 +972,7 @@ mod test {
         let config = ConfigBuilder::new()
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
-        let mut manager = ConnectionManager::new(&config, make_logger()).expect("invalid init");
+        let mut manager = ConnectionManager::new(&config, make_logger());
         let timestamp1 = SystemTime::now() - Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
         let timestamp2 = SystemTime::now() + Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
         let (writer, _) = unbounded_channel();

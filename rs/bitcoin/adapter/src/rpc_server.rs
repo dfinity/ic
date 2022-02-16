@@ -74,7 +74,7 @@ impl BtcAdapter for BtcAdapterImpl {
             .collect();
         let blocks = self.adapter.lock().await.get_successors(block_hashes);
         Ok(Response::new(GetSuccessorsResponse {
-            blocks: blocks.iter().map(|block| block_to_proto(block)).collect(),
+            blocks: blocks.iter().map(block_to_proto).collect(),
         }))
     }
 

@@ -1,24 +1,15 @@
 use crate::{
-    blockchainmanager::BlockchainManager,
-    connectionmanager::{ConnectionManager, ConnectionManagerError},
-    stream::handle_stream,
-    transaction_manager::TransactionManager,
-    Config, HandleClientRequest, ProcessEvent, ProcessEventError,
+    blockchainmanager::BlockchainManager, connectionmanager::ConnectionManager,
+    stream::handle_stream, transaction_manager::TransactionManager, Config, HandleClientRequest,
+    ProcessEvent, ProcessEventError,
 };
 use bitcoin::{Block, BlockHash};
-use slog::{error, Logger};
+use slog::Logger;
 use std::{net::SocketAddr, time::Instant};
-use thiserror::Error;
 
 enum AdapterState {
     Idle,
     ActiveSince(Instant),
-}
-
-#[derive(Debug, Error)]
-pub enum AdapterError {
-    #[error("ConnectionManager: {0}")]
-    ConnectionManager(ConnectionManagerError),
 }
 
 /// This struct is the overall wrapper around the functionality to communicate with the
@@ -39,19 +30,18 @@ pub struct Adapter {
 
 impl Adapter {
     /// Constructs a new adapter.
-    pub fn new(config: &Config, logger: Logger) -> Result<Self, AdapterError> {
-        let connection_manager = ConnectionManager::new(config, logger.clone())
-            .map_err(AdapterError::ConnectionManager)?;
+    pub fn new(config: &Config, logger: Logger) -> Self {
+        let connection_manager = ConnectionManager::new(config, logger.clone());
         let blockchain_manager = BlockchainManager::new(config, logger.clone());
         let transaction_manager = TransactionManager::new(logger.clone());
 
-        Ok(Self {
+        Self {
             blockchain_manager,
             connection_manager,
             transaction_manager,
             update_state: AdapterState::Idle,
             idle_seconds: config.idle_seconds,
-        })
+        }
     }
 
     fn disconnect(&mut self, address: SocketAddr) {
