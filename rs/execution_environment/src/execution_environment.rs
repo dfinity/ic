@@ -458,7 +458,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                             ErrorCode::CanisterContractViolation,
                             format!(
                                 "{} is called by {}. It can only be called by NNS.",
-                                Ic00Method::SetupInitialDKG.to_string(),
+                                Ic00Method::SetupInitialDKG,
                                 msg.sender()
                             ),
                         )),
@@ -986,12 +986,12 @@ impl ExecutionEnvironmentImpl {
         let compute_allocation_used = state.total_compute_allocation();
         let memory_allocation_used = state.total_memory_taken();
 
-        let mut canister = get_canister_mut(canister_id, state)?;
+        let canister = get_canister_mut(canister_id, state)?;
         self.canister_manager
             .update_settings(
                 sender,
                 settings,
-                &mut canister,
+                canister,
                 compute_allocation_used,
                 memory_allocation_used,
             )
@@ -1005,9 +1005,9 @@ impl ExecutionEnvironmentImpl {
         sender: PrincipalId,
         state: &mut ReplicatedState,
     ) -> Result<Vec<u8>, UserError> {
-        let mut canister = get_canister_mut(canister_id, state)?;
+        let canister = get_canister_mut(canister_id, state)?;
 
-        let result = self.canister_manager.start_canister(sender, &mut canister);
+        let result = self.canister_manager.start_canister(sender, canister);
 
         match result {
             Ok(stop_contexts) => {
@@ -1035,10 +1035,8 @@ impl ExecutionEnvironmentImpl {
             ),
 
             Some(canister_state) => {
-                self.cycles_account_manager.add_cycles(
-                    &mut canister_state.system_state.balance_mut(),
-                    msg.take_cycles(),
-                );
+                self.cycles_account_manager
+                    .add_cycles(canister_state.system_state.balance_mut(), msg.take_cycles());
                 (Ok(EmptyBlob::encode()), Cycles::from(0))
             }
         }
@@ -1050,10 +1048,10 @@ impl ExecutionEnvironmentImpl {
         canister_id: CanisterId,
         state: &mut ReplicatedState,
     ) -> Result<Vec<u8>, UserError> {
-        let mut canister = get_canister_mut(canister_id, state)?;
+        let canister = get_canister_mut(canister_id, state)?;
 
         self.canister_manager
-            .get_canister_status(sender, &mut canister)
+            .get_canister_status(sender, canister)
             .map(|status| status.encode())
             .map_err(|err| err.into())
     }
@@ -1088,9 +1086,9 @@ impl ExecutionEnvironmentImpl {
         state: &mut ReplicatedState,
         provisional_whitelist: &ProvisionalWhitelist,
     ) -> Result<Vec<u8>, UserError> {
-        let mut canister = get_canister_mut(canister_id, state)?;
+        let canister = get_canister_mut(canister_id, state)?;
         self.canister_manager
-            .add_cycles(sender, cycles, &mut canister, provisional_whitelist)
+            .add_cycles(sender, cycles, canister, provisional_whitelist)
             .map(|()| EmptyBlob::encode())
             .map_err(|err| err.into())
     }
@@ -1213,7 +1211,7 @@ impl ExecutionEnvironmentImpl {
         };
 
         self.cycles_account_manager
-            .add_cycles(&mut canister.system_state.balance_mut(), refunded_cycles);
+            .add_cycles(canister.system_state.balance_mut(), refunded_cycles);
 
         // The canister that sends a request must also pay the fee for
         // the transmission of the response. As we do not know how big
@@ -1856,7 +1854,7 @@ impl ExecutionEnvironmentImpl {
                 ErrorCode::CanisterContractViolation,
                 format!(
                     "{} is called by {}. It can only be called by NNS.",
-                    Ic00Method::SetupInitialDKG.to_string(),
+                    Ic00Method::SetupInitialDKG,
                     sender,
                 ),
             ));

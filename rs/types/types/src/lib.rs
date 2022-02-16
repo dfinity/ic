@@ -224,6 +224,7 @@ impl AccumulatedPriority {
 }
 
 // The initial accumulated priority is 0.
+#[allow(clippy::derivable_impls)]
 impl Default for AccumulatedPriority {
     fn default() -> Self {
         AccumulatedPriority(0)
@@ -345,6 +346,7 @@ impl ComputeAllocation {
 }
 
 // The default `ComputeAllocation` is 0: https://sdk.dfinity.org/docs/interface-spec/index.html#ic-install_code.
+#[allow(clippy::derivable_impls)]
 impl Default for ComputeAllocation {
     fn default() -> Self {
         ComputeAllocation(0)

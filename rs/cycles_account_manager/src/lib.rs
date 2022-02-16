@@ -546,7 +546,7 @@ impl CyclesAccountManager {
     ) -> Result<(), CanisterOutOfCyclesError> {
         self.withdraw_with_threshold(
             system_state.canister_id,
-            &mut system_state.balance_mut(),
+            system_state.balance_mut(),
             cycles,
             threshold,
         )

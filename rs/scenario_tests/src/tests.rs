@@ -69,7 +69,7 @@ impl<'a> CanisterLocator<'a> {
         } else {
             panic!(
                 "Could not find subnet id for canister {}.",
-                canister.canister_id().to_string()
+                canister.canister_id()
             );
         }
     }

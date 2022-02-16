@@ -180,7 +180,7 @@ impl SnsCanisters<'_> {
 
 /// Installs a rust canister with the provided memory allocation.
 pub async fn install_rust_canister_with_memory_allocation(
-    mut canister: &mut Canister<'_>,
+    canister: &mut Canister<'_>,
     relative_path_from_rs: impl AsRef<Path>,
     binary_name: impl AsRef<str>,
     cargo_features: &[&str],
@@ -194,7 +194,7 @@ pub async fn install_rust_canister_with_memory_allocation(
     );
 
     wasm.install_with_retries_onto_canister(
-        &mut canister,
+        canister,
         canister_init_payload,
         Some(memory_allocation),
     )

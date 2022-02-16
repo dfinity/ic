@@ -255,7 +255,7 @@ fn dfn_macro(
         },
     ) = function_info(&item, method, errors)?;
 
-    let async_runner_fn = Ident::new(&format!("{}___", name.to_string()), Span::call_site());
+    let async_runner_fn = Ident::new(&format!("{}___", name), Span::call_site());
 
     let export_name = format!("canister_{0} {1}", method, name);
 

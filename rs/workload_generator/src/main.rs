@@ -447,10 +447,7 @@ async fn main() {
             // Make sure to save the guard, see documentation for more information
             println!(
                 "Running {:?} rps for {} seconds, req_type = {}, evaluate_max_rps = {}",
-                rps,
-                duration,
-                request_type.to_string(),
-                evaluate_max_rps,
+                rps, duration, request_type, evaluate_max_rps,
             );
 
             let facts = if evaluate_max_rps {

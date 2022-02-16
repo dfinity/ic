@@ -948,7 +948,7 @@ impl ProposalTitleAndPayload<CreateSubnetPayload> for ProposeToCreateSubnetCmd {
             replica_version_id: self
                 .replica_version_id
                 .clone()
-                .unwrap_or_else(ReplicaVersion::default)
+                .unwrap_or_default()
                 .to_string(),
             unit_delay_millis: self.unit_delay_millis.unwrap(),
             initial_notary_delay_millis: self.initial_notary_delay_millis.unwrap(),

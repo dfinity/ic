@@ -340,9 +340,9 @@ mod tests {
                 RoseHashTree::Leaf(_) => Err(idx - 1),
                 RoseHashTree::Fork { children, .. } => {
                     let mut i = idx;
-                    for (label, mut child) in children.iter_mut() {
+                    for (label, child) in children.iter_mut() {
                         path.push(label.clone());
-                        match go_rec(&mut child, i, new_hash.clone(), path) {
+                        match go_rec(child, i, new_hash.clone(), path) {
                             Ok(result) => return Ok(result),
                             Err(new_index) => i = new_index,
                         }
@@ -378,7 +378,7 @@ mod tests {
                     let mut i = idx;
                     let mut removed_child = None;
 
-                    for (label, mut child) in children.iter_mut() {
+                    for (label, child) in children.iter_mut() {
                         if i == 0 {
                             removed_child = Some(label.clone());
                             break;
@@ -387,7 +387,7 @@ mod tests {
                         i -= 1;
 
                         path.push(label.clone());
-                        match go_rec(&mut child, i, path) {
+                        match go_rec(child, i, path) {
                             Ok(result) => return Ok(result),
                             Err(new_index) => i = new_index,
                         }

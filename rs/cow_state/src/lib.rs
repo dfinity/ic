@@ -88,7 +88,7 @@ impl ReadOnlyPolicy for ReadOnly {}
 impl AccessPolicy for ReadWrite {}
 impl ReadWritePolicy for ReadWrite {}
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 #[repr(C, packed)]
 struct StateMeta {
     magic: u64,
@@ -99,21 +99,6 @@ struct StateMeta {
     globals_len: usize,
     heap_offset: u64,
     heap_len: usize,
-}
-
-impl Default for StateMeta {
-    fn default() -> Self {
-        Self {
-            magic: 0,
-            version: 0,
-            meta_offset: 0,
-            meta_len: 0,
-            globals_offset: 0,
-            globals_len: 0,
-            heap_offset: 0,
-            heap_len: 0,
-        }
-    }
 }
 
 #[enum_dispatch]

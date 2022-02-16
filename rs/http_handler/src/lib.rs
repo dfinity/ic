@@ -598,7 +598,7 @@ async fn make_router(
             )),
     );
 
-    let invalid_argument_response = common::make_response(invalid_argument_error(format!("")));
+    let invalid_argument_response = common::make_response(invalid_argument_error(String::new()));
     metrics
         .protocol_version_total
         .with_label_values(&[app_layer.as_str(), &format!("{:?}", req.version())])

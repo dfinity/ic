@@ -152,13 +152,13 @@ const RETRY_BACKOFF: Duration = Duration::from_secs(5);
 /// Note: The SystemTestContext itself can be cloned/copied.
 #[derive(Clone)]
 pub struct SystemTestContext {
-    path: PathBuf,
+    _path: PathBuf,
     local_registry: Arc<LocalRegistry>,
-    rng: ChaCha8Rng,
+    _rng: ChaCha8Rng,
     pub log: slog::Logger,
     handle: RtHandle,
     // In case the Runtime is created by the System Test Context constructor, this structure owns it.
-    rt: Arc<Option<Rt>>,
+    _rt: Arc<Option<Rt>>,
 }
 
 impl SystemTestContext {
@@ -181,12 +181,12 @@ impl SystemTestContext {
         let handle = rt.handle().clone();
         let rt = Arc::new(Some(rt));
         Self {
-            path,
+            _path: path,
             local_registry,
-            rng,
+            _rng: rng,
             log,
             handle,
-            rt,
+            _rt: rt,
         }
     }
 

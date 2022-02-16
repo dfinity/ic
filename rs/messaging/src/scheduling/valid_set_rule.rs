@@ -138,7 +138,7 @@ impl ValidSetRuleImpl {
     /// Tries to induct a single ingress message and sets the message status in
     /// `state` accordingly (to `Received` if successful; or to `Failed` with
     /// the relevant error code on failure).
-    fn induct_message(&self, mut state: &mut ReplicatedState, msg: SignedIngressContent) {
+    fn induct_message(&self, state: &mut ReplicatedState, msg: SignedIngressContent) {
         trace!(self.log, "induct_message");
         let message_id = msg.id();
         let source = msg.sender();
@@ -151,7 +151,7 @@ impl ValidSetRuleImpl {
             Ok(()) => {
                 self.observe_inducted_ingress_payload_size(payload_bytes);
                 self.ingress_history_writer.set_status(
-                    &mut state,
+                    state,
                     message_id,
                     IngressStatus::Received {
                         receiver: receiver.get(),
@@ -185,7 +185,7 @@ impl ValidSetRuleImpl {
                     }
                 };
                 self.ingress_history_writer.set_status(
-                    &mut state,
+                    state,
                     message_id,
                     IngressStatus::Failed {
                         receiver: receiver.get(),

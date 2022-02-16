@@ -160,19 +160,11 @@ struct ClientState {
     event_handler: Arc<dyn AsyncTransportEventHandler>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Hub {
     ports: BTreeMap<NodeId, Arc<ThreadPort>>,
 }
 pub type HubAccess = Arc<Mutex<Hub>>;
-
-impl Default for Hub {
-    fn default() -> Self {
-        Self {
-            ports: Default::default(),
-        }
-    }
-}
 
 impl Hub {
     pub fn insert(&mut self, node: NodeId, port: Arc<ThreadPort>) -> Option<Arc<ThreadPort>> {

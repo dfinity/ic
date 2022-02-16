@@ -271,7 +271,7 @@ async fn query_request_failed() {
     let sa = getsockname(socket).expect("getsockname() failed");
 
     // URL to query a server that would be running on the allocated port.
-    let url = format!("http://{}", sa.to_string()).parse::<Uri>().unwrap();
+    let url = format!("http://{}", sa).parse::<Uri>().unwrap();
 
     let result =
         with_test_replica_logger(|log| do_async_query(make_xnet_client(metrics, log), url));

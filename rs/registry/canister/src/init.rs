@@ -1,15 +1,9 @@
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use std::fmt;
 
-#[derive(candid::CandidType, candid::Deserialize, Clone, Debug)]
+#[derive(candid::CandidType, candid::Deserialize, Clone, Debug, Default)]
 pub struct RegistryCanisterInitPayload {
     pub mutations: Vec<RegistryAtomicMutateRequest>,
-}
-
-impl Default for RegistryCanisterInitPayload {
-    fn default() -> Self {
-        RegistryCanisterInitPayload { mutations: vec![] }
-    }
 }
 
 impl fmt::Display for RegistryCanisterInitPayload {

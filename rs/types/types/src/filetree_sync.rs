@@ -168,11 +168,7 @@ impl Chunkable for FileTreeSyncChunksTracker {
 
         println!("Received Chunk {}", artifact_chunk.chunk_id);
         let mut chunk_path_buf = self.absolute_path.clone();
-        chunk_path_buf.push(format!(
-            "{}{}",
-            CHUNK_PREFIX,
-            artifact_chunk.chunk_id.to_string()
-        ));
+        chunk_path_buf.push(format!("{}{}", CHUNK_PREFIX, artifact_chunk.chunk_id));
         std::fs::File::create(chunk_path_buf.as_path())
             .map_err(|_| ArtifactErrorCode::ChunksMoreNeeded)?;
 

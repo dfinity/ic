@@ -320,12 +320,9 @@ impl Upgrade {
             format!("--replica-version={}", replica_version.as_ref()),
             format!(
                 "--config-file={}",
-                self.replica_config_file.as_path().display().to_string()
+                self.replica_config_file.as_path().display()
             ),
-            format!(
-                "--catch-up-package={}",
-                cup_path.as_path().display().to_string()
-            ),
+            format!("--catch-up-package={}", cup_path.as_path().display()),
             format!("--force-subnet={}", subnet_id),
         ];
 

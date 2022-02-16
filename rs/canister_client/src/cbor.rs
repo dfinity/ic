@@ -40,13 +40,6 @@ impl RequestStatus {
     }
 }
 
-#[derive(Debug)]
-struct CanisterCallResponse {
-    status: String,
-    arg: Option<Vec<u8>>,
-    reject_message: Option<String>,
-}
-
 /// Given a CBOR response from a `read_state` and a `request_id` extracts
 /// the `RequestStatus` if available.
 pub fn parse_read_state_response(

@@ -263,7 +263,7 @@ impl std::fmt::Display for StateError {
             StateError::CanisterStopping(canister_id) => {
                 write!(f, "Canister {} is stopping", canister_id)
             }
-            StateError::CanisterOutOfCycles(err) => write!(f, "{}", err.to_string()),
+            StateError::CanisterOutOfCycles(err) => write!(f, "{}", err),
 
             StateError::InvariantBroken(err) => {
                 write!(f, "Invariant broken: {}", err)

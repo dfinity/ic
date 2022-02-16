@@ -25,11 +25,9 @@ impl fmt::Debug for CspFsEncryptionSecretKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             // this prints no secret key parts since Debug for BTENode is redacted:
-            CspFsEncryptionSecretKey::Groth20_Bls12_381(sk) => write!(
-                f,
-                "CspFsEncryptionSecretKey::Groth20_Bls12_381 - {}",
-                format!("{:?}", sk)
-            ),
+            CspFsEncryptionSecretKey::Groth20_Bls12_381(sk) => {
+                write!(f, "CspFsEncryptionSecretKey::Groth20_Bls12_381 - {:?}", sk)
+            }
         }
     }
 }

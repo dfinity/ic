@@ -56,6 +56,7 @@ pub trait TcpAddrAllocator {
 /// The implementation is kept as simple as possible, i.e., no additional flags,
 /// such as REUSE_PORT, are set when binding a port (currently, we cannot make
 /// use of them as the internal libraries don't set the flag)
+#[derive(Default)]
 pub struct EphemeralPortAllocator {
     memoized_addrs: BTreeMap<AddrSpec, SocketAddr>,
     listeners: Vec<TcpListener>,
@@ -64,15 +65,6 @@ pub struct EphemeralPortAllocator {
 impl EphemeralPortAllocator {
     pub fn new() -> Self {
         Default::default()
-    }
-}
-
-impl Default for EphemeralPortAllocator {
-    fn default() -> Self {
-        Self {
-            memoized_addrs: Default::default(),
-            listeners: vec![],
-        }
     }
 }
 

@@ -272,15 +272,15 @@ mod tests {
 
     #[derive(Clone)]
     struct TestData {
-        node_id: NodeId,
+        _node_id: NodeId,
         node_pks: NodePublicKeys,
     }
 
     impl TestData {
         fn new() -> Self {
             let temp_dir = temp_dir();
-            let (node_pks, node_id) = get_node_keys_or_generate_if_missing(temp_dir.path());
-            Self { node_id, node_pks }
+            let (node_pks, _node_id) = get_node_keys_or_generate_if_missing(temp_dir.path());
+            Self { _node_id, node_pks }
         }
     }
 

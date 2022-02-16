@@ -36,7 +36,7 @@ impl Zeroize for FsEncryptionSecretKey {
 impl fmt::Debug for FsEncryptionSecretKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // this prints no secret key parts since Debug for BTENode is redacted:
-        write!(f, "bte_nodes: {}", format!("{:?}", self.bte_nodes))
+        write!(f, "bte_nodes: {:?}", self.bte_nodes)
     }
 }
 
@@ -73,7 +73,7 @@ impl fmt::Debug for BTENode {
         write!(
             f,
             "tau: {}, a: REDACTED, b: REDACTED, d_t: REDACTED, d_h: REDACTED, e: REDACTED",
-            format!("{:?}", base64::encode(&self.tau))
+            base64::encode(&self.tau)
         )
     }
 }

@@ -272,7 +272,7 @@ pub fn public_key_to_der(key: PublicKeyBytes) -> CryptoResult<Vec<u8>> {
     .map_err(|e| CryptoError::MalformedPublicKey {
         algorithm: AlgorithmId::ThresBls12_381,
         key_bytes: Some(key.to_vec()),
-        internal_error: format!("Conversion to DER failed with error {}", e.to_string()),
+        internal_error: format!("Conversion to DER failed with error {}", e),
     })
 }
 

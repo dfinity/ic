@@ -50,14 +50,9 @@ impl<Rd: AsRawFd + Read, Buffer: Default> BufferedReader<Rd, Buffer> {
 /// Implements a trivial non-persistent line buffer. It is non-persistent
 /// in the sense that as soon as a call to [LineBuffer::read_line] returns
 /// `Some`, that data is removed from the buffer.
+#[derive(Default)]
 pub struct LineBuffer {
     buf: Vec<u8>,
-}
-
-impl Default for LineBuffer {
-    fn default() -> Self {
-        LineBuffer { buf: Vec::new() }
-    }
 }
 
 impl LineBuffer {

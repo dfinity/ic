@@ -147,7 +147,7 @@ impl fmt::Debug for NodeOperatorPublicKey {
 
 #[derive(Clone, Debug)]
 pub struct NodeOperatorEntry {
-    name: String,
+    _name: String,
     principal_id: PrincipalId,
     node_provider_principal_id: Option<PrincipalId>,
     node_allowance: u64,
@@ -302,7 +302,7 @@ impl IcConfig {
         Self {
             target_dir: PathBuf::from(target_dir.as_ref()),
             topology_config,
-            initial_replica_version_id: replica_version_id.unwrap_or_else(ReplicaVersion::default),
+            initial_replica_version_id: replica_version_id.unwrap_or_default(),
             generate_subnet_records,
             nns_subnet_index,
             initial_release_package_url: release_package_url,
@@ -342,7 +342,7 @@ impl IcConfig {
                 .with_initial_node_operator(node_operator_id);
             self.initial_registry_node_operator_entries
                 .push(NodeOperatorEntry {
-                    name: "initial".into(),
+                    _name: "initial".into(),
                     node_allowance,
                     principal_id: node_operator_id,
                     node_provider_principal_id: self.initial_node_provider,
@@ -690,7 +690,7 @@ impl IcConfig {
             };
 
             node_operator_entries.push(NodeOperatorEntry {
-                name: String::from(name),
+                _name: String::from(name),
                 principal_id: PrincipalId::new_self_authenticating(&operator_buf),
                 node_provider_principal_id,
                 node_allowance,

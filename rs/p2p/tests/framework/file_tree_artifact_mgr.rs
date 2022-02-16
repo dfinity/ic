@@ -160,13 +160,9 @@ impl ArtifactChunkingTestImpl {
         node_id: NodeId,
         mem_pool: &mut FileTreeSyncInMemoryPool,
     ) -> Result<PathBuf, Box<dyn Error>> {
-        workdir.push(format!("{}{}", NODE_PREFIX, node_id.to_string()));
+        workdir.push(format!("{}{}", NODE_PREFIX, node_id));
         workdir.push(POOL);
-        workdir.push(format!(
-            "{}{}",
-            STATE_SYNC_ARTIFACT_PREFIX,
-            node_id.to_string()
-        ));
+        workdir.push(format!("{}{}", STATE_SYNC_ARTIFACT_PREFIX, node_id));
         std::fs::create_dir_all(&workdir)?;
         for i in 0..MAX_CHUNKS {
             workdir.push(format!("{}{}", CHUNK_PREFIX, i));
@@ -194,6 +190,6 @@ impl ArtifactChunkingTestImpl {
     }
 
     fn get_node_artifact_id_string(node_id: NodeId) -> String {
-        format!("{}{}", STATE_SYNC_ARTIFACT_PREFIX, node_id.to_string())
+        format!("{}{}", STATE_SYNC_ARTIFACT_PREFIX, node_id)
     }
 }

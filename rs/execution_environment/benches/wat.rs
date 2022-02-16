@@ -154,10 +154,10 @@ pub trait RenderParams {
 /// Implement RenderParams trait for no parameters function.
 impl RenderParams for NoParams {
     fn import<T: core::fmt::Display>(&self, _params_type: T) -> String {
-        format!("")
+        String::new()
     }
     fn call<T: core::fmt::Display>(&self, _params_type: T) -> String {
-        format!("")
+        String::new()
     }
 }
 
@@ -225,7 +225,7 @@ pub trait RenderResults {
 /// Implement RenderResults trait for no results function.
 impl RenderResults for NoResults {
     fn import<T: core::fmt::Display>(&self, _params_type: T) -> String {
-        format!("")
+        String::new()
     }
     fn ignore<B: core::fmt::Display>(&self, func_body: B) -> String {
         format!("{FUNC_BODY}", FUNC_BODY = func_body)

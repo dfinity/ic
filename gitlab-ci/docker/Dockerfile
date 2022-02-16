@@ -51,7 +51,7 @@ COPY --from=src_img /opt /tmp/src-artifacts
 RUN rsync --chmod=755 -rav /tmp/src-artifacts/ /usr && rm -rf /tmp/src-artifacts
 
 # rustup uses $CARGO_HOME to figure out where to install itself
-ARG rust_version=1.55.0
+ARG rust_version=1.58.1
 ENV CARGO_HOME=/opt/cargo
 RUN curl --fail https://sh.rustup.rs -sSf \
         | sh -s -- -y --default-toolchain ${rust_version}-x86_64-unknown-linux-gnu --no-modify-path && \

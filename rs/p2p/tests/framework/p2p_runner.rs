@@ -400,7 +400,6 @@ pub fn spawn_replicas_as_threads(
     }
 
     for join_handle in join_handles {
-        #[warn(unused_must_use)]
         assert!(join_handle.join().is_ok())
     }
 

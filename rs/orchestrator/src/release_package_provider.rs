@@ -24,7 +24,7 @@ pub(crate) struct ReleasePackageProvider {
     registry: Arc<RegistryHelper>,
     file_downloader: Arc<FileDownloader>,
     release_content_dir: PathBuf,
-    force_replica_binary: Option<String>,
+    _force_replica_binary: Option<String>,
     logger: ReplicaLogger,
 }
 
@@ -32,7 +32,7 @@ impl ReleasePackageProvider {
     pub(crate) fn new(
         registry: Arc<RegistryHelper>,
         release_content_dir: PathBuf,
-        force_replica_binary: Option<String>,
+        _force_replica_binary: Option<String>,
         logger: ReplicaLogger,
     ) -> Self {
         let file_downloader = Arc::new(FileDownloader::new(Some(logger.clone())));
@@ -41,7 +41,7 @@ impl ReleasePackageProvider {
             registry,
             file_downloader,
             release_content_dir,
-            force_replica_binary,
+            _force_replica_binary,
             logger,
         }
     }

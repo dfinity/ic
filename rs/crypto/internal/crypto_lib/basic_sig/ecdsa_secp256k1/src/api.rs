@@ -51,7 +51,7 @@ pub fn new_keypair() -> CryptoResult<(types::SecretKeyBytes, types::PublicKeyByt
             .private_key_to_der()
             .map_err(|e| CryptoError::AlgorithmNotSupported {
                 algorithm: AlgorithmId::EcdsaSecp256k1,
-                reason: format!("OpenSSL failed with error {}", e.to_string()),
+                reason: format!("OpenSSL failed with error {}", e),
             })?;
     let sk = types::SecretKeyBytes(SecretVec::new_and_zeroize_argument(&mut sk_der));
     let pk_bytes = ec_key
@@ -105,7 +105,7 @@ pub fn secret_key_from_components(
             .private_key_to_der()
             .map_err(|e| CryptoError::AlgorithmNotSupported {
                 algorithm: AlgorithmId::EcdsaSecp256k1,
-                reason: format!("OpenSSL failed with error {}", e.to_string()),
+                reason: format!("OpenSSL failed with error {}", e),
             })?;
     Ok(types::SecretKeyBytes(SecretVec::new_and_zeroize_argument(
         &mut sk_der,
@@ -271,14 +271,14 @@ fn r_s_from_sig_bytes(sig_bytes: &types::SignatureBytes) -> CryptoResult<(BigNum
         CryptoError::MalformedSignature {
             algorithm: AlgorithmId::EcdsaSecp256k1,
             sig_bytes: sig_bytes.0.to_vec(),
-            internal_error: format!("Error parsing r: {}", e.to_string()),
+            internal_error: format!("Error parsing r: {}", e),
         }
     })?;
     let s = BigNum::from_slice(&sig_bytes.0[types::FIELD_SIZE..]).map_err(|e| {
         CryptoError::MalformedSignature {
             algorithm: AlgorithmId::EcdsaSecp256k1,
             sig_bytes: sig_bytes.0.to_vec(),
-            internal_error: format!("Error parsing s: {}", e.to_string()),
+            internal_error: format!("Error parsing s: {}", e),
         }
     })?;
     Ok((r, s))
@@ -350,6 +350,6 @@ pub fn verify(
 fn wrap_openssl_err(e: openssl::error::ErrorStack, err_msg: &str) -> CryptoError {
     CryptoError::AlgorithmNotSupported {
         algorithm: AlgorithmId::EcdsaSecp256k1,
-        reason: format!("{}: OpenSSL failed with error {}", err_msg, e.to_string()),
+        reason: format!("{}: OpenSSL failed with error {}", err_msg, e),
     }
 }

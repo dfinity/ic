@@ -410,7 +410,7 @@ pub mod specialise {
     /// An error during specialisation
     #[derive(Debug)]
     pub struct SpecialisationError {
-        unexpected_type_name: &'static str,
+        _unexpected_type_name: &'static str,
     }
 
     /// Converts a secret key into a forward secure secret key set.

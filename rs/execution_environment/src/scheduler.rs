@@ -65,7 +65,7 @@ pub(crate) struct CanisterExecutionLimits {
     instruction_limit_per_message: NumInstructions,
     instruction_overhead_per_message: NumInstructions,
     max_message_duration_before_warn_in_seconds: f64,
-    heap_delta_rate_limit: NumBytes,
+    _heap_delta_rate_limit: NumBytes,
 }
 
 impl CanisterExecutionLimits {
@@ -77,7 +77,7 @@ impl CanisterExecutionLimits {
             instruction_overhead_per_message: config.instruction_overhead_per_message,
             max_message_duration_before_warn_in_seconds: config
                 .max_message_duration_before_warn_in_seconds,
-            heap_delta_rate_limit: config.heap_delta_rate_limit,
+            _heap_delta_rate_limit: config.heap_delta_rate_limit,
         }
     }
 }

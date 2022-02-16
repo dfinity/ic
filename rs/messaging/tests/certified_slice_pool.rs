@@ -291,8 +291,8 @@ proptest! {
                 adjust(
                     &certified_slice,
                     |tree| {
-                        let mut streams = children_of(tree).get_mut(&Label::from("streams")).unwrap();
-                        children_of(&mut streams).split_off(&Label::from(""));
+                        let streams = children_of(tree).get_mut(&Label::from("streams")).unwrap();
+                        children_of(streams).split_off(&Label::from(""));
                     }
                 ),
             );
@@ -305,8 +305,8 @@ proptest! {
                         let streams = children_of(tree).get_mut(&Label::from("streams")).unwrap();
                         let streams_tree = children_of(streams);
                         let subnet_id = streams_tree.keys()[0].clone();
-                        let mut stream = streams_tree.get_mut(&subnet_id).unwrap();
-                        children_of(&mut stream).split_off(&Label::from(""));
+                        let stream = streams_tree.get_mut(&subnet_id).unwrap();
+                        children_of(stream).split_off(&Label::from(""));
                     }
                 ),
             );

@@ -2280,7 +2280,7 @@ fn setup_initial_dkg_sender_not_on_nns() {
                     code: RejectCode::CanisterError,
                     message: format!(
                         "{} is called by {}. It can only be called by NNS.",
-                        ic00::Method::SetupInitialDKG.to_string(),
+                        ic00::Method::SetupInitialDKG,
                         sender,
                     )
                 })
