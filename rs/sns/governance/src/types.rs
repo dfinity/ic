@@ -26,7 +26,7 @@ const PROPOSAL_EXECUTE_SNS_FUNCTION_PAYLOAD_BYTES_MAX: usize = 70000;
 /// The number of e8s per governance token;
 pub const E8S_PER_TOKEN: u64 = TOKEN_SUBDIVIDABLE_BY;
 
-// The default values for network economics (until we initialize it).
+// The default values for network parameters (until we initialize it).
 // Can't implement Default since it conflicts with Prost's.
 impl NervousSystemParameters {
     pub fn with_default_values() -> Self {
@@ -218,7 +218,7 @@ impl Action {
     /// Returns whether a provided action is a valid [Action].
     /// This is to prevent memory attacks due to keying on
     /// u64
-    pub fn is_valid_action(_action: u64) -> bool {
+    pub fn is_valid_action(_action: &u64) -> bool {
         todo!()
     }
 
@@ -398,7 +398,7 @@ impl Ledger for EmptyLedger {
 /// A single ongoing update for a single neuron.
 /// Releases the lock when destroyed.
 pub struct LedgerUpdateLock {
-    pub nid: u64,
+    pub nid: String,
     pub gov: *mut Governance,
 }
 
@@ -409,6 +409,6 @@ impl Drop for LedgerUpdateLock {
         // &self always remains alive. The 'mut' is not an issue, because
         // 'unlock_neuron' will verify that the lock exists.
         let gov: &mut Governance = unsafe { &mut *self.gov };
-        gov.unlock_neuron(self.nid);
+        gov.unlock_neuron(&self.nid);
     }
 }

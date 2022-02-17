@@ -7,8 +7,11 @@ use crate::pb::v1::{
 };
 use ic_base_types::PrincipalId;
 use ledger_canister::Subaccount;
+use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
+use std::fmt::{Display, Formatter};
+use std::str::FromStr;
 
 /// The maximum number results returned by the method `list_neurons`.
 pub const MAX_LIST_NEURONS_RESULTS: u32 = 100;
@@ -112,7 +115,11 @@ impl Neuron {
     /// vote on a proposal of `action` based on which neurons this
     /// neuron follows on this action (or on the default action if this
     /// neuron doesn't specify any followees for `action`).
-    pub(crate) fn would_follow_ballots(&self, action: u64, ballots: &HashMap<u64, Ballot>) -> Vote {
+    pub(crate) fn would_follow_ballots(
+        &self,
+        action: u64,
+        ballots: &HashMap<String, Ballot>,
+    ) -> Vote {
         // Compute the list of followees for this action. If no
         // following is specified for the action, use the followees
         // from the 'Unspecified' topic.
@@ -134,7 +141,7 @@ impl Neuron {
             let mut yes: usize = 0;
             let mut no: usize = 0;
             for f in followees.iter() {
-                if let Some(f_vote) = ballots.get(&f.id) {
+                if let Some(f_vote) = ballots.get(&f.to_string()) {
                     if f_vote.vote == (Vote::Yes as i32) {
                         yes += 1;
                     } else if f_vote.vote == (Vote::No as i32) {
@@ -444,35 +451,65 @@ impl Neuron {
     }
 
     pub fn subaccount(&self) -> Result<Subaccount, GovernanceError> {
-        match &self.id {
-            Some(nid) => Ok(nid.subaccount()),
-            None => Err(GovernanceError::new_with_message(
+        if let Some(nid) = &self.id {
+            nid.subaccount()
+        } else {
+            Err(GovernanceError::new_with_message(
                 ErrorType::NotFound,
                 "Neuron must have a NeuronId",
-            )),
+            ))
         }
     }
 }
 
 impl NeuronId {
-    // TODO need to implement better decoding. This is a naive implementation
-    // that requires the last 24 bytes to be all zeros
-    pub fn subaccount(&self) -> Subaccount {
-        let slice = u64::to_ne_bytes(self.id);
-        let mut subaccount: [u8; 32] = [0; 32];
-
-        subaccount[..slice.len()].clone_from_slice(&slice[..]);
-
-        Subaccount(subaccount)
+    pub fn subaccount(&self) -> Result<Subaccount, GovernanceError> {
+        match Subaccount::try_from(self.id.as_slice()) {
+            Ok(subaccount) => Ok(subaccount),
+            Err(e) => Err(GovernanceError::new_with_message(
+                ErrorType::InvalidNeuronId,
+                format!("Could not convert NeuronId to Subaccount {}", e),
+            )),
+        }
     }
 }
 
 impl From<Subaccount> for NeuronId {
-    // TODO need to implement better encoding. This is a naive implementation
-    // that requires the last 24 bytes to be all zeros
-    fn from(val: Subaccount) -> Self {
-        let slice = u64::from_ne_bytes(val.to_vec()[0..8].try_into().unwrap());
+    fn from(subaccount: Subaccount) -> Self {
+        NeuronId {
+            id: subaccount.to_vec(),
+        }
+    }
+}
 
-        NeuronId { id: slice }
+impl FromStr for NeuronId {
+    type Err = GovernanceError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match hex::decode(s) {
+            Ok(id) => Ok(NeuronId { id }),
+            Err(e) => Err(GovernanceError::new_with_message(
+                ErrorType::InvalidNeuronId,
+                format!("Could not convert {} to NeuronId", e),
+            )),
+        }
+    }
+}
+
+impl Display for NeuronId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", hex::encode(&self.id))
+    }
+}
+
+impl Ord for NeuronId {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.id.cmp(&other.id)
+    }
+}
+
+impl PartialOrd for NeuronId {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }

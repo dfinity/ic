@@ -34,6 +34,7 @@ bytes = "1.0.1"
 strum_macros = "0.18.0"
 strum = "0.18.0"
 comparable = { version = "0.5", features = ["derive"] }
+hex = "0.4.3"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 clap = "3.0.0-beta.2"

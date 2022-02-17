@@ -8,7 +8,7 @@ use ic_sns_governance::pb::v1::manage_neuron_response::Command as CommandRespons
 
 use ic_sns_governance::pb::v1::manage_neuron::claim_or_refresh::{By, MemoAndController};
 use ic_sns_governance::pb::v1::manage_neuron::{ClaimOrRefresh, Command, Disburse};
-use ic_sns_governance::pb::v1::{ManageNeuron, ManageNeuronResponse, NeuronId};
+use ic_sns_governance::pb::v1::{ManageNeuron, ManageNeuronResponse};
 use ic_sns_test_utils::itest_helpers::{
     local_test_on_sns_subnet, SnsCanisters, SnsInitPayloadsBuilder,
 };
@@ -50,7 +50,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
             // Stake a neuron by transferring to a subaccount of the neurons
             // canister and claiming the neuron on the governance canister..
             let nonce = 12345u64;
-            let mut to_subaccount = Subaccount({
+            let to_subaccount = Subaccount({
                 let mut state = Sha256::new();
                 state.write(&[0x0c]);
                 state.write(b"neuron-stake");
@@ -58,11 +58,6 @@ fn test_stake_and_disburse_neuron_with_notification() {
                 state.write(&nonce.to_be_bytes());
                 state.finish()
             });
-
-            // TODO this is because we have to route through the encode/decode for the
-            // backside. this will be fixed when Subaccount->u64 conversion is
-            // discussed.
-            to_subaccount = NeuronId::from(to_subaccount).subaccount();
 
             // Stake the neuron.
             let stake = Tokens::from_tokens(100).unwrap();
@@ -134,6 +129,11 @@ fn test_stake_and_disburse_neuron_with_notification() {
                 alloc
             );
 
+            let subaccount = match neuron_id.subaccount() {
+                Ok(s) => s,
+                Err(e) => panic!("Error creating the subaccount, {}", e),
+            };
+
             // Disburse the neuron.
             let result: ManageNeuronResponse = sns_canisters
                 .governance
@@ -141,7 +141,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
                     "manage_neuron",
                     candid_one,
                     ManageNeuron {
-                        subaccount: neuron_id.subaccount().to_vec(),
+                        subaccount: subaccount.to_vec(),
                         command: Some(Command::Disburse(Disburse {
                             amount: None,
                             to_account: Some(

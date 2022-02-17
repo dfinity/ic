@@ -6023,6 +6023,7 @@ dependencies = [
  "dfn_core",
  "dfn_protobuf",
  "futures",
+ "hex",
  "ic-base-types",
  "ic-config",
  "ic-crypto-sha",
@@ -6052,6 +6053,7 @@ name = "ic-sns-integration-tests"
 version = "0.8.0"
 dependencies = [
  "candid",
+ "canister-test",
  "dfn_candid",
  "dfn_core",
  "dfn_json",
