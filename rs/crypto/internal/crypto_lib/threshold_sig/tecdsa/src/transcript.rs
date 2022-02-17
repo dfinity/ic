@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
 /// IDkg transcript information relevant for the internal Crypto operations
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct IDkgTranscriptInternal {
     pub combined_commitment: CombinedCommitment,
 }
@@ -42,7 +42,7 @@ impl TryFrom<&IDkgTranscript> for IDkgTranscriptInternal {
 }
 
 /// Some type of commitment, specifying its combination strategy
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub enum CombinedCommitment {
     BySummation(PolynomialCommitment),
     ByInterpolation(PolynomialCommitment),

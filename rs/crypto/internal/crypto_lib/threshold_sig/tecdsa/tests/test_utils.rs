@@ -443,7 +443,10 @@ impl ProtocolRound {
         mode: &IDkgTranscriptOperationInternal,
     ) -> ThresholdEcdsaResult<IDkgTranscriptInternal> {
         match create_transcript(setup.alg, setup.threshold, dealings, mode) {
-            Ok(t) => Ok(t),
+            Ok(t) => {
+                assert!(verify_transcript(&t, setup.alg, setup.threshold, dealings, mode).is_ok());
+                Ok(t)
+            }
             Err(IDkgCreateTranscriptInternalError::InsufficientDealings) => {
                 Err(ThresholdEcdsaError::InsufficientDealings)
             }
