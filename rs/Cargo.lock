@@ -10935,6 +10935,7 @@ dependencies = [
  "tree-deserializer",
  "url",
  "wabt 0.10.0 (git+https://github.com/dfinity-lab/wabt-rs?tag=0.10.0-dfinity)",
+ "xnet-test",
 ]
 
 [[package]]

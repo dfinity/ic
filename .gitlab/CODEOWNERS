@@ -57,7 +57,6 @@
 /testnet/tests/scripts/subnet_recovery_nns_upgrade_test.sh @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
 /testnet/tests/scripts/subnet_recovery_basic_test.sh       @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
 /testnet/tests/scripts/generic.sh                          @dfinity-lab/teams/ic-testing-verification
-/testnet/tests/scripts/global_reboot_test.sh               @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/message-routing-owners
 /testnet/tests/scripts/maximum_capacity_rejoin.sh          @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/message-routing-owners
 /testnet/tests/scripts/maximum_capacity_subnet_query.sh    @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/execution-owners
 /testnet/tests/scripts/maximum_capacity_subnet_update.sh   @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
@@ -144,6 +143,8 @@
 /rs/tests/src/consensus/             @dfinity-lab/teams/consensus-owners @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/execution.rs           @dfinity-lab/teams/execution-owners @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/execution/             @dfinity-lab/teams/execution-owners @dfinity-lab/teams/ic-testing-verification
+/rs/tests/src/message_routing.rs     @dfinity-lab/teams/message-routing-owners
+/rs/tests/src/message_routing/       @dfinity-lab/teams/message-routing-owners
 /rs/tests/src/rosetta_test.rs        @dfinity-lab/teams/financial-integrations @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/create_subnet.rs       @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/nns-team
 /rs/tests/src/networking             @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team

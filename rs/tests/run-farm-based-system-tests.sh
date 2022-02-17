@@ -61,6 +61,7 @@ else
     # We assume that we are running on CI
     set -x
     ARTIFACT_DIR="artifacts"
+    export XNET_TEST_CANISTER_WASM_PATH="$ARTIFACT_DIR/xnet-test-canister.wasm"
     RUN_CMD="${ARTIFACT_DIR}/prod-test-driver"
     cleanup_artifacts=false
     RESULT_FILE="${CI_PROJECT_DIR}/test-results.json"
