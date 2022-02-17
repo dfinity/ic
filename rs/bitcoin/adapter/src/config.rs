@@ -22,6 +22,10 @@ pub struct Config {
     /// `Idle` state.
     #[serde(default = "default_idle_seconds")]
     pub idle_seconds: u64,
+    /// When this field is set to `true`, the adapter will only connect to Bitcoin nodes
+    /// that support IPv6.
+    #[serde(default)]
+    pub ipv6_only: bool,
 }
 
 fn default_idle_seconds() -> u64 {
@@ -47,6 +51,7 @@ impl Default for Config {
             socks_proxy: Default::default(),
             nodes: vec![],
             idle_seconds: 5,
+            ipv6_only: false,
         }
     }
 }
@@ -79,6 +84,11 @@ pub mod test {
 
         pub fn with_network(mut self, network: Network) -> Self {
             self.config.network = network;
+            self
+        }
+
+        pub fn with_ipv6_only(mut self, ipv6_only: bool) -> Self {
+            self.config.ipv6_only = ipv6_only;
             self
         }
 
