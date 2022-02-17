@@ -986,7 +986,9 @@ impl DownloadManagerImpl {
         &self,
         latest_registry_version: RegistryVersion,
     ) -> BTreeMap<NodeId, NodeRecord> {
-        let subnet_membership_version = self.consensus_pool_cache.get_subnet_membership_version();
+        let subnet_membership_version = self
+            .consensus_pool_cache
+            .get_oldest_registry_version_in_use();
         let mut subnet_nodes = BTreeMap::new();
         // Iterate from subnet_membership_version to latest_registry_version + 1 (since
         // end is non-inclusive).
@@ -1772,7 +1774,7 @@ pub mod tests {
 
         let mut mock_consensus_cache = MockConsensusCache::new();
         mock_consensus_cache
-            .expect_get_subnet_membership_version()
+            .expect_get_oldest_registry_version_in_use()
             .returning(move || RegistryVersion::from(1));
         let consensus_pool_cache = Arc::new(mock_consensus_cache);
 
@@ -1844,7 +1846,7 @@ pub mod tests {
         let mut mock_consensus_cache = MockConsensusCache::new();
         let consensus_registry_client = registry_client.clone();
         mock_consensus_cache
-            .expect_get_subnet_membership_version()
+            .expect_get_oldest_registry_version_in_use()
             .returning(move || consensus_registry_client.get_latest_version());
         let consensus_pool_cache = Arc::new(mock_consensus_cache);
 

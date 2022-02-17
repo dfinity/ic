@@ -289,7 +289,7 @@ pub trait ConsensusPoolCache: Send + Sync {
     /// P2P should keep up connections to all nodes registered in any registry
     /// between the one returned from this function and the current
     /// `RegistryVersion`.
-    fn get_subnet_membership_version(&self) -> RegistryVersion {
+    fn get_oldest_registry_version_in_use(&self) -> RegistryVersion {
         self.catch_up_package()
             .content
             .block
@@ -297,8 +297,7 @@ pub trait ConsensusPoolCache: Send + Sync {
             .payload
             .as_ref()
             .as_summary()
-            .dkg
-            .get_subnet_membership_version()
+            .get_oldest_registry_version_in_use()
     }
 }
 

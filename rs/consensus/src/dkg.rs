@@ -3354,11 +3354,12 @@ mod tests {
                 RegistryVersion::from(5),
                 "The latest available version was used for the summary block."
             );
-            let dkg_summary = BlockPayload::from(dkg_block.payload).into_summary().dkg;
+            let summary = BlockPayload::from(dkg_block.payload).into_summary();
+            let dkg_summary = &summary.dkg;
             assert_eq!(dkg_summary.registry_version, RegistryVersion::from(5));
             assert_eq!(dkg_summary.height, Height::from(0));
             assert_eq!(
-                dkg_summary.get_subnet_membership_version(),
+                summary.get_oldest_registry_version_in_use(),
                 RegistryVersion::from(5)
             );
             for tag in TAGS.iter() {
@@ -3399,13 +3400,14 @@ mod tests {
                 RegistryVersion::from(6),
                 "The newest registry version is used."
             );
-            let dkg_summary = BlockPayload::from(dkg_block.payload).into_summary().dkg;
+            let summary = BlockPayload::from(dkg_block.payload).into_summary();
+            let dkg_summary = &summary.dkg;
             // This registry version corresponds to the registry version from the block
             // context of the previous summary.
             assert_eq!(dkg_summary.registry_version, RegistryVersion::from(5));
             assert_eq!(dkg_summary.height, Height::from(5));
             assert_eq!(
-                dkg_summary.get_subnet_membership_version(),
+                summary.get_oldest_registry_version_in_use(),
                 RegistryVersion::from(5)
             );
             for tag in TAGS.iter() {
@@ -3449,13 +3451,14 @@ mod tests {
                 RegistryVersion::from(10),
                 "The newest registry version is used."
             );
-            let dkg_summary = BlockPayload::from(dkg_block.payload).into_summary().dkg;
+            let summary = BlockPayload::from(dkg_block.payload).into_summary();
+            let dkg_summary = &summary.dkg;
             // This registry version corresponds to the registry version from the block
             // context of the previous summary.
             assert_eq!(dkg_summary.registry_version, RegistryVersion::from(6));
             assert_eq!(dkg_summary.height, Height::from(10));
             assert_eq!(
-                dkg_summary.get_subnet_membership_version(),
+                summary.get_oldest_registry_version_in_use(),
                 RegistryVersion::from(5)
             );
             for tag in TAGS.iter() {
@@ -3487,13 +3490,14 @@ mod tests {
                 RegistryVersion::from(10),
                 "The latest registry version is used."
             );
-            let dkg_summary = BlockPayload::from(dkg_block.payload).into_summary().dkg;
+            let summary = BlockPayload::from(dkg_block.payload).into_summary();
+            let dkg_summary = &summary.dkg;
             // This registry version corresponds to the registry version from the block
             // context of the previous summary.
             assert_eq!(dkg_summary.registry_version, RegistryVersion::from(10));
             assert_eq!(dkg_summary.height, Height::from(15));
             assert_eq!(
-                dkg_summary.get_subnet_membership_version(),
+                summary.get_oldest_registry_version_in_use(),
                 RegistryVersion::from(5)
             );
             for tag in TAGS.iter() {
@@ -3523,13 +3527,14 @@ mod tests {
                 RegistryVersion::from(10),
                 "The latest registry version is used."
             );
-            let dkg_summary = BlockPayload::from(dkg_block.payload).into_summary().dkg;
+            let summary = BlockPayload::from(dkg_block.payload).into_summary();
+            let dkg_summary = &summary.dkg;
             // This registry version corresponds to the registry version from the block
             // context of the previous summary.
             assert_eq!(dkg_summary.registry_version, RegistryVersion::from(10));
             assert_eq!(dkg_summary.height, Height::from(20));
             assert_eq!(
-                dkg_summary.get_subnet_membership_version(),
+                summary.get_oldest_registry_version_in_use(),
                 // The current DKGs finally use `RegistryVersion` 6
                 RegistryVersion::from(6)
             );

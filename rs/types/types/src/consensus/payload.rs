@@ -25,6 +25,18 @@ pub struct SummaryPayload {
     pub ecdsa: ecdsa::Summary,
 }
 
+impl SummaryPayload {
+    /// Return the oldest registry version that is still referenced by
+    /// parts of the summary block.
+    ///
+    /// P2P should keep up connections to all nodes registered in any registry
+    /// between the one returned from this function and the current
+    /// `RegistryVersion`.
+    pub fn get_oldest_registry_version_in_use(&self) -> RegistryVersion {
+        self.dkg.get_oldest_registry_version_in_use()
+    }
+}
+
 /// Block payload is either summary or a data payload).
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]

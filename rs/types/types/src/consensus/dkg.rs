@@ -234,11 +234,7 @@ impl Summary {
     }
 
     /// Returns the oldest registry version that is still relevant to DKG.
-    ///
-    /// P2P should keep up connections to all nodes registered in any registry
-    /// between the one returned from this function and the current
-    /// `RegistryVersion`.
-    pub fn get_subnet_membership_version(&self) -> RegistryVersion {
+    pub(crate) fn get_oldest_registry_version_in_use(&self) -> RegistryVersion {
         self.current_transcripts()
             .iter()
             .map(|(_id, transcript)| transcript.registry_version)
