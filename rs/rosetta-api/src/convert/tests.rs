@@ -1,7 +1,7 @@
 use crate::models::OperationIdentifier;
 
 use super::*;
-use crate::DEFAULT_TOKEN_NAME;
+use crate::DEFAULT_TOKEN_SYMBOL;
 use ledger_canister::AccountIdentifier;
 use ledger_canister::Operation as LedgerOperation;
 
@@ -29,7 +29,7 @@ impl OperationBuilder {
 
     fn amount(self, amount: i128) -> Self {
         Self(Operation {
-            amount: Some(signed_amount(amount, DEFAULT_TOKEN_NAME)),
+            amount: Some(signed_amount(amount, DEFAULT_TOKEN_SYMBOL)),
             ..self.0
         })
     }
@@ -67,7 +67,7 @@ fn test_transfer_requests_to_operations() {
                 amount: Tokens::from_e8s(100),
                 fee: Tokens::from_e8s(10),
             })],
-            DEFAULT_TOKEN_NAME
+            DEFAULT_TOKEN_SYMBOL
         ),
         Ok(vec![
             OperationBuilder::new(0, "TRANSACTION")
@@ -102,7 +102,7 @@ fn test_transfer_and_stake_requests_to_operations() {
                     neuron_index: 1,
                 })
             ],
-            DEFAULT_TOKEN_NAME
+            DEFAULT_TOKEN_SYMBOL
         ),
         Ok(vec![
             OperationBuilder::new(0, "TRANSACTION")
@@ -143,7 +143,7 @@ fn test_can_handle_multiple_transfers() {
                     fee: Tokens::from_e8s(20),
                 }),
             ],
-            DEFAULT_TOKEN_NAME
+            DEFAULT_TOKEN_SYMBOL
         ),
         Ok(vec![
             OperationBuilder::new(0, "TRANSACTION")

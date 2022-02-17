@@ -29,7 +29,7 @@ use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, messages::SignedReq
 use ledger_canister::protobuf::{ArchiveIndexEntry, ArchiveIndexResponse};
 use ledger_canister::{
     protobuf::TipOfChainRequest, AccountIdentifier, BlockArg, BlockHeight, BlockRes, EncodedBlock,
-    GetBlocksArgs, GetBlocksRes, HashOf, TipOfChainRes, Tokens, Transaction, TransferFee,
+    GetBlocksArgs, GetBlocksRes, HashOf, Symbol, TipOfChainRes, Tokens, Transaction, TransferFee,
     TransferFeeArgs, DEFAULT_TRANSFER_FEE,
 };
 use on_wire::{FromWire, IntoWire};
@@ -56,7 +56,7 @@ pub trait LedgerAccess {
     async fn sync_blocks(&self, stopped: Arc<AtomicBool>) -> Result<(), ApiError>;
     fn ledger_canister_id(&self) -> &CanisterId;
     fn governance_canister_id(&self) -> &CanisterId;
-    fn token_name(&self) -> &str;
+    fn token_symbol(&self) -> &str;
     async fn submit(&self, _envelopes: SignedTransaction) -> Result<TransactionResults, ApiError>;
     async fn cleanup(&self);
     async fn neuron_info(
@@ -78,7 +78,7 @@ pub struct LedgerClient {
     governance_canister_id: CanisterId,
     canister_access: Option<Arc<CanisterAccess>>,
     ic_url: Url,
-    token_name: String,
+    token_symbol: String,
     store_max_blocks: Option<u64>,
     offline: bool,
     root_key: Option<ThresholdSigPublicKey>,
@@ -89,7 +89,7 @@ impl LedgerClient {
     pub async fn new(
         ic_url: Url,
         canister_id: CanisterId,
-        token_name: String,
+        token_symbol: String,
         governance_canister_id: CanisterId,
         store_location: Option<&std::path::Path>,
         store_max_blocks: Option<u64>,
@@ -128,6 +128,42 @@ impl LedgerClient {
                     .map_err(ApiError::internal_error)?;
             }
 
+            let arg = CandidOne(())
+                .into_bytes()
+                .map_err(|e| ApiError::internal_error(format!("Serialization failed: {:?}", e)))?;
+
+            let symbol_res: Result<Symbol, String> = canister_access
+                .agent
+                .execute_query(&canister_access.canister_id, "symbol", arg)
+                .await
+                .and_then(|bytes| {
+                    CandidOne::from_bytes(
+                        bytes.ok_or_else(|| "symbol reply payload was empty".to_string())?,
+                    )
+                    .map(|c| c.0)
+                });
+
+            match symbol_res {
+                Ok(Symbol { symbol }) => {
+                    if symbol != token_symbol {
+                        return Err(ApiError::internal_error(format!(
+                            "The ledger serves a different token ({}) than specified ({})",
+                            symbol, token_symbol
+                        )));
+                    }
+                }
+                Err(e) => {
+                    if e.contains("has no query method") || e.contains("not found") {
+                        log::warn!("Symbol endpoint not present in the ledger canister. Couldn't verify token symbol.");
+                    } else {
+                        return Err(ApiError::internal_error(format!(
+                            "Failed to fetch symbol name from the ledger: {}",
+                            e
+                        )));
+                    }
+                }
+            };
+
             Some(canister_access)
         };
 
@@ -158,7 +194,7 @@ impl LedgerClient {
         Ok(Self {
             blockchain: RwLock::new(blocks),
             canister_id,
-            token_name,
+            token_symbol,
             governance_canister_id,
             canister_access,
             ic_url,
@@ -267,8 +303,8 @@ impl LedgerAccess for LedgerClient {
         Box::new(self.blockchain.read().await)
     }
 
-    fn token_name(&self) -> &str {
-        &self.token_name
+    fn token_symbol(&self) -> &str {
+        &self.token_symbol
     }
 
     async fn cleanup(&self) {
@@ -431,7 +467,7 @@ impl LedgerAccess for LedgerClient {
                 result.status = Status::Failed(e);
                 return Err(convert::transaction_results_to_api_error(
                     results,
-                    &self.token_name,
+                    &self.token_symbol,
                 ));
             }
         }

@@ -30,6 +30,8 @@ use std::{
 ///   old blocks.
 /// * `send_whitelist` - The [Ledger] canister whitelist.
 /// * `transfer_fee` - The fee to pay to perform a transaction.
+/// * `token_symbol` - Token symbol.
+/// * `token_name` - Token name.
 #[allow(clippy::too_many_arguments)]
 fn init(
     minting_account: AccountIdentifier,
@@ -39,6 +41,8 @@ fn init(
     archive_options: Option<archive::ArchiveOptions>,
     send_whitelist: HashSet<CanisterId>,
     transfer_fee: Option<Tokens>,
+    token_symbol: Option<String>,
+    token_name: Option<String>,
 ) {
     print(format!(
         "[ledger] init(): minting account is {}",
@@ -51,6 +55,8 @@ fn init(
         transaction_window,
         send_whitelist,
         transfer_fee,
+        token_symbol,
+        token_name,
     );
     match max_message_size_bytes {
         None => {
@@ -404,6 +410,27 @@ fn total_supply() -> Tokens {
     LEDGER.read().unwrap().balances.total_supply()
 }
 
+#[candid_method(query, rename = "symbol")]
+fn token_symbol() -> Symbol {
+    Symbol {
+        symbol: LEDGER.read().unwrap().token_symbol.clone(),
+    }
+}
+
+#[candid_method(query, rename = "name")]
+fn token_name() -> Name {
+    Name {
+        name: LEDGER.read().unwrap().token_name.clone(),
+    }
+}
+
+#[candid_method(query, rename = "decimals")]
+fn token_decimals() -> Decimals {
+    Decimals {
+        decimals: DECIMAL_PLACES,
+    }
+}
+
 #[candid_method(init)]
 fn canister_init(arg: LedgerCanisterInitPayload) {
     init(
@@ -414,6 +441,8 @@ fn canister_init(arg: LedgerCanisterInitPayload) {
         arg.archive_options,
         arg.send_whitelist,
         arg.transfer_fee,
+        arg.token_symbol,
+        arg.token_name,
     )
 }
 
@@ -705,6 +734,21 @@ fn transfer_fee_() {
     over(protobuf, transfer_fee)
 }
 
+#[export_name = "canister_query symbol"]
+fn token_symbol_candid() {
+    over(candid_one, |()| token_symbol())
+}
+
+#[export_name = "canister_query name"]
+fn token_name_candid() {
+    over(candid_one, |()| token_name())
+}
+
+#[export_name = "canister_query decimals"]
+fn token_decimals_candid() {
+    over(candid_one, |()| token_decimals())
+}
+
 #[export_name = "canister_query total_supply_pb"]
 fn total_supply_() {
     over(protobuf, |_: TotalSupplyArgs| total_supply())
@@ -828,8 +872,9 @@ fn get_canidid_interface() {
 #[cfg(test)]
 mod tests {
     use crate::{
-        AccountBalanceArgs, BinaryAccountBalanceArgs, BlockHeight, LedgerCanisterInitPayload,
-        SendArgs, Tokens, TransferArgs, TransferError, TransferFee, TransferFeeArgs,
+        AccountBalanceArgs, BinaryAccountBalanceArgs, BlockHeight, Decimals,
+        LedgerCanisterInitPayload, Name, SendArgs, Symbol, Tokens, TransferArgs, TransferError,
+        TransferFee, TransferFeeArgs,
     };
     use candid::utils::{service_compatible, CandidSource};
     use std::path::PathBuf;

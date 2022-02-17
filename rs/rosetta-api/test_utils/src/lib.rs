@@ -13,7 +13,7 @@ use ic_rosetta_api::request_types::{
     StartDissolve, StopDissolve, TransactionResults,
 };
 use ic_rosetta_api::transaction_id::TransactionIdentifier;
-use ic_rosetta_api::{convert, errors, errors::ApiError, DEFAULT_TOKEN_NAME};
+use ic_rosetta_api::{convert, errors, errors::ApiError, DEFAULT_TOKEN_SYMBOL};
 use ic_types::{messages::Blob, time, PrincipalId};
 
 use ledger_canister::{AccountIdentifier, BlockHeight, Operation, Tokens};
@@ -85,7 +85,7 @@ pub async fn prepare_multiple_txn(
     let mut all_sender_account_ids = Vec::new();
     let mut all_sender_pks = Vec::new();
     let mut trans_fee_amount = None;
-    let token_name = DEFAULT_TOKEN_NAME;
+    let token_name = DEFAULT_TOKEN_SYMBOL;
 
     for request in requests {
         // first ask for the fee
@@ -342,7 +342,7 @@ pub async fn do_multiple_txn(
         let rs: Vec<_> = requests.iter().map(|r| r.request.clone()).collect();
         assert_eq!(
             rs,
-            from_operations(&parse_res.operations, false, DEFAULT_TOKEN_NAME).unwrap()
+            from_operations(&parse_res.operations, false, DEFAULT_TOKEN_SYMBOL).unwrap()
         );
     }
 
@@ -369,7 +369,7 @@ pub async fn do_multiple_txn(
         let rs: Vec<_> = requests.iter().map(|r| r.request.clone()).collect();
         assert_eq!(
             rs,
-            from_operations(&parse_res.operations, false, DEFAULT_TOKEN_NAME).unwrap()
+            from_operations(&parse_res.operations, false, DEFAULT_TOKEN_SYMBOL).unwrap()
         );
     }
 
@@ -407,7 +407,7 @@ pub async fn do_multiple_txn(
     assert_eq!(submit_res, submit_res3);
 
     let results =
-        convert::from_transaction_operation_results(submit_res.metadata, DEFAULT_TOKEN_NAME)
+        convert::from_transaction_operation_results(submit_res.metadata, DEFAULT_TOKEN_SYMBOL)
             .expect("Couldn't convert metadata to TransactionResults");
 
     if let Some(RequestResult {
@@ -487,7 +487,7 @@ pub async fn send_icpts_with_window(
                 ))
             } else {
                 Err(errors::convert_to_error(
-                    &convert::transaction_results_to_api_error(results, DEFAULT_TOKEN_NAME),
+                    &convert::transaction_results_to_api_error(results, DEFAULT_TOKEN_SYMBOL),
                 ))
             }
         })
@@ -495,7 +495,7 @@ pub async fn send_icpts_with_window(
 
 pub fn assert_ic_error(err: &RosettaError, code: u32, ic_http_status: u64, text: &str) {
     let err = if let ApiError::OperationsErrors(results, _) =
-        errors::convert_to_api_error(err.clone(), DEFAULT_TOKEN_NAME)
+        errors::convert_to_api_error(err.clone(), DEFAULT_TOKEN_SYMBOL)
     {
         errors::convert_to_error(&results.error().unwrap().clone())
     } else {
@@ -518,7 +518,7 @@ pub fn assert_ic_error(err: &RosettaError, code: u32, ic_http_status: u64, text:
 
 pub fn assert_canister_error(err: &RosettaError, code: u32, text: &str) {
     let err = if let ApiError::OperationsErrors(results, _) =
-        errors::convert_to_api_error(err.clone(), DEFAULT_TOKEN_NAME)
+        errors::convert_to_api_error(err.clone(), DEFAULT_TOKEN_SYMBOL)
     {
         errors::convert_to_error(&results.error().unwrap().clone())
     } else {
