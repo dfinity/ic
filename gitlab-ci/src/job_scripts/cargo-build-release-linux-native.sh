@@ -20,7 +20,6 @@ cargo build --target $CARGO_BUILD_TARGET --release \
     --bin ic-rosetta-api \
     --bin boundary-node-control-plane \
     --bin boundary-node-prober \
-    --bin canister_sandbox \
     --bin ic-admin \
     --bin ic-btc-adapter \
     --bin ic-consensus-pool-util \
@@ -37,7 +36,6 @@ cargo build --target $CARGO_BUILD_TARGET --release \
     --bin ic-workload-generator \
     --bin orchestrator \
     --bin replica \
-    --bin sandbox_launcher \
     --bin state-tool \
     --bin vsock_agent \
     --bin system-tests \
@@ -46,6 +44,13 @@ cargo build --target $CARGO_BUILD_TARGET --release \
     --bin e2e-test-driver \
     --bin ic-nns-init
 
+cargo build --target $CARGO_BUILD_TARGET --profile release-lto \
+    --bin canister_sandbox \
+    --bin sandbox_launcher
+
+mv "$CARGO_TARGET_DIR"/x86_64-unknown-linux-gnu/release-lto/canister_sandbox \
+    "$CARGO_TARGET_DIR"/x86_64-unknown-linux-gnu/release-lto/sandbox_launcher \
+    "$CARGO_TARGET_DIR"/x86_64-unknown-linux-gnu/release/
 ls -l "$CARGO_TARGET_DIR"/x86_64-unknown-linux-gnu/release
 
 rm -rf artifacts/release
