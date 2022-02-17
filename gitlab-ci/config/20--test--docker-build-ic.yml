@@ -19,21 +19,14 @@ docker-build-ic-img:
   needs:
     - cargo-build-canisters
     - cargo-build-release-linux-native
-    - artifacts-upload-to-s3
-  dependencies:
-    - cargo-build-canisters
-    - cargo-build-release-linux-native
   stage: guest-os-build
-  artifacts:
-    paths:
-      - artifacts
   script:
     - |
       set -euo pipefail
       echo "Pipeline source: ${CI_PIPELINE_SOURCE}"
       VERSION=$("${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/find-build-id.sh)
       export VERSION
-      capsule -v -t "${VERSION}" -o artifacts/docker-build-ic/icos/update-img.tar.gz -- \
+      capsule -v -t "${VERSION}" -- \
       gitlab-ci/tools/docker-build-ic -a=i
       # we only collect artifacts/docker-build-ic/icos
       rm -rf artifacts/docker-build-ic/{canisters,release}
