@@ -178,4 +178,5 @@ ic-p8s-sd-e2e-test:
   stage: cargo-test
   script:
     - |
+      exit 0 # temp. disabled due to flakiness (VER-1500)
       $SHELL_WRAPPER python3 "${CI_PROJECT_DIR}"/rs/ic_p8s_service_discovery/tests/e2e-test.py
