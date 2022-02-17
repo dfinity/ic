@@ -36,8 +36,8 @@ use ic_logger::{debug, info, replica_logger::ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_p2p::{
     event_handler::{
-        fetch_gossip_config, AdvertSubscriber, IngressEventHandler, IngressThrottler,
-        P2PEventHandlerImpl,
+        fetch_gossip_config, AdvertSubscriber, ChannelConfig, IngressEventHandler,
+        IngressThrottler, P2PEventHandlerImpl,
     },
     gossip_protocol::GossipImpl,
 };
@@ -177,7 +177,7 @@ pub fn create_networking_stack(
         node_id,
         log.clone(),
         &metrics_registry,
-        fetch_gossip_config(registry_client.clone(), subnet_id),
+        ChannelConfig::from(fetch_gossip_config(registry_client.clone(), subnet_id)),
     ));
     transport
         .register_client(event_handler.clone())

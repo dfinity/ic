@@ -352,14 +352,6 @@ impl DownloadPrioritizerMetrics {
 pub struct EventHandlerMetrics {
     /// The times required for send message calls.
     pub send_message_duration_ms: HistogramVec,
-    /// The number of times advert delivery was blocked.
-    pub adverts_blocked: IntCounter,
-    /// The number of times the delivery of chunk requests was blocked.
-    pub requests_blocked: IntCounter,
-    /// The number of times chunk delivery was blocked.
-    pub chunks_blocked: IntCounter,
-    /// The number of times retransmission delivery was blocked.
-    pub retransmissions_blocked: IntCounter,
 }
 
 impl EventHandlerMetrics {
@@ -372,16 +364,6 @@ impl EventHandlerMetrics {
                 // 1ms, 2ms, 5ms - 100 sec, 200 sec, 500 sec
                 decimal_buckets(0, 5),
                 &["msg_type"],
-            ),
-            adverts_blocked: metrics_registry
-                .int_counter("adverts_blocked", "Number of times advert delivery blocked"),
-            chunks_blocked: metrics_registry
-                .int_counter("chunks_blocked", "Number of times chunks delivery blocked"),
-            requests_blocked: metrics_registry
-                .int_counter("requests_blocked", "Number of requests delivery blocked"),
-            retransmissions_blocked: metrics_registry.int_counter(
-                "retransmissions_blocked",
-                "Number of times retransmissions delivery blocked",
             ),
         }
     }

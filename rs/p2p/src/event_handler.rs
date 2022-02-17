@@ -78,7 +78,7 @@ use ic_interfaces::{
     registry::RegistryClient,
     transport::{AsyncTransportEventHandler, SendError},
 };
-use ic_logger::{info, replica_logger::ReplicaLogger, trace};
+use ic_logger::{error, info, replica_logger::ReplicaLogger, trace};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy, registry::subnet::v1::GossipConfig};
 use ic_registry_client::helper::subnet::SubnetRegistry;
@@ -106,7 +106,7 @@ use std::{
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 use threadpool::ThreadPool;
-use tokio::sync::{OwnedSemaphorePermit, Semaphore, TryAcquireError};
+use tokio::sync::{Semaphore, TryAcquireError};
 use tower_service::Service;
 
 const P2P_MAX_INGRESS_THREADS: usize = 2;
@@ -162,36 +162,57 @@ type PeersSemMap = Arc<RwLock<BTreeMap<NodeId, Arc<Semaphore>>>>;
 struct FlowEventHandler {
     threadpool: Arc<Mutex<ThreadPool>>,
     sem_map: PeersSemMap,
+    max_inflight_requests: usize,
 }
 
 impl FlowEventHandler {
-    fn new(threadpool: ThreadPool) -> Self {
+    fn new(threadpool: ThreadPool, max_inflight_requests: usize) -> Self {
         Self {
             threadpool: Arc::new(Mutex::new(threadpool)),
             sem_map: Arc::new(RwLock::new(BTreeMap::new())),
+            max_inflight_requests,
         }
     }
 
-    fn send<T: Send + 'static + Debug, F>(
+    async fn send<T: Send + 'static + Debug, F>(
         &self,
-        msg: T,
         node_id: NodeId,
-        permit: OwnedSemaphorePermit,
+        msg: T,
         consume_message_fn: F,
-    ) where
+    ) -> Result<(), SendError>
+    where
         F: Fn(T, NodeId) + Clone + Send + 'static,
     {
+        let insert_node = !self.sem_map.read().unwrap().contains_key(&node_id);
+        if insert_node {
+            self.add_node(node_id);
+        }
+
+        let sem = self
+            .sem_map
+            .read()
+            .unwrap()
+            .get(&node_id)
+            .ok_or(SendError::EndpointNotFound)?
+            .clone();
+
+        let permit = match sem.acquire_owned().await {
+            Ok(permit) => permit,
+            Err(_) => return Err(SendError::EndpointClosed),
+        };
+
         self.threadpool.lock().unwrap().execute(move || {
             let _permit = permit;
             consume_message_fn(msg, node_id);
         });
+        Ok(())
     }
 
     /// The method adds the node with the given node ID.
-    fn add_node(&self, node_id: NodeId, buffer: usize) {
+    fn add_node(&self, node_id: NodeId) {
         let mut sem_map = self.sem_map.write().unwrap();
         if let std::collections::btree_map::Entry::Vacant(e) = sem_map.entry(node_id) {
-            e.insert(Arc::new(Semaphore::new(max(1, buffer))));
+            e.insert(Arc::new(Semaphore::new(max(1, self.max_inflight_requests))));
         }
     }
 }
@@ -215,38 +236,28 @@ struct PeerFlows {
 }
 
 impl PeerFlows {
-    fn new(threadpool: ThreadPool) -> Self {
+    fn new(threadpool: ThreadPool, channel_config: ChannelConfig) -> Self {
         Self {
-            advert: FlowEventHandler::new(threadpool.clone()),
-            request: FlowEventHandler::new(threadpool.clone()),
-            chunk: FlowEventHandler::new(threadpool.clone()),
-            retransmission: FlowEventHandler::new(threadpool.clone()),
-            transport: FlowEventHandler::new(threadpool),
+            advert: FlowEventHandler::new(
+                threadpool.clone(),
+                channel_config.map[&FlowType::Advert],
+            ),
+            request: FlowEventHandler::new(
+                threadpool.clone(),
+                channel_config.map[&FlowType::Request],
+            ),
+            chunk: FlowEventHandler::new(threadpool.clone(), channel_config.map[&FlowType::Chunk]),
+            retransmission: FlowEventHandler::new(
+                threadpool.clone(),
+                channel_config.map[&FlowType::Retransmission],
+            ),
+            transport: FlowEventHandler::new(threadpool, channel_config.map[&FlowType::Transport]),
             gossip: Arc::new(RwLock::new(None)),
         }
     }
 
     pub fn start(&self, gossip_arc: GossipArc) {
         self.gossip.write().unwrap().replace(gossip_arc);
-    }
-
-    fn add_node(&self, node_id: NodeId, channel_config: &ChannelConfig) {
-        for flow_type in FlowType::iter() {
-            let flow_type = &flow_type;
-            match flow_type {
-                FlowType::Advert => self.advert.add_node(node_id, channel_config.map[flow_type]),
-                FlowType::Request => self
-                    .request
-                    .add_node(node_id, channel_config.map[flow_type]),
-                FlowType::Chunk => self.chunk.add_node(node_id, channel_config.map[flow_type]),
-                FlowType::Retransmission => self
-                    .retransmission
-                    .add_node(node_id, channel_config.map[flow_type]),
-                FlowType::Transport => self
-                    .transport
-                    .add_node(node_id, channel_config.map[flow_type]),
-            };
-        }
     }
 }
 
@@ -262,8 +273,6 @@ pub struct P2PEventHandlerImpl {
     log: ReplicaLogger,
     /// The event handler metrics.
     pub metrics: EventHandlerMetrics,
-    /// The channel configuration.
-    channel_config: ChannelConfig,
     /// The peer flows.
     peer_flows: PeerFlows,
 }
@@ -278,7 +287,7 @@ pub(crate) const MAX_RETRANSMISSION_BUFFER: usize = 1000;
 /// The channel configuration, containing the maximum number of messages for
 /// each flow type.
 #[derive(Default)]
-struct ChannelConfig {
+pub struct ChannelConfig {
     /// The map from flow type to the maximum number of buffered messages.
     map: BTreeMap<FlowType, usize>,
 }
@@ -312,66 +321,24 @@ impl P2PEventHandlerImpl {
         node_id: NodeId,
         log: ReplicaLogger,
         metrics_registry: &MetricsRegistry,
-        gossip_config: GossipConfig,
+        channel_config: ChannelConfig,
     ) -> Self {
         let threadpool = threadpool::Builder::new()
             .num_threads(P2P_MAX_EVENT_HANDLER_THREADS)
             .thread_name("P2P_Thread".into())
             .build();
-        let handler = P2PEventHandlerImpl {
+        P2PEventHandlerImpl {
             node_id,
             log,
             metrics: EventHandlerMetrics::new(metrics_registry),
-            channel_config: ChannelConfig::from(gossip_config),
-            peer_flows: PeerFlows::new(threadpool),
-        };
-        handler
-            .peer_flows
-            .add_node(node_id, &handler.channel_config);
-        handler
+            peer_flows: PeerFlows::new(threadpool, channel_config),
+        }
     }
 
     /// The method starts the event processing loop, dispatching events to the
     /// *Gossip* component.
     pub fn start(&self, gossip_arc: GossipArc) {
         self.peer_flows.start(gossip_arc);
-    }
-
-    async fn send_gossip_message<T: Send + 'static + Debug, F>(
-        &self,
-        sender: &FlowEventHandler,
-        peer_id: NodeId,
-        msg: T,
-        consume_fn: F,
-    ) -> Result<(), SendError>
-    where
-        F: Fn(T, NodeId) + Clone + Send + 'static,
-    {
-        // Add the node to the semaphore map if it doesn't exists yet.
-        let insert_node = !sender.sem_map.read().unwrap().contains_key(&peer_id);
-        if insert_node {
-            self.peer_flows.add_node(peer_id, &self.channel_config);
-        }
-
-        let sem = sender
-            .sem_map
-            .read()
-            .unwrap()
-            .get(&peer_id)
-            .ok_or(SendError::EndpointNotFound)?
-            .clone();
-        let permit = match sem.clone().try_acquire_owned() {
-            Err(_err) => {
-                self.metrics.adverts_blocked.inc();
-                match sem.acquire_owned().await {
-                    Ok(permit) => permit,
-                    Err(_) => return Err(SendError::EndpointClosed),
-                }
-            }
-            Ok(permit) => permit,
-        };
-        sender.send(msg, peer_id, permit, consume_fn);
-        Ok(())
     }
 }
 
@@ -403,22 +370,14 @@ impl AsyncTransportEventHandler for P2PEventHandlerImpl {
                 let consume_fn = move |item, peer_id| {
                     c_gossip.on_advert(item, peer_id);
                 };
-                (
-                    "Advert",
-                    self.send_gossip_message(sender, flow.peer_id, msg, consume_fn)
-                        .await,
-                )
+                ("Advert", sender.send(flow.peer_id, msg, consume_fn).await)
             }
             GossipMessage::ChunkRequest(msg) => {
                 let sender = &self.peer_flows.request;
                 let consume_fn = move |item, peer_id| {
                     c_gossip.on_chunk_request(item, peer_id);
                 };
-                (
-                    "Request",
-                    self.send_gossip_message(sender, flow.peer_id, msg, consume_fn)
-                        .await,
-                )
+                ("Request", sender.send(flow.peer_id, msg, consume_fn).await)
             }
             GossipMessage::Chunk(msg) => {
                 let sender = &self.peer_flows.chunk;
@@ -426,11 +385,7 @@ impl AsyncTransportEventHandler for P2PEventHandlerImpl {
                     c_gossip.on_chunk(item, peer_id);
                 };
 
-                (
-                    "Chunk",
-                    self.send_gossip_message(sender, flow.peer_id, msg, consume_fn)
-                        .await,
-                )
+                ("Chunk", sender.send(flow.peer_id, msg, consume_fn).await)
             }
             GossipMessage::RetransmissionRequest(msg) => {
                 let sender = &self.peer_flows.retransmission;
@@ -440,8 +395,7 @@ impl AsyncTransportEventHandler for P2PEventHandlerImpl {
 
                 (
                     "Retransmission",
-                    self.send_gossip_message(sender, flow.peer_id, msg, consume_fn)
-                        .await,
+                    sender.send(flow.peer_id, msg, consume_fn).await,
                 )
             }
         };
@@ -455,15 +409,6 @@ impl AsyncTransportEventHandler for P2PEventHandlerImpl {
     /// The method changes the state of the P2P event handler.
     async fn state_changed(&self, state_change: TransportStateChange) {
         let sender = &self.peer_flows.transport;
-        let sem = sender
-            .sem_map
-            .read()
-            .unwrap()
-            .get(&self.node_id)
-            .unwrap()
-            .clone();
-
-        let permit = sem.acquire_owned().await.unwrap();
         let c_gossip = self
             .peer_flows
             .gossip
@@ -476,7 +421,13 @@ impl AsyncTransportEventHandler for P2PEventHandlerImpl {
             c_gossip.on_transport_state_change(item);
         };
 
-        sender.send(state_change, self.node_id, permit, consume_fn);
+        if sender
+            .send(self.node_id, state_change, consume_fn)
+            .await
+            .is_err()
+        {
+            error!(self.log, "Sending state_chagne failed.");
+        }
     }
 
     /// If there is a sender error, the method sends a transport error
@@ -484,15 +435,7 @@ impl AsyncTransportEventHandler for P2PEventHandlerImpl {
     async fn error(&self, flow: FlowId, error: TransportErrorCode) {
         if let TransportErrorCode::SenderErrorIndicated = error {
             let sender = &self.peer_flows.transport;
-            let sem = sender
-                .sem_map
-                .read()
-                .unwrap()
-                .get(&self.node_id)
-                .unwrap()
-                .clone();
 
-            let permit = sem.acquire_owned().await.unwrap();
             let c_gossip = self
                 .peer_flows
                 .gossip
@@ -505,15 +448,20 @@ impl AsyncTransportEventHandler for P2PEventHandlerImpl {
                 c_gossip.on_transport_error(item);
             };
 
-            sender.send(
-                TransportError::TransportSendError(FlowId {
-                    peer_id: flow.peer_id,
-                    flow_tag: flow.flow_tag,
-                }),
-                self.node_id,
-                permit,
-                consume_fn,
-            )
+            if sender
+                .send(
+                    self.node_id,
+                    TransportError::TransportSendError(FlowId {
+                        peer_id: flow.peer_id,
+                        flow_tag: flow.flow_tag,
+                    }),
+                    consume_fn,
+                )
+                .await
+                .is_err()
+            {
+                error!(self.log, "Sending error failed.")
+            }
         }
     }
 }
@@ -778,16 +726,17 @@ pub mod tests {
         advert_max_depth: usize,
         node_id: NodeId,
     ) -> (P2PEventHandlerImpl, AdvertSubscriber) {
-        let mut handler = P2PEventHandlerImpl::new(
+        let mut channel_config = ChannelConfig::from(ic_types::p2p::build_default_gossip_config());
+        channel_config
+            .map
+            .insert(FlowType::Advert, advert_max_depth);
+
+        let handler = P2PEventHandlerImpl::new(
             node_id,
             p2p_test_setup_logger().root.clone().into(),
             &MetricsRegistry::new(),
-            ic_types::p2p::build_default_gossip_config(),
+            channel_config,
         );
-        handler
-            .channel_config
-            .map
-            .insert(FlowType::Advert, advert_max_depth);
 
         let advert_subscriber = AdvertSubscriber::new(
             p2p_test_setup_logger().root.clone().into(),
