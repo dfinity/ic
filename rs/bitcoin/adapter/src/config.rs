@@ -1,10 +1,10 @@
 use std::net::SocketAddr;
 
 use bitcoin::Network;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// This struct contains configuration options for the BTC Adapter.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
     /// The type of Bitcoin network we plan to communicate to (e.g. Mainnet, Testnet, etc.).
     pub network: Network,

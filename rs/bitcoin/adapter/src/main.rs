@@ -1,6 +1,7 @@
 use clap::Clap;
 use ic_btc_adapter::{spawn_grpc_server, Adapter, Cli};
-use slog::{error, slog_o, Drain, Logger};
+use serde_json::to_string_pretty;
+use slog::{error, info, slog_o, Drain, Logger};
 use std::io::stdout;
 use std::sync::Arc;
 use tokio::{
@@ -27,6 +28,11 @@ pub async fn main() {
             return;
         }
     };
+    info!(
+        logger,
+        "Starting the adapter with config: {}",
+        to_string_pretty(&config).unwrap()
+    );
 
     let adapter = Arc::new(Mutex::new(Adapter::new(&config, logger.clone())));
     spawn_grpc_server(Arc::clone(&adapter));
