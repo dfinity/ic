@@ -171,6 +171,42 @@ pub fn create_transcript(
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum IDkgVerifyTranscriptInternalError {
+    IncorrectTranscript,
+    FailedToCreateTranscript(IDkgCreateTranscriptInternalError),
+}
+
+/// Verifies the consistency of the transcript with the set of `verified_dealings`.
+pub fn verify_transcript(
+    internal_transcript: &IDkgTranscriptInternal,
+    algorithm_id: AlgorithmId,
+    reconstruction_threshold: NumberOfNodes,
+    verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+    operation_mode: &IDkgTranscriptOperationInternal,
+) -> Result<(), IDkgVerifyTranscriptInternalError> {
+    let transcript = create_transcript(
+        algorithm_id,
+        reconstruction_threshold,
+        verified_dealings,
+        operation_mode,
+    );
+
+    match transcript {
+        Ok(transcript) => {
+            if &transcript == internal_transcript {
+                Ok(())
+            } else {
+                Err(IDkgVerifyTranscriptInternalError::IncorrectTranscript)
+            }
+        }
+
+        Err(e) => Err(IDkgVerifyTranscriptInternalError::FailedToCreateTranscript(
+            e,
+        )),
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum IDkgComputeSecretSharesInternalError {
     InconsistentCommitments,
     InternalError(String),
