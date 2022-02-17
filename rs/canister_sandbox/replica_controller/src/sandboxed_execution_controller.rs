@@ -37,7 +37,7 @@ use crate::launch_as_process::{create_sandbox_process, spawn_launcher_process};
 use crate::process_exe_and_args::{create_launcher_argv, create_sandbox_argv};
 use crate::process_os_metrics;
 
-const SANDBOX_PROCESS_INACTIVE_TIME_BEFORE_EVICTION: Duration = Duration::from_secs(0);
+const SANDBOX_PROCESS_INACTIVE_TIME_BEFORE_EVICTION: Duration = Duration::from_secs(60);
 const SANDBOX_PROCESS_UPDATE_INTERVAL: Duration = Duration::from_secs(10);
 
 struct SandboxedExecutionMetrics {
