@@ -48,6 +48,7 @@ impl RegistryHelper {
         }
     }
 
+    /// Return the latest version that is locally available
     pub(crate) fn get_latest_version(&self) -> RegistryVersion {
         self.registry_client.get_latest_version()
     }
@@ -137,6 +138,8 @@ impl RegistryHelper {
         Arc::clone(&self.registry_client)
     }
 
+    /// Get the replica version of the given subnet in the given registry
+    /// version
     pub(crate) fn get_replica_version(
         &self,
         subnet_id: SubnetId,

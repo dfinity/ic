@@ -31,6 +31,18 @@ use std::sync::Arc;
 use std::time::Duration;
 use url::Url;
 
+/// The `InternalState` encompasses a locally persisted registry changelog which
+/// is kept up to date by repeated calls to [`Self::poll()`]. If this node is
+/// part of a subnet that is starting up as the NNS after a switch-over, the
+/// next call to [`Self::poll()`] will update the local registry accordingly and
+/// exit the process, to allow the node to be restarted as part of the NNS.
+///
+/// [`Self::poll()`] updates the `InternalState` by:
+/// 1. Fetching certified registry changes from the [`RegistryCanister`].
+/// 2. Comparing changes to current local state as provided by the
+///    [`RegistryClient`].
+/// 3. Applying recent changes by writing to (ideally) the client's
+///    [`LocalStore`].
 pub(crate) struct InternalState {
     logger: ReplicaLogger,
     node_id: Option<NodeId>,
@@ -64,13 +76,21 @@ impl InternalState {
         }
     }
 
+    /// Requests latest version and certified changes from the
+    /// [`RegistryCanister`], applies changes to [`LocalStore`] accordingly.
+    /// Exits the process if this node appears on a subnet that is started as
+    /// the new NNS after a version update.
     pub(crate) fn poll(&mut self) -> Result<(), String> {
+        // Note, this may not actually be the latest version, rather it is the latest
+        // version that is locally available
         let latest_version = self.registry_client.get_latest_version();
         if latest_version != self.latest_version {
-            // latest version has changed
+            // latest version has changed (originally initialized with 0)
             self.latest_version = latest_version;
             self.start_new_nns_subnet(latest_version)
                 .expect("Start new NNS failed.");
+            // update (initialize) *remote* registry canister client in case NNS has changed (or
+            // this is the first call to poll())
             if let Err(e) = self.update_registry_canister(latest_version) {
                 warn!(
                     self.logger,
@@ -79,13 +99,16 @@ impl InternalState {
             }
         }
 
+        // Poll registry canister and apply changes to local changelog
         if let Some(registry_canister_ref) = self.registry_canister.as_ref() {
             let registry_canister = Arc::clone(registry_canister_ref);
             let nns_pub_key = self
                 .nns_pub_key
                 .expect("registry canister is set => pub key is set");
+            // Note, code duplicate in registry_replicator.rs initialize_local_store()
             let (mut resp, t) = match tokio::task::block_in_place(|| {
                 tokio::runtime::Handle::current().block_on(
+                    // get certified changes since the latest version we have locally
                     registry_canister
                         .get_certified_changes_since(latest_version.get(), &nns_pub_key),
                 )
@@ -211,8 +234,12 @@ impl InternalState {
         std::process::exit(1);
     }
 
-    /// Given a `changelog`, this function applies the changes (as described
-    /// above) to the last changelog entry.
+    /// Given a `changelog`, this function adjusts the following entries of the
+    /// last registry changelog entry:
+    /// * Update subnet type to be `system`
+    /// * Update root subnet ID to be new NNS subnet ID
+    /// * Assign canister ranges of old NNS to new NNS in routing table
+    /// * Include new NNS in subnet list
     fn apply_switch_over_to_last_changelog_entry(
         &self,
         changelog: &mut [ChangelogEntry],
@@ -316,8 +343,8 @@ impl InternalState {
         });
     }
 
-    /// Update the RegistryCanister with the newest API Urls of the NNS nodes
-    /// found in the registry.
+    /// Update the [`RegistryCanister`] API wrapper with the newest API Urls
+    /// of the NNS nodes found in the registry if they have changed.
     ///
     /// If the necessary configuration is not set in the registry,
     /// `self.registry_canister` is set to None.

@@ -45,8 +45,8 @@ pub struct Orchestrator {
     task_handles: Vec<JoinHandle<()>>,
 }
 
-// Loads the replica version from the file specified as argument on node
-// manager's start.
+// Loads the replica version from the file specified as argument on
+// orchestrator's start.
 fn load_version_from_file(logger: &ReplicaLogger, path: &Path) -> Result<ReplicaVersion, ()> {
     let contents = std::fs::read_to_string(path).map_err(|err| {
         error!(
@@ -97,8 +97,11 @@ impl Orchestrator {
             warn!(logger, "{}", err);
         }
 
-        let registry_client = registry_replicator.get_registry_client();
+        // Filesystem API to local registry copy
         let registry_local_store = registry_replicator.get_local_store();
+        // Caches local registry by regularly polling local store
+        let registry_client = registry_replicator.get_registry_client();
+        // Wrapper to `RegistryClient`
         let registry = Arc::new(RegistryHelper::new(
             node_id,
             registry_client.clone(),
@@ -195,13 +198,16 @@ impl Orchestrator {
 
     /// Starts two asynchronous tasks:
     ///
-    /// 1. One that constantly monitors for a new CUP pointing to a newer replica version and
-    /// executes the upgrade to this version if such a CUP was found.
+    /// 1. One that constantly monitors for a new CUP pointing to a newer
+    /// replica version and executes the upgrade to this version if such a
+    /// CUP was found.
     ///
-    /// 2. Second task is doing two things sequentially. First, it  monitors the registry for new SSH readonly
-    /// keys and deploys the detected keys into OS. Second, it monitors the registry for new data centers.
-    /// If a new data center is added, orchestrator will generate a new firewall configuration allowing access
-    /// from the IP range specified in the DC record.
+    /// 2. Second task is doing two things sequentially. First, it  monitors the
+    /// registry for new SSH readonly keys and deploys the detected keys
+    /// into OS. Second, it monitors the registry for new data centers. If a
+    /// new data center is added, orchestrator will generate a new firewall
+    /// configuration allowing access from the IP range specified in the DC
+    /// record.
     pub fn spawn_tasks(&mut self) {
         async fn upgrade_checks(
             log: ReplicaLogger,

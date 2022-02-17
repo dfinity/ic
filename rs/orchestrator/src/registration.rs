@@ -23,6 +23,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use url::Url;
 
+/// Subcomponent used to register this node with the provided NNS.
 pub(crate) struct NodeRegistration {
     log: ReplicaLogger,
     node_config: Config,
@@ -32,7 +33,6 @@ pub(crate) struct NodeRegistration {
 }
 
 impl NodeRegistration {
-    ///
     pub(crate) fn new(
         log: ReplicaLogger,
         node_config: Config,

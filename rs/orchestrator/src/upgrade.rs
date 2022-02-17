@@ -20,9 +20,10 @@ use std::path::PathBuf;
 use std::process::{exit, Command};
 use std::sync::{Arc, Mutex};
 
-/// Continuously checks the Registry to determine if this node should upgrade
-/// to a new release package, and if so, downloads and extracts this release
-/// package and exec's the orchestrator binary contained within
+/// Provides function to continuously check the Registry to determine if this
+/// node should upgrade to a new release package, and if so, downloads and
+/// extracts this release package and exec's the orchestrator binary contained
+/// within.
 pub(crate) struct Upgrade {
     registry: Arc<RegistryHelper>,
     replica_process: Arc<Mutex<ReplicaProcess>>,
@@ -83,6 +84,7 @@ impl Upgrade {
                 })?;
             (subnet_id, Some(cup))
         } else {
+            // No local CUP found, check registry
             match self.registry.get_subnet_id(latest_registry_version) {
                 Ok(subnet_id) => {
                     info!(self.logger, "Assignment to subnet {} detected", subnet_id);
@@ -95,7 +97,7 @@ impl Upgrade {
 
         // When we arrived here, we are an assigned node.
 
-        // Get the latest available cup from the disk, peears or registry and
+        // Get the latest available CUP from the disk, peers or registry and
         // if the latest CUP is newer than the local one, persist it.
         let cup = self.cup_provider.get_latest_cup(subnet_id).await?;
         if Some(cup.cup.content.height()) > local_cup.map(|cup| cup.content.height()) {
@@ -128,7 +130,7 @@ impl Upgrade {
         .await?;
 
         // If we arrived here, we have the newest CUP and we're still assigned.
-        // Now we check if this CUP requires a new replica verison.
+        // Now we check if this CUP requires a new replica version.
         let cup_registry_version = cup.cup.content.registry_version();
         let new_replica_version = self
             .registry
@@ -138,14 +140,17 @@ impl Upgrade {
                 self.logger,
                 "Starting version upgrade: {} -> {}", self.replica_version, new_replica_version
             );
+            // Only downloads the new image if it doesn't already exists locally, i.e. it
+            // was previously downloaded by `download_image_if_upgrade_scheduled()`, see
+            // below.
             return self.download_and_upgrade(&new_replica_version).await;
         }
 
         // This will start a new replica process if none is running.
         self.ensure_replica_is_running(&self.replica_version, subnet_id)?;
 
-        // This will trigger an image download if one is already scheduled but we did not arrive at
-        // the corresponding CUP yet.
+        // This will trigger an image download if one is already scheduled but we did
+        // not arrive at the corresponding CUP yet.
         self.download_image_if_upgrade_scheduled(subnet_id).await?;
 
         Ok(())
@@ -201,8 +206,9 @@ impl Upgrade {
         Ok(())
     }
 
-    // Checks if the subnet record for the given subnet_id contains a different replica version.
-    // If it is the case, the image will be downloaded. This allows us to decrease the upgrade downtime.
+    // Checks if the subnet record for the given subnet_id contains a different
+    // replica version. If it is the case, the image will be downloaded. This
+    // allows us to decrease the upgrade downtime.
     async fn download_image_if_upgrade_scheduled(
         &self,
         subnet_id: SubnetId,
@@ -407,9 +413,9 @@ fn should_node_become_unassigned(
     let summary = &cup.content.block.get_value().payload.as_ref().as_summary();
     let oldest_relevant_version = summary.get_oldest_registry_version_in_use().get();
     let latest_registry_version = registry.get_latest_version().get();
-    // Make sure that if the latest registry version is for some reason violating the
-    // assumption that it's higher/equal than any other version used in the system, we still
-    // do not remove the subnet state by a mistake.
+    // Make sure that if the latest registry version is for some reason violating
+    // the assumption that it's higher/equal than any other version used in the
+    // system, we still do not remove the subnet state by a mistake.
     if latest_registry_version < oldest_relevant_version {
         return false;
     }
