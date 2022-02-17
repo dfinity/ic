@@ -930,17 +930,26 @@ mod tests {
 
         // check the public interface against the master version if we are in a
         // repository
-        let master_interface = Command::new("git")
-            .args(["show", "refs/remotes/origin/master:rs/rosetta-api/ledger_canister/ledger.did"])
+        let commit = Command::new("git")
+            .args(["merge-base", "HEAD", "origin/master"])
             .output()
-            .expect("Failed to execute git show refs/remotes/origin/master:rs/rosetta-api/ledger_canister/ledger.did")
+            .expect("Failed to execute git merge-base HEAD origin/master")
+            .stdout;
+        let commit = String::from_utf8(commit).unwrap();
+        let commit = commit.trim();
+        let commit_file = format!("{}:rs/rosetta-api/ledger_canister/ledger.did", commit);
+
+        let master_interface = Command::new("git")
+            .args(["show", &commit_file])
+            .output()
+            .unwrap_or_else(|e| panic!("Failed to execute git show {}: {}", commit_file, e))
             .stdout;
         let master_interface = String::from_utf8(master_interface).unwrap();
 
         check_service_compatible(
             "current branch ledger.did",
             CandidSource::File(old_interface.as_path()),
-            "master ledger.did",
+            &format!("merge-base master (commit: {}) ledger.did", commit),
             CandidSource::Text(&master_interface),
         );
     }
