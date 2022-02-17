@@ -48,7 +48,6 @@ fi
 
 SHELL_WRAPPER=${SHELL_WRAPPER:-/usr/bin/time}
 CI_PROJECT_DIR=${CI_PROJECT_DIR:-"$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../"}
-RESULT_FILE="$(mktemp -d)/test-results.json"
 
 JOB_ID="${CI_JOB_ID:-}"
 if [[ -z "${JOB_ID}" ]]; then
@@ -57,12 +56,14 @@ if [[ -z "${JOB_ID}" ]]; then
     JOB_ID="$(whoami)-$(hostname)-$(date +%s)"
     RUN_CMD="cargo"
     ADDITIONAL_ARGS=(run --bin prod-test-driver --)
+    RESULT_FILE="$(mktemp -d)/test-results.json"
 else
     # We assume that we are running on CI
     set -x
     ARTIFACT_DIR="artifacts"
     RUN_CMD="${ARTIFACT_DIR}/prod-test-driver"
     cleanup_artifacts=false
+    RESULT_FILE="${CI_PROJECT_DIR}/test-results.json"
 fi
 
 log "Artifacts will be stored in: ${ARTIFACT_DIR}"
