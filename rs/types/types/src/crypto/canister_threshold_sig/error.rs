@@ -54,10 +54,6 @@ pub enum ThresholdEcdsaGetPublicKeyError {
 impl_display_using_debug!(ThresholdEcdsaGetPublicKeyError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum IDkgTranscriptParsingError {}
-impl_display_using_debug!(IDkgTranscriptParsingError);
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgCreateTranscriptError {
     SerializationError {
         internal_error: String,
@@ -122,10 +118,6 @@ pub enum IDkgLoadTranscriptError {
 impl_display_using_debug!(IDkgLoadTranscriptError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum IDkgLoadTranscriptWithOpeningsError {}
-impl_display_using_debug!(IDkgLoadTranscriptWithOpeningsError);
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgCreateDealingError {
     NotADealer {
         node_id: NodeId,
@@ -167,10 +159,6 @@ pub enum IDkgVerifyDealingPrivateError {
 }
 impl_display_using_debug!(IDkgVerifyDealingPrivateError);
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum IDkgComplaintParsingError {}
-impl_display_using_debug!(IDkgComplaintParsingError);
-
 /// Occurs if verifying a complaint using `IDkgProtocol::verify_complaint` fails.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgVerifyComplaintError {
@@ -205,10 +193,6 @@ pub enum IDkgVerifyComplaintError {
     },
 }
 impl_display_using_debug!(IDkgVerifyComplaintError);
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum IDkgOpeningParsingError {}
-impl_display_using_debug!(IDkgOpeningParsingError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgVerifyOpeningError {}

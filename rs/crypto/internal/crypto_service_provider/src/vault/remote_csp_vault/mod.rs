@@ -22,7 +22,7 @@ use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use tecdsa::{
-    IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
+    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
     IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
 };
 use tokio::net::UnixListener;
@@ -145,6 +145,17 @@ pub trait TarpcCspVault {
         key_id: KeyId,
         transcript: IDkgTranscriptInternal,
     ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError>;
+
+    // Corresponds to `IDkgProtocolCspVault.idkg_load_transcript_with_openings`
+    #[allow(clippy::too_many_arguments)]
+    async fn idkg_load_transcript_with_openings(
+        dealings: BTreeMap<NodeIndex, IDkgDealingInternal>,
+        openings: BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
+        context_data: Vec<u8>,
+        receiver_index: NodeIndex,
+        key_id: KeyId,
+        transcript: IDkgTranscriptInternal,
+    ) -> Result<(), IDkgLoadTranscriptError>;
 
     // Corresponds to `IDkgProtocolCspVault.idkg_gen_mega_key_pair`
     async fn idkg_gen_mega_key_pair(

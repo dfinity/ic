@@ -8,7 +8,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateTranscriptError, IDkgLoadTranscriptError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgComplaint, IDkgDealers, IDkgMultiSignedDealing, IDkgReceivers, IDkgTranscript,
+    IDkgComplaint, IDkgDealers, IDkgMultiSignedDealing, IDkgOpening, IDkgReceivers, IDkgTranscript,
     IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType,
 };
 use ic_types::{NodeId, NodeIndex, RegistryVersion};
@@ -16,7 +16,7 @@ use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
 use tecdsa::{
-    IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
+    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
     IDkgTranscriptOperationInternal,
 };
 
@@ -83,8 +83,7 @@ pub fn load_transcript<C: CspIDkgProtocol>(
     let self_index = match transcript.receivers.position(*self_node_id) {
         Some(index) => index,
         None => {
-            // This isn't a receiver, so nothing to do.
-            return Ok(vec![]);
+            return Ok(vec![]); // This is not a receiver: nothing to do.
         }
     };
 
@@ -107,6 +106,72 @@ pub fn load_transcript<C: CspIDkgProtocol>(
     let complaints = complaints_from_internal_complaints(&internal_complaints, transcript)?;
 
     Ok(complaints)
+}
+
+pub fn load_transcript_with_openings<C: CspIDkgProtocol>(
+    csp_client: &C,
+    self_node_id: &NodeId,
+    registry: &Arc<dyn RegistryClient>,
+    transcript: &IDkgTranscript,
+    openings: &BTreeMap<IDkgComplaint, BTreeMap<NodeId, IDkgOpening>>,
+) -> Result<(), IDkgLoadTranscriptError> {
+    let self_index = match transcript.receivers.position(*self_node_id) {
+        Some(index) => index,
+        None => {
+            return Ok(()); // This is not a receiver: nothing to do.
+        }
+    };
+    ensure_sufficient_openings(openings, transcript)?;
+    ensure_matching_transcript_ids_and_dealer_ids(openings, transcript)?;
+
+    let self_mega_pubkey = get_mega_pubkey(self_node_id, registry, transcript.registry_version)?;
+
+    let internal_dealings =
+        internal_dealings_from_verified_dealings(&transcript.verified_dealings)?;
+    let internal_transcript = IDkgTranscriptInternal::try_from(transcript).map_err(|e| {
+        IDkgLoadTranscriptError::SerializationError {
+            internal_error: format!("{:?}", e),
+        }
+    })?;
+
+    let mut internal_openings = BTreeMap::new();
+    for (complaint, openings_by_opener_id) in openings {
+        let mut internal_openings_by_opener_index = BTreeMap::new();
+        for (opener_id, opening) in openings_by_opener_id {
+            let opener_index = transcript.receivers.position(*opener_id).ok_or_else(|| {
+                IDkgLoadTranscriptError::InvalidArguments {
+                    internal_error: format!(
+                        "invalid opener: node with ID {:?} is not a receiver",
+                        *opener_id
+                    ),
+                }
+            })?;
+            let internal_opening = CommitmentOpening::try_from(opening).map_err(|e| {
+                IDkgLoadTranscriptError::SerializationError {
+                    internal_error: format!("{:?}", e),
+                }
+            })?;
+            internal_openings_by_opener_index.insert(opener_index, internal_opening);
+        }
+        let dealer_index = transcript
+            .index_for_dealer_id(complaint.dealer_id)
+            .ok_or_else(|| IDkgLoadTranscriptError::InvalidArguments {
+                internal_error: format!(
+                    "invalid complaint: node with ID {:?} is not a dealer",
+                    complaint.dealer_id
+                ),
+            })?;
+        internal_openings.insert(dealer_index, internal_openings_by_opener_index);
+    }
+
+    csp_client.idkg_load_transcript_with_openings(
+        &internal_dealings,
+        &internal_openings,
+        &transcript.context_data(),
+        self_index,
+        &self_mega_pubkey,
+        &internal_transcript,
+    )
 }
 
 fn ensure_sufficient_dealings_collected(
@@ -333,4 +398,64 @@ fn complaints_from_internal_complaints(
             })
         })
         .collect()
+}
+
+fn ensure_sufficient_openings(
+    openings: &BTreeMap<IDkgComplaint, BTreeMap<NodeId, IDkgOpening>>,
+    transcript: &IDkgTranscript,
+) -> Result<(), IDkgLoadTranscriptError> {
+    let reconstruction_threshold_usize =
+        usize::try_from(transcript.reconstruction_threshold().get()).map_err(|e| {
+            IDkgLoadTranscriptError::InternalError {
+                internal_error: format!(
+                    "failed to convert reconstruction threshold to usize: {:?}",
+                    e
+                ),
+            }
+        })?;
+    if openings.values().len() < reconstruction_threshold_usize {
+        return Err(IDkgLoadTranscriptError::InvalidArguments {
+            internal_error: format!(
+                "insufficient number of openings: got {}, but required {}",
+                openings.len(),
+                reconstruction_threshold_usize
+            ),
+        });
+    }
+    Ok(())
+}
+
+fn ensure_matching_transcript_ids_and_dealer_ids(
+    openings: &BTreeMap<IDkgComplaint, BTreeMap<NodeId, IDkgOpening>>,
+    transcript: &IDkgTranscript,
+) -> Result<(), IDkgLoadTranscriptError> {
+    for (complaint, openings_by_opener_id) in openings {
+        if complaint.transcript_id != transcript.transcript_id {
+            return Err(IDkgLoadTranscriptError::InvalidArguments {
+                internal_error: format!(
+                    "mismatching transcript IDs in complaint ({:?}) and transcript ({:?})",
+                    complaint.transcript_id, transcript.transcript_id
+                ),
+            });
+        }
+        for opening in openings_by_opener_id.values() {
+            if opening.transcript_id != transcript.transcript_id {
+                return Err(IDkgLoadTranscriptError::InvalidArguments {
+                    internal_error: format!(
+                        "mismatching transcript IDs in opening ({:?}) and transcript ({:?})",
+                        opening.transcript_id, transcript.transcript_id
+                    ),
+                });
+            }
+            if opening.dealer_id != complaint.dealer_id {
+                return Err(IDkgLoadTranscriptError::InvalidArguments {
+                    internal_error: format!(
+                        "mismatching dealer IDs in opening ({:?}) and the complaint ({:?})",
+                        opening.dealer_id, complaint.dealer_id
+                    ),
+                });
+            }
+        }
+    }
+    Ok(())
 }

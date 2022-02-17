@@ -36,7 +36,7 @@ use std::path::Path;
 use tarpc::serde_transport;
 use tarpc::tokio_serde::formats::Bincode;
 use tecdsa::{
-    IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
+    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
     IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
 };
 use tokio::net::UnixStream;
@@ -344,6 +344,31 @@ impl IDkgProtocolCspVault for RemoteCspVault {
         block_on(self.tarpc_csp_client.idkg_load_transcript(
             tarpc::context::current(),
             dealings.clone(),
+            context_data.to_vec(),
+            receiver_index,
+            *key_id,
+            transcript.clone(),
+        ))
+        .unwrap_or_else(|e| {
+            Err(IDkgLoadTranscriptError::InternalError {
+                internal_error: e.to_string(),
+            })
+        })
+    }
+
+    fn idkg_load_transcript_with_openings(
+        &self,
+        dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+        openings: &BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
+        context_data: &[u8],
+        receiver_index: NodeIndex,
+        key_id: &KeyId,
+        transcript: &IDkgTranscriptInternal,
+    ) -> Result<(), IDkgLoadTranscriptError> {
+        block_on(self.tarpc_csp_client.idkg_load_transcript_with_openings(
+            tarpc::context::current(),
+            dealings.clone(),
+            openings.clone(),
             context_data.to_vec(),
             receiver_index,
             *key_id,

@@ -1240,18 +1240,6 @@ fn should_run_verify_opening() {
 }
 
 #[test]
-fn should_run_load_transcript_with_openings() {
-    let crypto_components = temp_crypto_components_for(&[NODE_1]);
-    let transcript = fake_transcript();
-    let mut openings = BTreeMap::new();
-    let complaint = fake_complaint();
-    openings.insert(complaint, BTreeMap::new());
-    let result =
-        crypto_for(NODE_1, &crypto_components).load_transcript_with_openings(&transcript, openings);
-    assert!(result.is_ok());
-}
-
-#[test]
 fn should_run_retain_active_transcripts() {
     let crypto_components = temp_crypto_components_for(&[NODE_1]);
     crypto_for(NODE_1, &crypto_components).retain_active_transcripts(&[]);

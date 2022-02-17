@@ -1,10 +1,7 @@
 //! Defines interactive distributed key generation (IDkg) types.
 use crate::consensus::ecdsa::EcdsaDealing;
 use crate::consensus::get_faults_tolerated;
-use crate::crypto::canister_threshold_sig::error::{
-    IDkgComplaintParsingError, IDkgOpeningParsingError, IDkgParamsValidationError,
-    IDkgTranscriptParsingError,
-};
+use crate::crypto::canister_threshold_sig::error::IDkgParamsValidationError;
 use crate::crypto::{AlgorithmId, CombinedMultiSigOf};
 use crate::{NodeId, NumberOfNodes, RegistryVersion};
 use ic_base_types::SubnetId;
@@ -490,14 +487,6 @@ pub enum IDkgTranscriptOperation {
 }
 
 impl IDkgTranscript {
-    pub fn deserialize(_data: &[u8]) -> Result<Self, IDkgTranscriptParsingError> {
-        unimplemented!("IDkgTranscript::deserialize");
-    }
-
-    pub fn serialize(&self) -> Vec<u8> {
-        unimplemented!("IDkgTranscript::serialize");
-    }
-
     pub fn get_type(&self) -> &IDkgTranscriptType {
         &self.transcript_type
     }
@@ -528,6 +517,16 @@ impl IDkgTranscript {
             .get(&index)
             .map(|signed_dealing| signed_dealing.dealing.idkg_dealing.dealer_id)
     }
+
+    /// Returns the index of the dealer with the given ID, or `None` if there is no such index.
+    pub fn index_for_dealer_id(&self, dealer_id: NodeId) -> Option<NodeIndex> {
+        self.verified_dealings
+            .iter()
+            .find(|(_index, signed_dealing)| {
+                signed_dealing.dealing.idkg_dealing.dealer_id == dealer_id
+            })
+            .map(|(index, _signed_dealing)| *index)
+    }
 }
 
 /// Dealing of an IDkg sharing.
@@ -554,32 +553,12 @@ pub struct IDkgComplaint {
     pub internal_complaint_raw: Vec<u8>,
 }
 
-impl IDkgComplaint {
-    pub fn deserialize(_data: &[u8]) -> Result<Self, IDkgComplaintParsingError> {
-        unimplemented!("IDkgComplaint::deserialize");
-    }
-
-    pub fn serialize(&self) -> Vec<u8> {
-        unimplemented!("IDkgComplaint::serialize");
-    }
-}
-
 /// Opening created in response to an IDkgComplaint.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 pub struct IDkgOpening {
     pub transcript_id: IDkgTranscriptId,
     pub dealer_id: NodeId,
     pub internal_opening_raw: Vec<u8>,
-}
-
-impl IDkgOpening {
-    pub fn deserialize(_data: &[u8]) -> Result<Self, IDkgOpeningParsingError> {
-        unimplemented!("IDkgOpening::deserialize");
-    }
-
-    pub fn serialize(&self) -> Vec<u8> {
-        unimplemented!("IDkgOpening::serialize");
-    }
 }
 
 fn number_of_nodes_from_usize(number: usize) -> Result<NumberOfNodes, ()> {

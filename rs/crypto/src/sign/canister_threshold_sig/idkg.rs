@@ -5,9 +5,8 @@ use ic_interfaces::crypto::IDkgProtocol;
 use ic_logger::{debug, new_logger};
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
-    IDkgLoadTranscriptWithOpeningsError, IDkgOpenTranscriptError, IDkgVerifyComplaintError,
-    IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError, IDkgVerifyOpeningError,
-    IDkgVerifyTranscriptError,
+    IDkgOpenTranscriptError, IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError,
+    IDkgVerifyDealingPublicError, IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgComplaint, IDkgDealing, IDkgMultiSignedDealing, IDkgOpening, IDkgTranscript,
@@ -235,8 +234,8 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
     fn load_transcript_with_openings(
         &self,
         transcript: &IDkgTranscript,
-        openings: BTreeMap<IDkgComplaint, BTreeMap<NodeId, IDkgOpening>>,
-    ) -> Result<(), IDkgLoadTranscriptWithOpeningsError> {
+        openings: &BTreeMap<IDkgComplaint, BTreeMap<NodeId, IDkgOpening>>,
+    ) -> Result<(), IDkgLoadTranscriptError> {
         let logger = new_logger!(&self.logger;
             crypto.trait_name => "IDkgProtocol",
             crypto.method_name => "load_transcript_with_openings",
@@ -244,7 +243,13 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         debug!(logger;
             crypto.description => "start",
         );
-        let result = mocks::load_transcript_with_openings(transcript.clone(), openings);
+        let result = transcript::load_transcript_with_openings(
+            &self.csp,
+            &self.node_id,
+            &self.registry_client,
+            transcript,
+            openings,
+        );
         debug!(logger;
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),

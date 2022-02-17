@@ -15,8 +15,9 @@ use rand::{CryptoRng, Rng};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use tecdsa::{
-    compute_secret_shares, create_dealing as tecdsa_create_dealing, gen_keypair,
-    generate_complaints, CommitmentOpeningBytes, EccCurveType, IDkgComplaintInternal,
+    compute_secret_shares, compute_secret_shares_with_openings,
+    create_dealing as tecdsa_create_dealing, gen_keypair, generate_complaints, CommitmentOpening,
+    CommitmentOpeningBytes, EccCurveType, IDkgComplaintInternal,
     IDkgComputeSecretSharesInternalError, IDkgDealingInternal, IDkgTranscriptInternal,
     IDkgTranscriptOperationInternal, MEGaKeySetK256Bytes, MEGaPrivateKey, MEGaPrivateKeyK256Bytes,
     MEGaPublicKey, MEGaPublicKeyK256Bytes, PolynomialCommitment, SecretShares, Seed,
@@ -112,6 +113,58 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
                 Err(IDkgLoadTranscriptError::InternalError {
                     internal_error: format!("{:?}", e),
                 })
+            }
+        }
+    }
+
+    fn idkg_load_transcript_with_openings(
+        &self,
+        dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+        openings: &BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
+        context_data: &[u8],
+        receiver_index: NodeIndex,
+        key_id: &KeyId,
+        transcript: &IDkgTranscriptInternal,
+    ) -> Result<(), IDkgLoadTranscriptError> {
+        // If secret share has already been stored in the C-SKS, nothing to do
+        if self
+            .commitment_opening_from_sks(transcript.combined_commitment.commitment())
+            .is_ok()
+        {
+            return Ok(());
+        }
+
+        let (public_key, private_key) = self.mega_keyset_from_sks(key_id)?;
+        let compute_secret_shares_with_openings_result = compute_secret_shares_with_openings(
+            dealings,
+            openings,
+            transcript,
+            context_data,
+            receiver_index,
+            &private_key,
+            &public_key,
+        );
+        match compute_secret_shares_with_openings_result {
+            Ok(opening) => {
+                let opening_bytes = CommitmentOpeningBytes::try_from(&opening).map_err(|e| {
+                    IDkgLoadTranscriptError::SerializationError {
+                        internal_error: format!("{:?}", e),
+                    }
+                })?;
+                self.store_canister_secret_key_or_panic(
+                    CspSecretKey::IDkgCommitmentOpening(opening_bytes),
+                    commitment_key_id(transcript.combined_commitment.commitment()),
+                );
+                Ok(())
+            }
+            Err(IDkgComputeSecretSharesInternalError::InconsistentCommitments) => {
+                Err(IDkgLoadTranscriptError::InvalidArguments {
+                    internal_error: "failed to compute secret shares with the provided openings"
+                        .to_string(),
+                })
+            }
+            Err(IDkgComputeSecretSharesInternalError::InternalError(e)) => {
+                Err(IDkgLoadTranscriptError::InvalidArguments { internal_error: e })
             }
         }
     }
