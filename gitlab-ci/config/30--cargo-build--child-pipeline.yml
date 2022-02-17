@@ -44,7 +44,7 @@ cargo-build-release-linux-native:
     - .rules-parent-pipeline-autorun-on-trigger
   image:
     # Use the docker image without nix-shell
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:2022-02-16-f97c4966-cd784dcbbc17bca44fb26f3f1f56450fce546b75"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:2022-02-17-70fb702a-22d99c7c67b7a3bb804f2d901083a2c0c86d648e"
   variables:
     BUILD_COMMAND: ""
     ARTIFACT_EXT: ""
@@ -86,7 +86,7 @@ cargo-build-canisters:
     ARTIFACT_EXT: ""
   image:
     # Use the docker image without nix-shell
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:2022-02-16-f97c4966-cd784dcbbc17bca44fb26f3f1f56450fce546b75"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:2022-02-17-70fb702a-22d99c7c67b7a3bb804f2d901083a2c0c86d648e"
   artifacts:
     paths:
       - "artifacts/canisters${ARTIFACT_EXT}/*"
@@ -122,7 +122,7 @@ dfx-build-release-linux:
       - artifacts/sdk-release/*
   image:
     # Use the docker image without nix-shell
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:2022-02-16-f97c4966-cd784dcbbc17bca44fb26f3f1f56450fce546b75"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:2022-02-17-70fb702a-22d99c7c67b7a3bb804f2d901083a2c0c86d648e"
   variables:
     BUILD_COMMAND: ""
     CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
