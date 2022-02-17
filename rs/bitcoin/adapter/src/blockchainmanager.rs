@@ -3,7 +3,7 @@ use crate::{
     common::{BlockHeight, MINIMUM_VERSION_NUMBER},
     config::Config,
     stream::{StreamEvent, StreamEventKind},
-    Channel, Command, HandleClientRequest, ProcessEventError,
+    Channel, Command, HandleClientRequest, HasHeight, ProcessEventError,
 };
 use bitcoin::{
     network::{
@@ -712,6 +712,13 @@ impl HandleClientRequest for BlockchainManager {
         }
 
         blocks_to_send
+    }
+}
+
+impl HasHeight for BlockchainManager {
+    /// Retrieve the active chain's tip and return its height.
+    fn get_height(&self) -> BlockHeight {
+        self.blockchain.get_active_chain_tip().height
     }
 }
 

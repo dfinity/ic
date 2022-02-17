@@ -82,7 +82,8 @@ impl Adapter {
 
         // After an event is dispatched, the managers `tick` method is called to process possible
         // outgoing messages.
-        self.connection_manager.tick(handle_stream);
+        self.connection_manager
+            .tick(&self.blockchain_manager, handle_stream);
         self.blockchain_manager.tick(&mut self.connection_manager);
         self.transaction_manager.tick(&mut self.connection_manager);
     }

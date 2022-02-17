@@ -28,8 +28,11 @@ use crate::{
     common::*,
     connection::{Connection, ConnectionConfig, ConnectionState, PingState},
     stream::{StreamConfig, StreamEvent, StreamEventKind},
-    Channel, ChannelError, Command, Config, ProcessEvent, ProcessEventError,
+    Channel, ChannelError, Command, Config, HasHeight, ProcessEvent, ProcessEventError,
 };
+
+/// How the adapter identifies itself to other Bitcoin nodes.
+const USER_AGENT: &str = "ic-btc-adapter";
 
 /// This constant represents the amount of time that is allowed for completing a version handshake
 /// in seconds. This is useful as some nodes do not respond in an orderly fashion with version
@@ -85,7 +88,7 @@ pub struct ConnectionManager {
     min_connections: usize,
     /// The minimum height that nodes should have in order to be a valid
     /// connection.
-    min_start_height: BlockHeight,
+    current_height: BlockHeight,
     /// This field contains connections that have connected are being managed.
     connections: HashMap<SocketAddr, Connection>,
     /// This field determines whether or not we will be using a SOCKS proxy to communicate with
@@ -115,7 +118,7 @@ impl ConnectionManager {
             magic: config.network.magic(),
             max_connections,
             min_connections,
-            min_start_height: 0,
+            current_height: 0,
             connections: HashMap::with_capacity(max_connections),
             rng: StdRng::from_entropy(),
             socks_proxy: config.socks_proxy,
@@ -140,10 +143,12 @@ impl ConnectionManager {
 
     /// This function contains the actions the must occur every time the connection
     /// manager must execute actions.
-    pub fn tick<T>(&mut self, handle: fn(StreamConfig) -> T)
+    pub fn tick<T>(&mut self, has_height_impl: &impl HasHeight, handle: fn(StreamConfig) -> T)
     where
         T: Future + Send + 'static,
     {
+        self.current_height = has_height_impl.get_height();
+
         if let Err(ConnectionManagerError::AddressBook(err)) = self.manage_connections(handle) {
             slog::error!(self.logger, "{}", err);
         }
@@ -321,25 +326,23 @@ impl ConnectionManager {
         }
     }
 
-    // TODO: ER-1493: The adapter should send a version that is more representative of the adapter's
-    // current state (block height, the machine's actual address, user agent).
     /// This function is used to send a `version` message to a specified connection.
     fn send_version(&mut self, addr: &SocketAddr) -> ConnectionManagerResult<()> {
         // https://en.bitcoin.it/wiki/Protocol_documentation#version
+        // Setup the sender field. This field is now ignored and most simply filled with dummy data per the documentation.
         let adapter_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
+        let sender = Address::new(&adapter_address, ServiceFlags::NONE);
+        // The adapter will not provide any services to the network, so the flags are set to none.
         let services = ServiceFlags::NONE;
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|_| ConnectionManagerError::SystemTimeIsBehind)?
             .as_secs();
-        // The node address that will be receiving this message
+
+        // The node address that will be receiving this message.
         let receiver = Address::new(addr, ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED);
-        // The node address that is sending this message (the adapter itself)
-        let sender = Address::new(&adapter_address, ServiceFlags::NONE);
         let nonce: u64 = self.rng.gen();
-        let user_agent = String::from("ic-btc-adapter");
-        // The height the adapter believes is the tip.
-        let start_height: i32 = 0;
+        let user_agent = String::from(USER_AGENT);
         let message = NetworkMessage::Version(VersionMessage::new(
             services,
             timestamp as i64,
@@ -347,7 +350,8 @@ impl ConnectionManager {
             sender,
             nonce,
             user_agent,
-            start_height,
+            // The height the adapter believes is the active tip.
+            self.current_height as i32,
         ));
 
         slog::debug!(self.logger, "Sending version to {}", addr);
@@ -554,7 +558,7 @@ impl ConnectionManager {
     /// * The services in the main message match the sender services.
     fn validate_received_version(&self, message: &VersionMessage) -> bool {
         validate_services(&message.services)
-            && message.start_height >= self.min_start_height as i32
+            && message.start_height >= self.current_height as i32
             && message.version >= MINIMUM_VERSION_NUMBER
     }
 }
@@ -658,6 +662,14 @@ mod test {
 
     use super::*;
 
+    struct HasHeightImpl;
+
+    impl HasHeight for HasHeightImpl {
+        fn get_height(&self) -> BlockHeight {
+            1
+        }
+    }
+
     #[test]
     fn validate_received_version_bad_version_number() {
         let socket_1 = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
@@ -704,7 +716,7 @@ mod test {
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let mut manager = ConnectionManager::new(&config, make_logger());
-        manager.min_start_height = 100_000;
+        manager.current_height = 100_000;
 
         assert!(!manager.validate_received_version(&version_message));
     }
@@ -789,7 +801,7 @@ mod test {
                                     Address::new(&address, services),
                                     0,
                                     String::from("user-agent"),
-                                    0,
+                                    1,
                                 ),
                             )),
                         })
@@ -821,16 +833,17 @@ mod test {
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let mut manager = ConnectionManager::new(&config, make_logger());
-
+        let has_height_impl = HasHeightImpl {};
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
         assert!(manager.initial_address_discovery);
+        assert_eq!(manager.current_height, 0);
         assert_eq!(
             manager.get_max_number_of_connections(),
             MAX_CONNECTIONS_DURING_ADDRESS_DISCOVERY
         );
 
         runtime.block_on(async {
-            manager.tick(simple_handle);
+            manager.tick(&has_height_impl, simple_handle);
             for i in 0..4u8 {
                 let event = manager
                     .stream_event_receiver
@@ -844,10 +857,11 @@ mod test {
                     // has been disconnected.
                     continue;
                 }
-                manager.tick(simple_handle);
+                manager.tick(&has_height_impl, simple_handle);
             }
         });
 
+        assert_eq!(manager.current_height, 1);
         assert_eq!(
             manager.address_book.size(),
             1,

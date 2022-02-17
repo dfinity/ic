@@ -48,6 +48,7 @@ mod proto {
 
 pub use adapter::Adapter;
 pub use cli::Cli;
+use common::BlockHeight;
 pub use config::Config;
 pub use rpc_server::spawn_grpc_server;
 use stream::StreamEvent;
@@ -104,4 +105,11 @@ pub trait HandleClientRequest {
     /// This method is used to return a block from the service that handles
     /// block storage that is a successor of the given block hashes.
     fn handle_client_request(&mut self, block_hashes: Vec<BlockHash>) -> Vec<Block>;
+}
+
+/// This trait provides an interface to anything that may need to get the
+/// active tip's height.
+pub trait HasHeight {
+    /// This function returns the active tip's height.
+    fn get_height(&self) -> BlockHeight;
 }
