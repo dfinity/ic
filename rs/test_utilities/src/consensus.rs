@@ -99,7 +99,7 @@ mock! {
 
         fn cup_with_protobuf(&self) -> CUPWithOriginalProtobuf;
 
-        fn get_subnet_membership_version(&self) -> RegistryVersion;
+        fn get_oldest_registry_version_in_use(&self) -> RegistryVersion;
     }
 }
 
