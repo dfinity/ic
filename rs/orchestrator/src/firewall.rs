@@ -17,9 +17,9 @@ enum DataSource {
     Registry,
 }
 
-/// Continuously checks the Registry to determine if there has been a change in
-/// the firewall config, and if so, updates the node's firewall rules file
-/// accordingly.
+/// Provides function to continuously check the Registry to determine if there
+/// has been a change in the firewall config, and if so, updates the node's
+/// firewall rules file accordingly.
 pub(crate) struct Firewall {
     registry: Arc<RegistryHelper>,
     metrics: Arc<OrchestratorMetrics>,
@@ -91,6 +91,7 @@ impl Firewall {
                         "Firewall configuration was not found in registry. Using previously fetched data. (Error from registry: {:?})",
                         e
                     ),
+                    // In case we have never found data in registry:
                     DataSource::Config => warn!(
                         every_n_seconds => 300,
                         self.logger,

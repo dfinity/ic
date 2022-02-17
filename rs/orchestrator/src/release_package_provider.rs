@@ -13,8 +13,8 @@ use std::time::Duration;
 const MAX_RELEASE_PACKAGES_TO_STORE: usize = 5;
 
 /// Release packages will not be deleted for this time after being created.
-/// Safeguards against deleting newly created packages before Node
-/// Manager has had the chance to start the binaries within them.
+/// Safeguards against deleting newly created packages before Orchestrator
+/// has had the chance to start the binaries within them.
 const MIN_RELEASE_PACKAGE_AGE: Duration = Duration::from_secs(60);
 
 /// Provides release packages, which contain binaries and config files used to
@@ -46,22 +46,20 @@ impl ReleasePackageProvider {
         }
     }
 
-    /// Return the release package associated with the given version
+    /// Downloads release package associated with the given version to
+    /// `[self.release_content_dir]/[replica_version]/base-os.tar.gz`.
     ///
-    /// If a dir already exists for the given replica version, we remove this
-    /// dir and all of its contents. This prevents issues where the dir
-    /// exists but contains unexpected files or is missing expected files.
+    /// Garbage collects old release packages while keeping
+    /// `self.MAX_RELEASE_PACKAGES_TO_STORE` youngest entries and files younger
+    /// than `self.MIN_RELEASE_PACKAGE_AGE`.
     ///
-    /// If no release package URL or hash is defined for the given replica
-    /// version's ReplicaVersionRecord, we attempt to construct a release
-    /// package from the record's replica and orchestrator URLs.
-    ///
-    /// Previously downloaded releases will be delete if redownload is set to
-    /// true.
+    /// Releases are downloaded using [`FileDownloader::download_file()`] which
+    /// returns immediately if a file with correct hash already exists.
     pub(crate) async fn download_release_package(
         &self,
         replica_version: ReplicaVersion,
     ) -> OrchestratorResult<()> {
+        // recent packages are persisted
         self.gc_release_packages();
         let version_dir = self.make_version_dir(&replica_version)?;
         let replica_version_record = self.registry.get_replica_version_record(
@@ -70,6 +68,7 @@ impl ReleasePackageProvider {
         )?;
         let tar_gz_path = version_dir.join("base-os.tar.gz");
         let start_time = std::time::Instant::now();
+        // returns immediately if the file already exists with the given hash
         self.file_downloader
             .download_file(
                 &replica_version_record.release_package_url,
@@ -87,10 +86,8 @@ impl ReleasePackageProvider {
         Ok(())
     }
 
-    /// Make a dir to store a release package for the given replica version
-    ///
-    /// Deletes the directory first if delete_first is setup, otherwise does
-    /// nothing.
+    /// Make a dir in `self.release_content_dir` to store a release package for
+    /// the given replica version See [`fs::create_dir_all()`]
     pub(crate) fn make_version_dir(
         &self,
         replica_version: &ReplicaVersion,

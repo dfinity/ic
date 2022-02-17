@@ -67,6 +67,8 @@ impl RegistryReplicator {
         local_store_path: PathBuf,
         poll_delay: Duration,
     ) -> Self {
+        // Initialize registry client and start polling/caching *local* store for
+        // updates
         let registry_client = Self::initialize_registry_client(create_data_provider(
             &DataProviderConfig::LocalStore(local_store_path.clone()),
             // We set the NNS public key to `None` and thus disable registry data signature
@@ -114,6 +116,8 @@ impl RegistryReplicator {
         Self::new(logger, node_id, local_store_path, poll_delay)
     }
 
+    /// initialize a new registry client and start polling the given data
+    /// provider for registry updates
     fn initialize_registry_client(
         data_provider: Arc<dyn RegistryDataProvider>,
     ) -> Arc<dyn RegistryClient> {
@@ -130,6 +134,7 @@ impl RegistryReplicator {
         registry_client
     }
 
+    /// Return NNS [`Url`]s and [`ThresholdSigPublicKey`] if configured
     pub fn parse_registry_access_info_from_config(
         &self,
         config: &Config,
@@ -190,12 +195,16 @@ impl RegistryReplicator {
                 .expect("Registry Local Store is empty and no NNS Public Key is provided.");
 
             let registry_canister = RegistryCanister::new(nns_urls);
+
+            // While the local registry changelog is empty, fill it by polling the registry
+            // canister. Retry every 30 seconds
             while self
                 .local_store
                 .get_changelog_since_version(ZERO_REGISTRY_VERSION)
                 .expect("Could not read registry local store.")
                 .is_empty()
             {
+                // Note, code duplicate in internal_state.rs poll()
                 match registry_canister
                     .get_certified_changes_since(0, &nns_pub_key)
                     .await
@@ -238,7 +247,7 @@ impl RegistryReplicator {
         }
     }
 
-    /// Calls `poll()` asynchronously and spawns a background task that
+    /// Calls [`Self::poll()`] asynchronously and spawns a background task that
     /// continuously polls for updates. Returns the result of the first poll.
     /// The background task is stopped when the object is dropped.
     pub async fn fetch_and_start_polling(

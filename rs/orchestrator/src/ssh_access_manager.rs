@@ -5,9 +5,9 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 
-/// Continuously checks the Registry to determine if there has been a change in
-/// the readonly and backup public key sets.If so, updates the accesss to the
-/// node accordingly.
+/// Provides function to continuously check the Registry to determine if there
+/// has been a change in the readonly and backup public key sets.If so, updates
+/// the accesss to the node accordingly.
 pub(crate) struct SshAccessManager {
     registry: Arc<RegistryHelper>,
     metrics: Arc<OrchestratorMetrics>,

@@ -50,10 +50,11 @@ impl CatchUpPackageProvider {
     }
 
     // Randomly selects a peer from the subnet and pulls its CUP. If this CUP is
-    // newer than the currently available one and it could be verified, then this CUP
-    // is returned. Note that it is acceptable to use a single peer, because CUPs are validated.
-    // If all `f` nodes serve unusable CUPs, we have a probability of 2/3 to hit
-    // a non-faulty node, so roughly on 4th attempt we should obtain the correct
+    // newer than the currently available one and it could be verified, then this
+    // CUP is returned. Else, `current_cup` is returned. Note that it is
+    // acceptable to use a single peer, because CUPs are validated. If all `f`
+    // nodes serve unusable CUPs, we have a probability of 2/3 to hit a
+    // non-faulty node, so roughly on 4th attempt we should obtain the correct
     // peer CUP.
     async fn get_peer_cup(
         &self,
@@ -82,7 +83,7 @@ impl CatchUpPackageProvider {
                     self.logger,
                     "Empty peer list for subnet {} at version {}", subnet_id, registry_version
                 );
-                return None;
+                return current_cup;
             }
             [(_, node_record), ..] => {
                 let http = node_record.clone().http?;

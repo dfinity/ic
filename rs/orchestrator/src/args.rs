@@ -32,8 +32,8 @@ pub struct OrchestratorArgs {
     #[structopt(long, parse(from_os_str))]
     pub(crate) ic_binary_directory: Option<PathBuf>,
 
-    /// If not set, the default listen addr (0.0.0.0:9091) will be used to
-    /// export metrics.
+    /// If not set, the default listen addr (0.0.0.0:[`PROMETHEUS_HTTP_PORT`])
+    /// will be used to export metrics.
     #[structopt(long)]
     pub(crate) metrics_listen_addr: Option<SocketAddr>,
 
@@ -53,8 +53,8 @@ pub struct OrchestratorArgs {
 }
 
 impl OrchestratorArgs {
-    /// Create the directories associated with this object if they don't already
-    /// exist
+    /// Create replica binary and CUP directories associated with this object if
+    /// they don't already exist
     pub(crate) fn create_dirs(&self) {
         if !&self.replica_binary_dir.exists() {
             fs::create_dir(&self.replica_binary_dir)
@@ -67,7 +67,8 @@ impl OrchestratorArgs {
         }
     }
 
-    /// Parse `self.replica_config_file`
+    /// Parse `self.replica_config_file` and persist in
+    /// [`TempDir`][tempfile::TempDir] "ic_config"
     pub(crate) fn get_ic_config(&self) -> Config {
         let tmpdir = tempfile::Builder::new()
             .prefix("ic_config")
@@ -81,6 +82,8 @@ impl OrchestratorArgs {
         Config::load_with_tmpdir(config_source, tmpdir)
     }
 
+    /// Return the configured metrics address or
+    /// "0.0.0.0:[`PROMETHEUS_HTTP_PORT`]" if none is set
     pub(crate) fn get_metrics_addr(&self) -> SocketAddr {
         self.metrics_listen_addr.unwrap_or_else(|| {
             SocketAddrV4::new("0.0.0.0".parse().expect("can't fail"), PROMETHEUS_HTTP_PORT).into()
