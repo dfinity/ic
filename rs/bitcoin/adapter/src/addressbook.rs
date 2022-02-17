@@ -78,6 +78,8 @@ impl AddressEntry {
 pub struct AddressBook {
     /// The DNS seeds provided by the configuration. These are used to build the seed queue.
     dns_seeds: Vec<String>,
+    /// This field controls whether or not the address book should accept IPv4 addresses.
+    ipv6_only: bool,
     /// The port that should be targeted based on the provided configuration.
     port: u16,
     /// This field contains the addresses that are already in use.
@@ -96,8 +98,6 @@ pub struct AddressBook {
 }
 
 impl AddressBook {
-    // TODO: ER-2122: Due to most replica nodes being IPv6 only, the adapter will need an
-    // IPv6 only mode.
     /// This function creates a base set of addresses to use based on the
     /// config provided. If no addresses found, a panic will be issued as a connection
     /// cannot be made without an address. If not enough addresses are found to
@@ -107,6 +107,7 @@ impl AddressBook {
         let known_addresses: HashSet<SocketAddr> = config.nodes.iter().cloned().collect();
         Self {
             dns_seeds: config.dns_seeds.clone(),
+            ipv6_only: config.ipv6_only,
             port: config.port(),
             active_addresses: HashSet::new(),
             known_addresses,
@@ -126,7 +127,11 @@ impl AddressBook {
             .iter()
             .map(|seed| format_addr(seed, self.port));
         let mut addresses = dns_seeds
-            .flat_map(|seed| seed.to_socket_addrs().map_or(vec![], |v| v.collect()))
+            .flat_map(|seed| {
+                seed.to_socket_addrs().map_or(vec![], |v| {
+                    v.filter(|addr| !self.ipv6_only || addr.is_ipv6()).collect()
+                })
+            })
             .collect::<Vec<SocketAddr>>();
         addresses.shuffle(&mut rng);
         self.seed_queue = addresses.into_iter().collect();
@@ -184,20 +189,26 @@ impl AddressBook {
                 break;
             }
 
-            if validate_services(&address.services) {
-                if let Ok(address) = address.socket_addr() {
-                    if *sender == address {
-                        continue;
-                    }
-                    self.add(address);
-                    added_addresses = added_addresses.saturating_add(1);
-                }
-            } else {
+            if !validate_services(&address.services) {
                 slog::debug!(
                     self.logger,
                     "Address {:?} does not provide the network or network limited services.",
                     address.address
                 );
+                continue;
+            }
+
+            if let Ok(addr) = address.socket_addr() {
+                // if the adapter is in IPv6-only mode, skip IPv4 addresses.
+                if self.ipv6_only && addr.is_ipv4() {
+                    continue;
+                }
+
+                if *sender == addr {
+                    continue;
+                }
+                self.add(addr);
+                added_addresses = added_addresses.saturating_add(1);
             }
         }
 
@@ -399,6 +410,38 @@ mod test {
         assert!(!book.known_addresses.contains(&socket_2));
     }
 
+    /// This function tests the `AddressBook::add_many(...)` function to ensure
+    /// IPv4 addresses are skipped when in IPv6 only mode.
+    #[test]
+    fn test_address_book_add_many_ipv6_only() {
+        let config = ConfigBuilder::new()
+            .with_dns_seeds(vec![String::from("127.0.0.1"), String::from("::1")])
+            .with_ipv6_only(true)
+            .build();
+        let mut book = AddressBook::new(&config, make_logger());
+
+        let seed = book.pop_seed().expect("there should be 1 seed");
+        let socket_1 = SocketAddr::from_str("127.0.0.1:8444").expect("bad address format");
+        let address_1 = Address::new(
+            &socket_1,
+            ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED,
+        );
+
+        let socket_2 = SocketAddr::from_str("[2401:3f00:1000:23:5000:7bff:fe3d:b81d]:8444")
+            .expect("bad address format");
+        let address_2 = Address::new(
+            &socket_2,
+            ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED,
+        );
+        let addresses = vec![(0, address_1), (0, address_2)];
+        assert_eq!(book.known_addresses.len(), 0);
+        book.add_many(seed.addr(), &addresses)
+            .expect("should not cause an error");
+        assert_eq!(book.known_addresses.len(), 1);
+        assert!(!book.known_addresses.contains(&socket_1));
+        assert!(book.known_addresses.contains(&socket_2));
+    }
+
     /// This function tests the `AddressBook::discard(...)` function to ensure
     /// the addresses are removed from the pool.
     #[test]
@@ -480,6 +523,26 @@ mod test {
             book.pop_seed(),
             Err(AddressBookError::NoSeedAddressesFound)
         ));
+    }
+
+    /// This function tests to ensure that when the seed queue is built and IPv6 only is enabled,
+    /// IPv4 seeds are filtered out.
+    #[test]
+    fn test_seeds_ipv6_only() {
+        let config = ConfigBuilder::new()
+            .with_network(Network::Signet)
+            .with_dns_seeds(vec![
+                String::from("127.0.0.1"),
+                String::from("[2401:3f00:1000:23:5000:7bff:fe3d:b81d]"),
+            ])
+            .with_ipv6_only(true)
+            .build();
+        let mut book = AddressBook::new(&config, make_logger());
+        assert_eq!(book.seed_queue.len(), 0);
+        book.build_seed_queue();
+        assert_eq!(book.seed_queue.len(), 1);
+        let addr_entry = book.pop_seed().expect("there should be 1 seed");
+        assert!(addr_entry.addr().is_ipv6());
     }
 
     /// This test exercises `AddressBook::clear(...)` by checking the following:

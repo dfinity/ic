@@ -12,7 +12,6 @@ pub enum CliError {
     #[error("An error occurred while deserialized the provided configuration: {0}")]
     Deserialize(String),
 }
-
 /// This struct is use to provide a command line interface to the adapter.
 #[derive(Clap)]
 #[clap(version = "0.0.0", author = "DFINITY team <team@dfinity.org>")]
@@ -20,6 +19,10 @@ pub enum CliError {
 pub struct Cli {
     /// This field contains the path to the config file.
     pub config: PathBuf,
+
+    /// This field represents if the adapter should ignore connecting to IPv4 addresses only.
+    #[clap(short, long)]
+    pub ipv6_only: bool,
 
     #[clap(short, long)]
     /// This field represents if the adapter should run in verbose.
@@ -45,7 +48,7 @@ impl Cli {
 }
 
 #[cfg(test)]
-mod test {
+pub mod test {
     use super::*;
     use bitcoin::Network;
     use std::str::FromStr;
@@ -55,6 +58,7 @@ mod test {
     fn test_cli_get_logging_level() {
         let cli = Cli {
             config: PathBuf::new(),
+            ipv6_only: false,
             verbose: false,
         };
 
@@ -62,6 +66,7 @@ mod test {
 
         let cli = Cli {
             config: PathBuf::new(),
+            ipv6_only: false,
             verbose: true,
         };
 
@@ -72,6 +77,7 @@ mod test {
     fn test_cli_get_config_error_opening_file() {
         let cli = Cli {
             config: PathBuf::from_str("/tmp/btc-adapter-test.json").expect("Bad file path string"),
+            ipv6_only: false,
             verbose: true,
         };
         let result = cli.get_config();
@@ -85,6 +91,7 @@ mod test {
         let cli = Cli {
             config: PathBuf::from_str("./src/json_configs/empty.config.json")
                 .expect("Bad file path string"),
+            ipv6_only: false,
             verbose: true,
         };
         let result = cli.get_config();
@@ -104,6 +111,7 @@ mod test {
         let cli = Cli {
             config: PathBuf::from_str("./src/json_configs/mainnet.config.json")
                 .expect("Bad file path string"),
+            ipv6_only: false,
             verbose: true,
         };
         let result = cli.get_config();
@@ -118,6 +126,7 @@ mod test {
         let cli = Cli {
             config: PathBuf::from_str("./src/json_configs/testnet.config.json")
                 .expect("Bad file path string"),
+            ipv6_only: false,
             verbose: true,
         };
         let result = cli.get_config();
