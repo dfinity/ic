@@ -49,6 +49,12 @@ in
 
         # for minimizing wasm
         pkgs.wabt
+
+        # For creating IC-OS config images and universal VM config images
+        # (./tests/create-universal-vm-config-image.sh)
+        pkgs.dosfstools
+        pkgs.mtools
+        pkgs.zstd
       ]
       ++ pkgs.lib.optionals pkgs.stdenv.isLinux [
         # provides the `taskset` command, which we use to fix core affinity in the shell
@@ -96,7 +102,6 @@ in
 
           if ! hash rustup 2>/dev/null; then
             echo >&2 "Warning: The IC nix-shell no longer provides rustc. Please install rustup using the instructions at https://rustup.rs/."
-            exit 1
           fi
         '';
     }
