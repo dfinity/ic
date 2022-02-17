@@ -51,7 +51,8 @@ The domain separator consists of a string (here "account-id") prepended by a sin
 Account balances change as the result of one of three operations: sending tokens from one account to another, minting tokens to an account and burning tokens from an account.  Each operation is triggered by a call to the ledger and is recorded as a transaction: in addition to the details of the operation a transaction includes a Memo field (a 64 bit number), and a timestamp indicating the time at which the transaction was created.
 
 
-Each transaction is included in a block (there is only one transaction per block) and blocks are "chained" by including in each block the hash of the previous block.  The position of a block in the ledger is called the block index;  counting starting from 0.
+Each transaction is included in a block (there is only one transaction per block) and blocks are "chained" by including in each block the hash of the previous block (details of how blocks are serialized are below).
+The position of a block in the ledger is called the block index (or block height);  counting starting from 0.
 
 
 The types used to represent these concepts are specified below in Candid syntax.
@@ -136,7 +137,7 @@ The inputs to the method are as follows:
 The ledger canister executes a `transfer` call as follows:
 
 * checks that the destination is a well-formed account identifier
-* checks that the transaction is recent enough (has been created within the last 24 hours) and is not "in the future" (`created_at_time` is in the future by more than an allowed time drift, specified by a parameter in the IC, currently set at 60 seconds)
+* checks that the transaction is recent enough (has been created within the last 24 hours) and is not "in the future" (that is, it checks that `created_at_time` is not in the future by more than an allowed time drift, specified by a parameter in the IC, currently set at 60 seconds)
 * calculates the source account (using the calling principal and `from_subaccount`) and checks that it holds more than amount+fee ICP
 * checks that `fee` matches the `standard_fee`  (currently, the standard fee is a fixed constant set to be 10^-4^ ICP, see below for an exception)
 * checks that an identical transaction has not been submitted in the last 24 hours
@@ -144,8 +145,76 @@ The ledger canister executes a `transfer` call as follows:
 * otherwise it
 ** substracts amount+fee from the source account
 ** adds amount to the destination account
-** adds transaction `(Send(from, to, amount, fee), memo, created_at_time)` to the ledger and returns the height of the block containing the transaction.
+** adds transaction `(Transfer(from, to, amount, fee), memo, created_at_time)` to the ledger:
+*** it creates a block, containing the transaction, sets the `parent_hash` in the block to be `last_hash` (essentially, the hash of the last block in the ledger), and `timestamp` in the block to be the system timestamp;
+*** it calculates `last_hash` as the hash of the encoding of the block newly created (see below for how the encoding is calculated);
+*** it appends the block to the ledger and returns its height.
 
+==== Chaining ledger blocks ====
+As explained above, the blocks contained in the ledger are chained (by including in a block the hash of the previous block). This enables authenticating the entire ledger by only signing its last block.
+
+In this section we describe the details of the chaining, by specifying how a block is serialized before it is hashed.
+
+At a high level, the block is serialized using protobuf. However, since protobuf encodings are not necessarily deterministic (and are also not guaranteed to stay fixed) here we provide the specific encoding used, which is guaranteed not to change.
+
+The definition below is recursive. It uses `.` to denote concatenation of byte strings, and two functions that are not defined here, but are well established: we write `len(x)` for the length of bytestring `x`.
+We also write `varint(s)`, for the variable length encoding of integer `s`.  The precise definition of this function can be found in the https://developers.google.com/protocol-buffers/docs/encoding#varints[protobuf documentation].
+----
+encoded_block(Block{parent_hash, timestamp, transaction}) :=
+    let encoded_transaction = encode_transaction(transaction)
+    in encode_hash(parent_hash) .
+       12 0a 08 . varint(timestamp) .
+       1a . len(encoded_transaction) . encoded_transaction
+
+encode_hash(Nil) := Nil
+encode_hash(hash) := 0a 22 0a 20 . hash
+
+encode_transaction(Transaction{operation, memo, created_at_time}) :=
+    let encoded_operation = encode_operation(operation)
+        encoded_memo = encode_memo(memo)
+        encoded_timestamp = encode_timestamp(created_at_time)
+    in encoded_operation .
+       22 . len(encoded_memo) . encoded_memo .
+       32 . len(encoded_timestamp) . encoded_timestamp
+
+encode_memo(Nil) := Nil
+encode_memo(Memo{memo}) := 08 . varint(memo)
+
+encode_timestamp(Timestamp{timestamp_nanos}) := 08. varint(timestamp_nanos)
+
+encode_operation(Burn{AccountIdentifier{from}, Tokens{amount}}) :=
+    // identifiers can be 28 or 32 bytes (4 bytes checksum + 28 bytes hash)
+    let encoded_account_identifier = 0a . len(from) . varint(from)
+        encoded_amount = 08 . varint(amount)
+        encoded_burn = 0a . len(encoded_account_identifier) . encoded_account_identifier .
+                       1a . len(encoded_amount) . encoded_amount
+    in 0a . len(encoded_burn) . encoded_burn
+
+encode_operation(Mint{AccountIdentifier{to}, Tokens{amount}}) :=
+    // identifiers can be 28 or 32 bytes (4 bytes checksum + 28 bytes hash)
+    let encoded_account_identifier = 0a . len(to) . to
+        encoded_amount = 08 . varint(amount)
+        encoded_mint = 12 . len(encoded_account_identifier) . encoded_account_identifier .
+                       1a . len(encoded_amount) . encoded_amount
+    in 12 . len(encoded_mint) . encoded_mint
+
+encode_operation(Transfer{AccountIdentifier{from},
+                           AccountIdentifier{to},
+                           Tokens{amount},
+                           Tokens{fee}}) :=
+    let encoded_from = 0a . len(from) . from
+        encoded_to = 0a . len(to) . to
+        encoded_amount = 08 . varint(amount)
+        encoded_fee = 08 . varint(fee)
+        encoded_transfer = 0a . len(encoded_from) . encoded_from .
+                           12 . len(encoded_to) . encoded_to .
+                           1a . len(encoded_amount) . encoded_amount .
+                           22 . len(encoded_fee) . encoded_fee
+    in 1a . len(encoded_transfer) . encoded_transfer
+
+
+
+----
 
 
 ==== Burning and minting tokens ====
