@@ -1,5 +1,6 @@
 use crate::*;
 use core::fmt::{self, Debug};
+use ic_types::crypto::canister_threshold_sig::idkg::IDkgOpening;
 use rand_core::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
@@ -326,6 +327,16 @@ impl CommitmentOpening {
             }
         }
     }
+
+    pub fn serialize(&self) -> ThresholdEcdsaResult<Vec<u8>> {
+        serde_cbor::to_vec(self)
+            .map_err(|e| ThresholdEcdsaError::SerializationError(format!("{}", e)))
+    }
+
+    pub fn deserialize(bytes: &[u8]) -> ThresholdEcdsaResult<Self> {
+        serde_cbor::from_slice::<Self>(bytes)
+            .map_err(|e| ThresholdEcdsaError::SerializationError(format!("{}", e)))
+    }
 }
 
 impl Debug for CommitmentOpening {
@@ -366,6 +377,14 @@ impl TryFrom<&CommitmentOpeningBytes> for CommitmentOpening {
                 EccScalar::try_from(scalar_bytes_2)?,
             )),
         }
+    }
+}
+
+impl TryFrom<&IDkgOpening> for CommitmentOpening {
+    type Error = ThresholdEcdsaError;
+
+    fn try_from(idkg_opening: &IDkgOpening) -> Result<Self, ThresholdEcdsaError> {
+        Self::deserialize(&idkg_opening.internal_opening_raw)
     }
 }
 

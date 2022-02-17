@@ -9,7 +9,7 @@ use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeIndex, NumberOfNodes, Randomness};
 use std::collections::BTreeMap;
 use tecdsa::{
-    IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
+    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
     IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaCombinedSigInternal,
     ThresholdEcdsaSigShareInternal,
 };
@@ -50,6 +50,18 @@ pub trait CspIDkgProtocol {
         public_key: &MEGaPublicKey,
         transcript: &IDkgTranscriptInternal,
     ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError>;
+
+    /// Computes a secret share from a transcript and openings, and stores it
+    /// in the canister secret key store.
+    fn idkg_load_transcript_with_openings(
+        &self,
+        dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+        openings: &BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
+        context_data: &[u8],
+        receiver_index: NodeIndex,
+        public_key: &MEGaPublicKey,
+        transcript: &IDkgTranscriptInternal,
+    ) -> Result<(), IDkgLoadTranscriptError>;
 
     /// Generate a MEGa key pair for encrypting threshold key shares in transmission
     /// from dealers to receivers.

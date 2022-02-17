@@ -31,6 +31,29 @@ fn should_return_correct_dealer_id_for_index() {
     assert_eq!(transcript.dealer_id_for_index(4), None);
 }
 
+#[test]
+fn should_return_correct_index_for_dealer_id() {
+    let transcript = IDkgTranscript {
+        verified_dealings: btreemap! {
+            0 => multi_signed_dealing(node_id(42)),
+            1 => multi_signed_dealing(node_id(43)),
+            3 => multi_signed_dealing(node_id(45))
+        },
+        transcript_id: dummy_transcript_id(),
+        receivers: dummy_receivers(),
+        registry_version: dummy_registry_version(),
+        transcript_type: dummy_transcript_type(),
+        algorithm_id: dummy_algorithm_id(),
+        internal_transcript_raw: dummy_internal_transcript_raw(),
+    };
+
+    assert_eq!(transcript.index_for_dealer_id(node_id(42)), Some(0));
+    assert_eq!(transcript.index_for_dealer_id(node_id(43)), Some(1));
+    assert_eq!(transcript.index_for_dealer_id(node_id(44)), None);
+    assert_eq!(transcript.index_for_dealer_id(node_id(45)), Some(3));
+    assert_eq!(transcript.index_for_dealer_id(node_id(46)), None);
+}
+
 fn multi_signed_dealing(dealer_id: NodeId) -> IDkgMultiSignedDealing {
     let ecdsa_dealing = EcdsaDealing {
         requested_height: dummy_height(),

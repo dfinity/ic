@@ -735,7 +735,7 @@ impl EcdsaTranscriptLoader for EcdsaComplaintHandlerImpl {
             }
         }
         // TODO: check num openings satisfies the threshold
-        match IDkgProtocol::load_transcript_with_openings(&*self.crypto, transcript, openings) {
+        match IDkgProtocol::load_transcript_with_openings(&*self.crypto, transcript, &openings) {
             Ok(()) => {
                 self.metrics
                     .complaint_metrics_inc("transcripts_loaded_with_openings");

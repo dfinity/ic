@@ -19,7 +19,7 @@ use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use tecdsa::{
-    IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
+    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
     IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
 };
 
@@ -439,6 +439,17 @@ pub trait IDkgProtocolCspVault {
         key_id: &KeyId,
         transcript: &IDkgTranscriptInternal,
     ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError>;
+
+    /// See [`CspIDkgProtocol::idkg_load_transcript_with_openings`].
+    fn idkg_load_transcript_with_openings(
+        &self,
+        dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+        openings: &BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
+        context_data: &[u8],
+        receiver_index: NodeIndex,
+        key_id: &KeyId,
+        transcript: &IDkgTranscriptInternal,
+    ) -> Result<(), IDkgLoadTranscriptError>;
 
     /// Generate a MEGa keypair, for encrypting/decrypting IDkg dealing shares.
     fn idkg_gen_mega_key_pair(

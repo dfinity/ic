@@ -26,8 +26,8 @@ use rand::{CryptoRng, Rng};
 use std::collections::BTreeMap;
 use tecdsa::{
     combine_sig_shares as tecdsa_combine_sig_shares, create_transcript as tecdsa_create_transcript,
-    verify_complaint as tecdsa_verify_complaint, IDkgComplaintInternal, IDkgDealingInternal,
-    IDkgTranscriptInternal, IDkgTranscriptOperationInternal, MEGaPublicKey,
+    verify_complaint as tecdsa_verify_complaint, CommitmentOpening, IDkgComplaintInternal,
+    IDkgDealingInternal, IDkgTranscriptInternal, IDkgTranscriptOperationInternal, MEGaPublicKey,
     ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSigShareInternal,
 };
 
@@ -94,6 +94,29 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp
 
         self.csp_vault.idkg_load_transcript(
             dealings,
+            context_data,
+            receiver_index,
+            &key_id,
+            transcript,
+        )
+    }
+
+    fn idkg_load_transcript_with_openings(
+        &self,
+        dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+        openings: &BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
+        context_data: &[u8],
+        receiver_index: NodeIndex,
+        public_key: &MEGaPublicKey,
+        transcript: &IDkgTranscriptInternal,
+    ) -> Result<(), IDkgLoadTranscriptError> {
+        debug!(self.logger; crypto.method_name => "idkg_load_transcript_with_openings");
+
+        let key_id = mega_key_id(public_key);
+
+        self.csp_vault.idkg_load_transcript_with_openings(
+            dealings,
+            openings,
             context_data,
             receiver_index,
             &key_id,

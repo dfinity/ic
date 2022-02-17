@@ -49,7 +49,7 @@ use mockall::*;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
 use tecdsa::{
-    IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
+    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
     IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaCombinedSigInternal,
     ThresholdEcdsaSigShareInternal,
 };
@@ -392,6 +392,16 @@ mock! {
             public_key: &MEGaPublicKey,
             transcript: &IDkgTranscriptInternal,
         ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError>;
+
+        fn idkg_load_transcript_with_openings(
+            &self,
+            dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+            openings: &BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
+            context_data: &[u8],
+            receiver_index: NodeIndex,
+            public_key: &MEGaPublicKey,
+            transcript: &IDkgTranscriptInternal,
+        ) -> Result<(), IDkgLoadTranscriptError>;
 
         fn idkg_create_mega_key_pair(&mut self, algorithm_id: AlgorithmId) -> Result<MEGaPublicKey, CspCreateMEGaKeyError>;
 

@@ -42,7 +42,7 @@ use tarpc::server::Serve;
 use tarpc::tokio_serde::formats::Bincode;
 use tarpc::{context, serde_transport, server::Channel};
 use tecdsa::{
-    IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
+    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
     IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
 };
 use tokio::net::UnixListener;
@@ -250,6 +250,26 @@ impl TarpcCspVault for TarpcCspVaultServerWorker {
     ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError> {
         self.local_csp_vault.idkg_load_transcript(
             &dealings,
+            &context_data,
+            receiver_index,
+            &key_id,
+            &transcript,
+        )
+    }
+
+    async fn idkg_load_transcript_with_openings(
+        self,
+        _: context::Context,
+        dealings: BTreeMap<NodeIndex, IDkgDealingInternal>,
+        openings: BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
+        context_data: Vec<u8>,
+        receiver_index: NodeIndex,
+        key_id: KeyId,
+        transcript: IDkgTranscriptInternal,
+    ) -> Result<(), IDkgLoadTranscriptError> {
+        self.local_csp_vault.idkg_load_transcript_with_openings(
+            &dealings,
+            &openings,
             &context_data,
             receiver_index,
             &key_id,
