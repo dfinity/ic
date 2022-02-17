@@ -1,4 +1,4 @@
-use tecdsa::*;
+use ic_crypto_internal_threshold_sig_ecdsa::*;
 
 #[test]
 fn poly_a_constant_poly_is_constant() -> ThresholdEcdsaResult<()> {

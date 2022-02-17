@@ -1,4 +1,4 @@
-use tecdsa::*;
+use ic_crypto_internal_threshold_sig_ecdsa::*;
 
 #[test]
 fn test_random_oracle_stability() -> ThresholdEcdsaResult<()> {

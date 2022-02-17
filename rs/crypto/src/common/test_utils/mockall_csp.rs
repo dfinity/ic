@@ -27,6 +27,11 @@ use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgCreateReshareTranscriptError, CspDkgCreateTranscriptError, CspDkgLoadPrivateKeyError,
     CspDkgUpdateFsEpochError, CspDkgVerifyDealingError, CspDkgVerifyReshareDealingError,
 };
+use ic_crypto_internal_threshold_sig_ecdsa::{
+    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
+    IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaCombinedSigInternal,
+    ThresholdEcdsaSigShareInternal,
+};
 use ic_crypto_internal_types::sign::threshold_sig::dkg::encryption_public_key::CspEncryptionPublicKey;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey, CspNiDkgDealing, CspNiDkgTranscript, Epoch,
@@ -48,11 +53,6 @@ use mockall::predicate::*;
 use mockall::*;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
-use tecdsa::{
-    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
-    IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaCombinedSigInternal,
-    ThresholdEcdsaSigShareInternal,
-};
 use tokio::net::TcpStream;
 
 mock! {

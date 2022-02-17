@@ -13,6 +13,10 @@ use ic_crypto_internal_threshold_sig_bls12381::dkg::secp256k1::types::{
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::types as ni_dkg_types;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::types::FsEncryptionSecretKey;
 use ic_crypto_internal_threshold_sig_bls12381::types as threshold_sig_types;
+use ic_crypto_internal_threshold_sig_ecdsa::{
+    CommitmentOpeningBytes, EccCurveType, EccScalarBytes, MEGaKeySetK256Bytes, MEGaPrivateKey,
+    MEGaPrivateKeyK256Bytes, MEGaPublicKeyK256Bytes,
+};
 use ic_crypto_internal_tls::keygen::TlsEd25519SecretKeyDerBytes;
 use ic_crypto_internal_types::encrypt::forward_secure::groth20_bls12_381::{
     FsEncryptionPop, FsEncryptionPublicKey,
@@ -20,10 +24,6 @@ use ic_crypto_internal_types::encrypt::forward_secure::groth20_bls12_381::{
 use ic_crypto_secrets_containers::SecretArray;
 use rand::Rng;
 use std::convert::TryFrom;
-use tecdsa::{
-    CommitmentOpeningBytes, EccCurveType, EccScalarBytes, MEGaKeySetK256Bytes, MEGaPrivateKey,
-    MEGaPrivateKeyK256Bytes, MEGaPublicKeyK256Bytes,
-};
 
 impl CspSecretKey {
     /// This function is only used for tests

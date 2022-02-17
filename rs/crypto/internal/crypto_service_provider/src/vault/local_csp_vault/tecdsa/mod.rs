@@ -3,16 +3,16 @@ use crate::types::CspSecretKey;
 use crate::vault::api::ThresholdEcdsaSignerCspVault;
 use crate::vault::local_csp_vault::idkg::commitment_key_id;
 use crate::vault::local_csp_vault::LocalCspVault;
+use ic_crypto_internal_threshold_sig_ecdsa::{
+    sign_share as tecdsa_sign_share, CombinedCommitment, CommitmentOpening, IDkgTranscriptInternal,
+    ThresholdEcdsaSigShareInternal,
+};
 use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaSignShareError;
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::AlgorithmId;
 use ic_types::Randomness;
 use rand::{CryptoRng, Rng};
 use std::convert::TryFrom;
-use tecdsa::{
-    sign_share as tecdsa_sign_share, CombinedCommitment, CommitmentOpening, IDkgTranscriptInternal,
-    ThresholdEcdsaSigShareInternal,
-};
 
 impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
     ThresholdEcdsaSignerCspVault for LocalCspVault<R, S, C>

@@ -4,6 +4,14 @@ use crate::secret_key_store::SecretKeyStore;
 use crate::types::CspSecretKey;
 use crate::vault::api::IDkgProtocolCspVault;
 use crate::vault::local_csp_vault::LocalCspVault;
+use ic_crypto_internal_threshold_sig_ecdsa::{
+    compute_secret_shares, compute_secret_shares_with_openings,
+    create_dealing as tecdsa_create_dealing, gen_keypair, generate_complaints, CommitmentOpening,
+    CommitmentOpeningBytes, EccCurveType, IDkgComplaintInternal,
+    IDkgComputeSecretSharesInternalError, IDkgDealingInternal, IDkgTranscriptInternal,
+    IDkgTranscriptOperationInternal, MEGaKeySetK256Bytes, MEGaPrivateKey, MEGaPrivateKeyK256Bytes,
+    MEGaPublicKey, MEGaPublicKeyK256Bytes, PolynomialCommitment, SecretShares, Seed,
+};
 use ic_crypto_sha::{DomainSeparationContext, Sha256};
 use ic_logger::debug;
 use ic_types::crypto::canister_threshold_sig::error::{
@@ -14,14 +22,6 @@ use ic_types::{NodeIndex, NumberOfNodes, Randomness};
 use rand::{CryptoRng, Rng};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
-use tecdsa::{
-    compute_secret_shares, compute_secret_shares_with_openings,
-    create_dealing as tecdsa_create_dealing, gen_keypair, generate_complaints, CommitmentOpening,
-    CommitmentOpeningBytes, EccCurveType, IDkgComplaintInternal,
-    IDkgComputeSecretSharesInternalError, IDkgDealingInternal, IDkgTranscriptInternal,
-    IDkgTranscriptOperationInternal, MEGaKeySetK256Bytes, MEGaPrivateKey, MEGaPrivateKeyK256Bytes,
-    MEGaPublicKey, MEGaPublicKeyK256Bytes, PolynomialCommitment, SecretShares, Seed,
-};
 
 const COMMITMENT_KEY_ID_DOMAIN: &str = "ic-key-id-idkg-commitment";
 

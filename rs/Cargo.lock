@@ -3861,6 +3861,7 @@ dependencies = [
  "ic-crypto-internal-multi-sig-bls12381",
  "ic-crypto-internal-test-vectors",
  "ic-crypto-internal-threshold-sig-bls12381",
+ "ic-crypto-internal-threshold-sig-ecdsa",
  "ic-crypto-internal-types",
  "ic-crypto-sha",
  "ic-crypto-test-utils",
@@ -3909,7 +3910,6 @@ dependencies = [
  "slog-scope",
  "strum 0.23.0",
  "strum_macros 0.23.1",
- "tecdsa",
  "tempfile",
  "tokio",
  "tokio-openssl",
@@ -4115,6 +4115,7 @@ dependencies = [
  "ic-crypto-internal-multi-sig-bls12381",
  "ic-crypto-internal-test-vectors",
  "ic-crypto-internal-threshold-sig-bls12381",
+ "ic-crypto-internal-threshold-sig-ecdsa",
  "ic-crypto-internal-tls",
  "ic-crypto-internal-types",
  "ic-crypto-secrets-containers",
@@ -4146,7 +4147,6 @@ dependencies = [
  "strum 0.23.0",
  "strum_macros 0.23.1",
  "tarpc",
- "tecdsa",
  "tempfile",
  "tokio",
  "tokio-openssl",
@@ -4282,6 +4282,32 @@ dependencies = [
  "serde_json",
  "simple_asn1 0.5.4",
  "strum_macros 0.23.1",
+ "zeroize",
+]
+
+[[package]]
+name = "ic-crypto-internal-threshold-sig-ecdsa"
+version = "0.1.0"
+dependencies = [
+ "bip32",
+ "criterion",
+ "hex",
+ "hex-literal 0.3.3",
+ "ic-crypto-internal-hmac",
+ "ic-crypto-internal-types",
+ "ic-crypto-sha",
+ "ic-types 0.8.0",
+ "k256 0.10.2",
+ "lazy_static",
+ "p256",
+ "paste 1.0.5",
+ "rand 0.7.3",
+ "rand_chacha 0.2.2",
+ "rand_core 0.5.1",
+ "serde",
+ "serde_cbor",
+ "sha2 0.9.9",
+ "subtle",
  "zeroize",
 ]
 
@@ -10849,32 +10875,6 @@ dependencies = [
  "proc-macro2 1.0.27",
  "quote 1.0.7",
  "syn 1.0.80",
-]
-
-[[package]]
-name = "tecdsa"
-version = "0.1.0"
-dependencies = [
- "bip32",
- "criterion",
- "hex",
- "hex-literal 0.3.3",
- "ic-crypto-internal-hmac",
- "ic-crypto-internal-types",
- "ic-crypto-sha",
- "ic-types 0.8.0",
- "k256 0.10.2",
- "lazy_static",
- "p256",
- "paste 1.0.5",
- "rand 0.7.3",
- "rand_chacha 0.2.2",
- "rand_core 0.5.1",
- "serde",
- "serde_cbor",
- "sha2 0.9.9",
- "subtle",
- "zeroize",
 ]
 
 [[package]]

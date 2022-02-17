@@ -1,11 +1,11 @@
 use super::*;
 use crate::sign::canister_threshold_sig::idkg::utils::{get_mega_pubkey, MegaKeyFromRegistryError};
 use ic_crypto_internal_csp::api::CspIDkgProtocol;
+use ic_crypto_internal_threshold_sig_ecdsa::{IDkgComplaintInternal, IDkgDealingInternal};
 use ic_interfaces::registry::RegistryClient;
 use ic_types::NodeIndex;
 use std::convert::TryFrom;
 use std::sync::Arc;
-use tecdsa::{IDkgComplaintInternal, IDkgDealingInternal};
 
 #[cfg(test)]
 mod tests;

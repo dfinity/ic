@@ -1,5 +1,5 @@
+use ic_crypto_internal_threshold_sig_ecdsa::*;
 use rand::Rng;
-use tecdsa::*;
 
 #[test]
 fn should_zk_equal_openings_proof_work() -> ThresholdEcdsaResult<()> {

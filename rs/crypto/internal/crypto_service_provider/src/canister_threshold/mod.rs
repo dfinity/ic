@@ -13,6 +13,12 @@ use crate::api::{
 use crate::keygen::mega_key_id;
 use crate::secret_key_store::SecretKeyStore;
 use crate::Csp;
+use ic_crypto_internal_threshold_sig_ecdsa::{
+    combine_sig_shares as tecdsa_combine_sig_shares, create_transcript as tecdsa_create_transcript,
+    verify_complaint as tecdsa_verify_complaint, CommitmentOpening, IDkgComplaintInternal,
+    IDkgDealingInternal, IDkgTranscriptInternal, IDkgTranscriptOperationInternal, MEGaPublicKey,
+    ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSigShareInternal,
+};
 use ic_crypto_internal_types::scope::{ConstScope, Scope};
 use ic_logger::debug;
 use ic_types::crypto::canister_threshold_sig::error::{
@@ -24,12 +30,6 @@ use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeIndex, NumberOfNodes, Randomness};
 use rand::{CryptoRng, Rng};
 use std::collections::BTreeMap;
-use tecdsa::{
-    combine_sig_shares as tecdsa_combine_sig_shares, create_transcript as tecdsa_create_transcript,
-    verify_complaint as tecdsa_verify_complaint, CommitmentOpening, IDkgComplaintInternal,
-    IDkgDealingInternal, IDkgTranscriptInternal, IDkgTranscriptOperationInternal, MEGaPublicKey,
-    ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSigShareInternal,
-};
 
 pub const IDKG_MEGA_SCOPE: Scope = Scope::Const(ConstScope::IDkgMEGaEncryptionKeys);
 

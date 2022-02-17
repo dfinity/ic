@@ -3,6 +3,10 @@ use crate::sign::canister_threshold_sig::idkg::utils::get_mega_pubkey;
 use crate::sign::multi_sig::MultiSigVerifierInternal;
 use ic_crypto_internal_csp::api::CspIDkgProtocol;
 use ic_crypto_internal_csp::api::CspSigner;
+use ic_crypto_internal_threshold_sig_ecdsa::{
+    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
+    IDkgTranscriptOperationInternal,
+};
 use ic_interfaces::registry::RegistryClient;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateTranscriptError, IDkgLoadTranscriptError,
@@ -15,10 +19,6 @@ use ic_types::{NodeId, NodeIndex, RegistryVersion};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
-use tecdsa::{
-    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
-    IDkgTranscriptOperationInternal,
-};
 
 pub fn create_transcript<C: CspIDkgProtocol + CspSigner>(
     csp_client: &C,

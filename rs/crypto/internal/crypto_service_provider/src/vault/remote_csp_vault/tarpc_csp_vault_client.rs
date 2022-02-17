@@ -16,6 +16,10 @@ use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgCreateFsKeyError, CspDkgCreateReshareDealingError, CspDkgLoadPrivateKeyError,
     CspDkgUpdateFsEpochError,
 };
+use ic_crypto_internal_threshold_sig_ecdsa::{
+    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
+    IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
+};
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
 };
@@ -35,10 +39,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use tarpc::serde_transport;
 use tarpc::tokio_serde::formats::Bincode;
-use tecdsa::{
-    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
-    IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
-};
 use tokio::net::UnixStream;
 use tokio_util::codec::length_delimited::LengthDelimitedCodec;
 

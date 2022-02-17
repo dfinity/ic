@@ -1,4 +1,4 @@
-use tecdsa::*;
+use ic_crypto_internal_threshold_sig_ecdsa::*;
 
 fn xmd_check(msg: &str, dst: &str, want: &str) {
     let x = expand_message_xmd(msg.as_bytes(), dst.as_bytes(), want.len() / 2).expect("XMD failed");

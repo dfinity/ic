@@ -1,7 +1,7 @@
 #![no_main]
 use libfuzzer_sys::fuzz_target;
 
-use tecdsa::*;
+use ic_crypto_internal_threshold_sig_ecdsa::*;
 
 // hash2curve has two possible implementations of sqrt_ratio
 // one generic and one that is optimized for p == 3 (mod 4)

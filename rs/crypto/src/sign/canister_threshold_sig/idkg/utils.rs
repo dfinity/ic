@@ -5,6 +5,7 @@ mod tests;
 mod errors;
 pub use errors::*;
 
+use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, MEGaPublicKey};
 use ic_interfaces::registry::RegistryClient;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
@@ -14,7 +15,6 @@ use ic_types::crypto::KeyPurpose;
 use ic_types::{NodeId, NodeIndex, RegistryVersion};
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use tecdsa::{EccCurveType, MEGaPublicKey};
 
 /// Query the registry for the MEGa public keys of all receivers.
 ///

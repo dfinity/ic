@@ -1,5 +1,5 @@
 use criterion::*;
-use tecdsa::*;
+use ic_crypto_internal_threshold_sig_ecdsa::*;
 
 fn poly_bench(c: &mut Criterion) {
     let curve = EccCurveType::K256;

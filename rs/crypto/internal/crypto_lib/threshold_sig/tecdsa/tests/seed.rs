@@ -1,5 +1,5 @@
+use ic_crypto_internal_threshold_sig_ecdsa::*;
 use rand_core::RngCore;
-use tecdsa::*;
 
 #[test]
 fn seed_fixed_output() {

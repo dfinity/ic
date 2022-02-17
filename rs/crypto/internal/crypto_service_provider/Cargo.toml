@@ -25,6 +25,7 @@ ic-crypto-internal-logmon = { path = "../logmon" }
 ic-crypto-internal-multi-sig-bls12381 = { path = "../crypto_lib/multi_sig/bls12_381" }
 ic-crypto-secrets-containers = { path = "../../secrets_containers" }
 ic-crypto-internal-threshold-sig-bls12381 = { path = "../crypto_lib/threshold_sig/bls12_381" }
+ic-crypto-internal-threshold-sig-ecdsa = { path = "../crypto_lib/threshold_sig/tecdsa" }
 ic-crypto-internal-test-vectors = { path = "../test_vectors" }
 ic-crypto-internal-tls = { path = "../crypto_lib/tls" }
 ic-crypto-internal-types = { path = "../crypto_lib/types" }
@@ -49,7 +50,6 @@ simple_asn1 = "0.5.4"
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
 strum = "0.23.0"
 strum_macros = "0.23.0"
-tecdsa = { path = "../crypto_lib/threshold_sig/tecdsa" }
 tarpc = { version = "0.27", features = ["full"] }
 tokio = { version = "1.15.0", features = ["full"] }
 tokio-openssl = "0.6.0"

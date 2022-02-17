@@ -18,10 +18,12 @@ use ic_crypto_internal_threshold_sig_bls12381::dkg::secp256k1::types::{
 };
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKeySet;
 use ic_crypto_internal_threshold_sig_bls12381::types as threshold_types;
+use ic_crypto_internal_threshold_sig_ecdsa::{
+    CommitmentOpeningBytes, EccScalarBytes, MEGaKeySetK256Bytes,
+};
 use ic_types::crypto::AlgorithmId;
 use serde::{Deserialize, Serialize};
 use strum_macros::IntoStaticStr;
-use tecdsa::{CommitmentOpeningBytes, EccScalarBytes, MEGaKeySetK256Bytes};
 use zeroize::Zeroize;
 
 pub mod conversions;

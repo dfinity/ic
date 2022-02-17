@@ -1,5 +1,5 @@
+use ic_crypto_internal_threshold_sig_ecdsa::*;
 use std::convert::TryFrom;
-use tecdsa::*;
 
 #[test]
 fn mega_single_smoke_test() -> Result<(), ThresholdEcdsaError> {

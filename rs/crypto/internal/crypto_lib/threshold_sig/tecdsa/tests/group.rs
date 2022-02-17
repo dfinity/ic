@@ -1,4 +1,4 @@
-use tecdsa::*;
+use ic_crypto_internal_threshold_sig_ecdsa::*;
 
 #[test]
 fn hash_to_scalar_is_deterministic() -> ThresholdEcdsaResult<()> {

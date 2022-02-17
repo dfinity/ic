@@ -16,6 +16,10 @@ use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgCreateFsKeyError, CspDkgCreateReshareDealingError, CspDkgLoadPrivateKeyError,
     CspDkgUpdateFsEpochError,
 };
+use ic_crypto_internal_threshold_sig_ecdsa::{
+    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
+    IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
+};
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
 };
@@ -41,10 +45,6 @@ use tarpc::server::BaseChannel;
 use tarpc::server::Serve;
 use tarpc::tokio_serde::formats::Bincode;
 use tarpc::{context, serde_transport, server::Channel};
-use tecdsa::{
-    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
-    IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
-};
 use tokio::net::UnixListener;
 use tokio_util::codec::length_delimited::LengthDelimitedCodec;
 
