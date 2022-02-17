@@ -177,6 +177,12 @@ exclude = ["universal_canister/impl"]
 # https://doc.rust-lang.org/cargo/reference/manifest.html#the-profile-sections
 debug = true
 
+[profile.release-lto]
+inherits = "release"
+# Enable "thin" LTO to reduce both the compilation time and the binary size.
+# See: https://doc.rust-lang.org/cargo/reference/profiles.html#lto
+lto = "thin"
+
 [profile.dev.package.miracl_core_bls12381]
 # Optimise the miracl_core_bls12381 cryptographic library, or else NiDKG tests take 4 hours.
 opt-level = 3
