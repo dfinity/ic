@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.4.0] - 2022-02-16
 ### Added
 - Support for `MERGE_MATURITY` neuron management operation.
+### Changed
+- --token-name parameter renamed to --token-symbol
 
 ## Fixed
 - The output of /construction/submit endpoint now returns operation statuses in the metadata field as stated in the documentation.

@@ -94,4 +94,13 @@ service : {
 
   // Returns the current transfer_fee.
   transfer_fee : (TransferFeeArg) -> (TransferFee) query;
+
+  // Returns token symbol.
+  symbol : () -> (record { symbol: text }) query;
+
+  // Returns token name.
+  name : () -> (record { name: text }) query;
+
+  // Returns token decimals.
+  decimals : () -> (record { decimals: nat32 }) query;
 }

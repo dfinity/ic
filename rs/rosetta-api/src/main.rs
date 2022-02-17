@@ -3,7 +3,7 @@ use structopt::StructOpt;
 use ic_crypto_internal_threshold_sig_bls12381 as bls12_381;
 use ic_crypto_utils_threshold_sig::parse_threshold_sig_key;
 use ic_rosetta_api::rosetta_server::{RosettaApiServer, RosettaApiServerOpt};
-use ic_rosetta_api::{ledger_client, RosettaRequestHandler, DEFAULT_TOKEN_NAME};
+use ic_rosetta_api::{ledger_client, RosettaRequestHandler, DEFAULT_TOKEN_SYMBOL};
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{CanisterId, PrincipalId};
 use std::{path::Path, path::PathBuf, str::FromStr, sync::Arc};
@@ -17,8 +17,8 @@ struct Opt {
     listen_port: u16,
     #[structopt(short = "c", long = "canister-id")]
     ic_canister_id: Option<String>,
-    #[structopt(short = "t", long = "token-name")]
-    token_name: Option<String>,
+    #[structopt(short = "t", long = "token-symbol")]
+    token_symbol: Option<String>,
     /// Id of the governance canister to use for neuron management.
     #[structopt(short = "g", long = "governance-canister-id")]
     governance_canister_id: Option<String>,
@@ -132,6 +132,11 @@ async fn main() -> std::io::Result<()> {
         (root_key, canister_id, governance_canister_id, url)
     };
 
+    let token_symbol = opt
+        .token_symbol
+        .unwrap_or_else(|| DEFAULT_TOKEN_SYMBOL.to_string());
+    log::info!("Token symbol set to {}", token_symbol);
+
     let store_location: Option<&Path> = match opt.store_type.as_ref() {
         "sqlite" => Some(&opt.store_location),
         "sqlite-in-memory" | "in-memory" => {
@@ -156,7 +161,7 @@ async fn main() -> std::io::Result<()> {
     let client = ledger_client::LedgerClient::new(
         url,
         canister_id,
-        opt.token_name.unwrap_or_else(|| DEFAULT_TOKEN_NAME.to_string()),
+        token_symbol,
         governance_canister_id,
         store_location,
         store_max_blocks,

@@ -91,6 +91,8 @@ type LedgerCanisterInitPayload = record {
     archive_options: opt ArchiveOptions;
     send_whitelist: vec principal;
     transfer_fee: opt Tokens;
+    token_symbol: opt text;
+    token_name: opt text;
 };
 
 service: (LedgerCanisterInitPayload) -> {

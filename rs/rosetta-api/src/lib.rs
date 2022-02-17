@@ -56,7 +56,7 @@ use log::{debug, warn};
 
 pub const API_VERSION: &str = "1.4.10";
 pub const NODE_VERSION: &str = env!("CARGO_PKG_VERSION");
-pub const DEFAULT_TOKEN_NAME: &str = "ICP";
+pub const DEFAULT_TOKEN_SYMBOL: &str = "ICP";
 
 fn to_index(height: BlockHeight) -> Result<i128, ApiError> {
     i128::try_from(height).map_err(|e| ApiError::InternalError(true, e.to_string().into()))
@@ -247,7 +247,7 @@ impl RosettaRequestHandler {
         let block = get_block(&blocks, msg.block_identifier)?;
 
         let tokens = blocks.get_balance(&account_id, block.index)?;
-        let amount = convert::amount_(tokens, self.ledger.token_name())?;
+        let amount = convert::amount_(tokens, self.ledger.token_symbol())?;
         let b = convert::block_id(&block)?;
         Ok(AccountBalanceResponse {
             block_identifier: b,
@@ -269,7 +269,7 @@ impl RosettaRequestHandler {
         let b_id = convert::block_id(&hb)?;
         let parent_id = create_parent_block_id(&blocks, &hb)?;
 
-        let transactions = vec![convert::transaction(&hb, self.ledger.token_name())?];
+        let transactions = vec![convert::transaction(&hb, self.ledger.token_symbol())?];
         let block = Some(models::Block::new(
             b_id,
             parent_id,
@@ -296,7 +296,7 @@ impl RosettaRequestHandler {
         });
         let hb = get_block(&blocks, b_id)?;
 
-        let transaction = convert::transaction(&hb, self.ledger.token_name())?;
+        let transaction = convert::transaction(&hb, self.ledger.token_symbol())?;
 
         Ok(BlockTransactionResponse::new(transaction))
     }
@@ -458,7 +458,7 @@ impl RosettaRequestHandler {
                 let transfer_fee = self.ledger.transfer_fee().await?.transfer_fee;
                 Some(vec![convert::amount_(
                     transfer_fee,
-                    self.ledger.token_name(),
+                    self.ledger.token_symbol(),
                 )?])
             }
         };
@@ -727,7 +727,7 @@ impl RosettaRequestHandler {
         let from_ai = from_ai.iter().map(to_model_account_identifier).collect();
 
         Ok(ConstructionParseResponse {
-            operations: Request::requests_to_operations(&requests, self.ledger.token_name())?,
+            operations: Request::requests_to_operations(&requests, self.ledger.token_symbol())?,
             signers: None,
             account_identifier_signers: Some(from_ai),
             metadata: None,
@@ -749,7 +749,7 @@ impl RosettaRequestHandler {
         let pks = msg.public_keys.clone().ok_or_else(|| {
             ApiError::internal_error("Expected field 'public_keys' to be populated")
         })?;
-        let transactions = convert::from_operations(&ops, false, self.ledger.token_name())?;
+        let transactions = convert::from_operations(&ops, false, self.ledger.token_symbol())?;
 
         let interval = ic_types::ingress::MAX_INGRESS_TTL
             - ic_types::ingress::PERMITTED_DRIFT
@@ -1151,7 +1151,8 @@ impl RosettaRequestHandler {
         msg: models::ConstructionPreprocessRequest,
     ) -> Result<ConstructionPreprocessResponse, ApiError> {
         verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
-        let transfers = convert::from_operations(&msg.operations, true, self.ledger.token_name())?;
+        let transfers =
+            convert::from_operations(&msg.operations, true, self.ledger.token_symbol())?;
         let options = Some(ConstructionMetadataRequestOptions {
             request_types: transfers
                 .iter()
@@ -1218,7 +1219,7 @@ impl RosettaRequestHandler {
             });
         let results = TransactionOperationResults::from_transaction_results(
             results,
-            self.ledger.token_name(),
+            self.ledger.token_symbol(),
         )?;
         Ok(ConstructionSubmitResponse {
             transaction_identifier,
@@ -1339,7 +1340,7 @@ impl RosettaRequestHandler {
                     "MERGE_MATURITY".to_string(),
                 ],
                 {
-                    let token_name = self.ledger.token_name();
+                    let token_name = self.ledger.token_symbol();
                     let mut errs = vec![
                         Error::new(&ApiError::InternalError(true, Default::default())),
                         Error::new(&ApiError::InvalidRequest(false, Default::default())),
@@ -1470,7 +1471,7 @@ impl RosettaRequestHandler {
         for hb in block_range.into_iter().rev() {
             txs.push(BlockTransaction::new(
                 convert::block_id(&hb)?,
-                convert::transaction(&hb, self.ledger.token_name())?,
+                convert::transaction(&hb, self.ledger.token_symbol())?,
             ));
         }
 
@@ -1612,7 +1613,7 @@ impl RosettaRequestHandler {
             let hb = blocks.get_verified_at(i)?;
             txs.push(BlockTransaction::new(
                 convert::block_id(&hb)?,
-                convert::transaction(&hb, self.ledger.token_name())?,
+                convert::transaction(&hb, self.ledger.token_symbol())?,
             ));
         }
 

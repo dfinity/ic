@@ -23,7 +23,7 @@ use ic_rosetta_api::balance_book::BalanceBook;
 use ic_rosetta_api::convert::{from_arg, to_model_account_identifier};
 use ic_rosetta_api::ledger_client::{Blocks, LedgerAccess};
 use ic_rosetta_api::rosetta_server::RosettaApiServer;
-use ic_rosetta_api::{store::HashedBlock, RosettaRequestHandler, DEFAULT_TOKEN_NAME};
+use ic_rosetta_api::{store::HashedBlock, RosettaRequestHandler, DEFAULT_TOKEN_SYMBOL};
 use ic_types::{
     messages::{HttpCallContent, HttpCanisterUpdate},
     PrincipalId,
@@ -134,8 +134,8 @@ impl LedgerAccess for TestLedger {
 
     async fn cleanup(&self) {}
 
-    fn token_name(&self) -> &str {
-        DEFAULT_TOKEN_NAME
+    fn token_symbol(&self) -> &str {
+        DEFAULT_TOKEN_SYMBOL
     }
 
     async fn sync_blocks(&self, _stopped: Arc<AtomicBool>) -> Result<(), ApiError> {

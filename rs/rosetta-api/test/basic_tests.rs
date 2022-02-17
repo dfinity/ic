@@ -175,7 +175,7 @@ async fn smoke_test() {
             block_id(scribe.blockchain.back().unwrap()).unwrap(),
             vec![amount_(
                 *scribe.balance_book.get(&acc_id(0)).unwrap(),
-                DEFAULT_TOKEN_NAME
+                DEFAULT_TOKEN_SYMBOL
             )
             .unwrap()]
         ))

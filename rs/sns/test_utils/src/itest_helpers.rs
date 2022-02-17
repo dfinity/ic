@@ -62,6 +62,8 @@ impl SnsInitPayloadsBuilder {
                 transaction_window: Some(Duration::from_secs(24 * 60 * 60)),
                 send_whitelist: ALL_SNS_CANISTER_IDS.iter().map(|&x| *x).collect(),
                 transfer_fee: Some(DEFAULT_TRANSFER_FEE),
+                token_symbol: None,
+                token_name: None,
             },
         }
     }

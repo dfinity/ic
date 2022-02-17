@@ -716,6 +716,11 @@ fn default_transfer_fee() -> Tokens {
     DEFAULT_TRANSFER_FEE
 }
 
+//this is only for deserialization from previous version of the ledger
+fn unknown_token() -> String {
+    "???".to_string()
+}
+
 #[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
 pub struct TransferFee {
     /// The fee to pay to perform a transfer
@@ -766,6 +771,13 @@ pub struct Ledger {
     /// The fee to pay to perform a transfer
     #[serde(default = "default_transfer_fee")]
     pub transfer_fee: Tokens,
+
+    /// Token symbol
+    #[serde(default = "unknown_token")]
+    pub token_symbol: String,
+    /// Token name
+    #[serde(default = "unknown_token")]
+    pub token_name: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -789,6 +801,8 @@ impl Default for Ledger {
             send_whitelist: HashSet::new(),
             max_transactions_in_window: Self::DEFAULT_MAX_TRANSACTIONS_IN_WINDOW,
             transfer_fee: DEFAULT_TRANSFER_FEE,
+            token_symbol: unknown_token(),
+            token_name: unknown_token(),
         }
     }
 }
@@ -981,6 +995,7 @@ impl Ledger {
         self.blockchain.add_block(block)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn from_init(
         &mut self,
         initial_values: HashMap<AccountIdentifier, Tokens>,
@@ -989,7 +1004,11 @@ impl Ledger {
         transaction_window: Option<Duration>,
         send_whitelist: HashSet<CanisterId>,
         transfer_fee: Option<Tokens>,
+        token_symbol: Option<String>,
+        token_name: Option<String>,
     ) {
+        self.token_symbol = token_symbol.unwrap_or_else(|| "ICP".to_string());
+        self.token_name = token_name.unwrap_or_else(|| "Internet Computer".to_string());
         self.balances.token_pool = Tokens::MAX;
         self.minting_account_id = Some(minting_account);
         if let Some(t) = transaction_window {
@@ -1147,6 +1166,8 @@ pub struct LedgerCanisterInitPayload {
     pub archive_options: Option<ArchiveOptions>,
     pub send_whitelist: HashSet<CanisterId>,
     pub transfer_fee: Option<Tokens>,
+    pub token_symbol: Option<String>,
+    pub token_name: Option<String>,
 }
 
 impl LedgerCanisterInitPayload {
@@ -1163,6 +1184,8 @@ pub struct LedgerCanisterInitPayloadBuilder {
     archive_options: Option<ArchiveOptions>,
     send_whitelist: HashSet<CanisterId>,
     transfer_fee: Option<Tokens>,
+    token_symbol: Option<String>,
+    token_name: Option<String>,
 }
 
 impl LedgerCanisterInitPayloadBuilder {
@@ -1175,6 +1198,8 @@ impl LedgerCanisterInitPayloadBuilder {
             archive_options: None,
             send_whitelist: Default::default(),
             transfer_fee: None,
+            token_symbol: None,
+            token_name: None,
         }
     }
 
@@ -1213,6 +1238,12 @@ impl LedgerCanisterInitPayloadBuilder {
         self
     }
 
+    pub fn token_symbol_and_name(mut self, token_symbol: &str, token_name: &str) -> Self {
+        self.token_symbol = Some(token_symbol.to_string());
+        self.token_name = Some(token_name.to_string());
+        self
+    }
+
     pub fn build(self) -> Result<LedgerCanisterInitPayload, String> {
         let minting_account = self
             .minting_account
@@ -1239,6 +1270,8 @@ impl LedgerCanisterInitPayloadBuilder {
             archive_options: self.archive_options,
             send_whitelist: self.send_whitelist,
             transfer_fee: self.transfer_fee,
+            token_symbol: self.token_symbol,
+            token_name: self.token_name,
         })
     }
 }
@@ -1425,6 +1458,8 @@ mod tests {
             None,
             HashSet::new(),
             None,
+            Some("ICP".into()),
+            Some("icp".into()),
         );
 
         let txn = Transaction::new(
@@ -1683,6 +1718,8 @@ mod tests {
             None,
             HashSet::new(),
             None,
+            Some("ICP".into()),
+            Some("icp".into()),
         );
 
         for i in 0..10 {
@@ -1741,6 +1778,8 @@ mod tests {
             Some(Duration::from_millis(10)),
             HashSet::new(),
             None,
+            Some("ICP".into()),
+            Some("icp".into()),
         );
         let little_later = genesis + Duration::from_millis(1);
 
@@ -2183,6 +2222,21 @@ pub struct TransferFeeArgs {}
 /// as input is backward-compatible.
 #[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
 pub struct TotalSupplyArgs {}
+
+#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+pub struct Symbol {
+    pub symbol: String,
+}
+
+#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+pub struct Name {
+    pub name: String,
+}
+
+#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+pub struct Decimals {
+    pub decimals: u32,
+}
 
 /// Argument returned by the tip_of_chain endpoint
 pub struct TipOfChainRes {
