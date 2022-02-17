@@ -34,10 +34,13 @@ def resolve_ip_addresses(ips: [str], testnet: str):
     try:
         for machine in ips:
             host = ansible.get_host_for_ip(testnet, machine)
-            host_prefix = host[:2]
-            load_generators.append(
-                {"name": machine, "host": host, "country": country[host_prefix] if host_prefix in country else ""}
-            )
+            if host:
+                host_prefix = host[:2]
+                load_generators.append(
+                    {"name": machine, "host": host, "country": country[host_prefix] if host_prefix in country else ""}
+                )
+            else:
+                load_generators.append({"name": machine, "host": "n.a.", "country": "n.a."})
     except Exception:
         traceback.print_exc()
     return load_generators

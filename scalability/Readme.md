@@ -19,7 +19,6 @@ A separate tool can be used to generate reports for previously collected benchma
 Those are HTML reports. Later, we can introduce more reports, e.g. to monitor performance over time. 
 Reports contain rich content (such as flamegraphs), but they also contain links to existing material such as existing Grafana dashboards.
 
-
 The code is as follows:
 - `metrics.py`: Abstraction for metrics. Can be started and stopped, which typically happens at the beginning and end of an iteration respectively. Currently supported are:
    - `flamegraphs.py`: Generation of flamegraphs on the target machine.
