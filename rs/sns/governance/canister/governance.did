@@ -59,7 +59,7 @@ type Follow = record { action_type : nat64; followees : vec NeuronId };
 type Followees = record { followees : vec NeuronId };
 type GetNeuron = record { neuron_id : opt NeuronId };
 type GetNeuronResponse = record { result : opt Result };
-type GetProposal = record { proposal_id : opt NeuronId };
+type GetProposal = record { proposal_id : opt ProposalId };
 type GetProposalResponse = record { result : opt Result_1 };
 type Governance = record {
   metrics : opt GovernanceCachedMetrics;
@@ -68,9 +68,9 @@ type Governance = record {
   ledger_canister_id : opt principal;
   first_principal_neuron_permissions : vec int32;
   proposals : vec record { nat64; ProposalData };
-  in_flight_commands : vec record { nat64; NeuronInFlightCommand };
+  in_flight_commands : vec record { text; NeuronInFlightCommand };
   other_principal_neuron_permissions : vec int32;
-  neurons : vec record { nat64; Neuron };
+  neurons : vec record { text; Neuron };
   genesis_timestamp_seconds : nat64;
 };
 type GovernanceCachedMetrics = record {
@@ -95,14 +95,14 @@ type IncreaseDissolveDelay = record {
   additional_dissolve_delay_seconds : nat32;
 };
 type ListNeurons = record {
-  first_neuron : opt NeuronId;
   of_principal : opt principal;
   limit : nat32;
+  after_neuron : opt NeuronId;
 };
 type ListNeuronsResponse = record { neurons : vec Neuron };
 type ListProposals = record {
   include_reward_status : vec int32;
-  before_proposal : opt NeuronId;
+  before_proposal : opt ProposalId;
   limit : nat32;
   exclude_type : vec nat64;
   include_status : vec int32;
@@ -143,7 +143,7 @@ type Neuron = record {
   followees : vec record { nat64; Followees };
   neuron_fees_e8s : nat64;
 };
-type NeuronId = record { id : nat64 };
+type NeuronId = record { id : vec nat8 };
 type NeuronInFlightCommand = record {
   command : opt Command_2;
   timestamp : nat64;
@@ -165,10 +165,10 @@ type Proposal = record {
   summary : text;
 };
 type ProposalData = record {
-  id : opt NeuronId;
+  id : opt ProposalId;
   action : nat64;
   failure_reason : opt GovernanceError;
-  ballots : vec record { nat64; Ballot };
+  ballots : vec record { text; Ballot };
   reward_event_round : nat64;
   failed_timestamp_seconds : nat64;
   proposal_creation_timestamp_seconds : nat64;
@@ -180,17 +180,18 @@ type ProposalData = record {
   wait_for_quiet_state : opt WaitForQuietState;
   executed_timestamp_seconds : nat64;
 };
-type RegisterVote = record { vote : int32; proposal : opt NeuronId };
+type ProposalId = record { id : nat64 };
+type RegisterVote = record { vote : int32; proposal : opt ProposalId };
 type Result = variant { Error : GovernanceError; Neuron : Neuron };
 type Result_1 = variant { Error : GovernanceError; Proposal : ProposalData };
 type RewardEvent = record {
   day_after_genesis : nat64;
   actual_timestamp_seconds : nat64;
   distributed_e8s_equivalent : nat64;
-  settled_proposals : vec NeuronId;
+  settled_proposals : vec ProposalId;
 };
 type SetDissolveTimestamp = record { dissolve_timestamp_seconds : nat64 };
-type Split = record { memo : opt nat64; amount_e8s : nat64 };
+type Split = record { memo : nat64; amount_e8s : nat64 };
 type SplitResponse = record { created_neuron_id : opt NeuronId };
 type Tally = record {
   no : nat64;

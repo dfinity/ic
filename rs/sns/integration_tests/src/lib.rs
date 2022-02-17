@@ -11,3 +11,5 @@
 //! crate.
 #[cfg(test)]
 mod ledger;
+#[cfg(test)]
+mod neuron;

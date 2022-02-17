@@ -45,10 +45,10 @@ message NeuronPermission {
   repeated NeuronPermissionType permission_type = 2;
 }
 
-// A container for a NeuronId, which is just the memo used in the
-// ledger transaction that staked the neuron in the first place.
+// A container for the id of the neuron, which is the
+// subaccount the staking transfer was sent to.
 message NeuronId {
-  uint64 id = 1;
+  bytes id = 1;
 }
 
 // The id of a specific proposal.
@@ -332,6 +332,9 @@ message GovernanceError {
 
     // The proposal is invalid.
     ERROR_TYPE_INVALID_PROPOSAL = 15;
+
+    // The NeuronId is invalid.
+    ERROR_TYPE_INVALID_NEURON_ID = 16;
   }
 
   ErrorType error_type = 1;
@@ -444,10 +447,10 @@ message ProposalData {
   // when this proposal was made.
   uint64 proposal_creation_timestamp_seconds = 6;
 
-  // Map neuron ID to the neuron's vote and voting power. Only
+  // Map NeuronId to the neuron's vote and voting power. Only
   // present for as long as the proposal is not yet settled with
   // respect to rewards.
-  map<fixed64, Ballot> ballots = 7;
+  map<string, Ballot> ballots = 7;
 
   // Latest tally. Recomputed for open proposals, when proposals are
   // processed. If the proposal is decided (not open), then the tally
@@ -584,7 +587,7 @@ message RewardEvent {
 // across upgrades of the governance system.
 message Governance {
   // The current set of neurons registered in governance.
-  map<uint64, Neuron> neurons = 1;
+  map<string, Neuron> neurons = 1;
 
   // The current set of proposals registered in governance.
   map<uint64, ProposalData> proposals = 2;
@@ -629,7 +632,7 @@ message Governance {
   // Because we know exactly what was going on, we should have the
   // information necessary to reconcile the state, using custom code
   // added on upgrade, if necessary.
-  map<fixed64, NeuronInFlightCommand> in_flight_commands = 10;
+  map<string, NeuronInFlightCommand> in_flight_commands = 10;
 
   // The timestamp, in seconds since the unix epoch, at which
   // `canister_init` was run for the governance canister,
@@ -677,7 +680,7 @@ message Empty {}
 // All operations that modify the state of an existing neuron are
 // represented by instances of `ManageNeuron`.
 message ManageNeuron {
-  // The subaccount/id of the Neuron.
+  // The subaccount the staking transfer was sent to
   bytes subaccount = 1;
 
   // The dissolve delay of a neuron can be increased up to a maximum
@@ -731,8 +734,9 @@ message ManageNeuron {
     // The amount to split to the child neuron.
     uint64 amount_e8s = 1;
 
-    // The optional memo provided for input to the ledger transfer
-    optional uint64 memo = 2;
+    // The memo(nonce) provided when generating the subaccount of the new
+    // Neuron's NeuronId and it's resulting ledger transaction.
+    uint64 memo = 2;
   }
 
   // Merge the maturity of a neuron into the current stake.
@@ -780,7 +784,10 @@ message ManageNeuron {
   // Claim a new neuron or refresh the stake of an existing neuron.
   message ClaimOrRefresh {
     message MemoAndController {
+      // The memo(nonce) used when generating the subaccount where the
+      // governance token was staked to.
       uint64 memo = 1;
+
       ic_base_types.pb.v1.PrincipalId controller = 2;
     }
 
@@ -915,21 +922,23 @@ message ListProposalsResponse {
   repeated ProposalData proposals = 1;
 }
 
-// List Neurons lists all Neurons tracked in the Governance state.
-// Ballots will be cleared for clarity. Listing over all proposals can
-// be accomplished using `first_neuron`. To list neurons controlled
-// by the supplied PrincipalId, use `of_principal`.
+// ListNeurons lists all Neurons tracked in the Governance state in a
+// paginated fashion. Ballots will be cleared for clarity. Listing
+// over all neurons can be accomplished using `limit` and `after_neuron`.
+// To list neurons controlled by the supplied PrincipalId, use `of_principal`.
 message ListNeurons {
-  // Limit on the number of [Neuron] to return. If no value is
+  // Limit the number of Neurons returned in each page. If no value is
   // specified, or if a value greater than 100 is specified, 100
   // will be used.
   uint32 limit = 1;
 
-  // If set, defines the first neuron to include on the returned list.
-  // Neurons are not kept in any specific order, but their ordering
-  // is deterministic, so this can be used to return all the neurons
-  // 1 page at a time.
-  NeuronId first_neuron = 2;
+  // Used to indicate where the next page of Neurons should start. Should be
+  // set to the last neuron of the previously returned page and will not be
+  // included in the next page. If not set, ListNeurons will return a page of
+  // size limit starting at the 0th Neuron. Neurons are not kept in any specific
+  // order, but their ordering is deterministic, so this can be used to return all
+  // the neurons one page at a time.
+  NeuronId after_neuron = 2;
 
   // If set, only returns neurons in which the given principal has
   // permissions.

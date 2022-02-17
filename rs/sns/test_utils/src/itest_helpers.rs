@@ -76,8 +76,14 @@ impl SnsInitPayloadsBuilder {
         self
     }
 
-    pub fn with_test_neurons(&mut self) -> &mut Self {
-        self.governance.with_test_neurons();
+    pub fn with_ledger_accounts(
+        &mut self,
+        accounts: Vec<AccountIdentifier>,
+        icpts: Tokens,
+    ) -> &mut Self {
+        for account in accounts {
+            self.ledger.initial_values.insert(account, icpts);
+        }
         self
     }
 
