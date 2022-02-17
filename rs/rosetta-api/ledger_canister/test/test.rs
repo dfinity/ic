@@ -218,6 +218,7 @@ fn archive_blocks_small_test() {
             node_max_memory_size_bytes: Some(node_max_memory_size_bytes),
             max_message_size_bytes: Some(max_message_size_bytes),
             controller_id: CanisterId::from_u64(876),
+            cycles_for_archive_creation: Some(0),
         };
 
         println!("[test] installing ledger canister");
@@ -325,6 +326,7 @@ fn archive_blocks_large_test() {
             node_max_memory_size_bytes: Some(node_max_memory_size_bytes),
             max_message_size_bytes: Some(max_message_size_bytes),
             controller_id: CanisterId::from_u64(876),
+            cycles_for_archive_creation: Some(0),
         };
 
         println!("[test] installing ledger canister");
@@ -559,6 +561,7 @@ fn notify_test() {
             controller_id: CanisterId::from_u64(876),
             trigger_threshold: 8,
             num_blocks_to_archive: 3,
+            cycles_for_archive_creation: Some(0),
         };
 
         let ledger_canister = proj
@@ -733,6 +736,7 @@ fn notify_disabled_test() {
             controller_id: CanisterId::from_u64(876),
             trigger_threshold: 8,
             num_blocks_to_archive: 3,
+            cycles_for_archive_creation: Some(0),
         };
 
         let ledger_canister = proj
@@ -1194,6 +1198,7 @@ fn get_block_test() {
             node_max_memory_size_bytes: Some(node_max_memory_size_bytes),
             max_message_size_bytes: Some(max_message_size_bytes),
             controller_id: CanisterId::from_u64(876),
+            cycles_for_archive_creation: Some(0),
         };
 
         println!(
@@ -1356,6 +1361,7 @@ fn get_multiple_blocks_test() {
             node_max_memory_size_bytes: Some(node_max_memory_size_bytes),
             max_message_size_bytes: Some(max_message_size_bytes),
             controller_id: CanisterId::from_u64(876),
+            cycles_for_archive_creation: Some(0),
         };
 
         println!(
@@ -1532,6 +1538,7 @@ fn only_ledger_can_append_blocks_to_archive_nodes() {
             node_max_memory_size_bytes: Some(node_max_memory_size_bytes),
             max_message_size_bytes: Some(max_message_size_bytes),
             controller_id: CanisterId::from_u64(876),
+            cycles_for_archive_creation: Some(0),
         };
 
         println!(

@@ -1,3 +1,4 @@
+use dfn_core::api::Funds;
 use ic_base_types::CanisterInstallMode;
 use ic_types::{
     ic00::{CanisterIdRecord, InstallCodeArgs, Method, IC_00},
@@ -30,13 +31,18 @@ pub async fn install_code<Arg: IntoWire>(
     .await
 }
 
-pub async fn create_canister() -> CanisterId {
-    dfn_core::api::print("[spawn] create_canister()");
-    let result: Result<CanisterIdRecord, _> = dfn_core::api::call_with_cleanup(
+pub async fn create_canister(cycles_for_canister_creation: u64) -> CanisterId {
+    dfn_core::api::print(format!(
+        "[spawn] create_canister(cycles_for_canister_creation={})",
+        cycles_for_canister_creation
+    ));
+    // dfn_core::api::call_with_funds_and_cleanup()
+    let result: Result<CanisterIdRecord, _> = dfn_core::api::call_with_funds_and_cleanup(
         IC_00,
         &Method::CreateCanister.to_string(),
         dfn_candid::candid_one,
         ic_types::ic00::CreateCanisterArgs::default(),
+        Funds::new(cycles_for_canister_creation),
     )
     .await;
     dfn_core::api::print(format!("[spawn] create_canister() = {:?}", result));
