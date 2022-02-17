@@ -139,7 +139,6 @@ impl EccScalar {
 
     /// Return the difference of two scalar values
     pub fn sub(&self, other: &EccScalar) -> ThresholdEcdsaResult<Self> {
-        use std::ops::Sub;
         match (self, other) {
             (Self::K256(s1), Self::K256(s2)) => Ok(Self::K256(s1.sub(s2))),
             (Self::P256(s1), Self::P256(s2)) => Ok(Self::P256(s1.sub(s2))),
@@ -221,14 +220,23 @@ impl EccScalar {
             EccCurveType::K256 => {
                 use k256::elliptic_curve::group::ff::PrimeField;
                 let fb = k256::FieldBytes::from_slice(bits);
-                let s = k256::Scalar::from_repr(*fb).ok_or(ThresholdEcdsaError::InvalidScalar)?;
-                Ok(Self::K256(s))
+                let s = k256::Scalar::from_repr(*fb);
+
+                if bool::from(s.is_some()) {
+                    Ok(Self::K256(s.unwrap()))
+                } else {
+                    Err(ThresholdEcdsaError::InvalidScalar)
+                }
             }
             EccCurveType::P256 => {
                 use p256::elliptic_curve::group::ff::PrimeField;
                 let fb = p256::FieldBytes::from_slice(bits);
-                let s = p256::Scalar::from_repr(*fb).ok_or(ThresholdEcdsaError::InvalidScalar)?;
-                Ok(Self::P256(s))
+                let s = p256::Scalar::from_repr(*fb);
+                if bool::from(s.is_some()) {
+                    Ok(Self::P256(s.unwrap()))
+                } else {
+                    Err(ThresholdEcdsaError::InvalidScalar)
+                }
             }
         }
     }
@@ -260,12 +268,12 @@ impl EccScalar {
 
         match curve {
             EccCurveType::K256 => {
-                use k256::elliptic_curve::group::ff::Field;
+                use k256::elliptic_curve::{ops::Reduce, Field};
                 let fb0 = k256::FieldBytes::from_slice(&extended[..scalar_bytes]);
                 let fb1 = k256::FieldBytes::from_slice(&extended[scalar_bytes..]);
 
-                let mut s0 = k256::Scalar::from_bytes_reduced(fb0);
-                let s1 = k256::Scalar::from_bytes_reduced(fb1);
+                let mut s0 = <k256::Scalar as Reduce<k256::U256>>::from_be_bytes_reduced(*fb0);
+                let s1 = <k256::Scalar as Reduce<k256::U256>>::from_be_bytes_reduced(*fb1);
 
                 for _bit in 1..=scalar_bytes * 8 {
                     s0 = s0.double();
@@ -275,11 +283,12 @@ impl EccScalar {
                 Ok(Self::K256(s0))
             }
             EccCurveType::P256 => {
+                use p256::elliptic_curve::ops::Reduce;
                 let fb0 = p256::FieldBytes::from_slice(&extended[..scalar_bytes]);
                 let fb1 = p256::FieldBytes::from_slice(&extended[scalar_bytes..]);
 
-                let mut s0 = p256::Scalar::from_bytes_reduced(fb0);
-                let s1 = p256::Scalar::from_bytes_reduced(fb1);
+                let mut s0 = p256::Scalar::from_be_bytes_reduced(*fb0);
+                let s1 = p256::Scalar::from_be_bytes_reduced(*fb1);
 
                 for _bit in 1..=scalar_bytes * 8 {
                     s0 = s0.double();
@@ -312,14 +321,20 @@ impl EccScalar {
     pub fn is_zero(&self) -> bool {
         match self {
             Self::K256(s) => bool::from(s.is_zero()),
-            Self::P256(s) => bool::from(s.is_zero()),
+            Self::P256(s) => {
+                use p256::elliptic_curve::Field;
+                bool::from(s.is_zero())
+            }
         }
     }
 
     /// Return true iff self is >= order / 2
     pub fn is_high(&self) -> bool {
         match self {
-            Self::K256(s) => bool::from(s.is_high()),
+            Self::K256(s) => {
+                use k256::elliptic_curve::IsHigh;
+                bool::from(s.is_high())
+            }
             Self::P256(s) => {
                 let s2 = s.double();
                 s2 < *s
@@ -348,8 +363,14 @@ impl EccScalar {
     /// just plain 0.
     pub fn zero(curve: EccCurveType) -> Self {
         match curve {
-            EccCurveType::K256 => Self::K256(k256::Scalar::zero()),
-            EccCurveType::P256 => Self::P256(p256::Scalar::zero()),
+            EccCurveType::K256 => {
+                use k256::elliptic_curve::Field;
+                Self::K256(k256::Scalar::zero())
+            }
+            EccCurveType::P256 => {
+                use p256::elliptic_curve::Field;
+                Self::P256(p256::Scalar::zero())
+            }
         }
     }
 
@@ -359,8 +380,14 @@ impl EccScalar {
     /// just plain 1.
     pub fn one(curve: EccCurveType) -> Self {
         match curve {
-            EccCurveType::K256 => Self::K256(k256::Scalar::one()),
-            EccCurveType::P256 => Self::P256(p256::Scalar::one()),
+            EccCurveType::K256 => {
+                use k256::elliptic_curve::Field;
+                Self::K256(k256::Scalar::one())
+            }
+            EccCurveType::P256 => {
+                use p256::elliptic_curve::Field;
+                Self::P256(p256::Scalar::one())
+            }
         }
     }
 
@@ -499,16 +526,16 @@ impl EccPoint {
     /// Return a point which is the identity element on the curve
     pub fn identity(curve: EccCurveType) -> Self {
         match curve {
-            EccCurveType::K256 => Self::K256(k256::ProjectivePoint::identity()),
-            EccCurveType::P256 => Self::P256(p256::ProjectivePoint::identity()),
+            EccCurveType::K256 => Self::K256(k256::ProjectivePoint::IDENTITY),
+            EccCurveType::P256 => Self::P256(p256::ProjectivePoint::IDENTITY),
         }
     }
 
     /// Return the "standard" generator for this curve
     pub fn generator_g(curve: EccCurveType) -> ThresholdEcdsaResult<Self> {
         match curve {
-            EccCurveType::K256 => Ok(Self::K256(k256::ProjectivePoint::generator())),
-            EccCurveType::P256 => Ok(Self::P256(p256::ProjectivePoint::generator())),
+            EccCurveType::K256 => Ok(Self::K256(k256::ProjectivePoint::GENERATOR)),
+            EccCurveType::P256 => Ok(Self::P256(p256::ProjectivePoint::GENERATOR)),
         }
     }
 
@@ -650,7 +677,7 @@ impl EccPoint {
 
         match self {
             Self::K256(pt) => {
-                let mut res = k256::ProjectivePoint::identity();
+                let mut res = k256::ProjectivePoint::IDENTITY;
 
                 for b in 0..scalar_bits {
                     res = res.double();
@@ -662,7 +689,7 @@ impl EccPoint {
                 Ok(Self::K256(res))
             }
             Self::P256(pt) => {
-                let mut res = p256::ProjectivePoint::identity();
+                let mut res = p256::ProjectivePoint::IDENTITY;
 
                 for b in 0..scalar_bits {
                     res = res.double();
@@ -685,11 +712,13 @@ impl EccPoint {
     ) -> ThresholdEcdsaResult<Self> {
         match (pt1, scalar1, pt2, scalar2) {
             (Self::K256(pt1), EccScalar::K256(s1), Self::K256(pt2), EccScalar::K256(s2)) => {
-                Ok(Self::K256(k256::lincomb(pt1, s1, pt2, s2)))
+                use k256::elliptic_curve::ops::LinearCombination;
+                Ok(Self::K256(k256::ProjectivePoint::lincomb(pt1, s1, pt2, s2)))
             }
 
             (Self::P256(pt1), EccScalar::P256(s1), Self::P256(pt2), EccScalar::P256(s2)) => {
-                Ok(Self::P256(pt1 * s1 + pt2 * s2))
+                use p256::elliptic_curve::ops::LinearCombination;
+                Ok(Self::P256(p256::ProjectivePoint::lincomb(pt1, s1, pt2, s2)))
             }
             (_, _, _, _) => Err(ThresholdEcdsaError::CurveMismatch),
         }
@@ -792,9 +821,10 @@ impl EccPoint {
                     .map_err(|_| ThresholdEcdsaError::InvalidPoint)?;
                 let apt = k256::AffinePoint::from_encoded_point(&ept);
 
-                match apt {
-                    Some(apt) => Ok(Self::K256(k256::ProjectivePoint::from(apt))),
-                    None => Err(ThresholdEcdsaError::InvalidPoint),
+                if bool::from(apt.is_some()) {
+                    Ok(Self::K256(k256::ProjectivePoint::from(apt.unwrap())))
+                } else {
+                    Err(ThresholdEcdsaError::InvalidPoint)
                 }
             }
             EccCurveType::P256 => {
@@ -802,9 +832,11 @@ impl EccPoint {
                 let ept = p256::EncodedPoint::from_bytes(bits)
                     .map_err(|_| ThresholdEcdsaError::InvalidPoint)?;
                 let apt = p256::AffinePoint::from_encoded_point(&ept);
-                match apt {
-                    Some(apt) => Ok(Self::P256(p256::ProjectivePoint::from(apt))),
-                    None => Err(ThresholdEcdsaError::InvalidPoint),
+
+                if bool::from(apt.is_some()) {
+                    Ok(Self::P256(p256::ProjectivePoint::from(apt.unwrap())))
+                } else {
+                    Err(ThresholdEcdsaError::InvalidPoint)
                 }
             }
         }
