@@ -145,11 +145,23 @@
       when: manual
       allow_failure: true  # the pipeline continues running even if the manual job is not run
 
+# Rule for triggering max capacity benchmarks
 .rules-benchmark-tests:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\[benchmark\]/'
       when: manual
       allow_failure: true
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "BENCHMARK_SUITE"'
+      when: always
+
+# Rule for triggering performance tests
+.rules-benchmark-nightly-tests:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\[benchmark\]/'
+      when: manual
+      allow_failure: true
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "BENCHMARK_NIGHTLY"'
+      when: always
 
 .rules-prod-tests:
   rules:

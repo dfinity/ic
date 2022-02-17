@@ -8,8 +8,6 @@
   variables:
     SHELL_WRAPPER: "/usr/bin/time"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
-    cd_target_env: "BENCHMARK_SUITE"
-    CD_ENV: "BENCHMARK_SUITE"
     TESTNET: "cdslo"
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
   artifacts:
@@ -158,7 +156,7 @@ large-subnet-gossip-experiment:
 .benchmark-nightly-test:
   extends:
     - .ubuntu-nix-docker
-    - .rules-benchmark-tests
+    - .rules-benchmark-nightly-tests
   stage: benchmark-nightly-tests
   resource_group: $TESTNET
   dependencies: []  # don't copy artifacts from other jobs by default
