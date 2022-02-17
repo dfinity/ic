@@ -56,6 +56,7 @@ impl SnsInitPayloadsBuilder {
                     // 128kb
                     max_message_size_bytes: Some(128 * 1024),
                     controller_id: TEST_ROOT_CANISTER_ID,
+                    cycles_for_archive_creation: Some(0),
                 }),
                 max_message_size_bytes: Some(128 * 1024),
                 // 24 hour transaction window

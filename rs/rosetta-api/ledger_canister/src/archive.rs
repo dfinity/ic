@@ -10,6 +10,10 @@ use std::collections::VecDeque;
 const ARCHIVE_NODE_BYTECODE: &[u8] =
     std::include_bytes!(std::env!("LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH"));
 
+fn default_cycles_for_archive_creation() -> u64 {
+    0
+}
+
 #[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
 pub struct ArchiveOptions {
     /// The number of blocks which, when exceeded, will trigger an archiving
@@ -20,24 +24,9 @@ pub struct ArchiveOptions {
     pub node_max_memory_size_bytes: Option<usize>,
     pub max_message_size_bytes: Option<usize>,
     pub controller_id: CanisterId,
-}
-
-impl ArchiveOptions {
-    pub fn new(
-        trigger_threshold: usize,
-        num_blocks_to_archive: usize,
-        node_max_memory_size_bytes: Option<usize>,
-        max_message_size_bytes: Option<usize>,
-        controller_id: CanisterId,
-    ) -> Self {
-        Self {
-            trigger_threshold,
-            num_blocks_to_archive,
-            node_max_memory_size_bytes,
-            max_message_size_bytes,
-            controller_id,
-        }
-    }
+    // cycles to use for the call to create a new archive canister
+    #[serde(default)]
+    pub cycles_for_archive_creation: Option<u64>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -75,6 +64,9 @@ pub struct Archive {
     pub trigger_threshold: usize,
     /// The number of blocks to archive when trigger threshold is exceeded
     pub num_blocks_to_archive: usize,
+    // cycles to use for the call to create a new canister and to install the archive
+    #[serde(default = "default_cycles_for_archive_creation")]
+    pub cycles_for_archive_creation: u64,
 }
 
 impl Archive {
@@ -90,6 +82,7 @@ impl Archive {
             num_archived_blocks: 0,
             trigger_threshold: options.trigger_threshold,
             num_blocks_to_archive: options.num_blocks_to_archive,
+            cycles_for_archive_creation: options.cycles_for_archive_creation.unwrap_or(0),
         }
     }
 
@@ -197,7 +190,8 @@ impl Archive {
         &mut self,
     ) -> Result<(CanisterId, usize, usize), FailedToArchiveBlocks> {
         print("[archive] calling create_canister()");
-        let node_canister_id: CanisterId = spawn::create_canister().await;
+        let node_canister_id: CanisterId =
+            spawn::create_canister(self.cycles_for_archive_creation).await;
         let node_block_height_offset: u64 = self
             .nodes_block_ranges
             .last()
