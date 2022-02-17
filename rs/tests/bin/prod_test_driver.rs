@@ -17,7 +17,7 @@ use ic_tests::token_balance_test::{self, test as token_balance_test};
 use ic_tests::upgrade_reject::{self, upgrade_reject};
 use ic_tests::{
     basic_health_test::{self, basic_health_test},
-    execution,
+    execution, message_routing,
     node_reassignment_test::{self, test as node_reassignment_test},
 };
 use ic_tests::{
@@ -159,6 +159,11 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 execution::upgraded_pots::cycles_restrictions_pot(),
                 execution::upgraded_pots::inter_canister_queries(),
                 execution::upgraded_pots::compute_allocation_pot(),
+                pot(
+                    "global_reboot_pot",
+                    message_routing::global_reboot_test::config,
+                    par(vec![t("global_reboot_test", message_routing::global_reboot_test::test)]),
+                ),
                 pot(
                     "node_removal_from_registry_pot",
                     node_removal_from_registry_test::config,
