@@ -3508,6 +3508,7 @@ dependencies = [
  "byteorder",
  "candid",
  "ic-btc-types",
+ "ic-protobuf",
  "lazy_static",
  "maplit",
  "prost",

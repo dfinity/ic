@@ -9,6 +9,7 @@ edition = "2018"
 bitcoin = "0.27.1"
 candid = "0.7.4"
 byteorder = "1.4.3"
+ic-protobuf = { path = "../../protobuf" }
 ic-btc-types = { path = "../types" }
 lazy_static = "1.4.0"
 prost = "0.9"

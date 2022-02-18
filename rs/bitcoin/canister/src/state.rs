@@ -1,5 +1,6 @@
 use crate::{block, proto, utxoset};
 use bitcoin::{hashes::Hash, Block, Network, OutPoint, Script, TxOut, Txid};
+use ic_protobuf::bitcoin::v1;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 pub type Height = u32;
@@ -78,11 +79,11 @@ impl UtxoSet {
                 .utxos
                 .iter()
                 .map(|(outpoint, (txout, height))| proto::Utxo {
-                    outpoint: Some(proto::OutPoint {
+                    outpoint: Some(v1::OutPoint {
                         txid: outpoint.txid.to_vec(),
                         vout: outpoint.vout,
                     }),
-                    txout: Some(proto::TxOut {
+                    txout: Some(v1::TxOut {
                         value: txout.value,
                         script_pubkey: txout.script_pubkey.to_bytes(),
                     }),

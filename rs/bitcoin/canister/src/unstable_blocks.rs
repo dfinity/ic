@@ -12,7 +12,7 @@ pub fn pop(blocks: &mut UnstableBlocks) -> Option<Block> {
     let mut anchor_child_trees = std::mem::take(&mut blocks.tree.children);
 
     // Sort them by depth.
-    anchor_child_trees.sort_by_key(|a| blocktree::depth(a));
+    anchor_child_trees.sort_by_key(blocktree::depth);
 
     match anchor_child_trees.last() {
         Some(deepest_child_tree) => {

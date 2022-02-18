@@ -2,15 +2,12 @@ use bitcoin::{
     blockdata::constants::genesis_block, util::psbt::serialize::Deserialize, Address, Network,
     Transaction,
 };
-use ic_btc_canister::{
-    proto::{GetSuccessorsRequest, GetSuccessorsResponse},
-    state::State,
-    store,
-};
+use ic_btc_canister::{state::State, store};
 use ic_btc_types::{
     GetBalanceError, GetBalanceRequest, GetUtxosError, GetUtxosRequest, GetUtxosResponse, OutPoint,
     SendTransactionError, SendTransactionRequest, Utxo,
 };
+use ic_protobuf::bitcoin::v1::{GetSuccessorsRequest, GetSuccessorsResponse};
 use prost::Message;
 use std::{cell::RefCell, collections::VecDeque, str::FromStr};
 

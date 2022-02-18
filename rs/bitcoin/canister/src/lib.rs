@@ -7,5 +7,5 @@ mod unstable_blocks;
 mod utxoset;
 
 pub mod proto {
-    include!(concat!(env!("OUT_DIR"), "/btc.rs"));
+    include!(concat!(env!("OUT_DIR"), "/btc_canister.rs"));
 }
