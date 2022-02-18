@@ -31,6 +31,13 @@ impl SandboxCrate {
         }
     }
 
+    fn env_binary(&self) -> Option<String> {
+        match self {
+            Self::SandboxLauncher => std::env::var("LAUNCHER_BINARY").ok(),
+            Self::CanisterSandbox => std::env::var("SANDBOX_BINARY").ok(),
+        }
+    }
+
     fn run_as_flag(&self) -> &'static str {
         match self {
             Self::SandboxLauncher => RUN_AS_SANDBOX_LAUNCHER_FLAG,
@@ -87,6 +94,10 @@ fn current_binary_path() -> Option<PathBuf> {
 /// Only for testing purposes.
 /// Gets executable and arguments when running in CI or in a dev environment.
 fn create_sandbox_argv_for_testing(krate: SandboxCrate) -> Option<Vec<String>> {
+    // Try environment variables first.
+    if let Some(env_binary) = krate.env_binary() {
+        return Some(vec![env_binary]);
+    }
     let executable_name = krate.executable_name();
     // In CI we expect the sandbox executable to be in our path so this should
     // succeed.
