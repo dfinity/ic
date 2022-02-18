@@ -167,6 +167,7 @@ subnet-update-workload-nightly:
 # boundary_update_workload: 1 hour 1kb @ 100 update requests per second
 boundary-update-workload-nightly:
   extends: .prod-nightly-test-group-3
+  allow_failure: true #boundary node test is not needed for release of replica
   script:
     - |
       set -eExou pipefail
@@ -180,6 +181,7 @@ boundary-update-workload-nightly:
 # subnet_update_workload test is run with IC-OS boundary nodes VMs
 icos-boundary-update-workload-nightly:
   extends: .prod-nightly-test-group-3
+  allow_failure: true #boundary node test is not needed for release of replica
   script:
     - |
       set -eExou pipefail
@@ -405,6 +407,7 @@ subnet-update-workload-slo-5-100kb:
 # SCENARIO TEST with update workload using boundary nodes: 2h 1kb @ 100 update requests per second
 boundary-update-workload-slo-2h:
   extends: .prod-slo-test
+  allow_failure: true #boundary node test is not needed for release of replica
   script:
     - |
       set -eExou pipefail
@@ -497,6 +500,7 @@ nns-workload-test-slo:
 # 56-nns-tests-slo: run some tests on topology with 56 nodes in the NNS subents
 56-nns-tests-slo:
   extends: .prod-slo-test
+  allow_failure: true #56 node NNS test is not needed for release of replica
   script:
     - |
       set -eExou pipefail
@@ -512,6 +516,7 @@ nns-workload-test-slo:
 # 46-nns-tests-slo: run some tests on topology with 46 nodes in the NNS subents
 46-nns-tests-slo:
   extends: .prod-slo-test
+  allow_failure: true #46 nodes in NNS test is not needed for release of replica
   script:
     - |
       set -eExou pipefail
