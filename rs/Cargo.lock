@@ -4710,6 +4710,7 @@ dependencies = [
  "ic-types 0.8.0",
  "ic-utils 0.8.0",
  "ic-wasm-types",
+ "itertools 0.10.0",
  "lazy_static",
  "maplit",
  "memory_tracker",

@@ -2,10 +2,12 @@ use candid::CandidType;
 use ic_protobuf::{proxy::ProxyDecodeError, registry::subnet::v1 as pb};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
-use strum_macros::EnumString;
+use strum_macros::{EnumIter, EnumString};
 
 /// Defines the different types of subnets that can exist on the IC.
-#[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, EnumString, PartialEq, Serialize)]
+#[derive(
+    CandidType, Clone, Copy, Deserialize, Debug, Eq, EnumIter, EnumString, PartialEq, Serialize,
+)]
 pub enum SubnetType {
     /// The application subnet type where most of the normal applications will
     /// be hosted.

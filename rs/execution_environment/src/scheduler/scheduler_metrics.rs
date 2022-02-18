@@ -6,12 +6,19 @@ use ic_types::nominal_cycles::NominalCycles;
 use prometheus::{Gauge, Histogram, IntCounter, IntGauge, IntGaugeVec};
 
 use crate::metrics::{
-    duration_histogram, instructions_histogram, messages_histogram, ScopedMetrics,
+    cycles_histogram, duration_histogram, instructions_histogram, memory_histogram,
+    messages_histogram, ScopedMetrics,
 };
 
 pub(super) struct SchedulerMetrics {
     pub(super) canister_age: Histogram,
     pub(super) canister_compute_allocation_violation: IntCounter,
+    pub(super) canister_balance: Histogram,
+    pub(super) canister_binary_size: Histogram,
+    pub(super) canister_wasm_memory_usage: Histogram,
+    pub(super) canister_stable_memory_usage: Histogram,
+    pub(super) canister_memory_allocation: Histogram,
+    pub(super) canister_compute_allocation: Histogram,
     pub(super) compute_utilization_per_core: Histogram,
     pub(super) instructions_consumed_per_message: Histogram,
     pub(super) instructions_consumed_per_round: Histogram,
@@ -74,6 +81,36 @@ impl SchedulerMetrics {
             canister_compute_allocation_violation: metrics_registry.int_counter(
                 "scheduler_compute_allocation_violations",
                 "Total number of canister allocation violations.",
+            ),
+            canister_balance: cycles_histogram(
+                "canister_balance_cycles",
+                "Canisters balance distribution in Cycles.",
+                metrics_registry,
+            ),
+            canister_binary_size: memory_histogram(
+                "canister_binary_size_bytes",
+                "Canisters WASM binary size distribution in bytes.",
+                metrics_registry,
+            ),
+            canister_wasm_memory_usage: memory_histogram(
+                "canister_wasm_memory_usage_bytes",
+                "Canisters WASM memory usage distribution in bytes.",
+                metrics_registry,
+            ),
+            canister_stable_memory_usage: memory_histogram(
+                "canister_stable_memory_usage_bytes",
+                "Canisters stable memory usage distribution in bytes.",
+                metrics_registry,
+            ),
+            canister_memory_allocation: memory_histogram(
+                "canister_memory_allocation_bytes",
+                "Canisters memory allocation distribution in bytes.",
+                metrics_registry,
+            ),
+            canister_compute_allocation: metrics_registry.histogram(
+                "canister_compute_allocation_ration",
+                "Canisters compute allocation distribution ratio (0-1).",
+                linear_buckets(0.0, 0.1, 11),
             ),
             compute_utilization_per_core: metrics_registry.histogram(
                 "scheduler_compute_utilization_per_core",

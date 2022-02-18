@@ -1,8 +1,13 @@
-use ic_config::subnet_config::SchedulerConfig;
+use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
 use ic_metrics::{buckets::decimal_buckets_with_zero, MetricsRegistry};
-use ic_types::{NumInstructions, NumMessages};
+use ic_registry_subnet_type::SubnetType;
+use ic_types::{
+    NumInstructions, NumMessages, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES,
+};
+use itertools::iproduct;
 use prometheus::Histogram;
 use std::{cell::RefCell, rc::Rc, time::Instant};
+use strum::IntoEnumIterator;
 
 pub(crate) struct QueryHandlerMetrics {
     pub query: ScopedMetrics,
@@ -199,12 +204,8 @@ pub fn duration_histogram<S: Into<String>>(
     metrics_registry.histogram(name, help, buckets)
 }
 
-/// Returns a histogram with buckets appropriate for instructions.
-pub fn instructions_histogram<S: Into<String>>(
-    name: S,
-    help: S,
-    metrics_registry: &MetricsRegistry,
-) -> Histogram {
+/// Returns buckets appropriate for instructions.
+fn instructions_buckets() -> Vec<f64> {
     fn add_limits(buckets: &mut Vec<NumInstructions>, config: SchedulerConfig) {
         buckets.push(config.max_instructions_per_message);
         buckets.push(config.max_instructions_per_round);
@@ -218,13 +219,18 @@ pub fn instructions_histogram<S: Into<String>>(
     buckets.push(NumInstructions::from(10));
     buckets.push(NumInstructions::from(1000));
     // Add buckets for all known instruction limits.
-    let app_subnet_config = SchedulerConfig::application_subnet();
-    add_limits(&mut buckets, app_subnet_config.clone());
-    add_limits(&mut buckets, SchedulerConfig::verified_application_subnet());
-    add_limits(&mut buckets, SchedulerConfig::system_subnet());
+    for t in SubnetType::iter() {
+        let config = match t {
+            SubnetType::Application => SchedulerConfig::application_subnet(),
+            SubnetType::System => SchedulerConfig::system_subnet(),
+            SubnetType::VerifiedApplication => SchedulerConfig::verified_application_subnet(),
+        };
+        add_limits(&mut buckets, config);
+    }
 
     // Add buckets with higher resolution between [round_limit,
     // round_limit+message_limit] for app subnets.
+    let app_subnet_config = SchedulerConfig::application_subnet();
     let round_limit = app_subnet_config.max_instructions_per_round.get();
     let message_limit = app_subnet_config.max_instructions_per_message.get();
     for value in (round_limit..(round_limit + message_limit)).step_by(1_000_000_000) {
@@ -235,11 +241,95 @@ pub fn instructions_histogram<S: Into<String>>(
     buckets.sort_unstable();
     buckets.dedup();
     // Buckets are [0, 10, 1K, 10K, 20K, ...,  10B, 20B, 50B] + [subnet limits]
-    metrics_registry.histogram(
-        name,
-        help,
-        buckets.into_iter().map(|x| x.get() as f64).collect(),
-    )
+    buckets.into_iter().map(|x| x.get() as f64).collect()
+}
+
+/// Returns a histogram with buckets appropriate for instructions.
+pub fn instructions_histogram<S: Into<String>>(
+    name: S,
+    help: S,
+    metrics_registry: &MetricsRegistry,
+) -> Histogram {
+    metrics_registry.histogram(name, help, instructions_buckets())
+}
+
+/// Returns buckets appropriate for Cycles.
+fn cycles_buckets() -> Vec<f64> {
+    // Collect fees for all the Subnet types
+    let fees: Vec<_> = SubnetType::iter()
+        .map(|t| {
+            match t {
+                SubnetType::Application => CyclesAccountManagerConfig::application_subnet(),
+                SubnetType::System => CyclesAccountManagerConfig::system_subnet(),
+                SubnetType::VerifiedApplication => {
+                    CyclesAccountManagerConfig::verified_application_subnet()
+                }
+            }
+            .ten_update_instructions_execution_fee
+            .get()
+        })
+        .collect();
+    // Apply every fee to each bucket element (cartesian product)
+    // For example, having fees [1, 2] and buckets [10, 20, 30], the cartesian product is:
+    // [1*10, 2*10, 1*20, 2*20, 1*30, 2*30]
+    let mut buckets: Vec<_> = iproduct!(fees, instructions_buckets())
+        .map(|(fee, x)| fee * x as u128 / 10)
+        .collect();
+    // Ensure that all buckets are unique.
+    buckets.sort_unstable();
+    buckets.dedup();
+    buckets.into_iter().map(|x| x as f64).collect()
+}
+
+/// Returns a histogram with buckets appropriate for Cycles.
+pub fn cycles_histogram<S: Into<String>>(
+    name: S,
+    help: S,
+    metrics_registry: &MetricsRegistry,
+) -> Histogram {
+    metrics_registry.histogram(name, help, cycles_buckets())
+}
+
+/// Returns buckets appropriate for WASM and Stable memories
+fn memory_buckets() -> Vec<f64> {
+    const K: u64 = 1024;
+    const M: u64 = K * 1024;
+    const G: u64 = M * 1024;
+    let mut buckets: Vec<_> = [
+        0,
+        4 * K,
+        64 * K,
+        M,
+        10 * M,
+        50 * M,
+        100 * M,
+        500 * M,
+        G,
+        2 * G,
+        3 * G,
+        4 * G,
+        5 * G,
+        6 * G,
+        7 * G,
+        8 * G,
+    ]
+    .iter()
+    .chain([MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES].iter())
+    .cloned()
+    .collect();
+    // Ensure that all buckets are unique
+    buckets.sort_unstable();
+    buckets.dedup();
+    buckets.into_iter().map(|x| x as f64).collect()
+}
+
+/// Returns a histogram with buckets appropriate for Canister memory.
+pub fn memory_histogram<S: Into<String>>(
+    name: S,
+    help: S,
+    metrics_registry: &MetricsRegistry,
+) -> Histogram {
+    metrics_registry.histogram(name, help, memory_buckets())
 }
 
 /// Returns a histogram with buckets appropriate for messages.
@@ -456,5 +546,89 @@ mod tests {
         assert_eq!(0, inner.instructions.get_sample_sum() as u64);
         assert_eq!(1, inner.messages.get_sample_count());
         assert_eq!(0, inner.messages.get_sample_sum() as u64);
+    }
+
+    #[test]
+    fn valid_instructions_buckets() {
+        let buckets: std::collections::HashSet<_> = instructions_buckets()
+            .into_iter()
+            .map(|x| x as u64)
+            .collect();
+        assert!(!buckets.is_empty());
+        // Collect all Instructions limits
+        let limits: Vec<_> = SubnetType::iter()
+            .flat_map(|t| {
+                let config = match t {
+                    SubnetType::Application => SchedulerConfig::application_subnet(),
+                    SubnetType::System => SchedulerConfig::system_subnet(),
+                    SubnetType::VerifiedApplication => {
+                        SchedulerConfig::verified_application_subnet()
+                    }
+                };
+                [
+                    config.max_instructions_per_message.get(),
+                    config.max_instructions_per_round.get(),
+                    config.max_instructions_per_install_code.get(),
+                ]
+            })
+            .collect();
+        assert!(!limits.is_empty());
+        for l in limits {
+            assert!(buckets.contains(&l));
+        }
+    }
+
+    #[test]
+    fn valid_cycles_buckets() {
+        let buckets: std::collections::HashSet<_> =
+            cycles_buckets().into_iter().map(|x| x as u128).collect();
+        assert!(!buckets.is_empty());
+        // Collect all Instructions limits
+        let limits: Vec<_> = SubnetType::iter()
+            .flat_map(|t| {
+                let config = match t {
+                    SubnetType::Application => SchedulerConfig::application_subnet(),
+                    SubnetType::System => SchedulerConfig::system_subnet(),
+                    SubnetType::VerifiedApplication => {
+                        SchedulerConfig::verified_application_subnet()
+                    }
+                };
+                [
+                    config.max_instructions_per_message.get(),
+                    config.max_instructions_per_round.get(),
+                    config.max_instructions_per_install_code.get(),
+                ]
+            })
+            .collect();
+        assert!(!limits.is_empty());
+        // Collect all Cycles fees
+        let fees: Vec<_> = SubnetType::iter()
+            .map(|t| {
+                match t {
+                    SubnetType::Application => CyclesAccountManagerConfig::application_subnet(),
+                    SubnetType::System => CyclesAccountManagerConfig::system_subnet(),
+                    SubnetType::VerifiedApplication => {
+                        CyclesAccountManagerConfig::verified_application_subnet()
+                    }
+                }
+                .ten_update_instructions_execution_fee
+                .get()
+            })
+            .collect();
+        assert!(!fees.is_empty());
+        for l in limits {
+            for f in &fees {
+                let b = l as u128 * f / 10;
+                assert!(buckets.contains(&b));
+            }
+        }
+    }
+    #[test]
+    fn valid_memory_buckets() {
+        let buckets: std::collections::HashSet<_> =
+            memory_buckets().into_iter().map(|x| x as u64).collect();
+        assert!(buckets.contains(&0));
+        assert!(buckets.contains(&MAX_STABLE_MEMORY_IN_BYTES));
+        assert!(buckets.contains(&MAX_WASM_MEMORY_IN_BYTES));
     }
 }
