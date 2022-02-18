@@ -53,7 +53,6 @@ def main(argv):
         ic_url,
         "--no_flamegraphs=True",
         "--no_prometheus=True",
-        "--skip_generate_report=True",
         "--testnet",
         "none",
         "--artifacts_path",
@@ -149,6 +148,7 @@ def main(argv):
             "run_experiment_gossip.py",
             "--duration",
             "10",
+            "--skip_generate_report=True",
         ]
         + base_arguments_load_test,
         check=True,

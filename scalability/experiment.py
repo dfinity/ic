@@ -7,6 +7,7 @@ import sys
 import time
 from typing import List
 
+import ansible
 import flamegraphs
 import generate_report
 import gflags
@@ -430,13 +431,7 @@ class Experiment:
 
     def get_machines(self, testnet, subnet=0):
         """Get a list of machines for the given subnetwork."""
-        p = subprocess.run(
-            ["ansible-inventory", "-i", "env/{}/hosts".format(testnet), "--list"],
-            check=True,
-            cwd="../testnet",
-            capture_output=True,
-        )
-        j = json.loads(p.stdout.decode("utf-8"))
+        j = ansible.get_testnet(testnet)
 
         hosts = [
             info
