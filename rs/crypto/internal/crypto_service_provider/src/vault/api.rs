@@ -3,6 +3,10 @@ use crate::secret_key_store::{Scope, SecretKeyStoreError};
 use crate::types::{CspPop, CspPublicKey, CspSignature};
 use crate::types::{CspPublicCoefficients, CspSecretKey};
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
+use ic_crypto_internal_threshold_sig_ecdsa::{
+    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
+    IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
+};
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
 };
@@ -18,10 +22,6 @@ use ic_types::crypto::{AlgorithmId, KeyId};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
-use tecdsa::{
-    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
-    IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
-};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CspBasicSignatureError {

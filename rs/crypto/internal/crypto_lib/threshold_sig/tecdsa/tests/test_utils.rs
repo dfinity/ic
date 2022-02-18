@@ -1,11 +1,11 @@
 #![allow(dead_code)]
 
+use ic_crypto_internal_threshold_sig_ecdsa::*;
 use ic_types::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
 use ic_types::crypto::AlgorithmId;
 use ic_types::*;
 use rand::Rng;
 use std::collections::BTreeMap;
-use tecdsa::*;
 
 #[derive(Debug, Clone)]
 pub struct ProtocolSetup {
@@ -635,7 +635,7 @@ impl SignatureProtocolSetup {
             algorithm_id: AlgorithmId::EcdsaSecp256k1,
             public_key: self.key.transcript.constant_term().serialize(),
         };
-        tecdsa::sign::derive_public_key(&master_public_key, path)
+        ic_crypto_internal_threshold_sig_ecdsa::sign::derive_public_key(&master_public_key, path)
     }
 }
 

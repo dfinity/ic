@@ -1,6 +1,8 @@
+use ic_crypto_internal_threshold_sig_ecdsa::{
+    DerivationPath, EccCurveType, EccPoint, ThresholdEcdsaError,
+};
 use rand::Rng;
 use std::convert::{TryFrom, TryInto};
-use tecdsa::{DerivationPath, EccCurveType, EccPoint, ThresholdEcdsaError};
 
 #[allow(dead_code)]
 mod test_utils;

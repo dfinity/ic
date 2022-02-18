@@ -4,6 +4,7 @@ use crate::api::{CspKeyGenerator, CspSecretKeyStoreChecker};
 use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreError};
 use crate::types::{CspPop, CspPublicKey, CspSecretKey};
 use crate::Csp;
+use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, MEGaPublicKey};
 use ic_crypto_internal_tls::keygen::generate_tls_key_pair_der;
 use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
 use ic_crypto_sha::Sha256;
@@ -14,7 +15,6 @@ use ic_types::NodeId;
 use openssl::asn1::Asn1Time;
 use rand::{CryptoRng, Rng};
 use std::convert::TryFrom;
-use tecdsa::{EccCurveType, MEGaPublicKey};
 pub use tls_keygen::tls_cert_hash_as_key_id;
 
 const KEY_ID_DOMAIN: &str = "ic-key-id";

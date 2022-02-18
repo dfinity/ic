@@ -1,5 +1,8 @@
 //! Implementations of ThresholdEcdsaSigner
 use ic_crypto_internal_csp::api::{CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner};
+use ic_crypto_internal_threshold_sig_ecdsa::{
+    IDkgTranscriptInternal, ThresholdEcdsaDerivePublicKeyError, ThresholdEcdsaSigShareInternal,
+};
 use ic_types::crypto::canister_threshold_sig::error::{
     ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaGetPublicKeyError,
     ThresholdEcdsaSignShareError,
@@ -16,9 +19,6 @@ use ic_types::{NodeId, NodeIndex};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
-use tecdsa::{
-    IDkgTranscriptInternal, ThresholdEcdsaDerivePublicKeyError, ThresholdEcdsaSigShareInternal,
-};
 
 pub fn sign_share<C: CspThresholdEcdsaSigner>(
     csp_client: &C,
@@ -144,14 +144,16 @@ pub fn derive_tecdsa_public_key(
     master_public_key: &MasterEcdsaPublicKey,
     extended_derivation_path: &ExtendedDerivationPath,
 ) -> Result<EcdsaPublicKey, ThresholdEcdsaGetPublicKeyError> {
-    tecdsa::derive_public_key(master_public_key, &extended_derivation_path.into()).map_err(|e| {
-        match e {
-            ThresholdEcdsaDerivePublicKeyError::InvalidArgument(s) => {
-                ThresholdEcdsaGetPublicKeyError::InvalidArgument(s)
-            }
-            ThresholdEcdsaDerivePublicKeyError::InternalError(e) => {
-                ThresholdEcdsaGetPublicKeyError::InternalError(format!("{:?}", e))
-            }
+    ic_crypto_internal_threshold_sig_ecdsa::derive_public_key(
+        master_public_key,
+        &extended_derivation_path.into(),
+    )
+    .map_err(|e| match e {
+        ThresholdEcdsaDerivePublicKeyError::InvalidArgument(s) => {
+            ThresholdEcdsaGetPublicKeyError::InvalidArgument(s)
+        }
+        ThresholdEcdsaDerivePublicKeyError::InternalError(e) => {
+            ThresholdEcdsaGetPublicKeyError::InternalError(format!("{:?}", e))
         }
     })
 }

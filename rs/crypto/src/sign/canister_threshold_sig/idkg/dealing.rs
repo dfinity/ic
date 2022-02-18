@@ -2,13 +2,13 @@
 
 use crate::sign::canister_threshold_sig::idkg::utils::idkg_encryption_keys_from_registry;
 use ic_crypto_internal_csp::api::CspIDkgProtocol;
+use ic_crypto_internal_threshold_sig_ecdsa::IDkgTranscriptOperationInternal;
 use ic_interfaces::registry::RegistryClient;
 use ic_types::crypto::canister_threshold_sig::error::IDkgCreateDealingError;
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealing, IDkgTranscriptParams};
 use ic_types::{NodeId, NodeIndex};
 use std::convert::TryFrom;
 use std::sync::Arc;
-use tecdsa::IDkgTranscriptOperationInternal;
 
 pub fn create_dealing<C: CspIDkgProtocol>(
     csp_client: &C,

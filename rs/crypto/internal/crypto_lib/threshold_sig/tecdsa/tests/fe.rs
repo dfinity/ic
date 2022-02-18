@@ -1,5 +1,5 @@
+use ic_crypto_internal_threshold_sig_ecdsa::*;
 use rand::RngCore;
-use tecdsa::*;
 
 fn random_field_element(curve_type: EccCurveType) -> EccFieldElement {
     let mut rng = rand::thread_rng();

@@ -1,6 +1,7 @@
 use ic_base_types::PrincipalId;
 use ic_crypto::utils::TempCryptoComponent;
 use ic_crypto::{derive_tecdsa_public_key, get_tecdsa_master_public_key};
+use ic_crypto_internal_threshold_sig_ecdsa::{IDkgDealingInternal, MEGaCiphertext};
 use ic_crypto_test_utils_canister_threshold_sigs::{
     build_params_from_previous, create_dealing, create_dealings, generate_key_transcript,
     generate_presig_quadruple, load_input_transcripts, load_transcript, multisign_dealings,
@@ -34,7 +35,6 @@ use rand::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 use std::sync::Arc;
-use tecdsa::{IDkgDealingInternal, MEGaCiphertext};
 
 #[test]
 fn should_fail_create_dealing_if_registry_missing_mega_pubkey() {

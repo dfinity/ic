@@ -1,6 +1,6 @@
+use ic_crypto_internal_threshold_sig_ecdsa::*;
 use rand::Rng;
 use std::collections::BTreeMap;
-use tecdsa::*;
 
 mod test_utils;
 

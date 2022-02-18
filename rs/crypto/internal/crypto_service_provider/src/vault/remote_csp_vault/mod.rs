@@ -6,6 +6,10 @@ use crate::vault::api::{
     CspTlsSignError,
 };
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
+use ic_crypto_internal_threshold_sig_ecdsa::{
+    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
+    IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
+};
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
 };
@@ -21,10 +25,6 @@ use ic_types::crypto::{AlgorithmId, KeyId};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
-use tecdsa::{
-    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
-    IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
-};
 use tokio::net::UnixListener;
 
 mod tarpc_csp_vault_client;

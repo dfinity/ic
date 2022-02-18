@@ -1,5 +1,5 @@
 use criterion::*;
-use tecdsa::*;
+use ic_crypto_internal_threshold_sig_ecdsa::*;
 
 fn field_ops(c: &mut Criterion) {
     let curve_type = EccCurveType::K256;

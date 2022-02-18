@@ -1,6 +1,6 @@
 use criterion::*;
+use ic_crypto_internal_threshold_sig_ecdsa::*;
 use rand::Rng;
-use tecdsa::*;
 
 fn zk_proofs(c: &mut Criterion) {
     let curve = EccCurveType::K256;

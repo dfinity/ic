@@ -1,8 +1,8 @@
 #![no_main]
 use libfuzzer_sys::fuzz_target;
 
+use ic_crypto_internal_threshold_sig_ecdsa::*;
 use num_bigint::BigUint;
-use tecdsa::*;
 
 fn prime_for(curve: EccCurveType) -> BigUint {
     match curve {

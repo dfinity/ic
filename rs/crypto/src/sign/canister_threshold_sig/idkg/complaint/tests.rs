@@ -6,6 +6,7 @@ use crate::sign::tests::{
     mega_encryption_pk_record_with, registry_returning, registry_returning_none, registry_with,
     REG_V1,
 };
+use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, MEGaPublicKey};
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_registry_client::client::RegistryClientError;
@@ -18,7 +19,6 @@ use ic_types::crypto::{AlgorithmId, CombinedMultiSig, CombinedMultiSigOf, KeyPur
 use ic_types::{Height, Randomness, RegistryVersion};
 use rand::{thread_rng, Rng};
 use std::collections::BTreeSet;
-use tecdsa::{EccCurveType, MEGaPublicKey};
 
 #[test]
 fn should_call_csp_with_correct_arguments() {
@@ -556,8 +556,11 @@ fn mega_encryption_pk_record_with_key(
 
 fn generate_mega_public_key() -> MEGaPublicKey {
     let rng = &mut thread_rng();
-    let (mega_pk, _mega_sk) = tecdsa::gen_keypair(EccCurveType::K256, Randomness::new(rng.gen()))
-        .expect("failed to generate keypair");
+    let (mega_pk, _mega_sk) = ic_crypto_internal_threshold_sig_ecdsa::gen_keypair(
+        EccCurveType::K256,
+        Randomness::new(rng.gen()),
+    )
+    .expect("failed to generate keypair");
     mega_pk
 }
 

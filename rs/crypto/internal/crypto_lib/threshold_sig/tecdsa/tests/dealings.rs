@@ -1,7 +1,7 @@
+use ic_crypto_internal_threshold_sig_ecdsa::*;
 use ic_types::crypto::AlgorithmId;
 use ic_types::*;
 use rand::Rng;
-use tecdsa::*;
 
 fn gen_private_keys(
     curve: EccCurveType,

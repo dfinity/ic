@@ -1,7 +1,7 @@
 //! Errors encountered during CSP canister threshold signature operations.
+use ic_crypto_internal_threshold_sig_ecdsa::ThresholdEcdsaError;
 use ic_types::crypto::AlgorithmId;
 use serde::{Deserialize, Serialize};
-use tecdsa::ThresholdEcdsaError;
 
 /// Errors encountered during generation of a MEGa encryption key pair.
 #[derive(Clone, Debug, Serialize, Deserialize)]
