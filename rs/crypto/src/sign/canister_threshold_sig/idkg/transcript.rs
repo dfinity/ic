@@ -12,8 +12,8 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateTranscriptError, IDkgLoadTranscriptError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgComplaint, IDkgDealers, IDkgMultiSignedDealing, IDkgOpening, IDkgReceivers, IDkgTranscript,
-    IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType,
+    IDkgComplaint, IDkgMultiSignedDealing, IDkgOpening, IDkgTranscript, IDkgTranscriptParams,
+    IDkgTranscriptType,
 };
 use ic_types::{NodeId, NodeIndex, RegistryVersion};
 use std::collections::BTreeMap;
@@ -32,11 +32,9 @@ pub fn create_transcript<C: CspIDkgProtocol + CspSigner>(
     ensure_sufficient_signatures_collected(params, dealings)?;
     verify_multisignatures(csp_client, registry, dealings, params.registry_version())?;
 
-    let internal_dealings = internal_dealings_by_index_from_dealings(
-        dealings,
-        params.dealers(),
-        params.operation_type(),
-    )?;
+    let signed_dealings_by_index = dealings_by_index_from_dealings(dealings, params)?;
+
+    let internal_dealings = internal_dealings_from_signed_dealings(&signed_dealings_by_index)?;
 
     let internal_operation_type =
         IDkgTranscriptOperationInternal::try_from(params.operation_type()).map_err(|e| {
@@ -60,14 +58,11 @@ pub fn create_transcript<C: CspIDkgProtocol + CspSigner>(
 
     let transcript_type = IDkgTranscriptType::from(params.operation_type());
 
-    let dealings_by_index =
-        dealings_by_index_from_dealings(dealings, params.dealers(), params.operation_type())?;
-
     Ok(IDkgTranscript {
         transcript_id: params.transcript_id(),
         receivers: params.receivers().clone(),
         registry_version: params.registry_version(),
-        verified_dealings: dealings_by_index,
+        verified_dealings: signed_dealings_by_index,
         transcript_type,
         algorithm_id: params.algorithm_id(),
         internal_transcript_raw,
@@ -256,100 +251,38 @@ fn verify_multisignatures<C: CspIDkgProtocol + CspSigner>(
     Ok(())
 }
 
-/// Convert IDkgDealings to IDkgDealingInternals, and re-key the map to use
-/// indices rather than ids
-///
-/// The indices are such that they allow the previous transcript(s) (if any)
-/// to be properly recombined (i.e. the indices are for the previous sharing,
-/// if this is a resharing or multiplication).
-fn internal_dealings_by_index_from_dealings(
-    dealings: &BTreeMap<NodeId, IDkgMultiSignedDealing>,
-    dealers: &IDkgDealers,
-    op_type: &IDkgTranscriptOperation,
+/// Convert values in the dealings map from IDkgDealings to IDkgDealingInternals
+fn internal_dealings_from_signed_dealings(
+    dealings: &BTreeMap<NodeIndex, IDkgMultiSignedDealing>,
 ) -> Result<BTreeMap<NodeIndex, IDkgDealingInternal>, IDkgCreateTranscriptError> {
-    fn deserialize_internal_dealing(
-        raw: &[u8],
-    ) -> Result<IDkgDealingInternal, IDkgCreateTranscriptError> {
-        IDkgDealingInternal::deserialize(raw).map_err(|e| {
-            IDkgCreateTranscriptError::SerializationError {
-                internal_error: format!("{:?}", e),
-            }
-        })
-    }
-
     dealings
         .iter()
-        .map(|(id, d)| {
+        .map(|(index, d)| {
             let internal_dealing =
-                deserialize_internal_dealing(&d.dealing.idkg_dealing.internal_dealing_raw)?;
-            let index = id_to_index(*id, dealers, op_type)?;
-            Ok((index, internal_dealing))
+                IDkgDealingInternal::deserialize(&d.dealing.idkg_dealing.internal_dealing_raw)
+                    .map_err(|e| IDkgCreateTranscriptError::SerializationError {
+                        internal_error: format!("{:?}", e),
+                    })?;
+            Ok((*index, internal_dealing))
         })
         .collect()
 }
 
-/// Convert a NodeId to the correct NodeIndex, based on the transcript operation
-///
-/// The NodeIndex is such that it allows the previous transcript(s) (if any)
-/// to be properly recombined (i.e. the indices are for the previous sharing,
-/// if this is a resharing or multiplication).
-fn id_to_index(
-    id: NodeId,
-    dealers: &IDkgDealers,
-    op_type: &IDkgTranscriptOperation,
-) -> Result<NodeIndex, IDkgCreateTranscriptError> {
-    fn dealer_id_to_index(
-        id: NodeId,
-        dealers: &IDkgDealers,
-    ) -> Result<NodeIndex, IDkgCreateTranscriptError> {
-        dealers
-            .position(id)
-            .ok_or(IDkgCreateTranscriptError::DealerNotAllowed { node_id: id })
-        // this should already have been checked by
-        // `ensure_dealers_allowed_by_params`
-    }
-
-    fn receiver_id_to_index(
-        id: NodeId,
-        receivers: &IDkgReceivers,
-    ) -> Result<NodeIndex, IDkgCreateTranscriptError> {
-        receivers
-            .position(id)
-            .ok_or(IDkgCreateTranscriptError::DealerNotAllowed { node_id: id })
-        // this should already have been checked by
-        // IDkgTranscriptParams::new
-    }
-
-    match op_type {
-        IDkgTranscriptOperation::Random => dealer_id_to_index(id, dealers),
-        IDkgTranscriptOperation::ReshareOfMasked(transcript) => {
-            receiver_id_to_index(id, &transcript.receivers)
-        }
-        IDkgTranscriptOperation::ReshareOfUnmasked(transcript) => {
-            receiver_id_to_index(id, &transcript.receivers)
-        }
-        IDkgTranscriptOperation::UnmaskedTimesMasked(transcript, _) => {
-            // transcript_1.receivers == transcript_2.receivers already checked by
-            // IDkgTranscriptParams::new
-            receiver_id_to_index(id, &transcript.receivers)
-        }
-    }
-}
-
-/// Re-key the map to use indices rather than ids
+/// Re-key the dealings map to use indices rather than ids
 ///
 /// The indices are such that they allow the previous transcript(s) (if any)
 /// to be properly recombined (i.e. the indices are for the previous sharing,
 /// if this is a resharing or multiplication).
 fn dealings_by_index_from_dealings(
     dealings: &BTreeMap<NodeId, IDkgMultiSignedDealing>,
-    dealers: &IDkgDealers,
-    op_type: &IDkgTranscriptOperation,
+    params: &IDkgTranscriptParams,
 ) -> Result<BTreeMap<NodeIndex, IDkgMultiSignedDealing>, IDkgCreateTranscriptError> {
     dealings
         .iter()
         .map(|(id, d)| {
-            let index = id_to_index(*id, dealers, op_type)?;
+            let index = params
+                .dealer_index(*id)
+                .ok_or(IDkgCreateTranscriptError::DealerNotAllowed { node_id: *id })?;
             Ok((index, d.clone()))
         })
         .collect()

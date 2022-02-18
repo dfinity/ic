@@ -329,6 +329,32 @@ impl IDkgTranscriptParams {
         self.receivers.reconstruction_threshold()
     }
 
+    /// Returns the dealer index of a node, or `None` if the node is not included in the set of dealers.
+    ///
+    /// For a Random transcript, the index of a dealer correspond to the position of `node_id` in the dealer set.
+    /// For all other transcript operations, the dealer index corresponds to its position of `node_id` in the previous set of receivers.
+    pub fn dealer_index(&self, node_id: NodeId) -> Option<NodeIndex> {
+        match self.dealers().position(node_id) {
+            None => None,
+            Some(index) => {
+                match &self.operation_type {
+                    IDkgTranscriptOperation::Random => Some(index),
+                    IDkgTranscriptOperation::ReshareOfMasked(transcript) => {
+                        transcript.receivers.position(node_id)
+                    }
+                    IDkgTranscriptOperation::ReshareOfUnmasked(transcript) => {
+                        transcript.receivers.position(node_id)
+                    }
+                    IDkgTranscriptOperation::UnmaskedTimesMasked(transcript_1, _transcript_2) => {
+                        // transcript_1.receivers == transcript_2.receivers already checked by
+                        // IDkgTranscriptParams::new
+                        transcript_1.receivers.position(node_id)
+                    }
+                }
+            }
+        }
+    }
+
     /// Number of multi-signature shares needed to include a dealing in a
     /// transcript.
     pub fn verification_threshold(&self) -> NumberOfNodes {
