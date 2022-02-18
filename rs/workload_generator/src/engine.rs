@@ -77,7 +77,6 @@ pub struct CallResult {
 #[derive(Clone)]
 pub struct Engine {
     agents: Vec<Agent>, // List of agents to be used in round-robin fashion when sending requests.
-    _sender: AgentSender,
 }
 
 impl Engine {
@@ -101,10 +100,7 @@ impl Engine {
         });
 
         agents.extend(current_batch);
-        Engine {
-            agents,
-            _sender: agent_sender,
-        }
+        Engine { agents }
     }
 
     // Goes over all agents and makes sure they are connected and the corresponding
@@ -345,7 +341,7 @@ impl Engine {
                     fs::write(f, bytes).unwrap();
                 }
 
-                Engine::check_query(r, tx, latency, plan).await
+                Engine::check_query(r, tx, latency).await
             }
             Err(e) => {
                 let err = format!("{:?}", e).to_string();
@@ -356,13 +352,7 @@ impl Engine {
                 let http_status = 0_u16;
 
                 tx.send(CallResult {
-                    fact: Fact::record(
-                        ContentLength::new(0),
-                        http_status,
-                        latency,
-                        false,
-                        plan.request_type,
-                    ),
+                    fact: Fact::record(ContentLength::new(0), http_status, latency, false),
                     counter: None,
                     call_failure: CallFailure::OnWait,
                     err_msg: Some(err),
@@ -438,7 +428,6 @@ impl Engine {
                         11,
                         Instant::now().duration_since(time_start),
                         false,
-                        plan.request_type,
                     ),
                     counter: None,
                     call_failure: CallFailure::OnSubmit,
@@ -477,7 +466,6 @@ impl Engine {
                             update_status_code,
                             Instant::now().duration_since(time_start),
                             false,
-                            plan.request_type,
                         ),
                         counter: None,
                         call_failure: CallFailure::OnSubmit,
@@ -548,7 +536,6 @@ impl Engine {
                                             http_status,
                                             Instant::now().duration_since(time_start),
                                             true,
-                                            plan.request_type,
                                         ),
                                         counter: Some(counter),
                                         call_failure: CallFailure::None,
@@ -581,7 +568,6 @@ impl Engine {
                                             33,
                                             Instant::now().duration_since(time_start),
                                             false,
-                                            plan.request_type,
                                         ),
                                         counter: None,
                                         call_failure: CallFailure::OnWait,
@@ -613,7 +599,6 @@ impl Engine {
                             44,
                             Instant::now().duration_since(time_start),
                             false,
-                            plan.request_type,
                         ),
                         counter: None,
                         call_failure: CallFailure::OnWait,
@@ -633,7 +618,6 @@ impl Engine {
         resp: Option<Vec<u8>>,
         tx: Sender<CallResult>,
         latency: Duration,
-        plan: &Plan,
     ) -> Option<u32> {
         debug!("Response: {:?}", resp);
         let counter = resp
@@ -651,7 +635,6 @@ impl Engine {
                 200_u16,
                 latency,
                 true,
-                plan.request_type,
             ),
             counter,
             call_failure: CallFailure::None,
