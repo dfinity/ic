@@ -153,6 +153,10 @@ impl Polynomial {
         self.coefficients.len() - zeros
     }
 
+    pub fn is_zero(&self) -> bool {
+        self.non_zero_coefficients() == 0
+    }
+
     /// Polynomial addition
     fn add(&self, rhs: &Self) -> ThresholdEcdsaResult<Self> {
         if self.curve_type() != rhs.curve_type() {
@@ -171,23 +175,27 @@ impl Polynomial {
     }
 
     /// Compute product of a polynomial and a polynomial
-    fn mul(&self, rhs: &Self) -> ThresholdEcdsaResult<Self> {
-        if self.curve_type() != rhs.curve_type() {
+    pub fn mul(&self, rhs: &Self) -> ThresholdEcdsaResult<Self> {
+        let curve_type = self.curve_type();
+
+        if rhs.curve_type() != curve_type {
             return Err(ThresholdEcdsaError::CurveMismatch);
         }
 
-        let n_coeffs = self.coefficients.len() + rhs.coefficients.len() - 1;
-        let curve = self.curve_type();
+        let lhs_coeffs = self.coefficients.len();
+        let rhs_coeffs = rhs.coefficients.len();
+        let n_coeffs = std::cmp::max(lhs_coeffs + rhs_coeffs, 1) - 1;
 
-        let zero = EccScalar::zero(curve);
+        let zero = EccScalar::zero(curve_type);
         let mut coeffs = vec![zero; n_coeffs];
+
         for (i, ca) in self.coefficients.iter().enumerate() {
             for (j, cb) in rhs.coefficients.iter().enumerate() {
                 let tmp = ca.mul(cb)?;
                 coeffs[i + j] = coeffs[i + j].add(&tmp)?;
             }
         }
-        Self::new(curve, coeffs)
+        Self::new(curve_type, coeffs)
     }
 
     /// Compute product of a polynomial and a scalar
@@ -647,8 +655,10 @@ pub fn lagrange_coefficients_at_value(
     value: &EccScalar,
     samples: &[EccScalar],
 ) -> Result<Vec<EccScalar>, ThresholdEcdsaError> {
+    // This is well defined but an error is easier for our purposes
+    // as we never need this case.
     if samples.is_empty() {
-        return Ok(vec![]);
+        return Err(ThresholdEcdsaError::InterpolationError);
     }
 
     let curve = samples[0].curve_type();

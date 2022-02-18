@@ -1,6 +1,22 @@
 use ic_crypto_internal_threshold_sig_ecdsa::*;
 
 #[test]
+fn poly_zero_times_zero_is_zero() -> ThresholdEcdsaResult<()> {
+    for curve in EccCurveType::all() {
+        let zero = EccScalar::zero(curve);
+
+        for coeffs in 0..10 {
+            let zpoly = Polynomial::new(curve, vec![zero; coeffs])?;
+            assert!(zpoly.is_zero());
+            let zpoly2 = zpoly.mul(&zpoly)?;
+            assert!(zpoly2.is_zero());
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
 fn poly_a_constant_poly_is_constant() -> ThresholdEcdsaResult<()> {
     let mut rng = rand::thread_rng();
 
@@ -276,8 +292,13 @@ fn poly_pedersen_commitments() -> ThresholdEcdsaResult<()> {
 fn poly_lagrange_coefficients_at_zero_are_correct() {
     let curve = EccCurveType::K256;
 
-    fn int_to_scalars(curve: EccCurveType, x: &[i64]) -> Vec<EccScalar> {
-        x.iter().map(|x| EccScalar::from_i64(curve, *x)).collect()
+    fn int_to_scalars(curve: EccCurveType, ints: &[i64]) -> Vec<EccScalar> {
+        let mut scalars = Vec::with_capacity(ints.len());
+        for i in ints {
+            let s = EccScalar::from_u64(curve, i.abs() as u64);
+            scalars.push(if i.is_negative() { s.negate() } else { s });
+        }
+        scalars
     }
 
     let x_values = int_to_scalars(curve, &[2, 3, 4, 7]);
