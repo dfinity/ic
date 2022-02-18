@@ -211,15 +211,15 @@ impl EccScalar {
     }
 
     /// Deserialize a SEC1 formatted scalar value
-    pub fn deserialize(curve: EccCurveType, bits: &[u8]) -> ThresholdEcdsaResult<Self> {
-        if bits.len() != curve.scalar_bytes() {
+    pub fn deserialize(curve: EccCurveType, bytes: &[u8]) -> ThresholdEcdsaResult<Self> {
+        if bytes.len() != curve.scalar_bytes() {
             return Err(ThresholdEcdsaError::InvalidScalar);
         }
 
         match curve {
             EccCurveType::K256 => {
                 use k256::elliptic_curve::group::ff::PrimeField;
-                let fb = k256::FieldBytes::from_slice(bits);
+                let fb = k256::FieldBytes::from_slice(bytes);
                 let s = k256::Scalar::from_repr(*fb);
 
                 if bool::from(s.is_some()) {
@@ -230,7 +230,7 @@ impl EccScalar {
             }
             EccCurveType::P256 => {
                 use p256::elliptic_curve::group::ff::PrimeField;
-                let fb = p256::FieldBytes::from_slice(bits);
+                let fb = p256::FieldBytes::from_slice(bytes);
                 let s = p256::Scalar::from_repr(*fb);
                 if bool::from(s.is_some()) {
                     Ok(Self::P256(s.unwrap()))
@@ -246,7 +246,7 @@ impl EccScalar {
     /// The input is allowed to be up to twice the length of a scalar. It is
     /// interpreted as a big-endian encoded integer, and reduced modulo the
     /// group order.
-    pub fn from_bytes_wide(curve: EccCurveType, bits: &[u8]) -> ThresholdEcdsaResult<Self> {
+    pub fn from_bytes_wide(curve: EccCurveType, bytes: &[u8]) -> ThresholdEcdsaResult<Self> {
         /*
         As the k256 and p256 crates are lacking a native function that reduces an
         input modulo the group order we have to synthesize it using other
@@ -258,13 +258,13 @@ impl EccScalar {
         */
         let scalar_bytes = curve.scalar_bytes();
 
-        if bits.len() > 2 * scalar_bytes {
+        if bytes.len() > 2 * scalar_bytes {
             return Err(ThresholdEcdsaError::InvalidScalar);
         }
 
         let mut extended = vec![0; 2 * scalar_bytes];
-        let offset = extended.len() - bits.len();
-        extended[offset..].copy_from_slice(bits); // zero pad
+        let offset = extended.len() - bytes.len();
+        extended[offset..].copy_from_slice(bytes); // zero pad
 
         match curve {
             EccCurveType::K256 => {
@@ -402,17 +402,6 @@ impl EccScalar {
     /// Return a small scalar value corresponding to the `index+1`
     pub fn from_node_index(curve: EccCurveType, index: NodeIndex) -> Self {
         Self::from_u64(curve, 1 + (index as u64))
-    }
-
-    /// Return a small scalar value
-    pub fn from_i64(curve: EccCurveType, n: i64) -> Self {
-        let s = Self::from_u64(curve, n.abs() as u64);
-
-        if n >= 0 {
-            s
-        } else {
-            s.negate()
-        }
     }
 
     pub fn interpolation_at_zero(samples: &[(EccScalar, EccScalar)]) -> ThresholdEcdsaResult<Self> {
@@ -629,7 +618,7 @@ impl EccPoint {
         encoded.push(0x04); // uncompressed
         encoded.extend_from_slice(&x_bytes);
         encoded.extend_from_slice(&y_bytes);
-        Self::deserialize(curve, &encoded)
+        Self::deserialize_any_format(curve, &encoded)
     }
 
     /// Add two elliptic curve points
@@ -811,13 +800,21 @@ impl EccPoint {
         }
     }
 
-    /// Deserialize a point. Either compressed or uncompressed points are
-    /// accepted.
-    pub fn deserialize(curve: EccCurveType, bits: &[u8]) -> ThresholdEcdsaResult<Self> {
+    /// Deserialize a point. Only compressed points are accepted.
+    pub fn deserialize(curve: EccCurveType, bytes: &[u8]) -> ThresholdEcdsaResult<Self> {
+        if bytes.len() != curve.point_bytes() || (bytes[0] != 2 && bytes[0] != 3) {
+            return Err(ThresholdEcdsaError::InvalidPoint);
+        }
+
+        Self::deserialize_any_format(curve, bytes)
+    }
+
+    /// Deserialize a point. Both compressed and uncompressed points are accepted.
+    fn deserialize_any_format(curve: EccCurveType, bytes: &[u8]) -> ThresholdEcdsaResult<Self> {
         match curve {
             EccCurveType::K256 => {
                 use k256::elliptic_curve::sec1::FromEncodedPoint;
-                let ept = k256::EncodedPoint::from_bytes(bits)
+                let ept = k256::EncodedPoint::from_bytes(bytes)
                     .map_err(|_| ThresholdEcdsaError::InvalidPoint)?;
                 let apt = k256::AffinePoint::from_encoded_point(&ept);
 
@@ -829,7 +826,7 @@ impl EccPoint {
             }
             EccCurveType::P256 => {
                 use p256::elliptic_curve::sec1::FromEncodedPoint;
-                let ept = p256::EncodedPoint::from_bytes(bits)
+                let ept = p256::EncodedPoint::from_bytes(bytes)
                     .map_err(|_| ThresholdEcdsaError::InvalidPoint)?;
                 let apt = p256::AffinePoint::from_encoded_point(&ept);
 
