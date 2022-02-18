@@ -21,12 +21,18 @@ deploy-guest-os-baseimg:
     docker build -q -t dfinity/genericos-base:"$TAG" -t dfinity/genericos-base:latest -f Dockerfile.base .
     docker push dfinity/genericos-base:"$TAG"
 
+    cd "${CI_PROJECT_DIR}/ic-os/boundary-guestos/rootfs"
+    docker build -q -t dfinity/boundaryos-base:"$TAG" -t dfinity/boundaryos-base:latest -f Dockerfile.base .
+    docker push dfinity/boundaryos-base:"$TAG"
+
     echo "Use the image with it's SHA256 DIGEST below for IC-OS Dockerfile"
     docker inspect --format='{{index .RepoDigests 0}}' dfinity/guestos-base:"$TAG"
     echo "Use the image with it's SHA256 DIGEST below for IC-OS Dockerfile (dev version)"
     docker inspect --format='{{index .RepoDigests 0}}' dfinity/guestos-base-dev:"$TAG"
     echo "Use the image with it's SHA256 DIGEST below for GENERIC IC-OS Dockerfile"
     docker inspect --format='{{index .RepoDigests 0}}' dfinity/genericos-base:"$TAG"
+    echo "Use the image with it's SHA256 DIGEST below for BOUNDARY IC-OS Dockerfile"
+    docker inspect --format='{{index .RepoDigests 0}}' dfinity/boundaryos-base:"$TAG"
 
 build-guest-os-baseimg:
   extends:
@@ -45,3 +51,7 @@ build-guest-os-baseimg:
 
     cd "${CI_PROJECT_DIR}/ic-os/generic-guestos/rootfs"
     docker build -t dfinity/genericos-base:"$TAG" -t dfinity/genericos-base:latest -f Dockerfile.base .
+
+    cd "${CI_PROJECT_DIR}/ic-os/boundary-guestos/rootfs"
+    docker build -t dfinity/boundaryos-base:"$TAG" -t dfinity/boundaryos-base:latest -f Dockerfile.base .
+
