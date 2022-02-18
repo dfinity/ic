@@ -1,7 +1,7 @@
 //! Transport related metrics
 
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
-use prometheus::{HistogramOpts, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
+use prometheus::{HistogramOpts, HistogramVec, IntCounterVec, IntGauge, IntGaugeVec};
 
 #[derive(Clone)]
 pub(crate) struct ControlPlaneMetrics {
@@ -88,8 +88,6 @@ impl ControlPlaneMetrics {
 
 #[derive(Clone)]
 pub(crate) struct DataPlaneMetrics {
-    pub(crate) _client_queue_full: IntCounter,
-    pub(crate) _client_send_fail: IntCounterVec,
     pub(crate) client_send_time_msec: HistogramVec,
     pub(crate) socket_write_bytes: IntCounterVec,
     pub(crate) socket_write_size: HistogramVec,
@@ -107,13 +105,6 @@ pub(crate) struct DataPlaneMetrics {
 impl DataPlaneMetrics {
     pub(crate) fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
-            _client_queue_full: metrics_registry
-                .int_counter("transport_client_queue_full", "Client queue fulls"),
-            _client_send_fail: metrics_registry.int_counter_vec(
-                "transport_client_send_fail",
-                "Passing read payload to client failed",
-                &["flow_peer_id", "flow_tag"],
-            ),
             // TODO: (NET-867)
             client_send_time_msec: HistogramVec::new(
                 HistogramOpts::new(
@@ -211,7 +202,6 @@ pub(crate) struct SendQueueMetrics {
     pub(crate) add_bytes: IntCounterVec,
     pub(crate) remove_count: IntCounterVec,
     pub(crate) remove_bytes: IntCounterVec,
-    pub(crate) _queue_size: IntGaugeVec,
     pub(crate) queue_full: IntCounterVec,
     pub(crate) queue_clear: IntCounterVec,
     pub(crate) receive_end_updates: IntCounterVec,
@@ -240,11 +230,6 @@ impl SendQueueMetrics {
             remove_bytes: metrics_registry.int_counter_vec(
                 "transport_send_queue_remove_bytes",
                 "Dequeued bytes",
-                &["flow_peer_id", "flow_tag"],
-            ),
-            _queue_size: metrics_registry.int_gauge_vec(
-                "transport_send_queue_size",
-                "Queue size",
                 &["flow_peer_id", "flow_tag"],
             ),
             queue_full: metrics_registry.int_counter_vec(

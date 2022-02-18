@@ -1,6 +1,4 @@
-use crate::{
-    chart::Chart, collector::RequestInfo, content_length::ContentLength, ChartSize, RequestType,
-};
+use crate::{chart::Chart, collector::RequestInfo, content_length::ContentLength, ChartSize};
 use std::{cmp, collections::HashMap, fmt, time::Duration};
 
 use serde::Serialize;
@@ -40,7 +38,6 @@ pub struct Fact {
     duration: Duration,
     content_length: ContentLength,
     success: bool,
-    _request_type: RequestType,
 }
 
 impl Fact {
@@ -54,14 +51,12 @@ impl Fact {
         // or got kill. If there is a problem with the returned requests we
         // should catch it by the metrics or the returned summary.
         success: bool,
-        request_type: RequestType,
     ) -> Fact {
         Fact {
             status,
             duration,
             content_length,
             success,
-            _request_type: request_type,
         }
     }
 }
