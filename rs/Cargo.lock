@@ -5052,6 +5052,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-common"
+version = "0.8.0"
+dependencies = [
+ "async-trait",
+ "dfn_core",
+ "dfn_protobuf",
+ "ledger-canister",
+]
+
+[[package]]
 name = "ic-nns-common"
 version = "0.8.0"
 dependencies = [
@@ -5109,6 +5119,7 @@ dependencies = [
  "ic-base-types",
  "ic-config",
  "ic-crypto-sha",
+ "ic-nervous-system-common",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-protobuf",
@@ -6107,6 +6118,7 @@ dependencies = [
  "ic-base-types",
  "ic-config",
  "ic-crypto-sha",
+ "ic-nervous-system-common",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",

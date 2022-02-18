@@ -18,13 +18,12 @@ use rand_core::{RngCore, SeedableRng};
 use std::boxed::Box;
 use std::time::SystemTime;
 
-use async_trait::async_trait;
 use prost::Message;
 
 use candid::candid_method;
 use dfn_candid::{candid, candid_one};
 use dfn_core::{
-    api::{arg_data, call, call_with_callbacks, caller, now},
+    api::{arg_data, call_with_callbacks, caller, now},
     over, over_async, println,
 };
 use dfn_protobuf::protobuf;
@@ -39,7 +38,7 @@ use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::pb::v1::{RewardEvent, UpdateNodeProvider};
 use ic_nns_governance::stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter};
 use ic_nns_governance::{
-    governance::{Environment, Governance, Ledger},
+    governance::{Environment, Governance},
     pb::v1::{
         claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
         governance_error::ErrorType,
@@ -56,12 +55,10 @@ use ic_nns_governance::{
 };
 
 use dfn_core::api::reject_message;
+use ic_nervous_system_common::ledger::LedgerCanister;
 use ic_nns_common::access_control::check_caller_is_gtc;
 use ic_nns_governance::governance::HeapGrowthPotential;
-use ledger_canister::{
-    metrics_encoder, AccountBalanceArgs, AccountIdentifier, Memo, SendArgs, Subaccount, Tokens,
-    TotalSupplyArgs,
-};
+use ledger_canister::metrics_encoder;
 
 /// Size of the buffer for stable memory reads and writes.
 ///
@@ -220,91 +217,6 @@ impl Environment for CanisterEnv {
     }
 }
 
-struct LedgerCanister {}
-
-#[async_trait]
-impl Ledger for LedgerCanister {
-    async fn transfer_funds(
-        &self,
-        amount_e8s: u64,
-        fee_e8s: u64,
-        from_subaccount: Option<Subaccount>,
-        to: AccountIdentifier,
-        memo: u64,
-    ) -> Result<u64, GovernanceError> {
-        // Send 'amount_e8s' to the target account.
-        //
-        // We deduct the transaction fee from the amount to transfer as in most
-        // cases the neuron sub-account has exactly as much as was staked and if
-        // we try to transfer that amount and charge the transaction fee in addition
-        // the transfer will fail due to insufficient funds.
-        let result: Result<u64, (Option<i32>, String)> = call(
-            LEDGER_CANISTER_ID,
-            "send_pb",
-            protobuf,
-            SendArgs {
-                memo: Memo(memo),
-                amount: Tokens::from_e8s(amount_e8s),
-                fee: Tokens::from_e8s(fee_e8s),
-                from_subaccount,
-                to,
-                created_at_time: None,
-            },
-        )
-        .await;
-
-        result.map_err(|(code, msg)| {
-            GovernanceError::new_with_message(
-                ErrorType::External,
-                format!(
-                    "Error calling method 'send' of the ledger canister. Code: {:?}. Message: {}",
-                    code, msg
-                ),
-            )
-        })
-    }
-
-    async fn total_supply(&self) -> Result<Tokens, GovernanceError> {
-        let result: Result<Tokens, (Option<i32>, String)> = call(
-            LEDGER_CANISTER_ID,
-            "total_supply_pb",
-            protobuf,
-            TotalSupplyArgs {},
-        )
-        .await;
-
-        result.map_err(|(code, msg)| {
-            GovernanceError::new_with_message(
-                ErrorType::External,
-                format!(
-                    "Error calling method 'total_supply' of the ledger canister. Code: {:?}. Message: {}",
-                    code, msg
-                )
-            )
-        })
-    }
-
-    async fn account_balance(&self, account: AccountIdentifier) -> Result<Tokens, GovernanceError> {
-        let result: Result<Tokens, (Option<i32>, String)> = call(
-            LEDGER_CANISTER_ID,
-            "account_balance_pb",
-            protobuf,
-            AccountBalanceArgs { account },
-        )
-        .await;
-
-        result.map_err(|(code, msg)| {
-            GovernanceError::new_with_message(
-                ErrorType::External,
-                format!(
-                    "Error calling method 'account_balance_pb' of the ledger canister. Code: {:?}. Message: {}",
-                    code, msg
-                )
-            )
-        })
-    }
-}
-
 #[export_name = "canister_init"]
 fn canister_init() {
     dfn_core::printer::hook();
@@ -345,7 +257,7 @@ fn canister_init_(init_payload: GovernanceProto) {
         GOVERNANCE = Some(Governance::new(
             init_payload,
             Box::new(CanisterEnv::new()),
-            Box::new(LedgerCanister {}),
+            Box::new(LedgerCanister::new(LEDGER_CANISTER_ID)),
         ));
     }
     governance()

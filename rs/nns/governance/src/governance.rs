@@ -41,8 +41,6 @@ use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
 use ledger_canister::{AccountIdentifier, Subaccount, DEFAULT_TRANSFER_FEE};
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 
-use async_trait::async_trait;
-
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 
@@ -54,6 +52,7 @@ use crate::pb::v1::WaitForQuietState;
 use cycles_minting_canister::IcpXdrConversionRateCertifiedResponse;
 use dfn_candid::candid_one;
 use dfn_core::api::spawn;
+use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
 use ledger_canister::{Tokens, TOKEN_SUBDIVIDABLE_BY};
 use registry_canister::pb::v1::NodeProvidersMonthlyXdrRewards;
 
@@ -212,6 +211,15 @@ impl GovernanceError {
 impl fmt::Display for GovernanceError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}: {}", self.error_type(), self.error_message)
+    }
+}
+
+impl From<NervousSystemError> for GovernanceError {
+    fn from(nervous_system_error: NervousSystemError) -> Self {
+        GovernanceError {
+            error_type: ErrorType::External as i32,
+            error_message: nervous_system_error.error_message,
+        }
     }
 }
 
@@ -1809,26 +1817,6 @@ pub enum HeapGrowthPotential {
     LimitedAvailability,
 }
 
-#[async_trait]
-pub trait Ledger: Send + Sync {
-    /// Transfers funds from one of this canister's subaccount to a
-    /// subaccount of of the provided principal.
-    ///
-    /// Returns the block height at which the transfer was recorded.
-    async fn transfer_funds(
-        &self,
-        amount_e8s: u64,
-        fee_e8s: u64,
-        from_subaccount: Option<Subaccount>,
-        to: AccountIdentifier,
-        memo: u64,
-    ) -> Result<u64, GovernanceError>;
-
-    async fn total_supply(&self) -> Result<Tokens, GovernanceError>;
-
-    async fn account_balance(&self, account: AccountIdentifier) -> Result<Tokens, GovernanceError>;
-}
-
 /// A single ongoing update for a single neuron.
 /// Releases the lock when destroyed.
 struct LedgerUpdateLock {
@@ -2775,7 +2763,7 @@ impl Governance {
         // Do the transfer.
 
         let now = self.env.now();
-        let result: Result<u64, GovernanceError> = self
+        let result: Result<u64, NervousSystemError> = self
             .ledger
             .transfer_funds(
                 staked_amount,
@@ -2787,6 +2775,7 @@ impl Governance {
             .await;
 
         if let Err(error) = result {
+            let error = GovernanceError::from(error);
             // If we've got an error, we assume the transfer didn't happen for
             // some reason. The only state to cleanup is to delete the child
             // neuron, since we haven't mutated the parent yet.
@@ -3251,7 +3240,7 @@ impl Governance {
         // (which is also the minting canister) main account into the new neuron's
         // subaccount.
         let now = self.env.now();
-        let result: Result<u64, GovernanceError> = self
+        let result: Result<u64, NervousSystemError> = self
             .ledger
             .transfer_funds(
                 child_stake_e8s,
@@ -3263,6 +3252,7 @@ impl Governance {
             .await;
 
         if let Err(error) = result {
+            let error = GovernanceError::from(error);
             // If we've got an error, we assume the transfer didn't happen for
             // some reason. The only state to cleanup is to delete the child
             // neuron, since we haven't mutated the parent yet.
@@ -3605,7 +3595,7 @@ impl Governance {
         // Do the transfer from the parent neuron's subaccount to the child neuron's
         // subaccount.
         let memo = creation_timestamp_seconds;
-        let result: Result<u64, GovernanceError> = self
+        let result: Result<u64, NervousSystemError> = self
             .ledger
             .transfer_funds(
                 staked_amount,
@@ -3617,6 +3607,7 @@ impl Governance {
             .await;
 
         if let Err(error) = result {
+            let error = GovernanceError::from(error);
             // If we've got an error, we assume the transfer didn't happen for
             // some reason. The only state to cleanup is to delete the child
             // neuron, since we haven't mutated the parent yet.
@@ -4242,7 +4233,10 @@ impl Governance {
                     .map_err(|e| {
                         GovernanceError::new_with_message(
                             ErrorType::PreconditionFailed,
-                            format!("Couldn't perform minting transfer: {}", e),
+                            format!(
+                                "Couldn't perform minting transfer: {}",
+                                GovernanceError::from(e)
+                            ),
                         )
                     })
             }
@@ -5960,7 +5954,11 @@ impl Governance {
                         self.proto.metrics = Some(metrics);
                     }
                 }
-                Err(e) => println!("{}Error when getting total ICP supply: {}", LOG_PREFIX, e),
+                Err(e) => println!(
+                    "{}Error when getting total ICP supply: {}",
+                    LOG_PREFIX,
+                    GovernanceError::from(e),
+                ),
             }
         }
 

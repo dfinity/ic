@@ -19,8 +19,9 @@ use futures::future::FutureExt;
 use std::convert::TryFrom;
 
 use ic_base_types::PrincipalId;
+use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance::governance::{Environment, Governance, HeapGrowthPotential, Ledger};
+use ic_nns_governance::governance::{Environment, Governance, HeapGrowthPotential};
 
 use ic_nns_governance::pb::v1::neuron;
 use ic_nns_governance::pb::v1::proposal;
@@ -80,18 +81,18 @@ impl Ledger for MockLedger {
         _from_subaccount: Option<Subaccount>,
         _to: AccountIdentifier,
         _memo: u64,
-    ) -> Result<u64, GovernanceError> {
+    ) -> Result<u64, NervousSystemError> {
         unimplemented!()
     }
 
-    async fn total_supply(&self) -> Result<Tokens, GovernanceError> {
+    async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
         unimplemented!()
     }
 
     async fn account_balance(
         &self,
         _account: AccountIdentifier,
-    ) -> Result<Tokens, GovernanceError> {
+    ) -> Result<Tokens, NervousSystemError> {
         unimplemented!()
     }
 }

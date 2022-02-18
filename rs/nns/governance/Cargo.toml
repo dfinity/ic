@@ -37,6 +37,7 @@ dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 futures = "0.3.13"
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha = {path = "../../crypto/sha/"}
+ic-nervous-system-common = {path = "../../nervous_system/common" }
 ic-nns-common = { path = "../common" }
 ic-nns-constants = { path = "../constants" }
 ic-protobuf = { path = "../../protobuf" }

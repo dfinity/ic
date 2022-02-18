@@ -4,9 +4,10 @@ use assert_matches::assert_matches;
 use async_trait::async_trait;
 use futures::future::FutureExt;
 use ic_base_types::PrincipalId;
+use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::{
-    governance::{Environment, Governance, Ledger},
+    governance::{Environment, Governance},
     pb::v1::{
         governance_error::ErrorType,
         manage_neuron::{
@@ -58,15 +59,15 @@ impl Ledger for DegradedEnv {
         _: Option<Subaccount>,
         _: AccountIdentifier,
         _: u64,
-    ) -> Result<u64, GovernanceError> {
+    ) -> Result<u64, NervousSystemError> {
         unimplemented!()
     }
 
-    async fn total_supply(&self) -> Result<Tokens, GovernanceError> {
+    async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
         unimplemented!()
     }
 
-    async fn account_balance(&self, _: AccountIdentifier) -> Result<Tokens, GovernanceError> {
+    async fn account_balance(&self, _: AccountIdentifier) -> Result<Tokens, NervousSystemError> {
         unimplemented!()
     }
 }

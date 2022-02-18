@@ -3,13 +3,10 @@
 use async_trait::async_trait;
 use futures::channel::mpsc::UnboundedSender as USender;
 use futures::channel::oneshot::{self, Sender as OSender};
+use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
 use std::sync::atomic;
 use std::sync::atomic::Ordering as AOrdering;
 
-use ic_nns_governance::{
-    governance::Ledger,
-    pb::v1::{governance_error::ErrorType, GovernanceError},
-};
 use ledger_canister::Subaccount;
 use ledger_canister::{AccountIdentifier, Tokens};
 
@@ -28,7 +25,7 @@ pub enum LedgerMessage {
     BalanceQuery(AccountIdentifier),
 }
 
-pub type LedgerControlMessage = (LedgerMessage, OSender<Result<(), GovernanceError>>);
+pub type LedgerControlMessage = (LedgerMessage, OSender<Result<(), NervousSystemError>>);
 
 pub type LedgerObserver = USender<LedgerControlMessage>;
 
@@ -55,11 +52,11 @@ impl InterleavingTestLedger {
 
     // Notifies the observer that a ledger method has been called, and blocks until
     // it receives a message to continue.
-    async fn notify(&self, msg: LedgerMessage) -> Result<(), GovernanceError> {
-        let (tx, rx) = oneshot::channel::<Result<(), GovernanceError>>();
+    async fn notify(&self, msg: LedgerMessage) -> Result<(), NervousSystemError> {
+        let (tx, rx) = oneshot::channel::<Result<(), NervousSystemError>>();
         self.observer.unbounded_send((msg, tx)).unwrap();
         rx.await
-            .map_err(|_e| GovernanceError::new(ErrorType::Unavailable))?
+            .map_err(|_e| NervousSystemError::new_with_message("Operation unavailable"))?
     }
 }
 
@@ -72,7 +69,7 @@ impl Ledger for InterleavingTestLedger {
         from_subaccount: Option<Subaccount>,
         to: AccountIdentifier,
         memo: u64,
-    ) -> Result<u64, GovernanceError> {
+    ) -> Result<u64, NervousSystemError> {
         let msg = LedgerMessage::Transfer {
             amount_e8s,
             fee_e8s,
@@ -87,13 +84,16 @@ impl Ledger for InterleavingTestLedger {
             .await
     }
 
-    async fn total_supply(&self) -> Result<Tokens, GovernanceError> {
+    async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
         atomic::fence(AOrdering::SeqCst);
         self.notify(LedgerMessage::TotalSupply).await?;
         self.underlying.total_supply().await
     }
 
-    async fn account_balance(&self, account: AccountIdentifier) -> Result<Tokens, GovernanceError> {
+    async fn account_balance(
+        &self,
+        account: AccountIdentifier,
+    ) -> Result<Tokens, NervousSystemError> {
         atomic::fence(AOrdering::SeqCst);
         self.notify(LedgerMessage::BalanceQuery(account)).await?;
         self.underlying.account_balance(account).await

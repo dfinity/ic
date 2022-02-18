@@ -2,15 +2,16 @@ use async_trait::async_trait;
 use candid::Encode;
 use futures::future::FutureExt;
 use ic_base_types::PrincipalId;
+use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::{
-    governance::{Environment, Governance, Ledger},
+    governance::{Environment, Governance},
     pb::v1::{
-        governance_error::ErrorType, manage_neuron, manage_neuron::NeuronIdOrSubaccount,
-        manage_neuron_response, proposal, ExecuteNnsFunction, GovernanceError, ManageNeuron,
-        Motion, NetworkEconomics, Neuron, NnsFunction, Proposal, Vote,
+        manage_neuron, manage_neuron::NeuronIdOrSubaccount, manage_neuron_response, proposal,
+        ExecuteNnsFunction, GovernanceError, ManageNeuron, Motion, NetworkEconomics, Neuron,
+        NnsFunction, Proposal, Vote,
     },
 };
 use ledger_canister::{AccountIdentifier, Tokens};
@@ -221,7 +222,7 @@ impl Ledger for FakeDriver {
         from_subaccount: Option<Subaccount>,
         to_account: AccountIdentifier,
         _: u64,
-    ) -> Result<u64, GovernanceError> {
+    ) -> Result<u64, NervousSystemError> {
         let from_account = AccountIdentifier::new(
             ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
             from_subaccount,
@@ -232,17 +233,17 @@ impl Ledger for FakeDriver {
         );
         let accounts = &mut self.state.try_lock().unwrap().accounts;
 
-        let from_e8s = accounts.get_mut(&from_account).ok_or_else(|| {
-            GovernanceError::new_with_message(ErrorType::External, "Source account doesn't exist")
-        })?;
+        let from_e8s = accounts
+            .get_mut(&from_account)
+            .ok_or_else(|| NervousSystemError::new_with_message("Source account doesn't exist"))?;
 
         let requested_e8s = amount_e8s + fee_e8s;
 
         if *from_e8s < requested_e8s {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InsufficientFunds,
-                format!("available {} requested {}", *from_e8s, requested_e8s),
-            ));
+            return Err(NervousSystemError::new_with_message(format!(
+                "Insufficient funds. Available {} requested {}",
+                *from_e8s, requested_e8s
+            )));
         }
 
         *from_e8s -= requested_e8s;
@@ -252,11 +253,14 @@ impl Ledger for FakeDriver {
         Ok(0)
     }
 
-    async fn total_supply(&self) -> Result<Tokens, GovernanceError> {
+    async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
         Ok(self.get_supply())
     }
 
-    async fn account_balance(&self, account: AccountIdentifier) -> Result<Tokens, GovernanceError> {
+    async fn account_balance(
+        &self,
+        account: AccountIdentifier,
+    ) -> Result<Tokens, NervousSystemError> {
         let accounts = &mut self.state.try_lock().unwrap().accounts;
         let account_e8s = accounts.get(&account).unwrap_or(&0);
         Ok(Tokens::from_e8s(*account_e8s))

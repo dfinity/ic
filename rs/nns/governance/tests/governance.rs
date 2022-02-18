@@ -24,7 +24,7 @@ use ic_nns_governance::pb::v1::{
 };
 use ic_nns_governance::{
     governance::{
-        subaccount_from_slice, validate_proposal_title, Environment, Governance, Ledger,
+        subaccount_from_slice, validate_proposal_title, Environment, Governance,
         EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX,
         MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS, PROPOSAL_MOTION_TEXT_BYTES_MAX,
         REWARD_DISTRIBUTION_PERIOD_SECONDS, WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS,
@@ -114,6 +114,7 @@ use fixtures::{prorated_neuron_age, LedgerBuilder, NNSStateChange, ProposalNeuro
 pub mod common;
 
 use common::increase_dissolve_delay_raw;
+use ic_nervous_system_common::ledger::Ledger;
 
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
 
@@ -4045,10 +4046,7 @@ fn test_cant_disburse_without_paying_fees() {
         .unwrap();
 
     assert!(result.is_err());
-    assert_eq!(
-        result.unwrap_err().error_type(),
-        ErrorType::InsufficientFunds
-    );
+    assert_eq!(result.unwrap_err().error_type(), ErrorType::External);
 
     assert_eq!(0, gov.proto.neurons.get(&id.id).unwrap().neuron_fees_e8s);
     driver.assert_account_contains(
@@ -4076,10 +4074,7 @@ fn test_cant_disburse_without_paying_fees() {
         .unwrap();
 
     assert!(result.is_err());
-    assert_eq!(
-        result.unwrap_err().error_type(),
-        ErrorType::InsufficientFunds
-    );
+    assert_eq!(result.unwrap_err().error_type(), ErrorType::External);
 
     // Finally try to disburse only the current stake (the initial
     // stake - the fees);

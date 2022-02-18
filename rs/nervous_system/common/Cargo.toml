@@ -1,0 +1,14 @@
+[package]
+name = "ic-nervous-system-common"
+version = "0.8.0"
+edition = "2018"
+
+[lib]
+name = "ic_nervous_system_common"
+path = "src/lib.rs"
+
+[dependencies]
+async-trait = "0.1.42"
+dfn_core = { path = "../../rust_canisters/dfn_core" }
+dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
+ledger-canister = { path = "../../rosetta-api/ledger_canister" }

@@ -42,10 +42,9 @@ use crate::proposal::{
     PROPOSAL_MOTION_TEXT_BYTES_MAX, PROPOSAL_SUMMARY_BYTES_MAX, PROPOSAL_TITLE_BYTES_MAX,
     PROPOSAL_URL_CHAR_MAX,
 };
-use crate::types::{
-    EmptyEnvironment, EmptyLedger, Environment, HeapGrowthPotential, Ledger, LedgerUpdateLock,
-};
+use crate::types::{Environment, HeapGrowthPotential, LedgerUpdateLock};
 use dfn_core::api::{id, spawn};
+use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
 use ledger_canister::Tokens;
 
 // When `list_proposals` is called, for each proposal if a payload exceeds
@@ -936,7 +935,7 @@ impl Governance {
         self.add_neuron(child_neuron.clone())?;
 
         // Do the transfer.
-        let result: Result<u64, GovernanceError> = self
+        let result: Result<u64, NervousSystemError> = self
             .ledger
             .transfer_funds(
                 staked_amount,
@@ -948,6 +947,7 @@ impl Governance {
             .await;
 
         if let Err(error) = result {
+            let error = GovernanceError::from(error);
             // If we've got an error, we assume the transfer didn't happen for
             // some reason. The only state to cleanup is to delete the child
             // neuron, since we haven't mutated the parent yet.
@@ -2350,7 +2350,7 @@ impl Governance {
                 Err(e) => println!(
                     "{}Error when getting total governance token supply: {}",
                     log_prefix(),
-                    e
+                    GovernanceError::from(e)
                 ),
             }
         }
@@ -2573,31 +2573,6 @@ impl Governance {
     }
 }
 
-impl Default for Governance {
-    fn default() -> Self {
-        Governance {
-            proto: GovernanceProto {
-                neurons: Default::default(),
-                proposals: Default::default(),
-                parameters: Some(Default::default()),
-                latest_reward_event: Some(Default::default()),
-                in_flight_commands: Default::default(),
-                genesis_timestamp_seconds: 0,
-                metrics: None,
-                first_principal_neuron_permissions: vec![],
-                other_principal_neuron_permissions: vec![],
-                ledger_canister_id: None,
-            },
-            env: Box::new(EmptyEnvironment {}),
-            ledger: Box::new(EmptyLedger {}),
-            action_followee_index: Default::default(),
-            principal_to_neuron_ids_index: Default::default(),
-            closest_proposal_deadline_timestamp_seconds: 0,
-            latest_gc_timestamp_seconds: 0,
-            latest_gc_num_proposals: 0,
-        }
-    }
-}
 /// Computes the subaccount to which neuron staking transfers are made. This
 /// function must be kept in sync with the NNS UI equivalent.
 pub fn compute_subaccount(controller: PrincipalId, nonce: u64) -> Subaccount {
