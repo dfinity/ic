@@ -5,7 +5,7 @@ use ic_crypto_internal_csp::api::CspIDkgProtocol;
 use ic_interfaces::registry::RegistryClient;
 use ic_types::crypto::canister_threshold_sig::error::IDkgCreateDealingError;
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealing, IDkgTranscriptParams};
-use ic_types::{NodeId, NodeIndex};
+use ic_types::NodeId;
 use std::convert::TryFrom;
 use std::sync::Arc;
 use tecdsa::IDkgTranscriptOperationInternal;
@@ -16,7 +16,12 @@ pub fn create_dealing<C: CspIDkgProtocol>(
     registry: &Arc<dyn RegistryClient>,
     params: &IDkgTranscriptParams,
 ) -> Result<IDkgDealing, IDkgCreateDealingError> {
-    let self_index = get_dealer_index(self_node_id, params)?;
+    let self_index =
+        params
+            .dealer_index(*self_node_id)
+            .ok_or(IDkgCreateDealingError::NotADealer {
+                node_id: *self_node_id,
+            })?;
 
     let receiver_keys = idkg_encryption_keys_from_registry(
         params.receivers(),
@@ -51,19 +56,4 @@ pub fn create_dealing<C: CspIDkgProtocol>(
         dealer_id: *self_node_id,
         internal_dealing_raw,
     })
-}
-
-/// Get the index of this dealer
-///
-/// If this node isn't in the dealer set, returns Err
-fn get_dealer_index(
-    self_node_id: &NodeId,
-    params: &IDkgTranscriptParams,
-) -> Result<NodeIndex, IDkgCreateDealingError> {
-    params
-        .dealers()
-        .position(*self_node_id)
-        .ok_or(IDkgCreateDealingError::NotADealer {
-            node_id: *self_node_id,
-        })
 }

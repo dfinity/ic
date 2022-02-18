@@ -6,6 +6,153 @@ use super::super::*;
 use crate::{NodeId, PrincipalId, SubnetId};
 
 #[test]
+fn should_return_correct_dealer_index_for_random() {
+    let mut dealers = BTreeSet::new();
+    dealers.insert(node_id(42));
+    dealers.insert(node_id(43));
+    dealers.insert(node_id(45));
+
+    let params = IDkgTranscriptParams::new(
+        transcript_id_generator(),
+        IDkgDealers::new(dealers.clone()).expect("Should be able to create IDKG dealers"),
+        IDkgReceivers::new(dealers).expect("Should be able to create IDKG receivers"),
+        RegistryVersion::from(0),
+        AlgorithmId::ThresholdEcdsaSecp256k1,
+        IDkgTranscriptOperation::Random,
+    )
+    .expect("Should be able to create IDKG params");
+
+    // For a random transcript the dealer index correspond to its position in the dealer set
+    assert_eq!(params.dealer_index(node_id(42)), Some(0));
+    assert_eq!(params.dealer_index(node_id(43)), Some(1));
+    assert_eq!(params.dealer_index(node_id(44)), None);
+    assert_eq!(params.dealer_index(node_id(45)), Some(2));
+    assert_eq!(params.dealer_index(node_id(46)), None);
+}
+
+#[test]
+fn should_return_correct_dealer_index_for_reshare_masked() {
+    let mut previous_receivers = BTreeSet::new();
+    previous_receivers.insert(node_id(35));
+    previous_receivers.insert(node_id(36));
+    previous_receivers.insert(node_id(37));
+    previous_receivers.insert(node_id(38));
+
+    let previous_transcript =
+        mock_transcript(Some(previous_receivers), mock_masked_transcript_type());
+
+    let mut dealers = BTreeSet::new();
+    dealers.insert(node_id(35));
+    dealers.insert(node_id(36));
+    dealers.insert(node_id(38));
+
+    // For a Resharing Masked transcript, the dealer set should be a subset of the previous receiver set.
+    assert!(dealers.is_subset(previous_transcript.receivers.get()));
+
+    let params = IDkgTranscriptParams::new(
+        transcript_id_generator(),
+        IDkgDealers::new(dealers.clone()).expect("Should be able to create IDKG dealers"),
+        IDkgReceivers::new(dealers).expect("Should be able to create IDKG receivers"),
+        RegistryVersion::from(0),
+        AlgorithmId::ThresholdEcdsaSecp256k1,
+        IDkgTranscriptOperation::ReshareOfMasked(previous_transcript),
+    )
+    .expect("Should be able to create IDKG params");
+
+    // For resharing a masked transcript the dealer index correspond to its position in the `previous_receiver` set
+    assert_eq!(params.dealer_index(node_id(35)), Some(0));
+    assert_eq!(params.dealer_index(node_id(36)), Some(1));
+    // Node 37 is not included in the dealer set, thus it does not have a dealer index.
+    assert_eq!(params.dealer_index(node_id(37)), None);
+    assert_eq!(params.dealer_index(node_id(38)), Some(3));
+    assert_eq!(params.dealer_index(node_id(39)), None);
+}
+
+#[test]
+fn should_return_correct_dealer_index_for_reshare_unmasked() {
+    let mut previous_receivers = BTreeSet::new();
+    previous_receivers.insert(node_id(35));
+    previous_receivers.insert(node_id(36));
+    previous_receivers.insert(node_id(37));
+    previous_receivers.insert(node_id(38));
+
+    let previous_transcript =
+        mock_transcript(Some(previous_receivers), mock_unmasked_transcript_type());
+
+    let mut dealers = BTreeSet::new();
+    dealers.insert(node_id(35));
+    dealers.insert(node_id(36));
+    dealers.insert(node_id(38));
+
+    // For a Resharing Unmasked transcript, the dealer set should be a subset of the previous receiver set.
+    assert!(dealers.is_subset(previous_transcript.receivers.get()));
+
+    let params = IDkgTranscriptParams::new(
+        transcript_id_generator(),
+        IDkgDealers::new(dealers.clone()).expect("Should be able to create IDKG dealers"),
+        IDkgReceivers::new(dealers).expect("Should be able to create IDKG receivers"),
+        RegistryVersion::from(0),
+        AlgorithmId::ThresholdEcdsaSecp256k1,
+        IDkgTranscriptOperation::ReshareOfUnmasked(previous_transcript),
+    )
+    .expect("Should be able to create IDKG params");
+
+    // For resharing an unmasked transcript the dealer index correspond to its position in the `previous_receiver` set
+    assert_eq!(params.dealer_index(node_id(35)), Some(0));
+    assert_eq!(params.dealer_index(node_id(36)), Some(1));
+    // Node 37 is not included in the dealer set, thus it does not have a dealer index.
+    assert_eq!(params.dealer_index(node_id(37)), None);
+    assert_eq!(params.dealer_index(node_id(38)), Some(3));
+    assert_eq!(params.dealer_index(node_id(39)), None);
+}
+
+#[test]
+fn should_return_correct_dealer_index_for_unmasked_times_masked() {
+    let mut previous_receivers = BTreeSet::new();
+    previous_receivers.insert(node_id(35));
+    previous_receivers.insert(node_id(36));
+    previous_receivers.insert(node_id(37));
+    previous_receivers.insert(node_id(38));
+
+    let previous_unmasked_transcript = mock_transcript(
+        Some(previous_receivers.clone()),
+        mock_unmasked_transcript_type(),
+    );
+    let previous_masked_transcript =
+        mock_transcript(Some(previous_receivers), mock_masked_transcript_type());
+
+    let mut dealers = BTreeSet::new();
+    dealers.insert(node_id(35));
+    dealers.insert(node_id(36));
+    dealers.insert(node_id(38));
+
+    // For unmasked times masked transcript, the dealer set should be a subset of the previous receiver set.
+    assert!(dealers.is_subset(previous_unmasked_transcript.receivers.get()));
+    assert!(dealers.is_subset(previous_masked_transcript.receivers.get()));
+
+    let params = IDkgTranscriptParams::new(
+        transcript_id_generator(),
+        IDkgDealers::new(dealers.clone()).expect("Should be able to create IDKG dealers"),
+        IDkgReceivers::new(dealers).expect("Should be able to create IDKG receivers"),
+        RegistryVersion::from(0),
+        AlgorithmId::ThresholdEcdsaSecp256k1,
+        IDkgTranscriptOperation::UnmaskedTimesMasked(
+            previous_unmasked_transcript,
+            previous_masked_transcript,
+        ),
+    )
+    .expect("Should be able to create IDKG params");
+
+    // For an unmasked times masked transcript the dealer index correspond to its position in the `previous_receiver` set
+    assert_eq!(params.dealer_index(node_id(35)), Some(0));
+    assert_eq!(params.dealer_index(node_id(36)), Some(1));
+    // Node 37 is not included in the dealer set, thus it does not have a dealer index.
+    assert_eq!(params.dealer_index(node_id(37)), None);
+    assert_eq!(params.dealer_index(node_id(38)), Some(3));
+    assert_eq!(params.dealer_index(node_id(39)), None);
+}
+
+#[test]
 fn should_create_random() {
     check_params_creation(None, IDkgTranscriptOperation::Random, None);
 }

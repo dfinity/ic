@@ -565,7 +565,10 @@ fn should_run_idkg_successfully_for_random_dealing() {
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
-    run_idkg_and_create_transcript(&params, &env.crypto_components);
+    let transcript = run_idkg_and_create_transcript(&params, &env.crypto_components);
+
+    // Transcript should have correct dealer indexes
+    check_dealer_indexes(&params, &transcript);
 }
 
 #[test]
@@ -577,11 +580,18 @@ fn should_run_idkg_successfully_for_reshare_of_random_dealing() {
     let initial_transcript =
         run_idkg_and_create_transcript(&initial_params, &env.crypto_components);
 
+    // Initial transcript should have correct dealer indexes
+    check_dealer_indexes(&initial_params, &initial_transcript);
+
     let reshare_params = build_params_from_previous(
         initial_params,
         IDkgTranscriptOperation::ReshareOfMasked(initial_transcript),
     );
-    run_idkg_and_create_transcript(&reshare_params, &env.crypto_components);
+    let reshare_transcript =
+        run_idkg_and_create_transcript(&reshare_params, &env.crypto_components);
+
+    // Reshare transcript should have correct dealer indexes
+    check_dealer_indexes(&reshare_params, &reshare_transcript);
 }
 
 #[test]
@@ -592,6 +602,9 @@ fn should_run_idkg_successfully_for_reshare_of_unmasked_dealing() {
     let initial_params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
     let initial_transcript =
         run_idkg_and_create_transcript(&initial_params, &env.crypto_components);
+
+    // Initial transcript should have correct dealer indexes
+    check_dealer_indexes(&initial_params, &initial_transcript);
 
     let unmasked_params = build_params_from_previous(
         initial_params,
@@ -604,7 +617,10 @@ fn should_run_idkg_successfully_for_reshare_of_unmasked_dealing() {
         unmasked_params,
         IDkgTranscriptOperation::ReshareOfUnmasked(unmasked_transcript),
     );
-    run_idkg_and_create_transcript(&reshare_params, &env.crypto_components);
+    let reshare_transcript =
+        run_idkg_and_create_transcript(&reshare_params, &env.crypto_components);
+
+    check_dealer_indexes(&reshare_params, &reshare_transcript);
 }
 
 #[test]
@@ -614,6 +630,9 @@ fn should_run_idkg_successfully_for_multiplication_of_dealings() {
 
     let masked_params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
     let masked_transcript = run_idkg_and_create_transcript(&masked_params, &env.crypto_components);
+
+    // Masked transcript should have correct dealer indexes
+    check_dealer_indexes(&masked_params, &masked_transcript);
 
     let unmasked_transcript = {
         let masked_random_params =
@@ -625,7 +644,13 @@ fn should_run_idkg_successfully_for_multiplication_of_dealings() {
             IDkgTranscriptOperation::ReshareOfMasked(masked_random_transcript),
         );
 
-        run_idkg_and_create_transcript(&unmasked_params, &env.crypto_components)
+        let unmasked_transcript =
+            run_idkg_and_create_transcript(&unmasked_params, &env.crypto_components);
+
+        // Unmasked transcript should have correct dealer indexes
+        check_dealer_indexes(&unmasked_params, &unmasked_transcript);
+
+        unmasked_transcript
     };
 
     let multiplication_params = build_params_from_previous(
@@ -633,7 +658,11 @@ fn should_run_idkg_successfully_for_multiplication_of_dealings() {
         IDkgTranscriptOperation::UnmaskedTimesMasked(unmasked_transcript, masked_transcript),
     );
 
-    run_idkg_and_create_transcript(&multiplication_params, &env.crypto_components);
+    let multiplication_transcript =
+        run_idkg_and_create_transcript(&multiplication_params, &env.crypto_components);
+
+    // Multiplication transcript should have correct dealer indexes
+    check_dealer_indexes(&multiplication_params, &multiplication_transcript);
 }
 
 #[test]
@@ -1434,4 +1463,18 @@ fn corrupt_signed_dealing_for_all_receivers(signed_dealing: &mut IDkgMultiSigned
             .expect("failed to serialize internal dealing")
     };
     signed_dealing.dealing.idkg_dealing.internal_dealing_raw = invalidated_internal_dealing_raw;
+}
+
+fn check_dealer_indexes(params: &IDkgTranscriptParams, transcript: &IDkgTranscript) {
+    // Transcript should have correct dealer indexes
+    for &index in transcript.verified_dealings.keys() {
+        let dealer_id = transcript
+            .dealer_id_for_index(index)
+            .expect("Transcript should return dealer ID for verified dealings");
+        assert_eq!(params.dealer_index(dealer_id), Some(index));
+        assert_eq!(
+            params.dealer_index(dealer_id),
+            transcript.index_for_dealer_id(dealer_id)
+        )
+    }
 }
