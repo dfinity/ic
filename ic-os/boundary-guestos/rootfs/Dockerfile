@@ -43,60 +43,14 @@ RUN cd /tmp/ && \
 # boundary node VM).
 # The downloads from previous stage will be used and installed into the target
 # image.
-
-FROM ubuntu:focal-20211006
-
-ENV TZ=UTC
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-
-# Preparation and install of packages for nginx
-RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommends install gnupg 
-RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-keys ABF5BD827BD9BF62
-
-RUN echo "deb http://nginx.org/packages/mainline/ubuntu/ focal nginx" >> /etc/apt/sources.list.d/nginx.list &&\
-    echo "deb-src http://nginx.org/packages/mainline/ubuntu/ focal nginx" >> /etc/apt/sources.list.d/nginx.list 
-
-RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommends install \
-    attr \
-    ca-certificates \
-    checkpolicy \
-    chrony \
-    cryptsetup \
-    curl \
-    faketime \
-    fdisk \
-    haveged \
-    initramfs-tools \
-    inotify-tools \
-    iproute2 \
-    iputils-ping \
-    isc-dhcp-client \
-    less \
-    libffi-dev \
-    liblmdb0 \
-    libssl-dev \
-    linux-image-virtual-hwe-20.04 \
-    lshw \
-    lvm2 \
-    net-tools \
-    nftables \
-    nginx=1.21.3-1~focal \
-    nginx-module-njs=1.21.3+0.7.0-1~focal \
-    opensc \
-    openssh-client openssh-server \
-    parted \
-    pciutils \
-    pcsc-tools pcscd \
-    policycoreutils \
-    python \
-    python3-dev \
-    rsync \
-    ssl-cert \
-    sudo \
-    systemd systemd-sysv systemd-journal-remote \
-    udev \
-    usbutils \
-    vim
+#
+# Build steps:
+# - `docker build --pull -t dfinity/boundaryos-main -f Dockerfile .`
+#
+# - Construct the actual target image (IC-OS root filesystem)
+#
+# Update below image when new dfinity/boundaryos-base image gets produced (see deploy-guest-os-baseimg CI job on master/rc).
+FROM dfinity/boundaryos-base@sha256:175202b7e1c87de14bf1bf771cdf4c6701817b8b3545272565ad707a1f2f2c2c
 
 RUN mkdir -p /boot/config \
              /boot/efi \
