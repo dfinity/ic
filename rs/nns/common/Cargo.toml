@@ -9,7 +9,12 @@ path = "src/lib.rs"
 
 [dependencies]
 candid = "0.7.4"
+
+# This MUST be kept in sync with build-info-build in the [build-dependencies] section!
+build-info = "0.0.23"
+
 dfn_core = { path = "../../rust_canisters/dfn_core" }
+dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha = {path = "../../crypto/sha/"}
 ic-nns-constants = { path = "../constants" }
@@ -29,6 +34,9 @@ comparable = { version = "0.5", features = ["derive"] }
 serial_test = "0.5.0"
 
 [build-dependencies]
+# This MUST be kept in sync with build-info in the [dependencies] section!
+build-info-build = "0.0.23"
+
 ic-base-types = { path = "../../types/base_types" }
 ic-nns-constants = { path = "../constants" }
 ic-types = { path = "../../types/types" }

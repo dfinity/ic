@@ -62,4 +62,6 @@ fn main() {
     config
         .compile_protos(&[proto_file], &["proto", &base_types_proto_dir])
         .unwrap();
+
+    build_info_build::build_script();
 }

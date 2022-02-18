@@ -31,6 +31,9 @@ mod node_provider_remuneration;
 mod governance_mem_test;
 
 #[cfg(test)]
+mod governance_get_build_metadata_test;
+
+#[cfg(test)]
 mod gtc;
 
 #[cfg(test)]
