@@ -56,3 +56,41 @@ guest-os-diskimg-dev-malicious:
   variables:
       BUILD_EXTRA_ARGS: "-t dev -p root"
       BUILD_EXTRA_SUFFIX: "-dev-malicious"
+
+boundary-os-diskimg:
+  extends:
+    - .ubuntu-nix-docker-protected
+    - .rules-parent-pipeline-autorun-on-trigger
+  stage: guest-os-build
+  needs:
+    - cargo-build-canisters
+    - cargo-build-release-linux-native
+  variables:
+      BUILD_EXTRA_ARGS: ""  # We keep this as a dev image might soon follow, e.g. due to ssh access
+      BUILD_EXTRA_SUFFIX: ""
+  script:
+    - |
+      set -xeuo pipefail
+
+      # artifacts/release dir with binaries come from cargo-build-release-linux-native
+      cd "${CI_PROJECT_DIR}"/ic-os/boundary-guestos
+
+      BUILD_OUT="build-out/disk-img${BUILD_EXTRA_SUFFIX}"
+      BUILD_TMP="build-tmp${BUILD_EXTRA_SUFFIX}"
+      UPLOAD_TARGET="boundary-os/disk-img${BUILD_EXTRA_SUFFIX}"
+
+      VERSION=$("${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/find-build-id.sh)
+      echo "Build ID: ${VERSION}"
+
+      # shellcheck disable=SC2086  # Expanding BUILD_EXTRA_ARGS into multiple parameters
+      capsule --passive -v -t "$(openssl sha256 <<<${BUILD_EXTRA_ARGS}${BUILD_EXTRA_SUFFIX})" -t "${VERSION}" -o "${BUILD_OUT}/**/*" -- \
+      "${CI_PROJECT_DIR}"/gitlab-ci/src/job_scripts/boundary-os-diskimg.sh \
+        "$BUILD_OUT" "$BUILD_TMP" "$UPLOAD_TARGET" "$VERSION" "$CDPRNET"
+      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" rclone -- \
+      "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" "$BUILD_OUT" "$UPLOAD_TARGET"
+      echo "Build ID (real or fake git revision): ${VERSION}"
+
+  artifacts:
+    paths:
+      - ic-os/boundary-guestos/build-out/disk-img${BUILD_EXTRA_SUFFIX}/*
+    expire_in: 2 days
