@@ -706,6 +706,4 @@ fn main() {
             ],
         )
         .unwrap();
-
-    build_info_build::build_script();
 }

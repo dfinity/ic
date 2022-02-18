@@ -5065,8 +5065,11 @@ dependencies = [
 name = "ic-nns-common"
 version = "0.8.0"
 dependencies = [
+ "build-info",
+ "build-info-build",
  "candid",
  "comparable",
+ "dfn_candid",
  "dfn_core",
  "ic-base-types",
  "ic-crypto-sha",
@@ -5103,8 +5106,6 @@ version = "0.8.0"
 dependencies = [
  "assert_matches",
  "async-trait",
- "build-info",
- "build-info-build",
  "bytes",
  "candid",
  "clap 3.0.0-beta.2",
