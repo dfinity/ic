@@ -253,6 +253,7 @@ pub(crate) fn create_data_payload(
             .get_ecdsa_config(subnet_id, summary_registry_version)?
             .unwrap_or(EcdsaConfig {
                 quadruples_to_create_in_advance: 1, // default value
+                ..EcdsaConfig::default()
             });
         match &summary.ecdsa {
             None => {
@@ -1113,6 +1114,7 @@ mod tests {
         let quadruples_to_create_in_advance = 5;
         let ecdsa_config = EcdsaConfig {
             quadruples_to_create_in_advance,
+            ..EcdsaConfig::default()
         };
         let mut next_unused_transcript_id = IDkgTranscriptId::new(subnet_id, 10);
         // Success case

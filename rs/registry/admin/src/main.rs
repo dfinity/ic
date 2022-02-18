@@ -1320,6 +1320,7 @@ impl ProposalTitleAndPayload<UpdateSubnetPayload> for ProposeToUpdateSubnetCmd {
                 .ecdsa_quadruples_to_create_in_advance
                 .map(|val| EcdsaConfig {
                     quadruples_to_create_in_advance: val,
+                    key_ids: vec![],
                 }),
             ssh_readonly_access: self.ssh_readonly_access.clone(),
             ssh_backup_access: self.ssh_backup_access.clone(),
