@@ -19,6 +19,7 @@ docker-build-ic-img:
   needs:
     - cargo-build-canisters
     - cargo-build-release-linux-native
+    - artifacts-upload-to-s3
   stage: guest-os-build
   script:
     - |
