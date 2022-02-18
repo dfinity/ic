@@ -712,6 +712,37 @@ impl SchedulerImpl {
         state.put_canister_states(canisters);
     }
 
+    // Observe different Canister metrics
+    fn observe_canister_metrics(&self, canister: &CanisterState) {
+        self.metrics
+            .canister_balance
+            .observe(canister.system_state.balance().get() as f64);
+        if let Some(es) = &canister.execution_state {
+            self.metrics
+                .canister_binary_size
+                .observe(es.wasm_binary.binary.len() as f64);
+            self.metrics.canister_wasm_memory_usage.observe(
+                ic_replicated_state::num_bytes_try_from(es.wasm_memory.size)
+                    .unwrap()
+                    .get() as f64,
+            );
+            self.metrics.canister_stable_memory_usage.observe(
+                ic_replicated_state::num_bytes_try_from(es.stable_memory.size)
+                    .unwrap()
+                    .get() as f64,
+            );
+        }
+        self.metrics
+            .canister_memory_allocation
+            .observe(match canister.memory_allocation() {
+                MemoryAllocation::Reserved(bytes) => bytes.get() as f64,
+                MemoryAllocation::BestEffort => 0.0,
+            });
+        self.metrics
+            .canister_compute_allocation
+            .observe(canister.compute_allocation().as_percent() as f64 / 100.0);
+    }
+
     /// Charge canisters for their resource allocation and usage. Canisters
     /// that did not manage to pay are uninstalled.
     fn charge_canisters_for_resource_allocation_and_usage(&self, state: &mut ReplicatedState) {
@@ -734,6 +765,7 @@ impl SchedulerImpl {
         let state_time = state.time();
         let mut all_rejects = Vec::new();
         for canister in state.canisters_iter_mut() {
+            self.observe_canister_metrics(canister);
             if self
                 .cycles_account_manager
                 .charge_canister_for_resource_allocation_and_usage(
