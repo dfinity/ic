@@ -90,7 +90,7 @@ impl Default for Config {
         // uses `memfd` files.
         // TODO(EXC-883): Re-enable sandboxing on Linux after fixing crashes.
         #[cfg(target_os = "linux")]
-        let canister_sandboxing_flag = FlagStatus::Enabled;
+        let canister_sandboxing_flag = FlagStatus::Disabled;
         #[cfg(not(target_os = "linux"))]
         let canister_sandboxing_flag = FlagStatus::Disabled;
 
