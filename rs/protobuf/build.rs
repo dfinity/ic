@@ -50,6 +50,7 @@ fn main() {
     build_messaging_proto();
     build_state_proto();
     build_p2p_proto();
+    build_bitcoin_proto();
 }
 
 /// Generates Rust structs from logging Protobuf messages.
@@ -333,6 +334,15 @@ fn build_p2p_proto() {
     config.out_dir("gen/p2p");
     config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
     let files = ["def/p2p/v1/p2p.proto"];
+    compile_protos(config, &files);
+}
+
+/// Generates Rust structs from Bitcoin adapter Protobuf messages.
+fn build_bitcoin_proto() {
+    let mut config = base_config();
+    config.out_dir("gen/bitcoin");
+    config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
+    let files = ["def/bitcoin/v1/bitcoin.proto"];
     compile_protos(config, &files);
 }
 

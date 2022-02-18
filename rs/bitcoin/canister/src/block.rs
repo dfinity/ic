@@ -1,13 +1,13 @@
-use crate::proto;
 use bitcoin::{
     hashes::Hash, Block, BlockHash, BlockHeader, OutPoint, Script, Transaction, TxIn, TxMerkleNode,
     TxOut, Txid,
 };
+use ic_protobuf::bitcoin::v1;
 
 /// Converts a `Block` into a protobuf struct.
-pub fn to_proto(block: &Block) -> proto::Block {
-    proto::Block {
-        header: Some(proto::BlockHeader {
+pub fn to_proto(block: &Block) -> v1::Block {
+    v1::Block {
+        header: Some(v1::BlockHeader {
             version: block.header.version,
             prev_blockhash: block.header.prev_blockhash.to_vec(),
             merkle_root: block.header.merkle_root.to_vec(),
@@ -18,14 +18,14 @@ pub fn to_proto(block: &Block) -> proto::Block {
         txdata: block
             .txdata
             .iter()
-            .map(|t| proto::Transaction {
+            .map(|t| v1::Transaction {
                 version: t.version,
                 lock_time: t.lock_time,
                 input: t
                     .input
                     .iter()
-                    .map(|i| proto::TxIn {
-                        previous_output: Some(proto::OutPoint {
+                    .map(|i| v1::TxIn {
+                        previous_output: Some(v1::OutPoint {
                             txid: i.previous_output.txid.to_vec(),
                             vout: i.previous_output.vout,
                         }),
@@ -37,7 +37,7 @@ pub fn to_proto(block: &Block) -> proto::Block {
                 output: t
                     .output
                     .iter()
-                    .map(|o| proto::TxOut {
+                    .map(|o| v1::TxOut {
                         value: o.value,
                         script_pubkey: o.script_pubkey.to_bytes(),
                     })
@@ -48,7 +48,7 @@ pub fn to_proto(block: &Block) -> proto::Block {
 }
 
 /// Converts a protobuf block into a `Block`.
-pub fn from_proto(block: &proto::Block) -> Block {
+pub fn from_proto(block: &v1::Block) -> Block {
     let header = block.header.as_ref().expect("Block header must exist");
 
     Block {

@@ -1,3 +1,4 @@
+pub mod bitcoin;
 pub mod crypto;
 pub mod log;
 mod macros;
