@@ -83,6 +83,7 @@ members = [
   "monitoring/metrics_exporter",
   "monitoring/pprof",
   "monitoring/prober",
+  "nervous_system/common",
   "nns/constants",
   "nns/common",
   "nns/cmc",

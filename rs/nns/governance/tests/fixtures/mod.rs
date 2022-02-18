@@ -11,13 +11,14 @@ use comparable::Comparable;
 use futures::future::FutureExt;
 use ic_base_types::PrincipalId;
 use ic_crypto_sha::Sha256;
+use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::ids::{TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL};
 use ic_nns_governance::{
     governance::{
         governance_minting_account, neuron_subaccount, subaccount_from_slice, Environment,
-        Governance, Ledger, EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX,
+        Governance, EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX,
         MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS, PROPOSAL_MOTION_TEXT_BYTES_MAX,
         REWARD_DISTRIBUTION_PERIOD_SECONDS,
     },
@@ -400,7 +401,7 @@ impl Ledger for NNSFixture {
         from_subaccount: Option<Subaccount>,
         to_account: AccountIdentifier,
         _: u64,
-    ) -> Result<u64, GovernanceError> {
+    ) -> Result<u64, NervousSystemError> {
         let from_account = from_subaccount.map_or(governance_minting_account(), neuron_subaccount);
         println!(
             "Issuing ledger transfer from account {} (subaccount {}) to account {} amount {} fee {}",
@@ -408,20 +409,20 @@ impl Ledger for NNSFixture {
         );
         let accounts = &mut self.nns_state.try_lock().unwrap().ledger.accounts;
 
-        let _to_e8s = accounts.get(&to_account).ok_or_else(|| {
-            GovernanceError::new_with_message(ErrorType::External, "Target account doesn't exist")
-        })?;
-        let from_e8s = accounts.get_mut(&from_account).ok_or_else(|| {
-            GovernanceError::new_with_message(ErrorType::External, "Source account doesn't exist")
-        })?;
+        let _to_e8s = accounts
+            .get(&to_account)
+            .ok_or_else(|| NervousSystemError::new_with_message("Target account doesn't exist"))?;
+        let from_e8s = accounts
+            .get_mut(&from_account)
+            .ok_or_else(|| NervousSystemError::new_with_message("Source account doesn't exist"))?;
 
         let requested_e8s = amount_e8s + fee_e8s;
 
         if *from_e8s < requested_e8s {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InsufficientFunds,
-                format!("available {} requested {}", *from_e8s, requested_e8s),
-            ));
+            return Err(NervousSystemError::new_with_message(format!(
+                "Insufficient funds. Available {} requested {}",
+                *from_e8s, requested_e8s
+            )));
         }
 
         *from_e8s -= requested_e8s;
@@ -431,11 +432,14 @@ impl Ledger for NNSFixture {
         Ok(0)
     }
 
-    async fn total_supply(&self) -> Result<Tokens, GovernanceError> {
+    async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
         Ok(self.nns_state.try_lock().unwrap().ledger.get_supply())
     }
 
-    async fn account_balance(&self, account: AccountIdentifier) -> Result<Tokens, GovernanceError> {
+    async fn account_balance(
+        &self,
+        account: AccountIdentifier,
+    ) -> Result<Tokens, NervousSystemError> {
         let accounts = &mut self.nns_state.try_lock().unwrap().ledger.accounts;
         let account_e8s = accounts.get(&account).unwrap_or(&0);
         Ok(Tokens::from_e8s(*account_e8s))
@@ -811,17 +815,20 @@ impl Ledger for NNS {
         from_subaccount: Option<Subaccount>,
         to_account: AccountIdentifier,
         arg: u64,
-    ) -> Result<u64, GovernanceError> {
+    ) -> Result<u64, NervousSystemError> {
         self.fixture
             .transfer_funds(amount_e8s, fee_e8s, from_subaccount, to_account, arg)
             .await
     }
 
-    async fn total_supply(&self) -> Result<Tokens, GovernanceError> {
+    async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
         self.fixture.total_supply().await
     }
 
-    async fn account_balance(&self, account: AccountIdentifier) -> Result<Tokens, GovernanceError> {
+    async fn account_balance(
+        &self,
+        account: AccountIdentifier,
+    ) -> Result<Tokens, NervousSystemError> {
         self.fixture.account_balance(account).await
     }
 }

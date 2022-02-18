@@ -16,7 +16,6 @@ use std::boxed::Box;
 use std::convert::TryFrom;
 use std::time::SystemTime;
 
-use async_trait::async_trait;
 use prost::Message;
 
 use candid::candid_method;
@@ -24,11 +23,11 @@ use dfn_candid::{candid, candid_one};
 use dfn_core::api::{call_with_callbacks, reject_message};
 use dfn_core::{
     api::{arg_data, caller, id, now},
-    call, over, over_async, println,
+    over, over_async, println,
 };
-use dfn_protobuf::protobuf;
 
 use ic_base_types::CanisterId;
+use ic_nervous_system_common::ledger::LedgerCanister;
 use ic_sns_governance::governance::{log_prefix, Governance};
 use ic_sns_governance::pb::v1::proposal::Action;
 use ic_sns_governance::pb::v1::{
@@ -37,11 +36,8 @@ use ic_sns_governance::pb::v1::{
     ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron, ManageNeuronResponse,
     RewardEvent,
 };
-use ic_sns_governance::types::{Environment, HeapGrowthPotential, Ledger};
-use ledger_canister::{
-    metrics_encoder, AccountBalanceArgs, AccountIdentifier, Memo, SendArgs, Subaccount, Tokens,
-    TotalSupplyArgs,
-};
+use ic_sns_governance::types::{Environment, HeapGrowthPotential};
+use ledger_canister::metrics_encoder;
 
 /// Size of the buffer for stable memory reads and writes.
 ///
@@ -187,89 +183,6 @@ impl Environment for CanisterEnv {
     }
 }
 
-struct LedgerCanister {
-    id: CanisterId,
-}
-
-#[async_trait]
-impl Ledger for LedgerCanister {
-    async fn transfer_funds(
-        &self,
-        amount_e8s: u64,
-        fee_e8s: u64,
-        from_subaccount: Option<Subaccount>,
-        to: AccountIdentifier,
-        memo: u64,
-    ) -> Result<u64, GovernanceError> {
-        // Send 'amount_e8s' to the target account.
-        //
-        // We expect the 'fee_e8s' AND 'amount_e8s' to be
-        // deducted from the from_subaccount. When calling
-        // this method, make sure that the staked amount
-        // can cover BOTH of these amounts, otherwise there
-        // will be an error.
-        let result: Result<u64, (Option<i32>, String)> = call(
-            self.id,
-            "send_pb",
-            protobuf,
-            SendArgs {
-                memo: Memo(memo),
-                amount: Tokens::from_e8s(amount_e8s),
-                fee: Tokens::from_e8s(fee_e8s),
-                from_subaccount,
-                to,
-                created_at_time: None,
-            },
-        )
-        .await;
-
-        result.map_err(|(code, msg)| {
-            GovernanceError::new_with_message(
-                ErrorType::External,
-                format!(
-                    "Error calling method 'send' of the ledger canister. Code: {:?}. Message: {}",
-                    code, msg
-                ),
-            )
-        })
-    }
-
-    async fn total_supply(&self) -> Result<Tokens, GovernanceError> {
-        let result: Result<Tokens, (Option<i32>, String)> =
-            call(self.id, "total_supply_pb", protobuf, TotalSupplyArgs {}).await;
-
-        result.map_err(|(code, msg)| {
-            GovernanceError::new_with_message(
-                ErrorType::External,
-                format!(
-                    "Error calling method 'total_supply' of the ledger canister. Code: {:?}. Message: {}",
-                    code, msg
-                )
-            )
-        })
-    }
-
-    async fn account_balance(&self, account: AccountIdentifier) -> Result<Tokens, GovernanceError> {
-        let result: Result<Tokens, (Option<i32>, String)> = call(
-            self.id,
-            "account_balance_pb",
-            protobuf,
-            AccountBalanceArgs { account },
-        )
-        .await;
-
-        result.map_err(|(code, msg)| {
-            GovernanceError::new_with_message(
-                ErrorType::External,
-                format!(
-                    "Error calling method 'account_balance_pb' of the ledger canister. Code: {:?}. Message: {}",
-                    code, msg
-                )
-            )
-        })
-    }
-}
-
 /// Initializes the canister by decoding the init
 /// arguments and initializing internal state.
 #[export_name = "canister_init"]
@@ -319,9 +232,7 @@ fn canister_init_(init_payload: GovernanceProto) {
         GOVERNANCE = Some(Governance::new(
             init_payload,
             Box::new(CanisterEnv::new()),
-            Box::new(LedgerCanister {
-                id: ledger_canister_id,
-            }),
+            Box::new(LedgerCanister::new(ledger_canister_id)),
         ));
     }
     governance()

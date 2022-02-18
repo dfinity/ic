@@ -7,12 +7,10 @@ use crate::pb::v1::{
     NervousSystemParameters, NeuronId, ProposalId, RewardEvent, Tally, Vote,
 };
 use ic_base_types::CanisterId;
-use ledger_canister::{
-    AccountIdentifier, Subaccount, Tokens, DEFAULT_TRANSFER_FEE, TOKEN_SUBDIVIDABLE_BY,
-};
+use ledger_canister::{DEFAULT_TRANSFER_FEE, TOKEN_SUBDIVIDABLE_BY};
 use std::fmt;
 
-use async_trait::async_trait;
+use ic_nervous_system_common::NervousSystemError;
 
 pub const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
 pub const ONE_YEAR_SECONDS: u64 = (4 * 365 + 1) * ONE_DAY_SECONDS / 4;
@@ -67,6 +65,15 @@ impl GovernanceError {
 impl fmt::Display for GovernanceError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}: {}", self.error_type(), self.error_message)
+    }
+}
+
+impl From<NervousSystemError> for GovernanceError {
+    fn from(nervous_system_error: NervousSystemError) -> Self {
+        GovernanceError {
+            error_type: ErrorType::External as i32,
+            error_message: nervous_system_error.error_message,
+        }
     }
 }
 
@@ -346,53 +353,6 @@ pub enum HeapGrowthPotential {
 
     /// The heap can still grow, but not by much.
     LimitedAvailability,
-}
-
-#[async_trait]
-pub trait Ledger: Send + Sync {
-    /// Transfers funds from one of this canister's subaccount to a
-    /// subaccount of of the provided principal.
-    ///
-    /// Returns the block height at which the transfer was recorded.
-    async fn transfer_funds(
-        &self,
-        amount_e8s: u64,
-        fee_e8s: u64,
-        from_subaccount: Option<Subaccount>,
-        to: AccountIdentifier,
-        memo: u64,
-    ) -> Result<u64, GovernanceError>;
-
-    async fn total_supply(&self) -> Result<Tokens, GovernanceError>;
-
-    async fn account_balance(&self, account: AccountIdentifier) -> Result<Tokens, GovernanceError>;
-}
-
-pub struct EmptyLedger {}
-
-#[async_trait]
-impl Ledger for EmptyLedger {
-    async fn transfer_funds(
-        &self,
-        _amount_e8s: u64,
-        _fee_e8s: u64,
-        _from_subaccount: Option<Subaccount>,
-        _to: AccountIdentifier,
-        _memo: u64,
-    ) -> Result<u64, GovernanceError> {
-        unimplemented!()
-    }
-
-    async fn total_supply(&self) -> Result<Tokens, GovernanceError> {
-        unimplemented!()
-    }
-
-    async fn account_balance(
-        &self,
-        _account: AccountIdentifier,
-    ) -> Result<Tokens, GovernanceError> {
-        unimplemented!()
-    }
 }
 
 /// A single ongoing update for a single neuron.
