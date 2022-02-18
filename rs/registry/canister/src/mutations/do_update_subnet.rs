@@ -219,6 +219,16 @@ fn merge_subnet_record(
     maybe_set!(subnet_record, max_instructions_per_round);
     maybe_set!(subnet_record, max_instructions_per_install_code);
 
+    // TODO(NNS1-1129): Removal of a threshold ECDSA key from a subnet is not supported
+    if let Some(existing_ecdsa_record) = subnet_record.ecdsa_config.as_ref() {
+        let new_ecdsa_config = ecdsa_config
+            .as_ref()
+            .expect("Cannot set this config to `None`, removal of ECDSA keys is not supported");
+        assert!(existing_ecdsa_record
+            .key_ids
+            .iter()
+            .all(|x| new_ecdsa_config.key_ids.contains(x)));
+    }
     maybe_set_option!(subnet_record, features);
     maybe_set_option!(subnet_record, ecdsa_config);
 
@@ -226,6 +236,7 @@ fn merge_subnet_record(
 
     maybe_set!(subnet_record, ssh_readonly_access);
     maybe_set!(subnet_record, ssh_backup_access);
+
     subnet_record
 }
 
@@ -240,6 +251,53 @@ mod tests {
     };
     use ic_types::{PrincipalId, SubnetId};
     use std::str::FromStr;
+
+    fn make_default_payload_for_tests() -> UpdateSubnetPayload {
+        UpdateSubnetPayload {
+            subnet_id: SubnetId::from(
+                PrincipalId::from_str(
+                    "bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae",
+                )
+                .unwrap(),
+            ),
+            max_ingress_bytes_per_message: Some(256),
+            max_ingress_messages_per_block: Some(256),
+            max_block_payload_size: Some(200),
+            unit_delay_millis: Some(300),
+            initial_notary_delay_millis: Some(200),
+            dkg_interval_length: Some(8),
+            dkg_dealings_per_block: Some(1),
+            max_artifact_streams_per_peer: Some(0),
+            max_chunk_wait_ms: Some(10),
+            max_duplicity: Some(5),
+            max_chunk_size: Some(1024),
+            receive_check_cache_size: Some(500),
+            pfn_evaluation_period_ms: Some(5000),
+            registry_poll_period_ms: Some(4000),
+            retransmission_request_ms: Some(7000),
+            advert_best_effort_percentage: Some(50),
+            set_gossip_config_to_default: false,
+            start_as_nns: Some(true),
+            subnet_type: None,
+            is_halted: Some(true),
+            max_instructions_per_message: Some(6_000_000_000),
+            max_instructions_per_round: Some(8_000_000_000),
+            max_instructions_per_install_code: Some(300_000_000_000),
+            features: Some(SubnetFeatures {
+                ecdsa_signatures: false,
+                canister_sandboxing: false,
+                http_requests: false,
+                bitcoin_testnet: None,
+            }),
+            ecdsa_config: Some(EcdsaConfig {
+                quadruples_to_create_in_advance: 10,
+                key_ids: vec!["key_id_1".to_string()],
+            }),
+            max_number_of_canisters: Some(10),
+            ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
+            ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
+        }
+    }
 
     #[test]
     fn can_override_all_fields() {
@@ -315,6 +373,7 @@ mod tests {
             }),
             ecdsa_config: Some(EcdsaConfig {
                 quadruples_to_create_in_advance: 10,
+                key_ids: vec!["key_id_1".to_string()],
             }),
             max_number_of_canisters: Some(10),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
@@ -363,6 +422,7 @@ mod tests {
                 ),
                 ecdsa_config: Some(EcdsaConfig {
                     quadruples_to_create_in_advance: 10,
+                    key_ids: vec!["key_id_1".to_string()]
                 }),
                 max_number_of_canisters: 10,
                 ssh_readonly_access: vec!["pub_key_0".to_string()],
@@ -482,6 +542,81 @@ mod tests {
                 ecdsa_config: None,
             }
         );
+    }
+
+    #[test]
+    #[should_panic]
+    fn merging_ecdsa_key_ids_works_correctly() {
+        let ecdsa_config = Some(EcdsaConfig {
+            key_ids: vec!["key_id_1".to_string()],
+            quadruples_to_create_in_advance: 0,
+        });
+
+        let subnet_record = SubnetRecord {
+            ecdsa_config: Some(EcdsaConfig {
+                key_ids: vec!["key_id_1".to_string()],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let mut payload_1 = make_default_payload_for_tests();
+        payload_1.ecdsa_config = ecdsa_config.clone();
+
+        assert_eq!(
+            merge_subnet_record(subnet_record.clone(), payload_1),
+            subnet_record
+        );
+
+        let mut new_subnet_record = subnet_record.clone();
+        new_subnet_record.ecdsa_config = ecdsa_config;
+
+        let mut payload_2 = make_default_payload_for_tests();
+        payload_2.ecdsa_config = Some(EcdsaConfig {
+            key_ids: vec!["key_id_1".to_string(), "key_id_2".to_string()],
+            ..Default::default()
+        });
+        assert_eq!(
+            &merge_subnet_record(subnet_record, payload_2),
+            &new_subnet_record
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn panic_on_removing_ecdsa_key_ids() {
+        let subnet_record = SubnetRecord {
+            ecdsa_config: Some(EcdsaConfig {
+                key_ids: vec!["key_id_1".to_string()],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let mut payload = make_default_payload_for_tests();
+        payload.ecdsa_config = Some(EcdsaConfig {
+            key_ids: vec!["key_id_2".to_string()],
+            ..Default::default()
+        });
+
+        merge_subnet_record(subnet_record, payload);
+    }
+
+    #[test]
+    #[should_panic]
+    fn panic_on_removing_ecdsa_config_none_value() {
+        let subnet_record = SubnetRecord {
+            ecdsa_config: Some(EcdsaConfig {
+                key_ids: vec!["key_id_1".to_string()],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let mut payload = make_default_payload_for_tests();
+        payload.ecdsa_config = None;
+
+        merge_subnet_record(subnet_record, payload);
     }
 
     #[test]

@@ -207,9 +207,10 @@ message SubnetFeatures {
     optional bool bitcoin_testnet = 4;
 }
 
-// Per subnet P2P configuration
-// Note: protoc is mangling the name P2PConfig to P2pConfig
+// Per subnet ECDSA configuration
 message EcdsaConfig {
   // Number of quadruples to create in advance.
   uint32 quadruples_to_create_in_advance = 1;
+  // Identifiers for threshold ECDSA keys held by the subnet.
+  repeated string key_ids = 2;
 }

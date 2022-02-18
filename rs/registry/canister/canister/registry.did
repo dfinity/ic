@@ -71,7 +71,10 @@ type DataCenterRecord = record {
   owner : text;
 };
 type DeleteSubnetPayload = record { subnet_id : opt principal };
-type EcdsaConfig = record { quadruples_to_create_in_advance : nat32 };
+type EcdsaConfig = record {
+  quadruples_to_create_in_advance : nat32;
+  key_ids : vec text;
+};
 type Gps = record { latitude : float32; longitude : float32 };
 type NodeProvidersMonthlyXdrRewards = record {
   rewards : vec record { text; nat64 };
