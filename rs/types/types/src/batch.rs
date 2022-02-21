@@ -32,7 +32,7 @@ pub struct Batch {
     pub registry_version: RegistryVersion,
     /// A clock time to be used for processing messages.
     pub time: Time,
-    /// Responses to subnet calls that reqire consensus' involvement.
+    /// Responses to subnet calls that require consensus' involvement.
     pub consensus_responses: Vec<Response>,
 }
 
