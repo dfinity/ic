@@ -8,9 +8,11 @@ lazy_static = "1.4.0"
 candid = "0.7.4"
 canister-test = { path = "../../rust_canisters/canister_test" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
+dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 futures = "0.3.8"
 ic-canister-client = { path = "../../canister_client" }
 ic-config = { path = "../../config" }
+ic-crypto-sha = { path = "../../crypto/sha" }
 ic-sns-governance = { path = "../governance" }
 ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }

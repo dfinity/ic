@@ -13,3 +13,5 @@
 mod ledger;
 #[cfg(test)]
 mod neuron;
+#[cfg(test)]
+mod proposals;

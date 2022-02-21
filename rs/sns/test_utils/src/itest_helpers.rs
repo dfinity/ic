@@ -1,12 +1,25 @@
 use canister_test::{local_test_with_config_e, Canister, Project, Runtime};
-use dfn_candid::CandidOne;
+use dfn_candid::{candid_one, CandidOne};
 use futures::future::join_all;
 use ic_config::subnet_config::SubnetConfig;
 use ic_config::Config;
 use ic_sns_governance::init::GovernanceCanisterInitPayloadBuilder;
-use ic_sns_governance::pb::v1::Governance;
+use ic_sns_governance::pb::v1::manage_neuron_response::Command as CommandResponse;
+use ic_sns_governance::pb::v1::{
+    get_proposal_response,
+    manage_neuron::{
+        claim_or_refresh::{By, MemoAndController},
+        configure::Operation,
+        ClaimOrRefresh, Command, Configure, IncreaseDissolveDelay,
+    },
+    GetProposal, GetProposalResponse, Governance, ManageNeuron, ManageNeuronResponse, NeuronId,
+    Proposal, ProposalData, ProposalId,
+};
 use ledger_canister as ledger;
-use ledger_canister::{AccountIdentifier, LedgerCanisterInitPayload, Tokens, DEFAULT_TRANSFER_FEE};
+use ledger_canister::{
+    AccountIdentifier, LedgerCanisterInitPayload, Memo, SendArgs, Subaccount, Tokens,
+    DEFAULT_TRANSFER_FEE,
+};
 use on_wire::IntoWire;
 use prost::Message;
 use std::collections::HashMap;
@@ -18,6 +31,10 @@ use crate::{
     memory_allocation_of, ALL_SNS_CANISTER_IDS, NUM_SNS_CANISTERS, TEST_GOVERNANCE_CANISTER_ID,
     TEST_LEDGER_CANISTER_ID, TEST_ROOT_CANISTER_ID,
 };
+use dfn_protobuf::protobuf;
+use ic_canister_client::Sender;
+use ic_crypto_sha::Sha256;
+use ic_types::PrincipalId;
 
 /// All the SNS canisters
 #[derive(Clone)]
@@ -184,6 +201,183 @@ impl SnsCanisters<'_> {
 
     pub fn all_canisters(&self) -> [&Canister<'_>; NUM_SNS_CANISTERS] {
         [&self.root, &self.governance, &self.ledger]
+    }
+
+    /// Make a Governance proposal
+    pub async fn make_proposal(
+        &self,
+        sender: &Sender,
+        subaccount: &Subaccount,
+        proposal: Proposal,
+    ) -> ProposalId {
+        let manage_neuron_response: ManageNeuronResponse = self
+            .governance
+            .update_from_sender(
+                "manage_neuron",
+                candid_one,
+                ManageNeuron {
+                    subaccount: subaccount.to_vec(),
+                    command: Some(Command::MakeProposal(proposal)),
+                },
+                sender,
+            )
+            .await
+            .expect("Error calling manage_neuron");
+
+        match manage_neuron_response.command.unwrap() {
+            CommandResponse::Error(error) => panic!("Unexpected error: {}", error),
+            CommandResponse::MakeProposal(make_proposal_response) => {
+                make_proposal_response.proposal_id.unwrap()
+            }
+            _ => panic!("Unexpected MakeProposal response"),
+        }
+    }
+
+    /// Get a proposal
+    pub async fn get_proposal(&self, proposal_id: ProposalId) -> ProposalData {
+        let get_proposal_response: GetProposalResponse = self
+            .governance
+            .query_(
+                "get_proposal",
+                candid_one,
+                GetProposal {
+                    proposal_id: Some(proposal_id),
+                },
+            )
+            .await
+            .expect("Error calling get_proposal");
+
+        match get_proposal_response
+            .result
+            .expect("Empty get_proposal_response")
+        {
+            get_proposal_response::Result::Error(e) => {
+                panic!("get_proposal error: {}", e);
+            }
+            get_proposal_response::Result::Proposal(proposal) => proposal,
+        }
+    }
+
+    /// Stake a neuron in the given SNS.
+    ///
+    /// Assumes `user` has an account on the Ledger containing at least 100 tokens.
+    pub async fn stake_and_claim_neuron(
+        &self,
+        user: &Sender,
+        dissolve_delay: Option<u32>,
+    ) -> NeuronId {
+        // Stake a neuron by transferring to a subaccount of the neurons
+        // canister and claiming the neuron on the governance canister..
+        let nonce = 12345u64;
+        let to_subaccount = Subaccount({
+            let mut state = Sha256::new();
+            state.write(&[0x0c]);
+            state.write(b"neuron-stake");
+            state.write(user.get_principal_id().as_slice());
+            state.write(&nonce.to_be_bytes());
+            state.finish()
+        });
+
+        // Stake the neuron.
+        let stake = Tokens::from_tokens(100).unwrap();
+        let _block_height: u64 = self
+            .ledger
+            .update_from_sender(
+                "send_pb",
+                protobuf,
+                SendArgs {
+                    memo: Memo(nonce),
+                    amount: stake,
+                    fee: DEFAULT_TRANSFER_FEE,
+                    from_subaccount: None,
+                    to: AccountIdentifier::new(
+                        PrincipalId::from(TEST_GOVERNANCE_CANISTER_ID),
+                        Some(to_subaccount),
+                    ),
+                    created_at_time: None,
+                },
+                user,
+            )
+            .await
+            .expect("Couldn't send funds.");
+
+        // Claim the neuron on the governance canister.
+        let claim_response: ManageNeuronResponse = self
+            .governance
+            .update_from_sender(
+                "manage_neuron",
+                candid_one,
+                ManageNeuron {
+                    subaccount: to_subaccount.to_vec(),
+                    command: Some(Command::ClaimOrRefresh(ClaimOrRefresh {
+                        by: Some(By::MemoAndController(MemoAndController {
+                            memo: nonce,
+                            controller: None,
+                        })),
+                    })),
+                },
+                user,
+            )
+            .await
+            .expect("Error calling the manage_neuron api.");
+
+        let neuron_id = match claim_response.command.unwrap() {
+            CommandResponse::ClaimOrRefresh(response) => {
+                println!(
+                    "User {} successfully claimed neuron",
+                    user.get_principal_id()
+                );
+
+                response.refreshed_neuron_id.unwrap()
+            }
+            CommandResponse::Error(error) => panic!(
+                "Unexpected error when claiming neuron for user {}: {}",
+                user.get_principal_id(),
+                error
+            ),
+            _ => panic!(
+                "Unexpected command response when claiming neuron for user {}.",
+                user.get_principal_id()
+            ),
+        };
+
+        // Increase dissolve delay
+        if let Some(dissolve_delay) = dissolve_delay {
+            let increase_response: ManageNeuronResponse = self
+                .governance
+                .update_from_sender(
+                    "manage_neuron",
+                    candid_one,
+                    ManageNeuron {
+                        subaccount: to_subaccount.to_vec(),
+                        command: Some(Command::Configure(Configure {
+                            operation: Some(Operation::IncreaseDissolveDelay(
+                                IncreaseDissolveDelay {
+                                    additional_dissolve_delay_seconds: dissolve_delay,
+                                },
+                            )),
+                        })),
+                    },
+                    user,
+                )
+                .await
+                .expect("Error calling the manage_neuron api.");
+
+            match increase_response.command.unwrap() {
+                CommandResponse::Configure(_) => (),
+                CommandResponse::Error(error) => panic!(
+                    "Unexpected error when increasing dissolve delay for user {}: {}",
+                    user.get_principal_id(),
+                    error
+                ),
+                _ => panic!(
+                    "Unexpected command response when increasing dissolve delay for user {}.",
+                    user.get_principal_id()
+                ),
+            };
+        }
+
+        neuron_id
     }
 }
 
