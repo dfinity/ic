@@ -5,6 +5,7 @@ pub mod sandbox_server;
 use ic_canister_sandbox_common::{
     child_process_initialization, controller_client_stub, protocol, rpc, transport,
 };
+use ic_config::embedders::Config as EmbeddersConfig;
 use std::sync::Arc;
 
 pub use ic_canister_sandbox_common::{RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_SANDBOX_LAUNCHER_FLAG};
@@ -24,7 +25,22 @@ pub use ic_canister_sandbox_common::{RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_SANDBO
 /// operations into the controller.
 pub fn canister_sandbox_main() {
     let socket = child_process_initialization();
-    run_canister_sandbox(socket);
+    let mut embedder_config_arg = None;
+
+    let mut args = std::env::args();
+    while let Some(arg) = args.next() {
+        if arg.as_str() == "--embedder-config" {
+            let config_arg = args.next().expect("Missing embedder config.");
+            embedder_config_arg = Some(
+                serde_json::from_str(config_arg.as_str())
+                    .expect("Could not parse the argument, invalid embedder config value."),
+            )
+        }
+    }
+    let embedder_config = embedder_config_arg
+        .expect("Error from the sandbox process due to unknown embedder config.");
+
+    run_canister_sandbox(socket, embedder_config);
 }
 
 /// Runs the canister sandbox service in the calling thread. The service
@@ -32,7 +48,10 @@ pub fn canister_sandbox_main() {
 /// communication. It expects execution IPC commands to passed as
 /// inputs on this communication channel, and will communicate
 /// completions as well as auxiliary requests back on this channel.
-pub fn run_canister_sandbox(socket: std::os::unix::net::UnixStream) {
+pub fn run_canister_sandbox(
+    socket: std::os::unix::net::UnixStream,
+    embedder_config: EmbeddersConfig,
+) {
     let socket = Arc::new(socket);
 
     let out_stream =
@@ -52,7 +71,7 @@ pub fn run_canister_sandbox(socket: std::os::unix::net::UnixStream) {
     // Construct RPC server for the  service offered by this binary,
     // namely access to the sandboxed canister runner functions.
     let svc = Arc::new(sandbox_server::SandboxServer::new(
-        sandbox_manager::SandboxManager::new(controller),
+        sandbox_manager::SandboxManager::new(controller, embedder_config),
     ));
 
     // Wrap it all up to handle frames received on socket -- either

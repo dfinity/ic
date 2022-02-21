@@ -20,7 +20,6 @@ pub fn spawn_socketed_process(
     socket: RawFd,
 ) -> std::io::Result<Child> {
     let mut cmd = Command::new(exec_path);
-
     cmd.args(argv);
 
     // In case of Command we inherit the current process's environment. This should

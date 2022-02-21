@@ -102,6 +102,7 @@ mod tests {
             structs::SandboxExecInput,
         },
     };
+    use ic_config::embedders::Config as EmbeddersConfig;
     use ic_config::subnet_config::CyclesAccountManagerConfig;
     use ic_cycles_account_manager::CyclesAccountManager;
     use ic_interfaces::execution_environment::{
@@ -450,9 +451,10 @@ mod tests {
         let exec_finished_sync =
             Arc::new(SyncCell::<protocol::ctlsvc::ExecutionFinishedRequest>::new());
 
-        let srv = SandboxServer::new(SandboxManager::new(setup_mock_controller(
-            exec_finished_sync.clone(),
-        )));
+        let srv = SandboxServer::new(SandboxManager::new(
+            setup_mock_controller(exec_finished_sync.clone()),
+            EmbeddersConfig::default(),
+        ));
 
         let wasm_id = WasmId::new();
         let rep = srv
@@ -523,9 +525,10 @@ mod tests {
         let exec_finished_sync =
             Arc::new(SyncCell::<protocol::ctlsvc::ExecutionFinishedRequest>::new());
 
-        let srv = SandboxServer::new(SandboxManager::new(setup_mock_controller(
-            exec_finished_sync.clone(),
-        )));
+        let srv = SandboxServer::new(SandboxManager::new(
+            setup_mock_controller(exec_finished_sync.clone()),
+            EmbeddersConfig::default(),
+        ));
 
         let wasm_id = WasmId::new();
         let rep = srv
@@ -581,9 +584,10 @@ mod tests {
         let exec_finished_sync =
             Arc::new(SyncCell::<protocol::ctlsvc::ExecutionFinishedRequest>::new());
 
-        let srv = SandboxServer::new(SandboxManager::new(setup_mock_controller(
-            exec_finished_sync.clone(),
-        )));
+        let srv = SandboxServer::new(SandboxManager::new(
+            setup_mock_controller(exec_finished_sync.clone()),
+            EmbeddersConfig::default(),
+        ));
 
         let wasm_id = WasmId::new();
         let rep = srv
@@ -666,7 +670,7 @@ mod tests {
 
         let controller = Arc::new(controller);
 
-        let srv = SandboxServer::new(SandboxManager::new(controller));
+        let srv = SandboxServer::new(SandboxManager::new(controller, EmbeddersConfig::default()));
 
         let wasm_id = WasmId::new();
         let rep = srv
@@ -774,9 +778,10 @@ mod tests {
         let exec_finished_sync =
             Arc::new(SyncCell::<protocol::ctlsvc::ExecutionFinishedRequest>::new());
 
-        let srv = SandboxServer::new(SandboxManager::new(setup_mock_controller(
-            exec_finished_sync.clone(),
-        )));
+        let srv = SandboxServer::new(SandboxManager::new(
+            setup_mock_controller(exec_finished_sync.clone()),
+            EmbeddersConfig::default(),
+        ));
 
         let wasm_id = WasmId::new();
         let rep = srv
@@ -832,9 +837,10 @@ mod tests {
         let exec_finished_sync =
             Arc::new(SyncCell::<protocol::ctlsvc::ExecutionFinishedRequest>::new());
 
-        let srv = SandboxServer::new(SandboxManager::new(setup_mock_controller(
-            exec_finished_sync.clone(),
-        )));
+        let srv = SandboxServer::new(SandboxManager::new(
+            setup_mock_controller(exec_finished_sync.clone()),
+            EmbeddersConfig::default(),
+        ));
 
         let wasm_id = WasmId::new();
         let rep = srv
@@ -899,9 +905,10 @@ mod tests {
         let exec_finished_sync =
             Arc::new(SyncCell::<protocol::ctlsvc::ExecutionFinishedRequest>::new());
 
-        let srv = SandboxServer::new(SandboxManager::new(setup_mock_controller(
-            exec_finished_sync.clone(),
-        )));
+        let srv = SandboxServer::new(SandboxManager::new(
+            setup_mock_controller(exec_finished_sync.clone()),
+            EmbeddersConfig::default(),
+        ));
 
         let wasm_id = WasmId::new();
         let rep = srv
@@ -998,9 +1005,10 @@ mod tests {
         let exec_finished_sync =
             Arc::new(SyncCell::<protocol::ctlsvc::ExecutionFinishedRequest>::new());
 
-        let srv = SandboxServer::new(SandboxManager::new(setup_mock_controller(
-            exec_finished_sync.clone(),
-        )));
+        let srv = SandboxServer::new(SandboxManager::new(
+            setup_mock_controller(exec_finished_sync.clone()),
+            EmbeddersConfig::default(),
+        ));
 
         let wasm_id = WasmId::new();
         let rep = srv

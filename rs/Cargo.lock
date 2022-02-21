@@ -3606,6 +3606,7 @@ dependencies = [
  "memory_tracker",
  "mockall 0.7.2",
  "nix 0.23.0",
+ "serde_json",
  "threadpool",
  "wabt 0.10.0 (git+https://github.com/dfinity-lab/wabt-rs?tag=0.10.0-dfinity)",
 ]
@@ -3663,6 +3664,7 @@ dependencies = [
  "once_cell 1.8.0",
  "prometheus",
  "regex",
+ "serde_json",
  "slog",
  "slog-async",
  "slog-term",
