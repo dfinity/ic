@@ -28,6 +28,7 @@ pub mod request_auth_malicious_replica_test;
 pub mod request_signature_test;
 pub mod rosetta_test;
 pub mod security;
+pub mod spec_compliance;
 pub mod ssh_access_to_nodes;
 pub mod ssh_access_utils;
 pub mod tecdsa_signature_test;

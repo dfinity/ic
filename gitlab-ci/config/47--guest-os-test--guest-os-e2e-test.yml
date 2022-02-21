@@ -247,3 +247,13 @@ upgrade-compatibility-pre-master:
       MASTER_GIT_REVISION=$("${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh origin/master)
       export MASTER_GIT_REVISION
     - *run-farm-based-test
+
+spec-compliance-pre-master:
+  extends: .system-tests
+  script:
+    - |
+      IC_VERSION_ID=$("${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/find-build-id.sh)
+      export IC_VERSION_ID
+      "$SHELL_WRAPPER" nix-shell -p "(import ./nix {}).ic-ref" --run "
+        ${CI_PROJECT_DIR}/rs/tests/run-farm-based-system-tests.sh --suite spec_compliance
+      "

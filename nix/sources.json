@@ -125,22 +125,10 @@
         "url_template": "https://static.crates.io/crates/ic-cdk-optimizer/ic-cdk-optimizer-<version>.crate",
         "version": "0.1.0"
     },
-    "ic-ref-0_16": {
-        "branch": "release-0.16",
-        "repo": "ssh://git@github.com/dfinity-lab/ic-ref",
-        "rev": "23c214042fab3e91aa45e5e91650495fdc554acd",
-        "type": "git"
-    },
-    "ic-ref-0_17": {
-        "branch": "release-0.17",
-        "repo": "ssh://git@github.com/dfinity-lab/ic-ref",
-        "rev": "a858395300d67685545e945dd4afd4b6af26c1a6",
-        "type": "git"
-    },
-    "ic-ref-0_18": {
-        "branch": "release-0.18",
-        "repo": "ssh://git@github.com/dfinity-lab/ic-ref",
-        "rev": "35b920af8100153db9b81e26c217238d6bd3d46f",
+    "ic-ref": {
+        "branch": "release-0.18.2",
+        "repo": "ssh://git@github.com/dfinity/ic-hs",
+        "rev": "2d99ad469d8672ae9213be459ad53d5733e2604f",
         "type": "git"
     },
     "idl2json": {

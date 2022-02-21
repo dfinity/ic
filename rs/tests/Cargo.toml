@@ -107,9 +107,5 @@ name = "ic_tests"
 path = "src/lib.rs"
 
 [[bin]]
-name = "ic-test-bin"
-path = "bin/ic_test_bin.rs"
-
-[[bin]]
 name = "prod-test-driver"
 path = "bin/prod_test_driver.rs"
