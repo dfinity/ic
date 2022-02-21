@@ -443,26 +443,34 @@ fn can_reject_module_with_too_many_custom_sections() {
 }
 
 #[test]
-fn can_reject_module_with_custom_section_too_big() {
+fn can_reject_module_with_custom_sections_too_big() {
     let content = vec![0, 1, 6, 5, 6, 7, 4, 6];
-    let size = content.len() + "custom_section".len();
-    let module = Module::new(vec![Section::Custom(WasmCustomSection::new(
-        "icp:private custom_section".to_string(),
-        content,
-    ))]);
+    let size = 2 * content.len() + "name".len() + "custom_section".len();
+    let module = Module::new(vec![
+        // Size of this custom section is 12 bytes.
+        Section::Custom(WasmCustomSection::new(
+            "icp:public name".to_string(),
+            content.clone(),
+        )),
+        // Adding the size of this custom section will exceed the `max_custom_sections_size`.
+        Section::Custom(WasmCustomSection::new(
+            "icp:private custom_section".to_string(),
+            content,
+        )),
+    ]);
 
-    let max_custom_section_size = NumBytes::new(4);
+    let max_custom_sections_size = NumBytes::new(14);
     assert_eq!(
         validate_custom_section(
             &module, &EmbeddersConfig {
-                max_custom_sections: 2,
-                max_custom_section_size,
+                max_custom_sections: 3,
+                max_custom_sections_size,
                 ..Default::default()
             }
         ),
        Err(WasmValidationError::InvalidCustomSection(format!(
-                        "Invalid custom section: size of custom section named custom_section exceeds the maximum allowed: size {} bytes, allowed {} bytes",
-                         size, max_custom_section_size
+                        "Invalid custom sections: total size of the custom sections exceeds the maximum allowed: size {} bytes, allowed {} bytes",
+                         size, max_custom_sections_size
                     )
        ))
     );

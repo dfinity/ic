@@ -968,6 +968,7 @@ pub fn validate_custom_section(
 ) -> Result<WasmMetadata, WasmValidationError> {
     let mut validated_custom_sections: BTreeMap<String, CustomSection> = BTreeMap::new();
     let custom_sections = module.custom_sections();
+    let mut total_custom_sections_size = NumBytes::from(0);
 
     for custom_section in custom_sections {
         let payload = custom_section.payload();
@@ -981,12 +982,13 @@ pub fn validate_custom_section(
                 )));
             }
 
-            // Check the size of the custom section is valid.
+            // Check the total accumulated size of the custom sections.
             let size_custom_section = NumBytes::new((payload.len() + name.len()) as u64);
-            if size_custom_section > config.max_custom_section_size {
+            total_custom_sections_size += size_custom_section;
+            if total_custom_sections_size > config.max_custom_sections_size {
                 return Err(WasmValidationError::InvalidCustomSection(format!(
-                        "Invalid custom section: size of custom section named {} exceeds the maximum allowed: size {} bytes, allowed {} bytes",
-                        name, size_custom_section, config.max_custom_section_size
+                        "Invalid custom sections: total size of the custom sections exceeds the maximum allowed: size {} bytes, allowed {} bytes",
+                        total_custom_sections_size, config.max_custom_sections_size
                     )));
             }
 

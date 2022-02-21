@@ -13,10 +13,9 @@ pub(crate) const MAX_GLOBALS: usize = 200;
 pub(crate) const MAX_FUNCTIONS: usize = 6000;
 // The maximum number of custom sections allowed in a wasm module.
 pub(crate) const MAX_CUSTOM_SECTIONS: usize = 16;
-// The maximum size of a custom section in bytes.
-// Maximum 1 MiB is allowed per canister for the custom sections.
-// Thus maximum size per custom section is 1 MiB / MAX_CUSTOM_SECTIONS.
-pub(crate) const MAX_CUSTOM_SECTION_SIZE: NumBytes = NumBytes::new(65536);
+// The total size of the exported custom sections in bytes.
+// The size should not exceed 1MiB.
+pub(crate) const MAX_CUSTOM_SECTIONS_SIZE: NumBytes = NumBytes::new(1048576);
 /// The number of threads to use for query execution.
 pub(crate) const QUERY_EXECUTION_THREADS: usize = 2;
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
@@ -46,8 +45,8 @@ pub struct Config {
     /// Maximum number of custom sections allowed in a Wasm module.
     pub max_custom_sections: usize,
 
-    /// Maximum size of a custom section in bytes.
-    pub max_custom_section_size: NumBytes,
+    /// Maximum size of the custom sections in bytes.
+    pub max_custom_sections_size: NumBytes,
 
     /// Flags to enable or disable features that are still experimental.
     pub feature_flags: FeatureFlags,
@@ -61,7 +60,7 @@ impl Config {
             max_globals: MAX_GLOBALS,
             max_functions: MAX_FUNCTIONS,
             max_custom_sections: MAX_CUSTOM_SECTIONS,
-            max_custom_section_size: MAX_CUSTOM_SECTION_SIZE,
+            max_custom_sections_size: MAX_CUSTOM_SECTIONS_SIZE,
             feature_flags: FeatureFlags::default(),
         }
     }
