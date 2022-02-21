@@ -36,9 +36,6 @@ pub enum OrchestratorError {
     /// An IO error occurred
     IoError(String, io::Error),
 
-    /// An error occurred when making an HTTP request for a binary
-    BinaryHttpError(HttpError),
-
     /// An error occurred when downloading, extracting or checking the hash of a
     /// downloaded file
     FileDownloadError(FileDownloadError),
@@ -99,9 +96,6 @@ impl fmt::Display for OrchestratorError {
                 write!(f, "IO error, message: {:?}, error: {:?}", msg, e)
             }
             OrchestratorError::FileDownloadError(e) => write!(f, "File download error: {:?}", e),
-            OrchestratorError::BinaryHttpError(HttpError::HyperError(e)) => {
-                write!(f, "Encountered error when requesting binary: {:?}", e)
-            }
             OrchestratorError::ExecError(path, e) => write!(
                 f,
                 "Failed to exec new Orchestrator process: {:?}, error: {:?}",
@@ -128,12 +122,6 @@ impl fmt::Display for OrchestratorError {
     }
 }
 
-impl From<hyper::Error> for OrchestratorError {
-    fn from(e: hyper::Error) -> Self {
-        OrchestratorError::BinaryHttpError(HttpError::HyperError(e))
-    }
-}
-
 impl From<FileDownloadError> for OrchestratorError {
     fn from(e: FileDownloadError) -> Self {
         OrchestratorError::FileDownloadError(e)
@@ -141,10 +129,3 @@ impl From<FileDownloadError> for OrchestratorError {
 }
 
 impl Error for OrchestratorError {}
-
-/// An HTTP error that Orchestrator may encounter
-#[derive(Debug)]
-pub enum HttpError {
-    /// A hyper HTTP client produced an error
-    HyperError(hyper::Error),
-}

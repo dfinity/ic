@@ -19,6 +19,12 @@ use std::sync::Arc;
 use std::{fs::File, path::PathBuf};
 use url::Url;
 
+/// This wraps the CUP with the context about its origin.
+pub enum LatestCup {
+    FromRegistry(CUPWithOriginalProtobuf),
+    FromPeers(CUPWithOriginalProtobuf),
+}
+
 /// Fetches catch-up packages from peers and local storage.
 ///
 /// CUPs are used to determine which version of the IC peers are running
@@ -208,13 +214,14 @@ impl CatchUpPackageProvider {
     ///
     /// Choose the highest CUP among: those provided by the subnet peers,
     /// the locally persisted CUP (if one exists) and the CUP that is specified
-    /// by the registry.
+    /// by the registry. If we manage to find a newer CUP we also persist it.
     pub(crate) async fn get_latest_cup(
         &self,
+        local_cup: Option<CUPWithOriginalProtobuf>,
         subnet_id: SubnetId,
-    ) -> OrchestratorResult<CUPWithOriginalProtobuf> {
+    ) -> OrchestratorResult<LatestCup> {
         let registry_version = self.registry.get_latest_version();
-        let local_cup = self.get_local_cup();
+        let local_cup_height = local_cup.as_ref().map(|cup| cup.cup.content.height());
 
         // Returns local_cup in case no more recent CUP is found.
         let subnet_cup = self
@@ -228,14 +235,34 @@ impl CatchUpPackageProvider {
             .map_err(|err| warn!(self.logger, "Failed to retrieve registry CUP {:?}", err))
             .ok();
 
-        vec![registry_cup, subnet_cup]
-            .into_iter()
-            .flatten()
-            .max_by_key(|cup| cup.cup.content.height())
-            .ok_or(OrchestratorError::MakeRegistryCupError(
-                subnet_id,
-                registry_version,
-            ))
+        let latest_cup = match (registry_cup, subnet_cup) {
+            (Some(r_cup), Some(p_cup)) => {
+                if r_cup.cup.content.height() > p_cup.cup.content.height() {
+                    LatestCup::FromRegistry(r_cup)
+                } else {
+                    LatestCup::FromPeers(p_cup)
+                }
+            }
+            (Some(r_cup), None) => LatestCup::FromRegistry(r_cup),
+            (None, Some(p_cup)) => LatestCup::FromPeers(p_cup),
+            _ => {
+                return Err(OrchestratorError::UpgradeError(
+                    "No latest CUP was found".to_string(),
+                ))
+            }
+        };
+
+        let latest_cup_unwrapped = match &latest_cup {
+            LatestCup::FromRegistry(cup) | LatestCup::FromPeers(cup) => cup,
+        };
+        if Some(latest_cup_unwrapped.cup.content.height()) > local_cup_height {
+            match self.persist_cup(latest_cup_unwrapped) {
+                Ok(path) => info!(self.logger, "New CUP persisted to {}", path.display()),
+                Err(err) => warn!(self.logger, "Failed to persist CUP: {:?}", err),
+            }
+        }
+
+        Ok(latest_cup)
     }
 
     /// Returns the locally persisted CUP.

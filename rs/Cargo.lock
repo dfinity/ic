@@ -8250,14 +8250,10 @@ name = "orchestrator"
 version = "0.8.0"
 dependencies = [
  "assert_cmd",
- "base64 0.13.0",
  "candid",
  "exec",
- "futures",
  "hex",
  "http",
- "hyper",
- "hyper-tls",
  "ic-async-utils",
  "ic-canister-client",
  "ic-config",
@@ -8283,7 +8279,6 @@ dependencies = [
  "ic-test-utilities",
  "ic-types 0.8.0",
  "ic-utils 0.8.0",
- "lazy_static",
  "nix 0.23.0",
  "prometheus",
  "prost",

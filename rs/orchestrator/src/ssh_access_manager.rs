@@ -1,6 +1,8 @@
+use crate::error::{OrchestratorError, OrchestratorResult};
 use crate::{metrics::OrchestratorMetrics, registry_helper::RegistryHelper};
 use ic_logger::{debug, warn, ReplicaLogger};
-use ic_types::RegistryVersion;
+use ic_registry_client::helper::unassigned_nodes::UnassignedNodeRegistry;
+use ic_types::{RegistryVersion, SubnetId};
 use std::io::Write;
 use std::process::{Command, Stdio};
 use std::sync::Arc;
@@ -30,7 +32,7 @@ impl SshAccessManager {
     }
 
     /// Checks for changes in the keysets, and updates the node accordingly.
-    pub(crate) async fn check_for_keyset_changes(&mut self) {
+    pub(crate) async fn check_for_keyset_changes(&mut self, subnet_id: Option<SubnetId>) {
         let registry_version = self.registry.get_latest_version();
         if self.last_seen_registry_version == registry_version {
             return;
@@ -40,20 +42,18 @@ impl SshAccessManager {
             "Checking for the access keys in the registry version: {}", registry_version
         );
 
-        let (new_readonly_keys, new_backup_keys) = match self
-            .registry
-            .get_own_readonly_and_backup_keysets(registry_version)
-        {
-            Err(error) => {
-                warn!(
-                    every_n_seconds => 300,
-                    self.logger,
-                    "Cannot retrieve the readonly & backup keysets from the registry {}", error
-                );
-                return;
-            }
-            Ok(keys) => keys,
-        };
+        let (new_readonly_keys, new_backup_keys) =
+            match self.get_readonly_and_backup_keysets(subnet_id, registry_version) {
+                Err(error) => {
+                    warn!(
+                        every_n_seconds => 300,
+                        self.logger,
+                        "Cannot retrieve the readonly & backup keysets from the registry {}", error
+                    );
+                    return;
+                }
+                Ok(keys) => keys,
+            };
 
         // Update the readonly & backup keys. If it fails, log why.
         if self.update_access_keys(&new_readonly_keys, &new_backup_keys) {
@@ -107,6 +107,35 @@ impl SshAccessManager {
         match cmd.wait_with_output() {
             Ok(_) => Ok(()),
             Err(e) => Err(format!("{}", e)),
+        }
+    }
+
+    fn get_readonly_and_backup_keysets(
+        &self,
+        subnet_id: Option<SubnetId>,
+        version: RegistryVersion,
+    ) -> OrchestratorResult<(Vec<String>, Vec<String>)> {
+        match subnet_id {
+            None => match self
+                .registry
+                .registry_client
+                .get_unassigned_nodes_config(version)
+                .map_err(OrchestratorError::RegistryClientError)?
+            {
+                // Unassigned nodes do not need backup keys
+                Some(record) => Ok((record.ssh_readonly_access, vec![])),
+                None => Ok((vec![], vec![])),
+            },
+            Some(subnet_id) => {
+                self.registry
+                    .get_subnet_record(subnet_id, version)
+                    .map(|subnet_record| {
+                        (
+                            subnet_record.ssh_readonly_access,
+                            subnet_record.ssh_backup_access,
+                        )
+                    })
+            }
         }
     }
 }

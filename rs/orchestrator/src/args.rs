@@ -37,11 +37,6 @@ pub struct OrchestratorArgs {
     #[structopt(long)]
     pub(crate) metrics_listen_addr: Option<SocketAddr>,
 
-    /// For debugging purposes, for the orchestrator to use the given
-    /// replica.
-    #[structopt(long)]
-    pub(crate) force_replica_binary: Option<String>,
-
     /// Provisional CLI-option intended to be used in bootstrap testing. Enables
     /// the registration procedure.
     #[structopt(long)]

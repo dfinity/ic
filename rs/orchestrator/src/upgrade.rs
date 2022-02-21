@@ -1,7 +1,6 @@
-use crate::catch_up_package_provider::CatchUpPackageProvider;
+use crate::catch_up_package_provider::{CatchUpPackageProvider, LatestCup};
 use crate::error::{OrchestratorError, OrchestratorResult};
 use crate::registry_helper::RegistryHelper;
-use crate::release_package_provider::ReleasePackageProvider;
 use crate::replica_process::ReplicaProcess;
 use crate::utils;
 use ic_http_utils::file_downloader::FileDownloader;
@@ -13,12 +12,20 @@ use ic_registry_client::helper::unassigned_nodes::UnassignedNodeRegistry;
 use ic_registry_common::local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::consensus::CatchUpPackage;
-use ic_types::consensus::HasHeight;
 use ic_types::{NodeId, RegistryVersion, ReplicaVersion, SubnetId};
 use std::convert::TryFrom;
 use std::path::PathBuf;
 use std::process::{exit, Command};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+/// The maximum number of binaries to persist at any given time
+const MAX_RELEASE_PACKAGES_TO_STORE: usize = 5;
+
+/// Release packages will not be deleted for this time after being created.
+/// Safeguards against deleting newly created packages before Orchestrator
+/// has had the chance to start the binaries within them.
+const MIN_RELEASE_PACKAGE_AGE: Duration = Duration::from_secs(60);
 
 /// Provides function to continuously check the Registry to determine if this
 /// node should upgrade to a new release package, and if so, downloads and
@@ -27,12 +34,12 @@ use std::sync::{Arc, Mutex};
 pub(crate) struct Upgrade {
     registry: Arc<RegistryHelper>,
     replica_process: Arc<Mutex<ReplicaProcess>>,
-    release_package_provider: Arc<ReleasePackageProvider>,
     cup_provider: Arc<CatchUpPackageProvider>,
     replica_version: ReplicaVersion,
     replica_config_file: PathBuf,
     ic_binary_dir: PathBuf,
     registry_replicator: Arc<RegistryReplicator>,
+    release_content_dir: PathBuf,
     logger: ReplicaLogger,
     node_id: NodeId,
 }
@@ -42,23 +49,23 @@ impl Upgrade {
     pub(crate) fn new(
         registry: Arc<RegistryHelper>,
         replica_process: Arc<Mutex<ReplicaProcess>>,
-        release_package_provider: Arc<ReleasePackageProvider>,
         cup_provider: Arc<CatchUpPackageProvider>,
         replica_version: ReplicaVersion,
         replica_config_file: PathBuf,
         node_id: NodeId,
         ic_binary_dir: PathBuf,
         registry_replicator: Arc<RegistryReplicator>,
+        release_content_dir: PathBuf,
         logger: ReplicaLogger,
     ) -> Self {
         let value = Self {
             registry,
             replica_process,
-            release_package_provider,
             cup_provider,
             node_id,
             replica_version,
             replica_config_file,
+            release_content_dir,
             ic_binary_dir,
             registry_replicator,
             logger,
@@ -69,14 +76,12 @@ impl Upgrade {
 
     /// Checks for a new release package, and if found, upgrades to this release
     /// package
-    pub(crate) async fn check(&self) -> OrchestratorResult<()> {
+    pub(crate) async fn check(&self) -> OrchestratorResult<Option<SubnetId>> {
         let latest_registry_version = self.registry.get_latest_version();
         // Determine the subnet_id using the local CUP.
-        let (subnet_id, local_cup) = if let Some(cup_with_proto) = self.cup_provider.get_local_cup()
-        {
-            let cup = cup_with_proto.cup;
+        let (subnet_id, local_cup) = if let Some(cup) = self.cup_provider.get_local_cup() {
             let subnet_id =
-                get_subnet_id(&*self.registry.registry_client, &cup).map_err(|err| {
+                get_subnet_id(&*self.registry.registry_client, &cup.cup).map_err(|err| {
                     OrchestratorError::UpgradeError(format!(
                         "Couldn't extract the subnet id from the local CUP: {:?}",
                         err
@@ -91,18 +96,33 @@ impl Upgrade {
                     (subnet_id, None)
                 }
                 // If no subnet is assigned to the node id, we're unassigned.
-                _ => return self.check_for_upgrade_as_unassigned().await,
+                _ => {
+                    self.check_for_upgrade_as_unassigned().await?;
+                    return Ok(None);
+                }
             }
         };
 
         // When we arrived here, we are an assigned node.
 
         // Get the latest available CUP from the disk, peers or registry and
-        // if the latest CUP is newer than the local one, persist it.
-        let cup = self.cup_provider.get_latest_cup(subnet_id).await?;
-        if Some(cup.cup.content.height()) > local_cup.map(|cup| cup.content.height()) {
-            self.cup_provider.persist_cup(&cup)?;
-        }
+        // persist it if necesasry.
+        let cup = match self
+            .cup_provider
+            .get_latest_cup(local_cup, subnet_id)
+            .await?
+        {
+            LatestCup::FromRegistry(cup) => {
+                // Check if we're in an NNS subnet recovery case.
+                self.download_registry_and_restart_if_nns_subnet_recovery(
+                    subnet_id,
+                    latest_registry_version,
+                )
+                .await?;
+                cup
+            }
+            LatestCup::FromPeers(cup) => cup,
+        };
 
         // Now when we have the most recent CUP, we check if we're still assigned.
         // If not, go into unassigned state.
@@ -119,15 +139,8 @@ impl Upgrade {
             )
             .map_err(OrchestratorError::UpgradeError)?;
             info!(self.logger, "Subnet state removed");
-            return Ok(());
+            return Ok(None);
         }
-
-        // Check if we're in an NNS subnet recovery case.
-        self.download_registry_and_restart_if_nns_subnet_recovery(
-            subnet_id,
-            latest_registry_version,
-        )
-        .await?;
 
         // If we arrived here, we have the newest CUP and we're still assigned.
         // Now we check if this CUP requires a new replica version.
@@ -153,7 +166,7 @@ impl Upgrade {
         // not arrive at the corresponding CUP yet.
         self.download_image_if_upgrade_scheduled(subnet_id).await?;
 
-        Ok(())
+        Ok(Some(subnet_id))
     }
 
     // Special case for when we are doing boostrap subnet recovery for
@@ -222,9 +235,7 @@ impl Upgrade {
                 self.logger,
                 "Version upgrade detected: {} -> {}", self.replica_version, new_replica_version
             );
-            self.release_package_provider
-                .download_release_package(new_replica_version)
-                .await?;
+            self.download_release_package(new_replica_version).await?;
         }
         Ok(())
     }
@@ -261,11 +272,9 @@ impl Upgrade {
         &self,
         replica_version: &ReplicaVersion,
     ) -> OrchestratorResult<T> {
-        self.release_package_provider
-            .download_release_package(replica_version.clone())
+        self.download_release_package(replica_version.clone())
             .await?;
         let image_path = self
-            .release_package_provider
             .make_version_dir(replica_version)?
             .join("base-os.tar.gz");
         let mut script = self.ic_binary_dir.clone();
@@ -314,7 +323,7 @@ impl Upgrade {
         if self.replica_process.lock().unwrap().is_running() {
             return Ok(());
         }
-        info!(self.logger, "Starting new replica process due to upgrade");
+        info!(self.logger, "Starting new replica process");
         let cup_path = self.cup_provider.get_cup_path();
         let replica_binary = self
             .ic_binary_dir
@@ -352,6 +361,65 @@ impl Upgrade {
         {
             error!(self.logger, "Could not confirm the boot: {:?}", err);
         }
+    }
+
+    // Downloads release package associated with the given version to
+    // `[self.release_content_dir]/[replica_version]/base-os.tar.gz`.
+    //
+    // Garbage collects old release packages while keeping
+    // `self.MAX_RELEASE_PACKAGES_TO_STORE` youngest entries and files younger
+    // than `self.MIN_RELEASE_PACKAGE_AGE`.
+    //
+    // Releases are downloaded using [`FileDownloader::download_file()`] which
+    // returns immediately if the file with matching hash already exists.
+    async fn download_release_package(
+        &self,
+        replica_version: ReplicaVersion,
+    ) -> OrchestratorResult<()> {
+        self.gc_release_packages();
+        let version_dir = self.make_version_dir(&replica_version)?;
+        let replica_version_record = self.registry.get_replica_version_record(
+            replica_version.clone(),
+            self.registry.get_latest_version(),
+        )?;
+        let tar_gz_path = version_dir.join("base-os.tar.gz");
+        let start_time = std::time::Instant::now();
+        let file_downloader = FileDownloader::new(Some(self.logger.clone()));
+        file_downloader
+            .download_file(
+                &replica_version_record.release_package_url,
+                &tar_gz_path,
+                Some(replica_version_record.release_package_sha256_hex),
+            )
+            .await
+            .map_err(OrchestratorError::from)?;
+        info!(
+            self.logger,
+            "Image downloading request for version {} processed in {:?}",
+            replica_version.as_ref(),
+            start_time.elapsed(),
+        );
+        Ok(())
+    }
+
+    // Make a dir to store a release package for the given replica version
+    fn make_version_dir(&self, replica_version: &ReplicaVersion) -> OrchestratorResult<PathBuf> {
+        let version_dir = self.release_content_dir.join(replica_version.as_ref());
+        std::fs::create_dir_all(&version_dir)
+            .map_err(|e| OrchestratorError::dir_create_error(&version_dir, e))?;
+        Ok(version_dir)
+    }
+
+    // Delete old release packages so that `release_content_dir` doesn't grow
+    // unbounded
+    fn gc_release_packages(&self) {
+        utils::gc_dir(
+            &self.logger,
+            &self.release_content_dir,
+            MAX_RELEASE_PACKAGES_TO_STORE,
+            MIN_RELEASE_PACKAGE_AGE,
+        )
+        .unwrap_or(());
     }
 }
 

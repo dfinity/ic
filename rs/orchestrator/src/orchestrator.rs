@@ -5,7 +5,6 @@ use crate::firewall::Firewall;
 use crate::metrics::OrchestratorMetrics;
 use crate::registration::NodeRegistration;
 use crate::registry_helper::RegistryHelper;
-use crate::release_package_provider::ReleasePackageProvider;
 use crate::replica_process::ReplicaProcess;
 use crate::ssh_access_manager::SshAccessManager;
 use crate::upgrade::Upgrade;
@@ -21,7 +20,7 @@ use ic_logger::{error, info, new_replica_logger, warn, LoggerImpl, ReplicaLogger
 use ic_metrics::MetricsRegistry;
 use ic_metrics_exporter::MetricsRuntimeImpl;
 use ic_registry_replicator::RegistryReplicator;
-use ic_types::ReplicaVersion;
+use ic_types::{ReplicaVersion, SubnetId};
 use slog_async::AsyncGuard;
 use std::env;
 use std::net::SocketAddr;
@@ -41,6 +40,8 @@ pub struct Orchestrator {
     ssh_access_manager: Option<SshAccessManager>,
     // A flag used to communicate to async tasks, that their job is done.
     exit_signal: Arc<RwLock<bool>>,
+    // The subnet id of the node.
+    subnet_id: Arc<RwLock<Option<SubnetId>>>,
     // Handles of async tasks used to wait for their completion
     task_handles: Vec<JoinHandle<()>>,
 }
@@ -127,13 +128,6 @@ impl Orchestrator {
             registration.register_node().await;
         }
 
-        let release_package_provider = Arc::new(ReleasePackageProvider::new(
-            Arc::clone(&registry),
-            args.replica_binary_dir.clone(),
-            args.force_replica_binary.clone(),
-            logger.clone(),
-        ));
-
         let slog_logger = logger.inner_logger.root.clone();
         let replica_process = Arc::new(Mutex::new(ReplicaProcess::new(slog_logger.clone())));
         let ic_binary_directory = args
@@ -154,13 +148,13 @@ impl Orchestrator {
         let upgrade = Some(Upgrade::new(
             Arc::clone(&registry),
             replica_process,
-            release_package_provider,
             cup_provider,
             replica_version,
             args.replica_config_file.clone(),
             node_id,
             ic_binary_directory,
             registry_replicator,
+            args.replica_binary_dir.clone(),
             logger.clone(),
         ));
 
@@ -192,6 +186,7 @@ impl Orchestrator {
             firewall,
             ssh_access_manager,
             exit_signal: Default::default(),
+            subnet_id: Default::default(),
             task_handles: Default::default(),
         })
     }
@@ -210,13 +205,15 @@ impl Orchestrator {
     /// record.
     pub fn spawn_tasks(&mut self) {
         async fn upgrade_checks(
-            log: ReplicaLogger,
-            exit_signal: Arc<RwLock<bool>>,
+            maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
             upgrade: Upgrade,
+            exit_signal: Arc<RwLock<bool>>,
+            log: ReplicaLogger,
         ) {
             while !*exit_signal.read().await {
-                if let Err(e) = upgrade.check().await {
-                    warn!(log, "Check for upgrade failed: {}", e);
+                match upgrade.check().await {
+                    Ok(val) => *maybe_subnet_id.write().await = val,
+                    Err(e) => warn!(log, "Check for upgrade failed: {}", e),
                 };
                 tokio::time::sleep(CHECK_INTERVAL_SECS).await;
             }
@@ -228,14 +225,17 @@ impl Orchestrator {
         }
 
         async fn ssh_key_and_firewall_rules_checks(
-            log: ReplicaLogger,
-            exit_signal: Arc<RwLock<bool>>,
+            maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
             mut ssh_access_manager: SshAccessManager,
             mut firewall: Firewall,
+            exit_signal: Arc<RwLock<bool>>,
+            log: ReplicaLogger,
         ) {
             while !*exit_signal.read().await {
                 // Check if new SSH keys need to be deployed
-                ssh_access_manager.check_for_keyset_changes().await;
+                ssh_access_manager
+                    .check_for_keyset_changes(*maybe_subnet_id.read().await)
+                    .await;
                 // Check and update the firewall rules
                 firewall.check_and_update();
                 tokio::time::sleep(CHECK_INTERVAL_SECS).await;
@@ -246,9 +246,10 @@ impl Orchestrator {
         if let Some(upgrade) = self.upgrade.take() {
             info!(self.logger, "Spawning the upgrade loop");
             self.task_handles.push(tokio::spawn(upgrade_checks(
-                self.logger.clone(),
-                Arc::clone(&self.exit_signal),
+                Arc::clone(&self.subnet_id),
                 upgrade,
+                Arc::clone(&self.exit_signal),
+                self.logger.clone(),
             )));
         }
 
@@ -260,10 +261,11 @@ impl Orchestrator {
             );
             self.task_handles
                 .push(tokio::spawn(ssh_key_and_firewall_rules_checks(
-                    self.logger.clone(),
-                    Arc::clone(&self.exit_signal),
+                    Arc::clone(&self.subnet_id),
                     ssh,
                     firewall,
+                    Arc::clone(&self.exit_signal),
+                    self.logger.clone(),
                 )));
         }
     }
