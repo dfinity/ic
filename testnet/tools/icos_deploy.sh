@@ -216,10 +216,6 @@ if [[ "${USE_ICOS_BOUNDARY_NODE_VMs}" == "true" ]]; then
         --input="$BN_MEDIA_PATH/${deployment}.json" \
         --output="$BN_MEDIA_PATH" \
         --git-revision=$GIT_REVISION
-
-    echo "**** Build boundary node VM disk image"
-    VERSION=$(git rev-parse --verify HEAD)
-    ./scripts/build-disk-image.sh -o "$BN_MEDIA_PATH/disk.img" -v $VERSION -p "root"
     echo "-------------------------------------------------------------------------------"
 fi
 
