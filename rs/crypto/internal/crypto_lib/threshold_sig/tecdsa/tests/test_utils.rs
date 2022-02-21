@@ -230,7 +230,6 @@ impl ProtocolRound {
             setup.next_dealing_seed(),
         );
         let transcript = Self::create_transcript(setup, &dealings, &mode)?;
-
         match transcript.combined_commitment {
             CombinedCommitment::ByInterpolation(PolynomialCommitment::Simple(_)) => {}
             _ => panic!("Unexpected transcript commitment type"),
@@ -470,10 +469,11 @@ impl ProtocolRound {
         transcript_type: &IDkgTranscriptOperationInternal,
         seed: Seed,
     ) -> BTreeMap<NodeIndex, IDkgDealingInternal> {
+        use rand::seq::IteratorRandom;
         assert!(number_of_dealers <= shares.len());
         assert!(number_of_dealings_corrupted <= number_of_dealers);
 
-        let mut rng = seed.into_rng();
+        let rng = &mut seed.into_rng();
 
         let mut dealings = BTreeMap::new();
 
@@ -531,33 +531,23 @@ impl ProtocolRound {
 
         // Discard some of the dealings at random
         while dealings.len() > number_of_dealers {
-            let index = rng.gen::<usize>() % shares.len();
-            dealings.remove(&(index as u32));
+            let index = *dealings.keys().choose(rng).unwrap();
+            dealings.remove(&index);
         }
 
-        if number_of_dealings_corrupted > 0 {
-            let mut damaged_dealings = std::collections::BTreeSet::new();
-            while damaged_dealings.len() != number_of_dealings_corrupted {
-                let index = rng.gen::<usize>() % setup.receivers;
+        let dealings_to_damage = dealings
+            .iter_mut()
+            .choose_multiple(rng, number_of_dealings_corrupted);
 
-                if dealings.contains_key(&(index as u32)) {
-                    damaged_dealings.insert(index);
-                }
-            }
+        for (_index, dealing) in dealings_to_damage {
+            let corrupted_recip = rng.gen_range(0, setup.receivers);
 
-            for i in damaged_dealings {
-                let corrupted_recip = rng.gen::<usize>() % setup.receivers;
+            let bad_dealing =
+                test_utils::corrupt_dealing(dealing, &[corrupted_recip as NodeIndex], rng).unwrap();
 
-                let dealing = dealings.get(&(i as u32)).unwrap();
-                let bad_dealing =
-                    test_utils::corrupt_dealing(dealing, &[corrupted_recip as NodeIndex], &mut rng)
-                        .unwrap();
-
-                // replace the dealing with a corrupted one
-                dealings.insert(i as NodeIndex, bad_dealing);
-            }
+            // replace the dealing with a corrupted one
+            *dealing = bad_dealing;
         }
-
         dealings
     }
 
