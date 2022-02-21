@@ -8,12 +8,6 @@ ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-crypto-utils-threshold-sig = { path = "../crypto/utils/threshold_sig" }
 ic-types = { path = "../types/types" }
 hex = "0.4.2"
-serde = { version = "1.0.99", features = [ "derive" ] }
+serde = "1"
 serde_cbor = "0.11.1"
 tree-deserializer = { path = "../tree_deserializer" }
-
-[dev-dependencies]
-ic-base-types = {path = "../types/base_types"}
-ic-certified-vars-test-utils = { path = "test-utils"}
-ic-crypto-internal-types = { path = "../crypto/internal/crypto_lib/types" }
-rand = "0.8.3"

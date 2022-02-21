@@ -14,6 +14,10 @@ use std::path::Path;
 /// * `std::io::Error` if the file cannot be opened, or if the contents
 /// are not PEM, or if the encoded key is not BLS12-381.
 pub fn parse_threshold_sig_key(pem_file: &Path) -> Result<ThresholdSigPublicKey> {
+    fn invalid_data_err(msg: impl std::string::ToString) -> Error {
+        Error::new(ErrorKind::InvalidData, msg.to_string())
+    }
+
     let buf = std::fs::read(pem_file)?;
     let s = String::from_utf8_lossy(&buf);
     let lines: Vec<_> = s.trim_end().lines().collect();
@@ -37,26 +41,10 @@ pub fn parse_threshold_sig_key(pem_file: &Path) -> Result<ThresholdSigPublicKey>
     let decoded = base64::decode(&lines[1..n - 1].join(""))
         .map_err(|err| invalid_data_err(format!("failed to decode base64: {}", err)))?;
 
-    parse_threshold_sig_key_from_der(&decoded)
-}
-
-/// Parse a DER format threshold signature public key from bytes.
-///
-/// # Arguments
-/// * `der_bytes` DER encoded public key
-/// # Returns
-/// The decoded `ThresholdSigPublicKey`
-/// # Error
-/// * `std::io::Error` if the data cannot be parsed, or if the encoded key is not BLS12-381.
-pub fn parse_threshold_sig_key_from_der(der_bytes: &[u8]) -> Result<ThresholdSigPublicKey> {
-    let pubkey_bytes = bls12_381::api::public_key_from_der(der_bytes)
+    let pubkey_bytes = bls12_381::api::public_key_from_der(&decoded)
         .map_err(|err| invalid_data_err(format!("failed to decode public key: {}", err)))?;
 
     Ok(ThresholdSigPublicKey::from(pubkey_bytes))
-}
-
-fn invalid_data_err(msg: impl std::string::ToString) -> Error {
-    Error::new(ErrorKind::InvalidData, msg.to_string())
 }
 
 #[cfg(test)]

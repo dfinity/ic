@@ -1,8 +1,8 @@
 use super::{decode_certified_deltas, CertificationError};
-use ic_certified_vars_test_utils::{CertificateBuilder, CertificateData};
+use ic_crypto::combined_threshold_signature_and_public_key;
 use ic_crypto_tree_hash::{
     flatmap, Digest, FlatMap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree,
-    WitnessGenerator,
+    MixedHashTree, WitnessGenerator,
 };
 use ic_interfaces::registry::RegistryTransportRecord;
 use ic_registry_transport::{
@@ -11,8 +11,10 @@ use ic_registry_transport::{
     upsert,
 };
 use ic_types::{
-    crypto::threshold_sig::ThresholdSigPublicKey, crypto::CombinedThresholdSig, CanisterId,
-    RegistryVersion, Time,
+    consensus::certification::CertificationContent,
+    crypto::{threshold_sig::ThresholdSigPublicKey, CryptoHash},
+    crypto::{CombinedThresholdSig, CombinedThresholdSigOf},
+    CanisterId, CryptoHashOfPartialState, Randomness, RegistryVersion, Time,
 };
 use prost::Message;
 use std::string::ToString;
@@ -34,6 +36,69 @@ impl GarbleResponse {
 }
 
 type EncodedResponse = Vec<u8>;
+
+fn make_certificate(
+    cid: &CanisterId,
+    certified_data: &Digest,
+    fake_sig: Option<CombinedThresholdSig>,
+) -> (ThresholdSigPublicKey, Vec<u8>) {
+    #[derive(serde::Serialize)]
+    struct Certificate {
+        tree: MixedHashTree,
+        signature: CombinedThresholdSigOf<CertificationContent>,
+    }
+
+    fn hash_full_tree(b: &mut HashTreeBuilderImpl, t: &LabeledTree<Vec<u8>>) {
+        match t {
+            LabeledTree::Leaf(bytes) => {
+                b.start_leaf();
+                b.write_leaf(&bytes[..]);
+                b.finish_leaf();
+            }
+            LabeledTree::SubTree(map) => {
+                b.start_subtree();
+                for (l, child) in map.iter() {
+                    b.new_edge(l.clone());
+                    hash_full_tree(b, child);
+                }
+                b.finish_subtree();
+            }
+        }
+    }
+    let mut encoded_time = vec![];
+    leb128::write::unsigned(&mut encoded_time, REPLICA_TIME).unwrap();
+
+    let tree = LabeledTree::SubTree(flatmap![
+        Label::from("canister") => LabeledTree::SubTree(flatmap![
+            Label::from(cid.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
+                Label::from("certified_data") => LabeledTree::Leaf(certified_data.to_vec()),
+            ])
+        ]),
+        Label::from("time") => LabeledTree::Leaf(encoded_time)
+    ]);
+
+    let mut b = HashTreeBuilderImpl::new();
+    hash_full_tree(&mut b, &tree);
+    let witness_gen = b.witness_generator().unwrap();
+    let hash_tree_digest = witness_gen.hash_tree().digest();
+    let mixed_tree = witness_gen.mixed_hash_tree(&tree).unwrap();
+    let root_hash = CryptoHashOfPartialState::from(CryptoHash(hash_tree_digest.to_vec()));
+
+    let (sig, pk) = combined_threshold_signature_and_public_key(
+        Randomness::from([0; 32]),
+        &CertificationContent::new(root_hash),
+    );
+
+    let bytes = serde_cbor::to_vec(&Certificate {
+        tree: mixed_tree,
+        signature: fake_sig
+            .map(CombinedThresholdSigOf::<CertificationContent>::from)
+            .unwrap_or(sig),
+    })
+    .unwrap();
+
+    (pk, bytes)
+}
 
 fn make_certified_delta(
     deltas: Vec<RegistryAtomicMutateRequest>,
@@ -96,19 +161,16 @@ fn make_certified_delta(
     let data_tree = LabeledTree::SubTree(root);
 
     let mixed_hash_tree = witness_gen.mixed_hash_tree(&data_tree).unwrap();
-
-    let mut builder = CertificateBuilder::new(CertificateData::CanisterData {
-        canister_id: cid,
-        certified_data: digest,
-    });
-    if let GarbleResponse::OverrideSignature(sig) = &garble_response {
-        builder = builder.with_sig(sig.clone());
-    }
-    let (_, pk, cbor) = builder.build();
+    let fake_sig = if let GarbleResponse::OverrideSignature(sig) = &garble_response {
+        Some(sig.clone())
+    } else {
+        None
+    };
+    let (pk, certificate) = make_certificate(&cid, &digest, fake_sig);
 
     let response = CertifiedResponse {
         hash_tree: Some(mixed_hash_tree.into()),
-        certificate: cbor,
+        certificate,
     };
 
     let mut encoded_response = vec![];

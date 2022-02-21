@@ -33,10 +33,7 @@ pub enum CertificationError {
     InvalidDeltas(String),
     /// The hash tree in the response was not well-formed.
     MalformedHashTree(String),
-    /// There are multiple delegation levels in the certification which is (currently) not allowed.
-    MultipleSubnetDelegationsNotAllowed,
-    /// The canister id is not contained in the canister ranges the subnet is allowed to issue certifications for.
-    CanisterIdOutOfRange,
+    SubnetDelegationNotAllowed,
 }
 
 #[derive(Deserialize)]
@@ -60,8 +57,7 @@ fn embed_certificate_error(err: CertificateValidationError) -> CertificationErro
             computed,
         },
         Cve::MalformedHashTree(err) => Ce::MalformedHashTree(err),
-        Cve::MultipleSubnetDelegationsNotAllowed => Ce::MultipleSubnetDelegationsNotAllowed,
-        Cve::CanisterIdOutOfRange => Ce::CanisterIdOutOfRange,
+        Cve::SubnetDelegationNotAllowed => Ce::SubnetDelegationNotAllowed,
     }
 }
 
