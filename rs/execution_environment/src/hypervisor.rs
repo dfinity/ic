@@ -1025,6 +1025,14 @@ impl Hypervisor {
         let mut embedder_config = EmbeddersConfig::new();
         embedder_config.query_execution_threads = config.query_execution_threads;
 
+        let sandbox_executor = match config.canister_sandboxing_flag {
+            FlagStatus::Enabled => Some(Arc::new(
+                SandboxedExecutionController::new(log.clone(), metrics_registry, &embedder_config)
+                    .expect("Failed to start sandboxed execution controller"),
+            )),
+            FlagStatus::Disabled => None,
+        };
+
         let wasm_embedder = WasmtimeEmbedder::new(embedder_config.clone(), log.clone());
         let wasm_executor = WasmExecutor::new(
             wasm_embedder,
@@ -1032,14 +1040,6 @@ impl Hypervisor {
             embedder_config,
             log.clone(),
         );
-
-        let sandbox_executor = match config.canister_sandboxing_flag {
-            FlagStatus::Enabled => Some(Arc::new(
-                SandboxedExecutionController::new(log.clone(), metrics_registry)
-                    .expect("Failed to start sandboxed execution controller"),
-            )),
-            FlagStatus::Disabled => None,
-        };
 
         Self {
             wasm_executor: Arc::new(wasm_executor),

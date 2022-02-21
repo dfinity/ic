@@ -23,6 +23,7 @@ use ic_canister_sandbox_common::protocol::structs::{
     MemoryModifications, SandboxExecInput, SandboxExecOutput, StateModifications,
 };
 use ic_canister_sandbox_common::{controller_service::ControllerService, protocol};
+use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
     wasm_executor::WasmStateChanges,
     wasm_utils::{
@@ -258,9 +259,7 @@ impl SandboxManager {
     /// Creates new sandbox manager. In order to operate, it needs
     /// an established backward RPC channel to the controller process
     /// to relay e.g. syscalls and completions.
-    pub fn new(controller: Arc<dyn ControllerService>) -> Self {
-        // TODO(EXC-755): Use the proper embedder config.
-        let config = ic_config::embedders::Config::default();
+    pub fn new(controller: Arc<dyn ControllerService>, config: EmbeddersConfig) -> Self {
         let log = ic_logger::replica_logger::no_op_logger();
         let embedder = Arc::new(WasmtimeEmbedder::new(config.clone(), log));
         SandboxManager {

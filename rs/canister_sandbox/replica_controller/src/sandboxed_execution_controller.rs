@@ -5,6 +5,7 @@ use ic_canister_sandbox_common::protocol::sbxsvc::MemorySerialization;
 use ic_canister_sandbox_common::protocol::structs::SandboxExecInput;
 use ic_canister_sandbox_common::sandbox_service::SandboxService;
 use ic_canister_sandbox_common::{protocol, rpc};
+use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::wasm_executor::get_wasm_reserved_pages;
 use ic_embedders::WasmExecutionInput;
 use ic_interfaces::execution_environment::{HypervisorResult, InstanceStats, WasmExecutionOutput};
@@ -316,7 +317,7 @@ struct SandboxProcessStats {
 pub struct SandboxedExecutionController {
     backends: Arc<Mutex<HashMap<CanisterId, Backend>>>,
     logger: ReplicaLogger,
-    /// Executuable and arguments to be passed to `canister_sandbox` which are
+    /// Executable and arguments to be passed to `canister_sandbox` which are
     /// the same for all canisters.
     sandbox_exec_argv: Vec<String>,
     compile_count_for_testing: AtomicU64,
@@ -327,9 +328,14 @@ pub struct SandboxedExecutionController {
 impl SandboxedExecutionController {
     /// Create a new sandboxed execution controller. It provides the
     /// same interface as the `WasmExecutor`.
-    pub fn new(logger: ReplicaLogger, metrics_registry: &MetricsRegistry) -> std::io::Result<Self> {
+    pub fn new(
+        logger: ReplicaLogger,
+        metrics_registry: &MetricsRegistry,
+        embedder_config: &EmbeddersConfig,
+    ) -> std::io::Result<Self> {
         let launcher_exec_argv = create_launcher_argv().expect("No sandbox_launcher binary found");
-        let sandbox_exec_argv = create_sandbox_argv().expect("No canister_sandbox binary found");
+        let sandbox_exec_argv =
+            create_sandbox_argv(embedder_config).expect("No canister_sandbox binary found");
         let backends = Arc::new(Mutex::new(HashMap::new()));
         let metrics = Arc::new(SandboxedExecutionMetrics::new(metrics_registry));
 
@@ -958,8 +964,12 @@ mod tests {
         let root = slog::Logger::root(drain, o!());
         let logger = new_replica_logger(root, &LoggerConfig::default());
 
-        let controller =
-            SandboxedExecutionController::new(logger, &MetricsRegistry::new()).unwrap();
+        let controller = SandboxedExecutionController::new(
+            logger,
+            &MetricsRegistry::new(),
+            &EmbeddersConfig::default(),
+        )
+        .unwrap();
 
         let wat = "(module)";
         let wasm_source = wabt::wat2wasm(wat).unwrap();

@@ -11,6 +11,7 @@ use std::{
 use once_cell::sync::OnceCell;
 
 use ic_canister_sandbox_common::{RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_SANDBOX_LAUNCHER_FLAG};
+use ic_config::embedders::Config as EmbeddersConfig;
 
 const SANDBOX_EXECUTABLE_NAME: &str = "canister_sandbox";
 const LAUNCHER_EXECUTABLE_NAME: &str = "sandbox_launcher";
@@ -47,8 +48,17 @@ impl SandboxCrate {
 }
 
 /// Gets the executable and arguments for spawning a canister sandbox.
-pub(super) fn create_sandbox_argv() -> Option<Vec<String>> {
-    create_child_process_argv(SandboxCrate::CanisterSandbox)
+pub(super) fn create_sandbox_argv(embedder_config: &EmbeddersConfig) -> Option<Vec<String>> {
+    let argv = create_child_process_argv(SandboxCrate::CanisterSandbox);
+    if let Some(mut argv) = argv {
+        argv.push("--embedder-config".to_string());
+        argv.push(
+            serde_json::to_string(embedder_config)
+                .expect("Failed to serialize the embedder config to JSON."),
+        );
+        return Some(argv);
+    }
+    argv
 }
 
 /// Gets the executable and arguments for spawning the sandbox launcher.

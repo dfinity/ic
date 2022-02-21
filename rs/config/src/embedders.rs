@@ -31,7 +31,7 @@ impl Default for FeatureFlags {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Config {
     pub max_wasm_stack_size: usize,
     pub query_execution_threads: usize,

@@ -20,6 +20,7 @@ ic-system-api = { path = "../../system_api" }
 libc = "0.2.91"
 memory_tracker = { path = "../../memory_tracker" }
 nix = "0.23.0"
+serde_json = "1.0.54"
 threadpool = "1.8.1"
 
 [dev-dependencies]
