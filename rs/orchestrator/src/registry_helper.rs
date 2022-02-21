@@ -7,7 +7,6 @@ use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client::helper::firewall::FirewallRegistry;
 use ic_registry_client::helper::subnet::SubnetRegistry;
-use ic_registry_client::helper::unassigned_nodes::UnassignedNodeRegistry;
 use ic_types::consensus::CatchUpPackage;
 use ic_types::{NodeId, RegistryVersion, ReplicaVersion, SubnetId};
 use std::convert::TryFrom;
@@ -85,18 +84,6 @@ impl RegistryHelper {
         }
     }
 
-    /// Return the subnet that this node belongs to at the given
-    /// registry version
-    pub(crate) fn get_own_subnet_record(
-        &self,
-        registry_version: RegistryVersion,
-    ) -> OrchestratorResult<(SubnetId, SubnetRecord)> {
-        let new_subnet_id = self.get_subnet_id(registry_version)?;
-        let new_subnet_record = self.get_subnet_record(new_subnet_id, registry_version)?;
-
-        Ok((new_subnet_id, new_subnet_record))
-    }
-
     /// Return the `ReplicaVersionRecord` for the given replica version
     pub(crate) fn get_replica_version_record(
         &self,
@@ -148,31 +135,5 @@ impl RegistryHelper {
         let subnet_record = self.get_subnet_record(subnet_id, registry_version)?;
         ReplicaVersion::try_from(subnet_record.replica_version_id.as_ref())
             .map_err(OrchestratorError::ReplicaVersionParseError)
-    }
-
-    pub(crate) fn get_own_readonly_and_backup_keysets(
-        &self,
-        version: RegistryVersion,
-    ) -> OrchestratorResult<(Vec<String>, Vec<String>)> {
-        // CON-621: get the keysets from the subnet record
-
-        match self.get_own_subnet_record(version) {
-            Ok((_subnet_id, subnet_record)) => Ok((
-                subnet_record.ssh_readonly_access,
-                subnet_record.ssh_backup_access,
-            )),
-            Err(OrchestratorError::NodeUnassignedError(_, _)) => {
-                match self
-                    .registry_client
-                    .get_unassigned_nodes_config(version)
-                    .map_err(OrchestratorError::RegistryClientError)?
-                {
-                    // Unassigned nodes do not need backup keys
-                    Some(record) => Ok((record.ssh_readonly_access, vec![])),
-                    None => Ok((vec![], vec![])),
-                }
-            }
-            Err(e) => Err(e),
-        }
     }
 }

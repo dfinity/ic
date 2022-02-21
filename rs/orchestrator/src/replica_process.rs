@@ -11,9 +11,7 @@ type PIDCell = Arc<Mutex<Option<Pid>>>;
 
 #[derive(Clone, Debug)]
 pub(crate) struct ReplicaCommand {
-    pub(crate) _replica_binary: String,
     pub(crate) replica_version: ReplicaVersion,
-    pub(crate) _args: Vec<String>,
 }
 
 /// Runs and monitors a Replica process and accepts requests to stop the current
@@ -23,7 +21,6 @@ pub(crate) struct ReplicaProcess {
     pub(crate) pid_cell: PIDCell,
     pub(crate) log: slog::Logger,
     pub(crate) join_handle: Option<std::thread::JoinHandle<()>>,
-    pub(crate) stopping: bool,
 }
 
 impl ReplicaProcess {
@@ -33,7 +30,6 @@ impl ReplicaProcess {
             pid_cell: Default::default(),
             log: logger.clone(),
             join_handle: None,
-            stopping: false,
         }
     }
 
@@ -90,7 +86,6 @@ impl ReplicaProcess {
     /// thread specific, i.e. the thread not the process does the
     /// subreaping.
     pub(crate) fn stop(&mut self) -> Result<()> {
-        self.stopping = true;
         self.kill()
     }
 
@@ -131,9 +126,7 @@ impl ReplicaProcess {
         }
 
         self.command = Some(ReplicaCommand {
-            _replica_binary: replica_binary.clone(),
             replica_version: replica_version.clone(),
-            _args: args.clone(),
         });
 
         debug!(
