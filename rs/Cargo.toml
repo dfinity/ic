@@ -20,6 +20,7 @@ members = [
   "canister_sandbox/sandbox_launcher",
   "canonical_state",
   "certified_vars",
+  "certified_vars/test-utils",
   "config",
   "consensus",
   "consensus/message",
