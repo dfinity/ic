@@ -22,7 +22,8 @@ rm -f SHA256SUMS
 )
 
 cp SHA256SUMS sign-input.txt
-git rev-parse --verify HEAD >>sign-input.txt
+VERSION="${VERSION:-$(git rev-parse --verify HEAD)}"
+echo "$VERSION" >>sign-input.txt
 
 openssl dgst -sha256 -hex -sign /openssl/private.pem -out "sign.sig" sign-input.txt
 
