@@ -603,8 +603,7 @@ pub struct Certificate {
     pub delegation: Option<CertificateDelegation>,
 }
 
-/// This enum is defined as a filler to make the encoding of `Certificate`
-/// compliant with the interface spec. It is not currently being used.
+/// A `CertificateDelegation` as defined in https://smartcontracts.org/docs/interface-spec/index.html#certification-delegation
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CertificateDelegation {
     pub subnet_id: Blob,
