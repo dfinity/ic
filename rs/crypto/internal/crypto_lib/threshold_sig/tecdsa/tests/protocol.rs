@@ -110,7 +110,6 @@ fn should_multiply_transcripts_correctly() -> Result<(), ThresholdEcdsaError> {
     Ok(())
 }
 
-#[ignore] // TODO (CRP-1413): Investigate why this test is frequently timing out
 #[test]
 fn should_reshare_transcripts_with_dynamic_threshold() -> Result<(), ThresholdEcdsaError> {
     let mut setup = ProtocolSetup::new(EccCurveType::K256, 5, 2, random_seed())?;

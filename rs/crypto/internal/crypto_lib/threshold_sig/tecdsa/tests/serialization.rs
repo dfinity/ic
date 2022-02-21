@@ -74,25 +74,25 @@ fn verify_serialization_remains_unchanged_over_time() -> Result<(), ThresholdEcd
         "d81bf365bcc449ae",
         "b6a77502144a501d",
         &[
-            (0, "35b9203df0fef455"),
-            (1, "e345dc98f5775825"),
+            (0, "5357d0ec495b3db2"),
+            (1, "769f6341db0b972f"),
             (2, "0f52dac309b0b672"),
             (3, "1d47b9521d9c38dc"),
-            (4, "f451b85212a45952"),
+            (4, "56f370f9bb04976c"),
         ],
     )?;
 
     check_dealings(
         "key*lambda",
         &setup.key_times_lambda,
-        "ff04d0458f4cd09a",
-        "083c9793cd7a16e0",
+        "eb81a06c0ebe3dd9",
+        "3a4e03abdf31de8c",
         &[
-            (0, "676a41730fac6174"),
-            (1, "eeb77186c9ad31f1"),
-            (2, "7bb3192035a67245"),
-            (3, "00f56c9321a0af3a"),
-            (4, "9ff253c2437b19f2"),
+            (0, "a00eed6d66f24e62"),
+            (1, "0723cc77b6b5f559"),
+            (2, "83ee87383da6ee5e"),
+            (3, "81c08c1d70007366"),
+            (4, "20e05fe40381443e"),
         ],
     )?;
 
@@ -102,10 +102,10 @@ fn verify_serialization_remains_unchanged_over_time() -> Result<(), ThresholdEcd
         "2e494300ce9229d7",
         "5cb31a17676257fe",
         &[
-            (0, "8184a0a747823e9e"),
-            (1, "66ed853b2622483d"),
+            (0, "9d83b661fb8ea7e6"),
+            (1, "ced1a78a33c5a03d"),
             (2, "667ea7eb87a7d65b"),
-            (3, "e2dc7b3dd741c0a1"),
+            (3, "5a792bf6c62f8016"),
             (4, "cbe6feff7f274e5e"),
         ],
     )?;
@@ -113,14 +113,14 @@ fn verify_serialization_remains_unchanged_over_time() -> Result<(), ThresholdEcd
     check_dealings(
         "kappa",
         &setup.kappa,
-        "46117e02faef5a24",
-        "9453c8bda561f21f",
+        "0e5829e1e11cf7f5",
+        "21bad7d76631a6c0",
         &[
-            (0, "d7b52618b38fcc04"),
-            (1, "462f8efc23d05f0a"),
-            (2, "6d96b186ab11d35e"),
-            (3, "989bb902462ad762"),
-            (4, "f7a29a29c9748b6e"),
+            (0, "09d3b0c78f7530c5"),
+            (1, "1b9f3c61fac8348b"),
+            (2, "54f2b81be50e8eb5"),
+            (3, "3ed3f16f3063f624"),
+            (4, "5b5d852c1708e753"),
         ],
     )?;
 
@@ -130,11 +130,11 @@ fn verify_serialization_remains_unchanged_over_time() -> Result<(), ThresholdEcd
         "9f87096af2d8673c",
         "d2d1fa319644a975",
         &[
-            (0, "3175466f32d509a2"),
-            (1, "4667027734ce6bd5"),
-            (2, "a59e5546a6453eda"),
-            (3, "3e9950c6f4b9347b"),
-            (4, "83ae0613049af2d2"),
+            (0, "f0374229369fd614"),
+            (1, "9352112806281c09"),
+            (2, "aec82fa00b346664"),
+            (3, "07316740e06c2f1f"),
+            (4, "ace454e12a6eeb62"),
         ],
     )?;
 
@@ -151,11 +151,11 @@ fn verify_serialization_remains_unchanged_over_time() -> Result<(), ThresholdEcd
     check_shares(
         &shares,
         &[
-            (0, "ec3a990db5a279c8"),
-            (1, "40d233f94d861818"),
-            (2, "6b08a4717f9c1da0"),
-            (3, "3b7c441e10db7bac"),
-            (4, "d5278a0078c95dfe"),
+            (0, "b6cf5b8d7aac3128"),
+            (1, "cc2bc61353c7d2c8"),
+            (2, "e5477a9f47438000"),
+            (3, "6b7f5c032909595e"),
+            (4, "2c21e9038bd41e0e"),
         ],
     )?;
 
