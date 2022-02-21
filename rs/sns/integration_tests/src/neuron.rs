@@ -1,25 +1,14 @@
 use canister_test::Canister;
 use dfn_candid::candid_one;
-use dfn_protobuf::protobuf;
-use ic_base_types::PrincipalId;
 use ic_canister_client::Sender;
-use ic_crypto_sha::Sha256;
 use ic_nns_constants::ids::{
     TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
 };
-use ic_sns_governance::pb::v1::manage_neuron::claim_or_refresh::{By, MemoAndController};
-use ic_sns_governance::pb::v1::manage_neuron::{ClaimOrRefresh, Command};
-use ic_sns_governance::pb::v1::manage_neuron_response::Command as CommandResponse;
-use ic_sns_governance::pb::v1::{
-    ListNeurons, ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, Neuron, NeuronId,
-};
+use ic_sns_governance::pb::v1::{ListNeurons, ListNeuronsResponse, Neuron, NeuronId};
 use ic_sns_test_utils::itest_helpers::{
     local_test_on_sns_subnet, SnsCanisters, SnsInitPayloadsBuilder,
 };
-use ic_sns_test_utils::TEST_GOVERNANCE_CANISTER_ID;
-use ledger_canister::{
-    AccountIdentifier, Memo, SendArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
-};
+use ledger_canister::{AccountIdentifier, Tokens};
 
 // This tests the determinism of list_neurons, now that the subaccount is used for
 // the unique identifier of the Neuron.
@@ -46,7 +35,7 @@ fn test_list_neurons_determinism() {
         let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
 
         for user in &users {
-            stake_and_claim_neuron(&sns_canisters, user).await;
+            sns_canisters.stake_and_claim_neuron(user, None).await;
         }
 
         let list_neuron_response: ListNeuronsResponse = sns_canisters
@@ -115,79 +104,4 @@ async fn paginate_neurons(
             return all_neurons;
         }
     }
-}
-
-async fn stake_and_claim_neuron(sns_canisters: &SnsCanisters<'_>, user: &Sender) {
-    // Stake a neuron by transferring to a subaccount of the neurons
-    // canister and claiming the neuron on the governance canister..
-    let nonce = 12345u64;
-    let to_subaccount = Subaccount({
-        let mut state = Sha256::new();
-        state.write(&[0x0c]);
-        state.write(b"neuron-stake");
-        state.write(user.get_principal_id().as_slice());
-        state.write(&nonce.to_be_bytes());
-        state.finish()
-    });
-
-    // Stake the neuron.
-    let stake = Tokens::from_tokens(100).unwrap();
-    let _block_height: u64 = sns_canisters
-        .ledger
-        .update_from_sender(
-            "send_pb",
-            protobuf,
-            SendArgs {
-                memo: Memo(nonce),
-                amount: stake,
-                fee: DEFAULT_TRANSFER_FEE,
-                from_subaccount: None,
-                to: AccountIdentifier::new(
-                    PrincipalId::from(TEST_GOVERNANCE_CANISTER_ID),
-                    Some(to_subaccount),
-                ),
-                created_at_time: None,
-            },
-            user,
-        )
-        .await
-        .expect("Couldn't send funds.");
-
-    // Claim the neuron on the governance canister.
-    let manage_neuron_response: ManageNeuronResponse = sns_canisters
-        .governance
-        .update_from_sender(
-            "manage_neuron",
-            candid_one,
-            ManageNeuron {
-                subaccount: to_subaccount.to_vec(),
-                command: Some(Command::ClaimOrRefresh(ClaimOrRefresh {
-                    by: Some(By::MemoAndController(MemoAndController {
-                        memo: nonce,
-                        controller: None,
-                    })),
-                })),
-            },
-            user,
-        )
-        .await
-        .expect("Error calling the manage_neuron api.");
-
-    match manage_neuron_response.command.unwrap() {
-        CommandResponse::ClaimOrRefresh(_) => {
-            println!(
-                "User {} successfully claimed neuron",
-                user.get_principal_id()
-            )
-        }
-        CommandResponse::Error(error) => panic!(
-            "Unexpected error for user {}: {}",
-            user.get_principal_id(),
-            error
-        ),
-        _ => panic!(
-            "Unexpected command response for user {}.",
-            user.get_principal_id()
-        ),
-    };
 }

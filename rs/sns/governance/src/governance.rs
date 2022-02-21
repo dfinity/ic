@@ -23,8 +23,9 @@ use crate::pb::v1::{
     proposal, Ballot, Empty, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
     Governance as GovernanceProto, GovernanceError, ListNeurons, ListNeuronsResponse,
     ListProposals, ListProposalsResponse, ManageNeuron, ManageNeuronResponse,
-    NervousSystemParameters, Neuron, NeuronId, NeuronPermissionType, Proposal, ProposalData,
-    ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RewardEvent, Tally, Vote,
+    NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionType, Proposal,
+    ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RewardEvent, Tally,
+    Vote,
 };
 use ic_base_types::PrincipalId;
 use ic_crypto_sha::Sha256;
@@ -72,6 +73,23 @@ pub fn log_prefix() -> String {
 #[cfg(test)]
 pub fn log_prefix() -> String {
     "[Governance] ".into()
+}
+
+impl NeuronPermission {
+    /// Grants all permissions to the given principal
+    pub fn all(principal: &PrincipalId) -> NeuronPermission {
+        NeuronPermission {
+            principal: Some(*principal),
+            permission_type: vec![
+                NeuronPermissionType::ConfigureDissolveState as i32,
+                NeuronPermissionType::ManagePrincipals as i32,
+                NeuronPermissionType::SubmitProposal as i32,
+                NeuronPermissionType::Vote as i32,
+                NeuronPermissionType::Disburse as i32,
+                NeuronPermissionType::ManageMaturity as i32,
+            ],
+        }
+    }
 }
 
 impl GovernanceProto {
@@ -2005,7 +2023,7 @@ impl Governance {
                 let nid = neuron.id.as_ref().expect("Neuron must have an id").clone();
                 self.refresh_neuron(nid, claim_or_refresh).await
             }
-            Err(_) => self.claim_neuron(nid, claim_or_refresh).await,
+            Err(_) => self.claim_neuron(nid, claim_or_refresh, caller).await,
         }
     }
 
@@ -2109,11 +2127,12 @@ impl Governance {
         &mut self,
         nid: NeuronId,
         claim_or_refresh: &ClaimOrRefresh,
+        claimer: &PrincipalId,
     ) -> Result<NeuronId, GovernanceError> {
         let now = self.env.now();
         let neuron = Neuron {
             id: Some(nid.clone()),
-            permissions: vec![], // TODO permissions
+            permissions: vec![NeuronPermission::all(claimer)], // TODO(NNS1-928): determine best default permissions
             cached_neuron_stake_e8s: 0,
             neuron_fees_e8s: 0,
             created_timestamp_seconds: now,
