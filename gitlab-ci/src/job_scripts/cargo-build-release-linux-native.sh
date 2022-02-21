@@ -39,7 +39,6 @@ cargo build --target $CARGO_BUILD_TARGET --release \
     --bin state-tool \
     --bin vsock_agent \
     --bin system-tests \
-    --bin ic-test-bin \
     --bin prod-test-driver \
     --bin e2e-test-driver \
     --bin ic-nns-init

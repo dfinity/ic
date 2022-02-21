@@ -13,6 +13,7 @@ use ic_tests::node_removal_from_registry_test::{self, test as node_removal_from_
 use ic_tests::node_restart_test::{self, test as node_restart_test};
 use ic_tests::rosetta_test;
 use ic_tests::security::nns_voting_fuzzing_poc_test;
+use ic_tests::spec_compliance;
 use ic_tests::token_balance_test::{self, test as token_balance_test};
 use ic_tests::upgrade_reject::{self, upgrade_reject};
 use ic_tests::{
@@ -401,6 +402,28 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     rosetta_test::test_everything,
                 )]),
             )],
+        ),
+    );
+
+    m.insert(
+        "spec_compliance".to_string(),
+        suite(
+            "spec_compliance",
+            vec![
+                pot(
+                    "spec_compliance_with_system_subnet",
+                    spec_compliance::ic_with_system_subnet,
+                    seq(vec![t(
+                        "with_system_subnet",
+                        spec_compliance::test_system_subnet,
+                    )]),
+                ),
+                pot(
+                    "spec_compliance_with_app_subnet",
+                    spec_compliance::ic_with_app_subnet,
+                    seq(vec![t("with_app_subnet", spec_compliance::test_app_subnet)]),
+                ),
+            ],
         ),
     );
 
