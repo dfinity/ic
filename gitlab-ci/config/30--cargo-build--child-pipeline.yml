@@ -57,6 +57,13 @@ cargo-build-release-linux-native:
 
       cd "${CI_PROJECT_DIR}/rs" || exit 1
 
+      # TODO: get rid of this usage of git revision
+      VERSION=$(git rev-parse --verify HEAD)
+      export VERSION
+
+      # Make sure git-related non-determinism does't get through.
+      git -c user.name="GitLab CI" -c user.email="infra+gitlab-automation@dfinity.org" commit --allow-empty -m "Non-determinism detection commit at $(date)"
+
       if [[ -z "${BUILD_COMMAND}" ]]; then
         buildevents cmd "${PARENT_PIPELINE_ID}" "${CI_JOB_ID}" cargo-build -- \
         capsule --passive -v -- "$CI_PROJECT_DIR/gitlab-ci/src/job_scripts/cargo-build-release-linux-native.sh"
@@ -95,6 +102,13 @@ cargo-build-canisters:
       set -eExuo pipefail
 
       cd "$CI_PROJECT_DIR"
+
+      # TODO: get rid of this usage of git revision
+      VERSION=$(git rev-parse --verify HEAD)
+      export VERSION
+
+      # Make sure git-related non-determinism does't get through.
+      git -c user.name="GitLab CI" -c user.email="infra+gitlab-automation@dfinity.org" commit --allow-empty -m "Non-determinism detection commit at $(date)"
 
       gitlab-ci/tools/cargo-build-canisters "${CI_PROJECT_DIR}/artifacts/canisters${ARTIFACT_EXT}"
 
