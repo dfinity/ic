@@ -7,7 +7,6 @@ cargo-lock-generate:
       echo "Running a tiny cargo check (should always succeed), just to make sure Cargo.lock is up to date"
       set -exuo pipefail
       cd "${CI_PROJECT_DIR}/rs"
-      git checkout "${CI_COMMIT_REF_NAME}"
       nix-shell --run "cargo check -p ic-sys"
       cd "${CI_PROJECT_DIR}"
     - |
@@ -15,14 +14,17 @@ cargo-lock-generate:
       git add rs/Cargo.lock
       git status
       if ! git diff --cached --quiet; then
-        # There are some changes staged
-        # Command might fail because the gitlab remote already exists from a previous run.
-        git remote add origin "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" || true
-        git remote set-url origin "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" || true
-        git config --global user.email "infra+gitlab-automation@dfinity.org"
-        git config --global user.name "IDX GitLab Automation"
-        git commit -m"Automatically updated rs/Cargo.lock"
-        git push origin
+        # If a merge request and not on a merge train then update the Cargo.lock file in the MR automatically.
+        if [ "$CI_PIPELINE_SOURCE" = "merge_request_event" ]  && [ "$CI_MERGE_REQUEST_EVENT_TYPE" != "merge_train" ];then
+          # There are some changes staged
+          # Command might fail because the gitlab remote already exists from a previous run.
+          git remote add origin "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" || true
+          git remote set-url origin "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" || true
+          git config --global user.email "infra+gitlab-automation@dfinity.org"
+          git config --global user.name "IDX GitLab Automation"
+          git commit -m"Automatically updated rs/Cargo.lock"
+          git push origin HEAD:"${CI_COMMIT_REF_NAME}"
+        fi
 
         # Force the pipeline to fail so MRs cannot be merged with a stale cargo lockfile.
         exit 1
