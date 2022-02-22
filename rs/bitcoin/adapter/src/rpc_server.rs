@@ -1,14 +1,13 @@
 use crate::{
     adapter::Adapter,
-    proto::{
-        self,
-        btc_adapter_server::{BtcAdapter, BtcAdapterServer},
-        GetSuccessorsRequest, GetSuccessorsResponse, SendTransactionRequest,
-        SendTransactionResponse,
-    },
+    proto::btc_adapter_server::{BtcAdapter, BtcAdapterServer},
 };
 use bitcoin::{hashes::Hash, Block, BlockHash};
 use ic_async_utils::{ensure_single_named_systemd_socket, incoming_from_first_systemd_socket};
+use ic_protobuf::bitcoin::v1::{
+    self, GetSuccessorsRequest, GetSuccessorsResponse, SendTransactionRequest,
+    SendTransactionResponse,
+};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tonic::{transport::Server, Request, Response, Status};
@@ -18,9 +17,9 @@ struct BtcAdapterImpl {
 }
 
 /// Converts a `Block` into a protobuf struct.
-fn block_to_proto(block: &Block) -> proto::Block {
-    proto::Block {
-        header: Some(proto::BlockHeader {
+fn block_to_proto(block: &Block) -> v1::Block {
+    v1::Block {
+        header: Some(v1::BlockHeader {
             version: block.header.version,
             prev_blockhash: block.header.prev_blockhash.to_vec(),
             merkle_root: block.header.merkle_root.to_vec(),
@@ -31,14 +30,14 @@ fn block_to_proto(block: &Block) -> proto::Block {
         txdata: block
             .txdata
             .iter()
-            .map(|t| proto::Transaction {
+            .map(|t| v1::Transaction {
                 version: t.version,
                 lock_time: t.lock_time,
                 input: t
                     .input
                     .iter()
-                    .map(|i| proto::TxIn {
-                        previous_output: Some(proto::OutPoint {
+                    .map(|i| v1::TxIn {
+                        previous_output: Some(v1::OutPoint {
                             txid: i.previous_output.txid.to_vec(),
                             vout: i.previous_output.vout,
                         }),
@@ -50,7 +49,7 @@ fn block_to_proto(block: &Block) -> proto::Block {
                 output: t
                     .output
                     .iter()
-                    .map(|o| proto::TxOut {
+                    .map(|o| v1::TxOut {
                         value: o.value,
                         script_pubkey: o.script_pubkey.to_bytes(),
                     })

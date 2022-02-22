@@ -1,6 +1,8 @@
 syntax = "proto3";
 
-package btc;
+package btc_adapter;
+
+import "bitcoin/v1/bitcoin.proto";
 
 enum Network {
   BITCOIN = 0;
@@ -9,88 +11,7 @@ enum Network {
   REGTEST = 3;
 }
 
-message State {
-  uint32 height = 1;
-  bytes latest_stable_block_hash = 2;
-  UtxoSet utxos = 3;
-  BlockForest unstable_blocks = 4;
-}
-
-message UtxoSet {
-  repeated Utxo utxos = 1;
-  bool strict = 2;
-  Network network = 3;
-}
-
-message Utxo {
-  OutPoint outpoint = 1;
-  TxOut txout = 2;
-  uint32 height = 3;
-}
-
-message BlockForest {
-  uint64 delta = 1;
-  repeated BlockTree trees = 2;
-}
-
-message BlockTree {
-  Block root = 1;
-  repeated BlockTree children = 2;
-}
-
-message Block {
-  BlockHeader header = 1;
-  repeated Transaction txdata = 2;
-}
-
-message BlockHeader {
-  int32 version = 1;
-  bytes prev_blockhash = 2;
-  bytes merkle_root = 3;
-  uint32 time = 4;
-  uint32 bits = 5;
-  uint32 nonce = 6;
-}
-
-message Transaction {
-  int32 version = 1;
-  uint32 lock_time = 2;
-  repeated TxIn input = 3;
-  repeated TxOut output = 4;
-}
-
-message TxIn {
-  OutPoint previous_output = 1;
-  bytes script_sig = 2;
-  uint32 sequence = 3;
-  repeated bytes witness = 4;
-}
-
-message TxOut {
-  uint64 value = 1;
-  bytes script_pubkey = 2;
-}
-
-message OutPoint {
-  bytes txid = 1;
-  uint32 vout = 2;
-}
-
-message GetSuccessorsRequest {
-  repeated bytes block_hashes = 1;
-}
-
-message GetSuccessorsResponse {
-  repeated Block blocks = 1;
-}
-
-message SendTransactionRequest {
-  bytes raw_tx = 1;
-}
-
-message SendTransactionResponse {}
-
 service BtcAdapter {
-    rpc GetSuccessors(GetSuccessorsRequest) returns (GetSuccessorsResponse);
-    rpc SendTransaction(SendTransactionRequest) returns (SendTransactionResponse);
+    rpc GetSuccessors(bitcoin.v1.GetSuccessorsRequest) returns (bitcoin.v1.GetSuccessorsResponse);
+    rpc SendTransaction(bitcoin.v1.SendTransactionRequest) returns (bitcoin.v1.SendTransactionResponse);
 }
