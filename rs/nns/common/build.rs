@@ -63,5 +63,24 @@ fn main() {
         .compile_protos(&[proto_file], &["proto", &base_types_proto_dir])
         .unwrap();
 
+    // TODO(http://go/jira/NNS1-1130): Remove this workaround once a fix for the
+    // build-info crate has been published.
+    let opt_level = std::env::var("OPT_LEVEL");
+    if let Ok(opt_level) = opt_level.clone() {
+        eprintln!(
+            "Working around bug in build-info OPT_LEVEL bug. Original OPT_LEVEL: {}",
+            opt_level
+        );
+        match opt_level.as_str() {
+            "s" => std::env::set_var("OPT_LEVEL", "8"),
+            "z" => std::env::set_var("OPT_LEVEL", "9"),
+            _ => (),
+        }
+    }
     build_info_build::build_script();
+    // Restore OPT_LEVEL environment variable.
+    if let Ok(opt_level) = opt_level {
+        eprintln!("Restoring OPT_LEVEL to {}", opt_level);
+        std::env::set_var("OPT_LEVEL", opt_level);
+    }
 }

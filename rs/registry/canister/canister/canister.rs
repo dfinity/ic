@@ -57,6 +57,10 @@ use dfn_core::println;
 use ic_protobuf::registry::node_operator::v1::RemoveNodeOperatorsPayload;
 use registry_canister::mutations::do_set_firewall_config::SetFirewallConfigPayload;
 
+// Makes expose_build_metadata! available.
+#[macro_use]
+extern crate ic_nns_common;
+
 static mut REGISTRY: Option<Registry> = None;
 
 const MAX_VERSIONS_PER_QUERY: usize = 1000;
@@ -180,6 +184,8 @@ fn canister_post_upgrade() {
         );
     }
 }
+
+expose_build_metadata! {}
 
 #[export_name = "canister_update update_authz"]
 fn update_authz() {

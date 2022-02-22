@@ -1,0 +1,1 @@
+service : { get_build_metadata : () -> (text) query }
