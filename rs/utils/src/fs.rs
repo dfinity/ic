@@ -1,6 +1,9 @@
 use std::ffi::{OsStr, OsString};
 use std::{fs, io, io::Error, io::ErrorKind::AlreadyExists, path::Path, path::PathBuf};
 
+#[cfg(target_os = "linux")]
+use thiserror::Error;
+
 #[cfg(target_family = "unix")]
 use std::io::Write;
 
@@ -500,6 +503,47 @@ fn tmp_name() -> String {
         .map(char::from)
         .take(TMP_NAME_LEN)
         .collect()
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Error, Clone, Debug, PartialEq, Eq)]
+pub enum CopyFileRangeAllError {
+    #[error(transparent)]
+    Nix(#[from] nix::Error),
+    #[error("zero bytes copied")]
+    WriteZero,
+}
+
+/// Copy a range of data from one file to another
+///
+/// As opposed to `nix::fcntl::copy_file_range` that it is based on, this
+/// function either copies all bytes or returns an error
+#[cfg(target_os = "linux")]
+pub fn copy_file_range_all(
+    src: &std::fs::File,
+    mut src_offset: i64,
+    dst: &std::fs::File,
+    mut dst_offset: i64,
+    len: usize,
+) -> Result<(), CopyFileRangeAllError> {
+    use std::os::unix::io::AsRawFd;
+    let mut copied_total = 0;
+    while copied_total < len {
+        let copied = nix::fcntl::copy_file_range(
+            src.as_raw_fd(),
+            Some(&mut src_offset),
+            dst.as_raw_fd(),
+            Some(&mut dst_offset),
+            len - copied_total,
+        );
+        match copied {
+            Ok(0) => return Err(CopyFileRangeAllError::WriteZero),
+            Ok(copied) => copied_total += copied,
+            Err(nix::errno::Errno::EINTR) | Err(nix::errno::Errno::EAGAIN) => continue,
+            Err(err) => return Err(err.into()),
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

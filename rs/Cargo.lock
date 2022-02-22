@@ -6653,11 +6653,13 @@ dependencies = [
  "features",
  "hex",
  "libc",
+ "nix 0.23.0",
  "prost",
  "rand 0.8.4",
  "scoped_threadpool",
  "serde",
  "tempfile",
+ "thiserror",
 ]
 
 [[package]]

@@ -1551,10 +1551,15 @@ fn can_state_sync_based_on_old_checkpoint() {
 #[test]
 fn can_recover_from_corruption_on_state_sync() {
     use ic_state_layout::{CheckpointLayout, RwPolicy};
+    use ic_state_manager::manifest::DEFAULT_CHUNK_SIZE;
 
-    fn populate_original_state(state: &mut ReplicatedState) {
+    let pages_per_chunk = DEFAULT_CHUNK_SIZE as u64 / PAGE_SIZE as u64;
+    assert_eq!(DEFAULT_CHUNK_SIZE as usize % PAGE_SIZE, 0);
+
+    let populate_original_state = |state: &mut ReplicatedState| {
         insert_dummy_canister(state, canister_test_id(90));
         insert_dummy_canister(state, canister_test_id(100));
+        insert_dummy_canister(state, canister_test_id(110));
 
         let canister_state = state.canister_state_mut(&canister_test_id(90)).unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
@@ -1576,7 +1581,16 @@ fn can_recover_from_corruption_on_state_sync() {
             (PageIndex::new(1), &[100u8; PAGE_SIZE]),
             (PageIndex::new(3000), &[100u8; PAGE_SIZE]),
         ]);
-    }
+
+        let canister_state = state.canister_state_mut(&canister_test_id(110)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        execution_state.wasm_memory.page_map.update(&[
+            (PageIndex::new(0), &[111u8; PAGE_SIZE]),
+            (PageIndex::new(pages_per_chunk - 1), &[0; PAGE_SIZE]),
+            (PageIndex::new(pages_per_chunk), &[112u8; PAGE_SIZE]),
+            (PageIndex::new(2 * pages_per_chunk - 1), &[0; PAGE_SIZE]),
+        ]);
+    };
 
     state_manager_test(|src_metrics, src_state_manager| {
         // Create initial state with a single canister.
@@ -1607,6 +1621,14 @@ fn can_recover_from_corruption_on_state_sync() {
             .wasm_memory
             .page_map
             .update(&[(PageIndex::new(300), &[3u8; PAGE_SIZE])]);
+
+        // Exchange pages in the canister heap to check applying chunks out of order.
+        let canister_state = state.canister_state_mut(&canister_test_id(110)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        execution_state.wasm_memory.page_map.update(&[
+            (PageIndex::new(0), &[112u8; PAGE_SIZE]),
+            (PageIndex::new(pages_per_chunk), &[111u8; PAGE_SIZE]),
+        ]);
 
         src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
 
