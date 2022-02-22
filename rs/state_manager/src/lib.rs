@@ -87,7 +87,7 @@ const LABEL_VALUE_HASHED: &str = "hashed";
 const LABEL_VALUE_HASHED_AND_COMPARED: &str = "hashed_and_compared";
 const LABEL_VALUE_REUSED: &str = "reused";
 
-/// Lables for state sync metrics
+/// Labels for state sync metrics
 const LABEL_FETCH: &str = "fetch";
 const LABEL_COPY_FILES: &str = "copy_files";
 const LABEL_COPY_CHUNKS: &str = "copy_chunks";
@@ -169,6 +169,11 @@ impl StateManagerMetrics {
             decimal_buckets(-3, 1),
             &["op"],
         );
+
+        for op in &["compute_manifest", "create"] {
+            checkpoint_op_duration.with_label_values(&[*op]);
+        }
+
         let api_call_duration = metrics_registry.histogram_vec(
             "state_manager_api_call_duration_seconds",
             "Duration of a StateManager API call in seconds.",
@@ -614,7 +619,7 @@ pub struct StateManagerImpl {
     latest_state_height: AtomicU64,
     latest_certified_height: AtomicU64,
     // The last height passed to remove_states_below()
-    requested_to_remove_states_below: AtomicU64,
+    requested_to_remove_states_below: Arc<AtomicU64>,
     state_sync_refs: StateSyncRefs,
     checkpoint_thread_pool: Arc<Mutex<scoped_threadpool::Pool>>,
     _state_hasher_handle: JoinOnDrop<()>,
@@ -821,6 +826,62 @@ fn switch_to_checkpoint(tip: &mut ReplicatedState, src: &ReplicatedState) {
     }
 }
 
+/// Persist the metadata of `StateManagerImpl` to disk
+///
+/// This function is a free function, so that it can easily be called
+/// by threads computing manifests.
+///
+/// An important principle is that any persisted metadata is not
+/// necessary for correct behaviour of `StateManager`, and the
+/// checkpoints alone are sufficient. The metadata does however
+/// improve performance. For example, if the metadata is missing or
+/// corrupt, manifests will have to be recomputed for any checkpoints
+/// on disk.
+fn persist_metadata_or_die(
+    log: &ReplicaLogger,
+    metrics: &StateManagerMetrics,
+    state_layout: &StateLayout,
+    requested_to_remove_states_below: &AtomicU64,
+    metadata: &StatesMetadata,
+) {
+    use std::io::Write;
+
+    let started_at = Instant::now();
+    let tmp = state_layout
+        .tmp()
+        .unwrap_or_else(|err| fatal!(log, "Failed to create temporary directory: {}", err))
+        .join("tmp_states_metadata.pb");
+
+    ic_utils::fs::write_atomically_using_tmp_file(state_layout.states_metadata(), &tmp, |w| {
+        let mut pb_meta = pb::StatesMetadata::default();
+        for (h, m) in metadata.iter() {
+            pb_meta.by_height.insert(h.get(), m.into());
+        }
+        pb_meta.oldest_required_state = requested_to_remove_states_below.load(Ordering::Relaxed);
+
+        let mut buf = vec![];
+        pb_meta.encode(&mut buf).unwrap_or_else(|e| {
+            fatal!(log, "Failed to encode states metadata to protobuf: {}", e);
+        });
+        w.write_all(&buf[..])
+    })
+    .unwrap_or_else(|err| {
+        fatal!(
+            log,
+            "Failed to serialize states metadata to {}: {}",
+            tmp.display(),
+            err
+        )
+    });
+    let elapsed = started_at.elapsed();
+    metrics
+        .checkpoint_op_duration
+        .with_label_values(&["persist_meta"])
+        .observe(elapsed.as_secs_f64());
+
+    debug!(log, "Persisted states metadata in {:?}", elapsed);
+}
+
 impl StateManagerImpl {
     /// Height for the initial default state.
     const INITIAL_STATE_HEIGHT: Height = Height::new(0);
@@ -980,6 +1041,9 @@ impl StateManagerImpl {
 
         let (compute_manifest_request_sender, compute_manifest_request_receiver) = unbounded();
 
+        let requested_to_remove_states_below =
+            Arc::new(AtomicU64::new(oldest_required_state.get()));
+
         let _state_hasher_handle = JoinOnDrop::new(
             std::thread::Builder::new()
                 .name("StateHasher".to_string())
@@ -988,6 +1052,9 @@ impl StateManagerImpl {
                     let states = Arc::clone(&states);
                     let metrics = metrics.clone();
                     let checkpoint_thread_pool = Arc::clone(&checkpoint_thread_pool);
+                    let state_layout = state_layout.clone();
+                    let requested_to_remove_states_below =
+                        Arc::clone(&requested_to_remove_states_below);
                     move || {
                         while let Ok(req) = compute_manifest_request_receiver.recv() {
                             // NB. we should lock the pool for the duration of only a single
@@ -999,6 +1066,8 @@ impl StateManagerImpl {
                                 &metrics,
                                 &log,
                                 &states,
+                                &state_layout,
+                                &requested_to_remove_states_below,
                                 req,
                                 &malicious_flags,
                             );
@@ -1044,7 +1113,7 @@ impl StateManagerImpl {
             deallocation_sender,
             latest_state_height,
             latest_certified_height,
-            requested_to_remove_states_below: AtomicU64::new(oldest_required_state.get()),
+            requested_to_remove_states_below,
             state_sync_refs: StateSyncRefs::new(log),
             checkpoint_thread_pool,
             _state_hasher_handle,
@@ -1156,60 +1225,23 @@ impl StateManagerImpl {
     }
 
     fn persist_metadata_or_die(&self, metadata: &StatesMetadata) {
-        use std::io::Write;
-
-        let started_at = Instant::now();
-        let tmp = self
-            .state_layout
-            .tmp()
-            .unwrap_or_else(|err| fatal!(self.log, "Failed to create temporary directory: {}", err))
-            .join("tmp_states_metadata.pb");
-
-        ic_utils::fs::write_atomically_using_tmp_file(
-            self.state_layout.states_metadata(),
-            &tmp,
-            |w| {
-                let mut pb_meta = pb::StatesMetadata::default();
-                for (h, m) in metadata.iter() {
-                    pb_meta.by_height.insert(h.get(), m.into());
-                }
-                pb_meta.oldest_required_state = self
-                    .requested_to_remove_states_below
-                    .load(Ordering::Relaxed);
-
-                let mut buf = vec![];
-                pb_meta.encode(&mut buf).unwrap_or_else(|e| {
-                    fatal!(
-                        self.log,
-                        "Failed to encode states metadata to protobuf: {}",
-                        e
-                    );
-                });
-                w.write_all(&buf[..])
-            },
-        )
-        .unwrap_or_else(|err| {
-            fatal!(
-                self.log,
-                "Failed to serialize states metadata to {}: {}",
-                tmp.display(),
-                err
-            )
-        });
-        let elapsed = started_at.elapsed();
-        self.metrics
-            .checkpoint_op_duration
-            .with_label_values(&["persist_meta"])
-            .observe(elapsed.as_secs_f64());
-
-        debug!(self.log, "Persisted states metadata in {:?}", elapsed);
+        persist_metadata_or_die(
+            &self.log,
+            &self.metrics,
+            &self.state_layout,
+            &self.requested_to_remove_states_below,
+            metadata,
+        );
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn handle_compute_manifest_request(
         thread_pool: &mut scoped_threadpool::Pool,
         metrics: &StateManagerMetrics,
         log: &ReplicaLogger,
-        states: &Arc<parking_lot::RwLock<SharedState>>,
+        states: &parking_lot::RwLock<SharedState>,
+        state_layout: &StateLayout,
+        requested_to_remove_states_below: &AtomicU64,
         req: ComputeManifestRequest,
         #[allow(unused_variables)] malicious_flags: &MaliciousFlags,
     ) {
@@ -1294,6 +1326,14 @@ impl StateManagerImpl {
             metadata.root_hash = Some(root_hash);
             metadata.manifest = Some(manifest);
         }
+
+        persist_metadata_or_die(
+            log,
+            metrics,
+            state_layout,
+            requested_to_remove_states_below,
+            &states.states_metadata,
+        );
     }
 
     fn latest_certified_state(
@@ -2042,9 +2082,6 @@ impl StateManager for StateManagerImpl {
             .with_label_values(&["remove_states_below"])
             .start_timer();
 
-        self.requested_to_remove_states_below
-            .store(requested_height.get(), Ordering::Relaxed);
-
         let checkpoint_heights = self
             .state_layout
             .checkpoint_heights()
@@ -2096,6 +2133,9 @@ impl StateManager for StateManagerImpl {
             });
 
         let mut states = self.states.write();
+
+        self.requested_to_remove_states_below
+            .store(requested_height.get(), Ordering::Relaxed);
 
         // Send object to deallocation thread if it has capacity.
         let deallocate = |x| {

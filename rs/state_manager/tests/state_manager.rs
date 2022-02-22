@@ -35,12 +35,12 @@ use ic_types::{
     CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, PrincipalId,
 };
 use proptest::prelude::*;
-use std::path::Path;
 use std::sync::Arc;
 use std::{
     collections::HashSet,
     convert::{TryFrom, TryInto},
 };
+use std::{path::Path, time::Duration};
 use tempfile::Builder;
 
 pub mod common;
@@ -515,6 +515,52 @@ fn certifications_are_not_persisted() {
                 ic_types::malicious_flags::MaliciousFlags::default(),
             );
             assert_eq!(vec![height(1)], heights_to_certify(&state_manager));
+        }
+    });
+}
+
+#[test]
+fn all_manifests_are_persisted() {
+    let tmp = Builder::new().prefix("test").tempdir().unwrap();
+    let config = Config::new(tmp.path().into());
+    with_test_replica_logger(|log| {
+        {
+            // Commit one checkpoint and wait for the manifest computation to finish
+            let metrics_registry = MetricsRegistry::new();
+            let state_manager = StateManagerImpl::new(
+                Arc::new(FakeVerifier::new()),
+                subnet_test_id(42),
+                SubnetType::Application,
+                log.clone(),
+                &metrics_registry,
+                &config,
+                ic_types::malicious_flags::MaliciousFlags::default(),
+            );
+            let (_height, state) = state_manager.take_tip();
+            state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+            wait_for_checkpoint(&state_manager, height(1));
+        }
+        {
+            // If the manifest wasn't persisted, then it needs to be recomputed upon restart
+            let metrics_registry = MetricsRegistry::new();
+            let _state_manager = StateManagerImpl::new(
+                Arc::new(FakeVerifier::new()),
+                subnet_test_id(42),
+                SubnetType::Application,
+                log,
+                &metrics_registry,
+                &config,
+                ic_types::malicious_flags::MaliciousFlags::default(),
+            );
+            std::thread::sleep(Duration::from_secs(5)); // Let any potential manifest computations finish
+
+            // No manifest computations happened
+            assert_eq!(
+                0,
+                fetch_int_counter_vec(&metrics_registry, "state_manager_manifest_chunk_bytes")
+                    .values()
+                    .sum::<u64>()
+            );
         }
     });
 }
