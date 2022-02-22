@@ -19,6 +19,7 @@ pub struct SubnetCallContextManager {
     pub setup_initial_dkg_contexts: BTreeMap<CallbackId, SetupInitialDkgContext>,
     pub sign_with_ecdsa_contexts: BTreeMap<CallbackId, SignWithEcdsaContext>,
     pub sign_with_mock_ecdsa_contexts: BTreeMap<CallbackId, SignWithEcdsaContext>,
+    pub canister_http_request_contexts: BTreeMap<CallbackId, CanisterHttpRequestContext>,
 }
 
 impl SubnetCallContextManager {
@@ -38,6 +39,14 @@ impl SubnetCallContextManager {
                 .insert(callback_id, context),
             false => self.sign_with_ecdsa_contexts.insert(callback_id, context),
         };
+    }
+
+    pub fn push_http_request(&mut self, context: CanisterHttpRequestContext) {
+        let callback_id = CallbackId::new(self.next_callback_id);
+        self.next_callback_id += 1;
+
+        self.canister_http_request_contexts
+            .insert(callback_id, context);
     }
 
     pub fn retrieve_request(
@@ -81,6 +90,19 @@ impl SubnetCallContextManager {
                         context.request
                     })
             })
+            .or_else(|| {
+                self.canister_http_request_contexts
+                    .remove(&callback_id)
+                    .map(|context| {
+                        info!(
+                            logger,
+                            "Received the response for HttpRequest with callback id {:?} from {:?}",
+                            context.request.sender_reply_callback,
+                            context.request.sender
+                        );
+                        context.request
+                    })
+            })
     }
 }
 
@@ -118,6 +140,16 @@ impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {
                     },
                 )
                 .collect(),
+            canister_http_request_contexts: item
+                .canister_http_request_contexts
+                .iter()
+                .map(
+                    |(callback_id, context)| pb_metadata::CanisterHttpRequestContextTree {
+                        callback_id: callback_id.get(),
+                        context: Some(context.into()),
+                    },
+                )
+                .collect(),
         }
     }
 }
@@ -131,23 +163,35 @@ impl TryFrom<pb_metadata::SubnetCallContextManager> for SubnetCallContextManager
                 try_from_option_field(entry.context, "SystemMetadata::SetupInitialDkgContext")?;
             setup_initial_dkg_contexts.insert(CallbackId::new(entry.callback_id), context);
         }
+
         let mut sign_with_ecdsa_contexts = BTreeMap::<CallbackId, SignWithEcdsaContext>::new();
         for entry in item.sign_with_ecdsa_contexts {
             let context: SignWithEcdsaContext =
                 try_from_option_field(entry.context, "SystemMetadata::SignWithEcdsaContext")?;
             sign_with_ecdsa_contexts.insert(CallbackId::new(entry.callback_id), context);
         }
+
         let mut sign_with_mock_ecdsa_contexts = BTreeMap::<CallbackId, SignWithEcdsaContext>::new();
         for entry in item.sign_with_mock_ecdsa_contexts {
             let context: SignWithEcdsaContext =
                 try_from_option_field(entry.context, "SystemMetadata::SignWithMockEcdsaContext")?;
             sign_with_mock_ecdsa_contexts.insert(CallbackId::new(entry.callback_id), context);
         }
+
+        let mut canister_http_request_contexts =
+            BTreeMap::<CallbackId, CanisterHttpRequestContext>::new();
+        for entry in item.canister_http_request_contexts {
+            let context: CanisterHttpRequestContext =
+                try_from_option_field(entry.context, "SystemMetadata::CanisterHttpRequestContext")?;
+            canister_http_request_contexts.insert(CallbackId::new(entry.callback_id), context);
+        }
+
         Ok(Self {
             next_callback_id: item.next_callback_id,
             setup_initial_dkg_contexts,
             sign_with_ecdsa_contexts,
             sign_with_mock_ecdsa_contexts,
+            canister_http_request_contexts,
         })
     }
 }
@@ -235,6 +279,70 @@ impl TryFrom<pb_metadata::SignWithEcdsaContext> for SignWithEcdsaContext {
                 id
             },
             batch_time: Time::from_nanos_since_unix_epoch(context.batch_time),
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum HttpMethodType {
+    GET,
+}
+
+impl From<&HttpMethodType> for pb_metadata::HttpMethodType {
+    fn from(http_method_type: &HttpMethodType) -> Self {
+        match http_method_type {
+            HttpMethodType::GET => pb_metadata::HttpMethodType::Get,
+        }
+    }
+}
+
+impl From<pb_metadata::HttpMethodType> for HttpMethodType {
+    fn from(http_method_type: pb_metadata::HttpMethodType) -> Self {
+        match http_method_type {
+            pb_metadata::HttpMethodType::Unspecified | pb_metadata::HttpMethodType::Get => {
+                HttpMethodType::GET
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CanisterHttpRequestContext {
+    pub request: Request,
+    pub url: String,
+    pub body: Option<Vec<u8>>,
+    pub http_method: HttpMethodType,
+    pub transform_method_name: Option<String>,
+}
+
+impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestContext {
+    fn from(context: &CanisterHttpRequestContext) -> Self {
+        pb_metadata::CanisterHttpRequestContext {
+            request: Some((&context.request).into()),
+            url: context.url.clone(),
+            body: context.body.clone(),
+            transform_method_name: context
+                .transform_method_name
+                .as_ref()
+                .map(|method_name| method_name.into()),
+            http_method: pb_metadata::HttpMethodType::from(&context.http_method) as i32,
+        }
+    }
+}
+
+impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestContext {
+    type Error = ProxyDecodeError;
+    fn try_from(context: pb_metadata::CanisterHttpRequestContext) -> Result<Self, Self::Error> {
+        let request: Request =
+            try_from_option_field(context.request, "CanisterHttpRequestContext::request")?;
+        Ok(CanisterHttpRequestContext {
+            request,
+            url: context.url,
+            body: context.body,
+            http_method: HttpMethodType::from(
+                pb_metadata::HttpMethodType::from_i32(context.http_method).unwrap_or_default(),
+            ),
+            transform_method_name: context.transform_method_name.map(From::from),
         })
     }
 }
