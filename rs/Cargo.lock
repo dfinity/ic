@@ -3726,12 +3726,32 @@ name = "ic-certified-vars"
 version = "0.8.0"
 dependencies = [
  "hex",
+ "ic-base-types",
+ "ic-certified-vars-test-utils",
+ "ic-crypto-internal-types",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig",
  "ic-types 0.8.0",
+ "rand 0.8.4",
  "serde",
  "serde_cbor",
  "tree-deserializer",
+]
+
+[[package]]
+name = "ic-certified-vars-test-utils"
+version = "0.1.0"
+dependencies = [
+ "ic-crypto",
+ "ic-crypto-internal-threshold-sig-bls12381",
+ "ic-crypto-internal-types",
+ "ic-crypto-tree-hash",
+ "ic-interfaces",
+ "ic-types 0.8.0",
+ "leb128",
+ "rand 0.8.4",
+ "serde",
+ "serde_cbor",
 ]
 
 [[package]]
@@ -5655,6 +5675,7 @@ dependencies = [
  "hyper-tls",
  "ic-canister-client",
  "ic-certified-vars",
+ "ic-certified-vars-test-utils",
  "ic-crypto",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig",
