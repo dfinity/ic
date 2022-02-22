@@ -1,4 +1,7 @@
 use super::*;
+use crate::metadata_state::subnet_call_context_manager::{
+    CanisterHttpRequestContext, HttpMethodType, SubnetCallContextManager,
+};
 use ic_test_utilities::{
     mock_time,
     types::{
@@ -10,6 +13,7 @@ use ic_test_utilities::{
         messages::ResponseBuilder,
     },
 };
+use ic_types::messages::CallbackId;
 use ic_types::{
     ingress::{WasmResult, MAX_INGRESS_TTL},
     messages::Payload,
@@ -192,5 +196,49 @@ fn streams_stats_after_deserialization() {
     assert_eq!(
         system_metadata.streams.responses_size_bytes(),
         deserialized_system_metadata.streams.responses_size_bytes()
+    );
+}
+
+#[test]
+fn subnet_call_contexts_deserialization() {
+    let url = "https://".to_string();
+    let transform_method_name = Some("transform".to_string());
+    let mut system_call_context_manager = SubnetCallContextManager::default();
+
+    let canister_http_request = CanisterHttpRequestContext {
+        request: RequestBuilder::default()
+            .sender(canister_test_id(1))
+            .receiver(canister_test_id(2))
+            .build(),
+        url: url.clone(),
+        body: None,
+        http_method: HttpMethodType::GET,
+        transform_method_name: transform_method_name.clone(),
+    };
+    system_call_context_manager.push_http_request(canister_http_request);
+
+    let system_call_context_manager_proto: ic_protobuf::state::system_metadata::v1::SubnetCallContextManager = (&system_call_context_manager).into();
+    let deserialized_system_call_context_manager: SubnetCallContextManager =
+        system_call_context_manager_proto.try_into().unwrap();
+
+    assert_eq!(
+        deserialized_system_call_context_manager
+            .canister_http_request_contexts
+            .len(),
+        1
+    );
+
+    let deserialized_http_request_context = deserialized_system_call_context_manager
+        .canister_http_request_contexts
+        .get(&CallbackId::from(0))
+        .unwrap();
+    assert_eq!(deserialized_http_request_context.url, url);
+    assert_eq!(
+        deserialized_http_request_context.http_method,
+        HttpMethodType::GET
+    );
+    assert_eq!(
+        deserialized_http_request_context.transform_method_name,
+        transform_method_name
     );
 }

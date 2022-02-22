@@ -65,6 +65,24 @@ message SignWithEcdsaContextTree {
     SignWithEcdsaContext context = 2;
 }
 
+enum HttpMethodType {
+    HTTP_METHOD_TYPE_UNSPECIFIED = 0;
+    HTTP_METHOD_TYPE_GET = 1;
+}
+
+message CanisterHttpRequestContext {
+    state.queues.v1.Request request = 1;
+    string url = 2;
+    google.protobuf.BytesValue body = 3;
+    google.protobuf.StringValue transform_method_name = 4;
+    HttpMethodType http_method = 5;
+}
+
+message CanisterHttpRequestContextTree {
+    uint64 callback_id = 1;
+    CanisterHttpRequestContext context = 2;
+}
+
 message SubnetCallContextManager {
     uint64 next_callback_id = 1;
     reserved 2;
@@ -72,6 +90,7 @@ message SubnetCallContextManager {
     repeated SetupInitialDkgContextTree setup_initial_dkg_contexts = 3;
     repeated SignWithEcdsaContextTree sign_with_ecdsa_contexts = 4;
     repeated SignWithEcdsaContextTree sign_with_mock_ecdsa_contexts = 5;
+    repeated CanisterHttpRequestContextTree canister_http_request_contexts = 6;
 }
 
 message TimeOfLastAllocationCharge {
