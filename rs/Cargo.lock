@@ -5119,6 +5119,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nns-common-test-canister"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "ic-nns-common",
+]
+
+[[package]]
 name = "ic-nns-constants"
 version = "0.8.0"
 dependencies = [

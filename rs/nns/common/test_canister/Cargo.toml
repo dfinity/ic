@@ -1,0 +1,12 @@
+# This has only one purpose (for the time being): To test the expose_build_metadata! macro.
+# This also serves as the most bare-bones example application of that macro.
+
+[package]
+name = "ic-nns-common-test-canister"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+candid = "0.7.4"
+ic-nns-common = { path = ".." }

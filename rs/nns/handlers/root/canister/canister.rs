@@ -15,6 +15,10 @@ use ic_nns_handler_root::{
     root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot},
 };
 
+// Makes expose_build_metadata! available.
+#[macro_use]
+extern crate ic_nns_common;
+
 fn main() {}
 
 #[cfg(target_arch = "wasm32")]
@@ -38,6 +42,8 @@ fn canister_post_upgrade() {
     // stateful. This minimizes risk of future mis-interpretation of data.
     stable::set(&[]);
 }
+
+expose_build_metadata! {}
 
 /// Returns the status of the canister specified in the input.
 ///

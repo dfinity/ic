@@ -171,6 +171,7 @@ service : {
   clear_provisional_whitelist : () -> ();
   create_subnet : (CreateSubnetPayload) -> ();
   delete_subnet : (DeleteSubnetPayload) -> ();
+  get_build_metadata : () -> (text) query;
   get_node_providers_monthly_xdr_rewards : () -> (Result_1) query;
   recover_subnet : (RecoverSubnetPayload) -> ();
   remove_node_directly : (RemoveNodeDirectlyPayload) -> ();

@@ -24,6 +24,7 @@ service : {
   donate_account : (text) -> (Result_1);
   forward_whitelisted_unclaimed_accounts : (null) -> (Result_1);
   get_account : (text) -> (Result_2) query;
+  get_build_metadata : () -> (text) query;
   len : () -> (nat16) query;
   total : () -> (nat32) query;
 }

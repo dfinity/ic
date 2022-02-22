@@ -20,16 +20,16 @@ use dfn_core::over;
 #[macro_export]
 macro_rules! expose_build_metadata {
     () => {
-        use ic_nns_common::export_build_metadata_via_candid as m;
+        use ic_nns_common::export_build_metadata_via_candid;
 
         #[export_name = "canister_query get_build_metadata"]
         fn get_build_metadata() {
-            m::get_build_metadata()
+            export_build_metadata_via_candid::get_build_metadata()
         }
 
-        #[candid_method(query, rename = "get_build_metadata")]
+        #[candid::candid_method(query, rename = "get_build_metadata")]
         fn get_build_metadata_() -> &'static str {
-            m::get_build_metadata_()
+            export_build_metadata_via_candid::get_build_metadata_()
         }
     };
 }

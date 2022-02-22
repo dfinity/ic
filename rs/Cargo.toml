@@ -86,6 +86,7 @@ members = [
   "nervous_system/common",
   "nns/constants",
   "nns/common",
+  "nns/common/test_canister",
   "nns/cmc",
   "nns/governance_upgrader",
   "nns/handlers/lifeline",

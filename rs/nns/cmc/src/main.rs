@@ -29,6 +29,10 @@ use lazy_static::lazy_static;
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use serde::{Deserialize, Serialize};
 
+// Makes expose_build_metadata! available.
+#[macro_use]
+extern crate ic_nns_common;
+
 mod limiter;
 
 /// The past 30 days are used for the average ICP/XDR rate.
@@ -140,6 +144,8 @@ fn init(args: CyclesCanisterInitPayload) {
     state.governance_canister_id = args.governance_canister_id;
     state.minting_account_id = args.minting_account_id;
 }
+
+expose_build_metadata! {}
 
 #[export_name = "canister_update set_authorized_subnetwork_list"]
 fn set_authorized_subnetwork_list_() {
