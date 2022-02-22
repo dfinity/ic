@@ -14,7 +14,7 @@ pub(crate) struct SshAccessManager {
     registry: Arc<RegistryHelper>,
     metrics: Arc<OrchestratorMetrics>,
     logger: ReplicaLogger,
-    last_seen_registry_version: RegistryVersion,
+    last_used_check_parameters: (RegistryVersion, Option<SubnetId>),
 }
 
 impl SshAccessManager {
@@ -27,19 +27,21 @@ impl SshAccessManager {
             registry,
             metrics,
             logger,
-            last_seen_registry_version: RegistryVersion::new(0),
+            last_used_check_parameters: Default::default(),
         }
     }
 
     /// Checks for changes in the keysets, and updates the node accordingly.
     pub(crate) async fn check_for_keyset_changes(&mut self, subnet_id: Option<SubnetId>) {
         let registry_version = self.registry.get_latest_version();
-        if self.last_seen_registry_version == registry_version {
+        if self.last_used_check_parameters == (registry_version, subnet_id) {
             return;
         }
         debug!(
             self.logger,
-            "Checking for the access keys in the registry version: {}", registry_version
+            "Checking for the access keys in the registry version {} for subnet_id {:?}",
+            registry_version,
+            subnet_id
         );
 
         let (new_readonly_keys, new_backup_keys) =
@@ -57,7 +59,7 @@ impl SshAccessManager {
 
         // Update the readonly & backup keys. If it fails, log why.
         if self.update_access_keys(&new_readonly_keys, &new_backup_keys) {
-            self.last_seen_registry_version = registry_version;
+            self.last_used_check_parameters = (registry_version, subnet_id);
             self.metrics
                 .ssh_access_registry_version
                 .set(registry_version.get() as i64);
@@ -65,24 +67,19 @@ impl SshAccessManager {
     }
 
     fn update_access_keys(&self, readonly_keys: &[String], backup_keys: &[String]) -> bool {
-        let mut both_keys_are_successfully_updated: bool = true;
-        if let Err(e) = self.update_access_to_one_account("readonly", readonly_keys) {
-            warn!(
-                every_n_seconds => 300,
-                self.logger,
-                "Could not update the readonly keys due to a script failure: {}", e
-            );
-            both_keys_are_successfully_updated = false;
+        let update = |account, keys| {
+            self.update_access_to_one_account(account, keys)
+                .map_err(|e| {
+                    warn!(
+                        every_n_seconds => 300,
+                        self.logger,
+                        "Could not update the {} keys due to a script failure: {}", account, e
+                    );
+                })
+                .is_ok()
         };
-        if let Err(e) = self.update_access_to_one_account("backup", backup_keys) {
-            warn!(
-                every_n_seconds => 300,
-                self.logger,
-                "Could not update the backup keys due to a script failure: {}", e
-            );
-            both_keys_are_successfully_updated = false;
-        }
-        both_keys_are_successfully_updated
+        let result = update("readonly", readonly_keys);
+        update("backup", backup_keys) && result
     }
 
     fn update_access_to_one_account(&self, account: &str, keys: &[String]) -> Result<(), String> {
@@ -105,8 +102,8 @@ impl SshAccessManager {
         drop(stdin);
 
         match cmd.wait_with_output() {
-            Ok(_) => Ok(()),
-            Err(e) => Err(format!("{}", e)),
+            Err(e) => Err(e.to_string()),
+            _ => Ok(()),
         }
     }
 
