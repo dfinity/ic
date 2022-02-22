@@ -263,7 +263,28 @@ impl IncompleteState {
                     );
 
                     if validate_data || ALWAYS_VALIDATE {
-                        let src_map = ScopedMmap::from_path(&src_path).unwrap_or_else(|err| {
+
+                        let src = std::fs::File::open(&src_path).unwrap_or_else(|err| {
+                            fatal!(
+                                log,
+                                "Failed to open file {} for read: {}",
+                                src_path.display(),
+                                err
+                            )
+                        });
+                        let src_len = src
+                            .metadata()
+                            .unwrap_or_else(|err| {
+                                fatal!(
+                                    log,
+                                    "Failed to get metadata of file {}: {}",
+                                    src_path.display(),
+                                    err
+                                )
+                            })
+                            .len() as usize;
+
+                        let src_map = ScopedMmap::from_readonly_file(&src, src_len).unwrap_or_else(|err| {
                             fatal!(log, "Failed to mmap file {}: {}", src_path.display(), err)
                         });
                         let src_data = src_map.as_slice();
@@ -389,18 +410,48 @@ impl IncompleteState {
                                 }
 
                                 let chunk = &manifest_old.chunk_table[idx];
-                                let data = &src_data[chunk.byte_range()];
 
-                                dst.write_all_at(data, chunk.offset).unwrap_or_else(|err| {
-                                    fatal!(
-                                        log,
-                                        "Failed to write chunk (offset = {}, size = {}) to file {}: {}",
-                                        chunk.offset,
-                                        chunk.size_bytes,
-                                        dst_path.display(),
-                                        err
-                                    )
-                                });
+                                #[cfg(target_os = "linux")]
+                                {
+                                    // The source and the destination offsets are the same because we are copying
+                                    // over uncorrupted chunks of the file into the new checkpoint.
+                                    let src_offset = chunk.offset as i64;
+                                    let dst_offset = chunk.offset as i64;
+
+                                    ic_utils::fs::copy_file_range_all(
+                                        &src,
+                                        src_offset,
+                                        &dst,
+                                        dst_offset,
+                                        chunk.size_bytes as usize
+                                    ).unwrap_or_else(|err| {
+                                        fatal!(
+                                            log,
+                                            "Failed to copy file range from {} => {} (offset = {}, size = {}): {}",
+                                            src_path.display(),
+                                            dst_path.display(),
+                                            chunk.offset,
+                                            chunk.size_bytes,
+                                            err
+                                        )
+                                    });
+                                }
+
+                                #[cfg(not(target_os = "linux"))]
+                                {
+                                    let data = &src_data[chunk.byte_range()];
+
+                                    dst.write_all_at(data, chunk.offset).unwrap_or_else(|err| {
+                                        fatal!(
+                                            log,
+                                            "Failed to write chunk (offset = {}, size = {}) to file {}: {}",
+                                            chunk.offset,
+                                            chunk.size_bytes,
+                                            dst_path.display(),
+                                            err
+                                        )
+                                    });
+                                }
                                 metrics.state_sync_remaining.sub(1);
                             }
                         }
@@ -485,6 +536,26 @@ impl IncompleteState {
                     root_old.join(&manifest_old.file_table[*src_file_index].relative_path);
                 let corrupted_chunks = Arc::clone(&corrupted_chunks);
                 scope.execute(move || {
+                    let src = std::fs::File::open(&src_path).unwrap_or_else(|err| {
+                        fatal!(
+                            log,
+                            "Failed to open file {} for read: {}",
+                            src_path.display(),
+                            err
+                        )
+                    });
+
+                    let src_len = src
+                        .metadata()
+                        .unwrap_or_else(|err| {
+                            fatal!(
+                                log,
+                                "Failed to get metadata of file {}: {}",
+                                src_path.display(),
+                                err
+                            )
+                        })
+                        .len() as usize;
                     let dst = std::fs::OpenOptions::new()
                         .write(true)
                         .create(false)
@@ -493,7 +564,7 @@ impl IncompleteState {
                             fatal!(log, "Failed to open file {}: {}", dst_path.display(), err)
                         });
 
-                    let src_map = ScopedMmap::from_path(&src_path).unwrap_or_else(|err| {
+                    let src_map = ScopedMmap::from_readonly_file(&src, src_len).unwrap_or_else(|err| {
                         fatal!(log, "Failed to mmap file {}: {}", src_path.display(), err)
                     });
 
@@ -520,9 +591,12 @@ impl IncompleteState {
                             corrupted_chunks.lock().unwrap().push(*dst_chunk_index + 1);
                             continue;
                         }
-
+                        #[cfg(not(target_os = "linux"))]
                         let src_data = &src_map.as_slice()[byte_range];
                         if validate_data || ALWAYS_VALIDATE {
+                            #[cfg(target_os = "linux")]
+                            let src_data = &src_map.as_slice()[byte_range];
+
                             if let Err(err) = crate::manifest::validate_chunk(
                                 *dst_chunk_index,
                                 src_data,
@@ -558,18 +632,45 @@ impl IncompleteState {
                                 continue;
                             }
                         }
+                        #[cfg(target_os = "linux")]
+                        {
+                            let src_offset = src_chunk.offset as i64;
+                            let dst_offset = dst_chunk.offset as i64;
 
-                        dst.write_all_at(src_data, dst_chunk.offset)
-                            .unwrap_or_else(|err| {
-                                fatal!(
-                                    log,
-                                    "Failed to write chunk (offset = {}, size = {}) to file {}: {}",
-                                    dst_chunk.offset,
-                                    dst_chunk.size_bytes,
-                                    dst_path.display(),
-                                    err
-                                )
-                            });
+                            ic_utils::fs::copy_file_range_all(
+                                &src,
+                                src_offset,
+                                &dst,
+                                dst_offset,
+                                dst_chunk.size_bytes as usize,
+                            )
+                                .unwrap_or_else(|err| {
+                                    fatal!(
+                                        log,
+                                        "Failed to copy file range from {} => {} (offset = {}, size = {}): {}",
+                                        src_path.display(),
+                                        dst_path.display(),
+                                        dst_chunk.offset,
+                                        dst_chunk.size_bytes,
+                                        err
+                                    )
+                                });
+                        }
+
+                        #[cfg(not(target_os = "linux"))]
+                        {
+                            dst.write_all_at(src_data, dst_chunk.offset)
+                                .unwrap_or_else(|err| {
+                                    fatal!(
+                                        log,
+                                        "Failed to write chunk (offset = {}, size = {}) to file {}: {}",
+                                        dst_chunk.offset,
+                                        dst_chunk.size_bytes,
+                                        dst_path.display(),
+                                        err
+                                    )
+                                });
+                        }
                         metrics.state_sync_remaining.sub(1);
                     }
                 });
