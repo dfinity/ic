@@ -69,7 +69,7 @@ use ic_nns_governance::{
 };
 use ledger_canister::{AccountIdentifier, Memo, Tokens};
 use maplit::hashmap;
-use proptest::prelude::proptest;
+use proptest::prelude::{prop_assert, prop_assert_eq, proptest, TestCaseError};
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 
 use std::cmp::Ordering;
@@ -7924,8 +7924,12 @@ fn test_merge_maturity_of_neuron_new(start in 56u64..56_000_000,
 
 }
 
+proptest! {
+
 #[test]
-fn test_merge_maturity_of_neuron() {
+fn test_merge_maturity_of_neuron(
+    starting_maturity in 1_000_000u64..250_000_000_000
+) {
     let (driver, mut gov, neuron) = create_mature_neuron(false);
 
     let id = neuron.id.clone().unwrap();
@@ -7941,21 +7945,29 @@ fn test_merge_maturity_of_neuron() {
         .unwrap()
         .unwrap()
         .get_e8s();
-    assert_eq!(neuron_stake_e8s, account_balance);
+    prop_assert_eq!(neuron_stake_e8s, account_balance);
 
     {
-        let maturity = 25_000_000;
         let neuron = gov.get_neuron_mut(&id).unwrap();
-        neuron.maturity_e8s_equivalent = maturity;
+        neuron.maturity_e8s_equivalent = starting_maturity;
     }
 
     // Assert that maturity can't be merged by someone who doesn't control the
     // neuron
-    assert!(merge_maturity(&mut gov, id.clone(), &*TEST_NEURON_2_OWNER_PRINCIPAL, 10).is_err());
+    prop_assert!(merge_maturity(&mut gov, id.clone(), &*TEST_NEURON_2_OWNER_PRINCIPAL, 10).is_err());
 
     // Assert percents outside of (0, 100] are rejected
-    assert!(merge_maturity(&mut gov, id.clone(), &controller, 0).is_err());
-    assert!(merge_maturity(&mut gov, id.clone(), &controller, 250).is_err());
+    prop_assert!(merge_maturity(&mut gov, id.clone(), &controller, 0).is_err());
+    prop_assert!(merge_maturity(&mut gov, id.clone(), &controller, 250).is_err());
+
+    let mut decrement_maturity = {
+        let mut remaining_maturity = starting_maturity;
+        move |percent: u64| {
+            let amount = (remaining_maturity * percent) / 100;
+            remaining_maturity -= amount;
+            amount
+        }
+    };
 
     // Assert that 10% of a neuron's maturity can be merged successfully
     assert_merge_maturity_executes_as_expected(
@@ -7963,9 +7975,9 @@ fn test_merge_maturity_of_neuron() {
         id.clone(),
         &controller,
         10,
-        2_500_000,
+        decrement_maturity(10),
         &driver,
-    );
+    )?;
 
     // Assert that 50% of a neuron's maturity can be merged successfully
     assert_merge_maturity_executes_as_expected(
@@ -7973,9 +7985,9 @@ fn test_merge_maturity_of_neuron() {
         id.clone(),
         &controller,
         50,
-        11_250_000,
+        decrement_maturity(50),
         &driver,
-    );
+    )?;
 
     // Assert that 100% of a neuron's maturity can be merged successfully
     assert_merge_maturity_executes_as_expected(
@@ -7983,12 +7995,14 @@ fn test_merge_maturity_of_neuron() {
         id.clone(),
         &controller,
         100,
-        11_250_000,
+        decrement_maturity(100),
         &driver,
-    );
+    )?;
 
     // Assert that merging a neuron with no maturity fails
-    assert!(merge_maturity(&mut gov, id, &controller, 10).is_err());
+    prop_assert!(merge_maturity(&mut gov, id, &controller, 10).is_err());
+}
+
 }
 
 /// Merge the maturity for a given neuron and assert that the neuron's stake,
@@ -8000,7 +8014,7 @@ fn assert_merge_maturity_executes_as_expected(
     percentage_to_merge: u32,
     expected_merged_maturity: u64,
     driver: &fake::FakeDriver,
-) {
+) -> std::result::Result<(), TestCaseError> {
     let neuron = gov.get_neuron(&id).unwrap().clone();
     let account = AccountIdentifier::new(
         ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
@@ -8008,7 +8022,7 @@ fn assert_merge_maturity_executes_as_expected(
     );
     let response = merge_maturity(gov, id.clone(), controller, percentage_to_merge).unwrap();
     let merged_maturity = response.merged_maturity_e8s;
-    assert_eq!(merged_maturity, expected_merged_maturity);
+    prop_assert_eq!(merged_maturity, expected_merged_maturity);
     let expected_resulting_maturity = neuron.maturity_e8s_equivalent - merged_maturity;
     let expected_resulting_stake = neuron.cached_neuron_stake_e8s + merged_maturity;
     let post_merge_account_balance = driver
@@ -8018,20 +8032,24 @@ fn assert_merge_maturity_executes_as_expected(
         .unwrap()
         .get_e8s();
     let merged_neuron = gov.get_neuron(&id).unwrap();
-    assert_eq!(
+    prop_assert_eq!(
         merged_neuron.maturity_e8s_equivalent,
         expected_resulting_maturity
     );
-    assert_eq!(
+    prop_assert_eq!(
         merged_neuron.cached_neuron_stake_e8s,
         expected_resulting_stake
     );
-    assert_eq!(
+    prop_assert_eq!(
         merged_neuron.cached_neuron_stake_e8s,
         post_merge_account_balance
     );
 
-    assert!(neuron.aging_since_timestamp_seconds < merged_neuron.aging_since_timestamp_seconds);
+    prop_assert!(
+        neuron.aging_since_timestamp_seconds < merged_neuron.aging_since_timestamp_seconds
+    );
+
+    Ok(())
 }
 
 /// A helper to merge the maturity of a neuron
