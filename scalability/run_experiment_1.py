@@ -151,9 +151,8 @@ class Experiment1(workload_experiment.WorkloadExperiment):
 
             else:
                 max_t_median = FLAGS.update_max_t_median if self.use_updates else FLAGS.max_t_median
-                max_failure_rate = FLAGS.max_failure_rate
                 rps_max_iter.append(rps_max)
-                if failure_rate < max_failure_rate and t_median < max_t_median:
+                if failure_rate < FLAGS.max_failure_rate and t_median < max_t_median:
                     if num_success / duration_in_iteration > rps_max:
                         rps_max = num_success / duration_in_iteration
                         rps_max_in = load_total
@@ -183,7 +182,7 @@ class Experiment1(workload_experiment.WorkloadExperiment):
                     "t_min": "{:.2f}".format(t_min),
                     "duration": duration,
                     "target_duration": iter_duration,
-                    "max_failure_rate": max_failure_rate,
+                    "viable_failure_rate": FLAGS.max_failure_rate,
                     "max_t_median": max_t_median,
                 },
                 rps,
