@@ -43,7 +43,7 @@ mod cli;
 /// This module contains the protobuf structs to send
 /// messages between the system component and the adapter.
 mod proto {
-    tonic::include_proto!("btc");
+    tonic::include_proto!("btc_adapter");
 }
 
 pub use adapter::Adapter;
