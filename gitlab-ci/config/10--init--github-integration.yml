@@ -13,4 +13,4 @@ cargo-audit:
     - .rules-cargo-audit-schedule
   stage: init
   script:
-    - $SHELL_WRAPPER nix-shell --run "cd rs; cargo audit"
+    - cd rs; cargo audit
