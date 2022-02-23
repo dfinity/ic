@@ -18,8 +18,8 @@ const PPROF_HOME_HTML: &str = r#"<html>
 <title>/_/pprof/</title>
 <style>
 .profile-name{
-	display:inline-block;
-	width:6rem;
+        display:inline-block;
+        width:6rem;
 }
 </style>
 </head>
