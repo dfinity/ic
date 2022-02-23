@@ -17,7 +17,7 @@ ic-wasm-types = { path = "../../types/wasm_types" }
 ic-utils = { path = "../../utils"}
 ic-sys = { path = "../../sys"}
 ic-system-api = { path = "../../system_api" }
-libc = "0.2.91"
+libc = "0.2.119"
 memory_tracker = { path = "../../memory_tracker" }
 nix = "0.23.0"
 serde_json = "1.0.54"

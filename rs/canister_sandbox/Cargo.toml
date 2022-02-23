@@ -8,7 +8,7 @@ cc = "1.0"
 
 [dependencies]
 ic-canister-sandbox-backend-lib = { path = "backend_lib" }
-libc = "0.2.91"
+libc = "0.2.119"
 
 [dev-dependencies]
 # This makes the dependecies of the binary more consistent
