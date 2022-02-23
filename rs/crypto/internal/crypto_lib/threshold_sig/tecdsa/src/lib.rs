@@ -37,7 +37,6 @@ pub type ThresholdEcdsaResult<T> = std::result::Result<T, ThresholdEcdsaError>;
 
 mod complaints;
 mod dealings;
-mod ecdsa;
 mod fe;
 mod group;
 mod hash2curve;
