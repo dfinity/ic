@@ -3,6 +3,7 @@
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import tempfile
 import time
@@ -16,6 +17,8 @@ from unittest import TestCase
 IC_BINARY_NAME = "ic-p8s-sd"
 # Don't start scraping mainnet
 DEFAULT_ARGUMENTS = "--no-poll"
+# Seconds to wait for the deamon to start up
+DAEMON_STARTUP_TIMEOUT_SECONDS = 270
 
 # the following are the targets addresses of the root subnet of mainnet at
 # registry version 0x6dc1. as we provide --no-poll to the daemon, the registry
@@ -67,8 +70,8 @@ class IcP8sDaemonTest(TestCase):
 
     def setUp(self):
         """Set up tests."""
-        self.scraping_dir = tempfile.TemporaryDirectory()
-        self.daemon = start_daemon(Path(self.scraping_dir.name))
+        self.targets_dir = tempfile.mkdtemp()
+        self.daemon = start_daemon(Path(self.targets_dir))
         retry_with_timeout(lambda: get_request("replica"))
 
     def test_mainnet_targets_expose(self):
@@ -95,9 +98,9 @@ class IcP8sDaemonTest(TestCase):
 
     def tearDown(self):
         """Tear down resources."""
-        self.scraping_dir.cleanup()
         self.daemon.kill()
         self.daemon.wait()
+        shutil.rmtree(self.targets_dir)
 
 
 def in_ci_env() -> bool:
@@ -136,10 +139,12 @@ def retry_with_timeout(f):
     start = time.time()
     while True:
         try:
-            return get_request("replica")
-        except Exception:
-            if time.time() - start > 90:
-                raise
+            res = get_request("replica")
+            print("Succeeded after {} seconds".format(time.time() - start))
+            return res
+        except Exception as e:
+            if time.time() - start > DAEMON_STARTUP_TIMEOUT_SECONDS:
+                raise Exception("Operation timed out") from e
 
 
 def get_request(path: str) -> bytes:
