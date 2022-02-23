@@ -50,8 +50,8 @@ if __name__ == "__main__":
     ElasticSearch.send_max_capacity(
         experiment_name,
         "Update" if FLAGS.use_updates else "Query",
-        "N/A",
-        "N/A",
+        exp.git_hash,
+        exp.git_hash,
         FLAGS.is_ci_job,
         max_subnet_size,
         exp.out_dir,

@@ -3,7 +3,7 @@
 Purpose: Measure memory performance for a canister that has a high memory demand.
 
 <pre>
-Deploy a single memory test canistere
+Deploy a single memory test canister which doubles memory occupation on update calls
 Increase requests per second over time
 Run workload generators on multiple machines with a fixed payload
 Measure and determine per iteration:

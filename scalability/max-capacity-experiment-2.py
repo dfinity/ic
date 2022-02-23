@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
+import os
+
 import experiment
 import gflags
 import misc
 import run_experiment_2
+from elasticsearch import ElasticSearch
 
 FLAGS = gflags.FLAGS
 
@@ -37,6 +40,7 @@ gflags.DEFINE_integer("stop_t_median", 25000, "Maximum median latency before abo
 
 if __name__ == "__main__":
     experiment.parse_command_line_args()
+    experiment_name = os.path.basename(__file__).replace(".py", "")
 
     exp = run_experiment_2.Experiment2()
     exp.start_experiment()
@@ -110,5 +114,16 @@ if __name__ == "__main__":
         )
 
         print(f"🚀  ... maximum capacity so far is {rps_max}")
+
+    ElasticSearch.send_max_capacity(
+        experiment_name,
+        "Update" if FLAGS.use_updates else "Query",
+        exp.git_hash,
+        exp.git_hash,
+        FLAGS.is_ci_job,
+        rps_max,
+        exp.out_dir,
+        exp.t_experiment_start,
+    )
 
     exp.end_experiment()
