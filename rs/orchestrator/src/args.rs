@@ -45,6 +45,10 @@ pub struct OrchestratorArgs {
     /// The path to the version file.
     #[structopt(long, parse(from_os_str))]
     pub(crate) version_file: PathBuf,
+
+    /// Print the replica's current node ID.
+    #[structopt(long)]
+    pub node_id: bool,
 }
 
 impl OrchestratorArgs {

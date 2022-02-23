@@ -6,6 +6,12 @@ use structopt::StructOpt;
 #[tokio::main]
 async fn main() {
     let args = OrchestratorArgs::from_args();
+
+    if args.node_id {
+        Orchestrator::node_id(args);
+        return;
+    }
+
     let mut orchestrator = Orchestrator::new(args)
         .await
         .expect("Failed to start orchestrator");
