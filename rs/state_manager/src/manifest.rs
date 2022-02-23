@@ -11,7 +11,7 @@ use crate::{
 use bit_vec::BitVec;
 use hash::{chunk_hasher, file_hasher, manifest_hasher, ManifestHash};
 use ic_crypto_sha::Sha256;
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{error, fatal, ReplicaLogger};
 use ic_replicated_state::PageIndex;
 use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_sys::{mmap::ScopedMmap, PAGE_SIZE};
@@ -276,14 +276,18 @@ fn build_chunk_table_parallel(
                             Some(mmap) => mmap,
                             None => {
                                 let mmap = Arc::new(
-                                ScopedMmap::from_path(&file_path).expect("failed to open file"),
+                                    ScopedMmap::from_path(&file_path)
+                                        .unwrap_or_else(|e| fatal!(log, "failed to mmap file {}: {}", file_path.display(), e)),
                                 );
                                 cache.insert(chunk_info.file_index, Arc::downgrade(&mmap));
                                 mmap
                             }
                         }
                     } else {
-                        Arc::new(ScopedMmap::from_path(&file_path).expect("failed to open file"))
+                        Arc::new(
+                            ScopedMmap::from_path(&file_path)
+                                .unwrap_or_else(|e| fatal!(log, "failed to mmap file {}: {}", file_path.display(), e))
+                        )
                     };
                     let data = mmap.as_slice();
 

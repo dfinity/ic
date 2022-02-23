@@ -5,7 +5,7 @@ use ic_execution_environment::setup_execution;
 use ic_interfaces::{
     execution_environment::{IngressHistoryReader, QueryHandler},
     messaging::MessageRouting,
-    state_manager::{StateHashError, StateManager, StateReader},
+    state_manager::{CertificationScope, StateHashError, StateManager, StateReader},
 };
 use ic_logger::ReplicaLogger;
 use ic_messaging::MessageRoutingImpl;
@@ -45,9 +45,10 @@ use ic_types::{
     UserId,
 };
 use std::fmt;
+use std::path::Path;
 use std::string::ToString;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tempfile::TempDir;
 
 /// Constructs the initial version of the registry containing a subnet with the
@@ -165,7 +166,11 @@ impl StateMachine {
         time: Time,
         subnet_config: Option<SubnetConfig>,
     ) -> Self {
-        let logger = slog::Logger::root(slog::Discard, slog::o!());
+        use slog::Drain;
+
+        let decorator = slog_term::PlainSyncDecorator::new(slog_term::TestStdoutWriter);
+        let drain = slog_term::FullFormat::new(decorator).build().fuse();
+        let logger = slog::Logger::root(drain, slog::o!());
         let replica_logger: ReplicaLogger = logger.into();
 
         let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(1));
@@ -181,7 +186,10 @@ impl StateMachine {
             make_single_node_registry(&metrics_registry, subnet_id, subnet_type, node_id);
 
         let sm_config = ic_config::state_manager::Config::new(state_dir.path().to_path_buf());
-        let hypervisor_config = ic_config::execution_environment::Config::default();
+        let hypervisor_config = ic_config::execution_environment::Config {
+            canister_sandboxing_flag: ic_config::flag_status::FlagStatus::Disabled,
+            ..Default::default()
+        };
 
         let cycles_account_manager = Arc::new(CyclesAccountManager::new(
             subnet_config.scheduler_config.max_instructions_per_message,
@@ -283,6 +291,7 @@ impl StateMachine {
     /// seconds to complete.
     pub fn await_state_hash(&self) -> CryptoHashOfState {
         let h = self.state_manager.latest_state_height();
+        let started_at = Instant::now();
         let mut tries = 0;
         while tries < 100 {
             match self.state_manager.get_state_hash_at(h) {
@@ -297,7 +306,10 @@ impl StateMachine {
                 }
             }
         }
-        panic!("State hash computation took too long")
+        panic!(
+            "State hash computation took too long ({:?})",
+            started_at.elapsed()
+        )
     }
 
     /// Blocks until the result of the ingress message with the specified ID is
@@ -309,7 +321,8 @@ impl StateMachine {
     /// reasonable amount of time (typically, a few seconds).
     pub fn await_ingress(&self, msg_id: MessageId) -> Result<WasmResult, UserError> {
         let mut tries = 0;
-        while tries < 100 {
+        let started_at = Instant::now();
+        while tries < 6000 {
             match self.ingress_status(&msg_id) {
                 IngressStatus::Completed { result, .. } => return Ok(result),
                 IngressStatus::Failed { error, .. } => return Err(error),
@@ -320,7 +333,105 @@ impl StateMachine {
                 }
             }
         }
-        panic!("didn't get answer to ingress {}", msg_id)
+        panic!(
+            "did not get answer to ingress {} after {:?}",
+            msg_id,
+            started_at.elapsed()
+        )
+    }
+
+    /// Imports a directory containing a canister snapshot into the state machine.
+    ///
+    /// After you import the canister, you can execute methods on it and upgrade it.
+    /// The original directory is not modified.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if loading the canister snapshot fails.
+    pub fn import_canister_state<P: AsRef<Path>>(
+        &self,
+        canister_directory: P,
+        canister_id: CanisterId,
+    ) {
+        let canister_directory = canister_directory.as_ref();
+        assert!(
+            canister_directory.is_dir(),
+            "canister state at {} must be a directory",
+            canister_directory.display()
+        );
+
+        let tip = self
+            .state_manager
+            .state_layout()
+            .tip()
+            .expect("failed to obtain tip");
+        let tip_canister_layout = tip
+            .canister(&canister_id)
+            .expect("failed to obtain writeable canister layout");
+
+        fn copy_as_writeable(src: &Path, dst: &Path) {
+            assert!(
+                src.is_file(),
+                "Canister layout contains only files, but {} is not a file.",
+                src.display()
+            );
+            std::fs::copy(src, dst).expect("failed to copy file");
+            let file = std::fs::File::open(dst).expect("failed to open file");
+            let mut permissions = file
+                .metadata()
+                .expect("failed to get file permission")
+                .permissions();
+            permissions.set_readonly(false);
+            file.set_permissions(permissions)
+                .expect("failed to set file persmission");
+        }
+
+        for entry in std::fs::read_dir(canister_directory).expect("failed to read_dir") {
+            let entry = entry.expect("failed to get directory entry");
+            copy_as_writeable(
+                &entry.path(),
+                &tip_canister_layout.raw_path().join(entry.file_name()),
+            );
+        }
+
+        let canister_state = ic_state_manager::checkpoint::load_canister_state(
+            &tip_canister_layout,
+            &canister_id,
+            ic_types::Height::new(0),
+        )
+        .unwrap_or_else(|e| {
+            panic!(
+                "failed to load canister state from {}: {}",
+                canister_directory.display(),
+                e
+            )
+        });
+
+        let (h, mut state) = self.state_manager.take_tip();
+        state.put_canister_state(canister_state);
+        self.state_manager
+            .commit_and_certify(state, h.increment(), CertificationScope::Full);
+    }
+
+    pub fn install_wasm_in_mode(
+        &self,
+        canister_id: CanisterId,
+        mode: CanisterInstallMode,
+        wasm: Vec<u8>,
+        payload: Vec<u8>,
+    ) {
+        let state = self.state_manager.get_latest_state().take();
+        let sender = state
+            .canister_state(&canister_id)
+            .and_then(|s| s.controllers().iter().next().cloned())
+            .unwrap_or_else(PrincipalId::new_anonymous);
+        self.execute_ingress_as(
+            sender,
+            ic00::IC_00,
+            Method::InstallCode,
+            InstallCodeArgs::new(mode, canister_id, wasm, payload, None, None, None).encode(),
+        )
+        .expect("failed to install canister code");
     }
 
     /// Compiles specified WAT to Wasm and installs it for the canister using
@@ -332,21 +443,12 @@ impl StateMachine {
         wat: &str,
         payload: Vec<u8>,
     ) {
-        self.execute_ingress(
-            ic00::IC_00,
-            Method::InstallCode,
-            InstallCodeArgs::new(
-                mode,
-                canister_id,
-                wabt::wat2wasm(wat).expect("invalid WAT"),
-                payload,
-                None,
-                None,
-                None,
-            )
-            .encode(),
+        self.install_wasm_in_mode(
+            canister_id,
+            mode,
+            wabt::wat2wasm(wat).expect("invalid WAT"),
+            payload,
         )
-        .expect("failed to install canister code");
     }
 
     /// Creates a new canister and installs its code specified by WAT string.
@@ -426,14 +528,24 @@ impl StateMachine {
     ///
     /// This function panics if the status was not ready in a reasonable amount
     /// of time (typically, a few seconds).
+    pub fn execute_ingress_as(
+        &self,
+        sender: PrincipalId,
+        canister_id: CanisterId,
+        method: impl ToString,
+        payload: Vec<u8>,
+    ) -> Result<WasmResult, UserError> {
+        let msg_id = self.send_ingress(sender, canister_id, method, payload);
+        self.await_ingress(msg_id)
+    }
+
     pub fn execute_ingress(
         &self,
         canister_id: CanisterId,
         method: impl ToString,
         payload: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
-        let msg_id = self.send_ingress(canister_id, method, payload);
-        self.await_ingress(msg_id)
+        self.execute_ingress_as(PrincipalId::new_anonymous(), canister_id, method, payload)
     }
 
     /// Sends an ingress message to the canister with the specified ID.
@@ -442,12 +554,14 @@ impl StateMachine {
     /// that can be awaited later with [await_ingress].
     pub fn send_ingress(
         &self,
+        sender: PrincipalId,
         canister_id: CanisterId,
         method: impl ToString,
         payload: Vec<u8>,
     ) -> MessageId {
         self.nonce.set(self.nonce.get() + 1);
         let msg = SignedIngressBuilder::new()
+            .sender(UserId::from(sender))
             .canister_id(canister_id)
             .method_name(method.to_string())
             .method_payload(payload)

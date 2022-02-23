@@ -7,7 +7,8 @@ use ic_replicated_state::{
     ExecutionState, NumWasmPages, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_state_layout::{
-    CanisterStateBits, CheckpointLayout, ExecutionStateBits, ReadPolicy, RwPolicy, StateLayout,
+    CanisterLayout, CanisterStateBits, CheckpointLayout, ExecutionStateBits, ReadPolicy, RwPolicy,
+    StateLayout,
 };
 use ic_types::Height;
 use ic_utils::thread::parallel_map;
@@ -217,17 +218,17 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
     Ok(state)
 }
 
-fn load_canister_state_from_checkpoint<P: ReadPolicy>(
-    checkpoint_layout: &CheckpointLayout<P>,
+pub fn load_canister_state<P: ReadPolicy>(
+    canister_layout: &CanisterLayout<P>,
     canister_id: &CanisterId,
+    height: Height,
 ) -> Result<CanisterState, CheckpointError> {
     let into_checkpoint_error =
         |field: String, err: ic_protobuf::proxy::ProxyDecodeError| CheckpointError::ProtoError {
-            path: checkpoint_layout.raw_path().into(),
+            path: canister_layout.raw_path(),
             field,
             proto_err: err.to_string(),
         };
-    let canister_layout = checkpoint_layout.canister(canister_id)?;
     let canister_state_bits: CanisterStateBits =
         CanisterStateBits::try_from(canister_layout.canister().deserialize()?).map_err(|err| {
             into_checkpoint_error(
@@ -235,22 +236,17 @@ fn load_canister_state_from_checkpoint<P: ReadPolicy>(
                 err,
             )
         })?;
+
     let session_nonce = None;
 
     let execution_state = match canister_state_bits.execution_state_bits {
         Some(execution_state_bits) => {
             let wasm_memory = Memory::new(
-                PageMap::open(
-                    &canister_layout.vmemory_0(),
-                    Some(checkpoint_layout.height()),
-                )?,
+                PageMap::open(&canister_layout.vmemory_0(), Some(height))?,
                 execution_state_bits.heap_size,
             );
             let stable_memory = Memory::new(
-                PageMap::open(
-                    &canister_layout.stable_memory_blob(),
-                    Some(checkpoint_layout.height()),
-                )?,
+                PageMap::open(&canister_layout.stable_memory_blob(), Some(height))?,
                 canister_state_bits.stable_memory_size,
             );
             let wasm_binary = WasmBinary::new(canister_layout.wasm().deserialize()?);
@@ -308,6 +304,14 @@ fn load_canister_state_from_checkpoint<P: ReadPolicy>(
             heap_delta_debit: canister_state_bits.heap_delta_debit,
         },
     })
+}
+
+fn load_canister_state_from_checkpoint<P: ReadPolicy>(
+    checkpoint_layout: &CheckpointLayout<P>,
+    canister_id: &CanisterId,
+) -> Result<CanisterState, CheckpointError> {
+    let canister_layout = checkpoint_layout.canister(canister_id)?;
+    load_canister_state::<P>(&canister_layout, canister_id, checkpoint_layout.height())
 }
 
 #[cfg(test)]

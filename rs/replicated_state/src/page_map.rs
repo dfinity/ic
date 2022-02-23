@@ -178,8 +178,16 @@ impl std::error::Error for PersistenceError {
 impl std::fmt::Display for PersistenceError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PersistenceError::FileSystemError { path, context, .. } => {
-                write!(f, "File system error for file {}: {}", path, context)
+            PersistenceError::FileSystemError {
+                path,
+                context,
+                internal_error,
+            } => {
+                write!(
+                    f,
+                    "File system error for file {}: {} {}",
+                    path, context, internal_error
+                )
             }
             PersistenceError::MmapError { path, len, .. } => {
                 write!(f, "Failed to memory map file {} of length {}", path, len)
