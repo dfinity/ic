@@ -270,6 +270,14 @@ impl Orchestrator {
         }
     }
 
+    /// Print the replica's current node ID.
+    pub fn node_id(args: OrchestratorArgs) {
+        let config = args.get_ic_config();
+        let (_node_pks, node_id) = get_node_keys_or_generate_if_missing(&config.crypto.crypto_root);
+
+        println!("{}", node_id);
+    }
+
     /// Shuts down the orchestrator: stops async tasks and the replica process
     pub async fn shutdown(self) {
         info!(self.logger, "Shutting down orchestrator...");
