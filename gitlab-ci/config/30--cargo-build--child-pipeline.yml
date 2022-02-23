@@ -4,7 +4,7 @@ cargo-clippy-linux:
     BUILD_COMMAND: "$CI_PROJECT_DIR/gitlab-ci/src/rust_lint/lint.sh"
 
 cargo-clippy-darwin:
-  extends: .cargo-build-macos
+  extends: .cargo-build-macos-mr-pipeline
   variables:
     BUILD_COMMAND: "$CI_PROJECT_DIR/gitlab-ci/src/rust_lint/lint.sh"
 
