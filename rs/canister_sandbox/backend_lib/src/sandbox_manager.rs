@@ -40,6 +40,7 @@ use ic_replicated_state::page_map::PageMapSerialization;
 use ic_replicated_state::{EmbedderCache, Memory, PageMap};
 use ic_types::CanisterId;
 use ic_wasm_types::BinaryEncodedWasm;
+use libc::malloc_trim;
 
 struct ExecutionInstantiateError;
 
@@ -288,6 +289,11 @@ impl SandboxManager {
             wasm_id,
         );
         let wasm = CanisterWasm::compile(&self.config, &self.embedder, wasm_src)?;
+        // Return as much memory as possible because compiling seems to use up
+        // some extra memory that can be returned.
+        //
+        // SAFETY: 0 is always a valid argument to `malloc_trim`.
+        unsafe { malloc_trim(0) };
         guard.canister_wasms.insert(wasm_id, Arc::new(wasm));
         Ok(())
     }
