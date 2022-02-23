@@ -112,6 +112,12 @@ class Experiment1(workload_experiment.WorkloadExperiment):
 
             iter_duration = FLAGS.iter_duration
             t_start = int(time.time())
+            evaluated_summaries = super().run_experiment(
+                {
+                    "load_total": load_total,
+                    "duration": iter_duration,
+                }
+            )
             (
                 failure_rate,
                 t_median_list,
@@ -122,12 +128,7 @@ class Experiment1(workload_experiment.WorkloadExperiment):
                 total_requests,
                 num_success,
                 num_failure,
-            ) = super().run_experiment(
-                {
-                    "load_total": load_total,
-                    "duration": iter_duration,
-                }
-            )
+            ) = evaluated_summaries.convert_tuple()
             duration_in_iteration = int(time.time()) - t_start
 
             from statistics import mean

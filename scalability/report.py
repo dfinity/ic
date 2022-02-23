@@ -20,6 +20,49 @@ def convert_duration(data: dict):
     return times
 
 
+class EvaluatedSummaries:
+    """Wrapper for storing results from evaluate_summaries."""
+
+    def __init__(
+        self,
+        failure_rate,
+        failure_rates,
+        t_median,
+        t_average,
+        t_max,
+        t_min,
+        percentiles,
+        total_number,
+        num_success,
+        num_fail,
+    ):
+        """Store evaluated summary data."""
+        self.failure_rate = failure_rate
+        self.failure_rates = failure_rates
+        self.t_median = t_median
+        self.t_average = t_average
+        self.t_max = t_max
+        self.t_min = t_min
+        self.percentiles = percentiles
+        self.total_number = total_number
+        self.num_success = num_success
+        self.num_fail = num_fail
+
+    def convert_tuple(self):
+        """Mostly used for backward compatibility."""
+        return (
+            self.failure_rate,
+            self.t_median,
+            self.t_average,
+            self.t_max,
+            self.t_min,
+            self.percentiles,
+            self.total_number,
+            self.num_success,
+            self.num_fail,
+        )
+
+
 def evaluate_summaries(summaries):
     """Evaluate a list of workload generator summary files."""
     result = {}
@@ -28,6 +71,7 @@ def evaluate_summaries(summaries):
     t_min = []
     t_average = []
     t_percentile = []
+    failure_rates = []
 
     num_machines = 0
     for summary in summaries:
@@ -40,11 +84,19 @@ def evaluate_summaries(summaries):
                 # Print content of file
                 # print(json.dumps(data, indent=2, sort_keys=True))
 
+                num_succ = 0
+                num_fail = 0
+
                 for (c, number) in data[0]["status_counts"].items():
                     code = int(c)
                     if code not in result:
                         result[code] = 0
                     result[code] += number
+
+                    if is_success(code):
+                        num_succ += number
+                    else:
+                        num_fail += number
 
                 t_percentile.append(convert_duration(data[0]["percentiles"]))
 
@@ -52,6 +104,7 @@ def evaluate_summaries(summaries):
                 t_max.append(convert_time_from_summary(data[0]["max"]))
                 t_min.append(convert_time_from_summary(data[0]["min"]))
                 t_average.append(convert_time_from_summary(data[0]["average"]))
+                failure_rates.append(num_fail / (num_succ + num_fail) if (num_succ + num_fail) > 0 else -1)
         except Exception as e:
             print("⚠️  Failed to read one summary file from workload gnerators, continuing ..")
             print(e)
@@ -66,8 +119,9 @@ def evaluate_summaries(summaries):
     percentiles = [mean_or_minus_one([x[p] for x in t_percentile]) for p in range(0, 100)]
 
     failure_rate = success[False] / (success[True] + success[False])
-    return (
+    return EvaluatedSummaries(
         failure_rate,
+        failure_rates,
         t_median,
         t_average,
         t_max,
