@@ -27,16 +27,26 @@ fn main() -> Result<()> {
     let log = make_logger();
     let metrics_registry = MetricsRegistry::new();
 
-    if !cli_args.no_mercury {
-        let mercury_dir = cli_args.ic_scraping_dir.join("mercury");
+    info!(log, "Starting ic-p8s-sd ...");
+    let mercury_dir = cli_args.targets_dir.join("mercury");
+    // Unless the user does *not* want to target mercury and the respective
+    // directory does not already exist, create the target directory and store
+    // the mercury registry in there ...
+    if !cli_args.no_mercury && !mercury_dir.is_dir() {
+        info!(
+            log,
+            "Writing mercury registry up to version 0x6d1c to {:?} ", mercury_dir
+        );
         let _store = create_local_store_from_changelog(mercury_dir, get_mainnet_delta_6d_c1());
     }
 
+    info!(log, "Starting IcServiceDiscovery ...");
     let ic_discovery = Arc::new(IcServiceDiscoveryImpl::new(
-        cli_args.ic_scraping_dir,
+        cli_args.targets_dir,
         cli_args.registry_query_timeout,
     )?);
 
+    info!(log, "Starting REST API ...");
     let http_handle = rt.spawn(start_http_server(
         log.clone(),
         ic_discovery.clone(),
@@ -157,7 +167,7 @@ initialized with a hardcoded initial registry.
 
 "#
     )]
-    ic_scraping_dir: PathBuf,
+    targets_dir: PathBuf,
 
     #[structopt(
         long = "no-mercury",
@@ -223,12 +233,12 @@ The listen address on which metrics for this service should be exposed.
 }
 impl CliArgs {
     fn validate(self) -> Result<Self> {
-        if !self.ic_scraping_dir.exists() {
-            bail!("Path does not exist: {:?}", self.ic_scraping_dir);
+        if !self.targets_dir.exists() {
+            bail!("Path does not exist: {:?}", self.targets_dir);
         }
 
-        if !self.ic_scraping_dir.is_dir() {
-            bail!("Not a directory: {:?}", self.ic_scraping_dir);
+        if !self.targets_dir.is_dir() {
+            bail!("Not a directory: {:?}", self.targets_dir);
         }
 
         Ok(self)
