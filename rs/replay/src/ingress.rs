@@ -219,7 +219,7 @@ pub fn cmd_add_ledger_account(
 /// the state hash.
 pub fn cmd_set_recovery_cup(
     agent: &Agent,
-    player: &crate::Player,
+    player: &crate::player::Player,
     cmd: &SetRecoveryCupCmd,
     context_time: Time,
 ) -> Result<SignedIngress, String> {
@@ -265,7 +265,7 @@ pub fn cmd_set_recovery_cup(
 /// potentially updates the subnet record with this replica version.
 pub fn cmd_add_and_bless_replica_version(
     agent: &Agent,
-    player: &crate::Player,
+    player: &crate::player::Player,
     cmd: &AddAndBlessReplicaVersionCmd,
     context_time: Time,
 ) -> Result<Vec<SignedIngress>, String> {
@@ -368,7 +368,7 @@ pub fn cmd_add_registry_content(
 /// Creates an ingress for removing of all nodes from a subnet.
 pub fn cmd_remove_subnet(
     agent: &Agent,
-    player: &crate::Player,
+    player: &crate::player::Player,
     context_time: Time,
 ) -> Result<Option<SignedIngress>, String> {
     let mut subnet_record = player.get_subnet_record(context_time)?;
@@ -441,7 +441,7 @@ pub fn update_catch_up_package_contents(
 /// Bless a new replica version by mutating the registry canister.
 pub fn bless_replica_version(
     agent: &Agent,
-    player: &crate::Player,
+    player: &crate::player::Player,
     replica_version_id: String,
     context_time: Time,
 ) -> Result<SignedIngress, String> {

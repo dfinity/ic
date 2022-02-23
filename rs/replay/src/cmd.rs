@@ -17,7 +17,7 @@ impl std::str::FromStr for ClapSubnetId {
 
 #[derive(Clap)]
 #[clap(version = "1.0")]
-pub struct CliArgs {
+pub struct ReplayToolArgs {
     /// Path to Replica configuration file.
     pub config: PathBuf,
 
