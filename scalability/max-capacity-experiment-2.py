@@ -71,13 +71,14 @@ if __name__ == "__main__":
         rps.append(load_total)
         print(f"🚀 Testing with load: {load_total} and updates={exp.use_updates}")
 
-        failure_rate, t_median_list, _, _, _, _, _, num_succ, _ = exp.run_experiment(
+        evaluated_summaries = exp.run_experiment(
             {
                 "load_total": load_total,
                 "payload_size": FLAGS.payload_size,
                 "duration": FLAGS.iter_duration,
             }
         )
+        failure_rate, t_median_list, _, _, _, _, _, num_succ, _ = evaluated_summaries.convert_tuple()
 
         t_median = max(t_median_list)
         num_succ_per_iteration.append(num_succ)

@@ -112,6 +112,12 @@ class GossipExperiment(workload_experiment.WorkloadExperiment):
             print(f"🚀 Testing with update load: {load} at the same time.")
 
             t_start = int(time.time())
+            evaluated_summaries = super().run_experiment(
+                {
+                    "load_total": load,
+                    "duration": FLAGS.iter_duration,
+                }
+            )
             (
                 failure_rate,
                 t_median_list,
@@ -122,12 +128,7 @@ class GossipExperiment(workload_experiment.WorkloadExperiment):
                 total_requests,
                 num_success,
                 num_failure,
-            ) = super().run_experiment(
-                {
-                    "load_total": load,
-                    "duration": FLAGS.iter_duration,
-                }
-            )
+            ) = evaluated_summaries.convert_tuple()
 
             t_median = max(t_median_list)
             t_average = mean(t_average_list)

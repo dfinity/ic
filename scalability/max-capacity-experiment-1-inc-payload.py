@@ -62,13 +62,15 @@ if __name__ == "__main__":
         print(f"🚀 Testing with payload_size: {curr_payload_size}")
 
         t_start = int(time.time())
-        failure_rate, t_median_list, _, _, _, _, _, num_succ, _ = exp.run_experiment(
+
+        evaluated_summaries = exp.run_experiment(
             {
                 "load_total": FLAGS.rps,
                 "duration": FLAGS.iter_duration,
                 "arguments": ["--payload-size", str(curr_payload_size)],
             }
         )
+        failure_rate, t_median_list, _, _, _, _, _, num_succ, _ = evaluated_summaries.convert_tuple()
         t_median = max(t_median_list)
 
         num_succ_per_iteration.append(num_succ)

@@ -77,9 +77,9 @@ class Experiment2(workload_experiment.WorkloadExperiment):
             duration=duration,
         )
         self.last_duration = int(time.time()) - t_start
-        failure_rate, t_median_list, _, _, _, _, _, _, _ = r
-        t_median = max(t_median_list)
-        print(f"🚀  ... failure rate for {load} rps was {failure_rate} median latency is {t_median}")
+
+        t_median = max(r.t_median)
+        print(f"🚀  ... failure rate for {load} rps was {r.failure_rate} median latency is {t_median}")
         return r
 
 

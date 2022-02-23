@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import traceback
+from collections import Counter
 
 import ansible
 import pybars
@@ -71,6 +72,8 @@ def generate_report(base, githash, timestamp):
     wg_http_latency = []
     wg_http_latency_99 = []
     wg_failure_rate = []
+    wg_failure_rates = []
+    wg_summary_files = []
 
     compiler = pybars.Compiler()
     template = compiler.compile(source)
@@ -86,6 +89,7 @@ def generate_report(base, githash, timestamp):
                 files = [os.path.join(path, f) for f in os.listdir(path) if f.startswith("summary_machine_")]
                 print("Files: ", files)
                 if len(files) > 0:
+                    evaluated_summaries = report.evaluate_summaries(files)
                     (
                         failure_rate,
                         t_median,
@@ -96,7 +100,8 @@ def generate_report(base, githash, timestamp):
                         total_requests,
                         _,
                         _,
-                    ) = report.evaluate_summaries(files)
+                    ) = evaluated_summaries.convert_tuple()
+                    wg_summary_files.append(files)
 
                     from statistics import mean
 
@@ -124,6 +129,7 @@ def generate_report(base, githash, timestamp):
                     wg_http_latency.append(t_median)
                     wg_http_latency_99.append(t_percentile[99])
                     wg_failure_rate.append(failure_rate * 100)
+                    wg_failure_rates.append(evaluated_summaries.failure_rates)
 
                 # Search for flamegraph
                 flamegraph = [os.path.join(str(i), f) for f in os.listdir(path) if f.startswith("flamegraph_")]
@@ -252,21 +258,57 @@ def generate_report(base, githash, timestamp):
         plots = [(http_request_duration, "http duration")]
         data.update(add_plot("http-latency", exp["xtitle"], "latency [s]", exp["xlabels"], plots))
 
-        plots = [(wg_failure_rate, "failure rate")]
-        data.update(add_plot("wg-failure-rate", exp["xtitle"], "failure rate [%]", exp["xlabels"], plots))
+        wg_summaries = [
+            [fname.split("/")[-1].replace("summary_machine_", "") for fname in fnames] for fnames in wg_summary_files
+        ]
 
         plots = []
-        if len(wg_http_latency) > 0:
-            num_results = len(wg_http_latency[0])
-            for workload_generator_id in range(num_results):
+        if len(wg_failure_rates) > 0:
+
+            num_workload_generators = len(wg_failure_rates[0])
+            for workload_generator_id in range(num_workload_generators):
+                workload_generators_idx_in_iterations = [host[workload_generator_id] for host in wg_summaries]
+                counts = Counter(workload_generators_idx_in_iterations)
+                # Each of those should have only one entry
+                assert len(counts) == 1
+
+                # With that, we can then also determine the label:
+                workload_generator_label = list(counts.elements())[0]
+
                 plots.append(
                     (
-                        [x[workload_generator_id] for x in wg_http_latency],
-                        f"median workload gen #{workload_generator_id}",
+                        [x[workload_generator_id] * 100.0 for x in wg_failure_rates],
+                        f"{workload_generator_label}",
                     )
                 )
 
-        plots.append((wg_http_latency_99, "mean 99th percentile"))
+        plots.append((wg_failure_rate, "aggregated failure rate"))
+        data.update(add_plot("wg-failure-rate", exp["xtitle"], "failure rate [%]", exp["xlabels"], plots))
+
+        plots = []
+
+        # We should absolutely make sure that the order of wg generator results is the SAME in each
+        # iteration, otherwise we will get really strange results in the plots
+        if len(wg_http_latency) > 0:
+
+            num_workload_generators = len(wg_http_latency[0])
+            for workload_generator_id in range(num_workload_generators):
+                workload_generators_idx_in_iterations = [host[workload_generator_id] for host in wg_summaries]
+                counts = Counter(workload_generators_idx_in_iterations)
+                # Each of those should have only one entry
+                assert len(counts) == 1
+
+                # With that, we can then also determine the label:
+                workload_generator_label = list(counts.elements())[0]
+
+                plots.append(
+                    (
+                        [x[workload_generator_id] for x in wg_http_latency],
+                        f"median {workload_generator_label}",
+                    )
+                )
+
+        plots.append((wg_http_latency_99, "mean 99th percentile of all"))
         data.update(add_plot("wg-http-latency", exp["xtitle"], "latency [ms]", exp["xlabels"], plots))
 
         dirname = f"{githash}/{timestamp}"
