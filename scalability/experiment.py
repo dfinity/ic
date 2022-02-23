@@ -26,6 +26,7 @@ gflags.DEFINE_boolean("skip_generate_report", False, "Skip generating report aft
 gflags.DEFINE_string("experiment_dir", "./", "The directory for output of current experiment run.")
 gflags.DEFINE_string("canister_id", "", "Use given canister ID instead of installing a new canister")
 gflags.DEFINE_string("artifacts_path", "../artifacts/release", "Path to the artifacts directory")
+gflags.DEFINE_string("workload_generator_path", "", "Path to the workload generator to be used")
 gflags.DEFINE_boolean("no_instrument", False, "Do not instrument target machine")
 gflags.DEFINE_string("top_level_out_dir", "", "Set the top-level output directory. Default is the git commit id.")
 gflags.DEFINE_string(
@@ -151,7 +152,14 @@ class Experiment:
 
         print(f"Artifacts hash is {self.artifacts_hash}")
         print(f"Found artifacts at {self.artifacts_path}")
-        self.workload_generator_path = os.path.join(self.artifacts_path, "ic-workload-generator")
+        self.set_workload_generator_path()
+
+    def set_workload_generator_path(self):
+        """Set path to the workload generator that should be used for this experiment run."""
+        if len(FLAGS.workload_generator_path) > 0:
+            self.workload_generator_path = FLAGS.workload_generator_path
+        else:
+            self.workload_generator_path = os.path.join(self.artifacts_path, "ic-workload-generator")
         print(f"Using workload generator at {self.workload_generator_path}")
 
     def get_machine_to_instrument(self) -> str:

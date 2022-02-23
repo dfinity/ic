@@ -100,6 +100,9 @@ class WorkloadExperiment(experiment.Experiment):
 
     def check_workload_generator_installed(self, machines):
         """Check if the workload generator is already installed on the given machines."""
+        if len(FLAGS.workload_generator_path) > 0:
+            print("Reinstalling workload generators since using locally built workload generator")
+            return False
         r = ssh.run_ssh_in_parallel(machines, "stat ./ic-workload-generator")
         return r == [0 for _ in machines]
 

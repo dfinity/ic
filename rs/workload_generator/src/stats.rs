@@ -1,7 +1,11 @@
 use crate::{chart::Chart, collector::RequestInfo, content_length::ContentLength, ChartSize};
+use std::time::Instant;
 use std::{cmp, collections::HashMap, fmt, time::Duration};
 
 use serde::Serialize;
+
+// Interval in seconds of rate end times that are grouped in the same bucket.
+const RATE_BUCKET_SIZE: usize = 5;
 
 trait ToMilliseconds {
     fn to_ms(&self) -> f64;
@@ -35,7 +39,8 @@ impl From<MS> for Duration {
 #[derive(Debug)]
 pub struct Fact {
     status: u16,
-    duration: Duration,
+    time_request_start: Instant,
+    time_request_end: Instant,
     content_length: ContentLength,
     success: bool,
 }
@@ -44,7 +49,8 @@ impl Fact {
     pub fn record(
         content_length: ContentLength,
         status: u16,
-        duration: Duration,
+        time_request_start: Instant,
+        time_request_end: Instant,
         // For context: some status codes were considered success others not. If
         // we had a single failure the binary will return a non-zero code.
         // Returning a non-zero code is used to determine if the binary crashed
@@ -54,7 +60,8 @@ impl Fact {
     ) -> Fact {
         Fact {
             status,
-            duration,
+            time_request_start,
+            time_request_end,
             content_length,
             success,
         }
@@ -75,7 +82,7 @@ impl DurationStats {
         let mut sorted: Vec<Duration> = facts
             .iter()
             .filter(|f| f.success)
-            .map(|f| f.duration)
+            .map(|f| f.time_request_end - f.time_request_start)
             .collect();
         sorted.sort();
         Self { sorted }
@@ -172,6 +179,7 @@ pub struct Summary {
     content_length: ContentLength,
     percentiles: Vec<Duration>,
     latency_histogram: Vec<u32>,
+    succ_rate_histogram: HashMap<usize, u32>,
     status_counts: HashMap<u16, u32>,
     #[serde(skip_serializing)]
     chart_size: ChartSize,
@@ -202,6 +210,7 @@ impl Summary {
             count,
             content_length,
             status_counts,
+            succ_rate_histogram: Summary::get_succ_rate_histogram(facts),
             ..Summary::from_durations(&DurationStats::from_facts(facts))
         }
     }
@@ -214,6 +223,48 @@ impl Summary {
     pub fn with_chart_size(mut self, size: ChartSize) -> Self {
         self.chart_size = size;
         self
+    }
+
+    fn get_succ_rate_histogram(facts: &[Fact]) -> HashMap<usize, u32> {
+        let end_times = facts.iter().map(|f| (f.time_request_end, f.is_succ()));
+
+        let start_times_min = facts.iter().map(|f| f.time_request_start).min();
+        let end_times_max = facts.iter().map(|f| f.time_request_end).max();
+
+        let mut buckets = HashMap::new();
+
+        if let Some(start_time_min) = start_times_min {
+            if let Some(end_time_max) = end_times_max {
+                let total_duration = (end_time_max - start_time_min).as_millis() as f64 / 1000.;
+                let num_buckets = (total_duration / RATE_BUCKET_SIZE as f64).ceil() as usize;
+
+                for i in 0..num_buckets {
+                    buckets.insert(i * RATE_BUCKET_SIZE, 0);
+                }
+
+                for (end_time, success) in end_times {
+                    if success {
+                        let end_time_secs_since_min =
+                            (end_time - start_time_min).as_millis() as f64 / 1000.;
+                        assert!(end_time_secs_since_min <= total_duration);
+
+                        let bucket_idx =
+                            (end_time_secs_since_min / RATE_BUCKET_SIZE as f64).floor() as usize;
+                        assert!(bucket_idx < num_buckets);
+
+                        let mut_entry = buckets
+                            .get_mut(&(bucket_idx * RATE_BUCKET_SIZE))
+                            .expect("Buckets should have been initialized to 0");
+
+                        *mut_entry += 1;
+                    }
+                }
+
+                return buckets;
+            }
+        }
+
+        buckets
     }
 
     fn from_durations(stats: &DurationStats) -> Summary {
@@ -248,6 +299,7 @@ impl Summary {
             content_length: ContentLength::zero(),
             percentiles: vec![Duration::new(0, 0); 100],
             latency_histogram: vec![0; 0],
+            succ_rate_histogram: HashMap::new(),
             status_counts: HashMap::new(),
             chart_size: ChartSize::Medium,
         }
