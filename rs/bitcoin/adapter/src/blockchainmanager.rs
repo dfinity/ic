@@ -12,10 +12,9 @@ use bitcoin::{
     },
     Block, BlockHash, BlockHeader,
 };
-use rand::prelude::*;
 use slog::Logger;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, VecDeque},
     net::SocketAddr,
     time::{Duration, SystemTime},
 };
@@ -42,8 +41,15 @@ const IMMEDIATE_SUCCESSORS_DEPTH: u32 = 10;
 /// How many blocks the BlockManager should look ahead when pre-fetching blocks.
 const FUTURE_SUCCESSORS_DEPTH: u32 = 20;
 
+const ONE_MB: usize = 1_024 * 1_024;
+
 /// Max size of the `GetSuccessorsResponse` message (2 MiB).
-const MAX_GET_SUCCESSORS_RESPONSE_BLOCKS_SIZE_BYTES: usize = 2 * 1024 * 1024;
+const MAX_GET_SUCCESSORS_RESPONSE_BLOCKS_SIZE_BYTES: usize = 2 * ONE_MB;
+
+/// The limit at which we should stop making additional requests for new blocks as the block cache
+/// becomes too large. Inflight `getdata` messages will remain active, but new `getdata` messages will
+/// not be created.
+const BLOCK_CACHE_THRESHOLD_BYTES: usize = 10 * ONE_MB;
 
 /// Block locators. Consists of starting hashes and a stop hash.
 type Locators = (Vec<BlockHash>, BlockHash);
@@ -134,9 +140,6 @@ pub struct BlockchainManager {
     /// This field stores the map of which bitcoin nodes sent which "inv" messages.
     peer_info: HashMap<SocketAddr, PeerInfo>,
 
-    /// Random number generator used for sampling a random peer to send "getdata" request.
-    rng: StdRng,
-
     /// This HashMap stores the information related to each getdata request
     /// sent by the BlockChainManager. An entry is removed from this hashmap if
     /// (1) The corresponding "Block" response is received or
@@ -144,8 +147,15 @@ pub struct BlockchainManager {
     /// (3) If the peer is disconnected.
     getdata_request_info: HashMap<BlockHash, GetDataRequestInfo>,
 
-    /// This HashSet stores the list of block hashes that has yet to be synced by the BlockChainManager.
-    blocks_to_be_synced: HashSet<BlockHash>,
+    /// This queue stores the set of block hashes belonging to blocks that have yet to be synced by the BlockChainManager
+    /// and stored into the block cache.
+    ///
+    /// A block hash is added when the `GetSuccessors` request is processed. If the block hash cannot be
+    /// found in the `getdata_request_info` field or in the `blockchain`'s block cache, the block hash
+    /// is added to the queue.
+    ///
+    /// A block hash is removed when it is determined a peer can receive another `getdata` message.
+    block_sync_queue: VecDeque<BlockHash>,
 
     /// This vector stores the list of messages that are to be sent to the Bitcoin network.
     outgoing_command_queue: Vec<Command>,
@@ -161,15 +171,12 @@ impl BlockchainManager {
         let blockchain = BlockchainState::new(config);
         let peer_info = HashMap::new();
         let getdata_request_info = HashMap::new();
-        let rng = StdRng::from_entropy();
-        let inventory_to_be_synced = HashSet::new();
         let outgoing_command_queue = Vec::new();
         BlockchainManager {
             blockchain,
             peer_info,
-            rng,
             getdata_request_info,
-            blocks_to_be_synced: inventory_to_be_synced,
+            block_sync_queue: VecDeque::new(),
             outgoing_command_queue,
             logger,
         }
@@ -180,7 +187,7 @@ impl BlockchainManager {
     /// the `getdata` request info.
     pub fn make_idle(&mut self) {
         self.outgoing_command_queue.clear();
-        self.blocks_to_be_synced.clear();
+        self.block_sync_queue.clear();
         self.getdata_request_info.clear();
         self.peer_info.clear();
         self.blockchain.clear_blocks();
@@ -456,20 +463,27 @@ impl BlockchainManager {
     }
 
     fn sync_blocks(&mut self) {
-        if self.blocks_to_be_synced.is_empty() {
+        if self.block_sync_queue.is_empty() {
             return;
         }
 
-        slog::info!(
+        println!(
+            "Cache Size: {}, Max Size: {}",
+            self.blockchain.get_block_cache_size(),
+            BLOCK_CACHE_THRESHOLD_BYTES
+        );
+        if self.blockchain.get_block_cache_size() >= BLOCK_CACHE_THRESHOLD_BYTES {
+            return;
+        }
+
+        slog::debug!(
             self.logger,
-            "Syning blocks. Blocks to be synced : {:?}",
-            self.blocks_to_be_synced
+            "Syncing blocks. Blocks to be synced : {:?}",
+            self.block_sync_queue.len()
         );
 
         // Removing expired getdata requests from `self.getdata_request_info`
         self.filter_expired_getdata_requests();
-
-        slog::info!(self.logger, "Syncing blocks. Inventory to be synced after filtering out the past getdata requests : {:?}", self.blocks_to_be_synced);
 
         // Count the number of requests per peer.
         let mut requests_per_peer: HashMap<SocketAddr, u32> =
@@ -494,11 +508,15 @@ impl BlockchainManager {
                 INV_PER_GET_DATA_REQUEST.saturating_sub(*requests_sent_to_peer);
 
             // Randomly sample some inventory to be requested from the peer.
-            let selected_inventory = self
-                .blocks_to_be_synced
-                .iter()
-                .cloned()
-                .choose_multiple(&mut self.rng, num_requests_to_be_sent as usize);
+            let mut selected_inventory = vec![];
+            for _ in 0..num_requests_to_be_sent {
+                match self.block_sync_queue.pop_front() {
+                    Some(hash) => {
+                        selected_inventory.push(hash);
+                    }
+                    None => break,
+                }
+            }
 
             if selected_inventory.is_empty() {
                 break;
@@ -532,9 +550,6 @@ impl BlockchainManager {
                         _on_timeout: OnTimeout::Ignore,
                     },
                 );
-
-                // Remove the inventory that is going to be sent.
-                self.blocks_to_be_synced.remove(&inv);
             }
         }
     }
@@ -595,10 +610,9 @@ impl BlockchainManager {
         }
 
         self.sync_blocks();
-        for command in self.outgoing_command_queue.iter() {
-            channel.send(command.clone()).ok();
+        for command in self.outgoing_command_queue.drain(..) {
+            channel.send(command).ok();
         }
-        self.outgoing_command_queue = vec![];
     }
 
     // TODO: ER-1943: Implement "smart adapters" which prefer to return blocks in the longest chain.
@@ -686,7 +700,7 @@ impl HandleClientRequest for BlockchainManager {
             if self.blockchain.get_block(&block_hash).is_none()
                 && !active_sent_hashes.contains(&block_hash)
             {
-                self.blocks_to_be_synced.insert(block_hash);
+                self.block_sync_queue.push_back(block_hash);
             }
         }
 
@@ -694,7 +708,7 @@ impl HandleClientRequest for BlockchainManager {
             self.logger,
             "Number of blocks cached: {}, Number of uncached successor blocks : {}",
             successor_blocks.len(),
-            self.blocks_to_be_synced.len()
+            self.block_sync_queue.len()
         );
 
         // Send at least 1 block if available.
@@ -965,11 +979,11 @@ pub mod test {
         assert_eq!(added_headers.len(), headers.len());
         assert!(maybe_err.is_none());
         blockchain_manager
-            .blocks_to_be_synced
-            .insert(block_1.block_hash());
+            .block_sync_queue
+            .push_back(block_1.block_hash());
         blockchain_manager
-            .blocks_to_be_synced
-            .insert(block_2.block_hash());
+            .block_sync_queue
+            .push_back(block_2.block_hash());
 
         blockchain_manager.add_peer(&peer_addr);
         // Ensure that the number of requests is at 0.
@@ -1062,12 +1076,12 @@ pub mod test {
 
     /// This tests ensures that `BlockchainManager::handle_client_request(...)` does the following:
     /// 1. Retrieves immediate successor hashes and returns block 1.
-    /// 2. Adds block 2 to `blockchain_manager.blocks_to_be_synced`.
+    /// 2. Adds block 2 to `blockchain_manager.block_sync_queue`.
     /// 3. Syncs the blocks.
     /// 4. Retrieves an empty set of blocks when provided a set of hashes containing block 1's hash.
     ///     a. Ensure that no blocks are returned as block 2 has yet to be retrieved.
     ///     b. Ensure Block 1 has been pruned from the block cache.
-    ///     c. Ensure Block 2 is no longer in the `blockchain_manager.blocks_to_be_synced` field as it has been requested.
+    ///     c. Ensure Block 2 is no longer in the `blockchain_manager.block_sync_queue` field as it has been requested.
     #[test]
     fn test_handle_client_request() {
         let test_state = TestState::setup();
@@ -1089,10 +1103,8 @@ pub mod test {
         let block_1_hash = test_state.block_1.block_hash();
         let block_2_hash = test_state.block_2.block_hash();
         assert!(matches!(blocks.first(), Some(block) if block.block_hash() == block_1_hash));
-        assert_eq!(blockchain_manager.blocks_to_be_synced.len(), 1);
-        assert!(blockchain_manager
-            .blocks_to_be_synced
-            .contains(&block_2_hash));
+        assert_eq!(blockchain_manager.block_sync_queue.len(), 1);
+        assert!(blockchain_manager.block_sync_queue.contains(&block_2_hash));
 
         let hashes = vec![
             blockchain_manager.blockchain.genesis().header.block_hash(),
@@ -1106,7 +1118,7 @@ pub mod test {
             .blockchain
             .get_block(&block_1_hash)
             .is_none());
-        assert!(blockchain_manager.blocks_to_be_synced.is_empty());
+        assert!(blockchain_manager.block_sync_queue.is_empty());
     }
 
     /// This tests ensures that `BlockchainManager::handle_client_request(...)` returns multiple
@@ -1237,7 +1249,44 @@ pub mod test {
             matches!(blocks.first(), Some(block) if block.block_hash() == block_1_hash && block.txdata.len() == large_block.txdata.len())
         );
         assert_eq!(blocks.len(), 1);
-        assert_eq!(blockchain_manager.blocks_to_be_synced.len(), 0);
+        assert_eq!(blockchain_manager.block_sync_queue.len(), 0);
+    }
+
+    /// This function tests to ensure that the BlockchainManager does not send out `getdata`
+    /// requests when the block cache has reached the size threshold.
+    #[test]
+    fn test_sync_blocks_size_limit() {
+        let test_state = TestState::setup();
+        let config = ConfigBuilder::new().build();
+        let addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
+
+        // Make 5 large blocks that are around 2MiB each.
+        let mut large_blocks = vec![large_block()];
+        for _ in 0..4 {
+            let mut new_block = large_block();
+            new_block.header.prev_blockhash = large_blocks.last().unwrap().block_hash();
+            large_blocks.push(new_block);
+        }
+
+        let headers = large_blocks.iter().map(|b| b.header).collect::<Vec<_>>();
+
+        let mut blockchain_manager = BlockchainManager::new(&config, make_logger());
+        blockchain_manager.add_peer(&addr);
+        let (added_headers, _) = blockchain_manager.blockchain.add_headers(&headers);
+        assert_eq!(added_headers.len(), 5);
+
+        // Add the 5 large blocks.
+        for block in large_blocks {
+            blockchain_manager.blockchain.add_block(block).unwrap();
+        }
+
+        blockchain_manager
+            .block_sync_queue
+            .push_back(test_state.block_2.block_hash());
+
+        blockchain_manager.sync_blocks();
+        // The `getdata_request_info` should be empty as the block cache is at the size threshold.
+        assert!(blockchain_manager.getdata_request_info.is_empty());
     }
 
     /// Tests the `BlockchainManager::idle(...)` function to ensure it clears the state from the
@@ -1261,15 +1310,15 @@ pub mod test {
         assert_eq!(added_headers.len(), headers.len());
         assert!(maybe_err.is_none());
         blockchain_manager
-            .blocks_to_be_synced
-            .insert(block_1.block_hash());
+            .block_sync_queue
+            .push_back(block_1.block_hash());
         blockchain_manager
             .blockchain
             .add_block(block_2)
             .expect("invalid block");
         blockchain_manager.add_peer(&peer_addr);
 
-        assert_eq!(blockchain_manager.blocks_to_be_synced.len(), 1);
+        assert_eq!(blockchain_manager.block_sync_queue.len(), 1);
         assert!(blockchain_manager
             .blockchain
             .get_block(&block_2_hash)
@@ -1277,7 +1326,7 @@ pub mod test {
         assert_eq!(blockchain_manager.peer_info.len(), 1);
 
         blockchain_manager.make_idle();
-        assert_eq!(blockchain_manager.blocks_to_be_synced.len(), 0);
+        assert_eq!(blockchain_manager.block_sync_queue.len(), 0);
         assert!(blockchain_manager
             .blockchain
             .get_block(&block_2_hash)
