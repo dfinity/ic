@@ -18,7 +18,7 @@ fn derive_rho(
     derivation_path: &DerivationPath,
     key_transcript: &IDkgTranscriptInternal,
     presig_transcript: &IDkgTranscriptInternal,
-) -> ThresholdEcdsaResult<(EccScalar, EccScalar, EccScalar)> {
+) -> ThresholdEcdsaResult<(EccScalar, EccScalar, EccScalar, EccPoint)> {
     let pre_sig = match &presig_transcript.combined_commitment {
         CombinedCommitment::ByInterpolation(PolynomialCommitment::Simple(c)) => c.constant_term(),
         _ => return Err(ThresholdEcdsaError::InconsistentCommitments),
@@ -43,7 +43,7 @@ fn derive_rho(
 
     let rho = ecdsa_conversion_function(&randomized_pre_sig)?;
 
-    Ok((rho, key_tweak, randomizer))
+    Ok((rho, key_tweak, randomizer, randomized_pre_sig))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,7 +65,7 @@ impl ThresholdEcdsaSigShareInternal {
         key_times_lambda: &CommitmentOpening,
         curve_type: EccCurveType,
     ) -> ThresholdEcdsaResult<Self> {
-        let (rho, key_tweak, randomizer) = derive_rho(
+        let (rho, key_tweak, randomizer, _presig) = derive_rho(
             curve_type,
             hashed_message,
             &randomness,
@@ -135,7 +135,7 @@ impl ThresholdEcdsaSigShareInternal {
         curve_type: EccCurveType,
     ) -> ThresholdEcdsaResult<bool> {
         // Compute rho and tweak
-        let (rho, key_tweak, randomizer) = derive_rho(
+        let (rho, key_tweak, randomizer, _presig) = derive_rho(
             curve_type,
             hashed_message,
             &randomness,
@@ -220,7 +220,7 @@ impl ThresholdEcdsaCombinedSigInternal {
             return Err(ThresholdEcdsaError::InsufficientDealings);
         }
 
-        let (rho, _key_tweak, _randomizer) = derive_rho(
+        let (rho, _key_tweak, _randomizer, _presig) = derive_rho(
             curve_type,
             hashed_message,
             &randomness,
@@ -291,7 +291,19 @@ impl ThresholdEcdsaCombinedSigInternal {
         key_transcript: &IDkgTranscriptInternal,
         curve_type: EccCurveType,
     ) -> ThresholdEcdsaResult<bool> {
-        let (rho, key_tweak, _) = derive_rho(
+        if self.r.is_zero() || self.s.is_zero() {
+            return Ok(false);
+        }
+
+        // ECDSA has special rules for converting the hash to a scalar,
+        // when the hash is larger than the curve order. If this check is
+        // removed make sure these conversions are implemented, and not
+        // just doing a reduction mod order using from_bytes_wide
+        if hashed_message.len() != curve_type.scalar_bytes() {
+            return Ok(false);
+        }
+
+        let (rho, key_tweak, _, pre_sig) = derive_rho(
             curve_type,
             hashed_message,
             &randomness,
@@ -313,7 +325,38 @@ impl ThresholdEcdsaCombinedSigInternal {
         let tweak_g = EccPoint::mul_by_g(&key_tweak)?;
         let public_key = tweak_g.add_points(&master_public_key)?;
 
-        ecdsa::verify_signature(&public_key, hashed_message, &self.r, &self.s)
+        // Even though the same size, the integer represenatation of the
+        // message might be larger than the order, requiring a reduction.
+        let msg = EccScalar::from_bytes_wide(curve_type, hashed_message)?;
+
+        let s_inv = self.s.invert()?;
+
+        let u1 = msg.mul(&s_inv)?;
+        let u2 = self.r.mul(&s_inv)?;
+
+        let rp = EccPoint::mul_points(&EccPoint::generator_g(curve_type)?, &u1, &public_key, &u2)?;
+
+        if rp.is_infinity()? {
+            return Ok(false);
+        }
+
+        /*
+        In normal ECDSA verification we would have
+
+        r = x_coordinate(k*G) % order
+
+        and during verification check
+
+        r == x_coordinate(rp) % order
+
+        To aid the security proof, instead here we use pre_sig (which equals k*G)
+        and check that x_coordinate(pre_sig) == x_coordinate(rp)
+
+        Due to normalization of s pre_sig and rp may differ in their sign, so
+        we only check the x coordinate.
+        */
+
+        Ok(rp.affine_x()? == pre_sig.affine_x()?)
     }
 }
 
