@@ -2,6 +2,7 @@ use crate::{common::BlockHeight, config::Config};
 use bitcoin::{blockdata::constants::genesis_block, Block, BlockHash, BlockHeader};
 use std::collections::HashMap;
 use thiserror::Error;
+
 /// This field contains the datatype used to store "work" of a Bitcoin blockchain
 pub type Work = bitcoin::util::uint::Uint256;
 
@@ -324,6 +325,13 @@ impl BlockchainState {
     pub fn clear_blocks(&mut self) {
         self.block_cache = HashMap::new();
     }
+
+    /// Returns the current size of the block cache.
+    pub fn get_block_cache_size(&self) -> usize {
+        self.block_cache
+            .values()
+            .fold(0, |sum, b| b.get_size() + sum)
+    }
 }
 
 #[cfg(test)]
@@ -534,5 +542,25 @@ mod test {
 
         state.prune_old_blocks(&[block_2_hash]);
         assert!(!state.block_cache.contains_key(&block_2_hash));
+    }
+
+    /// Simple test to verify that `BlockchainState::block_cache_size()` returns the total
+    /// number of bytes in the block cache.
+    #[test]
+    fn test_block_cache_size() {
+        let test_state = TestState::setup();
+        let config = ConfigBuilder::new().build();
+        let mut state = BlockchainState::new(&config);
+
+        let block_cache_size = state.get_block_cache_size();
+        assert_eq!(block_cache_size, 0);
+
+        state.add_block(test_state.block_1.clone()).unwrap();
+        state.add_block(test_state.block_2.clone()).unwrap();
+
+        let expected_cache_size = test_state.block_1.get_size() + test_state.block_2.get_size();
+        let block_cache_size = state.get_block_cache_size();
+
+        assert_eq!(expected_cache_size, block_cache_size);
     }
 }
