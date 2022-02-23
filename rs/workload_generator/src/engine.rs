@@ -328,7 +328,7 @@ impl Engine {
     ) -> Option<u32> {
         let time_query_start = Instant::now();
         let response = agent.execute_query(&plan.canister_id, &*method, arg).await;
-        let latency = Instant::now().duration_since(time_query_start);
+        let time_query_end = Instant::now();
         debug!("Sent query ({}). Response was: {:?}", n, response);
 
         match response {
@@ -341,7 +341,7 @@ impl Engine {
                     fs::write(f, bytes).unwrap();
                 }
 
-                Engine::check_query(r, tx, latency).await
+                Engine::check_query(r, tx, time_query_start, time_query_end).await
             }
             Err(e) => {
                 let err = format!("{:?}", e).to_string();
@@ -352,7 +352,13 @@ impl Engine {
                 let http_status = 0_u16;
 
                 tx.send(CallResult {
-                    fact: Fact::record(ContentLength::new(0), http_status, latency, false),
+                    fact: Fact::record(
+                        ContentLength::new(0),
+                        http_status,
+                        time_query_start,
+                        time_query_end,
+                        false,
+                    ),
                     counter: None,
                     call_failure: CallFailure::OnWait,
                     err_msg: Some(err),
@@ -426,7 +432,8 @@ impl Engine {
                     fact: Fact::record(
                         ContentLength::new(0),
                         11,
-                        Instant::now().duration_since(time_start),
+                        time_start,
+                        Instant::now(),
                         false,
                     ),
                     counter: None,
@@ -464,7 +471,8 @@ impl Engine {
                         fact: Fact::record(
                             ContentLength::new(0),
                             update_status_code,
-                            Instant::now().duration_since(time_start),
+                            time_start,
+                            Instant::now(),
                             false,
                         ),
                         counter: None,
@@ -529,12 +537,12 @@ impl Engine {
                                         Instant::now().duration_since(time_start).as_millis(),
                                         Instant::now().duration_since(time_origin).as_millis()
                                     );
-
                                     tx.send(CallResult {
                                         fact: Fact::record(
                                             ContentLength::new(body.len() as u64),
                                             http_status,
-                                            Instant::now().duration_since(time_start),
+                                            time_start,
+                                            Instant::now(),
                                             true,
                                         ),
                                         counter: Some(counter),
@@ -566,7 +574,8 @@ impl Engine {
                                         fact: Fact::record(
                                             ContentLength::new(body.len() as u64),
                                             33,
-                                            Instant::now().duration_since(time_start),
+                                            time_start,
+                                            Instant::now(),
                                             false,
                                         ),
                                         counter: None,
@@ -597,7 +606,8 @@ impl Engine {
                         fact: Fact::record(
                             ContentLength::new(0),
                             44,
-                            Instant::now().duration_since(time_start),
+                            time_start,
+                            Instant::now(),
                             false,
                         ),
                         counter: None,
@@ -617,8 +627,10 @@ impl Engine {
     async fn check_query(
         resp: Option<Vec<u8>>,
         tx: Sender<CallResult>,
-        latency: Duration,
+        time_query_start: Instant,
+        time_query_end: Instant,
     ) -> Option<u32> {
+        let latency = time_query_end.duration_since(time_query_start);
         debug!("Response: {:?}", resp);
         let counter = resp
             .as_ref()
@@ -633,7 +645,8 @@ impl Engine {
             fact: Fact::record(
                 ContentLength::new(resp.unwrap_or_else(Vec::new).len() as u64),
                 200_u16,
-                latency,
+                time_query_start,
+                time_query_end,
                 true,
             ),
             counter,
