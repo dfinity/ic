@@ -346,14 +346,17 @@ fn ensure_sufficient_openings(
                 ),
             }
         })?;
-    if openings.values().len() < reconstruction_threshold_usize {
-        return Err(IDkgLoadTranscriptError::InvalidArguments {
-            internal_error: format!(
-                "insufficient number of openings: got {}, but required {}",
-                openings.len(),
-                reconstruction_threshold_usize
-            ),
-        });
+
+    for complaint_openings in openings.values() {
+        if complaint_openings.len() < reconstruction_threshold_usize {
+            return Err(IDkgLoadTranscriptError::InvalidArguments {
+                internal_error: format!(
+                    "insufficient number of openings: got {}, but required {}",
+                    complaint_openings.len(),
+                    reconstruction_threshold_usize
+                ),
+            });
+        }
     }
     Ok(())
 }
