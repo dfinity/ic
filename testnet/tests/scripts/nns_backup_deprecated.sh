@@ -142,6 +142,14 @@ nns_ip=${nns_ip/]:8080/}
 # Retrieve all data required for the backup recovery.
 ssh-keygen -R "$nns_ip"
 scp -o StrictHostKeyChecking=no -r "admin@[${nns_ip}]:/run/ic-node/config/ic.json5" "${results_dir}"
+
+# Wait up to 15 seconds for the ssh backup keys to be deployed from the registry.
+WAIT_COUNTER=0
+while [[ ! $(ssh -oPasswordAuthentication=no "backup@${nns_ip}" "echo 1") == "1" ]] && [[ $WAIT_COUNTER -lt 3 ]]; do
+    ((WAIT_COUNTER += 1))
+    sleep 5
+done
+
 set +e
 rsync -az "backup@[${nns_ip}]:/var/lib/ic/backup/" "${results_dir}/backup/"
 rsync -az "admin@[${nns_ip}]:/var/lib/ic/data/ic_registry_local_store/" "${results_dir}/ic_registry_local_store/"
