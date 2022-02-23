@@ -1,7 +1,8 @@
 use super::*;
 use crate::metadata_state::subnet_call_context_manager::{
-    CanisterHttpRequestContext, HttpMethodType, SubnetCallContextManager,
+    CanisterHttpRequestContext, SubnetCallContextManager,
 };
+use ic_base_types::HttpMethodType;
 use ic_test_utilities::{
     mock_time,
     types::{

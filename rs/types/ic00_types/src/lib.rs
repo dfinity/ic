@@ -1,8 +1,8 @@
 //! Data types used for encoding/decoding the Candid payloads of ic:00.
 use candid::{CandidType, Decode, Deserialize, Encode};
 use ic_base_types::{
-    CanisterId, CanisterInstallMode, CanisterStatusType, NodeId, NumBytes, PrincipalId,
-    RegistryVersion, SubnetId,
+    CanisterId, CanisterInstallMode, CanisterStatusType, HttpMethodType, NodeId, NumBytes,
+    PrincipalId, RegistryVersion, SubnetId,
 };
 use ic_error_types::{ErrorCode, UserError};
 use ic_protobuf::registry::crypto::v1::PublicKey;
@@ -24,6 +24,7 @@ pub enum Method {
     CreateCanister,
     DeleteCanister,
     DepositCycles,
+    HttpRequest,
     GetECDSAPublicKey,
     InstallCode,
     RawRand,
@@ -465,6 +466,23 @@ impl SetControllerArgs {
 }
 
 impl Payload<'_> for SetControllerArgs {}
+
+/// Struct used for encoding/decoding
+/// `(http_request : (record {
+//     url : text;
+//     method : variant { get };
+//     body : opt blob;
+//     transform : opt variant { function: func (http_response) -> (http_response) query };
+//   })`
+#[derive(CandidType, Deserialize, Debug)]
+pub struct CanisterHttpRequestArgs {
+    pub url: String,
+    pub body: Option<Vec<u8>>,
+    pub http_method: HttpMethodType,
+    pub transform_method_name: Option<String>,
+}
+
+impl Payload<'_> for CanisterHttpRequestArgs {}
 
 /// Struct used for encoding/decoding
 /// `(record {

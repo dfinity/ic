@@ -11,10 +11,10 @@ use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_crypto::derive_tecdsa_public_key;
 use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost};
 use ic_ic00_types::{
-    CanisterIdRecord, CanisterSettingsArgs, CreateCanisterArgs, EmptyBlob, GetECDSAPublicKeyArgs,
-    GetECDSAPublicKeyResponse, InstallCodeArgs, Method as Ic00Method, Payload as Ic00Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SetControllerArgs,
-    SetupInitialDKGArgs, SignWithECDSAArgs, UpdateSettingsArgs, IC_00,
+    CanisterHttpRequestArgs, CanisterIdRecord, CanisterSettingsArgs, CreateCanisterArgs, EmptyBlob,
+    GetECDSAPublicKeyArgs, GetECDSAPublicKeyResponse, InstallCodeArgs, Method as Ic00Method,
+    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
+    SetControllerArgs, SetupInitialDKGArgs, SignWithECDSAArgs, UpdateSettingsArgs, IC_00,
 };
 use ic_interfaces::{
     execution_environment::{
@@ -28,6 +28,7 @@ use ic_metrics::{MetricsRegistry, Timer};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::metadata_state::subnet_call_context_manager::CanisterHttpRequestContext;
 use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::{SetupInitialDkgContext, SignWithEcdsaContext},
     CallContextAction, CallOrigin, CanisterState, ReplicatedState,
@@ -438,7 +439,40 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                     instructions_limit,
                 ),
             },
-
+            Ok(Ic00Method::HttpRequest) => match &msg {
+                RequestOrIngress::Request(request) => {
+                    match CanisterHttpRequestArgs::decode(payload) {
+                        Err(err) => (
+                            Some((Err(err.into()), msg.take_cycles())),
+                            instructions_limit,
+                        ),
+                        Ok(args) => {
+                            state
+                                .metadata
+                                .subnet_call_context_manager
+                                .push_http_request(CanisterHttpRequestContext {
+                                    request: request.clone(),
+                                    url: args.url,
+                                    body: args.body,
+                                    http_method: args.http_method,
+                                    transform_method_name: args.transform_method_name,
+                                });
+                            (None, instructions_limit)
+                        }
+                    }
+                }
+                RequestOrIngress::Ingress(_) => {
+                    error!(self.log, "[EXC-BUG] Ingress messages to HttpRequest should've been filtered earlier.");
+                    let error_string = format!(
+                        "HttpRequest is called by user {}. It can only be called by a canister.",
+                        msg.sender()
+                    );
+                    let user_error =
+                        UserError::new(ErrorCode::CanisterContractViolation, error_string);
+                    let res = Some((Err(user_error), msg.take_cycles()));
+                    (res, instructions_limit)
+                }
+            },
             Ok(Ic00Method::SetupInitialDKG) => match &msg {
                 RequestOrIngress::Request(request) => match SetupInitialDKGArgs::decode(payload) {
                     Err(err) => (
@@ -693,7 +727,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                 // responded to (which currently happens in the scheduler).
                 //
                 // This scenario also happens in the case of
-                // Ic00Method::SetupInitialDKG.  The request is saved and the
+                // Ic00Method::SetupInitialDKG and Ic00Method::HttpRequest. The request is saved and the
                 // response from consensus is handled separately.
                 (state, instructions_left)
             }

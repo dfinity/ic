@@ -1,3 +1,4 @@
+use ic_base_types::HttpMethodType;
 use ic_logger::{info, ReplicaLogger};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -280,29 +281,6 @@ impl TryFrom<pb_metadata::SignWithEcdsaContext> for SignWithEcdsaContext {
             },
             batch_time: Time::from_nanos_since_unix_epoch(context.batch_time),
         })
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum HttpMethodType {
-    GET,
-}
-
-impl From<&HttpMethodType> for pb_metadata::HttpMethodType {
-    fn from(http_method_type: &HttpMethodType) -> Self {
-        match http_method_type {
-            HttpMethodType::GET => pb_metadata::HttpMethodType::Get,
-        }
-    }
-}
-
-impl From<pb_metadata::HttpMethodType> for HttpMethodType {
-    fn from(http_method_type: pb_metadata::HttpMethodType) -> Self {
-        match http_method_type {
-            pb_metadata::HttpMethodType::Unspecified | pb_metadata::HttpMethodType::Get => {
-                HttpMethodType::GET
-            }
-        }
     }
 }
 
