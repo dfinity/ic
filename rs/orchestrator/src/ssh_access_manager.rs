@@ -82,6 +82,7 @@ impl SshAccessManager {
         update("backup", backup_keys) && result
     }
 
+    // If `keys` is empty, pre-existing keys will be deleted
     fn update_access_to_one_account(&self, account: &str, keys: &[String]) -> Result<(), String> {
         let mut cmd = Command::new("sudo")
             .arg("/opt/ic/bin/provision-ssh-keys.sh")

@@ -1,0 +1,86 @@
+# Orchestrator
+
+The orchestrator is a component of the Internet Computer that manages the replica. For that, it:
+
+. Repeatedly fetches and persists the registry changelog
+. Checks the registry for configuration updates and applies them (i.e. SSH keys & firewall)
+. Applies upgrades and subnet membership changes to the replica process using CUPs
+
+These main tasks are executed asynchronously in three separate loops.
+
+[#img] 
+.Orchestrator Overview 
+image::https://lucid.app/publicSegments/view/6874ee81-c9d0-4bed-901a-37a5ea925c2e/image.png[Overview, width=800]
+{empty} +
+
+## Registry Replicator
+The Registry Replicator polls one of the NNS Nodes for registry updates on a regular basis, verifies the response using the public key configured in the registry and applies the received changelog to the Registry Local Store.
+
+.Registry Replicator initialization and async loop
+image::https://lucid.app/publicSegments/view/813899a8-002a-4677-b486-07546b184085/image.png[Registry Loop, width=900]
+{empty} +
+
+In case of a "switch-over" or starting a new independent NNS subnet, the Registry Replicator modifies the Registry Local Store before rebooting:
+
+Consider the registry of the «parent» IC instance as the source registry. Let `subnet_record` be a subnet record (in the source registry) with `subnet_record.start_as_nns` set to `true`. Let `v` be the registry version at which `subnet_record` was added to the registry (i.e. the smallest `v` for which `subnet_record` exists). Create a fresh (target) registry state that contains all versions up to and including `v-1`. Add version `v`, but with the following changes:
+
+* `subnet_record.start_as_nns` is unset on all subnet records
+* `nns_subnet_id` set to the new NNS subnet id
+* `subnet_list`: contains only the `nns_subnet_id`
+* routing table: consists of a single entry that maps the range of canister ids that was mapped to the NNS in the source registry to the subnet id obtained from subnet record
+
+.Registry Replicator update and reboot procedure
+image::https://lucid.app/publicSegments/view/8fbd547e-8351-41f4-aff6-895a8870f222/image.png[Registry Update, width=900]
+{empty} +
+
+### Concurrency
+Note that the Registry Local Store is usually accessed using the Registry Client, which itself is polling and caching the local store repeatedly. Due to the resulting asynchrony of the local registry state, client functions can be parameterized with a specific (last seen) registry version.
+
+## Replica Upgrades and Subnet Membership
+The orchestrator triggers upgrades of the replica process. For that, it periodically performs the following operations:
+
+. Ask the registry for the current peers in the subnetwork it is supposed to run in.
+. Select a random peer, and fetch the latest CUP via a separate endpoint.
+. Verify CUPs (by means of the subnet signature) and select the most recent one between local (*lCUP*), peer (*pCUP*) and registry (*rCUP*), based on the block height.
+. Use the registry version referenced in that CUP and check the replica version associated with that registry version.
+. If the version is different from what we are currently running, apply upgrade and restart replica with that CUP.
+
+Additionally, using the highest CUP we determine the node's subnet membership and delete its state once it becomes unassigned. Similarly, we handle the NNS recovery case by redownloading the Registry and restarting the node.
+
+Our state is defined by a triple `replica_version`, `subnet_id`, `local_CUP`.
+
+.Upgrade state
+image::https://lucid.app/publicSegments/view/c860e0ba-220b-4440-b615-4031d6acf602/image.jpeg[Upgrade, width=800]
+{empty} +
+
+.Upgrades and subnet membership changes
+image::https://lucid.app/publicSegments/view/b91fff01-ff3e-4225-abb7-a75623b295d7/image.png[Upgrade, width=700]
+{empty} +
+
+## SSH Keyset Changes
+The Orchestrator manages and deploys two public key sets as configured in the registry:
+
+* Readonly keys (*R*): Owner has readonly access to replica
+* Backup keys (*B*): Owner has backup access to assigned replica
+Unassigned nodes do not hold state to be backed up and thus need no backup keys deployed. 
+
+Keys are deployed using an external shell script. Note that since the `subnet_id` is controlled by the upgrade module's latest cup and thus independently of the registry, we need to keep track of both, the current registry version, *and* the subnet ID, when deciding if new key changes could apply.
+
+.SSH keyset changes
+image::https://lucid.app/publicSegments/view/8c90b9a4-f85f-4920-8995-22f12fcb4268/image.png[SSH Keyset Update, width=700]
+{empty} +
+
+## Firewall Changes
+The Orchestrator monitors the registry for new data centers. If a new data center is added, it will generate a new firewall configuration allowing access from the IP range specified in the DC record.
+
+.Firewall configuration updates
+image::https://lucid.app/publicSegments/view/426c30ab-6b25-4a69-ac4c-03b2d79222d0/image.png[Registry Loop, width=900]
+{empty} +
+
+## Error Handling
+
+The Orchestrator is the last resort for us in any critical situation. This component should always stay up and retry, and not panic up on the first unexpected condition. Instead, we exit the current loop (not shown in diagrams) and try again in the next iteration.
+
+## Resources
+
+* https://lucid.app/lucidchart/8a70a48d-0b4d-423e-b32a-87b7a8b102d3/edit?viewport_loc=-708%2C-2005%2C3749%2C2114%2C0lyV22KAq-Sp&invitationId=inv_da73c245-f79c-49d0-a405-ff8378ef8c3e[Lucid diagrams (internal)]: Changes in diagrams are reflected immediately.
