@@ -20,5 +20,19 @@ REPO_ROOT="$(
 
 source "$REPO_ROOT/gitlab-ci/docker/docker-run-include"
 
-set -x
-docker run --rm "${DOCKER_RUN_ARGS[@]}" "$IMAGE" "${@:-bash}"
+wdir="/ic/$(git rev-parse --show-prefix)"
+if [ -z "${@}" ]; then
+    set -x
+    docker run --rm "${DOCKER_RUN_ARGS[@]}" -w "$wdir" "$IMAGE" bash
+else
+    set -x
+
+    # This script needs to quote the parameters passed into bash -c.
+    # However it also needs to escape quote each parameter so they are
+    # parsed correctly on the other end.
+    PARAMS=""
+    for PARAM in "$@"; do
+        PARAMS="${PARAMS} \"${PARAM}\""
+    done
+    docker run --rm "${DOCKER_RUN_ARGS[@]}" -w "$wdir" "$IMAGE" bash -c "${PARAMS}"
+fi
