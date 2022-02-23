@@ -285,7 +285,7 @@ impl<
         let fds: Vec<RawFd> = fd_locs.iter().map(|fd| **fd).collect();
 
         // Serialize the message.
-        let serialized_msg = serde_cbor::to_vec(&msg).expect("Failed to serialize message");
+        let serialized_msg = bincode::serialize(&msg).expect("Failed to serialize message");
 
         // Send message data + file descriptors down.
         // There must be a field in the struct for every file descriptor

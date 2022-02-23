@@ -16,9 +16,9 @@ name = "test_sandbox"
 path = "src/test_sandbox.rs"
 
 [dependencies]
+bincode = "1.2.1"
 bytes = "1.0.1"
 serde_bytes = "0.11"
-serde_cbor = "0.11.1"
 ic-embedders = { path = "../../embedders" }
 ic-interfaces = { path = "../../interfaces" }
 ic-replicated-state = { path = "../../replicated_state" }

@@ -3616,6 +3616,7 @@ dependencies = [
 name = "ic-canister-sandbox-common"
 version = "0.8.0"
 dependencies = [
+ "bincode",
  "bytes",
  "ic-embedders",
  "ic-interfaces",
@@ -3628,7 +3629,6 @@ dependencies = [
  "nix 0.23.0",
  "serde",
  "serde_bytes",
- "serde_cbor",
 ]
 
 [[package]]

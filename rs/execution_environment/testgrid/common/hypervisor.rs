@@ -5051,3 +5051,33 @@ fn can_extract_exported_custom_sections() {
         assert_eq!(execution_state.metadata.custom_sections().len(), 3);
     });
 }
+
+#[test]
+fn execute_with_huge_cycle_balance() {
+    with_hypervisor(|hypervisor, tmp_path| {
+        let wasm = wabt::wat2wasm(
+            r#"
+                        (module
+                          (func (export "canister_init"))
+                          (memory 0))
+                        "#,
+        )
+        .unwrap();
+
+        let canister_id = canister_test_id(42);
+        let execution_state = hypervisor
+            .create_execution_state(wasm, tmp_path, canister_id)
+            .unwrap();
+        let mut canister = canister_from_exec_state(execution_state, canister_id);
+        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
+        *canister.system_state.balance_mut() = Cycles::new(1u128 << 100);
+        let (_, _, res) = hypervisor.execute_canister_init(
+            canister,
+            test_caller(),
+            EMPTY_PAYLOAD.as_slice(),
+            mock_time(),
+            execution_parameters,
+        );
+        assert!(res.is_ok());
+    });
+}
