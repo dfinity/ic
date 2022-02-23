@@ -1478,6 +1478,7 @@ fn get_instructions_limit_for_subnet_message(
             | GetMockECDSAPublicKey
             | RawRand
             | SetController
+            | HttpRequest
             | SetupInitialDKG
             | SignWithECDSA
             | SignWithMockECDSA

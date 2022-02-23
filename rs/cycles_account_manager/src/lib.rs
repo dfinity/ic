@@ -343,6 +343,7 @@ impl CyclesAccountManager {
                 Ok(Method::CreateCanister)
                 | Ok(Method::SetupInitialDKG)
                 | Ok(Method::DepositCycles)
+                | Ok(Method::HttpRequest)
                 | Ok(Method::RawRand)
                 | Ok(Method::GetECDSAPublicKey)
                 | Ok(Method::GetMockECDSAPublicKey)

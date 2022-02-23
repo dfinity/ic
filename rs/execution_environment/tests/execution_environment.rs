@@ -1,6 +1,6 @@
 use assert_matches::assert_matches;
 use candid::Encode;
-use ic_base_types::NumSeconds;
+use ic_base_types::{HttpMethodType, NumSeconds};
 use ic_config::{execution_environment, subnet_config::CyclesAccountManagerConfig};
 use ic_execution_environment::{
     ExecutionEnvironment, ExecutionEnvironmentImpl, Hypervisor, IngressHistoryWriterImpl,
@@ -47,8 +47,8 @@ use ic_types::{
     canonical_error::{not_found_error, permission_denied_error},
     ic00,
     ic00::{
-        CanisterIdRecord, CanisterStatusResultV2, EmptyBlob, InstallCodeArgs, Method,
-        Payload as Ic00Payload, IC_00,
+        CanisterHttpRequestArgs, CanisterIdRecord, CanisterStatusResultV2, EmptyBlob,
+        InstallCodeArgs, Method, Payload as Ic00Payload, IC_00,
     },
     ingress::{IngressStatus, WasmResult},
     messages::{
@@ -3131,4 +3131,81 @@ fn test_allocating_memory_reduces_subnet_available_memory() {
             );
         },
     );
+}
+
+#[test]
+fn execute_canister_http_request() {
+    with_test_replica_logger(|log| {
+        let subnet_type = SubnetType::Application;
+        let nns_subnet_id = subnet_test_id(2);
+        let own_subnet_id = subnet_test_id(1);
+        let sender_subnet_id = subnet_test_id(1);
+
+        let (mut state, exec_env) = get_execution_environment(
+            nns_subnet_id,
+            own_subnet_id,
+            sender_subnet_id,
+            subnet_type,
+            log,
+        );
+
+        // Create payload of the request.
+        let url = "https::/".to_string();
+        let transform_method_name = Some("transform".to_string());
+        let request_payload = CanisterHttpRequestArgs {
+            url: url.clone(),
+            body: None,
+            http_method: HttpMethodType::GET,
+            transform_method_name: transform_method_name.clone(),
+        };
+
+        // Create request to HTTP_REQUEST method.
+        let sender = canister_test_id(257);
+        let request = RequestBuilder::new()
+            .sender(sender)
+            .receiver(IC_00)
+            .method_name(Method::HttpRequest)
+            .method_payload(Encode!(&request_payload).unwrap())
+            .build();
+
+        // Push the request in the subnet queue.
+        state
+            .subnet_queues_mut()
+            .push_input(
+                QUEUE_INDEX_NONE,
+                RequestOrResponse::Request(request.clone()),
+                InputQueueType::LocalSubnet,
+            )
+            .unwrap();
+
+        // Execute IC00::HTTP_REQUEST.
+        let (new_state, _) = exec_env.execute_subnet_message(
+            state.subnet_queues_mut().pop_input().unwrap(),
+            state,
+            MAX_NUM_INSTRUCTIONS,
+            &mut mock_random_number_generator(),
+            &None,
+            &ProvisionalWhitelist::Set(BTreeSet::new()),
+            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+            MAX_NUMBER_OF_CANISTERS,
+        );
+
+        // Check that the SubnetCallContextManager contains the request.
+        let canister_http_request_contexts = new_state
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts;
+        assert_eq!(canister_http_request_contexts.len(), 1);
+
+        let http_request_context = canister_http_request_contexts
+            .get(&CallbackId::from(0))
+            .unwrap();
+        assert_eq!(http_request_context.url, url);
+        assert_eq!(
+            http_request_context.transform_method_name,
+            transform_method_name
+        );
+        assert_eq!(http_request_context.http_method, HttpMethodType::GET);
+        assert_eq!(http_request_context.request, request);
+    });
 }

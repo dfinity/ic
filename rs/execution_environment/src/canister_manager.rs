@@ -167,7 +167,8 @@ impl CanisterManager {
             | Ok(Ic00Method::SignWithMockECDSA)
             // "DepositCycles" can be called by anyone however as ingress message
             // cannot carry cycles, it does not make sense to allow them from users.
-            | Ok(Ic00Method::DepositCycles) => rejected_canister_err,
+            | Ok(Ic00Method::DepositCycles)
+            | Ok(Ic00Method::HttpRequest) => rejected_canister_err,
 
             // These methods are only valid if they are sent by the controller
             // of the canister. We assume that the canister always wants to
