@@ -72,22 +72,17 @@ def main(argv):
     # --------------------------------------------------
     # These have to go first, since we turn of a replica for the load generator ones
 
-    out = subprocess.run(
+    subprocess.run(
         [
             "python3",
             "run_experiment_xnet.py",
-            "--runtime",
+            "--duration",
             "20",
         ]
         + base_arguments,
         capture_output=True,
         text=True,
     )
-    print(out.stderr)
-    print(out.stdout)
-    # The test will not actually run due to not having enough subnetworks in this test.
-    # Just make sure everything it runs until that point.
-    assert "At least 2 subnets are required to test XNet messaging. Provided topology has 1 subnets" in out.stderr
 
     # Benchmarks WITH load generation
     # --------------------------------------------------

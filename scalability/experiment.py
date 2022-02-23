@@ -390,17 +390,21 @@ class Experiment:
             cmd += ["--canister", canister]
         return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    def install_canister(self, target: str, canister=None, check=True):
+    def install_canister(self, target: str, canister=None, check=True) -> str:
         """
         Install the canister on the given machine.
 
         Note that canisters are currently always installed as best effort.
+
+        Returns the canister ID if installation was successful.
         """
         if FLAGS.canister_id is not None and len(FLAGS.canister_id) > 0:
             print(f"⚠️  Not installing canister, using {FLAGS.canister_id} ")
             self.canister = f"pre-installed canister {FLAGS.canister_id}"
-            self.canister_ids.extend(FLAGS.canister_id.split(","))
-            return
+            self.canister_ids = FLAGS.canister_id.split(",")
+            return None
+
+        this_canister_id = None
 
         print("Installing canister .. ")
         self.canister = canister if canister is not None else "counter"
@@ -420,6 +424,7 @@ class Experiment:
                 if len(canister_id):
                     cid = canister_id[0].split()[7]
                     self.canister_ids.append(cid)
+                    this_canister_id = cid
                     print("Found canister ID: ", cid)
                     print(
                         colored(
@@ -437,6 +442,8 @@ class Experiment:
             print(e.stderr.decode("utf-8"))
             exit(5)
 
+        return this_canister_id
+
     def get_machines(self, testnet, subnet=0):
         """Get a list of machines for the given subnetwork."""
         j = ansible.get_testnet(testnet)
@@ -449,8 +456,10 @@ class Experiment:
 
         return hosts
 
-    def get_hostnames(self, testnet, subnet=0):
+    def get_hostnames(self, testnet=None, subnet=0):
         """Return hostnames of all machines in the given testnet and subnet."""
+        if testnet is None:
+            testnet = FLAGS.testnet
         return sorted([h["ansible_host"] for h in self.get_machines(testnet, subnet)])
 
     def build_summary_file(self):

@@ -6,6 +6,9 @@ import sys
 import traceback
 from statistics import mean
 
+from ic.agent import Agent
+from ic.client import Client
+from ic.identity import Identity
 from termcolor import colored
 
 
@@ -165,3 +168,9 @@ def mean_or_minus_one(x):
         return mean(x)
     else:
         return -1
+
+
+def get_anonymous_agent(hostname: str):
+    ident = Identity(anonymous=True)
+    client = Client(url="http://[{}]:8080".format(hostname))
+    return Agent(ident, client)
