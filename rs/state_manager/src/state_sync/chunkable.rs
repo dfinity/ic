@@ -313,7 +313,7 @@ impl IncompleteState {
                                 warn!(
                                     log,
                                     "Local chunk {} ({}@{}—{}) is out of range (file len = {}), \
-                                    will request chunk {} instead",
+                                     will request chunk {} instead",
                                     idx,
                                     src_path.display(),
                                     byte_range.start,
@@ -344,7 +344,7 @@ impl IncompleteState {
                                 warn!(
                                     log,
                                     "Local chunk {} ({}@{}–{}) doesn't pass validation: {}, \
-                                        will request chunk {} instead",
+                                     will request chunk {} instead",
                                     idx,
                                     src_path.display(),
                                     byte_range.start,
@@ -580,7 +580,7 @@ impl IncompleteState {
                             warn!(
                                 log,
                                 "Local chunk {} ({}@{}—{}) is out of range (file len = {}), \
-                                     will request chunk {} instead",
+                                 will request chunk {} instead",
                                 *src_chunk_index,
                                 src_path.display(),
                                 byte_range.start,
@@ -606,7 +606,7 @@ impl IncompleteState {
                                 warn!(
                                     log,
                                     "Local chunk {} ({}@{}–{}) doesn't pass validation: {}, \
-			                    	     will request chunk {} instead",
+                                     will request chunk {} instead",
                                     *src_chunk_index,
                                     src_path.display(),
                                     byte_range.start,

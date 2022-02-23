@@ -267,27 +267,27 @@ fn build_chunk_table_parallel(
             let file_size = file_table[chunk_info.file_index as usize].size_bytes;
             let file_cache = Arc::clone(&file_cache);
             scope.execute(move || {
-		let recompute_chunk_hash = || {
-		    let mmap: Arc<ScopedMmap> = if file_size > max_chunk_size as u64 {
-			// We only use the file cache if there is more than one chunk in the file,
-			// otherwise the synchronization cost is unnecessary.
-			let mut cache = file_cache.lock().unwrap();
-			match cache.get(&chunk_info.file_index).and_then(Weak::upgrade) {
+                let recompute_chunk_hash = || {
+                    let mmap: Arc<ScopedMmap> = if file_size > max_chunk_size as u64 {
+                        // We only use the file cache if there is more than one chunk in the file,
+                        // otherwise the synchronization cost is unnecessary.
+                        let mut cache = file_cache.lock().unwrap();
+                        match cache.get(&chunk_info.file_index).and_then(Weak::upgrade) {
                             Some(mmap) => mmap,
                             None => {
-				let mmap = Arc::new(
+                                let mmap = Arc::new(
                                 ScopedMmap::from_path(&file_path).expect("failed to open file"),
-				);
-				cache.insert(chunk_info.file_index, Arc::downgrade(&mmap));
-				mmap
+                                );
+                                cache.insert(chunk_info.file_index, Arc::downgrade(&mmap));
+                                mmap
                             }
-			}
+                        }
                     } else {
-			Arc::new(ScopedMmap::from_path(&file_path).expect("failed to open file"))
+                        Arc::new(ScopedMmap::from_path(&file_path).expect("failed to open file"))
                     };
                     let data = mmap.as_slice();
 
-		    let mut hasher = chunk_hasher();
+                    let mut hasher = chunk_hasher();
                     let chunk_start = chunk_info.offset as usize;
                     let chunk_end = chunk_start + chunk_info.size_bytes as usize;
                     hasher.write(&data[chunk_start..chunk_end]);
@@ -296,14 +296,14 @@ fn build_chunk_table_parallel(
 
                 chunk_info.hash = match chunk_action {
                     ChunkAction::Recompute => {
-			metrics.chunk_bytes.with_label_values(&[LABEL_VALUE_HASHED]).inc_by(chunk_info.size_bytes as u64);
-			recompute_chunk_hash()
-		    },
+                        metrics.chunk_bytes.with_label_values(&[LABEL_VALUE_HASHED]).inc_by(chunk_info.size_bytes as u64);
+                        recompute_chunk_hash()
+                    },
                     ChunkAction::RecomputeAndCompare(precomputed_hash) => {
-			metrics.chunk_bytes.with_label_values(&[LABEL_VALUE_HASHED_AND_COMPARED]).inc_by(chunk_info.size_bytes as u64);
+                        metrics.chunk_bytes.with_label_values(&[LABEL_VALUE_HASHED_AND_COMPARED]).inc_by(chunk_info.size_bytes as u64);
 
-			let recomputed_hash = recompute_chunk_hash();
-			debug_assert_eq!(recomputed_hash, precomputed_hash);
+                        let recomputed_hash = recompute_chunk_hash();
+                        debug_assert_eq!(recomputed_hash, precomputed_hash);
                         if recomputed_hash != precomputed_hash {
                             metrics.reused_chunk_hash_error_count.inc();
                             error!(
@@ -318,10 +318,10 @@ fn build_chunk_table_parallel(
                         }
                         recomputed_hash
                     }
-		    ChunkAction::UseHash(precomputed_hash) => {
-			metrics.chunk_bytes.with_label_values(&[LABEL_VALUE_REUSED]).inc_by(chunk_info.size_bytes as u64);
-			precomputed_hash
-		    },
+                    ChunkAction::UseHash(precomputed_hash) => {
+                        metrics.chunk_bytes.with_label_values(&[LABEL_VALUE_REUSED]).inc_by(chunk_info.size_bytes as u64);
+                        precomputed_hash
+                    },
                 };
             });
         }

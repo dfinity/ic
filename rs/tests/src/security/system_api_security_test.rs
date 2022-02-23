@@ -423,11 +423,11 @@ pub fn malicious_intercanister_calls(handle: IcHandle, ctx: &ic_fondue::pot::Con
               (i32.store (i32.const 80) (i32.const 0))
               (i32.store (i32.const 90) (i32.const 10000))
               (block
-	            (loop
-		          (i32.store (i32.const 80) (i32.add (i32.load (i32.const 80)) (i32.const 1)))
-		          (br_if 1 (i32.eq (i32.load (i32.const 80)) (i32.load (i32.const 90))))
-		          (br 0)
-	            )
+                    (loop
+                          (i32.store (i32.const 80) (i32.add (i32.load (i32.const 80)) (i32.const 1)))
+                          (br_if 1 (i32.eq (i32.load (i32.const 80)) (i32.load (i32.const 90))))
+                          (br 0)
+                    )
               )
             )
 
@@ -454,11 +454,11 @@ pub fn malicious_intercanister_calls(handle: IcHandle, ctx: &ic_fondue::pot::Con
               (i32.store (i32.const 80) (i32.const 0))
               (i32.store (i32.const 90) (i32.const 10000))
               (block
-	            (loop
-		          (i32.store (i32.const 80) (i32.add (i32.load (i32.const 80)) (i32.const 1)))
-		          (br_if 1 (i32.eq (i32.load (i32.const 80)) (i32.load (i32.const 90))))
-		          (br 0)
-	            )
+                    (loop
+                          (i32.store (i32.const 80) (i32.add (i32.load (i32.const 80)) (i32.const 1)))
+                          (br_if 1 (i32.eq (i32.load (i32.const 80)) (i32.load (i32.const 90))))
+                          (br 0)
+                    )
               )
             )
 

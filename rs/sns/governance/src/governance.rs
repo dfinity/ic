@@ -2196,8 +2196,8 @@ impl Governance {
                 // acquired and we can investigate.
                 panic!(
                     "When attempting to stake a neuron with ID {} and stake {:?},\
-	             the neuron disappeared while the operation was in flight.\
-	             Please try again: {}",
+                     the neuron disappeared while the operation was in flight.\
+                     Please try again: {}",
                     nid,
                     balance.get_e8s(),
                     err
