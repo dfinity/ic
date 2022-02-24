@@ -232,7 +232,9 @@ after_script:
 
       set +x
       echo -e "\e[0Ksection_start:$(date +%s):sccache_stats[collapsed=true]\r\e[0KClick here to see the sccache stats"
-      "$RUSTC_WRAPPER" --show-stats
+      # If the build artifacts came from the capsules cache, then sccache server will have never started.
+      # Therefore mark the output advisory so it doesn't fail the job.
+      "$RUSTC_WRAPPER" --show-stats || true
       echo -e "\e[0Ksection_end:$(date +%s):sccache_stats\r\e[0K"
 
 .ubuntu-nix-docker:
