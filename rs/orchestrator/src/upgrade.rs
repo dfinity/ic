@@ -1,4 +1,4 @@
-use crate::catch_up_package_provider::{CatchUpPackageProvider, LatestCup};
+use crate::catch_up_package_provider::CatchUpPackageProvider;
 use crate::error::{OrchestratorError, OrchestratorResult};
 use crate::registry_helper::RegistryHelper;
 use crate::replica_process::ReplicaProcess;
@@ -107,22 +107,25 @@ impl Upgrade {
 
         // Get the latest available CUP from the disk, peers or registry and
         // persist it if necesasry.
-        let cup = match self
+        let cup = self
             .cup_provider
             .get_latest_cup(local_cup, subnet_id)
-            .await?
-        {
-            LatestCup::FromRegistry(cup) => {
-                // Check if we're in an NNS subnet recovery case.
-                self.download_registry_and_restart_if_nns_subnet_recovery(
-                    subnet_id,
-                    latest_registry_version,
-                )
-                .await?;
-                cup
-            }
-            LatestCup::FromPeers(cup) => cup,
-        };
+            .await?;
+
+        // If the CUP is unsigned, it's a registry CUP and we're in a genesis or subnet
+        // recovery scenario. Check if we're in an NNS subnet recovery case and download the new
+        // registry if needed.
+        if cup.cup.signature.signature.clone().get().0.is_empty() {
+            info!(
+                self.logger,
+                "The latest CUP is unsigned: a subnet genesis/recovery is in progress"
+            );
+            self.download_registry_and_restart_if_nns_subnet_recovery(
+                subnet_id,
+                latest_registry_version,
+            )
+            .await?;
+        }
 
         // Now when we have the most recent CUP, we check if we're still assigned.
         // If not, go into unassigned state.

@@ -19,12 +19,6 @@ use std::sync::Arc;
 use std::{fs::File, path::PathBuf};
 use url::Url;
 
-/// This wraps the CUP with the context about its origin.
-pub enum LatestCup {
-    FromRegistry(CUPWithOriginalProtobuf),
-    FromPeers(CUPWithOriginalProtobuf),
-}
-
 /// Fetches catch-up packages from peers and local storage.
 ///
 /// CUPs are used to determine which version of the IC peers are running
@@ -57,16 +51,15 @@ impl CatchUpPackageProvider {
 
     // Randomly selects a peer from the subnet and pulls its CUP. If this CUP is
     // newer than the currently available one and it could be verified, then this
-    // CUP is returned. Else, `current_cup` is returned. Note that it is
-    // acceptable to use a single peer, because CUPs are validated. If all `f`
-    // nodes serve unusable CUPs, we have a probability of 2/3 to hit a
-    // non-faulty node, so roughly on 4th attempt we should obtain the correct
-    // peer CUP.
+    // CUP is returned. Note that it is acceptable to use a single peer, because
+    // CUPs are validated. If all `f` nodes serve unusable CUPs, we have a probability
+    // of 2/3 to hit a non-faulty node, so roughly on 4th attempt we should obtain
+    // the correct peer CUP.
     async fn get_peer_cup(
         &self,
         subnet_id: SubnetId,
         registry_version: RegistryVersion,
-        current_cup: Option<CUPWithOriginalProtobuf>,
+        current_cup: Option<&CUPWithOriginalProtobuf>,
     ) -> Option<CUPWithOriginalProtobuf> {
         use ic_protobuf::registry::node::v1::NodeRecord;
         use ic_registry_client::helper::subnet::SubnetTransportRegistry;
@@ -89,7 +82,7 @@ impl CatchUpPackageProvider {
                     self.logger,
                     "Empty peer list for subnet {} at version {}", subnet_id, registry_version
                 );
-                return current_cup;
+                return None;
             }
             [(_, node_record), ..] => {
                 let http = node_record.clone().http?;
@@ -105,7 +98,7 @@ impl CatchUpPackageProvider {
             }
         };
 
-        let param = current_cup.as_ref().map(CatchUpPackageParam::from);
+        let param = current_cup.map(CatchUpPackageParam::from);
         let peer_cup = self
             .fetch_verify_and_deserialize_catch_up_package(peer_url, param, subnet_id)
             .await;
@@ -114,7 +107,7 @@ impl CatchUpPackageProvider {
             return peer_cup;
         }
 
-        current_cup
+        None
     }
 
     // Download CUP from the given URL.
@@ -219,13 +212,12 @@ impl CatchUpPackageProvider {
         &self,
         local_cup: Option<CUPWithOriginalProtobuf>,
         subnet_id: SubnetId,
-    ) -> OrchestratorResult<LatestCup> {
+    ) -> OrchestratorResult<CUPWithOriginalProtobuf> {
         let registry_version = self.registry.get_latest_version();
         let local_cup_height = local_cup.as_ref().map(|cup| cup.cup.content.height());
 
-        // Returns local_cup in case no more recent CUP is found.
         let subnet_cup = self
-            .get_peer_cup(subnet_id, registry_version, local_cup)
+            .get_peer_cup(subnet_id, registry_version, local_cup.as_ref())
             .await;
 
         let registry_cup = self
@@ -235,28 +227,17 @@ impl CatchUpPackageProvider {
             .map_err(|err| warn!(self.logger, "Failed to retrieve registry CUP {:?}", err))
             .ok();
 
-        let latest_cup = match (registry_cup, subnet_cup) {
-            (Some(r_cup), Some(p_cup)) => {
-                if r_cup.cup.content.height() > p_cup.cup.content.height() {
-                    LatestCup::FromRegistry(r_cup)
-                } else {
-                    LatestCup::FromPeers(p_cup)
-                }
-            }
-            (Some(r_cup), None) => LatestCup::FromRegistry(r_cup),
-            (None, Some(p_cup)) => LatestCup::FromPeers(p_cup),
-            _ => {
-                return Err(OrchestratorError::UpgradeError(
-                    "No latest CUP was found".to_string(),
-                ))
-            }
-        };
+        let latest_cup = vec![local_cup, registry_cup, subnet_cup]
+            .into_iter()
+            .flatten()
+            .max_by_key(|cup| cup.cup.content.height())
+            .ok_or(OrchestratorError::MakeRegistryCupError(
+                subnet_id,
+                registry_version,
+            ))?;
 
-        let latest_cup_unwrapped = match &latest_cup {
-            LatestCup::FromRegistry(cup) | LatestCup::FromPeers(cup) => cup,
-        };
-        if Some(latest_cup_unwrapped.cup.content.height()) > local_cup_height {
-            match self.persist_cup(latest_cup_unwrapped) {
+        if Some(latest_cup.cup.content.height()) > local_cup_height {
+            match self.persist_cup(&latest_cup) {
                 Ok(path) => info!(self.logger, "New CUP persisted to {}", path.display()),
                 Err(err) => warn!(self.logger, "Failed to persist CUP: {:?}", err),
             }
