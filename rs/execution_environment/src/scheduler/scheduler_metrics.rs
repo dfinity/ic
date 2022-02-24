@@ -108,7 +108,7 @@ impl SchedulerMetrics {
                 metrics_registry,
             ),
             canister_compute_allocation: metrics_registry.histogram(
-                "canister_compute_allocation_ration",
+                "canister_compute_allocation_ratio",
                 "Canisters compute allocation distribution ratio (0-1).",
                 linear_buckets(0.0, 0.1, 11),
             ),
