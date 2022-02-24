@@ -363,7 +363,7 @@ impl StateMachine {
         let tip = self
             .state_manager
             .state_layout()
-            .tip()
+            .tip(ic_types::Height::new(0))
             .expect("failed to obtain tip");
         let tip_canister_layout = tip
             .canister(&canister_id)

@@ -657,7 +657,7 @@ fn load_checkpoint_as_tip(
         .unwrap_or_else(|err| fatal!(log, "Failed to reset tip to checkpoint height: {:?}", err));
 
     let tip_layout = state_layout
-        .tip()
+        .tip(height)
         .unwrap_or_else(|err| fatal!(log, "Failed to retrieve tip {:?}", err));
 
     checkpoint::load_checkpoint(&tip_layout, own_subnet_type, None)
@@ -1546,10 +1546,10 @@ impl StateManagerImpl {
 
     /// Flushes to disk all the canister heap deltas accumulated in memory
     /// during one round of execution.
-    fn flush_page_maps(&self, tip_state: &mut ReplicatedState) {
+    fn flush_page_maps(&self, tip_state: &mut ReplicatedState, height: Height) {
         let tip_layout = self
             .state_layout
-            .tip()
+            .tip(height)
             .unwrap_or_else(|err| fatal!(self.log, "Failed to access @TIP: {}", err));
 
         for canister in tip_state.canisters_iter_mut() {
@@ -2279,7 +2279,7 @@ impl StateManager for StateManagerImpl {
             .start_timer();
 
         self.populate_extra_metadata(&mut state, height);
-        self.flush_page_maps(&mut state);
+        self.flush_page_maps(&mut state, height);
         let mut dirty_pages = None;
         let checkpointed_state = match scope {
             CertificationScope::Full => {

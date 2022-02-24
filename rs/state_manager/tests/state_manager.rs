@@ -35,12 +35,12 @@ use ic_types::{
     CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, PrincipalId,
 };
 use proptest::prelude::*;
+use std::path::Path;
 use std::sync::Arc;
 use std::{
     collections::HashSet,
     convert::{TryFrom, TryInto},
 };
-use std::{path::Path, time::Duration};
 use tempfile::Builder;
 
 pub mod common;
@@ -521,47 +521,67 @@ fn certifications_are_not_persisted() {
 
 #[test]
 fn all_manifests_are_persisted() {
-    let tmp = Builder::new().prefix("test").tempdir().unwrap();
-    let config = Config::new(tmp.path().into());
-    with_test_replica_logger(|log| {
-        {
-            // Commit one checkpoint and wait for the manifest computation to finish
-            let metrics_registry = MetricsRegistry::new();
-            let state_manager = StateManagerImpl::new(
-                Arc::new(FakeVerifier::new()),
-                subnet_test_id(42),
-                SubnetType::Application,
-                log.clone(),
-                &metrics_registry,
-                &config,
-                ic_types::malicious_flags::MaliciousFlags::default(),
-            );
-            let (_height, state) = state_manager.take_tip();
-            state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
-            wait_for_checkpoint(&state_manager, height(1));
-        }
-        {
-            // If the manifest wasn't persisted, then it needs to be recomputed upon restart
-            let metrics_registry = MetricsRegistry::new();
-            let _state_manager = StateManagerImpl::new(
-                Arc::new(FakeVerifier::new()),
-                subnet_test_id(42),
-                SubnetType::Application,
-                log,
-                &metrics_registry,
-                &config,
-                ic_types::malicious_flags::MaliciousFlags::default(),
-            );
-            std::thread::sleep(Duration::from_secs(5)); // Let any potential manifest computations finish
+    state_manager_restart_test_with_metrics(|_metrics, state_manager, restart_fn| {
+        let (_height, state) = state_manager.take_tip();
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        wait_for_checkpoint(&state_manager, height(1));
 
-            // No manifest computations happened
-            assert_eq!(
-                0,
-                fetch_int_counter_vec(&metrics_registry, "state_manager_manifest_chunk_bytes")
-                    .values()
-                    .sum::<u64>()
-            );
-        }
+        let (metrics, state_manager) = restart_fn(state_manager);
+
+        wait_for_checkpoint(&state_manager, height(1));
+
+        // No manifest computations happened
+        assert_eq!(
+            0,
+            fetch_int_counter_vec(&metrics, "state_manager_manifest_chunk_bytes")
+                .values()
+                .sum::<u64>()
+        );
+    });
+}
+
+#[test]
+fn first_manifest_after_restart_is_incremental() {
+    state_manager_restart_test_with_metrics(|_metrics, state_manager, restart_fn| {
+        let (_height, mut state) = state_manager.take_tip();
+
+        // We need at least one canister, as incremental manifest computation only considers
+        // heap and stable memory
+        insert_dummy_canister(&mut state, canister_test_id(1));
+        let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+
+        const NEW_WASM_PAGE: u64 = 300;
+        execution_state.wasm_memory.page_map.update(&[
+            (PageIndex::new(1), &[1u8; PAGE_SIZE]),
+            (PageIndex::new(NEW_WASM_PAGE), &[2u8; PAGE_SIZE]),
+        ]);
+        const NEW_STABLE_PAGE: u64 = 500;
+        execution_state.stable_memory.page_map.update(&[
+            (PageIndex::new(1), &[1u8; PAGE_SIZE]),
+            (PageIndex::new(NEW_STABLE_PAGE), &[2u8; PAGE_SIZE]),
+        ]);
+
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        wait_for_checkpoint(&state_manager, height(1));
+
+        let (metrics, state_manager) = restart_fn(state_manager);
+
+        wait_for_checkpoint(&state_manager, height(1)); // Make sure the base manifest is available
+        let (_height, state) = state_manager.take_tip();
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+        wait_for_checkpoint(&state_manager, height(2));
+
+        // We detect that the manifest computation was incremental by checking that at least some bytes
+        // are either "reused" or "hashed_and_compared"
+        let chunk_bytes = fetch_int_counter_vec(&metrics, "state_manager_manifest_chunk_bytes");
+        let reused_key = maplit::btreemap! {"type".to_string() => "reused".to_string()};
+        let hashed_and_compared_key =
+            maplit::btreemap! {"type".to_string() => "hashed_and_compared".to_string()};
+        assert_ne!(
+            0,
+            chunk_bytes[&reused_key] + chunk_bytes[&hashed_and_compared_key]
+        );
     });
 }
 

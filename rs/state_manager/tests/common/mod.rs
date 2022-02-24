@@ -441,9 +441,13 @@ pub fn state_manager_test<F: FnOnce(&MetricsRegistry, StateManagerImpl)>(f: F) {
     state_manager_test_with_verifier_result(true, f)
 }
 
-pub fn state_manager_restart_test<Test>(test: Test)
+pub fn state_manager_restart_test_with_metrics<Test>(test: Test)
 where
-    Test: FnOnce(StateManagerImpl, Box<dyn Fn(StateManagerImpl) -> StateManagerImpl>),
+    Test: FnOnce(
+        &MetricsRegistry,
+        StateManagerImpl,
+        Box<dyn Fn(StateManagerImpl) -> (MetricsRegistry, StateManagerImpl)>,
+    ),
 {
     let tmp = Builder::new().prefix("test").tempdir().unwrap();
     let config = Config::new(tmp.path().into());
@@ -454,7 +458,7 @@ where
         let make_state_manager = move || {
             let metrics_registry = MetricsRegistry::new();
 
-            StateManagerImpl::new(
+            let state_manager = StateManagerImpl::new(
                 Arc::clone(&verifier),
                 own_subnet,
                 SubnetType::Application,
@@ -462,16 +466,28 @@ where
                 &metrics_registry,
                 &config,
                 ic_types::malicious_flags::MaliciousFlags::default(),
-            )
+            );
+
+            (metrics_registry, state_manager)
         };
 
-        let state_manager = make_state_manager();
+        let (metrics_registry, state_manager) = make_state_manager();
 
         let restart_fn = Box::new(move |state_manager| {
             drop(state_manager);
             make_state_manager()
         });
 
-        test(state_manager, restart_fn);
+        test(&metrics_registry, state_manager, restart_fn);
+    });
+}
+
+pub fn state_manager_restart_test<Test>(test: Test)
+where
+    Test: FnOnce(StateManagerImpl, Box<dyn Fn(StateManagerImpl) -> StateManagerImpl>),
+{
+    state_manager_restart_test_with_metrics(|_metrics, state_manager, restart_fn| {
+        let restart_fn_without_metrics = Box::new(move |state_manager| restart_fn(state_manager).1);
+        test(state_manager, restart_fn_without_metrics);
     });
 }

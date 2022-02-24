@@ -32,7 +32,7 @@ pub fn make_checkpoint(
     metrics: &CheckpointMetrics,
     thread_pool: &mut scoped_threadpool::Pool,
 ) -> Result<ReplicatedState, CheckpointError> {
-    let tip = layout.tip().map_err(CheckpointError::from)?;
+    let tip = layout.tip(height).map_err(CheckpointError::from)?;
 
     {
         let _timer = metrics
@@ -47,7 +47,7 @@ pub fn make_checkpoint(
             .step_duration
             .with_label_values(&["tip_to_checkpoint"])
             .start_timer();
-        layout.tip_to_checkpoint(tip, height, Some(thread_pool))?
+        layout.tip_to_checkpoint(tip, Some(thread_pool))?
     };
 
     let state = {

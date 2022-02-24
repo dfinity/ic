@@ -256,8 +256,8 @@ impl StateLayout {
     /// full state and is converted to a checkpoint.
     /// This directory is cleaned during restart of a node and reset to
     /// last full checkpoint.
-    pub fn tip(&self) -> Result<CheckpointLayout<RwPolicy>, LayoutError> {
-        CheckpointLayout::new(self.tip_path(), Height::from(0))
+    pub fn tip(&self, height: Height) -> Result<CheckpointLayout<RwPolicy>, LayoutError> {
+        CheckpointLayout::new(self.tip_path(), height)
     }
 
     /// Returns the path to the serialized states metadata.
@@ -294,9 +294,9 @@ impl StateLayout {
     pub fn tip_to_checkpoint(
         &self,
         tip: CheckpointLayout<RwPolicy>,
-        height: Height,
         thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+        let height = tip.height;
         let cp_name = self.checkpoint_name(height);
         match self
             .cp_manager
