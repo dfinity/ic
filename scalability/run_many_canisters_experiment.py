@@ -93,6 +93,6 @@ if __name__ == "__main__":
 
     exp.start_experiment()
     exp.run_experiment({})
-    exp.write_summary_file("experiment_3", {}, [0], "requests / s")
+    exp.write_summary_file("run_many_canisters_experiment", {}, [0], "requests / s")
 
     exp.end_experiment()

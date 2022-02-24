@@ -6,7 +6,7 @@ import time
 import experiment
 import gflags
 import misc
-import run_experiment_1
+import run_system_baseline_experiment
 from elasticsearch import ElasticSearch
 
 FLAGS = gflags.FLAGS
@@ -88,7 +88,7 @@ if __name__ == "__main__":
     print(f"Performance test of {FLAGS.load} query calls on version {FLAGS.base_revision} starts now. ")
     base_query_datapoints = [FLAGS.target_query_load]
     base_query_start = int(time.time())
-    base_query_exp = run_experiment_1.Experiment1()
+    base_query_exp = run_system_baseline_experiment.Experiment1()
     (
         base_query_failure_rate,
         base_query_t_median,
@@ -108,7 +108,7 @@ if __name__ == "__main__":
     print(f"Performance test of {FLAGS.load} update calls on version {FLAGS.base_revision} starts now. ")
     base_update_datapoints = [FLAGS.target_update_load]
     base_update_start = int(time.time())
-    base_update_exp = run_experiment_1.Experiment1()
+    base_update_exp = run_system_baseline_experiment.Experiment1()
     (
         base_update_failure_rate,
         base_update_t_median,
@@ -145,7 +145,7 @@ if __name__ == "__main__":
     print(f"Performance test of {FLAGS.load} query calls on version {FLAGS.upgrade_revision} starts now. ")
     upgrade_query_datapoints = [FLAGS.target_query_load]
     upgrade_query_start = int(time.time())
-    upgrade_query_exp = run_experiment_1.Experiment1()
+    upgrade_query_exp = run_system_baseline_experiment.Experiment1()
     (
         upgrade_query_failure_rate,
         upgrade_query_t_median,
@@ -165,7 +165,7 @@ if __name__ == "__main__":
     print(f"Performance test of {FLAGS.load} update calls on version {FLAGS.upgrade_revision} starts now. ")
     upgrade_update_datapoints = [FLAGS.target_update_load]
     upgrade_update_start = int(time.time())
-    upgrade_update_exp = run_experiment_1.Experiment1()
+    upgrade_update_exp = run_system_baseline_experiment.Experiment1()
     (
         upgrade_update_failure_rate,
         upgrade_update_t_median,

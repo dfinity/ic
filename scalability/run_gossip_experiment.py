@@ -156,7 +156,7 @@ class GossipExperiment(workload_experiment.WorkloadExperiment):
 
             # Write summary file in each iteration including experiment specific data.
             self.write_summary_file(
-                "large-subnet-gossip-experiment",
+                "run_gossip_experiment",
                 {
                     "total_requests": total_requests,
                     "subnet_sizes": subnet_sizes,
@@ -207,7 +207,7 @@ if __name__ == "__main__":
 
         num_nodes_installed.append(len(exp.get_subnet_members(FLAGS.subnet_to_grow)))
         exp.write_summary_file(
-            "gossip_experiment", {}, num_nodes_installed, "#nodes", rtype="update" if exp.use_updates else "query"
+            "run_gossip_experiment", {}, num_nodes_installed, "#nodes", rtype="update" if exp.use_updates else "query"
         )
 
     exp.end_experiment()

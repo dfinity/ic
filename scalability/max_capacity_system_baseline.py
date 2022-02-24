@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
+import os
+
 import experiment
 import gflags
 import misc
-import run_experiment_1
+import run_system_baseline_experiment
 from elasticsearch import ElasticSearch
 
 FLAGS = gflags.FLAGS
@@ -43,7 +45,7 @@ gflags.DEFINE_integer("stop_t_median", 120000, "Maximum median latency before ab
 
 if __name__ == "__main__":
     experiment.parse_command_line_args()
-    experiment_name = "system-baseline-maximum-capacity"
+    experiment_name = os.path.basename(__file__).replace(".py", "")
 
     datapoints = (
         misc.get_datapoints(
@@ -54,7 +56,7 @@ if __name__ == "__main__":
             FLAGS.target_query_load, FLAGS.query_initial_rps, FLAGS.max_query_load, FLAGS.query_rps_increment, 1
         )
     )
-    exp = run_experiment_1.Experiment1()
+    exp = run_system_baseline_experiment.Experiment1()
     (
         failure_rate,
         t_median,

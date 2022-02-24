@@ -104,7 +104,7 @@ if __name__ == "__main__":
         data = {}
 
         print("Experiment 1")
-        data["plot_exp1_query"] = find_results(["experiment_1", "system-baseline-experiment"], "query", 2800)
+        data["plot_exp1_query"] = find_results(["experiment_1", "run_system_baseline_experiment"], "query", 2800)
         data["plot_exp1_query"]["layout"].update(
             {
                 "annotations": [
@@ -135,7 +135,7 @@ if __name__ == "__main__":
                 ]
             }
         )
-        data["plot_exp1_update"] = find_results(["experiment_1", "system-baseline-experiment"], "update", 500)
+        data["plot_exp1_update"] = find_results(["experiment_1", "run_system_baseline_experiment"], "update", 500)
 
         print("Experiment 2")
         data["plot_exp2_update"] = find_results(["experiment_2"], "update", 20)

@@ -197,7 +197,7 @@ if __name__ == "__main__":
         break
 
     exp.write_summary_file(
-        "experiment_xnet", {"rps": [FLAGS.payload_size]}, [FLAGS.payload_size], "payload size [bytes]"
+        "run_xnet_experiment", {"rps": [FLAGS.payload_size]}, [FLAGS.payload_size], "payload size [bytes]"
     )
 
     exp.end_experiment()
