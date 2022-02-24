@@ -41,13 +41,6 @@ include:
     - .rules-parent-pipeline-protected-branch-only
   stage: cargo-build
 
-.cargo-build-macos-mr-pipeline:
-  needs: []
-  extends:
-    - .macos-nix-native
-    - .rules-parent-pipeline
-  stage: cargo-build
-
 .cargo-crate-test:
   extends:
     - .ubuntu-nix-docker
