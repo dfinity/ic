@@ -10,8 +10,8 @@ Currently, there is support for installing canisters, running the workload gener
 
 Experiments typically run in iterations, where each iteration typically increases stress on the system.
 
-Each experiment has an entry point at `run_experiment_n.py`.
-Some of them (currently only Experiment 1) have a maximum capacity script as well (`max-capacity-experiment-n.py`), where the load of the system is incrementally increased until failures occur.
+Each experiment has an entry point at `run_experiment_*.py`.
+Some of them (currently only Experiment 1) have a maximum capacity script as well (`max_capacity_*.py`), where the load of the system is incrementally increased until failures occur.
 
 When running benchmarks, the tool collects all measurements and quite a few metrics, most of them are collected for each iteration the benchmark is running.
 
@@ -25,9 +25,9 @@ The code is as follows:
    - `prometheus.py`: Downloads metrics collected during benchmark execution on Prometheus.
 - `ssh.py`: Helpers to execute commands remotely via SSH
 - `experiment.py`: Base class for experiments. Implements common functionality like installing canisters or running the workload generator.
-   - `load_experiment.py`: Base class for workload generator based experiments. In addition to `experiment.py`, those experiments have built-in support for running the workload generator.
-   - `run_experiment*.py`: Each of those implement a single benchmark as descrobed in IC-562
-   - `max-capacity-experiment*.py`: Maximum capacity variants of the experiments - increases loads iteratively until the system starts to fail.
+   - `workload_experiment.py`: Base class for workload generator based experiments. In addition to `experiment.py`, those experiments have built-in support for running the workload generator.
+   - `run_*_experiment.py`: Each of those implement a single benchmark as descrobed in IC-562
+   - `max_capacity_*.py`: Maximum capacity variants of the experiments - increases loads iteratively until the system starts to fail.
  - `report.py` and `generate_report.py`: Scripts to generate HTML reports out of collected measurements from experiment executions.
    - `templates/`: folder for storing templates to generate HTML reports. There is one main`experiment.html.hb` is the main experiment report template, with `experiment_*.html.hb` defining the template for the experiment-specific part of the report. The name of the template file has to match what's given as first argument to `write_summary_file`.
 
@@ -90,7 +90,7 @@ As described above, make sure you have *two* testnets reserved, then:
 - Run the python script corresponding to your benchmark (make sure you are within the `pipenv shell`). A good starting point is the following, which benchmarks system overhead by stressing with query and update calls (default are queries, use `--use_updates=True` for update calls):
 
   ```
-  $  ./max-capacity-experiment-1.py --testnet $TESTNET --wg_testnet $WG_TESTNET
+  $  ./max_capacity_system_baseline.py --testnet $TESTNET --wg_testnet $WG_TESTNET
   ```
 - You can observe the benchmark on the following dashboard: https://grafana.dfinity.systems/d/u016YUeGz/workload-generator-metrics?orgId=1&refresh=5s - make sure to select the target subnetwork *as well as* the subnetwork with workload generators under "IC" and "IC workload generator" at the top respectively.
 - Create the report `python generate_report.py githash timestamp`. This is normally called from the suite automatically, so in many cases you won't to manually run it.

@@ -96,6 +96,8 @@ if __name__ == "__main__":
             "duration": FLAGS.duration,
         }
     )
-    exp.write_summary_file("experiment_2", {"rps": [FLAGS.initial_rps]}, [FLAGS.initial_rps], "requests / s")
+    exp.write_summary_file(
+        "run_large_memory_experiment", {"rps": [FLAGS.initial_rps]}, [FLAGS.initial_rps], "requests / s"
+    )
 
     exp.end_experiment()

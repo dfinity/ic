@@ -75,8 +75,8 @@ def main(argv):
     subprocess.run(
         [
             "python3",
-            "run_experiment_xnet.py",
-            "--duration",
+            "run_xnet_experiment.py",
+            "--runtime",
             "20",
         ]
         + base_arguments,
@@ -91,7 +91,7 @@ def main(argv):
     subprocess.run(
         [
             "python3",
-            "run_experiment_1.py",
+            "run_system_baseline_experiment.py",
             "--duration",
             "10",
             "--load",
@@ -106,7 +106,7 @@ def main(argv):
     subprocess.run(
         [
             "python3",
-            "run_experiment_1.py",
+            "run_system_baseline_experiment.py",
             "--duration",
             "10",
             "--load",
@@ -122,7 +122,7 @@ def main(argv):
     subprocess.run(
         [
             "python3",
-            "max-capacity-experiment-1-inc-payload.py",
+            "max_capacity_large_payload.py",
             "--duration",
             "10",
             "--max_block_payload_size",
@@ -140,7 +140,7 @@ def main(argv):
     subprocess.run(
         [
             "python3",
-            "run_experiment_gossip.py",
+            "run_gossip_experiment.py",
             "--duration",
             "10",
             "--skip_generate_report=True",
@@ -152,7 +152,7 @@ def main(argv):
     subprocess.run(
         [
             "python3",
-            "run_experiment_2.py",
+            "run_large_memory_experiment.py",
             "--duration",
             "10",
             "--initial_rps",

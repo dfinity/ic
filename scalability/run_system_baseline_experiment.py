@@ -166,7 +166,7 @@ class Experiment1(workload_experiment.WorkloadExperiment):
 
             # Write summary file in each iteration including experiment specific data.
             self.write_summary_file(
-                "system-baseline-experiment",
+                "run_system_baseline_experiment",
                 {
                     "total_requests": total_requests,
                     "rps": rps,
@@ -206,7 +206,7 @@ if __name__ == "__main__":
     exp.start_experiment()
     exp.run_experiment({"load_total": FLAGS.load, "duration": FLAGS.duration})
     exp.write_summary_file(
-        "experiment_1",
+        "run_system_baseline_experiment",
         {"rps": FLAGS.load},
         [FLAGS.load],
         "requests / s",

@@ -4,7 +4,7 @@ import os
 import experiment
 import gflags
 import misc
-import run_experiment_2
+import run_large_memory_experiment
 from elasticsearch import ElasticSearch
 
 FLAGS = gflags.FLAGS
@@ -42,7 +42,7 @@ if __name__ == "__main__":
     experiment.parse_command_line_args()
     experiment_name = os.path.basename(__file__).replace(".py", "")
 
-    exp = run_experiment_2.Experiment2()
+    exp = run_large_memory_experiment.Experiment2()
     exp.start_experiment()
 
     failure_rate = 0.0
@@ -100,7 +100,7 @@ if __name__ == "__main__":
         rtype = "update" if exp.use_updates else "query"
         state = "running" if run else "done"
         exp.write_summary_file(
-            "experiment_2",
+            "run_large_memory_experiment",
             {
                 "rps": rps,
                 "rps_max": rps_max,

@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
+import os
+
 import experiment
 import gflags
-import run_experiment_gossip
+import run_gossip_experiment
 from elasticsearch import ElasticSearch
 
 FLAGS = gflags.FLAGS
@@ -31,10 +33,10 @@ gflags.DEFINE_integer("stop_t_median", 30000, "Maximum median latency before abo
 
 if __name__ == "__main__":
     experiment.parse_command_line_args()
-    experiment_name = "large-subnet-gossip-maximum-capacity"
+    experiment_name = os.path.basename(__file__).replace(".py", "")
     FLAGS.load = FLAGS.target_update_load
 
-    exp = run_experiment_gossip.GossipExperiment()
+    exp = run_gossip_experiment.GossipExperiment()
     (
         failure_rate,
         t_median,
