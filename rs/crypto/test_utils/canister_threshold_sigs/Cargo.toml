@@ -7,6 +7,7 @@ edition = "2018"
 [dependencies]
 ic-crypto = { path = "../.." }
 ic-interfaces = { path = "../../../interfaces" }
+ic-crypto-internal-threshold-sig-ecdsa = { path = "../../internal/crypto_lib/threshold_sig/tecdsa" }
 ic-registry-client = { path = "../../../registry/client" }
 ic-registry-common = { path = "../../../registry/common" }
 ic-registry-keys = { path = "../../../registry/keys" }

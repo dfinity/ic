@@ -158,6 +158,13 @@ impl MaliciousBehaviour {
         })
     }
 
+    pub fn set_maliciously_corrupt_ecdsa_dealings(self) -> Self {
+        self.set_malicious_behaviour(|mut s| {
+            s.malicious_flags.maliciously_corrupt_ecdsa_dealings = true;
+            s
+        })
+    }
+
     fn set_malicious_behaviour<F: FnOnce(Self) -> Self>(self, f: F) -> Self {
         if self.allow_malicious_behaviour {
             f(self)

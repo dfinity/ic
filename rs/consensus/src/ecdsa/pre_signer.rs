@@ -21,8 +21,12 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgMultiSignedDealing, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation,
     IDkgTranscriptParams,
 };
+use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::signature::MultiSignature;
 use ic_types::{Height, NodeId};
+
+#[cfg(feature = "malicious_code")]
+use ic_types::crypto::canister_threshold_sig::idkg::IDkgDealing;
 
 use prometheus::IntCounterVec;
 use std::collections::{BTreeMap, BTreeSet};
@@ -45,6 +49,7 @@ pub(crate) struct EcdsaPreSignerImpl {
     schedule: RoundRobin,
     metrics: EcdsaPreSignerMetrics,
     log: ReplicaLogger,
+    malicious_flags: MaliciousFlags,
 }
 
 impl EcdsaPreSignerImpl {
@@ -54,6 +59,7 @@ impl EcdsaPreSignerImpl {
         crypto: Arc<dyn ConsensusCrypto>,
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
+        malicious_flags: MaliciousFlags,
     ) -> Self {
         Self {
             node_id,
@@ -62,6 +68,7 @@ impl EcdsaPreSignerImpl {
             schedule: RoundRobin::default(),
             metrics: EcdsaPreSignerMetrics::new(metrics_registry),
             log,
+            malicious_flags,
         }
     }
 
@@ -511,6 +518,11 @@ impl EcdsaPreSignerImpl {
                 return Default::default();
             }
         };
+
+        // Corrupt the dealing if malicious testing is enabled
+        #[cfg(feature = "malicious_code")]
+        let idkg_dealing = self.crypto_corrupt_dealing(idkg_dealing, transcript_params);
+
         let ecdsa_dealing = EcdsaDealing {
             requested_height: block_reader.tip_height(),
             idkg_dealing,
@@ -627,6 +639,46 @@ impl EcdsaPreSignerImpl {
                     vec![EcdsaChangeAction::MoveToValidated(id.clone())]
                 },
             )
+    }
+
+    /// Helper to corrupt the crypto dealing for malicious testing
+    #[cfg(feature = "malicious_code")]
+    fn crypto_corrupt_dealing(
+        &self,
+        idkg_dealing: IDkgDealing,
+        transcript_params: &IDkgTranscriptParams,
+    ) -> IDkgDealing {
+        if !self.malicious_flags.maliciously_corrupt_ecdsa_dealings {
+            return idkg_dealing;
+        }
+
+        let mut rng = rand::thread_rng();
+        match ic_crypto_test_utils_canister_threshold_sigs::corrupt_idkg_dealing(
+            &idkg_dealing,
+            transcript_params,
+            &mut rng,
+        ) {
+            Ok(dealing) => {
+                warn!(
+                     every_n_seconds => 2,
+                     self.log,
+                    "Corrupted dealing: transcript_id = {:?}", transcript_params.transcript_id()
+                );
+                self.metrics.pre_sign_metrics_inc("dealing_corrupted");
+                dealing
+            }
+            Err(err) => {
+                warn!(
+                    self.log,
+                    "Failed to corrupt dealing: transcript_id = {:?}, type = {:?}, error = {:?}",
+                    transcript_params.transcript_id(),
+                    transcript_params.operation_type(),
+                    err
+                );
+                self.metrics.pre_sign_errors_inc("corrupt_dealing");
+                idkg_dealing
+            }
+        }
     }
 
     /// Helper to issue a support share for a dealing. Assumes we are a receiver
