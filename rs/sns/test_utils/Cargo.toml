@@ -13,6 +13,7 @@ futures = "0.3.8"
 ic-canister-client = { path = "../../canister_client" }
 ic-config = { path = "../../config" }
 ic-crypto-sha = { path = "../../crypto/sha" }
+ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-sns-governance = { path = "../governance" }
 ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }

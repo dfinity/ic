@@ -1,7 +1,9 @@
 use crate::NervousSystemError;
 use async_trait::async_trait;
+use dfn_core::api::PrincipalId;
 use dfn_core::{call, CanisterId};
 use dfn_protobuf::protobuf;
+use ic_crypto_sha::Sha256;
 use ledger_canister::{
     AccountBalanceArgs, AccountIdentifier, Memo, SendArgs, Subaccount, Tokens, TotalSupplyArgs,
 };
@@ -118,4 +120,22 @@ impl Ledger for LedgerCanister {
             )
         })
     }
+}
+
+/// Computes the subaccount to which neuron staking transfers are made. This
+/// function must be kept in sync with the Nervous System UI equivalent.
+pub fn compute_neuron_staking_subaccount(controller: PrincipalId, nonce: u64) -> Subaccount {
+    // The equivalent function in the NNS UI is
+    // https://github.com/dfinity/dfinity_wallet/blob/351e07d3e6d007b090117161a94ce8ec9d5a6b49/js-agent/src/canisters/createNeuron.ts#L63
+    const DOMAIN: &[u8] = b"neuron-stake";
+    const DOMAIN_LENGTH: [u8; 1] = [0x0c];
+
+    Subaccount({
+        let mut hasher = Sha256::new();
+        hasher.write(&DOMAIN_LENGTH);
+        hasher.write(DOMAIN);
+        hasher.write(controller.as_slice());
+        hasher.write(&nonce.to_be_bytes());
+        hasher.finish()
+    })
 }

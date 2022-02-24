@@ -28,7 +28,6 @@ use crate::pb::v1::{
     Vote,
 };
 use ic_base_types::PrincipalId;
-use ic_crypto_sha::Sha256;
 use ledger_canister::{AccountIdentifier, Subaccount};
 
 #[cfg(target_arch = "wasm32")]
@@ -45,6 +44,7 @@ use crate::proposal::{
 };
 use crate::types::{Environment, HeapGrowthPotential, LedgerUpdateLock};
 use dfn_core::api::{id, spawn};
+use ic_nervous_system_common::ledger;
 use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
 use ledger_canister::Tokens;
 
@@ -408,7 +408,7 @@ impl Governance {
         controller: &PrincipalId,
         memo: u64,
     ) -> Result<NeuronId, GovernanceError> {
-        let subaccount = compute_subaccount(*controller, memo);
+        let subaccount = ledger::compute_neuron_staking_subaccount(*controller, memo);
         let nid = NeuronId::from(subaccount);
         // Don't allow IDs that are already in use.
         if self.proto.neurons.contains_key(&nid.to_string()) {
@@ -2017,7 +2017,7 @@ impl Governance {
     ) -> Result<NeuronId, GovernanceError> {
         let controller = memo_and_controller.controller.unwrap_or(*caller);
         let memo = memo_and_controller.memo;
-        let nid = NeuronId::from(compute_subaccount(controller, memo));
+        let nid = NeuronId::from(ledger::compute_neuron_staking_subaccount(controller, memo));
         match self.get_neuron_result(&nid) {
             Ok(neuron) => {
                 let nid = neuron.id.as_ref().expect("Neuron must have an id").clone();
@@ -2590,21 +2590,6 @@ impl Governance {
             .get_mut(&nid.to_string())
             .ok_or_else(|| Self::neuron_not_found_error(nid))
     }
-}
-
-/// Computes the subaccount to which neuron staking transfers are made. This
-/// function must be kept in sync with the NNS UI equivalent.
-pub fn compute_subaccount(controller: PrincipalId, nonce: u64) -> Subaccount {
-    // The equivalent function in the UI is
-    // https://github.com/dfinity/dfinity_wallet/blob/351e07d3e6d007b090117161a94ce8ec9d5a6b49/js-agent/src/canisters/createNeuron.ts#L63
-    Subaccount({
-        let mut state = Sha256::new();
-        state.write(&[0x0c]);
-        state.write(b"neuron-stake");
-        state.write(controller.as_slice());
-        state.write(&nonce.to_be_bytes());
-        state.finish()
-    })
 }
 
 #[cfg(test)]

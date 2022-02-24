@@ -30,7 +30,6 @@ use crate::pb::v1::{
 use candid::Decode;
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_crypto_sha::Sha256;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{
@@ -52,6 +51,8 @@ use crate::pb::v1::WaitForQuietState;
 use cycles_minting_canister::IcpXdrConversionRateCertifiedResponse;
 use dfn_candid::candid_one;
 use dfn_core::api::spawn;
+use ic_crypto_sha::Sha256;
+use ic_nervous_system_common::ledger;
 use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
 use ledger_canister::{Tokens, TOKEN_SUBDIVIDABLE_BY};
 use registry_canister::pb::v1::NodeProvidersMonthlyXdrRewards;
@@ -3174,7 +3175,9 @@ impl Governance {
         // use provided sub-account if any, otherwise generate a random one.
         let to_subaccount = match spawn.nonce {
             None => Subaccount(self.env.random_byte_array()),
-            Some(nonce_val) => compute_neuron_staking_subaccount(*child_controller, nonce_val),
+            Some(nonce_val) => {
+                ledger::compute_neuron_staking_subaccount(*child_controller, nonce_val)
+            }
         };
 
         // Make sure there isn't already a neuron with the same sub-account.
@@ -5468,7 +5471,7 @@ impl Governance {
     ) -> Result<NeuronId, GovernanceError> {
         let controller = memo_and_controller.controller.unwrap_or(*caller);
         let memo = memo_and_controller.memo;
-        let subaccount = compute_neuron_staking_subaccount(controller, memo);
+        let subaccount = ledger::compute_neuron_staking_subaccount(controller, memo);
         match self.get_neuron_by_subaccount(&subaccount) {
             Some(neuron) => {
                 let nid = neuron.id.as_ref().expect("Neuron must have an id").clone();
@@ -6248,21 +6251,6 @@ pub fn validate_proposal_title(title: &Option<String>) -> Result<(), GovernanceE
     }
 
     Ok(())
-}
-
-/// Computes the subaccount to which neuron staking transfers are made. This
-/// function must be kept in sync with the NNS UI equivalent.
-pub fn compute_neuron_staking_subaccount(controller: PrincipalId, nonce: u64) -> Subaccount {
-    // The equivalent function in the UI is
-    // https://github.com/dfinity/dfinity_wallet/blob/351e07d3e6d007b090117161a94ce8ec9d5a6b49/js-agent/src/canisters/createNeuron.ts#L63
-    Subaccount({
-        let mut state = Sha256::new();
-        state.write(&[0x0c]);
-        state.write(b"neuron-stake");
-        state.write(controller.as_slice());
-        state.write(&nonce.to_be_bytes());
-        state.finish()
-    })
 }
 
 /// A helper for the Registry's get_node_providers_monthly_xdr_rewards method
