@@ -450,7 +450,7 @@ fn setup_artifact_manager(
             replica_logger.clone(),
             metrics_registry.clone(),
             node_id,
-            malicious_flags,
+            malicious_flags.clone(),
         );
         artifact_manager_maker.add_client(ingress_client, actor);
     }
@@ -525,6 +525,7 @@ fn setup_artifact_manager(
                             Arc::clone(&consensus_crypto),
                             metrics_registry.clone(),
                             replica_logger.clone(),
+                            malicious_flags,
                         ),
                         ecdsa::EcdsaGossipImpl::new(Arc::clone(&consensus_block_cache)),
                     )

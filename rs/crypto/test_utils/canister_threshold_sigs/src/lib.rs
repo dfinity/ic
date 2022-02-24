@@ -1,6 +1,8 @@
 //! Utilities for testing IDkg and canister threshold signature operations.
 
 use ic_crypto::utils::TempCryptoComponent;
+use ic_crypto_internal_threshold_sig_ecdsa::test_utils::corrupt_dealing;
+use ic_crypto_internal_threshold_sig_ecdsa::IDkgDealingInternal;
 use ic_interfaces::crypto::{IDkgProtocol, MultiSigVerifier, MultiSigner};
 use ic_registry_client::fake::FakeRegistryClient;
 use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
@@ -13,7 +15,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
 use ic_types::crypto::canister_threshold_sig::PreSignatureQuadruple;
 use ic_types::crypto::canister_threshold_sig::ThresholdEcdsaSigInputs;
 use ic_types::crypto::{AlgorithmId, KeyPurpose};
-use ic_types::{Height, NodeId, PrincipalId, RegistryVersion, SubnetId};
+use ic_types::{Height, NodeId, NodeIndex, PrincipalId, RegistryVersion, SubnetId};
 use rand::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -481,4 +483,33 @@ pub fn random_dealer_id(params: &IDkgTranscriptParams) -> NodeId {
         .iter()
         .choose(&mut thread_rng())
         .expect("dealers is empty")
+}
+
+/// Corrupts the dealing for a single randomly picked receiver.
+/// The transcript params used to create the dealing is passed in with the
+/// dealing to be corrupted.
+pub fn corrupt_idkg_dealing<R: CryptoRng + RngCore>(
+    idkg_dealing: &IDkgDealing,
+    transcript_params: &IDkgTranscriptParams,
+    rng: &mut R,
+) -> Result<IDkgDealing, CorruptIDkgDealingError> {
+    let internal_dealing = IDkgDealingInternal::deserialize(&idkg_dealing.internal_dealing_raw)
+        .map_err(|e| CorruptIDkgDealingError::SerializationError(format!("{:?}", e)))?;
+    let num_receivers = transcript_params.receivers().count().get() as usize;
+    let receiver = rng.gen_range(0, num_receivers);
+    let corrupted_dealing = corrupt_dealing(&internal_dealing, &[receiver as NodeIndex], rng)
+        .map_err(|e| CorruptIDkgDealingError::FailedToCorruptDealing(format!("{:?}", e)))?;
+    let internal_dealing_raw = corrupted_dealing
+        .serialize()
+        .map_err(|e| CorruptIDkgDealingError::SerializationError(format!("{:?}", e)))?;
+    Ok(IDkgDealing {
+        transcript_id: idkg_dealing.transcript_id,
+        dealer_id: idkg_dealing.dealer_id,
+        internal_dealing_raw,
+    })
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum CorruptIDkgDealingError {
+    SerializationError(String),
+    FailedToCorruptDealing(String),
 }

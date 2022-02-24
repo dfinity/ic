@@ -4429,6 +4429,7 @@ name = "ic-crypto-test-utils-canister-threshold-sigs"
 version = "0.8.0"
 dependencies = [
  "ic-crypto",
+ "ic-crypto-internal-threshold-sig-ecdsa",
  "ic-interfaces",
  "ic-registry-client",
  "ic-registry-common",

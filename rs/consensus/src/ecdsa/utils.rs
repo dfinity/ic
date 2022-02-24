@@ -179,6 +179,7 @@ pub(crate) mod test_utils {
         ExtendedDerivationPath, ThresholdEcdsaSigShare,
     };
     use ic_types::crypto::AlgorithmId;
+    use ic_types::malicious_behaviour::MaliciousBehaviour;
     use ic_types::signature::*;
     use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion};
     use std::collections::{BTreeMap, BTreeSet};
@@ -390,6 +391,7 @@ pub(crate) mod test_utils {
             crypto,
             metrics_registry.clone(),
             logger.clone(),
+            MaliciousBehaviour::new(false).malicious_flags,
         );
         let ecdsa_pool = EcdsaPoolImpl::new(logger, metrics_registry);
 

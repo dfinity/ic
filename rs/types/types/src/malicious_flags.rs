@@ -30,6 +30,7 @@ pub struct MaliciousFlags {
     pub maliciously_disable_execution: bool,
     pub maliciously_corrupt_own_state_at_heights: Vec<u64>,
     pub maliciously_disable_ingress_validation: bool,
+    pub maliciously_corrupt_ecdsa_dealings: bool,
 }
 
 impl MaliciousFlags {

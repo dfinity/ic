@@ -183,6 +183,7 @@ use ic_metrics::MetricsRegistry;
 use ic_types::{
     artifact::{EcdsaMessageAttribute, EcdsaMessageId, Priority, PriorityFn},
     consensus::ecdsa::EcdsaBlockReader,
+    malicious_flags::MaliciousFlags,
     Height, NodeId,
 };
 
@@ -218,6 +219,7 @@ impl EcdsaImpl {
         crypto: Arc<dyn ConsensusCrypto>,
         metrics_registry: MetricsRegistry,
         logger: ReplicaLogger,
+        malicious_flags: MaliciousFlags,
     ) -> Self {
         let pre_signer = Box::new(EcdsaPreSignerImpl::new(
             node_id,
@@ -225,6 +227,7 @@ impl EcdsaImpl {
             crypto.clone(),
             metrics_registry.clone(),
             logger.clone(),
+            malicious_flags,
         ));
         let signer = Box::new(EcdsaSignerImpl::new(
             node_id,

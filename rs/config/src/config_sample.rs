@@ -295,6 +295,7 @@ pub const SAMPLE_CONFIG: &str = r#"
          maliciously_disable_execution: false,
          maliciously_corrupt_own_state_at_heights: [],
          maliciously_disable_ingress_validation: false,
+         maliciously_corrupt_ecdsa_dealings: false,
        },
     },
 
