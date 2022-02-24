@@ -18,6 +18,7 @@ type ArchiveOptions = record {
     node_max_memory_size_bytes: opt nat64;
     max_message_size_bytes: opt nat64;
     controller_id: principal;
+    cycles_for_archive_creation: opt nat64;
 };
 
 // Height of a ledger block.
