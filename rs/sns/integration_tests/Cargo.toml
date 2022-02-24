@@ -20,6 +20,7 @@ ic-sns-governance = { path = "../governance" }
 ic-crypto = { path = "../../crypto" }
 ic-crypto-sha = { path = "../../crypto/sha" }
 ic-sns-test-utils = { path = "../../sns/test_utils" }
+ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-types = { path = "../../types/types" }
 ic-base-types={path="../../types/base_types"}

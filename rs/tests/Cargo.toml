@@ -33,6 +33,7 @@ ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-fondue = { path = "../ic_fondue" }
 ic-http-utils = { path = "../http_utils" }
 ic-ic00-types = { path = "../types/ic00_types" }
+ic-nervous-system-common = { path = "../nervous_system/common" }
 ic-nns-common = { path = "../nns/common" }
 ic-nns-init = { path = "../nns/init" }
 ic-interfaces = { path = "../interfaces" }

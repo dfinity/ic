@@ -11,4 +11,5 @@ path = "src/lib.rs"
 async-trait = "0.1.42"
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
+ic-crypto-sha = {path = "../../crypto/sha" }
 ledger-canister = { path = "../../rosetta-api/ledger_canister" }

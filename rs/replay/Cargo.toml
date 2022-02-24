@@ -24,6 +24,7 @@ ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
 ic-messaging = { path = "../messaging" }
 ic-metrics = { path = "../monitoring/metrics" }
+ic-nervous-system-common = { path = "../nervous_system/common" }
 ic-nns-constants = { path = "../nns/constants" }
 ic-nns-common = { path = "../nns/common" }
 ic-nns-init = { path = "../nns/init" }

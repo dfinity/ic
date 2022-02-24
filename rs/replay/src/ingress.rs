@@ -4,7 +4,7 @@ use crate::cmd::{
 };
 use candid::Encode;
 use ic_canister_client::{Agent, Sender};
-use ic_crypto_sha::Sha256;
+use ic_nervous_system_common::ledger;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_nns_governance::pb::v1::{
@@ -28,7 +28,7 @@ use ic_registry_transport::{
     serialize_atomic_mutate_request,
 };
 use ic_types::{messages::SignedIngress, CanisterId, PrincipalId, SubnetId, Time};
-use ledger_canister::{AccountIdentifier, Memo, SendArgs, Subaccount, Tokens};
+use ledger_canister::{AccountIdentifier, Memo, SendArgs, Tokens};
 use prost::Message;
 use std::convert::TryFrom;
 use std::str::FromStr;
@@ -90,15 +90,7 @@ pub fn cmd_add_neuron(time: Time, cmd: &WithNeuronCmd) -> Result<Vec<SignedIngre
 
     let controller = cmd.neuron_controller;
     let memo = 1234_u64;
-
-    let subaccount = Subaccount({
-        let mut sha = Sha256::new();
-        sha.write(&[0x0c]);
-        sha.write(b"neuron-stake");
-        sha.write(controller.as_slice());
-        sha.write(&memo.to_be_bytes());
-        sha.finish()
-    });
+    let subaccount = ledger::compute_neuron_staking_subaccount(controller, memo);
 
     let neuron_account = AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(subaccount));
 

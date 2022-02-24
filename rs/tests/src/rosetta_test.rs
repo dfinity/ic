@@ -30,8 +30,8 @@ use dfn_protobuf::protobuf;
 use ed25519_dalek::Signer;
 use ic_canister_client::Sender;
 use ic_fondue::{ic_instance::InternetComputer, ic_manager::IcHandle};
+use ic_nervous_system_common::ledger;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID};
-use ic_nns_governance::governance::compute_neuron_staking_subaccount;
 use ic_nns_governance::pb::v1::{Governance, NetworkEconomics, Neuron};
 use ic_nns_test_utils::itest_helpers::{set_up_governance_canister, set_up_ledger_canister};
 use ic_registry_subnet_type::SubnetType;
@@ -2124,7 +2124,7 @@ async fn test_spawn(ros: &RosettaApiHandle, ledger: &Canister<'_>, neuron_info: 
 
     // Verify that maturity got transferred to the spawned neuron.
     let subaccount =
-        compute_neuron_staking_subaccount(neuron_info.principal_id, spawned_neuron_index);
+        ledger::compute_neuron_staking_subaccount(neuron_info.principal_id, spawned_neuron_index);
     let spawned_neuron = AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(subaccount));
     let balance_sub = get_balance(ledger, spawned_neuron).await;
     assert_eq!(
@@ -2252,7 +2252,7 @@ async fn test_spawn_partial(
 
     // Verify that the proper percentage of maturity got transferred to the spawned neuron.
     let subaccount =
-        compute_neuron_staking_subaccount(neuron_info.principal_id, spawned_neuron_index);
+        ledger::compute_neuron_staking_subaccount(neuron_info.principal_id, spawned_neuron_index);
     let spawned_neuron = AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(subaccount));
     let balance_sub = get_balance(ledger, spawned_neuron).await;
     assert_eq!(

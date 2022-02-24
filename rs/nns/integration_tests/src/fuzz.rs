@@ -26,6 +26,7 @@ use dfn_protobuf::protobuf;
 use ic_base_types::PrincipalId;
 use ic_canister_client::Sender;
 use ic_crypto_sha::Sha256;
+use ic_nervous_system_common::ledger;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::init::GovernanceCanisterInitPayloadBuilder;
@@ -103,14 +104,7 @@ struct Neuron {
 
 impl Neuron {
     fn subaccount(&self) -> Subaccount {
-        Subaccount({
-            let mut state = Sha256::new();
-            state.write(&[0x0c]);
-            state.write(b"neuron-stake");
-            state.write(self.owner.sender.get_principal_id().as_slice());
-            state.write(&self.nonce.to_be_bytes());
-            state.finish()
-        })
+        ledger::compute_neuron_staking_subaccount(self.owner.sender.get_principal_id(), self.nonce)
     }
 }
 
@@ -132,17 +126,10 @@ impl From<Neuron> for NeuronProto {
 
 impl From<Neuron> for AccountIdentifier {
     fn from(neuron: Neuron) -> AccountIdentifier {
-        let subaccount = Subaccount::try_from(
-            &{
-                let mut state = Sha256::new();
-                state.write(&[0x0c]);
-                state.write(b"neuron-stake");
-                state.write(neuron.owner.sender.get_principal_id().as_slice());
-                state.write(&neuron.nonce.to_be_bytes());
-                state.finish()
-            }[..],
-        )
-        .expect("Couldn't build subaccount from hash.");
+        let subaccount = ledger::compute_neuron_staking_subaccount(
+            neuron.owner.sender.get_principal_id(),
+            neuron.nonce,
+        );
         AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(subaccount))
     }
 }
