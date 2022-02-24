@@ -7,8 +7,8 @@ use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
 use ic_registry_keys::make_crypto_node_key;
 use ic_types::consensus::ecdsa::EcdsaDealing;
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgDealers, IDkgDealing, IDkgMultiSignedDealing, IDkgReceivers, IDkgTranscript,
-    IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
+    IDkgDealing, IDkgMultiSignedDealing, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
+    IDkgTranscriptOperation, IDkgTranscriptParams,
 };
 use ic_types::crypto::canister_threshold_sig::PreSignatureQuadruple;
 use ic_types::crypto::canister_threshold_sig::ThresholdEcdsaSigInputs;
@@ -291,8 +291,8 @@ pub fn build_params_from_previous(
 ) -> IDkgTranscriptParams {
     IDkgTranscriptParams::new(
         random_transcript_id(),
-        previous_params.dealers().clone(),
-        previous_params.receivers().clone(),
+        previous_params.dealers().get().clone(),
+        previous_params.receivers().get().clone(),
         previous_params.registry_version(),
         previous_params.algorithm_id(),
         operation_type,
@@ -339,8 +339,8 @@ impl CanisterThresholdSigTestEnvironment {
 
         IDkgTranscriptParams::new(
             random_transcript_id(),
-            IDkgDealers::new(nodes.clone()).expect("failed to create IDkgDealers"),
-            IDkgReceivers::new(nodes).expect("failed to create IDkgReceivers"),
+            nodes.clone(),
+            nodes,
             self.newest_registry_version,
             algorithm_id,
             IDkgTranscriptOperation::Random,

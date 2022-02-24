@@ -258,6 +258,8 @@ pub struct IDkgTranscriptParams {
 
 impl IDkgTranscriptParams {
     /// Checks the following invariants:
+    /// * |dealers| > 0 and |receivers| > 0 (errors: `DealersEmpty`
+    ///   and `ReceiversEmpty`)
     /// * |dealers| >= self.collection_threshold + faults_tolerated(|dealers|)
     ///   (error: `UnsatisfiedCollectionThreshold`)
     /// * algorithm_id is of type `ThresholdEcdsaSecp256k1` (error:
@@ -278,16 +280,16 @@ impl IDkgTranscriptParams {
     /// `WrongTypeForOriginalTranscript`)
     pub fn new(
         transcript_id: IDkgTranscriptId,
-        dealers: IDkgDealers,
-        receivers: IDkgReceivers,
+        dealers: BTreeSet<NodeId>,
+        receivers: BTreeSet<NodeId>,
         registry_version: RegistryVersion,
         algorithm_id: AlgorithmId,
         operation_type: IDkgTranscriptOperation,
     ) -> Result<Self, IDkgParamsValidationError> {
         let ret = Self {
             transcript_id,
-            dealers,
-            receivers,
+            dealers: IDkgDealers::new(dealers)?,
+            receivers: IDkgReceivers::new(receivers)?,
             registry_version,
             algorithm_id,
             operation_type,

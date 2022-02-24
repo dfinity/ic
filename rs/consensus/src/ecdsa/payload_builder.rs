@@ -28,7 +28,7 @@ use ic_types::{
                 IDkgParamsValidationError, PresignatureQuadrupleCreationError,
                 ThresholdEcdsaSigInputsCreationError,
             },
-            idkg::{IDkgDealers, IDkgReceivers, IDkgTranscript, IDkgTranscriptId},
+            idkg::{IDkgTranscript, IDkgTranscriptId},
             ExtendedDerivationPath,
         },
         AlgorithmId,
@@ -442,8 +442,8 @@ fn new_random_config(
 ) -> Result<ecdsa::RandomTranscriptParams, EcdsaPayloadError> {
     let transcript_id = *next_unused_transcript_id;
     *next_unused_transcript_id = transcript_id.increment();
-    let dealers = IDkgDealers::new(subnet_nodes.iter().copied().collect::<BTreeSet<_>>())?;
-    let receivers = IDkgReceivers::new(subnet_nodes.iter().copied().collect::<BTreeSet<_>>())?;
+    let dealers = subnet_nodes.iter().copied().collect::<BTreeSet<_>>();
+    let receivers = subnet_nodes.iter().copied().collect::<BTreeSet<_>>();
     Ok(ecdsa::RandomTranscriptParams::new(
         transcript_id,
         dealers,
@@ -677,9 +677,8 @@ fn update_next_key_transcript(
             // Create a new reshare config when there is none
             let transcript_id = payload.next_unused_transcript_id;
             payload.next_unused_transcript_id = transcript_id.increment();
-            let dealers = IDkgDealers::new(subnet_nodes.iter().copied().collect::<BTreeSet<_>>())?;
-            let receivers =
-                IDkgReceivers::new(subnet_nodes.iter().copied().collect::<BTreeSet<_>>())?;
+            let dealers = subnet_nodes.iter().copied().collect::<BTreeSet<_>>();
+            let receivers = subnet_nodes.iter().copied().collect::<BTreeSet<_>>();
             payload.next_key_transcript_creation =
                 Some(ecdsa::KeyTranscriptCreation::ReshareOfUnmaskedParams(
                     ecdsa::ReshareOfUnmaskedParams::new(
@@ -706,9 +705,8 @@ fn update_next_key_transcript(
             // config.
             let transcript_id = payload.next_unused_transcript_id;
             payload.next_unused_transcript_id = transcript_id.increment();
-            let dealers = IDkgDealers::new(subnet_nodes.iter().copied().collect::<BTreeSet<_>>())?;
-            let receivers =
-                IDkgReceivers::new(subnet_nodes.iter().copied().collect::<BTreeSet<_>>())?;
+            let dealers = subnet_nodes.iter().copied().collect::<BTreeSet<_>>();
+            let receivers = subnet_nodes.iter().copied().collect::<BTreeSet<_>>();
             payload.next_key_transcript_creation =
                 Some(ecdsa::KeyTranscriptCreation::RandomTranscriptParams(
                     ecdsa::RandomTranscriptParams::new(
@@ -725,10 +723,8 @@ fn update_next_key_transcript(
             if let Some(transcript) = completed_transcripts.get(&config.as_ref().transcript_id) {
                 let transcript_id = payload.next_unused_transcript_id;
                 payload.next_unused_transcript_id = transcript_id.increment();
-                let dealers =
-                    IDkgDealers::new(subnet_nodes.iter().copied().collect::<BTreeSet<_>>())?;
-                let receivers =
-                    IDkgReceivers::new(subnet_nodes.iter().copied().collect::<BTreeSet<_>>())?;
+                let dealers = subnet_nodes.iter().copied().collect::<BTreeSet<_>>();
+                let receivers = subnet_nodes.iter().copied().collect::<BTreeSet<_>>();
                 let transcript_ref = ecdsa::MaskedTranscript::try_from((height, transcript))?;
                 payload.next_key_transcript_creation =
                     Some(ecdsa::KeyTranscriptCreation::ReshareOfMaskedParams(
@@ -984,7 +980,6 @@ mod tests {
     use super::*;
     use crate::consensus::mocks::{dependencies, Dependencies};
     use crate::ecdsa::utils::test_utils::*;
-    use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         generate_key_transcript, run_idkg_and_create_transcript,
         CanisterThresholdSigTestEnvironment,
@@ -1141,20 +1136,6 @@ mod tests {
         assert_eq!(
             transcript_ids.iter().max().unwrap().increment(),
             next_unused_transcript_id
-        );
-        // Failure case
-        let result = next_quadruples_in_creation(
-            &[],
-            summary_registry_version,
-            &summary,
-            &ecdsa_config,
-            &mut next_unused_transcript_id,
-        );
-        assert_matches!(
-            result,
-            Err(EcdsaPayloadError::IDkgParamsValidationError(
-                IDkgParamsValidationError::DealersEmpty
-            ))
         );
     }
 
