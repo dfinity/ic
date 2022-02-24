@@ -22,8 +22,8 @@ use ic_types::crypto::canister_threshold_sig::error::{
     ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgComplaint, IDkgDealers, IDkgDealing, IDkgMaskedTranscriptOrigin, IDkgMultiSignedDealing,
-    IDkgOpening, IDkgReceivers, IDkgTranscript, IDkgTranscriptOperation, IDkgTranscriptParams,
+    IDkgComplaint, IDkgDealing, IDkgMaskedTranscriptOrigin, IDkgMultiSignedDealing, IDkgOpening,
+    IDkgReceivers, IDkgTranscript, IDkgTranscriptOperation, IDkgTranscriptParams,
     IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
 };
 use ic_types::crypto::canister_threshold_sig::{
@@ -185,8 +185,8 @@ fn should_fail_create_transcript_with_signature_by_disallowed_receiver() {
     modified_receivers.remove(&removed_node_id);
     let modified_params = IDkgTranscriptParams::new(
         params.transcript_id(),
-        params.dealers().clone(),
-        IDkgReceivers::new(modified_receivers).expect("failed to create new receivers"),
+        params.dealers().get().clone(),
+        modified_receivers,
         params.registry_version(),
         params.algorithm_id(),
         params.operation_type().clone(),
@@ -1280,8 +1280,8 @@ fn fake_params_for(node_id: NodeId) -> IDkgTranscriptParams {
 
     IDkgTranscriptParams::new(
         dummy_idkg_transcript_id_for_tests(1),
-        IDkgDealers::new(nodes.clone()).unwrap(),
-        IDkgReceivers::new(nodes).unwrap(),
+        nodes.clone(),
+        nodes,
         RegistryVersion::from(1),
         AlgorithmId::ThresholdEcdsaSecp256k1,
         IDkgTranscriptOperation::Random,

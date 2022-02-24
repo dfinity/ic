@@ -1,9 +1,9 @@
+use super::super::*;
 use crate::crypto::AlgorithmId;
 use crate::RegistryVersion;
-use std::collections::BTreeSet;
-
-use super::super::*;
 use crate::{NodeId, PrincipalId, SubnetId};
+use maplit::btreeset;
+use std::collections::BTreeSet;
 
 #[test]
 fn should_return_correct_dealer_index_for_random() {
@@ -14,8 +14,8 @@ fn should_return_correct_dealer_index_for_random() {
 
     let params = IDkgTranscriptParams::new(
         transcript_id_generator(),
-        IDkgDealers::new(dealers.clone()).expect("Should be able to create IDKG dealers"),
-        IDkgReceivers::new(dealers).expect("Should be able to create IDKG receivers"),
+        dealers.clone(),
+        dealers,
         RegistryVersion::from(0),
         AlgorithmId::ThresholdEcdsaSecp256k1,
         IDkgTranscriptOperation::Random,
@@ -51,8 +51,8 @@ fn should_return_correct_dealer_index_for_reshare_masked() {
 
     let params = IDkgTranscriptParams::new(
         transcript_id_generator(),
-        IDkgDealers::new(dealers.clone()).expect("Should be able to create IDKG dealers"),
-        IDkgReceivers::new(dealers).expect("Should be able to create IDKG receivers"),
+        dealers.clone(),
+        dealers,
         RegistryVersion::from(0),
         AlgorithmId::ThresholdEcdsaSecp256k1,
         IDkgTranscriptOperation::ReshareOfMasked(previous_transcript),
@@ -89,8 +89,8 @@ fn should_return_correct_dealer_index_for_reshare_unmasked() {
 
     let params = IDkgTranscriptParams::new(
         transcript_id_generator(),
-        IDkgDealers::new(dealers.clone()).expect("Should be able to create IDKG dealers"),
-        IDkgReceivers::new(dealers).expect("Should be able to create IDKG receivers"),
+        dealers.clone(),
+        dealers,
         RegistryVersion::from(0),
         AlgorithmId::ThresholdEcdsaSecp256k1,
         IDkgTranscriptOperation::ReshareOfUnmasked(previous_transcript),
@@ -132,8 +132,8 @@ fn should_return_correct_dealer_index_for_unmasked_times_masked() {
 
     let params = IDkgTranscriptParams::new(
         transcript_id_generator(),
-        IDkgDealers::new(dealers.clone()).expect("Should be able to create IDKG dealers"),
-        IDkgReceivers::new(dealers).expect("Should be able to create IDKG receivers"),
+        dealers.clone(),
+        dealers,
         RegistryVersion::from(0),
         AlgorithmId::ThresholdEcdsaSecp256k1,
         IDkgTranscriptOperation::UnmaskedTimesMasked(
@@ -155,6 +155,44 @@ fn should_return_correct_dealer_index_for_unmasked_times_masked() {
 #[test]
 fn should_create_random() {
     check_params_creation(None, IDkgTranscriptOperation::Random, None);
+}
+
+#[test]
+fn should_not_create_with_empty_dealers() {
+    let empty_dealers = BTreeSet::new();
+
+    let result = IDkgTranscriptParams::new(
+        transcript_id_generator(),
+        empty_dealers,
+        btreeset! {node_id(1)},
+        RegistryVersion::from(0),
+        AlgorithmId::Placeholder, // should be ThresholdEcdsaSecp256k1 !
+        IDkgTranscriptOperation::Random,
+    );
+
+    assert!(matches!(
+        result,
+        Err(IDkgParamsValidationError::DealersEmpty)
+    ));
+}
+
+#[test]
+fn should_not_create_with_empty_receivers() {
+    let empty_receivers = BTreeSet::new();
+
+    let result = IDkgTranscriptParams::new(
+        transcript_id_generator(),
+        btreeset! {node_id(1)},
+        empty_receivers,
+        RegistryVersion::from(0),
+        AlgorithmId::Placeholder, // should be ThresholdEcdsaSecp256k1 !
+        IDkgTranscriptOperation::Random,
+    );
+
+    assert!(matches!(
+        result,
+        Err(IDkgParamsValidationError::ReceiversEmpty)
+    ));
 }
 
 #[test]
@@ -267,8 +305,8 @@ fn should_not_create_with_placeholder_algid() {
 
     let result = IDkgTranscriptParams::new(
         transcript_id_generator(),
-        IDkgDealers::new(nodes.clone()).unwrap(),
-        IDkgReceivers::new(nodes).unwrap(),
+        nodes.clone(),
+        nodes,
         RegistryVersion::from(0),
         AlgorithmId::Placeholder, // should be ThresholdEcdsaSecp256k1 !
         IDkgTranscriptOperation::Random,
@@ -289,8 +327,8 @@ fn should_not_create_with_wrong_algid() {
 
     let result = IDkgTranscriptParams::new(
         transcript_id_generator(),
-        IDkgDealers::new(nodes.clone()).unwrap(),
-        IDkgReceivers::new(nodes).unwrap(),
+        nodes.clone(),
+        nodes,
         RegistryVersion::from(0),
         AlgorithmId::RsaSha256, // should be ThresholdEcdsaSecp256k1 !
         IDkgTranscriptOperation::Random,
@@ -601,8 +639,8 @@ fn check_params_creation(
 
     let result = IDkgTranscriptParams::new(
         transcript_id_generator(),
-        IDkgDealers::new(node_set.clone()).unwrap(),
-        IDkgReceivers::new(node_set).unwrap(),
+        node_set.clone(),
+        node_set,
         RegistryVersion::from(0),
         AlgorithmId::ThresholdEcdsaSecp256k1,
         operation,

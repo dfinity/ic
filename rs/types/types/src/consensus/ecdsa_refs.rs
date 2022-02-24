@@ -1,6 +1,8 @@
 //! Threshold ECDSA transcript references related defines.
 
+use ic_base_types::NodeId;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use std::convert::{AsMut, AsRef, TryFrom};
 
 use crate::crypto::{
@@ -9,8 +11,8 @@ use crate::crypto::{
         ThresholdEcdsaSigInputsCreationError,
     },
     canister_threshold_sig::idkg::{
-        IDkgDealers, IDkgReceivers, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation,
-        IDkgTranscriptParams, IDkgTranscriptType,
+        IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
+        IDkgTranscriptType,
     },
     canister_threshold_sig::{
         ExtendedDerivationPath, PreSignatureQuadruple, ThresholdEcdsaSigInputs,
@@ -124,8 +126,8 @@ pub struct RandomTranscriptParams(IDkgTranscriptParamsRef);
 impl RandomTranscriptParams {
     pub fn new(
         transcript_id: IDkgTranscriptId,
-        dealers: IDkgDealers,
-        receivers: IDkgReceivers,
+        dealers: BTreeSet<NodeId>,
+        receivers: BTreeSet<NodeId>,
         registry_version: RegistryVersion,
         algorithm_id: AlgorithmId,
     ) -> Self {
@@ -156,8 +158,8 @@ pub struct ReshareOfMaskedParams(IDkgTranscriptParamsRef);
 impl ReshareOfMaskedParams {
     pub fn new(
         transcript_id: IDkgTranscriptId,
-        dealers: IDkgDealers,
-        receivers: IDkgReceivers,
+        dealers: BTreeSet<NodeId>,
+        receivers: BTreeSet<NodeId>,
         registry_version: RegistryVersion,
         algorithm_id: AlgorithmId,
         transcript: MaskedTranscript,
@@ -189,8 +191,8 @@ pub struct ReshareOfUnmaskedParams(IDkgTranscriptParamsRef);
 impl ReshareOfUnmaskedParams {
     pub fn new(
         transcript_id: IDkgTranscriptId,
-        dealers: IDkgDealers,
-        receivers: IDkgReceivers,
+        dealers: BTreeSet<NodeId>,
+        receivers: BTreeSet<NodeId>,
         registry_version: RegistryVersion,
         algorithm_id: AlgorithmId,
         transcript: UnmaskedTranscript,
@@ -222,8 +224,8 @@ pub struct UnmaskedTimesMaskedParams(IDkgTranscriptParamsRef);
 impl UnmaskedTimesMaskedParams {
     pub fn new(
         transcript_id: IDkgTranscriptId,
-        dealers: IDkgDealers,
-        receivers: IDkgReceivers,
+        dealers: BTreeSet<NodeId>,
+        receivers: BTreeSet<NodeId>,
         registry_version: RegistryVersion,
         algorithm_id: AlgorithmId,
         transcript_1: UnmaskedTranscript,
@@ -500,8 +502,8 @@ impl IDkgTranscriptOperationRef {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct IDkgTranscriptParamsRef {
     pub transcript_id: IDkgTranscriptId,
-    pub dealers: IDkgDealers,
-    pub receivers: IDkgReceivers,
+    pub dealers: BTreeSet<NodeId>,
+    pub receivers: BTreeSet<NodeId>,
     pub registry_version: RegistryVersion,
     pub algorithm_id: AlgorithmId,
     pub operation_type_ref: IDkgTranscriptOperationRef,
@@ -516,8 +518,8 @@ pub enum TranscriptParamsError {
 impl IDkgTranscriptParamsRef {
     pub fn new(
         transcript_id: IDkgTranscriptId,
-        dealers: IDkgDealers,
-        receivers: IDkgReceivers,
+        dealers: BTreeSet<NodeId>,
+        receivers: BTreeSet<NodeId>,
         registry_version: RegistryVersion,
         algorithm_id: AlgorithmId,
         operation_type_ref: IDkgTranscriptOperationRef,

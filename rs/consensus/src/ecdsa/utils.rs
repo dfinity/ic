@@ -172,8 +172,8 @@ pub(crate) mod test_utils {
         UnmaskedTranscript,
     };
     use ic_types::crypto::canister_threshold_sig::idkg::{
-        IDkgComplaint, IDkgDealers, IDkgMaskedTranscriptOrigin, IDkgOpening, IDkgReceivers,
-        IDkgTranscript, IDkgTranscriptId, IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
+        IDkgComplaint, IDkgMaskedTranscriptOrigin, IDkgOpening, IDkgReceivers, IDkgTranscript,
+        IDkgTranscriptId, IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
     };
     use ic_types::crypto::canister_threshold_sig::{
         ExtendedDerivationPath, ThresholdEcdsaSigShare,
@@ -506,8 +506,8 @@ pub(crate) mod test_utils {
         // The transcript that points to the random transcript
         let transcript_params_ref = ReshareOfMaskedParams::new(
             transcript_id,
-            IDkgDealers::new(dealers).unwrap(),
-            IDkgReceivers::new(receivers).unwrap(),
+            dealers,
+            receivers,
             RegistryVersion::from(0),
             AlgorithmId::ThresholdEcdsaSecp256k1,
             random_masked,
