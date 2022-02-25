@@ -74,9 +74,5 @@ default = []
 sigsegv_handler_debug = []
 
 [[bench]]
-name = "execute_update_iai"
-harness = false
-
-[[bench]]
 name = "execute_update"
 harness = false
