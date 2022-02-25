@@ -5,6 +5,7 @@ Description=IC Bitcoin Adapter Service Provider
 After=bootstrap-ic-node.service
 Wants=bootstrap-ic-node.service
 Requires=ic-btc-adapter.socket
+StartLimitIntervalSec=0
 
 [Service]
 User=ic-replica
