@@ -4,12 +4,12 @@ use dfn_protobuf::protobuf;
 use ic_canister_client::Sender;
 use ic_types::{CanisterId, PrincipalId};
 use ledger_canister::{
-    AccountBalanceArgs, AccountIdentifier, ArchiveOptions, BinaryAccountBalanceArgs, Block,
-    BlockArg, BlockHeight, BlockRange, BlockRes, CandidBlock, EncodedBlock, GetBlocksArgs,
-    GetBlocksError, GetBlocksRes, GetBlocksResult, IterBlocksArgs, IterBlocksRes,
-    LedgerCanisterInitPayload, Memo, NotifyCanisterArgs, Operation, SendArgs, Subaccount,
-    TimeStamp, Tokens, TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee,
-    TransferFeeArgs, DEFAULT_TRANSFER_FEE,
+    AccountBalanceArgs, AccountIdentifier, ArchiveOptions, ArchivesResult,
+    BinaryAccountBalanceArgs, Block, BlockArg, BlockHeight, BlockRange, BlockRes, CandidBlock,
+    EncodedBlock, GetBlocksArgs, GetBlocksError, GetBlocksRes, GetBlocksResult, IterBlocksArgs,
+    IterBlocksRes, LedgerCanisterInitPayload, Memo, NotifyCanisterArgs, Operation, SendArgs,
+    Subaccount, TimeStamp, Tokens, TotalSupplyArgs, Transaction, TransferArgs, TransferError,
+    TransferFee, TransferFeeArgs, DEFAULT_TRANSFER_FEE,
 };
 use on_wire::IntoWire;
 use std::collections::{HashMap, HashSet};
@@ -133,6 +133,10 @@ async fn fetch_candid_interface(canister: &Canister<'_>) -> Result<String, Strin
     canister
         .query_("__get_candid_interface_tmp_hack", candid_one, ())
         .await
+}
+
+async fn get_archives(canister: &Canister<'_>) -> Result<ArchivesResult, String> {
+    canister.query_("archives", candid_one, ()).await
 }
 
 fn assert_same_blocks(pb: &[EncodedBlock], candid: &[CandidBlock]) {
@@ -1631,6 +1635,63 @@ fn test_ledger_candid_interface_endpoint() {
 
         let candid_interface: String = fetch_candid_interface(&ledger).await.unwrap();
         assert_eq!(candid_interface, include_str!("../ledger.did"));
+
+        Ok(())
+    });
+}
+
+#[test]
+fn test_archives_endpoint() {
+    local_test_e(|r| async move {
+        let proj = Project::new(env!("CARGO_MANIFEST_DIR"));
+
+        let minting_account = create_sender(0);
+
+        let minting_canister_id = CanisterId::try_from(minting_account.get_principal_id()).unwrap();
+        let ledger = proj
+            .cargo_bin("ledger-canister", &[])
+            .install_(
+                &r,
+                CandidOne(
+                    LedgerCanisterInitPayload::builder()
+                        .minting_account(minting_canister_id.into())
+                        .archive_options(ArchiveOptions {
+                            trigger_threshold: 0,
+                            num_blocks_to_archive: 1000,
+                            node_max_memory_size_bytes: None,
+                            max_message_size_bytes: None,
+                            controller_id: minting_canister_id,
+                            cycles_for_archive_creation: None,
+                        })
+                        .build()
+                        .unwrap(),
+                ),
+            )
+            .await?;
+
+        let archive_ids = get_archives(&ledger).await.unwrap().unwrap().archives;
+        assert_eq!(archive_ids, vec![]);
+
+        let sender1 = create_sender(1);
+        let account1: AccountIdentifier = sender1.get_principal_id().into();
+
+        transfer_candid(
+            &ledger,
+            &minting_account,
+            TransferArgs {
+                memo: Default::default(),
+                amount: Tokens::from_e8s(1),
+                fee: Default::default(),
+                from_subaccount: None,
+                to: account1.to_address(),
+                created_at_time: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let archive_ids = get_archives(&ledger).await.unwrap().unwrap().archives;
+        assert_eq!(archive_ids.len(), 1);
 
         Ok(())
     });
