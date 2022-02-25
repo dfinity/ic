@@ -778,20 +778,44 @@ fn get_blocks_() {
     });
 }
 
+#[candid_method(query, rename = "archives")]
+fn archives() -> ArchivesResult {
+    let ledger = LEDGER.read().unwrap();
+    let archive = ledger
+        .blockchain
+        .archive
+        .try_read()
+        .map_err(|_| ArchivesError::NotAvailable)?;
+
+    let archives: Vec<_> = archive
+        .as_ref()
+        .iter()
+        .flat_map(|archive| {
+            archive
+                .nodes()
+                .iter()
+                .map(|cid| ArchiveInfo { canister_id: *cid })
+        })
+        .collect();
+
+    Ok(Archives { archives })
+}
+
 #[export_name = "canister_query get_nodes"]
 fn get_nodes_() {
-    over(candid, |()| -> Vec<CanisterId> {
-        LEDGER
-            .read()
-            .unwrap()
-            .blockchain
-            .archive
-            .try_read()
+    over(candid, |()| {
+        archives()
             .expect("Failed to get lock on archive")
-            .as_ref()
-            .map(|archive| archive.nodes().to_vec())
-            .unwrap_or_default()
+            .archives
+            .iter()
+            .map(|archive| archive.canister_id)
+            .collect::<Vec<CanisterId>>()
     });
+}
+
+#[export_name = "canister_query archives"]
+fn archives_candid() {
+    over(candid_one, |()| archives());
 }
 
 fn encode_metrics(w: &mut metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
@@ -872,7 +896,7 @@ fn get_canidid_interface() {
 #[cfg(test)]
 mod tests {
     use crate::{
-        AccountBalanceArgs, BinaryAccountBalanceArgs, BlockHeight, Decimals,
+        AccountBalanceArgs, ArchivesResult, BinaryAccountBalanceArgs, BlockHeight, Decimals,
         LedgerCanisterInitPayload, Name, SendArgs, Symbol, Tokens, TransferArgs, TransferError,
         TransferFee, TransferFeeArgs,
     };
