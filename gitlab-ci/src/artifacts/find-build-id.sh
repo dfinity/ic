@@ -5,7 +5,8 @@
 set -eu
 
 # TODO: "broken-blockmaster" condition is a hack to fix the broken hack of !2067.
-if [[ "${CI_PARENT_PIPELINE_SOURCE:-}" = "merge_request_event" && "${CI_COMMIT_REF_NAME:-}" != "broken-blockmaker" ]]; then
+# TODO: CI_MERGE_REQUEST_TITLE conditional is a stopgap solution for IDX-2123.
+if [[ "${CI_PARENT_PIPELINE_SOURCE:-}" = "merge_request_event" && "${CI_COMMIT_REF_NAME:-}" != "broken-blockmaker" && ! "${CI_MERGE_REQUEST_TITLE}" =~ \[rc\]|\[benchmark\] ]]; then
     cd "${CI_PROJECT_DIR}"
     placebo -c build-id --inputs_hash
 else
