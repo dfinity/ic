@@ -40,6 +40,51 @@ const MULTIPLIER_MAX_SIZE_LOCAL_SUBNET: u64 = 5;
 const MAX_NON_REPLICATED_QUERY_REPLY_SIZE: NumBytes = NumBytes::new(3 << 20);
 const CERTIFIED_DATA_MAX_LENGTH: u32 = 32;
 
+// Enables tracing of system calls for local debugging.
+const TRACE_SYSCALLS: bool = false;
+
+// This macro is used in system calls for tracing.
+macro_rules! trace_syscall {
+    ($self:ident, $name:ident, $result:expr $( , $args:expr )*) => {{
+        if TRACE_SYSCALLS {
+            // Output to both logger and stderr to simplify debugging.
+            error!(
+                $self.log,
+                "[system-api][{}] {}: {:?} => {:?}",
+                $self.sandbox_safe_system_state.canister_id,
+                stringify!($name),
+                ($(&$args, )*),
+                &$result
+            );
+            eprintln!(
+                "[system-api][{}] {}: {:?} => {:?}",
+                $self.sandbox_safe_system_state.canister_id,
+                stringify!($name),
+                ($(&$args, )*),
+                &$result
+            );
+        }
+    }}
+}
+
+// This helper is used in system calls for displaying a summary hash of a heap region.
+#[inline]
+fn summarize(heap: &[u8], start: u32, size: u32) -> u64 {
+    if TRACE_SYSCALLS {
+        let start = (start as usize).min(heap.len());
+        let end = ((start as usize) + (size as usize)).min(heap.len());
+        // The actual hash function doesn't matter much as long as it is
+        // cheap to compute and maps the input to u64 reasonably well.
+        let mut sum = 0;
+        for (i, byte) in heap[start..end].iter().enumerate() {
+            sum += (i + 1) as u64 * *byte as u64
+        }
+        sum
+    } else {
+        0
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[doc(hidden)]
 pub enum ResponseStatus {
@@ -1028,7 +1073,7 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn ic0_msg_caller_size(&self) -> HypervisorResult<u32> {
-        match &self.api_type {
+        let result = match &self.api_type {
             ApiType::Start { .. }
             | ApiType::Heartbeat { .. }
             | ApiType::Cleanup { .. }
@@ -1040,7 +1085,9 @@ impl SystemApi for SystemApiImpl {
             | ApiType::NonReplicatedQuery { caller, .. }
             | ApiType::PreUpgrade { caller, .. }
             | ApiType::InspectMessage { caller, .. } => Ok(caller.as_slice().len() as u32),
-        }
+        };
+        trace_syscall!(self, ic0_msg_caller_size, result);
+        result
     }
 
     fn ic0_msg_caller_copy(
@@ -1050,7 +1097,7 @@ impl SystemApi for SystemApiImpl {
         size: u32,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
-        match &self.api_type {
+        let result = match &self.api_type {
             ApiType::Start { .. }
             | ApiType::Heartbeat { .. }
             | ApiType::Cleanup { .. }
@@ -1069,11 +1116,21 @@ impl SystemApi for SystemApiImpl {
                 deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
                 Ok(())
             }
-        }
+        };
+        trace_syscall!(
+            self,
+            ic0_msg_caller_copy,
+            result,
+            dst,
+            offset,
+            size,
+            summarize(heap, dst, size)
+        );
+        result
     }
 
     fn ic0_msg_arg_data_size(&self) -> HypervisorResult<u32> {
-        match &self.api_type {
+        let result = match &self.api_type {
             ApiType::Start { .. }
             | ApiType::Cleanup { .. }
             | ApiType::Heartbeat { .. }
@@ -1097,7 +1154,9 @@ impl SystemApi for SystemApiImpl {
             | ApiType::NonReplicatedQuery {
                 incoming_payload, ..
             } => Ok(incoming_payload.len() as u32),
-        }
+        };
+        trace_syscall!(self, ic0_msg_arg_data_size, result);
+        result
     }
 
     fn ic0_msg_arg_data_copy(
@@ -1107,7 +1166,7 @@ impl SystemApi for SystemApiImpl {
         size: u32,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
-        match &self.api_type {
+        let result = match &self.api_type {
             ApiType::Start { .. }
             | ApiType::Heartbeat { .. }
             | ApiType::Cleanup { .. }
@@ -1142,11 +1201,21 @@ impl SystemApi for SystemApiImpl {
                 deterministic_copy_from_slice(&mut heap[dst..dst + size], payload_subslice);
                 Ok(())
             }
-        }
+        };
+        trace_syscall!(
+            self,
+            ic0_msg_arg_data_copy,
+            result,
+            dst,
+            offset,
+            size,
+            summarize(heap, dst, size)
+        );
+        result
     }
 
     fn ic0_msg_method_name_size(&self) -> HypervisorResult<u32> {
-        match &self.api_type {
+        let result = match &self.api_type {
             ApiType::Start { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::PreUpgrade { .. }
@@ -1158,7 +1227,9 @@ impl SystemApi for SystemApiImpl {
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::Init { .. } => Err(self.error_for("ic0_msg_method_name_size")),
             ApiType::InspectMessage { method_name, .. } => Ok(method_name.len() as u32),
-        }
+        };
+        trace_syscall!(self, ic0_msg_method_name_size, result);
+        result
     }
 
     fn ic0_msg_method_name_copy(
@@ -1168,7 +1239,7 @@ impl SystemApi for SystemApiImpl {
         size: u32,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
-        match &self.api_type {
+        let result = match &self.api_type {
             ApiType::Start { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::Cleanup { .. }
@@ -1191,11 +1262,21 @@ impl SystemApi for SystemApiImpl {
                 deterministic_copy_from_slice(&mut heap[dst..dst + size], payload_subslice);
                 Ok(())
             }
-        }
+        };
+        trace_syscall!(
+            self,
+            ic0_msg_method_name_copy,
+            result,
+            dst,
+            offset,
+            size,
+            summarize(heap, dst, size)
+        );
+        result
     }
 
     fn ic0_accept_message(&mut self) -> HypervisorResult<()> {
-        match &mut self.api_type {
+        let result = match &mut self.api_type {
             ApiType::Start { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::PreUpgrade { .. }
@@ -1218,11 +1299,13 @@ impl SystemApi for SystemApiImpl {
                     Ok(())
                 }
             }
-        }
+        };
+        trace_syscall!(self, ic0_accept_message, result);
+        result
     }
 
     fn ic0_msg_reply(&mut self) -> HypervisorResult<()> {
-        match self.get_response_info() {
+        let result = match self.get_response_info() {
             None => Err(self.error_for("ic0_msg_reply")),
             Some((data, _, status)) => match status {
                 ResponseStatus::NotRepliedYet => {
@@ -1235,7 +1318,9 @@ impl SystemApi for SystemApiImpl {
                     ContractViolation("ic0.msg_reply: the call is already replied".to_string()),
                 ),
             },
-        }
+        };
+        trace_syscall!(self, ic0_msg_reply, result);
+        result
     }
 
     fn ic0_msg_reply_data_append(
@@ -1244,7 +1329,7 @@ impl SystemApi for SystemApiImpl {
         size: u32,
         heap: &[u8],
     ) -> HypervisorResult<()> {
-        match self.get_response_info() {
+        let result = match self.get_response_info() {
             None => Err(self.error_for("ic0_msg_reply_data_append")),
             Some((data, max_reply_size, response_status)) => match response_status {
                 ResponseStatus::NotRepliedYet => {
@@ -1266,11 +1351,20 @@ impl SystemApi for SystemApiImpl {
                     ))
                 }
             },
-        }
+        };
+        trace_syscall!(
+            self,
+            ic0_msg_reply_data_append,
+            result,
+            src,
+            size,
+            summarize(heap, src, size)
+        );
+        result
     }
 
     fn ic0_msg_reject(&mut self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()> {
-        match self.get_response_info() {
+        let result = match self.get_response_info() {
             None => Err(self.error_for("ic0_msg_reject")),
             Some((_, max_reply_size, response_status)) => match response_status {
                 ResponseStatus::NotRepliedYet => {
@@ -1295,19 +1389,33 @@ impl SystemApi for SystemApiImpl {
                     ContractViolation("ic0.msg_reject: the call is already replied".to_string()),
                 ),
             },
-        }
+        };
+        trace_syscall!(
+            self,
+            ic0_msg_reject,
+            result,
+            src,
+            size,
+            summarize(heap, src, size)
+        );
+        result
     }
 
     fn ic0_msg_reject_code(&self) -> HypervisorResult<i32> {
-        self.get_reject_code()
-            .ok_or_else(|| self.error_for("ic0_msg_reject_code"))
+        let result = self
+            .get_reject_code()
+            .ok_or_else(|| self.error_for("ic0_msg_reject_code"));
+        trace_syscall!(self, ic0_msg_reject_code, result);
+        result
     }
 
     fn ic0_msg_reject_msg_size(&self) -> HypervisorResult<u32> {
         let reject_context = self
             .get_reject_context()
             .ok_or_else(|| self.error_for("ic0_msg_reject_msg_size"))?;
-        Ok(reject_context.message().len() as u32)
+        let result = Ok(reject_context.message().len() as u32);
+        trace_syscall!(self, ic0_msg_reject_msg_size, result);
+        result
     }
 
     fn ic0_msg_reject_msg_copy(
@@ -1317,21 +1425,34 @@ impl SystemApi for SystemApiImpl {
         size: u32,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
-        let reject_context = self
-            .get_reject_context()
-            .ok_or_else(|| self.error_for("ic0_msg_reject_msg_copy"))?;
-        valid_subslice("ic0.msg_reject_msg_copy heap", dst, size, heap)?;
-        let msg = reject_context.message();
-        let dst = dst as usize;
-        let msg_bytes =
-            valid_subslice("ic0.msg_reject_msg_copy msg", offset, size, msg.as_bytes())?;
-        let size = size as usize;
-        deterministic_copy_from_slice(&mut heap[dst..dst + size], msg_bytes);
-        Ok(())
+        let result = {
+            let reject_context = self
+                .get_reject_context()
+                .ok_or_else(|| self.error_for("ic0_msg_reject_msg_copy"))?;
+            valid_subslice("ic0.msg_reject_msg_copy heap", dst, size, heap)?;
+
+            let msg = reject_context.message();
+            let dst = dst as usize;
+            let msg_bytes =
+                valid_subslice("ic0.msg_reject_msg_copy msg", offset, size, msg.as_bytes())?;
+            let size = size as usize;
+            deterministic_copy_from_slice(&mut heap[dst..dst + size], msg_bytes);
+            Ok(())
+        };
+        trace_syscall!(
+            self,
+            ic0_msg_reject_msg_copy,
+            result,
+            dst,
+            offset,
+            size,
+            summarize(heap, dst, size)
+        );
+        result
     }
 
     fn ic0_canister_self_size(&self) -> HypervisorResult<usize> {
-        match &self.api_type {
+        let result = match &self.api_type {
             ApiType::Start { .. } => Err(self.error_for("ic0_canister_self_size")),
             ApiType::Init { .. }
             | ApiType::Heartbeat { .. }
@@ -1348,7 +1469,9 @@ impl SystemApi for SystemApiImpl {
                 .get_ref()
                 .as_slice()
                 .len()),
-        }
+        };
+        trace_syscall!(self, ic0_canister_self_size, result);
+        result
     }
 
     fn ic0_canister_self_copy(
@@ -1358,7 +1481,7 @@ impl SystemApi for SystemApiImpl {
         size: u32,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
-        match &self.api_type {
+        let result = match &self.api_type {
             ApiType::Start { .. } => Err(self.error_for("ic0_canister_self_copy")),
             ApiType::Init { .. }
             | ApiType::Heartbeat { .. }
@@ -1378,11 +1501,21 @@ impl SystemApi for SystemApiImpl {
                 deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
                 Ok(())
             }
-        }
+        };
+        trace_syscall!(
+            self,
+            ic0_canister_self_copy,
+            result,
+            dst,
+            offset,
+            size,
+            summarize(heap, dst, size)
+        );
+        result
     }
 
     fn ic0_controller_size(&self) -> HypervisorResult<usize> {
-        match &self.api_type {
+        let result = match &self.api_type {
             ApiType::Start {} => Err(self.error_for("ic0_controller_size")),
             ApiType::Init { .. }
             | ApiType::Heartbeat { .. }
@@ -1396,7 +1529,9 @@ impl SystemApi for SystemApiImpl {
             | ApiType::InspectMessage { .. } => {
                 Ok(self.sandbox_safe_system_state.controller.as_slice().len())
             }
-        }
+        };
+        trace_syscall!(self, ic0_controller_size, result);
+        result
     }
 
     fn ic0_controller_copy(
@@ -1406,7 +1541,7 @@ impl SystemApi for SystemApiImpl {
         size: u32,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
-        match &self.api_type {
+        let result = match &self.api_type {
             ApiType::Start {} => Err(self.error_for("ic0_controller_copy")),
             ApiType::Init { .. }
             | ApiType::Heartbeat { .. }
@@ -1426,7 +1561,9 @@ impl SystemApi for SystemApiImpl {
                 deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
                 Ok(())
             }
-        }
+        };
+        trace_syscall!(self, ic0_controller_copy, result);
+        result
     }
 
     fn ic0_call_simple(
@@ -1443,7 +1580,7 @@ impl SystemApi for SystemApiImpl {
         data_len: u32,
         heap: &[u8],
     ) -> HypervisorResult<i32> {
-        match &mut self.api_type {
+        let result = match &mut self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
             | ApiType::Cleanup { .. }
@@ -1555,7 +1692,25 @@ impl SystemApi for SystemApiImpl {
                 };
                 self.push_output_request(msg)
             }
-        }
+        };
+        trace_syscall!(
+            self,
+            ic0_call_simple,
+            result,
+            callee_src,
+            callee_size,
+            method_name_src,
+            method_name_len,
+            reply_fun,
+            reply_env,
+            reject_fun,
+            reject_env,
+            data_src,
+            data_len,
+            summarize(heap, method_name_src, method_name_len),
+            summarize(heap, data_src, data_len)
+        );
+        result
     }
 
     fn ic0_call_new(
@@ -1570,7 +1725,7 @@ impl SystemApi for SystemApiImpl {
         reject_env: u32,
         heap: &[u8],
     ) -> HypervisorResult<()> {
-        match &mut self.api_type {
+        let result = match &mut self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
             | ApiType::ReplicatedQuery { .. }
@@ -1618,11 +1773,26 @@ impl SystemApi for SystemApiImpl {
                 *outgoing_request = Some(req);
                 Ok(())
             }
-        }
+        };
+        trace_syscall!(
+            self,
+            ic0_call_new,
+            result,
+            callee_src,
+            callee_size,
+            name_src,
+            name_len,
+            reply_fun,
+            reply_env,
+            reject_fun,
+            reject_env,
+            summarize(heap, callee_src, callee_size)
+        );
+        result
     }
 
     fn ic0_call_data_append(&mut self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()> {
-        match &mut self.api_type {
+        let result = match &mut self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
             | ApiType::ReplicatedQuery { .. }
@@ -1655,11 +1825,19 @@ impl SystemApi for SystemApiImpl {
                 )),
                 Some(request) => request.extend_method_payload(src, size, heap),
             },
-        }
+        };
+        trace_syscall!(
+            self,
+            ic0_call_data_append,
+            src,
+            size,
+            summarize(heap, src, size)
+        );
+        result
     }
 
     fn ic0_call_on_cleanup(&mut self, fun: u32, env: u32) -> HypervisorResult<()> {
-        match &mut self.api_type {
+        let result = match &mut self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
             | ApiType::ReplicatedQuery { .. }
@@ -1692,15 +1870,21 @@ impl SystemApi for SystemApiImpl {
                 )),
                 Some(request) => request.set_on_cleanup(WasmClosure::new(fun, env)),
             },
-        }
+        };
+        trace_syscall!(self, ic0_call_on_cleanup, fun, env);
+        result
     }
 
     fn ic0_call_cycles_add(&mut self, amount: u64) -> HypervisorResult<()> {
-        self.ic0_call_cycles_add_helper("ic0_call_cycles_add", Cycles::from(amount))
+        let result = self.ic0_call_cycles_add_helper("ic0_call_cycles_add", Cycles::from(amount));
+        trace_syscall!(self, ic0_call_cycles_add, result, amount);
+        result
     }
 
     fn ic0_call_cycles_add128(&mut self, amount: Cycles) -> HypervisorResult<()> {
-        self.ic0_call_cycles_add_helper("ic0_call_cycles_add128", amount)
+        let result = self.ic0_call_cycles_add_helper("ic0_call_cycles_add128", amount);
+        trace_syscall!(self, ic0_call_cycles_add128, result, amount);
+        result
     }
 
     // Note that if this function returns an error, then the canister will be
@@ -1713,7 +1897,7 @@ impl SystemApi for SystemApiImpl {
     // or the output queues are full. In this case, we need to perform the
     // necessary cleanups.
     fn ic0_call_perform(&mut self) -> HypervisorResult<i32> {
-        match &mut self.api_type {
+        let result = match &mut self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
             | ApiType::ReplicatedQuery { .. }
@@ -1813,11 +1997,13 @@ impl SystemApi for SystemApiImpl {
 
                 self.push_output_request(req)
             }
-        }
+        };
+        trace_syscall!(self, ic0_call_perform, result);
+        result
     }
 
     fn ic0_stable_size(&self) -> HypervisorResult<u32> {
-        match &self.api_type {
+        let result = match &self.api_type {
             ApiType::Start {} => Err(self.error_for("ic0_stable_size")),
             ApiType::Init { .. }
             | ApiType::Heartbeat { .. }
@@ -1829,11 +2015,13 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. } => self.stable_memory.stable_size(),
-        }
+        };
+        trace_syscall!(self, ic0_stable_size, result);
+        result
     }
 
     fn ic0_stable_grow(&mut self, additional_pages: u32) -> HypervisorResult<i32> {
-        match &self.api_type {
+        let result = match &self.api_type {
             ApiType::Start {} => Err(self.error_for("ic0_stable_grow")),
             ApiType::Init { .. }
             | ApiType::Heartbeat { .. }
@@ -1859,7 +2047,9 @@ impl SystemApi for SystemApiImpl {
                     Err(_err) => Ok(-1),
                 }
             }
-        }
+        };
+        trace_syscall!(self, ic0_stable_grow, result, additional_pages);
+        result
     }
 
     fn ic0_stable_read(
@@ -1869,7 +2059,7 @@ impl SystemApi for SystemApiImpl {
         size: u32,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
-        match &self.api_type {
+        let result = match &self.api_type {
             ApiType::Start {} => Err(self.error_for("ic0_stable_read")),
             ApiType::Init { .. }
             | ApiType::Heartbeat { .. }
@@ -1883,7 +2073,17 @@ impl SystemApi for SystemApiImpl {
             | ApiType::InspectMessage { .. } => {
                 self.stable_memory.stable_read(dst, offset, size, heap)
             }
-        }
+        };
+        trace_syscall!(
+            self,
+            ic0_stable_read,
+            result,
+            dst,
+            offset,
+            size,
+            summarize(heap, dst, size)
+        );
+        result
     }
 
     fn ic0_stable_write(
@@ -1893,7 +2093,7 @@ impl SystemApi for SystemApiImpl {
         size: u32,
         heap: &[u8],
     ) -> HypervisorResult<()> {
-        match &self.api_type {
+        let result = match &self.api_type {
             ApiType::Start {} => Err(self.error_for("ic0_stable_write")),
             ApiType::Init { .. }
             | ApiType::Heartbeat { .. }
@@ -1911,11 +2111,21 @@ impl SystemApi for SystemApiImpl {
                     self.memory_usage.stable_memory_delta +=
                         (size as usize / PAGE_SIZE) + std::cmp::min(1, size as usize % PAGE_SIZE);
                 }),
-        }
+        };
+        trace_syscall!(
+            self,
+            ic0_stable_write,
+            result,
+            offset,
+            src,
+            size,
+            summarize(heap, src, size)
+        );
+        result
     }
 
     fn ic0_stable64_size(&self) -> HypervisorResult<u64> {
-        match &self.api_type {
+        let result = match &self.api_type {
             ApiType::Start {} => Err(self.error_for("ic0_stable64_size")),
             ApiType::Init { .. }
             | ApiType::Heartbeat { .. }
@@ -1927,11 +2137,13 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. } => self.stable_memory.stable64_size(),
-        }
+        };
+        trace_syscall!(self, ic0_stable64_size, result);
+        result
     }
 
     fn ic0_stable64_grow(&mut self, additional_pages: u64) -> HypervisorResult<i64> {
-        match &self.api_type {
+        let result = match &self.api_type {
             ApiType::Start {} => Err(self.error_for("ic0_stable64_grow")),
             ApiType::Init { .. }
             | ApiType::Heartbeat { .. }
@@ -1957,7 +2169,9 @@ impl SystemApi for SystemApiImpl {
                     Err(_err) => Ok(-1),
                 }
             }
-        }
+        };
+        trace_syscall!(self, ic0_stable64_grow, result, additional_pages);
+        result
     }
 
     fn ic0_stable64_read(
@@ -1967,7 +2181,7 @@ impl SystemApi for SystemApiImpl {
         size: u64,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
-        match &self.api_type {
+        let result = match &self.api_type {
             ApiType::Start {} => Err(self.error_for("ic0_stable64_read")),
             ApiType::Init { .. }
             | ApiType::Heartbeat { .. }
@@ -1981,7 +2195,17 @@ impl SystemApi for SystemApiImpl {
             | ApiType::InspectMessage { .. } => {
                 self.stable_memory.stable64_read(dst, offset, size, heap)
             }
-        }
+        };
+        trace_syscall!(
+            self,
+            ic0_stable64_read,
+            result,
+            dst,
+            offset,
+            size,
+            summarize(heap, dst as u32, size as u32)
+        );
+        result
     }
 
     fn ic0_stable64_write(
@@ -1991,7 +2215,7 @@ impl SystemApi for SystemApiImpl {
         size: u64,
         heap: &[u8],
     ) -> HypervisorResult<()> {
-        match &self.api_type {
+        let result = match &self.api_type {
             ApiType::Start {} => Err(self.error_for("ic0_stable64_write")),
             ApiType::Init { .. }
             | ApiType::Heartbeat { .. }
@@ -2009,11 +2233,21 @@ impl SystemApi for SystemApiImpl {
                     self.memory_usage.stable_memory_delta +=
                         (size as usize / PAGE_SIZE) + std::cmp::min(1, size as usize % PAGE_SIZE);
                 }),
-        }
+        };
+        trace_syscall!(
+            self,
+            ic0_stable64_write,
+            result,
+            offset,
+            src,
+            size,
+            summarize(heap, src as u32, size as u32)
+        );
+        result
     }
 
     fn ic0_time(&self) -> HypervisorResult<Time> {
-        match &self.api_type {
+        let result = match &self.api_type {
             ApiType::Start { .. } => Err(self.error_for("ic0_time")),
             ApiType::Init { time, .. }
             | ApiType::Heartbeat { time, .. }
@@ -2025,11 +2259,15 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplyCallback { time, .. }
             | ApiType::RejectCallback { time, .. }
             | ApiType::InspectMessage { time, .. } => Ok(*time),
-        }
+        };
+        trace_syscall!(self, ic0_time, result);
+        result
     }
 
     fn out_of_instructions(&self) -> HypervisorError {
-        HypervisorError::InstructionLimitExceeded
+        let result = HypervisorError::InstructionLimitExceeded;
+        trace_syscall!(self, out_of_instructions, result);
+        result
     }
 
     fn update_available_memory(
@@ -2037,80 +2275,128 @@ impl SystemApi for SystemApiImpl {
         native_memory_grow_res: i32,
         additional_pages: u32,
     ) -> HypervisorResult<i32> {
-        if native_memory_grow_res == -1 {
-            return Ok(-1);
-        }
-        match self.memory_usage.allocate_pages(additional_pages as usize) {
-            Ok(()) => Ok(native_memory_grow_res),
-            Err(_err) => Err(HypervisorError::OutOfMemory),
-        }
+        let result = {
+            if native_memory_grow_res == -1 {
+                return Ok(-1);
+            }
+            match self.memory_usage.allocate_pages(additional_pages as usize) {
+                Ok(()) => Ok(native_memory_grow_res),
+                Err(_err) => Err(HypervisorError::OutOfMemory),
+            }
+        };
+        trace_syscall!(
+            self,
+            update_available_memory,
+            result,
+            native_memory_grow_res,
+            additional_pages
+        );
+        result
     }
 
     fn ic0_canister_cycle_balance(&self) -> HypervisorResult<u64> {
-        let (high_amount, low_amount) = self
-            .ic0_canister_cycles_balance_helper("ic0_canister_cycles_balance")?
-            .into_parts();
-        if high_amount != 0 {
-            return Err(HypervisorError::Trapped(CyclesAmountTooBigFor64Bit));
-        }
-        Ok(low_amount)
+        let result = {
+            let (high_amount, low_amount) = self
+                .ic0_canister_cycles_balance_helper("ic0_canister_cycles_balance")?
+                .into_parts();
+            if high_amount != 0 {
+                return Err(HypervisorError::Trapped(CyclesAmountTooBigFor64Bit));
+            }
+            Ok(low_amount)
+        };
+        trace_syscall!(self, ic0_canister_cycle_balance, result);
+        result
     }
 
     fn ic0_canister_cycles_balance128(&self, dst: u32, heap: &mut [u8]) -> HypervisorResult<()> {
-        let method_name = "ic0_canister_cycles_balance128";
-        let cycles = self.ic0_canister_cycles_balance_helper(method_name)?;
-        copy_cycles_to_heap(cycles, dst, heap, method_name)?;
-        Ok(())
+        let result = {
+            let method_name = "ic0_canister_cycles_balance128";
+            let cycles = self.ic0_canister_cycles_balance_helper(method_name)?;
+            copy_cycles_to_heap(cycles, dst, heap, method_name)?;
+            Ok(())
+        };
+        trace_syscall!(
+            self,
+            ic0_canister_cycles_balance128,
+            dst,
+            summarize(heap, dst, 16)
+        );
+        result
     }
 
     fn ic0_msg_cycles_available(&self) -> HypervisorResult<u64> {
-        let (high_amount, low_amount) = self
-            .ic0_msg_cycles_available_helper("ic0_msg_cycles_available")?
-            .into_parts();
-        if high_amount != 0 {
-            return Err(HypervisorError::Trapped(CyclesAmountTooBigFor64Bit));
-        }
-        Ok(low_amount)
+        let result = {
+            let (high_amount, low_amount) = self
+                .ic0_msg_cycles_available_helper("ic0_msg_cycles_available")?
+                .into_parts();
+            if high_amount != 0 {
+                return Err(HypervisorError::Trapped(CyclesAmountTooBigFor64Bit));
+            }
+            Ok(low_amount)
+        };
+        trace_syscall!(self, ic0_msg_cycles_available, result);
+        result
     }
 
     fn ic0_msg_cycles_available128(&self, dst: u32, heap: &mut [u8]) -> HypervisorResult<()> {
-        let method_name = "ic0_msg_cycles_available128";
-        let cycles = self.ic0_msg_cycles_available_helper(method_name)?;
-        copy_cycles_to_heap(cycles, dst, heap, method_name)?;
-        Ok(())
+        let result = {
+            let method_name = "ic0_msg_cycles_available128";
+            let cycles = self.ic0_msg_cycles_available_helper(method_name)?;
+            copy_cycles_to_heap(cycles, dst, heap, method_name)?;
+            Ok(())
+        };
+        trace_syscall!(self, ic0_msg_cycles_available128, result);
+        result
     }
 
     fn ic0_msg_cycles_refunded(&self) -> HypervisorResult<u64> {
-        let (high_amount, low_amount) = self
-            .ic0_msg_cycles_refunded_helper("ic0_msg_cycles_refunded")?
-            .into_parts();
-        if high_amount != 0 {
-            return Err(HypervisorError::Trapped(CyclesAmountTooBigFor64Bit));
-        }
-        Ok(low_amount)
+        let result = {
+            let (high_amount, low_amount) = self
+                .ic0_msg_cycles_refunded_helper("ic0_msg_cycles_refunded")?
+                .into_parts();
+            if high_amount != 0 {
+                return Err(HypervisorError::Trapped(CyclesAmountTooBigFor64Bit));
+            }
+            Ok(low_amount)
+        };
+        trace_syscall!(self, ic0_msg_cycles_refunded, result);
+        result
     }
 
     fn ic0_msg_cycles_refunded128(&self, dst: u32, heap: &mut [u8]) -> HypervisorResult<()> {
-        let method_name = "ic0_msg_cycles_refunded128";
-        let cycles = self.ic0_msg_cycles_refunded_helper(method_name)?;
-        copy_cycles_to_heap(cycles, dst, heap, method_name)?;
-        Ok(())
+        let result = {
+            let method_name = "ic0_msg_cycles_refunded128";
+            let cycles = self.ic0_msg_cycles_refunded_helper(method_name)?;
+            copy_cycles_to_heap(cycles, dst, heap, method_name)?;
+            Ok(())
+        };
+        trace_syscall!(
+            self,
+            ic0_msg_cycles_refunded128,
+            result,
+            summarize(heap, dst, 16)
+        );
+        result
     }
 
     fn ic0_msg_cycles_accept(&mut self, max_amount: u64) -> HypervisorResult<u64> {
-        // Cannot accept more than max_amount.
-        let (high_amount, low_amount) = self
-            .ic0_msg_cycles_accept_helper("ic0_msg_cycles_accept", Cycles::from(max_amount))?
-            .into_parts();
-        if high_amount != 0 {
-            error!(
+        let result = {
+            // Cannot accept more than max_amount.
+            let (high_amount, low_amount) = self
+                .ic0_msg_cycles_accept_helper("ic0_msg_cycles_accept", Cycles::from(max_amount))?
+                .into_parts();
+            if high_amount != 0 {
+                error!(
                 self.log,
                 "ic0_msg_cycles_accept cannot accept more than max_amount {}; accepted amount {}",
                 max_amount,
                 Cycles::from_parts(high_amount, low_amount).get()
             )
-        }
-        Ok(low_amount)
+            }
+            Ok(low_amount)
+        };
+        trace_syscall!(self, ic0_msg_cycles_accept, result, max_amount);
+        result
     }
 
     fn ic0_msg_cycles_accept128(
@@ -2119,14 +2405,18 @@ impl SystemApi for SystemApiImpl {
         dst: u32,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
-        let method_name = "ic0_msg_cycles_accept128";
-        let cycles = self.ic0_msg_cycles_accept_helper(method_name, max_amount)?;
-        copy_cycles_to_heap(cycles, dst, heap, method_name)?;
-        Ok(())
+        let result = {
+            let method_name = "ic0_msg_cycles_accept128";
+            let cycles = self.ic0_msg_cycles_accept_helper(method_name, max_amount)?;
+            copy_cycles_to_heap(cycles, dst, heap, method_name)?;
+            Ok(())
+        };
+        trace_syscall!(self, ic0_msg_cycles_accept128, result);
+        result
     }
 
     fn ic0_data_certificate_present(&self) -> HypervisorResult<i32> {
-        match &self.api_type {
+        let result = match &self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
             | ApiType::ReplyCallback { .. }
@@ -2145,11 +2435,13 @@ impl SystemApi for SystemApiImpl {
                 Some(_) => Ok(1),
                 None => Ok(0),
             },
-        }
+        };
+        trace_syscall!(self, ic0_data_certificate_present, result);
+        result
     }
 
     fn ic0_data_certificate_size(&self) -> HypervisorResult<i32> {
-        match &self.api_type {
+        let result = match &self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
             | ApiType::Heartbeat { .. }
@@ -2168,7 +2460,9 @@ impl SystemApi for SystemApiImpl {
                 Some(data_certificate) => Ok(data_certificate.len() as i32),
                 None => Err(self.error_for("ic0_data_certificate_size")),
             },
-        }
+        };
+        trace_syscall!(self, ic0_data_certificate_size, result);
+        result
     }
 
     fn ic0_data_certificate_copy(
@@ -2178,7 +2472,7 @@ impl SystemApi for SystemApiImpl {
         size: u32,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
-        match &self.api_type {
+        let result = match &self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
             | ApiType::Heartbeat { .. }
@@ -2230,11 +2524,20 @@ impl SystemApi for SystemApiImpl {
                 }
                 None => Err(self.error_for("ic0_data_certificate_size")),
             },
-        }
+        };
+        trace_syscall!(
+            self,
+            ic0_data_certificate_copy,
+            dst,
+            offset,
+            size,
+            summarize(heap, dst, size)
+        );
+        result
     }
 
     fn ic0_certified_data_set(&mut self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()> {
-        match &mut self.api_type {
+        let result = match &mut self.api_type {
             ApiType::Start { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::Cleanup { .. }
@@ -2273,11 +2576,20 @@ impl SystemApi for SystemApiImpl {
                     .new_certified_data = Some(heap[src..src + size].to_vec());
                 Ok(())
             }
-        }
+        };
+        trace_syscall!(
+            self,
+            ic0_certified_data_set,
+            result,
+            src,
+            size,
+            summarize(heap, src, size)
+        );
+        result
     }
 
     fn ic0_canister_status(&self) -> HypervisorResult<u32> {
-        match &self.api_type {
+        let result = match &self.api_type {
             ApiType::Start { .. } => Err(self.error_for("ic0_canister_status")),
             ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
@@ -2293,11 +2605,13 @@ impl SystemApi for SystemApiImpl {
                 CanisterStatusView::Stopping => Ok(2),
                 CanisterStatusView::Stopped => Ok(3),
             },
-        }
+        };
+        trace_syscall!(self, ic0_canister_status, result);
+        result
     }
 
     fn ic0_mint_cycles(&mut self, amount: u64) -> HypervisorResult<u64> {
-        match self.api_type {
+        let result = match self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
             | ApiType::PreUpgrade { .. }
@@ -2314,7 +2628,9 @@ impl SystemApi for SystemApiImpl {
                     .mint_cycles(Cycles::from(amount))?;
                 Ok(amount)
             }
-        }
+        };
+        trace_syscall!(self, ic0_mint_cycles, result, amount);
+        result
     }
 
     fn ic0_debug_print(&self, src: u32, size: u32, heap: &[u8]) {
@@ -2331,13 +2647,18 @@ impl SystemApi for SystemApiImpl {
             "[Canister {}] {}",
             self.sandbox_safe_system_state.canister_id, msg
         );
+        trace_syscall!(self, ic0_debug_print, src, size, summarize(heap, src, size));
     }
 
     fn ic0_trap(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorError {
-        let msg = valid_subslice("trap", src, size, heap)
-            .map(|bytes| String::from_utf8_lossy(bytes).to_string())
-            .unwrap_or_else(|_| "(trap message out of memory bounds)".to_string());
-        CalledTrap(msg)
+        let result = {
+            let msg = valid_subslice("trap", src, size, heap)
+                .map(|bytes| String::from_utf8_lossy(bytes).to_string())
+                .unwrap_or_else(|_| "(trap message out of memory bounds)".to_string());
+            CalledTrap(msg)
+        };
+        trace_syscall!(self, ic0_trap, src, size, summarize(heap, src, size));
+        result
     }
 }
 
