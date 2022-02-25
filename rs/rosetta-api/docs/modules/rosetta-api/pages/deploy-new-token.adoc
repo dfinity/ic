@@ -1,0 +1,160 @@
+This tutorial will guide you step-by-step to deploy your own token to the IC and to connect rosetta-api to it.
+
+== Deploy your Ledger
+
+. Ensure you have the ledger image, the private ledger interface, and the public ledger interface.
+  If you do not have them, follow the steps in xref:ledger-local-setup.adoc[Setup Ledger locally].
+
+. Ensure you use a recent version of DFX.
+  If you don't have DFX installed, follow instructions on https://smartcontracts.org/ to install it.
+
+. Add the following canister definition to the `dfx.json` file in your project:
++
+[source,json]
+----
+{
+  "canisters": {
+    "custom-ledger": {
+      "type": "custom",
+      "wasm": "ledger.wasm",
+      "candid": "ledger.private.did"
+    }
+  }
+}
+----
+
+. Deploy the ledger canister to the IC:
+
++
+[source,bash]
+----
+# Change the variable to "ic" to deploy the ledger on the mainnet.
+export NETWORK=local
+
+# Change the variable to the account that can mint and burn tokens.
+export MINT_ACC=$(dfx ledger account-id)
+
+# Change the variable to the principal that controls archive canisters.
+export ARCHIVE_CONTROLLER=$(dfx identity get-principal)
+
+export TOKEN_NAME="My Token"
+export TOKEN_SYMBOL=XMTK
+
+dfx deploy --network ${NETWORK} custom-ledger --argument '(record {
+  name = "'${TOKEN_NAME}'";
+  symbol = "'${TOKEN_SYMBOL}'";
+  minting_account = "'${MINT_ACC}'";
+  initial_values = vec {};
+  send_whitelist = vec {};
+  archive_options = opt record {
+    trigger_threshold = 2000;
+    num_blocks_to_archive = 1000;
+    controller_id = principal "'${ARCHIVE_CONTROLLER}'";
+    cycles_for_archive_creation = opt 10_000_000_000_000
+  }
+})'
+----
+where
+- the `NETWORK` is the url or name of the replica where you want to deploy the ledger (e.g. use ic for the mainnet)
+- the `TOKEN_NAME` is the human-readable name of your new token
+- the `TOKEN_SYMBOL` is the symbol of your new token
+- the `MINT_ACC` is the account of the Principal responsible for minting and burning tokens (see the xref:ledger.adoc[Ledger documentation])
+- the `ARCHIVE_CONTROLLER` is the xref:https://smartcontracts.org/docs/developers-guide/default-wallet.html#_controller_and_custodian_roles[controller Principal] of the archive canisters
+
++
+[IMPORTANT]
+====
+When you deploy to the mainnet:
+
+  * Always set the `archive_options` field.
+    If the archiving is disabled, the capacity of your ledger is limited to the memory of a single canister.
+
+  * Make sure that the ledger canister has plenty of cycles.
+    The canister will need cycles to spawn new instances of the archive canister on demand.
+    The exact number of cycles attached to `create_canister` messages is controlled by the `cycles_for_archive_creation` option.
+====
+
+. Update the canister definition in the `dfx.json` file to use the public Candid interface:
++
+[source,diff]
+----
+ {
+   "canisters": {
+     "ledger": {
+       "type": "custom",
+       "wasm": "ledger.wasm",
+-       "candid": "ledger.private.did"
++       "candid": "ledger.public.did"
+     }
+   }
+ }
+----
++
+
+. Check that the Ledger canister is healthy. Execute the following command:
++
+[source,sh]
+----
+dfx canister --network ${NETWORK} call ledger symbol
+----
++
+The output should look like the following:
++
+[example]
+----
+(record { symbol = "XMTK" })
+----
+
+Your new token is deployed and ready to be used.
+
+== Connect rosetta-api
+
+The rosetta-api is an application that connects to a Ledger canister and exposes the xref:https://www.rosetta-api.org[Rosetta API].
+Its main purpose is to facilitate integration with exchanges.
+The application is available as a xref:https://hub.docker.com/r/dfinity/rosetta-api[docker image].
+
+Let us now connect the rosetta-api to an existing Ledger canister.
+
+. Get the Ledger token symbol
+
++
+[source,sh]
+----
+dfx canister call <ledger_canister_id> symbol
+----
++
+The output should look like the following:
++
+[example]
+----
+(record { symbol = <token_symbol> })
+----
+
+. Run `rosetta-api`
+
++
+[source,bash]
+----
+docker run \
+    --interactive \
+    --tty \
+    --publish 8081:8080 \
+    --rm \
+    dfinity/rosetta-api:v1.3.0 \
+    --canister-id <ledger_canister_id> \
+    --ic-url <replica> \
+    -t <token_symbol>
+----
++
+The output should contain the following lines:
++
+[example]
+----
+16:31:45.472550 INFO [main] ic_rosetta_api::rosetta_server - Starting Rosetta API server
+16:31:45.506905 INFO [main] ic_rosetta_api::ledger_client - You are all caught up to block <x>
+----
++
+The `<x>` above stands for the last block index in the ledger blockchain.
+
+`rosetta-api` is connected to your Ledger instance and ready to be used.
+Read xref:transfers.adoc[Transfers tokens] article to learn about Rosetta token transfer operations.
