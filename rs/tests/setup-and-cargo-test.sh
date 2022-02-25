@@ -18,7 +18,7 @@ fi
 show_help() {
     echo "Usage: ./setup-and-cargo-test.sh [OPTIONS] [-- FONDUE_OPTIONS]"
     echo ""
-    echo "Compiles the replica and orchestrator, sets the binaries up then"
+    echo "Compiles replica, orchestrator, rosetta and sandbox binaries, sets the binaries up then"
     echo "runs system-tests"
     echo ""
     echo "This script must be ran from 'rs/tests'. "
@@ -26,7 +26,7 @@ show_help() {
     echo "For information on the fondue options run this script with '-- -h'."
     echo ""
     echo "Options:"
-    echo "   --no-build    Does not build the replica nor the orchestrator"
+    echo "   --no-build    Do not build any new binaries"
     echo ""
     echo "   --debug       Build the binaries in debug mode (ignored if --no-build is specified)"
     echo ""
@@ -109,21 +109,25 @@ on_sigterm() {
     for pid in $(pgrep system-tests); do kill -s SIGTERM "$pid"; done
     echo "Sending SIGTERM to 'ic-rosetta-api' processes started by this session!"
     for pid in $(pgrep ic-rosetta-api); do kill -s SIGTERM "$pid"; done
+    # I don't think these are necessary, but just in case...
     echo "Sending SIGTERM to 'rosetta-cli' processes started by this session!"
-    # I don't think this one is necessary, but just in case...
     for pid in $(pgrep rosetta-cli); do kill -s SIGTERM "$pid"; done
+    echo "Sending SIGTERM to 'canister_sandbox' processes started by this session!"
+    for pid in $(pgrep canister_sandbox); do kill -s SIGTERM "$pid"; done
+    echo "Sending SIGTERM to 'sandbox_launcher' processes started by this session!"
+    for pid in $(pgrep sandbox_launcher); do kill -s SIGTERM "$pid"; done
     echo "You can remove rosetta_workspace/rosetta_api_tmp_* dirs after you confirmed rosetta_api finished"
     remove_tmp_dirs
 }
 
 if [[ "$no_build" != true ]]; then
-    ## Go build the replica and the orchestrator
+    ## Go build replica, orchestrator, rosetta and sandbox binaries.
     pushd ..
     st_build=$(date)
     pushd replica
     cargo build ${jobs_str} --bin replica ${release_string} --features malicious_code
     popd
-    cargo build ${jobs_str} --bin orchestrator --bin ic-rosetta-api ${release_string}
+    cargo build ${jobs_str} --bin orchestrator --bin ic-rosetta-api --bin sandbox_launcher --bin canister_sandbox ${release_string}
     popd
     cargo build ${jobs_str}
     e_build=$(date)
@@ -137,11 +141,16 @@ fi
 ## If CARGO_TEST_DIR is not set, we use the default $(pwd)/../target instead.
 target=${CARGO_TARGET_DIR:-$(pwd)/../target}/${RUST_TRIPLE}/${BUILD_DIR}
 
-if [[ ! -f "${target}/replica" ]] || [[ ! -f "${target}/orchestrator" ]]; then
+if [[ ! -f "${target}/replica" ]] || [[ ! -f "${target}/orchestrator" ]] \
+    || [[ ! -f "${target}/ic-rosetta-api" ]] \
+    || [[ ! -f "${target}/canister_sandbox" ]] \
+    || [[ ! -f "${target}/sandbox_launcher" ]]; then
     echo "Make sure that the following files exist:"
     echo "    - ${target}/replica"
     echo "    - ${target}/orchestrator"
     echo "    - ${target}/ic-rosetta-api"
+    echo "    - ${target}/canister_sandbox"
+    echo "    - ${target}/sandbox_launcher"
     exit 1
 fi
 
@@ -150,6 +159,8 @@ TMP_DIR=$(mktemp -d)
 ln -fs "${target}/replica" "${TMP_DIR}/"
 ln -fs "${target}/orchestrator" "${TMP_DIR}/"
 ln -fs "${target}/ic-rosetta-api" "${TMP_DIR}/"
+ln -fs "${target}/canister_sandbox" "${TMP_DIR}/"
+ln -fs "${target}/sandbox_launcher" "${TMP_DIR}/"
 
 ## Update path; because we must run this script from the tests directory,
 ## we know local bin is in here.
