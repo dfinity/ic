@@ -9,6 +9,7 @@ use ic_crypto_test_utils::tls::x509_certificates::generate_ed25519_cert;
 use ic_interfaces::crypto::KeyManager;
 use ic_logger::replica_logger::no_op_logger;
 use ic_protobuf::crypto::v1::NodePublicKeys;
+use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client::fake::FakeRegistryClient;
@@ -17,6 +18,7 @@ use ic_test_utilities::types::ids::node_test_id;
 use ic_types::crypto::{AlgorithmId, CryptoError, KeyPurpose};
 use ic_types::RegistryVersion;
 use std::sync::Arc;
+use strum::IntoEnumIterator;
 
 mod keygen_utils;
 
@@ -558,6 +560,85 @@ fn should_succeed_check_keys_with_registry_if_all_keys_are_present() {
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
     assert!(result.is_ok());
+}
+
+/// If this test fails it means that one of AlgorithmId and AlgorithmIdProto structs was updated but not the other.
+/// Ensure the structs are consistent and then update the test below.
+#[test]
+fn algorithm_id_should_match_algorithm_id_proto() {
+    let algorithm_id_variants = 17;
+    assert_eq!(AlgorithmId::iter().count(), algorithm_id_variants);
+
+    for i in 0..algorithm_id_variants {
+        assert!(AlgorithmIdProto::from_i32(i as i32).is_some());
+    }
+    assert!(AlgorithmIdProto::from_i32(algorithm_id_variants as i32).is_none());
+
+    assert_eq!(
+        AlgorithmId::Placeholder as i32,
+        AlgorithmIdProto::Unspecified as i32
+    );
+    assert_eq!(
+        AlgorithmId::MultiBls12_381 as i32,
+        AlgorithmIdProto::MultiBls12381 as i32
+    );
+    assert_eq!(
+        AlgorithmId::ThresBls12_381 as i32,
+        AlgorithmIdProto::ThresBls12381 as i32
+    );
+    assert_eq!(
+        AlgorithmId::SchnorrSecp256k1 as i32,
+        AlgorithmIdProto::SchnorrSecp256k1 as i32
+    );
+    assert_eq!(
+        AlgorithmId::StaticDhSecp256k1 as i32,
+        AlgorithmIdProto::StaticDhSecp256k1 as i32
+    );
+    assert_eq!(
+        AlgorithmId::HashSha256 as i32,
+        AlgorithmIdProto::HashSha256 as i32
+    );
+    assert_eq!(AlgorithmId::Tls as i32, AlgorithmIdProto::Tls as i32);
+    assert_eq!(
+        AlgorithmId::Ed25519 as i32,
+        AlgorithmIdProto::Ed25519 as i32
+    );
+    assert_eq!(
+        AlgorithmId::Secp256k1 as i32,
+        AlgorithmIdProto::Secp256k1 as i32
+    );
+    assert_eq!(
+        AlgorithmId::Groth20_Bls12_381 as i32,
+        AlgorithmIdProto::Groth20Bls12381 as i32
+    );
+    assert_eq!(
+        AlgorithmId::NiDkg_Groth20_Bls12_381 as i32,
+        AlgorithmIdProto::NidkgGroth20Bls12381 as i32
+    );
+    assert_eq!(
+        AlgorithmId::EcdsaP256 as i32,
+        AlgorithmIdProto::EcdsaP256 as i32
+    );
+    assert_eq!(
+        AlgorithmId::EcdsaSecp256k1 as i32,
+        AlgorithmIdProto::EcdsaSecp256k1 as i32
+    );
+    assert_eq!(
+        AlgorithmId::IcCanisterSignature as i32,
+        AlgorithmIdProto::IcCanisterSignature as i32
+    );
+    assert_eq!(
+        AlgorithmId::RsaSha256 as i32,
+        AlgorithmIdProto::RsaSha256 as i32
+    );
+    assert_eq!(
+        AlgorithmId::ThresholdEcdsaSecp256k1 as i32,
+        AlgorithmIdProto::ThresholdEcdsaSecp256k1 as i32
+    );
+    assert_eq!(
+        AlgorithmId::MegaSecp256k1 as i32,
+        AlgorithmIdProto::MegaSecp256k1 as i32
+    );
 }
 
 fn well_formed_dkg_dealing_encryption_pk() -> PublicKey {

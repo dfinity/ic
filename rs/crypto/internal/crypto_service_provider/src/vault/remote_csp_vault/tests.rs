@@ -182,6 +182,7 @@ mod ni_dkg {
             new_csp_vault,
         );
     }
+    #[ignore]
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn ni_dkg_should_work_with_all_players_acting_correctly_3() {
         test_utils::ni_dkg::test_ni_dkg_should_work_with_all_players_acting_correctly(

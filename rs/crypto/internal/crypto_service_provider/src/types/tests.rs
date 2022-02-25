@@ -20,6 +20,7 @@ use ic_crypto_internal_types::encrypt::forward_secure::groth20_bls12_381::{
 };
 use ic_crypto_secrets_containers::SecretArray;
 use ic_interfaces::crypto::CryptoHashableTestDummy;
+use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, UserPublicKey};
 use std::convert::TryFrom;
@@ -284,7 +285,7 @@ fn should_correctly_compare_csp_signatures() {
 #[test]
 fn should_correctly_convert_ed25519_pk_proto_to_csp_public_key() {
     let pk_proto = PublicKeyProto {
-        algorithm: AlgorithmId::Ed25519 as i32,
+        algorithm: AlgorithmIdProto::Ed25519 as i32,
         key_value: hex_to_byte_vec(TESTVEC_RFC8032_ED25519_SHA_ABC_PK),
         version: 0,
         proof_data: None,
@@ -300,7 +301,7 @@ fn should_correctly_convert_ed25519_pk_proto_to_csp_public_key() {
 #[test]
 fn should_correctly_convert_multi_bls12_381_pk_proto_to_csp_public_key() {
     let pk_proto = PublicKeyProto {
-        algorithm: AlgorithmId::MultiBls12_381 as i32,
+        algorithm: AlgorithmIdProto::MultiBls12381 as i32,
         key_value: hex_to_byte_vec(TESTVEC_MULTI_BLS12_381_1_PK),
         version: 0,
         proof_data: None,
@@ -316,7 +317,7 @@ fn should_correctly_convert_multi_bls12_381_pk_proto_to_csp_public_key() {
 #[test]
 fn should_fail_conversion_to_csp_public_key_if_ed25519_pk_proto_is_too_short() {
     let pk_proto = PublicKeyProto {
-        algorithm: AlgorithmId::Ed25519 as i32,
+        algorithm: AlgorithmIdProto::Ed25519 as i32,
         key_value: vec![0; ed25519_types::PublicKeyBytes::SIZE - 1],
         version: 0,
         proof_data: None,
@@ -329,7 +330,7 @@ fn should_fail_conversion_to_csp_public_key_if_ed25519_pk_proto_is_too_short() {
 #[test]
 fn should_fail_conversion_to_csp_public_key_if_ed25519_pk_proto_is_too_long() {
     let pk_proto = PublicKeyProto {
-        algorithm: AlgorithmId::Ed25519 as i32,
+        algorithm: AlgorithmIdProto::Ed25519 as i32,
         key_value: vec![0; ed25519_types::PublicKeyBytes::SIZE + 1],
         version: 0,
         proof_data: None,
@@ -342,7 +343,7 @@ fn should_fail_conversion_to_csp_public_key_if_ed25519_pk_proto_is_too_long() {
 #[test]
 fn should_fail_conversion_to_csp_public_key_if_multi_bls12_381_pk_proto_is_too_short() {
     let pk_proto = PublicKeyProto {
-        algorithm: AlgorithmId::MultiBls12_381 as i32,
+        algorithm: AlgorithmIdProto::MultiBls12381 as i32,
         key_value: vec![0; multi_types::PublicKeyBytes::SIZE - 1],
         version: 0,
         proof_data: None,
@@ -355,7 +356,7 @@ fn should_fail_conversion_to_csp_public_key_if_multi_bls12_381_pk_proto_is_too_s
 #[test]
 fn should_fail_conversion_to_csp_public_key_if_multi_bls12_381_pk_proto_is_too_long() {
     let pk_proto = PublicKeyProto {
-        algorithm: AlgorithmId::MultiBls12_381 as i32,
+        algorithm: AlgorithmIdProto::MultiBls12381 as i32,
         key_value: vec![0; multi_types::PublicKeyBytes::SIZE + 1],
         version: 0,
         proof_data: None,
