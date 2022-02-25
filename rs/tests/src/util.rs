@@ -711,15 +711,14 @@ pub(crate) async fn get_icp_balance(
     ledger: &Canister<'_>,
     can: &CanisterId,
     subaccount: Option<Subaccount>,
-) -> Tokens {
-    let reply: Result<Tokens, String> = ledger
+) -> Result<Tokens, String> {
+    ledger
         .query_(
             "account_balance_pb",
             protobuf,
             AccountBalanceArgs::new(AccountIdentifier::new(can.get(), subaccount)),
         )
-        .await;
-    reply.unwrap()
+        .await
 }
 
 pub(crate) async fn transact_icp_subaccount(
@@ -728,8 +727,7 @@ pub(crate) async fn transact_icp_subaccount(
     sender: (&UniversalCanister<'_>, Option<Subaccount>),
     amount: u64,
     recipient: (&UniversalCanister<'_>, Option<Subaccount>),
-    balance: u64,
-) {
+) -> anyhow::Result<Tokens, String> {
     let pid = PrincipalId::try_from(recipient.0.canister_id().as_slice()).unwrap();
 
     let args = SendArgs {
@@ -749,22 +747,17 @@ pub(crate) async fn transact_icp_subaccount(
             to_arg(args),
         )
         .await
-        .expect("failed to send update message");
+        .map_err(|e| format!("{:?}", e))?;
 
-    let decoded: u64 = ProtoBuf::from_bytes(reply)
-        .map(|ProtoBuf(c)| c)
-        .expect("Proto to deserialize");
+    let decoded: u64 = ProtoBuf::from_bytes(reply).map(|ProtoBuf(c)| c)?;
     info!(ctx.logger, "decoded result is {:?}", decoded);
 
-    assert_eq!(
-        Tokens::from_e8s(balance),
-        get_icp_balance(
-            ledger,
-            &CanisterId::try_from(recipient.0.canister_id().as_slice()).unwrap(),
-            recipient.1
-        )
-        .await
-    );
+    get_icp_balance(
+        ledger,
+        &CanisterId::try_from(recipient.0.canister_id().as_slice()).unwrap(),
+        recipient.1,
+    )
+    .await
 }
 
 pub(crate) async fn transact_icp(
@@ -773,17 +766,8 @@ pub(crate) async fn transact_icp(
     sender: &UniversalCanister<'_>,
     amount: u64,
     recipient: &UniversalCanister<'_>,
-    balance: u64,
-) {
-    transact_icp_subaccount(
-        ctx,
-        ledger,
-        (sender, None),
-        amount,
-        (recipient, None),
-        balance,
-    )
-    .await
+) -> Result<Tokens, String> {
+    transact_icp_subaccount(ctx, ledger, (sender, None), amount, (recipient, None)).await
 }
 
 pub(crate) fn to_principal_id(principal: &Principal) -> PrincipalId {

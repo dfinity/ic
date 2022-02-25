@@ -12,7 +12,11 @@ use ic_nns_constants::{LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::CanisterId;
 use ledger_canister::DEFAULT_TRANSFER_FEE;
+use slog::info;
 use std::convert::TryFrom;
+use std::time::Duration;
+
+const MAX_NUMBER_OF_RETRIES: usize = 5;
 
 pub fn config() -> InternetComputer {
     InternetComputer::new()
@@ -83,9 +87,18 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let _ = nns_endpoints[1].start_node(ctx.logger.clone());
 
     // A transfer request can be started right away, even though the rejoined node
-    // is likely not yet ready. Its completion will be delayed until the
-    // rejoined node is up.
-    transfer(ctx, &rt, &ledger.clone(), &can2.clone(), &can1.clone(), 100);
+    // is likely not yet ready. Its completion will be delayed until the rejoined node is up.
+    //
+    // Note: the moment when a node starts accepting requests is succeeded by a short period of time
+    // when the node is not full operational, e.g. a WASM module is not yet installed.
+    // Thus, a transfer may not be successful at first attempt.
+    for _ in 0..MAX_NUMBER_OF_RETRIES {
+        if transfer(ctx, &rt, &ledger.clone(), &can2.clone(), &can1.clone(), 100) {
+            return;
+        }
+        std::thread::sleep(Duration::from_secs(2));
+    }
+    panic!("Failed to make a transfer after rejoining a node.")
 }
 
 /// Transfers `amount` of ICP between two given canisters and verifies that the
@@ -99,14 +112,25 @@ fn transfer(
     from: &util::UniversalCanister,
     to: &util::UniversalCanister,
     amount: u64,
-) {
+) -> bool {
     rt.block_on(async move {
-        let balance = util::get_icp_balance(
-            ledger,
-            &CanisterId::try_from(to.canister_id().as_slice()).unwrap(),
-            None,
-        )
-        .await;
-        util::transact_icp(ctx, ledger, from, amount, to, balance.get_e8s() + amount).await;
-    });
+        let new_balance = util::transact_icp(ctx, ledger, from, amount, to).await;
+        match new_balance {
+            Ok(nb) => {
+                let balance = util::get_icp_balance(
+                    ledger,
+                    &CanisterId::try_from(to.canister_id().as_slice()).unwrap(),
+                    None,
+                )
+                .await
+                .expect("cannot get balance");
+                assert_eq!(nb, balance);
+            }
+            Err(e) => {
+                info!(&ctx.logger, "transfer failed: {}", e);
+                return false;
+            }
+        }
+        true
+    })
 }
