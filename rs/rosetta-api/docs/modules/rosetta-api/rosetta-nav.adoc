@@ -6,4 +6,5 @@
 *** xref:staking-tutorial.adoc[Tutorial: ICP staking workflow]
 ** Ledger canister smart contract
 *** xref:ledger-local-setup.adoc[Setup Ledger locally]
+*** xref:deploy-new-token.adoc[Deploy your own token]
 *** xref:ledger.adoc[Ledger specification]
