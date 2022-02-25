@@ -2310,11 +2310,7 @@ impl Governance {
             .max_proposals_to_keep_per_action
             .expect("NervousSystemParameters must have max_proposals_to_keep_per_type")
             as usize;
-        // If `max_proposals_to_keep_per_type` is unspecified, or
-        // specified as zero, don't garbage collect any proposals.
-        if max_proposals == 0 {
-            return true;
-        }
+
         // This data structure contains proposals grouped by type.
         let proposals_by_type = {
             let mut tmp: HashMap<u64, Vec<u64>> = HashMap::new();

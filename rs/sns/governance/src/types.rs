@@ -7,10 +7,9 @@ use crate::pb::v1::{
     NervousSystemParameters, NeuronId, ProposalId, RewardEvent, Tally, Vote,
 };
 use ic_base_types::CanisterId;
+use ic_nervous_system_common::NervousSystemError;
 use ledger_canister::{DEFAULT_TRANSFER_FEE, TOKEN_SUBDIVIDABLE_BY};
 use std::fmt;
-
-use ic_nervous_system_common::NervousSystemError;
 
 pub const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
 pub const ONE_YEAR_SECONDS: u64 = (4 * 365 + 1) * ONE_DAY_SECONDS / 4;
@@ -27,13 +26,37 @@ pub const E8S_PER_TOKEN: u64 = TOKEN_SUBDIVIDABLE_BY;
 // The default values for network parameters (until we initialize it).
 // Can't implement Default since it conflicts with Prost's.
 impl NervousSystemParameters {
+    /// Exceeding this value for `max_proposals_to_keep_per_action` may cause degradation in the
+    /// corresponding Governance canister or the SNS subnet.
+    pub const MAX_PROPOSALS_TO_KEEP_PER_ACTION_CEILING: u32 = 700;
+
+    /// Exceeding this value for `max_number_of_neurons` may cause degradation in the
+    /// corresponding Governance canister or the SNS subnet.
+    pub const MAX_NUMBER_OF_NEURONS_CEILING: u64 = 200_000;
+
+    /// Exceeding this value for `max_number_of_proposals_with_ballots` may cause degradation in the
+    /// corresponding Governance canister or the SNS subnet.
+    pub const MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS_CEILING: u64 = 700;
+
+    /// Exceeding this value for `initial_voting_period` may cause degradation in the
+    /// corresponding Governance canister or the SNS subnet.
+    pub const INITIAL_VOTING_PERIOD_CEILING: u64 = 30 * ONE_DAY_SECONDS;
+
+    /// Not exceeding this value for `initial_voting_period` may cause the
+    /// corresponding Governance canister to be ineffective.
+    pub const INITIAL_VOTING_PERIOD_FLOOR: u64 = ONE_DAY_SECONDS;
+
+    /// Exceeding this value for `max_followees_per_action` may cause degradation in the
+    /// corresponding Governance canister or the SNS subnet.
+    pub const MAX_FOLLOWEES_PER_ACTION_CEILING: u64 = 15;
+
     pub fn with_default_values() -> Self {
         Self {
             reject_cost_e8s: Some(E8S_PER_TOKEN),          // 1 Token
             neuron_minimum_stake_e8s: Some(E8S_PER_TOKEN), // 1 Token
             transaction_fee_e8s: Some(DEFAULT_TRANSFER_FEE.get_e8s()),
             max_proposals_to_keep_per_action: Some(100),
-            initial_voting_period: Some(2 * ONE_DAY_SECONDS),
+            initial_voting_period: Some(4 * ONE_DAY_SECONDS),
             default_followees: std::collections::HashMap::new(),
             max_number_of_neurons: Some(200_000),
             neuron_minimum_dissolve_delay_to_vote_seconds: Some(6 * ONE_MONTH_SECONDS),
@@ -42,6 +65,200 @@ impl NervousSystemParameters {
             max_neuron_age_for_age_bonus: Some(4 * ONE_YEAR_SECONDS),
             reward_distribution_period_seconds: Some(ONE_DAY_SECONDS),
             max_number_of_proposals_with_ballots: Some(700),
+        }
+    }
+
+    /// Validate that this `NervousSystemParameters` is well-formed
+    pub fn validate(&self) -> Result<(), String> {
+        self.validate_reject_cost_e8s()?;
+        self.validate_neuron_minimum_stake_e8s()?;
+        self.validate_transaction_fee_e8s()?;
+        self.validate_max_proposals_to_keep_per_action()?;
+        self.validate_initial_voting_period()?;
+        self.validate_default_followees()?;
+        self.validate_max_number_of_neurons()?;
+        self.validate_neuron_minimum_dissolve_delay_to_vote_seconds()?;
+        self.validate_max_followees_per_action()?;
+        self.validate_max_dissolve_delay_seconds()?;
+        self.validate_max_neuron_age_for_age_bonus()?;
+        self.validate_reward_distribution_period_seconds()?;
+        self.validate_max_number_of_proposals_with_ballots()?;
+
+        Ok(())
+    }
+
+    fn validate_reject_cost_e8s(&self) -> Result<u64, String> {
+        self.reject_cost_e8s
+            .ok_or_else(|| "NervousSystemParameters.reject_cost_e8s must be set".to_string())
+    }
+
+    fn validate_neuron_minimum_stake_e8s(&self) -> Result<(), String> {
+        let transaction_fee_e8s = self.validate_transaction_fee_e8s()?;
+
+        let neuron_minimum_stake_e8s = self.neuron_minimum_stake_e8s.ok_or_else(|| {
+            "NervousSystemParameters.neuron_minimum_stake_e8s must be set".to_string()
+        })?;
+
+        if neuron_minimum_stake_e8s <= transaction_fee_e8s {
+            Err(format!(
+                "NervousSystemParameters.neuron_minimum_stake_e8s ({}) must be greater than \
+                NervousSystemParameters.transaction_fee_e8s ({})",
+                neuron_minimum_stake_e8s, neuron_minimum_stake_e8s
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn validate_transaction_fee_e8s(&self) -> Result<u64, String> {
+        self.transaction_fee_e8s
+            .ok_or_else(|| "NervousSystemParameters.transaction_fee_e8s must be set".to_string())
+    }
+
+    fn validate_max_proposals_to_keep_per_action(&self) -> Result<(), String> {
+        let max_proposals_to_keep_per_action =
+            self.max_proposals_to_keep_per_action.ok_or_else(|| {
+                "NervousSystemParameters.max_proposals_to_keep_per_action must be set".to_string()
+            })?;
+
+        if max_proposals_to_keep_per_action == 0 {
+            Err(
+                "NervousSystemParameters.max_proposals_to_keep_per_action must be greater than 0"
+                    .to_string(),
+            )
+        } else if max_proposals_to_keep_per_action > Self::MAX_PROPOSALS_TO_KEEP_PER_ACTION_CEILING
+        {
+            Err(format!(
+                "NervousSystemParameters.max_proposals_to_keep_per_action must be less than {}",
+                Self::MAX_PROPOSALS_TO_KEEP_PER_ACTION_CEILING
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn validate_initial_voting_period(&self) -> Result<(), String> {
+        let initial_voting_period = self.initial_voting_period.ok_or_else(|| {
+            "NervousSystemParameters.initial_voting_period must be set".to_string()
+        })?;
+
+        if initial_voting_period < Self::INITIAL_VOTING_PERIOD_FLOOR {
+            Err(format!(
+                "NervousSystemParameters.initial_voting_period must be greater than {}",
+                Self::INITIAL_VOTING_PERIOD_FLOOR
+            ))
+        } else if initial_voting_period > Self::INITIAL_VOTING_PERIOD_CEILING {
+            Err(format!(
+                "NervousSystemParameters.initial_voting_period must be less than {}",
+                Self::INITIAL_VOTING_PERIOD_CEILING
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn validate_default_followees(&self) -> Result<(), String> {
+        let max_followees_per_action = self.validate_max_followees_per_action()?;
+
+        if self.default_followees.len() > max_followees_per_action as usize {
+            Err(format!(
+                "NervousSystemParameters.default_followees must have size less than {}",
+                max_followees_per_action
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn validate_max_number_of_neurons(&self) -> Result<(), String> {
+        let max_number_of_neurons = self.max_number_of_neurons.ok_or_else(|| {
+            "NervousSystemParameters.max_number_of_neurons must be set".to_string()
+        })?;
+
+        if max_number_of_neurons > Self::MAX_NUMBER_OF_NEURONS_CEILING {
+            Err(format!(
+                "NervousSystemParameters.max_number_of_neurons must be less than {}",
+                Self::MAX_NUMBER_OF_NEURONS_CEILING
+            ))
+        } else if max_number_of_neurons == 0 {
+            Err("NervousSystemParameters.max_number_of_neurons must be greater than 0".to_string())
+        } else {
+            Ok(())
+        }
+    }
+
+    fn validate_neuron_minimum_dissolve_delay_to_vote_seconds(&self) -> Result<(), String> {
+        let max_dissolve_delay_seconds = self.validate_max_dissolve_delay_seconds()?;
+
+        let neuron_minimum_dissolve_delay_to_vote_seconds = self
+            .neuron_minimum_dissolve_delay_to_vote_seconds
+            .ok_or_else(|| {
+                "NervousSystemParameters.neuron_minimum_dissolve_delay_to_vote_seconds must be set"
+                    .to_string()
+            })?;
+
+        if neuron_minimum_dissolve_delay_to_vote_seconds > max_dissolve_delay_seconds {
+            Err(format!(
+                "The minimum dissolve delay to vote ({}) cannot be greater than the max \
+                dissolve delay ({})",
+                neuron_minimum_dissolve_delay_to_vote_seconds, max_dissolve_delay_seconds
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn validate_max_followees_per_action(&self) -> Result<u64, String> {
+        let max_followees_per_action = self.max_followees_per_action.ok_or_else(|| {
+            "NervousSystemParameters.max_followees_per_action must be set".to_string()
+        })?;
+
+        if max_followees_per_action > Self::MAX_FOLLOWEES_PER_ACTION_CEILING {
+            Err(format!(
+                "NervousSystemParameters.max_followees_per_action ({}) cannot be greater than {}",
+                max_followees_per_action,
+                Self::MAX_FOLLOWEES_PER_ACTION_CEILING
+            ))
+        } else {
+            Ok(max_followees_per_action)
+        }
+    }
+
+    fn validate_max_dissolve_delay_seconds(&self) -> Result<u64, String> {
+        self.max_dissolve_delay_seconds.ok_or_else(|| {
+            "NervousSystemParameters.max_dissolve_delay_seconds must be set".to_string()
+        })
+    }
+
+    fn validate_max_neuron_age_for_age_bonus(&self) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn validate_reward_distribution_period_seconds(&self) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn validate_max_number_of_proposals_with_ballots(&self) -> Result<(), String> {
+        let max_number_of_proposals_with_ballots =
+            self.max_number_of_proposals_with_ballots.ok_or_else(|| {
+                "NervousSystemParameters.max_number_of_proposals_with_ballots must be set"
+                    .to_string()
+            })?;
+
+        if max_number_of_proposals_with_ballots == 0 {
+            Err(
+                "NervousSystemParameters.max_number_of_proposals_with_ballots must be greater than 0"
+                    .to_string(),
+            )
+        } else if max_number_of_proposals_with_ballots
+            > Self::MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS_CEILING
+        {
+            Err(format!(
+                "NervousSystemParameters.max_number_of_proposals_with_ballots must be less than {}",
+                Self::MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS_CEILING
+            ))
+        } else {
+            Ok(())
         }
     }
 }
@@ -370,5 +587,125 @@ impl Drop for LedgerUpdateLock {
         // 'unlock_neuron' will verify that the lock exists.
         let gov: &mut Governance = unsafe { &mut *self.gov };
         gov.unlock_neuron(&self.nid);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::pb::v1::neuron::Followees;
+    use maplit::hashmap;
+
+    #[test]
+    fn test_nervous_system_parameters_validate() {
+        let invalid_params = vec![
+            NervousSystemParameters {
+                neuron_minimum_stake_e8s: None,
+                ..NervousSystemParameters::with_default_values()
+            },
+            NervousSystemParameters {
+                transaction_fee_e8s: Some(100),
+                neuron_minimum_stake_e8s: Some(10),
+                ..NervousSystemParameters::with_default_values()
+            },
+            NervousSystemParameters {
+                transaction_fee_e8s: None,
+                ..NervousSystemParameters::with_default_values()
+            },
+            NervousSystemParameters {
+                max_proposals_to_keep_per_action: None,
+                ..NervousSystemParameters::with_default_values()
+            },
+            NervousSystemParameters {
+                max_proposals_to_keep_per_action: Some(0),
+                ..NervousSystemParameters::with_default_values()
+            },
+            NervousSystemParameters {
+                max_proposals_to_keep_per_action: Some(
+                    NervousSystemParameters::MAX_PROPOSALS_TO_KEEP_PER_ACTION_CEILING + 1,
+                ),
+                ..NervousSystemParameters::with_default_values()
+            },
+            NervousSystemParameters {
+                initial_voting_period: None,
+                ..NervousSystemParameters::with_default_values()
+            },
+            NervousSystemParameters {
+                initial_voting_period: Some(
+                    NervousSystemParameters::INITIAL_VOTING_PERIOD_FLOOR - 1,
+                ),
+                ..NervousSystemParameters::with_default_values()
+            },
+            NervousSystemParameters {
+                initial_voting_period: Some(
+                    NervousSystemParameters::INITIAL_VOTING_PERIOD_CEILING + 1,
+                ),
+                ..NervousSystemParameters::with_default_values()
+            },
+            NervousSystemParameters {
+                max_followees_per_action: Some(0),
+                default_followees: hashmap! {12 => Followees { followees: vec![NeuronId { id: vec![] }] }},
+                ..NervousSystemParameters::with_default_values()
+            },
+            NervousSystemParameters {
+                max_number_of_neurons: None,
+                ..NervousSystemParameters::with_default_values()
+            },
+            NervousSystemParameters {
+                max_number_of_neurons: Some(0),
+                ..NervousSystemParameters::with_default_values()
+            },
+            NervousSystemParameters {
+                max_number_of_neurons: Some(
+                    NervousSystemParameters::MAX_NUMBER_OF_NEURONS_CEILING + 1,
+                ),
+                ..NervousSystemParameters::with_default_values()
+            },
+            NervousSystemParameters {
+                neuron_minimum_dissolve_delay_to_vote_seconds: None,
+                ..NervousSystemParameters::with_default_values()
+            },
+            NervousSystemParameters {
+                max_dissolve_delay_seconds: Some(10),
+                neuron_minimum_dissolve_delay_to_vote_seconds: Some(20),
+                ..NervousSystemParameters::with_default_values()
+            },
+            NervousSystemParameters {
+                max_followees_per_action: None,
+                ..NervousSystemParameters::with_default_values()
+            },
+            NervousSystemParameters {
+                max_followees_per_action: Some(
+                    NervousSystemParameters::MAX_FOLLOWEES_PER_ACTION_CEILING + 1,
+                ),
+                ..NervousSystemParameters::with_default_values()
+            },
+            NervousSystemParameters {
+                max_dissolve_delay_seconds: None,
+                ..NervousSystemParameters::with_default_values()
+            },
+            NervousSystemParameters {
+                max_number_of_proposals_with_ballots: None,
+                ..NervousSystemParameters::with_default_values()
+            },
+            NervousSystemParameters {
+                max_number_of_proposals_with_ballots: Some(0),
+                ..NervousSystemParameters::with_default_values()
+            },
+            NervousSystemParameters {
+                max_number_of_proposals_with_ballots: Some(
+                    NervousSystemParameters::MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS_CEILING + 1,
+                ),
+                ..NervousSystemParameters::with_default_values()
+            },
+        ];
+
+        for params in invalid_params {
+            assert!(params.validate().is_err());
+        }
+
+        assert!(NervousSystemParameters::with_default_values()
+            .validate()
+            .is_ok());
     }
 }

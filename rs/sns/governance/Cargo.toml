@@ -59,6 +59,7 @@ ic-base-types = { path = "../../types/base_types", features = ["test"] }
 ic-nns-common = { path = "../../nns/common", features = ["test"] }
 ledger-canister = { path = "../../rosetta-api/ledger_canister", features = ["test"] }
 ic-sns-governance = { path = ".", features = ["test"] }
+maplit = "1.0.2"
 
 [features]
 test = ["ic-base-types/test", "ledger-canister/test"]

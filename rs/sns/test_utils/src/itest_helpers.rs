@@ -12,8 +12,8 @@ use ic_sns_governance::pb::v1::{
         configure::Operation,
         ClaimOrRefresh, Command, Configure, IncreaseDissolveDelay,
     },
-    GetProposal, GetProposalResponse, Governance, ManageNeuron, ManageNeuronResponse, NeuronId,
-    Proposal, ProposalData, ProposalId,
+    GetProposal, GetProposalResponse, Governance, ManageNeuron, ManageNeuronResponse,
+    NervousSystemParameters, NeuronId, Proposal, ProposalData, ProposalId,
 };
 use ledger_canister as ledger;
 use ledger_canister::{
@@ -117,6 +117,11 @@ impl SnsInitPayloadsBuilder {
 
     pub fn with_governance_proto(&mut self, proto: Governance) -> &mut Self {
         self.governance.with_governance_proto(proto);
+        self
+    }
+
+    pub fn with_nervous_system_parameters(&mut self, params: NervousSystemParameters) -> &mut Self {
+        self.governance.proto.parameters = Some(params);
         self
     }
 

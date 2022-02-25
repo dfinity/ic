@@ -34,7 +34,7 @@ use ic_sns_governance::pb::v1::{
     governance_error::ErrorType, ExecuteNervousSystemFunction, GetNeuron, GetNeuronResponse,
     GetProposal, GetProposalResponse, Governance as GovernanceProto, GovernanceError, ListNeurons,
     ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron, ManageNeuronResponse,
-    RewardEvent,
+    NervousSystemParameters, RewardEvent,
 };
 use ic_sns_governance::types::{Environment, HeapGrowthPotential};
 use ledger_canister::metrics_encoder;
@@ -207,6 +207,13 @@ fn canister_init() {
 
 #[candid_method(init)]
 fn canister_init_(init_payload: GovernanceProto) {
+    init_payload
+        .parameters
+        .as_ref()
+        .expect("NervousSystemParameters must be set")
+        .validate()
+        .expect("NervousSystemParameters are not valid");
+
     println!(
         "{}canister_init: Initializing with: \
               {:?}, genesis_timestamp_seconds: {}, neuron count: {}",
@@ -278,6 +285,23 @@ fn canister_post_upgrade() {
         }
     }
     .expect("Couldn't upgrade canister.");
+}
+
+/// Returns Governance's NervousSystemParameters
+#[export_name = "canister_query get_nervous_system_parameters"]
+fn get_nervous_system_parameters() {
+    println!("{}get_nervous_system_parameters", log_prefix());
+    over(candid_one, get_nervous_system_parameters_)
+}
+
+/// Returns Governance's NervousSystemParameters
+#[candid_method(query, rename = "get_nervous_system_parameters")]
+fn get_nervous_system_parameters_(_: ()) -> NervousSystemParameters {
+    governance()
+        .proto
+        .parameters
+        .clone()
+        .expect("NervousSystemParameters are not set")
 }
 
 /// Performs the action of a neuron, such as voting,
