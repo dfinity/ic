@@ -28,8 +28,12 @@ gflags.DEFINE_integer("iter_duration", 300, "Duration per iteration of the bench
 # for rps to choose as rps_max. If failure rate or latency is higher,
 # continue running the benchmark, but do not consider this RPS
 # for max capacity
-gflags.DEFINE_float("max_failure_rate", 0.2, "Maximum failure rate at which to consider the iteration successful.")
-gflags.DEFINE_integer("max_t_median", 5000, "Maximum median latency at which to consider the iteration successful.")
+gflags.DEFINE_float(
+    "allowable_failure_rate", 0.2, "Maximum failure rate at which to consider the iteration successful."
+)
+gflags.DEFINE_integer(
+    "allowable_t_median", 5000, "Maximum median latency at which to consider the iteration successful."
+)
 
 # Maximum failure rate and median query duration limit for when to
 # stop the benchmark.
@@ -89,7 +93,7 @@ if __name__ == "__main__":
 
         print(f"🚀  ... failure rate for {load_total} rps was {failure_rate} median latency is {t_median}")
 
-        if failure_rate < FLAGS.max_failure_rate and t_median < FLAGS.max_t_median:
+        if failure_rate < FLAGS.allowable_failure_rate and t_median < FLAGS.allowable_t_median:
             if num_succ / exp.last_duration > rps_max:
                 rps_max = num_succ / exp.last_duration
                 rps_max_in = load_total

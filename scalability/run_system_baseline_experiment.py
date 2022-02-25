@@ -101,6 +101,7 @@ class Experiment1(workload_experiment.WorkloadExperiment):
         total_requests = 0
         num_success = 0
         num_failure = 0
+        allowable_t_median = 0
 
         while run:
 
@@ -110,7 +111,7 @@ class Experiment1(workload_experiment.WorkloadExperiment):
             rps.append(load_total)
             print(f"🚀 Testing with load: {load_total} and updates={self.use_updates}")
 
-            iter_duration = FLAGS.iter_duration
+            iter_duration = FLAGS.iter_duration if "iter_duration" in FLAGS else FLAGS.duration
             t_start = int(time.time())
             evaluated_summaries = super().run_experiment(
                 {
@@ -151,9 +152,9 @@ class Experiment1(workload_experiment.WorkloadExperiment):
                 run = False
 
             else:
-                max_t_median = FLAGS.update_max_t_median if self.use_updates else FLAGS.max_t_median
+                allowable_t_median = FLAGS.update_allowable_t_median if self.use_updates else FLAGS.allowable_t_median
                 rps_max_iter.append(rps_max)
-                if failure_rate < FLAGS.max_failure_rate and t_median < max_t_median:
+                if failure_rate < FLAGS.allowable_failure_rate and t_median < allowable_t_median:
                     if num_success / duration_in_iteration > rps_max:
                         rps_max = num_success / duration_in_iteration
                         rps_max_in = load_total
@@ -183,8 +184,10 @@ class Experiment1(workload_experiment.WorkloadExperiment):
                     "t_min": "{:.2f}".format(t_min),
                     "duration": duration,
                     "target_duration": iter_duration,
-                    "viable_failure_rate": FLAGS.max_failure_rate,
-                    "max_t_median": max_t_median,
+                    "allowable_failure_rate": FLAGS.allowable_failure_rate
+                    if "allowable_failure_rate" in FLAGS
+                    else "N/A",
+                    "allowable_t_median": "N/A" if allowable_t_median == 0 else allowable_t_median,
                 },
                 rps,
                 "requests / s",
@@ -200,17 +203,4 @@ class Experiment1(workload_experiment.WorkloadExperiment):
 
 if __name__ == "__main__":
     experiment.parse_command_line_args()
-
-    exp = Experiment1()
-
-    exp.start_experiment()
-    exp.run_experiment({"load_total": FLAGS.load, "duration": FLAGS.duration})
-    exp.write_summary_file(
-        "run_system_baseline_experiment",
-        {"rps": FLAGS.load},
-        [FLAGS.load],
-        "requests / s",
-        rtype="update" if FLAGS.use_updates else "query",
-    )
-
-    exp.end_experiment()
+    Experiment1().run_iterations([FLAGS.load])

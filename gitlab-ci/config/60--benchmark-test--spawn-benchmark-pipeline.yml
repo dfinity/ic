@@ -148,7 +148,7 @@ large-subnet-gossip-experiment:
       $SHELL_WRAPPER timeout 30m ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION" --hosts-ini hosts_large_unassigned.ini
       cd ./scalability
       $SHELL_WRAPPER pip3 install --user -r requirements.txt
-      $SHELL_WRAPPER python3 max_capacity_gossip.py --testnet $TESTNET --wg_testnet $TESTNET --skip_generate_report=False --use_updates=True --update_max_t_median=10000
+      $SHELL_WRAPPER python3 max_capacity_gossip.py --testnet $TESTNET --wg_testnet $TESTNET --skip_generate_report=False --use_updates=True --update_allowable_t_median=10000
       cd -
 
       $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"

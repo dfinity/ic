@@ -28,12 +28,14 @@ gflags.DEFINE_integer("iter_duration", 300, "Duration per iteration of the bench
 # for rps to choose as rps_max. If failure rate or latency is higher,
 # continue running the benchmark, but do not consider this RPS
 # for max capacity
-gflags.DEFINE_float("max_failure_rate", 0.2, "Maximum failure rate at which to consider the iteration successful.")
-gflags.DEFINE_integer(
-    "max_t_median", 5000, "Maximum query median latency at which to consider the iteration successful."
+gflags.DEFINE_float(
+    "allowable_failure_rate", 0.2, "Maximum failure rate at which to consider the iteration successful."
 )
 gflags.DEFINE_integer(
-    "update_max_t_median", 5000, "Maximum update median latency at which to consider the iteration successful."
+    "allowable_t_median", 5000, "Maximum query median latency at which to consider the iteration successful."
+)
+gflags.DEFINE_integer(
+    "update_allowable_t_median", 5000, "Maximum update median latency at which to consider the iteration successful."
 )
 
 # Maximum failure rate and median query duration limit for when to

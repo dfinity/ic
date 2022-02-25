@@ -21,9 +21,11 @@ gflags.DEFINE_float("rps", 1, "Requests per second.")
 # for rps to choose as rps_max. If failure rate or latency is higher,
 # continue running the benchmark, but do not consider this RPS
 # for max capacity
-gflags.DEFINE_float("max_failure_rate", 0.2, "Maximum failure rate at which to consider the iteration successful.")
+gflags.DEFINE_float(
+    "allowable_failure_rate", 0.2, "Maximum failure rate at which to consider the iteration successful."
+)
 gflags.DEFINE_integer(
-    "update_max_t_median", 5000, "Maximum update median latency at which to consider the iteration successful."
+    "update_allowable_t_median", 5000, "Maximum update median latency at which to consider the iteration successful."
 )
 gflags.DEFINE_integer("max_iterations", 10, "Maximum number of iterations needed in this run.")
 
@@ -81,8 +83,8 @@ if __name__ == "__main__":
         )
 
         duration = int(time.time()) - t_start
-        max_t_median = FLAGS.update_max_t_median
-        if failure_rate < FLAGS.max_failure_rate and t_median < max_t_median:
+        allowable_t_median = FLAGS.update_allowable_t_median
+        if failure_rate < FLAGS.allowable_failure_rate and t_median < allowable_t_median:
             if num_succ / duration > payload_size_max:
                 payload_size_max = num_succ / duration
                 payload_size_max_in = curr_payload_size
