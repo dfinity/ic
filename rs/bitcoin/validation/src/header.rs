@@ -2,7 +2,7 @@ use bitcoin::{util::uint::Uint256, BlockHash, BlockHeader, Network};
 
 use crate::{
     constants::{
-        checkpoints, max_target, no_pow_retargeting, pow_limit_bits,
+        checkpoints, latest_checkpoint_height, max_target, no_pow_retargeting, pow_limit_bits,
         DIFFICULTY_ADJUSTMENT_INTERVAL, TEN_MINUTES,
     },
     BlockHeight,
@@ -30,6 +30,7 @@ pub enum ValidateHeaderError {
     PrevHeaderNotFound,
 }
 
+#[derive(Clone)]
 pub struct StoredHeader {
     pub header: BlockHeader,
     pub height: BlockHeight,
@@ -38,6 +39,8 @@ pub struct StoredHeader {
 pub trait HeaderStore {
     /// Retrieves the header from the store.
     fn get_header(&self, hash: &BlockHash) -> Option<&StoredHeader>;
+    /// Retrieves the current height of the block chain.
+    fn get_height(&self) -> BlockHeight;
     /// Retrieves the initial hash the store starts from.
     fn get_initial_hash(&self) -> BlockHash;
 }
@@ -60,7 +63,7 @@ pub fn validate_header(
         return Err(ValidateHeaderError::HeaderIsOld);
     }
 
-    if !is_checkpoint_valid(network, prev_stored_header, header) {
+    if !is_checkpoint_valid(network, prev_stored_header, header, store.get_height()) {
         return Err(ValidateHeaderError::DoesNotMatchCheckpoint);
     }
 
@@ -86,12 +89,15 @@ pub fn validate_header(
     Ok(())
 }
 
-/// If the height of the header is the same as a checkpoint,
-/// then ensure that the header is matching.
+/// This validates the header against the network's checkpoints.
+/// 1. If the next header is at a checkpoint height, the checkpoint is compared to the next header's block hash.
+/// 2. If the header is not the same height, the function then compares the height to the latest checkpoint.
+///    If the next header's height is less than the last checkpoint's height, the header is invalid.
 fn is_checkpoint_valid(
     network: &Network,
     prev_header: &StoredHeader,
     header: &BlockHeader,
+    chain_height: BlockHeight,
 ) -> bool {
     let checkpoints = checkpoints(network);
     let next_height = prev_header.height.saturating_add(1);
@@ -99,7 +105,8 @@ fn is_checkpoint_valid(
         return *next_hash == header.block_hash();
     }
 
-    true
+    let checkpoint_height = latest_checkpoint_height(network, chain_height);
+    next_height > checkpoint_height
 }
 
 /// Validates if a header's timestamp is valid.
@@ -283,13 +290,14 @@ mod test {
 
     use super::*;
     use crate::constants::test::{
-        MAINNET_HEADER_11110, MAINNET_HEADER_11111, MAINNET_HEADER_586656, MAINNET_HEADER_705600,
-        MAINNET_HEADER_705601, MAINNET_HEADER_705602, TESTNET_HEADER_2132555,
-        TESTNET_HEADER_2132556,
+        MAINNET_HEADER_11109, MAINNET_HEADER_11110, MAINNET_HEADER_11111, MAINNET_HEADER_586656,
+        MAINNET_HEADER_705600, MAINNET_HEADER_705601, MAINNET_HEADER_705602,
+        TESTNET_HEADER_2132555, TESTNET_HEADER_2132556,
     };
 
     struct SimpleHeaderStore {
         headers: HashMap<BlockHash, StoredHeader>,
+        height: BlockHeight,
         initial_hash: BlockHash,
     }
 
@@ -307,6 +315,7 @@ mod test {
 
             Self {
                 headers,
+                height,
                 initial_hash,
             }
         }
@@ -321,6 +330,7 @@ mod test {
                 height: prev.height + 1,
             };
 
+            self.height = stored_header.height;
             self.headers.insert(header.block_hash(), stored_header);
         }
     }
@@ -328,6 +338,10 @@ mod test {
     impl HeaderStore for SimpleHeaderStore {
         fn get_header(&self, hash: &BlockHash) -> Option<&StoredHeader> {
             self.headers.get(hash)
+        }
+
+        fn get_height(&self) -> BlockHeight {
+            self.height
         }
 
         fn get_initial_hash(&self) -> BlockHash {
@@ -445,14 +459,19 @@ mod test {
     }
 
     #[test]
-    fn test_is_header_valid_checkpoint_valid() {
+    fn test_is_header_valid_checkpoint_valid_at_height() {
+        let network = Network::Bitcoin;
         let header_11110 = deserialize_header(MAINNET_HEADER_11110);
         let mut header_11111 = deserialize_header(MAINNET_HEADER_11111);
         let store = SimpleHeaderStore::new(header_11110, 11110);
         let prev_header = store.get_header(&header_11111.prev_blockhash).unwrap();
-        let network = Network::Bitcoin;
 
-        assert!(is_checkpoint_valid(&network, prev_header, &header_11111));
+        assert!(is_checkpoint_valid(
+            &network,
+            prev_header,
+            &header_11111,
+            store.get_height()
+        ));
 
         // Change time to slightly modify the block hash to make it invalid for the
         // checkpoint.
@@ -462,6 +481,61 @@ mod test {
         assert!(matches!(
             result,
             Err(ValidateHeaderError::DoesNotMatchCheckpoint)
+        ));
+    }
+
+    #[test]
+    fn test_is_header_valid_checkpoint_valid_detect_fork_around_11111() {
+        let network = Network::Bitcoin;
+        let header_11109 = deserialize_header(MAINNET_HEADER_11109);
+        let header_11110 = deserialize_header(MAINNET_HEADER_11110);
+        let header_11111 = deserialize_header(MAINNET_HEADER_11111);
+        // Make a header for height 11110 that would cause a fork.
+        let mut bad_header_11110 = header_11110;
+        bad_header_11110.time -= 1;
+
+        let mut store = SimpleHeaderStore::new(header_11109, 11109);
+        store.add(header_11110);
+
+        let prev_header = store
+            .get_header(&header_11111.prev_blockhash)
+            .cloned()
+            .unwrap();
+
+        assert!(is_checkpoint_valid(
+            &network,
+            &prev_header,
+            &header_11111,
+            store.get_height()
+        ));
+
+        store.add(header_11111);
+
+        // This should return false as bad_header_11110 is a fork.
+        assert!(!is_checkpoint_valid(
+            &network,
+            &prev_header,
+            &bad_header_11110,
+            store.get_height()
+        ));
+    }
+
+    #[test]
+    fn test_is_header_valid_checkpoint_valid_detect_fork_around_705600() {
+        let network = Network::Bitcoin;
+        let header_705600 = deserialize_header(MAINNET_HEADER_705600);
+        let header_705601 = deserialize_header(MAINNET_HEADER_705601);
+        let store = SimpleHeaderStore::new(header_705600, 705_600);
+        let prev_header = store
+            .get_header(&header_705601.prev_blockhash)
+            .cloned()
+            .unwrap();
+
+        assert!(is_checkpoint_valid(
+            &network,
+            &prev_header,
+            &header_705601,
+            store.get_height()
         ));
     }
 
