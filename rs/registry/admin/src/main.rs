@@ -1743,6 +1743,10 @@ struct ProposeToUpdateNodeOperatorConfigCmd {
     /// '{ "default": 10, "storage_upgrade": 24 }'
     #[clap(long)]
     rewardable_nodes: Option<String>,
+
+    #[clap(long)]
+    /// The principal id of the node provider
+    pub node_provider_id: Option<PrincipalId>,
 }
 
 #[async_trait]
@@ -1771,6 +1775,7 @@ impl ProposalTitleAndPayload<UpdateNodeOperatorConfigPayload>
             node_allowance: self.node_allowance,
             dc_id: self.dc_id.clone(),
             rewardable_nodes,
+            node_provider_id: self.node_provider_id,
         }
     }
 }

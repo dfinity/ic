@@ -2,7 +2,7 @@ use candid::Encode;
 use dfn_candid::candid_one;
 
 use ic_nns_common::registry::encode_or_panic;
-use ic_nns_constants::ids::TEST_NEURON_1_OWNER_PRINCIPAL;
+use ic_nns_constants::ids::{TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL};
 use ic_nns_test_utils::{
     itest_helpers::{
         forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
@@ -63,6 +63,7 @@ fn test_non_governance_users_cannot_update_node_operator_config() {
             node_allowance: Some(10),
             dc_id: None,
             rewardable_nodes: btreemap! {},
+            node_provider_id: Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
         };
 
         // The anonymous end-user tries to update a node operator, bypassing
@@ -133,11 +134,32 @@ fn test_accepted_proposal_mutates_the_registry() {
 
         let rewardable_nodes = btreemap! { "default".to_string() => 10 };
 
-        let payload = UpdateNodeOperatorConfigPayload {
+        // Try to set node_provider_id == node_operator_id...
+        let mut payload = UpdateNodeOperatorConfigPayload {
             node_operator_id: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
             node_allowance: Some(10),
             dc_id: Some("AN1".into()),
             rewardable_nodes: rewardable_nodes.clone(),
+            node_provider_id: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+        };
+
+        // ...causing a panic
+        assert!(
+            !forward_call_via_universal_canister(
+                &governance,
+                &registry,
+                "update_node_operator_config",
+                Encode!(&payload).unwrap()
+            )
+            .await
+        );
+
+        payload = UpdateNodeOperatorConfigPayload {
+            node_operator_id: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+            node_allowance: Some(10),
+            dc_id: Some("AN1".into()),
+            rewardable_nodes: rewardable_nodes.clone(),
+            node_provider_id: Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
         };
 
         assert!(
@@ -159,7 +181,7 @@ fn test_accepted_proposal_mutates_the_registry() {
                 node_allowance: 10,
                 dc_id: "AN1".into(),
                 rewardable_nodes,
-                ..Default::default()
+                node_provider_principal_id: (*TEST_NEURON_2_OWNER_PRINCIPAL).to_vec(),
             },
         );
 

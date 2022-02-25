@@ -116,6 +116,7 @@ type SubnetFeatures = record {
 type SubnetType = variant { application; verified_application; system };
 type UpdateNodeOperatorConfigPayload = record {
   node_operator_id : opt principal;
+  node_provider_id : opt principal;
   node_allowance : opt nat64;
   rewardable_nodes : vec record { text; nat32 };
   dc_id : opt text;
