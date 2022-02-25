@@ -41,10 +41,7 @@ where
     slog_scope::scope(&log, || f(&log))
 }
 
-pub fn with_test_replica_logger<F, R>(f: F) -> R
-where
-    F: FnOnce(ReplicaLogger) -> R,
-{
+pub fn get_test_replica_logger() -> ReplicaLogger {
     use slog::Drain;
 
     let buf = Arc::new(Mutex::new(vec![]));
@@ -57,6 +54,12 @@ where
         .filter_level(slog::Level::Info)
         .ignore_res();
     let drain = Mutex::new(drain).fuse();
-    let log = slog::Logger::root(drain, slog::o!()).into();
-    f(log)
+    slog::Logger::root(drain, slog::o!()).into()
+}
+
+pub fn with_test_replica_logger<F, R>(f: F) -> R
+where
+    F: FnOnce(ReplicaLogger) -> R,
+{
+    f(get_test_replica_logger())
 }

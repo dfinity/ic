@@ -16,15 +16,16 @@ mod wat;
 use criterion::{criterion_group, criterion_main, Criterion};
 
 pub fn bench_update(c: &mut Criterion) {
+    let (hypervisor, canister_root) = update::get_hypervisor();
     for (id, wat, expected_instructions) in wat::ALL.iter() {
-        println!("BENCH: {}", id);
-        println!(
-            "    Instructions per bench iteration: {} ({}M)",
-            expected_instructions,
-            *expected_instructions / 1_000_000
+        update::run_benchmark(
+            c,
+            id,
+            wat,
+            *expected_instructions,
+            &hypervisor,
+            &canister_root,
         );
-        println!("    WAT: {}", wat);
-        update::run_benchmark(Some(c), id, wat, *expected_instructions);
     }
 }
 

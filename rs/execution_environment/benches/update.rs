@@ -1,4 +1,4 @@
-use criterion::Criterion;
+use criterion::{BatchSize, Criterion};
 use ic_config::execution_environment::Config;
 use ic_execution_environment::Hypervisor;
 use ic_interfaces::{
@@ -11,11 +11,10 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CallContextAction, CanisterState};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
-    mock_time,
+    get_test_replica_logger, mock_time,
     state::canister_from_exec_state,
     types::ids::{canister_test_id, subnet_test_id},
     types::messages::IngressBuilder,
-    with_test_replica_logger,
 };
 use ic_types::{
     CanisterId, Cycles, MemoryAllocation, NumBytes, NumInstructions, PrincipalId, SubnetId, Time,
@@ -35,26 +34,7 @@ lazy_static! {
         SubnetAvailableMemory::new(i64::MAX);
 }
 
-fn with_hypervisor<F>(f: F)
-where
-    F: FnOnce(Hypervisor, std::path::PathBuf),
-{
-    with_test_replica_logger(|log| {
-        let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-        let metrics_registry = MetricsRegistry::new();
-        let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-        let hypervisor = Hypervisor::new(
-            Config::default(),
-            &metrics_registry,
-            subnet_test_id(1),
-            SubnetType::Application,
-            log,
-            cycles_account_manager,
-        );
-        f(hypervisor, tmpdir.path().into());
-    });
-}
-
+#[derive(Clone)]
 struct ExecuteUpdateArgs(
     CanisterState,
     RequestOrIngress,
@@ -64,10 +44,26 @@ struct ExecuteUpdateArgs(
     ExecutionParameters,
 );
 
+pub fn get_hypervisor() -> (Hypervisor, std::path::PathBuf) {
+    let log = get_test_replica_logger();
+    let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
+    let metrics_registry = MetricsRegistry::new();
+    let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
+    let hypervisor = Hypervisor::new(
+        Config::default(),
+        &metrics_registry,
+        subnet_test_id(1),
+        SubnetType::Application,
+        log,
+        cycles_account_manager,
+    );
+    (hypervisor, tmpdir.path().into())
+}
+
 fn setup_update<W>(
     hypervisor: &Hypervisor,
+    canister_root: &std::path::Path,
     wat: W,
-    canister_root: std::path::PathBuf,
 ) -> ExecuteUpdateArgs
 where
     W: AsRef<str>,
@@ -79,7 +75,7 @@ where
     let execution_state = hypervisor
         .create_execution_state(
             wabt::wat2wasm_with_features(wat.as_ref(), features).unwrap(),
-            canister_root,
+            canister_root.into(),
             canister_id,
         )
         .expect("Failed to create execution state");
@@ -124,79 +120,73 @@ where
 }
 
 /// Run execute_update() benchmark for a given WAT snippet.
-pub fn run_benchmark<I, W>(c: Option<&mut Criterion>, id: I, wat: W, expected_instructions: u64)
-where
+pub fn run_benchmark<I, W>(
+    c: &mut Criterion,
+    id: I,
+    wat: W,
+    expected_instructions: u64,
+    hypervisor: &Hypervisor,
+    canister_root: &std::path::Path,
+) where
     I: AsRef<str>,
     W: AsRef<str>,
 {
-    match c {
-        // IAI benchmark
-        None => {
-            with_hypervisor(|hypervisor, tmp_path| {
-                let ExecuteUpdateArgs(
-                    canister_state,
-                    request,
-                    time,
-                    routing_table,
-                    subnet_records,
-                    execution_parameters,
-                ) = setup_update(&hypervisor, wat.as_ref(), tmp_path);
-
-                hypervisor.execute_update(
-                    canister_state,
-                    request,
-                    time,
-                    routing_table,
-                    subnet_records,
-                    execution_parameters,
-                );
-            });
-        }
-        // Criterion benchmark
-        Some(c) => {
-            let mut group = c.benchmark_group("update");
-            with_hypervisor(|hypervisor, tmp_path| {
-                let ExecuteUpdateArgs(
-                    canister_state,
-                    request,
-                    time,
-                    routing_table,
-                    subnet_records,
-                    execution_parameters,
-                ) = setup_update(&hypervisor, wat, tmp_path);
-                group
-                    .throughput(criterion::Throughput::Elements(expected_instructions))
-                    .bench_function(id.as_ref(), |b| {
-                        b.iter(|| {
-                            let (_state, instructions, action, _bytes) = hypervisor.execute_update(
-                                canister_state.clone(),
-                                request.clone(),
-                                time,
-                                Arc::clone(&routing_table),
-                                subnet_records.clone(),
-                                execution_parameters.clone(),
-                            );
-                            match action {
-                                CallContextAction::NoResponse { .. } => {}
-                                CallContextAction::Reply { .. } => {}
-                                CallContextAction::Reject { .. } => {}
-                                _ => assert_eq!(
-                                    action,
-                                    CallContextAction::NoResponse {
-                                        refund: Cycles::from(0),
-                                    },
-                                    "The system call should not fail"
-                                ),
-                            }
-                            assert_eq!(
-                                expected_instructions,
-                                MAX_NUM_INSTRUCTIONS.get() - instructions.get(),
-                                "Expected number of instructions is required for IPS metric"
-                            );
-                        });
-                    });
-            });
-            group.finish();
-        }
-    }
+    let mut group = c.benchmark_group("update");
+    let mut bench_args = None;
+    group
+        .throughput(criterion::Throughput::Elements(expected_instructions))
+        .bench_function(id.as_ref(), |b| {
+            b.iter_batched(
+                || {
+                    // Lazily setup the benchmark arguments
+                    if bench_args.is_none() {
+                        println!(
+                            "\n    Instructions per bench iteration: {} ({}M)",
+                            expected_instructions,
+                            expected_instructions / 1_000_000
+                        );
+                        println!("    WAT: {}", wat.as_ref());
+                        bench_args = Some(setup_update(hypervisor, canister_root, wat.as_ref()));
+                    }
+                    // let (hypervisor, args) = bench_setup.take().unwrap();
+                    bench_args.as_ref().unwrap().clone()
+                },
+                |ExecuteUpdateArgs(
+                    cloned_canister_state,
+                    cloned_request,
+                    cloned_time,
+                    cloned_routing_table,
+                    cloned_subnet_records,
+                    cloned_execution_parameters,
+                )| {
+                    let (_state, instructions, action, _bytes) = hypervisor.execute_update(
+                        cloned_canister_state,
+                        cloned_request,
+                        cloned_time,
+                        cloned_routing_table,
+                        cloned_subnet_records,
+                        cloned_execution_parameters,
+                    );
+                    match action {
+                        CallContextAction::NoResponse { .. } => {}
+                        CallContextAction::Reply { .. } => {}
+                        CallContextAction::Reject { .. } => {}
+                        _ => assert_eq!(
+                            action,
+                            CallContextAction::NoResponse {
+                                refund: Cycles::from(0),
+                            },
+                            "The system call should not fail"
+                        ),
+                    }
+                    assert_eq!(
+                        expected_instructions,
+                        MAX_NUM_INSTRUCTIONS.get() - instructions.get(),
+                        "Expected number of instructions is required for IPS metric"
+                    );
+                },
+                BatchSize::SmallInput,
+            );
+        });
+    group.finish();
 }
