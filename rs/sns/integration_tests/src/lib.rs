@@ -11,7 +11,12 @@
 //! crate.
 #[cfg(test)]
 mod ledger;
+
 #[cfg(test)]
 mod neuron;
+
 #[cfg(test)]
 mod proposals;
+
+#[cfg(test)]
+mod nervous_system_parameters;
