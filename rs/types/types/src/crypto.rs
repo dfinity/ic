@@ -128,6 +128,7 @@ pub enum AlgorithmId {
     IcCanisterSignature = 13,
     RsaSha256 = 14,
     ThresholdEcdsaSecp256k1 = 15,
+    MegaSecp256k1 = 16,
 }
 
 impl From<CspThresholdSigPublicKey> for AlgorithmId {
@@ -176,6 +177,7 @@ impl From<i32> for AlgorithmId {
             13 => AlgorithmId::IcCanisterSignature,
             14 => AlgorithmId::RsaSha256,
             15 => AlgorithmId::ThresholdEcdsaSecp256k1,
+            16 => AlgorithmId::MegaSecp256k1,
             _ => AlgorithmId::Placeholder,
         }
     }

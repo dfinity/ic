@@ -5,7 +5,7 @@ use strum::IntoEnumIterator;
 #[test]
 fn should_correctly_convert_i32_to_algorithm_id() {
     // ensure _all_ algorithm IDs are compared (i.e., no algorithm was forgotten)
-    assert_eq!(AlgorithmId::iter().count(), 16);
+    assert_eq!(AlgorithmId::iter().count(), 17);
 
     assert_eq!(AlgorithmId::from(0), AlgorithmId::Placeholder);
     assert_eq!(AlgorithmId::from(1), AlgorithmId::MultiBls12_381);
@@ -23,6 +23,7 @@ fn should_correctly_convert_i32_to_algorithm_id() {
     assert_eq!(AlgorithmId::from(13), AlgorithmId::IcCanisterSignature);
     assert_eq!(AlgorithmId::from(14), AlgorithmId::RsaSha256);
     assert_eq!(AlgorithmId::from(15), AlgorithmId::ThresholdEcdsaSecp256k1);
+    assert_eq!(AlgorithmId::from(16), AlgorithmId::MegaSecp256k1);
 
     // Verify that an unknown i32 maps onto Placeholder
     assert_eq!(AlgorithmId::from(42), AlgorithmId::Placeholder);
@@ -31,7 +32,7 @@ fn should_correctly_convert_i32_to_algorithm_id() {
 #[test]
 fn should_correctly_convert_algorithm_id_to_i32() {
     // ensure _all_ algorithm IDs are compared (i.e., no algorithm was forgotten)
-    assert_eq!(AlgorithmId::iter().count(), 16);
+    assert_eq!(AlgorithmId::iter().count(), 17);
 
     assert_eq!(AlgorithmId::Placeholder as i32, 0);
     assert_eq!(AlgorithmId::MultiBls12_381 as i32, 1);
@@ -49,6 +50,7 @@ fn should_correctly_convert_algorithm_id_to_i32() {
     assert_eq!(AlgorithmId::IcCanisterSignature as i32, 13);
     assert_eq!(AlgorithmId::RsaSha256 as i32, 14);
     assert_eq!(AlgorithmId::ThresholdEcdsaSecp256k1 as i32, 15);
+    assert_eq!(AlgorithmId::MegaSecp256k1 as i32, 16)
 }
 
 pub fn set_of(node_ids: &[NodeId]) -> BTreeSet<NodeId> {

@@ -19,7 +19,9 @@ enum AlgorithmId {
   ALGORITHM_ID_ECDSA_P256 = 11;
   ALGORITHM_ID_ECDSA_SECP_256K1 = 12;
   ALGORITHM_ID_IC_CANISTER_SIGNATURE = 13;
-  ALGORITHM_ID_MEGA_SECP_256K1 = 14;
+  ALGORITHM_ID_RSA_SHA256 = 14;
+  ALGORITHM_ID_THRESHOLD_ECDSA_SECP_256K1 = 15;
+  ALGORITHM_ID_MEGA_SECP_256K1 = 16;
 }
 
 // A public key. Described by its `AlgorithmId`, the key's value and proof data holding, e.g., a proof of possession (PoP).
