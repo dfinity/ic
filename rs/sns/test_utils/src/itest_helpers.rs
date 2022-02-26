@@ -10,10 +10,10 @@ use ic_sns_governance::pb::v1::{
     manage_neuron::{
         claim_or_refresh::{By, MemoAndController},
         configure::Operation,
-        ClaimOrRefresh, Command, Configure, IncreaseDissolveDelay,
+        ClaimOrRefresh, Command, Configure, IncreaseDissolveDelay, RegisterVote,
     },
     GetProposal, GetProposalResponse, Governance, ManageNeuron, ManageNeuronResponse,
-    NervousSystemParameters, NeuronId, Proposal, ProposalData, ProposalId,
+    NervousSystemParameters, NeuronId, Proposal, ProposalData, ProposalId, Vote,
 };
 use ledger_canister as ledger;
 use ledger_canister::{
@@ -383,6 +383,35 @@ impl SnsCanisters<'_> {
         }
 
         neuron_id
+    }
+
+    pub async fn vote(
+        &self,
+        user: &Sender,
+        subaccount: &Subaccount,
+        proposal_id: ProposalId,
+        accept: bool,
+    ) -> ManageNeuronResponse {
+        let vote = if accept { Vote::Yes } else { Vote::No } as i32;
+
+        let response: ManageNeuronResponse = self
+            .governance
+            .update_from_sender(
+                "manage_neuron",
+                candid_one,
+                ManageNeuron {
+                    subaccount: subaccount.to_vec(),
+                    command: Some(Command::RegisterVote(RegisterVote {
+                        proposal: Some(proposal_id),
+                        vote,
+                    })),
+                },
+                user,
+            )
+            .await
+            .expect("Vote request failed");
+
+        response
     }
 }
 

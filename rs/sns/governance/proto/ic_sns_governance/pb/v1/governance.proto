@@ -341,9 +341,20 @@ message GovernanceError {
   string error_message = 2;
 }
 
+// A ballot can be filled out automatically using the follow mechanism (aka
+// delegation aka liquid democracy).
+//
+// Note that as of Feb, 2022, we disallow changing a ballot once it has been
+// filled out, even if the ballot was marked automatically via the follow
+// mechanism. This could be changed later though.
 message Ballot {
   Vote vote = 1;
   uint64 voting_power = 2;
+
+  // Time when the vote field was populated with a decision (YES or NO, not
+  // UNDECIDED). Only meaningful when a decision has been made. As per our
+  // convention, seconds since the UNIX epoch.
+  uint64 cast_timestamp_seconds = 3;
 }
 
 // TODO this ends up being awfully verbose in code. Refactor for smaller enum::value naming

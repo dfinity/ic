@@ -7,7 +7,11 @@ type Action = variant {
   Motion : Motion;
 };
 type Amount = record { e8s : nat64 };
-type Ballot = record { vote : int32; voting_power : nat64 };
+type Ballot = record {
+  vote : int32;
+  cast_timestamp_seconds : nat64;
+  voting_power : nat64;
+};
 type By = variant {
   MemoAndController : MemoAndController;
   NeuronId : record {};

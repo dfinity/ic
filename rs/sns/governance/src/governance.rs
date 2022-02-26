@@ -1621,6 +1621,7 @@ impl Governance {
                 Ballot {
                     vote: Vote::Unspecified as i32,
                     voting_power: power,
+                    cast_timestamp_seconds: 0,
                 },
             );
         }
@@ -1680,6 +1681,7 @@ impl Governance {
             action,
             &self.action_followee_index,
             &mut self.proto.neurons,
+            now_seconds,
         );
 
         // Finally, add this proposal as an open proposal.
@@ -1701,6 +1703,7 @@ impl Governance {
         action: &Action,
         action_followee_index: &BTreeMap<u64, BTreeMap<String, BTreeSet<NeuronId>>>,
         neurons: &mut BTreeMap<String, Neuron>,
+        now_seconds: u64,
     ) {
         let unspecified_action = Action::Unspecified(Empty {});
         assert!(action != &unspecified_action);
@@ -1729,6 +1732,7 @@ impl Governance {
                             // for neurons that have already voted
                             // (manually) and we don't change these votes.
                             k_ballot.vote = *v as i32;
+                            k_ballot.cast_timestamp_seconds = now_seconds;
                             // Here k is the followee, i.e., the neuron
                             // that has just cast a vote that may be
                             // followed by other neurons.
@@ -1868,6 +1872,7 @@ impl Governance {
             action,
             &self.action_followee_index,
             &mut self.proto.neurons,
+            self.env.now(),
         );
 
         self.process_proposal(proposal_id.id);
