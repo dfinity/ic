@@ -37,7 +37,7 @@ use ic_metrics::MetricsRegistry;
 use ic_p2p::{
     event_handler::{
         fetch_gossip_config, AdvertSubscriber, ChannelConfig, IngressEventHandler,
-        IngressThrottler, P2PEventHandlerImpl,
+        P2PEventHandlerImpl,
     },
     gossip_protocol::GossipImpl,
 };
@@ -111,6 +111,16 @@ pub enum P2PStateSyncClient {
     ),
 }
 
+/// The collection of all artifact pools.
+pub struct ArtifactPools {
+    pub ingress_pool: Arc<RwLock<IngressPoolImpl>>,
+    pub consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
+    pub consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
+    pub certification_pool: Arc<RwLock<CertificationPoolImpl>>,
+    pub dkg_pool: Arc<RwLock<DkgPoolImpl>>,
+    pub ecdsa_pool: Arc<RwLock<EcdsaPoolImpl>>,
+}
+
 /// The function constructs a P2P instance. Currently, it constructs all the
 /// artifact pools and the Consensus/P2P time source. Artifact
 /// clients are constructed and run in their separate actors.
@@ -124,7 +134,6 @@ pub fn create_networking_stack(
     log: ReplicaLogger,
     rt_handle: tokio::runtime::Handle,
     transport_config: TransportConfig,
-    artifact_pool_config: ArtifactPoolConfig,
     consensus_config: ConsensusConfig,
     malicious_flags: MaliciousFlags,
     node_id: NodeId,
@@ -144,18 +153,11 @@ pub fn create_networking_stack(
     ingress_sig_crypto: Arc<dyn IngressSigVerifier + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
-    catch_up_package: CUPWithOriginalProtobuf,
+    artifact_pools: &ArtifactPools,
     cycles_account_manager: Arc<CyclesAccountManager>,
     local_store_time_reader: Option<Arc<dyn LocalStoreCertifiedTimeReader>>,
     registry_poll_delay_duration_ms: u64,
-) -> Result<
-    (
-        IngressIngestionService,
-        Box<dyn P2PRunner>,
-        Arc<dyn ConsensusPoolCache>,
-    ),
-    String,
-> {
+) -> Result<(IngressIngestionService, Box<dyn P2PRunner>), String> {
     let transport = transport.unwrap_or_else(|| {
         create_transport(
             node_id,
@@ -189,14 +191,13 @@ pub fn create_networking_stack(
     );
 
     // Now we setup the Artifact Pools and the manager.
-    let (artifact_manager, consensus_pool_cache, ingress_throttle) = setup_artifact_manager(
+    let artifact_manager = setup_artifact_manager(
         node_id,
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&consensus_crypto) as Arc<_>,
         Arc::clone(&certifier_crypto) as Arc<_>,
         Arc::clone(&ingress_sig_crypto) as Arc<_>,
         subnet_id,
-        artifact_pool_config,
         consensus_config,
         log.clone(),
         metrics_registry.clone(),
@@ -207,7 +208,7 @@ pub fn create_networking_stack(
         self_validating_payload_builder,
         message_router,
         ingress_history_reader,
-        catch_up_package,
+        artifact_pools,
         malicious_flags.clone(),
         cycles_account_manager,
         local_store_time_reader,
@@ -219,7 +220,7 @@ pub fn create_networking_stack(
     let gossip = Arc::new(GossipImpl::new(
         node_id,
         subnet_id,
-        consensus_pool_cache.clone(),
+        artifact_pools.consensus_pool_cache.clone(),
         registry_client.clone(),
         artifact_manager.clone(),
         transport.clone(),
@@ -239,8 +240,11 @@ pub fn create_networking_stack(
         event_handler,
     };
 
-    let ingress_event_handler =
-        BoxService::new(IngressEventHandler::new(ingress_throttle, gossip, node_id));
+    let ingress_event_handler = BoxService::new(IngressEventHandler::new(
+        artifact_pools.ingress_pool.clone(),
+        gossip,
+        node_id,
+    ));
 
     let ingress_ingestion_service = BoxService::new(
         ServiceBuilder::new()
@@ -251,11 +255,7 @@ pub fn create_networking_stack(
     let ingress_ingestion_service = ServiceBuilder::new()
         .buffer(MAX_BUFFERED_INGRESS_MESSAGES)
         .service(ingress_ingestion_service);
-    Ok((
-        ingress_ingestion_service,
-        Box::new(p2p),
-        consensus_pool_cache,
-    ))
+    Ok((ingress_ingestion_service, Box::new(p2p)))
 }
 
 impl P2PRunner for P2P {
@@ -303,7 +303,6 @@ fn setup_artifact_manager(
     certifier_crypto: Arc<dyn certification::CertificationCrypto>,
     ingress_sig_crypto: Arc<dyn IngressSigVerifier + Send + Sync>,
     subnet_id: SubnetId,
-    artifact_pool_config: ArtifactPoolConfig,
     consensus_config: ConsensusConfig,
     replica_logger: ReplicaLogger,
     metrics_registry: MetricsRegistry,
@@ -314,36 +313,23 @@ fn setup_artifact_manager(
     self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
     message_router: Arc<dyn MessageRouting>,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
-    catch_up_package: CUPWithOriginalProtobuf,
+    artifact_pools: &ArtifactPools,
     malicious_flags: MaliciousFlags,
     cycles_account_manager: Arc<CyclesAccountManager>,
     local_store_time_reader: Option<Arc<dyn LocalStoreCertifiedTimeReader>>,
     registry_poll_delay_duration_ms: u64,
     event_handler: AdvertSubscriber,
-) -> std::io::Result<(
-    Arc<dyn ArtifactManager>,
-    Arc<dyn ConsensusPoolCache>,
-    IngressThrottler,
-)> {
+) -> std::io::Result<Arc<dyn ArtifactManager>> {
     // Initialize the time source.
     let time_source = Arc::new(SysTimeSource::new());
 
     let mut artifact_manager_maker = manager::ArtifactManagerMaker::new(time_source.clone());
 
-    ensure_persistent_pool_replica_version_compatibility(
-        artifact_pool_config.persistent_pool_db_path(),
-    );
-
-    let (ingress_pool, consensus_pool, cert_pool, dkg_pool, ecdsa_pool) = init_artifact_pools(
-        subnet_id,
-        artifact_pool_config,
-        metrics_registry.clone(),
-        replica_logger.clone(),
-        catch_up_package,
-    );
-
-    let consensus_cache = consensus_pool.read().unwrap().get_cache();
-    let consensus_block_cache = consensus_pool.read().unwrap().get_block_cache();
+    let consensus_block_cache = artifact_pools
+        .consensus_pool
+        .read()
+        .unwrap()
+        .get_block_cache();
 
     if let P2PStateSyncClient::TestChunkingPool(client, client_on_state_change) = state_sync_client
     {
@@ -355,11 +341,7 @@ fn setup_artifact_manager(
             move |req| c_event_handler.broadcast_advert(req.advert.into(), req.advert_class),
         );
         artifact_manager_maker.add_arc_client(client, addr);
-        return Ok((
-            artifact_manager_maker.finish(),
-            consensus_cache,
-            ingress_pool as Arc<_>,
-        ));
+        return Ok(artifact_manager_maker.finish());
     }
     if let P2PStateSyncClient::Client(state_sync_client) = state_sync_client {
         let event_handler = event_handler.clone();
@@ -374,14 +356,14 @@ fn setup_artifact_manager(
 
     let consensus_replica_config = ReplicaConfig { node_id, subnet_id };
     let membership = Membership::new(
-        consensus_cache.clone(),
+        artifact_pools.consensus_pool_cache.clone(),
         Arc::clone(&registry_client),
         subnet_id,
     );
     let membership = Arc::new(membership);
 
     let ingress_manager = IngressManager::new(
-        consensus_cache.clone(),
+        artifact_pools.consensus_pool_cache.clone(),
         ingress_history_reader,
         Arc::clone(&registry_client),
         Arc::clone(&ingress_sig_crypto) as Arc<_>,
@@ -417,8 +399,8 @@ fn setup_artifact_manager(
                     Arc::clone(&ingress_manager) as Arc<_>,
                     Arc::clone(&xnet_payload_builder) as Arc<_>,
                     Arc::clone(&self_validating_payload_builder) as Arc<_>,
-                    Arc::clone(&dkg_pool) as Arc<_>,
-                    Arc::clone(&ecdsa_pool) as Arc<_>,
+                    Arc::clone(&artifact_pools.dkg_pool) as Arc<_>,
+                    Arc::clone(&artifact_pools.ecdsa_pool) as Arc<_>,
                     Arc::clone(&dkg_key_manager) as Arc<_>,
                     Arc::clone(&message_router) as Arc<_>,
                     Arc::clone(&state_manager) as Arc<_>,
@@ -431,8 +413,8 @@ fn setup_artifact_manager(
                 )
             },
             Arc::clone(&time_source) as Arc<_>,
-            Arc::clone(&consensus_pool),
-            Arc::clone(&ingress_pool),
+            Arc::clone(&artifact_pools.consensus_pool),
+            Arc::clone(&artifact_pools.ingress_pool),
             replica_logger.clone(),
             metrics_registry.clone(),
         );
@@ -445,7 +427,7 @@ fn setup_artifact_manager(
         let (ingress_client, actor) = processors::IngressProcessor::build(
             move |req| event_handler.broadcast_advert(req.advert.into(), req.advert_class),
             Arc::clone(&time_source) as Arc<_>,
-            Arc::clone(&ingress_pool),
+            Arc::clone(&artifact_pools.ingress_pool),
             ingress_manager,
             replica_logger.clone(),
             metrics_registry.clone(),
@@ -471,8 +453,8 @@ fn setup_artifact_manager(
                 )
             },
             Arc::clone(&time_source) as Arc<_>,
-            Arc::clone(&consensus_cache) as Arc<_>,
-            Arc::clone(&cert_pool),
+            Arc::clone(&artifact_pools.consensus_pool_cache) as Arc<_>,
+            Arc::clone(&artifact_pools.certification_pool),
             replica_logger.clone(),
             metrics_registry.clone(),
         );
@@ -489,7 +471,7 @@ fn setup_artifact_manager(
                     dkg::DkgImpl::new(
                         consensus_replica_config.node_id,
                         Arc::clone(&consensus_crypto),
-                        Arc::clone(&consensus_cache),
+                        Arc::clone(&artifact_pools.consensus_pool_cache),
                         dkg_key_manager,
                         metrics_registry.clone(),
                         replica_logger.clone(),
@@ -498,7 +480,7 @@ fn setup_artifact_manager(
                 )
             },
             Arc::clone(&time_source) as Arc<_>,
-            Arc::clone(&dkg_pool),
+            Arc::clone(&artifact_pools.dkg_pool),
             replica_logger.clone(),
             metrics_registry.clone(),
         );
@@ -531,7 +513,7 @@ fn setup_artifact_manager(
                     )
                 },
                 Arc::clone(&time_source) as Arc<_>,
-                Arc::clone(&ecdsa_pool),
+                Arc::clone(&artifact_pools.ecdsa_pool),
                 metrics_registry.clone(),
                 replica_logger.clone(),
             );
@@ -541,49 +523,48 @@ fn setup_artifact_manager(
         }
     }
 
-    Ok((
-        artifact_manager_maker.finish(),
-        consensus_cache,
-        ingress_pool as Arc<_>,
-    ))
+    Ok(artifact_manager_maker.finish())
 }
 
 /// The function initializes the artifact pools.
 #[allow(clippy::type_complexity)]
-pub(crate) fn init_artifact_pools(
+pub fn init_artifact_pools(
     subnet_id: SubnetId,
     config: ArtifactPoolConfig,
     registry: MetricsRegistry,
     log: ReplicaLogger,
     catch_up_package: CUPWithOriginalProtobuf,
-) -> (
-    Arc<RwLock<IngressPoolImpl>>,
-    Arc<RwLock<ConsensusPoolImpl>>,
-    Arc<RwLock<CertificationPoolImpl>>,
-    Arc<RwLock<DkgPoolImpl>>,
-    Arc<RwLock<EcdsaPoolImpl>>,
-) {
-    (
-        Arc::new(RwLock::new(IngressPoolImpl::new(
-            config.clone(),
-            registry.clone(),
-            log.clone(),
-        ))),
-        Arc::new(RwLock::new(ConsensusPoolImpl::new(
-            subnet_id,
-            catch_up_package,
-            config.clone(),
-            registry.clone(),
-            log.clone(),
-        ))),
-        Arc::new(RwLock::new(CertificationPoolImpl::new(
-            config,
-            log.clone(),
-            registry.clone(),
-        ))),
-        Arc::new(RwLock::new(DkgPoolImpl::new(registry.clone()))),
-        Arc::new(RwLock::new(EcdsaPoolImpl::new(log, registry))),
-    )
+) -> ArtifactPools {
+    ensure_persistent_pool_replica_version_compatibility(config.persistent_pool_db_path());
+
+    let ingress_pool = Arc::new(RwLock::new(IngressPoolImpl::new(
+        config.clone(),
+        registry.clone(),
+        log.clone(),
+    )));
+    let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new(
+        subnet_id,
+        catch_up_package,
+        config.clone(),
+        registry.clone(),
+        log.clone(),
+    )));
+    let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
+    let certification_pool = Arc::new(RwLock::new(CertificationPoolImpl::new(
+        config,
+        log.clone(),
+        registry.clone(),
+    )));
+    let dkg_pool = Arc::new(RwLock::new(DkgPoolImpl::new(registry.clone())));
+    let ecdsa_pool = Arc::new(RwLock::new(EcdsaPoolImpl::new(log, registry)));
+    ArtifactPools {
+        ingress_pool,
+        consensus_pool,
+        consensus_pool_cache,
+        certification_pool,
+        dkg_pool,
+        ecdsa_pool,
+    }
 }
 
 // The following types are used for testing only. Ideally, they should only

@@ -7,7 +7,9 @@ use ic_logger::{debug, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_subnet_type::SubnetType;
-use ic_replica_setup_ic_network::{create_networking_stack, P2PStateSyncClient};
+use ic_replica_setup_ic_network::{
+    create_networking_stack, init_artifact_pools, P2PStateSyncClient,
+};
 use ic_test_utilities::{
     consensus::make_catch_up_package_with_empty_transcript,
     crypto::fake_tls_handshake::FakeTlsHandshake,
@@ -83,12 +85,22 @@ fn execute_test(
             subnet_config.cycles_account_manager_config,
         ));
 
-        let (_, p2p_runner, _) = create_networking_stack(
+        let artifact_pools = init_artifact_pools(
+            subnet_id,
+            artifact_pool_config,
+            metrics_registry.clone(),
+            log.clone(),
+            CUPWithOriginalProtobuf::from_cup(make_catch_up_package_with_empty_transcript(
+                registry.clone(),
+                subnet_id,
+            )),
+        );
+
+        let (_, p2p_runner) = create_networking_stack(
             metrics_registry.clone(),
             log.clone(),
             rt_handle,
             transport_config,
-            artifact_pool_config,
             Default::default(),
             Default::default(),
             node_id,
@@ -106,9 +118,7 @@ fn execute_test(
             Arc::clone(&fake_crypto) as Arc<_>,
             registry.clone(),
             ingress_hist_reader,
-            CUPWithOriginalProtobuf::from_cup(make_catch_up_package_with_empty_transcript(
-                registry, subnet_id,
-            )),
+            &artifact_pools,
             cycles_account_manager,
             None,
             0,
@@ -237,12 +247,22 @@ fn execute_test_chunking_pool(
             subnet_config.cycles_account_manager_config,
         ));
 
-        let (_a, p2p_runner, _) = create_networking_stack(
+        let artifact_pools = init_artifact_pools(
+            subnet_id,
+            artifact_pool_config,
+            metrics_registry.clone(),
+            log.clone(),
+            CUPWithOriginalProtobuf::from_cup(make_catch_up_package_with_empty_transcript(
+                registry.clone(),
+                subnet_id,
+            )),
+        );
+
+        let (_a, p2p_runner) = create_networking_stack(
             metrics_registry.clone(),
             log.clone(),
             rt_handle,
             transport_config,
-            artifact_pool_config,
             Default::default(),
             Default::default(),
             node_id,
@@ -260,9 +280,7 @@ fn execute_test_chunking_pool(
             Arc::clone(&fake_crypto) as Arc<_>,
             registry.clone(),
             ingress_hist_reader,
-            CUPWithOriginalProtobuf::from_cup(make_catch_up_package_with_empty_transcript(
-                registry, subnet_id,
-            )),
+            &artifact_pools,
             cycles_account_manager,
             None,
             0,

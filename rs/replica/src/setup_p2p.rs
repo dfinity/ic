@@ -15,7 +15,9 @@ use ic_interfaces::{
 use ic_logger::{info, ReplicaLogger};
 use ic_messaging::{MessageRoutingImpl, XNetEndpoint, XNetEndpointConfig, XNetPayloadBuilderImpl};
 use ic_registry_subnet_type::SubnetType;
-use ic_replica_setup_ic_network::{create_networking_stack, P2PStateSyncClient};
+use ic_replica_setup_ic_network::{
+    create_networking_stack, init_artifact_pools, P2PStateSyncClient,
+};
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::StateManagerImpl;
 use ic_types::{consensus::catchup::CUPWithOriginalProtobuf, NodeId, SubnetId};
@@ -47,6 +49,84 @@ pub fn construct_ic_stack(
     IngressFilterService,
     XNetEndpoint,
 )> {
+    let artifact_pool_config = ArtifactPoolConfig::from(config.artifact_pool);
+
+    // Determine the correct catch-up package.
+    let catch_up_package = {
+        use ic_types::consensus::HasHeight;
+        let make_registry_cup = || {
+            CUPWithOriginalProtobuf::from_cup(
+                ic_consensus::dkg::make_registry_cup(&*registry, subnet_id, None)
+                    .expect("Couldn't create a registry CUP"),
+            )
+        };
+        match catch_up_package {
+            // The orchestrator has persisted a CUP for the replica.
+            Some(cup_from_nm) => {
+                let signed = !cup_from_nm
+                    .cup
+                    .signature
+                    .signature
+                    .clone()
+                    .get()
+                    .0
+                    .is_empty();
+                if signed {
+                    // The CUP persisted by the orchestrator is safe to use because it's signed.
+                    info!(
+                        &replica_logger,
+                        "Using the signed CUP with height {}",
+                        cup_from_nm.cup.height()
+                    );
+                    cup_from_nm
+                } else {
+                    // The CUP persisted by the orchestrator is unsigned and hence it was created
+                    // from the registry CUP contents. In this case, we re-create this CUP to avoid
+                    // incompatibility issues, because on other replicas of the same subnet the node
+                    // manager version may differ, so the CUP contents might differ as well.
+                    let registry_cup = make_registry_cup();
+                    // However in a special case of the NNS subnet recovery, we still have to use
+                    // a newer unsigned CUP. The incompatibility issue is not a problem in this
+                    // case, because this CUP will not be created by the orchestrator.
+                    if registry_cup.cup.height() < cup_from_nm.cup.height() {
+                        info!(
+                            &replica_logger,
+                            "Using the newer CUP with height {} passed from the orchestrator",
+                            cup_from_nm.cup.height()
+                        );
+                        cup_from_nm
+                    } else {
+                        info!(
+                            &replica_logger,
+                            "Using the CUP with height {} generated from the registry (CUP height from the orchestrator is {})",
+                            registry_cup.cup.height(),
+                            cup_from_nm.cup.height()
+                        );
+                        registry_cup
+                    }
+                }
+            }
+            // No CUP was persisted by the orchestrator, which is usually the case for fresh nodes.
+            None => {
+                let registry_cup = make_registry_cup();
+                info!(
+                    &replica_logger,
+                    "Using the CUP with height {} generated from the registry",
+                    registry_cup.cup.height()
+                );
+                registry_cup
+            }
+        }
+    };
+
+    let artifact_pools = init_artifact_pools(
+        subnet_id,
+        artifact_pool_config,
+        metrics_registry.clone(),
+        replica_logger.clone(),
+        catch_up_package,
+    );
+
     let cycles_account_manager = Arc::new(CyclesAccountManager::new(
         subnet_config.scheduler_config.max_instructions_per_message,
         subnet_type,
@@ -142,82 +222,11 @@ pub fn construct_ic_stack(
     let self_validating_payload_builder = NoOpSelfValidatingPayloadBuilder {};
     let self_validating_payload_builder = Arc::new(self_validating_payload_builder);
 
-    let artifact_pool_config = ArtifactPoolConfig::from(config.artifact_pool);
-
-    // Determine the correct catch-up package.
-    let catch_up_package = {
-        use ic_types::consensus::HasHeight;
-        let make_registry_cup = || {
-            CUPWithOriginalProtobuf::from_cup(
-                ic_consensus::dkg::make_registry_cup(&*registry, subnet_id, None)
-                    .expect("Couldn't create a registry CUP"),
-            )
-        };
-        match catch_up_package {
-            // The orchestrator has persisted a CUP for the replica.
-            Some(cup_from_nm) => {
-                let signed = !cup_from_nm
-                    .cup
-                    .signature
-                    .signature
-                    .clone()
-                    .get()
-                    .0
-                    .is_empty();
-                if signed {
-                    // The CUP persisted by the orchestrator is safe to use because it's signed.
-                    info!(
-                        &replica_logger,
-                        "Using the signed CUP with height {}",
-                        cup_from_nm.cup.height()
-                    );
-                    cup_from_nm
-                } else {
-                    // The CUP persisted by the orchestrator is unsigned and hence it was created
-                    // from the registry CUP contents. In this case, we re-create this CUP to avoid
-                    // incompatibility issues, because on other replicas of the same subnet the node
-                    // manager version may differ, so the CUP contents might differ as well.
-                    let registry_cup = make_registry_cup();
-                    // However in a special case of the NNS subnet recovery, we still have to use
-                    // a newer unsigned CUP. The incompatibility issue is not a problem in this
-                    // case, because this CUP will not be created by the orchestrator.
-                    if registry_cup.cup.height() < cup_from_nm.cup.height() {
-                        info!(
-                            &replica_logger,
-                            "Using the newer CUP with height {} passed from the orchestrator",
-                            cup_from_nm.cup.height()
-                        );
-                        cup_from_nm
-                    } else {
-                        info!(
-                            &replica_logger,
-                            "Using the CUP with height {} generated from the registry (CUP height from the orchestrator is {})",
-                            registry_cup.cup.height(),
-                            cup_from_nm.cup.height()
-                        );
-                        registry_cup
-                    }
-                }
-            }
-            // No CUP was persisted by the orchestrator, which is usually the case for fresh nodes.
-            None => {
-                let registry_cup = make_registry_cup();
-                info!(
-                    &replica_logger,
-                    "Using the CUP with height {} generated from the registry",
-                    registry_cup.cup.height()
-                );
-                registry_cup
-            }
-        }
-    };
-
-    let (p2p_event_handler, p2p_runner, consensus_pool_cache) = create_networking_stack(
+    let (p2p_event_handler, p2p_runner) = create_networking_stack(
         metrics_registry,
         replica_logger,
         tokio::runtime::Handle::current(),
         config.transport,
-        artifact_pool_config,
         config.consensus,
         config.malicious_behaviour.malicious_flags,
         node_id,
@@ -236,7 +245,7 @@ pub fn construct_ic_stack(
         Arc::clone(&crypto) as Arc<_>,
         registry,
         ingress_history_reader,
-        catch_up_package,
+        &artifact_pools,
         cycles_account_manager,
         local_store_time_reader,
         config.nns_registry_replicator.poll_delay_duration_ms,
@@ -250,7 +259,7 @@ pub fn construct_ic_stack(
         async_query_handler,
         p2p_runner,
         p2p_event_handler,
-        consensus_pool_cache,
+        artifact_pools.consensus_pool_cache,
         ingress_filter,
         xnet_endpoint,
     ))
