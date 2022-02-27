@@ -230,7 +230,7 @@ export async function handleRequest(request: Request): Promise<Response> {
   if (maybeCanisterId) {
     try {
       const replicaUrl = new URL(url.origin);
-      const agent = new HttpAgent({ host: replicaUrl.toString() });
+      const agent = new HttpAgent({ host: replicaUrl.toString(), fetch: self.fetch.bind(self) });
       const actor = Actor.createActor(canisterIdlFactory, {
         agent,
         canisterId: maybeCanisterId,
@@ -256,6 +256,8 @@ export async function handleRequest(request: Request): Promise<Response> {
       let certificate: ArrayBuffer | undefined;
       let tree: ArrayBuffer | undefined;
       let encoding = '';
+      let chunk_tree: ArrayBuffer | undefined;
+      let chunk_index = 0;
       for (const [key, value] of httpResponse.headers) {
         switch (key.trim().toLowerCase()) {
           case 'ic-certificate':
@@ -263,12 +265,19 @@ export async function handleRequest(request: Request): Promise<Response> {
               const fields = value.split(/,/);
               for (const f of fields) {
                 const [_0, name, b64Value] = [...f.match(/^(.*)=:(.*):$/)].map(x => x.trim());
+                if (name === 'chunk_index') {
+                  chunk_index = parseInt(b64Value);
+                  continue;
+                }
+
                 const value = base64Arraybuffer.decode(b64Value);
 
                 if (name === 'certificate') {
                   certificate = value;
                 } else if (name === 'tree') {
                   tree = value;
+                } else if (name === 'chunk_tree') {
+                  chunk_tree = value;
                 }
               }
             }
@@ -293,6 +302,8 @@ export async function handleRequest(request: Request): Promise<Response> {
           body.buffer,
           certificate,
           tree,
+          chunk_tree,
+          chunk_index,
           agent,
           shouldFetchRootKey,
         );
@@ -306,12 +317,15 @@ export async function handleRequest(request: Request): Promise<Response> {
             identity.buffer,
             certificate,
             tree,
+            chunk_tree,
+            chunk_index,
             agent,
             isLocal,
           );
         }
       }
       if (bodyValid) {
+        console.log('Body valid', {httpRequest, httpResponse, headers});
         return new Response(identity.buffer, {
           status: httpResponse.status_code,
           headers,

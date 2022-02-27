@@ -25,6 +25,8 @@ export async function validateBody(
   body: ArrayBuffer,
   certificate: ArrayBuffer,
   tree: ArrayBuffer,
+  chunk_tree: ArrayBuffer | undefined,
+  chunk_index: number,
   agent: HttpAgent,
   shouldFetchRootKey = false,
 ): Promise<boolean> {
@@ -70,7 +72,26 @@ export async function validateBody(
     return false;
   }
 
-  return !!treeSha && equal(sha, treeSha);
+  if (!chunk_tree) {
+    return !!treeSha && equal(sha, treeSha); // backward compatibility
+  }
+
+  const hashChunkTree: HashTree = cbor.decode(new Uint8Array(chunk_tree));
+	const chunkWitnessHash = lookup_path([chunk_index.toString()], hashChunkTree);
+
+	if (!chunkWitnessHash) {
+		console.error(`Unable to lookup index path of chunk witness index=${chunk_index}`);
+		return false;
+	}
+	
+	if (!equal(sha, chunkWitnessHash)) {
+		console.error(`Body hash does not equal witness chunk hash index=${chunk_index}`);
+		return false;
+	}
+	
+	const reconstructedTreeSha = await reconstruct(hashChunkTree);
+
+	return equal(reconstructedTreeSha, treeSha);
 }
 
 function equal(buf1: ArrayBuffer, buf2: ArrayBuffer): boolean {
