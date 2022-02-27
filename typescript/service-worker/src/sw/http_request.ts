@@ -325,7 +325,6 @@ export async function handleRequest(request: Request): Promise<Response> {
         }
       }
       if (bodyValid) {
-        console.log('Body valid', {httpRequest, httpResponse, headers});
         return new Response(identity.buffer, {
           status: httpResponse.status_code,
           headers,
