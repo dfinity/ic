@@ -1,11 +1,12 @@
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgCreateDealingError, IDkgLoadTranscriptError,
+    IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
 };
 use ic_types::registry::RegistryClientError;
 use ic_types::{NodeId, RegistryVersion};
 
 /// Errors encountered while looking-up a MEGa public key from the registry
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MegaKeyFromRegistryError {
     RegistryError(RegistryClientError),
     PublicKeyNotFound {
@@ -59,6 +60,14 @@ impl From<MegaKeyFromRegistryError> for IDkgLoadTranscriptError {
             MegaKeyFromRegistryError::MalformedPublicKey { node_id, key_bytes } => {
                 IDkgLoadTranscriptError::MalformedPublicKey { node_id, key_bytes }
             }
+        }
+    }
+}
+
+impl From<MegaKeyFromRegistryError> for IDkgOpenTranscriptError {
+    fn from(e: MegaKeyFromRegistryError) -> Self {
+        IDkgOpenTranscriptError::InternalError {
+            internal_error: format!("Error retrieving public key: {:?}", e),
         }
     }
 }

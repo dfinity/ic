@@ -6,7 +6,7 @@ use crate::sign::tests::{
     mega_encryption_pk_record_with, registry_returning, registry_returning_none, registry_with,
     REG_V1,
 };
-use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, MEGaPublicKey};
+use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, IDkgDealingInternal, MEGaPublicKey};
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_registry_client::client::RegistryClientError;
@@ -243,7 +243,7 @@ fn should_fail_if_deserializing_dealing_fails() {
     assert!(matches!(
         result,
         Err(IDkgVerifyComplaintError::SerializationError { internal_error })
-          if internal_error.contains("failed to deserialize dealing")
+          if internal_error.contains("Error deserializing a signed dealing")
     ));
 }
 

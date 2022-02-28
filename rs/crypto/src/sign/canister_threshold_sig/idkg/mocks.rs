@@ -1,6 +1,6 @@
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgOpenTranscriptError, IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError,
-    IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
+    IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError, IDkgVerifyOpeningError,
+    IDkgVerifyTranscriptError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgComplaint, IDkgDealing, IDkgOpening, IDkgTranscript, IDkgTranscriptParams,
@@ -26,17 +26,6 @@ pub fn verify_transcript(
     _transcript: &IDkgTranscript,
 ) -> Result<(), IDkgVerifyTranscriptError> {
     Ok(())
-}
-
-pub fn open_transcript(
-    transcript: &IDkgTranscript,
-    complaint: &IDkgComplaint,
-) -> Result<IDkgOpening, IDkgOpenTranscriptError> {
-    Ok(IDkgOpening {
-        transcript_id: transcript.transcript_id,
-        dealer_id: complaint.dealer_id,
-        internal_opening_raw: vec![],
-    })
 }
 
 pub fn verify_opening(

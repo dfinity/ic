@@ -18,8 +18,8 @@ use ic_test_utilities::crypto::{
 use ic_test_utilities::types::ids::NODE_1;
 use ic_types::consensus::ecdsa::EcdsaDealing;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgVerifyComplaintError,
-    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+    IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgOpenTranscriptError,
+    IDkgVerifyComplaintError, ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgComplaint, IDkgDealing, IDkgMaskedTranscriptOrigin, IDkgMultiSignedDealing, IDkgOpening,
@@ -1249,8 +1249,13 @@ fn should_run_open_transcript() {
     let crypto_components = temp_crypto_components_for(&[NODE_1]);
     let complaint = fake_complaint();
     let transcript = fake_transcript();
-    let result = crypto_for(NODE_1, &crypto_components).open_transcript(&transcript, &complaint);
-    assert!(result.is_ok());
+    let result =
+        crypto_for(NODE_1, &crypto_components).open_transcript(&transcript, NODE_1, &complaint);
+    // TODO(CRP-1366): `open_transcript(...) calls real verify_transcript() on the given
+    // fake transcript, so the call fails, but the test passes, as `open_transcript()` is called.
+    // This is however suboptimal, so should be fixed when adding more tests.
+    let err = result.unwrap_err();
+    assert!(matches!(err, IDkgOpenTranscriptError::InternalError { .. }));
 }
 
 #[test]

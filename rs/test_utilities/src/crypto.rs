@@ -569,6 +569,7 @@ impl IDkgProtocol for CryptoReturningOk {
     fn open_transcript(
         &self,
         _transcript: &IDkgTranscript,
+        _complainer_id: NodeId,
         complaint: &IDkgComplaint,
     ) -> Result<IDkgOpening, IDkgOpenTranscriptError> {
         Ok(dummy_idkg_opening_for_tests(complaint))

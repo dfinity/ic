@@ -1,5 +1,8 @@
 //! Implementations of IDkgProtocol related to transcripts
-use crate::sign::canister_threshold_sig::idkg::utils::get_mega_pubkey;
+use crate::sign::canister_threshold_sig::idkg::complaint::verify_complaint;
+use crate::sign::canister_threshold_sig::idkg::utils::{
+    get_mega_pubkey, index_and_dealing_of_dealer,
+};
 use crate::sign::multi_sig::MultiSigVerifierInternal;
 use ic_crypto_internal_csp::api::CspIDkgProtocol;
 use ic_crypto_internal_csp::api::CspSigner;
@@ -9,7 +12,7 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
 };
 use ic_interfaces::registry::RegistryClient;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgCreateTranscriptError, IDkgLoadTranscriptError,
+    IDkgCreateTranscriptError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgComplaint, IDkgMultiSignedDealing, IDkgOpening, IDkgTranscript, IDkgTranscriptParams,
@@ -167,6 +170,63 @@ pub fn load_transcript_with_openings<C: CspIDkgProtocol>(
         &self_mega_pubkey,
         &internal_transcript,
     )
+}
+
+pub fn open_transcript<C: CspIDkgProtocol>(
+    csp_idkg_client: &C,
+    self_node_id: &NodeId,
+    registry: &Arc<dyn RegistryClient>,
+    transcript: &IDkgTranscript,
+    complainer_id: NodeId,
+    complaint: &IDkgComplaint,
+) -> Result<IDkgOpening, IDkgOpenTranscriptError> {
+    // Verifies the complaint
+    verify_complaint(
+        csp_idkg_client,
+        registry,
+        transcript,
+        complaint,
+        complainer_id,
+    )
+    .map_err(|e| IDkgOpenTranscriptError::InternalError {
+        internal_error: format!("Complaint verification failed: {:?}", e),
+    })?;
+
+    // Get the MEGa-encryption public key.
+    let opener_public_key = get_mega_pubkey(self_node_id, registry, transcript.registry_version)?;
+
+    // Extract the accused dealing from the transcript.
+    let (dealer_index, internal_dealing) =
+        index_and_dealing_of_dealer(complaint.dealer_id, transcript)?;
+    let context_data = transcript.context_data();
+    let opener_index = match transcript.receivers.position(*self_node_id) {
+        None => {
+            return Err(IDkgOpenTranscriptError::InternalError {
+                internal_error: "This node is not a receiver of the given transcript".to_string(),
+            })
+        }
+        Some(index) => index,
+    };
+
+    let internal_opening = csp_idkg_client.idkg_open_dealing(
+        internal_dealing,
+        dealer_index,
+        &context_data,
+        opener_index,
+        &opener_public_key,
+    )?;
+    let internal_opening_raw =
+        internal_opening
+            .serialize()
+            .map_err(|e| IDkgOpenTranscriptError::InternalError {
+                internal_error: format!("Error serializing opening: {:?}", e),
+            })?;
+
+    Ok(IDkgOpening {
+        transcript_id: transcript.transcript_id,
+        dealer_id: complaint.dealer_id,
+        internal_opening_raw,
+    })
 }
 
 fn ensure_sufficient_dealings_collected(

@@ -15,7 +15,8 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 };
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgCreateDealingError, IDkgLoadTranscriptError, ThresholdEcdsaSignShareError,
+    IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
+    ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, KeyId};
@@ -456,6 +457,16 @@ pub trait IDkgProtocolCspVault {
         &self,
         algorithm_id: AlgorithmId,
     ) -> Result<MEGaPublicKey, CspCreateMEGaKeyError>;
+
+    /// Opens the dealing from dealer specified by `dealer_index`.
+    fn idkg_open_dealing(
+        &self,
+        dealing: IDkgDealingInternal,
+        dealer_index: NodeIndex,
+        context_data: &[u8],
+        opener_index: NodeIndex,
+        opener_key_id: &KeyId,
+    ) -> Result<CommitmentOpening, IDkgOpenTranscriptError>;
 }
 
 /// Operations of `CspVault` related to threshold-ECDSA (cf.
