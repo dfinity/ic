@@ -16,6 +16,7 @@ use ic_tests::orchestrator::{
     node_reassignment_test::{self, test as node_reassignment_test},
     ssh_access_to_nodes, unassigned_node_upgrade_test,
 };
+use ic_tests::rejoin_test::{self, test as rejoin_test};
 use ic_tests::rosetta_test;
 use ic_tests::security::nns_voting_fuzzing_poc_test;
 use ic_tests::spec_compliance;
@@ -147,14 +148,14 @@ fn get_test_suites() -> HashMap<String, Suite> {
             "pre_master",
             vec![
                 pot(
-                    "firewall_pot", 
+                    "firewall_pot",
                     firewall::config,
                     par(vec![
                         t("change_to_firewall_rules_takes_effect", change_to_firewall_rules_takes_effect),
                     ]),
                 ),
                 pot(
-                    "create_subnet", 
+                    "create_subnet",
                     create_subnet::config,
                     par(vec![
                         t("create_subnet", create_subnet_test),
@@ -350,6 +351,11 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "mock_ecdsa_signatures_are_supported",
                         feature_flags::mock_ecdsa_signatures_are_supported,
                     )]),
+                ),
+                pot(
+                    "rejoin",
+                    rejoin_test::config,
+                    par(vec![t("rejoin", rejoin_test)]),
                 ),
                 pot(
                     "tecdsa_signature_test_pot",
