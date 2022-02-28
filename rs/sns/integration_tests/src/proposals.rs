@@ -1,14 +1,21 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use dfn_candid::candid;
 use ic_canister_client::Sender;
 use ic_nns_constants::ids::{TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR};
+use ic_sns_governance::pb::v1::get_proposal_response::Result::Error;
+use ic_sns_governance::pb::v1::get_proposal_response::Result::Proposal as ResponseProposal;
+use ic_sns_governance::pb::v1::governance_error::ErrorType::PreconditionFailed;
 use ic_sns_governance::pb::v1::proposal::Action;
-use ic_sns_governance::pb::v1::{Motion, Proposal, Vote};
+use ic_sns_governance::pb::v1::{
+    GetProposal, GetProposalResponse, Motion, Proposal, ProposalId, Vote,
+};
 use ic_sns_governance::types::ONE_YEAR_SECONDS;
 use ic_sns_test_utils::itest_helpers::{
     local_test_on_sns_subnet, SnsCanisters, SnsInitPayloadsBuilder,
 };
 use ledger_canister::Tokens;
+use on_wire::bytes;
 
 /// Assert that Motion proposals can be submitted, voted on, and executed
 #[test]
@@ -219,6 +226,98 @@ fn test_voting_with_three_neurons_with_the_same_stake() {
                 );
             }
 
+            Ok(())
+        }
+    });
+}
+
+#[test]
+fn test_bad_proposal_id_candid_type() {
+    local_test_on_sns_subnet(|runtime| {
+        async move {
+            // Initialize the ledger with an account for a user.
+            let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
+            let alloc = Tokens::from_tokens(1000).unwrap();
+
+            let sns_init_payload = SnsInitPayloadsBuilder::new()
+                .with_ledger_account(user.get_principal_id().into(), alloc)
+                .build();
+            let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+            // get_proposal requires a ProposalId argument. Here instead the caller is
+            // sending a PrincipalId. This is also valid Candid, but with the
+            // wrong type.
+            let res: Result<Option<GetProposalResponse>, String> = sns_canisters
+                .governance
+                .query_("get_proposal", candid, (user.get_principal_id(),))
+                .await;
+            match res {
+                Err(e) => assert!(e.contains("Fail to decode argument")),
+                Ok(_) => panic!("get_proposal should fail to decode argument"),
+            };
+
+            Ok(())
+        }
+    });
+}
+
+#[test]
+fn test_bad_proposal_id_candid_encoding() {
+    local_test_on_sns_subnet(|runtime| {
+        async move {
+            // Initialize the ledger with an account for a user.
+            let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
+            let alloc = Tokens::from_tokens(1000).unwrap();
+
+            let sns_init_payload = SnsInitPayloadsBuilder::new()
+                .with_ledger_account(user.get_principal_id().into(), alloc)
+                .build();
+            let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+            let res: Result<Vec<u8>, String> = sns_canisters
+                .governance
+                .query_("get_proposal", bytes, b"This is not valid candid!".to_vec())
+                .await;
+
+            match res {
+                Err(e) => assert!(e.contains("Deserialization Failed")),
+                Ok(_) => panic!("get_proposal should fail to deserialize"),
+            };
+            Ok(())
+        }
+    });
+}
+
+#[test]
+fn test_non_existent_proposal_id_is_not_a_bad_input() {
+    local_test_on_sns_subnet(|runtime| {
+        async move {
+            // Initialize the ledger with an account for a user.
+            let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
+            let alloc = Tokens::from_tokens(1000).unwrap();
+
+            let sns_init_payload = SnsInitPayloadsBuilder::new()
+                .with_ledger_account(user.get_principal_id().into(), alloc)
+                .build();
+            let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+            let req = GetProposal {
+                proposal_id: Some(ProposalId { id: 23 }),
+            };
+
+            // There is no proposal 23. This should return and error
+            let res: Result<Option<GetProposalResponse>, String> = sns_canisters
+                .governance
+                .query_("get_proposal", candid, (req,))
+                .await;
+
+            let get_proposal_response = res.unwrap().unwrap().result.unwrap();
+            match get_proposal_response {
+                Error(e) => assert_eq!(e.error_type, PreconditionFailed as i32),
+                ResponseProposal(_) => {
+                    panic!("Proposal does not exist. get_proposal should return an error")
+                }
+            };
             Ok(())
         }
     });

@@ -14,13 +14,15 @@ ledger-canister = { path = "../../rosetta-api/ledger_canister" }
 
 # Dependencies required to compile the tests.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-ic-canister-client = { path = "../../canister_client" }
+assert_matches = "1.3.0"
 canister-test = { path = "../../rust_canisters/canister_test" }
-ic-sns-governance = { path = "../governance" }
+ic-canister-client = { path = "../../canister_client" }
+ic-base-types={path="../../types/base_types"}
 ic-crypto = { path = "../../crypto" }
 ic-crypto-sha = { path = "../../crypto/sha" }
-ic-sns-test-utils = { path = "../../sns/test_utils" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nns-constants = { path = "../../nns/constants" }
+ic-sns-governance = { path = "../governance" }
+ic-sns-test-utils = { path = "../../sns/test_utils" }
 ic-types = { path = "../../types/types" }
-ic-base-types={path="../../types/base_types"}
+on_wire = { path = "../../rust_canisters/on_wire" }
