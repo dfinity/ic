@@ -19,6 +19,7 @@ DEFAULT_BINARIES = [
     "e2e-test-driver",
     "ic-admin",
     "ic-btc-adapter",
+    "ic-canister-http-adapter",
     "ic-consensus-pool-util",
     "ic-crypto-csp",
     "ic-cup-explorer",

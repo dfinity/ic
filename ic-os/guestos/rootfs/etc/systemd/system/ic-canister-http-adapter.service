@@ -1,0 +1,18 @@
+[Unit]
+Description=IC Canister HTTP Provider
+# We must wait for IC bootstrap to complete: It writes various
+# state files and may also be needed to obtain network config.
+After=bootstrap-ic-node.service
+Wants=bootstrap-ic-node.service
+Requires=ic-canister-http-adapter.socket
+StartLimitIntervalSec=0
+
+[Service]
+User=ic-replica
+ExecStart=/opt/ic/bin/ic-canister-http-adapter
+NotifyAccess=main
+Restart=always
+
+[Install]
+RequiredBy=ic-replica.service
+Also=ic-canister-http-adapter.socket

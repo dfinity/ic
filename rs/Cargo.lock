@@ -3584,6 +3584,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-canister-http-adapter"
+version = "0.1.0"
+dependencies = [
+ "async-stream",
+ "clap 3.0.0-beta.2",
+ "futures",
+ "http",
+ "hyper",
+ "hyper-tls",
+ "ic-async-utils",
+ "prost",
+ "prost-build",
+ "rand 0.8.4",
+ "serde",
+ "serde_json",
+ "slog",
+ "slog-term",
+ "thiserror",
+ "tokio",
+ "tonic",
+ "tonic-build",
+ "tower",
+ "uuid",
+]
+
+[[package]]
 name = "ic-canister-sandbox-backend-lib"
 version = "0.8.0"
 dependencies = [
@@ -11767,11 +11793,11 @@ checksum = "b4ae116fef2b7fea257ed6440d3cfcff7f190865f170cdad00bb6465bf18ecba"
 
 [[package]]
 name = "uuid"
-version = "0.8.1"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9fde2f6a4bea1d6e007c4ad38c6839fa71cbb63b6dbf5b595aa38dc9b1093c11"
+checksum = "bc5cf98d8186244414c848017f0e2676b3fcb46807f6668a97dfe67359a3c4b7"
 dependencies = [
- "rand 0.7.3",
+ "getrandom 0.2.2",
 ]
 
 [[package]]
