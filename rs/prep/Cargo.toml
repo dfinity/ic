@@ -7,6 +7,7 @@ edition = "2018"
 anyhow = "1.0"
 base64 = "0.11"
 chrono = "0.4.19"
+fs_extra = "1.2.0"
 ic-crypto = { path = "../crypto" }
 ic-config = { path = "../config" }
 structopt = { version = "0.3", features = ["wrap_help"] }

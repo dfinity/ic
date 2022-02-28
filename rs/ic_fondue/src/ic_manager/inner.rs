@@ -294,6 +294,7 @@ impl IcManager {
                             .into()],
                         // this value will be overridden by IcConfig::with_node_operator()
                         node_operator_principal_id: None,
+                        secret_key_store: None,
                     },
                 );
                 if let Some(malicious_behaviour) = &node.malicious_behaviour {

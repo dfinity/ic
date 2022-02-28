@@ -12,7 +12,7 @@ use ic_interfaces::{
 };
 use ic_metrics::MetricsRegistry;
 use ic_prep_lib::internet_computer::{IcConfig, TopologyConfig};
-use ic_prep_lib::node::{NodeConfiguration, NodeIndex};
+use ic_prep_lib::node::{NodeConfiguration, NodeIndex, NodeSecretKeyStore};
 use ic_prep_lib::subnet_configuration::SubnetConfig;
 use ic_registry_client::fake::FakeRegistryClient;
 use ic_registry_client::helper::subnet::SubnetRegistry;
@@ -210,12 +210,14 @@ where
 pub fn get_ic_config() -> IcConfig {
     let subnet_index = 0;
 
-    // Allocate a temporary directory where ic-prep generates the registry and the
-    // crypto state.
-    let prep_dir = tempfile::Builder::new()
-        .prefix("ic_prep")
-        .tempdir()
-        .unwrap();
+    // Choose a temporary directory as the working directory for ic-prep.
+    use rand::Rng;
+    let random_suffix = rand::thread_rng().gen::<usize>();
+    let prep_dir = std::env::temp_dir().join(format!("ic_prep_{}", random_suffix));
+
+    // Create the secret key store in a node a sub-directory of the ic-prep.
+    let node_sks = prep_dir.join("node_sks");
+    let node_sks = NodeSecretKeyStore::new(node_sks).unwrap();
 
     // We use the `ic-prep` crate to generate the secret key store and registry
     // entries. The topology contains a single node.
@@ -233,6 +235,7 @@ pub fn get_ic_config() -> IcConfig {
             p2p_num_flows: 1,
             p2p_start_flow_tag: 0,
             node_operator_principal_id: None,
+            secret_key_store: Some(node_sks),
         },
     );
 
@@ -268,7 +271,7 @@ pub fn get_ic_config() -> IcConfig {
     // for ic-prep when we handle a specific deployment scenario: deploying
     // without assigning nodes to a particular subnet.
     IcConfig::new(
-        prep_dir.path(),
+        prep_dir,
         topology_config,
         /* replica_version_id= */ None,
         /* generate_subnet_records= */ true,

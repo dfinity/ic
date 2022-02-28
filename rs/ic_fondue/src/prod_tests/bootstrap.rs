@@ -349,5 +349,6 @@ fn node_to_config(node_index: NodeIndex, res_group: &ResourceGroup) -> NodeConfi
         prometheus_metrics: vec![prometheus_addr.into()],
         // this value will be overridden by IcConfig::with_node_operator()
         node_operator_principal_id: None,
+        secret_key_store: None,
     }
 }

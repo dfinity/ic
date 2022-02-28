@@ -12,11 +12,14 @@ use crate::util::{write_proto_to_file_raw, write_registry_entry};
 use ic_crypto::utils::{
     generate_idkg_dealing_encryption_keys, get_node_keys_or_generate_if_missing,
 };
-use ic_protobuf::registry::{
-    crypto::v1::{PublicKey, X509PublicKeyCert},
-    node::v1::{
-        connection_endpoint::Protocol, ConnectionEndpoint as pbConnectionEndpoint,
-        FlowEndpoint as pbFlowEndpoint, NodeRecord as pbNodeRecord,
+use ic_protobuf::{
+    crypto::v1::NodePublicKeys,
+    registry::{
+        crypto::v1::{PublicKey, X509PublicKeyCert},
+        node::v1::{
+            connection_endpoint::Protocol, ConnectionEndpoint as pbConnectionEndpoint,
+            FlowEndpoint as pbFlowEndpoint, NodeRecord as pbNodeRecord,
+        },
     },
 };
 use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
@@ -208,6 +211,18 @@ pub struct NodeConfiguration {
 
     /// The principal id of the node operator that operates this node.
     pub node_operator_principal_id: Option<PrincipalId>,
+
+    /// If set, the specified secret key store will be used. Ohterwise, a new
+    /// one will be created when initializing the internet computer.
+    ///
+    /// Creating the secret key store ahead of time allows for the node id to be
+    /// set before all other configuration values must be specified (such as ip
+    /// address, etc.)
+    ///
+    /// **Note**: The path of the secret key store will be *copied* to a new
+    /// directory chosen by ic-prep.
+    #[serde(skip_serializing, skip_deserializing)]
+    pub secret_key_store: Option<NodeSecretKeyStore>,
 }
 
 #[derive(Error, Debug)]
@@ -328,6 +343,11 @@ pub enum InitializeNodeError {
     CreateNodePathFailed { path: String, source: io::Error },
     #[error("saving node id failed: {source}")]
     SavingNodeId { source: io::Error },
+    #[error("copying secret key store failed: {source}")]
+    CouldNotCopySks {
+        #[from]
+        source: fs_extra::error::Error,
+    },
     #[error("could not transform into pb struct: {source}")]
     CreatePbMessage {
         #[from]
@@ -348,26 +368,23 @@ impl NodeConfiguration {
                 source,
             }
         })?;
-
         let crypto_path = InitializedNode::build_crypto_path(node_path.as_ref());
-        std::fs::create_dir_all(&crypto_path).map_err(|source| {
-            InitializeNodeError::CreateNodePathFailed {
-                path: crypto_path.to_string_lossy().to_string(),
-                source,
-            }
-        })?;
-        // Set permissions required for `get_node_keys_or_generate_if_missing`
-        std::fs::set_permissions(&crypto_path, std::fs::Permissions::from_mode(0o750)).map_err(
-            |source| InitializeNodeError::CreateNodePathFailed {
-                path: crypto_path.to_string_lossy().to_string(),
-                source,
-            },
-        )?;
-        let (node_pks, node_id) = get_node_keys_or_generate_if_missing(&crypto_path);
-        // CRP-1273: Remove the following call when the encryption keys are generated
-        // together with the rest of the node keys.
-        let idkg_mega_encryption_pubkey = generate_idkg_dealing_encryption_keys(&crypto_path);
+        let sks = if let Some(sks) = self.secret_key_store.clone() {
+            let mut options = fs_extra::dir::CopyOptions::new();
+            options.copy_inside = true;
+            fs_extra::dir::copy(sks.path.as_path(), crypto_path.as_path(), &options)
+                .map_err(|e| InitializeNodeError::CouldNotCopySks { source: e })?;
+            NodeSecretKeyStore::set_permissions(&crypto_path)?;
+            sks
+        } else {
+            NodeSecretKeyStore::new(crypto_path)?
+        };
 
+        use prost::Message;
+        let node_id = sks.node_id;
+        let node_pks = NodePublicKeys::decode(sks.node_pks.as_slice()).unwrap();
+        let idkg_mega_encryption_pubkey =
+            PublicKey::decode(sks.idkg_mega_encryption_pubkey.as_slice()).unwrap();
         Ok(InitializedNode {
             node_id,
             pk_committee_signing: node_pks.committee_signing_pk.unwrap(),
@@ -378,6 +395,60 @@ impl NodeConfiguration {
             dkg_dealing_encryption_pubkey: node_pks.dkg_dealing_encryption_pk.unwrap(),
             idkg_mega_encryption_pubkey,
         })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct NodeSecretKeyStore {
+    pub node_id: NodeId,
+    /// Serialized protobuf of node public keys. The serialized version of the
+    /// buffer is trivially (Partial)Eq + (Partial)Ord
+    pub node_pks: Vec<u8>,
+    /// Serialized protobuf containing idkg public key
+    pub idkg_mega_encryption_pubkey: Vec<u8>,
+    pub path: PathBuf,
+}
+
+impl NodeSecretKeyStore {
+    /// Create a secret key store for a node at the path `path`.
+    ///
+    /// If `path` or any of its parent directories do not exist, they will be
+    /// created.
+    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, InitializeNodeError> {
+        let path = PathBuf::from(path.as_ref());
+        std::fs::create_dir_all(&path).map_err(|source| {
+            InitializeNodeError::CreateNodePathFailed {
+                path: path.to_string_lossy().to_string(),
+                source,
+            }
+        })?;
+        Self::set_permissions(&path)?;
+        let (node_pks, node_id) = get_node_keys_or_generate_if_missing(&path);
+        // CRP-1273: Remove the following call when the encryption keys are generated
+        // together with the rest of the node keys.
+        let idkg_mega_encryption_pubkey = generate_idkg_dealing_encryption_keys(&path);
+
+        use prost::Message;
+        let node_pks = node_pks.encode_to_vec();
+        let idkg_mega_encryption_pubkey = idkg_mega_encryption_pubkey.encode_to_vec();
+
+        Ok(Self {
+            node_id,
+            node_pks,
+            idkg_mega_encryption_pubkey,
+            path,
+        })
+    }
+
+    /// Sets the permission bits of the given path as expected by the crypto component.
+    fn set_permissions<P: AsRef<Path>>(path: P) -> Result<(), InitializeNodeError> {
+        // Set permissions required for `get_node_keys_or_generate_if_missing`
+        std::fs::set_permissions(path.as_ref(), std::fs::Permissions::from_mode(0o750)).map_err(
+            |source| InitializeNodeError::CreateNodePathFailed {
+                path: path.as_ref().to_string_lossy().to_string(),
+                source,
+            },
+        )
     }
 }
 
@@ -397,6 +468,7 @@ mod node_configuration {
             p2p_num_flows: 2,
             p2p_start_flow_tag: 12,
             node_operator_principal_id: None,
+            secret_key_store: None,
         };
 
         let got = pbNodeRecord::try_from(node_configuration).unwrap();
