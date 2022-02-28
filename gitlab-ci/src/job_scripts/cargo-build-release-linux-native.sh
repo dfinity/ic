@@ -22,6 +22,7 @@ cargo build --target $CARGO_BUILD_TARGET --release \
     --bin boundary-node-prober \
     --bin ic-admin \
     --bin ic-btc-adapter \
+    --bin ic-canister-http-adapter \
     --bin ic-consensus-pool-util \
     --bin ic-crypto-csp \
     --bin ic-cup-explorer \

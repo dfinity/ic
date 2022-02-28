@@ -10,5 +10,6 @@ artifacts/
 **/bin/replica
 **/bin/ic-crypto-csp
 **/bin/ic-btc-adapter
+**/bin/ic-canister-http-adapter
 **/bin/state-tool
 **/disk.img

@@ -55,7 +55,7 @@ function build_ubuntu_from_tar() {
     rm -rf "$FAKEROOT_STATE_FILE" "$FS_TMPDIR"
 }
 
-declare -a IC_EXECUTABLES=(orchestrator replica canister_sandbox sandbox_launcher vsock_agent state-tool ic-consensus-pool-util ic-crypto-csp ic-regedit ic-btc-adapter)
+declare -a IC_EXECUTABLES=(orchestrator replica canister_sandbox sandbox_launcher vsock_agent state-tool ic-consensus-pool-util ic-crypto-csp ic-regedit ic-btc-adapter ic-canister-http-adapter)
 
 # Install IC executables from source to target
 #

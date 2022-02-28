@@ -11,6 +11,7 @@ output = [
   "/cargo_target/x86_64-unknown-linux-gnu/release/canister_sandbox",
   "/cargo_target/x86_64-unknown-linux-gnu/release/ic-admin",
   "/cargo_target/x86_64-unknown-linux-gnu/release/ic-btc-adapter",
+  "/cargo_target/x86_64-unknown-linux-gnu/release/ic-canister-http-adapter",
   "/cargo_target/x86_64-unknown-linux-gnu/release/ic-consensus-pool-util",
   "/cargo_target/x86_64-unknown-linux-gnu/release/ic-crypto-csp",
   "/cargo_target/x86_64-unknown-linux-gnu/release/ic-cup-explorer",

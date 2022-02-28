@@ -13,6 +13,7 @@ members = [
   "boundary_node/prober",
   "canister_client",
   "cycles_account_manager",
+  "canister_http/adapter",
   "canister_sandbox",
   "canister_sandbox/backend_lib",
   "canister_sandbox/common",
