@@ -150,10 +150,12 @@ pub trait IDkgProtocol {
         complaint: &IDkgComplaint,
     ) -> Result<(), IDkgVerifyComplaintError>;
 
-    /// Generate an opening for the dealing given in `complaint`.
+    /// Generate an opening for the dealing given in `complaint`,
+    /// reported by `complainer_id`.
     fn open_transcript(
         &self,
         transcript: &IDkgTranscript,
+        complainer_id: NodeId,
         complaint: &IDkgComplaint,
     ) -> Result<IDkgOpening, IDkgOpenTranscriptError>;
 

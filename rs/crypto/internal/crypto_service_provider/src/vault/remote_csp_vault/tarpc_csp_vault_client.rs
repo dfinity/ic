@@ -29,7 +29,8 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 use ic_crypto_internal_types::NodeIndex;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgCreateDealingError, IDkgLoadTranscriptError, ThresholdEcdsaSignShareError,
+    IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
+    ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, KeyId};
@@ -391,6 +392,29 @@ impl IDkgProtocolCspVault for RemoteCspVault {
         )
         .unwrap_or_else(|e| {
             Err(CspCreateMEGaKeyError::CspServerError {
+                internal_error: e.to_string(),
+            })
+        })
+    }
+
+    fn idkg_open_dealing(
+        &self,
+        dealing: IDkgDealingInternal,
+        dealer_index: NodeIndex,
+        context_data: &[u8],
+        opener_index: NodeIndex,
+        opener_key_id: &KeyId,
+    ) -> Result<CommitmentOpening, IDkgOpenTranscriptError> {
+        block_on(self.tarpc_csp_client.idkg_open_dealing(
+            tarpc::context::current(),
+            dealing,
+            dealer_index,
+            context_data.to_vec(),
+            opener_index,
+            *opener_key_id,
+        ))
+        .unwrap_or_else(|e| {
+            Err(IDkgOpenTranscriptError::InternalError {
                 internal_error: e.to_string(),
             })
         })

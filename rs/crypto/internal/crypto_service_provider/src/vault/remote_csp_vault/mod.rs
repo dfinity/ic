@@ -18,7 +18,8 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 };
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgCreateDealingError, IDkgLoadTranscriptError, ThresholdEcdsaSignShareError,
+    IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
+    ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, KeyId};
@@ -161,6 +162,15 @@ pub trait TarpcCspVault {
     async fn idkg_gen_mega_key_pair(
         algorithm_id: AlgorithmId,
     ) -> Result<MEGaPublicKey, CspCreateMEGaKeyError>;
+
+    // Corresponds to `IDkgProtocolCspVault.idkg_open_dealing`
+    async fn idkg_open_dealing(
+        dealing: IDkgDealingInternal,
+        dealer_index: NodeIndex,
+        context_data: Vec<u8>,
+        opener_index: NodeIndex,
+        opener_key_id: KeyId,
+    ) -> Result<CommitmentOpening, IDkgOpenTranscriptError>;
 
     // Corresponds to `ThresholdEcdsaSignerCspVault.ecdsa_sign_share`
     #[allow(clippy::too_many_arguments)]

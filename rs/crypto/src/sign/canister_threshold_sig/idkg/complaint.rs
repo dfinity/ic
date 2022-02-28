@@ -1,7 +1,9 @@
 use super::*;
-use crate::sign::canister_threshold_sig::idkg::utils::{get_mega_pubkey, MegaKeyFromRegistryError};
+use crate::sign::canister_threshold_sig::idkg::utils::{
+    get_mega_pubkey, index_and_dealing_of_dealer, MegaKeyFromRegistryError,
+};
 use ic_crypto_internal_csp::api::CspIDkgProtocol;
-use ic_crypto_internal_threshold_sig_ecdsa::{IDkgComplaintInternal, IDkgDealingInternal};
+use ic_crypto_internal_threshold_sig_ecdsa::IDkgComplaintInternal;
 use ic_interfaces::registry::RegistryClient;
 use ic_types::NodeIndex;
 use std::convert::TryFrom;
@@ -28,33 +30,17 @@ pub fn verify_complaint<C: CspIDkgProtocol>(
             internal_error: format!("failed to deserialize complaint: {:?}", e),
         }
     })?;
-    let (dealer_index, signed_dealing) =
+    let (dealer_index, internal_dealing) =
         index_and_dealing_of_dealer(complaint.dealer_id, transcript)?;
-    let internal_dealing = IDkgDealingInternal::try_from(signed_dealing).map_err(|e| {
-        IDkgVerifyComplaintError::SerializationError {
-            internal_error: format!("failed to deserialize dealing: {:?}", e),
-        }
-    })?;
 
     csp_idkg_client.idkg_verify_complaint(
         &internal_complaint,
         complainer_index,
         &complainer_mega_pubkey,
         &internal_dealing,
-        *dealer_index,
+        dealer_index,
         &transcript.context_data(),
     )
-}
-
-fn index_and_dealing_of_dealer(
-    dealer_id: NodeId,
-    transcript: &IDkgTranscript,
-) -> Result<(&NodeIndex, &IDkgMultiSignedDealing), IDkgVerifyComplaintError> {
-    transcript
-        .verified_dealings
-        .iter()
-        .find(|(_index, signed_dealing)| signed_dealing.dealing.idkg_dealing.dealer_id == dealer_id)
-        .ok_or(IDkgVerifyComplaintError::InvalidArgumentMissingDealingInTranscript { dealer_id })
 }
 
 fn index_of_complainer(

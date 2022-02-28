@@ -190,6 +190,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
     fn open_transcript(
         &self,
         transcript: &IDkgTranscript,
+        complainer_id: NodeId,
         complaint: &IDkgComplaint,
     ) -> Result<IDkgOpening, IDkgOpenTranscriptError> {
         let logger = new_logger!(&self.logger;
@@ -199,7 +200,14 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         debug!(logger;
             crypto.description => "start",
         );
-        let result = mocks::open_transcript(transcript, complaint);
+        let result = transcript::open_transcript(
+            &self.csp,
+            &self.node_id,
+            &self.registry_client,
+            transcript,
+            complainer_id,
+            complaint,
+        );
         debug!(logger;
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),

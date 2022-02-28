@@ -6,8 +6,8 @@ use crate::vault::api::IDkgProtocolCspVault;
 use crate::vault::local_csp_vault::LocalCspVault;
 use ic_crypto_internal_threshold_sig_ecdsa::{
     compute_secret_shares, compute_secret_shares_with_openings,
-    create_dealing as tecdsa_create_dealing, gen_keypair, generate_complaints, CommitmentOpening,
-    CommitmentOpeningBytes, EccCurveType, IDkgComplaintInternal,
+    create_dealing as tecdsa_create_dealing, gen_keypair, generate_complaints, open_dealing,
+    CommitmentOpening, CommitmentOpeningBytes, EccCurveType, IDkgComplaintInternal,
     IDkgComputeSecretSharesInternalError, IDkgDealingInternal, IDkgTranscriptInternal,
     IDkgTranscriptOperationInternal, MEGaKeySetK256Bytes, MEGaPrivateKey, MEGaPrivateKeyK256Bytes,
     MEGaPublicKey, MEGaPublicKeyK256Bytes, PolynomialCommitment, SecretShares, Seed,
@@ -15,7 +15,7 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
 use ic_crypto_sha::{DomainSeparationContext, Sha256};
 use ic_logger::debug;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgCreateDealingError, IDkgLoadTranscriptError,
+    IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
 };
 use ic_types::crypto::{AlgorithmId, KeyId};
 use ic_types::{NodeIndex, NumberOfNodes, Randomness};
@@ -197,6 +197,39 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
         );
 
         Ok(public_key)
+    }
+
+    fn idkg_open_dealing(
+        &self,
+        dealing: IDkgDealingInternal,
+        dealer_index: NodeIndex,
+        context_data: &[u8],
+        opener_index: NodeIndex,
+        opener_key_id: &KeyId,
+    ) -> Result<CommitmentOpening, IDkgOpenTranscriptError> {
+        let (opener_public_key, opener_private_key) = self
+            .mega_keyset_from_sks(opener_key_id)
+            .map_err(|e| match e {
+                IDkgLoadTranscriptError::PrivateKeyNotFound => {
+                    IDkgOpenTranscriptError::PrivateKeyNotFound {
+                        key_id: *opener_key_id,
+                    }
+                }
+                _ => IDkgOpenTranscriptError::InternalError {
+                    internal_error: e.to_string(),
+                },
+            })?;
+        open_dealing(
+            &dealing,
+            context_data,
+            dealer_index,
+            opener_index,
+            &opener_private_key,
+            &opener_public_key,
+        )
+        .map_err(|e| IDkgOpenTranscriptError::InternalError {
+            internal_error: format!("{:?}", e),
+        })
     }
 }
 

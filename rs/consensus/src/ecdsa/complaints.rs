@@ -411,10 +411,11 @@ impl EcdsaComplaintHandlerImpl {
         let complaint = signed_complaint.get();
 
         // Create the opening
-        let idkg_opening = match self
-            .crypto
-            .open_transcript(transcript, &complaint.idkg_complaint)
-        {
+        let idkg_opening = match self.crypto.open_transcript(
+            transcript,
+            signed_complaint.signature.signer,
+            &complaint.idkg_complaint,
+        ) {
             Ok(opening) => opening,
             Err(err) => {
                 warn!(

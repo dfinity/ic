@@ -31,7 +31,8 @@ use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_logger::new_logger;
 use ic_logger::replica_logger::no_op_logger;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgCreateDealingError, IDkgLoadTranscriptError, ThresholdEcdsaSignShareError,
+    IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
+    ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, KeyId};
@@ -283,6 +284,24 @@ impl TarpcCspVault for TarpcCspVaultServerWorker {
         algorithm_id: AlgorithmId,
     ) -> Result<MEGaPublicKey, CspCreateMEGaKeyError> {
         self.local_csp_vault.idkg_gen_mega_key_pair(algorithm_id)
+    }
+
+    async fn idkg_open_dealing(
+        self,
+        _: context::Context,
+        dealing: IDkgDealingInternal,
+        dealer_index: NodeIndex,
+        context_data: Vec<u8>,
+        opener_index: NodeIndex,
+        opener_key_id: KeyId,
+    ) -> Result<CommitmentOpening, IDkgOpenTranscriptError> {
+        self.local_csp_vault.idkg_open_dealing(
+            dealing,
+            dealer_index,
+            &context_data,
+            opener_index,
+            &opener_key_id,
+        )
     }
 
     // `ThresholdEcdsaSignerCspVault`-methods
