@@ -2,6 +2,37 @@ use ic_crypto_internal_threshold_sig_ecdsa::*;
 use std::convert::TryFrom;
 
 #[test]
+fn mega_key_validity() -> ThresholdEcdsaResult<()> {
+    let mut rng = rand::thread_rng();
+
+    for curve_type in EccCurveType::all() {
+        let sk = MEGaPrivateKey::generate(curve_type, &mut rng)?;
+        let pk = sk.public_key()?;
+
+        let mut pk_bytes = pk.serialize();
+
+        assert!(verify_mega_public_key(curve_type, &pk_bytes).is_ok());
+
+        // In compressed format flipping this bit is equivalant to
+        // flipping the sign of y, which is equivalent to negating the
+        // point.  In all cases if pk_bytes is a valid encoding, this
+        // modification is also
+        pk_bytes[0] ^= 1;
+        assert!(verify_mega_public_key(curve_type, &pk_bytes).is_ok());
+
+        // Invalid header:
+        pk_bytes[0] ^= 2;
+        assert!(verify_mega_public_key(curve_type, &pk_bytes).is_err());
+
+        // This x is too large to be a field element (except for P-521)
+        let mut max_x = vec![0xFF; curve_type.point_bytes()];
+        max_x[0] = 2;
+        assert!(verify_mega_public_key(curve_type, &max_x).is_err());
+    }
+    Ok(())
+}
+
+#[test]
 fn mega_single_smoke_test() -> Result<(), ThresholdEcdsaError> {
     let curve = EccCurveType::K256;
 
