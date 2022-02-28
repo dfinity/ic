@@ -1,4 +1,3 @@
-use archive::FailedToArchiveBlocks;
 use candid::candid_method;
 use dfn_candid::{candid, candid_one, CandidOne};
 use dfn_core::{
@@ -494,37 +493,47 @@ fn pre_upgrade() {
 /// split this method up into the parts that require async (this function) and
 /// the parts that require a lock (Ledger::get_blocks_for_archiving).
 async fn archive_blocks() {
-    let ledger_guard = LEDGER.try_read().expect("Failed to get ledger read lock");
-    let archive_arc = ledger_guard.blockchain.archive.clone();
-    let mut archive_guard = match archive_arc.try_write() {
-        Ok(g) => g,
-        Err(_) => {
+    use ledger_canister::archive::{
+        send_blocks_to_archive, ArchivingGuard, ArchivingGuardError, FailedToArchiveBlocks,
+    };
+
+    let archive_arc = {
+        let ledger_guard = LEDGER.try_read().expect("Failed to get ledger read lock");
+        ledger_guard.blockchain.archive.clone()
+    };
+
+    // NOTE: this guard will prevent another logical thread to start the archiving process.
+    let _archiving_guard = match ArchivingGuard::new(Arc::clone(&archive_arc)) {
+        Ok(guard) => guard,
+        Err(ArchivingGuardError::NoArchive) => {
+            return; // Archiving not enabled
+        }
+        Err(ArchivingGuardError::AlreadyArchiving) => {
             print("Ledger is currently archiving. Skipping archive_blocks()");
             return;
         }
     };
-    if archive_guard.is_none() {
-        return; // Archiving not enabled
-    }
-    let archive = archive_guard.as_mut().unwrap();
 
-    let blocks_to_archive = ledger_guard
-        .get_blocks_for_archiving(archive.trigger_threshold, archive.num_blocks_to_archive);
+    let blocks_to_archive = {
+        let ledger_guard = LEDGER.try_read().expect("Failed to get ledger read lock");
+        let archive_guard = ledger_guard.blockchain.archive.read().unwrap();
+        let archive = archive_guard.as_ref().unwrap();
+
+        ledger_guard
+            .get_blocks_for_archiving(archive.trigger_threshold, archive.num_blocks_to_archive)
+    };
+
     if blocks_to_archive.is_empty() {
         return;
     }
-
-    drop(ledger_guard); // Drop the lock on the ledger
 
     let num_blocks = blocks_to_archive.len();
     print(format!("[ledger] archiving {} blocks", num_blocks,));
 
     let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
-    let res = archive
-        .send_blocks_to_archive(blocks_to_archive, max_msg_size)
-        .await;
+    let res = send_blocks_to_archive(archive_arc, blocks_to_archive, max_msg_size).await;
 
-    let mut ledger = LEDGER.try_write().expect("Failed to get ledger write lock");
+    let mut ledger = LEDGER.write().expect("Failed to get ledger write lock");
     match res {
         Ok(num_sent_blocks) => ledger.remove_archived_blocks(num_sent_blocks),
         Err((num_sent_blocks, FailedToArchiveBlocks(err))) => {
