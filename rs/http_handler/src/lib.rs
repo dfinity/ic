@@ -316,7 +316,7 @@ pub async fn start_server(
         http_handler.log.clone(),
         Arc::clone(&http_handler.delegation_from_nns),
         Arc::clone(&http_handler.health_status),
-        rt_handle,
+        rt_handle.clone(),
     );
 
     let outstanding_connections =
@@ -335,7 +335,7 @@ pub async fn start_server(
                 metrics.connections_total.inc();
                 // Start recording connection setup duration.
                 let connection_start_time = Instant::now();
-                tokio::task::spawn(async move {
+                rt_handle.spawn(async move {
                     // Do a move of the permit so it gets dropped at the end of the scope.
                     let _request_permit_deleter = request_permit;
                     let mut b = [0_u8; 1];
