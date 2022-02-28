@@ -455,7 +455,7 @@ fn main() {
 fn post_upgrade() {
     over_init(|_: BytesS| {
         let mut ledger = LEDGER.write().unwrap();
-        *ledger = serde_cbor::from_reader(&mut stable::StableReader::new())
+        *ledger = ciborium::de::from_reader(stable::StableReader::new())
             .expect("Decoding stable memory failed");
 
         ledger.maximum_number_of_accounts = 28_000_000;
@@ -471,8 +471,6 @@ fn post_upgrade() {
 
 #[export_name = "canister_pre_upgrade"]
 fn pre_upgrade() {
-    use std::io::Write;
-
     setup::START.call_once(|| {
         printer::hook();
     });
@@ -481,11 +479,8 @@ fn pre_upgrade() {
         .read()
         // This should never happen, but it's better to be safe than sorry
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let mut writer = stable::StableWriter::new();
-    serde_cbor::to_writer(&mut writer, &*ledger).unwrap();
-    writer
-        .flush()
-        .expect("failed to flush stable memory writer");
+    ciborium::ser::into_writer(&*ledger, stable::StableWriter::new())
+        .expect("failed to write ledger state to stable memory");
 }
 
 /// Upon reaching a `trigger_threshold` we will archive `num_blocks`.
