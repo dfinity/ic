@@ -975,10 +975,10 @@ impl Scheduler for SchedulerImpl {
             // of the scheduling algorithm. The next best thing we can do is to limit
             // subnet messages on top of the fixed limit for canister messages.
             // The value of the limit for subnet messages is chosen quite arbitrarily
-            // as a quarter of the fixed limit. Any other value in the same ballpark would
+            // as 1/16th of the fixed limit. Any other value in the same ballpark would
             // work here.
             let max_instructions_per_round_for_subnet_messages =
-                self.config.max_instructions_per_round / 4;
+                self.config.max_instructions_per_round / 16;
             let mut total_instructions_consumed = NumInstructions::from(0);
 
             while let Some(msg) = state.pop_subnet_input() {
