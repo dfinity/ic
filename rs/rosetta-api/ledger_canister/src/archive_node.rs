@@ -229,15 +229,14 @@ fn post_upgrade() {
     over_init(|_: BytesS| {
         let bytes = stable::get();
         let mut state = ARCHIVE_STATE.write().unwrap();
-        *state = serde_cbor::from_slice(&bytes).expect("Decoding stable memory failed");
+        *state = ciborium::de::from_reader(std::io::Cursor::new(&bytes))
+            .expect("Decoding stable memory failed");
         state.last_upgrade_timestamp = dfn_core::api::time_nanos();
     });
 }
 
 #[export_name = "canister_pre_upgrade"]
 fn pre_upgrade() {
-    use std::io::Write;
-
     dfn_core::setup::START.call_once(|| {
         dfn_core::printer::hook();
     });
@@ -246,9 +245,7 @@ fn pre_upgrade() {
         .read()
         // This should never happen, but it's better to be safe than sorry
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let mut writer = stable::StableWriter::new();
-    serde_cbor::to_writer(&mut writer, &*archive_state).unwrap();
-    writer.flush().unwrap();
+    ciborium::ser::into_writer(&*archive_state, stable::StableWriter::new()).unwrap();
 }
 
 fn encode_metrics(w: &mut MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {

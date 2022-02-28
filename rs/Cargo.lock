@@ -1166,6 +1166,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b89647f09b9f4c838cb622799b2843e4e13bff64661dab9a0362bb92985addd"
 
 [[package]]
+name = "ciborium"
+version = "0.2.0"
+source = "git+https://github.com/enarx/ciborium?rev=e719537c99b564c3674a56defe53713c702c6f46#e719537c99b564c3674a56defe53713c702c6f46"
+dependencies = [
+ "ciborium-io",
+ "ciborium-ll",
+ "serde",
+]
+
+[[package]]
+name = "ciborium-io"
+version = "0.2.0"
+source = "git+https://github.com/enarx/ciborium?rev=e719537c99b564c3674a56defe53713c702c6f46#e719537c99b564c3674a56defe53713c702c6f46"
+
+[[package]]
+name = "ciborium-ll"
+version = "0.2.0"
+source = "git+https://github.com/enarx/ciborium?rev=e719537c99b564c3674a56defe53713c702c6f46#e719537c99b564c3674a56defe53713c702c6f46"
+dependencies = [
+ "ciborium-io",
+ "half",
+]
+
+[[package]]
 name = "clang-sys"
 version = "0.29.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7183,6 +7207,7 @@ dependencies = [
  "byteorder",
  "candid",
  "canister-test",
+ "ciborium",
  "comparable",
  "crc32fast",
  "dfn_candid",
