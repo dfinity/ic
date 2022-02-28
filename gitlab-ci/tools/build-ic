@@ -134,11 +134,11 @@ export BUILD_EXTRA_ARGS=${BUILD_EXTRA_ARGS:-""}
 
 if [ "$BUILD_BINARIES" == "true" ]; then
     echo -e "\n${HEADER_BINARIES}\n"
-    gitlab-ci/src/job_scripts/cargo-build-release-linux-native.sh
+    gitlab-ci/src/job_scripts/lib/cargo-build-release-linux-native.sh
 fi
 if [ "$BUILD_CANISTERS" == "true" ]; then
     echo -e "\n${HEADER_CANISTERS}\n"
-    gitlab-ci/tools/cargo-build-canisters "${CANISTERS_DIR}"
+    gitlab-ci/tools/job-driver.py cargo-build-canisters "${CANISTERS_DIR}"
 fi
 if [ "$BUILD_IMAGES" == "true" ]; then
     if [ "$BUILD_BINARIES" != "true" ]; then
@@ -148,7 +148,7 @@ if [ "$BUILD_IMAGES" == "true" ]; then
             --git-rev "${VERSION}" --out /ic/artifacts/release
     fi
     echo -e "\n${HEADER_ICOS}\n"
-    gitlab-ci/src/job_scripts/guest-os-updateimg.sh "${DISK_DIR}"
+    gitlab-ci/src/job_scripts/lib/guest-os-updateimg.sh "${DISK_DIR}"
 fi
 
 echo

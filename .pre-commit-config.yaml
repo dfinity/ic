@@ -98,7 +98,7 @@ repos:
   hooks:
   - id: pydocstyle
     args:
-      - --ignore=D100,D103,D104,D203,D212
+      - --ignore=D100,D101,D102,D103,D104,D107,D203,D205,D212,D400,D401,D415
         # The default for pydocstyle is to match only on files that end in .py,
         # even if pre-commit specifies other files. This makes it so Python
         # files will be recognized regardless of extension.

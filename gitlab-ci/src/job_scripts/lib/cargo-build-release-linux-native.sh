@@ -48,6 +48,9 @@ cargo build --target $CARGO_BUILD_TARGET --profile release-lto \
     --bin canister_sandbox \
     --bin sandbox_launcher
 
+rm -f "$CARGO_TARGET_DIR"/x86_64-unknown-linux-gnu/release/canister_sandbox
+rm -f "$CARGO_TARGET_DIR"/x86_64-unknown-linux-gnu/release/sandbox_launcher
+
 mv "$CARGO_TARGET_DIR"/x86_64-unknown-linux-gnu/release-lto/canister_sandbox \
     "$CARGO_TARGET_DIR"/x86_64-unknown-linux-gnu/release-lto/sandbox_launcher \
     "$CARGO_TARGET_DIR"/x86_64-unknown-linux-gnu/release/
@@ -55,5 +58,5 @@ ls -l "$CARGO_TARGET_DIR"/x86_64-unknown-linux-gnu/release
 
 rm -rf artifacts/release
 if [[ "$CI_JOB_NAME" == "docker-build-ic"* ]] || [ "$CI_JOB_NAME" == "" ]; then
-    "$ROOT_DIR"/gitlab-ci/src/artifacts/collect_build_binaries.py artifacts/release
+    cd "$ROOT_DIR"/gitlab-ci/src && python3 -m artifacts.collect_build_binaries artifacts/release
 fi
