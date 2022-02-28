@@ -249,12 +249,7 @@ $ANSIBLE icos_network_redeploy.yml -e ic_state="start"
 if [[ "${USE_BOUNDARY_NODES}" == "true" ]]; then
     pushd "$REPO_ROOT/testnet"
     BOUNDARY_OUT=$(mktemp /tmp/icos-deploy.sh.XXXXXX)
-    if [[ "${USE_ICOS_BOUNDARY_NODE_VMs}" == "true" ]]; then
-        # The new boundary node VM still needs a couple of configuration steps via ansible
-        echo "**** Installing boundary node VMs (log $BOUNDARY_OUT)"
-        # We're invoking ansible as a quoted command, so all given ansible arguments need to be properly quoted as well, hence printf
-        script --quiet --return "$BOUNDARY_OUT" --command "set -x; $(printf '%q ' $ANSIBLE) -l boundary icos_test_bnvm.yml" >/dev/null 2>&1 &
-    else
+    if [[ "${USE_ICOS_BOUNDARY_NODE_VMs}" == "false" ]]; then
         echo "**** Installing boundary nodes (log $BOUNDARY_OUT)"
         # We're invoking ansible as a quoted command, so all given ansible arguments need to be properly quoted as well, hence printf
         script --quiet --return "$BOUNDARY_OUT" --command "set -x; $(printf '%q ' $ANSIBLE) -l boundary icos_test.yml" >/dev/null 2>&1 &

@@ -39,6 +39,12 @@ RUN cd /tmp/ && \
    shasum -c  libnginx-mod-httpor-input.sha256
 
 
+# Download icx-proxy.deb 
+RUN cd /tmp/ && \
+   curl -L -O https://github.com/dfinity/icx-proxy/releases/download/5967469/icx-proxy.deb && \
+   echo "686db806f492995a61dd2a1f741425f2d0ecf683  ./icx-proxy.deb" > icx-proxy.sha256 && \
+   shasum -c icx-proxy.sha256
+
 # Second build stage: construct the actual target image (root filesystem of the
 # boundary node VM).
 # The downloads from previous stage will be used and installed into the target
@@ -220,6 +226,11 @@ COPY --from=download /tmp/libnginx-mod-http-cbor-input_0.0.9_amd64.deb /tmp/libn
 RUN dpkg -i /tmp/libnginx-mod-http-cbor-input_0.0.9_amd64.deb &&\
     rm /tmp/libnginx-mod-http-cbor-input_0.0.9_amd64.deb
 
+# Install icx-proxy
+COPY --from=download /tmp/icx-proxy.deb /tmp/icx-proxy.deb
+RUN dpkg -i /tmp/icx-proxy.deb &&\
+    rm /tmp/icx-proxy.deb
+
 # Clear all files that may lead to indeterministic build.
 RUN apt-get clean && \
     rm -rf \
@@ -249,12 +260,25 @@ COPY var/www/html /var/www/html
 RUN chown www-data:www-data /var/www/html && \
     chmod 0755 /var/www/html/*
 
+# Generate DH parameters
+# -dsaparam & 2048 feild prime is suseptible to logjam attacks
+# TODO: BOUN-171  Generate 4096 bit DH parameters for prod boundary vms
+#RUN /usr/bin/openssl dhparam -out /etc/nginx/dhparam.pem 4096
+RUN /usr/bin/openssl dhparam -dsaparam -out /etc/nginx/dhparam.pem 2048
+
+# Point to a self signed certificate
+# TODO: BOUN-167
+#     FLASHING WARNING.
+#     Actual certificate injection for boundary VMs hasn't been scoped yet.
+RUN cp /etc/ssl/certs/ssl-cert-snakeoil.pem /etc/nginx/ic/trusted_certs.pem
+
 # Take care of nginx files
 RUN chmod 0755 /etc/nginx/*
 RUN chmod 0644 /etc/nginx/ic_public_key.pem
 RUN chmod 0644 /etc/nginx/nginx.conf
 RUN chmod 0644 /etc/nginx/modules-enabled/ngx_http_cbor_input_module.conf
 RUN chmod 0644 /etc/nginx/modules-enabled/ngx_http_js_module.conf
+RUN chmod 0755 /etc/nginx/ic/ic_router_control_plane_watcher.sh
 RUN rm -rf /etc/nginx/conf.d/nginx-global.conf
 RUN rm -rf /etc/nginx/conf.d/default.conf
 RUN rm -rf /etc/nginx/sites-enabled/default
