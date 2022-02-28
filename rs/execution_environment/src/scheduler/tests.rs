@@ -35,7 +35,8 @@ use ic_test_utilities::{
     },
     with_test_replica_logger,
 };
-use ic_types::methods::SystemMethod;
+use ic_types::messages::CallContextId;
+use ic_types::methods::{Callback, SystemMethod, WasmClosure};
 use ic_types::{
     ingress::WasmResult,
     methods::WasmMethod,
@@ -724,6 +725,166 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
         ingress_history_writer,
         exec_env,
     )
+}
+
+/// Verifies that the [`SchedulerConfig::instruction_overhead_per_message`] puts
+/// a limit on the number of update messages that will be executed in a single
+/// round.
+#[test]
+fn test_message_limit_from_message_overhead() {
+    // Create two canisters on the same subnet. When each one receives a
+    // message, it sends a message to the other so that they ping-pong forever.
+    let canister0 = canister_test_id(0);
+    let canister1 = canister_test_id(1);
+    let mut exec_env = MockExecutionEnvironment::new();
+    // Return sufficiently large subnet and canister memory limits.
+    exec_env
+        .expect_subnet_available_memory()
+        .times(..)
+        .return_const(*SUBNET_AVAILABLE_MEMORY);
+    exec_env
+        .expect_max_canister_memory_size()
+        .times(..)
+        .return_const(MAX_CANISTER_MEMORY_SIZE);
+    exec_env
+        .expect_subnet_memory_capacity()
+        .times(..)
+        .return_const(SUBNET_MEMORY_CAPACITY);
+    exec_env
+        .expect_execute_canister_message()
+        .times(..)
+        .returning(move |mut canister, instruction_limit, msg, _, _, _, _| {
+            if let CanisterInputMessage::Request(ic_types::messages::Request {
+                receiver,
+                sender,
+                sender_reply_callback,
+                ..
+            }) = msg
+            {
+                canister.push_output_response(Response {
+                    originator: sender,
+                    respondent: receiver,
+                    originator_reply_callback: sender_reply_callback,
+                    refund: Cycles::from(0u64),
+                    response_payload: Payload::Data(vec![]),
+                })
+            }
+            match msg {
+                CanisterInputMessage::Response(msg) => {
+                    canister
+                        .system_state
+                        .call_context_manager_mut()
+                        .unwrap()
+                        .unregister_callback(msg.originator_reply_callback)
+                        .unwrap();
+                }
+                CanisterInputMessage::Request(_) | CanisterInputMessage::Ingress(_) => {
+                    let canister_id = canister.canister_id();
+                    let other_canister = if canister_id == canister0 {
+                        canister1
+                    } else {
+                        canister0
+                    };
+                    let callback_id = canister
+                        .system_state
+                        .call_context_manager_mut()
+                        .unwrap()
+                        .register_callback(Callback {
+                            call_context_id: CallContextId::new(0),
+                            originator: None,
+                            respondent: None,
+                            cycles_sent: Cycles::from(0u64),
+                            on_reply: WasmClosure::new(0, 0),
+                            on_reject: WasmClosure::new(0, 0),
+                            on_cleanup: None,
+                        });
+                    canister
+                        .push_output_request(
+                            RequestBuilder::new()
+                                .sender(canister_id)
+                                .receiver(other_canister)
+                                .sender_reply_callback(callback_id)
+                                .build(),
+                        )
+                        .unwrap();
+                }
+            }
+            ExecuteMessageResult {
+                canister: canister.clone(),
+                num_instructions_left: instruction_limit,
+                ingress_status: None,
+                heap_delta: NumBytes::from(0),
+            }
+        });
+    let exec_env = Arc::new(exec_env);
+    let scheduler_config = SchedulerConfig {
+        scheduler_cores: 1,
+        instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
+        max_instructions_per_message: NumInstructions::from(5_000_000_000),
+        max_instructions_per_round: NumInstructions::from(7_000_000_000),
+        instruction_overhead_per_message: NumInstructions::from(2_000_000),
+        ..SchedulerConfig::application_subnet()
+    };
+
+    // There are 7B instructions allowed per round, but we won't execute a
+    // message unless we know there are 5B instructions left since that is the
+    // maximum a message could use.  So execution will stop when we've used 2B
+    // messages.  There is an overhead of 2M instructions per message so this
+    // allows us to execute 1000 messages.  We stop when we've gone over the
+    // limit, so one additional message will be handled.
+    let expected_number_of_messages = (scheduler_config.max_instructions_per_round
+        - scheduler_config.max_instructions_per_message)
+        / scheduler_config.instruction_overhead_per_message
+        + 1;
+
+    let scheduler_test_fixture = SchedulerTestFixture {
+        scheduler_config,
+        metrics_registry: MetricsRegistry::new(),
+        canister_num: 2,
+        message_num_per_canister: 0,
+    };
+
+    scheduler_test(
+        &scheduler_test_fixture,
+        |scheduler| {
+            let mut state = ReplicatedStateBuilder::new()
+                .with_canister(
+                    CanisterStateBuilder::new()
+                        .with_canister_id(canister_test_id(0))
+                        .with_ingress(
+                            SignedIngressBuilder::new()
+                                .canister_id(canister0)
+                                .build()
+                                .into(),
+                        )
+                        .build(),
+                )
+                .with_canister(
+                    CanisterStateBuilder::new()
+                        .with_canister_id(canister_test_id(1))
+                        .build(),
+                )
+                .build();
+            let routing_table = Arc::new(RoutingTable::try_from(btreemap! {
+                CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => scheduler.own_subnet_id,
+            }).unwrap());
+            state.metadata.network_topology.routing_table = routing_table;
+
+            let round = ExecutionRound::from(1);
+            scheduler.execute_round(
+                state,
+                Randomness::from([0; 32]),
+                None,
+                round,
+                ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
+            );
+            let number_of_messages = scheduler.metrics.msg_execution_duration.get_sample_count();
+            assert_eq!(number_of_messages, expected_number_of_messages);
+        },
+        Arc::new(MockIngressHistory::new()),
+        exec_env,
+    );
 }
 
 /// A test to ensure that there are multiple iterations of the loop in
