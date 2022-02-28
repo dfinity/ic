@@ -861,3 +861,22 @@ pub fn verify_dealing_opening(
 
     Ok(())
 }
+
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+pub enum MEGaKeyVerificationError {
+    InvalidPublicKey,
+}
+
+/// Verifies the validity of a MEGa public key
+///
+/// Checks that a serialized MEGa public key is a valid point on the curve
+pub fn verify_mega_public_key(
+    curve_type: EccCurveType,
+    raw_bytes: &[u8],
+) -> Result<(), MEGaKeyVerificationError> {
+    if MEGaPublicKey::deserialize(curve_type, raw_bytes).is_ok() {
+        Ok(())
+    } else {
+        Err(MEGaKeyVerificationError::InvalidPublicKey)
+    }
+}

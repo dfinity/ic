@@ -67,11 +67,8 @@ impl EccCurveType {
 
     /// Return the size of encoded points, in bytes
     pub fn point_bytes(&self) -> usize {
-        // 1 byte header with y parity + 32 bytes (256 bits) affine x
-        match self {
-            EccCurveType::K256 => 1 + 32,
-            EccCurveType::P256 => 1 + 32,
-        }
+        // 1 byte header with y parity plus an affine x field element
+        1 + self.field_bytes()
     }
 
     /// Return a unique small integer for this curve type
