@@ -6209,6 +6209,7 @@ dependencies = [
 name = "ic-sns-integration-tests"
 version = "0.8.0"
 dependencies = [
+ "assert_matches",
  "candid",
  "canister-test",
  "dfn_candid",
@@ -6225,6 +6226,7 @@ dependencies = [
  "ic-sns-test-utils",
  "ic-types 0.8.0",
  "ledger-canister",
+ "on_wire",
 ]
 
 [[package]]
