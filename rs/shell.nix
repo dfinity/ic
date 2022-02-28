@@ -4,6 +4,47 @@
 
 let
   crateEnv = import ./crate-environment.nix { inherit pkgs; };
+
+  honeycomb-beeline =
+    with pkgs.python3Packages;
+    buildPythonPackage rec {
+      pname = "honeycomb-beeline";
+      version = "3.2.0";
+
+      src = fetchPypi {
+        inherit pname version;
+        sha256 = "1aaxqp6d0dlg7yxzm602v9lv8rzlias625q542i45i3sw541bdxs";
+      };
+
+      # check phase depends on a bunch of commonly used python web frameworks
+      doCheck = false;
+
+      propagatedBuildInputs = [
+        wrapt
+        libhoney
+      ];
+    };
+
+  libhoney =
+    with pkgs.python3Packages;
+    buildPythonPackage rec {
+      pname = "libhoney";
+      version = "2.0.0";
+
+      src = fetchPypi {
+        inherit pname version;
+        sha256 = "0i0s4lqpn04d2sm97llhanrpcljzygpr920kiynxahyqjfyk8qwy";
+      };
+
+      propagatedBuildInputs = [
+        mock
+        requests-mock
+        requests
+        six
+        statsd
+        tornado
+      ];
+    };
 in
 (
   pkgs.mkShell (
@@ -71,6 +112,9 @@ in
         # dependencies for coverage.py
         pkgs.kcov
         pkgs.python3Packages.toml
+      ] ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [
+        # used for honeycomb traces in CI scripts
+        honeycomb-beeline
       ];
 
       buildInputs = [

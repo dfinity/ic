@@ -101,7 +101,7 @@ $ ./gitlab-ci/tools/docker-run ./gitlab-ci/tools/build-ic
 
 This builds:
 
-* Native binaries (replica, orchestrator, et al -- for the full list, see https://github.com/dfinity/ic/blob/master/gitlab-ci/src/job_scripts/cargo-build-release-linux-native.sh)
+* Native binaries (replica, orchestrator, et al -- for the full list, see https://github.com/dfinity/ic/blob/master/gitlab-ci/src/job_scripts/lib/cargo-build-release-linux-native.sh)
 * Canisters
 * The ICOS disk image
 

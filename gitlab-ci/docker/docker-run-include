@@ -37,10 +37,14 @@ DOCKER_RUN_ARGS=(
 
 # if i'm not withing docker already, bind mount the source
 if [ ! -e /.dockerenv ]; then
-    # we would make this readonly to ensure people don't accidentally chown things
-    # to ubuntu, but it also prevents cargo from updating Cargo.lock
     DOCKER_RUN_ARGS+=(
+        # we would make this readonly to ensure people don't accidentally chown things
+        # to ubuntu, but it also prevents cargo from updating Cargo.lock
         --mount type=bind,source="$REPO_ROOT",target=$WORKDIR
+        # cache the build directories locally (not on CI) to save time between runs
+        -v ic-target:/cargo_target
+        -v ic-cargo:/cargo
+        -v ic-rustup:/opt/rustup
     )
 else
     DOCKER_RUN_ARGS+=(

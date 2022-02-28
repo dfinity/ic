@@ -20,6 +20,7 @@ prod-generic-test:
     - generic-guest-os-diskimg
     - cargo-build-canisters
     - cargo-build-release-linux-native
+    - artifacts-upload-to-s3
   resource_group: $CDPRNET
   artifacts:
     paths:
