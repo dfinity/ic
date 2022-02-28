@@ -16,7 +16,7 @@ use crate::{
         get_governance_canister, submit_external_proposal_with_test_id,
         vote_execute_proposal_assert_executed, vote_execute_proposal_assert_failed, NnsExt,
     },
-    ssh_access_utils::*,
+    orchestrator::utils::ssh_access::*,
     util::{
         get_random_application_node_endpoint, get_random_nns_node_endpoint,
         get_random_unassigned_node_endpoint, runtime_from_url,

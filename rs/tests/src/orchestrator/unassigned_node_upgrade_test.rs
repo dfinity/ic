@@ -21,7 +21,7 @@ Success::
 end::catalog[] */
 
 use core::time;
-use std::{convert::TryFrom, path::Path, thread};
+use std::{convert::TryFrom, thread};
 
 use ic_fondue::{
     ic_instance::InternetComputer,
@@ -34,11 +34,14 @@ use crate::{
         submit_update_unassigned_node_version_proposal, vote_execute_proposal_assert_executed,
         NnsExt,
     },
-    ssh_access_to_nodes::{
+    orchestrator::ssh_access_to_nodes::{
         get_updateunassignednodespayload, update_ssh_keys_for_all_unassigned_nodes,
     },
-    ssh_access_utils::{
-        generate_key_strings, read_remote_file, wait_until_authentication_is_granted, AuthMean,
+    orchestrator::utils::ssh_access::{
+        generate_key_strings, wait_until_authentication_is_granted, AuthMean,
+    },
+    orchestrator::utils::upgrade::{
+        fetch_node_version, fetch_update_file_sha256, get_blessed_replica_versions,
     },
     util::{
         block_on, get_random_nns_node_endpoint, get_random_unassigned_node_endpoint,
@@ -46,18 +49,13 @@ use crate::{
     },
 };
 use ic_canister_client::Sender;
-use ic_http_utils::file_downloader::FileDownloader;
 use ic_nns_common::types::NeuronId;
 use ic_nns_constants::ids::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
-use ic_protobuf::registry::replica_version::v1::BlessedReplicaVersions;
 use ic_registry_common::registry::RegistryCanister;
-use ic_registry_keys::make_blessed_replica_version_key;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::ReplicaVersion;
-use prost::Message;
 use slog::info;
-use std::fs;
 
 pub fn config() -> InternetComputer {
     InternetComputer::new()
@@ -110,7 +108,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         // initial parameters
         let reg_ver = registry_canister.get_latest_version().await.unwrap();
         info!(ctx.logger, "Registry version: {}", reg_ver);
-        let blessed_versions = blessed_replica_versions(&registry_canister).await;
+        let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
         info!(ctx.logger, "Initial: {:?}", blessed_versions);
         let sha256 = fetch_update_file_sha256(&sha_url, true).await;
         info!(ctx.logger, "Update image SHA256: {}", sha256);
@@ -139,7 +137,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         assert!(reg_ver < reg_ver2);
 
         // new blessed versions
-        let blessed_versions = blessed_replica_versions(&registry_canister).await;
+        let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
         info!(ctx.logger, "Updated: {:?}", blessed_versions);
 
         // proposal to upgrade the unassigned nodes
@@ -184,50 +182,4 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         thread::sleep(time::Duration::from_secs(10));
     };
     assert_eq!(actual_version, Some(target_version));
-}
-
-pub async fn blessed_replica_versions(
-    registry_canister: &RegistryCanister,
-) -> BlessedReplicaVersions {
-    let blessed_vers_result = registry_canister
-        .get_value(make_blessed_replica_version_key().as_bytes().to_vec(), None)
-        .await
-        .unwrap();
-    BlessedReplicaVersions::decode(&*blessed_vers_result.0).unwrap()
-}
-
-fn fetch_node_version(
-    node_ip: &std::net::IpAddr,
-    readonly_mean: &AuthMean,
-) -> Result<String, String> {
-    let version_file = Path::new("/opt/ic/share/version.txt");
-    let mut version = read_remote_file(node_ip, "readonly", readonly_mean, version_file)?;
-    version.retain(|c| !c.is_whitespace());
-    Ok(version)
-}
-
-pub async fn fetch_update_file_sha256(sha_url: &str, is_test_img: bool) -> String {
-    let tmp_dir = tempfile::tempdir().unwrap().into_path();
-    let mut tmp_file = tmp_dir.clone();
-    tmp_file.push("SHA256.txt");
-
-    let file_downloader = FileDownloader::new(None);
-    file_downloader
-        .download_file(sha_url, &tmp_file, None)
-        .await
-        .expect("Download of SHA256SUMS file failed.");
-    let contents = fs::read_to_string(tmp_file).expect("Something went wrong reading the file");
-    for line in contents.lines() {
-        let words: Vec<&str> = line.split(char::is_whitespace).collect();
-        let suffix = if is_test_img {
-            "-img-test.tar.gz"
-        } else {
-            "-img.tar.gz"
-        };
-        if words.len() == 2 && words[1].ends_with(suffix) {
-            return words[0].to_string();
-        }
-    }
-
-    panic!("SHA256 hash is not fund in {}", sha_url)
 }

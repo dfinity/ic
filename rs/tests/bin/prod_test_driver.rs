@@ -11,6 +11,11 @@ use ic_tests::node_assign_test::{self, test as node_assign_test};
 use ic_tests::node_graceful_leaving_test::{self, test as node_graceful_leaving_test};
 use ic_tests::node_removal_from_registry_test::{self, test as node_removal_from_registry_test};
 use ic_tests::node_restart_test::{self, test as node_restart_test};
+use ic_tests::orchestrator::{
+    cup_fetching_across_upgrades,
+    node_reassignment_test::{self, test as node_reassignment_test},
+    ssh_access_to_nodes, unassigned_node_upgrade_test,
+};
 use ic_tests::rosetta_test;
 use ic_tests::security::nns_voting_fuzzing_poc_test;
 use ic_tests::spec_compliance;
@@ -19,14 +24,13 @@ use ic_tests::upgrade_reject::{self, upgrade_reject};
 use ic_tests::{
     basic_health_test::{self, basic_health_test},
     execution, message_routing,
-    node_reassignment_test::{self, test as node_reassignment_test},
 };
 use ic_tests::{
-    cup_fetching_across_upgrades, cycles_minting_test, feature_flags,
+    cycles_minting_test, feature_flags,
     networking::firewall::{self, change_to_firewall_rules_takes_effect},
     nns_canister_upgrade_test, nns_uninstall_canister_by_proposal_test,
-    registry_authentication_test, ssh_access_to_nodes, tecdsa_signature_test,
-    transaction_ledger_correctness_test, unassigned_node_upgrade_test, wasm_generator_test,
+    registry_authentication_test, tecdsa_signature_test, transaction_ledger_correctness_test,
+    wasm_generator_test,
 };
 use regex::Regex;
 use std::collections::HashMap;
