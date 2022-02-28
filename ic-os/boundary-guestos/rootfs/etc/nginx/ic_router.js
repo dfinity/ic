@@ -1,18 +1,6 @@
 import qs from 'querystring';
-var tables = {};
-var default_routing = '{{ default_routing_value }}';
 
-// one of these per ic/testnet (ics)
 import subnet_table from 'ic/ic_router_table.js';
-tables['{{ ic }}'] = subnet_table;
-
-function to_hex(bytes) {
-  return bytes
-      .map(function(byte) {
-        return (byte & 0xFF).toString(16)
-      })
-      .join('')
-}
 
 function leftpad(s, len, pad) {
   return len + 1 >= s.length && (s = new Array(len + 1 - s.length).join(pad) + s), s
@@ -103,7 +91,6 @@ function get_hostname_from_uri(uri) {
 }
 
 function route(r) {
-  var ic = resolve_ci_from_host(r.headersIn.host);
   var canister_id = resolve_canister_id_from_uri(r.uri);
   if (!canister_id) {
     canister_id = resolve_canister_id_from_host(r.headersIn.host);
@@ -116,9 +103,6 @@ function route(r) {
     var host = get_hostname_from_uri(referer);
     if (host) {
       canister_id = resolve_canister_id_from_host(host);
-      if (canister_id) {
-        ic = resolve_ci_from_host(host);
-      }
     }
     if (!canister_id) {
       var i = referer.indexOf('?');
@@ -128,12 +112,7 @@ function route(r) {
       }
     }
   }
-  if (ic == '' || !(ic in tables)) {
-    ic = default_routing;
-  }
-  if (!(ic in tables)) {
-    return '';
-  }
+
   // TODO: Lookup custom domain via ci
   // if (!canister_id && ci) {
   //   var custom_route = lookup_custom_route(ci);
@@ -142,32 +121,31 @@ function route(r) {
   //     ic = custom_route.ic;
   //   }
   // }
-  var table = tables[ic];
-  if (!("canister_subnets" in table)) {
+  if (!("canister_subnets" in subnet_table)) {
     return '';
   }
   var subnet_index = 0;
   var status_re = /^\/api\/v2\/status/
   if (r.uri.match(status_re)) { 
-    subnet_index = Math.floor(Math.random() * Math.floor(table.canister_subnets.length));
+    subnet_index = Math.floor(Math.random() * Math.floor(subnet_table.canister_subnets.length));
   } else {
     if (!canister_id) {
       return '';
     }
     canister_id = decode_canister_id(canister_id);
-    subnet_index = find_subnet(canister_id, table);
-    if (canister_id < table.canister_range_starts[subnet_index] ||
-        canister_id > table.canister_range_ends[subnet_index]) {
+    subnet_index = find_subnet(canister_id, subnet_table);
+    if (canister_id < subnet_table.canister_range_starts[subnet_index] ||
+        canister_id > subnet_table.canister_range_ends[subnet_index]) {
       return '';
     }
   }
-  var subnet_id = table.canister_subnets[subnet_index];
-  var nodes = table.subnet_nodes[subnet_index];
+  var subnet_id = subnet_table.canister_subnets[subnet_index];
+  var nodes = subnet_table.subnet_nodes[subnet_index];
   if (nodes.length < 1) {
     return '';
   }
   var node_index = Math.floor(Math.random() * Math.floor(nodes.length));
-  var node_ids = table.subnet_node_ids[subnet_index];
+  var node_ids = subnet_table.subnet_node_ids[subnet_index];
   var node_id = node_ids[node_index]
   r.headersOut['x-ic-subnet-id'] = subnet_id;
   r.headersOut['x-ic-node-id'] = node_id;
