@@ -67,13 +67,14 @@ impl BtcAdapter for BtcAdapterImpl {
     ) -> Result<Response<GetSuccessorsResponse>, Status> {
         let block_hashes = request
             .into_inner()
-            .block_hashes
+            .processed_block_hashes
             .iter()
             .filter_map(|hash| BlockHash::from_slice(hash.as_slice()).ok())
             .collect();
         let blocks = self.adapter.lock().await.get_successors(block_hashes);
         Ok(Response::new(GetSuccessorsResponse {
             blocks: blocks.iter().map(block_to_proto).collect(),
+            next: vec![],
         }))
     }
 

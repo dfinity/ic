@@ -41,11 +41,22 @@ message Block {
 }
 
 message GetSuccessorsRequest {
-  repeated bytes block_hashes = 1;
+  // Used by the adapter to filter out previously sent blocks from its
+  // `GetSuccessorsResponse`. 
+  repeated bytes processed_block_hashes = 1;
+  // The first hash in processed block hashes. This field is used by the adapter
+  // to start a breadth-first search its known headers to determine which blocks
+  // to respond with in `GetSuccessorsResponse::blocks` field.
+  bytes anchor = 2;
 }
 
 message GetSuccessorsResponse {
+  // The blocks that the adapter has knowledge of based on the anchor and processed
+  // block hashes provided in the `GetSuccessorsRequest`.
   repeated Block blocks = 1;
+  // The next block headers that used to notify the Bitcoin virtual canister that
+  // more blocks are available.
+  repeated BlockHeader next = 2;
 }
 
 message SendTransactionRequest {

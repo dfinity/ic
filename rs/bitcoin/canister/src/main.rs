@@ -84,13 +84,20 @@ pub fn send_transaction(request: SendTransactionRequest) -> Result<(), SendTrans
 
 // Retrieves a `GetSuccessorsRequest` to send to the adapter.
 pub fn get_successors_request(state: &State) -> Vec<u8> {
-    let block_hashes = store::get_unstable_blocks(state)
+    let mut processed_block_hashes: Vec<Vec<u8>> = store::get_unstable_blocks(state)
         .iter()
         .map(|b| b.block_hash().to_vec())
         .collect();
 
-    println!("block hashes: {:?}", block_hashes);
-    GetSuccessorsRequest { block_hashes }.encode_to_vec()
+    // This is safe as there will always be at least 1 unstable block.
+    let anchor = processed_block_hashes.remove(0);
+
+    println!("block hashes: {:?}", processed_block_hashes);
+    GetSuccessorsRequest {
+        anchor,
+        processed_block_hashes,
+    }
+    .encode_to_vec()
 }
 
 pub fn has_outgoing_transaction() -> bool {
