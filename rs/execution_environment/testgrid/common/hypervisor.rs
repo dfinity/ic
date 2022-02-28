@@ -42,6 +42,7 @@ use ic_types::{
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use proptest::prelude::*;
+use proptest::test_runner::{TestRng, TestRunner};
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::{collections::BTreeMap, convert::TryFrom, sync::Arc, time::Duration};
@@ -145,9 +146,9 @@ fn test_api_type_for_reject(reject_context: RejectContext) -> ApiType {
     )
 }
 
-pub fn with_hypervisor<F>(f: F)
+pub fn with_hypervisor<F, R>(f: F) -> R
 where
-    F: FnOnce(Hypervisor, std::path::PathBuf),
+    F: FnOnce(Hypervisor, std::path::PathBuf) -> R,
 {
     with_test_replica_logger(|log| {
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
@@ -161,8 +162,8 @@ where
             log,
             cycles_account_manager,
         );
-        f(hypervisor, tmpdir.path().into());
-    });
+        f(hypervisor, tmpdir.path().into())
+    })
 }
 
 fn execute_update(
@@ -4698,14 +4699,14 @@ impl MemoryAccessor {
     }
 }
 
-fn with_memory_accessor<F>(wasm_pages: i32, test: F)
+fn with_memory_accessor<F, R>(wasm_pages: i32, test: F) -> R
 where
-    F: FnOnce(MemoryAccessor),
+    F: FnOnce(MemoryAccessor) -> R,
 {
     with_hypervisor(|hypervisor, tmp_path| {
         let memory_accessor = MemoryAccessor::new(wasm_pages, hypervisor, tmp_path);
-        test(memory_accessor);
-    });
+        test(memory_accessor)
+    })
 }
 
 #[test]
@@ -4807,91 +4808,100 @@ fn random_operations(
     prop::collection::vec(operation, 1..num_operations)
 }
 
-proptest! {
+#[test]
+fn random_memory_accesses() {
     // Limit the number of cases to keep the running time low.
-    #![proptest_config(ProptestConfig { cases: 20, .. ProptestConfig::default() })]
-    #[test]
-    fn random_memory_accesses(operations in random_operations(10, 100)) {
-        const PAGES_PER_WASM_PAGE: i32 = WASM_PAGE_SIZE / 4096;
-        let mut pages = vec![0_u8; 10 * PAGES_PER_WASM_PAGE as usize];
-        let mut dirty = vec![false; 10 * PAGES_PER_WASM_PAGE as usize];
-        with_memory_accessor(10, |mut memory_accessor| {
-            for op in operations {
-                match op {
-                    Operation::Read (page) => {
-                        assert_eq!(
-                            CallContextAction::Reply {
-                                payload: vec![pages[page as usize]; 4096],
-                                refund: Cycles::new(0)
-                            },
-                            memory_accessor.read(page * 4096, 4096),
-                        );
-                        // Read uses the first page as a scratchpad for arguments.
-                        dirty[0] = true;
-                    }
-                    Operation::Write (page, value) => {
-                        // Pages are already zero initialized, so writing zero
-                        // doesn't necessarily dirty them. Avoid zeros to make
-                        // dirty page tracking in the test precise.
-                        assert!(value > 0);
-                        assert_eq!(
-                            CallContextAction::NoResponse {
-                                refund: Cycles::new(0)
-                            },
-                            memory_accessor.write(page * 4096, &[value; 4096]),
-                        );
+    let config = ProptestConfig {
+        cases: 20,
+        failure_persistence: None,
+        ..ProptestConfig::default()
+    };
+    let algorithm = config.rng_algorithm;
+    let mut runner = TestRunner::new_with_rng(config, TestRng::deterministic_rng(algorithm));
+    runner
+        .run(&random_operations(10, 100), |operations| {
+            const PAGES_PER_WASM_PAGE: i32 = WASM_PAGE_SIZE / 4096;
+            let mut pages = vec![0_u8; 10 * PAGES_PER_WASM_PAGE as usize];
+            let mut dirty = vec![false; 10 * PAGES_PER_WASM_PAGE as usize];
+            with_memory_accessor(10, |mut memory_accessor| {
+                for op in operations {
+                    match op {
+                        Operation::Read(page) => {
+                            prop_assert_eq!(
+                                CallContextAction::Reply {
+                                    payload: vec![pages[page as usize]; 4096],
+                                    refund: Cycles::new(0)
+                                },
+                                memory_accessor.read(page * 4096, 4096)
+                            );
+                            // Read uses the first page as a scratchpad for arguments.
+                            dirty[0] = true;
+                        }
+                        Operation::Write(page, value) => {
+                            // Pages are already zero initialized, so writing zero
+                            // doesn't necessarily dirty them. Avoid zeros to make
+                            // dirty page tracking in the test precise.
+                            prop_assert!(value > 0);
+                            prop_assert_eq!(
+                                CallContextAction::NoResponse {
+                                    refund: Cycles::new(0)
+                                },
+                                memory_accessor.write(page * 4096, &[value; 4096])
+                            );
 
-                        // Confirm that the write was correct by reading the page.
-                        assert_eq!(
-                            CallContextAction::Reply {
-                                payload: vec![value; 4096],
-                                refund: Cycles::new(0)
-                            },
-                            memory_accessor.read(page * 4096, 4096),
-                        );
-                        pages[page as usize] = value;
-                        dirty[page as usize] = true;
-                        // Write uses the first page as a scratchpad for arguments.
-                        dirty[0] = true;
-                    },
-                    Operation::GrowAndRead => {
-                        assert_eq!(
-                            CallContextAction::Reply {
-                                payload: vec![0; 65536],
-                                refund: Cycles::new(0)
-                            },
-                            memory_accessor.grow_and_read(),
-                        );
-                        pages.extend(vec![0_u8; PAGES_PER_WASM_PAGE as usize]);
-                        dirty.extend(vec![false; PAGES_PER_WASM_PAGE as usize]);
-                    },
-                    Operation::GrowAndWrite (value) => {
-                        // Pages are already zero initialized, so writing zero
-                        // doesn't necessarily dirty them. Avoid zeros to make
-                        // dirty page tracking in the test precise.
-                        assert!(value > 0);
-                        assert_eq!(
-                            CallContextAction::NoResponse {
-                                refund: Cycles::new(0)
-                            },
-                            memory_accessor.grow_and_write(&[value; WASM_PAGE_SIZE as usize]),
-                        );
-                        // Confirm that the write was correct by reading the pages.
-                        assert_eq!(
-                            CallContextAction::Reply {
-                                payload: vec![value; WASM_PAGE_SIZE as usize],
-                                refund: Cycles::new(0)
-                            },
-                            memory_accessor.read(pages.len() as i32 * 4096, WASM_PAGE_SIZE),
-                        );
-                        pages.extend(vec![value; PAGES_PER_WASM_PAGE as usize]);
-                        dirty.extend(vec![true; PAGES_PER_WASM_PAGE as usize]);
+                            // Confirm that the write was correct by reading the page.
+                            prop_assert_eq!(
+                                CallContextAction::Reply {
+                                    payload: vec![value; 4096],
+                                    refund: Cycles::new(0)
+                                },
+                                memory_accessor.read(page * 4096, 4096)
+                            );
+                            pages[page as usize] = value;
+                            dirty[page as usize] = true;
+                            // Write uses the first page as a scratchpad for arguments.
+                            dirty[0] = true;
+                        }
+                        Operation::GrowAndRead => {
+                            prop_assert_eq!(
+                                CallContextAction::Reply {
+                                    payload: vec![0; 65536],
+                                    refund: Cycles::new(0)
+                                },
+                                memory_accessor.grow_and_read()
+                            );
+                            pages.extend(vec![0_u8; PAGES_PER_WASM_PAGE as usize]);
+                            dirty.extend(vec![false; PAGES_PER_WASM_PAGE as usize]);
+                        }
+                        Operation::GrowAndWrite(value) => {
+                            // Pages are already zero initialized, so writing zero
+                            // doesn't necessarily dirty them. Avoid zeros to make
+                            // dirty page tracking in the test precise.
+                            prop_assert!(value > 0);
+                            prop_assert_eq!(
+                                CallContextAction::NoResponse {
+                                    refund: Cycles::new(0)
+                                },
+                                memory_accessor.grow_and_write(&[value; WASM_PAGE_SIZE as usize])
+                            );
+                            // Confirm that the write was correct by reading the pages.
+                            prop_assert_eq!(
+                                CallContextAction::Reply {
+                                    payload: vec![value; WASM_PAGE_SIZE as usize],
+                                    refund: Cycles::new(0)
+                                },
+                                memory_accessor.read(pages.len() as i32 * 4096, WASM_PAGE_SIZE)
+                            );
+                            pages.extend(vec![value; PAGES_PER_WASM_PAGE as usize]);
+                            dirty.extend(vec![true; PAGES_PER_WASM_PAGE as usize]);
+                        }
                     }
                 }
-            }
-            memory_accessor.verify_dirty_pages(&dirty);
-        });
-    }
+                memory_accessor.verify_dirty_pages(&dirty);
+                Ok(())
+            })
+        })
+        .unwrap();
 }
 
 // Verify that the `memory.fill` instruction has cost linear with it's size

@@ -18,7 +18,10 @@ use ic_types::{
     ingress::WasmResult, CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, SubnetId,
 };
 use maplit::btreemap;
-use proptest::prelude::*;
+use proptest::{
+    prelude::*,
+    test_runner::{TestRng, TestRunner},
+};
 use std::{collections::BTreeMap, convert::TryFrom, sync::Arc};
 
 fn execution_parameters() -> ExecutionParameters {
@@ -239,24 +242,36 @@ const TEST_NUM_PAGES: usize = 32;
 const TEST_NUM_WRITES: usize = 20;
 const WASM_PAGE_SIZE_BYTES: usize = 65536;
 
-proptest! {
-    #![proptest_config(ProptestConfig { cases: 20, .. ProptestConfig::default() })]
-    #[test]
-    // generate multiple writes of varying size to random memory locations, apply them both to a
-    // canister and a simple Vec buffer and compare the results.
-    fn test_orthogonal_persistence(writes in random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES)) {
-        with_test_replica_logger(|log| {
-            let mut heap = vec![0;TEST_HEAP_SIZE_BYTES];
-            let wat = make_module_wat(TEST_NUM_PAGES);
-            let mut t = HypervisorTest::init(&wat, log);
+#[test]
+// generate multiple writes of varying size to random memory locations, apply them both to a
+// canister and a simple Vec buffer and compare the results.
+fn test_orthogonal_persistence() {
+    let config = ProptestConfig {
+        cases: 20,
+        failure_persistence: None,
+        ..ProptestConfig::default()
+    };
+    let algorithm = config.rng_algorithm;
+    let mut runner = TestRunner::new_with_rng(config, TestRng::deterministic_rng(algorithm));
+    runner
+        .run(
+            &random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES),
+            |writes| {
+                with_test_replica_logger(|log| {
+                    let mut heap = vec![0; TEST_HEAP_SIZE_BYTES];
+                    let wat = make_module_wat(TEST_NUM_PAGES);
+                    let mut t = HypervisorTest::init(&wat, log);
 
-            for w in &writes {
-                buf_apply_write(&mut heap, w);
-                write_bytes(&mut t, w.dst, &w.bytes);
-                // verify the heap
-                let canister_heap = dump_heap(&mut t);
-                assert_eq!(heap[..], canister_heap[..])
-            }
-        });
-    }
+                    for w in &writes {
+                        buf_apply_write(&mut heap, w);
+                        write_bytes(&mut t, w.dst, &w.bytes);
+                        // verify the heap
+                        let canister_heap = dump_heap(&mut t);
+                        prop_assert_eq!(&heap[..], &canister_heap[..]);
+                    }
+                    Ok(())
+                })
+            },
+        )
+        .unwrap();
 }
