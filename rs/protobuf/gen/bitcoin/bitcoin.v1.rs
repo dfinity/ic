@@ -65,14 +65,23 @@ pub struct Block {
 #[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetSuccessorsRequest {
+    /// Used by the adapter to filter out previously sent blocks from its
+    /// `GetSuccessorsResponse`. 
     #[prost(bytes="vec", repeated, tag="1")]
-    pub block_hashes: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+    pub processed_block_hashes: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+    /// The first hash in processed block hashes. This field is used by the adapter
+    /// to start a breadth-first search its known headers to determine which blocks
+    /// to respond with in `GetSuccessorsResponse::blocks` field.
+    #[prost(bytes="vec", tag="2")]
+    pub anchor: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetSuccessorsResponse {
     #[prost(message, repeated, tag="1")]
     pub blocks: ::prost::alloc::vec::Vec<Block>,
+    #[prost(message, repeated, tag="2")]
+    pub next: ::prost::alloc::vec::Vec<BlockHeader>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]
