@@ -22,6 +22,7 @@ pub mod node_removal_from_registry_test;
 pub mod node_restart_test;
 pub mod orchestrator;
 pub mod registry_authentication_test;
+pub mod rejoin_test;
 pub mod replica_determinism_test;
 pub mod request_auth_malicious_replica_test;
 pub mod request_signature_test;
