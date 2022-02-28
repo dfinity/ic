@@ -1,6 +1,5 @@
 mod canister_manager;
 mod canister_settings;
-mod common;
 mod execution_environment;
 mod execution_environment_metrics;
 mod history;
