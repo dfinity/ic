@@ -1,7 +1,4 @@
-use crate::{
-    common::{PendingFutureResult, PendingFutureResultInternal},
-    ExecutionEnvironmentImpl,
-};
+use crate::ExecutionEnvironmentImpl;
 use ic_interfaces::{
     execution_environment::{ExecutionMode, IngressFilterService},
     state_manager::StateReader,
@@ -14,6 +11,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
+use tokio::sync::oneshot;
 use tower::{util::BoxService, Service, ServiceBuilder};
 
 pub(crate) struct IngressFilter {
@@ -46,21 +44,6 @@ impl IngressFilter {
     }
 }
 
-type FutureIngressFilterResult =
-    PendingFutureResult<Result<Result<(), CanonicalError>, Infallible>>;
-
-impl Default for FutureIngressFilterResult {
-    fn default() -> Self {
-        let inner = PendingFutureResultInternal {
-            result: None,
-            waker: None,
-        };
-        Self {
-            inner: Arc::new(Mutex::new(inner)),
-        }
-    }
-}
-
 impl Service<(ProvisionalWhitelist, SignedIngressContent)> for IngressFilter {
     type Response = Result<(), CanonicalError>;
     type Error = Infallible;
@@ -77,11 +60,10 @@ impl Service<(ProvisionalWhitelist, SignedIngressContent)> for IngressFilter {
     ) -> Self::Future {
         let exec_env = Arc::clone(&self.exec_env);
         let state_reader = Arc::clone(&self.state_reader);
-        let future = FutureIngressFilterResult::default();
-        let weak_future = future.weak();
+        let (tx, rx) = oneshot::channel();
         let threadpool = self.threadpool.lock().unwrap().clone();
         threadpool.execute(move || {
-            if let Some(future) = FutureIngressFilterResult::from_weak(weak_future) {
+            if !tx.is_closed() {
                 let state = state_reader.get_latest_state().take();
                 let v = exec_env.should_accept_ingress_message(
                     state,
@@ -89,9 +71,12 @@ impl Service<(ProvisionalWhitelist, SignedIngressContent)> for IngressFilter {
                     &ingress,
                     ExecutionMode::NonReplicated,
                 );
-                future.resolve(Ok(v));
+                let _ = tx.send(Ok(v));
             }
         });
-        Box::pin(future)
+        Box::pin(async move {
+            rx.await
+                .expect("The sender was dropped before sending the message.")
+        })
     }
 }

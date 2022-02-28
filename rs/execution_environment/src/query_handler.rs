@@ -7,7 +7,6 @@ mod query_context;
 mod tests;
 
 use crate::{
-    common::{PendingFutureResult, PendingFutureResultInternal},
     hypervisor::Hypervisor,
     metrics::{MeasurementScope, QueryHandlerMetrics},
 };
@@ -39,6 +38,7 @@ use std::{
     sync::{Arc, Mutex, RwLock},
     task::{Context, Poll},
 };
+use tokio::sync::oneshot;
 use tower::{util::BoxService, Service, ServiceBuilder};
 
 /// Convert an object into CBOR binary.
@@ -206,20 +206,6 @@ impl QueryHandler for HttpQueryHandler {
     }
 }
 
-type FutureQueryResult = PendingFutureResult<Result<HttpQueryResponse, Infallible>>;
-
-impl Default for FutureQueryResult {
-    fn default() -> Self {
-        let inner = PendingFutureResultInternal {
-            result: None,
-            waker: None,
-        };
-        Self {
-            inner: Arc::new(Mutex::new(inner)),
-        }
-    }
-}
-
 impl Service<(UserQuery, Option<CertificateDelegation>)> for HttpQueryHandler {
     type Response = HttpQueryResponse;
     type Error = Infallible;
@@ -236,11 +222,10 @@ impl Service<(UserQuery, Option<CertificateDelegation>)> for HttpQueryHandler {
     ) -> Self::Future {
         let internal = Arc::clone(&self.internal);
         let state_reader = Arc::clone(&self.state_reader);
-        let future = FutureQueryResult::default();
-        let weak_future = future.weak();
+        let (tx, rx) = oneshot::channel();
         let threadpool = self.threadpool.lock().unwrap().clone();
         threadpool.execute(move || {
-            if let Some(future) = FutureQueryResult::from_weak(weak_future) {
+            if !tx.is_closed() {
                 // We managed to upgrade the weak pointer, so the query was not cancelled.
                 // Canceling the query after this point will have to effect: the query will
                 // be executed anyway. That is fine because the execution will take O(ms).
@@ -273,9 +258,12 @@ impl Service<(UserQuery, Option<CertificateDelegation>)> for HttpQueryHandler {
                     },
                 };
 
-                future.resolve(Ok(http_query_response));
+                let _ = tx.send(Ok(http_query_response));
             }
         });
-        Box::pin(future)
+        Box::pin(async move {
+            rx.await
+                .expect("The sender was dropped before sending the message.")
+        })
     }
 }
