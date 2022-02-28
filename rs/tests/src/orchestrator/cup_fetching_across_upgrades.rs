@@ -34,8 +34,8 @@ use crate::nns::{
     get_governance_canister, submit_bless_replica_version_proposal,
     submit_update_subnet_replica_version_proposal, vote_execute_proposal_assert_executed, NnsExt,
 };
-use crate::node_reassignment_test::{can_read_msg, store_message};
-use crate::unassigned_node_upgrade_test::{blessed_replica_versions, fetch_update_file_sha256};
+use crate::orchestrator::node_reassignment_test::{can_read_msg, store_message};
+use crate::orchestrator::utils::upgrade::{fetch_update_file_sha256, get_blessed_replica_versions};
 use crate::util::{
     assert_endpoints_reachability, block_on, get_other_subnet_nodes,
     get_random_application_node_endpoint, get_random_nns_node_endpoint, get_update_image_url,
@@ -243,7 +243,7 @@ fn propose_blessed_version(
     let test_neuron_id = NeuronId(TEST_NEURON_1_ID);
     let proposal_sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
     block_on(async {
-        let blessed_versions = blessed_replica_versions(&registry_canister).await;
+        let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
         info!(ctx.logger, "Initial: {:?}", blessed_versions);
         let sha256 = fetch_update_file_sha256(&sha_url, target_version != replica_version).await;
 
@@ -257,7 +257,7 @@ fn propose_blessed_version(
         )
         .await;
         vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
-        let blessed_versions = blessed_replica_versions(&registry_canister).await;
+        let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
         info!(ctx.logger, "Updated: {:?}", blessed_versions);
     });
 }
