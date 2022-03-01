@@ -23,7 +23,6 @@ mach = "0.3.2"
 
 [features]
 default = []
-sigsegv_handler_debug = []
 sigsegv_handler_checksum = []
 
 [dev-dependencies]
