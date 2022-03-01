@@ -128,7 +128,6 @@ members = [
   "replicated_state",
   "rosetta-api",
   "rosetta-api/ledger_canister",
-  "rosetta-api/cycles_minting_client",
   "rosetta-api/hardware_wallet_tests",
   "rosetta-api/test_utils",
   "rust_canisters/canister_test",
