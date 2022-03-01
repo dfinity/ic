@@ -2249,13 +2249,6 @@ pub struct Archives {
     pub archives: Vec<ArchiveInfo>,
 }
 
-#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
-pub enum ArchivesError {
-    NotAvailable,
-}
-
-pub type ArchivesResult = Result<Archives, ArchivesError>;
-
 /// Argument returned by the tip_of_chain endpoint
 pub struct TipOfChainRes {
     pub certification: Option<Vec<u8>>,

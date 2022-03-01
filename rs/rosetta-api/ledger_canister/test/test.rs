@@ -4,12 +4,12 @@ use dfn_protobuf::protobuf;
 use ic_canister_client::Sender;
 use ic_types::{CanisterId, PrincipalId};
 use ledger_canister::{
-    AccountBalanceArgs, AccountIdentifier, ArchiveOptions, ArchivesResult,
-    BinaryAccountBalanceArgs, Block, BlockArg, BlockHeight, BlockRange, BlockRes, CandidBlock,
-    EncodedBlock, GetBlocksArgs, GetBlocksError, GetBlocksRes, GetBlocksResult, IterBlocksArgs,
-    IterBlocksRes, LedgerCanisterInitPayload, Memo, NotifyCanisterArgs, Operation, SendArgs,
-    Subaccount, TimeStamp, Tokens, TotalSupplyArgs, Transaction, TransferArgs, TransferError,
-    TransferFee, TransferFeeArgs, DEFAULT_TRANSFER_FEE,
+    AccountBalanceArgs, AccountIdentifier, ArchiveOptions, Archives, BinaryAccountBalanceArgs,
+    Block, BlockArg, BlockHeight, BlockRange, BlockRes, CandidBlock, EncodedBlock, GetBlocksArgs,
+    GetBlocksError, GetBlocksRes, GetBlocksResult, IterBlocksArgs, IterBlocksRes,
+    LedgerCanisterInitPayload, Memo, NotifyCanisterArgs, Operation, SendArgs, Subaccount,
+    TimeStamp, Tokens, TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee,
+    TransferFeeArgs, DEFAULT_TRANSFER_FEE,
 };
 use on_wire::IntoWire;
 use std::collections::{HashMap, HashSet};
@@ -135,7 +135,7 @@ async fn fetch_candid_interface(canister: &Canister<'_>) -> Result<String, Strin
         .await
 }
 
-async fn get_archives(canister: &Canister<'_>) -> Result<ArchivesResult, String> {
+async fn get_archives(canister: &Canister<'_>) -> Result<Archives, String> {
     canister.query_("archives", candid_one, ()).await
 }
 
@@ -1669,7 +1669,7 @@ fn test_archives_endpoint() {
             )
             .await?;
 
-        let archive_ids = get_archives(&ledger).await.unwrap().unwrap().archives;
+        let archive_ids = get_archives(&ledger).await.unwrap().archives;
         assert_eq!(archive_ids, vec![]);
 
         let sender1 = create_sender(1);
@@ -1690,7 +1690,7 @@ fn test_archives_endpoint() {
         .await
         .unwrap();
 
-        let archive_ids = get_archives(&ledger).await.unwrap().unwrap().archives;
+        let archive_ids = get_archives(&ledger).await.unwrap().archives;
         assert_eq!(archive_ids.len(), 1);
 
         Ok(())
