@@ -1,6 +1,6 @@
 use crate::{common::make_response, MAX_REQUEST_RECEIVE_DURATION, MAX_REQUEST_SIZE_BYTES};
 use futures_util::StreamExt;
-use hyper::{Body, Response};
+use hyper::{body::HttpBody, Body, Response};
 use ic_types::canonical_error::{out_of_range_error, unknown_error, CanonicalError};
 use std::future::Future;
 use std::pin::Pin;
@@ -55,7 +55,14 @@ async fn receive_body_without_timeout(
     mut body: Body,
     max_request_body_size_bytes: usize,
 ) -> Result<Vec<u8>, CanonicalError> {
-    let mut received_body = Vec::<u8>::new();
+    let body_size_hint = body.size_hint().lower() as usize;
+    if body_size_hint > max_request_body_size_bytes {
+        return Err(out_of_range_error(format!(
+            "The request body is bigger than {} bytes.",
+            max_request_body_size_bytes
+        )));
+    }
+    let mut received_body = Vec::<u8>::with_capacity(body_size_hint);
     while let Some(chunk) = body.next().await {
         match chunk {
             Err(err) => {
