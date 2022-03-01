@@ -30,15 +30,9 @@ pub enum ValidateHeaderError {
     PrevHeaderNotFound,
 }
 
-#[derive(Clone)]
-pub struct StoredHeader {
-    pub header: BlockHeader,
-    pub height: BlockHeight,
-}
-
 pub trait HeaderStore {
     /// Retrieves the header from the store.
-    fn get_header(&self, hash: &BlockHash) -> Option<&StoredHeader>;
+    fn get_header(&self, hash: &BlockHash) -> Option<(&BlockHeader, BlockHeight)>;
     /// Retrieves the current height of the block chain.
     fn get_height(&self) -> BlockHeight;
     /// Retrieves the initial hash the store starts from.
@@ -52,8 +46,8 @@ pub fn validate_header(
     store: &impl HeaderStore,
     header: &BlockHeader,
 ) -> Result<(), ValidateHeaderError> {
-    let prev_stored_header = match store.get_header(&header.prev_blockhash) {
-        Some(header) => header,
+    let (prev_header, prev_height) = match store.get_header(&header.prev_blockhash) {
+        Some(result) => result,
         None => {
             return Err(ValidateHeaderError::PrevHeaderNotFound);
         }
@@ -63,7 +57,7 @@ pub fn validate_header(
         return Err(ValidateHeaderError::HeaderIsOld);
     }
 
-    if !is_checkpoint_valid(network, prev_stored_header, header, store.get_height()) {
+    if !is_checkpoint_valid(network, prev_height, header, store.get_height()) {
         return Err(ValidateHeaderError::DoesNotMatchCheckpoint);
     }
 
@@ -76,7 +70,7 @@ pub fn validate_header(
         return Err(ValidateHeaderError::InvalidPoWForHeaderTarget);
     }
 
-    let target = get_next_target(network, store, prev_stored_header, header);
+    let target = get_next_target(network, store, prev_header, prev_height, header);
     if let Err(err) = header.validate_pow(&target) {
         match err {
             bitcoin::Error::BlockBadProofOfWork => println!("bad proof of work"),
@@ -95,12 +89,12 @@ pub fn validate_header(
 ///    If the next header's height is less than the last checkpoint's height, the header is invalid.
 fn is_checkpoint_valid(
     network: &Network,
-    prev_header: &StoredHeader,
+    prev_height: BlockHeight,
     header: &BlockHeader,
     chain_height: BlockHeight,
 ) -> bool {
     let checkpoints = checkpoints(network);
-    let next_height = prev_header.height.saturating_add(1);
+    let next_height = prev_height.saturating_add(1);
     if let Some(next_hash) = checkpoints.get(&next_height) {
         return *next_hash == header.block_hash();
     }
@@ -116,11 +110,7 @@ fn is_timestamp_valid(store: &impl HeaderStore, header: &BlockHeader) -> bool {
     let mut times = vec![];
     let mut current_header = header;
     for _ in 0..11 {
-        if let Some(StoredHeader {
-            header: prev_header,
-            ..
-        }) = store.get_header(&current_header.prev_blockhash)
-        {
+        if let Some((prev_header, _)) = store.get_header(&current_header.prev_blockhash) {
             times.push(prev_header.time);
             if prev_header.block_hash() == store.get_initial_hash() {
                 break;
@@ -143,18 +133,19 @@ fn is_timestamp_valid(store: &impl HeaderStore, header: &BlockHeader) -> bool {
 fn get_next_target(
     network: &Network,
     store: &impl HeaderStore,
-    prev_stored_header: &StoredHeader,
+    prev_header: &BlockHeader,
+    prev_height: BlockHeight,
     header: &BlockHeader,
 ) -> Uint256 {
     match network {
         Network::Testnet | Network::Regtest => {
-            if (prev_stored_header.height + 1) % DIFFICULTY_ADJUSTMENT_INTERVAL != 0 {
+            if (prev_height + 1) % DIFFICULTY_ADJUSTMENT_INTERVAL != 0 {
                 // This if statements is reached only for Regtest and Testnet networks
                 // Here is the quote from "https://en.bitcoin.it/wiki/Testnet"
                 // "If no block has been found in 20 minutes, the difficulty automatically
                 // resets back to the minimum for a single block, after which it
                 // returns to its previous value."
-                if header.time > prev_stored_header.header.time + TEN_MINUTES * 2 {
+                if header.time > prev_header.time + TEN_MINUTES * 2 {
                     //If no block has been found in 20 minutes, then use the maximum difficulty
                     // target
                     max_target(network)
@@ -164,19 +155,21 @@ fn get_next_target(
                     BlockHeader::u256_from_compact_target(find_next_difficulty_in_chain(
                         network,
                         store,
-                        prev_stored_header,
+                        prev_header,
+                        prev_height,
                     ))
                 }
             } else {
                 BlockHeader::u256_from_compact_target(compute_next_difficulty(
                     network,
                     store,
-                    prev_stored_header,
+                    prev_header,
+                    prev_height,
                 ))
             }
         }
         Network::Bitcoin | Network::Signet => BlockHeader::u256_from_compact_target(
-            compute_next_difficulty(network, store, prev_stored_header),
+            compute_next_difficulty(network, store, prev_header, prev_height),
         ),
     }
 }
@@ -191,28 +184,31 @@ fn get_next_target(
 fn find_next_difficulty_in_chain(
     network: &Network,
     store: &impl HeaderStore,
-    prev_header: &StoredHeader,
+    prev_header: &BlockHeader,
+    prev_height: BlockHeight,
 ) -> u32 {
     // This is the maximum difficulty target for the network
     let pow_limit_bits = pow_limit_bits(network);
     match network {
         Network::Testnet | Network::Regtest => {
             let mut current_header = prev_header;
+            let mut current_height = prev_height;
             let initial_header_hash = store.get_initial_hash();
 
             // Keep traversing the blockchain backwards from the recent block to initial
             // header hash.
-            while current_header.header.block_hash() != initial_header_hash {
-                if current_header.header.bits != pow_limit_bits
-                    || current_header.height % DIFFICULTY_ADJUSTMENT_INTERVAL == 0
+            while current_header.block_hash() != initial_header_hash {
+                if current_header.bits != pow_limit_bits
+                    || current_height % DIFFICULTY_ADJUSTMENT_INTERVAL == 0
                 {
-                    return current_header.header.bits;
+                    return current_header.bits;
                 }
 
                 // Traverse to the previous header
-                current_header = store
-                    .get_header(&current_header.header.prev_blockhash)
-                    .unwrap();
+                // TODO: unwrap needs to be removed
+                let header_info = store.get_header(&current_header.prev_blockhash).unwrap();
+                current_header = header_info.0;
+                current_height = header_info.1;
             }
             pow_limit_bits
         }
@@ -225,28 +221,28 @@ fn find_next_difficulty_in_chain(
 fn compute_next_difficulty(
     network: &Network,
     store: &impl HeaderStore,
-    prev_header: &StoredHeader,
+    prev_header: &BlockHeader,
+    prev_height: BlockHeight,
 ) -> u32 {
     // Difficulty is adjusted only once in every interval of 2 weeks (2016 blocks)
     // If an interval boundary is not reached, then previous difficulty target is
     // returned Regtest network doesn't adjust PoW difficult levels. For
     // regtest, simply return the previous difficulty target
 
-    if (prev_header.height + 1) % DIFFICULTY_ADJUSTMENT_INTERVAL != 0 || no_pow_retargeting(network)
-    {
-        return prev_header.header.bits;
+    if (prev_height + 1) % DIFFICULTY_ADJUSTMENT_INTERVAL != 0 || no_pow_retargeting(network) {
+        return prev_header.bits;
     }
 
     // Computing the last header with height multiple of 2016
     let mut current_header = prev_header;
     for _i in 0..(DIFFICULTY_ADJUSTMENT_INTERVAL - 1) {
-        if let Some(h) = store.get_header(&current_header.header.prev_blockhash) {
-            current_header = h;
+        if let Some((header, _)) = store.get_header(&current_header.prev_blockhash) {
+            current_header = header;
         }
     }
     // last_adjustment_header is the last header with height multiple of 2016
     let last_adjustment_header = current_header;
-    let last_adjustment_time = last_adjustment_header.header.time;
+    let last_adjustment_time = last_adjustment_header.time;
 
     // Computing the time interval between the last adjustment header time and
     // current time. The expected value actual_interval is 2 weeks assuming
@@ -254,7 +250,7 @@ fn compute_next_difficulty(
     // actual_interval will deviate slightly from 2 weeks. Our goal is to
     // readjust the difficulty target so that the expected time taken for the next
     // 2016 blocks is again 2 weeks.
-    let actual_interval = prev_header.header.time - last_adjustment_time;
+    let actual_interval = prev_header.time - last_adjustment_time;
     let mut adjusted_interval = actual_interval as u32;
 
     // The target_adjustment_interval_time is 2 weeks of time expressed in seconds
@@ -268,7 +264,7 @@ fn compute_next_difficulty(
     // Computing new difficulty target.
     // new difficulty target = old difficult target * (adjusted_interval /
     // 2_weeks);
-    let mut target = prev_header.header.target();
+    let mut target = prev_header.target();
     target = target.mul_u32(adjusted_interval);
     target = target / Uint256::from_u64(target_adjustment_interval_time as u64).unwrap();
 
@@ -294,6 +290,12 @@ mod test {
         MAINNET_HEADER_705600, MAINNET_HEADER_705601, MAINNET_HEADER_705602,
         TESTNET_HEADER_2132555, TESTNET_HEADER_2132556,
     };
+
+    #[derive(Clone)]
+    struct StoredHeader {
+        header: BlockHeader,
+        height: BlockHeight,
+    }
 
     struct SimpleHeaderStore {
         headers: HashMap<BlockHash, StoredHeader>,
@@ -336,8 +338,10 @@ mod test {
     }
 
     impl HeaderStore for SimpleHeaderStore {
-        fn get_header(&self, hash: &BlockHash) -> Option<&StoredHeader> {
-            self.headers.get(hash)
+        fn get_header(&self, hash: &BlockHash) -> Option<(&BlockHeader, BlockHeight)> {
+            self.headers
+                .get(hash)
+                .map(|stored| (&stored.header, stored.height))
         }
 
         fn get_height(&self) -> BlockHeight {
@@ -464,11 +468,11 @@ mod test {
         let header_11110 = deserialize_header(MAINNET_HEADER_11110);
         let mut header_11111 = deserialize_header(MAINNET_HEADER_11111);
         let store = SimpleHeaderStore::new(header_11110, 11110);
-        let prev_header = store.get_header(&header_11111.prev_blockhash).unwrap();
+        let (_, prev_height) = store.get_header(&header_11111.prev_blockhash).unwrap();
 
         assert!(is_checkpoint_valid(
             &network,
-            prev_header,
+            prev_height,
             &header_11111,
             store.get_height()
         ));
@@ -497,14 +501,11 @@ mod test {
         let mut store = SimpleHeaderStore::new(header_11109, 11109);
         store.add(header_11110);
 
-        let prev_header = store
-            .get_header(&header_11111.prev_blockhash)
-            .cloned()
-            .unwrap();
+        let (_, prev_height) = store.get_header(&header_11111.prev_blockhash).unwrap();
 
         assert!(is_checkpoint_valid(
             &network,
-            &prev_header,
+            prev_height,
             &header_11111,
             store.get_height()
         ));
@@ -512,9 +513,10 @@ mod test {
         store.add(header_11111);
 
         // This should return false as bad_header_11110 is a fork.
+        let (_, prev_height) = store.get_header(&header_11111.prev_blockhash).unwrap();
         assert!(!is_checkpoint_valid(
             &network,
-            &prev_header,
+            prev_height,
             &bad_header_11110,
             store.get_height()
         ));
@@ -526,14 +528,11 @@ mod test {
         let header_705600 = deserialize_header(MAINNET_HEADER_705600);
         let header_705601 = deserialize_header(MAINNET_HEADER_705601);
         let store = SimpleHeaderStore::new(header_705600, 705_600);
-        let prev_header = store
-            .get_header(&header_705601.prev_blockhash)
-            .cloned()
-            .unwrap();
+        let (_, prev_height) = store.get_header(&header_705601.prev_blockhash).unwrap();
 
         assert!(is_checkpoint_valid(
             &network,
-            &prev_header,
+            prev_height,
             &header_705601,
             store.get_height()
         ));
