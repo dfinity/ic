@@ -1,13 +1,13 @@
 use crate::errors::ApiError;
 use crate::models;
-use crate::models::{AccountIdentifier, Amount, BlockIdentifier, Currency, Operation, Timestamp};
+use crate::models::{
+    AccountIdentifier, Amount, BlockIdentifier, Currency, Operation, OperationType, Timestamp,
+};
 use crate::request_types::{
     AddHotKey, Disburse, DisburseMetadata, KeyMetadata, MergeMaturity, MergeMaturityMetadata,
     NeuronIdentifierMetadata, PublicKeyOrPrincipal, Request, RequestResult, RequestResultMetadata,
     SetDissolveTimestamp, SetDissolveTimestampMetadata, Spawn, SpawnMetadata, Stake, StartDissolve,
-    Status, StopDissolve, TransactionOperationResults, TransactionResults, ADD_HOT_KEY, DISBURSE,
-    FEE, MERGE_MATURITY, SET_DISSOLVE_TIMESTAMP, SPAWN, STAKE, START_DISSOLVE, STATUS_COMPLETED,
-    STOP_DISSOLVE, TRANSACTION,
+    Status, StopDissolve, TransactionOperationResults, TransactionResults, STATUS_COMPLETED,
 };
 use crate::store::HashedBlock;
 use crate::time::Seconds;
@@ -24,8 +24,7 @@ use ledger_canister::{
 use on_wire::{FromWire, IntoWire};
 use serde_json::map::Map;
 use serde_json::{from_value, Number, Value};
-use std::convert::TryFrom;
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// This module converts from ledger_canister data structures to Rosetta data
@@ -344,7 +343,7 @@ pub fn from_operations(
             .map_err(|e| op_error(o, e))?;
 
         let validate_neuron_management_op = || {
-            if o.amount.is_some() && o._type != DISBURSE {
+            if o.amount.is_some() && o._type != OperationType::Disburse {
                 Err(op_error(
                     o,
                     format!(
@@ -365,8 +364,8 @@ pub fn from_operations(
             }
         };
 
-        match o._type.as_str() {
-            TRANSACTION => {
+        match o._type {
+            OperationType::Transaction => {
                 let amount = o
                     .amount
                     .as_ref()
@@ -374,7 +373,7 @@ pub fn from_operations(
                 let amount = from_amount(amount, token_name).map_err(|e| op_error(o, e))?;
                 state.transaction(account, amount)?;
             }
-            FEE => {
+            OperationType::Fee => {
                 let amount = o
                     .amount
                     .as_ref()
@@ -382,12 +381,12 @@ pub fn from_operations(
                 let amount = from_amount(amount, token_name).map_err(|e| op_error(o, e))?;
                 state.fee(account, Tokens::from_e8s((-amount) as u64))?;
             }
-            STAKE => {
+            OperationType::Stake => {
                 validate_neuron_management_op()?;
                 let NeuronIdentifierMetadata { neuron_index } = o.metadata.clone().try_into()?;
                 state.stake(account, neuron_index)?;
             }
-            SET_DISSOLVE_TIMESTAMP => {
+            OperationType::SetDissolveTimestamp => {
                 validate_neuron_management_op()?;
                 let SetDissolveTimestampMetadata {
                     neuron_index,
@@ -396,22 +395,22 @@ pub fn from_operations(
 
                 state.set_dissolve_timestamp(account, neuron_index, timestamp)?;
             }
-            START_DISSOLVE => {
+            OperationType::StartDissolving => {
                 validate_neuron_management_op()?;
                 let NeuronIdentifierMetadata { neuron_index } = o.metadata.clone().try_into()?;
                 state.start_dissolve(account, neuron_index)?;
             }
-            STOP_DISSOLVE => {
+            OperationType::StopDissolving => {
                 validate_neuron_management_op()?;
                 let NeuronIdentifierMetadata { neuron_index } = o.metadata.clone().try_into()?;
                 state.stop_dissolve(account, neuron_index)?;
             }
-            ADD_HOT_KEY => {
+            OperationType::AddHotkey => {
                 let KeyMetadata { key, neuron_index } = o.metadata.clone().try_into()?;
                 validate_neuron_management_op()?;
                 state.add_hot_key(account, neuron_index, key)?;
             }
-            DISBURSE => {
+            OperationType::Disburse => {
                 let DisburseMetadata {
                     neuron_index,
                     recipient,
@@ -428,7 +427,7 @@ pub fn from_operations(
                 };
                 state.disburse(account, neuron_index, amount, recipient)?;
             }
-            SPAWN => {
+            OperationType::Spawn => {
                 let SpawnMetadata {
                     neuron_index,
                     controller,
@@ -444,7 +443,7 @@ pub fn from_operations(
                     controller,
                 )?;
             }
-            MERGE_MATURITY => {
+            OperationType::MergeMaturity => {
                 let MergeMaturityMetadata {
                     neuron_index,
                     percentage_to_merge,
@@ -452,7 +451,7 @@ pub fn from_operations(
                 validate_neuron_management_op()?;
                 state.merge_maturity(account, neuron_index, percentage_to_merge)?;
             }
-            _ => {
+            OperationType::Burn | OperationType::Mint => {
                 let msg = format!("Unsupported operation type: {}", o._type);
                 return Err(op_error(o, msg));
             }
@@ -655,9 +654,9 @@ pub fn from_transaction_operation_results(
     for _type in requests.into_iter() {
         let o = match (&_type, &t.operations[op_idx..]) {
             (Request::Transfer(LedgerOperation::Transfer { .. }), [withdraw, deposit, fee, ..])
-                if withdraw._type == TRANSACTION
-                    && deposit._type == TRANSACTION
-                    && fee._type == FEE =>
+                if withdraw._type == OperationType::Transaction
+                    && deposit._type == OperationType::Transaction
+                    && fee._type == OperationType::Fee =>
             {
                 op_idx += 3;
                 fee

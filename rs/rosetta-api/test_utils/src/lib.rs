@@ -6,7 +6,7 @@ use ic_rosetta_api::convert::{
 use ic_rosetta_api::models::Error as RosettaError;
 use ic_rosetta_api::models::{
     ConstructionCombineResponse, ConstructionPayloadsRequestMetadata, ConstructionPayloadsResponse,
-    CurveType, PublicKey, Signature, SignatureType,
+    CurveType, OperationType, PublicKey, Signature, SignatureType,
 };
 use ic_rosetta_api::request_types::{
     AddHotKey, Disburse, MergeMaturity, Request, RequestResult, SetDissolveTimestamp, Spawn, Stake,
@@ -91,7 +91,7 @@ pub async fn prepare_multiple_txn(
         // first ask for the fee
         let mut fee_found = false;
         for o in Request::requests_to_operations(&[request.request.clone()], token_name).unwrap() {
-            if o._type == "FEE" {
+            if o._type == OperationType::Fee {
                 fee_found = true;
             } else {
                 dry_run_ops.push(o.clone());
@@ -161,7 +161,7 @@ pub async fn prepare_multiple_txn(
 
     if accept_suggested_fee {
         for o in &mut all_ops {
-            if o._type == "FEE" {
+            if o._type == OperationType::Fee {
                 o.amount = Some(signed_amount(-(fee_icpts.get_e8s() as i128), token_name));
             }
         }

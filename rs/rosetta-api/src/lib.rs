@@ -38,6 +38,7 @@ use ic_types::messages::{
 };
 use ic_types::{messages::MessageId, CanisterId, PrincipalId};
 use on_wire::IntoWire;
+use strum::IntoEnumIterator;
 
 use models::*;
 
@@ -1327,18 +1328,7 @@ impl RosettaRequestHandler {
             ),
             Allow::new(
                 vec![OperationStatus::new("COMPLETED".to_string(), true)],
-                vec![
-                    "BURN".to_string(),
-                    "MINT".to_string(),
-                    "TRANSACTION".to_string(),
-                    "FEE".to_string(),
-                    "STAKE".to_string(),
-                    "SET_DISSOLVE_TIMESTAMP".to_string(),
-                    "START_DISSOLVING".to_string(),
-                    "STOP_DISSOLVING".to_string(),
-                    "SPAWN".to_string(),
-                    "MERGE_MATURITY".to_string(),
-                ],
+                OperationType::iter().map(|op| op.to_string()).collect(),
                 {
                     let token_name = self.ledger.token_symbol();
                     let mut errs = vec![

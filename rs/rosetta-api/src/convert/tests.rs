@@ -1,4 +1,4 @@
-use crate::models::OperationIdentifier;
+use crate::models::{OperationIdentifier, OperationType};
 
 use super::*;
 use crate::DEFAULT_TOKEN_SYMBOL;
@@ -7,10 +7,10 @@ use ledger_canister::Operation as LedgerOperation;
 
 struct OperationBuilder(Operation);
 impl OperationBuilder {
-    fn new(idx: i64, typ: impl ToString) -> Self {
+    fn new(idx: i64, _type: OperationType) -> Self {
         Self(Operation {
             operation_identifier: OperationIdentifier::new(idx),
-            _type: typ.to_string(),
+            _type,
             status: None,
             account: None,
             amount: None,
@@ -70,15 +70,15 @@ fn test_transfer_requests_to_operations() {
             DEFAULT_TOKEN_SYMBOL
         ),
         Ok(vec![
-            OperationBuilder::new(0, "TRANSACTION")
+            OperationBuilder::new(0, OperationType::Transaction)
                 .account(test_account(1))
                 .amount(-100)
                 .build(),
-            OperationBuilder::new(1, "TRANSACTION")
+            OperationBuilder::new(1, OperationType::Transaction)
                 .account(test_account(2))
                 .amount(100)
                 .build(),
-            OperationBuilder::new(2, "FEE")
+            OperationBuilder::new(2, OperationType::Fee)
                 .account(test_account(1))
                 .amount(-10)
                 .build(),
@@ -105,19 +105,19 @@ fn test_transfer_and_stake_requests_to_operations() {
             DEFAULT_TOKEN_SYMBOL
         ),
         Ok(vec![
-            OperationBuilder::new(0, "TRANSACTION")
+            OperationBuilder::new(0, OperationType::Transaction)
                 .account(test_account(1))
                 .amount(-100)
                 .build(),
-            OperationBuilder::new(1, "TRANSACTION")
+            OperationBuilder::new(1, OperationType::Transaction)
                 .account(test_account(2))
                 .amount(100)
                 .build(),
-            OperationBuilder::new(2, "FEE")
+            OperationBuilder::new(2, OperationType::Fee)
                 .account(test_account(1))
                 .amount(-10)
                 .build(),
-            OperationBuilder::new(3, "STAKE")
+            OperationBuilder::new(3, OperationType::Stake)
                 .account(test_account(2))
                 .neuron_index(1)
                 .build(),
@@ -146,27 +146,27 @@ fn test_can_handle_multiple_transfers() {
             DEFAULT_TOKEN_SYMBOL
         ),
         Ok(vec![
-            OperationBuilder::new(0, "TRANSACTION")
+            OperationBuilder::new(0, OperationType::Transaction)
                 .account(test_account(1))
                 .amount(-100)
                 .build(),
-            OperationBuilder::new(1, "TRANSACTION")
+            OperationBuilder::new(1, OperationType::Transaction)
                 .account(test_account(2))
                 .amount(100)
                 .build(),
-            OperationBuilder::new(2, "FEE")
+            OperationBuilder::new(2, OperationType::Fee)
                 .account(test_account(1))
                 .amount(-10)
                 .build(),
-            OperationBuilder::new(3, "TRANSACTION")
+            OperationBuilder::new(3, OperationType::Transaction)
                 .account(test_account(3))
                 .amount(-200)
                 .build(),
-            OperationBuilder::new(4, "TRANSACTION")
+            OperationBuilder::new(4, OperationType::Transaction)
                 .account(test_account(4))
                 .amount(200)
                 .build(),
-            OperationBuilder::new(5, "FEE")
+            OperationBuilder::new(5, OperationType::Fee)
                 .account(test_account(3))
                 .amount(-20)
                 .build(),

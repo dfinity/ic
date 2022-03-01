@@ -4,13 +4,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.4.0] - 2022-02-16
+## [1.4.0] - Unreleased
 ### Added
 - Support for `MERGE_MATURITY` neuron management operation.
+
 ### Changed
 - --token-name parameter renamed to --token-symbol
 
-## Fixed
+### Fixed
+- /network/options always returns the full list of supported operations.
+- Names of some neurons management operations changed to match the documentation:
+  * `START_DISSOLVE` -> `START_DISSOLVING`
+  * `STOP_DISSOLVE` -> `STOP_DISSOLVING`
+  * `ADD_HOT_KEY` -> `ADD_HOTKEY`
 - The output of /construction/submit endpoint now returns operation statuses in the metadata field as stated in the documentation.
 
 ## [1.3.0] - 2021-12-28

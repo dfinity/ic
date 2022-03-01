@@ -6087,6 +6087,8 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "structopt",
+ "strum 0.23.0",
+ "strum_macros 0.23.1",
  "tempfile",
  "tokio",
  "tree-deserializer",
