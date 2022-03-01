@@ -12,6 +12,7 @@ use std::{
     convert::{TryFrom, TryInto},
     fmt::Display,
 };
+use strum_macros::{Display, EnumIter};
 
 // This file is generated from https://github.com/coinbase/rosetta-specifications using openapi-generator
 // Then heavily tweaked because openapi-generator no longer generates valid rust
@@ -1435,6 +1436,47 @@ impl NetworkStatusResponse {
     }
 }
 
+#[derive(Display, Debug, Clone, PartialEq, EnumIter, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub enum OperationType {
+    #[serde(rename = "TRANSACTION")]
+    #[strum(serialize = "TRANSACTION")]
+    Transaction,
+    #[serde(rename = "MINT")]
+    #[strum(serialize = "MINT")]
+    Mint,
+    #[serde(rename = "BURN")]
+    #[strum(serialize = "BURN")]
+    Burn,
+    #[serde(rename = "FEE")]
+    #[strum(serialize = "FEE")]
+    Fee,
+    #[serde(rename = "STAKE")]
+    #[strum(serialize = "STAKE")]
+    Stake,
+    #[serde(rename = "START_DISSOLVING")]
+    #[strum(serialize = "START_DISSOLVING")]
+    StartDissolving,
+    #[serde(rename = "STOP_DISSOLVING")]
+    #[strum(serialize = "STOP_DISSOLVING")]
+    StopDissolving,
+    #[serde(rename = "SET_DISSOLVE_TIMESTAMP")]
+    #[strum(serialize = "SET_DISSOLVE_TIMESTAMP")]
+    SetDissolveTimestamp,
+    #[serde(rename = "DISBURSE")]
+    #[strum(serialize = "DISBURSE")]
+    Disburse,
+    #[serde(rename = "ADD_HOTKEY")]
+    #[strum(serialize = "ADD_HOTKEY")]
+    AddHotkey,
+    #[serde(rename = "SPAWN")]
+    #[strum(serialize = "SPAWN")]
+    Spawn,
+    #[serde(rename = "MERGE_MATURITY")]
+    #[strum(serialize = "MERGE_MATURITY")]
+    MergeMaturity,
+}
+
 /// Operations contain all balance-changing information within a transaction.
 /// They are always one-sided (only affect 1 AccountIdentifier) and can succeed
 /// or fail independently from a Transaction.
@@ -1459,7 +1501,7 @@ pub struct Operation {
     /// This can be very useful to downstream consumers that parse all block
     /// data.
     #[serde(rename = "type")]
-    pub _type: String,
+    pub _type: OperationType,
 
     /// The network-specific status of the operation. Status is not defined on
     /// the transaction object because blockchains with smart contracts may have
@@ -1493,7 +1535,7 @@ pub struct Operation {
 impl Operation {
     pub fn new(
         op_id: i64,
-        _type: String,
+        _type: OperationType,
         status: Option<String>,
         account: Option<AccountIdentifier>,
         amount: Option<Amount>,
