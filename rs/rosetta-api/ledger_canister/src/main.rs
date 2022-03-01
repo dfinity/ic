@@ -932,7 +932,6 @@ mod tests {
         }
     }
 
-    #[ignore] // (mp) required to make archives breaking change tests pass
     #[test]
     fn check_candid_interface_compatibility() {
         candid::export_service!();
