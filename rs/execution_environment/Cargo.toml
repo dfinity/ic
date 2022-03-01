@@ -73,6 +73,10 @@ path = "testgrid/wasmtime_tests.rs"
 [features]
 default = []
 sigsegv_handler_debug = []
+sigsegv_handler_checksum = [
+	"ic-canister-sandbox-replica-controller/sigsegv_handler_checksum",
+	"memory_tracker/sigsegv_handler_checksum"
+]
 
 [[bench]]
 name = "execute_update"

@@ -16,3 +16,6 @@ libc = "0.2.119"
 # allows the binary to reuse most of the build artifacts
 # produced by `cargo test`.
 ic-test-utilities = { path = "../test_utilities" }
+
+[features]
+sigsegv_handler_checksum = [ "ic-canister-sandbox-backend-lib/sigsegv_handler_checksum" ]

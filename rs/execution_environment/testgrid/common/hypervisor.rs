@@ -4872,6 +4872,8 @@ fn random_memory_accesses() {
                             );
                             pages.extend(vec![0_u8; PAGES_PER_WASM_PAGE as usize]);
                             dirty.extend(vec![false; PAGES_PER_WASM_PAGE as usize]);
+                            // Read uses the first page as a scratchpad for arguments.
+                            dirty[0] = true;
                         }
                         Operation::GrowAndWrite(value) => {
                             // Pages are already zero initialized, so writing zero
@@ -4894,6 +4896,8 @@ fn random_memory_accesses() {
                             );
                             pages.extend(vec![value; PAGES_PER_WASM_PAGE as usize]);
                             dirty.extend(vec![true; PAGES_PER_WASM_PAGE as usize]);
+                            // Write uses the first page as a scratchpad for arguments.
+                            dirty[0] = true;
                         }
                     }
                 }

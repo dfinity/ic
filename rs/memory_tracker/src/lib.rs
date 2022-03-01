@@ -199,6 +199,8 @@ pub struct SigsegvMemoryTracker {
     dirty_page_tracking: DirtyPageTracking,
     page_map: PageMap,
     use_new_signal_handler: bool,
+    #[cfg(feature = "sigsegv_handler_checksum")]
+    checksum: RefCell<checksum::SigsegChecksum>,
 }
 
 impl SigsegvMemoryTracker {
@@ -232,6 +234,8 @@ impl SigsegvMemoryTracker {
             dirty_page_tracking,
             page_map,
             use_new_signal_handler,
+            #[cfg(feature = "sigsegv_handler_checksum")]
+            checksum: RefCell::new(checksum::SigsegChecksum::default()),
         };
 
         // Map the memory and make the range inaccessible to track it with SIGSEGV.
@@ -388,6 +392,13 @@ pub fn sigsegv_fault_handler_old(
         return false;
     };
 
+    #[cfg(feature = "sigsegv_handler_checksum")]
+    tracker.checksum.borrow_mut().record_access(
+        tracker.memory_area.addr(),
+        fault_address,
+        AccessKind::Read, // We don't have the access kind, so default to read.
+    );
+
     #[allow(clippy::branches_sharing_code)]
     if tracker
         .accessed_bitmap
@@ -535,6 +546,13 @@ pub fn sigsegv_fault_handler_new(
         // This memory tracker is not responsible for handling this address.
         return false;
     };
+
+    #[cfg(feature = "sigsegv_handler_checksum")]
+    tracker.checksum.borrow_mut().record_access(
+        tracker.memory_area.addr(),
+        fault_address,
+        access_kind,
+    );
 
     let faulting_page = tracker.page_index_from(fault_address);
     let mut accessed_bitmap = tracker.accessed_bitmap.borrow_mut();
@@ -781,3 +799,50 @@ pub(crate) fn show_bytes_compact(bytes: &PageBytes) -> String {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(feature = "sigsegv_handler_checksum")]
+mod checksum {
+    use std::io::Write;
+
+    use crate::AccessKind;
+
+    #[derive(Default)]
+    pub(super) struct SigsegChecksum {
+        value: usize,
+        index: usize,
+    }
+
+    impl SigsegChecksum {
+        pub(super) fn record_access(
+            &mut self,
+            base_addr: usize,
+            access_addr: *const libc::c_void,
+            access_kind: AccessKind,
+        ) {
+            self.index += 1;
+            self.value += self.index
+                * (access_addr as usize - base_addr)
+                * match access_kind {
+                    AccessKind::Read => 1,
+                    AccessKind::Write => 1 << 32,
+                };
+        }
+    }
+
+    impl Drop for SigsegChecksum {
+        fn drop(&mut self) {
+            let output_file = std::env::var("CHECKSUM_FILE").unwrap();
+            let mut file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(output_file)
+                .unwrap();
+            writeln!(
+                file,
+                "Memory tracker completed with checksum {}",
+                self.value
+            )
+            .unwrap();
+        }
+    }
+}
