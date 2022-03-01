@@ -37,11 +37,6 @@ pub(crate) fn sigsegv_memory_tracker_handler(
             let s = *siginfo_ptr;
             (s.si_signo, s.si_errno, s.si_code, s.si_addr())
         };
-        #[cfg(feature = "sigsegv_handler_debug")]
-        eprintln!(
-            "> instance signal handler: signal = {}, si_signo = {}, si_errno = {}, si_code = {}, si_addr = {:?}",
-            signal, _si_signo, _si_errno, _si_code, si_addr
-        );
 
         let expected_signal =
             // Mac OS raises SIGBUS instead of SIGSEGV
@@ -52,8 +47,6 @@ pub(crate) fn sigsegv_memory_tracker_handler(
             };
 
         if signal != expected_signal {
-            #[cfg(feature = "sigsegv_handler_debug")]
-            eprintln!("> instance signal handler: calling default signal handler");
             return false;
         }
 
@@ -72,24 +65,15 @@ pub(crate) fn sigsegv_memory_tracker_handler(
 
         // We handle SIGSEGV from the Wasm module heap ourselves.
         if sigsegv_memory_tracker.area().is_within(si_addr) {
-            #[cfg(feature = "sigsegv_handler_debug")]
-            eprintln!("> instance signal handler: calling memory tracker signal handler");
             // Returns true if the signal has been handled by our handler which indicates
             // that the instance should continue.
             sigsegv_memory_tracker.handle_sigsegv(access_kind, si_addr)
         // The heap has expanded. Update tracked memory area.
         } else if let Some(heap_size) = check_if_expanded() {
             let delta = heap_size - sigsegv_memory_tracker.area().size();
-            #[cfg(feature = "sigsegv_handler_debug")]
-            eprintln!(
-                "> instance signal handler: expanding memory area by {}",
-                delta
-            );
             sigsegv_memory_tracker.expand(delta);
             true
         } else {
-            #[cfg(feature = "sigsegv_handler_debug")]
-            eprintln!("> instance signal handler: calling default signal handler");
             false
         }
     }

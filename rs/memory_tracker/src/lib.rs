@@ -352,14 +352,9 @@ impl SigsegvMemoryTracker {
     }
 }
 
-/// This is the old (unoptimized) signal handler. We keep it for two reasons:
-/// 1) It is needed for `CowMemoryManager`.
-/// 2) If we discover a bug in the new signal handler, we can quickly revert to
-///    the old implementation.
-/// It is not possible to use a logger from within the signal handler. Hence,
-/// for debugging, we use an ordinary `eprintln!` hidden behind a feature gate.
-/// To enable:
-/// ic-execution-environment = { ..., features = [ "sigsegv_handler_debug" ] }
+/// This is the old (unoptimized) signal handler. We keep it for use on MacOS
+/// where the new signal handler doesn't work because the [`AcessKind`] is not
+/// available.
 pub fn sigsegv_fault_handler_old(
     tracker: &SigsegvMemoryTracker,
     page_map: &PageMap,
@@ -371,24 +366,8 @@ pub fn sigsegv_fault_handler_old(
 
     let page_num = (fault_address_page_boundary - tracker.memory_area.addr()) / PAGE_SIZE;
 
-    #[cfg(feature = "sigsegv_handler_debug")]
-    eprintln!(
-        "> Thread: {:?} sigsegv_fault_handler: base_addr = 0x{:x}, page_size = 0x{:x}, fault_address = 0x{:x}, fault_address_page_boundary = 0x{:x}, page = {}",
-        std::thread::current().id(),
-        tracker.memory_area.addr() as u64,
-        PAGE_SIZE,
-        fault_address as u64,
-        fault_address_page_boundary,
-        page_num
-    );
-
     // Ensure `fault_address` falls within tracked memory area
     if !tracker.memory_area.is_within(fault_address) {
-        #[cfg(feature = "sigsegv_handler_debug")]
-        eprintln!(
-            "fault address {:?} outside of tracked memory area",
-            fault_address
-        );
         return false;
     };
 
@@ -407,12 +386,6 @@ pub fn sigsegv_fault_handler_old(
     {
         // This page has already been accessed, hence this fault must be for writing.
         // Upgrade its protection to read+write.
-        #[cfg(feature = "sigsegv_handler_debug")]
-        eprintln!(
-            "> sigsegv_fault_handler: page({}) is already faulted: mprotect(addr=0x{:x}, len=0x{:x}, prot=PROT_READ|PROT_WRITE)",
-            page_num,
-            fault_address_page_boundary, PAGE_SIZE
-        );
         unsafe {
             nix::sys::mman::mprotect(
                 fault_address_page_boundary as *mut libc::c_void,
@@ -430,13 +403,6 @@ pub fn sigsegv_fault_handler_old(
         // The fault could be for reading or writing.
         // Load the contents of the page and enable just reading.
         // If the fault was for writing, then another fault will occur right away.
-        #[cfg(feature = "sigsegv_handler_debug")]
-        eprintln!(
-            "> sigsegv_fault_handler: page({}) has not been faulted: mprotect(addr=0x{:x}, len=0x{:x}, prot=PROT_READ)",
-            page_num,
-            fault_address_page_boundary,
-            PAGE_SIZE
-        );
         // Temporarily allow writes to the page, to populate contents with the right
         // data
         unsafe {
@@ -452,12 +418,6 @@ pub fn sigsegv_fault_handler_old(
         // page will be initialized by the kernel from that file.
 
         let page = page_map.get_page(PageIndex::new(page_num as u64));
-        #[cfg(feature = "sigsegv_handler_debug")]
-        eprintln!(
-            "> sigsegv_fault_handler: setting page({}) contents to {}",
-            page_num,
-            show_bytes_compact(page)
-        );
         unsafe {
             std::ptr::copy_nonoverlapping(
                 page.as_ptr(),
@@ -768,33 +728,6 @@ fn range_from_count(page: PageIndex, count: usize) -> Range<PageIndex> {
 
 fn range_count(range: &Range<PageIndex>) -> usize {
     (range.end.get() - range.start.get()) as usize
-}
-
-#[allow(dead_code)]
-#[cfg(feature = "sigsegv_handler_debug")]
-pub(crate) fn show_bytes_compact(bytes: &PageBytes) -> String {
-    let mut result = String::new();
-    let mut count = 1;
-    let mut current = None;
-    result += "[";
-    for &b in bytes.iter() {
-        match current {
-            Some(x) if x == b => {
-                count += 1;
-            }
-            Some(x) => {
-                result += &format!("{}x{:x} ", count, x);
-                count = 1;
-            }
-            None => (),
-        }
-        current = Some(b);
-    }
-    if let Some(x) = current {
-        result += &format!("{}x{:x}", count, x)
-    }
-    result += "]";
-    result
 }
 
 #[cfg(test)]
