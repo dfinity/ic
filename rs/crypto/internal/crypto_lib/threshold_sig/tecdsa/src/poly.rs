@@ -311,29 +311,14 @@ impl CommitmentOpening {
         opener_secret_key: &MEGaPrivateKey,
         opener_public_key: &MEGaPublicKey,
     ) -> ThresholdEcdsaResult<Self> {
-        match &verified_dealing.ciphertext {
-            MEGaCiphertext::Single(ciphertext) => {
-                let opening = ciphertext.decrypt(
-                    associated_data,
-                    dealer_index,
-                    opener_index,
-                    opener_secret_key,
-                    opener_public_key,
-                )?;
-                Ok(Self::Simple(opening))
-            }
-
-            MEGaCiphertext::Pairs(ciphertext) => {
-                let opening = ciphertext.decrypt(
-                    associated_data,
-                    dealer_index,
-                    opener_index,
-                    opener_secret_key,
-                    opener_public_key,
-                )?;
-                Ok(Self::Pedersen(opening.0, opening.1))
-            }
-        }
+        verified_dealing.ciphertext.decrypt_and_check(
+            &verified_dealing.commitment,
+            associated_data,
+            dealer_index,
+            opener_index,
+            opener_secret_key,
+            opener_public_key,
+        )
     }
 
     pub fn serialize(&self) -> ThresholdEcdsaResult<Vec<u8>> {
