@@ -120,4 +120,4 @@ done
 
 sha256sum "${ARTIFACTS}"/*
 
-gzip -f --no-name "${ARTIFACTS}"/*
+pigz -f --no-name "${ARTIFACTS}"/*

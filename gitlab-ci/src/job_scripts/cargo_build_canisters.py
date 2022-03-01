@@ -131,7 +131,7 @@ def run(artifacts_dir=default_artifacts_dir):
             exit(1)
 
     sh(f"sha256sum {artifacts_dir}/*", shell=True)
-    sh(f"gzip -f --no-name {artifacts_dir}/*", shell=True)
+    sh(f"pigz -f --no-name {artifacts_dir}/*", shell=True)
 
     if ENV.is_gitlab:
         sh("gitlab-ci/src/artifacts/openssl-sign.sh", f"{ENV.top}/artifacts/canisters{artifact_ext}")
