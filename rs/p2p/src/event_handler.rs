@@ -100,7 +100,7 @@ use std::{
     fmt::Debug,
     future::Future,
     pin::Pin,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, Condvar, Mutex, RwLock},
     task::{Context, Poll},
 };
 use strum::IntoEnumIterator;
@@ -231,8 +231,6 @@ struct PeerFlows {
     retransmission: FlowEventHandler,
     /// The current flows of transport notifications.
     transport: FlowEventHandler,
-
-    gossip: Arc<RwLock<Option<GossipArc>>>,
 }
 
 impl PeerFlows {
@@ -252,12 +250,7 @@ impl PeerFlows {
                 channel_config.map[&FlowType::Retransmission],
             ),
             transport: FlowEventHandler::new(threadpool, channel_config.map[&FlowType::Transport]),
-            gossip: Arc::new(RwLock::new(None)),
         }
-    }
-
-    pub fn start(&self, gossip_arc: GossipArc) {
-        self.gossip.write().unwrap().replace(gossip_arc);
     }
 }
 
@@ -275,6 +268,7 @@ pub struct P2PEventHandlerImpl {
     pub metrics: EventHandlerMetrics,
     /// The peer flows.
     peer_flows: PeerFlows,
+    gossip: Arc<RwLock<Option<GossipArc>>>,
 }
 
 /// The maximum number of buffered adverts.
@@ -332,13 +326,14 @@ impl P2PEventHandlerImpl {
             log,
             metrics: EventHandlerMetrics::new(metrics_registry),
             peer_flows: PeerFlows::new(threadpool, channel_config),
+            gossip: Arc::new(RwLock::new(None)),
         }
     }
 
     /// The method starts the event processing loop, dispatching events to the
     /// *Gossip* component.
     pub fn start(&self, gossip_arc: GossipArc) {
-        self.peer_flows.start(gossip_arc);
+        self.gossip.write().unwrap().replace(gossip_arc);
     }
 }
 
@@ -355,15 +350,9 @@ impl AsyncTransportEventHandler for P2PEventHandlerImpl {
             trace!(self.log, "Deserialization failed {}", e);
             SendError::DeserializationFailed
         })?;
+
         let start_time = std::time::Instant::now();
-        let c_gossip = self
-            .peer_flows
-            .gossip
-            .read()
-            .unwrap()
-            .as_ref()
-            .unwrap()
-            .clone();
+        let c_gossip = self.gossip.read().unwrap().as_ref().unwrap().clone();
         let (msg_type, ret) = match gossip_message {
             GossipMessage::Advert(msg) => {
                 let sender = &self.peer_flows.advert;
@@ -409,14 +398,7 @@ impl AsyncTransportEventHandler for P2PEventHandlerImpl {
     /// The method changes the state of the P2P event handler.
     async fn state_changed(&self, state_change: TransportStateChange) {
         let sender = &self.peer_flows.transport;
-        let c_gossip = self
-            .peer_flows
-            .gossip
-            .read()
-            .unwrap()
-            .as_ref()
-            .unwrap()
-            .clone();
+        let c_gossip = self.gossip.read().unwrap().as_ref().unwrap().clone();
         let consume_fn = move |item, _peer_id| {
             c_gossip.on_transport_state_change(item);
         };
@@ -436,14 +418,7 @@ impl AsyncTransportEventHandler for P2PEventHandlerImpl {
         if let TransportErrorCode::SenderErrorIndicated = error {
             let sender = &self.peer_flows.transport;
 
-            let c_gossip = self
-                .peer_flows
-                .gossip
-                .read()
-                .unwrap()
-                .as_ref()
-                .unwrap()
-                .clone();
+            let c_gossip = self.gossip.read().unwrap().as_ref().unwrap().clone();
             let consume_fn = move |item, _peer_id| {
                 c_gossip.on_transport_error(item);
             };
@@ -533,8 +508,10 @@ pub struct AdvertSubscriber {
     /// For advert send requests from artifact manager.
     advert_builder: AdvertRequestBuilder,
     sem: Arc<Semaphore>,
+    started: Arc<(Mutex<bool>, Condvar)>,
 }
 
+#[allow(clippy::mutex_atomic)]
 impl AdvertSubscriber {
     pub fn new(
         log: ReplicaLogger,
@@ -552,15 +529,25 @@ impl AdvertSubscriber {
                 log,
             ),
             sem: Arc::new(Semaphore::new(MAX_ADVERT_BUFFER)),
+            started: Arc::new((Mutex::new(false), Condvar::new())),
         }
     }
 
     pub fn start(&self, gossip_arc: GossipArc) {
         self.gossip.write().unwrap().replace(gossip_arc);
+        let (lock, cvar) = &*self.started;
+        *lock.lock().unwrap() = true;
+        cvar.notify_one();
     }
 
     /// The method broadcasts the given advert.
     pub fn broadcast_advert(&self, advert: GossipAdvert, advert_class: AdvertClass) {
+        let (lock, cvar) = &*self.started;
+        let mut started = lock.lock().unwrap();
+        while !*started {
+            started = cvar.wait(started).unwrap();
+        }
+
         // Translate the advert request to internal format
         let advert_request = match self.advert_builder.build(advert, advert_class) {
             Some(request) => request,
