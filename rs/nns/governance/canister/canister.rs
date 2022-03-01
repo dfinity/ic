@@ -40,7 +40,7 @@ use ic_nns_common::{
 extern crate ic_nns_common;
 
 use ic_nns_constants::LEDGER_CANISTER_ID;
-use ic_nns_governance::pb::v1::{RewardEvent, UpdateNodeProvider};
+use ic_nns_governance::pb::v1::{NodeProvider, RewardEvent, UpdateNodeProvider};
 use ic_nns_governance::stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter};
 use ic_nns_governance::{
     governance::{Environment, Governance},
@@ -704,6 +704,19 @@ fn update_node_provider() {
 #[candid_method(update, rename = "update_node_provider")]
 fn update_node_provider_(req: UpdateNodeProvider) -> Result<(), GovernanceError> {
     governance_mut().update_node_provider(&caller(), req)
+}
+
+/// Return the NodeProvider record where NodeProvider.id == caller(), if such a
+/// NodeProvider record exists.
+#[export_name = "canister_query get_node_provider_by_caller"]
+fn get_node_provider_by_caller() {
+    println!("{}get_node_provider_by_caller", LOG_PREFIX);
+    over(candid_one, get_node_provider_by_caller_)
+}
+
+#[candid_method(query, rename = "get_node_provider_by_caller")]
+fn get_node_provider_by_caller_(_: ()) -> Result<NodeProvider, GovernanceError> {
+    governance().get_node_provider(&caller())
 }
 
 /// Encodes

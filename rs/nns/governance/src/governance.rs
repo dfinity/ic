@@ -6176,6 +6176,25 @@ impl Governance {
         Ok(())
     }
 
+    /// Return the given Node Provider, if it exists
+    pub fn get_node_provider(
+        &self,
+        node_provider_id: &PrincipalId,
+    ) -> Result<NodeProvider, GovernanceError> {
+        // TODO(NNS1-1168): More efficient Node Provider lookup
+        self.proto
+            .node_providers
+            .iter()
+            .find(|np| np.id.as_ref() == Some(node_provider_id))
+            .cloned()
+            .ok_or_else(|| {
+                GovernanceError::new_with_message(
+                    ErrorType::NotFound,
+                    format!("Node Provider {} is not known by the NNS", node_provider_id),
+                )
+            })
+    }
+
     /// Return the monthly rewards that node providers should be awarded
     ///
     /// Fetches the map from node provider to monthly XDR rewards from the

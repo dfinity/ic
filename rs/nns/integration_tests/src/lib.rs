@@ -98,3 +98,6 @@ mod governance_time_warp;
 
 #[cfg(test)]
 mod known_neurons;
+
+#[cfg(test)]
+mod update_node_provider;
