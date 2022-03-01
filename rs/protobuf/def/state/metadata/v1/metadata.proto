@@ -76,6 +76,7 @@ message CanisterHttpRequestContext {
     google.protobuf.BytesValue body = 3;
     google.protobuf.StringValue transform_method_name = 4;
     HttpMethodType http_method = 5;
+    uint64 time = 6;
 }
 
 message CanisterHttpRequestContextTree {

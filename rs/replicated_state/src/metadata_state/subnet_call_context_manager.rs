@@ -1,10 +1,10 @@
-use ic_base_types::HttpMethodType;
 use ic_logger::{info, ReplicaLogger};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::system_metadata::v1 as pb_metadata,
 };
 use ic_types::{
+    canister_http::CanisterHttpRequestContext,
     crypto::threshold_sig::ni_dkg::{id::ni_dkg_target_id, NiDkgTargetId},
     messages::{CallbackId, Request},
     node_id_into_protobuf, node_id_try_from_protobuf, NodeId, RegistryVersion, Time,
@@ -280,47 +280,6 @@ impl TryFrom<pb_metadata::SignWithEcdsaContext> for SignWithEcdsaContext {
                 id
             },
             batch_time: Time::from_nanos_since_unix_epoch(context.batch_time),
-        })
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CanisterHttpRequestContext {
-    pub request: Request,
-    pub url: String,
-    pub body: Option<Vec<u8>>,
-    pub http_method: HttpMethodType,
-    pub transform_method_name: Option<String>,
-}
-
-impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestContext {
-    fn from(context: &CanisterHttpRequestContext) -> Self {
-        pb_metadata::CanisterHttpRequestContext {
-            request: Some((&context.request).into()),
-            url: context.url.clone(),
-            body: context.body.clone(),
-            transform_method_name: context
-                .transform_method_name
-                .as_ref()
-                .map(|method_name| method_name.into()),
-            http_method: pb_metadata::HttpMethodType::from(&context.http_method) as i32,
-        }
-    }
-}
-
-impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestContext {
-    type Error = ProxyDecodeError;
-    fn try_from(context: pb_metadata::CanisterHttpRequestContext) -> Result<Self, Self::Error> {
-        let request: Request =
-            try_from_option_field(context.request, "CanisterHttpRequestContext::request")?;
-        Ok(CanisterHttpRequestContext {
-            request,
-            url: context.url,
-            body: context.body,
-            http_method: HttpMethodType::from(
-                pb_metadata::HttpMethodType::from_i32(context.http_method).unwrap_or_default(),
-            ),
-            transform_method_name: context.transform_method_name.map(From::from),
         })
     }
 }

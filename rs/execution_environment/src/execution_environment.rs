@@ -28,12 +28,12 @@ use ic_metrics::{MetricsRegistry, Timer};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::metadata_state::subnet_call_context_manager::CanisterHttpRequestContext;
 use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::{SetupInitialDkgContext, SignWithEcdsaContext},
     CallContextAction, CallOrigin, CanisterState, ReplicatedState,
 };
 use ic_types::{
+    canister_http::CanisterHttpRequestContext,
     canonical_error::{not_found_error, permission_denied_error, CanonicalError},
     crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterEcdsaPublicKey},
     crypto::threshold_sig::ni_dkg::NiDkgTargetId,
@@ -456,6 +456,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                                     body: args.body,
                                     http_method: args.http_method,
                                     transform_method_name: args.transform_method_name,
+                                    time: state.time(),
                                 });
                             (None, instructions_limit)
                         }

@@ -184,7 +184,7 @@ impl From<CanisterIdError> for ProxyDecodeError {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, CandidType, Deserialize)]
+#[derive(Clone, Debug, PartialEq, CandidType, Eq, Hash, Serialize, Deserialize)]
 pub enum HttpMethodType {
     GET,
 }
