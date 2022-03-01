@@ -50,7 +50,7 @@ pub fn basic_config_with_all_features_enabled() -> InternetComputer {
             ecdsa_signatures: true,
             canister_sandboxing: false,
             http_requests: true,
-            bitcoin_testnet: Some(false),
+            bitcoin_testnet_feature: None,
         },
     ))
 }

@@ -193,6 +193,33 @@ enum SubnetType {
     SUBNET_TYPE_VERIFIED_APPLICATION = 4;
 }
 
+enum BitcoinFeature {
+  // The bitcoin feature is disabled.
+  //
+  // The subnet does not sync the bitcoin chain and requests to the bitcoin
+  // canister are forwarded to another subnet where the feature is enabled.
+  //
+  // WARNING: Transitioning into this state deletes any bitcoin state present
+  // on the subnet, and full sync from genesis would then be required when
+  // enabling this feature again.
+  BITCOIN_FEATURE_UNSPECIFIED = 0;
+
+  // The bitcoin feature is paused.
+  //
+  // The subnet does not sync the bitcoin chain and requests to the bitcoin
+  // canister are forwarded to another subnet where the feature is enabled.
+  //
+  // Transitioning into this state does _not_ delete any bitcoin state that's
+  // present on the subnet.
+  BITCOIN_FEATURE_PAUSED = 1;
+
+  // The bitcoin feature is enabled.
+  //
+  // The subnet syncs the bitcoin chain and handles requests to the bitcoin
+  // canister.
+  BITCOIN_FEATURE_ENABLED = 2;
+}
+
 message SubnetFeatures {
     // This feature flag controls, whether canisters of this subnet are capable of
     // issuing threshold ecdsa signatures.
@@ -203,8 +230,12 @@ message SubnetFeatures {
     // This feature flag controls whether canisters of this subnet are capable of
     // performing http(s) requests to the web2.
     bool http_requests = 3;
-    // Whether or not this subnet should be syncing the state of the Bitcoin testnet.
-    optional bool bitcoin_testnet = 4;
+
+    reserved 4;
+
+    // Whether or not the subnet is capable of serving requests to the bitcoin testnet canister.
+    // Note that in the near future an identical feature will be introduced for the bitcoin mainnet.
+    optional BitcoinFeature bitcoin_testnet_feature = 5;
 }
 
 // Per subnet ECDSA configuration
