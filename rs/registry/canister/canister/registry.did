@@ -23,6 +23,7 @@ type AddOrRemoveDataCentersProposalPayload = record {
   data_centers_to_add : vec DataCenterRecord;
   data_centers_to_remove : vec text;
 };
+type BitcoinFeature = variant { Paused; Enabled; Disabled };
 type BlessReplicaVersionPayload = record {
   node_manager_sha256_hex : text;
   release_package_url : text;
@@ -109,8 +110,8 @@ type SetFirewallConfigPayload = record {
 };
 type SubnetFeatures = record {
   canister_sandboxing : bool;
-  bitcoin_testnet : opt bool;
   http_requests : bool;
+  bitcoin_testnet_feature : opt BitcoinFeature;
   ecdsa_signatures : bool;
 };
 type SubnetType = variant { application; verified_application; system };
