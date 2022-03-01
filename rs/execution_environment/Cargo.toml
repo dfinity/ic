@@ -37,13 +37,10 @@ nix = "0.23.0"
 num-traits = "0.2.12"
 num-rational = "0.2.2"
 scoped_threadpool = "0.1.*"
-once_cell = { git = "https://github.com/dfinity-lab/once_cell", branch = "master" }
 prometheus = { version = "0.12.0", features = [ "process" ] }
 rand = "0.7.3"
-reqwest = { version = "0.11.1", features = [ "native-tls" ] }
 serde = { version = "1.0.99", features = [ "derive" ] }
 serde_cbor = "0.11.1"
-serde_json = "1.0.40"
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
 strum = "0.23.0"
 threadpool = "1.8.1"

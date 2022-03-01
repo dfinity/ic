@@ -48,7 +48,7 @@ dependencies = [
  "local-channel",
  "log",
  "mime",
- "once_cell 1.8.0",
+ "once_cell",
  "paste 1.0.5",
  "percent-encoding",
  "pin-project",
@@ -178,7 +178,7 @@ dependencies = [
  "language-tags",
  "log",
  "mime",
- "once_cell 1.8.0",
+ "once_cell",
  "pin-project",
  "regex",
  "serde",
@@ -232,7 +232,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "43bb833f0bf979d8475d38fbf09ed3b8a55e1885fe93ad3f93239fc6a4f17b98"
 dependencies = [
  "getrandom 0.2.2",
- "once_cell 1.8.0",
+ "once_cell",
  "version_check",
 ]
 
@@ -1450,7 +1450,7 @@ dependencies = [
  "log",
  "regalloc",
  "smallvec",
- "target-lexicon 0.12.0",
+ "target-lexicon",
 ]
 
 [[package]]
@@ -1486,7 +1486,7 @@ dependencies = [
  "cranelift-codegen",
  "log",
  "smallvec",
- "target-lexicon 0.12.0",
+ "target-lexicon",
 ]
 
 [[package]]
@@ -1497,7 +1497,7 @@ checksum = "8007864b5d0c49b026c861a15761785a2871124e401630c03ef1426e6d0d559e"
 dependencies = [
  "cranelift-codegen",
  "libc",
- "target-lexicon 0.12.0",
+ "target-lexicon",
 ]
 
 [[package]]
@@ -2360,7 +2360,7 @@ version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8946e241a7774d5327d92749c50806f275f57d031d2229ecbfd65469a8ad338e"
 dependencies = [
- "once_cell 1.8.0",
+ "once_cell",
  "proc-macro2 1.0.27",
  "quote 1.0.7",
  "syn 1.0.80",
@@ -2426,7 +2426,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "44bb3f795fe1b9d34f089c7fab034c2b757998d65361d95ef008045b57665262"
 dependencies = [
  "log",
- "once_cell 1.8.0",
+ "once_cell",
  "serde",
  "serde_json",
 ]
@@ -3096,7 +3096,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "84f2a5541afe0725f0b95619d6af614f48c1b176385b8aa30918cfb8c4bfafc8"
 dependencies = [
  "hmac 0.11.0",
- "once_cell 1.8.0",
+ "once_cell",
  "pbkdf2",
  "rand_core 0.6.2",
  "sha2 0.9.9",
@@ -3712,7 +3712,7 @@ dependencies = [
  "lazy_static",
  "libc",
  "nix 0.23.0",
- "once_cell 1.8.0",
+ "once_cell",
  "prometheus",
  "regex",
  "serde_json",
@@ -4724,8 +4724,6 @@ version = "0.8.0"
 dependencies = [
  "anyhow",
  "assert_matches",
- "clap 2.33.3",
- "crossbeam-channel 0.5.1",
  "ic-config",
  "ic-cycles-account-manager",
  "ic-interfaces",
@@ -4750,15 +4748,11 @@ dependencies = [
  "pretty_assertions 0.6.1",
  "prometheus",
  "proptest 0.9.6",
- "rand 0.7.3",
  "regex",
  "serde",
- "serde_json",
  "slog",
  "slog-async",
  "slog-term",
- "target-lexicon 0.10.0",
- "tempfile",
  "wabt 0.10.0 (git+https://github.com/dfinity-lab/wabt-rs?tag=0.10.0-dfinity)",
  "wasmtime",
  "wasmtime-environ",
@@ -4819,15 +4813,12 @@ dependencies = [
  "nix 0.23.0",
  "num-rational 0.2.4",
  "num-traits",
- "once_cell 1.4.0-alpha.0",
  "prometheus",
  "proptest 0.9.6",
  "rand 0.7.3",
- "reqwest",
  "scoped_threadpool",
  "serde",
  "serde_cbor",
- "serde_json",
  "slog",
  "strum 0.23.0",
  "tempfile",
@@ -6673,7 +6664,7 @@ dependencies = [
  "ic-utils 0.8.0",
  "maplit",
  "num-traits",
- "once_cell 1.8.0",
+ "once_cell",
  "phantom_newtype",
  "pretty_assertions 0.6.1",
  "proptest 0.9.6",
@@ -7659,7 +7650,6 @@ name = "memory_tracker"
 version = "0.8.0"
 dependencies = [
  "bit-vec 0.5.1",
- "byteorder",
  "criterion",
  "ic-config",
  "ic-logger",
@@ -8266,11 +8256,6 @@ version = "0.8.0"
 
 [[package]]
 name = "once_cell"
-version = "1.4.0-alpha.0"
-source = "git+https://github.com/dfinity-lab/once_cell?branch=master#854095347d356e006ea29b7750637a14a20a6dae"
-
-[[package]]
-name = "once_cell"
 version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "692fcb63b64b1758029e0a96ee63e049ce8c5948587f2f7208df04625e5f6b56"
@@ -8316,7 +8301,7 @@ dependencies = [
  "cfg-if 1.0.0",
  "foreign-types",
  "libc",
- "once_cell 1.8.0",
+ "once_cell",
  "openssl-sys",
 ]
 
@@ -8587,7 +8572,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f4c220d01f863d13d96ca82359d1e81e64a7c6bf0637bcde7b2349630addf0c6"
 dependencies = [
  "base64 0.13.0",
- "once_cell 1.8.0",
+ "once_cell",
  "regex",
 ]
 
@@ -8598,7 +8583,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06673860db84d02a63942fa69cd9543f2624a5df3aea7f33173048fa7ad5cf1a"
 dependencies = [
  "base64 0.13.0",
- "once_cell 1.8.0",
+ "once_cell",
  "regex",
 ]
 
@@ -9708,7 +9693,7 @@ checksum = "3053cf52e236a3ed746dfc745aa9cacf1b791d846bdaf412f60a8d7d6e17c8fc"
 dependencies = [
  "cc",
  "libc",
- "once_cell 1.8.0",
+ "once_cell",
  "spin",
  "untrusted",
  "web-sys",
@@ -10963,12 +10948,6 @@ dependencies = [
 
 [[package]]
 name = "target-lexicon"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab0e7238dcc7b40a7be719a25365910f6807bd864f4cce6b2e6b873658e2b19d"
-
-[[package]]
-name = "target-lexicon"
 version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "64ae3b39281e4b14b8123bdbaddd472b7dfe215e444181f2f9d2443c2444f834"
@@ -11380,7 +11359,7 @@ dependencies = [
  "memchr",
  "mio 0.8.0",
  "num_cpus",
- "once_cell 1.8.0",
+ "once_cell",
  "parking_lot 0.12.0",
  "pin-project-lite",
  "signal-hook-registry",
@@ -12043,7 +12022,7 @@ dependencies = [
  "region",
  "rustc-demangle",
  "serde",
- "target-lexicon 0.12.0",
+ "target-lexicon",
  "wasmparser",
  "wasmtime-cranelift",
  "wasmtime-environ",
@@ -12068,7 +12047,7 @@ dependencies = [
  "log",
  "more-asserts",
  "object 0.27.1",
- "target-lexicon 0.12.0",
+ "target-lexicon",
  "thiserror",
  "wasmparser",
  "wasmtime-environ",
@@ -12088,7 +12067,7 @@ dependencies = [
  "more-asserts",
  "object 0.27.1",
  "serde",
- "target-lexicon 0.12.0",
+ "target-lexicon",
  "thiserror",
  "wasmparser",
  "wasmtime-types",
@@ -12108,7 +12087,7 @@ dependencies = [
  "object 0.27.1",
  "region",
  "serde",
- "target-lexicon 0.12.0",
+ "target-lexicon",
  "thiserror",
  "wasmtime-environ",
  "wasmtime-runtime",
