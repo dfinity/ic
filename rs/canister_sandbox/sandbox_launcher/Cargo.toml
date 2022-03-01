@@ -21,3 +21,9 @@ ic-test-utilities = { path = "../../test_utilities" }
 [[bin]]
 name = "sandbox_launcher"
 path = "bin/sandbox_launcher.rs"
+
+# This feature doesn't actually do anything. It is just convenient because it
+# allows us to use the same cargo flags for building sandbox_launcher as we have
+# for canister_sandbox.
+[features]
+sigsegv_handler_checksum = []

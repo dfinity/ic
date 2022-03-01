@@ -230,6 +230,10 @@ fn make_cargo_argv_for_testing(
         manifest_path.to_str().unwrap(),
         "--bin",
         executable_name,
+        #[cfg(feature = "sigsegv_handler_checksum")]
+        "--features",
+        #[cfg(feature = "sigsegv_handler_checksum")]
+        "sigsegv_handler_checksum",
     ];
     let argv = match cargo_command_type {
         CargoCommandType::Run => vec![vec![cargo_path, "run"], common_args, vec!["--"]],
