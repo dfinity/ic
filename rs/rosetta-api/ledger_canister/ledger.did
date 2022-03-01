@@ -91,18 +91,6 @@ type Archives = record {
     archives: vec Archive;
 };
 
-type ArchivesError = variant {
-    // This error indicates that the archive index is temporarily unavailable
-    // because the archiving is still in progress.
-    // This error is retryable.
-    NotAvailable;
-};
-
-type ArchivesResult = variant {
-    Ok : Archives;
-    Err : ArchivesError;
-};
-
 service : {
   // Transfers tokens from a subaccount of the caller to the destination address.
   // The source address is computed from the principal of the caller and the specified subaccount.
@@ -125,5 +113,5 @@ service : {
   decimals : () -> (record { decimals: nat32 }) query;
 
   // Returns the existing archive canisters information.
-  archives : () -> (ArchivesResult) query;
+  archives : () -> (Archives) query;
 }
