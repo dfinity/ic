@@ -126,9 +126,9 @@
         "version": "0.1.0"
     },
     "ic-ref": {
-        "branch": "release-0.18.2",
+        "branch": "release-0.18.4",
         "repo": "ssh://git@github.com/dfinity/ic-hs",
-        "rev": "2d99ad469d8672ae9213be459ad53d5733e2604f",
+        "rev": "a0d453253a1795f3e27a6e1443383d4bb99d046f",
         "type": "git"
     },
     "idl2json": {

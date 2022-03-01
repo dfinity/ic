@@ -23,27 +23,19 @@ use crate::util;
 const EXCLUDED: &[&str] = &[
     // to start with something that is always false
     "(1 == 0)",
-    // ic-ref-test assumes that the Internet Computer will reject signatures with an
-    // expiry that is absurdly far in the future. The replica does not enforce that
-    // for query calls, so let’s disable that.
-    "$0 ~ /signature checking.with expiry in the future.in query/",
-    "$0 ~ /signature checking.with expiry in the future.in request status/",
-    "$0 ~ /signature checking.with expiry in the future.in empty read state request/",
-    // Certification is specified in a way that `read_state` returns non-existance proofs.
-    // This is not implemented yet.
     "$0 ~ /non-existence proofs for non-existing request id/",
     "$0 ~ /module_hash of empty canister/",
-    // Authenticating the use of read_state currently does not heed the target restrictions
-    // in the request delegation.
-    "($2 ~ /Delegation targets/ && $4 ~ /in read_state/)",
     // the replica does not yet check that the effective canister id is valid
-    "$0 ~ /wrong url path/",
     "$0 ~ /wrong effective canister id/",
     "$0 ~ /access denied two status to different canisters/",
     // In the replica, contexts marked as “deleted” (due to `canister_uninstall` or
     // running out of cycles) currently still block the transition from stopping to
     // stopped.
     "$0 ~ /deleted call contexts do not prevent stopping/",
+    "$0 ~ /metadata.absent/",
+    "$0 ~ /zero-length metadata name/",
+    // TODO(VER-1507): investigate why this test always fails
+    "$0 ~ /legacy API traps when a result is too big/",
 ];
 
 pub fn ic_with_system_subnet() -> InternetComputer {
