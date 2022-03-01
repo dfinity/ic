@@ -33,7 +33,7 @@ e2e-workload-test:
       tar --sparse -xvf  "${CI_PROJECT_DIR}/ic-os/guestos/build-out/disk-img/disk-img.tar.gz"
 
       for f in ic-prep ic-workload-generator; do
-        gzip -d "${CI_PROJECT_DIR}/artifacts/release/$f.gz"
+        pigz -d "${CI_PROJECT_DIR}/artifacts/release/$f.gz"
         chmod u+x "${CI_PROJECT_DIR}/artifacts/release/$f"
         ln -sf "${CI_PROJECT_DIR}/artifacts/release/$f" "$f"
       done

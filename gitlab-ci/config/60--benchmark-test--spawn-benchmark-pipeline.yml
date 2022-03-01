@@ -37,7 +37,7 @@ maximum-capacity-system-baseline-query:
       cd ./scalability
       $SHELL_WRAPPER pip3 install --user -r requirements.txt
       $SHELL_WRAPPER python3 max_capacity_system_baseline.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --skip_generate_report=False --is_ci_job=True
-      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 gzip
+      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
 
       $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
@@ -59,7 +59,7 @@ maximum-capacity-system-baseline-update:
       cd ./scalability
       $SHELL_WRAPPER pip3 install --user -r requirements.txt
       $SHELL_WRAPPER python3 max_capacity_system_baseline.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --use_updates=True --skip_generate_report=False --is_ci_job=True
-      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 gzip
+      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
 
       $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
@@ -81,7 +81,7 @@ maximum-capacity-large-memory-query:
       cd ./scalability
       $SHELL_WRAPPER pip3 install --user -r requirements.txt
       $SHELL_WRAPPER python3 max_capacity_large_memory.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --skip_generate_report=False --is_ci_job=True
-      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 gzip
+      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
 
       $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
@@ -103,7 +103,7 @@ maximum-capacity-large-memory-update:
       cd ./scalability
       $SHELL_WRAPPER pip3 install --user -r requirements.txt
       $SHELL_WRAPPER python3 max_capacity_large_memory.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --skip_generate_report=False --use_updates=True --is_ci_job=True
-      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 gzip
+      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
 
       $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
@@ -126,7 +126,7 @@ benchmark-xnet:
       cd ./scalability
       $SHELL_WRAPPER pip3 install --user -r requirements.txt
       $SHELL_WRAPPER python3 run_xnet_experiment.py --testnet $TESTNET --skip_generate_report=False
-      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 gzip
+      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
 
       $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"

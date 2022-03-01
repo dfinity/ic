@@ -34,14 +34,14 @@ function process_single_core_file() {
         exit' | grep '^\[' | grep -v '/nix/' | grep -v 'vdso' | awk '{print $NF}')
 
         for exec_name in $EXEC_NAMES; do
-            # gzip and artifact dependent executables, skipping the ones already done
+            # pigz and artifact dependent executables, skipping the ones already done
             if [[ ! -f "coredumps/$(basename "$exec_name").gz" ]]; then
-                gzip -c --no-name "${exec_name}" >"coredumps/$(basename "$exec_name").gz"
+                pigz -c --no-name "${exec_name}" >"coredumps/$(basename "$exec_name").gz"
             fi
         done
 
-        # Finally, gzip and artifact the core dump itself
-        gzip -f --no-name "$1"
+        # Finally, pigz and artifact the core dump itself
+        pigz -f --no-name "$1"
         mv "$1.gz" "coredumps/${f_basename}.gz"
     fi
 }

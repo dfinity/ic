@@ -130,7 +130,7 @@ class Collector:
         self._adjust_paths(bin_path)
         self._strip_refs(bin_path)
 
-        sh("gzip", "-c", "--no-name", bin_path, pipe_to=path.join(self.out_dir, f"{binary}.gz"))
+        sh("pigz", "-c", "--no-name", bin_path, pipe_to=path.join(self.out_dir, f"{binary}.gz"))
 
     def _strip(self, in_path: str):
         if ENV.is_linux:
