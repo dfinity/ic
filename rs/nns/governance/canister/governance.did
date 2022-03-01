@@ -277,6 +277,7 @@ type Result_1 = variant { Error : GovernanceError; NeuronId : NeuronId };
 type Result_2 = variant { Ok : Neuron; Err : GovernanceError };
 type Result_3 = variant { Ok : RewardNodeProviders; Err : GovernanceError };
 type Result_4 = variant { Ok : NeuronInfo; Err : GovernanceError };
+type Result_5 = variant { Ok : NodeProvider; Err : GovernanceError };
 type RewardEvent = record {
   day_after_genesis : nat64;
   actual_timestamp_seconds : nat64;
@@ -333,6 +334,7 @@ service : (Governance) -> {
   get_neuron_info_by_id_or_subaccount : (NeuronIdOrSubaccount) -> (
       Result_4,
     ) query;
+  get_node_provider_by_caller : (null) -> (Result_5) query;
   get_pending_proposals : () -> (vec ProposalInfo) query;
   get_proposal_info : (nat64) -> (opt ProposalInfo) query;
   list_known_neurons : () -> (ListKnownNeuronsResponse) query;

@@ -463,7 +463,7 @@ async fn add_node_operator(
 }
 
 /// Submit and execute a proposal to add the given node provider
-async fn add_node_provider(nns_canisters: &NnsCanisters<'_>, np: NodeProvider) {
+pub async fn add_node_provider(nns_canisters: &NnsCanisters<'_>, np: NodeProvider) {
     let result: ManageNeuronResponse = nns_canisters
         .governance
         .update_from_sender(
