@@ -15,7 +15,6 @@ canister-test = { path = "../rust_canisters/canister_test" }
 chrono = "0.4.19"
 crossbeam-channel = "0.5.1"
 cycles-minting-canister = { path = "../nns/cmc" }
-cycles_minting_client = { path = "../rosetta-api/cycles_minting_client" }
 dfn_candid = { path = "../rust_canisters/dfn_candid" }
 dfn_protobuf = { path = "../rust_canisters/dfn_protobuf" }
 dfn_core = { path = "../rust_canisters/dfn_core" }

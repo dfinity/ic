@@ -13,7 +13,6 @@ actix-web = "4.0.0-beta.6"
 async-trait = "0.1.41"
 base64 = "0.13.0"
 candid = "0.7.4"
-cycles-minting-canister = {path = "../nns/cmc"}
 dfn_candid = {path = "../rust_canisters/dfn_candid"}
 dfn_core = {path = "../rust_canisters/dfn_core"}
 dfn_macro = {path = "../rust_canisters/dfn_macro"}

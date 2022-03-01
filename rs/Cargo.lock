@@ -1842,23 +1842,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cycles_minting_client"
-version = "0.8.0"
-dependencies = [
- "candid",
- "cycles-minting-canister",
- "dfn_candid",
- "dfn_protobuf",
- "ed25519-dalek",
- "ic-canister-client",
- "ic-types 0.8.0",
- "lazy_static",
- "ledger-canister",
- "on_wire",
- "url",
-]
-
-[[package]]
 name = "darling"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6068,7 +6051,6 @@ dependencies = [
  "async-trait",
  "base64 0.13.0",
  "candid",
- "cycles-minting-canister",
  "dfn_candid",
  "dfn_core",
  "dfn_macro",
@@ -11096,7 +11078,6 @@ dependencies = [
  "chrono",
  "crossbeam-channel 0.5.1",
  "cycles-minting-canister",
- "cycles_minting_client",
  "dfn_candid",
  "dfn_core",
  "dfn_protobuf",
