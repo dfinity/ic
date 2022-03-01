@@ -20,7 +20,6 @@ pub enum ThresholdEcdsaError {
     InsufficientOpenings,
     InterpolationError,
     InvalidArguments(String),
-    InvalidDerivationPath,
     InvalidFieldElement,
     InvalidComplaint,
     InvalidOpening,
@@ -61,7 +60,7 @@ pub use crate::seed::*;
 pub use crate::transcript::*;
 pub use crate::xmd::*;
 
-pub use crate::key_derivation::DerivationPath;
+pub use crate::key_derivation::{DerivationIndex, DerivationPath};
 pub use sign::{ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSigShareInternal};
 
 /// Create MEGa encryption keypair
@@ -370,10 +369,10 @@ impl From<&ExtendedDerivationPath> for DerivationPath {
         // We use generalized derivation for all path bytestrings after prepending
         // the caller's principal. It means only big-endian encoded 4-byte values
         // less than 2^31 are compatible with BIP-32 non-hardened derivation path.
-        Self::new_arbitrary(
+        Self::new(
             std::iter::once(extended_derivation_path.caller.to_vec())
                 .chain(extended_derivation_path.derivation_path.clone().into_iter())
-                .map(key_derivation::DerivationIndex::Generalized)
+                .map(key_derivation::DerivationIndex)
                 .collect::<Vec<_>>(),
         )
     }
@@ -654,7 +653,6 @@ impl From<ThresholdEcdsaError> for ThresholdEcdsaDerivePublicKeyError {
             | ThresholdEcdsaError::InsufficientOpenings
             | ThresholdEcdsaError::InterpolationError
             | ThresholdEcdsaError::InvalidComplaint
-            | ThresholdEcdsaError::InvalidDerivationPath
             | ThresholdEcdsaError::InvalidFieldElement
             | ThresholdEcdsaError::InvalidOpening
             | ThresholdEcdsaError::InvalidPoint

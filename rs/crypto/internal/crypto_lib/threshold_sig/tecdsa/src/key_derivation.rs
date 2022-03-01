@@ -1,27 +1,39 @@
 use crate::*;
 use ic_crypto_internal_hmac::{Hmac, Sha512};
-use ic_types::PrincipalId;
 
 #[derive(Debug, Clone)]
-pub enum DerivationIndex {
-    U32(u32),
-    Generalized(Vec<u8>),
-}
+pub struct DerivationIndex(pub Vec<u8>);
 
 impl DerivationIndex {
     /// Return the BIP32 "next" derivation path
     ///
-    /// This is only used very rarely. The +1 behavior for u32's matches
-    /// standard BIP32. For the generalized case, the "next" value is not
-    /// necessarily obvious, so instead we cause key derivation to fails.
+    /// This is only used very rarely. In the case that a derivation index is a
+    /// 4 byte big-endian encoding of an integer less than 2**31-1, the behavior
+    /// matches that of standard BIP32.
     ///
-    /// This does mean that with ~ 1/2**127 chance, a canister will not be
-    /// able to derive a public key for itself.
-    fn next(&self) -> ThresholdEcdsaResult<Self> {
-        match self {
-            Self::U32(i) => Ok(Self::U32(i + 1)),
-            Self::Generalized(_) => Err(ThresholdEcdsaError::InvalidDerivationPath),
+    /// For the index 2**31-1, if the exceptional condition occurs, this will
+    /// return a BIP32 "hardened" derivation index, which is non-sensical for BIP32.
+    /// This is a corner case in the BIP32 spec and it seems that few implementations
+    /// handle it correctly.
+    pub fn next(&self) -> Self {
+        let mut n = self.0.clone();
+
+        n.reverse();
+
+        let mut carry = 1u8;
+        for w in &mut n {
+            let (v, c) = w.overflowing_add(carry);
+            *w = v;
+            carry = if c { 1 } else { 0 };
         }
+
+        if carry != 0 {
+            n.push(carry);
+        }
+
+        n.reverse();
+
+        Self(n)
     }
 }
 
@@ -35,23 +47,13 @@ impl DerivationPath {
     pub fn new_bip32(bip32: &[u32]) -> Self {
         let mut path = Vec::with_capacity(bip32.len());
         for n in bip32 {
-            path.push(DerivationIndex::U32(*n));
+            path.push(DerivationIndex(n.to_be_bytes().to_vec()));
         }
-        Self::new_arbitrary(path)
-    }
-
-    /// Create a derivation path from a principal ID and a BIP32 path
-    pub fn new_with_principal(principal: PrincipalId, bip32: &[u32]) -> Self {
-        let mut path = Vec::with_capacity(1 + bip32.len());
-        path.push(DerivationIndex::Generalized(principal.to_vec()));
-        for n in bip32 {
-            path.push(DerivationIndex::U32(*n));
-        }
-        Self::new_arbitrary(path)
+        Self::new(path)
     }
 
     /// Create a free-form derivation path
-    pub fn new_arbitrary(path: Vec<DerivationIndex>) -> Self {
+    pub fn new(path: Vec<DerivationIndex>) -> Self {
         Self { path }
     }
 
@@ -74,19 +76,7 @@ impl DerivationPath {
         let mut hmac = Hmac::<Sha512>::new(chain_key);
 
         hmac.write(&public_key.serialize());
-
-        match index {
-            DerivationIndex::U32(u) => {
-                if (u >> 31) != 0 {
-                    // hard derivation not supported
-                    return Err(ThresholdEcdsaError::InvalidDerivationPath);
-                }
-                hmac.write(&u.to_be_bytes());
-            }
-            DerivationIndex::Generalized(v) => {
-                hmac.write(v);
-            }
-        }
+        hmac.write(&index.0);
 
         let hmac_output = hmac.finish();
 
@@ -98,7 +88,7 @@ impl DerivationPath {
 
         // If iL >= order or new_key=inf, try again with the "next" index
         if key_offset.serialize() != hmac_output[..32] || new_key.is_infinity()? {
-            Self::bip32_ckdpub(public_key, chain_key, &index.next()?)
+            Self::bip32_ckdpub(public_key, chain_key, &index.next())
         } else {
             Ok((new_key, new_chain_key, key_offset))
         }
@@ -127,7 +117,10 @@ impl DerivationPath {
             Ok((derived_offset, derived_chain_key))
         } else {
             // Key derivation is not currently defined for curves other than secp256k1
-            Err(ThresholdEcdsaError::InvalidDerivationPath)
+            Err(ThresholdEcdsaError::InvalidArguments(format!(
+                "Currently key derivation not defined for {}",
+                curve_type
+            )))
         }
     }
 }
