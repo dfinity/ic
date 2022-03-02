@@ -157,7 +157,6 @@ class ExperimentXnet(experiment.Experiment):
         out = json.dumps(r, indent=2)
         with open(os.path.join(self.iter_outdir, "xnet-stream-size.json"), "w") as iter_file:
             iter_file.write(out)
-        print(f"Got Prometheus metrics: {out}")
 
     def parse(path: str):
         """Parse the given json file containing Prometheus xnet-stream data."""
