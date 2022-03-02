@@ -1,5 +1,6 @@
 use crate::{common::BlockHeight, config::Config};
-use bitcoin::{blockdata::constants::genesis_block, Block, BlockHash, BlockHeader};
+use bitcoin::{blockdata::constants::genesis_block, Block, BlockHash, BlockHeader, Network};
+use ic_btc_validation::{validate_header, HeaderStore, ValidateHeaderError};
 use std::collections::HashMap;
 use thiserror::Error;
 
@@ -25,9 +26,6 @@ pub struct CachedHeader {
     pub header: BlockHeader,
     /// This field stores the height of a Bitcoin header
     pub height: BlockHeight,
-
-    // TODO: ER-2121: To be compatible with `btc-validation`, work should only be calculated
-    // when a new tip is added.
     /// This field stores the work of the Blockchain leading up to this header.
     /// That is, this field is the sum of work of the above header and all its ancestors.
     pub work: Work,
@@ -47,7 +45,7 @@ pub enum AddHeaderError {
     /// This variant is used when the input header is invalid
     /// (eg: not of the right format)
     #[error("Received an invalid block header: {0}")]
-    InvalidHeader(BlockHash),
+    InvalidHeader(BlockHash, ValidateHeaderError),
     /// This variant is used when the predecessor of the input header is not part of header_cache.
     #[error("Received a block header where we do not have the previous header in the cache: {0}")]
     PrevHeaderNotCached(BlockHash),
@@ -84,6 +82,9 @@ pub struct BlockchainState {
 
     /// This field contains the known tips of the header cache.
     tips: Vec<Tip>,
+
+    ///
+    network: Network,
 }
 
 impl BlockchainState {
@@ -116,6 +117,7 @@ impl BlockchainState {
             children,
             cached_genesis,
             tips,
+            network: config.network,
         }
     }
 
@@ -124,14 +126,8 @@ impl BlockchainState {
         &self.cached_genesis
     }
 
-    /// This method checks if the input header is valid and outputs true iff the header is valid.
-    /// TODO: ER-2120 Use `btc-validation` to validate headers.
-    fn is_header_valid(&self, _header: BlockHeader) -> bool {
-        true
-    }
-
     /// Returns the header for the given block hash.
-    pub fn get_header(&self, hash: &BlockHash) -> Option<&CachedHeader> {
+    pub fn get_cached_header(&self, hash: &BlockHash) -> Option<&CachedHeader> {
         self.header_cache.get(hash)
     }
 
@@ -174,12 +170,12 @@ impl BlockchainState {
 
         // If the header already exists in the cache,
         // then don't insert the header again, and return HeaderAlreadyExistsError
-        if let Some(cached_header) = self.get_header(&block_hash) {
+        if let Some(cached_header) = self.get_cached_header(&block_hash) {
             return Ok(AddHeaderResult::HeaderAlreadyExists(cached_header.clone()));
         }
 
-        if !self.is_header_valid(header) {
-            return Err(AddHeaderError::InvalidHeader(block_hash));
+        if let Err(err) = validate_header(&self.network, self, &header) {
+            return Err(AddHeaderError::InvalidHeader(block_hash, err));
         }
 
         // Compute prev_hash in the header. Check if it is present in the `header_cache`.
@@ -334,6 +330,21 @@ impl BlockchainState {
     }
 }
 
+impl HeaderStore for BlockchainState {
+    fn get_header(&self, hash: &BlockHash) -> Option<(&BlockHeader, BlockHeight)> {
+        self.get_cached_header(hash)
+            .map(|cached| (&cached.header, cached.height))
+    }
+
+    fn get_height(&self) -> BlockHeight {
+        self.get_active_chain_tip().height
+    }
+
+    fn get_initial_hash(&self) -> BlockHash {
+        self.genesis().header.block_hash()
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -371,7 +382,7 @@ mod test {
     /// successfully.
     #[test]
     fn test_adding_headers_successfully() {
-        let config = ConfigBuilder::new().build();
+        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let mut state = BlockchainState::new(&config);
 
         let initial_header = state.genesis();
@@ -398,7 +409,7 @@ mod test {
     /// Tests whether or not the `BlockchainState::add_headers(...)` function can add headers that
     /// cause 2 forks in the chain. The state should be able to determine what is the active tip.
     fn test_forks_when_adding_headers() {
-        let config = ConfigBuilder::new().build();
+        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let mut state = BlockchainState::new(&config);
         let initial_header = state.genesis();
 
@@ -455,7 +466,7 @@ mod test {
     /// headers in the state.
     #[test]
     fn test_adding_headers_that_already_exist() {
-        let config = ConfigBuilder::new().build();
+        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let mut state = BlockchainState::new(&config);
 
         let initial_header = state.genesis();
@@ -484,7 +495,7 @@ mod test {
     /// adding a header that is invalid.
     #[test]
     fn test_adding_headers_with_an_invalid_header() {
-        let config = ConfigBuilder::new().build();
+        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let mut state = BlockchainState::new(&config);
 
         let initial_header = state.genesis();
@@ -500,9 +511,10 @@ mod test {
         let last_hash = chain_hashes[10];
 
         let (added_headers, maybe_err) = state.add_headers(&chain);
+
         assert_eq!(added_headers.len(), 10);
         assert!(
-            matches!(maybe_err, Some(AddHeaderError::PrevHeaderNotCached(block_hash)) if block_hash == last_hash)
+            matches!(maybe_err, Some(AddHeaderError::InvalidHeader(block_hash, err)) if block_hash == last_hash && matches!(err, ValidateHeaderError::PrevHeaderNotFound))
         );
 
         let tip = state.get_active_chain_tip();
@@ -522,7 +534,7 @@ mod test {
         let block_2_hash = block_2.header.block_hash();
         let result = state.add_block(block_2);
         assert!(
-            matches!(result, Err(AddBlockError::Header(AddHeaderError::PrevHeaderNotCached(stop_hash))) if stop_hash == block_2_hash),
+            matches!(result, Err(AddBlockError::Header(AddHeaderError::InvalidHeader(stop_hash, err))) if stop_hash == block_2_hash && matches!(err, ValidateHeaderError::PrevHeaderNotFound)),
         );
 
         let result = state.add_block(block_1);

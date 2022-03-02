@@ -318,8 +318,12 @@ impl BlockchainManager {
         // Update the peer's tip and height to the last
         let maybe_last_header = if added_headers.last().is_some() {
             added_headers.last()
-        } else if self.blockchain.get_header(&last_block_hash).is_some() {
-            self.blockchain.get_header(&last_block_hash)
+        } else if self
+            .blockchain
+            .get_cached_header(&last_block_hash)
+            .is_some()
+        {
+            self.blockchain.get_cached_header(&last_block_hash)
         } else {
             None
         };
@@ -339,7 +343,7 @@ impl BlockchainManager {
         }
 
         let maybe_locators = match maybe_err {
-            Some(AddHeaderError::InvalidHeader(_)) => {
+            Some(AddHeaderError::InvalidHeader(_, _)) => {
                 return Err(ReceivedHeadersMessageError::ReceivedInvalidHeader)
             }
             Some(AddHeaderError::PrevHeaderNotCached(stop_hash)) => {
@@ -467,7 +471,8 @@ impl BlockchainManager {
             return;
         }
 
-        println!(
+        slog::debug!(
+            self.logger,
             "Cache Size: {}, Max Size: {}",
             self.blockchain.get_block_cache_size(),
             BLOCK_CACHE_THRESHOLD_BYTES
@@ -739,11 +744,13 @@ impl HasHeight for BlockchainManager {
 pub mod test {
     use super::*;
     use crate::common::test_common::{
-        generate_headers, large_block, make_logger, TestState, BLOCK_1_ENCODED, BLOCK_2_ENCODED,
+        generate_headers, generate_large_block_blockchain, make_logger, TestState, BLOCK_1_ENCODED,
+        BLOCK_2_ENCODED,
     };
     use crate::config::test::ConfigBuilder;
     use crate::config::Config;
     use bitcoin::consensus::deserialize;
+    use bitcoin::Network;
     use bitcoin::{
         network::message::NetworkMessage, network::message_blockdata::Inventory, BlockHash,
     };
@@ -802,7 +809,7 @@ pub mod test {
     /// The test then adds each of the peers and verifies the response from the blockchain manager.
     #[test]
     fn test_init_sync() {
-        let config = Config::default();
+        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let mut blockchain_manager = BlockchainManager::new(&config, make_logger());
 
         // Create an arbitrary chain and adding to the BlockchainState.
@@ -870,7 +877,7 @@ pub mod test {
     /// This test first creates a BlockChainManager, adds a peer, and let the initial sync happen.
     /// The test then sends an inv message for a fork chain, and verifies if the BlockChainManager responds correctly.
     fn test_received_inv() {
-        let config = Config::default();
+        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let mut blockchain_manager = BlockchainManager::new(&config, make_logger());
 
         // Create an arbitrary chain and adding to the BlockchainState.
@@ -1036,14 +1043,18 @@ pub mod test {
 
     #[test]
     fn test_get_successor_block_hashes() {
-        let test_state = TestState::setup();
-        let config = ConfigBuilder::new().build();
+        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let mut blockchain_manager = BlockchainManager::new(&config, make_logger());
 
         // Set up the following chain:
         // |-> 1' -> 2'
         // 0 -> 1 -> 2
-        let main_chain = vec![test_state.block_1.header, test_state.block_2.header];
+        let main_chain = generate_headers(
+            blockchain_manager.blockchain.genesis().header.block_hash(),
+            blockchain_manager.blockchain.genesis().header.time,
+            2,
+        );
+
         let side_chain = generate_headers(
             blockchain_manager.blockchain.genesis().header.block_hash(),
             blockchain_manager.blockchain.genesis().header.time,
@@ -1058,20 +1069,20 @@ pub mod test {
         // If chain is 0 -> 1 -> 2 and block hashes are {0}  then {1, 1'} should be returned.
         let successor_hashes = blockchain_manager.get_successor_block_hashes(&block_hashes, 1);
         assert_eq!(successor_hashes.len(), 2);
-        assert!(successor_hashes.contains(&test_state.block_1.block_hash()));
+        assert!(successor_hashes.contains(&main_chain[0].block_hash()));
         assert!(successor_hashes.contains(&side_chain[0].block_hash()));
         //             |-> 1' -> 2'
         // If chain is 0 -> 1 -> 2 and block hashes are {0, 1}  then {1', 2, 2'} should be returned.
         let block_hashes = vec![
             blockchain_manager.blockchain.genesis().header.block_hash(),
-            test_state.block_1.block_hash(),
+            main_chain[0].block_hash(),
         ];
         let successor_hashes = blockchain_manager.get_successor_block_hashes(&block_hashes, 2);
 
         assert_eq!(successor_hashes.len(), 3);
         assert!(successor_hashes.contains(&side_chain[0].block_hash()));
         assert!(successor_hashes.contains(&side_chain[1].block_hash()));
-        assert!(successor_hashes.contains(&test_state.block_2.block_hash()));
+        assert!(successor_hashes.contains(&main_chain[1].block_hash()));
     }
 
     /// This tests ensures that `BlockchainManager::handle_client_request(...)` does the following:
@@ -1125,13 +1136,25 @@ pub mod test {
     /// blocks from the main chain and a fork. Order should be preserved.
     #[test]
     fn test_handle_client_request_multiple_blocks() {
-        let test_state = TestState::setup();
-        let config = ConfigBuilder::new().build();
+        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let mut blockchain_manager = BlockchainManager::new(&config, make_logger());
         // Set up the following chain:
         // |-> 1'
         // 0 -> 1 -> 2
-        let main_chain = vec![test_state.block_1.header, test_state.block_2.header];
+        let main_chain = generate_headers(
+            blockchain_manager.blockchain.genesis().header.block_hash(),
+            blockchain_manager.blockchain.genesis().header.time,
+            2,
+        );
+        let main_block_1 = Block {
+            header: main_chain[0],
+            txdata: vec![],
+        };
+        let main_block_2 = Block {
+            header: main_chain[1],
+            txdata: vec![],
+        };
+
         let side_chain = generate_headers(
             blockchain_manager.blockchain.genesis().header.block_hash(),
             blockchain_manager.blockchain.genesis().header.time,
@@ -1146,11 +1169,11 @@ pub mod test {
         blockchain_manager.blockchain.add_headers(&side_chain);
         blockchain_manager
             .blockchain
-            .add_block(test_state.block_1.clone())
+            .add_block(main_block_1.clone())
             .expect("invalid block");
         blockchain_manager
             .blockchain
-            .add_block(test_state.block_2.clone())
+            .add_block(main_block_2.clone())
             .expect("invalid block");
         blockchain_manager
             .blockchain
@@ -1164,13 +1187,13 @@ pub mod test {
         let blocks = blockchain_manager.handle_client_request(block_hashes);
         assert_eq!(blocks.len(), 3);
         assert!(
-            matches!(blocks.get(0), Some(block) if block.block_hash() == test_state.block_1.block_hash())
+            matches!(blocks.get(0), Some(block) if block.block_hash() == main_block_1.block_hash())
         );
         assert!(
             matches!(blocks.get(1), Some(block) if block.block_hash() == side_block_1.block_hash())
         );
         assert!(
-            matches!(blocks.get(2), Some(block) if block.block_hash() == test_state.block_2.block_hash())
+            matches!(blocks.get(2), Some(block) if block.block_hash() == main_block_2.block_hash())
         );
     }
 
@@ -1178,13 +1201,21 @@ pub mod test {
     /// blocks from the main chain and a fork. Order should be preserved.
     #[test]
     fn test_handle_client_request_multiple_blocks_out_of_order() {
-        let test_state = TestState::setup();
-        let config = ConfigBuilder::new().build();
+        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let mut blockchain_manager = BlockchainManager::new(&config, make_logger());
         // Set up the following chain:
         // |-> 1'
         // 0 -> 1 -> 2
-        let main_chain = vec![test_state.block_1.header, test_state.block_2.header];
+        let main_chain = generate_headers(
+            blockchain_manager.blockchain.genesis().header.block_hash(),
+            blockchain_manager.blockchain.genesis().header.time,
+            2,
+        );
+        let main_block_2 = Block {
+            header: main_chain[1],
+            txdata: vec![],
+        };
+
         let side_chain = generate_headers(
             blockchain_manager.blockchain.genesis().header.block_hash(),
             blockchain_manager.blockchain.genesis().header.time,
@@ -1199,7 +1230,7 @@ pub mod test {
         blockchain_manager.blockchain.add_headers(&side_chain);
         blockchain_manager
             .blockchain
-            .add_block(test_state.block_2)
+            .add_block(main_block_2)
             .expect("invalid block");
         blockchain_manager
             .blockchain
@@ -1219,19 +1250,31 @@ pub mod test {
     /// This test ensures that the 2MB limit is enforced by `BlockchainManager.handle_client_request(...)`.
     #[test]
     fn test_handle_client_request_large_block() {
-        let large_block = large_block();
-        let test_state = TestState::setup();
-        let config = ConfigBuilder::new().build();
+        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
+        let blockchain_manager = BlockchainManager::new(&config, make_logger());
+        let genesis = blockchain_manager.blockchain.genesis();
 
-        let mut block_2 = test_state.block_2;
-        block_2.header.prev_blockhash = large_block.block_hash();
-        let headers = vec![large_block.header, block_2.header];
+        let large_blocks =
+            generate_large_block_blockchain(genesis.header.block_hash(), genesis.header.time, 1);
+        let large_block = large_blocks.first().cloned().unwrap();
+        let headers: Vec<BlockHeader> = large_blocks.iter().map(|b| b.header).collect();
+
+        let additional_headers =
+            generate_headers(large_block.block_hash(), large_block.header.time, 1);
+        let small_block = Block {
+            header: additional_headers[0],
+            txdata: vec![],
+        };
 
         let mut blockchain_manager = BlockchainManager::new(&config, make_logger());
         blockchain_manager.add_peer(&addr);
         let (added_headers, _) = blockchain_manager.blockchain.add_headers(&headers);
-        assert_eq!(added_headers.len(), 2);
+        assert_eq!(added_headers.len(), 1);
+        let (added_headers, _) = blockchain_manager
+            .blockchain
+            .add_headers(&additional_headers);
+        assert_eq!(added_headers.len(), 1);
 
         blockchain_manager
             .blockchain
@@ -1239,14 +1282,13 @@ pub mod test {
             .expect("invalid block");
         blockchain_manager
             .blockchain
-            .add_block(block_2)
+            .add_block(small_block)
             .expect("invalid block");
 
         let hashes = vec![blockchain_manager.blockchain.genesis().header.block_hash()];
         let blocks = blockchain_manager.handle_client_request(hashes);
-        let block_1_hash = large_block.block_hash();
         assert!(
-            matches!(blocks.first(), Some(block) if block.block_hash() == block_1_hash && block.txdata.len() == large_block.txdata.len())
+            matches!(blocks.first(), Some(block) if block.block_hash() == large_block.block_hash() && block.txdata.len() == large_block.txdata.len())
         );
         assert_eq!(blocks.len(), 1);
         assert_eq!(blockchain_manager.block_sync_queue.len(), 0);
@@ -1257,20 +1299,16 @@ pub mod test {
     #[test]
     fn test_sync_blocks_size_limit() {
         let test_state = TestState::setup();
-        let config = ConfigBuilder::new().build();
+        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let mut blockchain_manager = BlockchainManager::new(&config, make_logger());
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
 
         // Make 5 large blocks that are around 2MiB each.
-        let mut large_blocks = vec![large_block()];
-        for _ in 0..4 {
-            let mut new_block = large_block();
-            new_block.header.prev_blockhash = large_blocks.last().unwrap().block_hash();
-            large_blocks.push(new_block);
-        }
-
+        let genesis = blockchain_manager.blockchain.genesis();
+        let large_blocks =
+            generate_large_block_blockchain(genesis.header.block_hash(), genesis.header.time, 5);
         let headers = large_blocks.iter().map(|b| b.header).collect::<Vec<_>>();
 
-        let mut blockchain_manager = BlockchainManager::new(&config, make_logger());
         blockchain_manager.add_peer(&addr);
         let (added_headers, _) = blockchain_manager.blockchain.add_headers(&headers);
         assert_eq!(added_headers.len(), 5);
