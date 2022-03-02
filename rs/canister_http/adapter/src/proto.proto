@@ -2,23 +2,9 @@ syntax = "proto3";
 
 package http_adapter;
 
+import "canister_http/v1/canister_http.proto";
+
+
 service HttpAdapter {
-    rpc SendHTTPRequest(CanisterHttpRequest) returns (CanisterHttpResponse);
-}
-
-message HttpHeader {
-  string name = 1;
-  bytes value = 2;
-}
-
-message CanisterHttpRequest {
-  string url = 1;
-  bytes body = 2;
-  repeated HttpHeader headers = 3;
-}
-
-message CanisterHttpResponse {
-  uint32 status = 1;
-  repeated HttpHeader headers = 2;
-  bytes content = 3;
+    rpc SendHTTPRequest(canister_http.v1.CanisterHttpRequest) returns (canister_http.v1.CanisterHttpResponse);
 }

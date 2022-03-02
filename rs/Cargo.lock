@@ -3544,6 +3544,7 @@ dependencies = [
  "hyper",
  "hyper-tls",
  "ic-async-utils",
+ "ic-protobuf",
  "prost",
  "prost-build",
  "rand 0.8.4",
