@@ -42,6 +42,8 @@ repos:
     # because the intention is clearly to define no service.
     exclude: ^rs/nns/empty[.]did$
     language: system
+    verbose: true
+    always_run: true
 
 # The following repo is maintained by us at
 # https://gitlab.com/dfinity-lab/open/pre-commit-tools.
