@@ -46,7 +46,7 @@ fn mk_compressed_img_path() -> std::string::String {
 pub fn init_ic<P: AsRef<Path>>(
     ctx: &DriverContext,
     prep_dir: P,
-    ic: InternetComputer,
+    ic: &InternetComputer,
     res_group: &ResourceGroup,
 ) -> (InitializedIc, MaliciousNodes, NodeVms) {
     let mut next_node_index = 0u64;
@@ -130,7 +130,7 @@ pub fn init_ic<P: AsRef<Path>>(
         );
     }
 
-    for node in ic.unassigned_nodes {
+    for node in &ic.unassigned_nodes {
         let node_index = next_node_index;
         next_node_index += 1;
         let vm = res_group
@@ -163,7 +163,7 @@ pub fn init_ic<P: AsRef<Path>>(
         Some(whitelist),
         ic.node_operator,
         ic.node_provider,
-        ic.ssh_readonly_access_to_unassigned_nodes,
+        ic.ssh_readonly_access_to_unassigned_nodes.clone(),
     );
 
     let init_ic = ic_config.initialize().expect("can't fail");
