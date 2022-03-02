@@ -1,14 +1,25 @@
 import json
+import os
 import subprocess
+
+import gflags
+
+FLAGS = gflags.FLAGS
+gflags.DEFINE_string(
+    "hosts_ini_filename", "hosts.ini", "hosts.ini file to used for the testnet deployment, if done via ansible"
+)
 
 
 def get_testnet(testnet):
     """Get info about the given testnet."""
+    ansible_env = os.environ.copy()
+    ansible_env["HOSTS_INI_FILENAME"] = FLAGS.hosts_ini_filename
     p = subprocess.run(
         ["ansible-inventory", "-i", "env/{}/hosts".format(testnet), "--list"],
         check=True,
         cwd="../testnet",
         capture_output=True,
+        env=ansible_env,
     )
     j = json.loads(p.stdout.decode("utf-8"))
     return j
