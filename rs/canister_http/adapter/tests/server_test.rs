@@ -7,12 +7,10 @@ use tower::service_fn;
 use uuid::Uuid;
 
 use ic_canister_http_adapter::{
-    proto::{
-        http_adapter_client::HttpAdapterClient, http_adapter_server::HttpAdapterServer,
-        CanisterHttpRequest, HttpHeader,
-    },
+    proto::{http_adapter_client::HttpAdapterClient, http_adapter_server::HttpAdapterServer},
     HttpFromCanister,
 };
+use ic_protobuf::canister_http::v1::{CanisterHttpRequest, HttpHeader};
 use unix::UnixListenerDrop;
 
 #[tokio::test]

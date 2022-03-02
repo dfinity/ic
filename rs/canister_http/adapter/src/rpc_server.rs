@@ -1,12 +1,9 @@
-use crate::proto::{
-    http_adapter_server::HttpAdapter,
-    {CanisterHttpRequest, CanisterHttpResponse, HttpHeader},
-};
-
+use crate::proto::http_adapter_server::HttpAdapter;
 use http::Uri;
 use hyper::client::HttpConnector;
 use hyper::{body, Body, Client, Method};
 use hyper_tls::HttpsConnector;
+use ic_protobuf::canister_http::v1::{CanisterHttpRequest, CanisterHttpResponse, HttpHeader};
 use std::fmt::Debug;
 use tonic::{Request, Response, Status};
 
