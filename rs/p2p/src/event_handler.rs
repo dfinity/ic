@@ -93,6 +93,7 @@ use ic_types::{
     },
     NodeId, SubnetId,
 };
+use parking_lot::RwLock;
 use std::{
     cmp::max,
     collections::BTreeMap,
@@ -100,7 +101,7 @@ use std::{
     fmt::Debug,
     future::Future,
     pin::Pin,
-    sync::{Arc, Condvar, Mutex, RwLock},
+    sync::{Arc, Condvar, Mutex},
     task::{Context, Poll},
 };
 use strum::IntoEnumIterator;
@@ -183,7 +184,7 @@ impl FlowEventHandler {
     where
         F: Fn(T, NodeId) + Clone + Send + 'static,
     {
-        let insert_node = !self.sem_map.read().unwrap().contains_key(&node_id);
+        let insert_node = !self.sem_map.read().contains_key(&node_id);
         if insert_node {
             self.add_node(node_id);
         }
@@ -191,7 +192,6 @@ impl FlowEventHandler {
         let sem = self
             .sem_map
             .read()
-            .unwrap()
             .get(&node_id)
             .ok_or(SendError::EndpointNotFound)?
             .clone();
@@ -210,7 +210,7 @@ impl FlowEventHandler {
 
     /// The method adds the node with the given node ID.
     fn add_node(&self, node_id: NodeId) {
-        let mut sem_map = self.sem_map.write().unwrap();
+        let mut sem_map = self.sem_map.write();
         if let std::collections::btree_map::Entry::Vacant(e) = sem_map.entry(node_id) {
             e.insert(Arc::new(Semaphore::new(max(1, self.max_inflight_requests))));
         }
@@ -256,7 +256,7 @@ impl PeerFlows {
 
 /// The ingress throttler is protected by a read-write lock for concurrent
 /// access.
-pub type IngressThrottler = Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>;
+pub type IngressThrottler = Arc<std::sync::RwLock<dyn IngressPoolThrottler + Send + Sync>>;
 /// The struct implements the async event handler traits for consumption by
 /// transport, ingress, artifact manager, and node addition/removal.
 pub struct P2PEventHandlerImpl {
@@ -333,7 +333,7 @@ impl P2PEventHandlerImpl {
     /// The method starts the event processing loop, dispatching events to the
     /// *Gossip* component.
     pub fn start(&self, gossip_arc: GossipArc) {
-        self.gossip.write().unwrap().replace(gossip_arc);
+        self.gossip.write().replace(gossip_arc);
     }
 }
 
@@ -352,7 +352,7 @@ impl AsyncTransportEventHandler for P2PEventHandlerImpl {
         })?;
 
         let start_time = std::time::Instant::now();
-        let c_gossip = self.gossip.read().unwrap().as_ref().unwrap().clone();
+        let c_gossip = self.gossip.read().as_ref().unwrap().clone();
         let (msg_type, ret) = match gossip_message {
             GossipMessage::Advert(msg) => {
                 let sender = &self.peer_flows.advert;
@@ -398,7 +398,7 @@ impl AsyncTransportEventHandler for P2PEventHandlerImpl {
     /// The method changes the state of the P2P event handler.
     async fn state_changed(&self, state_change: TransportStateChange) {
         let sender = &self.peer_flows.transport;
-        let c_gossip = self.gossip.read().unwrap().as_ref().unwrap().clone();
+        let c_gossip = self.gossip.read().as_ref().unwrap().clone();
         let consume_fn = move |item, _peer_id| {
             c_gossip.on_transport_state_change(item);
         };
@@ -418,7 +418,7 @@ impl AsyncTransportEventHandler for P2PEventHandlerImpl {
         if let TransportErrorCode::SenderErrorIndicated = error {
             let sender = &self.peer_flows.transport;
 
-            let c_gossip = self.gossip.read().unwrap().as_ref().unwrap().clone();
+            let c_gossip = self.gossip.read().as_ref().unwrap().clone();
             let consume_fn = move |item, _peer_id| {
                 c_gossip.on_transport_error(item);
             };
@@ -534,7 +534,7 @@ impl AdvertSubscriber {
     }
 
     pub fn start(&self, gossip_arc: GossipArc) {
-        self.gossip.write().unwrap().replace(gossip_arc);
+        self.gossip.write().replace(gossip_arc);
         let (lock, cvar) = &*self.started;
         *lock.lock().unwrap() = true;
         cvar.notify_one();
@@ -555,7 +555,7 @@ impl AdvertSubscriber {
         };
         match self.sem.clone().try_acquire_owned() {
             Ok(permit) => {
-                let c_gossip = self.gossip.read().unwrap().as_ref().unwrap().clone();
+                let c_gossip = self.gossip.read().as_ref().unwrap().clone();
                 self.threadpool.execute(move || {
                     let _permit = permit;
                     c_gossip.broadcast_advert(advert_request);

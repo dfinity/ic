@@ -5418,6 +5418,7 @@ dependencies = [
  "linked-hash-map",
  "lru",
  "mockall 0.7.2",
+ "parking_lot 0.11.1",
  "phantom_newtype",
  "prometheus",
  "proptest 0.9.6",
