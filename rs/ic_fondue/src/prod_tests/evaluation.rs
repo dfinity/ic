@@ -1,10 +1,7 @@
 use std::{panic::catch_unwind, time::Instant};
 
-use super::bootstrap::{init_ic, setup_and_start_vms};
 use super::driver_setup::DriverContext;
 use super::pot_dsl::{ExecutionMode, Pot, Suite, Test, TestPath, TestSet};
-use super::resource::{allocate_resources, get_resource_request};
-use super::test_setup::create_ic_handle;
 use crate::ic_instance::InternetComputer;
 use crate::ic_manager::IcHandle;
 use crate::pot::Context;
@@ -126,7 +123,6 @@ fn evaluate_pot_with_group(
     pot_path: TestPath,
     group_name: &str,
 ) -> Result<TestResultNode> {
-    let logger = ctx.logger();
     let started_at = Instant::now();
     let (no_threads, all_tests) = match pot.testset {
         TestSet::Sequence(tests) => (1, tests),
@@ -138,13 +134,9 @@ fn evaluate_pot_with_group(
         .collect();
     let tests_num = tests.len();
 
-    let res_request = get_resource_request(ctx, &config, group_name);
-    let res_group = allocate_resources(ctx, &res_request)?;
     let temp_dir = tempfile::tempdir().expect("Could not create temp directory");
-    info!(logger, "temp_dir: {:?}", temp_dir.path());
-    let (init_ic, mal_beh, node_vms) = init_ic(ctx, temp_dir.path(), config, &res_group);
-    setup_and_start_vms(ctx, &init_ic, &node_vms)?;
-    let ic_handle = create_ic_handle(ctx, &init_ic, &node_vms, &mal_beh);
+    info!(&ctx.logger, "temp_dir: {:?}", temp_dir.path());
+    let ic_handle = config.setup_and_start(ctx, &temp_dir, group_name)?;
 
     let (sender, receiver) = bounded(tests_num);
     let chunks = chunk(tests, no_threads);
