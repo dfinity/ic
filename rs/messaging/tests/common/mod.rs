@@ -66,6 +66,7 @@ impl StateManagerFixture {
             log.clone(),
             &metrics,
             &config,
+            None,
             ic_types::malicious_flags::MaliciousFlags::default(),
         );
 

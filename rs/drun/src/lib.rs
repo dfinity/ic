@@ -196,6 +196,7 @@ pub fn run_drun(uo: DrunOptions) -> Result<(), String> {
         log.clone().into(),
         &metrics_registry,
         &cfg.state_manager,
+        None,
         ic_types::malicious_flags::MaliciousFlags::default(),
     ));
     let (_, ingress_history_writer, ingress_hist_reader, query_handler, _, scheduler) =

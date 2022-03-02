@@ -431,6 +431,7 @@ pub fn state_manager_test_with_verifier_result<F: FnOnce(&MetricsRegistry, State
                 log,
                 &metrics_registry,
                 &config,
+                None,
                 ic_types::malicious_flags::MaliciousFlags::default(),
             ),
         );
@@ -446,7 +447,7 @@ where
     Test: FnOnce(
         &MetricsRegistry,
         StateManagerImpl,
-        Box<dyn Fn(StateManagerImpl) -> (MetricsRegistry, StateManagerImpl)>,
+        Box<dyn Fn(StateManagerImpl, Option<Height>) -> (MetricsRegistry, StateManagerImpl)>,
     ),
 {
     let tmp = Builder::new().prefix("test").tempdir().unwrap();
@@ -455,7 +456,7 @@ where
     let verifier: Arc<dyn Verifier> = Arc::new(FakeVerifier::new());
 
     with_test_replica_logger(|log| {
-        let make_state_manager = move || {
+        let make_state_manager = move |starting_height| {
             let metrics_registry = MetricsRegistry::new();
 
             let state_manager = StateManagerImpl::new(
@@ -465,17 +466,18 @@ where
                 log.clone(),
                 &metrics_registry,
                 &config,
+                starting_height,
                 ic_types::malicious_flags::MaliciousFlags::default(),
             );
 
             (metrics_registry, state_manager)
         };
 
-        let (metrics_registry, state_manager) = make_state_manager();
+        let (metrics_registry, state_manager) = make_state_manager(None);
 
-        let restart_fn = Box::new(move |state_manager| {
+        let restart_fn = Box::new(move |state_manager, starting_height| {
             drop(state_manager);
-            make_state_manager()
+            make_state_manager(starting_height)
         });
 
         test(&metrics_registry, state_manager, restart_fn);
@@ -484,10 +486,13 @@ where
 
 pub fn state_manager_restart_test<Test>(test: Test)
 where
-    Test: FnOnce(StateManagerImpl, Box<dyn Fn(StateManagerImpl) -> StateManagerImpl>),
+    Test:
+        FnOnce(StateManagerImpl, Box<dyn Fn(StateManagerImpl, Option<Height>) -> StateManagerImpl>),
 {
     state_manager_restart_test_with_metrics(|_metrics, state_manager, restart_fn| {
-        let restart_fn_without_metrics = Box::new(move |state_manager| restart_fn(state_manager).1);
+        let restart_fn_without_metrics = Box::new(move |state_manager, starting_height| {
+            restart_fn(state_manager, starting_height).1
+        });
         test(state_manager, restart_fn_without_metrics);
     });
 }

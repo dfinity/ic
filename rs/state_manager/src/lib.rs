@@ -354,12 +354,6 @@ impl StateSyncMetrics {
     }
 }
 
-#[derive(Debug, Default)]
-struct PersistedStatesMetadata {
-    by_height: StatesMetadata,
-    oldest_required_state: Height,
-}
-
 type StatesMetadata = BTreeMap<Height, StateMetadata>;
 
 type CertificationsMetadata = BTreeMap<Height, CertificationMetadata>;
@@ -619,6 +613,7 @@ pub struct StateManagerImpl {
     latest_state_height: AtomicU64,
     latest_certified_height: AtomicU64,
     // The last height passed to remove_states_below()
+    // Deprecated. Only used to allow safe downgrades.
     requested_to_remove_states_below: Arc<AtomicU64>,
     state_sync_refs: StateSyncRefs,
     checkpoint_thread_pool: Arc<Mutex<scoped_threadpool::Pool>>,
@@ -857,6 +852,10 @@ fn persist_metadata_or_die(
         for (h, m) in metadata.iter() {
             pb_meta.by_height.insert(h.get(), m.into());
         }
+
+        // Even though we no longer read the persisted height on
+        // startup, we still persist the value to allow safe
+        // downgrades to earlier replica versions.
         pb_meta.oldest_required_state = requested_to_remove_states_below.load(Ordering::Relaxed);
 
         let mut buf = vec![];
@@ -893,6 +892,7 @@ impl StateManagerImpl {
         log: ReplicaLogger,
         metrics_registry: &MetricsRegistry,
         config: &Config,
+        starting_height: Option<Height>,
         malicious_flags: MaliciousFlags,
     ) -> Self {
         let metrics = StateManagerMetrics::new(metrics_registry);
@@ -903,30 +903,25 @@ impl StateManagerImpl {
         );
         let state_layout = StateLayout::new(log.clone(), config.state_root());
 
-        let PersistedStatesMetadata {
-            by_height: mut states_metadata,
-            oldest_required_state,
-        } = Self::load_metadata(&log, state_layout.states_metadata().as_path());
+        let mut states_metadata =
+            Self::load_metadata(&log, state_layout.states_metadata().as_path());
 
         let mut checkpoint_heights = state_layout
             .checkpoint_heights()
             .unwrap_or_else(|err| fatal!(&log, "Failed to retrieve checkpoint heights: {:?}", err));
 
-        if oldest_required_state > Self::INITIAL_STATE_HEIGHT {
-            // Note [Oldest Required State Recovery]
+        if let Some(starting_height) = starting_height {
+            // Note [Starting Height State Recovery]
             // =====================================
             //
-            // We look at the oldest state height consensus asked us to keep and
-            // compare it to the checkpoints we have.  We then "archive" all the
-            // checkpoints that are too fresh and can prevent us from recomputing
-            // states that consensus might still need.
+            // We "archive" all the checkpoints that are newer than `starting_height` and can
+            // prevent us from recomputing states that consensus might still need.
+            // If `starting_height` is None, we start from the most recent checkpoint.
             //
-            // For example, let's say we have checkpoints @100 and @200, and
-            // consensus asked us to remove states below 150.  We did that and
-            // then got restarted. If we now recover from checkpoint @200, we'll
-            // never recompute states 150 and above, which might still be needed.
-            // So we archive checkpoint @200, to make sure it doesn't interfere
-            // with normal operation and continue from @100 instead.
+            // For example, let's say we have checkpoints @100 and @200, and consensus still
+            // needs all states from 150 onwards. If we now recover from checkpoint @200, we'll never
+            // recompute states 150 and above.  So we archive checkpoint @200, to make sure it doesn't
+            // interfere with normal operation and continue from @100 instead.
             //
             // NB. We do not apply this heuristic if we only have one
             // checkpoint. Rationale:
@@ -940,14 +935,12 @@ impl StateManagerImpl {
             //   3. It looks dangerous to remove the only last state.
             //      What if this somehow happens on all the nodes simultaneously?
             while checkpoint_heights.len() > 1
-                && checkpoint_heights.last().cloned().unwrap() > oldest_required_state
+                && checkpoint_heights.last().cloned().unwrap() > starting_height
             {
                 let h = checkpoint_heights.pop().unwrap();
                 info!(
                     log,
-                    "Archiving checkpoint {} (oldest required state = {})",
-                    h,
-                    oldest_required_state
+                    "Archiving checkpoint {} (starting height = {})", h, starting_height
                 );
                 state_layout
                     .archive_checkpoint(h)
@@ -1041,8 +1034,9 @@ impl StateManagerImpl {
 
         let (compute_manifest_request_sender, compute_manifest_request_receiver) = unbounded();
 
-        let requested_to_remove_states_below =
-            Arc::new(AtomicU64::new(oldest_required_state.get()));
+        let requested_to_remove_states_below = Arc::new(AtomicU64::new(
+            starting_height.unwrap_or(Self::INITIAL_STATE_HEIGHT).get(),
+        ));
 
         let _state_hasher_handle = JoinOnDrop::new(
             std::thread::Builder::new()
@@ -1164,7 +1158,7 @@ impl StateManagerImpl {
     ///
     /// It's OK to miss some (or all) metadata entries as it will be re-computed
     /// as part of the recovery procedure.
-    fn load_metadata(log: &ReplicaLogger, path: &Path) -> PersistedStatesMetadata {
+    fn load_metadata(log: &ReplicaLogger, path: &Path) -> StatesMetadata {
         use std::io::Read;
 
         let mut file = match OpenOptions::new().read(true).open(path) {
@@ -1207,10 +1201,7 @@ impl StateManagerImpl {
                         }
                     }
                 }
-                PersistedStatesMetadata {
-                    by_height: map,
-                    oldest_required_state: Height::new(pb_meta.oldest_required_state),
-                }
+                map
             }
             Err(err) => {
                 warn!(
@@ -1747,10 +1738,15 @@ impl StateManager for StateManagerImpl {
                         if *key < height {
                             StateHashError::Transient(StateNotCommittedYet(height))
                         } else {
-                            let oldest_kept = Height::new(
-                                self.requested_to_remove_states_below
-                                    .load(Ordering::Relaxed),
-                            );
+                            // If the state is older than the oldest state we still have,
+                            // we report it as having been removed
+                            let oldest_kept = states
+                                .certifications_metadata
+                                .iter()
+                                .next()
+                                .map(|(height, _)| *height)
+                                .unwrap(); // certifications_metadata cannot be empty in this branch
+
                             if height < oldest_kept {
                                 // The state might have been not fully certified in addition to
                                 // being removed. We don't know anymore.
