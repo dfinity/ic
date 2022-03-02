@@ -16,7 +16,7 @@ use std::collections::BTreeMap;
 use std::convert::{From, TryFrom};
 
 /// Creates a checkpoint of the node state using specified directory
-/// layout. Returns a new state that is equivalent the to given one
+/// layout. Returns a new state that is equivalent to the given one
 /// and a result of the operation.
 ///
 /// This function uses the provided thread-pool to parallelize expensive
