@@ -6573,6 +6573,7 @@ dependencies = [
  "base32",
  "base64 0.11.0",
  "bincode",
+ "bitcoin",
  "byte-unit",
  "candid",
  "chrono",
