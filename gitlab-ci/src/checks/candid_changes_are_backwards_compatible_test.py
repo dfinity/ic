@@ -76,6 +76,26 @@ def improved_subprocess_called_process_error_str(e):
     return f.read()
 
 
+@contextlib.contextmanager
+def env(name, value):
+    # Get original value.
+    original = None
+    try:
+        original = os.environ[name]
+    except KeyError:
+        pass
+
+    os.environ[name] = value
+    try:
+        yield
+    finally:
+        # Restore original value.
+        if original is None:
+            del os.environ[name]
+        else:
+            os.environ[name] = original
+
+
 class CommandLineTest(unittest.TestCase):
     """Tests candid_changes_are_backwards_compatible.py."""
 
@@ -176,3 +196,24 @@ class CommandLineTest(unittest.TestCase):
         )
 
         run_against("example.did", also_reverse=True)
+
+    def test_gitlab_ci_diff_base(self):
+        """What happens when it looks like we are in Gitlab CI mode."""
+        # Make it look like we added a method.
+        NO_DO_STUFF_METHOD_SHA = "019035c1b0a832d9c5da3cebea6ad07b074338cc"
+        with env("CI_MERGE_REQUEST_DIFF_BASE_SHA", NO_DO_STUFF_METHOD_SHA):
+            # Ok when run in forward-only mode.
+            run_against("example.did")
+
+            # Not ok when run in forward-and-backward mode.
+            with self.assertRaises(subprocess.CalledProcessError):
+                run_against("example.did", also_reverse=True)
+
+        # Make it look like we deleted a method.
+        HAS_SECRET_METHOD_SHA = "b6c2758bf772669035a4ae06191f1e7fbb6055e6"
+        with env("CI_MERGE_REQUEST_DIFF_BASE_SHA", HAS_SECRET_METHOD_SHA):
+            # Not ok regardless of whether --also-reverse is used.
+            with self.assertRaises(subprocess.CalledProcessError):
+                run_against("example.did")
+            with self.assertRaises(subprocess.CalledProcessError):
+                run_against("example.did", also_reverse=True)

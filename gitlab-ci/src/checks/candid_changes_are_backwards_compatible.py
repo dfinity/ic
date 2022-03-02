@@ -12,10 +12,17 @@ import traceback
 
 ARGUMENT_PARSER = argparse.ArgumentParser(
     description="""
-Compares the working copy of Candid files passed via the command line against
-HEAD. Fails if the changes are not compatible. E.g. if a record field type is
-changed from int to text, then records that conformed to the old .did file will
-not be understood by programs using the new .did file.
+Compares the working copy of Candid file(s) passed via the command line against
+their original version(s). Fails if the changes are not compatible.
+
+There are two modes of operation, which determine whence the originals come. By
+default, originals come from HEAD. On the other hand, if there is an environment
+variable named CI_MERGE_REQUEST_DIFF_BASE_SHA (available in the Gitlab CI
+execution environment), then that is where originals are drawn from.
+
+A particularly egregious example of an incompatible change would be the removal
+of a method, because well-behaved clients will start seeing rejections from the
+server.
 
 Example usage:
 
@@ -27,10 +34,13 @@ Can be via pre-commit as follows:
 
   pre-commit run candid_changes_are_backwards_compatible
 
-Note that pre-commit only sees staged changes. Therefore, one must git add
-changed .did files before this test will notice one's changes.
+Note that when run via pre-commit, only staged changes are visible. Therefore,
+one must git add changed .did files before this test will notice one's changes.
 
 To install pre-commit, follow the directions described at http://pre-commit.com.
+
+TODO: Support pre-commit's --from-ref (and --to-ref) flags. These cause
+environment variables to be set.
 
 Requires didc to be on PATH. Can be named didc-arm32, didc-linux64, didc-macos,
 or just didc. Pre-compiled binaries can be downloaded at
@@ -42,8 +52,11 @@ ARGUMENT_PARSER.add_argument(
     "staged_file_paths",
     nargs="*",
     help="""
-Path(s) relative to the repo root to .did files that have been staged and
-should be checked for backwards compatibility.
+Path(s) to the working copy of .did files that are to be inspected for
+compatibility when compared with their originals. When run "conventionally"
+(i.e. outside Gitlab CI), the original version comes from HEAD. Otherwise,
+originals are taken from the CI_MERGE_REQUEST_DIFF_BASE_SHA environment
+variable.
 """.strip(),
 )
 
@@ -93,15 +106,13 @@ def delete_files(paths):
             os.remove(p)
 
 
-def get_originals(staged_file_paths):
+def get_originals(staged_file_paths, *, diff_base):
     originals = []
     for f in staged_file_paths:
         try:
-            stdout, stderr = run(["git", "show", f"HEAD:./{f}"])
+            stdout, stderr = run(["git", "show", f"{diff_base}:./{f}"])
         except subprocess.CalledProcessError as e:
-            is_new = any(
-                phrase in e.stderr for phrase in [b"exists on disk, but not in 'HEAD'", b"does not exist in 'HEAD'"]
-            )
+            is_new = any(phrase in e.stderr for phrase in [b"exists on disk, but not in ", b"does not exist in "])
             if not is_new:
                 raise
 
@@ -120,8 +131,8 @@ def get_originals(staged_file_paths):
 
 
 @contextlib.contextmanager
-def originals(staged_file_paths):
-    originals = get_originals(staged_file_paths)
+def originals(staged_file_paths, *, diff_base):
+    originals = get_originals(staged_file_paths, diff_base=diff_base)
     try:
         yield originals
     finally:
@@ -185,7 +196,7 @@ def didc_check(didc, server_did_file_path, client_did_file_path):
         raise SuspiciousDidcCheckOutput(returncode=0, stdout=stdout, stderr=stderr)
 
 
-def inspect_all_files(staged_file_paths, *, also_reverse):
+def inspect_all_files(staged_file_paths, *, also_reverse, diff_base):
     """
     Return true if no defects are found.
 
@@ -193,12 +204,13 @@ def inspect_all_files(staged_file_paths, *, also_reverse):
     ----
       staged_file_paths: Same as command line argument(s).
       also_reverse: Same as --also-reverse.
+      diff_base: Where to get copies of the originals. E.g. "HEAD", or some other git commit hash.
 
     """
     didc = find_didc_or_exit()
 
     any_defective_files = False
-    with originals(staged_file_paths) as paths_to_original_contents:
+    with originals(staged_file_paths, diff_base=diff_base) as paths_to_original_contents:
         # Compare .did files as they were before (at commit) vs. after changes.
         for before, after in zip(paths_to_original_contents, staged_file_paths):
             # Skip when there is no previous version to comapre to (the staged file is new).
@@ -217,6 +229,16 @@ def inspect_all_files(staged_file_paths, *, also_reverse):
     return any_defective_files
 
 
+def get_diff_base():
+    try:
+        result = os.environ["CI_MERGE_REQUEST_DIFF_BASE_SHA"]
+        print("It appears we are in Gitlab CI.")
+        return result
+    except KeyError:
+        print('Looks like we are running "conventionally", i.e. not in Gitlab CI.')
+        return "HEAD"
+
+
 def main(argv):
     args = ARGUMENT_PARSER.parse_args()
 
@@ -225,8 +247,13 @@ def main(argv):
         print(f"  - {f}")
     print()
 
+    diff_base = get_diff_base()
+    print()
+
     try:
-        any_defective_files = inspect_all_files(args.staged_file_paths, also_reverse=args.also_reverse)
+        any_defective_files = inspect_all_files(
+            args.staged_file_paths, also_reverse=args.also_reverse, diff_base=diff_base
+        )
     except subprocess.CalledProcessError as e:
         traceback.print_exc()
         print()
