@@ -299,6 +299,14 @@ pub trait ConsensusPoolCache: Send + Sync {
             .as_summary()
             .get_oldest_registry_version_in_use()
     }
+
+    /// The target height that the StateManager should start at given
+    /// this consensus pool during startup.
+    fn starting_height(&self) -> Height {
+        let certified_height = self.finalized_block().context.certified_height;
+        let catchup_package_height = self.catch_up_package().height();
+        certified_height.max(catchup_package_height)
+    }
 }
 
 /// Cache of blocks from the block chain.

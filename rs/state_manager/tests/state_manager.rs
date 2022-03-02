@@ -90,7 +90,7 @@ fn tip_can_be_recovered_if_no_checkpoint_exists() {
         std::fs::create_dir_all(test_dir.as_path()).unwrap();
         assert!(test_dir.exists());
 
-        let state_manager = restart_fn(state_manager);
+        let state_manager = restart_fn(state_manager, None);
 
         let test_dir = state_manager
             .state_layout()
@@ -106,7 +106,7 @@ fn tip_can_be_recovered_from_empty_checkpoint() {
         let (_height, state) = state_manager.take_tip();
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
 
-        let state_manager = restart_fn(state_manager);
+        let state_manager = restart_fn(state_manager, None);
 
         // verify we can continue to recovered tip from empty checkpoint
         let canister_id: CanisterId = canister_test_id(100);
@@ -124,7 +124,7 @@ fn tip_can_be_recovered_from_metadata_checkpoint() {
         insert_dummy_canister(&mut state, canister_id);
         state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
 
-        let state_manager = restart_fn(state_manager);
+        let state_manager = restart_fn(state_manager, None);
 
         let (_height, recovered_tip) = state_manager.take_tip();
         assert_eq!(canister_ids(&recovered_tip), vec![]);
@@ -139,7 +139,7 @@ fn tip_can_be_recovered_from_valid_checkpoint() {
         insert_dummy_canister(&mut state, canister_id);
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
 
-        let state_manager = restart_fn(state_manager);
+        let state_manager = restart_fn(state_manager, None);
 
         let canister_id: CanisterId = canister_test_id(100);
         let (_height, recovered_tip) = state_manager.take_tip();
@@ -159,9 +159,60 @@ fn tip_can_be_recovered_from_latest_checkpoint() {
         insert_dummy_canister(&mut state, canister_test_id(200));
         state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
 
-        let state_manager = restart_fn(state_manager);
+        let state_manager = restart_fn(state_manager, None);
 
         let canister_id: Vec<CanisterId> = vec![canister_test_id(100), canister_test_id(200)];
+        let (_height, recovered_tip) = state_manager.take_tip();
+        assert_eq!(canister_ids(&recovered_tip), canister_id);
+    });
+}
+
+#[test]
+fn tip_can_be_recovered_from_earlier_checkpoint() {
+    state_manager_restart_test(|state_manager, restart_fn| {
+        let (_height, mut state) = state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(100));
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+
+        let (_height, mut state) = state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(200));
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+
+        let state_manager = restart_fn(state_manager, Some(height(1)));
+
+        let canister_id: Vec<CanisterId> = vec![canister_test_id(100)];
+        let (_height, recovered_tip) = state_manager.take_tip();
+        assert_eq!(canister_ids(&recovered_tip), canister_id);
+    });
+}
+
+#[test]
+fn starting_height_independent_of_remove_states_below() {
+    state_manager_restart_test(|state_manager, restart_fn| {
+        let (_height, mut state) = state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(100));
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+
+        let (_height, mut state) = state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(200));
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+        let (_height, mut state) = state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(300));
+        state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+
+        state_manager.remove_states_below(height(3));
+
+        let canister_id: Vec<CanisterId> = vec![
+            canister_test_id(100),
+            canister_test_id(200),
+            canister_test_id(300),
+        ];
+        let (_height, recovered_tip) = state_manager.take_tip();
+        assert_eq!(canister_ids(&recovered_tip), canister_id);
+
+        let state_manager = restart_fn(state_manager, Some(height(1)));
+
+        let canister_id: Vec<CanisterId> = vec![canister_test_id(100)];
         let (_height, recovered_tip) = state_manager.take_tip();
         assert_eq!(canister_ids(&recovered_tip), canister_id);
     });
@@ -208,7 +259,7 @@ fn stable_memory_is_persisted() {
                 .page_map
         );
 
-        let state_manager = restart_fn(state_manager);
+        let state_manager = restart_fn(state_manager, None);
 
         let recovered = state_manager.get_latest_state();
         assert_eq!(height(1), recovered.height());
@@ -262,7 +313,7 @@ fn missing_stable_memory_file_is_handled() {
         let canister_stable_memory = canister_layout.stable_memory_blob();
         assert!(!canister_stable_memory.exists());
 
-        let state_manager = restart_fn(state_manager);
+        let state_manager = restart_fn(state_manager, None);
 
         let recovered = state_manager.get_latest_state();
         assert_eq!(height(1), recovered.height());
@@ -288,6 +339,7 @@ where
                 log.clone(),
                 &MetricsRegistry::new(),
                 &config,
+                None,
                 ic_types::malicious_flags::MaliciousFlags::default(),
             ));
         })
@@ -304,6 +356,7 @@ where
                 log,
                 &metrics,
                 &config,
+                None,
                 ic_types::malicious_flags::MaliciousFlags::default(),
             ),
         );
@@ -441,6 +494,7 @@ fn checkpoints_outlive_state_manager() {
                 log.clone(),
                 &metrics_registry,
                 &config,
+                None,
                 ic_types::malicious_flags::MaliciousFlags::default(),
             );
             let (_height, mut state) = state_manager.take_tip();
@@ -462,6 +516,7 @@ fn checkpoints_outlive_state_manager() {
             log,
             &metrics_registry,
             &config,
+            None,
             ic_types::malicious_flags::MaliciousFlags::default(),
         );
 
@@ -495,6 +550,7 @@ fn certifications_are_not_persisted() {
                 log.clone(),
                 &metrics_registry,
                 &config,
+                None,
                 ic_types::malicious_flags::MaliciousFlags::default(),
             );
             let (_height, state) = state_manager.take_tip();
@@ -512,6 +568,7 @@ fn certifications_are_not_persisted() {
                 log,
                 &metrics_registry,
                 &config,
+                None,
                 ic_types::malicious_flags::MaliciousFlags::default(),
             );
             assert_eq!(vec![height(1)], heights_to_certify(&state_manager));
@@ -526,7 +583,7 @@ fn all_manifests_are_persisted() {
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
         wait_for_checkpoint(&state_manager, height(1));
 
-        let (metrics, state_manager) = restart_fn(state_manager);
+        let (metrics, state_manager) = restart_fn(state_manager, None);
 
         wait_for_checkpoint(&state_manager, height(1));
 
@@ -565,7 +622,7 @@ fn first_manifest_after_restart_is_incremental() {
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
         wait_for_checkpoint(&state_manager, height(1));
 
-        let (metrics, state_manager) = restart_fn(state_manager);
+        let (metrics, state_manager) = restart_fn(state_manager, None);
 
         wait_for_checkpoint(&state_manager, height(1)); // Make sure the base manifest is available
         let (_height, state) = state_manager.take_tip();
@@ -660,7 +717,7 @@ fn can_remove_checkpoints() {
             ],
         );
 
-        let state_manager = restart_fn(state_manager);
+        let state_manager = restart_fn(state_manager, Some(height(4)));
 
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
@@ -720,7 +777,7 @@ fn can_keep_last_checkpoint_and_higher_states_after_removal() {
         let latest_state = state_manager.get_latest_state();
         assert_eq!(height(9), latest_state.height());
 
-        let state_manager = restart_fn(state_manager);
+        let state_manager = restart_fn(state_manager, Some(height(10)));
 
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
@@ -785,7 +842,7 @@ fn should_restart_from_the_latest_checkpoint_requested_to_remove() {
         let latest_state = state_manager.get_latest_state();
         assert_eq!(height(13), latest_state.height());
 
-        let state_manager = restart_fn(state_manager);
+        let state_manager = restart_fn(state_manager, Some(height(6)));
 
         // The checkpoint at height 8 is ignored.
         assert_eq!(
@@ -817,7 +874,7 @@ fn should_be_able_to_restart_twice_from_the_same_checkpoint() {
 
         state_manager.remove_states_below(height(3));
 
-        let state_manager = restart_fn(state_manager);
+        let state_manager = restart_fn(state_manager, Some(height(3)));
 
         assert_eq!(height(1), state_manager.latest_state_height());
         assert_eq!(
@@ -836,7 +893,7 @@ fn should_be_able_to_restart_twice_from_the_same_checkpoint() {
             state_manager.commit_and_certify(state, *h, scope.clone());
         }
 
-        let state_manager = restart_fn(state_manager);
+        let state_manager = restart_fn(state_manager, Some(height(3)));
 
         assert_eq!(height(1), state_manager.latest_state_height());
         assert_eq!(
@@ -863,7 +920,7 @@ fn should_keep_the_last_checkpoint_on_restart() {
 
         state_manager.remove_states_below(height(3));
 
-        let state_manager = restart_fn(state_manager);
+        let state_manager = restart_fn(state_manager, Some(height(3)));
 
         assert_eq!(height(4), state_manager.latest_state_height());
         assert!(state_manager
@@ -883,7 +940,7 @@ fn should_not_remove_latest_state_after_restarting_without_checkpoints() {
             state_manager.remove_states_below(height(i));
         }
 
-        let state_manager = restart_fn(state_manager);
+        let state_manager = restart_fn(state_manager, Some(height(10)));
         for i in 0..10 {
             let (_, state) = state_manager.take_tip();
             state_manager.commit_and_certify(state, height(i), CertificationScope::Metadata);
@@ -1078,7 +1135,7 @@ fn certifications_of_transient_states_are_not_cached() {
 
         assert_eq!(Vec::<Height>::new(), heights_to_certify(&state_manager));
 
-        let state_manager = restart_fn(state_manager);
+        let state_manager = restart_fn(state_manager, None);
 
         assert_eq!(height(1), state_manager.latest_state_height());
         let (_height, state) = state_manager.take_tip();
@@ -1197,7 +1254,7 @@ fn recomputes_metadata_on_restart_if_missing() {
         assert_eq!(1, cert_hashes.len());
         assert_eq!(height(1), cert_hashes[0].0);
 
-        let state_manager = restart_fn(state_manager);
+        let state_manager = restart_fn(state_manager, None);
 
         assert_eq!(cert_hashes, state_manager.list_state_hashes_to_certify());
     })

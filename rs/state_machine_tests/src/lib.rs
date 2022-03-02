@@ -204,6 +204,7 @@ impl StateMachine {
             replica_logger.clone(),
             &metrics_registry,
             &sm_config,
+            None,
             ic_types::malicious_flags::MaliciousFlags::default(),
         ));
         let (_, ingress_history_writer, ingress_history_reader, query_handler, _, scheduler) =

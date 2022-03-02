@@ -93,6 +93,7 @@ where
             no_op_logger(),
             &metrics_registry,
             &StateManagerConfig::new(tmpdir.path().to_path_buf()),
+            None,
             ic_types::malicious_flags::MaliciousFlags::default(),
         );
         setup_ingress_state(now, &mut state_manager);

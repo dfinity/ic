@@ -15,6 +15,7 @@ use ic_execution_environment::setup_execution;
 use ic_interfaces::{
     certification::CertificationPool,
     certification::Verifier,
+    consensus_pool::ConsensusPool,
     execution_environment::{IngressHistoryReader, QueryHandler},
     messaging::{MessageRouting, MessageRoutingError},
     registry::{RegistryClient, RegistryTransportRecord},
@@ -251,6 +252,9 @@ impl Player {
             subnet_id,
             subnet_config.cycles_account_manager_config,
         ));
+        let starting_height = consensus_pool
+            .as_ref()
+            .map(|pool| pool.as_cache().starting_height());
         let state_manager = Arc::new(StateManagerImpl::new(
             verifier,
             subnet_id,
@@ -258,6 +262,7 @@ impl Player {
             log.clone(),
             &metrics_registry,
             &cfg.state_manager,
+            starting_height,
             ic_types::malicious_flags::MaliciousFlags::default(),
         ));
         let (_, ingress_history_writer, ingress_history_reader, http_query_handler, _, scheduler) =

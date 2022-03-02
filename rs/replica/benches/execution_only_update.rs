@@ -192,6 +192,7 @@ fn criterion_calls(criterion: &mut Criterion) {
         bench_replica.log.clone(),
         &bench_replica.metrics_registry,
         &StateManagerConfig::new(tmpdir.path().to_path_buf()),
+        None,
         ic_types::malicious_flags::MaliciousFlags::default(),
     ));
 

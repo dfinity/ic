@@ -127,6 +127,7 @@ pub(crate) fn setup() -> (
         log.clone().into(),
         &metrics_registry,
         &config.state_manager,
+        None,
         ic_types::malicious_flags::MaliciousFlags::default(),
     ));
 

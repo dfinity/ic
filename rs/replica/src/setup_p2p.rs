@@ -141,6 +141,7 @@ pub fn construct_ic_stack(
         replica_logger.clone(),
         &metrics_registry,
         &config.state_manager,
+        Some(artifact_pools.consensus_pool_cache.starting_height()),
         config.malicious_behaviour.malicious_flags.clone(),
     ));
     let (
