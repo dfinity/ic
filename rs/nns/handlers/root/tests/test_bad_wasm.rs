@@ -5,7 +5,7 @@ use canister_test::Runtime;
 use dfn_candid::candid;
 
 use ic_base_types::CanisterInstallMode::{self, Reinstall, Upgrade};
-use ic_nns_handler_root::common::{
+use ic_nervous_system_root::{
     CanisterIdRecord, CanisterStatusResult, CanisterStatusType, ChangeNnsCanisterProposalPayload,
 };
 use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;

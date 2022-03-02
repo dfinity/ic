@@ -1,13 +1,13 @@
 use candid::Nat;
 use dfn_candid::candid_one;
 use ic_canister_client::Sender;
-use ic_nns_common::types::NeuronId;
-use ic_nns_constants::ids::TEST_NEURON_1_OWNER_KEYPAIR;
-use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
-use ic_nns_handler_root::common::{
+use ic_nervous_system_root::{
     AddNnsCanisterProposalPayload, CanisterIdRecord, CanisterStatusResult,
     CanisterStatusType::Running,
 };
+use ic_nns_common::types::NeuronId;
+use ic_nns_constants::ids::TEST_NEURON_1_OWNER_KEYPAIR;
+use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
 use ic_nns_test_utils::{
     governance::{get_pending_proposals, submit_external_update_proposal, wait_for_final_state},

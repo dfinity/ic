@@ -2,11 +2,14 @@ use candid::{CandidType, Deserialize};
 use dfn_core::api::CanisterId;
 use ic_base_types::{CanisterInstallMode, PrincipalId};
 use ic_crypto_sha::Sha256;
+
+// TODO: Move these to nervous-system somewhere in the rs/nervous_system dir.
 use ic_nns_common::types::MethodAuthzChange;
 use ic_nns_constants::memory_allocation_of;
+
 use serde::Serialize;
 
-pub const LOG_PREFIX: &str = "[Root Handler] ";
+pub const LOG_PREFIX: &str = "[Root Canister] ";
 
 /// Copied from ic-types::ic_00::CanisterIdRecord.
 #[derive(CandidType, Deserialize, Debug)]

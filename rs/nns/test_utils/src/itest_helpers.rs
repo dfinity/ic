@@ -30,6 +30,10 @@ use dfn_candid::{candid_one, CandidOne};
 use ic_base_types::{CanisterId, CanisterInstallMode};
 use ic_canister_client::Sender;
 use ic_config::{subnet_config::SubnetConfig, Config};
+use ic_nervous_system_root::{
+    CanisterIdRecord, CanisterStatusResult, CanisterStatusType::Running,
+    ChangeNnsCanisterProposalPayload,
+};
 use ic_nns_common::{
     init::{LifelineCanisterInitPayload, LifelineCanisterInitPayloadBuilder},
     types::NeuronId,
@@ -42,13 +46,7 @@ use ic_nns_governance::{
 };
 use ic_nns_gtc::{init::GenesisTokenCanisterInitPayloadBuilder, pb::v1::Gtc};
 use ic_nns_gtc_accounts::{ECT_ACCOUNTS, SEED_ROUND_ACCOUNTS};
-use ic_nns_handler_root::{
-    common::{
-        CanisterIdRecord, CanisterStatusResult, CanisterStatusType::Running,
-        ChangeNnsCanisterProposalPayload,
-    },
-    init::{RootCanisterInitPayload, RootCanisterInitPayloadBuilder},
-};
+use ic_nns_handler_root::init::{RootCanisterInitPayload, RootCanisterInitPayloadBuilder};
 use ic_registry_transport::pb::v1::{RegistryAtomicMutateRequest, RegistryMutation};
 use ic_test_utilities::universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,

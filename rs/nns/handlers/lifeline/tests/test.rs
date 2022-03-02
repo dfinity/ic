@@ -1,7 +1,7 @@
 use dfn_candid::candid;
 use ic_ic00_types::CanisterIdRecord;
+use ic_nervous_system_root::CanisterStatusResult;
 use ic_nns_common::init::LifelineCanisterInitPayloadBuilder;
-use ic_nns_handler_root::common::CanisterStatusResult;
 use ic_nns_test_utils::itest_helpers::{
     local_test_on_nns_subnet, set_up_lifeline_canister, set_up_universal_canister,
 };

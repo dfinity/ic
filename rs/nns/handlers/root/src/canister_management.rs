@@ -1,8 +1,3 @@
-use crate::common::{
-    AddNnsCanisterProposalPayload, CanisterAction, CanisterIdRecord, CanisterStatusResult,
-    CanisterStatusType, ChangeNnsCanisterProposalPayload, StopOrStartNnsCanisterProposalPayload,
-    LOG_PREFIX,
-};
 use dfn_core::api::{call, call_with_funds, CanisterId, Funds};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
@@ -10,6 +5,11 @@ use ic_base_types::{CanisterInstallMode::Install, PrincipalId};
 
 use futures::future::join_all;
 use ic_ic00_types::{InstallCodeArgs, IC_00};
+use ic_nervous_system_root::{
+    AddNnsCanisterProposalPayload, CanisterAction, CanisterIdRecord, CanisterStatusResult,
+    CanisterStatusType, ChangeNnsCanisterProposalPayload, StopOrStartNnsCanisterProposalPayload,
+    LOG_PREFIX,
+};
 use ic_nns_common::{
     registry::{encode_or_panic, get_value, mutate_registry},
     types::{AuthzChangeOp, MethodAuthzChange},

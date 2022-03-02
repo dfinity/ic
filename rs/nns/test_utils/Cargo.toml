@@ -22,6 +22,7 @@ ic-nns-constants = { path = "../constants" }
 ic-nns-governance = { path = "../governance" }
 ic-nns-gtc = { path = "../gtc" }
 ic-nns-gtc-accounts = { path = "../gtc_accounts" }
+ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nns-handler-root = { path = "../handlers/root" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-keys = { path = "../../registry/keys" }

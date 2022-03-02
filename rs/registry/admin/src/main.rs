@@ -21,6 +21,10 @@ use ic_types::p2p;
 extern crate ic_admin_derive;
 use ic_consensus::dkg::make_registry_cup;
 use ic_interfaces::registry::RegistryClient;
+use ic_nervous_system_root::{
+    AddNnsCanisterProposalPayload, CanisterAction, CanisterStatusResult,
+    ChangeNnsCanisterProposalPayload, StopOrStartNnsCanisterProposalPayload,
+};
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::{
     ids::{
@@ -42,13 +46,7 @@ use ic_nns_governance::{
         decode_make_proposal_response,
     },
 };
-use ic_nns_handler_root::{
-    common::{
-        AddNnsCanisterProposalPayload, CanisterAction, CanisterStatusResult,
-        ChangeNnsCanisterProposalPayload, StopOrStartNnsCanisterProposalPayload,
-    },
-    root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot},
-};
+use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
 use ic_nns_init::make_hsm_sender;
 use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
 use ic_protobuf::registry::node_rewards::v2::{
