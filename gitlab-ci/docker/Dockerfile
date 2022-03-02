@@ -18,7 +18,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null && \
     apt -yq update && \
     apt -yqq install --no-install-recommends \
-        build-essential pkg-config libssl-dev llvm-10-dev llvm-dev liblmdb-dev clang-10 cmake libbz2-dev gcc-multilib zlib1g-dev \
+        build-essential pkg-config libssl-dev llvm-10-dev llvm-dev liblmdb-dev clang clang-10 cmake libbz2-dev gcc-multilib zlib1g-dev \
         lldb libc-bin libclang-10-dev liblz4-dev librocksdb-dev libsnappy-dev libzstd-dev zstd vim emacs nano jq \
         zip unzip rclone rsync bc csmith gcc lld lld-10 libc++-10-dev libcsmith-dev sqlite3 libsqlite3-dev libselinux-dev libunwind-dev \
         qemu-system-x86 ovmf iproute2 dosfstools mtools fakeroot faketime android-sdk-ext4-utils \
