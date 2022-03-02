@@ -43,7 +43,7 @@ jemalloc-ctl = "0.3.3"
 json5 = "0.2.7"
 libc = "0.2.91"
 nix = "0.23.0"
-pprof = { version= "0.6.1" , features = ["flamegraph", "protobuf"], optional = true }
+pprof = { version = "0.6.2", default-features = false, features = ["flamegraph", "protobuf"], optional = true }
 prometheus = "0.12.0"
 prost = "0.9.0"
 rand = "0.7.3"
