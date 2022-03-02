@@ -3436,6 +3436,7 @@ dependencies = [
  "futures",
  "hex",
  "ic-async-utils",
+ "ic-btc-validation",
  "ic-protobuf",
  "prost",
  "prost-build",

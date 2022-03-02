@@ -23,7 +23,8 @@ pub type BlockHeight = u32;
 pub mod test_common {
 
     use bitcoin::{
-        consensus::deserialize, util::uint::Uint256, Block, BlockHash, BlockHeader, TxMerkleNode,
+        consensus::deserialize, util::uint::Uint256, Block, BlockHash, BlockHeader, Transaction,
+        TxMerkleNode,
     };
     use hex::FromHex;
     use rand::{prelude::StdRng, Rng, SeedableRng};
@@ -79,19 +80,27 @@ pub mod test_common {
         decode_block(BLOCK_2_ENCODED)
     }
 
-    pub fn large_block() -> Block {
-        let mut block = decode_block(BLOCK_1_ENCODED);
-        let tx = block
-            .txdata
-            .get(0)
-            .cloned()
-            .expect("block 1 missing transaction");
-        for _ in 0..20_000 {
-            // 20_000 transactions will generate just a bit over a 2 MiB block
+    /// Generates a singular large block.
+    fn large_block(prev_blockhash: &BlockHash, prev_time: u32, tx: Transaction) -> Block {
+        let mut block = Block {
+            header: BlockHeader {
+                version: 1,
+                prev_blockhash: *prev_blockhash,
+                merkle_root: TxMerkleNode::default(),
+                time: prev_time + gen_time_delta(),
+                bits: BlockHeader::compact_target_from_u256(&TARGET),
+                nonce: 0,
+            },
+            txdata: vec![],
+        };
+
+        for _ in 0..25_000 {
+            // 25_000 transactions will generate just a bit over a 2 MiB block
             block.txdata.push(tx.clone());
         }
 
         block.header.merkle_root = block.merkle_root();
+        solve_proof_of_work(&mut block.header);
         block
     }
 
@@ -99,6 +108,28 @@ pub mod test_common {
     /// logging messages.
     pub fn make_logger() -> Logger {
         Logger::root(slog::Discard, slog::o!())
+    }
+
+    /// Generates a blockchain containing large blocks (blocks over 2MiB) starting at a given hash and time.
+    pub fn generate_large_block_blockchain(
+        initial_blockhash: BlockHash,
+        initial_time: u32,
+        limit: BlockHeight,
+    ) -> Vec<Block> {
+        let block_1 = decode_block(BLOCK_1_ENCODED);
+        let tx = block_1.txdata.first().cloned().unwrap();
+        let mut blocks = vec![];
+
+        let mut prev_blockhash = initial_blockhash;
+        let mut prev_time = initial_time;
+        for _ in 0..limit {
+            let block = large_block(&prev_blockhash, prev_time, tx.clone());
+            prev_blockhash = block.header.block_hash();
+            prev_time = block.header.time;
+            blocks.push(block);
+        }
+
+        blocks
     }
 
     /// This helper generates a header chain starting at the given header until the given height.
