@@ -6,7 +6,7 @@ use crate::{
         encode_controllers, encode_message, encode_metadata, encode_stream_header,
         encode_subnet_canister_ranges,
     },
-    MAX_SUPPORTED_CERTIFICATION_VERSION,
+    max_supported_certification_version,
 };
 use ic_crypto_tree_hash::Label;
 use ic_registry_routing_table::RoutingTable;
@@ -216,10 +216,10 @@ fn invert_routing_table(
 fn state_as_tree(state: &ReplicatedState) -> LazyTree<'_> {
     let certification_version = state.metadata.certification_version;
     assert!(
-        certification_version <= MAX_SUPPORTED_CERTIFICATION_VERSION,
+        certification_version <= max_supported_certification_version(),
         "Unable to certify state with version {}. Maximum supported certification version is {}",
         certification_version,
-        MAX_SUPPORTED_CERTIFICATION_VERSION
+        max_supported_certification_version()
     );
 
     fork(
