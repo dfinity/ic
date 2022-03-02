@@ -1,7 +1,4 @@
 use crate::canister_management::do_change_nns_canister;
-use crate::common::{
-    CanisterIdRecord, CanisterStatusResult, ChangeNnsCanisterProposalPayload, LOG_PREFIX,
-};
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -14,6 +11,9 @@ use dfn_core::api::{call, now, CanisterId};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::{CanisterInstallMode, NodeId, PrincipalId, SubnetId};
+use ic_nervous_system_root::{
+    CanisterIdRecord, CanisterStatusResult, ChangeNnsCanisterProposalPayload, LOG_PREFIX,
+};
 use ic_nns_common::registry::get_value;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_protobuf::registry::{

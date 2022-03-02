@@ -86,6 +86,7 @@ members = [
   "monitoring/pprof",
   "monitoring/prober",
   "nervous_system/common",
+  "nervous_system/root",
   "nns/constants",
   "nns/common",
   "nns/common/test_canister",

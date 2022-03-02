@@ -5,13 +5,13 @@ use dfn_core::{
     stable,
 };
 use ic_base_types::PrincipalId;
+use ic_nervous_system_root::{
+    AddNnsCanisterProposalPayload, CanisterIdRecord, ChangeNnsCanisterProposalPayload,
+    StopOrStartNnsCanisterProposalPayload, LOG_PREFIX,
+};
 use ic_nns_common::access_control::check_caller_is_governance;
 use ic_nns_handler_root::{
     canister_management,
-    common::{
-        AddNnsCanisterProposalPayload, CanisterIdRecord, ChangeNnsCanisterProposalPayload,
-        StopOrStartNnsCanisterProposalPayload, LOG_PREFIX,
-    },
     root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot},
 };
 

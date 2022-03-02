@@ -38,6 +38,7 @@ ic-nns-init = { path = "../nns/init" }
 ic-interfaces = { path = "../interfaces" }
 ic-nns-constants = { path = "../nns/constants" }
 ic-nns-governance = { path = "../nns/governance" }
+ic-nervous-system-root = { path = "../nervous_system/root" }
 ic-nns-handler-root = { path = "../nns/handlers/root" }
 ic-nns-test-utils = { path = "../nns/test_utils" }
 ic-prep = { path = "../prep" }

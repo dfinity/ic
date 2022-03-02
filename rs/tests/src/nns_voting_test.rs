@@ -55,12 +55,12 @@ use dfn_candid::candid_one;
 use ic_nns_test_utils::ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID, TEST_NEURON_3_ID};
 
 use ic_canister_client::Sender;
+use ic_nervous_system_root::ChangeNnsCanisterProposalPayload;
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::{
     ids::{TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR, TEST_NEURON_3_OWNER_KEYPAIR},
     GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID,
 };
-use ic_nns_handler_root::common::ChangeNnsCanisterProposalPayload;
 use ic_nns_test_utils::governance::submit_external_update_proposal_allowing_error;
 use ic_registry_subnet_type::SubnetType;
 use rand::Rng;

@@ -3222,6 +3222,7 @@ dependencies = [
  "ic-crypto-utils-basic-sig",
  "ic-http-utils",
  "ic-interfaces",
+ "ic-nervous-system-root",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
@@ -5084,6 +5085,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-root"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "dfn_core",
+ "ic-base-types",
+ "ic-crypto-sha",
+ "ic-nns-common",
+ "ic-nns-constants",
+ "serde",
+ "serde_bytes",
+]
+
+[[package]]
 name = "ic-nns-common"
 version = "0.8.0"
 dependencies = [
@@ -5221,6 +5236,7 @@ dependencies = [
  "ic-cdk",
  "ic-crypto-sha",
  "ic-ic00-types",
+ "ic-nervous-system-root",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
@@ -5310,6 +5326,7 @@ dependencies = [
  "ic-crypto-sha",
  "ic-error-types",
  "ic-nervous-system-common",
+ "ic-nervous-system-root",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
@@ -5361,6 +5378,7 @@ dependencies = [
  "ic-config",
  "ic-crypto",
  "ic-crypto-sha",
+ "ic-nervous-system-root",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
@@ -7297,9 +7315,9 @@ dependencies = [
  "dfn_candid",
  "ic-base-types",
  "ic-ic00-types",
+ "ic-nervous-system-root",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-nns-handler-root",
  "ic-nns-test-utils",
  "wabt 0.10.0 (git+https://github.com/dfinity-lab/wabt-rs?tag=0.10.0-dfinity)",
 ]
@@ -11036,6 +11054,7 @@ dependencies = [
  "ic-ic00-types",
  "ic-interfaces",
  "ic-nervous-system-common",
+ "ic-nervous-system-root",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",

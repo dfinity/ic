@@ -39,6 +39,7 @@ ic-types = { path = "../../types/types" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-governance = { path = "../../nns/governance" }
+ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nns-handler-root = { path = "../../nns/handlers/root" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-registry-routing-table = { path = "../routing_table" }

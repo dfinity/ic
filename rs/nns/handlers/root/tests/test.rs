@@ -2,10 +2,10 @@ use assert_matches::assert_matches;
 use candid::Encode;
 use dfn_candid::candid;
 use ic_base_types::CanisterInstallMode::Upgrade;
-use ic_nns_handler_root::{
-    common::{CanisterIdRecord, CanisterStatusResult, ChangeNnsCanisterProposalPayload},
-    init::RootCanisterInitPayloadBuilder,
+use ic_nervous_system_root::{
+    CanisterIdRecord, CanisterStatusResult, ChangeNnsCanisterProposalPayload,
 };
+use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
 use ic_nns_test_utils::itest_helpers::{
     forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_root_canister,
     set_up_universal_canister,

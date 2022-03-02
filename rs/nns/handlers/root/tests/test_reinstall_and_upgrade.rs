@@ -4,9 +4,9 @@ use canister_test::{Project, Runtime};
 use dfn_candid::candid;
 
 use ic_base_types::CanisterInstallMode::{self, Install, Reinstall, Upgrade};
-use ic_nns_handler_root::common::CanisterStatusType::Running;
-use ic_nns_handler_root::common::{
-    CanisterIdRecord, CanisterStatusResult, ChangeNnsCanisterProposalPayload,
+use ic_nervous_system_root::{
+    CanisterIdRecord, CanisterStatusResult, CanisterStatusType::Running,
+    ChangeNnsCanisterProposalPayload,
 };
 use ic_nns_handler_root::init::RootCanisterInitPayload;
 use ic_nns_test_utils::itest_helpers::{

@@ -3,13 +3,11 @@ use dfn_candid::candid;
 
 use ic_nns_constants::{REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
 
-use ic_nns_handler_root::{
-    common::{
-        AddNnsCanisterProposalPayload, CanisterIdRecord, CanisterStatusResult,
-        CanisterStatusType::Running,
-    },
-    init::RootCanisterInitPayloadBuilder,
+use ic_nervous_system_root::{
+    AddNnsCanisterProposalPayload, CanisterIdRecord, CanisterStatusResult,
+    CanisterStatusType::Running,
 };
+use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
 use ic_nns_test_utils::{
     itest_helpers::{
         forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
