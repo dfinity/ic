@@ -172,6 +172,7 @@
 /rs/types/types/src/crypto.rs        @dfinity-lab/teams/crypto-owners
 /rs/types/types/src/crypto/          @dfinity-lab/teams/crypto-owners
 /rs/types/types/src/ic00.rs          @dfinity-lab/teams/execution-owners
+/rs/types/ic00_types/                @dfinity-lab/teams/execution-owners
 /rs/types/types/src/p2p.rs           @dfinity-lab/teams/networking-team
 /rs/universal_canister/              @dfinity-lab/teams/execution-owners @dfinity-lab/teams/ic-testing-verification
 /rs/validator/                       @dfinity-lab/teams/execution-owners
