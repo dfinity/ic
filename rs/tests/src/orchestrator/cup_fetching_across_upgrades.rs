@@ -30,33 +30,26 @@ Success::
 
 end::catalog[] */
 
-use crate::nns::{
-    get_governance_canister, submit_bless_replica_version_proposal,
-    submit_update_subnet_replica_version_proposal, vote_execute_proposal_assert_executed, NnsExt,
-};
+use crate::nns::NnsExt;
 use crate::orchestrator::node_reassignment_test::{can_read_msg, store_message};
-use crate::orchestrator::utils::upgrade::{fetch_update_file_sha256, get_blessed_replica_versions};
+use crate::orchestrator::utils::upgrade::{
+    assert_assigned_replica_version, bless_replica_version, get_assigned_replica_version,
+    update_subnet_replica_version, UpdateImageType,
+};
 use crate::util::{
     assert_endpoints_reachability, block_on, get_other_subnet_nodes,
-    get_random_application_node_endpoint, get_random_nns_node_endpoint, get_update_image_url,
-    runtime_from_url, EndpointsStatus, UpdateImageType,
+    get_random_application_node_endpoint, get_random_nns_node_endpoint, EndpointsStatus,
 };
-use core::time;
-use ic_canister_client::Sender;
 use ic_fondue::pot::Context;
 use ic_fondue::{
     ic_instance::{InternetComputer, Subnet},
     ic_manager::{IcControl, IcEndpoint, IcHandle},
 };
-use ic_nns_common::types::NeuronId;
-use ic_nns_constants::ids::TEST_NEURON_1_OWNER_KEYPAIR;
-use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
-use ic_registry_common::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{messages::ReplicaHealthStatus, Height, ReplicaVersion, SubnetId};
+use ic_types::{Height, ReplicaVersion, SubnetId};
 use slog::{info, warn};
 use std::convert::TryFrom;
-use std::{env, thread};
+use std::env;
 
 const DKG_INTERVAL: u64 = 14;
 const SUBNET_SIZE: usize = 4;
@@ -104,7 +97,7 @@ pub fn test(handle: IcHandle, ctx: &Context) {
     let subnet_id = app_node.subnet_id().unwrap();
     let other_nodes = get_other_subnet_nodes(&handle, app_node);
 
-    let original_version = get_replica_version(app_node).unwrap();
+    let original_version = get_assigned_replica_version(app_node).unwrap();
     info!(ctx.logger, "Original version: {}", original_version);
     if original_version == master_version {
         warn!(
@@ -159,16 +152,18 @@ fn upgrade_replica_after_subnet_upgraded(
         ctx.logger,
         "Upgrade from {} to: {}", original_version, replica_version
     );
-    let new_replica_version = ReplicaVersion::try_from(replica_version).unwrap();
+    let image_type = match target_version == replica_version {
+        true => UpdateImageType::Image,
+        false => UpdateImageType::ImageTest,
+    };
 
-    // bless the target version
-    propose_blessed_version(
+    // bless the target replica version
+    block_on(bless_replica_version(
         nns_node,
         target_version,
-        replica_version,
-        &new_replica_version,
-        ctx,
-    );
+        image_type,
+        &ctx.logger,
+    ));
 
     // kill a node
     stop_node(app_node, ctx);
@@ -186,11 +181,15 @@ fn upgrade_replica_after_subnet_upgraded(
     )));
 
     // proposal to upgrade the subnet nodes
-    proposal_upgrade_nodes(nns_node, &new_replica_version, subnet_id);
+    block_on(update_subnet_replica_version(
+        nns_node,
+        &ReplicaVersion::try_from(replica_version).unwrap(),
+        subnet_id,
+    ));
 
     // make sure the whole subnet is of the target version now
     for node in other_nodes.iter() {
-        assert_replica_version(node, replica_version, ctx);
+        assert_assigned_replica_version(node, replica_version, &ctx.logger);
     }
 
     // read again the message to make sure the state is kept after the upgrade
@@ -206,7 +205,7 @@ fn upgrade_replica_after_subnet_upgraded(
     let app_node2 = start_stoped_node(ctx, app_node);
 
     // make sure it has the target version now
-    assert_replica_version(&app_node2, replica_version, ctx);
+    assert_assigned_replica_version(&app_node2, replica_version, &ctx.logger);
 
     // check that the subnet is still running
     info!(ctx.logger, "Store message '{}'", replica_version);
@@ -220,68 +219,6 @@ fn upgrade_replica_after_subnet_upgraded(
     )));
 
     app_node2
-}
-
-fn propose_blessed_version(
-    nns_node: &IcEndpoint,
-    target_version: &str,
-    replica_version: &str,
-    new_replica_version: &ReplicaVersion,
-    ctx: &Context,
-) {
-    let upgrade_url = if target_version == replica_version {
-        get_update_image_url(UpdateImageType::Image, target_version)
-    } else {
-        get_update_image_url(UpdateImageType::ImageTest, target_version)
-    };
-    info!(ctx.logger, "Upgrade URL: {}", upgrade_url);
-    let sha_url = get_update_image_url(UpdateImageType::Sha256, target_version);
-
-    let nns = runtime_from_url(nns_node.url.clone());
-    let governance_canister = get_governance_canister(&nns);
-    let registry_canister = RegistryCanister::new(vec![nns_node.url.clone()]);
-    let test_neuron_id = NeuronId(TEST_NEURON_1_ID);
-    let proposal_sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
-    block_on(async {
-        let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
-        info!(ctx.logger, "Initial: {:?}", blessed_versions);
-        let sha256 = fetch_update_file_sha256(&sha_url, target_version != replica_version).await;
-
-        let proposal_id = submit_bless_replica_version_proposal(
-            &governance_canister,
-            proposal_sender.clone(),
-            test_neuron_id,
-            new_replica_version.clone(),
-            sha256,
-            upgrade_url,
-        )
-        .await;
-        vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
-        let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
-        info!(ctx.logger, "Updated: {:?}", blessed_versions);
-    });
-}
-
-fn proposal_upgrade_nodes(
-    nns_node: &IcEndpoint,
-    new_replica_version: &ReplicaVersion,
-    subnet_id: SubnetId,
-) {
-    let nns = runtime_from_url(nns_node.url.clone());
-    let governance_canister = get_governance_canister(&nns);
-    let test_neuron_id = NeuronId(TEST_NEURON_1_ID);
-    let proposal_sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
-    block_on(async {
-        let proposal2_id = submit_update_subnet_replica_version_proposal(
-            &governance_canister,
-            proposal_sender.clone(),
-            test_neuron_id,
-            new_replica_version.clone(),
-            subnet_id,
-        )
-        .await;
-        vote_execute_proposal_assert_executed(&governance_canister, proposal2_id).await;
-    });
 }
 
 fn stop_node(app_node: &IcEndpoint, ctx: &Context) {
@@ -320,38 +257,4 @@ fn start_stoped_node(ctx: &Context, app_node: &IcEndpoint) -> IcEndpoint {
         app_node.ip_address().unwrap()
     );
     app_node2
-}
-
-fn assert_replica_version(endpoint: &IcEndpoint, expected_version: &str, ctx: &Context) {
-    for i in 1..=50 {
-        let fetched_version = get_replica_version(endpoint).ok();
-        info!(
-            ctx.logger,
-            "Try: {}. replica version: {:?}", i, fetched_version
-        );
-        if Some(expected_version.to_string()) == fetched_version {
-            return;
-        };
-        thread::sleep(time::Duration::from_secs(10));
-    }
-
-    panic!("Couldn't detect the replica version {}", expected_version)
-}
-
-fn get_replica_version(endpoint: &IcEndpoint) -> Result<String, String> {
-    let version = match block_on(async { endpoint.status().await }) {
-        Ok(status) => {
-            if Some(ReplicaHealthStatus::Healthy) == status.replica_health_status {
-                status
-            } else {
-                return Err("Replica is not healty".to_string());
-            }
-        }
-        Err(err) => return Err(err.to_string()),
-    }
-    .impl_version;
-    match version {
-        Some(ver) => Ok(ver),
-        None => Err("No version found in status".to_string()),
-    }
 }

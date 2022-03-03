@@ -794,33 +794,3 @@ pub(crate) fn escape_for_wat(id: &Principal) -> String {
         res
     })
 }
-
-#[allow(dead_code)] // Not all image types are used yet.
-#[derive(Clone, Copy, PartialEq)]
-pub(crate) enum UpdateImageType {
-    Image,
-    ImageTest,
-    Sha256,
-}
-pub(crate) fn get_update_image_url(image_type: UpdateImageType, git_revision: &str) -> String {
-    match image_type {
-        UpdateImageType::Image => {
-            format!(
-                "https://download.dfinity.systems/ic/{}/guest-os/update-img/update-img.tar.gz",
-                git_revision
-            )
-        }
-        UpdateImageType::ImageTest => {
-            format!(
-                "https://download.dfinity.systems/ic/{}/guest-os/update-img/update-img-test.tar.gz",
-                git_revision
-            )
-        }
-        UpdateImageType::Sha256 => {
-            format!(
-                "https://download.dfinity.systems/ic/{}/guest-os/update-img/SHA256SUMS",
-                git_revision
-            )
-        }
-    }
-}

@@ -35,14 +35,14 @@ use ic_types::{Height, ReplicaVersion};
 
 use ic_canister_client::Sender;
 
-use crate::nns::{self, await_proposal_execution, get_software_version};
-use crate::nns::{
-    await_replica_status_change, submit_bless_replica_version_proposal,
-    submit_update_subnet_replica_version_proposal, NnsExt,
-};
-
-use crate::util::{
-    get_random_nns_node_endpoint, get_update_image_url, runtime_from_url, UpdateImageType,
+use crate::{
+    nns::{
+        self, await_proposal_execution, await_replica_status_change, get_software_version,
+        submit_bless_replica_version_proposal, submit_update_subnet_replica_version_proposal,
+        NnsExt,
+    },
+    orchestrator::utils::upgrade::{get_update_image_url, UpdateImageType},
+    util::{get_random_nns_node_endpoint, runtime_from_url},
 };
 
 use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
@@ -54,7 +54,7 @@ pub fn config() -> InternetComputer {
     )
 }
 
-pub fn upgrade_reject(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
 
     ctx.install_nns_canisters(&handle, true);
