@@ -9,6 +9,7 @@ DFX_BINS=(
     replica
     ic-starter
     canister_sandbox
+    sandbox_launcher
 )
 
 function bins() {
