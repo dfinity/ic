@@ -281,7 +281,7 @@ where
     Post: Fn(usize, F::Output) -> P,
     O: FromIterator<P>,
 {
-    let futures = targets.into_iter().map(|target| call(target));
+    let futures = targets.into_iter().map(call);
     join_all(futures)
         .await
         .into_iter()

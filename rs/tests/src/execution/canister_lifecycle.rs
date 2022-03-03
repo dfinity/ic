@@ -306,7 +306,7 @@ pub fn update_settings_multiple_controllers(handle: IcHandle, ctx: &ic_fondue::p
                     let result = res.settings.controllers();
                     let expected = controllers
                         .iter()
-                        .map(|id| to_principal_id(id))
+                        .map(to_principal_id)
                         .collect::<Vec<PrincipalId>>();
                     assert_eq!(result, expected);
                 })
@@ -426,7 +426,7 @@ pub fn create_canister_with_multiple_controllers(handle: IcHandle, ctx: &ic_fond
                     let result = res.settings.controllers();
                     let expected = controllers
                         .iter()
-                        .map(|id| to_principal_id(id))
+                        .map(to_principal_id)
                         .collect::<Vec<PrincipalId>>();
                     assert_eq!(result, expected);
                 })
@@ -448,7 +448,7 @@ pub fn create_canister_with_multiple_controllers(handle: IcHandle, ctx: &ic_fond
                     let result = res.settings.controllers();
                     let expected = controllers
                         .iter()
-                        .map(|id| to_principal_id(id))
+                        .map(to_principal_id)
                         .collect::<Vec<PrincipalId>>();
                     assert_eq!(result, expected);
                 })

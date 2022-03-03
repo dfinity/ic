@@ -31,7 +31,7 @@ pub(crate) fn from_flags(config: Config) -> Result<Config, ConfigError> {
         config.urls = NNS_URLS
             .flag
             .split(',')
-            .map(|s| Url::parse(s))
+            .map(Url::parse)
             .collect::<Result<Vec<Url>, _>>()?;
     }
 

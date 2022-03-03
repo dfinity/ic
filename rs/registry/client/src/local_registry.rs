@@ -227,10 +227,7 @@ impl LocalRegistry {
         let mut urls: Vec<Url> = t_infos
             .iter()
             .filter_map(|(_nid, n_record)| {
-                n_record
-                    .http
-                    .as_ref()
-                    .and_then(|h| Self::http_endpoint_to_url(h))
+                n_record.http.as_ref().and_then(Self::http_endpoint_to_url)
             })
             .collect();
         // enforce canonical representation of the list
