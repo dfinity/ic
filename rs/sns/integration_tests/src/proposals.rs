@@ -1,14 +1,15 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use dfn_candid::candid;
+use dfn_candid::{candid, candid_one};
 use ic_canister_client::Sender;
 use ic_nns_constants::ids::{TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR};
 use ic_sns_governance::pb::v1::get_proposal_response::Result::Error;
 use ic_sns_governance::pb::v1::get_proposal_response::Result::Proposal as ResponseProposal;
+use ic_sns_governance::pb::v1::governance_error::ErrorType;
 use ic_sns_governance::pb::v1::governance_error::ErrorType::PreconditionFailed;
 use ic_sns_governance::pb::v1::proposal::Action;
 use ic_sns_governance::pb::v1::{
-    GetProposal, GetProposalResponse, Motion, Proposal, ProposalId, Vote,
+    GetProposal, GetProposalResponse, Motion, NervousSystemParameters, Proposal, ProposalId, Vote,
 };
 use ic_sns_governance::types::ONE_YEAR_SECONDS;
 use ic_sns_test_utils::itest_helpers::{
@@ -53,7 +54,8 @@ fn test_motion_proposal_execution() {
             // submitter has a majority stake and submitting also votes automatically.
             let proposal_id = sns_canisters
                 .make_proposal(&user, &subaccount, proposal_payload)
-                .await;
+                .await
+                .unwrap();
 
             let proposal = sns_canisters.get_proposal(proposal_id).await;
 
@@ -71,6 +73,90 @@ fn test_motion_proposal_execution() {
             assert_eq!(proposal.ballots.len(), 1);
             let (ballot_neuron_id, _ballot) = proposal.ballots.iter().next().unwrap();
             assert_eq!(*ballot_neuron_id, neuron_id.to_string());
+
+            Ok(())
+        }
+    })
+}
+
+/// Assert that ManageNervousSystemParameters proposals can be submitted, voted on, and executed
+#[test]
+fn test_manage_nervous_system_parameters_proposal_execution() {
+    local_test_on_sns_subnet(|runtime| {
+        async move {
+            // Initialize the ledger with an account for a user.
+            let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
+
+            let alloc = Tokens::from_tokens(1000).unwrap();
+            let sns_init_payload = SnsInitPayloadsBuilder::new()
+                .with_ledger_account(user.get_principal_id().into(), alloc)
+                .build();
+
+            let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+            let neuron_id = sns_canisters
+                .stake_and_claim_neuron(&user, Some(ONE_YEAR_SECONDS as u32))
+                .await;
+
+            let subaccount = match neuron_id.subaccount() {
+                Ok(s) => s,
+                Err(e) => panic!("Error creating the subaccount, {}", e),
+            };
+
+            // Assert that invalid params are rejected on proposal submission
+            let proposal_payload = Proposal {
+                title: "Test invalid ManageNervousSystemParameters proposal".into(),
+                action: Some(Action::ManageNervousSystemParameters(
+                    NervousSystemParameters {
+                        max_number_of_neurons: Some(
+                            NervousSystemParameters::MAX_NUMBER_OF_NEURONS_CEILING + 1,
+                        ),
+                        ..Default::default()
+                    },
+                )),
+                ..Default::default()
+            };
+
+            let error = sns_canisters
+                .make_proposal(&user, &subaccount, proposal_payload)
+                .await
+                .unwrap_err();
+
+            assert_eq!(error.error_type, ErrorType::InvalidProposal as i32);
+
+            // Assert that valid params cause Governance system parameters to be updated
+            let proposal_payload = Proposal {
+                title: "Test valid ManageNervousSystemParameters proposal".into(),
+                action: Some(Action::ManageNervousSystemParameters(
+                    NervousSystemParameters {
+                        transaction_fee_e8s: Some(120_001),
+                        neuron_minimum_stake_e8s: Some(398_002_900),
+                        ..Default::default()
+                    },
+                )),
+                ..Default::default()
+            };
+
+            // Submit a proposal. It should then be executed because the submitter
+            // has a majority stake and submitting also votes automatically.
+            let proposal_id = sns_canisters
+                .make_proposal(&user, &subaccount, proposal_payload)
+                .await
+                .unwrap();
+
+            let proposal = sns_canisters.get_proposal(proposal_id).await;
+
+            assert_eq!(proposal.action, 2);
+            assert_ne!(proposal.decided_timestamp_seconds, 0);
+            assert_ne!(proposal.executed_timestamp_seconds, 0);
+
+            let live_sys_params: NervousSystemParameters = sns_canisters
+                .governance
+                .query_("get_nervous_system_parameters", candid_one, ())
+                .await?;
+
+            assert_eq!(live_sys_params.transaction_fee_e8s, Some(120_001));
+            assert_eq!(live_sys_params.neuron_minimum_stake_e8s, Some(398_002_900));
 
             Ok(())
         }
@@ -131,7 +217,8 @@ fn test_voting_with_three_neurons_with_the_same_stake() {
                         ..Default::default()
                     },
                 )
-                .await;
+                .await
+                .unwrap();
 
             // Proposal hasn't been decided yet (nor has it been executed).
             let proposal = sns_canisters.get_proposal(proposal_id).await;

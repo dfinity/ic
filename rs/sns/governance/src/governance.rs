@@ -20,9 +20,9 @@ use crate::pb::v1::{
     },
     neuron::DissolveState,
     neuron::Followees,
-    proposal, Ballot, Empty, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
-    Governance as GovernanceProto, GovernanceError, ListNeurons, ListNeuronsResponse,
-    ListProposals, ListProposalsResponse, ManageNeuron, ManageNeuronResponse,
+    proposal, Ballot, DefaultFollowees, Empty, GetNeuron, GetNeuronResponse, GetProposal,
+    GetProposalResponse, Governance as GovernanceProto, GovernanceError, ListNeurons,
+    ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron, ManageNeuronResponse,
     NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionType, Proposal,
     ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RewardEvent, Tally,
     Vote,
@@ -365,7 +365,10 @@ impl Governance {
             .parameters
             .as_ref()
             .expect("Governance must have NervousSystemParameters.")
-            .default_followees;
+            .default_followees
+            .clone()
+            .unwrap_or_else(|| DefaultFollowees::default())
+            .followees;
 
         self.proto
             .validate_default_followees(&self.proto.neurons, default_followee)?;
@@ -1405,8 +1408,9 @@ impl Governance {
             proposal::Action::Motion(_) => {
                 self.set_proposal_execution_status(pid, Ok(()));
             }
-            proposal::Action::ManageNervousSystemParameters(_) => {
-                // TODO
+            proposal::Action::ManageNervousSystemParameters(params) => {
+                let result = self.perform_manage_nervous_system_parameters_action(params);
+                self.set_proposal_execution_status(pid, result);
             }
             proposal::Action::UpgradeSnsControlledCanister(_) => {
                 // TODO
@@ -1417,6 +1421,37 @@ impl Governance {
             proposal::Action::Unspecified(_) => {
                 // throw an error
             }
+        }
+    }
+
+    /// Execute a ManageNervousSystemParameters proposal by updating Governance's NervousSystemParameters
+    fn perform_manage_nervous_system_parameters_action(
+        &mut self,
+        proposed_params: NervousSystemParameters,
+    ) -> Result<(), GovernanceError> {
+        // Only set `self.proto.parameters` if "applying" the proposed params to the
+        // current params results in valid params
+        let new_params = proposed_params.inherit_from(self.nervous_system_parameters());
+
+        println!(
+            "{}Setting Governance nervous system params to: {:?}",
+            log_prefix(),
+            &new_params
+        );
+
+        match new_params.validate() {
+            Ok(()) => {
+                self.proto.parameters = Some(new_params);
+                Ok(())
+            }
+            Err(msg) => Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                format!(
+                    "Failed to perform ManageNervousSystemParameters action, proposed \
+                        parameters would lead to invalid NervousSystemParameters: {}",
+                    msg
+                ),
+            )),
         }
     }
 
@@ -1485,6 +1520,16 @@ impl Governance {
             } else {
                 return Ok(());
             }
+        } else if let Some(proposal::Action::ManageNervousSystemParameters(params)) =
+            &proposal.action
+        {
+            // Proposed NervousSystemParameters are valid if when "applied" to the current system
+            // params the resulting NervousSystemParameters are valid.
+            return params
+                .clone()
+                .inherit_from(self.nervous_system_parameters())
+                .validate()
+                .map_err(|msg| GovernanceError::new_with_message(ErrorType::InvalidProposal, msg));
         } else {
             return Ok(());
         };

@@ -3,8 +3,8 @@ use crate::pb::v1::governance_error::ErrorType;
 use crate::pb::v1::manage_neuron_response::MergeMaturityResponse;
 use crate::pb::v1::proposal::Action;
 use crate::pb::v1::{
-    manage_neuron_response, ExecuteNervousSystemFunction, GovernanceError, ManageNeuronResponse,
-    NervousSystemParameters, NeuronId, ProposalId, RewardEvent, Tally, Vote,
+    manage_neuron_response, DefaultFollowees, ExecuteNervousSystemFunction, GovernanceError,
+    ManageNeuronResponse, NervousSystemParameters, NeuronId, ProposalId, RewardEvent, Tally, Vote,
 };
 use ic_base_types::CanisterId;
 use ic_nervous_system_common::NervousSystemError;
@@ -57,7 +57,7 @@ impl NervousSystemParameters {
             transaction_fee_e8s: Some(DEFAULT_TRANSFER_FEE.get_e8s()),
             max_proposals_to_keep_per_action: Some(100),
             initial_voting_period: Some(4 * ONE_DAY_SECONDS),
-            default_followees: std::collections::HashMap::new(),
+            default_followees: Some(DefaultFollowees::default()),
             max_number_of_neurons: Some(200_000),
             neuron_minimum_dissolve_delay_to_vote_seconds: Some(6 * ONE_MONTH_SECONDS),
             max_followees_per_action: Some(15),
@@ -66,6 +66,47 @@ impl NervousSystemParameters {
             reward_distribution_period_seconds: Some(ONE_DAY_SECONDS),
             max_number_of_proposals_with_ballots: Some(700),
         }
+    }
+
+    /// Any empty fields of `self` will be overwritten with the corresponding fields of `base`
+    pub fn inherit_from(&self, base: &Self) -> Self {
+        let mut new_params = self.clone();
+        new_params.reject_cost_e8s = self.reject_cost_e8s.or(base.reject_cost_e8s);
+        new_params.neuron_minimum_stake_e8s = self
+            .neuron_minimum_stake_e8s
+            .or(base.neuron_minimum_stake_e8s);
+        new_params.transaction_fee_e8s = self.transaction_fee_e8s.or(base.transaction_fee_e8s);
+        new_params.max_proposals_to_keep_per_action = self
+            .max_proposals_to_keep_per_action
+            .or(base.max_proposals_to_keep_per_action);
+        new_params.initial_voting_period =
+            self.initial_voting_period.or(base.initial_voting_period);
+        new_params.default_followees = self
+            .default_followees
+            .clone()
+            .or_else(|| base.default_followees.clone());
+        new_params.max_number_of_neurons =
+            self.max_number_of_neurons.or(base.max_number_of_neurons);
+        new_params.neuron_minimum_dissolve_delay_to_vote_seconds = self
+            .neuron_minimum_dissolve_delay_to_vote_seconds
+            .or(base.neuron_minimum_dissolve_delay_to_vote_seconds);
+        new_params.max_followees_per_action = self
+            .max_followees_per_action
+            .or(base.max_followees_per_action);
+        new_params.max_dissolve_delay_seconds = self
+            .max_dissolve_delay_seconds
+            .or(base.max_dissolve_delay_seconds);
+        new_params.max_neuron_age_for_age_bonus = self
+            .max_neuron_age_for_age_bonus
+            .or(base.max_neuron_age_for_age_bonus);
+        new_params.reward_distribution_period_seconds = self
+            .reward_distribution_period_seconds
+            .or(base.reward_distribution_period_seconds);
+        new_params.max_number_of_proposals_with_ballots = self
+            .max_number_of_proposals_with_ballots
+            .or(base.max_number_of_proposals_with_ballots);
+
+        new_params
     }
 
     /// Validate that this `NervousSystemParameters` is well-formed
@@ -159,15 +200,16 @@ impl NervousSystemParameters {
 
     fn validate_default_followees(&self) -> Result<(), String> {
         let max_followees_per_action = self.validate_max_followees_per_action()?;
-
-        if self.default_followees.len() > max_followees_per_action as usize {
-            Err(format!(
-                "NervousSystemParameters.default_followees must have size less than {}",
-                max_followees_per_action
-            ))
-        } else {
-            Ok(())
+        if let Some(default_followees) = &self.default_followees {
+            if default_followees.followees.len() > max_followees_per_action as usize {
+                return Err(format!(
+                    "NervousSystemParameters.default_followees must have size less than {}",
+                    max_followees_per_action
+                ));
+            }
         }
+
+        Ok(())
     }
 
     fn validate_max_number_of_neurons(&self) -> Result<(), String> {
@@ -644,7 +686,9 @@ mod tests {
             },
             NervousSystemParameters {
                 max_followees_per_action: Some(0),
-                default_followees: hashmap! {12 => Followees { followees: vec![NeuronId { id: vec![] }] }},
+                default_followees: Some(DefaultFollowees {
+                    followees: hashmap! {12 => Followees { followees: vec![NeuronId { id: vec![] }] }},
+                }),
                 ..NervousSystemParameters::with_default_values()
             },
             NervousSystemParameters {
@@ -707,5 +751,63 @@ mod tests {
         assert!(NervousSystemParameters::with_default_values()
             .validate()
             .is_ok());
+    }
+
+    #[test]
+    fn test_inherit_from() {
+        let default_params = NervousSystemParameters::with_default_values();
+        let followees = DefaultFollowees {
+            followees: hashmap! { 1 => Followees { followees: vec![] } },
+        };
+
+        let proposed_params = NervousSystemParameters {
+            transaction_fee_e8s: Some(124),
+            max_number_of_neurons: Some(566),
+            max_number_of_proposals_with_ballots: Some(9801),
+            default_followees: Some(followees.clone()),
+            ..Default::default()
+        };
+
+        let new_params = proposed_params.inherit_from(&default_params);
+        let expected_params = NervousSystemParameters {
+            transaction_fee_e8s: Some(124),
+            max_number_of_neurons: Some(566),
+            max_number_of_proposals_with_ballots: Some(9801),
+            default_followees: Some(followees),
+            ..default_params
+        };
+
+        assert_eq!(new_params, expected_params);
+    }
+
+    /// Test that default followees can be cleared by inheriting an empty default_followees
+    #[test]
+    fn test_inherit_from_inherits_default_followees() {
+        let default_params = NervousSystemParameters::with_default_values();
+        let followees = DefaultFollowees {
+            followees: hashmap! { 1 => Followees { followees: vec![] } },
+        };
+
+        let proposed_params = NervousSystemParameters {
+            default_followees: Some(DefaultFollowees {
+                followees: hashmap! {},
+            }),
+            ..Default::default()
+        };
+
+        let current_params = NervousSystemParameters {
+            default_followees: Some(followees),
+            ..default_params
+        };
+
+        let new_params = proposed_params.inherit_from(&current_params);
+        let expected_params = NervousSystemParameters {
+            default_followees: Some(DefaultFollowees {
+                followees: hashmap! {},
+            }),
+            ..default_params
+        };
+
+        assert_eq!(new_params, expected_params);
     }
 }
