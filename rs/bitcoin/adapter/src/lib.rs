@@ -50,6 +50,7 @@ pub use adapter::Adapter;
 pub use cli::Cli;
 use common::BlockHeight;
 pub use config::Config;
+pub use proto::btc_adapter_client::BtcAdapterClient;
 pub use rpc_server::spawn_grpc_server;
 use stream::StreamEvent;
 
