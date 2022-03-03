@@ -928,7 +928,7 @@ impl Scheduler for SchedulerImpl {
                 state.metadata.heap_delta_estimate,
             );
             self.metrics.execute_round_called.inc();
-            observe_replicated_state_metrics(self.own_subnet_id, &state, &self.metrics);
+            observe_replicated_state_metrics(self.own_subnet_id, &state, &self.metrics, &round_log);
 
             {
                 let _timer = self.metrics.round_preparation_ingress.start_timer();
@@ -1365,6 +1365,7 @@ fn observe_replicated_state_metrics(
     own_subnet_id: SubnetId,
     state: &ReplicatedState,
     metrics: &SchedulerMetrics,
+    logger: &ReplicaLogger,
 ) {
     // Observe the number of registered canisters keyed by their status.
     let mut num_running_canisters = 0;
@@ -1381,6 +1382,7 @@ fn observe_replicated_state_metrics(
     let mut queues_reservations = 0;
     let mut queues_oversized_requests_extra_bytes = 0;
     let mut canisters_not_in_routing_table = 0;
+    let mut old_call_contexts_count = 0;
 
     state.canisters_iter().for_each(|canister| {
         match canister.status() {
@@ -1403,7 +1405,24 @@ fn observe_replicated_state_metrics(
         if state.routing_table().route(canister.canister_id().into()) != Some(own_subnet_id) {
             canisters_not_in_routing_table += 1;
         }
+        if let Some(manager) = canister.system_state.call_context_manager() {
+            let old_call_contexts =
+                manager.call_contexts_older_than(state.time(), OLD_CALL_CONTEXT_CUTOFF);
+            for (origin, origin_time) in &old_call_contexts {
+                error!(
+                    logger,
+                    "Call context has been open for {:?}: origin: {:?}, respondent: {}",
+                    state.time() - *origin_time,
+                    origin,
+                    canister.canister_id()
+                );
+            }
+            old_call_contexts_count += old_call_contexts.len();
+        }
     });
+    metrics
+        .old_open_call_contexts
+        .set(old_call_contexts_count as i64);
     let streams_response_bytes = state
         .metadata
         .streams()

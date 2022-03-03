@@ -226,6 +226,7 @@ impl CanisterStateBuilder {
             let call_context_id = call_context_manager.new_call_context(
                 call_context.call_origin().clone(),
                 call_context.available_cycles(),
+                call_context.time().unwrap(),
             );
 
             let call_context_in_call_context_manager = call_context_manager
@@ -354,6 +355,7 @@ impl SystemStateBuilder {
 pub struct CallContextBuilder {
     call_origin: CallOrigin,
     responded: bool,
+    time: Time,
 }
 
 impl CallContextBuilder {
@@ -371,8 +373,19 @@ impl CallContextBuilder {
         self
     }
 
+    pub fn with_time(mut self, time: Time) -> Self {
+        self.time = time;
+        self
+    }
+
     pub fn build(self) -> CallContext {
-        CallContext::new(self.call_origin, self.responded, false, Cycles::from(0))
+        CallContext::new(
+            self.call_origin,
+            self.responded,
+            false,
+            Cycles::from(0),
+            self.time,
+        )
     }
 }
 
@@ -381,6 +394,7 @@ impl Default for CallContextBuilder {
         Self {
             call_origin: CallOrigin::Ingress(user_test_id(0), message_test_id(0)),
             responded: false,
+            time: Time::from_nanos_since_unix_epoch(0),
         }
     }
 }
@@ -588,6 +602,7 @@ pub fn register_callback(
     let call_context_id = call_context_manager.new_call_context(
         CallOrigin::CanisterUpdate(originator, callback_id),
         Cycles::zero(),
+        Time::from_nanos_since_unix_epoch(0),
     );
 
     call_context_manager.register_callback(Callback::new(

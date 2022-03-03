@@ -9,6 +9,7 @@ use ic_test_utilities::types::{
 use ic_types::{
     messages::CallbackId,
     methods::{Callback, WasmClosure},
+    Time,
 };
 use ic_types::{messages::MAX_RESPONSE_COUNT_BYTES, CountBytes, Cycles};
 use ic_wasm_types::BinaryEncodedWasm;
@@ -63,6 +64,7 @@ fn canister_state_push_input_response_no_reservation() {
             .new_call_context(
                 CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1)),
                 Cycles::zero(),
+                Time::from_nanos_since_unix_epoch(0),
             );
         let callback_id = canister_state
             .system_state
@@ -120,6 +122,7 @@ fn canister_state_push_input_response_success() {
             .new_call_context(
                 CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1)),
                 Cycles::zero(),
+                Time::from_nanos_since_unix_epoch(0),
             );
         let callback_id = canister_state
             .system_state
@@ -450,6 +453,7 @@ fn canister_state_push_input_response_memory_limit_test_impl(
             .new_call_context(
                 CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1)),
                 Cycles::zero(),
+                Time::from_nanos_since_unix_epoch(0),
             );
         let callback_id = canister_state
             .system_state

@@ -18,7 +18,7 @@ use ic_test_utilities::{
 use ic_test_utilities::{state::SystemStateBuilder, types::ids::canister_test_id};
 use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext},
-    ComputeAllocation, Cycles, NumInstructions,
+    ComputeAllocation, Cycles, NumInstructions, Time,
 };
 use maplit::btreemap;
 
@@ -142,6 +142,7 @@ pub fn get_system_state() -> SystemState {
         .new_call_context(
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
             Cycles::from(50),
+            Time::from_nanos_since_unix_epoch(0),
         );
     system_state
 }

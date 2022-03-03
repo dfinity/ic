@@ -2773,6 +2773,7 @@ fn stopping_canisters_are_not_stopped_if_not_ready() {
                 .new_call_context(
                     CallOrigin::Ingress(user_test_id(13), message_test_id(14)),
                     Cycles::from(10),
+                    Time::from_nanos_since_unix_epoch(0),
                 );
 
             let expected_ccm = canister
@@ -2825,7 +2826,12 @@ fn replicated_state_metrics_nothing_exported() {
     let registry = MetricsRegistry::new();
     let scheduler_metrics = SchedulerMetrics::new(&registry);
 
-    observe_replicated_state_metrics(subnet_test_id(1), &state, &scheduler_metrics);
+    observe_replicated_state_metrics(
+        subnet_test_id(1),
+        &state,
+        &scheduler_metrics,
+        &no_op_logger(),
+    );
 
     // No canisters in the state. There should be nothing exported.
     assert_eq!(
@@ -3386,7 +3392,12 @@ fn replicated_state_metrics_running_canister() {
     let registry = MetricsRegistry::new();
     let scheduler_metrics = SchedulerMetrics::new(&registry);
 
-    observe_replicated_state_metrics(subnet_test_id(1), &state, &scheduler_metrics);
+    observe_replicated_state_metrics(
+        subnet_test_id(1),
+        &state,
+        &scheduler_metrics,
+        &no_op_logger(),
+    );
 
     assert_eq!(
         fetch_int_gauge_vec(&registry, "replicated_state_registered_canisters"),
@@ -3434,7 +3445,12 @@ fn replicated_state_metrics_different_canister_statuses() {
     let registry = MetricsRegistry::new();
     let scheduler_metrics = SchedulerMetrics::new(&registry);
 
-    observe_replicated_state_metrics(subnet_test_id(1), &state, &scheduler_metrics);
+    observe_replicated_state_metrics(
+        subnet_test_id(1),
+        &state,
+        &scheduler_metrics,
+        &no_op_logger(),
+    );
 
     assert_eq!(
         fetch_int_gauge_vec(&registry, "replicated_state_registered_canisters"),
@@ -3471,7 +3487,12 @@ fn replicated_state_metrics_all_canisters_in_routing_table() {
     let registry = MetricsRegistry::new();
     let scheduler_metrics = SchedulerMetrics::new(&registry);
 
-    observe_replicated_state_metrics(subnet_test_id(1), &state, &scheduler_metrics);
+    observe_replicated_state_metrics(
+        subnet_test_id(1),
+        &state,
+        &scheduler_metrics,
+        &no_op_logger(),
+    );
 
     assert_eq!(
         fetch_int_gauge(&registry, "replicated_state_canisters_not_in_routing_table"),
@@ -3504,11 +3525,91 @@ fn replicated_state_metrics_some_canisters_not_in_routing_table() {
     let registry = MetricsRegistry::new();
     let scheduler_metrics = SchedulerMetrics::new(&registry);
 
-    observe_replicated_state_metrics(subnet_test_id(1), &state, &scheduler_metrics);
+    observe_replicated_state_metrics(
+        subnet_test_id(1),
+        &state,
+        &scheduler_metrics,
+        &no_op_logger(),
+    );
 
     assert_eq!(
         fetch_int_gauge(&registry, "replicated_state_canisters_not_in_routing_table"),
         Some(1)
+    );
+}
+
+#[test]
+fn long_open_call_context_is_recorded() {
+    let num_instructions_consumed_per_msg = NumInstructions::from(5);
+    let scheduler_test_fixture = SchedulerTestFixture {
+        scheduler_config: SchedulerConfig {
+            scheduler_cores: 1,
+            max_instructions_per_round: NumInstructions::from(51),
+            max_instructions_per_message: num_instructions_consumed_per_msg,
+            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
+            ..SchedulerConfig::application_subnet()
+        },
+        metrics_registry: MetricsRegistry::new(),
+        canister_num: 1,
+        message_num_per_canister: 0,
+    };
+    let exec_env = default_exec_env_mock(
+        &scheduler_test_fixture,
+        0,
+        num_instructions_consumed_per_msg,
+        NumBytes::new(0),
+    );
+    let exec_env = Arc::new(exec_env);
+
+    let ingress_history_writer = default_ingress_history_writer_mock(0);
+    let ingress_history_writer = Arc::new(ingress_history_writer);
+
+    let context_creation_time = Time::from_nanos_since_unix_epoch(10);
+    // The round occurs one day after the call context was created so it should
+    // be recorded.
+    let round_time = context_creation_time + Duration::from_secs(60 * 60 * 24);
+
+    scheduler_test(
+        &scheduler_test_fixture,
+        |scheduler| {
+            let state = ReplicatedStateBuilder::new()
+                .with_time(round_time)
+                .with_canister(
+                    CanisterStateBuilder::new()
+                        .with_canister_id(canister_test_id(1))
+                        .with_cycles(1_000_000_000_000_000u64)
+                        .with_call_context(
+                            CallContextBuilder::new()
+                                .with_call_origin(CallOrigin::CanisterUpdate(
+                                    canister_test_id(0),
+                                    CallbackId::from(0),
+                                ))
+                                .with_responded(false)
+                                .with_time(context_creation_time)
+                                .build(),
+                        )
+                        .build(),
+                )
+                .build();
+
+            scheduler.execute_round(
+                state,
+                Randomness::from([0; 32]),
+                None,
+                ExecutionRound::from(4),
+                ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
+            );
+
+            let registry = &scheduler_test_fixture.metrics_registry;
+            assert_eq!(
+                fetch_int_gauge(registry, "scheduler_old_open_call_contexts").unwrap(),
+                1
+            );
+        },
+        ingress_history_writer,
+        exec_env,
     );
 }
 

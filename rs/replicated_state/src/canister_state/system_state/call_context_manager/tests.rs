@@ -7,7 +7,11 @@ fn call_context_origin() {
     let mut ccm = CallContextManager::default();
     let id = canister_test_id(42);
     let cb_id = CallbackId::from(1);
-    let cc_id = ccm.new_call_context(CallOrigin::CanisterUpdate(id, cb_id), Cycles::from(10));
+    let cc_id = ccm.new_call_context(
+        CallOrigin::CanisterUpdate(id, cb_id),
+        Cycles::from(10),
+        Time::from_nanos_since_unix_epoch(0),
+    );
     assert_eq!(
         ccm.call_contexts().get(&cc_id).unwrap().call_origin,
         CallOrigin::CanisterUpdate(id, cb_id)
@@ -24,15 +28,18 @@ fn call_context_handling() {
     let call_context_id1 = call_context_manager.new_call_context(
         CallOrigin::CanisterUpdate(canister_test_id(123), CallbackId::from(1)),
         Cycles::from(0),
+        Time::from_nanos_since_unix_epoch(0),
     );
     let call_context_id2 = call_context_manager.new_call_context(
         CallOrigin::CanisterUpdate(canister_test_id(123), CallbackId::from(2)),
         Cycles::from(0),
+        Time::from_nanos_since_unix_epoch(0),
     );
 
     let call_context_id3 = call_context_manager.new_call_context(
         CallOrigin::CanisterUpdate(canister_test_id(123), CallbackId::from(3)),
         Cycles::from(0),
+        Time::from_nanos_since_unix_epoch(0),
     );
 
     // Call context 3 was not responded and does not have outstanding calls,
@@ -231,7 +238,11 @@ fn withdraw_cycles_fails_when_not_enough_available_cycles() {
     let mut ccm = CallContextManager::default();
     let id = canister_test_id(42);
     let cb_id = CallbackId::from(1);
-    let cc_id = ccm.new_call_context(CallOrigin::CanisterUpdate(id, cb_id), Cycles::from(30));
+    let cc_id = ccm.new_call_context(
+        CallOrigin::CanisterUpdate(id, cb_id),
+        Cycles::from(30),
+        Time::from_nanos_since_unix_epoch(0),
+    );
 
     assert_eq!(
         ccm.call_context_mut(cc_id)
@@ -249,7 +260,11 @@ fn withdraw_cycles_succeeds_when_enough_available_cycles() {
     let mut ccm = CallContextManager::default();
     let id = canister_test_id(42);
     let cb_id = CallbackId::from(1);
-    let cc_id = ccm.new_call_context(CallOrigin::CanisterUpdate(id, cb_id), Cycles::from(30));
+    let cc_id = ccm.new_call_context(
+        CallOrigin::CanisterUpdate(id, cb_id),
+        Cycles::from(30),
+        Time::from_nanos_since_unix_epoch(0),
+    );
 
     assert_eq!(
         ccm.call_context_mut(cc_id)
