@@ -7,6 +7,7 @@ use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_protobuf::types::v1 as pb_types;
 use ic_types::messages::Response;
+use ic_types::Time;
 use ic_types::{
     ingress::WasmResult,
     messages::{CallContextId, CallbackId, MessageId},
@@ -16,6 +17,7 @@ use ic_types::{
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::convert::{From, TryFrom, TryInto};
+use std::time::Duration;
 
 /// Call context contains all context information related to an incoming call.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -35,6 +37,10 @@ pub struct CallContext {
 
     /// Cycles that were sent in the request that created the CallContext.
     available_cycles: Cycles,
+
+    /// Time that the call context was created. This field is only optional to
+    /// accomodate contexts that were created before this field was created.
+    time: Option<Time>,
 }
 
 impl CallContext {
@@ -43,12 +49,14 @@ impl CallContext {
         responded: bool,
         deleted: bool,
         available_cycles: Cycles,
+        time: Time,
     ) -> Self {
         Self {
             call_origin,
             responded,
             deleted,
             available_cycles,
+            time: Some(time),
         }
     }
 
@@ -94,6 +102,11 @@ impl CallContext {
     pub fn mark_responded(&mut self) {
         self.responded = true;
     }
+
+    /// The time at which the call context was created.
+    pub fn time(&self) -> Option<Time> {
+        self.time
+    }
 }
 
 impl From<&CallContext> for pb::CallContext {
@@ -104,6 +117,7 @@ impl From<&CallContext> for pb::CallContext {
             responded: item.responded,
             deleted: item.deleted,
             available_funds: Some((&funds).into()),
+            time_nanos: item.time.map(|t| t.as_nanos_since_unix_epoch()),
         }
     }
 }
@@ -119,6 +133,7 @@ impl TryFrom<pb::CallContext> for CallContext {
             responded: value.responded,
             deleted: value.deleted,
             available_cycles: funds.cycles(),
+            time: value.time_nanos.map(Time::from_nanos_since_unix_epoch),
         })
     }
 }
@@ -274,7 +289,12 @@ impl TryFrom<pb::call_context::CallOrigin> for CallOrigin {
 impl CallContextManager {
     /// Must be used to create a new call context at the beginning of every new
     /// ingress or inter-canister message.
-    pub fn new_call_context(&mut self, call_origin: CallOrigin, cycles: Cycles) -> CallContextId {
+    pub fn new_call_context(
+        &mut self,
+        call_origin: CallOrigin,
+        cycles: Cycles,
+        time: Time,
+    ) -> CallContextId {
         self.next_call_context_id += 1;
         let id = CallContextId::from(self.next_call_context_id);
         self.call_contexts.insert(
@@ -284,6 +304,7 @@ impl CallContextManager {
                 responded: false,
                 deleted: false,
                 available_cycles: cycles,
+                time: Some(time),
             },
         );
         id
@@ -513,6 +534,32 @@ impl CallContextManager {
     /// predict what the new ids will be.
     pub fn next_callback_id(&self) -> u64 {
         self.next_callback_id
+    }
+
+    pub fn call_contexts_older_than(
+        &self,
+        current_time: Time,
+        duration: Duration,
+    ) -> Vec<(CallOrigin, Time)> {
+        // Call contexts are stored in order of increasing CallContextId, and
+        // the IDs are generated sequentially, so we are iterating in order of
+        // creation time. This means we can stop as soon as we encounter a call
+        // context that isn't old enough.
+        self.call_contexts
+            .iter()
+            .take_while(|(_, call_context)| match call_context.time() {
+                Some(context_time) => context_time + duration <= current_time,
+                None => true,
+            })
+            .filter_map(|(_, call_context)| {
+                if let Some(time) = call_context.time() {
+                    if !call_context.is_deleted() {
+                        return Some((call_context.call_origin().clone(), time));
+                    }
+                }
+                None
+            })
+            .collect()
     }
 }
 

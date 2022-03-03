@@ -174,7 +174,7 @@ impl Hypervisor {
         let call_context_id = system_state
             .call_context_manager_mut()
             .unwrap()
-            .new_call_context(CallOrigin::from(&request), incoming_cycles);
+            .new_call_context(CallOrigin::from(&request), incoming_cycles, time);
 
         let api_type = ApiType::update(
             time,
@@ -904,7 +904,7 @@ impl Hypervisor {
         let call_context_id = old_system_state
             .call_context_manager_mut()
             .unwrap()
-            .new_call_context(CallOrigin::Heartbeat, Cycles::from(0));
+            .new_call_context(CallOrigin::Heartbeat, Cycles::from(0), time);
 
         let api_type = ApiType::heartbeat(
             time,

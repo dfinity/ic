@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets},
     MetricsRegistry,
@@ -63,11 +65,14 @@ pub(super) struct SchedulerMetrics {
     pub(super) canister_heap_delta_debits: Histogram,
     pub(super) heap_delta_rate_limited_canisters_per_round: Histogram,
     pub(super) canisters_not_in_routing_table: IntGauge,
+    pub(super) old_open_call_contexts: IntGauge,
 }
 
 const LABEL_MESSAGE_KIND: &str = "kind";
 pub(super) const MESSAGE_KIND_INGRESS: &str = "ingress";
 pub(super) const MESSAGE_KIND_CANISTER: &str = "canister";
+/// Alert for call contexts older than this cutoff (one day).
+pub(super) const OLD_CALL_CONTEXT_CUTOFF: Duration = Duration::from_secs(60 * 60 * 24);
 
 impl SchedulerMetrics {
     pub(super) fn new(metrics_registry: &MetricsRegistry) -> Self {
@@ -454,6 +459,10 @@ impl SchedulerMetrics {
             canisters_not_in_routing_table: metrics_registry.int_gauge(
                 "replicated_state_canisters_not_in_routing_table",
                 "Number of canisters in the state not assigned to the subnet range in the routing table."
+            ),
+            old_open_call_contexts: metrics_registry.int_gauge(
+                "scheduler_old_open_call_contexts",
+                &format!("Number of call contexts that have been open for more than {:?}.", OLD_CALL_CONTEXT_CUTOFF)
             ),
         }
     }

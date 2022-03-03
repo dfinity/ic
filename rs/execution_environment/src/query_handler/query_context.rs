@@ -314,7 +314,7 @@ impl<'a> QueryContext<'a> {
                     canister_id
                 )
             });
-        manager.new_call_context(call_origin, Cycles::from(0))
+        manager.new_call_context(call_origin, Cycles::from(0), self.state.time())
     }
 
     // A helper function that enqueues any outgoing requests that the canister

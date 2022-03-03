@@ -58,7 +58,7 @@ use ic_types::{
     methods::{Callback, WasmClosure},
     user_error::{ErrorCode, RejectCode, UserError},
     CanisterId, CanisterStatusType, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
-    NumInstructions, PrincipalId, QueueIndex, RegistryVersion, SubnetId,
+    NumInstructions, PrincipalId, QueueIndex, RegistryVersion, SubnetId, Time,
 };
 use lazy_static::lazy_static;
 use maplit::btreemap;
@@ -746,6 +746,7 @@ fn test_response_message_side_effects_1() {
         .new_call_context(
             CallOrigin::CanisterUpdate(origin_id, origin_cb_id),
             Cycles::from(50),
+            Time::from_nanos_since_unix_epoch(0),
         );
     let callback_id = system_state
         .call_context_manager_mut()
@@ -843,6 +844,7 @@ fn test_repeated_response() {
         .new_call_context(
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(888)),
             Cycles::from(42),
+            Time::from_nanos_since_unix_epoch(0),
         );
     let callback_id = system_state
         .call_context_manager_mut()
@@ -1646,6 +1648,7 @@ fn starting_a_stopping_canister_succeeds() {
             .new_call_context(
                 CallOrigin::Ingress(user_test_id(13), message_test_id(14)),
                 Cycles::from(0),
+                Time::from_nanos_since_unix_epoch(0),
             );
 
         // Ensure that the canister is `Stopping`.

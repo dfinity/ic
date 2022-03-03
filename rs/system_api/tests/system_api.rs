@@ -26,7 +26,7 @@ use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext, MAX_RESPONSE_COUNT_BYTES},
     methods::{Callback, WasmClosure},
     user_error::RejectCode,
-    CountBytes, Cycles, NumBytes, NumInstructions,
+    CountBytes, Cycles, NumBytes, NumInstructions, Time,
 };
 use std::convert::{From, TryInto};
 
@@ -1085,6 +1085,7 @@ fn test_canister_balance() {
         .new_call_context(
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
             Cycles::from(50),
+            Time::from_nanos_since_unix_epoch(0),
         );
 
     let api = get_system_api(
@@ -1112,6 +1113,7 @@ fn test_canister_cycle_balance() {
         .new_call_context(
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
             Cycles::from(50),
+            Time::from_nanos_since_unix_epoch(0),
         );
 
     let api = get_system_api(
@@ -1145,6 +1147,7 @@ fn test_msg_cycles_available_traps() {
         .new_call_context(
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
             available_cycles,
+            Time::from_nanos_since_unix_epoch(0),
         );
 
     let api = get_system_api(
@@ -1297,6 +1300,7 @@ fn msg_cycles_accept_all_cycles_in_call_context() {
         .new_call_context(
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
             Cycles::from(amount),
+            Time::from_nanos_since_unix_epoch(0),
         );
     let mut api = get_system_api(
         ApiTypeBuilder::new().build_update_api(),
@@ -1319,6 +1323,7 @@ fn msg_cycles_accept_all_cycles_in_call_context_when_more_asked() {
         .new_call_context(
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
             Cycles::from(40),
+            Time::from_nanos_since_unix_epoch(0),
         );
     let mut api = get_system_api(
         ApiTypeBuilder::new().build_update_api(),
@@ -1348,6 +1353,7 @@ fn call_perform_not_enough_cycles_resets_state() {
         .new_call_context(
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
             Cycles::from(40),
+            Time::from_nanos_since_unix_epoch(0),
         );
     let mut api = get_system_api(
         ApiTypeBuilder::new().build_update_api(),
