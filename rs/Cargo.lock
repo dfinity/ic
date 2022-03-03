@@ -5737,9 +5737,7 @@ name = "ic-registry-routing-table"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
- "candid",
  "ic-base-types",
- "ic-ic00-types",
  "ic-protobuf",
  "ic-test-utilities",
  "serde",
@@ -6407,6 +6405,7 @@ dependencies = [
 name = "ic-system-api"
 version = "0.8.0"
 dependencies = [
+ "candid",
  "ic-base-types",
  "ic-cycles-account-manager",
  "ic-ic00-types",
