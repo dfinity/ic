@@ -1,7 +1,7 @@
 use crate::crypto::ErrorReplication;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError,
-    IDkgVerifyOpeningError, ThresholdEcdsaVerifySigShareError,
+    IDkgVerifyOpeningError, IDkgVerifyTranscriptError, ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::threshold_sig::ni_dkg::errors::create_transcript_error::DkgCreateTranscriptError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError;
@@ -105,6 +105,26 @@ impl ErrorReplication for DkgCreateTranscriptError {
                 // true, coefficients remain malformed when retrying
                 true
             }
+        }
+    }
+}
+
+impl ErrorReplication for IDkgVerifyTranscriptError {
+    fn is_replicated(&self) -> bool {
+        // The match below is intentionally explicit on all possible values,
+        // to avoid defaults, which might be error-prone.
+        // Upon addition of any new error this match has to be updated.
+        match self {
+            // rue, as validity checks of arguments are stable across replicas
+            IDkgVerifyTranscriptError::InvalidArgument(_) => true,
+            // Whether this is a replicated error depends on the underlying crypto error
+            IDkgVerifyTranscriptError::InvalidDealingMultiSignature { crypto_error, .. } => {
+                crypto_error.is_replicated()
+            }
+            // true, as (de)serialization is stable across replicas
+            IDkgVerifyTranscriptError::SerializationError(_) => true,
+            // true, as the transcript does not become valid through retrying
+            IDkgVerifyTranscriptError::InvalidTranscript => true,
         }
     }
 }

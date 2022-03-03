@@ -197,19 +197,23 @@ pub fn load_previous_transcripts_and_create_dealings(
 /// Load previous transcripts on each node (if resharing or multiplying),
 /// create all dealings, multi-sign them, and build a transcript from those
 /// multi-signed dealings.
-pub fn run_idkg_and_create_transcript(
+pub fn run_idkg_and_create_and_verify_transcript(
     params: &IDkgTranscriptParams,
     crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
 ) -> IDkgTranscript {
     let dealings = load_previous_transcripts_and_create_dealings(params, crypto_components);
     let multisigned_dealings = multisign_dealings(params, crypto_components, &dealings);
     let transcript_creator = params.dealers().get().iter().next().unwrap();
-    create_transcript(
+    let transcript = create_transcript(
         params,
         crypto_components,
         &multisigned_dealings,
         *transcript_creator,
-    )
+    );
+    assert!(crypto_for(random_receiver_id(params), crypto_components)
+        .verify_transcript(params, &transcript)
+        .is_ok());
+    transcript
 }
 
 pub fn generate_key_transcript(
@@ -219,14 +223,14 @@ pub fn generate_key_transcript(
     let masked_key_params = env.params_for_random_sharing(algorithm_id);
 
     let masked_key_transcript =
-        run_idkg_and_create_transcript(&masked_key_params, &env.crypto_components);
+        run_idkg_and_create_and_verify_transcript(&masked_key_params, &env.crypto_components);
 
     let unmasked_key_params = build_params_from_previous(
         masked_key_params,
         IDkgTranscriptOperation::ReshareOfMasked(masked_key_transcript),
     );
 
-    run_idkg_and_create_transcript(&unmasked_key_params, &env.crypto_components)
+    run_idkg_and_create_and_verify_transcript(&unmasked_key_params, &env.crypto_components)
 }
 
 pub fn generate_presig_quadruple(
@@ -235,20 +239,21 @@ pub fn generate_presig_quadruple(
     key_transcript: &IDkgTranscript,
 ) -> PreSignatureQuadruple {
     let lambda_params = env.params_for_random_sharing(algorithm_id);
-    let lambda_transcript = run_idkg_and_create_transcript(&lambda_params, &env.crypto_components);
+    let lambda_transcript =
+        run_idkg_and_create_and_verify_transcript(&lambda_params, &env.crypto_components);
 
     let kappa_transcript = {
         let masked_kappa_params = env.params_for_random_sharing(algorithm_id);
 
         let masked_kappa_transcript =
-            run_idkg_and_create_transcript(&masked_kappa_params, &env.crypto_components);
+            run_idkg_and_create_and_verify_transcript(&masked_kappa_params, &env.crypto_components);
 
         let unmasked_kappa_params = build_params_from_previous(
             masked_kappa_params,
             IDkgTranscriptOperation::ReshareOfMasked(masked_kappa_transcript),
         );
 
-        run_idkg_and_create_transcript(&unmasked_kappa_params, &env.crypto_components)
+        run_idkg_and_create_and_verify_transcript(&unmasked_kappa_params, &env.crypto_components)
     };
 
     let kappa_times_lambda_transcript = {
@@ -260,7 +265,10 @@ pub fn generate_presig_quadruple(
             ),
         );
 
-        run_idkg_and_create_transcript(&kappa_times_lambda_params, &env.crypto_components)
+        run_idkg_and_create_and_verify_transcript(
+            &kappa_times_lambda_params,
+            &env.crypto_components,
+        )
     };
 
     let key_times_lambda_transcript = {
@@ -272,7 +280,7 @@ pub fn generate_presig_quadruple(
             ),
         );
 
-        run_idkg_and_create_transcript(&key_times_lambda_params, &env.crypto_components)
+        run_idkg_and_create_and_verify_transcript(&key_times_lambda_params, &env.crypto_components)
     };
 
     PreSignatureQuadruple::new(

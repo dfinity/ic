@@ -13,6 +13,7 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
 use ic_interfaces::registry::RegistryClient;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateTranscriptError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
+    IDkgVerifyTranscriptError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgComplaint, IDkgMultiSignedDealing, IDkgOpening, IDkgTranscript, IDkgTranscriptParams,
@@ -72,6 +73,75 @@ pub fn create_transcript<C: CspIDkgProtocol + CspSigner>(
     })
 }
 
+pub fn verify_transcript<C: CspIDkgProtocol + CspSigner>(
+    csp_client: &C,
+    registry: &Arc<dyn RegistryClient>,
+    params: &IDkgTranscriptParams,
+    transcript: &IDkgTranscript,
+) -> Result<(), IDkgVerifyTranscriptError> {
+    transcript
+        .verify_consistency_with_params(params)
+        .map_err(|e| {
+            IDkgVerifyTranscriptError::InvalidArgument(format!(
+                "failed to verify transcript against params: {}",
+                e
+            ))
+        })?;
+
+    for (dealer_index, signed_dealing) in &transcript.verified_dealings {
+        if signed_dealing.signers.len() < transcript.verification_threshold().get() as usize {
+            return Err(IDkgVerifyTranscriptError::InvalidArgument(format!(
+                "insufficient number of signers ({}<{}) for dealing of dealer with index {}",
+                signed_dealing.signers.len(),
+                transcript.verification_threshold(),
+                dealer_index
+            )));
+        }
+        // Note that signer eligibility is checked in `transcript.verify_consistency_with_params`
+        MultiSigVerifierInternal::verify_multi_sig_combined(
+            csp_client,
+            Arc::clone(registry),
+            &signed_dealing.signature,
+            &signed_dealing.dealing,
+            signed_dealing.signers.clone(),
+            params.registry_version(),
+        )
+        .map_err(|crypto_error| {
+            IDkgVerifyTranscriptError::InvalidDealingMultiSignature {
+                error: format!(
+                    "invalid combined multi-signature of dealing of dealer with index {}: {}",
+                    dealer_index, crypto_error
+                ),
+                crypto_error,
+            }
+        })?;
+    }
+
+    let internal_transcript_operation =
+        IDkgTranscriptOperationInternal::try_from(params.operation_type()).map_err(|e| {
+            IDkgVerifyTranscriptError::InvalidArgument(format!(
+                "failed to convert transcript operation to internal counterpart: {:?}",
+                e
+            ))
+        })?;
+    let internal_transcript = IDkgTranscriptInternal::try_from(transcript).map_err(|e| {
+        IDkgVerifyTranscriptError::SerializationError(format!(
+            "failed to deserialize internal transcript: {:?}",
+            e
+        ))
+    })?;
+    let internal_dealings = internal_dealings_from_verified_dealings(&transcript.verified_dealings)
+        .map_err(|e| IDkgVerifyTranscriptError::SerializationError(e.serde_error))?;
+
+    csp_client.idkg_verify_transcript(
+        &internal_transcript,
+        transcript.algorithm_id,
+        params.reconstruction_threshold(),
+        &internal_dealings,
+        &internal_transcript_operation,
+    )
+}
+
 pub fn load_transcript<C: CspIDkgProtocol>(
     csp_client: &C,
     self_node_id: &NodeId,
@@ -87,8 +157,10 @@ pub fn load_transcript<C: CspIDkgProtocol>(
 
     let self_mega_pubkey = get_mega_pubkey(self_node_id, registry, transcript.registry_version)?;
 
-    let internal_dealings =
-        internal_dealings_from_verified_dealings(&transcript.verified_dealings)?;
+    let internal_dealings = internal_dealings_from_verified_dealings(&transcript.verified_dealings)
+        .map_err(|e| IDkgLoadTranscriptError::SerializationError {
+            internal_error: e.serde_error,
+        })?;
     let internal_transcript = IDkgTranscriptInternal::try_from(transcript).map_err(|e| {
         IDkgLoadTranscriptError::SerializationError {
             internal_error: format!("{:?}", e),
@@ -124,8 +196,10 @@ pub fn load_transcript_with_openings<C: CspIDkgProtocol>(
 
     let self_mega_pubkey = get_mega_pubkey(self_node_id, registry, transcript.registry_version)?;
 
-    let internal_dealings =
-        internal_dealings_from_verified_dealings(&transcript.verified_dealings)?;
+    let internal_dealings = internal_dealings_from_verified_dealings(&transcript.verified_dealings)
+        .map_err(|e| IDkgLoadTranscriptError::SerializationError {
+            internal_error: e.serde_error,
+        })?;
     let internal_transcript = IDkgTranscriptInternal::try_from(transcript).map_err(|e| {
         IDkgLoadTranscriptError::SerializationError {
             internal_error: format!("{:?}", e),
@@ -146,7 +220,7 @@ pub fn load_transcript_with_openings<C: CspIDkgProtocol>(
             })?;
             let internal_opening = CommitmentOpening::try_from(opening).map_err(|e| {
                 IDkgLoadTranscriptError::SerializationError {
-                    internal_error: format!("{:?}", e),
+                    internal_error: format!("failed to deserialize opening: {:?}", e),
                 }
             })?;
             internal_openings_by_opener_index.insert(opener_index, internal_opening);
@@ -290,7 +364,7 @@ fn ensure_sufficient_signatures_collected(
     Ok(())
 }
 
-fn verify_multisignatures<C: CspIDkgProtocol + CspSigner>(
+fn verify_multisignatures<C: CspSigner>(
     csp_client: &C,
     registry: &Arc<dyn RegistryClient>,
     dealings: &BTreeMap<NodeId, IDkgMultiSignedDealing>,
@@ -350,18 +424,25 @@ fn dealings_by_index_from_dealings(
 
 fn internal_dealings_from_verified_dealings(
     verified_dealings: &BTreeMap<NodeIndex, IDkgMultiSignedDealing>,
-) -> Result<BTreeMap<NodeIndex, IDkgDealingInternal>, IDkgLoadTranscriptError> {
+) -> Result<
+    BTreeMap<NodeIndex, IDkgDealingInternal>,
+    InternalDealingsFromVerifiedDealingsSerializationError,
+> {
     verified_dealings
         .iter()
         .map(|(index, signed_dealing)| {
             let dealing = IDkgDealingInternal::try_from(signed_dealing).map_err(|e| {
-                IDkgLoadTranscriptError::SerializationError {
-                    internal_error: format!("{:?}", e),
+                InternalDealingsFromVerifiedDealingsSerializationError {
+                    serde_error: format!("failed to deserialize internal dealing: {:?}", e),
                 }
             })?;
             Ok((*index, dealing))
         })
         .collect()
+}
+
+struct InternalDealingsFromVerifiedDealingsSerializationError {
+    serde_error: String,
 }
 
 /// Builds IDkgComplaint's from IDkgComplaintInternal's

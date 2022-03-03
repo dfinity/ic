@@ -6,7 +6,7 @@ use ic_crypto_test_utils_canister_threshold_sigs::{
     build_params_from_previous, create_dealing, create_dealings, generate_key_transcript,
     generate_presig_quadruple, load_input_transcripts, load_transcript, multisign_dealings,
     random_dealer_id, random_node_id_excluding, random_receiver_for_inputs, random_receiver_id,
-    random_receiver_id_excluding, run_idkg_and_create_transcript,
+    random_receiver_id_excluding, run_idkg_and_create_and_verify_transcript,
     CanisterThresholdSigTestEnvironment,
 };
 use ic_interfaces::crypto::{
@@ -84,7 +84,7 @@ fn should_fail_create_reshare_dealing_if_transcript_isnt_loaded() {
 
     let initial_params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
     let initial_transcript =
-        run_idkg_and_create_transcript(&initial_params, &env.crypto_components);
+        run_idkg_and_create_and_verify_transcript(&initial_params, &env.crypto_components);
 
     let reshare_params = build_params_from_previous(
         initial_params,
@@ -316,7 +316,7 @@ fn should_return_ok_from_load_transcript_if_not_a_receiver() {
     let mut env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
-    let transcript = run_idkg_and_create_transcript(&params, &env.crypto_components);
+    let transcript = run_idkg_and_create_and_verify_transcript(&params, &env.crypto_components);
 
     let loader_id_not_receiver =
         random_node_id_excluding(&env.crypto_components.keys().cloned().collect());
@@ -337,7 +337,7 @@ fn should_run_load_transcript_successfully_if_already_loaded() {
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
-    let transcript = run_idkg_and_create_transcript(&params, &env.crypto_components);
+    let transcript = run_idkg_and_create_and_verify_transcript(&params, &env.crypto_components);
 
     let loader_id = random_receiver_id(&params);
 
@@ -355,7 +355,7 @@ fn should_load_transcript_without_returning_complaints() {
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
-    let transcript = run_idkg_and_create_transcript(&params, &env.crypto_components);
+    let transcript = run_idkg_and_create_and_verify_transcript(&params, &env.crypto_components);
     let loader_id = random_receiver_id(&params);
 
     let result = crypto_for(loader_id, &env.crypto_components).load_transcript(&transcript);
@@ -370,7 +370,7 @@ fn should_return_valid_and_correct_complaints_on_load_transcript_with_invalid_de
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
-    let mut transcript = run_idkg_and_create_transcript(&params, &env.crypto_components);
+    let mut transcript = run_idkg_and_create_and_verify_transcript(&params, &env.crypto_components);
     let loader_id = random_receiver_id(&params);
 
     let num_of_dealings_to_corrupt = rng.gen_range(1, transcript.verified_dealings.len() + 1);
@@ -418,7 +418,7 @@ fn should_fail_to_verify_complaint_against_wrong_complainer_id() {
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
-    let mut transcript = run_idkg_and_create_transcript(&params, &env.crypto_components);
+    let mut transcript = run_idkg_and_create_and_verify_transcript(&params, &env.crypto_components);
     let loader_id = random_receiver_id(&params);
 
     let dealing_index_to_corrupt: NodeIndex = transcript
@@ -461,7 +461,7 @@ fn should_fail_to_verify_complaint_with_wrong_dealer_id() {
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
-    let mut transcript = run_idkg_and_create_transcript(&params, &env.crypto_components);
+    let mut transcript = run_idkg_and_create_and_verify_transcript(&params, &env.crypto_components);
     let loader_id = random_receiver_id(&params);
 
     let num_of_dealings_to_corrupt = 2;
@@ -514,7 +514,7 @@ fn should_fail_to_verify_complaint_with_wrong_internal_complaint() {
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
-    let mut transcript = run_idkg_and_create_transcript(&params, &env.crypto_components);
+    let mut transcript = run_idkg_and_create_and_verify_transcript(&params, &env.crypto_components);
     let loader_id = random_receiver_id(&params);
 
     let num_of_dealings_to_corrupt = 2;
@@ -565,7 +565,7 @@ fn should_run_idkg_successfully_for_random_dealing() {
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
-    let transcript = run_idkg_and_create_transcript(&params, &env.crypto_components);
+    let transcript = run_idkg_and_create_and_verify_transcript(&params, &env.crypto_components);
 
     // Transcript should have correct dealer indexes
     check_dealer_indexes(&params, &transcript);
@@ -578,7 +578,7 @@ fn should_run_idkg_successfully_for_reshare_of_random_dealing() {
 
     let initial_params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
     let initial_transcript =
-        run_idkg_and_create_transcript(&initial_params, &env.crypto_components);
+        run_idkg_and_create_and_verify_transcript(&initial_params, &env.crypto_components);
 
     // Initial transcript should have correct dealer indexes
     check_dealer_indexes(&initial_params, &initial_transcript);
@@ -588,7 +588,7 @@ fn should_run_idkg_successfully_for_reshare_of_random_dealing() {
         IDkgTranscriptOperation::ReshareOfMasked(initial_transcript),
     );
     let reshare_transcript =
-        run_idkg_and_create_transcript(&reshare_params, &env.crypto_components);
+        run_idkg_and_create_and_verify_transcript(&reshare_params, &env.crypto_components);
 
     // Reshare transcript should have correct dealer indexes
     check_dealer_indexes(&reshare_params, &reshare_transcript);
@@ -601,7 +601,7 @@ fn should_run_idkg_successfully_for_reshare_of_unmasked_dealing() {
 
     let initial_params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
     let initial_transcript =
-        run_idkg_and_create_transcript(&initial_params, &env.crypto_components);
+        run_idkg_and_create_and_verify_transcript(&initial_params, &env.crypto_components);
 
     // Initial transcript should have correct dealer indexes
     check_dealer_indexes(&initial_params, &initial_transcript);
@@ -611,14 +611,14 @@ fn should_run_idkg_successfully_for_reshare_of_unmasked_dealing() {
         IDkgTranscriptOperation::ReshareOfMasked(initial_transcript),
     );
     let unmasked_transcript =
-        run_idkg_and_create_transcript(&unmasked_params, &env.crypto_components);
+        run_idkg_and_create_and_verify_transcript(&unmasked_params, &env.crypto_components);
 
     let reshare_params = build_params_from_previous(
         unmasked_params,
         IDkgTranscriptOperation::ReshareOfUnmasked(unmasked_transcript),
     );
     let reshare_transcript =
-        run_idkg_and_create_transcript(&reshare_params, &env.crypto_components);
+        run_idkg_and_create_and_verify_transcript(&reshare_params, &env.crypto_components);
 
     check_dealer_indexes(&reshare_params, &reshare_transcript);
 }
@@ -629,7 +629,8 @@ fn should_run_idkg_successfully_for_multiplication_of_dealings() {
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let masked_params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
-    let masked_transcript = run_idkg_and_create_transcript(&masked_params, &env.crypto_components);
+    let masked_transcript =
+        run_idkg_and_create_and_verify_transcript(&masked_params, &env.crypto_components);
 
     // Masked transcript should have correct dealer indexes
     check_dealer_indexes(&masked_params, &masked_transcript);
@@ -637,15 +638,17 @@ fn should_run_idkg_successfully_for_multiplication_of_dealings() {
     let unmasked_transcript = {
         let masked_random_params =
             env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
-        let masked_random_transcript =
-            run_idkg_and_create_transcript(&masked_random_params, &env.crypto_components);
+        let masked_random_transcript = run_idkg_and_create_and_verify_transcript(
+            &masked_random_params,
+            &env.crypto_components,
+        );
+
         let unmasked_params = build_params_from_previous(
             masked_random_params,
             IDkgTranscriptOperation::ReshareOfMasked(masked_random_transcript),
         );
-
         let unmasked_transcript =
-            run_idkg_and_create_transcript(&unmasked_params, &env.crypto_components);
+            run_idkg_and_create_and_verify_transcript(&unmasked_params, &env.crypto_components);
 
         // Unmasked transcript should have correct dealer indexes
         check_dealer_indexes(&unmasked_params, &unmasked_transcript);
@@ -657,9 +660,8 @@ fn should_run_idkg_successfully_for_multiplication_of_dealings() {
         masked_params,
         IDkgTranscriptOperation::UnmaskedTimesMasked(unmasked_transcript, masked_transcript),
     );
-
     let multiplication_transcript =
-        run_idkg_and_create_transcript(&multiplication_params, &env.crypto_components);
+        run_idkg_and_create_and_verify_transcript(&multiplication_params, &env.crypto_components);
 
     // Multiplication transcript should have correct dealer indexes
     check_dealer_indexes(&multiplication_params, &multiplication_transcript);
@@ -1236,15 +1238,6 @@ fn should_run_verify_dealing_private() {
 }
 
 #[test]
-fn should_run_verify_transcript() {
-    let crypto_components = temp_crypto_components_for(&[NODE_1]);
-    let params = fake_params_for(NODE_1);
-    let transcript = fake_transcript();
-    let result = crypto_for(NODE_1, &crypto_components).verify_transcript(&params, &transcript);
-    assert!(result.is_ok());
-}
-
-#[test]
 fn should_run_open_transcript() {
     let crypto_components = temp_crypto_components_for(&[NODE_1]);
     let complaint = fake_complaint();
@@ -1334,7 +1327,7 @@ fn fake_key_and_presig_quadruple(
         let env = CanisterThresholdSigTestEnvironment::new(1);
 
         let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
-        let transcript = run_idkg_and_create_transcript(&params, &env.crypto_components);
+        let transcript = run_idkg_and_create_and_verify_transcript(&params, &env.crypto_components);
         transcript.internal_transcript_raw
     };
 
