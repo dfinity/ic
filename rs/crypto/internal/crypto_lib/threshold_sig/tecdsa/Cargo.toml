@@ -6,6 +6,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+fe-derive = { path = "fe-derive" }
 ic-crypto-sha = { path = "../../../../sha" }
 ic-crypto-internal-types = { path = "../../types" }
 ic-crypto-internal-hmac = { path = "../../hmac" }

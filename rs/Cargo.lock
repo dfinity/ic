@@ -2409,6 +2409,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "fe-derive"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "num-bigint-dig 0.7.0",
+ "num-traits",
+ "proc-macro2 1.0.27",
+ "quote 1.0.7",
+ "syn 1.0.80",
+]
+
+[[package]]
 name = "features"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4289,6 +4301,7 @@ version = "0.1.0"
 dependencies = [
  "bip32",
  "criterion",
+ "fe-derive",
  "hex",
  "hex-literal 0.3.3",
  "ic-crypto-internal-hmac",
@@ -8031,6 +8044,7 @@ dependencies = [
  "num-iter",
  "num-traits",
  "rand 0.8.4",
+ "serde",
  "smallvec",
  "zeroize",
 ]
