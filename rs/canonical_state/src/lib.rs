@@ -161,7 +161,7 @@ pub use visitor::{Control, Visitor};
 /// computed states.
 pub const CURRENT_CERTIFICATION_VERSION: u32 = 6;
 
-/// Maximum supported certification version. Always
+/// Maximum supported certification version. Always at least
 /// `CURRENT_CERTIFICATION_VERSION + 1`, since any given canonical state change
 /// is either:
 ///

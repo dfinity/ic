@@ -1,5 +1,5 @@
 use super::test_fixtures::*;
-use crate::{encoding::types, CURRENT_CERTIFICATION_VERSION};
+use crate::{encoding::types, max_supported_certification_version};
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::{
     messages::{Payload, RejectContext, RequestOrResponse},
@@ -11,7 +11,7 @@ use std::convert::{TryFrom, TryInto};
 fn roundtrip_conversion_stream_header() {
     let header = stream_header();
 
-    for certification_version in 0..=CURRENT_CERTIFICATION_VERSION {
+    for certification_version in 0..=max_supported_certification_version() {
         assert_eq!(
             header,
             types::StreamHeader::from((&header, certification_version))
@@ -25,7 +25,7 @@ fn roundtrip_conversion_stream_header() {
 fn roundtrip_conversion_request() {
     let request = request();
 
-    for certification_version in 0..=CURRENT_CERTIFICATION_VERSION {
+    for certification_version in 0..=max_supported_certification_version() {
         assert_eq!(
             request,
             types::RequestOrResponse::from((&request, certification_version))
@@ -39,7 +39,7 @@ fn roundtrip_conversion_request() {
 fn roundtrip_conversion_response() {
     let response = response();
 
-    for certification_version in 0..=CURRENT_CERTIFICATION_VERSION {
+    for certification_version in 0..=max_supported_certification_version() {
         assert_eq!(
             response,
             types::RequestOrResponse::from((&response, certification_version))
@@ -53,7 +53,7 @@ fn roundtrip_conversion_response() {
 fn roundtrip_conversion_reject_response() {
     let response = reject_response();
 
-    for certification_version in 0..=CURRENT_CERTIFICATION_VERSION {
+    for certification_version in 0..=max_supported_certification_version() {
         assert_eq!(
             response,
             types::RequestOrResponse::from((&response, certification_version))
