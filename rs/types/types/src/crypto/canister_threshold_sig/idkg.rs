@@ -555,6 +555,121 @@ impl IDkgTranscript {
             })
             .map(|(index, _signed_dealing)| *index)
     }
+
+    /// Verifies consistency with the given transcript `params`.
+    ///
+    /// The verification succeeds iff the following conditions hold between the
+    /// transcript and the `params`:
+    /// * the transcript IDs match
+    /// * the receivers match
+    /// * the dealers match
+    /// * the registry versions match
+    /// * the algorithm IDs match
+    /// * the transcript's type matches the transcript type derived from
+    ///   the params' transcript operation
+    /// * the transcript has sufficient dealings, i.e., the number of dealings
+    ///   in the transcript is at least the param's collection threshold
+    /// * the transcript only contains dealings from nodes that are dealers
+    ///   according to the params
+    /// * the dealer indexes match
+    /// * the signers of the transcript's verified dealings are eligible for
+    ///   signing, i.e., they are receivers in the params
+    pub fn verify_consistency_with_params(
+        &self,
+        params: &IDkgTranscriptParams,
+    ) -> Result<(), String> {
+        if self.transcript_id != params.transcript_id() {
+            return Err(format!(
+                "mismatching transcript IDs in transcript ({:?}) and params ({:?})",
+                self.transcript_id,
+                params.transcript_id(),
+            ));
+        }
+        if self.receivers != *params.receivers() {
+            return Err(format!(
+                "mismatching receivers in transcript ({:?}) and params ({:?})",
+                self.receivers,
+                params.receivers(),
+            ));
+        }
+        //////////////////////////////////////////////////////////////
+        // TODO (CRP-1382): Check equality of dealers in params and transcript
+        // once the transcript has a dealers field. Also add a respective test.
+        //////////////////////////////////////////////////////////////
+        if self.registry_version != params.registry_version() {
+            return Err(format!(
+                "mismatching registry versions in transcript ({:?}) and params ({:?})",
+                self.registry_version,
+                params.registry_version(),
+            ));
+        }
+        if self.algorithm_id != params.algorithm_id() {
+            return Err(format!(
+                "mismatching algorithm IDs in transcript ({:?}) and params ({:?})",
+                self.algorithm_id,
+                params.algorithm_id(),
+            ));
+        }
+        type Itop = IDkgTranscriptOperation;
+        type Itt = IDkgTranscriptType;
+        type Imto = IDkgMaskedTranscriptOrigin;
+        type Iuto = IDkgUnmaskedTranscriptOrigin;
+        let transcript_type_from_params_op = match params.operation_type() {
+            Itop::Random => Itt::Masked(Imto::Random),
+            Itop::ReshareOfMasked(r) => Itt::Unmasked(Iuto::ReshareMasked(r.transcript_id)),
+            Itop::ReshareOfUnmasked(r) => Itt::Unmasked(Iuto::ReshareUnmasked(r.transcript_id)),
+            Itop::UnmaskedTimesMasked(l, r) => {
+                Itt::Masked(Imto::UnmaskedTimesMasked(l.transcript_id, r.transcript_id))
+            }
+        };
+        if self.transcript_type != transcript_type_from_params_op {
+            return Err(format!(
+                "transcript's type ({:?}) does not match transcript type derived from param's transcript operation ({:?})",
+                self.transcript_type,
+                transcript_type_from_params_op,
+            ));
+        }
+        if self.verified_dealings.len() < params.collection_threshold().get() as usize {
+            return Err(format!(
+                "insufficient number of dealings ({}<{})",
+                self.verified_dealings.len(),
+                params.collection_threshold().get() as usize,
+            ));
+        }
+        let dealer_index_to_dealer_id: BTreeMap<NodeIndex, NodeId> = self
+            .verified_dealings
+            .iter()
+            .map(|(dealer_index, dealing)| (*dealer_index, dealing.dealing.idkg_dealing.dealer_id))
+            .collect();
+        for (dealer_index, dealer_id) in dealer_index_to_dealer_id {
+            let dealer_index_in_params = params.dealer_index(dealer_id).ok_or_else(|| {
+                format!(
+                    "transcript contains dealings from non-dealer with ID {}",
+                    dealer_id
+                )
+            })?;
+            if dealer_index != dealer_index_in_params {
+                return Err(format!(
+                    "mismatching dealer indexes in transcript ({}) and params ({}) for dealer {}",
+                    dealer_index, dealer_index_in_params, dealer_id
+                ));
+            }
+        }
+        for (dealer_index, signed_dealing) in &self.verified_dealings {
+            let ineligible_signers: BTreeSet<NodeId> = signed_dealing
+                .signers
+                .difference(params.receivers.get())
+                .copied()
+                .collect();
+            if !ineligible_signers.is_empty() {
+                return Err(format!(
+                    "ineligible signers (non-receivers) for dealer index {}: {:?} ",
+                    dealer_index, ineligible_signers
+                ));
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Dealing of an IDkg sharing.

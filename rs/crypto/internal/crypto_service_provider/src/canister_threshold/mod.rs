@@ -15,16 +15,17 @@ use crate::secret_key_store::SecretKeyStore;
 use crate::Csp;
 use ic_crypto_internal_threshold_sig_ecdsa::{
     combine_sig_shares as tecdsa_combine_sig_shares, create_transcript as tecdsa_create_transcript,
-    verify_complaint as tecdsa_verify_complaint, CommitmentOpening, IDkgComplaintInternal,
-    IDkgDealingInternal, IDkgTranscriptInternal, IDkgTranscriptOperationInternal, MEGaPublicKey,
-    ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSigShareInternal,
+    verify_complaint as tecdsa_verify_complaint, verify_transcript as tecdsa_verify_transcript,
+    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
+    IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaCombinedSigInternal,
+    ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::scope::{ConstScope, Scope};
 use ic_logger::debug;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
-    IDkgOpenTranscriptError, IDkgVerifyComplaintError, ThresholdEcdsaCombineSigSharesError,
-    ThresholdEcdsaSignShareError,
+    IDkgOpenTranscriptError, IDkgVerifyComplaintError, IDkgVerifyTranscriptError,
+    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::AlgorithmId;
@@ -79,6 +80,25 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp
         .map_err(|e| IDkgCreateTranscriptError::InternalError {
             internal_error: format!("{:?}", e),
         })
+    }
+
+    fn idkg_verify_transcript(
+        &self,
+        transcript: &IDkgTranscriptInternal,
+        algorithm_id: AlgorithmId,
+        reconstruction_threshold: NumberOfNodes,
+        verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+        operation_mode: &IDkgTranscriptOperationInternal,
+    ) -> Result<(), IDkgVerifyTranscriptError> {
+        debug!(self.logger; crypto.method_name => "idkg_verify_transcript");
+
+        Ok(tecdsa_verify_transcript(
+            transcript,
+            algorithm_id,
+            reconstruction_threshold,
+            verified_dealings,
+            operation_mode,
+        )?)
     }
 
     fn idkg_load_transcript(

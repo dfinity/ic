@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgLoadTranscriptError, IDkgVerifyComplaintError,
+    IDkgLoadTranscriptError, IDkgVerifyComplaintError, IDkgVerifyTranscriptError,
 };
 pub use ic_types::crypto::canister_threshold_sig::EcdsaPublicKey;
 pub use ic_types::NodeIndex;
@@ -172,6 +172,19 @@ pub fn create_transcript(
 pub enum IDkgVerifyTranscriptInternalError {
     IncorrectTranscript,
     FailedToCreateTranscript(IDkgCreateTranscriptInternalError),
+}
+
+impl From<IDkgVerifyTranscriptInternalError> for IDkgVerifyTranscriptError {
+    fn from(verify_transcript_internal_error: IDkgVerifyTranscriptInternalError) -> Self {
+        type Vtie = IDkgVerifyTranscriptInternalError;
+        type Vte = IDkgVerifyTranscriptError;
+        match verify_transcript_internal_error {
+            Vtie::IncorrectTranscript => Vte::InvalidTranscript,
+            Vtie::FailedToCreateTranscript(create_transcript_error) => Vte::InvalidArgument(
+                format!("failed to create transcript: {:?}", create_transcript_error),
+            ),
+        }
+    }
 }
 
 /// Verifies the consistency of the transcript with the set of `verified_dealings`.

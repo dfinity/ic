@@ -83,7 +83,15 @@ pub enum IDkgCreateTranscriptError {
 impl_display_using_debug!(IDkgCreateTranscriptError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum IDkgVerifyTranscriptError {}
+pub enum IDkgVerifyTranscriptError {
+    InvalidArgument(String),
+    InvalidDealingMultiSignature {
+        error: String,
+        crypto_error: CryptoError,
+    },
+    SerializationError(String),
+    InvalidTranscript,
+}
 impl_display_using_debug!(IDkgVerifyTranscriptError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

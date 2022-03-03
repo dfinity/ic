@@ -981,7 +981,7 @@ mod tests {
     use crate::consensus::mocks::{dependencies, Dependencies};
     use crate::ecdsa::utils::test_utils::*;
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        generate_key_transcript, run_idkg_and_create_transcript,
+        generate_key_transcript, run_idkg_and_create_and_verify_transcript,
         CanisterThresholdSigTestEnvironment,
     };
     use ic_logger::replica_logger::no_op_logger;
@@ -1239,7 +1239,7 @@ mod tests {
                     payload.next_key_transcript_creation
                 ),
             };
-            run_idkg_and_create_transcript(
+            run_idkg_and_create_and_verify_transcript(
                 &param.as_ref().translate(&block_reader).unwrap(),
                 &env.crypto_components,
             )
@@ -1274,7 +1274,7 @@ mod tests {
                     payload.next_key_transcript_creation
                 ),
             };
-            run_idkg_and_create_transcript(
+            run_idkg_and_create_and_verify_transcript(
                 &param.as_ref().translate(&block_reader).unwrap(),
                 &env.crypto_components,
             )
@@ -1341,7 +1341,7 @@ mod tests {
                     payload.next_key_transcript_creation
                 ),
             };
-            run_idkg_and_create_transcript(
+            run_idkg_and_create_and_verify_transcript(
                 &param.as_ref().translate(&block_reader).unwrap(),
                 &env.crypto_components,
             )
@@ -1441,7 +1441,7 @@ mod tests {
         // 1. When kappa_masked is ready, expect a new kappa_unmasked config.
         let kappa_transcript = {
             let param = kappa_config_ref.as_ref(); //env.params_for_random_sharing(algorithm);
-            run_idkg_and_create_transcript(
+            run_idkg_and_create_and_verify_transcript(
                 &param.translate(&block_reader).unwrap(),
                 &env.crypto_components,
             )
@@ -1472,7 +1472,7 @@ mod tests {
         // 2. When lambda_masked is ready, expect a new key_times_lambda config.
         let lambda_transcript = {
             let param = lambda_config_ref.as_ref(); //env.params_for_random_sharing(algorithm);
-            run_idkg_and_create_transcript(
+            run_idkg_and_create_and_verify_transcript(
                 &param.translate(&block_reader).unwrap(),
                 &env.crypto_components,
             )
@@ -1508,7 +1508,7 @@ mod tests {
                 .find(|x| x.transcript_id == kappa_unmasked_config_id)
                 .unwrap()
                 .clone();
-            run_idkg_and_create_transcript(
+            run_idkg_and_create_and_verify_transcript(
                 &param.translate(&block_reader).unwrap(),
                 &env.crypto_components,
             )
@@ -1544,7 +1544,7 @@ mod tests {
                 .find(|x| x.transcript_id == kappa_times_lambda_config_id)
                 .unwrap()
                 .clone();
-            run_idkg_and_create_transcript(
+            run_idkg_and_create_and_verify_transcript(
                 &param.translate(&block_reader).unwrap(),
                 &env.crypto_components,
             )
@@ -1556,7 +1556,7 @@ mod tests {
                 .find(|x| x.transcript_id == key_times_lambda_config_id)
                 .unwrap()
                 .clone();
-            run_idkg_and_create_transcript(
+            run_idkg_and_create_and_verify_transcript(
                 &param.translate(&block_reader).unwrap(),
                 &env.crypto_components,
             )

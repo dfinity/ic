@@ -7,8 +7,8 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
 };
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
-    IDkgOpenTranscriptError, IDkgVerifyComplaintError, ThresholdEcdsaCombineSigSharesError,
-    ThresholdEcdsaSignShareError,
+    IDkgOpenTranscriptError, IDkgVerifyComplaintError, IDkgVerifyTranscriptError,
+    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::AlgorithmId;
@@ -40,6 +40,15 @@ pub trait CspIDkgProtocol {
         verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
         operation_mode: &IDkgTranscriptOperationInternal,
     ) -> Result<IDkgTranscriptInternal, IDkgCreateTranscriptError>;
+
+    fn idkg_verify_transcript(
+        &self,
+        transcript: &IDkgTranscriptInternal,
+        algorithm_id: AlgorithmId,
+        reconstruction_threshold: NumberOfNodes,
+        verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+        operation_mode: &IDkgTranscriptOperationInternal,
+    ) -> Result<(), IDkgVerifyTranscriptError>;
 
     /// Compute secret from transcript and store in SKS, generating complaints
     /// if necessary.
