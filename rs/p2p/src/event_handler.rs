@@ -78,7 +78,7 @@ use ic_interfaces::{
     registry::RegistryClient,
     transport::{AsyncTransportEventHandler, SendError},
 };
-use ic_logger::{error, info, replica_logger::ReplicaLogger, trace};
+use ic_logger::{info, replica_logger::ReplicaLogger, trace};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy, registry::subnet::v1::GossipConfig};
 use ic_registry_client::helper::subnet::SubnetRegistry;
@@ -128,7 +128,23 @@ pub fn fetch_gossip_config(
     }
 }
 
-/// The different flow types.
+/// A *Gossip* type with atomic reference counting.
+pub type GossipArc = Arc<
+    dyn Gossip<
+            GossipAdvert = GossipAdvert,
+            GossipChunkRequest = GossipChunkRequest,
+            GossipChunk = GossipChunk,
+            NodeId = NodeId,
+            TransportNotification = TransportNotification,
+            Ingress = SignedIngress,
+        > + Send
+        + Sync,
+>;
+
+/// Flows are reliable and bidirectional channels. They must support backpressure, which prevents receivers
+/// from being flooded by data from eager senders.
+///
+/// The FlowType enum specifies which message is passed on each flow.
 #[derive(EnumIter, PartialOrd, Ord, Eq, PartialEq)]
 enum FlowType {
     /// Advert variant.
@@ -143,30 +159,19 @@ enum FlowType {
     Transport,
 }
 
-/// A *Gossip* type with atomic reference counting.
-pub type GossipArc = Arc<
-    dyn Gossip<
-            GossipAdvert = GossipAdvert,
-            GossipChunkRequest = GossipChunkRequest,
-            GossipChunk = GossipChunk,
-            NodeId = NodeId,
-            TransportNotification = TransportNotification,
-            Ingress = SignedIngress,
-        > + Send
-        + Sync,
->;
-
-type PeersSemMap = Arc<RwLock<BTreeMap<NodeId, Arc<Semaphore>>>>;
-
-// The struct dispaches work into the given threadpool. Each flow has a single FlowEventHandler
-// associated with it.
-struct FlowEventHandler {
+/// We have a single worker for all flows with the same flow type.
+struct FlowTypeWorker {
+    /// The threadpool is used for executing messages from all flows with the
+    /// given flow type.
     threadpool: Arc<Mutex<ThreadPool>>,
-    sem_map: PeersSemMap,
+    /// The semaphore map used to make sure not a single peer can
+    /// flood the this peer.
+    sem_map: Arc<RwLock<BTreeMap<NodeId, Arc<Semaphore>>>>,
+    /// The max number of inflight request for each peer.
     max_inflight_requests: usize,
 }
 
-impl FlowEventHandler {
+impl FlowTypeWorker {
     fn new(threadpool: ThreadPool, max_inflight_requests: usize) -> Self {
         Self {
             threadpool: Arc::new(Mutex::new(threadpool)),
@@ -175,88 +180,42 @@ impl FlowEventHandler {
         }
     }
 
-    async fn send<T: Send + 'static + Debug, F>(
+    async fn execute<T: Send + 'static + Debug, F>(
         &self,
         node_id: NodeId,
         msg: T,
         consume_message_fn: F,
-    ) -> Result<(), SendError>
-    where
+    ) where
         F: Fn(T, NodeId) + Clone + Send + 'static,
     {
-        let insert_node = !self.sem_map.read().contains_key(&node_id);
-        if insert_node {
-            self.add_node(node_id);
-        }
-
-        let sem = self
-            .sem_map
-            .read()
-            .get(&node_id)
-            .ok_or(SendError::EndpointNotFound)?
-            .clone();
-
-        let permit = match sem.acquire_owned().await {
-            Ok(permit) => permit,
-            Err(_) => return Err(SendError::EndpointClosed),
-        };
-
+        let sem = self.insert_peer_semaphore_if_missing(node_id);
+        // Acquiring a permit must always succeed because we never close the semaphore.
+        let permit = sem
+            .acquire_owned()
+            .await
+            .expect("acquiring a permit failed");
         self.threadpool.lock().unwrap().execute(move || {
             let _permit = permit;
             consume_message_fn(msg, node_id);
         });
-        Ok(())
     }
 
-    /// The method adds the node with the given node ID.
-    fn add_node(&self, node_id: NodeId) {
+    fn insert_peer_semaphore_if_missing(&self, node_id: NodeId) -> Arc<Semaphore> {
+        if let Some(sem) = self.sem_map.read().get(&node_id) {
+            return sem.clone();
+        }
         let mut sem_map = self.sem_map.write();
-        if let std::collections::btree_map::Entry::Vacant(e) = sem_map.entry(node_id) {
-            e.insert(Arc::new(Semaphore::new(max(1, self.max_inflight_requests))));
+        match sem_map.entry(node_id) {
+            std::collections::btree_map::Entry::Vacant(e) => {
+                let sem = Arc::new(Semaphore::new(max(1, self.max_inflight_requests)));
+                e.insert(sem.clone());
+                sem
+            }
+            std::collections::btree_map::Entry::Occupied(e) => e.get().clone(),
         }
     }
 }
 
-/// The peer flow struct, which contains a flow for each flow type.
-struct PeerFlows {
-    // A struct is used instead of an enum to allocate only the required memory.
-    // Otherwise, space for the largest variant (artifact chunk) would be used.
-    /// The current flows of received adverts.
-    advert: FlowEventHandler,
-    /// The current flows of received chunk requests.
-    request: FlowEventHandler,
-    /// The current flows of received chunk requests.
-    chunk: FlowEventHandler,
-    /// The current flows of retransmission requests.
-    retransmission: FlowEventHandler,
-    /// The current flows of transport notifications.
-    transport: FlowEventHandler,
-}
-
-impl PeerFlows {
-    fn new(threadpool: ThreadPool, channel_config: ChannelConfig) -> Self {
-        Self {
-            advert: FlowEventHandler::new(
-                threadpool.clone(),
-                channel_config.map[&FlowType::Advert],
-            ),
-            request: FlowEventHandler::new(
-                threadpool.clone(),
-                channel_config.map[&FlowType::Request],
-            ),
-            chunk: FlowEventHandler::new(threadpool.clone(), channel_config.map[&FlowType::Chunk]),
-            retransmission: FlowEventHandler::new(
-                threadpool.clone(),
-                channel_config.map[&FlowType::Retransmission],
-            ),
-            transport: FlowEventHandler::new(threadpool, channel_config.map[&FlowType::Transport]),
-        }
-    }
-}
-
-/// The ingress throttler is protected by a read-write lock for concurrent
-/// access.
-pub type IngressThrottler = Arc<std::sync::RwLock<dyn IngressPoolThrottler + Send + Sync>>;
 /// The struct implements the async event handler traits for consumption by
 /// transport, ingress, artifact manager, and node addition/removal.
 pub struct P2PEventHandlerImpl {
@@ -267,8 +226,18 @@ pub struct P2PEventHandlerImpl {
     /// The event handler metrics.
     pub metrics: EventHandlerMetrics,
     /// The peer flows.
-    peer_flows: PeerFlows,
     gossip: Arc<RwLock<Option<GossipArc>>>,
+
+    /// The current flows of received adverts.
+    advert: FlowTypeWorker,
+    /// The current flows of received chunk requests.
+    request: FlowTypeWorker,
+    /// The current flows of received chunk requests.
+    chunk: FlowTypeWorker,
+    /// The current flows of retransmission requests.
+    retransmission: FlowTypeWorker,
+    /// The current flows of transport notifications.
+    transport: FlowTypeWorker,
 }
 
 /// The maximum number of buffered adverts.
@@ -321,12 +290,23 @@ impl P2PEventHandlerImpl {
             .num_threads(P2P_MAX_EVENT_HANDLER_THREADS)
             .thread_name("P2P_Thread".into())
             .build();
-        P2PEventHandlerImpl {
+        Self {
             node_id,
             log,
             metrics: EventHandlerMetrics::new(metrics_registry),
-            peer_flows: PeerFlows::new(threadpool, channel_config),
             gossip: Arc::new(RwLock::new(None)),
+
+            advert: FlowTypeWorker::new(threadpool.clone(), channel_config.map[&FlowType::Advert]),
+            request: FlowTypeWorker::new(
+                threadpool.clone(),
+                channel_config.map[&FlowType::Request],
+            ),
+            chunk: FlowTypeWorker::new(threadpool.clone(), channel_config.map[&FlowType::Chunk]),
+            retransmission: FlowTypeWorker::new(
+                threadpool.clone(),
+                channel_config.map[&FlowType::Retransmission],
+            ),
+            transport: FlowTypeWorker::new(threadpool, channel_config.map[&FlowType::Transport]),
         }
     }
 
@@ -353,78 +333,66 @@ impl AsyncTransportEventHandler for P2PEventHandlerImpl {
 
         let start_time = std::time::Instant::now();
         let c_gossip = self.gossip.read().as_ref().unwrap().clone();
-        let (msg_type, ret) = match gossip_message {
+        let msg_type = match gossip_message {
             GossipMessage::Advert(msg) => {
-                let sender = &self.peer_flows.advert;
                 let consume_fn = move |item, peer_id| {
                     c_gossip.on_advert(item, peer_id);
                 };
-                ("Advert", sender.send(flow.peer_id, msg, consume_fn).await)
+                self.advert.execute(flow.peer_id, msg, consume_fn).await;
+                "Advert"
             }
             GossipMessage::ChunkRequest(msg) => {
-                let sender = &self.peer_flows.request;
                 let consume_fn = move |item, peer_id| {
                     c_gossip.on_chunk_request(item, peer_id);
                 };
-                ("Request", sender.send(flow.peer_id, msg, consume_fn).await)
+                self.request.execute(flow.peer_id, msg, consume_fn).await;
+                "Request"
             }
             GossipMessage::Chunk(msg) => {
-                let sender = &self.peer_flows.chunk;
                 let consume_fn = move |item, peer_id| {
                     c_gossip.on_chunk(item, peer_id);
                 };
-
-                ("Chunk", sender.send(flow.peer_id, msg, consume_fn).await)
+                self.chunk.execute(flow.peer_id, msg, consume_fn).await;
+                "Chunk"
             }
             GossipMessage::RetransmissionRequest(msg) => {
-                let sender = &self.peer_flows.retransmission;
                 let consume_fn = move |item, peer_id| {
                     c_gossip.on_retransmission_request(item, peer_id);
                 };
-
-                (
-                    "Retransmission",
-                    sender.send(flow.peer_id, msg, consume_fn).await,
-                )
+                self.retransmission
+                    .execute(flow.peer_id, msg, consume_fn)
+                    .await;
+                "Retransmission"
             }
         };
         self.metrics
             .send_message_duration_ms
             .with_label_values(&[msg_type])
             .observe(start_time.elapsed().as_millis() as f64);
-        ret
+        Ok(())
     }
 
     /// The method changes the state of the P2P event handler.
     async fn state_changed(&self, state_change: TransportStateChange) {
-        let sender = &self.peer_flows.transport;
         let c_gossip = self.gossip.read().as_ref().unwrap().clone();
         let consume_fn = move |item, _peer_id| {
             c_gossip.on_transport_state_change(item);
         };
-
-        if sender
-            .send(self.node_id, state_change, consume_fn)
-            .await
-            .is_err()
-        {
-            error!(self.log, "Sending state_chagne failed.");
-        }
+        self.transport
+            .execute(self.node_id, state_change, consume_fn)
+            .await;
     }
 
     /// If there is a sender error, the method sends a transport error
     /// notification message on the flow associated with the given flow ID.
     async fn error(&self, flow: FlowId, error: TransportErrorCode) {
         if let TransportErrorCode::SenderErrorIndicated = error {
-            let sender = &self.peer_flows.transport;
-
             let c_gossip = self.gossip.read().as_ref().unwrap().clone();
             let consume_fn = move |item, _peer_id| {
                 c_gossip.on_transport_error(item);
             };
-
-            if sender
-                .send(
+            self.transport
+                .execute(
                     self.node_id,
                     TransportError::TransportSendError(FlowId {
                         peer_id: flow.peer_id,
@@ -432,14 +400,14 @@ impl AsyncTransportEventHandler for P2PEventHandlerImpl {
                     }),
                     consume_fn,
                 )
-                .await
-                .is_err()
-            {
-                error!(self.log, "Sending error failed.")
-            }
+                .await;
         }
     }
 }
+
+/// The ingress throttler is protected by a read-write lock for concurrent
+/// access.
+pub type IngressThrottler = Arc<std::sync::RwLock<dyn IngressPoolThrottler + Send + Sync>>;
 
 /// Interface between the ingress handler and P2P.
 pub struct IngressEventHandler {
