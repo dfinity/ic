@@ -2,9 +2,9 @@ use candid::{CandidType, Deserialize};
 use dfn_core::api::CanisterId;
 use ic_base_types::{CanisterInstallMode, PrincipalId};
 use ic_crypto_sha::Sha256;
+use ic_nervous_system_common::MethodAuthzChange;
 
-// TODO: Move these to nervous-system somewhere in the rs/nervous_system dir.
-use ic_nns_common::types::MethodAuthzChange;
+// TODO: Move to somewhere in the rs/nervous_system dir.
 use ic_nns_constants::memory_allocation_of;
 
 use serde::Serialize;

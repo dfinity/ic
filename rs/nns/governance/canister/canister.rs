@@ -29,10 +29,11 @@ use dfn_core::{
 use dfn_protobuf::protobuf;
 
 use ic_base_types::PrincipalId;
+use ic_nervous_system_common::MethodAuthzChange;
 use ic_nns_common::{
     access_control::{check_caller_is_ledger, check_caller_is_root},
     pb::v1::{CanisterAuthzInfo, NeuronId as NeuronIdProto, ProposalId as ProposalIdProto},
-    types::{MethodAuthzChange, NeuronId, ProposalId},
+    types::{NeuronId, ProposalId},
 };
 
 // Makes expose_build_metadata! available.

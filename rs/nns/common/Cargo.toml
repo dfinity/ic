@@ -17,6 +17,7 @@ dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha = {path = "../../crypto/sha/"}
+ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nns-constants = { path = "../constants" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-keys = { path = "../../registry/keys" }
@@ -37,7 +38,6 @@ serial_test = "0.5.0"
 # This MUST be kept in sync with build-info in the [dependencies] section!
 build-info-build = "0.0.23"
 
-ic-base-types = { path = "../../types/base_types" }
 ic-nns-constants = { path = "../constants" }
 ic-types = { path = "../../types/types" }
 prost-build = "0.9.0"

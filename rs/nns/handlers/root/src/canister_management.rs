@@ -5,15 +5,13 @@ use ic_base_types::{CanisterInstallMode::Install, PrincipalId};
 
 use futures::future::join_all;
 use ic_ic00_types::{InstallCodeArgs, IC_00};
+use ic_nervous_system_common::{AuthzChangeOp, MethodAuthzChange};
 use ic_nervous_system_root::{
     AddNnsCanisterProposalPayload, CanisterAction, CanisterIdRecord, CanisterStatusResult,
     CanisterStatusType, ChangeNnsCanisterProposalPayload, StopOrStartNnsCanisterProposalPayload,
     LOG_PREFIX,
 };
-use ic_nns_common::{
-    registry::{encode_or_panic, get_value, mutate_registry},
-    types::{AuthzChangeOp, MethodAuthzChange},
-};
+use ic_nns_common::registry::{encode_or_panic, get_value, mutate_registry};
 use ic_protobuf::registry::nns::v1::{NnsCanisterRecord, NnsCanisterRecords};
 use ic_protobuf::types::v1 as pb;
 use ic_registry_keys::make_nns_canister_records_key;

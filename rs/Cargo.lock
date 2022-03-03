@@ -5078,10 +5078,13 @@ name = "ic-nervous-system-common"
 version = "0.8.0"
 dependencies = [
  "async-trait",
+ "candid",
  "dfn_core",
  "dfn_protobuf",
+ "ic-base-types",
  "ic-crypto-sha",
  "ledger-canister",
+ "serde",
 ]
 
 [[package]]
@@ -5092,7 +5095,7 @@ dependencies = [
  "dfn_core",
  "ic-base-types",
  "ic-crypto-sha",
- "ic-nns-common",
+ "ic-nervous-system-common",
  "ic-nns-constants",
  "serde",
  "serde_bytes",
@@ -5110,6 +5113,7 @@ dependencies = [
  "dfn_core",
  "ic-base-types",
  "ic-crypto-sha",
+ "ic-nervous-system-common",
  "ic-nns-constants",
  "ic-protobuf",
  "ic-registry-keys",
@@ -5236,6 +5240,7 @@ dependencies = [
  "ic-cdk",
  "ic-crypto-sha",
  "ic-ic00-types",
+ "ic-nervous-system-common",
  "ic-nervous-system-root",
  "ic-nns-common",
  "ic-nns-constants",
@@ -9522,6 +9527,7 @@ dependencies = [
  "ic-crypto-tree-hash",
  "ic-crypto-utils-basic-sig",
  "ic-interfaces",
+ "ic-nervous-system-common",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-test-utils",
