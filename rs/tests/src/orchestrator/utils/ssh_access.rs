@@ -1,9 +1,21 @@
 /// SSH Key Utilities
-use ic_types::time::current_time;
+use crate::{
+    nns::{
+        get_governance_canister, submit_external_proposal_with_test_id,
+        vote_execute_proposal_assert_executed, vote_execute_proposal_assert_failed,
+    },
+    util::runtime_from_url,
+};
+
+use ic_fondue::ic_manager::IcEndpoint;
+use ic_nns_governance::pb::v1::NnsFunction;
+use ic_types::{time::current_time, SubnetId};
 use openssh_keys::PublicKey;
 use openssl::pkey::Private;
 use openssl::rsa::Rsa;
 use pem::{encode, Pem};
+use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
+use registry_canister::mutations::do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload;
 use ssh2::Session;
 use std::io::Read;
 use std::net::{IpAddr, TcpStream};
@@ -126,4 +138,110 @@ pub(crate) fn wait_until_authentication_fails(ip: &IpAddr, username: &str, mean:
             _ => {}
         }
     }
+}
+
+pub(crate) fn get_updatesubnetpayload_with_keys(
+    subnet_id: SubnetId,
+    readonly_keys: Option<Vec<String>>,
+    backup_keys: Option<Vec<String>>,
+) -> UpdateSubnetPayload {
+    UpdateSubnetPayload {
+        subnet_id,
+        max_ingress_bytes_per_message: None,
+        max_ingress_messages_per_block: None,
+        max_block_payload_size: None,
+        unit_delay_millis: None,
+        initial_notary_delay_millis: None,
+        dkg_interval_length: None,
+        dkg_dealings_per_block: None,
+        max_artifact_streams_per_peer: None,
+        max_chunk_wait_ms: None,
+        max_duplicity: None,
+        max_chunk_size: None,
+        receive_check_cache_size: None,
+        pfn_evaluation_period_ms: None,
+        registry_poll_period_ms: None,
+        retransmission_request_ms: None,
+        advert_best_effort_percentage: None,
+        set_gossip_config_to_default: false,
+        start_as_nns: None,
+        subnet_type: None,
+        is_halted: None,
+        max_instructions_per_message: None,
+        max_instructions_per_round: None,
+        max_instructions_per_install_code: None,
+        features: None,
+        ecdsa_config: None,
+        max_number_of_canisters: None,
+        ssh_readonly_access: readonly_keys,
+        ssh_backup_access: backup_keys,
+    }
+}
+
+pub(crate) async fn update_subnet_record(nns_endpoint: &IcEndpoint, payload: UpdateSubnetPayload) {
+    let r = runtime_from_url(nns_endpoint.url.clone());
+    let gov_can = get_governance_canister(&r);
+
+    let proposal_id =
+        submit_external_proposal_with_test_id(&gov_can, NnsFunction::UpdateConfigOfSubnet, payload)
+            .await;
+
+    vote_execute_proposal_assert_executed(&gov_can, proposal_id).await;
+}
+
+pub(crate) async fn fail_to_update_subnet_record(
+    nns_endpoint: &IcEndpoint,
+    payload: UpdateSubnetPayload,
+) {
+    let r = runtime_from_url(nns_endpoint.url.clone());
+    let gov_can = get_governance_canister(&r);
+
+    let proposal_id =
+        submit_external_proposal_with_test_id(&gov_can, NnsFunction::UpdateConfigOfSubnet, payload)
+            .await;
+
+    vote_execute_proposal_assert_failed(&gov_can, proposal_id, "too long").await;
+}
+
+pub(crate) fn get_updateunassignednodespayload(
+    readonly_keys: Option<Vec<String>>,
+) -> UpdateUnassignedNodesConfigPayload {
+    UpdateUnassignedNodesConfigPayload {
+        ssh_readonly_access: readonly_keys,
+        replica_version: None,
+    }
+}
+
+pub(crate) async fn update_ssh_keys_for_all_unassigned_nodes(
+    nns_endpoint: &IcEndpoint,
+    payload: UpdateUnassignedNodesConfigPayload,
+) {
+    let r = runtime_from_url(nns_endpoint.url.clone());
+    let gov_can = get_governance_canister(&r);
+
+    let proposal_id = submit_external_proposal_with_test_id(
+        &gov_can,
+        NnsFunction::UpdateUnassignedNodesConfig,
+        payload,
+    )
+    .await;
+
+    vote_execute_proposal_assert_executed(&gov_can, proposal_id).await;
+}
+
+pub(crate) async fn fail_updating_ssh_keys_for_all_unassigned_nodes(
+    nns_endpoint: &IcEndpoint,
+    payload: UpdateUnassignedNodesConfigPayload,
+) {
+    let r = runtime_from_url(nns_endpoint.url.clone());
+    let gov_can = get_governance_canister(&r);
+
+    let proposal_id = submit_external_proposal_with_test_id(
+        &gov_can,
+        NnsFunction::UpdateUnassignedNodesConfig,
+        payload,
+    )
+    .await;
+
+    vote_execute_proposal_assert_failed(&gov_can, proposal_id, "too long").await;
 }

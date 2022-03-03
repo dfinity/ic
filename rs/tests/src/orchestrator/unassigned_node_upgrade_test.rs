@@ -34,11 +34,9 @@ use crate::{
         submit_update_unassigned_node_version_proposal, vote_execute_proposal_assert_executed,
         NnsExt,
     },
-    orchestrator::ssh_access_to_nodes::{
-        get_updateunassignednodespayload, update_ssh_keys_for_all_unassigned_nodes,
-    },
     orchestrator::utils::ssh_access::{
-        generate_key_strings, wait_until_authentication_is_granted, AuthMean,
+        generate_key_strings, get_updateunassignednodespayload,
+        update_ssh_keys_for_all_unassigned_nodes, wait_until_authentication_is_granted, AuthMean,
     },
     orchestrator::utils::upgrade::{
         fetch_unassigned_node_version, fetch_update_file_sha256, get_blessed_replica_versions,
