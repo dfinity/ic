@@ -1,9 +1,10 @@
 use crate::{
-    blockchainmanager::BlockchainManager, connectionmanager::ConnectionManager,
-    stream::handle_stream, transaction_manager::TransactionManager, Config, HandleClientRequest,
-    ProcessEvent, ProcessEventError,
+    blockchainmanager::{BlockchainManager, GetSuccessorsRequest, GetSuccessorsResponse},
+    connectionmanager::ConnectionManager,
+    stream::handle_stream,
+    transaction_manager::TransactionManager,
+    Config, ProcessEvent, ProcessEventError,
 };
-use bitcoin::{Block, BlockHash};
 use slog::Logger;
 use std::{net::SocketAddr, time::Instant};
 
@@ -89,9 +90,9 @@ impl Adapter {
     }
 
     /// Gets successors from the configured  bitcoin network.
-    pub fn get_successors(&mut self, block_hashes: Vec<BlockHash>) -> Vec<Block> {
+    pub fn get_successors(&mut self, request: GetSuccessorsRequest) -> GetSuccessorsResponse {
         self.received_rpc_call();
-        self.blockchain_manager.handle_client_request(block_hashes)
+        self.blockchain_manager.get_successors(request)
     }
 
     /// Sends transaction to the configured bitcoin network.

@@ -132,8 +132,8 @@ impl BlockchainState {
     }
 
     /// This method retrieves the children for the given block hash.
-    pub fn get_children(&self, hash: &BlockHash) -> Option<&Vec<BlockHash>> {
-        self.children.get(hash)
+    pub fn get_children(&self, hash: &BlockHash) -> Vec<BlockHash> {
+        self.children.get(hash).cloned().unwrap_or_default()
     }
 
     /// Processes the `headers` message received from Bitcoin nodes by adding them to the state.

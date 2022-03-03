@@ -1,14 +1,15 @@
 use crate::{
     adapter::Adapter,
+    blockchainmanager::{GetSuccessorsRequest, GetSuccessorsResponse},
     proto::btc_adapter_server::{BtcAdapter, BtcAdapterServer},
 };
-use bitcoin::{hashes::Hash, Block, BlockHash};
+use bitcoin::{hashes::Hash, Block, BlockHash, BlockHeader};
 use ic_async_utils::{ensure_single_named_systemd_socket, incoming_from_first_systemd_socket};
-use ic_protobuf::bitcoin::v1::{
-    self, GetSuccessorsRequest, GetSuccessorsResponse, SendTransactionRequest,
-    SendTransactionResponse,
+use ic_protobuf::bitcoin::v1;
+use std::{
+    convert::{TryFrom, TryInto},
+    sync::Arc,
 };
-use std::sync::Arc;
 use tokio::sync::Mutex;
 use tonic::{transport::Server, Request, Response, Status};
 
@@ -16,17 +17,21 @@ struct BtcAdapterImpl {
     adapter: Arc<Mutex<Adapter>>,
 }
 
+fn header_to_proto(header: &BlockHeader) -> v1::BlockHeader {
+    v1::BlockHeader {
+        version: header.version,
+        prev_blockhash: header.prev_blockhash.to_vec(),
+        merkle_root: header.merkle_root.to_vec(),
+        time: header.time,
+        bits: header.bits,
+        nonce: header.nonce,
+    }
+}
+
 /// Converts a `Block` into a protobuf struct.
 fn block_to_proto(block: &Block) -> v1::Block {
     v1::Block {
-        header: Some(v1::BlockHeader {
-            version: block.header.version,
-            prev_blockhash: block.header.prev_blockhash.to_vec(),
-            merkle_root: block.header.merkle_root.to_vec(),
-            time: block.header.time,
-            bits: block.header.bits,
-            nonce: block.header.nonce,
-        }),
+        header: Some(header_to_proto(&block.header)),
         txdata: block
             .txdata
             .iter()
@@ -59,32 +64,56 @@ fn block_to_proto(block: &Block) -> v1::Block {
     }
 }
 
+impl TryFrom<v1::GetSuccessorsRequest> for GetSuccessorsRequest {
+    type Error = Status;
+
+    fn try_from(request: v1::GetSuccessorsRequest) -> Result<Self, Self::Error> {
+        let anchor = BlockHash::from_slice(request.anchor.as_slice())
+            .map_err(|_| Status::internal("Failed to parse anchor hash!"))?;
+
+        let processed_block_hashes = request
+            .processed_block_hashes
+            .into_iter()
+            .map(|hash| {
+                BlockHash::from_slice(hash.as_slice())
+                    .map_err(|_| Status::internal("Failed to read processed_block_hashes!"))
+            })
+            .collect::<Result<Vec<_>, Status>>()?;
+
+        Ok(GetSuccessorsRequest {
+            anchor,
+            processed_block_hashes,
+        })
+    }
+}
+
+impl From<GetSuccessorsResponse> for v1::GetSuccessorsResponse {
+    fn from(response: GetSuccessorsResponse) -> Self {
+        v1::GetSuccessorsResponse {
+            blocks: response.blocks.iter().map(block_to_proto).collect(),
+            next: response.next.iter().map(header_to_proto).collect(),
+        }
+    }
+}
+
 #[tonic::async_trait]
 impl BtcAdapter for BtcAdapterImpl {
     async fn get_successors(
         &self,
-        request: Request<GetSuccessorsRequest>,
-    ) -> Result<Response<GetSuccessorsResponse>, Status> {
-        let block_hashes = request
-            .into_inner()
-            .processed_block_hashes
-            .iter()
-            .filter_map(|hash| BlockHash::from_slice(hash.as_slice()).ok())
-            .collect();
-        let blocks = self.adapter.lock().await.get_successors(block_hashes);
-        Ok(Response::new(GetSuccessorsResponse {
-            blocks: blocks.iter().map(block_to_proto).collect(),
-            next: vec![],
-        }))
+        request: Request<v1::GetSuccessorsRequest>,
+    ) -> Result<Response<v1::GetSuccessorsResponse>, Status> {
+        let request = request.into_inner().try_into()?;
+        let response = self.adapter.lock().await.get_successors(request);
+        Ok(Response::new(response.into()))
     }
 
     async fn send_transaction(
         &self,
-        request: Request<SendTransactionRequest>,
-    ) -> Result<Response<SendTransactionResponse>, Status> {
+        request: Request<v1::SendTransactionRequest>,
+    ) -> Result<Response<v1::SendTransactionResponse>, Status> {
         let transaction = request.into_inner().raw_tx;
         self.adapter.lock().await.send_transaction(transaction);
-        Ok(Response::new(SendTransactionResponse {}))
+        Ok(Response::new(v1::SendTransactionResponse {}))
     }
 }
 
