@@ -111,7 +111,7 @@ impl<T: std::clone::Clone + CountBytes> QueueWithReservation<T> {
     /// Returns an Arc<item> at the head of the queue or `None` if the queue is
     /// empty.
     fn peek(&self) -> Option<Arc<T>> {
-        self.queue.front().map(|msg| Arc::clone(msg))
+        self.queue.front().map(Arc::clone)
     }
 
     /// Number of actual messages in the queue.

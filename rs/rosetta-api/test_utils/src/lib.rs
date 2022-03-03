@@ -255,7 +255,7 @@ pub async fn sign_txn(
                 .get(
                     &from_model_account_identifier(p.account_identifier.as_ref().unwrap()).unwrap(),
                 )
-                .map(|x| Arc::clone(x))
+                .map(Arc::clone)
                 .unwrap_or_else(|| Arc::clone(&keypairs[0]));
             let bytes = from_hex(&p.hex_bytes).unwrap();
             let signature_bytes = keypair.sign(&bytes).to_bytes();

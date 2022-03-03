@@ -539,7 +539,7 @@ impl ProposalTitleAndPayload<RemoveNodeOperatorsPayload> for ProposeToRemoveNode
                 "Remove node operators with principal ids: {:?}",
                 self.node_operators_to_remove
                     .iter()
-                    .map(|x| shortened_pid_string(x))
+                    .map(shortened_pid_string)
                     .collect::<Vec<String>>()
             ),
         }

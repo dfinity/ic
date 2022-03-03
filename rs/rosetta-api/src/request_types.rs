@@ -310,7 +310,7 @@ pub fn convert_to_request_result_metadata(rr: &RequestResult) -> RequestResultMe
         block_index: rr.block_index,
         neuron_id: rr.neuron_id,
         transaction_identifier: rr.transaction_identifier.clone(),
-        response: rr.status.failed().map(|e| errors::convert_to_error(e)),
+        response: rr.status.failed().map(errors::convert_to_error),
     }
 }
 

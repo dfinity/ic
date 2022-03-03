@@ -607,7 +607,7 @@ mod tests {
 
         // check if empty returns are skipped
         let round_robin = RoundRobin::default();
-        let make_empty = || vec![];
+        let make_empty = Vec::new;
         let calls: [&'_ dyn Fn() -> Vec<u8>; 6] = [
             &make_empty,
             &make_1,

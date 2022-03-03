@@ -36,7 +36,7 @@ impl TranscriptsToRetain {
 
     /// Returns the public keys corresponding to the transcripts.
     pub fn public_keys(&self) -> BTreeSet<CspPublicCoefficients> {
-        self.transcripts.iter().map(|t| pub_coeffs(t)).collect()
+        self.transcripts.iter().map(pub_coeffs).collect()
     }
 
     /// Returns the minimum registry version of all transcripts

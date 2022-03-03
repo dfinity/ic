@@ -216,7 +216,7 @@ async fn main() -> Result<()> {
     let nns_urls = NNS_URLS
         .flag
         .split_terminator(',')
-        .map(|s| Url::parse(s))
+        .map(Url::parse)
         .collect::<Result<Vec<Url>, _>>()
         .expect("unable to parse nns url");
     let data_provider = create_data_provider(
@@ -754,7 +754,7 @@ mod tests {
 
         // Use a single tls cert for all Nodes. This is a stress test
         // and we don't want to generate thousands of unique certs
-        for node_id in (0..MAX_NODES as u64).map(|i| node_test_id(i)) {
+        for node_id in (0..MAX_NODES as u64).map(node_test_id) {
             data_provider
                 .add(
                     &make_crypto_tls_cert_key(node_id),
