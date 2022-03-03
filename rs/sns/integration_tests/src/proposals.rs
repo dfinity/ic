@@ -9,7 +9,8 @@ use ic_sns_governance::pb::v1::governance_error::ErrorType;
 use ic_sns_governance::pb::v1::governance_error::ErrorType::PreconditionFailed;
 use ic_sns_governance::pb::v1::proposal::Action;
 use ic_sns_governance::pb::v1::{
-    GetProposal, GetProposalResponse, Motion, NervousSystemParameters, Proposal, ProposalId, Vote,
+    GetProposal, GetProposalResponse, Motion, NervousSystemParameters, NeuronPermissionList,
+    NeuronPermissionType, Proposal, ProposalId, Vote,
 };
 use ic_sns_governance::types::ONE_YEAR_SECONDS;
 use ic_sns_test_utils::itest_helpers::{
@@ -25,10 +26,18 @@ fn test_motion_proposal_execution() {
         async move {
             // Initialize the ledger with an account for a user.
             let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
-
             let alloc = Tokens::from_tokens(1000).unwrap();
+
+            let system_params = NervousSystemParameters {
+                neuron_claimer_permissions: Some(NeuronPermissionList {
+                    permissions: NeuronPermissionType::all(),
+                }),
+                ..NervousSystemParameters::with_default_values()
+            };
+
             let sns_init_payload = SnsInitPayloadsBuilder::new()
                 .with_ledger_account(user.get_principal_id().into(), alloc)
+                .with_nervous_system_parameters(system_params)
                 .build();
 
             let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
@@ -86,10 +95,18 @@ fn test_manage_nervous_system_parameters_proposal_execution() {
         async move {
             // Initialize the ledger with an account for a user.
             let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
-
             let alloc = Tokens::from_tokens(1000).unwrap();
+
+            let sys_params = NervousSystemParameters {
+                neuron_claimer_permissions: Some(NeuronPermissionList {
+                    permissions: NeuronPermissionType::all(),
+                }),
+                ..NervousSystemParameters::with_default_values()
+            };
+
             let sns_init_payload = SnsInitPayloadsBuilder::new()
                 .with_ledger_account(user.get_principal_id().into(), alloc)
+                .with_nervous_system_parameters(sys_params)
                 .build();
 
             let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
@@ -180,10 +197,19 @@ fn test_voting_with_three_neurons_with_the_same_stake() {
             let user_3 = Sender::from_keypair(&TEST_USER3_KEYPAIR);
 
             let tokens = Tokens::from_tokens(1000).unwrap();
+
+            let system_params = NervousSystemParameters {
+                neuron_claimer_permissions: Some(NeuronPermissionList {
+                    permissions: NeuronPermissionType::all(),
+                }),
+                ..NervousSystemParameters::with_default_values()
+            };
+
             let sns_init_payload = SnsInitPayloadsBuilder::new()
                 .with_ledger_account(user_1.get_principal_id().into(), tokens)
                 .with_ledger_account(user_2.get_principal_id().into(), tokens)
                 .with_ledger_account(user_3.get_principal_id().into(), tokens)
+                .with_nervous_system_parameters(system_params)
                 .build();
 
             let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;

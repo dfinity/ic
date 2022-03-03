@@ -6,15 +6,15 @@ use ic_config::Config;
 use ic_sns_governance::init::GovernanceCanisterInitPayloadBuilder;
 use ic_sns_governance::pb::v1::manage_neuron_response::Command as CommandResponse;
 use ic_sns_governance::pb::v1::{
-    get_proposal_response,
+    get_neuron_response, get_proposal_response,
     manage_neuron::{
         claim_or_refresh::{By, MemoAndController},
         configure::Operation,
         ClaimOrRefresh, Command, Configure, IncreaseDissolveDelay, RegisterVote,
     },
-    GetProposal, GetProposalResponse, Governance, GovernanceError, ManageNeuron,
-    ManageNeuronResponse, NervousSystemParameters, NeuronId, Proposal, ProposalData, ProposalId,
-    Vote,
+    GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse, Governance, GovernanceError,
+    ManageNeuron, ManageNeuronResponse, NervousSystemParameters, Neuron, NeuronId, Proposal,
+    ProposalData, ProposalId, Vote,
 };
 use ledger_canister as ledger;
 use ledger_canister::{
@@ -261,6 +261,31 @@ impl SnsCanisters<'_> {
                 panic!("get_proposal error: {}", e);
             }
             get_proposal_response::Result::Proposal(proposal) => proposal,
+        }
+    }
+
+    /// Get a neuron
+    pub async fn get_neuron(&self, neuron_id: NeuronId) -> Neuron {
+        let get_neuron_response: GetNeuronResponse = self
+            .governance
+            .query_(
+                "get_neuron",
+                candid_one,
+                GetNeuron {
+                    neuron_id: Some(neuron_id),
+                },
+            )
+            .await
+            .expect("Error calling get_neuron");
+
+        match get_neuron_response
+            .result
+            .expect("Empty get_neuron_response")
+        {
+            get_neuron_response::Result::Error(e) => {
+                panic!("get_neuron error: {}", e)
+            }
+            get_neuron_response::Result::Neuron(neuron) => neuron,
         }
     }
 

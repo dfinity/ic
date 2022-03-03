@@ -4,7 +4,8 @@ use crate::pb::v1::manage_neuron_response::MergeMaturityResponse;
 use crate::pb::v1::proposal::Action;
 use crate::pb::v1::{
     manage_neuron_response, DefaultFollowees, ExecuteNervousSystemFunction, GovernanceError,
-    ManageNeuronResponse, NervousSystemParameters, NeuronId, ProposalId, RewardEvent, Tally, Vote,
+    ManageNeuronResponse, NervousSystemParameters, NeuronId, NeuronPermissionList,
+    NeuronPermissionType, ProposalId, RewardEvent, Tally, Vote,
 };
 use ic_base_types::CanisterId;
 use ic_nervous_system_common::NervousSystemError;
@@ -65,6 +66,8 @@ impl NervousSystemParameters {
             max_neuron_age_for_age_bonus: Some(4 * ONE_YEAR_SECONDS),
             reward_distribution_period_seconds: Some(ONE_DAY_SECONDS),
             max_number_of_proposals_with_ballots: Some(700),
+            neuron_claimer_permissions: Some(Self::default_neuron_claimer_permissions()),
+            neuron_grantable_permissions: Some(NeuronPermissionList::default()),
         }
     }
 
@@ -105,6 +108,14 @@ impl NervousSystemParameters {
         new_params.max_number_of_proposals_with_ballots = self
             .max_number_of_proposals_with_ballots
             .or(base.max_number_of_proposals_with_ballots);
+        new_params.neuron_claimer_permissions = self
+            .neuron_claimer_permissions
+            .clone()
+            .or_else(|| base.neuron_claimer_permissions.clone());
+        new_params.neuron_grantable_permissions = self
+            .neuron_grantable_permissions
+            .clone()
+            .or_else(|| base.neuron_grantable_permissions.clone());
 
         new_params
     }
@@ -124,6 +135,8 @@ impl NervousSystemParameters {
         self.validate_max_neuron_age_for_age_bonus()?;
         self.validate_reward_distribution_period_seconds()?;
         self.validate_max_number_of_proposals_with_ballots()?;
+        self.validate_neuron_claimer_permissions()?;
+        self.validate_neuron_grantable_permissions()?;
 
         Ok(())
     }
@@ -303,6 +316,29 @@ impl NervousSystemParameters {
             Ok(())
         }
     }
+
+    fn validate_neuron_claimer_permissions(&self) -> Result<(), String> {
+        if let Some(neuron_claimer_permissions) = &self.neuron_claimer_permissions {
+            if !neuron_claimer_permissions
+                .permissions
+                .contains(&(NeuronPermissionType::ManagePrincipals as i32))
+            {
+                return Err("NervousSystemParameters.neuron_claimer_permissions must contain NeuronPermissionType::ManagePrincipals".to_string());
+            }
+        }
+
+        Ok(())
+    }
+
+    fn default_neuron_claimer_permissions() -> NeuronPermissionList {
+        NeuronPermissionList {
+            permissions: vec![NeuronPermissionType::ManagePrincipals as i32],
+        }
+    }
+
+    fn validate_neuron_grantable_permissions(&self) -> Result<(), String> {
+        Ok(())
+    }
 }
 
 impl GovernanceError {
@@ -392,7 +428,7 @@ impl ManageNeuronResponse {
 
     pub fn expect(self, msg: &str) -> Self {
         if let Some(manage_neuron_response::Command::Error(err)) = &self.command {
-            panic!("{}: {:?}", msg, err);
+            panic!("{}: {}", msg, err);
         }
         self
     }
@@ -742,6 +778,12 @@ mod tests {
                 ),
                 ..NervousSystemParameters::with_default_values()
             },
+            NervousSystemParameters {
+                neuron_claimer_permissions: Some(NeuronPermissionList {
+                    permissions: vec![NeuronPermissionType::Vote as i32],
+                }),
+                ..NervousSystemParameters::with_default_values()
+            },
         ];
 
         for params in invalid_params {
@@ -797,7 +839,7 @@ mod tests {
 
         let current_params = NervousSystemParameters {
             default_followees: Some(followees),
-            ..default_params
+            ..default_params.clone()
         };
 
         let new_params = proposed_params.inherit_from(&current_params);

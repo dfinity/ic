@@ -36,7 +36,7 @@ fn main() {
 
     config.type_attribute(
         "ic_sns_governance.pb.v1.NeuronPermissionType",
-        "#[derive(candid::CandidType, candid::Deserialize)]",
+        "#[derive(candid::CandidType, candid::Deserialize, strum_macros::EnumIter)]",
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.NeuronPermission",
@@ -197,6 +197,14 @@ fn main() {
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.DefaultFollowees",
+        [
+            "#[derive(candid::CandidType, candid::Deserialize)]",
+            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
+        ]
+        .join(" "),
+    );
+    config.type_attribute(
+        "ic_sns_governance.pb.v1.NeuronPermissionList",
         [
             "#[derive(candid::CandidType, candid::Deserialize)]",
             "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",

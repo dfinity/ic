@@ -4,7 +4,16 @@ use ic_canister_client::Sender;
 use ic_nns_constants::ids::{
     TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
 };
-use ic_sns_governance::pb::v1::{ListNeurons, ListNeuronsResponse, Neuron, NeuronId};
+use ic_sns_governance::pb::v1::governance_error::ErrorType;
+use ic_sns_governance::pb::v1::manage_neuron::Command;
+use ic_sns_governance::pb::v1::manage_neuron_response::Command as CommandResponse;
+use ic_sns_governance::pb::v1::proposal::Action;
+use ic_sns_governance::pb::v1::{
+    ListNeurons, ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, Motion,
+    NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
+    NeuronPermissionType, Proposal,
+};
+use ic_sns_governance::types::ONE_YEAR_SECONDS;
 use ic_sns_test_utils::itest_helpers::{
     local_test_on_sns_subnet, SnsCanisters, SnsInitPayloadsBuilder,
 };
@@ -57,6 +66,101 @@ fn test_list_neurons_determinism() {
         let actual = paginate_neurons(&sns_canisters.governance, &users[0], 1_usize).await;
 
         assert_eq!(expected, actual);
+
+        Ok(())
+    });
+}
+
+#[test]
+fn test_claim_neuron_with_default_permissions() {
+    local_test_on_sns_subnet(|runtime| async move {
+        let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
+        let account_identifier = AccountIdentifier::from(user.get_principal_id());
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let sns_init_payload = SnsInitPayloadsBuilder::new()
+            .with_ledger_account(account_identifier, alloc)
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        let nid = sns_canisters.stake_and_claim_neuron(&user, None).await;
+        let neuron = sns_canisters.get_neuron(nid).await;
+
+        let expected = vec![NeuronPermission::new(
+            &user.get_principal_id(),
+            NervousSystemParameters::with_default_values()
+                .neuron_claimer_permissions
+                .unwrap()
+                .permissions,
+        )];
+
+        assert_eq!(neuron.permissions, expected);
+        Ok(())
+    });
+}
+
+#[test]
+fn test_neuron_action_is_not_authorized() {
+    local_test_on_sns_subnet(|runtime| async move {
+        let neuron_owner = Sender::from_keypair(&TEST_USER1_KEYPAIR);
+        let unauthorized_caller = Sender::from_keypair(&TEST_USER2_KEYPAIR);
+
+        let neuron_owner_account_identifier =
+            AccountIdentifier::from(neuron_owner.get_principal_id());
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let system_params = NervousSystemParameters {
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let sns_init_payload = SnsInitPayloadsBuilder::new()
+            .with_ledger_account(neuron_owner_account_identifier, alloc)
+            .with_nervous_system_parameters(system_params)
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        // Stake and claim a neuron capable of making a proposal
+        let neuron_owner_nid = sns_canisters
+            .stake_and_claim_neuron(&neuron_owner, Some(ONE_YEAR_SECONDS as u32))
+            .await;
+
+        // Get that neuron's subaccount
+        let neuron_owner_subaccount = match neuron_owner_nid.subaccount() {
+            Ok(s) => s,
+            Err(e) => panic!("Error creating the subaccount, {}", e),
+        };
+
+        let proposal_payload = Proposal {
+            title: "Motion to delete this SNS".into(),
+            action: Some(Action::Motion(Motion {
+                motion_text: "I'm a bad actor and this should not be tolerated".into(),
+            })),
+            ..Default::default()
+        };
+
+        let manage_neuron_response: ManageNeuronResponse = sns_canisters
+            .governance
+            .update_from_sender(
+                "manage_neuron",
+                candid_one,
+                ManageNeuron {
+                    subaccount: neuron_owner_subaccount.to_vec(),
+                    command: Some(Command::MakeProposal(proposal_payload)),
+                },
+                &unauthorized_caller,
+            )
+            .await
+            .expect("Error calling manage_neuron");
+
+        match manage_neuron_response.command.unwrap() {
+            CommandResponse::Error(e) => assert_eq!(e.error_type, ErrorType::NotAuthorized as i32),
+            response => panic!("Unexpected response, {:?}", response),
+        }
 
         Ok(())
     });
