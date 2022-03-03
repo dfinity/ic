@@ -782,6 +782,67 @@ fn get_blocks_() {
     });
 }
 
+#[candid_method(query, rename = "query_blocks")]
+fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksResponse {
+    use ledger_canister::range_utils;
+
+    let requested_range = range_utils::make_range(start, length);
+
+    let ledger = &LEDGER.read().unwrap();
+    let local_range = ledger.blockchain.local_block_range();
+    let effective_local_range = range_utils::head(
+        &range_utils::intersect(&requested_range, &local_range),
+        MAX_BLOCKS_PER_REQUEST,
+    );
+
+    let local_start = (effective_local_range.start - local_range.start) as usize;
+    let local_end = local_start + range_utils::range_len(&effective_local_range) as usize;
+
+    let local_blocks: Vec<CandidBlock> = ledger.blockchain.blocks[local_start..local_end]
+        .iter()
+        .map(|enc_block| -> CandidBlock {
+            enc_block
+                .decode()
+                .expect("bug: failed to decode encoded block")
+                .into()
+        })
+        .collect();
+
+    let archived_blocks_range = requested_range.start..effective_local_range.start;
+    let archive = ledger.blockchain.archive.read().unwrap();
+
+    let archived_blocks = archive
+        .iter()
+        .flat_map(|archive| archive.index().into_iter())
+        .filter_map(|((from, to), canister_id)| {
+            let slice = range_utils::intersect(&(from..to + 1), &archived_blocks_range);
+            (!slice.is_empty()).then(|| ArchivedBlocksRange {
+                start: slice.start,
+                length: range_utils::range_len(&slice) as u64,
+                callback: QueryArchiveFn {
+                    canister_id,
+                    method: "get_blocks".to_string(),
+                },
+            })
+        })
+        .collect();
+
+    let chain_length = ledger.blockchain.chain_length() as u64;
+
+    QueryBlocksResponse {
+        chain_length,
+        certificate: dfn_core::api::data_certificate().map(serde_bytes::ByteBuf::from),
+        blocks: local_blocks,
+        first_block_index: effective_local_range.start as BlockHeight,
+        archived_blocks,
+    }
+}
+
+#[export_name = "canister_query query_blocks"]
+fn query_blocks_() {
+    over(candid_one, query_blocks)
+}
+
 #[candid_method(query, rename = "archives")]
 fn archives() -> Archives {
     let ledger_guard = LEDGER.try_read().expect("Failed to get ledger read lock");
@@ -892,11 +953,7 @@ fn get_canidid_interface() {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        AccountBalanceArgs, Archives, BinaryAccountBalanceArgs, BlockHeight, Decimals,
-        LedgerCanisterInitPayload, Name, SendArgs, Symbol, Tokens, TransferArgs, TransferError,
-        TransferFee, TransferFeeArgs,
-    };
+    use super::*;
     use candid::utils::{service_compatible, CandidSource};
     use std::path::PathBuf;
     use std::process::Command;

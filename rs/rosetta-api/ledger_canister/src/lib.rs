@@ -602,7 +602,12 @@ impl Blockchain {
     }
 
     pub fn num_unarchived_blocks(&self) -> u64 {
-        self.blocks.len().try_into().unwrap()
+        self.blocks.len() as u64
+    }
+
+    /// The range of block indices that are not archived yet.
+    pub fn local_block_range(&self) -> std::ops::Range<u64> {
+        self.num_archived_blocks..self.num_archived_blocks + self.blocks.len() as u64
     }
 
     pub fn chain_length(&self) -> BlockHeight {
@@ -2338,4 +2343,65 @@ pub enum CyclesResponse {
     // Silly requirement by the candid derivation
     ToppedUp(()),
     Refunded(String, Option<BlockHeight>),
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(try_from = "candid::types::reference::Func")]
+pub struct QueryArchiveFn {
+    pub canister_id: CanisterId,
+    pub method: String,
+}
+
+impl From<QueryArchiveFn> for candid::types::reference::Func {
+    fn from(archive_fn: QueryArchiveFn) -> Self {
+        Self {
+            principal: candid::Principal::from_slice(archive_fn.canister_id.as_ref()),
+            method: archive_fn.method,
+        }
+    }
+}
+
+impl TryFrom<candid::types::reference::Func> for QueryArchiveFn {
+    type Error = String;
+    fn try_from(func: candid::types::reference::Func) -> Result<Self, Self::Error> {
+        let canister_id = CanisterId::try_from(func.principal.as_slice())
+            .map_err(|e| format!("principal is not a canister id: {}", e))?;
+        Ok(QueryArchiveFn {
+            canister_id,
+            method: func.method,
+        })
+    }
+}
+
+impl CandidType for QueryArchiveFn {
+    fn _ty() -> candid::types::Type {
+        candid::types::Type::Func(candid::types::Function {
+            modes: vec![candid::parser::types::FuncMode::Query],
+            args: vec![GetBlocksArgs::_ty()],
+            rets: vec![GetBlocksResult::_ty()],
+        })
+    }
+
+    fn idl_serialize<S>(&self, serializer: S) -> Result<(), S::Error>
+    where
+        S: candid::types::Serializer,
+    {
+        candid::types::reference::Func::from(self.clone()).idl_serialize(serializer)
+    }
+}
+
+#[derive(Debug, CandidType, Deserialize)]
+pub struct ArchivedBlocksRange {
+    pub start: BlockHeight,
+    pub length: u64,
+    pub callback: QueryArchiveFn,
+}
+
+#[derive(Debug, CandidType, Deserialize)]
+pub struct QueryBlocksResponse {
+    pub chain_length: u64,
+    pub certificate: Option<serde_bytes::ByteBuf>,
+    pub blocks: Vec<CandidBlock>,
+    pub first_block_index: BlockHeight,
+    pub archived_blocks: Vec<ArchivedBlocksRange>,
 }

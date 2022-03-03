@@ -51,3 +51,11 @@ pub fn curtail(r: &Range<u64>, n: usize) -> Range<u64> {
         end: r.start + range_len(r).saturating_sub(n as u64),
     }
 }
+
+/// Converts the range of u64 integers into a range of array indices.
+pub fn as_indices(r: &Range<u64>) -> Range<usize> {
+    Range {
+        start: r.start as usize,
+        end: r.end as usize,
+    }
+}

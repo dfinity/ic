@@ -1,3 +1,4 @@
+use candid::CandidType;
 use canister_test::*;
 use dfn_candid::{candid, candid_one, CandidOne};
 use dfn_protobuf::protobuf;
@@ -7,14 +8,22 @@ use ledger_canister::{
     AccountBalanceArgs, AccountIdentifier, ArchiveOptions, Archives, BinaryAccountBalanceArgs,
     Block, BlockArg, BlockHeight, BlockRange, BlockRes, CandidBlock, EncodedBlock, GetBlocksArgs,
     GetBlocksError, GetBlocksRes, GetBlocksResult, IterBlocksArgs, IterBlocksRes,
-    LedgerCanisterInitPayload, Memo, NotifyCanisterArgs, Operation, SendArgs, Subaccount,
-    TimeStamp, Tokens, TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee,
-    TransferFeeArgs, DEFAULT_TRANSFER_FEE,
+    LedgerCanisterInitPayload, Memo, NotifyCanisterArgs, Operation, QueryBlocksResponse, SendArgs,
+    Subaccount, TimeStamp, Tokens, TotalSupplyArgs, Transaction, TransferArgs, TransferError,
+    TransferFee, TransferFeeArgs, DEFAULT_TRANSFER_FEE,
 };
 use on_wire::IntoWire;
+use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::time::{Duration, SystemTime};
+
+#[derive(CandidType, Deserialize)]
+struct TestQueryBlocksArgs {
+    ledger: PrincipalId,
+    arg: GetBlocksArgs,
+    result: Vec<CandidBlock>,
+}
 
 fn create_sender(i: u64) -> ic_canister_client::Sender {
     use rand_chacha::ChaChaRng;
@@ -161,6 +170,16 @@ fn make_accounts(num_accounts: u64, num_subaccounts: u8) -> HashMap<AccountIdent
         .collect()
 }
 
+async fn install_motoko_proxy(r: &canister_test::Runtime) -> Canister<'_> {
+    let manifest_dir = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
+        .join("wasm/ledger_proxy.wasm");
+
+    canister_test::Wasm::from_file(manifest_dir)
+        .install_(r, CandidOne(()).into_bytes().unwrap())
+        .await
+        .expect("failed to install the ledger proxy canister")
+}
+
 #[test]
 fn upgrade_test() {
     local_test_e(|r| async move {
@@ -264,7 +283,7 @@ fn archive_blocks_small_test() {
 
         ledger_assert_num_blocks(&ledger, 1).await;
         let GetBlocksRes(ledger_blocks) = get_blocks_pb(&ledger, 12..13).await?;
-        assert_eq!(ledger_blocks.unwrap().len(), 1);
+        assert_eq!(ledger_blocks.as_ref().unwrap().len(), 1);
 
         // First we get the CanisterId of each archive node that has been
         // created
@@ -305,6 +324,32 @@ fn archive_blocks_small_test() {
 
         // Finally check that we retrieved what we have expected
         assert_eq!(blocks_from_archive, blocks);
+
+        // Fetch all blocks through the Motoko proxy canister.
+        let all_blocks: Vec<_> = blocks
+            .into_iter()
+            .chain(ledger_blocks.unwrap().into_iter())
+            .collect();
+
+        let proxy = install_motoko_proxy(&r).await;
+        let () = proxy
+            .update_(
+                "testQueryBlocks",
+                candid_one,
+                TestQueryBlocksArgs {
+                    ledger: ledger.canister_id().into(),
+                    arg: GetBlocksArgs {
+                        start: 0,
+                        length: all_blocks.len(),
+                    },
+                    result: all_blocks
+                        .iter()
+                        .map(|eb| CandidBlock::from(eb.decode().unwrap()))
+                        .collect(),
+                },
+            )
+            .await
+            .expect("ledger proxy call failed");
 
         Ok(())
     })
@@ -436,6 +481,62 @@ fn archive_blocks_large_test() {
         // Finally check that we retrieved what we have expected
         assert_eq!(blocks_from_archive, blocks);
 
+        Ok(())
+    })
+}
+
+#[test]
+fn query_blocks_certificate() {
+    local_test_e(|r| async move {
+        let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+
+        let accounts = make_accounts(4, 3);
+        println!("[test] accounts: {:?}", accounts);
+
+        println!("[test] installing ledger canister");
+        let minting_account = create_sender(0);
+
+        let ledger: canister_test::Canister = {
+            let payload = LedgerCanisterInitPayload::builder()
+                .minting_account(
+                    CanisterId::try_from(minting_account.get_principal_id())
+                        .unwrap()
+                        .into(),
+                )
+                .initial_values(accounts)
+                .build()
+                .unwrap();
+            let mut install = proj.cargo_bin("ledger-canister", &[]).install(&r);
+            install.memory_allocation = Some(128 * 1024 * 1024);
+            install.bytes(CandidOne(payload).into_bytes()?).await?
+        };
+        println!("[test] ledger canister id: {}", ledger.canister_id());
+
+        let result: QueryBlocksResponse = ledger
+            .query_(
+                "query_blocks",
+                candid_one,
+                GetBlocksArgs {
+                    start: 0,
+                    length: 1,
+                },
+            )
+            .await
+            .expect("failed to query blocks");
+        assert!(result.certificate.is_some());
+
+        let result: QueryBlocksResponse = ledger
+            .query_(
+                "query_blocks",
+                candid_one,
+                GetBlocksArgs {
+                    start: 0,
+                    length: 100,
+                },
+            )
+            .await
+            .expect("failed to query blocks");
+        assert!(result.certificate.is_some());
         Ok(())
     })
 }
