@@ -6,7 +6,7 @@ use crate::consensus::{
     ConsensusCrypto,
 };
 use crate::ecdsa::complaints::EcdsaTranscriptLoader;
-use crate::ecdsa::utils::{load_transcripts, EcdsaBlockReaderImpl};
+use crate::ecdsa::utils::{load_transcripts, transcript_op_summary, EcdsaBlockReaderImpl};
 use ic_interfaces::consensus_pool::{ConsensusBlockCache, ConsensusBlockChain};
 use ic_interfaces::crypto::{ErrorReplication, IDkgProtocol};
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
@@ -152,13 +152,7 @@ impl EcdsaPreSignerImpl {
                     .pre_sign_errors_inc("duplicate_dealing_in_batch");
                 ret.push(EcdsaChangeAction::HandleInvalid(
                     id,
-                    format!(
-                        "Duplicate dealing in unvalidated batch: dealer = {:?}, height = {:?},
-                          transcript_id = {:?}",
-                        dealing.idkg_dealing.dealer_id,
-                        dealing.requested_height,
-                        dealing.idkg_dealing.transcript_id
-                    ),
+                    format!("Duplicate dealing in unvalidated batch: {}", signed_dealing),
                 ));
                 continue;
             }
@@ -179,13 +173,7 @@ impl EcdsaPreSignerImpl {
                         self.metrics.pre_sign_errors_inc("unexpected_dealing");
                         ret.push(EcdsaChangeAction::HandleInvalid(
                             id,
-                            format!(
-                                "Dealing from unexpected node: dealer = {:?}, height = {:?},
-                                  transcript_id = {:?}",
-                                dealing.idkg_dealing.dealer_id,
-                                dealing.requested_height,
-                                dealing.idkg_dealing.transcript_id
-                            ),
+                            format!("Dealing from unexpected node: {}", signed_dealing),
                         ))
                     } else if self.has_dealer_issued_dealing(
                         ecdsa_pool,
@@ -196,13 +184,7 @@ impl EcdsaPreSignerImpl {
                         self.metrics.pre_sign_errors_inc("duplicate_dealing");
                         ret.push(EcdsaChangeAction::HandleInvalid(
                             id,
-                            format!(
-                                "Duplicate dealing: dealer = {:?}, height = {:?},
-                                  transcript_id = {:?}",
-                                dealing.idkg_dealing.dealer_id,
-                                dealing.requested_height,
-                                dealing.idkg_dealing.transcript_id
-                            ),
+                            format!("Duplicate dealing: {}", signed_dealing),
                         ))
                     } else {
                         let mut changes =
@@ -265,11 +247,7 @@ impl EcdsaPreSignerImpl {
                         .pre_sign_errors_inc("create_support_missing_transcript_params");
                     warn!(
                         self.log,
-                        "Dealing support creation: transcript_param not found: dealer = {:?},
-                          height = {:?}, transcript_id = {:?}",
-                        dealing.idkg_dealing.dealer_id,
-                        dealing.requested_height,
-                        dealing.idkg_dealing.transcript_id,
+                        "Dealing support creation: transcript_param not found: {}", signed_dealing,
                     );
                     None
                 }
@@ -339,14 +317,7 @@ impl EcdsaPreSignerImpl {
                     .pre_sign_errors_inc("duplicate_support_in_batch");
                 ret.push(EcdsaChangeAction::HandleInvalid(
                     id,
-                    format!(
-                        "Duplicate support in unvalidated batch: dealer = {:?}, height = {:?},
-                          transcript_id = {:?}, signer = {:?}",
-                        dealing.idkg_dealing.dealer_id,
-                        dealing.requested_height,
-                        dealing.idkg_dealing.transcript_id,
-                        support.signature.signer,
-                    ),
+                    format!("Duplicate support in unvalidated batch: {}", support),
                 ));
                 continue;
             }
@@ -368,13 +339,7 @@ impl EcdsaPreSignerImpl {
                         self.metrics.pre_sign_errors_inc("unexpected_support");
                         ret.push(EcdsaChangeAction::HandleInvalid(
                             id,
-                            format!(
-                                "Support from unexpected node: dealer = {:?}, height = {:?},
-                                  transcript_id = {:?}, signer = support.signature.signer",
-                                dealing.idkg_dealing.dealer_id,
-                                dealing.requested_height,
-                                dealing.idkg_dealing.transcript_id
-                            ),
+                            format!("Support from unexpected node: {}", support),
                         ))
                     } else if !valid_dealings.contains(&dealing_key) {
                         // Support for a dealing we don't have yet, defer it
@@ -389,14 +354,7 @@ impl EcdsaPreSignerImpl {
                         self.metrics.pre_sign_errors_inc("duplicate_support");
                         ret.push(EcdsaChangeAction::HandleInvalid(
                             id,
-                            format!(
-                                "Duplicate support: dealer = {:?}, height = {:?},
-                                  transcript_id = {:?}, signer = {:?}",
-                                dealing.idkg_dealing.dealer_id,
-                                dealing.requested_height,
-                                dealing.idkg_dealing.transcript_id,
-                                support.signature.signer
-                            ),
+                            format!("Duplicate support: {}", support),
                         ))
                     } else {
                         let mut changes =
@@ -511,7 +469,7 @@ impl EcdsaPreSignerImpl {
                     self.log,
                     "Failed to create dealing: transcript_id = {:?}, type = {:?}, error = {:?}",
                     transcript_params.transcript_id(),
-                    transcript_params.operation_type(),
+                    transcript_op_summary(transcript_params.operation_type()),
                     err
                 );
                 self.metrics.pre_sign_errors_inc("create_dealing");
@@ -549,7 +507,7 @@ impl EcdsaPreSignerImpl {
                     self.log,
                     "Failed to sign dealing: transcript_id = {:?}, type = {:?}, error = {:?}",
                     transcript_params.transcript_id(),
-                    transcript_params.operation_type(),
+                    transcript_op_summary(transcript_params.operation_type()),
                     err
                 );
                 self.metrics.pre_sign_errors_inc("sign_dealing");
@@ -578,23 +536,16 @@ impl EcdsaPreSignerImpl {
                 return vec![EcdsaChangeAction::HandleInvalid(
                     id.clone(),
                     format!(
-                        "Dealing signature validation(permanent error): dealer = {:?},
-                              height = {:?}, transcript_id = {:?}, error = {:?}",
-                        dealing.idkg_dealing.dealer_id,
-                        dealing.requested_height,
-                        dealing.idkg_dealing.transcript_id,
-                        error
+                        "Dealing signature validation(permanent error): {}, error = {:?}",
+                        signed_dealing, error
                     ),
                 )];
             } else {
                 // Defer in case of transient errors
                 debug!(
                     self.log,
-                    "Dealing signature validation(transient error): dealer = {:?},
-                          height = {:?}, transcript_id = {:?}, error = {:?}",
-                    dealing.idkg_dealing.dealer_id,
-                    dealing.requested_height,
-                    dealing.idkg_dealing.transcript_id,
+                    "Dealing signature validation(transient error): {}, error = {:?}",
+                    signed_dealing,
                     error
                 );
                 self.metrics
@@ -611,23 +562,16 @@ impl EcdsaPreSignerImpl {
                         vec![EcdsaChangeAction::HandleInvalid(
                             id.clone(),
                             format!(
-                                "Dealing validation(permanent error): dealer = {:?},
-                              height = {:?}, transcript_id = {:?}, error = {:?}",
-                                dealing.idkg_dealing.dealer_id,
-                                dealing.requested_height,
-                                dealing.idkg_dealing.transcript_id,
-                                error
+                                "Dealing validation(permanent error): {}, error = {:?}",
+                                signed_dealing, error
                             ),
                         )]
                     } else {
                         // Defer in case of transient errors
                         debug!(
                             self.log,
-                            "Dealing validation(transient error): dealer = {:?},
-                          height = {:?}, transcript_id = {:?}, error = {:?}",
-                            dealing.idkg_dealing.dealer_id,
-                            dealing.requested_height,
-                            dealing.idkg_dealing.transcript_id,
+                            "Dealing validation(transient error): {}, error = {:?}",
+                            signed_dealing,
                             error
                         );
                         self.metrics.pre_sign_errors_inc("verify_dealing_transient");
@@ -672,7 +616,7 @@ impl EcdsaPreSignerImpl {
                     self.log,
                     "Failed to corrupt dealing: transcript_id = {:?}, type = {:?}, error = {:?}",
                     transcript_params.transcript_id(),
-                    transcript_params.operation_type(),
+                    transcript_op_summary(transcript_params.operation_type()),
                     err
                 );
                 self.metrics.pre_sign_errors_inc("corrupt_dealing");
@@ -700,12 +644,8 @@ impl EcdsaPreSignerImpl {
                 return vec![EcdsaChangeAction::HandleInvalid(
                     id.clone(),
                     format!(
-                        "Dealing private verification(permanent error): dealer = {:?},
-                          height = {:?}, transcript_id = {:?}, error = {:?}",
-                        dealing.idkg_dealing.dealer_id,
-                        dealing.requested_height,
-                        dealing.idkg_dealing.transcript_id,
-                        error
+                        "Dealing private verification(permanent error): {}, error = {:?}",
+                        dealing, error
                     ),
                 )];
             } else {
@@ -713,11 +653,8 @@ impl EcdsaPreSignerImpl {
                     .pre_sign_errors_inc("verify_dealing_private_transient");
                 debug!(
                     self.log,
-                    "Dealing private verification(transient error): dealer = {:?},
-                          height = {:?}, transcript_id = {:?}, error = {:?}",
-                    dealing.idkg_dealing.dealer_id,
-                    dealing.requested_height,
-                    dealing.idkg_dealing.transcript_id,
+                    "Dealing private verification(transient error): {}, error = {:?}",
+                    dealing,
                     error
                 );
                 return Default::default();
@@ -731,12 +668,7 @@ impl EcdsaPreSignerImpl {
                 |error| {
                     debug!(
                         self.log,
-                        "Dealing multi sign failed: dealer = {:?},
-                          height = {:?}, transcript_id = {:?}, error = {:?}",
-                        dealing.idkg_dealing.dealer_id,
-                        dealing.requested_height,
-                        dealing.idkg_dealing.transcript_id,
-                        error
+                        "Dealing multi sign failed: {}, error = {:?}", dealing, error
                     );
                     self.metrics
                         .pre_sign_errors_inc("dealing_support_multi_sign");
@@ -762,7 +694,6 @@ impl EcdsaPreSignerImpl {
         transcript_params: &IDkgTranscriptParams,
         support: &EcdsaDealingSupport,
     ) -> EcdsaChangeSet {
-        let dealing = &support.content;
         self.crypto
             .verify(support, transcript_params.registry_version())
             .map_or_else(
@@ -771,13 +702,8 @@ impl EcdsaPreSignerImpl {
                     vec![EcdsaChangeAction::HandleInvalid(
                         id.clone(),
                         format!(
-                            "Support validation failed: dealer = {:?},
-                          height = {:?}, transcript_id = {:?}, signer = {:?}, error = {:?}",
-                            dealing.idkg_dealing.dealer_id,
-                            dealing.requested_height,
-                            dealing.idkg_dealing.transcript_id,
-                            support.signature.signer,
-                            error
+                            "Support validation failed: {}, error = {:?}",
+                            support, error
                         ),
                     )]
                 },

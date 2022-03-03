@@ -296,6 +296,93 @@ impl EcdsaComplaintHandlerImpl {
         ret
     }
 
+    /// Purges the entries no longer needed from the artifact pool
+    fn purge_artifacts(
+        &self,
+        ecdsa_pool: &dyn EcdsaPool,
+        block_reader: &dyn EcdsaBlockReader,
+    ) -> EcdsaChangeSet {
+        let active_transcripts = resolve_complaint_refs(
+            block_reader,
+            "purge_artifacts",
+            self.metrics.complaint_errors.clone(),
+            &self.log,
+        );
+
+        let mut ret = Vec::new();
+        let current_height = block_reader.tip_height();
+
+        // Unvalidated complaints
+        let mut action = ecdsa_pool
+            .unvalidated()
+            .complaints()
+            .filter(|(_, signed_complaint)| {
+                let complaint = signed_complaint.get();
+                self.should_purge(
+                    &complaint.idkg_complaint.transcript_id,
+                    complaint.complainer_height,
+                    current_height,
+                    &active_transcripts,
+                )
+            })
+            .map(|(id, _)| EcdsaChangeAction::RemoveUnvalidated(id))
+            .collect();
+        ret.append(&mut action);
+
+        // Validated complaints
+        let mut action = ecdsa_pool
+            .validated()
+            .complaints()
+            .filter(|(_, signed_complaint)| {
+                let complaint = signed_complaint.get();
+                self.should_purge(
+                    &complaint.idkg_complaint.transcript_id,
+                    complaint.complainer_height,
+                    current_height,
+                    &active_transcripts,
+                )
+            })
+            .map(|(id, _)| EcdsaChangeAction::RemoveValidated(id))
+            .collect();
+        ret.append(&mut action);
+
+        // Unvalidated openings
+        let mut action = ecdsa_pool
+            .unvalidated()
+            .openings()
+            .filter(|(_, signed_opening)| {
+                let opening = signed_opening.get();
+                self.should_purge(
+                    &opening.idkg_opening.transcript_id,
+                    opening.complainer_height,
+                    current_height,
+                    &active_transcripts,
+                )
+            })
+            .map(|(id, _)| EcdsaChangeAction::RemoveUnvalidated(id))
+            .collect();
+        ret.append(&mut action);
+
+        // Validated openings
+        let mut action = ecdsa_pool
+            .validated()
+            .openings()
+            .filter(|(_, signed_opening)| {
+                let opening = signed_opening.get();
+                self.should_purge(
+                    &opening.idkg_opening.transcript_id,
+                    opening.complainer_height,
+                    current_height,
+                    &active_transcripts,
+                )
+            })
+            .map(|(id, _)| EcdsaChangeAction::RemoveValidated(id))
+            .collect();
+        ret.append(&mut action);
+
+        ret
+    }
+
     /// Helper to create a signed complaint
     fn crypto_create_complaint(
         &self,
@@ -616,6 +703,17 @@ impl EcdsaComplaintHandlerImpl {
         }
         openings
     }
+
+    /// Checks if the artifact should be purged
+    fn should_purge(
+        &self,
+        transcript_id: &IDkgTranscriptId,
+        requested_height: Height,
+        current_height: Height,
+        active_transcripts: &BTreeMap<IDkgTranscriptId, IDkgTranscript>,
+    ) -> bool {
+        requested_height <= current_height && !active_transcripts.contains_key(transcript_id)
+    }
 }
 
 impl EcdsaComplaintHandler for EcdsaComplaintHandlerImpl {
@@ -630,7 +728,6 @@ impl EcdsaComplaintHandler for EcdsaComplaintHandlerImpl {
                 &metrics.on_state_change_duration,
             )
         };
-
         let send_openings = || {
             timed_call(
                 "send_openings",
@@ -638,7 +735,6 @@ impl EcdsaComplaintHandler for EcdsaComplaintHandlerImpl {
                 &metrics.on_state_change_duration,
             )
         };
-
         let validate_openings = || {
             timed_call(
                 "validate_openings",
@@ -646,9 +742,20 @@ impl EcdsaComplaintHandler for EcdsaComplaintHandlerImpl {
                 &metrics.on_state_change_duration,
             )
         };
+        let purge_artifacts = || {
+            timed_call(
+                "purge_artifacts",
+                || self.purge_artifacts(ecdsa_pool, &block_reader),
+                &metrics.on_state_change_duration,
+            )
+        };
 
-        let calls: [&'_ dyn Fn() -> EcdsaChangeSet; 3] =
-            [&validate_complaints, &send_openings, &validate_openings];
+        let calls: [&'_ dyn Fn() -> EcdsaChangeSet; 4] = [
+            &validate_complaints,
+            &send_openings,
+            &validate_openings,
+            &purge_artifacts,
+        ];
         self.schedule.call_next(&calls)
     }
 
@@ -1247,6 +1354,218 @@ mod tests {
                 assert_eq!(change_set.len(), 2);
                 assert!(is_handle_invalid(&change_set, &msg_id_1));
                 assert!(is_handle_invalid(&change_set, &msg_id_2));
+            })
+        })
+    }
+
+    // Tests purging of complaints from unvalidated pool
+    #[test]
+    fn test_ecdsa_purge_unvalidated_complaints() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut ecdsa_pool, complaint_handler) =
+                    create_complaint_dependencies(pool_config, logger);
+                let time_source = FastForwardTimeSource::new();
+                let (id_1, id_2, id_3) = (
+                    create_transcript_id(1),
+                    create_transcript_id(2),
+                    create_transcript_id(3),
+                );
+
+                // Complaint 1: height <= current_height, active transcripts (not purged)
+                let mut complaint = create_complaint(id_1, NODE_2, NODE_3);
+                complaint.content.complainer_height = Height::from(20);
+                ecdsa_pool.insert(UnvalidatedArtifact {
+                    message: EcdsaMessage::EcdsaComplaint(complaint),
+                    peer_id: NODE_3,
+                    timestamp: time_source.get_relative_time(),
+                });
+
+                // Complaint 2: height <= current_height, non-active transcripts (purged)
+                let mut complaint = create_complaint(id_2, NODE_2, NODE_3);
+                complaint.content.complainer_height = Height::from(30);
+                let key = complaint.key();
+                let msg_id = EcdsaComplaint::key_to_outer_hash(&key);
+                ecdsa_pool.insert(UnvalidatedArtifact {
+                    message: EcdsaMessage::EcdsaComplaint(complaint),
+                    peer_id: NODE_3,
+                    timestamp: time_source.get_relative_time(),
+                });
+
+                // Complaint 3: height > current_height (not purged)
+                let mut complaint = create_complaint(id_3, NODE_2, NODE_3);
+                complaint.content.complainer_height = Height::from(200);
+                ecdsa_pool.insert(UnvalidatedArtifact {
+                    message: EcdsaMessage::EcdsaComplaint(complaint),
+                    peer_id: NODE_3,
+                    timestamp: time_source.get_relative_time(),
+                });
+
+                // Only id_1 is active
+                let block_reader = TestEcdsaBlockReader::for_complainer_test(
+                    Height::new(100),
+                    vec![TranscriptRef::new(Height::new(10), id_1)],
+                );
+                let change_set = complaint_handler.purge_artifacts(&ecdsa_pool, &block_reader);
+                assert_eq!(change_set.len(), 1);
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id));
+            })
+        })
+    }
+
+    // Tests purging of complaints from validated pool
+    #[test]
+    fn test_ecdsa_purge_validated_complaints() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut ecdsa_pool, complaint_handler) =
+                    create_complaint_dependencies(pool_config, logger);
+                let (id_1, id_2, id_3) = (
+                    create_transcript_id(1),
+                    create_transcript_id(2),
+                    create_transcript_id(3),
+                );
+
+                // Complaint 1: height <= current_height, active transcripts (not purged)
+                let mut complaint = create_complaint(id_1, NODE_2, NODE_3);
+                complaint.content.complainer_height = Height::from(20);
+                let change_set = vec![EcdsaChangeAction::AddToValidated(
+                    EcdsaMessage::EcdsaComplaint(complaint),
+                )];
+                ecdsa_pool.apply_changes(change_set);
+
+                // Complaint 2: height <= current_height, non-active transcripts (purged)
+                let mut complaint = create_complaint(id_2, NODE_2, NODE_3);
+                complaint.content.complainer_height = Height::from(30);
+                let key = complaint.key();
+                let msg_id = EcdsaComplaint::key_to_outer_hash(&key);
+                let change_set = vec![EcdsaChangeAction::AddToValidated(
+                    EcdsaMessage::EcdsaComplaint(complaint),
+                )];
+                ecdsa_pool.apply_changes(change_set);
+
+                // Complaint 3: height > current_height (not purged)
+                let mut complaint = create_complaint(id_3, NODE_2, NODE_3);
+                complaint.content.complainer_height = Height::from(200);
+                let change_set = vec![EcdsaChangeAction::AddToValidated(
+                    EcdsaMessage::EcdsaComplaint(complaint),
+                )];
+                ecdsa_pool.apply_changes(change_set);
+
+                // Only id_1 is active
+                let block_reader = TestEcdsaBlockReader::for_complainer_test(
+                    Height::new(100),
+                    vec![TranscriptRef::new(Height::new(10), id_1)],
+                );
+                let change_set = complaint_handler.purge_artifacts(&ecdsa_pool, &block_reader);
+                assert_eq!(change_set.len(), 1);
+                assert!(is_removed_from_validated(&change_set, &msg_id));
+            })
+        })
+    }
+
+    // Tests purging of openings from unvalidated pool
+    #[test]
+    fn test_ecdsa_purge_unvalidated_openings() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut ecdsa_pool, complaint_handler) =
+                    create_complaint_dependencies(pool_config, logger);
+                let time_source = FastForwardTimeSource::new();
+                let (id_1, id_2, id_3) = (
+                    create_transcript_id(1),
+                    create_transcript_id(2),
+                    create_transcript_id(3),
+                );
+
+                // Opening 1: height <= current_height, active transcripts (not purged)
+                let mut opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
+                opening.content.complainer_height = Height::from(20);
+                ecdsa_pool.insert(UnvalidatedArtifact {
+                    message: EcdsaMessage::EcdsaOpening(opening),
+                    peer_id: NODE_4,
+                    timestamp: time_source.get_relative_time(),
+                });
+
+                // Opening 2: height <= current_height, non-active transcripts (purged)
+                let mut opening = create_opening(id_2, NODE_2, NODE_3, NODE_4);
+                opening.content.complainer_height = Height::from(30);
+                let key = opening.key();
+                let msg_id = EcdsaOpening::key_to_outer_hash(&key);
+                ecdsa_pool.insert(UnvalidatedArtifact {
+                    message: EcdsaMessage::EcdsaOpening(opening),
+                    peer_id: NODE_4,
+                    timestamp: time_source.get_relative_time(),
+                });
+
+                // Complaint 3: height > current_height (not purged)
+                let mut opening = create_opening(id_3, NODE_2, NODE_3, NODE_4);
+                opening.content.complainer_height = Height::from(200);
+                ecdsa_pool.insert(UnvalidatedArtifact {
+                    message: EcdsaMessage::EcdsaOpening(opening),
+                    peer_id: NODE_4,
+                    timestamp: time_source.get_relative_time(),
+                });
+
+                // Only id_1 is active
+                let block_reader = TestEcdsaBlockReader::for_complainer_test(
+                    Height::new(100),
+                    vec![TranscriptRef::new(Height::new(10), id_1)],
+                );
+                let change_set = complaint_handler.purge_artifacts(&ecdsa_pool, &block_reader);
+                assert_eq!(change_set.len(), 1);
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id));
+            })
+        })
+    }
+
+    // Tests purging of openings from validated pool
+    #[test]
+    fn test_ecdsa_purge_validated_openings() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut ecdsa_pool, complaint_handler) =
+                    create_complaint_dependencies(pool_config, logger);
+                let (id_1, id_2, id_3) = (
+                    create_transcript_id(1),
+                    create_transcript_id(2),
+                    create_transcript_id(3),
+                );
+
+                // Opening 1: height <= current_height, active transcripts (not purged)
+                let mut opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
+                opening.content.complainer_height = Height::from(20);
+                let change_set = vec![EcdsaChangeAction::AddToValidated(
+                    EcdsaMessage::EcdsaOpening(opening),
+                )];
+                ecdsa_pool.apply_changes(change_set);
+
+                // Opening 2: height <= current_height, non-active transcripts (purged)
+                let mut opening = create_opening(id_2, NODE_2, NODE_3, NODE_4);
+                opening.content.complainer_height = Height::from(30);
+                let key = opening.key();
+                let msg_id = EcdsaOpening::key_to_outer_hash(&key);
+                let change_set = vec![EcdsaChangeAction::AddToValidated(
+                    EcdsaMessage::EcdsaOpening(opening),
+                )];
+                ecdsa_pool.apply_changes(change_set);
+
+                // Complaint 3: height > current_height (not purged)
+                let mut opening = create_opening(id_3, NODE_2, NODE_3, NODE_4);
+                opening.content.complainer_height = Height::from(200);
+                let change_set = vec![EcdsaChangeAction::AddToValidated(
+                    EcdsaMessage::EcdsaOpening(opening),
+                )];
+                ecdsa_pool.apply_changes(change_set);
+
+                // Only id_1 is active
+                let block_reader = TestEcdsaBlockReader::for_complainer_test(
+                    Height::new(100),
+                    vec![TranscriptRef::new(Height::new(10), id_1)],
+                );
+                let change_set = complaint_handler.purge_artifacts(&ecdsa_pool, &block_reader);
+                assert_eq!(change_set.len(), 1);
+                assert!(is_removed_from_validated(&change_set, &msg_id));
             })
         })
     }
