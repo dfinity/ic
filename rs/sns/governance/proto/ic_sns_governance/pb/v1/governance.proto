@@ -14,9 +14,10 @@ enum NeuronPermissionType {
   // The principal has permission to start/stop/increase the dissolve delay of the neuron.
   NEURON_PERMISSION_TYPE_CONFIGURE_DISSOLVE_STATE = 1;
 
-  // TODO expand on best practices of the NEURON_PERMISSION_TYPE_MANAGE_PRINCIPALS
   // The principal has permission to add more principals to control the
-  // neuron.
+  // neuron. See `NervousSystemParameters::neuron_claimer_permissions` and
+  // `NervousSystemParameters::neuron_grantable_permissions` for more
+  // details on what permissions can be granted by a principal.
   NEURON_PERMISSION_TYPE_MANAGE_PRINCIPALS = 2;
 
   // The principal has permission to submit proposals on behalf of the neuron.
@@ -558,11 +559,25 @@ message NervousSystemParameters {
   // The max number of unsettled proposals -- that is proposals for which ballots
   // are still stored.
   optional uint64 max_number_of_proposals_with_ballots = 14;
+
+  // The default set of permissions granted to the principal claiming a neuron.
+  optional NeuronPermissionList neuron_claimer_permissions = 15;
+
+  // The superset of permissions a principal with permission `NeuronPermissionType::ManagePrincipals`
+  // can grant to other principals controlling a neuron. If this set changes via a
+  // ManageNervousSystemParameters proposal, previous neuron's permissions will be unchanged and only
+  // newly granted permissions will be affected.
+  optional NeuronPermissionList neuron_grantable_permissions = 16;
 }
 
 // A mapping of proposal action to a set of default followees for that action
 message DefaultFollowees {
   map<uint64, Neuron.Followees> followees = 1;
+}
+
+// A wrapper for a list of permissions so it can be optionally provided.
+message NeuronPermissionList {
+  repeated NeuronPermissionType permissions = 1;
 }
 
 // A reward event is an event at which neuron maturity is increased

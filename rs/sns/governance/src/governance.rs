@@ -29,6 +29,7 @@ use crate::pb::v1::{
 };
 use ic_base_types::PrincipalId;
 use ledger_canister::{AccountIdentifier, Subaccount};
+use strum::IntoEnumIterator;
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
@@ -75,19 +76,25 @@ pub fn log_prefix() -> String {
     "[Governance] ".into()
 }
 
+impl NeuronPermissionType {
+    /// Returns all the permissions as a vector
+    pub fn all() -> Vec<i32> {
+        NeuronPermissionType::iter()
+            .map(|permission| permission as i32)
+            .collect()
+    }
+}
+
 impl NeuronPermission {
     /// Grants all permissions to the given principal
     pub fn all(principal: &PrincipalId) -> NeuronPermission {
+        NeuronPermission::new(principal, NeuronPermissionType::all())
+    }
+
+    pub fn new(principal: &PrincipalId, permissions: Vec<i32>) -> NeuronPermission {
         NeuronPermission {
             principal: Some(*principal),
-            permission_type: vec![
-                NeuronPermissionType::ConfigureDissolveState as i32,
-                NeuronPermissionType::ManagePrincipals as i32,
-                NeuronPermissionType::SubmitProposal as i32,
-                NeuronPermissionType::Vote as i32,
-                NeuronPermissionType::Disburse as i32,
-                NeuronPermissionType::ManageMaturity as i32,
-            ],
+            permission_type: permissions,
         }
     }
 }
@@ -691,16 +698,7 @@ impl Governance {
         let transaction_fee_e8s = self.transaction_fee();
         let neuron = self.get_neuron_result(id)?;
 
-        // TODO implement ACL permissions check
-        // if !neuron.is_authorized(caller, NeuronPermissionType::Disburse) {
-        //     return Err(GovernanceError::new_with_message(
-        //         ErrorType::NotAuthorized,
-        //         format!(
-        //             "Caller '{:?}' is not authorized to control neuron '{}'.",
-        //             caller, id.id
-        //         ),
-        //     ));
-        // }
+        neuron.check_authorized(caller, NeuronPermissionType::Disburse)?;
 
         let state = neuron.state(self.env.now());
         if state != NeuronState::Dissolved {
@@ -871,12 +869,10 @@ impl Governance {
         // Get the neuron and clone to appease the borrow checker.
         // We'll get a mutable reference when we need to change it later.
         let parent_neuron = self.get_neuron_result(id)?.clone();
-
         let parent_nid = parent_neuron.id.as_ref().expect("Neurons must have an id");
 
-        if !parent_neuron.is_authorized(caller, NeuronPermissionType::Disburse) {
-            return Err(GovernanceError::new(ErrorType::NotAuthorized));
-        }
+        // TODO NNS1-1013 - split_neuron will have it's own permission
+        parent_neuron.check_authorized(caller, NeuronPermissionType::Disburse)?;
 
         if split.amount_e8s < min_stake + transaction_fee_e8s {
             return Err(GovernanceError::new_with_message(
@@ -935,8 +931,7 @@ impl Governance {
         // stake to 0 and only change it after the transfer is successful.
         let child_neuron = Neuron {
             id: Some(child_nid.clone()),
-            permissions: parent_neuron.permissions.clone(), /* TODO determine how we want to copy
-                                                             * permission */
+            permissions: parent_neuron.permissions.clone(),
             cached_neuron_stake_e8s: 0,
             neuron_fees_e8s: 0,
             created_timestamp_seconds: creation_timestamp_seconds,
@@ -1018,9 +1013,7 @@ impl Governance {
         let nid = neuron.id.as_ref().expect("Neurons must have an id");
         let subaccount = neuron.subaccount()?;
 
-        if !neuron.is_authorized(caller, NeuronPermissionType::ManageMaturity) {
-            return Err(GovernanceError::new(ErrorType::NotAuthorized));
-        }
+        neuron.check_authorized(caller, NeuronPermissionType::ManageMaturity)?;
 
         if merge_maturity.percentage_to_merge > 100 || merge_maturity.percentage_to_merge == 0 {
             return Err(GovernanceError::new_with_message(
@@ -1581,12 +1574,7 @@ impl Governance {
         // === Validation
         //
         // Check that the caller is authorized to make a proposal
-        if !proposer.is_authorized(caller, NeuronPermissionType::SubmitProposal) {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::NotAuthorized,
-                "Caller not authorized to propose.",
-            ));
-        }
+        proposer.check_authorized(caller, NeuronPermissionType::SubmitProposal)?;
 
         let min_dissolve_delay_for_vote = self
             .nervous_system_parameters()
@@ -1869,13 +1857,8 @@ impl Governance {
             .ok_or_else(||
             // The specified neuron is not present.
             GovernanceError::new_with_message(ErrorType::NotFound, "Neuron not found"))?;
-        // Check that the caller is authorized
-        if !neuron.is_authorized(caller, NeuronPermissionType::Vote) {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::NotAuthorized,
-                "Caller is not authorized to vote for neuron.",
-            ));
-        }
+
+        neuron.check_authorized(caller, NeuronPermissionType::Vote)?;
         let proposal_id = pb.proposal.as_ref().ok_or_else(||
             // Proposal not specified.
             GovernanceError::new_with_message(ErrorType::PreconditionFailed, "Registering of vote must include a proposal id."))?;
@@ -1946,12 +1929,7 @@ impl Governance {
 
         // Check that the caller is authorized to change followers (same authorization
         // as voting required).
-        if !neuron.is_authorized(caller, NeuronPermissionType::Vote) {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::NotAuthorized,
-                "Caller is not authorized to manage following of neuron.",
-            ));
-        }
+        neuron.check_authorized(caller, NeuronPermissionType::Vote)?;
 
         let max_followees_per_topic = self
             .proto
@@ -2030,24 +2008,27 @@ impl Governance {
         &mut self,
         id: &NeuronId,
         caller: &PrincipalId,
-        c: &manage_neuron::Configure,
+        configure: &manage_neuron::Configure,
     ) -> Result<(), GovernanceError> {
-        if let Some(neuron) = self.proto.neurons.get_mut(&id.to_string()) {
-            let now_seconds = self.env.now();
-            let network_parameters = self
-                .proto
-                .parameters
-                .as_ref()
-                .expect("NervousSystemParameters not present");
+        let neuron = self
+            .proto
+            .neurons
+            .get_mut(&id.to_string())
+            .ok_or_else(|| Self::neuron_not_found_error(id))?;
 
-            neuron.configure(caller, now_seconds, c, network_parameters)?;
-            Ok(())
-        } else {
-            Err(GovernanceError::new_with_message(
-                ErrorType::NotFound,
-                "Neuron not found.",
-            ))
-        }
+        neuron.check_authorized(caller, NeuronPermissionType::ConfigureDissolveState)?;
+
+        let now_seconds = self.env.now();
+        let max_dissolve_delay_seconds = self
+            .proto
+            .parameters
+            .as_ref()
+            .expect("NervousSystemParameters not present")
+            .max_dissolve_delay_seconds
+            .expect("NervousSystemParameters must have max_dissolve_delay_seconds");
+
+        neuron.configure(now_seconds, configure, max_dissolve_delay_seconds)?;
+        Ok(())
     }
 
     /// Creates a new neuron or refreshes the stake of an existing
@@ -2180,14 +2161,37 @@ impl Governance {
         claimer: &PrincipalId,
     ) -> Result<NeuronId, GovernanceError> {
         let now = self.env.now();
+        let neuron_claimer_permissions = self
+            .proto
+            .parameters
+            .as_ref()
+            .expect("NervousSystemParameters not present")
+            .neuron_claimer_permissions
+            .as_ref()
+            .expect("NervousSystemParameters.neuron_claimer_permissions must be present")
+            .clone();
+
+        let default_followees = self
+            .proto
+            .parameters
+            .as_ref()
+            .expect("NervousSystemParameters not present")
+            .default_followees
+            .as_ref()
+            .expect("NervousSystemParameters.default_followees must be present")
+            .clone();
+
         let neuron = Neuron {
             id: Some(nid.clone()),
-            permissions: vec![NeuronPermission::all(claimer)], // TODO(NNS1-928): determine best default permissions
+            permissions: vec![NeuronPermission::new(
+                claimer,
+                neuron_claimer_permissions.permissions,
+            )],
             cached_neuron_stake_e8s: 0,
             neuron_fees_e8s: 0,
             created_timestamp_seconds: now,
             aging_since_timestamp_seconds: now,
-            followees: Default::default(),
+            followees: default_followees.followees,
             maturity_e8s_equivalent: 0,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(0)),
         };

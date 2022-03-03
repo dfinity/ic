@@ -49,6 +49,7 @@ impl GovernanceCanisterInitPayloadBuilder {
         self.proto.ledger_canister_id = Some(ledger_canister_id.get());
         self
     }
+
     pub fn build(&mut self) -> Governance {
         self.proto.clone()
     }

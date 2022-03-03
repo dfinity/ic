@@ -125,6 +125,7 @@ type Motion = record { motion_text : text };
 type NervousSystemParameters = record {
   default_followees : opt DefaultFollowees;
   max_dissolve_delay_seconds : opt nat64;
+  neuron_claimer_permissions : opt NeuronPermissionList;
   neuron_minimum_stake_e8s : opt nat64;
   initial_voting_period : opt nat64;
   max_neuron_age_for_age_bonus : opt nat64;
@@ -135,6 +136,7 @@ type NervousSystemParameters = record {
   transaction_fee_e8s : opt nat64;
   max_number_of_proposals_with_ballots : opt nat64;
   reward_distribution_period_seconds : opt nat64;
+  neuron_grantable_permissions : opt NeuronPermissionList;
   max_followees_per_action : opt nat64;
 };
 type Neuron = record {
@@ -157,6 +159,7 @@ type NeuronPermission = record {
   "principal" : opt principal;
   permission_type : vec int32;
 };
+type NeuronPermissionList = record { permissions : vec int32 };
 type Operation = variant {
   StopDissolving : record {};
   StartDissolving : record {};

@@ -8,7 +8,10 @@ use ic_sns_governance::pb::v1::manage_neuron_response::Command as CommandRespons
 
 use ic_sns_governance::pb::v1::manage_neuron::claim_or_refresh::{By, MemoAndController};
 use ic_sns_governance::pb::v1::manage_neuron::{ClaimOrRefresh, Command, Disburse};
-use ic_sns_governance::pb::v1::{ManageNeuron, ManageNeuronResponse};
+use ic_sns_governance::pb::v1::{
+    ManageNeuron, ManageNeuronResponse, NervousSystemParameters, NeuronPermissionList,
+    NeuronPermissionType,
+};
 use ic_sns_test_utils::itest_helpers::{
     local_test_on_sns_subnet, SnsCanisters, SnsInitPayloadsBuilder,
 };
@@ -26,11 +29,18 @@ fn test_stake_and_disburse_neuron_with_notification() {
         async move {
             // Initialize the ledger with an account for a user.
             let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
-
             let alloc = Tokens::from_tokens(1000).unwrap();
+
+            let system_params = NervousSystemParameters {
+                neuron_claimer_permissions: Some(NeuronPermissionList {
+                    permissions: NeuronPermissionType::all(),
+                }),
+                ..NervousSystemParameters::with_default_values()
+            };
 
             let sns_init_payload = SnsInitPayloadsBuilder::new()
                 .with_ledger_account(user.get_principal_id().into(), alloc)
+                .with_nervous_system_parameters(system_params)
                 .build();
 
             let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;

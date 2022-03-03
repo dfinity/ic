@@ -2,8 +2,7 @@ use crate::pb::v1::governance_error::ErrorType;
 use crate::pb::v1::neuron::DissolveState;
 use crate::pb::v1::proposal::Action;
 use crate::pb::v1::{
-    manage_neuron, Ballot, Empty, GovernanceError, NervousSystemParameters, Neuron, NeuronId,
-    NeuronPermissionType, Vote,
+    manage_neuron, Ballot, Empty, GovernanceError, Neuron, NeuronId, NeuronPermissionType, Vote,
 };
 use ic_base_types::PrincipalId;
 use ledger_canister::Subaccount;
@@ -53,8 +52,26 @@ impl Neuron {
         }
     }
 
-    // TODO this can be sped up a lot if we build an index of
-    // PrincipalID->Vec<NeuronPermissionType>
+    pub(crate) fn check_authorized(
+        &self,
+        principal: &PrincipalId,
+        permission: NeuronPermissionType,
+    ) -> Result<(), GovernanceError> {
+        if !self.is_authorized(principal, permission) {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::NotAuthorized,
+                format!(
+                    "Caller '{:?}' is not authorized to perform action: '{:?}' on neuron '{}'.",
+                    principal,
+                    permission,
+                    self.id.as_ref().expect("Neuron must have a NeuronId"),
+                ),
+            ));
+        }
+
+        Ok(())
+    }
+
     pub(crate) fn is_authorized(
         &self,
         principal: &PrincipalId,
@@ -337,26 +354,16 @@ impl Neuron {
     /// See [manage_neuron::Configure] for details.
     pub fn configure(
         &mut self,
-        caller: &PrincipalId,
         now_seconds: u64,
         cmd: &manage_neuron::Configure,
-        network_parameters: &NervousSystemParameters,
+        max_dissolve_delay_seconds: u64,
     ) -> Result<(), GovernanceError> {
-        // This group of methods can only be invoked by a caller with
-        // `NeuronPermissionType::ConfigureDissolveState`
-        if !self.is_authorized(caller, NeuronPermissionType::ConfigureDissolveState) {
-            return Err(GovernanceError::new(ErrorType::NotAuthorized));
-        }
         let op = &cmd.operation.as_ref().ok_or_else(|| {
             GovernanceError::new_with_message(
                 ErrorType::InvalidCommand,
                 "Configure must have an operation.",
             )
         })?;
-
-        let max_dissolve_delay_seconds = network_parameters
-            .max_dissolve_delay_seconds
-            .expect("NervousSystemParameters must have max_dissolve_delay_seconds");
 
         match op {
             manage_neuron::configure::Operation::IncreaseDissolveDelay(d) => self
