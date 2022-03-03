@@ -12,8 +12,9 @@ use ic_sns_governance::pb::v1::{
         configure::Operation,
         ClaimOrRefresh, Command, Configure, IncreaseDissolveDelay, RegisterVote,
     },
-    GetProposal, GetProposalResponse, Governance, ManageNeuron, ManageNeuronResponse,
-    NervousSystemParameters, NeuronId, Proposal, ProposalData, ProposalId, Vote,
+    GetProposal, GetProposalResponse, Governance, GovernanceError, ManageNeuron,
+    ManageNeuronResponse, NervousSystemParameters, NeuronId, Proposal, ProposalData, ProposalId,
+    Vote,
 };
 use ledger_canister as ledger;
 use ledger_canister::{
@@ -214,7 +215,7 @@ impl SnsCanisters<'_> {
         sender: &Sender,
         subaccount: &Subaccount,
         proposal: Proposal,
-    ) -> ProposalId {
+    ) -> Result<ProposalId, GovernanceError> {
         let manage_neuron_response: ManageNeuronResponse = self
             .governance
             .update_from_sender(
@@ -230,9 +231,9 @@ impl SnsCanisters<'_> {
             .expect("Error calling manage_neuron");
 
         match manage_neuron_response.command.unwrap() {
-            CommandResponse::Error(error) => panic!("Unexpected error: {}", error),
+            CommandResponse::Error(e) => Err(e),
             CommandResponse::MakeProposal(make_proposal_response) => {
-                make_proposal_response.proposal_id.unwrap()
+                Ok(make_proposal_response.proposal_id.unwrap())
             }
             _ => panic!("Unexpected MakeProposal response"),
         }

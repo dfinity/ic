@@ -46,6 +46,7 @@ type Command_2 = variant {
   Disburse : Disburse;
 };
 type Configure = record { operation : opt Operation };
+type DefaultFollowees = record { followees : vec record { nat64; Followees } };
 type Disburse = record {
   to_account : opt AccountIdentifier;
   amount : opt Amount;
@@ -122,7 +123,7 @@ type MergeMaturityResponse = record {
 };
 type Motion = record { motion_text : text };
 type NervousSystemParameters = record {
-  default_followees : vec record { nat64; Followees };
+  default_followees : opt DefaultFollowees;
   max_dissolve_delay_seconds : opt nat64;
   neuron_minimum_stake_e8s : opt nat64;
   initial_voting_period : opt nat64;

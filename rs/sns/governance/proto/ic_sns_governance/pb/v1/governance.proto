@@ -527,7 +527,7 @@ message NervousSystemParameters {
 
   // A mapping of proposal action to the followees that every neuron has as default.
   // If unset, neurons will have no followees by default.
-  map<uint64, Neuron.Followees> default_followees = 6;
+  DefaultFollowees default_followees = 6;
 
   // The max number of neurons allowed. When maximum is reached, no new
   // neurons will be created until some are removed.
@@ -558,6 +558,11 @@ message NervousSystemParameters {
   // The max number of unsettled proposals -- that is proposals for which ballots
   // are still stored.
   optional uint64 max_number_of_proposals_with_ballots = 14;
+}
+
+// A mapping of proposal action to a set of default followees for that action
+message DefaultFollowees {
+  map<uint64, Neuron.Followees> followees = 1;
 }
 
 // A reward event is an event at which neuron maturity is increased
