@@ -1,8 +1,5 @@
 //! Defines types used for threshold ECDSA key generation.
 
-// TODO: Remove once we have implemented the functionality
-#![allow(dead_code)]
-
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt::{self, Display, Formatter};
@@ -186,6 +183,16 @@ pub struct EcdsaDealing {
     pub idkg_dealing: IDkgDealing,
 }
 
+impl Display for EcdsaDealing {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Dealing[transcript_id = {:?}, requested_height = {:?}, dealer_id = {:?}]",
+            self.idkg_dealing.transcript_id, self.requested_height, self.idkg_dealing.dealer_id,
+        )
+    }
+}
+
 impl SignedBytesWithoutDomainSeparator for EcdsaDealing {
     fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
         serde_cbor::to_vec(&self).unwrap()
@@ -199,6 +206,16 @@ pub type EcdsaSignedDealing = Signed<EcdsaDealing, BasicSignature<EcdsaDealing>>
 impl EcdsaSignedDealing {
     pub fn get(&self) -> &EcdsaDealing {
         &self.content
+    }
+}
+
+impl Display for EcdsaSignedDealing {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}, basic_signer_id = {:?}",
+            self.content, self.signature.signer,
+        )
     }
 }
 
@@ -216,6 +233,16 @@ pub type EcdsaDealingSupport = Signed<EcdsaDealing, MultiSignatureShare<EcdsaDea
 /// The multi-signature verified dealing
 pub type EcdsaVerifiedDealing = Signed<EcdsaDealing, MultiSignature<EcdsaDealing>>;
 
+impl Display for EcdsaDealingSupport {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}, multi_signer_id = {:?}",
+            self.content, self.signature.signer,
+        )
+    }
+}
+
 /// The ECDSA signature share
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct EcdsaSigShare {
@@ -230,6 +257,16 @@ pub struct EcdsaSigShare {
 
     /// The signature share
     pub share: ThresholdEcdsaSigShare,
+}
+
+impl Display for EcdsaSigShare {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "SigShare[request_id = {:?}, requested_height = {:?}, signer_id = {:?}]",
+            self.request_id, self.requested_height, self.signer_id,
+        )
+    }
 }
 
 /// Complaint related defines

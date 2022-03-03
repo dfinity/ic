@@ -124,11 +124,7 @@ impl EcdsaSignerImpl {
                     .sign_errors_inc("duplicate_sig_shares_in_batch");
                 ret.push(EcdsaChangeAction::HandleInvalid(
                     id,
-                    format!(
-                        "Duplicate share in unvalidated batch: signer = {:?}, height = {:?},
-                          request_id = {:?}",
-                        share.signer_id, share.requested_height, share.request_id
-                    ),
+                    format!("Duplicate share in unvalidated batch: {}", share),
                 ));
                 continue;
             }
@@ -149,11 +145,7 @@ impl EcdsaSignerImpl {
                         self.metrics.sign_errors_inc("duplicate_sig_share");
                         ret.push(EcdsaChangeAction::HandleInvalid(
                             id,
-                            format!(
-                                "Duplicate share: signer = {:?}, height = {:?},
-                                  request_id = {:?}",
-                                share.signer_id, share.requested_height, share.request_id
-                            ),
+                            format!("Duplicate share: {}", share),
                         ))
                     } else {
                         let mut changes =
@@ -294,21 +286,15 @@ impl EcdsaSignerImpl {
                     vec![EcdsaChangeAction::HandleInvalid(
                         id.clone(),
                         format!(
-                            "Share validation(permanent error): signer = {:?},
-                              height = {:?}, request_id = {:?}, error = {:?}",
-                            share.signer_id, share.requested_height, share.request_id, error
+                            "Share validation(permanent error): {}, error = {:?}",
+                            share, error
                         ),
                     )]
                 } else {
                     // Defer in case of transient errors
                     debug!(
                         self.log,
-                        "Share validation(transient error): signer = {:?},
-                            height = {:?}, request_id = {:?}, error = {:?}",
-                        share.signer_id,
-                        share.requested_height,
-                        share.request_id,
-                        error
+                        "Share validation(permanent error): {}, error = {:?}", share, error
                     );
                     self.metrics.sign_errors_inc("verify_sig_share_transient");
                     Default::default()

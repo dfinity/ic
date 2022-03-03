@@ -10,6 +10,7 @@ use ic_types::consensus::ecdsa::{
 };
 use ic_types::consensus::{Block, BlockPayload, HasHeight};
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscript;
+use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptOperation;
 use ic_types::Height;
 use std::sync::Arc;
 
@@ -142,6 +143,23 @@ pub(crate) fn load_transcripts(
         None
     } else {
         Some(new_complaints)
+    }
+}
+
+/// Brief summary of the IDkgTranscriptOperation
+pub(crate) fn transcript_op_summary(op: &IDkgTranscriptOperation) -> String {
+    match op {
+        IDkgTranscriptOperation::Random => "Random".to_string(),
+        IDkgTranscriptOperation::ReshareOfMasked(t) => {
+            format!("ReshareOfMasked({:?})", t.transcript_id)
+        }
+        IDkgTranscriptOperation::ReshareOfUnmasked(t) => {
+            format!("ReshareOfUnmasked({:?})", t.transcript_id)
+        }
+        IDkgTranscriptOperation::UnmaskedTimesMasked(t1, t2) => format!(
+            "UnmaskedTimesMasked({:?}, {:?})",
+            t1.transcript_id, t2.transcript_id
+        ),
     }
 }
 
