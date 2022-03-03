@@ -1,8 +1,8 @@
-use crate::{sandbox_safe_system_state::SandboxSafeSystemState, valid_subslice};
+use crate::{routing, sandbox_safe_system_state::SandboxSafeSystemState, valid_subslice};
 use ic_ic00_types::IC_00;
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_logger::{info, ReplicaLogger};
-use ic_registry_routing_table::{resolve_destination, RoutingTable};
+use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     messages::{CallContextId, Request},
@@ -170,7 +170,7 @@ pub(crate) fn into_request(
     let (destination_canister, destination_subnet) = if callee == IC_00.get() {
         // This is a request to ic:00. Update `callee` to be the appropriate
         // subnet.
-        let destination_subnet = resolve_destination(
+        let destination_subnet = routing::resolve_destination(
             routing_table,
             method_name.as_str(),
             method_payload.as_slice(),

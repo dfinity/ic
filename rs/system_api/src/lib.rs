@@ -1,4 +1,5 @@
 mod request_in_prep;
+mod routing;
 pub mod sandbox_safe_system_state;
 mod stable_memory;
 pub mod system_api_empty;
@@ -11,7 +12,7 @@ use ic_interfaces::execution_environment::{
     TrapCode::CyclesAmountTooBigFor64Bit,
 };
 use ic_logger::{error, info, ReplicaLogger};
-use ic_registry_routing_table::{resolve_destination, RoutingTable};
+use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::ENFORCE_MESSAGE_MEMORY_USAGE, memory_required_to_push_request,
@@ -1647,7 +1648,7 @@ impl SystemApi for SystemApiImpl {
 
                 let callee = if callee == IC_00.get() {
                     // This is a request to ic:00. Update `callee` to be the appropriate subnet.
-                    let callee = resolve_destination(
+                    let callee = routing::resolve_destination(
                         routing_table,
                         method_name.as_str(),
                         payload.as_slice(),
