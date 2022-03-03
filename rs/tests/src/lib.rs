@@ -34,6 +34,5 @@ pub mod tecdsa_signature_test;
 pub mod token_balance_test;
 pub mod transaction_ledger_correctness_test;
 pub mod types;
-pub mod upgrade_reject;
 pub mod util;
 pub mod wasm_generator_test;

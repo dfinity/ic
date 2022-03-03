@@ -41,11 +41,12 @@ use crate::{
         generate_key_strings, wait_until_authentication_is_granted, AuthMean,
     },
     orchestrator::utils::upgrade::{
-        fetch_node_version, fetch_update_file_sha256, get_blessed_replica_versions,
+        fetch_unassigned_node_version, fetch_update_file_sha256, get_blessed_replica_versions,
+        get_update_image_url, UpdateImageType,
     },
     util::{
         block_on, get_random_nns_node_endpoint, get_random_unassigned_node_endpoint,
-        get_update_image_url, runtime_from_url, UpdateImageType,
+        runtime_from_url,
     },
 };
 use ic_canister_client::Sender;
@@ -89,12 +90,11 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     info!(ctx.logger, "SSH authorization succeeded");
 
     // fetch the current replica version and deduce the new one
-    let original_version = fetch_node_version(&unassigned_node_ip, &readonly_mean).unwrap();
+    let original_version =
+        fetch_unassigned_node_version(&unassigned_node_ip, &readonly_mean).unwrap();
     info!(ctx.logger, "Original replica version: {}", original_version);
     let upgrade_url = get_update_image_url(UpdateImageType::ImageTest, &original_version);
     info!(ctx.logger, "Upgrade URL: {}", upgrade_url);
-    let sha_url = get_update_image_url(UpdateImageType::Sha256, &original_version);
-    info!(ctx.logger, "SHA256 URL: {}", sha_url);
     let target_version = format!("{}-test", original_version);
     let new_replica_version = ReplicaVersion::try_from(target_version.clone()).unwrap();
     info!(
@@ -110,7 +110,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         info!(ctx.logger, "Registry version: {}", reg_ver);
         let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
         info!(ctx.logger, "Initial: {:?}", blessed_versions);
-        let sha256 = fetch_update_file_sha256(&sha_url, true).await;
+        let sha256 = fetch_update_file_sha256(&original_version, true).await;
         info!(ctx.logger, "Update image SHA256: {}", sha256);
 
         // prepare for the 1. proposal
@@ -164,14 +164,15 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         if i >= 100 {
             break None;
         }
-        let fetched_version = match fetch_node_version(&unassigned_node_ip, &readonly_mean) {
-            Ok(ver) => ver,
-            Err(_) => {
-                info!(ctx.logger, "Try: {}. Waiting for the host to boot...", i);
-                thread::sleep(time::Duration::from_secs(20));
-                continue; // if the host is down, try again to fetch the version
-            }
-        };
+        let fetched_version =
+            match fetch_unassigned_node_version(&unassigned_node_ip, &readonly_mean) {
+                Ok(ver) => ver,
+                Err(_) => {
+                    info!(ctx.logger, "Try: {}. Waiting for the host to boot...", i);
+                    thread::sleep(time::Duration::from_secs(20));
+                    continue; // if the host is down, try again to fetch the version
+                }
+            };
         info!(
             ctx.logger,
             "Try: {}. Unassigned node replica version: {}", i, fetched_version

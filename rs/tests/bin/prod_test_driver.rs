@@ -14,14 +14,13 @@ use ic_tests::node_restart_test::{self, test as node_restart_test};
 use ic_tests::orchestrator::{
     cup_fetching_across_upgrades,
     node_reassignment_test::{self, test as node_reassignment_test},
-    ssh_access_to_nodes, unassigned_node_upgrade_test,
+    ssh_access_to_nodes, unassigned_node_upgrade_test, upgrade_reject,
 };
 use ic_tests::rejoin_test::{self, test as rejoin_test};
 use ic_tests::rosetta_test;
 use ic_tests::security::nns_voting_fuzzing_poc_test;
 use ic_tests::spec_compliance;
 use ic_tests::token_balance_test::{self, test as token_balance_test};
-use ic_tests::upgrade_reject::{self, upgrade_reject};
 use ic_tests::{
     basic_health_test::{self, basic_health_test},
     execution, message_routing,
@@ -340,9 +339,9 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     par(vec![t("create_subnet", create_subnet_test)]),
                 ),
                 pot(
-                    "upgrade_reject",
+                    "upgrade_reject_pot",
                     upgrade_reject::config,
-                    par(vec![t("upgrade_reject", upgrade_reject)]),
+                    par(vec![t("upgrade_reject_test", upgrade_reject::test)]),
                 ),
                 pot(
                     "basic_pot_with_all_features_enabled",
