@@ -96,22 +96,13 @@ impl ProposalData {
     /// This, this method can return true even if the proposal is
     /// already decided.
     pub fn accepts_vote(&self, now_seconds: u64, voting_period_seconds: u64) -> bool {
-        // If voting_period_seconds is zero, always accept votes. This only happens in
-        // tests.
-        #[cfg(not(feature = "test"))]
-        let always_allow = false;
-        #[cfg(feature = "test")]
-        let always_allow = voting_period_seconds == 0;
         // Naive version of the wait-for-quiet mechanics. For now just tests
         // that the proposal duration is smaller than the threshold, which
         // we're just currently setting as seconds.
         //
         // Wait for quiet is meant to be able to decide proposals without
         // quorum. The tally must have been done above already.
-        //
-        // If the wait for quit threshold is unset (0), then proposals can
-        // accept votes forever.
-        always_allow || (now_seconds < self.get_deadline_timestamp_seconds(voting_period_seconds))
+        now_seconds < self.get_deadline_timestamp_seconds(voting_period_seconds)
     }
 
     pub fn evaluate_wait_for_quiet(
