@@ -8,8 +8,11 @@ name = "ic_nervous_system_common"
 path = "src/lib.rs"
 
 [dependencies]
+candid = "0.7.4"
 async-trait = "0.1.42"
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
+ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha = {path = "../../crypto/sha" }
 ledger-canister = { path = "../../rosetta-api/ledger_canister" }
+serde = { version = "1.0", features = ["derive"] }

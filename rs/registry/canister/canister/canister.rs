@@ -8,9 +8,8 @@ use dfn_core::{
 };
 use ic_base_types::NodeId;
 use ic_certified_map::{AsHashTree, HashTree};
-use ic_nns_common::{
-    access_control::check_caller_is_root, pb::v1::CanisterAuthzInfo, types::MethodAuthzChange,
-};
+use ic_nervous_system_common::MethodAuthzChange;
+use ic_nns_common::{access_control::check_caller_is_root, pb::v1::CanisterAuthzInfo};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_protobuf::registry::{
     dc::v1::AddOrRemoveDataCentersProposalPayload,

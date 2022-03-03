@@ -24,6 +24,7 @@ ic-base-types = {path="../../../types/base_types"}
 ic-cdk = { version = "0.3.1", default-features = false }
 ic-crypto-sha = {path = "../../../crypto/sha/"}
 ic-ic00-types = {path="../../../types/ic00_types"}
+ic-nervous-system-common = { path = "../../../nervous_system/common" }
 ic-nervous-system-root = { path = "../../../nervous_system/root" }
 ic-nns-common ={path="../../common"}
 ic-nns-constants ={path="../../constants"}

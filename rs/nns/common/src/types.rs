@@ -10,8 +10,6 @@ use std::hash::Hash;
 use std::num::ParseIntError;
 use std::str::FromStr;
 
-use ic_base_types::PrincipalId;
-
 use crate::pb::v1::{
     CanisterId as CanisterIdProto, NeuronId as NeuronIdProto, ProposalId as ProposalIdProto,
 };
@@ -85,31 +83,6 @@ impl Display for ProposalId {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "proposal {}", self.0)
     }
-}
-
-/// Description of a change to the authz of a specific method on a specific
-/// canister that must happen for a given canister change/add/remove
-/// to be viable
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
-pub struct MethodAuthzChange {
-    pub canister: CanisterId,
-    pub method_name: String,
-    pub principal: Option<PrincipalId>,
-    pub operation: AuthzChangeOp,
-}
-
-/// The operation to execute. Varible names in comments refer to the fields
-/// of AuthzChange.
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
-pub enum AuthzChangeOp {
-    /// 'canister' must add a principal to the authorized list of 'method_name'.
-    /// If 'add_self' is true, the canister_id to be authorized is the canister
-    /// being added/changed, if it's false, 'principal' is used instead, which
-    /// must be Some in that case..
-    Authorize { add_self: bool },
-    /// 'canister' must remove 'principal' from the authorized list of
-    /// 'method_name'. 'principal' must always be Some.
-    Deauthorize,
 }
 
 /// The payload of a proposal to update the ICP/XDR conversion rate.

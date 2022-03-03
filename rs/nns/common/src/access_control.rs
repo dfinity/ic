@@ -6,11 +6,9 @@ use std::sync::RwLock;
 use lazy_static::lazy_static;
 
 use ic_base_types::PrincipalId;
+use ic_nervous_system_common::{AuthzChangeOp, MethodAuthzChange};
 
-use crate::{
-    pb::v1::{CanisterAuthzInfo, MethodAuthzInfo},
-    types::{AuthzChangeOp, MethodAuthzChange},
-};
+use crate::pb::v1::{CanisterAuthzInfo, MethodAuthzInfo};
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
