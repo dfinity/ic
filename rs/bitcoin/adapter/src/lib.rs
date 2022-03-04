@@ -6,7 +6,7 @@
 
 use std::net::SocketAddr;
 
-use bitcoin::{network::message::NetworkMessage, Block, BlockHash};
+use bitcoin::network::message::NetworkMessage;
 /// This module contains the main adapter code that controls the interactions of
 /// the other modules.
 mod adapter;
@@ -98,14 +98,6 @@ pub trait ProcessEvent {
     /// This method is used to route an event in a component's internals and
     /// perform state updates.
     fn process_event(&mut self, event: &StreamEvent) -> Result<(), ProcessEventError>;
-}
-
-/// This trait provides an interface to anything that may need to retrieve
-/// a block from an implementation.
-pub trait HandleClientRequest {
-    /// This method is used to return a block from the service that handles
-    /// block storage that is a successor of the given block hashes.
-    fn handle_client_request(&mut self, block_hashes: Vec<BlockHash>) -> Vec<Block>;
 }
 
 /// This trait provides an interface to anything that may need to get the
