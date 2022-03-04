@@ -11,6 +11,7 @@ pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions, Glob
 use ic_interfaces::messages::CanisterInputMessage;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::methods::SystemMethod;
+use ic_types::NumInstructions;
 use ic_types::{
     messages::{Ingress, Request, RequestOrResponse, Response},
     methods::WasmMethod,
@@ -45,9 +46,13 @@ pub struct SchedulerState {
     /// in the vector d that corresponds to this canister.
     pub accumulated_priority: AccumulatedPriority,
 
-    /// The amount of heap delta debit left from the canister's last full
-    /// execution round.
+    /// The amount of heap delta debit. The canister skips execution of update
+    /// messages if this value is non-zero.
     pub heap_delta_debit: NumBytes,
+
+    /// The amount of install_code instruction debit. The canister rejects
+    /// install_code messages if this value is non-zero.
+    pub install_code_debit: NumInstructions,
 }
 
 impl Default for SchedulerState {
@@ -57,6 +62,7 @@ impl Default for SchedulerState {
             compute_allocation: ComputeAllocation::default(),
             accumulated_priority: AccumulatedPriority::default(),
             heap_delta_debit: NumBytes::from(0),
+            install_code_debit: NumInstructions::from(0),
         }
     }
 }

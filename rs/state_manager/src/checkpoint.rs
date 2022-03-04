@@ -153,6 +153,7 @@ fn serialize_canister_to_tip(
                     .map(|es| es.stable_memory.size)
                     .unwrap_or_else(|| NumWasmPages::from(0)),
                 heap_delta_debit: canister_state.scheduler_state.heap_delta_debit,
+                install_code_debit: canister_state.scheduler_state.install_code_debit,
             }
             .into(),
         )
@@ -302,6 +303,7 @@ pub fn load_canister_state<P: ReadPolicy>(
             compute_allocation: canister_state_bits.compute_allocation,
             accumulated_priority: canister_state_bits.accumulated_priority,
             heap_delta_debit: canister_state_bits.heap_delta_debit,
+            install_code_debit: canister_state_bits.install_code_debit,
         },
     })
 }

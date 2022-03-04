@@ -137,6 +137,12 @@ pub struct SchedulerConfig {
     /// then not run for several rounds until they are back under the allowed
     /// rate.
     pub heap_delta_rate_limit: NumBytes,
+
+    /// Denotes how many instructions each canister is allowed to execute in
+    /// install_code messages per round. Canisters may go over this limit in a
+    /// single round, but will then reject install_code messages for several
+    /// rounds until they are back under the allowed rate.
+    pub install_code_rate_limit: NumInstructions,
 }
 
 impl SchedulerConfig {
@@ -155,6 +161,7 @@ impl SchedulerConfig {
                 MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
             only_track_system_heartbeat_errors: true,
             heap_delta_rate_limit: NumBytes::from(100 * 1024 * 1024),
+            install_code_rate_limit: MAX_INSTRUCTIONS_PER_MESSAGE,
         }
     }
 
@@ -176,6 +183,9 @@ impl SchedulerConfig {
             // This limit should be high enough (1000T) to effectively disable
             // rate-limiting for the system subnets.
             heap_delta_rate_limit: NumBytes::from(1_000_000_000_000_000),
+            // This limit should be high enough (1000T) to effectively disable
+            // rate-limiting for the system subnets.
+            install_code_rate_limit: NumInstructions::from(1_000_000_000_000_000),
         }
     }
 
@@ -195,6 +205,7 @@ impl SchedulerConfig {
                 MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
             only_track_system_heartbeat_errors: true,
             heap_delta_rate_limit: NumBytes::from(100 * 1024 * 1024),
+            install_code_rate_limit: MAX_INSTRUCTIONS_PER_MESSAGE,
         }
     }
 

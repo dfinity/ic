@@ -16,7 +16,7 @@ use ic_replicated_state::{
 };
 use ic_types::{
     nominal_cycles::NominalCycles, AccumulatedPriority, CanisterId, ComputeAllocation, Cycles,
-    ExecutionRound, Height, MemoryAllocation, PrincipalId,
+    ExecutionRound, Height, MemoryAllocation, NumInstructions, PrincipalId,
 };
 use ic_wasm_types::BinaryEncodedWasm;
 use std::convert::{From, TryFrom, TryInto};
@@ -180,6 +180,7 @@ pub struct CanisterStateBits {
     pub consumed_cycles_since_replica_started: NominalCycles,
     pub stable_memory_size: NumWasmPages,
     pub heap_delta_debit: NumBytes,
+    pub install_code_debit: NumInstructions,
 }
 
 /// `StateLayout` provides convenience functions to construct correct
@@ -976,6 +977,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             ),
             stable_memory_size64: item.stable_memory_size.get() as u64,
             heap_delta_debit: item.heap_delta_debit.get(),
+            install_code_debit: item.install_code_debit.get(),
         }
     }
 }
@@ -1040,6 +1042,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             consumed_cycles_since_replica_started,
             stable_memory_size: NumWasmPages::from(value.stable_memory_size64 as usize),
             heap_delta_debit: NumBytes::from(value.heap_delta_debit),
+            install_code_debit: NumInstructions::from(value.install_code_debit),
         })
     }
 }
@@ -1111,6 +1114,7 @@ mod test {
             consumed_cycles_since_replica_started: NominalCycles::from(0),
             stable_memory_size: NumWasmPages::from(0),
             heap_delta_debit: NumBytes::from(0),
+            install_code_debit: NumInstructions::from(0),
         };
 
         let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
@@ -1146,6 +1150,7 @@ mod test {
             consumed_cycles_since_replica_started: NominalCycles::from(0),
             stable_memory_size: NumWasmPages::from(0),
             heap_delta_debit: NumBytes::from(0),
+            install_code_debit: NumInstructions::from(0),
         };
 
         let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);

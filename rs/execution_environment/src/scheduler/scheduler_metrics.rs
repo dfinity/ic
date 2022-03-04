@@ -65,6 +65,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) canister_heap_delta_debits: Histogram,
     pub(super) heap_delta_rate_limited_canisters_per_round: Histogram,
     pub(super) canisters_not_in_routing_table: IntGauge,
+    pub(super) canister_install_code_debits: Histogram,
     pub(super) old_open_call_contexts: IntGauge,
 }
 
@@ -459,6 +460,12 @@ impl SchedulerMetrics {
             canisters_not_in_routing_table: metrics_registry.int_gauge(
                 "replicated_state_canisters_not_in_routing_table",
                 "Number of canisters in the state not assigned to the subnet range in the routing table."
+            ),
+            canister_install_code_debits: instructions_histogram(
+                "scheduler_canister_install_code_debits",
+                "The install code debit of a canister at the end of the round, before \
+                subtracting the rate limit allowed amount",
+                metrics_registry,
             ),
             old_open_call_contexts: metrics_registry.int_gauge(
                 "scheduler_old_open_call_contexts",

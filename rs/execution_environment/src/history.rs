@@ -257,5 +257,8 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         CanisterCyclesLimitExceeded => {
             "Canister Cycles Limit for Single Message Execution Exceeded"
         }
+        CanisterInstallCodeRateLimited => {
+            "Canister is rate limited because it executed too many instructions in the previous install_code messages"
+        }
     }
 }
