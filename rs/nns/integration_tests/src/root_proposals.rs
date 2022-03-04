@@ -97,6 +97,9 @@ fn test_upgrade_governance_through_root_proposal() {
             CanisterInstallMode::Upgrade,
             GOVERNANCE_CANISTER_ID,
         )
+        .with_memory_allocation(ic_nns_constants::memory_allocation_of(
+            GOVERNANCE_CANISTER_ID,
+        ))
         // Note that we upgrade the governance canister to the universal
         // canister (effectively breaking governance). This is needed so
         // that we can be sure that the upgrade actually went through.
@@ -199,6 +202,9 @@ fn test_unauthorized_user_cant_submit_on_root_proposals() {
             CanisterInstallMode::Upgrade,
             GOVERNANCE_CANISTER_ID,
         )
+        .with_memory_allocation(ic_nns_constants::memory_allocation_of(
+            GOVERNANCE_CANISTER_ID,
+        ))
         .with_wasm(ic_test_utilities::empty_wasm::EMPTY_WASM.to_vec());
 
         let response: Result<(), String> = nns_canisters
@@ -239,6 +245,9 @@ fn test_cant_submit_root_proposal_with_wrong_sha() {
             CanisterInstallMode::Upgrade,
             GOVERNANCE_CANISTER_ID,
         )
+        .with_memory_allocation(ic_nns_constants::memory_allocation_of(
+            GOVERNANCE_CANISTER_ID,
+        ))
         .with_wasm(ic_test_utilities::empty_wasm::EMPTY_WASM.to_vec());
 
         let empty_wasm_sha =
@@ -285,6 +294,9 @@ fn test_enough_no_votes_rejects_the_proposal() {
             CanisterInstallMode::Upgrade,
             GOVERNANCE_CANISTER_ID,
         )
+        .with_memory_allocation(ic_nns_constants::memory_allocation_of(
+            GOVERNANCE_CANISTER_ID,
+        ))
         // Note that we upgrade the governance canister to the universal
         // canister (effectively breaking governance). This is needed so
         // that we can be sure that the upgrade actually went through.
@@ -364,6 +376,9 @@ fn test_changing_the_sha_invalidates_the_proposal() {
             CanisterInstallMode::Upgrade,
             GOVERNANCE_CANISTER_ID,
         )
+        .with_memory_allocation(ic_nns_constants::memory_allocation_of(
+            GOVERNANCE_CANISTER_ID,
+        ))
         // Note that we upgrade the governance canister to the empty
         // canister (effectively breaking governance). This is needed so
         // that we can be sure that the upgrade actually went through.
@@ -398,6 +413,9 @@ fn test_changing_the_sha_invalidates_the_proposal() {
             CanisterInstallMode::Upgrade,
             GOVERNANCE_CANISTER_ID,
         )
+        .with_memory_allocation(ic_nns_constants::memory_allocation_of(
+            GOVERNANCE_CANISTER_ID,
+        ))
         .with_wasm(ic_test_utilities::empty_wasm::EMPTY_WASM.to_vec());
 
         let response: Result<(), String> = nns_canisters

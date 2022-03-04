@@ -4,9 +4,6 @@ use ic_base_types::{CanisterInstallMode, PrincipalId};
 use ic_crypto_sha::Sha256;
 use ic_nervous_system_common::MethodAuthzChange;
 
-// TODO: Move to somewhere in the rs/nervous_system dir.
-use ic_nns_constants::memory_allocation_of;
-
 use serde::Serialize;
 
 pub const LOG_PREFIX: &str = "[Root Canister] ";
@@ -162,6 +159,8 @@ impl ChangeNnsCanisterProposalPayload {
         mode: CanisterInstallMode,
         canister_id: CanisterId,
     ) -> Self {
+        let default_memory_allocation = 1_u64 << 30;
+
         Self {
             stop_before_installing,
             mode,
@@ -169,10 +168,15 @@ impl ChangeNnsCanisterProposalPayload {
             wasm_module: Vec::new(),
             arg: Vec::new(),
             compute_allocation: None,
-            memory_allocation: Some(candid::Nat::from(memory_allocation_of(canister_id))),
+            memory_allocation: Some(candid::Nat::from(default_memory_allocation)),
             query_allocation: None,
             authz_changes: Vec::new(),
         }
+    }
+
+    pub fn with_memory_allocation(mut self, n: u64) -> Self {
+        self.memory_allocation = Some(candid::Nat::from(n));
+        self
     }
 
     pub fn with_wasm(mut self, wasm_module: Vec<u8>) -> Self {

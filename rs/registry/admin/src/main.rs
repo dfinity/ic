@@ -32,7 +32,7 @@ use ic_nns_constants::{
         TEST_USER2_PRINCIPAL, TEST_USER3_KEYPAIR, TEST_USER3_PRINCIPAL, TEST_USER4_KEYPAIR,
         TEST_USER4_PRINCIPAL,
     },
-    GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID,
+    memory_allocation_of, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID,
 };
 use ic_nns_governance::pb::v1::{
     add_or_remove_node_provider::Change, manage_neuron::Command, proposal::Action,
@@ -3643,6 +3643,7 @@ impl RootCanisterClient {
             CanisterInstallMode::Upgrade,
             GOVERNANCE_CANISTER_ID,
         )
+        .with_memory_allocation(memory_allocation_of(GOVERNANCE_CANISTER_ID))
         .with_wasm(wasm_module);
 
         let serialized = Encode!(&CanisterIdRecord::from(GOVERNANCE_CANISTER_ID)).unwrap();
