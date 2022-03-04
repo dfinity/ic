@@ -6,6 +6,7 @@ use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager
 use ic_base_types::CanisterId;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
+    registry::subnet::v1 as pb_subnet,
     state::{
         ingress::v1 as pb_ingress,
         queues::v1 as pb_queues,
@@ -13,7 +14,7 @@ use ic_protobuf::{
     },
 };
 use ic_registry_routing_table::RoutingTable;
-use ic_registry_subnet_features::SubnetFeatures;
+use ic_registry_subnet_features::{BitcoinFeature, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     crypto::CryptoHash,
@@ -134,6 +135,29 @@ impl Default for NetworkTopology {
     }
 }
 
+impl NetworkTopology {
+    /// Returns a list of subnets where the bitcoin testnet feature is enabled.
+    pub fn bitcoin_testnet_subnets(&self) -> Vec<SubnetId> {
+        self.subnets
+            .iter()
+            .filter(|(_, subnet_topology)| {
+                subnet_topology.subnet_features.bitcoin_testnet_feature
+                    == Some(BitcoinFeature::Enabled)
+            })
+            .map(|(subnet_id, _)| *subnet_id)
+            .collect()
+    }
+
+    /// Returns a list of subnets where the ecdsa feature is enabled.
+    pub fn ecdsa_subnets(&self) -> Vec<SubnetId> {
+        self.subnets
+            .iter()
+            .filter(|(_, subnet_topology)| subnet_topology.subnet_features.ecdsa_signatures)
+            .map(|(subnet_id, _)| *subnet_id)
+            .collect()
+    }
+}
+
 impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
     fn from(item: &NetworkTopology) -> Self {
         Self {
@@ -191,6 +215,7 @@ pub struct SubnetTopology {
     pub public_key: Vec<u8>,
     pub nodes: BTreeMap<NodeId, NodeTopology>,
     pub subnet_type: SubnetType,
+    pub subnet_features: SubnetFeatures,
 }
 
 impl From<&SubnetTopology> for pb_metadata::SubnetTopology {
@@ -206,6 +231,7 @@ impl From<&SubnetTopology> for pb_metadata::SubnetTopology {
                 })
                 .collect(),
             subnet_type: i32::from(item.subnet_type),
+            subnet_features: Some(pb_subnet::SubnetFeatures::from(item.subnet_features)),
         }
     }
 }
@@ -231,6 +257,10 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
             // field before we actually use it. We pick the value of least
             // privilege just to be sure.
             subnet_type: SubnetType::try_from(item.subnet_type).unwrap_or(SubnetType::Application),
+            subnet_features: item
+                .subnet_features
+                .map(SubnetFeatures::from)
+                .unwrap_or_default(),
         })
     }
 }

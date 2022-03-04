@@ -49,6 +49,7 @@ mod tests {
     };
     use ic_base_types::NumSeconds;
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+    use ic_registry_subnet_features::SubnetFeatures;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
         canister_state::{
@@ -641,11 +642,13 @@ mod tests {
                 public_key: vec![1, 2, 3, 4],
                 nodes: btreemap!{},
                 subnet_type: SubnetType::Application,
+                subnet_features: SubnetFeatures::default(),
             },
             subnet_test_id(1) => SubnetTopology {
                 public_key: vec![5, 6, 7, 8],
                 nodes: btreemap!{},
                 subnet_type: SubnetType::Application,
+                subnet_features: SubnetFeatures::default(),
             }
         };
         fn id_range(from: u64, to: u64) -> CanisterIdRange {

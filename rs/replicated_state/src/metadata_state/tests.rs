@@ -8,7 +8,7 @@ use ic_test_utilities::{
         messages::RequestBuilder,
     },
     types::{
-        ids::{SUBNET_0, SUBNET_2},
+        ids::{subnet_test_id, SUBNET_0, SUBNET_2},
         messages::ResponseBuilder,
     },
 };
@@ -17,6 +17,8 @@ use ic_types::{
     ingress::{WasmResult, MAX_INGRESS_TTL},
     messages::{CallbackId, Payload},
 };
+use maplit::btreemap;
+use std::str::FromStr;
 
 #[test]
 fn can_prune_old_ingress_history_entries() {
@@ -241,4 +243,81 @@ fn subnet_call_contexts_deserialization() {
         deserialized_http_request_context.transform_method_name,
         transform_method_name
     );
+}
+
+#[test]
+fn empty_network_topology() {
+    let network_topology = NetworkTopology {
+        subnets: BTreeMap::new(),
+        routing_table: Arc::new(RoutingTable::default()),
+        nns_subnet_id: subnet_test_id(42),
+    };
+
+    assert_eq!(network_topology.bitcoin_testnet_subnets(), vec![]);
+    assert_eq!(network_topology.ecdsa_subnets(), vec![]);
+}
+
+#[test]
+fn network_topology_bitcoin_testnet_subnets() {
+    let network_topology = NetworkTopology {
+        subnets: btreemap![
+            // A subnet with the bitcoin testnet feature enabled.
+            subnet_test_id(0) => SubnetTopology {
+                public_key: vec![],
+                nodes: BTreeMap::new(),
+                subnet_type: SubnetType::Application,
+                subnet_features: SubnetFeatures::from_str("bitcoin_testnet").unwrap()
+            },
+
+            // A subnet with the bitcoin testnet feature paused.
+            subnet_test_id(1) => SubnetTopology {
+                public_key: vec![],
+                nodes: BTreeMap::new(),
+                subnet_type: SubnetType::Application,
+                subnet_features: SubnetFeatures::from_str("bitcoin_testnet_paused").unwrap()
+            },
+
+            // A subnet without the bitcoin feature enabled.
+            subnet_test_id(3) => SubnetTopology {
+                public_key: vec![],
+                nodes: BTreeMap::new(),
+                subnet_type: SubnetType::Application,
+                subnet_features: SubnetFeatures::default()
+            }
+        ],
+        routing_table: Arc::new(RoutingTable::default()),
+        nns_subnet_id: subnet_test_id(42),
+    };
+
+    assert_eq!(
+        network_topology.bitcoin_testnet_subnets(),
+        vec![subnet_test_id(0)]
+    );
+}
+
+#[test]
+fn network_topology_ecdsa_subnets() {
+    let network_topology = NetworkTopology {
+        subnets: btreemap![
+            // A subnet without ECDSA enabled.
+            subnet_test_id(0) => SubnetTopology {
+                public_key: vec![],
+                nodes: BTreeMap::new(),
+                subnet_type: SubnetType::Application,
+                subnet_features: SubnetFeatures::from_str("bitcoin_testnet_paused").unwrap()
+            },
+
+            // A subnet with ECDSA enabled.
+            subnet_test_id(1) => SubnetTopology {
+                public_key: vec![],
+                nodes: BTreeMap::new(),
+                subnet_type: SubnetType::Application,
+                subnet_features: SubnetFeatures::from_str("ecdsa_signatures").unwrap()
+            }
+        ],
+        routing_table: Arc::new(RoutingTable::default()),
+        nns_subnet_id: subnet_test_id(42),
+    };
+
+    assert_eq!(network_topology.ecdsa_subnets(), vec![subnet_test_id(1)]);
 }
