@@ -463,12 +463,14 @@ impl BatchProcessorImpl {
             let public_key =
                 get_subnet_public_key(Arc::clone(&self.registry), *subnet_id, registry_version)?;
             let subnet_type = self.get_subnet_type(*subnet_id, registry_version);
+            let subnet_features = self.get_subnet_features(*subnet_id, registry_version);
             subnets.insert(
                 *subnet_id,
                 SubnetTopology {
                     public_key,
                     nodes,
                     subnet_type,
+                    subnet_features,
                 },
             );
         }

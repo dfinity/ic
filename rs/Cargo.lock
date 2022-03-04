@@ -3653,6 +3653,7 @@ dependencies = [
  "ic-crypto-tree-hash",
  "ic-protobuf",
  "ic-registry-routing-table",
+ "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-replicated-state",
  "ic-sys",

@@ -33,6 +33,7 @@ tempfile = "3.1.0"
 criterion = "0.3"
 criterion-time = { path = "../criterion_time" }
 ic-test-utilities = { path = "../test_utilities" }
+maplit = "1.0.2"
 serde_cbor = "0.11.1"
 proptest = "0.9.4"
 scoped_threadpool = "0.1.*"

@@ -5,6 +5,7 @@ use crate::{
 };
 use ic_interfaces::{execution_environment::Scheduler, state_manager::StateManager};
 use ic_metrics::MetricsRegistry;
+use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{ReplicatedState, SubnetTopology};
 use ic_test_utilities::{
@@ -102,6 +103,7 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
             public_key: vec![0, 1, 2, 3],
             nodes: BTreeMap::new(),
             subnet_type: SubnetType::Application,
+            subnet_features: SubnetFeatures::default(),
         },
     );
 
