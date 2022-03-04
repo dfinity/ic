@@ -2,6 +2,7 @@ use ic_config::subnet_config::SubnetConfig;
 use ic_config::subnet_config::SubnetConfigs;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::setup_execution;
+use ic_interfaces::registry::RegistryClient;
 use ic_interfaces::{
     execution_environment::{IngressHistoryReader, QueryHandler},
     messaging::MessageRouting,
@@ -22,7 +23,7 @@ use ic_registry_keys::{
     make_provisional_whitelist_record_key, make_routing_table_record_key, ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
+use ic_registry_routing_table::{routing_table_insert_subnet, CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::StateManagerImpl;
@@ -59,7 +60,7 @@ fn make_single_node_registry(
     subnet_id: SubnetId,
     subnet_type: SubnetType,
     node_id: NodeId,
-) -> Arc<RegistryClientImpl> {
+) -> (Arc<ProtoRegistryDataProvider>, Arc<RegistryClientImpl>) {
     let registry_version = RegistryVersion::from(1);
     let data_provider = Arc::new(ProtoRegistryDataProvider::new());
 
@@ -103,16 +104,18 @@ fn make_single_node_registry(
     add_subnet_record(&data_provider, registry_version.get(), subnet_id, record);
 
     let registry_client = Arc::new(RegistryClientImpl::new(
-        data_provider,
+        Arc::clone(&data_provider) as _,
         Some(metrics_registry),
     ));
     registry_client.fetch_and_start_polling().unwrap();
-    registry_client
+    (data_provider, registry_client)
 }
 
 /// Represents a replicated state machine detached from the network layer that
 /// can be used to test this part of the stack in isolation.
 pub struct StateMachine {
+    registry_data_provider: Arc<ProtoRegistryDataProvider>,
+    registry_client: Arc<RegistryClientImpl>,
     state_manager: Arc<StateManagerImpl>,
     message_routing: MessageRoutingImpl,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
@@ -182,7 +185,7 @@ impl StateMachine {
             None => SubnetConfigs::default().own_subnet_config(subnet_type),
         };
 
-        let registry =
+        let (registry_data_provider, registry_client) =
             make_single_node_registry(&metrics_registry, subnet_id, subnet_type, node_id);
 
         let sm_config = ic_config::state_manager::Config::new(state_dir.path().to_path_buf());
@@ -229,10 +232,12 @@ impl StateMachine {
             subnet_id,
             &metrics_registry,
             replica_logger,
-            Arc::clone(&registry) as _,
+            Arc::clone(&registry_client) as _,
         );
 
         Self {
+            registry_data_provider,
+            registry_client,
             state_manager,
             ingress_history_reader,
             message_routing,
@@ -275,7 +280,7 @@ impl StateMachine {
             },
             randomness: Randomness::from([0; 32]),
             ecdsa_subnet_public_key: None,
-            registry_version: RegistryVersion::from(1),
+            registry_version: self.registry_client.get_latest_version(),
             time: self.time.get(),
             consensus_responses: vec![],
         };
@@ -576,5 +581,53 @@ impl StateMachine {
     /// Returns the status of the ingress message with the specified ID.
     pub fn ingress_status(&self, msg_id: &MessageId) -> IngressStatus {
         (self.ingress_history_reader.get_latest_status())(msg_id)
+    }
+
+    pub fn stop_canister(&self, canister_id: CanisterId) -> Result<WasmResult, UserError> {
+        self.execute_ingress(
+            CanisterId::ic_00(),
+            "stop_canister",
+            (CanisterIdRecord::from(canister_id)).encode(),
+        )
+    }
+
+    /// Updates the routing table so that a range of canisters is assigned to
+    /// the specified destination subnet.
+    pub fn reroute_canister_range(
+        &self,
+        canister_range: std::ops::RangeInclusive<CanisterId>,
+        destination: SubnetId,
+    ) {
+        use ic_registry_client::helper::routing_table::RoutingTableRegistry;
+
+        let last_version = self.registry_client.get_latest_version();
+        let next_version = last_version.increment();
+
+        let mut routing_table = self
+            .registry_client
+            .get_routing_table(last_version)
+            .expect("malformed routing table")
+            .expect("missing routing table");
+
+        routing_table.assign_range(
+            CanisterIdRange {
+                start: *canister_range.start(),
+                end: *canister_range.end(),
+            },
+            destination,
+        );
+
+        self.registry_data_provider
+            .add(
+                &make_routing_table_record_key(),
+                next_version,
+                Some(PbRoutingTable::from(routing_table)),
+            )
+            .unwrap();
+
+        self.registry_client
+            .poll_once()
+            .expect("failed to pull registry changes");
+        assert_eq!(next_version, self.registry_client.get_latest_version());
     }
 }

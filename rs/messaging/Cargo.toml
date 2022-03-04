@@ -29,6 +29,7 @@ ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-types = { path = "../types/types" }
+ic-state-layout = { path = "../state_layout" }
 ic-utils = { path = "../utils" }
 lazy_static = "1.4.0"
 prometheus = { version = "0.12.0", features = [ "process" ] }

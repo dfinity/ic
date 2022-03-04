@@ -2565,11 +2565,7 @@ fn requested_method_does_not_exist() {
     scheduler_test(
         &scheduler_test_fixture,
         |scheduler| {
-            let mut state = ReplicatedState::new_rooted_at(
-                subnet_test_id(1),
-                SubnetType::Application,
-                "NOT_USED".into(),
-            );
+            let mut state = ReplicatedStateBuilder::new().build();
 
             let canister_id = canister_test_id(0);
             let mut canister_state = new_canister_state(
@@ -2661,11 +2657,7 @@ fn stopping_canisters_are_stopped_when_they_are_ready() {
     scheduler_test(
         &scheduler_test_fixture,
         |scheduler| {
-            let mut state = ReplicatedState::new_rooted_at(
-                subnet_test_id(1),
-                SubnetType::Application,
-                "NOT_USED".into(),
-            );
+            let mut state = ReplicatedStateBuilder::new().build();
             // Create a canister in the stopping state and assume that the
             // controller sent two stop messages at the same time.
             let mut canister = get_stopping_canister(canister_test_id(0));
@@ -2737,11 +2729,7 @@ fn stopping_canisters_are_not_stopped_if_not_ready() {
     scheduler_test(
         &scheduler_test_fixture,
         |scheduler| {
-            let mut state = ReplicatedState::new_rooted_at(
-                subnet_test_id(1),
-                SubnetType::Application,
-                "NOT_USED".into(),
-            );
+            let mut state = ReplicatedStateBuilder::new().build();
             // Create a canister in the stopping state and assume that the
             // controller sent two stop messages at the same time.
             let mut canister = get_stopping_canister(canister_test_id(0));

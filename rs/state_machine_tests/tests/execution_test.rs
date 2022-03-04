@@ -3,7 +3,7 @@ use ic_error_types::ErrorCode;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::StateMachine;
 use ic_types::ic00::CanisterSettingsArgs;
-use ic_types::Cycles;
+use ic_types::{Cycles, PrincipalId, SubnetId};
 
 /// This is a canister that keeps a counter on the heap and exposes various test
 /// methods. Exposed methods:
@@ -353,4 +353,24 @@ async fn test_manifest_computation_memory_expand() {
 
     let state_hash_3 = env.await_state_hash();
     assert_ne!(state_hash_2, state_hash_3);
+}
+
+#[tokio::test]
+async fn automatic_stopped_canister_removal() {
+    let env = StateMachine::new();
+
+    let canister_id_1 = env.install_canister_wat(TEST_CANISTER, vec![], None);
+    let canister_id_2 = env.install_canister_wat(TEST_CANISTER, vec![], None);
+
+    let new_subnet = SubnetId::from(PrincipalId::new_subnet_test_id(404));
+    env.reroute_canister_range(canister_id_1..=canister_id_1, new_subnet);
+    env.execute_ingress(canister_id_1, "inc", vec![]).unwrap();
+    env.execute_ingress(canister_id_2, "inc", vec![]).unwrap();
+
+    env.stop_canister(canister_id_1).unwrap();
+    env.execute_ingress(canister_id_2, "inc", vec![]).unwrap();
+    let user_error = env
+        .execute_ingress(canister_id_1, "inc", vec![])
+        .unwrap_err();
+    assert_eq!(user_error.code(), ErrorCode::CanisterNotFound);
 }

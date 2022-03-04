@@ -52,7 +52,7 @@ impl CanisterIdRanges {
         use WellFormedError::*;
 
         // Ranges are non-empty (ranges are closed).
-        for range in self.0.iter() {
+        for range in self.iter() {
             if range.start > range.end {
                 return Err(CanisterIdRangeNonClosedRange(format!(
                     "start {} is greater than end {}",
@@ -74,6 +74,12 @@ impl CanisterIdRanges {
         }
 
         Ok(())
+    }
+
+    /// Returns an iterator over canister id ranges.
+    /// The canister ranges are guaranteed to be sorted.
+    pub fn iter(&self) -> impl Iterator<Item = &CanisterIdRange> {
+        self.0.iter()
     }
 
     /// Total sum of the lengths of all ranges, i.e., the total number of
