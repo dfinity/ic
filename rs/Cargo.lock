@@ -5672,7 +5672,6 @@ dependencies = [
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig",
  "ic-interfaces",
- "ic-nns-common",
  "ic-nns-constants",
  "ic-protobuf",
  "ic-registry-keys",
