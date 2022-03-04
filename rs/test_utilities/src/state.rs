@@ -7,6 +7,7 @@ use crate::{
     },
 };
 use ic_base_types::NumSeconds;
+use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::{
@@ -83,6 +84,17 @@ impl ReplicatedStateBuilder {
         for canister in self.canisters {
             state.put_canister_state(canister);
         }
+        let mut routing_table = RoutingTable::new();
+        routing_table
+            .insert(
+                CanisterIdRange {
+                    start: CanisterId::from(0),
+                    end: CanisterId::from(u64::MAX),
+                },
+                self.subnet_id,
+            )
+            .unwrap();
+        state.metadata.network_topology.routing_table = Arc::new(routing_table);
 
         state.metadata.batch_time = self.batch_time;
         state.metadata.time_of_last_allocation_charge = self.time_of_last_allocation_charge;
@@ -565,6 +577,18 @@ pub fn get_initial_state_with_balance(
 
         state.put_canister_state(canister_state_builder.build());
     }
+    state.metadata.network_topology.routing_table = Arc::new({
+        let mut rt = ic_registry_routing_table::RoutingTable::new();
+        rt.insert(
+            ic_registry_routing_table::CanisterIdRange {
+                start: CanisterId::from(0),
+                end: CanisterId::from(u64::MAX),
+            },
+            subnet_test_id(1),
+        )
+        .unwrap();
+        rt
+    });
     state
 }
 
@@ -665,9 +689,7 @@ prop_compose! {
         ),
         message_num_per_canister in 1..message_num_per_canister_max,
     ) -> ReplicatedState {
-        let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-
-        let mut state = ReplicatedState::new_rooted_at(subnet_test_id(1),  SubnetType::Application, tmpdir.path().into());
+        let mut state = ReplicatedStateBuilder::new().build();
         for (_, mut canister_state) in canister_states.into_iter().enumerate() {
             let canister_id = canister_state.canister_id();
             for i in 0..message_num_per_canister {
@@ -835,6 +857,19 @@ fn new_replicated_state_for_test(
         .collect();
 
     let mut replicated_state = ReplicatedStateBuilder::new().build();
+
+    let mut routing_table = RoutingTable::new();
+    routing_table
+        .insert(
+            CanisterIdRange {
+                start: CanisterId::from(0),
+                end: CanisterId::from(u64::MAX),
+            },
+            own_subnet_id,
+        )
+        .unwrap();
+    replicated_state.metadata.network_topology.routing_table = Arc::new(routing_table);
+
     replicated_state.put_canister_states(canister_states);
     if let Some(subnet_queues) = subnet_queues {
         replicated_state.put_subnet_queues(subnet_queues);

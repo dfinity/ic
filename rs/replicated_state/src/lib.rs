@@ -2,6 +2,7 @@ pub mod canister_state;
 pub mod metadata_state;
 pub mod page_map;
 pub mod replicated_state;
+pub mod routing;
 pub mod testing {
     pub use super::canister_state::system_state::testing::SystemStateTesting;
     pub use super::canister_state::testing::CanisterQueuesTesting;
