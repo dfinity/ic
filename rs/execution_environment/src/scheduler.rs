@@ -1083,12 +1083,19 @@ impl Scheduler for SchedulerImpl {
             let _timer = self.metrics.round_finalization_duration.start_timer();
             let own_subnet_type = state.metadata.own_subnet_type;
             for canister in state.canisters_iter_mut() {
-                let end_of_round_debit = canister.scheduler_state.heap_delta_debit.get();
+                let heap_delta_debit = canister.scheduler_state.heap_delta_debit.get();
                 self.metrics
                     .canister_heap_delta_debits
-                    .observe(end_of_round_debit as f64);
+                    .observe(heap_delta_debit as f64);
                 canister.scheduler_state.heap_delta_debit = NumBytes::from(
-                    end_of_round_debit.saturating_sub(self.config.heap_delta_rate_limit.get()),
+                    heap_delta_debit.saturating_sub(self.config.heap_delta_rate_limit.get()),
+                );
+                let install_code_debit = canister.scheduler_state.install_code_debit.get();
+                self.metrics
+                    .canister_install_code_debits
+                    .observe(install_code_debit as f64);
+                canister.scheduler_state.install_code_debit = NumInstructions::from(
+                    install_code_debit.saturating_sub(self.config.install_code_rate_limit.get()),
                 );
                 total_canister_memory_usage += canister.memory_usage(own_subnet_type);
             }

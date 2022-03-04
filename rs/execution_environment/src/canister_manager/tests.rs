@@ -167,6 +167,14 @@ fn initial_state(path: &Path, subnet_id: SubnetId) -> ReplicatedState {
     state
 }
 
+fn reset_install_code_debit(state: &mut ReplicatedState, canister_id: &CanisterId) {
+    state
+        .canister_state_mut(canister_id)
+        .unwrap()
+        .scheduler_state
+        .install_code_debit = NumInstructions::from(0);
+}
+
 fn with_setup<F>(f: F)
 where
     F: FnOnce(CanisterManager, ReplicatedState, SubnetId),
@@ -2687,6 +2695,7 @@ fn install_code_respects_instruction_limit() {
             ..EXECUTION_PARAMETERS.clone()
         },
     );
+    reset_install_code_debit(&mut state, &canister_id);
     assert_matches!(
         result,
         Err(CanisterManagerError::Hypervisor(
@@ -2714,6 +2723,7 @@ fn install_code_respects_instruction_limit() {
             ..EXECUTION_PARAMETERS.clone()
         },
     );
+    reset_install_code_debit(&mut state, &canister_id);
     assert!(result.is_ok());
     assert_eq!(instructions_left, NumInstructions::from(1));
 
@@ -2735,6 +2745,7 @@ fn install_code_respects_instruction_limit() {
             ..EXECUTION_PARAMETERS.clone()
         },
     );
+    reset_install_code_debit(&mut state, &canister_id);
     assert_matches!(
         result,
         Err(CanisterManagerError::Hypervisor(
@@ -3310,6 +3321,7 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
             )
             .1
             .unwrap();
+        reset_install_code_debit(&mut state, &canister_id);
 
         // Set memory allocation to 0.
         let settings = CanisterSettings::new(
@@ -3597,6 +3609,7 @@ fn test_upgrade_preserves_stable_memory() {
             )
             .1
             .unwrap();
+        reset_install_code_debit(&mut state, &canister_id);
 
         // Step 2. Grow the stable memory and write data there.
         let data = vec![1, 2, 5, 8, 13];
@@ -3820,5 +3833,64 @@ pub fn test_can_create_9000_canisters() {
 pub fn test_can_create_10000_canisters() {
     with_hypervisor(|hypervisor, canister_manager, mut state, subnet_id| {
         create_canisters(10_000, hypervisor, &canister_manager, &mut state, subnet_id);
+    })
+}
+
+#[test]
+fn test_install_code_rate_limiting() {
+    with_setup(|canister_manager, mut state, subnet_id| {
+        let wasm = ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec();
+
+        let sender = canister_test_id(100).get();
+        let canister_id = canister_manager
+            .create_canister(
+                sender,
+                subnet_id,
+                *INITIAL_CYCLES,
+                CanisterSettings::default(),
+                MAX_NUMBER_OF_CANISTERS,
+                &mut state,
+            )
+            .0
+            .unwrap();
+
+        canister_manager
+            .install_code(
+                InstallCodeContext {
+                    sender,
+                    canister_id,
+                    wasm_module: wasm.clone(),
+                    arg: vec![],
+                    compute_allocation: None,
+                    memory_allocation: None,
+                    mode: CanisterInstallMode::Install,
+                    query_allocation: QueryAllocation::default(),
+                },
+                &mut state,
+                EXECUTION_PARAMETERS.clone(),
+            )
+            .1
+            .unwrap();
+
+        let (instructions_left, result) = canister_manager.install_code(
+            InstallCodeContext {
+                sender,
+                canister_id,
+                wasm_module: wasm,
+                arg: vec![],
+                compute_allocation: None,
+                memory_allocation: None,
+                mode: CanisterInstallMode::Upgrade,
+                query_allocation: QueryAllocation::default(),
+            },
+            &mut state,
+            EXECUTION_PARAMETERS.clone(),
+        );
+
+        assert_eq!(instructions_left, EXECUTION_PARAMETERS.instruction_limit);
+        assert_eq!(
+            result,
+            Err(CanisterManagerError::InstallCodeRateLimited(canister_id))
+        );
     })
 }

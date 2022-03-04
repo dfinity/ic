@@ -184,8 +184,10 @@ message CanisterStateBits {
   state.queues.v1.Cycles cycles_balance = 26;
   // The size of the canister's stable memory in bytes.
   uint64 stable_memory_size64 = 27;
-  // The memory delta debit of this canister at the last time it ran a full
-  // execution. This is tracked for the purposes of rate limiting the amount
-  // of memory delta generated per round.
+  // The memory delta debit of this canister. This is tracked for the purposes
+  // of rate limiting the amount of memory delta generated per round.
   uint64 heap_delta_debit = 28;
+  // The instruction debit for install_code messages of this canister. This is
+  // tracked for the purposes of rate limiting the install_code messages.
+  uint64 install_code_debit = 29;
 }

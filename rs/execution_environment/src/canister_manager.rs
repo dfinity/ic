@@ -457,6 +457,15 @@ impl CanisterManager {
             CanisterInstallMode::Reinstall | CanisterInstallMode::Upgrade => {}
         }
 
+        if old_canister.scheduler_state.install_code_debit.get() > 0 {
+            return (
+                execution_parameters.instruction_limit,
+                Err(CanisterManagerError::InstallCodeRateLimited(
+                    old_canister.system_state.canister_id,
+                )),
+            );
+        }
+
         // All validation checks have passed. Reserve cycles on the old canister
         // for executing the various hooks such as `start`, `pre_upgrade`,
         // `post_upgrade`.
@@ -482,6 +491,7 @@ impl CanisterManager {
         // Copy bits out of context as the calls below are going to consume it.
         let canister_id = context.canister_id;
         let mode = context.mode;
+        let instruction_limit = execution_parameters.instruction_limit;
 
         let (instructions_left, result) = match context.mode {
             CanisterInstallMode::Install | CanisterInstallMode::Reinstall => self.install(
@@ -500,15 +510,17 @@ impl CanisterManager {
             ),
         };
 
+        let instructions_consumed = instruction_limit - instructions_left;
+
         let result = match result {
             Ok((heap_delta, mut new_canister)) => {
                 // Refund the left over execution cycles to the new canister and
                 // replace the old canister with the new one.
-
                 let old_wasm_hash = self.get_wasm_hash(old_canister);
                 let new_wasm_hash = self.get_wasm_hash(&new_canister);
                 self.cycles_account_manager
                     .refund_execution_cycles(&mut new_canister.system_state, instructions_left);
+                new_canister.scheduler_state.install_code_debit += instructions_consumed;
                 state.put_canister_state(new_canister);
                 // We managed to create a new canister and will be dropping the
                 // older one. So we get rid of the previous heap to make sure it
@@ -528,7 +540,7 @@ impl CanisterManager {
             Err(err) => {
                 // the install / upgrade failed. Refund the left over cycles to
                 // the old canister and leave it in the state.
-
+                old_canister.scheduler_state.install_code_debit += instructions_consumed;
                 self.cycles_account_manager
                     .refund_execution_cycles(&mut old_canister.system_state, instructions_left);
                 Err(err)
@@ -1369,6 +1381,7 @@ pub(crate) enum CanisterManagerError {
         required: Cycles,
     },
     InstallCodeNotEnoughCycles(CanisterOutOfCyclesError),
+    InstallCodeRateLimited(CanisterId),
     SubnetOutOfCanisterIds {
         allowed: u128,
     },
@@ -1495,6 +1508,12 @@ impl From<CanisterManagerError> for UserError {
                 Self::new(
                 ErrorCode::CanisterOutOfCycles,
                     format!("Canister installation failed with `{}`", err),
+                )
+            }
+            InstallCodeRateLimited(canister_id) => {
+                Self::new(
+                ErrorCode::CanisterInstallCodeRateLimited,
+                    format!("Canister {} is rate limited because it executed too many instructions in the previous install_code messages. Please retry installation after several minutes.", canister_id),
                 )
             }
             SubnetOutOfCanisterIds{ allowed } => {

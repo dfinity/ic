@@ -96,6 +96,7 @@ impl From<ErrorCode> for RejectCode {
             InsufficientCyclesInCall => CanisterError,
             CanisterWasmEngineError => CanisterError,
             CanisterCyclesLimitExceeded => CanisterError,
+            CanisterInstallCodeRateLimited => SysTransient,
         }
     }
 }
@@ -143,6 +144,7 @@ pub enum ErrorCode {
     InsufficientCyclesInCall = 520,
     CanisterWasmEngineError = 521,
     CanisterCyclesLimitExceeded = 522,
+    CanisterInstallCodeRateLimited = 523,
 }
 
 impl From<candid::Error> for UserError {
@@ -193,6 +195,7 @@ impl TryFrom<u64> for ErrorCode {
             520 => Ok(ErrorCode::InsufficientCyclesInCall),
             521 => Ok(ErrorCode::CanisterWasmEngineError),
             522 => Ok(ErrorCode::CanisterCyclesLimitExceeded),
+            523 => Ok(ErrorCode::CanisterInstallCodeRateLimited),
             _ => Err(ProxyDecodeError::ValueOutOfRange {
                 typ: "ErrorCode",
                 err: err.to_string(),
