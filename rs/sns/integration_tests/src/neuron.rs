@@ -1,11 +1,18 @@
 use canister_test::Canister;
 use dfn_candid::candid_one;
+use dfn_protobuf::protobuf;
 use ic_canister_client::Sender;
+use ic_crypto_sha::Sha256;
 use ic_nns_constants::ids::{
     TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
 };
 use ic_sns_governance::pb::v1::governance_error::ErrorType;
 use ic_sns_governance::pb::v1::manage_neuron::Command;
+use ic_sns_governance::pb::v1::manage_neuron::{
+    claim_or_refresh::{By, MemoAndController},
+    configure::Operation,
+    ClaimOrRefresh, Configure, IncreaseDissolveDelay,
+};
 use ic_sns_governance::pb::v1::manage_neuron_response::Command as CommandResponse;
 use ic_sns_governance::pb::v1::proposal::Action;
 use ic_sns_governance::pb::v1::{
@@ -17,7 +24,10 @@ use ic_sns_governance::types::ONE_YEAR_SECONDS;
 use ic_sns_test_utils::itest_helpers::{
     local_test_on_sns_subnet, SnsCanisters, SnsInitPayloadsBuilder,
 };
+use ic_sns_test_utils::TEST_GOVERNANCE_CANISTER_ID;
+use ic_types::PrincipalId;
 use ledger_canister::{AccountIdentifier, Tokens};
+use ledger_canister::{Memo, SendArgs, Subaccount, DEFAULT_TRANSFER_FEE};
 
 // This tests the determinism of list_neurons, now that the subaccount is used for
 // the unique identifier of the Neuron.
@@ -208,4 +218,137 @@ async fn paginate_neurons(
             return all_neurons;
         }
     }
+}
+
+#[test]
+fn test_one_user_cannot_claim_other_users_neuron() {
+    local_test_on_sns_subnet(|runtime| async move {
+        let user1 = Sender::from_keypair(&TEST_USER1_KEYPAIR);
+        let user2 = Sender::from_keypair(&TEST_USER2_KEYPAIR);
+        let account_identifier1 = AccountIdentifier::from(user1.get_principal_id());
+        let alloc = Tokens::from_tokens(1000).unwrap();
+        let params = NervousSystemParameters {
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let sns_init_payload = SnsInitPayloadsBuilder::new()
+            .with_ledger_account(account_identifier1, alloc)
+            .with_nervous_system_parameters(params)
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        let nonce = 12345u64;
+        let to_subaccount = Subaccount({
+            let mut state = Sha256::new();
+            state.write(&[0x0c]);
+            state.write(b"neuron-stake");
+            state.write(user1.get_principal_id().as_slice());
+            state.write(&nonce.to_be_bytes());
+            state.finish()
+        });
+
+        // user1 makes a staking transfer
+        let stake = Tokens::from_tokens(100).unwrap();
+        let _block_height: u64 = sns_canisters
+            .ledger
+            .update_from_sender(
+                "send_pb",
+                protobuf,
+                SendArgs {
+                    memo: Memo(nonce),
+                    amount: stake,
+                    fee: DEFAULT_TRANSFER_FEE,
+                    from_subaccount: None,
+                    to: AccountIdentifier::new(
+                        PrincipalId::from(TEST_GOVERNANCE_CANISTER_ID),
+                        Some(to_subaccount),
+                    ),
+                    created_at_time: None,
+                },
+                &user1,
+            )
+            .await
+            .expect("Couldn't send funds.");
+
+        // user2 claims the neuron that user1 staked
+        let claim_response: ManageNeuronResponse = sns_canisters
+            .governance
+            .update_from_sender(
+                "manage_neuron",
+                candid_one,
+                ManageNeuron {
+                    subaccount: to_subaccount.to_vec(),
+                    command: Some(Command::ClaimOrRefresh(ClaimOrRefresh {
+                        by: Some(By::MemoAndController(MemoAndController {
+                            memo: nonce,
+                            controller: Some(user1.get_principal_id()),
+                        })),
+                    })),
+                },
+                &user2,
+            )
+            .await
+            .expect("Error calling the manage_neuron api.");
+
+        let neuron_id = match claim_response.command.unwrap() {
+            CommandResponse::ClaimOrRefresh(response) => response.refreshed_neuron_id.unwrap(),
+            CommandResponse::Error(error) => panic!(
+                "Unexpected error when claiming neuron for user {}: {}",
+                user1.get_principal_id(),
+                error
+            ),
+            _ => panic!(
+                "Unexpected command response when claiming neuron for user {}.",
+                user1.get_principal_id()
+            ),
+        };
+
+        let neuron = sns_canisters.get_neuron(neuron_id).await;
+
+        let expected_permissions = vec![NeuronPermission::new(
+            &user1.get_principal_id(),
+            NeuronPermissionType::all(),
+        )];
+
+        assert_eq!(neuron.permissions, expected_permissions);
+
+        // user2 should not be able to increase dissolve delay
+        let dissolve_delay: u32 = 10_000;
+        let increase_response: ManageNeuronResponse = sns_canisters
+            .governance
+            .update_from_sender(
+                "manage_neuron",
+                candid_one,
+                ManageNeuron {
+                    subaccount: to_subaccount.to_vec(),
+                    command: Some(Command::Configure(Configure {
+                        operation: Some(Operation::IncreaseDissolveDelay(IncreaseDissolveDelay {
+                            additional_dissolve_delay_seconds: dissolve_delay,
+                        })),
+                    })),
+                },
+                &user2,
+            )
+            .await
+            .expect("Error calling the manage_neuron api.");
+
+        match increase_response.command.unwrap() {
+            CommandResponse::Configure(_) => {
+                panic!("user2 should not be able to increase dissolve delay of user1's neuron",)
+            }
+            CommandResponse::Error(error) => {
+                assert_eq!(error.error_type, ErrorType::NotAuthorized as i32)
+            }
+            _ => panic!(
+                "Unexpected command response when increasing dissolve delay for user {}.",
+                user1.get_principal_id()
+            ),
+        };
+
+        Ok(())
+    });
 }
