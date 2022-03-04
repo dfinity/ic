@@ -19,6 +19,7 @@ docker image build -t ic-build-src:$TAG -f- . <<EOF
 FROM dfinity/ic-build:$DOCKER_IMG_VERSION
 USER $SET_UID
 COPY --chown=${USER:-ubuntu}:${USER:-ubuntu} . /ic
+RUN sudo mkdir /ic/artifacts && sudo chown -R ${SET_UID}:${SET_UID} /ic/artifacts
 EOF
 
 export IMAGE=ic-build-src:$TAG

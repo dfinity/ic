@@ -12,7 +12,6 @@ BUILD_IMAGES=true
 VERSION="${VERSION:-$(git rev-parse HEAD)}"
 
 cd $ROOT_DIR
-sudo setfacl -m u:$(id -u):rwx -R $ROOT_DIR
 
 usage() {
     echo "by default, this script builds everything including the Binaries, Canisters and the IC OS Image."
@@ -74,6 +73,12 @@ while test $# -gt 0; do
             ;;
     esac
 done
+
+if [ "$BUILD_IMAGES" == "true" ] && uname -s | grep Darwin; then
+    echo "Building ICOS Image on Darwin is not supported!"
+    echo "Specify only binaries and/or canisters."
+    exit 0
+fi
 
 HEADER_BINARIES=$(
     cat <<"EOF"
