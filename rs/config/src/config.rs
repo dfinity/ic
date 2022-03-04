@@ -4,6 +4,7 @@
 //! get included here so that it can be parsed.
 
 use crate::{
+    adapters::AdaptersConfig,
     artifact_pool::ArtifactPoolTomlConfig,
     config_parser::{ConfigError, ConfigSource, ConfigValidate},
     consensus::ConsensusConfig,
@@ -46,6 +47,7 @@ pub struct Config {
     pub firewall: FirewallConfig,
     pub registration: RegistrationConfig,
     pub nns_registry_replicator: NnsRegistryReplicatorConfig,
+    pub adapters_config: AdaptersConfig,
 }
 
 /// Mirrors the Config struct except that fields are made optional. This is
@@ -68,6 +70,7 @@ pub struct ConfigOptional {
     pub firewall: Option<FirewallConfig>,
     pub registration: Option<RegistrationConfig>,
     pub nns_registry_replicator: Option<NnsRegistryReplicatorConfig>,
+    pub adapters_config: Option<AdaptersConfig>,
 }
 
 impl Config {
@@ -95,6 +98,7 @@ impl Config {
             firewall: FirewallConfig::default(),
             registration: RegistrationConfig::default(),
             nns_registry_replicator: NnsRegistryReplicatorConfig::default(),
+            adapters_config: AdaptersConfig::default(),
         }
     }
 
@@ -151,6 +155,7 @@ impl Config {
             nns_registry_replicator: cfg
                 .nns_registry_replicator
                 .unwrap_or(default.nns_registry_replicator),
+            adapters_config: cfg.adapters_config.unwrap_or(default.adapters_config),
         })
     }
 
