@@ -629,68 +629,130 @@ impl PolynomialCommitment {
     }
 }
 
-/// Computes Lagrange polynomials evaluated at a given value.
-///
-/// Namely it computes the following values:
-///    * lagrange_i = numerator_i/denominator_i
-///    * numerator_i = (x_0-value) * (x_1-value) * ... * (x_(i-1)-value) *(x_(i+1)-value) * ... *(x_n-value)
-///    * denominator_i = (x_0 - x_i) * (x_1 - x_i) * ... * (x_(i-1) - x_i) *
-///      (x_(i+1) - x_i) * ... * (x_n - x_i)
-pub fn lagrange_coefficients_at_value(
-    value: &EccScalar,
-    samples: &[EccScalar],
-) -> Result<Vec<EccScalar>, ThresholdEcdsaError> {
-    // This is well defined but an error is easier for our purposes
-    // as we never need this case.
-    if samples.is_empty() {
-        return Err(ThresholdEcdsaError::InterpolationError);
-    }
+pub struct LagrangeCoefficients {
+    coefficients: Vec<EccScalar>,
+}
 
-    let curve = samples[0].curve_type();
-
-    for sample in samples {
-        if sample.curve_type() != curve {
-            return Err(ThresholdEcdsaError::CurveMismatch);
-        }
-    }
-
-    if samples.len() == 1 {
-        return Ok(vec![EccScalar::one(curve)]);
-    }
-
-    if contains_duplicates(samples) {
-        return Err(ThresholdEcdsaError::InterpolationError);
-    }
-
-    let mut numerator = Vec::with_capacity(samples.len());
-    let mut tmp = EccScalar::one(curve);
-    numerator.push(tmp);
-    for x in samples.iter().take(samples.len() - 1) {
-        tmp = tmp.mul(&x.sub(value)?)?;
-        numerator.push(tmp);
-    }
-
-    tmp = EccScalar::one(curve);
-    for (i, x) in samples[1..].iter().enumerate().rev() {
-        tmp = tmp.mul(&x.sub(value)?)?;
-        numerator[i] = numerator[i].mul(&tmp)?;
-    }
-
-    for (lagrange_i, x_i) in numerator.iter_mut().zip(samples) {
-        // Compute the value at 0 of the i-th Lagrange polynomial that is `0` at the
-        // other data points but `1` at `x_i`.
-        let mut denom = EccScalar::one(curve);
-        for x_j in samples.iter().filter(|x_j| *x_j != x_i) {
-            let diff = x_j.sub(x_i)?;
-            denom = denom.mul(&diff)?;
-        }
-        let inv = denom.invert()?;
-
-        if inv.is_zero() {
+impl LagrangeCoefficients {
+    fn new(coefficients: Vec<EccScalar>) -> ThresholdEcdsaResult<Self> {
+        if coefficients.is_empty() {
             return Err(ThresholdEcdsaError::InterpolationError);
         }
 
-        *lagrange_i = lagrange_i.mul(&inv)?;
+        Ok(Self { coefficients })
     }
-    Ok(numerator)
+
+    pub fn coefficients(&self) -> &[EccScalar] {
+        &self.coefficients
+    }
+
+    /// Given a list of samples `(x, f(x) * g)` for a set of unique `x`, some
+    /// polynomial `f`, and some elliptic curve point `g`, returns `f(value) * g`.
+    ///
+    /// See: <https://en.wikipedia.org/wiki/Shamir%27s_Secret_Sharing#Computationally_efficient_approach>
+    pub fn interpolate_point(&self, y: &[EccPoint]) -> ThresholdEcdsaResult<EccPoint> {
+        if y.len() != self.coefficients.len() {
+            return Err(ThresholdEcdsaError::InterpolationError);
+        }
+        let curve_type = self.coefficients[0].curve_type();
+        let mut result = EccPoint::identity(curve_type);
+        for (coefficient, sample) in self.coefficients.iter().zip(y) {
+            result = result.add_points(&sample.scalar_mul(coefficient)?)?;
+        }
+        Ok(result)
+    }
+
+    /// Given a list of samples `(x, f(x))` for a set of unique `x`, some
+    /// polynomial `f`, returns `f(value) * g`.
+    ///
+    /// See: <https://en.wikipedia.org/wiki/Shamir%27s_Secret_Sharing#Computationally_efficient_approach>
+    pub fn interpolate_scalar(&self, y: &[EccScalar]) -> ThresholdEcdsaResult<EccScalar> {
+        if y.len() != self.coefficients.len() {
+            return Err(ThresholdEcdsaError::InterpolationError);
+        }
+        let curve_type = self.coefficients[0].curve_type();
+        let mut result = EccScalar::zero(curve_type);
+        for (coefficient, sample) in self.coefficients.iter().zip(y) {
+            result = result.add(&sample.mul(coefficient)?)?;
+        }
+        Ok(result)
+    }
+
+    /// Computes Lagrange polynomials evaluated at zero
+    ///
+    /// Namely it computes the following values:
+    ///    * lagrange_i = numerator_i/denominator_i
+    ///    * numerator_i = (x_0) * (x_1) * ... * (x_(i-1)) *(x_(i+1)) * ... *(x_n)
+    ///    * denominator_i = (x_0 - x_i) * (x_1 - x_i) * ... * (x_(i-1) - x_i) *
+    ///      (x_(i+1) - x_i) * ... * (x_n - x_i)
+    pub fn at_zero(samples: &[EccScalar]) -> Result<Self, ThresholdEcdsaError> {
+        if samples.is_empty() {
+            return Err(ThresholdEcdsaError::InterpolationError);
+        }
+
+        let zero = EccScalar::zero(samples[0].curve_type());
+        Self::at_value(&zero, samples)
+    }
+
+    /// Computes Lagrange polynomials evaluated at a given value.
+    ///
+    /// Namely it computes the following values:
+    ///    * lagrange_i = numerator_i/denominator_i
+    ///    * numerator_i = (x_0-value) * (x_1-value) * ... * (x_(i-1)-value) *(x_(i+1)-value) * ... *(x_n-value)
+    ///    * denominator_i = (x_0 - x_i) * (x_1 - x_i) * ... * (x_(i-1) - x_i) *
+    ///      (x_(i+1) - x_i) * ... * (x_n - x_i)
+    pub fn at_value(value: &EccScalar, samples: &[EccScalar]) -> Result<Self, ThresholdEcdsaError> {
+        // This is not strictly required but for our usage it simplifies matters
+        if samples.is_empty() {
+            return Err(ThresholdEcdsaError::InterpolationError);
+        }
+
+        let curve = value.curve_type();
+
+        for sample in samples {
+            if sample.curve_type() != curve {
+                return Err(ThresholdEcdsaError::CurveMismatch);
+            }
+        }
+
+        if samples.len() == 1 {
+            return Self::new(vec![EccScalar::one(curve)]);
+        }
+
+        if contains_duplicates(samples) {
+            return Err(ThresholdEcdsaError::InterpolationError);
+        }
+
+        let mut numerator = Vec::with_capacity(samples.len());
+        let mut tmp = EccScalar::one(curve);
+        numerator.push(tmp);
+        for x in samples.iter().take(samples.len() - 1) {
+            tmp = tmp.mul(&x.sub(value)?)?;
+            numerator.push(tmp);
+        }
+
+        tmp = EccScalar::one(curve);
+        for (i, x) in samples[1..].iter().enumerate().rev() {
+            tmp = tmp.mul(&x.sub(value)?)?;
+            numerator[i] = numerator[i].mul(&tmp)?;
+        }
+
+        for (lagrange_i, x_i) in numerator.iter_mut().zip(samples) {
+            // Compute the value at 0 of the i-th Lagrange polynomial that is `0` at the
+            // other data points but `1` at `x_i`.
+            let mut denom = EccScalar::one(curve);
+            for x_j in samples.iter().filter(|x_j| *x_j != x_i) {
+                let diff = x_j.sub(x_i)?;
+                denom = denom.mul(&diff)?;
+            }
+            let inv = denom.invert()?;
+
+            if inv.is_zero() {
+                return Err(ThresholdEcdsaError::InterpolationError);
+            }
+
+            *lagrange_i = lagrange_i.mul(&inv)?;
+        }
+        Self::new(numerator)
+    }
 }

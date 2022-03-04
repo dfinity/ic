@@ -300,38 +300,44 @@ impl ProtocolRound {
 
         match commitment {
             PolynomialCommitment::Simple(_) => {
+                let mut indexes = Vec::with_capacity(openings.len());
                 let mut g_openings = Vec::with_capacity(openings.len());
 
                 for (idx, opening) in openings.iter().enumerate() {
                     if let CommitmentOpening::Simple(value) = opening {
                         let index = EccScalar::from_node_index(curve_type, idx as NodeIndex);
-                        g_openings.push((index, *value));
+                        indexes.push(index);
+                        g_openings.push(*value);
                     } else {
                         panic!("Unexpected opening type");
                     }
                 }
 
-                let dlog = EccScalar::interpolation_at_zero(&g_openings)?;
+                let coefficients = LagrangeCoefficients::at_zero(&indexes)?;
+                let dlog = coefficients.interpolate_scalar(&g_openings)?;
                 let pt = EccPoint::mul_by_g(&dlog)?;
                 assert_eq!(pt, constant_term);
             }
 
             PolynomialCommitment::Pedersen(_) => {
+                let mut indexes = Vec::with_capacity(openings.len());
                 let mut g_openings = Vec::with_capacity(openings.len());
                 let mut h_openings = Vec::with_capacity(openings.len());
 
                 for (idx, opening) in openings.iter().enumerate() {
                     if let CommitmentOpening::Pedersen(value, mask) = opening {
                         let index = EccScalar::from_node_index(curve_type, idx as NodeIndex);
-                        g_openings.push((index, *value));
-                        h_openings.push((index, *mask));
+                        indexes.push(index);
+                        g_openings.push(*value);
+                        h_openings.push(*mask);
                     } else {
                         panic!("Unexpected opening type");
                     }
                 }
 
-                let dlog_g = EccScalar::interpolation_at_zero(&g_openings)?;
-                let dlog_h = EccScalar::interpolation_at_zero(&h_openings)?;
+                let coefficients = LagrangeCoefficients::at_zero(&indexes)?;
+                let dlog_g = coefficients.interpolate_scalar(&g_openings)?;
+                let dlog_h = coefficients.interpolate_scalar(&h_openings)?;
                 let pt = EccPoint::pedersen(&dlog_g, &dlog_h)?;
                 assert_eq!(pt, constant_term);
             }

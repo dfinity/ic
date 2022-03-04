@@ -120,22 +120,23 @@ fn combine_commitments_via_interpolation(
         }
     }
 
-    let mut commitments = Vec::new();
-    let mut indexes = Vec::new();
-    let mut combined = Vec::new();
+    let mut commitments = Vec::with_capacity(verified_dealings.len());
+    let mut indexes = Vec::with_capacity(verified_dealings.len());
 
     for (index, dealing) in verified_dealings {
         indexes.push(EccScalar::from_node_index(curve, *index));
         commitments.push(dealing.commitment.clone());
     }
 
+    let coefficients = LagrangeCoefficients::at_zero(&indexes)?;
+    let mut combined = Vec::with_capacity(reconstruction_threshold);
+
     for i in 0..reconstruction_threshold {
-        let mut coeff = Vec::new();
+        let mut values = Vec::new();
         for commitment in &commitments {
-            coeff.push(commitment.points()[i]);
+            values.push(commitment.points()[i]);
         }
-        let samples = indexes.iter().cloned().zip(coeff).collect::<Vec<_>>();
-        combined.push(EccPoint::interpolation_at_zero(&samples)?)
+        combined.push(coefficients.interpolate_point(&values)?);
     }
 
     let commitment = match commitment_type {
@@ -285,16 +286,20 @@ fn reconstruct_share_from_openings(
 
     match &dealing.commitment {
         PolynomialCommitment::Simple(_) => {
+            let mut x_values = Vec::with_capacity(openings.len());
             let mut values = Vec::with_capacity(openings.len());
-            for (dealer_index, opening) in openings {
+
+            for (receiver_index, opening) in openings {
                 if let CommitmentOpening::Simple(value) = opening {
-                    values.push((EccScalar::from_node_index(curve, *dealer_index), *value));
+                    x_values.push(EccScalar::from_node_index(curve, *receiver_index));
+                    values.push(*value);
                 } else {
                     return Err(ThresholdEcdsaError::InconsistentCommitments);
                 }
             }
 
-            let combined_value = EccScalar::interpolation_at_value(&index, &values)?;
+            let coefficients = LagrangeCoefficients::at_value(&index, &x_values)?;
+            let combined_value = coefficients.interpolate_scalar(&values)?;
             let combined_opening = CommitmentOpening::Simple(combined_value);
 
             dealing
@@ -302,24 +307,23 @@ fn reconstruct_share_from_openings(
                 .return_opening_if_consistent(share_index, &combined_opening)
         }
         PolynomialCommitment::Pedersen(_) => {
+            let mut x_values = Vec::with_capacity(openings.len());
             let mut values = Vec::with_capacity(openings.len());
             let mut masks = Vec::with_capacity(openings.len());
 
-            for (dealer_index, opening) in openings {
+            for (receiver_index, opening) in openings {
                 if let CommitmentOpening::Pedersen(value, mask) = opening {
-                    values.push((EccScalar::from_node_index(curve, *dealer_index), *value));
-                    masks.push((EccScalar::from_node_index(curve, *dealer_index), *mask));
+                    x_values.push(EccScalar::from_node_index(curve, *receiver_index));
+                    values.push(*value);
+                    masks.push(*mask);
                 } else {
                     return Err(ThresholdEcdsaError::InconsistentCommitments);
                 }
             }
 
-            // We could optimize this to compute the Lagrange coefficients just
-            // once as the indexes are the same. Since complaints are a
-            // rarely/never used portion of the protocol it does not seem
-            // important to optimize this at this time.
-            let combined_value = EccScalar::interpolation_at_value(&index, &values)?;
-            let combined_mask = EccScalar::interpolation_at_value(&index, &masks)?;
+            let coefficients = LagrangeCoefficients::at_value(&index, &x_values)?;
+            let combined_value = coefficients.interpolate_scalar(&values)?;
+            let combined_mask = coefficients.interpolate_scalar(&masks)?;
             let combined_opening = CommitmentOpening::Pedersen(combined_value, combined_mask);
 
             dealing
@@ -377,7 +381,7 @@ impl CommitmentOpening {
             openings.push((dealer_index, opening));
         }
 
-        Self::from_openings(&openings, transcript_commitment, receiver_index, curve)
+        Self::combine_openings(&openings, transcript_commitment, receiver_index, curve)
     }
 
     /// Creates a commitment opening using dealings and openings
@@ -417,10 +421,10 @@ impl CommitmentOpening {
             openings.push((dealer_index, opening));
         }
 
-        Self::from_openings(&openings, transcript_commitment, receiver_index, curve)
+        Self::combine_openings(&openings, transcript_commitment, receiver_index, curve)
     }
 
-    fn from_openings(
+    fn combine_openings(
         openings: &[(EccScalar, CommitmentOpening)],
         transcript_commitment: &CombinedCommitment,
         receiver_index: NodeIndex,
@@ -449,21 +453,24 @@ impl CommitmentOpening {
             }
 
             CombinedCommitment::ByInterpolation(PolynomialCommitment::Pedersen(commitment)) => {
+                let mut x_values = Vec::with_capacity(openings.len());
                 let mut values = Vec::with_capacity(openings.len());
                 let mut masks = Vec::with_capacity(openings.len());
 
                 for (dealer_index, opening) in openings {
                     if let Self::Pedersen(value, mask) = opening {
-                        values.push((*dealer_index, *value));
-                        masks.push((*dealer_index, *mask));
+                        x_values.push(*dealer_index);
+                        values.push(*value);
+                        masks.push(*mask);
                     } else {
                         return Err(ThresholdEcdsaError::InconsistentCommitments);
                     }
                 }
 
                 // Recombine secret by interpolation
-                let combined_value = EccScalar::interpolation_at_zero(&values)?;
-                let combined_mask = EccScalar::interpolation_at_zero(&masks)?;
+                let coefficients = LagrangeCoefficients::at_zero(&x_values)?;
+                let combined_value = coefficients.interpolate_scalar(&values)?;
+                let combined_mask = coefficients.interpolate_scalar(&masks)?;
 
                 // Check reconstructed opening matches the commitment
                 if commitment.check_opening(receiver_index, &combined_value, &combined_mask)? {
@@ -474,18 +481,21 @@ impl CommitmentOpening {
             }
 
             CombinedCommitment::ByInterpolation(PolynomialCommitment::Simple(commitment)) => {
+                let mut x_values = Vec::with_capacity(openings.len());
                 let mut values = Vec::with_capacity(openings.len());
 
                 for (dealer_index, opening) in openings {
                     if let Self::Simple(value) = opening {
-                        values.push((*dealer_index, *value))
+                        x_values.push(*dealer_index);
+                        values.push(*value);
                     } else {
                         return Err(ThresholdEcdsaError::InconsistentCommitments);
                     }
                 }
 
                 // Recombine secret by interpolation
-                let combined_value = EccScalar::interpolation_at_zero(&values)?;
+                let coefficients = LagrangeCoefficients::at_zero(&x_values)?;
+                let combined_value = coefficients.interpolate_scalar(&values)?;
 
                 // Check reconstructed opening matches the commitment
                 if commitment.check_opening(receiver_index, &combined_value)? {
