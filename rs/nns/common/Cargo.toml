@@ -11,7 +11,7 @@ path = "src/lib.rs"
 candid = "0.7.4"
 
 # This MUST be kept in sync with build-info-build in the [build-dependencies] section!
-build-info = "0.0.23"
+build-info = { version = "0.0.25", default-features = false, features = [] }
 
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
@@ -36,7 +36,7 @@ serial_test = "0.5.0"
 
 [build-dependencies]
 # This MUST be kept in sync with build-info in the [dependencies] section!
-build-info-build = "0.0.23"
+build-info-build = { version="0.0.25", default-features = false, features = [] }
 
 ic-nns-constants = { path = "../constants" }
 ic-types = { path = "../../types/types" }
