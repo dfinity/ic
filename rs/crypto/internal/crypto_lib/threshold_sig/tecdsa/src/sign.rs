@@ -230,29 +230,32 @@ impl ThresholdEcdsaCombinedSigInternal {
         )?;
 
         // Compute sigma's numerator via interpolation
+        let mut x_values = Vec::with_capacity(reconstruction_threshold);
         let mut numerator_samples = Vec::with_capacity(reconstruction_threshold);
         let mut denominator_samples = Vec::with_capacity(reconstruction_threshold);
 
         for (index, sig_share) in sig_shares.iter().take(reconstruction_threshold) {
             let index = EccScalar::from_node_index(curve_type, *index);
 
+            x_values.push(index);
             // Reconstruction of the signature share does not require recombining the
             // masking values.
             if let CommitmentOpening::Pedersen(c, _) = sig_share.sigma_numerator {
-                numerator_samples.push((index, c));
+                numerator_samples.push(c);
             } else {
                 return Err(ThresholdEcdsaError::InconsistentCommitments);
             }
 
             if let CommitmentOpening::Pedersen(c, _) = sig_share.sigma_denominator {
-                denominator_samples.push((index, c));
+                denominator_samples.push(c);
             } else {
                 return Err(ThresholdEcdsaError::InconsistentCommitments);
             }
         }
 
-        let numerator = EccScalar::interpolation_at_zero(&numerator_samples)?;
-        let denominator = EccScalar::interpolation_at_zero(&denominator_samples)?;
+        let coefficients = LagrangeCoefficients::at_zero(&x_values)?;
+        let numerator = coefficients.interpolate_scalar(&numerator_samples)?;
+        let denominator = coefficients.interpolate_scalar(&denominator_samples)?;
 
         let sigma = numerator.mul(&denominator.invert()?)?;
 

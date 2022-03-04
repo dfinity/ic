@@ -323,10 +323,17 @@ fn poly_lagrange_coefficients_at_zero_are_correct() {
 
     let zero = EccScalar::zero(curve);
 
-    let observed = lagrange_coefficients_at_value(&zero, &x_values)
-        .expect("Failed even though coordinates were distinct");
+    let observed = LagrangeCoefficients::at_value(&zero, &x_values)
+        .expect("Failed even though coordinates were distinct")
+        .coefficients()
+        .to_vec();
 
     assert_eq!(computed, observed);
+}
+
+fn interpolation_at_zero(x: &[EccScalar], y: &[EccPoint]) -> ThresholdEcdsaResult<EccPoint> {
+    let coefficients = LagrangeCoefficients::at_zero(x)?;
+    coefficients.interpolate_point(y)
 }
 
 #[test]
@@ -340,17 +347,54 @@ fn poly_point_interpolation_at_zero() -> ThresholdEcdsaResult<()> {
 
             let poly = Polynomial::random_with_constant(sk, num_coefficients, &mut rng)?;
 
-            let mut samples = Vec::with_capacity(num_coefficients);
+            let mut x = Vec::with_capacity(num_coefficients);
+            let mut y = Vec::with_capacity(num_coefficients);
 
             for _i in 0..num_coefficients {
-                let x = EccScalar::random(curve, &mut rng)?;
-                let p_x = poly.evaluate_at(&x)?;
-                let g_p_x = EccPoint::mul_by_g(&p_x)?;
-                samples.push((x, g_p_x));
+                let r = EccScalar::random(curve, &mut rng)?;
+                let p_r = poly.evaluate_at(&r)?;
+                let g_p_r = EccPoint::mul_by_g(&p_r)?;
+
+                x.push(r);
+                y.push(g_p_r);
             }
 
-            let g0 = EccPoint::interpolation_at_zero(&samples)?;
+            let g0 = interpolation_at_zero(&x, &y)?;
             assert_eq!(g0, pk);
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
+fn poly_point_interpolation_at_value() -> ThresholdEcdsaResult<()> {
+    let mut rng = rand::thread_rng();
+
+    for curve in EccCurveType::all() {
+        for num_coefficients in 1..30 {
+            let value = EccScalar::random(curve, &mut rng)?;
+
+            let poly = Polynomial::random(curve, num_coefficients, &mut rng)?;
+
+            let mut x = Vec::with_capacity(num_coefficients);
+            let mut y = Vec::with_capacity(num_coefficients);
+
+            for _i in 0..num_coefficients {
+                let r = EccScalar::random(curve, &mut rng)?;
+                let p_r = poly.evaluate_at(&r)?;
+                let g_p_r = EccPoint::mul_by_g(&p_r)?;
+
+                x.push(r);
+                y.push(g_p_r);
+            }
+
+            let coefficients = LagrangeCoefficients::at_value(&value, &x)?;
+
+            assert_eq!(
+                coefficients.interpolate_point(&y)?,
+                EccPoint::mul_by_g(&poly.evaluate_at(&value)?)?
+            );
         }
     }
 
@@ -367,16 +411,21 @@ fn poly_scalar_interpolation_at_value() -> ThresholdEcdsaResult<()> {
 
             let poly = Polynomial::random(curve, num_coefficients, &mut rng)?;
 
-            let mut samples = Vec::with_capacity(num_coefficients);
+            let mut x = Vec::with_capacity(num_coefficients);
+            let mut y = Vec::with_capacity(num_coefficients);
 
             for _i in 0..num_coefficients {
-                let x = EccScalar::random(curve, &mut rng)?;
-                let p_x = poly.evaluate_at(&x)?;
-                samples.push((x, p_x));
+                let r = EccScalar::random(curve, &mut rng)?;
+                let p_r = poly.evaluate_at(&r)?;
+
+                x.push(r);
+                y.push(p_r);
             }
 
+            let coefficients = LagrangeCoefficients::at_value(&value, &x)?;
+
             assert_eq!(
-                EccScalar::interpolation_at_value(&value, &samples)?,
+                coefficients.interpolate_scalar(&y)?,
                 poly.evaluate_at(&value)?
             );
         }
@@ -394,22 +443,27 @@ fn poly_point_interpolation_at_zero_rejects_duplicates() -> ThresholdEcdsaResult
             let sk = EccScalar::random(curve, &mut rng)?;
             let poly = Polynomial::random_with_constant(sk, num_coefficients, &mut rng)?;
 
-            let mut samples = Vec::with_capacity(num_coefficients);
+            let mut x = Vec::with_capacity(num_coefficients);
+            let mut y = Vec::with_capacity(num_coefficients);
 
-            let dup_x = EccScalar::random(curve, &mut rng)?;
-            let dup_g_p_x = EccPoint::mul_by_g(&poly.evaluate_at(&dup_x)?)?;
+            let dup_r = EccScalar::random(curve, &mut rng)?;
+            let dup_g_p_r = EccPoint::mul_by_g(&poly.evaluate_at(&dup_r)?)?;
 
-            samples.push((dup_x, dup_g_p_x));
+            x.push(dup_r);
+            y.push(dup_g_p_r);
 
             for _i in 0..num_coefficients {
-                let x = EccScalar::random(curve, &mut rng)?;
-                let g_p_x = EccPoint::mul_by_g(&poly.evaluate_at(&x)?)?;
-                samples.push((x, g_p_x));
+                let r = EccScalar::random(curve, &mut rng)?;
+                let g_p_r = EccPoint::mul_by_g(&poly.evaluate_at(&r)?)?;
+
+                x.push(r);
+                y.push(g_p_r);
             }
 
-            samples.push((dup_x, dup_g_p_x));
+            x.push(dup_r);
+            y.push(dup_g_p_r);
 
-            assert!(EccPoint::interpolation_at_zero(&samples).is_err());
+            assert!(interpolation_at_zero(&x, &y).is_err());
         }
     }
 
@@ -426,16 +480,19 @@ fn poly_point_interpolation_at_zero_fails_with_insufficient_shares() -> Threshol
             let pk = EccPoint::mul_by_g(&sk)?;
 
             let poly = Polynomial::random_with_constant(sk, num_coefficients, &mut rng)?;
-            let mut samples = Vec::with_capacity(num_coefficients - 1);
+            let mut x = Vec::with_capacity(num_coefficients - 1);
+            let mut y = Vec::with_capacity(num_coefficients - 1);
 
             for _i in 0..num_coefficients - 1 {
-                let x = EccScalar::random(curve, &mut rng)?;
-                let g_p_x = EccPoint::mul_by_g(&poly.evaluate_at(&x)?)?;
-                samples.push((x, g_p_x));
+                let r = EccScalar::random(curve, &mut rng)?;
+                let g_p_r = EccPoint::mul_by_g(&poly.evaluate_at(&r)?)?;
+
+                x.push(r);
+                y.push(g_p_r);
             }
 
             // Interpolation fails to recover the correct value with insufficient values
-            match EccPoint::interpolation_at_zero(&samples) {
+            match interpolation_at_zero(&x, &y) {
                 Err(e) => assert_eq!(e, ThresholdEcdsaError::InterpolationError),
                 Ok(pt) => assert_ne!(pt, pk),
             }

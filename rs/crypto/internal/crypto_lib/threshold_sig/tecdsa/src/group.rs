@@ -321,35 +321,6 @@ impl EccScalar {
     pub fn from_node_index(curve: EccCurveType, index: NodeIndex) -> Self {
         Self::from_u64(curve, 1 + (index as u64))
     }
-
-    pub fn interpolation_at_zero(samples: &[(EccScalar, EccScalar)]) -> ThresholdEcdsaResult<Self> {
-        if samples.is_empty() {
-            return Err(ThresholdEcdsaError::InterpolationError);
-        }
-
-        let zero = EccScalar::zero(samples[0].0.curve_type());
-
-        Self::interpolation_at_value(&zero, samples)
-    }
-
-    pub fn interpolation_at_value(
-        value: &EccScalar,
-        samples: &[(EccScalar, EccScalar)],
-    ) -> ThresholdEcdsaResult<Self> {
-        if samples.is_empty() {
-            return Err(ThresholdEcdsaError::InterpolationError);
-        }
-
-        let (all_x, all_y): (Vec<_>, Vec<_>) = samples.iter().cloned().unzip();
-        let coefficients = lagrange_coefficients_at_value(value, &all_x)?;
-
-        let curve = coefficients[0].curve_type();
-        let mut result = EccScalar::zero(curve);
-        for (coefficient, sample) in coefficients.iter().zip(all_y) {
-            result = result.add(&sample.mul(coefficient)?)?;
-        }
-        Ok(result)
-    }
 }
 
 #[derive(Deserialize, Serialize)]
@@ -479,27 +450,6 @@ impl EccPoint {
             Self::K256(_) => EccCurveType::K256,
             Self::P256(_) => EccCurveType::P256,
         }
-    }
-
-    /// Given a list of samples `(x, f(x) * g)` for a set of unique `x`, some
-    /// polynomial `f`, and some elliptic curve point `g`, returns `f(0) * g`.
-    ///
-    /// See: <https://en.wikipedia.org/wiki/Shamir%27s_Secret_Sharing#Computationally_efficient_approach>
-    pub fn interpolation_at_zero(samples: &[(EccScalar, EccPoint)]) -> ThresholdEcdsaResult<Self> {
-        if samples.is_empty() {
-            return Err(ThresholdEcdsaError::InterpolationError);
-        }
-
-        let curve_type = samples[0].0.curve_type();
-
-        let (all_x, all_y): (Vec<_>, Vec<_>) = samples.iter().cloned().unzip();
-        let coefficients = lagrange_coefficients_at_value(&EccScalar::zero(curve_type), &all_x)?;
-
-        let mut result = EccPoint::identity(curve_type);
-        for (coefficient, sample) in coefficients.iter().zip(all_y) {
-            result = result.add_points(&sample.scalar_mul(coefficient)?)?;
-        }
-        Ok(result)
     }
 
     /// Hash an input to a valid elliptic curve point
