@@ -368,6 +368,9 @@ async fn change_nns_canister_by_proposal(
 
     let proposal_payload =
         ChangeNnsCanisterProposalPayload::new(stop_before_installing, how, canister.canister_id())
+            .with_memory_allocation(ic_nns_constants::memory_allocation_of(
+                canister.canister_id(),
+            ))
             .with_wasm(wasm);
     let proposal_payload = if let Some(arg) = arg {
         proposal_payload.with_arg(arg)

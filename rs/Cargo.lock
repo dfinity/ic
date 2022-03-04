@@ -5090,7 +5090,6 @@ dependencies = [
  "ic-base-types",
  "ic-crypto-sha",
  "ic-nervous-system-common",
- "ic-nns-constants",
  "serde",
  "serde_bytes",
 ]
