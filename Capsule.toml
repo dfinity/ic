@@ -11,7 +11,7 @@ input = [
 input = [
   "artifacts/release/*.gz",
   "artifacts/canisters/nns-ui-canister.wasm.gz",
-  "rs/tests/run-farm-based-system-tests.sh",
+  "rs/tests/run-system-tests.py",
   "gitlab-ci/src/artifacts/rclone_download.py",
   "gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh",
   "gitlab-ci/src/test_results/*",
