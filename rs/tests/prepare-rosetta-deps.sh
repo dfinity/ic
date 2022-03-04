@@ -7,13 +7,13 @@
 #    1. As a preparatory step in an existing shell. For example:
 #
 #       $ . ./prepare-rosetta-deps.sh
-#       $ ./run-farm-based-system-tests.sh --suite rosetta
+#       $ ./run-system-tests.py --suite rosetta
 #
 #       Note: This changes the $PATH variable in the current shell.
 #
 #
 #    2. As a wrapper:
-#       $ ./prepare-rosetta-deps.sh ./run-farm-based-system-tests.sh --suite rosetta
+#       $ ./prepare-rosetta-deps.sh ./run-system-tests.py --suite rosetta
 #
 
 set -eEou pipefail

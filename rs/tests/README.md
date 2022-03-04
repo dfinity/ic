@@ -46,7 +46,7 @@ For example, running all tests in a test suite `hourly` can be achieved as
 follows:
 
 ```bash
-IC_VERSION_ID=<version> ./run-farm-based-system-tests.sh --suite hourly
+IC_VERSION_ID=<version> ./run-system-tests.py --suite hourly
 ```
 
 The command line options `include-pattern` and `exclude-pattern` allow the
@@ -57,7 +57,7 @@ For example, running the basic health test can be achieved using the following
 command:
 
 ```bash
-IC_VERSION_ID=<version> ./run-farm-based-system-tests.sh --suite hourly --include-pattern basic_health_test
+IC_VERSION_ID=<version> ./run-system-tests.py --suite hourly --include-pattern basic_health_test
 ```
 
 If you have further questions, please contact the testing team on #eng-testing.
@@ -139,7 +139,7 @@ The System Tests are defined in `rs/tests/bin/prod-test-driver.rs`. The API of t
 For example, to run all the `pre-master` System Tests use:
 
 ```bash
-./run-farm-based-system-tests.sh --suite pre_master --log-base-dir $(date +"%Y%m%d") 2>&1 | tee farm.log
+./run-system-tests.py --suite pre_master --log-base-dir $(date +"%Y%m%d") 2>&1 | tee farm.log
 ```
 
 Note: This requires the commit to be built by CI/CD, i.e. it must be pushed to the remote and an MR has to be created. If the script can't find artifacts for the current commit, it will fail.

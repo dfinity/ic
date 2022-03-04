@@ -673,9 +673,10 @@ icos-continuous-upgrade-nightly:
   else
     LOG_DEBUG_OVERRIDES_OPTS=("--log-debug-overrides" "${LOG_DEBUG_OVERRIDES}")
   fi
-  $SHELL_WRAPPER "${CI_PROJECT_DIR}/rs/tests/run-farm-based-system-tests.sh" \
-    --suite "${SUITE_NAME}" \
-    --log-base-dir "${BASE_DIR}" \
+
+  $SHELL_WRAPPER "${CI_PROJECT_DIR}/rs/tests/run-system-tests.py" \
+    --suite="${SUITE_NAME}" \
+    --log-base-dir="${BASE_DIR}" \
     "${LOG_DEBUG_OVERRIDES_OPTS[@]}" \
   | tee "${BASE_DIR}/unstructured-logs.log" \
   | awk '$4 ~ /CRIT|ERRO|WARN|INFO|DEBG|TRCE/'
