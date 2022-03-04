@@ -23,9 +23,9 @@ use crate::pb::v1::{
     proposal, Ballot, DefaultFollowees, Empty, GetNeuron, GetNeuronResponse, GetProposal,
     GetProposalResponse, Governance as GovernanceProto, GovernanceError, ListNeurons,
     ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron, ManageNeuronResponse,
-    NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionType, Proposal,
-    ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RewardEvent, Tally,
-    Vote,
+    NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
+    NeuronPermissionType, Proposal, ProposalData, ProposalDecisionStatus, ProposalId,
+    ProposalRewardStatus, RewardEvent, Tally, Vote,
 };
 use ic_base_types::PrincipalId;
 use ledger_canister::{AccountIdentifier, Subaccount};
@@ -1455,6 +1455,22 @@ impl Governance {
             .expect("NervousSystemParameters not present")
     }
 
+    fn neuron_claimer_permissions(&self) -> NeuronPermissionList {
+        self.nervous_system_parameters()
+            .neuron_claimer_permissions
+            .as_ref()
+            .expect("NervousSystemParameters.neuron_claimer_permissions must be present")
+            .clone()
+    }
+
+    fn default_followees(&self) -> DefaultFollowees {
+        self.nervous_system_parameters()
+            .default_followees
+            .as_ref()
+            .expect("NervousSystemParameters.default_followees must be present")
+            .clone()
+    }
+
     /// Inserts a proposals that has already been validated in the state.
     ///
     /// This is a low-level function that makes no verification whatsoever.
@@ -2054,7 +2070,7 @@ impl Governance {
                 let nid = neuron.id.as_ref().expect("Neuron must have an id").clone();
                 self.refresh_neuron(nid, claim_or_refresh).await
             }
-            Err(_) => self.claim_neuron(nid, claim_or_refresh, caller).await,
+            Err(_) => self.claim_neuron(nid, claim_or_refresh, &controller).await,
         }
     }
 
@@ -2161,37 +2177,18 @@ impl Governance {
         claimer: &PrincipalId,
     ) -> Result<NeuronId, GovernanceError> {
         let now = self.env.now();
-        let neuron_claimer_permissions = self
-            .proto
-            .parameters
-            .as_ref()
-            .expect("NervousSystemParameters not present")
-            .neuron_claimer_permissions
-            .as_ref()
-            .expect("NervousSystemParameters.neuron_claimer_permissions must be present")
-            .clone();
-
-        let default_followees = self
-            .proto
-            .parameters
-            .as_ref()
-            .expect("NervousSystemParameters not present")
-            .default_followees
-            .as_ref()
-            .expect("NervousSystemParameters.default_followees must be present")
-            .clone();
 
         let neuron = Neuron {
             id: Some(nid.clone()),
             permissions: vec![NeuronPermission::new(
                 claimer,
-                neuron_claimer_permissions.permissions,
+                self.neuron_claimer_permissions().permissions,
             )],
             cached_neuron_stake_e8s: 0,
             neuron_fees_e8s: 0,
             created_timestamp_seconds: now,
             aging_since_timestamp_seconds: now,
-            followees: default_followees.followees,
+            followees: self.default_followees().followees,
             maturity_e8s_equivalent: 0,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(0)),
         };
@@ -2214,10 +2211,7 @@ impl Governance {
         let account = neuron_account_id(subaccount);
         let balance = self.ledger.account_balance(account).await?;
         let min_stake = self
-            .proto
-            .parameters
-            .as_ref()
-            .expect("NervousSystemParameters not present")
+            .nervous_system_parameters()
             .neuron_minimum_stake_e8s
             .expect("NervousSystemParameters must have neuron_minimum_stake_e8s");
 
