@@ -4,7 +4,18 @@ use ic_protobuf::bitcoin::v1::{
 use std::time::Duration;
 use tonic::Status;
 
-pub type RpcResult<T> = Result<T, Status>;
+/// Describe RPC error -- can be either related to transport (i.e.
+/// failure to transport or parse a message) or to server (i.e. server
+/// responded, but gave us a message indicating an error).
+#[derive(Debug)]
+pub enum RpcError {
+    /// Failure at transport
+    ConnectionBroken,
+    /// Failure at server endpoint
+    ServerError(Status),
+}
+
+pub type RpcResult<T> = Result<T, RpcError>;
 
 pub struct Options {
     pub timeout: Option<Duration>,

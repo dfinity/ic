@@ -318,6 +318,11 @@ pub const SAMPLE_CONFIG: &str = r#"
     nns_registry_replicator: {
       poll_delay_duration_ms: 5000
     },
+    // =================================
+    adapters_config: {
+        bitcoin_uds_path: "/tmp/bitcoin_uds"
+    }
+    // =================================
 }
 "#;
 
