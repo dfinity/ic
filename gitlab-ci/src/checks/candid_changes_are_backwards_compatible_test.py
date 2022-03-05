@@ -217,3 +217,21 @@ class CommandLineTest(unittest.TestCase):
                 run_against("example.did")
             with self.assertRaises(subprocess.CalledProcessError):
                 run_against("example.did", also_reverse=True)
+
+    def test_override_also_reverse(self):
+        # Add a method to the servce.
+        modify_file_contents(
+            path="example.did", find="// Comment within service.", replacement="new_method : () -> ();"
+        )
+
+        # Adding a method is fine going forwards.
+        run_against("example.did", also_reverse=False)
+
+        # But it's not fine going backwards.
+        with self.assertRaises(subprocess.CalledProcessError):
+            run_against("example.did", also_reverse=True)
+
+        # When the merge request title contains the magic words, --also-reverse should be disabled.
+        with env("CI_MERGE_REQUEST_TITLE", "Best change evar [override-also-reverse]"):
+            # Does not explode.
+            run_against("example.did", also_reverse=True)
