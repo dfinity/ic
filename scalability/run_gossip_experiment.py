@@ -1,9 +1,8 @@
 """
-P0 Experiment 4: Gossip.
+Gossip Experiment.
 
-Purpose: Stress P2P layer with and without boundary node rate limiting
-and having a lot of clients (currently not investigated by the
-networking team).  See presentation from networking team.
+Purpose: Stress P2P layer (without boundary node rate limiting)
+by increasing the subnet size.
 
 Topology: 13 node subnet, 1 machine NNS
 Deploy one instance of the counter or nop canister
@@ -16,25 +15,27 @@ Measure and determine:
   P2P metrics
   Workload generator metrics
 """
+import os
 import sys
 import time
 from statistics import mean
 
 import gflags
 import workload_experiment
+from elasticsearch import ElasticSearch
 
 FLAGS = gflags.FLAGS
-gflags.DEFINE_integer("duration", 60, "Duration to run the workload in seconds")
+gflags.DEFINE_integer("duration", 60, "Duration to run the workload in seconds.")
 gflags.DEFINE_integer("load", 50, "Load in requests per second to issue, default is 50.")
 gflags.DEFINE_integer("max_nodes", 50, "Add machines until given number of nodes is reached.")
 gflags.DEFINE_integer("subnet_to_grow", 1, "Index of the subnet to grow.")
 
 
 class GossipExperiment(workload_experiment.WorkloadExperiment):
-    """Logic for experiment 4."""
+    """Implementation for testing gossip capacity with varied size of subnets."""
 
     def __init__(self):
-        """Construct experiment 4."""
+        """Initiate the Gossip experiment."""
         super().__init__(num_workload_gen=1)
         self.init()
         self.use_updates = FLAGS.use_updates
@@ -67,7 +68,7 @@ class GossipExperiment(workload_experiment.WorkloadExperiment):
             duration=duration,
         )
 
-    def run_iterations(self, load):
+    def run_iterations(self):
         """Exercise the experiment with specified iterations."""
         # Algorithm:
         # As long as the there are still unassigned nodes:
@@ -109,12 +110,12 @@ class GossipExperiment(workload_experiment.WorkloadExperiment):
             members = self.get_subnet_members(FLAGS.subnet_to_grow)
             print(f"👉 Members are ${members}")
 
-            print(f"🚀 Testing with update load: {load} at the same time.")
+            print(f"🚀 Testing with number of nodes: {len(members)}.")
 
             t_start = int(time.time())
             evaluated_summaries = super().run_experiment(
                 {
-                    "load_total": load,
+                    "load_total": len(members),
                     "duration": FLAGS.iter_duration,
                 }
             )
@@ -196,6 +197,9 @@ class GossipExperiment(workload_experiment.WorkloadExperiment):
 if __name__ == "__main__":
 
     FLAGS(sys.argv)
+
+    experiment_name = os.path.basename(__file__).replace(".py", "")
+
     exp = GossipExperiment()
     print(exp.get_subnet_members(1))
 
@@ -209,5 +213,7 @@ if __name__ == "__main__":
         exp.write_summary_file(
             "run_gossip_experiment", {}, num_nodes_installed, "#nodes", rtype="update" if exp.use_updates else "query"
         )
+
+    ElasticSearch.send_perf(experiment_name, True, exp.use_updates, "N/A", "N/A", True, {})
 
     exp.end_experiment()

@@ -25,18 +25,21 @@ gflags.DEFINE_float(
     "allowable_failure_rate", 0.2, "Maximum failure rate at which to consider the iteration successful."
 )
 gflags.DEFINE_integer(
-    "update_allowable_t_median", 5000, "Maximum update median latency at which to consider the iteration successful."
+    "update_allowable_t_median",
+    30000,
+    "Maximum update median latency in unit of milliseconds at which to consider the iteration successful.",
 )
 
 # Maximum failure rate and median query duration limit for when to
 # stop the benchmark.
 gflags.DEFINE_float("stop_failure_rate", 0.4, "Maximum failure rate before aborting the benchmark.")
-gflags.DEFINE_integer("stop_t_median", 30000, "Maximum median latency before aborting the benchmark.")
+gflags.DEFINE_integer(
+    "stop_t_median", 60000, "Maximum median latency in unit of milliseconds before aborting the benchmark."
+)
 
 if __name__ == "__main__":
     experiment.parse_command_line_args()
     experiment_name = os.path.basename(__file__).replace(".py", "")
-    FLAGS.load = FLAGS.target_update_load
 
     exp = run_gossip_experiment.GossipExperiment()
     (
@@ -49,7 +52,7 @@ if __name__ == "__main__":
         num_success,
         num_failure,
         max_subnet_size,
-    ) = exp.run_iterations(FLAGS.target_update_load)
+    ) = exp.run_iterations()
 
     ElasticSearch.send_max_capacity(
         experiment_name,

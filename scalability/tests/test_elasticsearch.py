@@ -12,45 +12,29 @@ class Test_ElasticSearch(TestCase):
         name = "system_baseline_nightly_unit_test"
         is_success = False
         request_type = "Query"
-        base_revision = "391fd19f2154471f01068aaa771084eac010a099"
-        base_branch = "rc--2021-12-31_18_31"
-        upgrade_revision = "391fd19f2154471f01068aaa771084eac010a099"
-        upgrade_branch = "rc--2022-01-01_18_31"
+        revision = "391fd19f2154471f01068aaa771084eac010a099"
+        branch = "rc--2022-01-01_18_31"
         is_ci_job = False
-        base_failure_rate = 20.5
-        upgrade_failure_rate = 20.8
+        failure_rate = 20.8
         failure_rate_threshold = 0
-        failure_rate_delta_threshold = 0
-        base_median_latency = 200
-        upgrade_median_latency = 195
+        t_median = 195
         median_latency_threshold = 250
-        median_latency_delta_threshold = 0.1
-        base_rps = 200
-        upgrade_rps = 220
-        rps_threshold = 230
-        rps_delta_threshold = -0.05
+        rps = 220
+        target_load = 230
         summaries = (
-            base_failure_rate,
-            upgrade_failure_rate,
+            failure_rate,
             failure_rate_threshold,
-            failure_rate_delta_threshold,
-            base_median_latency,
-            upgrade_median_latency,
+            t_median,
             median_latency_threshold,
-            median_latency_delta_threshold,
-            base_rps,
-            upgrade_rps,
-            rps_threshold,
-            rps_delta_threshold,
+            rps,
+            target_load,
         )
-        sent = ElasticSearch.send_perf_compare(
+        sent = ElasticSearch.send_perf(
             name,
             is_success,
             request_type,
-            base_revision,
-            upgrade_revision,
-            base_branch,
-            upgrade_branch,
+            revision,
+            branch,
             is_ci_job,
             summaries,
         )

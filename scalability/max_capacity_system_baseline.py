@@ -21,9 +21,6 @@ gflags.DEFINE_integer("update_rps_increment", 20, "Increment of requests per sec
 gflags.DEFINE_integer("update_initial_rps", 100, "Start rps and increment in update mode.")
 gflags.DEFINE_integer("max_update_load", 2000, "Maximum update load in queries per second to issue.")
 
-# Duration in seconds for which to execute workload in each round.
-gflags.DEFINE_integer("iter_duration", 300, "Duration per iteration of the benchmark.")
-
 # Maximum failure rate and median query duration limit to consider
 # for rps to choose as rps_max. If failure rate or latency is higher,
 # continue running the benchmark, but do not consider this RPS

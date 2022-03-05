@@ -3,10 +3,12 @@ import datetime
 import json
 import time
 
-import misc
+import gflags
 import requests
 
+gflags.DEFINE_boolean("send_perf_metrics", False, "Send perf metrics to ElasticSearch for dashboard presentation.")
 
+FLAGS = gflags.FLAGS
 BASE_URL = "http://elasticsearch.dfinity.systems:9200"
 INDEX = "performance-trend"
 
@@ -51,79 +53,55 @@ class ElasticSearch:
                 time.sleep(3)
         return False
 
-    def send_perf_compare(
-        name,
-        is_success,
-        request_type,
-        base_revision,
-        experiment_revision,
-        base_branch,
-        experiment_branch,
-        is_ci_job,
-        summaries,
-    ):
+    def send_perf(name, is_success, request_type, revision, branch, is_ci_job, summaries):
         """Send a performance nightly data point performance-trend index in ElasticSearch."""
+        if FLAGS.send_perf_metrics is False:
+            return True
+
         (
-            base_failure_rate,
             experiment_failure_rate,
             failure_rate_threshold,
-            failure_rate_delta_threshold,
-            base_median_latency,
             experiment_median_latency,
             median_latency_threshold,
-            median_latency_delta_threshold,
-            base_throughput,
             experiment_throughput,
             throughput_threshold,
-            throughput_delta_threshold,
         ) = summaries
 
         metric = {
             "timestamp": datetime.datetime.now().isoformat(),
-            "rev": experiment_revision,
-            "branch": experiment_branch,
+            "rev": revision,
+            "branch": branch,
             "is_ci_job": is_ci_job,
             "package": "replica-perf-trend",
             "performance": {
                 "title": name,
                 "request_type": request_type,
                 "is_success": is_success,
-                "base_revision": base_revision,
-                "experiment_revision": experiment_revision,
-                "base_branch": base_branch,
-                "experiment_branch": experiment_branch,
                 "metrics": {
                     "failure_rate": {
-                        "base": base_failure_rate,
-                        "experiment": experiment_failure_rate,
-                        "difference_rate": misc.get_difference_rate(experiment_failure_rate, base_failure_rate),
+                        "value": experiment_failure_rate,
                         "threshold": failure_rate_threshold,
-                        "delta_threshold": failure_rate_delta_threshold,
                     },
                     "median_latency": {
-                        "base": base_median_latency,
-                        "experiment": experiment_median_latency,
-                        "difference_rate": misc.get_difference_rate(experiment_median_latency, base_median_latency),
+                        "value": experiment_median_latency,
                         "threshold": median_latency_threshold,
-                        "delta_threshold": median_latency_delta_threshold,
                     },
                     "throughput": {
-                        "base": base_throughput,
-                        "experiment": experiment_throughput,
-                        "difference_rate": misc.get_difference_rate(experiment_throughput, base_throughput),
+                        "value": experiment_throughput,
                         "threshold": throughput_threshold,
-                        "delta_threshold": throughput_delta_threshold,
                     },
                 },
             },
         }
-
         return ElasticSearch.call_elastic_search(metric)
 
     def send_max_capacity(
         name, request_type, experiment_revision, experiment_branch, is_ci_job, rps, out_dir, unix_time=None
     ):
         """Send a maximum capacity data point to performance-trend index in ElasticSearch."""
+        if FLAGS.send_perf_metrics is False:
+            return True
+
         if unix_time is None:
             unix_time = int(time.time())
             timestamp = datetime.datetime.fromtimestamp(unix_time).isoformat()

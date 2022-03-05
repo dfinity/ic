@@ -11,9 +11,8 @@ FLAGS = gflags.FLAGS
 
 
 # Duration in seconds for which to execute workload in each round.
-gflags.DEFINE_integer("iter_duration", 600, "Duration per iteration of the benchmark.")
 gflags.DEFINE_integer(
-    "max_block_payload_size", 4 * 1024 * 1024, "The max-block-payload-size to which the subnet is set."
+    "max_block_payload_size", 4 * 1024 * 1024, "The maximum block payload size allow on the subnet in unit of bytes."
 )
 gflags.DEFINE_float("rps", 1, "Requests per second.")
 
@@ -25,7 +24,9 @@ gflags.DEFINE_float(
     "allowable_failure_rate", 0.2, "Maximum failure rate at which to consider the iteration successful."
 )
 gflags.DEFINE_integer(
-    "update_allowable_t_median", 5000, "Maximum update median latency at which to consider the iteration successful."
+    "update_allowable_t_median",
+    5000,
+    "Maximum update median latency in unit of milliseconds at which to consider the iteration successful.",
 )
 gflags.DEFINE_integer("max_iterations", 10, "Maximum number of iterations needed in this run.")
 
@@ -34,7 +35,9 @@ gflags.DEFINE_integer("max_iterations", 10, "Maximum number of iterations needed
 # Looks like the workload generator timeout is 30s, so we will never
 # see anything higher than that on average.
 gflags.DEFINE_float("stop_failure_rate", 0.95, "Maximum failure rate before aborting the benchmark.")
-gflags.DEFINE_integer("stop_t_median", 600000, "Maximum median latency before aborting the benchmark.")
+gflags.DEFINE_integer(
+    "stop_t_median", 600000, "Maximum median latency in unit of milliseconds before aborting the benchmark."
+)
 
 if __name__ == "__main__":
     experiment.parse_command_line_args()
