@@ -30,7 +30,7 @@ Example usage:
   echo "changes" >> existing.did
   ./gitlab-ci/src/checks/candid_changes_are_backwards_compatible.py existing.did
 
-Can be via pre-commit as follows:
+Can be run via pre-commit as follows:
 
   pre-commit run candid_changes_are_backwards_compatible
 
@@ -45,11 +45,16 @@ environment variables to be set.
 Requires didc to be on PATH. Can be named didc-arm32, didc-linux64, didc-macos,
 or just didc. Pre-compiled binaries can be downloaded at
 https://github.com/dfinity/candid/releases.
+
+Behavior affected by a couple of environment variables:
+
+1. CI_MERGE_REQUEST_DIFF_BASE_SHA: Described above.
+2. CI_MERGE_REQUEST_TITLE: See --also-reverse.
 """.strip()
 )
 
 ARGUMENT_PARSER.add_argument(
-    "staged_file_paths",
+    "candid_file_paths",
     nargs="*",
     help="""
 Path(s) to the working copy of .did files that are to be inspected for
@@ -67,7 +72,8 @@ ARGUMENT_PARSER.add_argument(
 In addition to the usual `didc check after.did before.did`, also make sure that
 `didc check before.did after.did` passes. This is useful when it is expected
 that clients will "jump the gun", i.e. upgrade before servers. This is an
-unusual (but not unheard of) use case.
+unusual (but not unheard of) use case. This can be disabled if the
+CI_MERGE_REQUEST_TITLE environment variable contains "[override-also-reverse]".
 """.strip(),
 )
 
@@ -106,9 +112,9 @@ def delete_files(paths):
             os.remove(p)
 
 
-def get_originals(staged_file_paths, *, diff_base):
+def get_originals(candid_file_paths, *, diff_base):
     originals = []
-    for f in staged_file_paths:
+    for f in candid_file_paths:
         try:
             stdout, stderr = run(["git", "show", f"{diff_base}:./{f}"])
         except subprocess.CalledProcessError as e:
@@ -131,8 +137,8 @@ def get_originals(staged_file_paths, *, diff_base):
 
 
 @contextlib.contextmanager
-def originals(staged_file_paths, *, diff_base):
-    originals = get_originals(staged_file_paths, diff_base=diff_base)
+def originals(candid_file_paths, *, diff_base):
+    originals = get_originals(candid_file_paths, diff_base=diff_base)
     try:
         yield originals
     finally:
@@ -172,7 +178,8 @@ def print_run_fail(subprocess_called_process_error, *, prefix):
 
 def print_didc_check_failure(didc, before_path, after_path, e):
     prefix = " " * 4
-    print(f"{didc} check found problem(s) in {after_path}:")
+    short_didc = os.path.split(didc)[1]
+    print(f"{short_didc} check found problem(s) in {after_path}:")
     print_run_fail(e, prefix=prefix)
 
     print("  diff:")
@@ -181,6 +188,12 @@ def print_didc_check_failure(didc, before_path, after_path, e):
         for ln in difflib.unified_diff(
             read_lines(before_path), read_lines(after_path), fromfile="before.did", tofile="after.did"
         )
+    )
+
+    print(
+        "  Tip:\n"
+        "    If the only thing you did was add a method, add [override-also-reverse]\n"
+        "    to the title of your merge request."
     )
 
 
@@ -196,23 +209,23 @@ def didc_check(didc, server_did_file_path, client_did_file_path):
         raise SuspiciousDidcCheckOutput(returncode=0, stdout=stdout, stderr=stderr)
 
 
-def inspect_all_files(staged_file_paths, *, also_reverse, diff_base):
+def inspect_all_files(candid_file_paths, *, also_reverse, diff_base):
     """
     Return true if no defects are found.
 
     Args:
     ----
-      staged_file_paths: Same as command line argument(s).
-      also_reverse: Same as --also-reverse.
+      candid_file_paths: Same meaning as candid_file_paths command line argument(s).
+      also_reverse: Same meaning as --also-reverse.
       diff_base: Where to get copies of the originals. E.g. "HEAD", or some other git commit hash.
 
     """
     didc = find_didc_or_exit()
 
     any_defective_files = False
-    with originals(staged_file_paths, diff_base=diff_base) as paths_to_original_contents:
+    with originals(candid_file_paths, diff_base=diff_base) as paths_to_original_contents:
         # Compare .did files as they were before (at commit) vs. after changes.
-        for before, after in zip(paths_to_original_contents, staged_file_paths):
+        for before, after in zip(paths_to_original_contents, candid_file_paths):
             # Skip when there is no previous version to comapre to (the staged file is new).
             if before is None:
                 continue
@@ -243,17 +256,18 @@ def main(argv):
     args = ARGUMENT_PARSER.parse_args()
 
     print("Files to be inspected:")
-    for f in args.staged_file_paths:
+    for f in args.candid_file_paths:
         print(f"  - {f}")
     print()
 
     diff_base = get_diff_base()
     print()
 
+    override = "[override-also-reverse]" in os.environ.get("CI_MERGE_REQUEST_TITLE", "")
+    also_reverse = args.also_reverse and not override
+
     try:
-        any_defective_files = inspect_all_files(
-            args.staged_file_paths, also_reverse=args.also_reverse, diff_base=diff_base
-        )
+        any_defective_files = inspect_all_files(args.candid_file_paths, also_reverse=also_reverse, diff_base=diff_base)
     except subprocess.CalledProcessError as e:
         traceback.print_exc()
         print()

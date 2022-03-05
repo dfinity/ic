@@ -17,6 +17,7 @@ type DanceResponse = record {
 };
 
 service : {
+  // Comment within service.
   do_stuff : (Request) -> ();
   dance : (DanceRequest) -> (DanceResponse);
 }
