@@ -139,7 +139,7 @@
     <h2>Iterations</h2>
 
     Experiments run in iteration.
-    In each experiment iteration, we increase stress on tye system.
+    In each experiment iteration, we increase stress on the system.
     
     We collect metrics for those iterations individually.
     

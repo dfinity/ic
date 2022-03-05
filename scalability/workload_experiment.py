@@ -17,24 +17,24 @@ from termcolor import colored
 NUM_WORKLOAD_GEN = 2  # Number of machines to run the workload generator on
 
 FLAGS = gflags.FLAGS
-gflags.DEFINE_bool("use_updates", False, "Issue update calls instead of query calls")
+gflags.DEFINE_bool("use_updates", False, "Issue update calls instead of query calls.")
 gflags.DEFINE_string(
     "wg_testnet", None, "Testnet to deploy workload generators too. Can be the same as testnet, but use with care!"
 )
 gflags.MarkFlagAsRequired("wg_testnet")
-gflags.DEFINE_integer("subnet", 1, "Subnet from which to choose the target machine")
-gflags.DEFINE_integer("wg_subnet", 0, "Subnet in which to run the workload generator")
-gflags.DEFINE_integer("wg_connections_per_host", 1, "Number of connections to use per workload generator")
-gflags.DEFINE_string("target_subnet_id", "", "Subnet ID that is running the canister specified by canister_id")
-gflags.DEFINE_boolean("target_all", False, "Target all nodes, even when running query calls")
-gflags.DEFINE_string("targets", "", "Set load target IP adresses from this coma-separated list directly")
+gflags.DEFINE_integer("subnet", 1, "Subnet from which to choose the target machine.")
+gflags.DEFINE_integer("wg_subnet", 0, "Subnet in which to run the workload generator.")
+gflags.DEFINE_integer("wg_connections_per_host", 1, "Number of connections to use per workload generator.")
+gflags.DEFINE_string("target_subnet_id", "", "Subnet ID that is running the canister specified by canister_id.")
+gflags.DEFINE_boolean("target_all", False, "Target all nodes, even when running query calls.")
+gflags.DEFINE_string("targets", "", "Set load target IP adresses from this coma-separated list directly.")
 gflags.DEFINE_string(
-    "workload_generator_machines", "", "Set workload generator IP adresses from this coma-separated list directly"
+    "workload_generator_machines", "", "Set workload generator IP adresses from this coma-separated list directly."
 )
 gflags.DEFINE_integer(
     "query_target_node_idx",
     0,
-    "The node idx to use within the subnetwork to target for query calls. Only relevant when running against mainnet",
+    "The node idx to use within the subnetwork to target for query calls. Only relevant when running against mainnet.",
 )
 
 

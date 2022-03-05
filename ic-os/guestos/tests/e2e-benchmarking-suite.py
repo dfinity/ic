@@ -96,6 +96,7 @@ def main(argv):
             "10",
             "--load",
             "50",
+            "--median_latency_threshold=100",
             "--num_workload_generators",
             "1",
         ]
@@ -110,8 +111,9 @@ def main(argv):
             "--duration",
             "10",
             "--load",
-            "50",
+            "5",
             "--use_updates=True",
+            "--median_latency_threshold=5000",
             "--num_workload_generators",
             "1",
         ]

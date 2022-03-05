@@ -36,7 +36,7 @@ maximum-capacity-system-baseline-query:
       $SHELL_WRAPPER timeout 30m ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION"
       cd ./scalability
       $SHELL_WRAPPER pip3 install --user -r requirements.txt
-      $SHELL_WRAPPER python3 max_capacity_system_baseline.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --skip_generate_report=False --is_ci_job=True
+      $SHELL_WRAPPER python3 max_capacity_system_baseline.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --skip_generate_report=False --is_ci_job=True --send_perf_metrics=True
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
 
@@ -58,7 +58,7 @@ maximum-capacity-system-baseline-update:
       $SHELL_WRAPPER timeout 30m ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION"
       cd ./scalability
       $SHELL_WRAPPER pip3 install --user -r requirements.txt
-      $SHELL_WRAPPER python3 max_capacity_system_baseline.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --use_updates=True --skip_generate_report=False --is_ci_job=True
+      $SHELL_WRAPPER python3 max_capacity_system_baseline.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --use_updates=True --skip_generate_report=False --is_ci_job=True --send_perf_metrics=True
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
 
@@ -80,7 +80,7 @@ maximum-capacity-large-memory-query:
       $SHELL_WRAPPER timeout 30m ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION"
       cd ./scalability
       $SHELL_WRAPPER pip3 install --user -r requirements.txt
-      $SHELL_WRAPPER python3 max_capacity_large_memory.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --skip_generate_report=False --is_ci_job=True
+      $SHELL_WRAPPER python3 max_capacity_large_memory.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --skip_generate_report=False --is_ci_job=True --send_perf_metrics=True
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
 
@@ -102,7 +102,7 @@ maximum-capacity-large-memory-update:
       $SHELL_WRAPPER timeout 30m ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION"
       cd ./scalability
       $SHELL_WRAPPER pip3 install --user -r requirements.txt
-      $SHELL_WRAPPER python3 max_capacity_large_memory.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --skip_generate_report=False --use_updates=True --is_ci_job=True
+      $SHELL_WRAPPER python3 max_capacity_large_memory.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --skip_generate_report=False --use_updates=True --is_ci_job=True --send_perf_metrics=True
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
 
@@ -125,7 +125,7 @@ benchmark-xnet:
       $SHELL_WRAPPER timeout 30m ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION" --hosts-ini hosts_single_node_subnets.ini
       cd ./scalability
       $SHELL_WRAPPER pip3 install --user -r requirements.txt
-      $SHELL_WRAPPER python3 run_xnet_experiment.py --testnet $TESTNET --skip_generate_report=False --hosts_ini_filename=hosts_single_node_subnets.ini
+      $SHELL_WRAPPER python3 run_xnet_experiment.py --testnet $TESTNET --wg_subnet 2 --skip_generate_report=False --hosts_ini_filename=hosts_single_node_subnets.ini
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
 
@@ -148,7 +148,8 @@ large-subnet-gossip-experiment:
       $SHELL_WRAPPER timeout 30m ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION" --hosts-ini hosts_large_unassigned.ini
       cd ./scalability
       $SHELL_WRAPPER pip3 install --user -r requirements.txt
-      $SHELL_WRAPPER python3 max_capacity_gossip.py --testnet $TESTNET --wg_testnet $TESTNET --skip_generate_report=False --use_updates=True --update_allowable_t_median=10000 --hosts_ini_filename=hosts_large_unassigned.ini
+      $SHELL_WRAPPER python3 max_capacity_gossip.py --testnet $TESTNET --wg_testnet $TESTNET --wg_subnet 2 --skip_generate_report=False --use_updates=True --update_allowable_t_median=10000 --send_perf_metrics=True --hosts_ini_filename=hosts_large_unassigned.ini
+
       cd -
 
       $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
@@ -165,7 +166,8 @@ large-subnet-gossip-experiment:
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
     cd_target_env: "BENCHMARK_NIGHTLY"
     CD_ENV: "BENCHMARK_NIGHTLY"
-    TESTNET: "cdslo"
+    TESTNET: "cdrc02"
+    WG_TESTNET: "cdrc02"
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
   artifacts:
     when: always
@@ -177,8 +179,8 @@ large-subnet-gossip-experiment:
     - ubuntu
   timeout: 1 hour
 
-# Checks system performance changes against standard numbers and against previous release
-system-baseline-performance-test-nightly:
+# Checks system performance with query calls
+system-baseline-query-performance-test-nightly:
    extends: .benchmark-nightly-test
    artifacts:
     when: always
@@ -189,10 +191,34 @@ system-baseline-performance-test-nightly:
       set -eExou pipefail
       git fetch
 
-      # Find the release candidate branch name for last day
-      LAST_TRIMMED_RC=$(RC_DATE_TIME=${DISKIMG_BRANCH#'origin/rc--'}; RC_TODAY=$(date -d "${RC_DATE_TIME%_*}" '+%Y-%m-%d'); RC_YESTERDAY=$(date -d "$RC_TODAY -1 day" '+%Y-%m-%d'); LAST_RC_BRANCH=$(git branch --all | grep "rc--$RC_YESTERDAY" | xargs); LAST_TRIMMED_RC="${LAST_RC_BRANCH/remotes\//}"; echo "$LAST_TRIMMED_RC";)
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
 
-      # Run system baseline performance evaluation with old version and new version
+      # Note that this benchmark needs unassigned nodes
+      $SHELL_WRAPPER timeout 30m ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION"
+
+      # Run system baseline performance evaluation
       cd ./scalability
       $SHELL_WRAPPER pip3 install --user -r requirements.txt
-      $SHELL_WRAPPER timeout 1h python3 ./system_baseline_test.py --testnet "$TESTNET" --wg_testnet "$WG_TESTNET" --iter_duration 300 --skip_generate_report=False --target_query_load=600 --target_update_load=60 --base_branch="$LAST_TRIMMED_RC" --upgrade_branch="$DISKIMG_BRANCH" --is_ci_job=True
+      $SHELL_WRAPPER timeout 1h python3 ./run_system_baseline_experiment.py --testnet "$TESTNET" --wg_subnet 2 --wg_testnet $TESTNET --iter_duration 300 --skip_generate_report=False --load=600 --branch="$DISKIMG_BRANCH" --is_ci_job=True --use_updates=False --median_latency_threshold=200 --send_perf_metrics=True
+
+# Checks system performance with update calls
+system-baseline-update-performance-test-nightly:
+   extends: .benchmark-nightly-test
+   artifacts:
+    when: always
+    paths:
+      - scalability/
+   script:
+    - |
+      set -eExou pipefail
+      git fetch
+
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+
+      # Note that this benchmark needs unassigned nodes
+      $SHELL_WRAPPER timeout 30m ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION"
+
+      # Run system baseline performance evaluation
+      cd ./scalability
+      $SHELL_WRAPPER pip3 install --user -r requirements.txt
+      $SHELL_WRAPPER timeout 1h python3 ./run_system_baseline_experiment.py --testnet "$TESTNET" --wg_subnet 2 --wg_testnet $TESTNET --iter_duration 300 --skip_generate_report=False --load=60 --branch="$DISKIMG_BRANCH" --is_ci_job=True --use_updates=True --median_latency_threshold=2300 --send_perf_metrics=True

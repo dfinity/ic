@@ -27,17 +27,27 @@ Maximum number of queries not be below yyy queries per second with less than 20%
 Suggested success criteria (Updates):
 Maximum number of queries not be below xxx queries per second with less than 20% failure and a maximum latency of 10000ms
 """
+import os
+import sys
 import time
 
 import experiment
 import gflags
+import misc
 import workload_experiment
+from elasticsearch import ElasticSearch
 from termcolor import colored
 
 FLAGS = gflags.FLAGS
 gflags.DEFINE_integer("duration", 60, "Duration to run the workload in seconds")
 gflags.DEFINE_integer("load", 50, "Load in requests per second to issue")
-gflags.DEFINE_integer("num_workload_generators", 5, "Number of workload generators to run")
+gflags.DEFINE_integer("num_workload_generators", 2, "Number of workload generators to run")
+gflags.DEFINE_string(
+    "revision", "", 'Git revision hash to measure performance. E.g. "391fd19f2154471f01068aaa771084eac010a099".'
+)
+gflags.DEFINE_string("branch", "", 'Git branch to measure performance. E.g. "origin/rc--2022-01-01_18-31".')
+gflags.DEFINE_integer("iter_duration", 300, "Duration in seconds for which to execute workload in each round.")
+gflags.DEFINE_integer("median_latency_threshold", 380, "Median latency threshold for query calls.")
 
 
 class Experiment1(workload_experiment.WorkloadExperiment):
@@ -203,4 +213,45 @@ class Experiment1(workload_experiment.WorkloadExperiment):
 
 if __name__ == "__main__":
     experiment.parse_command_line_args()
-    Experiment1().run_iterations([FLAGS.load])
+
+    experiment_name = os.path.basename(__file__).replace(".py", "")
+    perf_failures = 0
+    start_time = int(time.time())
+    exp = Experiment1()
+    result_file = f"{exp.out_dir}/verification_results.txt"
+
+    (
+        failure_rate,
+        t_median,
+        t_average,
+        t_max,
+        t_min,
+        total_requests,
+        num_success,
+        num_failure,
+        rps,
+    ) = exp.run_iterations([FLAGS.load])
+
+    perf_failures += misc.verify(f"{exp.request_type} failure rate", failure_rate, 0, 0, result_file)
+    perf_failures += misc.verify(
+        f"{exp.request_type} median latency", t_median, FLAGS.median_latency_threshold, 0.01, result_file
+    )
+    perf_failures += misc.verify(f"{exp.request_type} throughput", rps, FLAGS.load, -0.2, result_file)
+
+    ElasticSearch.send_perf(
+        experiment_name,
+        perf_failures <= 0,
+        "Update",
+        exp.git_hash,
+        FLAGS.branch,
+        FLAGS.is_ci_job,
+        (failure_rate, 0, t_median, FLAGS.median_latency_threshold, rps, FLAGS.load),
+    )
+
+    if perf_failures > 0:
+        print(
+            "❌ Performance did not meet expectation. Check verification_results.txt file for more detailed results. 😭😭😭"
+        )
+        sys.exit(1)
+
+    print("✅ Performance verifications passed! 🎉🎉🎉")
