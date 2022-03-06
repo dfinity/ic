@@ -35,8 +35,9 @@ use ic_agent::export::Principal;
 use ic_agent::identity::Identity;
 use ic_agent::AgentError;
 use ic_fondue::{
-    ic_instance::{InternetComputer, Subnet},
+    ic_instance::{LegacyInternetComputer, Subnet as LegacySubnet},
     ic_manager::IcHandle,
+    prod_tests::ic::{InternetComputer, Subnet},
 };
 use ic_ic00_types::{CanisterSettingsArgs, CanisterStatusResultV2, CreateCanisterArgs, EmptyBlob};
 use ic_registry_subnet_type::SubnetType;
@@ -662,9 +663,9 @@ pub fn exceeding_memory_capacity_fails_when_memory_allocation_changes(
 }
 
 // A special configuration for testing small canister memory size.
-pub fn config_canister_memory_size() -> InternetComputer {
-    InternetComputer::new().add_subnet(
-        Subnet::fast_single_node(SubnetType::System)
+pub fn config_canister_memory_size() -> LegacyInternetComputer {
+    LegacyInternetComputer::new().add_subnet(
+        LegacySubnet::fast_single_node(SubnetType::System)
             // A small limit on canisters' memory.
             .with_max_canister_memory_size(10 * 1024 * 1024 /* 10 MiB */),
     )
@@ -1475,9 +1476,10 @@ pub fn refunds_after_uninstall_are_refunded(handle: IcHandle, ctx: &ic_fondue::p
 
 // A special configuration for testing the maximum number of canisters on a
 // subnet. The value is set to 3 for the tests.
-pub fn config_max_number_of_canisters() -> InternetComputer {
-    InternetComputer::new()
-        .add_subnet(Subnet::fast_single_node(SubnetType::System).with_max_number_of_canisters(3))
+pub fn config_max_number_of_canisters() -> LegacyInternetComputer {
+    LegacyInternetComputer::new().add_subnet(
+        LegacySubnet::fast_single_node(SubnetType::System).with_max_number_of_canisters(3),
+    )
 }
 
 /// This test assumes it's being executed using

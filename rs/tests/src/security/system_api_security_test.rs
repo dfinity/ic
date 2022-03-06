@@ -8,8 +8,8 @@ use ic_agent::export::Principal;
 use ic_agent::AgentError;
 use ic_agent::RequestId;
 use ic_fondue::{
-    ic_instance::{InternetComputer, Subnet}, // which is declared through these types
-    ic_manager::IcHandle,                    // we run the test on the IC
+    ic_instance::{LegacyInternetComputer, Subnet}, // which is declared through these types
+    ic_manager::IcHandle,                          // we run the test on the IC
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_utils::interfaces::ManagementCanister;
@@ -17,8 +17,8 @@ use slog::debug;
 use std::{time::Duration, time::Instant};
 use tokio::time::sleep_until;
 
-pub fn config() -> InternetComputer {
-    InternetComputer::new()
+pub fn config() -> LegacyInternetComputer {
+    LegacyInternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
 }

@@ -1,4 +1,4 @@
-use super::bootstrap::{MaliciousNodes, NodeVms};
+use super::bootstrap::NodeVms;
 use super::driver_setup::DriverContext;
 use crate::ic_manager::{FarmInfo, IcEndpoint, IcHandle, IcSubnet, RuntimeDescriptor};
 use ic_base_types::NodeId;
@@ -12,10 +12,8 @@ pub fn create_ic_handle(
     ctx: &DriverContext,
     init_ic: &InitializedIc,
     vm_nodes: &NodeVms,
-    mal_beh: &MaliciousNodes,
 ) -> IcHandle {
     let mut public_api_endpoints = vec![];
-    let mut malicious_public_api_endpoints = vec![];
 
     vm_nodes.iter().for_each(|(node_id, vm)| {
         let (subnet, node) = node_id_to_subnet(init_ic, *node_id);
@@ -51,18 +49,13 @@ pub fn create_ic_handle(
             ssh_key_pairs: ctx.authorized_ssh_accounts.clone(),
             node_id: *node_id,
         };
-
-        if mal_beh.contains_key(node_id) {
-            malicious_public_api_endpoints.push(endpoint);
-        } else {
-            public_api_endpoints.push(endpoint);
-        }
+        public_api_endpoints.push(endpoint);
     });
 
     let ic_prep_working_dir = Some(IcPrepStateDir::new(&init_ic.target_dir));
     IcHandle {
         public_api_endpoints,
-        malicious_public_api_endpoints,
+        malicious_public_api_endpoints: Vec::new(),
         ic_prep_working_dir,
     }
 }

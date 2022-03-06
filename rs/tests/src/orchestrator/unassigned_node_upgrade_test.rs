@@ -24,8 +24,8 @@ use core::time;
 use std::{convert::TryFrom, thread};
 
 use ic_fondue::{
-    ic_instance::InternetComputer,
     ic_manager::{IcControl, IcHandle},
+    prod_tests::ic::InternetComputer,
 };
 
 use crate::{

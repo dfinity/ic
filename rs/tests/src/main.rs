@@ -15,7 +15,7 @@ use structopt::StructOpt;
 use ic_fondue::pot;
 use ic_fondue::*; // Import the macros for easier pot declaration
 use ic_fondue::{
-    ic_instance::{InternetComputer, Subnet},
+    ic_instance::{LegacyInternetComputer, Subnet},
     ic_manager::IcManager,
 };
 use ic_registry_subnet_type::SubnetType;
@@ -77,7 +77,7 @@ fn all_pots() -> Vec<ic_fondue::pot::Pot> {
 fn basic_health_pot() -> pot::Pot {
     composable!(
         "basic_health_pot",
-        basic_health_test::config(),
+        basic_health_test::legacy_config(),
         steps! {
             basic_health_test::basic_health_test,
             feature_flags::ecdsa_signatures_disabled_by_default
@@ -100,7 +100,7 @@ fn request_auth_malicious_replica_pot() -> pot::Pot {
 fn canister_lifecycle_memory_capacity_pot() -> pot::Pot {
     composable!(
         "canister_lifecycle_memory_capacity_pot",
-        execution::config_memory_capacity(),
+        execution::legacy_config_memory_capacity(),
         steps! { execution::canister_lifecycle::exceeding_memory_capacity_fails_when_memory_allocation_changes }
     )
 }
@@ -108,7 +108,7 @@ fn canister_lifecycle_memory_capacity_pot() -> pot::Pot {
 fn subnet_capacity_pot() -> pot::Pot {
     composable!(
         "subnet_capacity_pot",
-        execution::config_memory_capacity(),
+        execution::legacy_config_memory_capacity(),
         steps! {
             execution::subnet_capacity::exceeding_memory_capacity_fails_during_message_execution
         }
@@ -136,7 +136,7 @@ fn canister_lifecycle_memory_size_pot() -> pot::Pot {
 fn system_subnets_pot() -> pot::Pot {
     composable!(
         "system_subnets_pot",
-        execution::config_many_system_subnets(),
+        execution::legacy_config_many_system_subnets(),
         steps! {
             execution::nns_shielding::non_nns_canister_attempt_to_create_canister_on_another_subnet_fails,
             execution::nns_shielding::nns_canister_attempt_to_create_canister_on_another_subnet_succeeds

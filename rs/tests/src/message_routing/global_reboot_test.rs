@@ -35,8 +35,8 @@ use crate::util::{
 use canister_test::{Canister, Project, Runtime, Wasm};
 use dfn_candid::candid;
 use ic_fondue::{
-    ic_instance::InternetComputer,
     ic_manager::{IcControl, IcHandle},
+    prod_tests::ic::InternetComputer,
 };
 use ic_registry_subnet_type::SubnetType;
 use slog::info;

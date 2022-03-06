@@ -21,7 +21,7 @@ end::catalog[] */
 
 use ic_agent::Agent;
 use ic_fondue::{
-    ic_instance::{InternetComputer, Subnet},
+    ic_instance::{LegacyInternetComputer as InternetComputer, Subnet},
     ic_manager::IcManager,
 };
 use slog::{info, Logger};

@@ -1,8 +1,9 @@
 use std::fmt::Display;
 use std::panic::{catch_unwind, UnwindSafe};
 
+use crate::ic_manager::IcHandle;
 use crate::pot::FondueTestFn;
-use crate::{ic_instance::InternetComputer, ic_manager::IcHandle};
+use crate::prod_tests::ic::InternetComputer;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 

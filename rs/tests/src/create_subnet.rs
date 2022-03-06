@@ -25,8 +25,8 @@ use std::time::Duration;
 use ic_base_types::NodeId;
 use ic_fondue::ic_manager::IcSubnet;
 use ic_fondue::{
-    ic_instance::{InternetComputer, Subnet}, // which is declared through these types
-    ic_manager::IcHandle,                    // we run the test on the IC
+    ic_manager::IcHandle,                       // we run the test on the IC
+    prod_tests::ic::{InternetComputer, Subnet}, // which is declared through these types
 };
 use slog::info;
 

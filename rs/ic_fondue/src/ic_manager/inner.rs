@@ -31,7 +31,7 @@ use crate::ic_instance::node_software_version::NodeSoftwareVersion;
 use crate::ic_instance::port_allocator::{
     AddrType, EphemeralPortAllocator, TcpAddrAllocator, VmAddrAllocator,
 };
-use crate::ic_instance::InternetComputer;
+use crate::ic_instance::LegacyInternetComputer as InternetComputer;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use nix::unistd::Pid;
 use slog::{debug, info, warn, Logger};

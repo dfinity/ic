@@ -29,7 +29,7 @@ use canister_test::{Canister, RemoteTestRuntime, Runtime};
 use dfn_protobuf::protobuf;
 use ed25519_dalek::Signer;
 use ic_canister_client::Sender;
-use ic_fondue::{ic_instance::InternetComputer, ic_manager::IcHandle};
+use ic_fondue::{ic_manager::IcHandle, prod_tests::ic::InternetComputer};
 use ic_nervous_system_common::ledger;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_nns_governance::pb::v1::{Governance, NetworkEconomics, Neuron};

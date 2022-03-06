@@ -26,7 +26,7 @@ use crate::util::{
 };
 use slog::info;
 
-use ic_fondue::{self, ic_instance::InternetComputer, ic_manager::IcHandle};
+use ic_fondue::{self, ic_manager::IcHandle, prod_tests::ic::InternetComputer};
 
 use async_recursion::async_recursion;
 use canister_test::{Canister, Runtime};

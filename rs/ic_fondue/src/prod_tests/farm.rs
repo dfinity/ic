@@ -5,7 +5,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::ic_instance::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocation};
+use crate::prod_tests::ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocation};
 use anyhow::Result;
 use reqwest::blocking::{multipart, Client, RequestBuilder};
 use serde::{Deserialize, Serialize};

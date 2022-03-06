@@ -18,9 +18,9 @@ end::catalog[] */
 
 use crate::util::{assert_all_ready, assert_create_agent, block_on, UniversalCanister};
 use ic_fondue::{
-    ic_instance::{InternetComputer, Subnet},
     ic_manager::{IcControl, IcEndpoint, IcHandle},
     iterator::PermOf,
+    prod_tests::ic::{InternetComputer, Subnet},
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;

@@ -6,7 +6,7 @@ use crate::util::{
 };
 use ic_agent::export::Principal;
 use ic_agent::{identity::AnonymousIdentity, Identity, Signature};
-use ic_fondue::{ic_instance::InternetComputer, ic_manager::IcHandle};
+use ic_fondue::{ic_manager::IcHandle, prod_tests::ic::InternetComputer};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::{
     Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpRequestEnvelope, HttpUserQuery,

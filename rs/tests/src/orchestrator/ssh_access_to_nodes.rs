@@ -21,8 +21,8 @@ use crate::{
 };
 
 use ic_fondue::{
-    ic_instance::InternetComputer,
     ic_manager::{IcControl, IcHandle},
+    prod_tests::ic::InternetComputer,
 };
 use ic_nns_common::registry::MAX_NUM_SSH_KEYS;
 use ic_registry_subnet_type::SubnetType;

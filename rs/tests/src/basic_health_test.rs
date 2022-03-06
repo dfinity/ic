@@ -33,8 +33,9 @@ end::catalog[] */
 
 use crate::{api::system_test_context::*, util::*}; // to use the universal canister
 use ic_fondue::{
-    ic_instance::{InternetComputer, Subnet}, // which is declared through these types
-    ic_manager::IcHandle,                    // we run the test on the IC
+    ic_instance::{LegacyInternetComputer, Subnet as LegacySubnet}, // which is declared through these types
+    ic_manager::IcHandle,                                          // we run the test on the IC
+    prod_tests::ic::{InternetComputer, Subnet},
 };
 use ic_registry_subnet_type::SubnetType;
 use slog::info;
@@ -47,6 +48,12 @@ pub fn config() -> InternetComputer {
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(4))
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(4))
+}
+
+pub fn legacy_config() -> LegacyInternetComputer {
+    LegacyInternetComputer::new()
+        .add_subnet(LegacySubnet::new(SubnetType::System).add_nodes(4))
+        .add_subnet(LegacySubnet::new(SubnetType::System).add_nodes(4))
 }
 
 const MSG: &[u8] = b"this beautiful prose should be persisted for future generations";

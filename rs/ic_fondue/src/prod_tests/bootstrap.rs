@@ -9,10 +9,9 @@ use std::{
     process::Command,
 };
 
-use crate::ic_instance::{
-    node_software_version::NodeSoftwareVersion, port_allocator::AddrType, InternetComputer,
-};
+use crate::ic_instance::{node_software_version::NodeSoftwareVersion, port_allocator::AddrType};
 use crate::prod_tests::farm::FarmResult;
+use crate::prod_tests::ic::InternetComputer;
 use ic_base_types::NodeId;
 
 use ic_prep_lib::{
@@ -22,7 +21,6 @@ use ic_prep_lib::{
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::malicious_behaviour::MaliciousBehaviour;
 use slog::{info, warn};
 use std::io::Write;
 use std::thread::{self, JoinHandle};
@@ -33,7 +31,6 @@ use super::{
     resource::{AllocatedVm, ResourceGroup},
 };
 
-pub type MaliciousNodes = BTreeMap<NodeId, MaliciousBehaviour>;
 pub type UnassignedNodes = BTreeMap<NodeIndex, NodeConfiguration>;
 pub type NodeVms = BTreeMap<NodeId, AllocatedVm>;
 
@@ -48,10 +45,9 @@ pub fn init_ic<P: AsRef<Path>>(
     prep_dir: P,
     ic: &InternetComputer,
     res_group: &ResourceGroup,
-) -> (InitializedIc, MaliciousNodes, NodeVms) {
+) -> (InitializedIc, NodeVms) {
     let mut next_node_index = 0u64;
     let working_dir = PathBuf::from(prep_dir.as_ref());
-    let mut malicious_nodes: BTreeMap<NodeIndex, MaliciousBehaviour> = Default::default();
     let mut node_idx_to_vm: BTreeMap<NodeIndex, AllocatedVm> = Default::default();
 
     // In production, this dummy hash is not actually checked and exists
@@ -91,7 +87,7 @@ pub fn init_ic<P: AsRef<Path>>(
         let subnet_index = subnet_idx as u64;
         let mut nodes: BTreeMap<NodeIndex, NodeConfiguration> = BTreeMap::new();
 
-        for node in subnet.nodes.iter() {
+        for _node in subnet.nodes.iter() {
             let node_index = next_node_index;
             next_node_index += 1;
             let vm = res_group
@@ -99,9 +95,6 @@ pub fn init_ic<P: AsRef<Path>>(
                 .expect("Could not find allocated vm for given node index.");
             node_idx_to_vm.insert(node_index, vm);
             nodes.insert(node_index, node_to_config(node_index, res_group));
-            if let Some(malicious_behaviour) = &node.malicious_behaviour {
-                malicious_nodes.insert(node_index, malicious_behaviour.clone());
-            }
         }
 
         ic_topology.insert_subnet(
@@ -130,7 +123,7 @@ pub fn init_ic<P: AsRef<Path>>(
         );
     }
 
-    for node in &ic.unassigned_nodes {
+    for _node in &ic.unassigned_nodes {
         let node_index = next_node_index;
         next_node_index += 1;
         let vm = res_group
@@ -141,9 +134,6 @@ pub fn init_ic<P: AsRef<Path>>(
             node_index as NodeIndex,
             node_to_config(node_index, res_group),
         );
-        if let Some(malicious_behaviour) = &node.malicious_behaviour {
-            malicious_nodes.insert(node_index, malicious_behaviour.clone());
-        }
     }
 
     let whitelist = ProvisionalWhitelist::All;
@@ -168,17 +158,6 @@ pub fn init_ic<P: AsRef<Path>>(
 
     let init_ic = ic_config.initialize().expect("can't fail");
 
-    let malicious_nodes: MaliciousNodes = init_ic
-        .initialized_topology
-        .values()
-        .flat_map(|s| s.initialized_nodes.iter())
-        .filter_map(|(node_index, n)| {
-            malicious_nodes
-                .get(node_index)
-                .map(|mal_beh| (n.node_id, mal_beh.clone()))
-        })
-        .collect();
-
     let mut node_vms = BTreeMap::new();
     init_ic
         .initialized_topology
@@ -198,7 +177,7 @@ pub fn init_ic<P: AsRef<Path>>(
             node_vms.insert(n.node_id, node_idx_to_vm.get(&node_idx).cloned().unwrap());
         });
 
-    (init_ic, malicious_nodes, node_vms)
+    (init_ic, node_vms)
 }
 
 pub fn setup_and_start_vms(

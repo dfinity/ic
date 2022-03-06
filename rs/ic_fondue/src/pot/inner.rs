@@ -30,7 +30,7 @@ use std::sync::{Arc, Mutex};
 use std::{path::PathBuf, thread};
 
 use super::log::mk_logger;
-use crate::ic_instance::*;
+use crate::ic_instance::LegacyInternetComputer as InternetComputer;
 use crate::ic_manager::*;
 use crate::result::*;
 use slog::{info, warn, Logger};
