@@ -28,7 +28,7 @@ end::catalog[] */
 
 use crate::util::{get_random_nns_node_endpoint, runtime_from_url};
 
-use ic_fondue::{ic_instance::InternetComputer, ic_manager::IcHandle};
+use ic_fondue::{ic_manager::IcHandle, prod_tests::ic::InternetComputer};
 
 use ic_nns_governance::pb::v1::{
     governance_error::ErrorType,

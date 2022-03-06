@@ -22,8 +22,8 @@ use hyper::{
 };
 use ic_crypto::threshold_sig_public_key_from_der;
 use ic_fondue::{
-    ic_instance::{InternetComputer, Subnet},
     ic_manager::IcHandle,
+    prod_tests::ic::{InternetComputer, Subnet},
 };
 use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::itest_helpers::{

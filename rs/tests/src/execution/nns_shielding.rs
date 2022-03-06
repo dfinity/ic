@@ -6,8 +6,8 @@ use candid::{Decode, Encode, Principal};
 use ic_agent::AgentError;
 use ic_base_types::RegistryVersion;
 use ic_fondue::{
-    ic_instance::{InternetComputer, Subnet},
     ic_manager::IcHandle,
+    prod_tests::ic::{InternetComputer, Subnet},
 };
 use ic_ic00_types::SetupInitialDKGArgs;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;

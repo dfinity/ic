@@ -1,6 +1,6 @@
 use std::net::IpAddr;
 
-use crate::ic_instance::{AmountOfMemoryKiB, InternetComputer, Node, NrOfVCPUs};
+use crate::prod_tests::ic::{AmountOfMemoryKiB, InternetComputer, Node, NrOfVCPUs};
 use ic_prep_lib::node::NodeIndex;
 use slog::info;
 use url::Url;

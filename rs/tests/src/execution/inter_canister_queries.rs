@@ -8,7 +8,7 @@ use crate::{
         get_random_verified_app_node_endpoint, UniversalCanister,
     },
 };
-use ic_fondue::{ic_instance::InternetComputer, ic_manager::IcHandle};
+use ic_fondue::{ic_manager::IcHandle, prod_tests::ic::InternetComputer};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::CanisterId;
 use ic_universal_canister::{call_args, wasm};

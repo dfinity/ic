@@ -15,7 +15,7 @@ use ic_protobuf::log::log_entry::v1::LogEntry;
 use slog::{debug, o, Logger};
 mod inner;
 
-use crate::ic_instance::InternetComputer;
+use crate::ic_instance::LegacyInternetComputer as InternetComputer;
 pub mod buffered_reader;
 pub mod handle;
 pub mod process_pool;

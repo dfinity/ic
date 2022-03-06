@@ -26,8 +26,8 @@ use crate::{
 };
 use ic_agent::{export::Principal, Agent};
 use ic_fondue::{
-    ic_instance::{InternetComputer, Subnet},
     ic_manager::IcHandle,
+    prod_tests::ic::{InternetComputer, Subnet},
 };
 use ic_nns_governance::pb::v1::NnsFunction;
 use ic_registry_subnet_type::SubnetType;

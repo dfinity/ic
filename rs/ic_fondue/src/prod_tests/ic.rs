@@ -1,33 +1,44 @@
+use super::bootstrap::{init_ic, setup_and_start_vms};
+use super::driver_setup::DriverContext;
+use super::resource::{allocate_resources, get_resource_request};
+use super::test_setup::create_ic_handle;
+use crate::ic_instance::node_software_version::NodeSoftwareVersion;
+use crate::ic_manager::IcHandle;
+use anyhow::Result;
 use ic_config::{consensus::ConsensusConfig, ConfigOptional as ReplicaConfig};
 use ic_protobuf::registry::subnet::v1::GossipConfig;
 use ic_protobuf::registry::subnet::v1::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::p2p::build_default_gossip_config;
-use ic_types::{Height, NodeId, NumBytes, PrincipalId};
-use node_software_version::NodeSoftwareVersion;
-use std::collections::{hash_map::DefaultHasher, BTreeMap};
+use ic_types::{Height, NumBytes, PrincipalId};
+use phantom_newtype::AmountOf;
+use serde::{Deserialize, Serialize};
+use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
-
-pub mod node_software_version;
-pub mod port_allocator;
 
 /// Builder object to declare a topology of an InternetComputer. Used as input
 /// to the IC Manager.
 #[derive(Clone, Debug, Default)]
-pub struct LegacyInternetComputer {
+pub struct InternetComputer {
     pub initial_version: Option<NodeSoftwareVersion>,
+    pub vm_allocation: Option<VmAllocation>,
     pub subnets: Vec<Subnet>,
-    pub malicious_behaviours: BTreeMap<NodeId, MaliciousBehaviour>,
     pub node_operator: Option<PrincipalId>,
     pub node_provider: Option<PrincipalId>,
-    pub experimental_vm_test: bool,
     pub unassigned_nodes: Vec<Node>,
     pub ssh_readonly_access_to_unassigned_nodes: Vec<String>,
 }
 
-impl LegacyInternetComputer {
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+pub enum VmAllocation {
+    #[serde(rename = "distributeWithinSingleHost")]
+    DistributeWithinSingleHost,
+    #[serde(rename = "distributeAcrossDcs")]
+    DistributeAcrossDcs,
+}
+
+impl InternetComputer {
     pub fn new() -> Self {
         Self::default()
     }
@@ -61,13 +72,6 @@ impl LegacyInternetComputer {
         self
     }
 
-    /// An experimental test environment where each node runs as a virtual
-    /// machine on a single host.
-    pub fn experimental_vm_test(mut self) -> Self {
-        self.experimental_vm_test = true;
-        self
-    }
-
     pub fn with_unassigned_nodes(mut self, no_of_nodes: i32) -> Self {
         for _ in 0..no_of_nodes {
             let node = Node::new();
@@ -76,25 +80,17 @@ impl LegacyInternetComputer {
         self
     }
 
-    pub fn summarize(&self) -> String {
-        // XXX: The prefix of this name exposes information to fondue about the
-        // environment in which the pot is to be run. Strictly speaking, this
-        // breaks the abstraction layers between fondue and ic-fondue. This is a
-        // temporary solution as the goal is to lift all tests to the
-        // experimental environment.
-        let exp_prefix = if self.experimental_vm_test {
-            "EXP-VM-"
-        } else {
-            ""
-        };
-
-        let mut s = Vec::new();
-        for sub in self.subnets.iter() {
-            s.push(sub.summary());
-        }
-        let my_id = s.join("");
-
-        format!("{}{}", exp_prefix, my_id)
+    pub fn setup_and_start(
+        &self,
+        ctx: &DriverContext,
+        temp_dir: &tempfile::TempDir,
+        group_name: &str,
+    ) -> Result<IcHandle> {
+        let res_request = get_resource_request(ctx, self, group_name);
+        let res_group = allocate_resources(ctx, &res_request)?;
+        let (init_ic, node_vms) = init_ic(ctx, temp_dir.path(), self, &res_group);
+        setup_and_start_vms(ctx, &init_ic, &node_vms)?;
+        Ok(create_ic_handle(ctx, &init_ic, &node_vms))
     }
 }
 
@@ -204,18 +200,6 @@ impl Subnet {
             .with_initial_notary_delay(Duration::from_millis(5000))
     }
 
-    pub fn add_malicious_nodes(
-        mut self,
-        no_of_nodes: usize,
-        malicious_behaviour: MaliciousBehaviour,
-    ) -> Self {
-        for _ in 0..no_of_nodes {
-            let node = Node::new().with_malicious_behaviour(malicious_behaviour.clone());
-            self.nodes.push(node);
-        }
-        self
-    }
-
     pub fn add_nodes(mut self, no_of_nodes: usize) -> Self {
         (0..no_of_nodes).for_each(|_| self.nodes.push(Default::default()));
         self
@@ -291,15 +275,10 @@ impl Subnet {
     /// as a part of a test environment identifier.
     pub fn summary(&self) -> String {
         let ns = self.nodes.len();
-        let malicious_ns = self
-            .nodes
-            .iter()
-            .filter(|n| n.malicious_behaviour.is_some())
-            .count();
         let mut s = DefaultHasher::new();
         format!("{:?}", self).hash(&mut s);
         let config_hash = format!("{:x}", s.finish());
-        format!("S{:02}{:02}{}", ns, malicious_ns, &config_hash[0..3])
+        format!("S{:02}{}", ns, &config_hash[0..3])
     }
 }
 
@@ -328,19 +307,22 @@ impl Default for Subnet {
         }
     }
 }
+
+pub type NrOfVCPUs = AmountOf<VCPUs, u64>;
+pub type AmountOfMemoryKiB = AmountOf<MemoryKiB, u64>;
+
+pub enum VCPUs {}
+pub enum MemoryKiB {}
+
 /// A builder for the initial configuration of a node.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Node {
-    pub malicious_behaviour: Option<MaliciousBehaviour>,
+    pub vcpus: Option<NrOfVCPUs>,
+    pub memory_kibibytes: Option<AmountOfMemoryKiB>,
 }
 
 impl Node {
     pub fn new() -> Self {
         Default::default()
-    }
-
-    pub fn with_malicious_behaviour(mut self, malicious_behaviour: MaliciousBehaviour) -> Self {
-        self.malicious_behaviour = Some(malicious_behaviour);
-        self
     }
 }

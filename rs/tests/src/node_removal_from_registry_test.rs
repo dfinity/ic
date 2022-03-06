@@ -30,8 +30,8 @@ use crate::{
 };
 use ic_base_types::PrincipalId;
 use ic_fondue::{
-    ic_instance::{InternetComputer, Subnet},
     ic_manager::IcHandle,
+    prod_tests::ic::{InternetComputer, Subnet},
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::pb::v1::NnsFunction;

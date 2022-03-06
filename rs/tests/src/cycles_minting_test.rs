@@ -20,7 +20,7 @@ use ic_certified_vars::verify_certificate;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_crypto::threshold_sig_public_key_from_der;
 use ic_crypto_tree_hash::MixedHashTree;
-use ic_fondue::{ic_instance::InternetComputer, ic_manager::IcHandle};
+use ic_fondue::{ic_manager::IcHandle, prod_tests::ic::InternetComputer};
 use ic_nns_common::types::{NeuronId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{
     ids::{

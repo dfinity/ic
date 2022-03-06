@@ -4,7 +4,7 @@ end::catalog[] */
 use crate::tecdsa_signature_test::{get_public_key, get_signature, verify_signature};
 use crate::util::*;
 use ic_fondue::{
-    ic_instance::{InternetComputer, Subnet},
+    ic_instance::{LegacyInternetComputer as InternetComputer, Subnet},
     ic_manager::IcHandle,
 };
 use ic_protobuf::registry::subnet::v1::SubnetFeatures;

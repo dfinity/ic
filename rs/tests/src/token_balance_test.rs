@@ -34,7 +34,7 @@ use crate::util::{
     UniversalCanister,
 };
 
-use ic_fondue::{ic_instance::InternetComputer, ic_manager::IcHandle};
+use ic_fondue::{ic_manager::IcHandle, prod_tests::ic::InternetComputer};
 
 use crate::nns::NnsExt;
 

@@ -29,7 +29,7 @@ end::catalog[] */
 use crate::util::*;
 use ic_agent::export::Principal;
 use ic_fondue::{
-    ic_instance::{InternetComputer, Subnet},
+    ic_instance::{LegacyInternetComputer as InternetComputer, Subnet},
     ic_manager::IcHandle,
 };
 use ic_registry_subnet_type::SubnetType;

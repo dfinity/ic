@@ -24,8 +24,8 @@ use crate::{
     },
 };
 use ic_fondue::{
-    ic_instance::{InternetComputer, Subnet},
     ic_manager::{IcControl, IcEndpoint, IcHandle},
+    prod_tests::ic::{InternetComputer, Subnet},
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;

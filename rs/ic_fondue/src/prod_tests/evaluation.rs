@@ -2,11 +2,11 @@ use std::{panic::catch_unwind, time::Instant};
 
 use super::driver_setup::DriverContext;
 use super::pot_dsl::{ExecutionMode, Pot, Suite, Test, TestPath, TestSet};
-use crate::ic_instance::InternetComputer;
 use crate::ic_manager::IcHandle;
 use crate::pot::Context;
 use crate::prod_tests::driver_setup::tee_logger;
 use crate::prod_tests::farm::GroupSpec;
+use crate::prod_tests::ic::InternetComputer;
 use crate::result::*;
 use anyhow::{bail, Result};
 use crossbeam_channel::{bounded, Receiver, Sender};

@@ -25,8 +25,8 @@ use ic_nns_constants::ids::TEST_NEURON_1_OWNER_KEYPAIR;
 
 use ic_base_types::SubnetId;
 use ic_fondue::{
-    ic_instance::{InternetComputer, Subnet}, // which is declared through these types
-    ic_manager::IcHandle,                    // we run the test on the IC
+    ic_manager::IcHandle,                       // we run the test on the IC
+    prod_tests::ic::{InternetComputer, Subnet}, // which is declared through these types
 };
 
 use ic_nns_common::types::NeuronId;
