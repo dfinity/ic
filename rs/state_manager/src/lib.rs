@@ -639,6 +639,11 @@ fn load_checkpoint(
         })
 }
 
+// Resets tip to the given height and loads the checkpoint at that height.
+// The returned state has its `root` pointing to the tip directory, however
+// all `PageMap`s in the state are based on the clean read-only checkpoint
+// files located in the checkpoint directory. This is important to ensure
+// that message execution never reads from mutable tip files.
 fn load_checkpoint_as_tip(
     log: &ReplicaLogger,
     state_layout: &StateLayout,
@@ -655,8 +660,22 @@ fn load_checkpoint_as_tip(
         .tip(height)
         .unwrap_or_else(|err| fatal!(log, "Failed to retrieve tip {:?}", err));
 
-    checkpoint::load_checkpoint(&tip_layout, own_subnet_type, None)
-        .unwrap_or_else(|err| fatal!(log, "Failed to reset tip to checkpoint height: {:?}", err))
+    let mut tip = checkpoint::load_checkpoint(&tip_layout, own_subnet_type, None)
+        .unwrap_or_else(|err| fatal!(log, "Failed to load checkpoint as tip {:?}", err));
+
+    let checkpoint_layout = state_layout
+        .checkpoint(height)
+        .unwrap_or_else(|err| fatal!(log, "Failed to retrieve checkpoint {:?}", err));
+
+    let checkpointed_state = checkpoint::load_checkpoint(&checkpoint_layout, own_subnet_type, None)
+        .unwrap_or_else(|err| fatal!(log, "Failed to load checkpoint {:?}", err));
+
+    // Ensure that the `PageMap`s of the tip use the clean read-only checkpoint
+    // files similar to how this is done in `commit_and_certify()` after a full
+    // checkpoint.
+    switch_to_checkpoint(&mut tip, &checkpointed_state);
+
+    tip
 }
 
 /// Deletes obsolete diverged states and state backups, keeping at most
@@ -2297,9 +2316,8 @@ impl StateManager for StateManagerImpl {
                 };
 
                 let elapsed = start.elapsed();
-                match result {
+                let checkpointed_state = match result {
                     Ok(checkpointed_state) => {
-                        switch_to_checkpoint(&mut state, &checkpointed_state);
                         info!(self.log, "Created checkpoint @{} in {:?}", height, elapsed);
                         self.metrics
                             .checkpoint_op_duration
@@ -2340,7 +2358,9 @@ impl StateManager for StateManagerImpl {
                         height,
                         err
                     ),
-                }
+                };
+                switch_to_checkpoint(&mut state, &checkpointed_state);
+                checkpointed_state
             }
             CertificationScope::Metadata => state.clone(),
         };
