@@ -1,5 +1,6 @@
 use crate::{CheckpointError, CheckpointMetrics};
 use ic_base_types::CanisterId;
+use ic_logger::ReplicaLogger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::Memory;
 use ic_replicated_state::{
@@ -29,6 +30,7 @@ pub fn make_checkpoint(
     state: &ReplicatedState,
     height: Height,
     layout: &StateLayout,
+    log: &ReplicaLogger,
     metrics: &CheckpointMetrics,
     thread_pool: &mut scoped_threadpool::Pool,
 ) -> Result<ReplicatedState, CheckpointError> {
@@ -39,7 +41,7 @@ pub fn make_checkpoint(
             .step_duration
             .with_label_values(&["serialize_to_tip"])
             .start_timer();
-        serialize_to_tip(state, &tip, thread_pool)?;
+        serialize_to_tip(log, state, &tip, thread_pool)?;
     }
 
     let cp = {
@@ -62,6 +64,7 @@ pub fn make_checkpoint(
 }
 
 fn serialize_to_tip(
+    log: &ReplicaLogger,
     state: &ReplicatedState,
     tip: &CheckpointLayout<RwPolicy>,
     thread_pool: &mut scoped_threadpool::Pool,
@@ -73,7 +76,7 @@ fn serialize_to_tip(
         .serialize((state.subnet_queues()).into())?;
 
     let results = parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
-        serialize_canister_to_tip(canister_state, tip)
+        serialize_canister_to_tip(log, canister_state, tip)
     });
 
     for result in results.into_iter() {
@@ -83,6 +86,7 @@ fn serialize_to_tip(
 }
 
 fn serialize_canister_to_tip(
+    log: &ReplicaLogger,
     canister_state: &CanisterState,
     tip: &CheckpointLayout<RwPolicy>,
 ) -> Result<(), CheckpointError> {
@@ -93,9 +97,27 @@ fn serialize_canister_to_tip(
 
     let execution_state_bits = match &canister_state.execution_state {
         Some(execution_state) => {
-            canister_layout
-                .wasm()
-                .serialize(&execution_state.wasm_binary.binary)?;
+            let wasm_binary = &execution_state.wasm_binary.binary;
+            match wasm_binary.file() {
+                Some(path) => {
+                    let wasm = canister_layout.wasm();
+                    if !wasm.raw_path().exists() {
+                        ic_state_layout::utils::do_copy(log, path, wasm.raw_path()).map_err(
+                            |io_err| CheckpointError::IoError {
+                                path: path.to_path_buf(),
+                                message: "failed to copy Wasm file".to_string(),
+                                io_err: io_err.to_string(),
+                            },
+                        )?;
+                    }
+                }
+                None => {
+                    // Canister was installed/upgraded. Persist the new wasm binary.
+                    canister_layout
+                        .wasm()
+                        .serialize(&execution_state.wasm_binary.binary)?;
+                }
+            }
             execution_state
                 .wasm_memory
                 .page_map
@@ -375,6 +397,7 @@ mod tests {
     }
 
     fn make_checkpoint_and_get_state(
+        log: &ReplicaLogger,
         state: &ReplicatedState,
         height: Height,
         layout: &StateLayout,
@@ -383,6 +406,7 @@ mod tests {
             state,
             height,
             layout,
+            log,
             &checkpoint_metrics(),
             &mut thread_pool(),
         )
@@ -394,7 +418,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log, root.clone());
+            let layout = StateLayout::new(log.clone(), root.clone());
 
             const HEIGHT: Height = Height::new(42);
             let canister_id = canister_test_id(10);
@@ -411,7 +435,7 @@ mod tests {
                 NumSeconds::from(100_000),
             ));
 
-            let _state = make_checkpoint_and_get_state(&state, HEIGHT, &layout);
+            let _state = make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout);
 
             // Ensure that checkpoint data is now available via layout API.
             assert_eq!(layout.checkpoint_heights().unwrap(), vec![HEIGHT]);
@@ -453,7 +477,7 @@ mod tests {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
             let checkpoints_dir = root.join("checkpoints");
-            let layout = StateLayout::new(log, root.clone());
+            let layout = StateLayout::new(log.clone(), root.clone());
 
             const HEIGHT: Height = Height::new(42);
             let canister_id = canister_test_id(10);
@@ -479,6 +503,7 @@ mod tests {
                 &state,
                 HEIGHT,
                 &layout,
+                &log,
                 &checkpoint_metrics(),
                 &mut thread_pool(),
             ) {
@@ -496,7 +521,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log, root.clone());
+            let layout = StateLayout::new(log.clone(), root.clone());
 
             const HEIGHT: Height = Height::new(42);
             let canister_id: CanisterId = canister_test_id(10);
@@ -529,7 +554,7 @@ mod tests {
             let mut state =
                 ReplicatedState::new_rooted_at(subnet_test_id(1), own_subnet_type, root);
             state.put_canister_state(canister_state);
-            let _state = make_checkpoint_and_get_state(&state, HEIGHT, &layout);
+            let _state = make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout);
 
             let recovered_state = load_checkpoint(
                 &layout.checkpoint(HEIGHT).unwrap(),
@@ -586,12 +611,13 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log, root);
+            let layout = StateLayout::new(log.clone(), root);
 
             const HEIGHT: Height = Height::new(42);
             let own_subnet_type = SubnetType::Application;
 
             let _state = make_checkpoint_and_get_state(
+                &log,
                 &ReplicatedState::new_rooted_at(
                     subnet_test_id(1),
                     own_subnet_type,
@@ -640,7 +666,7 @@ mod tests {
 
             mark_readonly(&root).unwrap();
 
-            let layout = StateLayout::new(log, root);
+            let layout = StateLayout::new(log.clone(), root);
 
             let own_subnet_type = SubnetType::Application;
             const HEIGHT: Height = Height::new(42);
@@ -662,6 +688,7 @@ mod tests {
                 &state,
                 HEIGHT,
                 &layout,
+                &log,
                 &checkpoint_metrics(),
                 &mut thread_pool(),
             );
@@ -684,7 +711,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log, root);
+            let layout = StateLayout::new(log.clone(), root);
 
             const HEIGHT: Height = Height::new(42);
             let canister_id: CanisterId = canister_test_id(10);
@@ -716,7 +743,7 @@ mod tests {
                 "NOT_USED".into(),
             );
             state.put_canister_state(canister_state);
-            let _state = make_checkpoint_and_get_state(&state, HEIGHT, &layout);
+            let _state = make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout);
 
             let recovered_state = load_checkpoint(
                 &layout.checkpoint(HEIGHT).unwrap(),
@@ -743,7 +770,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log, root);
+            let layout = StateLayout::new(log.clone(), root);
 
             const HEIGHT: Height = Height::new(42);
             let canister_id: CanisterId = canister_test_id(10);
@@ -767,7 +794,7 @@ mod tests {
                 "NOT_USED".into(),
             );
             state.put_canister_state(canister_state);
-            let _state = make_checkpoint_and_get_state(&state, HEIGHT, &layout);
+            let _state = make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout);
 
             let loaded_state = load_checkpoint(
                 &layout.checkpoint(HEIGHT).unwrap(),
@@ -788,7 +815,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log, root);
+            let layout = StateLayout::new(log.clone(), root);
 
             const HEIGHT: Height = Height::new(42);
             let canister_id: CanisterId = canister_test_id(10);
@@ -812,7 +839,7 @@ mod tests {
                 "NOT_USED".into(),
             );
             state.put_canister_state(canister_state);
-            let _state = make_checkpoint_and_get_state(&state, HEIGHT, &layout);
+            let _state = make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout);
 
             let recovered_state = load_checkpoint(
                 &layout.checkpoint(HEIGHT).unwrap(),
@@ -833,7 +860,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::new(log, root);
+            let layout = StateLayout::new(log.clone(), root);
 
             const HEIGHT: Height = Height::new(42);
 
@@ -852,7 +879,7 @@ mod tests {
             );
 
             let original_state = state.clone();
-            let _state = make_checkpoint_and_get_state(&state, HEIGHT, &layout);
+            let _state = make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout);
 
             let recovered_state = load_checkpoint(
                 &layout.checkpoint(HEIGHT).unwrap(),

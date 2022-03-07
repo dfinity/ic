@@ -892,6 +892,12 @@ pub struct WasmFile<Permissions> {
     permissions_tag: PhantomData<Permissions>,
 }
 
+impl<T> WasmFile<T> {
+    pub fn raw_path(&self) -> &Path {
+        &self.path
+    }
+}
+
 impl<T> WasmFile<T>
 where
     T: ReadPolicy,
@@ -910,34 +916,25 @@ where
     T: WritePolicy,
 {
     pub fn serialize(&self, wasm: &BinaryEncodedWasm) -> Result<(), LayoutError> {
-        if wasm.file().is_none() {
-            // Canister was installed/upgraded. Persist the new
-            // wasm binary
-            let mut file = open_for_write(&self.path)?;
-            file.write_all(wasm.as_slice())
-                .and_then(|_| file.flush())
-                .map_err(|err| LayoutError::IoError {
-                    path: self.path.clone(),
-                    message: "failed to write wasm binary to file".to_string(),
-                    io_err: err,
-                })?;
-
-            file.flush().map_err(|err| LayoutError::IoError {
+        let mut file = open_for_write(&self.path)?;
+        file.write_all(wasm.as_slice())
+            .map_err(|err| LayoutError::IoError {
                 path: self.path.clone(),
-                message: "failed to flush wasm binary to disk".to_string(),
+                message: "failed to write wasm binary to file".to_string(),
                 io_err: err,
             })?;
 
-            file.sync_all().map_err(|err| LayoutError::IoError {
-                path: self.path.clone(),
-                message: "failed to sync wasm binary to disk".to_string(),
-                io_err: err,
-            })
-        } else {
-            // No need to persist as existing wasm binary was used and
-            // it did not change since last checkpoint
-            Ok(())
-        }
+        file.flush().map_err(|err| LayoutError::IoError {
+            path: self.path.clone(),
+            message: "failed to flush wasm binary to disk".to_string(),
+            io_err: err,
+        })?;
+
+        file.sync_all().map_err(|err| LayoutError::IoError {
+            path: self.path.clone(),
+            message: "failed to sync wasm binary to disk".to_string(),
+            io_err: err,
+        })
     }
 }
 

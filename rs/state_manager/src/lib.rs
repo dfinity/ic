@@ -812,6 +812,22 @@ fn switch_to_checkpoint(tip: &mut ReplicatedState, src: &ReplicatedState) {
                 .stable_memory
                 .page_map
                 .switch_to_checkpoint(&src_state.stable_memory.page_map);
+
+            debug_assert_eq!(
+                tip_state.wasm_binary.binary.as_slice(),
+                src_state.wasm_binary.binary.as_slice()
+            );
+
+            // We can reuse the cache because the Wasm binary has the same
+            // contents, only the storage of that binary changed.
+            let embedder_cache = Arc::clone(&tip_state.wasm_binary.embedder_cache);
+            tip_state.wasm_binary = Arc::new(
+                ic_replicated_state::canister_state::execution_state::WasmBinary {
+                    binary: src_state.wasm_binary.binary.clone(),
+                    embedder_cache,
+                },
+            );
+
             assert_eq!(tip_state.wasm_memory.size, src_state.wasm_memory.size);
             // Reset the sandbox state to force full synchronization on the next message
             // execution because the checkpoint file of `tip` has changed.
@@ -2291,6 +2307,7 @@ impl StateManager for StateManagerImpl {
                         &state,
                         height,
                         &self.state_layout,
+                        &self.log,
                         &self.metrics.checkpoint_metrics,
                         &mut thread_pool,
                     )
