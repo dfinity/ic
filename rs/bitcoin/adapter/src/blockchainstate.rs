@@ -390,6 +390,7 @@ mod test {
             initial_header.header.block_hash(),
             initial_header.header.time,
             16,
+            &[],
         );
         let chain_hashes: Vec<BlockHash> = chain.iter().map(|header| header.block_hash()).collect();
         let last_hash = *chain_hashes.last().unwrap();
@@ -418,6 +419,7 @@ mod test {
             initial_header.header.block_hash(),
             initial_header.header.time,
             16,
+            &[],
         );
         let chain_hashes: Vec<BlockHash> = chain.iter().map(|header| header.block_hash()).collect();
         let last_chain_hash = chain_hashes.last().expect("missing last hash");
@@ -430,7 +432,7 @@ mod test {
         );
 
         // Create a fork chain forking from chain_hashes[10] and adding to the BlockchainState.
-        let fork_chain = generate_headers(chain_hashes[10], chain[10].time, 16);
+        let fork_chain = generate_headers(chain_hashes[10], chain[10].time, 16, &chain_hashes);
         let fork_hashes: Vec<BlockHash> = fork_chain
             .iter()
             .map(|header| header.block_hash())
@@ -474,6 +476,7 @@ mod test {
             initial_header.header.block_hash(),
             initial_header.header.time,
             16,
+            &[],
         );
         let chain_hashes: Vec<BlockHash> = chain.iter().map(|header| header.block_hash()).collect();
         let last_hash = *chain_hashes.last().unwrap();
@@ -503,6 +506,7 @@ mod test {
             initial_header.header.block_hash(),
             initial_header.header.time,
             16,
+            &[],
         );
         let last_header = chain.get_mut(10).unwrap();
         last_header.prev_blockhash = BlockHash::default();

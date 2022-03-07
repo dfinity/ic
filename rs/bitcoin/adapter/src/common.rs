@@ -22,6 +22,8 @@ pub type BlockHeight = u32;
 #[cfg(test)]
 pub mod test_common {
 
+    use std::collections::HashSet;
+
     use bitcoin::{
         consensus::deserialize, util::uint::Uint256, Block, BlockHash, BlockHeader, Transaction,
         TxMerkleNode,
@@ -78,6 +80,10 @@ pub mod test_common {
 
     pub fn block_2() -> Block {
         decode_block(BLOCK_2_ENCODED)
+    }
+
+    pub fn headers_to_hashes(headers: &[BlockHeader]) -> Vec<BlockHash> {
+        headers.iter().map(|h| h.block_hash()).collect()
     }
 
     /// Generates a singular large block.
@@ -137,22 +143,26 @@ pub mod test_common {
         initial_blockhash: BlockHash,
         initial_time: u32,
         limit: BlockHeight,
+        previous_blockhashes: &[BlockHash],
     ) -> Vec<BlockHeader> {
         let mut headers = vec![];
         if limit == 0 {
             return headers;
         }
 
-        let first = generate_header(initial_blockhash, initial_time);
-        let mut prev_blockhash = first.block_hash();
-        let mut prev_time = first.time;
-        headers.push(first);
+        let mut prev_blockhash = initial_blockhash;
+        let mut prev_time = initial_time;
 
-        for _ in 0..limit - 1 {
-            let header = generate_header(prev_blockhash, prev_time);
-            headers.push(header);
+        let known_hashes: HashSet<BlockHash> = previous_blockhashes.iter().copied().collect();
+
+        for _ in 0..limit {
+            let mut header = generate_header(prev_blockhash, prev_time);
+            while known_hashes.contains(&header.block_hash()) {
+                header = generate_header(prev_blockhash, prev_time);
+            }
             prev_blockhash = header.block_hash();
             prev_time = header.time;
+            headers.push(header);
         }
 
         headers

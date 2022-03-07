@@ -806,8 +806,8 @@ fn is_single_block_only_mode_enabled(network: Network, anchor_height: BlockHeigh
 pub mod test {
     use super::*;
     use crate::common::test_common::{
-        generate_headers, generate_large_block_blockchain, make_logger, TestState, BLOCK_1_ENCODED,
-        BLOCK_2_ENCODED,
+        generate_headers, generate_large_block_blockchain, headers_to_hashes, make_logger,
+        TestState, BLOCK_1_ENCODED, BLOCK_2_ENCODED,
     };
     use crate::config::test::ConfigBuilder;
     use crate::config::Config;
@@ -879,6 +879,7 @@ pub mod test {
             blockchain_manager.blockchain.genesis().header.block_hash(),
             blockchain_manager.blockchain.genesis().header.time,
             16,
+            &[],
         );
         let runtime = tokio::runtime::Runtime::new().expect("runtime err");
 
@@ -947,6 +948,7 @@ pub mod test {
             blockchain_manager.blockchain.genesis().header.block_hash(),
             blockchain_manager.blockchain.genesis().header.time,
             16,
+            &[],
         );
         let chain_hashes: Vec<BlockHash> = chain.iter().map(|header| header.block_hash()).collect();
 
@@ -973,7 +975,7 @@ pub mod test {
             );
 
             //Send an inv message for a fork chain.
-            let fork_chain = generate_headers(chain_hashes[10], chain[10].time, 16);
+            let fork_chain = generate_headers(chain_hashes[10], chain[10].time, 16, &chain_hashes);
             let fork_hashes: Vec<BlockHash> = fork_chain
                 .iter()
                 .map(|header| header.block_hash())
@@ -1167,6 +1169,7 @@ pub mod test {
             blockchain_manager.blockchain.genesis().header.block_hash(),
             blockchain_manager.blockchain.genesis().header.time,
             2,
+            &[],
         );
         let main_block_1 = Block {
             header: main_chain[0],
@@ -1181,6 +1184,7 @@ pub mod test {
             blockchain_manager.blockchain.genesis().header.block_hash(),
             blockchain_manager.blockchain.genesis().header.time,
             1,
+            &headers_to_hashes(&main_chain),
         );
         let side_1 = side_chain.get(0).cloned().expect("Should have 1 header");
         let side_block_1 = Block {
@@ -1234,6 +1238,7 @@ pub mod test {
             blockchain_manager.blockchain.genesis().header.block_hash(),
             blockchain_manager.blockchain.genesis().header.time,
             2,
+            &[],
         );
         let main_block_2 = Block {
             header: main_chain[1],
@@ -1244,14 +1249,26 @@ pub mod test {
             blockchain_manager.blockchain.genesis().header.block_hash(),
             blockchain_manager.blockchain.genesis().header.time,
             1,
+            &headers_to_hashes(&main_chain),
         );
         let side_1 = side_chain.get(0).cloned().expect("Should have 1 header");
         let side_block_1 = Block {
             header: side_1,
             txdata: vec![],
         };
-        blockchain_manager.blockchain.add_headers(&main_chain);
-        blockchain_manager.blockchain.add_headers(&side_chain);
+        let (_, maybe_err) = blockchain_manager.blockchain.add_headers(&main_chain);
+        assert!(
+            maybe_err.is_none(),
+            "Error was found in main chain: {:#?}",
+            maybe_err
+        );
+
+        let (_, maybe_err) = blockchain_manager.blockchain.add_headers(&side_chain);
+        assert!(
+            maybe_err.is_none(),
+            "Error was found in side chain: {:#?}",
+            maybe_err
+        );
         blockchain_manager
             .blockchain
             .add_block(main_block_2)
@@ -1270,11 +1287,29 @@ pub mod test {
             processed_block_hashes: vec![],
         };
         let response = blockchain_manager.get_successors(request);
-        assert_eq!(response.blocks.len(), 1);
+        assert_eq!(
+            response.blocks.len(),
+            1,
+            "main_chain = {:#?}, side_chain = {:#?}, blocks = {:#?}",
+            headers_to_hashes(&main_chain),
+            headers_to_hashes(&side_chain),
+            response
+                .blocks
+                .iter()
+                .map(|b| b.block_hash())
+                .collect::<Vec<BlockHash>>()
+        );
         assert!(
             matches!(response.blocks.get(0), Some(block) if block.block_hash() == side_block_1.block_hash())
         );
-        assert_eq!(response.next.len(), 2);
+        assert_eq!(
+            response.next.len(),
+            2,
+            "main_chain = {:#?}, side_chain = {:#?}, next = {:#?}",
+            headers_to_hashes(&main_chain),
+            headers_to_hashes(&side_chain),
+            headers_to_hashes(&response.next)
+        );
         assert_eq!(response.next[0].block_hash(), main_chain[0].block_hash());
         assert_eq!(response.next[1].block_hash(), main_chain[1].block_hash());
     }
@@ -1293,7 +1328,7 @@ pub mod test {
         let headers: Vec<BlockHeader> = large_blocks.iter().map(|b| b.header).collect();
 
         let additional_headers =
-            generate_headers(large_block.block_hash(), large_block.header.time, 1);
+            generate_headers(large_block.block_hash(), large_block.header.time, 1, &[]);
         let small_block = Block {
             header: additional_headers[0],
             txdata: vec![],
