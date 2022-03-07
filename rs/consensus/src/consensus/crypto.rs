@@ -1,10 +1,13 @@
 use crate::consensus::prelude::*;
 use ic_interfaces::{crypto::*, validation::ValidationResult};
-
-use ic_types::canister_http::CanisterHttpResponseContent;
-use ic_types::consensus::ecdsa::{EcdsaComplaintContent, EcdsaDealing, EcdsaOpeningContent};
-use ic_types::crypto::threshold_sig::ni_dkg::{DkgId, NiDkgId};
-use ic_types::crypto::CryptoError;
+use ic_types::{
+    canister_http::CanisterHttpResponseMetadata,
+    consensus::ecdsa::{EcdsaComplaintContent, EcdsaDealing, EcdsaOpeningContent},
+    crypto::{
+        threshold_sig::ni_dkg::{DkgId, NiDkgId},
+        CryptoError,
+    },
+};
 
 /// A trait that unifies the individual signing and verification interface for
 /// both threshold and multi signatures. It is parameterized by the following:
@@ -391,12 +394,12 @@ pub trait ConsensusCrypto:
     + SignVerify<CatchUpContent, ThresholdSignatureShare<CatchUpContent>, NiDkgId>
     + SignVerify<dkg::DealingContent, BasicSignature<dkg::DealingContent>, RegistryVersion>
     + SignVerify<
-        CanisterHttpResponseContent,
-        MultiSignatureShare<CryptoHashOf<CanisterHttpResponseContent>>,
+        CanisterHttpResponseMetadata,
+        MultiSignatureShare<CanisterHttpResponseMetadata>,
         RegistryVersion,
     > + SignVerify<
-        CryptoHashOf<CanisterHttpResponseContent>,
-        MultiSignatureShare<CryptoHashOf<CanisterHttpResponseContent>>,
+        CanisterHttpResponseMetadata,
+        MultiSignatureShare<CanisterHttpResponseMetadata>,
         RegistryVersion,
     > + Aggregate<
         NotarizationContent,
@@ -429,10 +432,10 @@ pub trait ConsensusCrypto:
         NiDkgId,
         ThresholdSignature<CatchUpContent>,
     > + Aggregate<
-        CanisterHttpResponseContent,
-        MultiSignatureShare<CryptoHashOf<CanisterHttpResponseContent>>,
+        CanisterHttpResponseMetadata,
+        MultiSignatureShare<CanisterHttpResponseMetadata>,
         RegistryVersion,
-        MultiSignature<CryptoHashOf<CanisterHttpResponseContent>>,
+        MultiSignature<CanisterHttpResponseMetadata>,
     > + Crypto
     + Send
     + Sync

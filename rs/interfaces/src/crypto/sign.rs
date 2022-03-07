@@ -24,19 +24,18 @@
 
 use crate::crypto::hash::{
     DOMAIN_BLOCK, DOMAIN_CATCH_UP_CONTENT, DOMAIN_CERTIFICATION_CONTENT,
-    DOMAIN_CRYPTO_HASH_OF_CANISTER_HTTP_RESPONSE, DOMAIN_DEALING_CONTENT,
+    DOMAIN_CRYPTO_HASH_OF_CANISTER_HTTP_RESPONSE_METADATA, DOMAIN_DEALING_CONTENT,
     DOMAIN_ECDSA_COMPLAINT_CONTENT, DOMAIN_ECDSA_DEALING, DOMAIN_ECDSA_OPENING_CONTENT,
     DOMAIN_FINALIZATION_CONTENT, DOMAIN_NOTARIZATION_CONTENT, DOMAIN_RANDOM_BEACON_CONTENT,
     DOMAIN_RANDOM_TAPE_CONTENT,
 };
-use ic_types::crypto::CryptoHashOf;
+use ic_types::canister_http::CanisterHttpResponseMetadata;
 use ic_types::crypto::{
     BasicSigOf, CanisterSigOf, CombinedMultiSigOf, CryptoResult, IndividualMultiSigOf,
     SignedBytesWithoutDomainSeparator, UserPublicKey,
 };
 use ic_types::messages::{Delegation, MessageId, WebAuthnEnvelope};
 use ic_types::{
-    canister_http::CanisterHttpResponseContent,
     consensus::{
         certification::CertificationContent,
         dkg::DealingContent,
@@ -103,7 +102,7 @@ mod private {
     impl SignatureDomainSeal for EcdsaOpeningContent {}
     impl SignatureDomainSeal for WebAuthnEnvelope {}
     impl SignatureDomainSeal for Delegation {}
-    impl SignatureDomainSeal for CryptoHashOf<CanisterHttpResponseContent> {}
+    impl SignatureDomainSeal for CanisterHttpResponseMetadata {}
     impl SignatureDomainSeal for MessageId {}
     impl SignatureDomainSeal for CertificationContent {}
     impl SignatureDomainSeal for CatchUpContent {}
@@ -113,9 +112,9 @@ mod private {
     impl SignatureDomainSeal for SignableMock {}
 }
 
-impl SignatureDomain for CryptoHashOf<CanisterHttpResponseContent> {
+impl SignatureDomain for CanisterHttpResponseMetadata {
     fn domain(&self) -> Vec<u8> {
-        domain_with_prepended_length(DOMAIN_CRYPTO_HASH_OF_CANISTER_HTTP_RESPONSE)
+        domain_with_prepended_length(DOMAIN_CRYPTO_HASH_OF_CANISTER_HTTP_RESPONSE_METADATA)
     }
 }
 

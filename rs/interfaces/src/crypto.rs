@@ -1,6 +1,7 @@
 //! The crypto public interface.
 mod keygen;
 
+use ic_types::canister_http::CanisterHttpResponseMetadata;
 pub use keygen::KeyManager;
 
 mod hash;
@@ -32,7 +33,6 @@ pub use sign::{Signable, SignableMock};
 
 pub use sign::canister_threshold_sig::*;
 
-use ic_types::canister_http::CanisterHttpResponseContent;
 use ic_types::consensus::certification::CertificationContent;
 use ic_types::consensus::dkg as consensus_dkg;
 use ic_types::consensus::{
@@ -40,7 +40,6 @@ use ic_types::consensus::{
     Block, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent, NotarizationContent,
     RandomBeaconContent, RandomTapeContent,
 };
-use ic_types::crypto::CryptoHashOf;
 use ic_types::messages::{MessageId, WebAuthnEnvelope};
 
 /// The functionality offered by the crypto component
@@ -80,8 +79,8 @@ pub trait Crypto:
     + ThresholdEcdsaSigner
     + ThresholdEcdsaSigVerifier
     // CanisterHttpResponse
-    + MultiSigner<CryptoHashOf<CanisterHttpResponseContent>>
-    + MultiSigVerifier<CryptoHashOf<CanisterHttpResponseContent>>
+    + MultiSigner<CanisterHttpResponseMetadata>
+    + MultiSigVerifier<CanisterHttpResponseMetadata>
     // RequestId/WebAuthn
     + BasicSigVerifierByPublicKey<MessageId>
     + BasicSigVerifierByPublicKey<WebAuthnEnvelope>
@@ -135,8 +134,8 @@ impl<T> Crypto for T where
         + BasicSigVerifier<EcdsaComplaintContent>
         + BasicSigner<EcdsaOpeningContent>
         + BasicSigVerifier<EcdsaOpeningContent>
-        + MultiSigner<CryptoHashOf<CanisterHttpResponseContent>>
-        + MultiSigVerifier<CryptoHashOf<CanisterHttpResponseContent>>
+        + MultiSigner<CanisterHttpResponseMetadata>
+        + MultiSigVerifier<CanisterHttpResponseMetadata>
         + IDkgProtocol
         + ThresholdEcdsaSigner
         + ThresholdEcdsaSigVerifier

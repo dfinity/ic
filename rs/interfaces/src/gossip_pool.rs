@@ -1,13 +1,16 @@
 //! The gossip pool public interface.
 use crate::{
-    artifact_pool::ArtifactPoolError, certification::ChangeSet as CertificationChangeSet,
+    artifact_pool::ArtifactPoolError, canister_http::CanisterHttpChangeSet,
+    certification::ChangeSet as CertificationChangeSet,
     consensus_pool::ChangeSet as ConsensusChangeSet, dkg::ChangeSet as DkgChangeSet,
     ecdsa::EcdsaChangeSet, ingress_pool::ChangeSet as IngressChangeSet,
 };
 use ic_types::{
     artifact::{
-        CertificationMessageId, ConsensusMessageId, DkgMessageId, EcdsaMessageId, IngressMessageId,
+        CanisterHttpResponseId, CertificationMessageId, ConsensusMessageId, DkgMessageId,
+        EcdsaMessageId, IngressMessageId,
     },
+    canister_http::CanisterHttpResponseShareSignature,
     consensus::{certification::CertificationMessage, dkg, ecdsa::EcdsaMessage, ConsensusMessage},
     messages::SignedIngress,
     Height, NodeId, Time,
@@ -88,5 +91,15 @@ pub trait DkgGossipPool:
 /// GossipPool trait for EcdsaPool
 pub trait EcdsaGossipPool:
     GossipPool<EcdsaMessage, EcdsaChangeSet, MessageId = EcdsaMessageId, Filter = ()>
+{
+}
+
+pub trait CanisterHttpGossipPool:
+    GossipPool<
+    CanisterHttpResponseShareSignature,
+    CanisterHttpChangeSet,
+    MessageId = CanisterHttpResponseId,
+    Filter = (),
+>
 {
 }

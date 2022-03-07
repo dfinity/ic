@@ -1,32 +1,31 @@
-use crate::metrics::{PoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED};
+use crate::{
+    metrics::{POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED},
+    pool_common::PoolSection,
+};
 use ic_crypto::crypto_hash;
-use ic_interfaces::artifact_pool::{UnvalidatedArtifact, ValidatedArtifact};
-use ic_interfaces::dkg::{ChangeAction, ChangeSet, DkgPool, MutableDkgPool};
-use ic_interfaces::gossip_pool::{DkgGossipPool, GossipPool};
+use ic_interfaces::{
+    artifact_pool::{UnvalidatedArtifact, ValidatedArtifact},
+    dkg::{ChangeAction, ChangeSet, DkgPool, MutableDkgPool},
+    gossip_pool::{DkgGossipPool, GossipPool},
+};
 use ic_metrics::MetricsRegistry;
-use ic_types::consensus;
 use ic_types::consensus::dkg;
-use ic_types::crypto;
-use ic_types::crypto::CryptoHashOf;
-use ic_types::time::{current_time, Time};
-use ic_types::*;
-use std::collections::BTreeMap;
-use std::ops::Sub;
-use std::time::Duration;
-
-/// Workaround for `consensus::dkg::Message` not implementing `CountBytes`.
-// TODO (cm, idkg): implement `CountBytes`
-const MESSAGE_SIZE_BYTES: usize = 0;
+use ic_types::{consensus, Height};
+use ic_types::{
+    crypto::CryptoHashOf,
+    time::{current_time, Time},
+};
+use std::{ops::Sub, time::Duration};
 
 /// The DkgPool is used to store messages that are exchanged between replicas in
 /// the process of executing DKG.
 pub struct DkgPoolImpl {
     validated: PoolSection<
-        crypto::CryptoHashOf<consensus::dkg::Message>,
+        CryptoHashOf<consensus::dkg::Message>,
         ValidatedArtifact<consensus::dkg::Message>,
     >,
     unvalidated: PoolSection<
-        crypto::CryptoHashOf<consensus::dkg::Message>,
+        CryptoHashOf<consensus::dkg::Message>,
         UnvalidatedArtifact<consensus::dkg::Message>,
     >,
     current_start_height: Height,
@@ -46,10 +45,7 @@ impl DkgPoolImpl {
 
     /// Returns a DKG message by hash if available in either the validated or
     /// unvalidated sections.
-    pub fn get(
-        &self,
-        hash: &crypto::CryptoHashOf<consensus::dkg::Message>,
-    ) -> Option<&dkg::Message> {
+    pub fn get(&self, hash: &CryptoHashOf<consensus::dkg::Message>) -> Option<&dkg::Message> {
         self.validated
             .get(hash)
             .map(|artifact| artifact.as_ref())
@@ -203,54 +199,6 @@ impl DkgPool for DkgPoolImpl {
     }
 }
 
-/// Wrapper around `BTreeMap`, instrumenting insertions and removals.
-struct PoolSection<K, V> {
-    messages: BTreeMap<K, V>,
-    metrics: PoolMetrics,
-}
-
-impl<K: Ord, V> PoolSection<K, V> {
-    fn new(metrics_registry: MetricsRegistry, pool: &str, pool_type: &str) -> Self {
-        Self {
-            messages: Default::default(),
-            metrics: PoolMetrics::new(metrics_registry, pool, pool_type),
-        }
-    }
-
-    fn insert(&mut self, key: K, value: V) -> Option<V> {
-        self.metrics.observe_insert(MESSAGE_SIZE_BYTES);
-        let replaced = self.messages.insert(key, value);
-        if replaced.is_some() {
-            self.metrics.observe_duplicate(MESSAGE_SIZE_BYTES);
-        }
-        replaced
-    }
-
-    fn remove(&mut self, key: &K) -> Option<V> {
-        let removed = self.messages.remove(key);
-        if removed.is_some() {
-            self.metrics.observe_remove(MESSAGE_SIZE_BYTES);
-        }
-        removed
-    }
-
-    fn get(&self, key: &K) -> Option<&V> {
-        self.messages.get(key)
-    }
-
-    fn contains_key(&self, key: &K) -> bool {
-        self.messages.contains_key(key)
-    }
-
-    fn iter(&self) -> std::collections::btree_map::Iter<'_, K, V> {
-        self.messages.iter()
-    }
-
-    fn values(&self) -> std::collections::btree_map::Values<'_, K, V> {
-        self.messages.values()
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -263,9 +211,9 @@ mod test {
     use ic_types::{
         crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         signature::BasicSignature,
+        NodeId,
     };
-    use std::ops::Add;
-    use std::ops::Sub;
+    use std::ops::{Add, Sub};
 
     fn make_message(start_height: Height, node_id: NodeId) -> dkg::Message {
         let dkg_id = NiDkgId {
