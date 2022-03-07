@@ -184,7 +184,7 @@ impl ThresholdEcdsaSigShareInternal {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ThresholdEcdsaCombinedSigInternal {
     r: EccScalar,
     s: EccScalar,
@@ -200,6 +200,32 @@ impl ThresholdEcdsaCombinedSigInternal {
         sig.extend_from_slice(&r_bytes);
         sig.extend_from_slice(&s_bytes);
         sig
+    }
+
+    pub fn deserialize(
+        algorithm_id: ic_types::crypto::AlgorithmId,
+        bytes: &[u8],
+    ) -> ThresholdEcdsaResult<Self> {
+        let curve_type = match algorithm_id {
+            AlgorithmId::ThresholdEcdsaSecp256k1 => Ok(EccCurveType::K256),
+            x => Err(ThresholdEcdsaError::SerializationError(format!(
+                "Invalid algorithm {:?} for threshold ECDSA",
+                x
+            ))),
+        }?;
+
+        let slen = curve_type.scalar_bytes();
+
+        if bytes.len() != 2 * slen {
+            return Err(ThresholdEcdsaError::SerializationError(
+                "Bad signature length".to_string(),
+            ));
+        }
+
+        let r = EccScalar::deserialize(curve_type, &bytes[..slen])?;
+        let s = EccScalar::deserialize(curve_type, &bytes[slen..])?;
+
+        Ok(Self { r, s })
     }
 }
 

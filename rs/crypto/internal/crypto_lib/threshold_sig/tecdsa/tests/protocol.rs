@@ -204,9 +204,21 @@ fn random_subset(
 
 #[test]
 fn should_basic_signing_protocol_work() -> Result<(), ThresholdEcdsaError> {
+    fn test_sig_serialization(
+        alg: ic_types::crypto::AlgorithmId,
+        sig: &ThresholdEcdsaCombinedSigInternal,
+    ) -> Result<(), ThresholdEcdsaError> {
+        let bytes = sig.serialize();
+        let sig2 = ThresholdEcdsaCombinedSigInternal::deserialize(alg, &bytes)?;
+        assert_eq!(*sig, sig2);
+        Ok(())
+    }
+
     let nodes = 10;
     let threshold = nodes / 3;
     let setup = SignatureProtocolSetup::new(EccCurveType::K256, nodes, threshold, random_seed())?;
+
+    let alg = setup.alg();
 
     let mut rng = rand::thread_rng();
     let signed_message = rng.gen::<[u8; 32]>().to_vec();
@@ -229,6 +241,7 @@ fn should_basic_signing_protocol_work() -> Result<(), ThresholdEcdsaError> {
             assert!(proto.generate_signature(&shares).is_err());
         } else {
             let sig = proto.generate_signature(&shares).unwrap();
+            test_sig_serialization(alg, &sig)?;
             assert!(proto.verify_signature(&sig).is_ok());
         }
     }
@@ -241,6 +254,7 @@ fn should_basic_signing_protocol_work() -> Result<(), ThresholdEcdsaError> {
 
     let shares = proto2.generate_shares()?;
     let sig = proto2.generate_signature(&shares).unwrap();
+    test_sig_serialization(alg, &sig)?;
 
     assert!(proto.verify_signature(&sig).is_err());
     assert!(proto2.verify_signature(&sig).is_ok());
