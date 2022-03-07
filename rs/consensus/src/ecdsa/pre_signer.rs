@@ -636,6 +636,7 @@ impl EcdsaPreSignerImpl {
         if let Err(error) = IDkgProtocol::verify_dealing_private(
             &*self.crypto,
             transcript_params,
+            dealing.idkg_dealing.dealer_id,
             &dealing.idkg_dealing,
         ) {
             if error.is_replicated() {

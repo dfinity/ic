@@ -19,7 +19,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
-    ThresholdEcdsaSignShareError,
+    IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, KeyId};
@@ -137,6 +137,16 @@ pub trait TarpcCspVault {
         receiver_keys: Vec<MEGaPublicKey>,
         transcript_operation: IDkgTranscriptOperationInternal,
     ) -> Result<IDkgDealingInternal, IDkgCreateDealingError>;
+
+    // Corresponds to `IDkgProtocolCspVault.idkg_verify_dealing_private`
+    async fn idkg_verify_dealing_private(
+        algorithm_id: AlgorithmId,
+        dealing: IDkgDealingInternal,
+        dealer_index: NodeIndex,
+        receiver_index: NodeIndex,
+        receiver_key_id: KeyId,
+        context_data: Vec<u8>,
+    ) -> Result<(), IDkgVerifyDealingPrivateError>;
 
     // Corresponds to `IDkgProtocolCspVault.idkg_load_transcript`
     async fn idkg_load_transcript(

@@ -32,7 +32,7 @@ use ic_logger::new_logger;
 use ic_logger::replica_logger::no_op_logger;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
-    ThresholdEcdsaSignShareError,
+    IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, KeyId};
@@ -237,6 +237,26 @@ impl TarpcCspVault for TarpcCspVaultServerWorker {
             reconstruction_threshold,
             &receiver_keys,
             &transcript_operation,
+        )
+    }
+
+    async fn idkg_verify_dealing_private(
+        self,
+        _: context::Context,
+        algorithm_id: AlgorithmId,
+        dealing: IDkgDealingInternal,
+        dealer_index: NodeIndex,
+        receiver_index: NodeIndex,
+        receiver_key_id: KeyId,
+        context_data: Vec<u8>,
+    ) -> Result<(), IDkgVerifyDealingPrivateError> {
+        self.local_csp_vault.idkg_verify_dealing_private(
+            algorithm_id,
+            &dealing,
+            dealer_index,
+            receiver_index,
+            receiver_key_id,
+            &context_data,
         )
     }
 

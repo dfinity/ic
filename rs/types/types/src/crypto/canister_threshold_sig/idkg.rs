@@ -357,6 +357,11 @@ impl IDkgTranscriptParams {
         }
     }
 
+    /// Returns the dealer index of a node, or `None` if the node is not included in the set of receivers.
+    pub fn receiver_index(&self, node_id: NodeId) -> Option<NodeIndex> {
+        self.receivers.position(node_id)
+    }
+
     /// Number of multi-signature shares needed to include a dealing in a
     /// transcript.
     pub fn verification_threshold(&self) -> NumberOfNodes {

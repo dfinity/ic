@@ -3,10 +3,10 @@ use ic_crypto::utils::TempCryptoComponent;
 use ic_crypto::{derive_tecdsa_public_key, get_tecdsa_master_public_key};
 use ic_crypto_internal_threshold_sig_ecdsa::{IDkgDealingInternal, MEGaCiphertext};
 use ic_crypto_test_utils_canister_threshold_sigs::{
-    build_params_from_previous, create_dealing, create_dealings, generate_key_transcript,
-    generate_presig_quadruple, load_input_transcripts, load_transcript, multisign_dealings,
-    random_dealer_id, random_node_id_excluding, random_receiver_for_inputs, random_receiver_id,
-    random_receiver_id_excluding, run_idkg_and_create_and_verify_transcript,
+    build_params_from_previous, create_and_verify_dealing, create_dealings,
+    generate_key_transcript, generate_presig_quadruple, load_input_transcripts, load_transcript,
+    multisign_dealings, random_dealer_id, random_node_id_excluding, random_receiver_for_inputs,
+    random_receiver_id, random_receiver_id_excluding, run_idkg_and_create_and_verify_transcript,
     CanisterThresholdSigTestEnvironment,
 };
 use ic_interfaces::crypto::{
@@ -120,7 +120,7 @@ fn should_fail_create_transcript_without_enough_dealings() {
         .iter()
         .take(params.collection_threshold().get() as usize - 1) // NOTE: Not enough!
         .map(|node| {
-            let dealing = create_dealing(&params, &env.crypto_components, *node);
+            let dealing = create_and_verify_dealing(&params, &env.crypto_components, *node);
             (*node, dealing)
         })
         .collect();
@@ -149,7 +149,7 @@ fn should_fail_create_transcript_with_mislabeled_dealers() {
         .get()
         .iter()
         .map(|node| {
-            let dealing = create_dealing(&params, &env.crypto_components, *node);
+            let dealing = create_and_verify_dealing(&params, &env.crypto_components, *node);
             // NOTE: Wrong Id!
             let non_dealer_node = random_node_id_excluding(params.dealers().get());
             (non_dealer_node, dealing)
@@ -288,7 +288,7 @@ fn should_fail_create_transcript_with_bad_signature() {
         .get()
         .iter()
         .map(|node| {
-            let dealing = create_dealing(&params, &env.crypto_components, *node);
+            let dealing = create_and_verify_dealing(&params, &env.crypto_components, *node);
             (*node, dealing)
         })
         .collect();
@@ -1221,19 +1221,6 @@ fn should_run_verify_dealing_public() {
         internal_dealing_raw: vec![],
     };
     let result = crypto_for(NODE_1, &crypto_components).verify_dealing_public(&params, &dealing);
-    assert!(result.is_ok());
-}
-
-#[test]
-fn should_run_verify_dealing_private() {
-    let crypto_components = temp_crypto_components_for(&[NODE_1]);
-    let params = fake_params_for(NODE_1);
-    let dealing = IDkgDealing {
-        transcript_id: dummy_idkg_transcript_id_for_tests(1),
-        dealer_id: NodeId::from(PrincipalId::new_node_test_id(0)),
-        internal_dealing_raw: vec![],
-    };
-    let result = crypto_for(NODE_1, &crypto_components).verify_dealing_private(&params, &dealing);
     assert!(result.is_ok());
 }
 

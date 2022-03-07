@@ -153,6 +153,25 @@ fn should_return_correct_dealer_index_for_unmasked_times_masked() {
 }
 
 #[test]
+fn should_return_correct_receiver_index() {
+    let params = IDkgTranscriptParams::new(
+        transcript_id_generator(),
+        btreeset! {node_id(42), node_id(43), node_id(45)},
+        btreeset! {node_id(43), node_id(45), node_id(46)},
+        RegistryVersion::from(0),
+        AlgorithmId::ThresholdEcdsaSecp256k1,
+        IDkgTranscriptOperation::Random,
+    )
+    .expect("Should be able to create IDKG params");
+
+    assert_eq!(params.receiver_index(node_id(42)), None);
+    assert_eq!(params.receiver_index(node_id(43)), Some(0));
+    assert_eq!(params.receiver_index(node_id(44)), None);
+    assert_eq!(params.receiver_index(node_id(45)), Some(1));
+    assert_eq!(params.receiver_index(node_id(46)), Some(2));
+}
+
+#[test]
 fn should_create_random() {
     check_params_creation(None, IDkgTranscriptOperation::Random, None);
 }

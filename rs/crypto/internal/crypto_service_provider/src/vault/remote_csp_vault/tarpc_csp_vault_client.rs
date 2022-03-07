@@ -30,7 +30,7 @@ use ic_crypto_internal_types::NodeIndex;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
-    ThresholdEcdsaSignShareError,
+    IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, KeyId};
@@ -331,6 +331,31 @@ impl IDkgProtocolCspVault for RemoteCspVault {
             Err(IDkgCreateDealingError::InternalError {
                 internal_error: e.to_string(),
             })
+        })
+    }
+
+    fn idkg_verify_dealing_private(
+        &self,
+        algorithm_id: AlgorithmId,
+        dealing: &IDkgDealingInternal,
+        dealer_index: NodeIndex,
+        receiver_index: NodeIndex,
+        receiver_key_id: KeyId,
+        context_data: &[u8],
+    ) -> Result<(), IDkgVerifyDealingPrivateError> {
+        block_on(self.tarpc_csp_client.idkg_verify_dealing_private(
+            tarpc::context::current(),
+            algorithm_id,
+            dealing.clone(),
+            dealer_index,
+            receiver_index,
+            receiver_key_id,
+            context_data.to_vec(),
+        ))
+        .unwrap_or_else(|e| {
+            Err(IDkgVerifyDealingPrivateError::CspVaultRpcError(
+                e.to_string(),
+            ))
         })
     }
 

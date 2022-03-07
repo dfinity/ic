@@ -16,7 +16,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
-    ThresholdEcdsaSignShareError,
+    IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, KeyId};
@@ -429,6 +429,17 @@ pub trait IDkgProtocolCspVault {
         receiver_keys: &[MEGaPublicKey],
         transcript_operation: &IDkgTranscriptOperationInternal,
     ) -> Result<IDkgDealingInternal, IDkgCreateDealingError>;
+
+    /// See [`CspIDkgProtocol::idkg_verify_dealing_private`].
+    fn idkg_verify_dealing_private(
+        &self,
+        algorithm_id: AlgorithmId,
+        dealing: &IDkgDealingInternal,
+        dealer_index: NodeIndex,
+        receiver_index: NodeIndex,
+        receiver_key_id: KeyId,
+        context_data: &[u8],
+    ) -> Result<(), IDkgVerifyDealingPrivateError>;
 
     /// Compute secret from transcript and store in SKS, generating complaints
     /// if necessary.

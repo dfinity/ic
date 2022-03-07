@@ -177,10 +177,28 @@ impl ErrorReplication for IDkgVerifyDealingPrivateError {
         // to avoid defaults, which might be error-prone.
         // Upon addition of any new error this match has to be updated.
         match self {
-            IDkgVerifyDealingPrivateError::NotAReceiver => {
-                // Logic error. Everyone thinks a non-receiver is a receiver.
-                true
+            IDkgVerifyDealingPrivateError::RegistryError(registry_client_error) => {
+                error_replication_of_registry_client_error(registry_client_error)
             }
+            // false, as an RPC error may be transient
+            IDkgVerifyDealingPrivateError::CspVaultRpcError(_) => false,
+            // true, as the dealing does not become valid through retrying
+            IDkgVerifyDealingPrivateError::InvalidDealing(_) => true,
+            // true, as validity checks of arguments are stable across replicas
+            IDkgVerifyDealingPrivateError::InvalidArgument(_) => true,
+            // true, as the internal errors that may occur are stable
+            IDkgVerifyDealingPrivateError::InternalError(_) => true,
+            // true, as the private key remains missing despite retrying
+            IDkgVerifyDealingPrivateError::PrivateKeyNotFound => true,
+            // true, as the registry is guaranteed to be consistent across replicas
+            IDkgVerifyDealingPrivateError::PublicKeyNotInRegistry { .. } => true,
+            // true, as the public key is fetched from the registry and the
+            // registry is guaranteed to be consistent across replicas
+            IDkgVerifyDealingPrivateError::MalformedPublicKey { .. } => true,
+            // true, as the set of supported algorithms is stable (bound to code version)
+            IDkgVerifyDealingPrivateError::UnsupportedAlgorithm { .. } => true,
+            // true, as the node won't become a receiver through retrying
+            IDkgVerifyDealingPrivateError::NotAReceiver => true,
         }
     }
 }

@@ -7,15 +7,17 @@ use crate::vault::local_csp_vault::LocalCspVault;
 use ic_crypto_internal_threshold_sig_ecdsa::{
     compute_secret_shares, compute_secret_shares_with_openings,
     create_dealing as tecdsa_create_dealing, gen_keypair, generate_complaints, open_dealing,
-    CommitmentOpening, CommitmentOpeningBytes, EccCurveType, IDkgComplaintInternal,
-    IDkgComputeSecretSharesInternalError, IDkgDealingInternal, IDkgTranscriptInternal,
-    IDkgTranscriptOperationInternal, MEGaKeySetK256Bytes, MEGaPrivateKey, MEGaPrivateKeyK256Bytes,
-    MEGaPublicKey, MEGaPublicKeyK256Bytes, PolynomialCommitment, SecretShares, Seed,
+    privately_verify_dealing, CommitmentOpening, CommitmentOpeningBytes, EccCurveType,
+    IDkgComplaintInternal, IDkgComputeSecretSharesInternalError, IDkgDealingInternal,
+    IDkgTranscriptInternal, IDkgTranscriptOperationInternal, MEGaKeySetK256Bytes, MEGaPrivateKey,
+    MEGaPrivateKeyK256Bytes, MEGaPublicKey, MEGaPublicKeyK256Bytes, PolynomialCommitment,
+    SecretShares, Seed,
 };
 use ic_crypto_sha::{DomainSeparationContext, Sha256};
 use ic_logger::debug;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
+    IDkgVerifyDealingPrivateError,
 };
 use ic_types::crypto::{AlgorithmId, KeyId};
 use ic_types::{NodeIndex, NumberOfNodes, Randomness};
@@ -37,7 +39,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
         receiver_keys: &[MEGaPublicKey],
         transcript_operation: &IDkgTranscriptOperationInternal,
     ) -> Result<IDkgDealingInternal, IDkgCreateDealingError> {
-        debug!(self.logger; crypto.method_name => "create_dealing");
+        debug!(self.logger; crypto.method_name => "idkg_create_dealing");
 
         let seed = Randomness::from(self.rng_write_lock().gen::<[u8; 32]>());
 
@@ -55,6 +57,31 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
         .map_err(|e| IDkgCreateDealingError::InternalError {
             internal_error: format!("{:?}", e),
         })
+    }
+
+    fn idkg_verify_dealing_private(
+        &self,
+        algorithm_id: AlgorithmId,
+        dealing: &IDkgDealingInternal,
+        dealer_index: NodeIndex,
+        receiver_index: NodeIndex,
+        receiver_key_id: KeyId,
+        context_data: &[u8],
+    ) -> Result<(), IDkgVerifyDealingPrivateError> {
+        debug!(self.logger; crypto.method_name => "idkg_verify_dealing_private");
+
+        let (receiver_public_key, receiver_secret_key) =
+            self.mega_keyset_from_sks(&receiver_key_id)?;
+
+        Ok(privately_verify_dealing(
+            algorithm_id,
+            dealing,
+            &receiver_secret_key,
+            &receiver_public_key,
+            context_data,
+            dealer_index,
+            receiver_index,
+        )?)
     }
 
     fn idkg_load_transcript(
@@ -210,13 +237,13 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
         let (opener_public_key, opener_private_key) = self
             .mega_keyset_from_sks(opener_key_id)
             .map_err(|e| match e {
-                IDkgLoadTranscriptError::PrivateKeyNotFound => {
+                MEGaKeysetFromSksError::PrivateKeyNotFound => {
                     IDkgOpenTranscriptError::PrivateKeyNotFound {
                         key_id: *opener_key_id,
                     }
                 }
                 _ => IDkgOpenTranscriptError::InternalError {
-                    internal_error: e.to_string(),
+                    internal_error: format!("{:?}", e),
                 },
             })?;
         open_dealing(
@@ -280,24 +307,51 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
     fn mega_keyset_from_sks(
         &self,
         key_id: &KeyId,
-    ) -> Result<(MEGaPublicKey, MEGaPrivateKey), IDkgLoadTranscriptError> {
-        match &self.sks_read_lock().get(key_id) {
+    ) -> Result<(MEGaPublicKey, MEGaPrivateKey), MEGaKeysetFromSksError> {
+        type Mkfse = MEGaKeysetFromSksError;
+        let key = self.sks_read_lock().get(key_id);
+        // Obtaining the lock in the `match` would hold it longer than necessary
+        match &key {
             Some(CspSecretKey::MEGaEncryptionK256(keyset_bytes)) => {
-                let public_key =
-                    MEGaPublicKey::try_from(&keyset_bytes.public_key).map_err(|e| {
-                        IDkgLoadTranscriptError::SerializationError {
-                            internal_error: format!("{:?}", e),
-                        }
-                    })?;
-                let private_key =
-                    MEGaPrivateKey::try_from(&keyset_bytes.private_key).map_err(|e| {
-                        IDkgLoadTranscriptError::SerializationError {
-                            internal_error: format!("{:?}", e),
-                        }
-                    })?;
+                let public_key = MEGaPublicKey::try_from(&keyset_bytes.public_key)
+                    .map_err(|e| Mkfse::DeserializationError(format!("{:?}", e)))?;
+                let private_key = MEGaPrivateKey::try_from(&keyset_bytes.private_key)
+                    .map_err(|e| Mkfse::DeserializationError(format!("{:?}", e)))?;
                 Ok((public_key, private_key))
             }
-            _ => Err(IDkgLoadTranscriptError::PrivateKeyNotFound),
+            Some(_non_mega_encryption_k256_key) => Err(Mkfse::DeserializationError(format!(
+                "secret key with ID {} is not a MEGa encryption key set",
+                key_id
+            ))),
+            None => Err(Mkfse::PrivateKeyNotFound),
+        }
+    }
+}
+
+#[derive(Debug)]
+enum MEGaKeysetFromSksError {
+    DeserializationError(String),
+    PrivateKeyNotFound,
+}
+
+impl From<MEGaKeysetFromSksError> for IDkgVerifyDealingPrivateError {
+    fn from(mega_keyset_from_sks_error: MEGaKeysetFromSksError) -> Self {
+        type Mkfse = MEGaKeysetFromSksError;
+        type Ivdpe = IDkgVerifyDealingPrivateError;
+        match mega_keyset_from_sks_error {
+            Mkfse::DeserializationError(e) => Ivdpe::InternalError(e),
+            Mkfse::PrivateKeyNotFound => Ivdpe::PrivateKeyNotFound,
+        }
+    }
+}
+
+impl From<MEGaKeysetFromSksError> for IDkgLoadTranscriptError {
+    fn from(mega_keyset_from_sks_error: MEGaKeysetFromSksError) -> Self {
+        type Mkfse = MEGaKeysetFromSksError;
+        type Ilte = IDkgLoadTranscriptError;
+        match mega_keyset_from_sks_error {
+            Mkfse::DeserializationError(e) => Ilte::SerializationError { internal_error: e },
+            Mkfse::PrivateKeyNotFound => Ilte::PrivateKeyNotFound,
         }
     }
 }

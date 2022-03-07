@@ -167,7 +167,24 @@ impl_display_using_debug!(IDkgVerifyDealingPublicError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgVerifyDealingPrivateError {
+    InvalidDealing(String),
     NotAReceiver,
+    InvalidArgument(String),
+    PrivateKeyNotFound,
+    RegistryError(RegistryClientError),
+    PublicKeyNotInRegistry {
+        node_id: NodeId,
+        registry_version: RegistryVersion,
+    },
+    MalformedPublicKey {
+        node_id: NodeId,
+        key_bytes: Vec<u8>,
+    },
+    UnsupportedAlgorithm {
+        algorithm_id: Option<AlgorithmIdProto>,
+    },
+    InternalError(String),
+    CspVaultRpcError(String),
 }
 impl_display_using_debug!(IDkgVerifyDealingPrivateError);
 
