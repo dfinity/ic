@@ -22,6 +22,13 @@ pub struct SubnetFeatures {
     pub bitcoin_testnet_feature: Option<BitcoinFeature>,
 }
 
+impl SubnetFeatures {
+    pub fn bitcoin_testnet(&self) -> BitcoinFeature {
+        self.bitcoin_testnet_feature
+            .unwrap_or(BitcoinFeature::Disabled)
+    }
+}
+
 impl From<SubnetFeatures> for pb::SubnetFeatures {
     fn from(features: SubnetFeatures) -> pb::SubnetFeatures {
         Self {

@@ -180,7 +180,8 @@ impl ValidSetRuleImpl {
                     StateError::QueueFull { .. }
                     | StateError::OutOfMemory { .. }
                     | StateError::InvariantBroken { .. }
-                    | StateError::NonMatchingResponse { .. } => {
+                    | StateError::NonMatchingResponse { .. }
+                    | StateError::BitcoinStateError(_) => {
                         unreachable!("Unexpected error: {}", err)
                     }
                 };

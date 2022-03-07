@@ -3,6 +3,7 @@ use super::{
     metadata_state::{IngressHistoryState, Stream, Streams, SystemMetadata},
 };
 use crate::{
+    bitcoin_state::{BitcoinState, BitcoinStateError},
     canister_state::{
         system_state::{push_input, CanisterOutputQueuesIterator},
         ENFORCE_MESSAGE_MEMORY_USAGE,
@@ -15,9 +16,11 @@ use ic_interfaces::{
     execution_environment::CanisterOutOfCyclesError, messages::CanisterInputMessage,
 };
 use ic_registry_routing_table::RoutingTable;
+use ic_registry_subnet_features::BitcoinFeature;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::CallbackId;
 use ic_types::{
+    bitcoin::{BitcoinAdapterRequestWrapper, BitcoinAdapterResponse},
     ingress::IngressStatus,
     messages::{is_subnet_message, MessageId, RequestOrResponse, Response, SignedIngressContent},
     user_error::{ErrorCode, UserError},
@@ -95,6 +98,10 @@ pub enum StateError {
     /// Message enqueuing would have caused the canister or subnet to run over
     /// their memory limit.
     OutOfMemory { requested: NumBytes, available: i64 },
+
+    /// An error that can be returned when manipulating the `BitcoinState`.
+    /// See `BitcoinStateError` for more information.
+    BitcoinStateError(BitcoinStateError),
 }
 
 /// Circular iterator that consumes messages from all canisters' and the
@@ -226,6 +233,7 @@ pub const LABEL_VALUE_UNKNOWN_SUBNET_METHOD: &str = "UnknownSubnetMethod";
 pub const LABEL_VALUE_INVALID_RESPONSE: &str = "InvalidResponse";
 pub const LABEL_VALUE_INVALID_SUBNET_PAYLOAD: &str = "InvalidSubnetPayload";
 pub const LABEL_VALUE_OUT_OF_MEMORY: &str = "OutOfMemory";
+pub const LABEL_VALUE_BITCOIN_STATE_ERROR: &str = "BitcoinStateError";
 
 impl StateError {
     /// Returns a string representation of the `StateError` variant name to be
@@ -242,6 +250,7 @@ impl StateError {
             StateError::NonMatchingResponse { .. } => LABEL_VALUE_INVALID_RESPONSE,
             StateError::InvalidSubnetPayload => LABEL_VALUE_INVALID_SUBNET_PAYLOAD,
             StateError::OutOfMemory { .. } => LABEL_VALUE_OUT_OF_MEMORY,
+            StateError::BitcoinStateError(_) => LABEL_VALUE_BITCOIN_STATE_ERROR,
         }
     }
 }
@@ -290,6 +299,7 @@ impl std::fmt::Display for StateError {
                 "Cannot enqueue message. Out of memory: requested {}, available {}",
                 requested, available
             ),
+            StateError::BitcoinStateError(error) => write!(f, "Bitcoin state error: {}", error),
         }
     }
 }
@@ -322,6 +332,8 @@ pub struct ReplicatedState {
     pub consensus_queue: Vec<Response>,
 
     pub root: PathBuf,
+
+    bitcoin_testnet: BitcoinState,
 }
 
 // We use custom impl of PartialEq because state root is not part of identity.
@@ -354,6 +366,7 @@ impl ReplicatedState {
             metadata: SystemMetadata::new(own_subnet_id, own_subnet_type),
             subnet_queues: CanisterQueues::default(),
             consensus_queue: Vec::new(),
+            bitcoin_testnet: BitcoinState::default(),
         }
     }
 
@@ -362,6 +375,7 @@ impl ReplicatedState {
         metadata: SystemMetadata,
         subnet_queues: CanisterQueues,
         consensus_queue: Vec<Response>,
+        bitcoin_testnet: BitcoinState,
         root: PathBuf,
     ) -> Self {
         let mut res = Self {
@@ -370,6 +384,7 @@ impl ReplicatedState {
             subnet_queues,
             consensus_queue,
             root,
+            bitcoin_testnet,
         };
         res.update_stream_responses_size_bytes();
         res
@@ -689,6 +704,57 @@ impl ReplicatedState {
     /// Returns the number of canisters in this `ReplicatedState`.
     pub fn num_canisters(&self) -> usize {
         self.canister_states.len()
+    }
+
+    /// Returns a reference to the `BitcoinState`.
+    pub fn bitcoin_testnet(&self) -> &BitcoinState {
+        &self.bitcoin_testnet
+    }
+
+    /// Pushes a request onto the testnet `BitcoinState` iff the bitcoin testnet
+    /// feature is enabled and returns a `StateError` otherwise.
+    ///
+    /// See documentation of `BitcoinState::push_request` for more information.
+    pub fn push_request_bitcoin_testnet(
+        &mut self,
+        request: BitcoinAdapterRequestWrapper,
+    ) -> Result<(), StateError> {
+        match self.metadata.own_subnet_features.bitcoin_testnet() {
+            BitcoinFeature::Enabled => self
+                .bitcoin_testnet
+                .push_request(request)
+                .map_err(|err| StateError::BitcoinStateError(err)),
+            BitcoinFeature::Paused => Err(StateError::BitcoinStateError(
+                BitcoinStateError::TestnetFeatureNotEnabled,
+            )),
+            BitcoinFeature::Disabled => Err(StateError::BitcoinStateError(
+                BitcoinStateError::TestnetFeatureNotEnabled,
+            )),
+        }
+    }
+
+    /// Pushes a response from the Bitcoin Adapter to the testnet `BitcoinState`
+    /// iff the bitcoin testnet feature is not disabled and returns a `StateError`
+    /// otherwise.
+    ///
+    /// See documentation of `BitcoinState::push_response` for more information.
+    pub fn push_response_bitcoin_testnet(
+        &mut self,
+        response: BitcoinAdapterResponse,
+    ) -> Result<(), StateError> {
+        match self.metadata.own_subnet_features.bitcoin_testnet() {
+            BitcoinFeature::Enabled => self
+                .bitcoin_testnet
+                .push_response(response)
+                .map_err(|err| StateError::BitcoinStateError(err)),
+            BitcoinFeature::Paused => self
+                .bitcoin_testnet
+                .push_response(response)
+                .map_err(|err| StateError::BitcoinStateError(err)),
+            BitcoinFeature::Disabled => Err(StateError::BitcoinStateError(
+                BitcoinStateError::TestnetFeatureNotEnabled,
+            )),
+        }
     }
 }
 

@@ -28,7 +28,7 @@ use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{CanisterQueues, ReplicatedState, SystemMetadata};
+use ic_replicated_state::{BitcoinState, CanisterQueues, ReplicatedState, SystemMetadata};
 use ic_test_utilities::{
     consensus::MockConsensusCache,
     crypto::temp_crypto_component_with_fake_registry,
@@ -185,6 +185,7 @@ where
                         metadata,
                         CanisterQueues::default(),
                         Vec::new(),
+                        BitcoinState::default(),
                         std::path::PathBuf::new(),
                     )),
                 )

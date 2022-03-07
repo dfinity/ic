@@ -64,3 +64,58 @@ message SendTransactionRequest {
 }
 
 message SendTransactionResponse {};
+
+// Wraps the different types of requests to the Bitcoin Adapter.
+message BitcoinAdapterRequestWrapper {
+  oneof r {
+    GetSuccessorsRequest get_successors_request = 1;
+    SendTransactionRequest send_transaction_request = 2;
+  }
+}
+
+// Wraps the different types of responses from the Bitcoin Adapter.
+message BitcoinAdapterResponseWrapper {
+  oneof r {
+    GetSuccessorsResponse get_successors_response = 1;
+    SendTransactionResponse send_transaction_response = 2;
+  }
+}
+
+// A Bitcoin Adapter request, used to store the requests in the
+// `ReplicatedState`.
+message BitcoinAdapterRequest {
+  // The wrapped Bitcoin request to the Adapter.
+  BitcoinAdapterRequestWrapper request = 1;
+  // The callback id associated with this request. Useful to match it against
+  // the incoming responses.
+  uint64 callback_id = 2;
+}
+
+// A Bitcoin Adapter response, used to store the responses in the
+// `ReplicatedState`.
+message BitcoinAdapterResponse {
+  // The wrapped Bitcoin response from the Adapter.
+  BitcoinAdapterResponseWrapper response = 1;
+  // The callback id associated with this response. Used to match a response
+  // against its corresponding request.
+  uint64 callback_id = 2;
+}
+
+message AdapterQueues {
+  // Tracks the callback id that will be generated for the next request.
+  // Used to match incoming responses to existing requests.
+  uint64 next_callback_id = 1;
+  // Queue of outgoing requests to the Bitcoin Adapter.
+  repeated BitcoinAdapterRequest requests = 2;
+  // Queue of incoming responses from the Bitcoin Adapter.
+  repeated BitcoinAdapterResponse responses = 3;
+  // Capacity of the queue of outgoing requests.
+  uint32 requests_queue_capacity = 4;
+}
+
+// Represents the Bitcoin state of the subnet.
+message BitcoinState {
+  // The queues that maintain the requests to and responses from the Bitcoin
+  // Adapter.
+  AdapterQueues adapter_queues = 1;
+}
