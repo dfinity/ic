@@ -1,10 +1,11 @@
 use crate::{
     adapter::Adapter,
     blockchainmanager::{GetSuccessorsRequest, GetSuccessorsResponse},
-    proto::btc_adapter_server::{BtcAdapter, BtcAdapterServer},
 };
+
 use bitcoin::{hashes::Hash, Block, BlockHash, BlockHeader};
 use ic_async_utils::{ensure_single_named_systemd_socket, incoming_from_first_systemd_socket};
+use ic_btc_adapter_service::btc_adapter_server::{BtcAdapter, BtcAdapterServer};
 use ic_protobuf::bitcoin::v1;
 use std::{
     convert::{TryFrom, TryInto},

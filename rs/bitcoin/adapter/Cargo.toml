@@ -11,6 +11,7 @@ clap = "=3.0.0-beta.2"
 futures = "0.3.17"
 hex = "0.4.2"
 ic-async-utils = { path = "../../async_utils" }
+ic-btc-adapter-service = { path = "../adapter_service"}
 ic-btc-validation = { path = "../validation" }
 ic-protobuf = { path = "../../protobuf" }
 prost = "0.9"
@@ -24,6 +25,3 @@ tokio = { version = "1.15.0", features = ["full"] }
 tokio-socks = "0.5.1"
 tonic = "0.6.2"
 
-[build-dependencies]
-prost-build = "0.9.0"
-tonic-build = "0.6.2"
