@@ -6643,6 +6643,7 @@ dependencies = [
  "candid",
  "hex-literal 0.2.1",
  "ic-crypto-sha",
+ "ic-types 0.8.0",
  "serde",
 ]
 

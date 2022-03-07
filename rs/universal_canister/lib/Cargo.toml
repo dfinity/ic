@@ -10,3 +10,4 @@ serde = "1.0.115"
 
 [dev-dependencies]
 ic-crypto-sha = { path = "../../crypto/sha" }
+ic-types = { path = "../../types/types" }

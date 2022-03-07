@@ -35,11 +35,11 @@ fn can_create_canister_from_another_canister() {
         let expected_response_payload =
             Encode!(&CanisterIdRecord::from(expected_canister_id)).unwrap();
 
-        let num_cycles = 1 << 40;
+        let num_cycles = Cycles::from(1u128 << 40);
         // Call method "create_canister" on ic:00. This should create a canister
         // with the auto-generated id above.
         assert_eq!(
-            canister.update(wasm().call(management::create_canister(num_cycles))),
+            canister.update(wasm().call(management::create_canister(num_cycles.into_parts()))),
             Ok(WasmResult::Reply(expected_response_payload))
         );
     });
@@ -51,11 +51,11 @@ fn full_canister_lifecycle_from_another_canister() {
     utils::simple_canister_test(|canister| {
         let expected_canister_id = CanisterId::from(1);
         let canister_id_record = Encode!(&CanisterIdRecord::from(expected_canister_id)).unwrap();
-        let num_cycles = 1 << 40;
+        let num_cycles = Cycles::from(1u128 << 40);
 
         // Create a new canister from within a canister.
         assert_eq!(
-            canister.update(wasm().call(management::create_canister(num_cycles))),
+            canister.update(wasm().call(management::create_canister(num_cycles.into_parts()))),
             Ok(WasmResult::Reply(canister_id_record,)),
         );
 
@@ -107,7 +107,7 @@ fn full_canister_lifecycle_ingress() {
         let expected_canister_id = CanisterId::from(1);
         let canister_id_record = Encode!(&CanisterIdRecord::from(expected_canister_id)).unwrap();
 
-        let num_cycles = 1 << 40;
+        let num_cycles = Cycles::from(1u128 << 40);
 
         // Create a new canister from within a canister.
         assert_eq!(
@@ -118,7 +118,7 @@ fn full_canister_lifecycle_ingress() {
                     ic00::IC_00,
                     Method::CreateCanister,
                     call_args().other_side(EmptyBlob::encode()),
-                    num_cycles,
+                    num_cycles.into_parts(),
                 )
             ),
             Ok(WasmResult::Reply(canister_id_record.clone(),)),
@@ -135,7 +135,7 @@ fn full_canister_lifecycle_ingress() {
                     SetControllerArgs::new(expected_canister_id, PrincipalId::new_anonymous())
                         .encode(),
                 ),
-                num_cycles,
+                num_cycles.into_parts(),
             ),
         )
         .unwrap();
@@ -490,7 +490,7 @@ fn can_create_canister_with_cycles_from_another_canister() {
                     IC_00,
                     Method::CreateCanister,
                     call_args().other_side(EmptyBlob::encode()),
-                    cycles_for_new_canister.into(),
+                    cycles_for_new_canister.into_parts(),
                 ),
             )
             .unwrap()

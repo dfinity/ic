@@ -45,9 +45,9 @@ fn can_refund_when_having_nested_calls() {
                     canister_c_id,
                     "update",
                     call_args(),
-                    500_000_000,
+                    Cycles::from(500_000_000).into_parts(),
                 )),
-                1_000_000_000,
+                Cycles::from(1_000_000_000).into_parts(),
             ),
         )
         .unwrap();
@@ -92,7 +92,7 @@ fn can_deposit_cycles_via_the_management_canister() {
                     IC_00,
                     Method::CreateCanister,
                     call_args().other_side(EmptyBlob::encode()),
-                    cycles_for_new_canister.into(),
+                    cycles_for_new_canister.into_parts(),
                 ),
             )
             .unwrap()
@@ -108,7 +108,7 @@ fn can_deposit_cycles_via_the_management_canister() {
             test.canister_state(&new_canister_id).system_state.balance();
 
         // Deposit cycles to the new canister.
-        let cycles_to_deposit = 200_000_000;
+        let cycles_to_deposit = Cycles::from(200_000_000);
         test.ingress(
             canister_id,
             "update",
@@ -116,7 +116,7 @@ fn can_deposit_cycles_via_the_management_canister() {
                 IC_00,
                 Method::DepositCycles,
                 call_args().other_side(CanisterIdRecord::from(new_canister_id).encode()),
-                cycles_to_deposit,
+                cycles_to_deposit.into_parts(),
             ),
         )
         .unwrap();
@@ -128,12 +128,12 @@ fn can_deposit_cycles_via_the_management_canister() {
 
         // Check cycles balances.
         assert_balance_equals(
-            old_canister_cycles_balance_before - Cycles::from(cycles_to_deposit),
+            old_canister_cycles_balance_before - cycles_to_deposit,
             old_canister_cycles_balance_after,
             BALANCE_EPSILON,
         );
         assert_balance_equals(
-            new_canister_cycles_balance_before + Cycles::from(cycles_to_deposit),
+            new_canister_cycles_balance_before + cycles_to_deposit,
             new_canister_cycles_balance_after,
             BALANCE_EPSILON,
         );
