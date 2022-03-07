@@ -1,5 +1,7 @@
 use ic_types::artifact::StateSyncMessage;
-use ic_types::canister_http::CanisterHttpResponseContent;
+use ic_types::canister_http::{
+    CanisterHttpResponseContent, CanisterHttpResponseMetadata, CanisterHttpResponseShare,
+};
 use ic_types::consensus::certification::CertificationMessage;
 use ic_types::consensus::dkg as consensus_dkg;
 use ic_types::consensus::{
@@ -83,8 +85,10 @@ pub(crate) const DOMAIN_ECDSA_OPENING_CONTENT: &str = "ic-threshold-ecdsa-openin
 pub const DOMAIN_ECDSA_OPENING: &str = "ic-threshold-ecdsa-opening-domain";
 
 pub(crate) const DOMAIN_CANISTER_HTTP_RESPONSE: &str = "ic-canister-http-response-domain";
-pub(crate) const DOMAIN_CRYPTO_HASH_OF_CANISTER_HTTP_RESPONSE: &str =
-    "ic-crypto-hash-of-canister-http-response-domain";
+pub(crate) const DOMAIN_CRYPTO_HASH_OF_CANISTER_HTTP_RESPONSE_METADATA: &str =
+    "ic-crypto-hash-of-canister-http-response-metadata-domain";
+pub(crate) const DOMAIN_CANISTER_HTTP_RESPONSE_SHARE: &str =
+    "ic-canister-http-response-share-domain";
 
 /// A cryptographically hashable type.
 pub trait CryptoHashable: CryptoHashDomain + Hash {}
@@ -102,6 +106,8 @@ pub trait CryptoHashDomain: private::CryptoHashDomainSeal {
     fn domain(&self) -> String;
 }
 mod private {
+
+    use ic_types::canister_http::CanisterHttpResponseShare;
 
     use super::*;
 
@@ -181,7 +187,8 @@ mod private {
     impl CryptoHashDomainSeal for Signed<EcdsaOpeningContent, BasicSignature<EcdsaOpeningContent>> {}
 
     impl CryptoHashDomainSeal for CanisterHttpResponseContent {}
-    impl CryptoHashDomainSeal for ic_types::crypto::CryptoHashOf<CanisterHttpResponseContent> {}
+    impl CryptoHashDomainSeal for CanisterHttpResponseMetadata {}
+    impl CryptoHashDomainSeal for CanisterHttpResponseShare {}
 
     impl CryptoHashDomainSeal for CryptoHashableTestDummy {}
 }
@@ -192,9 +199,15 @@ impl CryptoHashDomain for CanisterHttpResponseContent {
     }
 }
 
-impl CryptoHashDomain for ic_types::crypto::CryptoHashOf<CanisterHttpResponseContent> {
+impl CryptoHashDomain for CanisterHttpResponseMetadata {
     fn domain(&self) -> String {
-        DOMAIN_CRYPTO_HASH_OF_CANISTER_HTTP_RESPONSE.to_string()
+        DOMAIN_CRYPTO_HASH_OF_CANISTER_HTTP_RESPONSE_METADATA.to_string()
+    }
+}
+
+impl CryptoHashDomain for CanisterHttpResponseShare {
+    fn domain(&self) -> String {
+        DOMAIN_CANISTER_HTTP_RESPONSE_SHARE.to_string()
     }
 }
 

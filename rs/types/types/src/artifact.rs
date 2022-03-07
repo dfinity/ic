@@ -14,6 +14,7 @@
 //! All [`Artifact`] sub-types must also implement [`ChunkableArtifact`] trait
 //! defined in the chunkable module.
 use crate::{
+    canister_http::CanisterHttpResponseShare,
     consensus::{certification::CertificationMessageHash, ConsensusMessageHash},
     crypto::{CryptoHash, CryptoHashOf},
     filetree_sync::{FileTreeSyncArtifact, FileTreeSyncId},
@@ -461,6 +462,11 @@ pub struct DkgMessageAttribute {
 // ECDSA artifacts
 
 pub type EcdsaMessageId = EcdsaMessageHash;
+
+// -----------------------------------------------------------------------------
+// CanisterHttp artifacts
+
+pub type CanisterHttpResponseId = CryptoHashOf<CanisterHttpResponseShare>;
 
 // ------------------------------------------------------------------------------
 // StateSync artifacts.

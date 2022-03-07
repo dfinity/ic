@@ -1,3 +1,4 @@
+mod canister_http_pool;
 pub mod certification_pool;
 pub mod consensus_pool;
 mod consensus_pool_cache;
@@ -8,6 +9,7 @@ pub mod ingress_pool;
 mod inmemory_pool;
 mod metrics;
 mod peer_index;
+mod pool_common;
 #[cfg(test)]
 mod test_utils;
 
