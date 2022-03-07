@@ -5,12 +5,11 @@ use super::test_setup::create_ic_handle;
 use crate::ic_instance::node_software_version::NodeSoftwareVersion;
 use crate::ic_manager::IcHandle;
 use anyhow::Result;
-use ic_config::{consensus::ConsensusConfig, ConfigOptional as ReplicaConfig};
 use ic_protobuf::registry::subnet::v1::GossipConfig;
 use ic_protobuf::registry::subnet::v1::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::p2p::build_default_gossip_config;
-use ic_types::{Height, NumBytes, PrincipalId};
+use ic_types::{Height, PrincipalId};
 use phantom_newtype::AmountOf;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
@@ -109,7 +108,6 @@ pub struct Subnet {
     // NOTE: Some values in this config, like the http port,
     // are overwritten in `update_and_write_node_config`.
     pub gossip_config: GossipConfig,
-    pub node_config: ReplicaConfig,
     pub subnet_type: SubnetType,
     pub max_instructions_per_message: Option<u64>,
     pub max_instructions_per_round: Option<u64>,
@@ -132,7 +130,6 @@ impl Subnet {
             initial_notary_delay: None,
             dkg_interval_length: None,
             dkg_dealings_per_block: None,
-            node_config: ReplicaConfig::default(),
             gossip_config: build_default_gossip_config(),
             max_instructions_per_message: None,
             max_instructions_per_round: None,
@@ -161,10 +158,6 @@ impl Subnet {
             // Shorter block time.
             .with_unit_delay(Duration::from_millis(200))
             .with_initial_notary_delay(Duration::from_millis(500))
-            // Disable starvation checks since it's very spammy
-            // when the block time is low and isn't needed for a
-            // single node anyways.
-            .with_detect_starvation(false)
             .add_nodes(no_of_nodes)
     }
 
@@ -240,27 +233,6 @@ impl Subnet {
         self
     }
 
-    pub fn with_detect_starvation(mut self, detect_starvation: bool) -> Self {
-        self.node_config.consensus = Some(ConsensusConfig::new(detect_starvation));
-        self
-    }
-
-    pub fn with_memory_capacity(mut self, capacity: u64) -> Self {
-        let mut hypervisor_config = self.node_config.hypervisor.unwrap_or_default();
-
-        hypervisor_config.subnet_memory_capacity = NumBytes::new(capacity);
-
-        self.node_config.hypervisor = Some(hypervisor_config);
-        self
-    }
-
-    pub fn with_max_canister_memory_size(mut self, n: u64) -> Self {
-        let mut hypervisor_config = self.node_config.hypervisor.unwrap_or_default();
-        hypervisor_config.max_canister_memory_size = NumBytes::new(n);
-        self.node_config.hypervisor = Some(hypervisor_config);
-        self
-    }
-
     pub fn with_features(mut self, features: SubnetFeatures) -> Self {
         self.features = Some(features);
         self
@@ -295,7 +267,6 @@ impl Default for Subnet {
             dkg_interval_length: None,
             dkg_dealings_per_block: None,
             gossip_config: build_default_gossip_config(),
-            node_config: ReplicaConfig::default(),
             subnet_type: SubnetType::System,
             max_instructions_per_message: None,
             max_instructions_per_round: None,
