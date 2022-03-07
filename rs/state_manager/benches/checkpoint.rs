@@ -72,13 +72,16 @@ fn criterion_make_checkpoint(c: &mut Criterion) {
             },
             // Do the actual measurement
             |mut data| {
-                let _node_state = make_checkpoint(
-                    &data.state,
-                    data.height,
-                    &data.layout,
-                    &data.metrics,
-                    Rc::get_mut(&mut data.thread_pool).unwrap(),
-                );
+                with_test_replica_logger(|log| {
+                    let _node_state = make_checkpoint(
+                        &data.state,
+                        data.height,
+                        &data.layout,
+                        &log,
+                        &data.metrics,
+                        Rc::get_mut(&mut data.thread_pool).unwrap(),
+                    );
+                });
             },
         )
     });

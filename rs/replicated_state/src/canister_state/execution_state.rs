@@ -189,14 +189,14 @@ pub struct WasmBinary {
     /// Cached compiled representation of the binary. Lower layers will assign
     /// to this field to create a compiled representation of the wasm, and
     /// ensure that this happens only once.
-    pub embedder_cache: std::sync::Mutex<Option<EmbedderCache>>,
+    pub embedder_cache: Arc<std::sync::Mutex<Option<EmbedderCache>>>,
 }
 
 impl WasmBinary {
     pub fn new(binary: BinaryEncodedWasm) -> Arc<Self> {
         Arc::new(WasmBinary {
             binary,
-            embedder_cache: std::sync::Mutex::new(None),
+            embedder_cache: Arc::new(std::sync::Mutex::new(None)),
         })
     }
 
