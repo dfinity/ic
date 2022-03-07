@@ -204,16 +204,7 @@ class Env:
     @property
     def build_id(self):
         if self._build_id is None:
-            if (
-                # this condition is a hack to fix the broken hack of !2067
-                getenv("CI_PARENT_PIPELINE_SOURCE", "") == "merge_request_event"
-                and getenv("CI_COMMIT_REF_NAME", "") != "broken-blockmaker"
-            ):
-                buildidcmd = ["placebo", "-c", "build-id", "--inputs_hash"]
-            else:
-                buildidcmd = ["git", "rev-parse", "--verify", "HEAD"]
-
-            self._build_id = sh(*buildidcmd, cwd=self._top, capture=True)
+            self._build_id = sh("gitlab-ci/src/artifacts/find-build-id.sh", cwd=self._top, capture=True)
         return self._build_id
 
 
