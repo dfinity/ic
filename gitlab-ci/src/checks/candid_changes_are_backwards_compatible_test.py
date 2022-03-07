@@ -46,7 +46,7 @@ def run_against(file_name, *, also_reverse=False):
     if also_reverse:
         cmd.append("--also-reverse")
     cmd.append(file_name)
-    run(cmd)
+    return run(cmd)
 
 
 def didc_check(did_file_path):
@@ -78,22 +78,34 @@ def improved_subprocess_called_process_error_str(e):
 
 @contextlib.contextmanager
 def env(name, value):
-    # Get original value.
-    original = None
-    try:
-        original = os.environ[name]
-    except KeyError:
-        pass
+    # Get original value so that we can restore later.
+    original = original = os.environ.get(name)
 
     os.environ[name] = value
     try:
         yield
     finally:
-        # Restore original value.
-        if original is None:
-            del os.environ[name]
-        else:
-            os.environ[name] = original
+        restore_environment_variable(name, original)
+
+
+def clobber_environment_variable(name):
+    original = os.environ.get(name)
+    try:
+        del os.environ[name]
+    except KeyError:
+        pass
+    return original
+
+
+def restore_environment_variable(name, original_value):
+    if original_value is not None:
+        os.environ[name] = original_value
+        return
+
+    try:
+        del os.environ[name]
+    except KeyError:
+        pass
 
 
 class CommandLineTest(unittest.TestCase):
@@ -115,10 +127,17 @@ class CommandLineTest(unittest.TestCase):
         self.original_subprocess_called_process_error_str = subprocess.CalledProcessError.__str__
         subprocess.CalledProcessError.__str__ = improved_subprocess_called_process_error_str
 
+        self.original_ci_merge_request_title = clobber_environment_variable("CI_MERGE_REQUEST_TITLE")
+        self.original_ci_merge_request_diff_base_sha = clobber_environment_variable("CI_MERGE_REQUEST_DIFF_BASE_SHA")
+
     @staticmethod
     def tearDownClass():
         """Undo setUpClass."""
         self = CommandLineTest
+
+        restore_environment_variable("CI_MERGE_REQUEST_DIFF_BASE_SHA", self.original_ci_merge_request_diff_base_sha)
+        restore_environment_variable("CI_MERGE_REQUEST_TITLE", self.original_ci_merge_request_title)
+
         subprocess.CalledProcessError.__str__ = self.original_subprocess_called_process_error_str
         os.chdir(self.original_working_dir)
 
