@@ -486,6 +486,35 @@ impl Payload<'_> for CanisterHttpRequestArgs {}
 
 /// Struct used for encoding/decoding
 /// `(record {
+/// name: text;
+/// value: text;
+/// })`;
+#[derive(CandidType, Deserialize, Debug)]
+pub struct CanisterHttpHeader {
+    pub name: String,
+    pub value: String,
+}
+
+impl Payload<'_> for CanisterHttpHeader {}
+
+/// Represents the response for a canister http request.
+/// Struct used for encoding/decoding
+/// `(record {
+/// status: nat;
+/// headers: vec http_header;
+/// body: blob;
+/// })`;
+#[derive(CandidType, Deserialize, Debug)]
+pub struct CanisterHttpResponsePayload {
+    pub status: u64,
+    pub headers: Vec<CanisterHttpHeader>,
+    pub body: Vec<u8>,
+}
+
+impl Payload<'_> for CanisterHttpResponsePayload {}
+
+/// Struct used for encoding/decoding
+/// `(record {
 ///     node_ids : vec principal;
 ///     registry_version: nat;
 /// })`
