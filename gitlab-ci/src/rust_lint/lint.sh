@@ -16,5 +16,7 @@ if cargo tree -e features | grep -q 'serde feature "rc"'; then
     exit 1
 fi
 
+cargo run -q -p depcheck
+
 cd "$CI_PROJECT_DIR/rs/replica"
 cargo check --features malicious_code --locked

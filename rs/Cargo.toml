@@ -62,6 +62,7 @@ members = [
   "crypto/utils/basic_sig",
   "crypto/utils/threshold_sig",
   "cup_explorer",
+  "depcheck",
   "drun",
   "replay",
   "elastic_common_schema",

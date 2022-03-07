@@ -906,7 +906,7 @@ dependencies = [
  "base64 0.13.0",
  "bincode",
  "build-info-common",
- "cargo_metadata 0.14.2",
+ "cargo_metadata",
  "chrono",
  "glob 0.3.0",
  "lazy_static",
@@ -1044,7 +1044,7 @@ version = "0.8.0"
 dependencies = [
  "backoff",
  "candid",
- "cargo_metadata 0.9.1",
+ "cargo_metadata",
  "dfn_candid",
  "escargot",
  "ic-canister-client",
@@ -1077,18 +1077,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cbdb825da8a5df079a43676dbe042702f1707b1109f713a01420fbb4cc71fa27"
 dependencies = [
  "serde",
-]
-
-[[package]]
-name = "cargo_metadata"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46e3374c604fb39d1a2f35ed5e4a4e30e60d01fab49446e08f1b3e9a90aef202"
-dependencies = [
- "semver 0.9.0",
- "serde",
- "serde_derive",
- "serde_json",
 ]
 
 [[package]]
@@ -1885,6 +1873,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f91cf5a8c2f2097e2a32627123508635d47ce10563d999ec1a95addf08b502ba"
 dependencies = [
  "uuid",
+]
+
+[[package]]
+name = "depcheck"
+version = "0.1.0"
+dependencies = [
+ "cargo_metadata",
 ]
 
 [[package]]
@@ -10004,7 +9999,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d7eb9ef2c18661902cc47e535f9bc51b78acd254da71d375c2f6720d9a40403"
 dependencies = [
  "semver-parser 0.7.0",
- "serde",
 ]
 
 [[package]]
