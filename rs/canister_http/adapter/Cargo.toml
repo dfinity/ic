@@ -8,6 +8,7 @@ edition = "2018"
 [dependencies]
 ic-async-utils = { path = "../../async_utils" }
 ic-protobuf = { path = "../../protobuf" }
+ic-canister-http-adapter-service = { path = "../adapter_service"}
 clap = "=3.0.0-beta.2"
 futures = "0.3.17"
 prost = "0.9"
@@ -24,10 +25,6 @@ hyper = { version = "0.14", features = ["full"] }
 hyper-tls = "0.5.0"
 http = "0.2"
 async-stream = "0.3.2"
-
-[build-dependencies]
-prost-build = "0.9.0"
-tonic-build = "0.6.2"
 
 [dev-dependencies]
 uuid = { version = "0.8.2", features = ["v4"] }

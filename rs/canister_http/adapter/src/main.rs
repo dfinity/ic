@@ -6,8 +6,8 @@
 use tonic::transport::Server;
 
 use ic_async_utils::{ensure_single_named_systemd_socket, incoming_from_first_systemd_socket};
-use ic_canister_http_adapter::{proto::http_adapter_server::HttpAdapterServer, HttpFromCanister};
-
+use ic_canister_http_adapter::HttpFromCanister;
+use ic_canister_http_adapter_service::http_adapter_server::HttpAdapterServer;
 const IC_CANISTER_HTTP_SOCKET_NAME: &str = "ic-canister-http-adapter.socket";
 
 #[tokio::main]

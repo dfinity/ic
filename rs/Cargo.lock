@@ -3536,9 +3536,9 @@ dependencies = [
  "hyper",
  "hyper-tls",
  "ic-async-utils",
+ "ic-canister-http-adapter-service",
  "ic-protobuf",
  "prost",
- "prost-build",
  "rand 0.8.4",
  "serde",
  "serde_json",
@@ -3547,9 +3547,18 @@ dependencies = [
  "thiserror",
  "tokio",
  "tonic",
- "tonic-build",
  "tower",
  "uuid",
+]
+
+[[package]]
+name = "ic-canister-http-adapter-service"
+version = "0.1.0"
+dependencies = [
+ "ic-protobuf",
+ "prost-build",
+ "tonic",
+ "tonic-build",
 ]
 
 [[package]]
