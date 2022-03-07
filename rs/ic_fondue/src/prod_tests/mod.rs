@@ -6,4 +6,5 @@ pub mod farm;
 pub mod ic;
 pub mod pot_dsl;
 pub mod resource;
+pub mod test_env;
 pub mod test_setup;
