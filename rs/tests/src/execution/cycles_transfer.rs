@@ -3,6 +3,7 @@ end::catalog[] */
 
 use crate::{types::RejectCode, util::*};
 use ic_fondue::ic_manager::IcHandle;
+use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm};
 
 pub fn can_transfer_cycles_from_a_canister_to_another(
@@ -29,6 +30,7 @@ pub fn can_transfer_cycles_from_a_canister_to_another(
             let initial_bob_balance = get_balance(&bob.canister_id(), &agent).await;
 
             let cycles_to_send = 500_000_000;
+            let accept_cycles = Cycles::from(cycles_to_send / 2);
 
             // Bob sends Alice some cycles and Alice accepts half of them.
             bob.update(
@@ -36,8 +38,8 @@ pub fn can_transfer_cycles_from_a_canister_to_another(
                     .call_with_cycles(
                         alice.canister_id(),
                         "update",
-                        call_args().other_side(wasm().accept_cycles(cycles_to_send / 2)),
-                        cycles_to_send,
+                        call_args().other_side(wasm().accept_cycles128(accept_cycles.into_parts())),
+                        Cycles::from(cycles_to_send).into_parts(),
                     )
                     .reply(),
             )
@@ -81,6 +83,7 @@ pub fn cannot_send_cycles_from_application_to_verified_subnets(
             let alice = UniversalCanister::new(&verified_agent).await;
 
             let cycles_to_send = 500_000_000;
+            let accept_cycles = Cycles::from(cycles_to_send / 2);
             // Bob sends Alice some cycles and Alice accepts half of them.
             let result = bob
                 .update(
@@ -88,8 +91,9 @@ pub fn cannot_send_cycles_from_application_to_verified_subnets(
                         .call_with_cycles(
                             alice.canister_id(),
                             "update",
-                            call_args().other_side(wasm().accept_cycles(cycles_to_send / 2)),
-                            cycles_to_send,
+                            call_args()
+                                .other_side(wasm().accept_cycles128(accept_cycles.into_parts())),
+                            Cycles::from(cycles_to_send).into_parts(),
                         )
                         .reply(),
                 )

@@ -253,7 +253,7 @@ impl<'a> UniversalCanister<'a> {
         receiver: &Principal,
         method: &str,
         payload: Vec<u8>,
-        cycles: u64,
+        cycles: Cycles,
     ) -> Result<Vec<u8>, AgentError> {
         let universal_canister_payload = universal_canister_argument_builder()
             .call_with_cycles(
@@ -261,7 +261,7 @@ impl<'a> UniversalCanister<'a> {
                 PrincipalId::try_from(receiver.as_slice()).unwrap(),
                 method,
                 call_args().other_side(payload),
-                cycles,
+                cycles.into_parts(),
             )
             .build();
 
@@ -280,8 +280,13 @@ impl<'a> UniversalCanister<'a> {
         method: &str,
         payload: Vec<u8>,
     ) -> Result<Vec<u8>, AgentError> {
-        self.forward_with_cycles_to(receiver, method, payload, 0 /* no cycles */)
-            .await
+        self.forward_with_cycles_to(
+            receiver,
+            method,
+            payload,
+            Cycles::zero(), /* no cycles */
+        )
+        .await
     }
 
     pub fn canister_id(&self) -> Principal {
@@ -616,7 +621,7 @@ pub(crate) fn assert_balance_equals(expected: Cycles, actual: Cycles, epsilon: C
     );
 }
 
-pub(crate) async fn get_balance(canister_id: &Principal, agent: &Agent) -> u64 {
+pub(crate) async fn get_balance(canister_id: &Principal, agent: &Agent) -> u128 {
     let mgr = ManagementCanister::create(agent);
     let canister_status = mgr
         .canister_status(canister_id)
@@ -624,7 +629,7 @@ pub(crate) async fn get_balance(canister_id: &Principal, agent: &Agent) -> u64 {
         .await
         .unwrap_or_else(|err| panic!("Could not get canister status: {}", err))
         .0;
-    u64::try_from(canister_status.cycles.0).unwrap()
+    u128::try_from(canister_status.cycles.0).unwrap()
 }
 
 pub(crate) async fn set_controller(
@@ -650,7 +655,7 @@ pub(crate) async fn deposit_cycles(
             &Principal::management_canister(),
             "deposit_cycles",
             Encode!(&CanisterIdRecord { canister_id }).unwrap(),
-            cycles_to_deposit.into(),
+            cycles_to_deposit,
         )
         .await
         .unwrap_or_else(|err| panic!("Failed to deposit to canister: {}", err));
@@ -677,7 +682,7 @@ pub(crate) async fn create_canister_via_canister_with_cycles(
             &Principal::management_canister(),
             "create_canister",
             EmptyBlob::encode(),
-            cycles.into(),
+            cycles,
         )
         .await
         .map(|res| {

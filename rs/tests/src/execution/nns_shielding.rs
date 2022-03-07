@@ -150,8 +150,9 @@ pub fn no_cycle_balance_limit_on_nns_subnet(handle: IcHandle, ctx: &ic_fondue::p
             UniversalCanister::new_with_cycles(&agent, CYCLES_LIMIT_PER_CANISTER * 3).await;
 
         let balance = get_balance(&canister_a.canister_id(), &agent).await;
-        assert!(
-            Cycles::from(balance) == CYCLES_LIMIT_PER_CANISTER * 3,
+        assert_eq!(
+            Cycles::from(balance),
+            CYCLES_LIMIT_PER_CANISTER * 3,
             "expected {} == {}",
             balance,
             CYCLES_LIMIT_PER_CANISTER * 3
@@ -165,8 +166,9 @@ pub fn no_cycle_balance_limit_on_nns_subnet(handle: IcHandle, ctx: &ic_fondue::p
 
         // Check canister_a's balance has decreased.
         let balance = get_balance(&canister_a.canister_id(), &agent).await;
-        assert!(
-            Cycles::from(balance) == CYCLES_LIMIT_PER_CANISTER * 2,
+        assert_eq!(
+            Cycles::from(balance),
+            CYCLES_LIMIT_PER_CANISTER * 2,
             "expected {} == {}",
             balance,
             CYCLES_LIMIT_PER_CANISTER * 2
@@ -178,16 +180,18 @@ pub fn no_cycle_balance_limit_on_nns_subnet(handle: IcHandle, ctx: &ic_fondue::p
 
         // Check canister_a's balance has not decreased as it's an NNS node.
         let balance = get_balance(&canister_a.canister_id(), &agent).await;
-        assert!(
-            Cycles::from(balance) == CYCLES_LIMIT_PER_CANISTER,
+        assert_eq!(
+            Cycles::from(balance),
+            CYCLES_LIMIT_PER_CANISTER,
             "expected {} == {}",
             balance,
             CYCLES_LIMIT_PER_CANISTER
         );
 
         let balance = get_balance_via_canister(&canister_b_id, &canister_a).await;
-        assert!(
-            balance == CYCLES_LIMIT_PER_CANISTER * 2,
+        assert_eq!(
+            balance,
+            CYCLES_LIMIT_PER_CANISTER * 2,
             "expected {} == {}",
             balance,
             CYCLES_LIMIT_PER_CANISTER * 2
@@ -225,7 +229,7 @@ pub fn non_nns_canister_attempt_to_create_canister_on_another_subnet_fails(
                 &other_subnet.get().into(),
                 "create_canister",
                 Encode!().unwrap(),
-                100_000_000_000_000,
+                Cycles::from(100_000_000_000_000u64),
             )
             .await
             .map(|res| {
@@ -243,7 +247,7 @@ pub fn non_nns_canister_attempt_to_create_canister_on_another_subnet_fails(
                 &other_subnet.get().into(),
                 "create_canister",
                 Encode!().unwrap(),
-                100_000_000_000_000,
+                Cycles::from(100_000_000_000_000u64),
             )
             .await
             .map(|res| {
@@ -267,7 +271,7 @@ pub fn non_nns_canister_attempt_to_create_canister_on_another_subnet_fails(
                 &other_subnet.get().into(),
                 "create_canister",
                 Encode!().unwrap(),
-                0,
+                Cycles::from(0),
             )
             .await
             .map(|res| {
@@ -285,7 +289,7 @@ pub fn non_nns_canister_attempt_to_create_canister_on_another_subnet_fails(
                 &other_subnet.get().into(),
                 "create_canister",
                 Encode!().unwrap(),
-                0,
+                Cycles::from(0),
             )
             .await
             .map(|res| {
@@ -310,7 +314,7 @@ pub fn non_nns_canister_attempt_to_create_canister_on_another_subnet_fails(
                 &other_subnet.get().into(),
                 "create_canister",
                 Encode!().unwrap(),
-                50_000_000_000_000,
+                Cycles::from(50_000_000_000_000u64),
             )
             .await
             .map(|res| {
@@ -328,7 +332,7 @@ pub fn non_nns_canister_attempt_to_create_canister_on_another_subnet_fails(
                 &other_subnet.get().into(),
                 "create_canister",
                 Encode!().unwrap(),
-                50_000_000_000_000,
+                Cycles::from(50_000_000_000_000u64),
             )
             .await
             .map(|res| {
@@ -362,7 +366,7 @@ pub fn nns_canister_attempt_to_create_canister_on_another_subnet_succeeds(
                 &other_subnet.get().into(),
                 "create_canister",
                 Encode!().unwrap(),
-                100_000_000_000_000,
+                Cycles::from(100_000_000_000_000u64),
             )
             .await
             .map(|res| {

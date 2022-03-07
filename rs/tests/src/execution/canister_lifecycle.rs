@@ -116,10 +116,12 @@ pub fn create_canister_with_controller_and_controllers_fails(
                 canister_a
                     .update(
                         wasm().call(
-                            management::create_canister(2_000_000_000_000)
-                                // Setting both of these should result in an error.
-                                .with_controllers(vec![canister_a.canister_id()])
-                                .with_controller(canister_a.canister_id()),
+                            management::create_canister(
+                                Cycles::from(2_000_000_000_000u64).into_parts(),
+                            )
+                            // Setting both of these should result in an error.
+                            .with_controllers(vec![canister_a.canister_id()])
+                            .with_controller(canister_a.canister_id()),
                         ),
                     )
                     .await
@@ -149,7 +151,9 @@ pub fn update_settings_with_controller_and_controllers_fails(
             let canister_a = UniversalCanister::new(&agent).await;
 
             let canister_b = canister_a
-                .update(wasm().call(management::create_canister(2_000_000_000_000)))
+                .update(wasm().call(management::create_canister(
+                    Cycles::from(2_000_000_000_000u64).into_parts(),
+                )))
                 .await
                 .map(|res| {
                     Decode!(res.as_slice(), CreateCanisterResult)
@@ -188,8 +192,10 @@ pub fn create_canister_with_one_controller(handle: IcHandle, ctx: &ic_fondue::po
             let canister_b = canister_a
                 .update(
                     wasm().call(
-                        management::create_canister(2_000_000_000_000)
-                            .with_controllers(vec![canister_a.canister_id()]),
+                        management::create_canister(
+                            Cycles::from(2_000_000_000_000u64).into_parts(),
+                        )
+                        .with_controllers(vec![canister_a.canister_id()]),
                     ),
                 )
                 .await
@@ -236,7 +242,9 @@ pub fn update_settings_multiple_controllers(handle: IcHandle, ctx: &ic_fondue::p
 
             // A creates C
             let canister_c = canister_a
-                .update(wasm().call(management::create_canister(2_000_000_000_000)))
+                .update(wasm().call(management::create_canister(
+                    Cycles::from(2_000_000_000_000u64).into_parts(),
+                )))
                 .await
                 .map(|res| {
                     Decode!(res.as_slice(), CreateCanisterResult)
@@ -359,8 +367,10 @@ pub fn create_canister_with_no_controllers(handle: IcHandle, ctx: &ic_fondue::po
             let canister_b = canister_a
                 .update(
                     wasm().call(
-                        management::create_canister(2_000_000_000_000)
-                            .with_controllers(Vec::<Principal>::new()), // No controllers
+                        management::create_canister(
+                            Cycles::from(2_000_000_000_000u64).into_parts(),
+                        )
+                        .with_controllers(Vec::<Principal>::new()), // No controllers
                     ),
                 )
                 .await
@@ -399,8 +409,10 @@ pub fn create_canister_with_multiple_controllers(handle: IcHandle, ctx: &ic_fond
             let canister_c = canister_a
                 .update(
                     wasm().call(
-                        management::create_canister(2_000_000_000_000)
-                            .with_controllers(controllers.clone()),
+                        management::create_canister(
+                            Cycles::from(2_000_000_000_000u64).into_parts(),
+                        )
+                        .with_controllers(controllers.clone()),
                     ),
                 )
                 .await
@@ -479,9 +491,14 @@ pub fn create_canister_with_too_many_controllers_fails(
 
             // Canister A creates C with multiple controllers
             let response = canister_a
-                .update(wasm().call(
-                    management::create_canister(2_000_000_000_000).with_controllers(controllers),
-                ))
+                .update(
+                    wasm().call(
+                        management::create_canister(
+                            Cycles::from(2_000_000_000_000u64).into_parts(),
+                        )
+                        .with_controllers(controllers),
+                    ),
+                )
                 .await;
             assert_reject(response, RejectCode::CanisterReject);
         }
@@ -852,7 +869,9 @@ pub fn canister_can_manage_other_canister(handle: IcHandle, ctx: &ic_fondue::pot
             let canister_a = UniversalCanister::new(&agent).await;
 
             let canister_b = canister_a
-                .update(wasm().call(management::create_canister(2_000_000_000_000)))
+                .update(wasm().call(management::create_canister(
+                    Cycles::from(2_000_000_000_000u64).into_parts(),
+                )))
                 .await
                 .map(|res| {
                     Decode!(res.as_slice(), CreateCanisterResult)
@@ -898,7 +917,9 @@ pub fn canister_can_manage_other_canister_batched(handle: IcHandle, ctx: &ic_fon
 
             let canister_a = UniversalCanister::new(&agent).await;
             let canister_b = canister_a
-                .update(wasm().call(management::create_canister(2_000_000_000_000)))
+                .update(wasm().call(management::create_canister(
+                    Cycles::from(2_000_000_000_000u64).into_parts(),
+                )))
                 .await
                 .map(|res| {
                     Decode!(res.as_slice(), CreateCanisterResult)
@@ -999,7 +1020,9 @@ pub fn total_compute_allocation_cannot_be_exceeded(
             reply_data: &[u8],
         ) -> Result<(Principal, Vec<u8>), AgentError> {
             let created_canister = universal_canister
-                .update(wasm().call(management::create_canister(100_000_000_000_000)))
+                .update(wasm().call(management::create_canister(
+                    Cycles::from(100_000_000_000_000u64).into_parts(),
+                )))
                 .await
                 .map(|res| {
                     Decode!(res.as_slice(), CreateCanisterResult)
@@ -1097,7 +1120,7 @@ pub fn canisters_are_deallocated_when_their_balance_falls(
             let agent = assert_create_agent(endpoint.url.as_str()).await;
             let mgr = ManagementCanister::create(&agent);
 
-            let initial_cycles = 10_000_000_000_000;
+            let initial_cycles: u64 = 10_000_000_000_000;
             let create_canister_cycles = 2_000_000_000_000;
             let transfer_cycles = 8_000_000_000_000;
 
@@ -1121,7 +1144,7 @@ pub fn canisters_are_deallocated_when_their_balance_falls(
                             canister_id: canister_b,
                         })
                         .unwrap(),
-                        transfer_cycles,
+                        Cycles::from(transfer_cycles),
                     )
                     .await,
                 RejectCode::DestinationInvalid,
@@ -1161,7 +1184,7 @@ fn create_canister_test(handle: IcHandle, ctx: &ic_fondue::pot::Context, payload
                     &Principal::management_canister(),
                     "create_canister",
                     payload,
-                    2_000_000_000_000,
+                    Cycles::from(2_000_000_000_000u64),
                 )
                 .await
                 .map(|res| {
@@ -1260,7 +1283,7 @@ pub fn create_canister_with_freezing_threshold(handle: IcHandle, ctx: &ic_fondue
                             }),
                         }
                         .encode(),
-                        2_000_000_000_000,
+                        Cycles::from(2_000_000_000_000u64),
                     )
                     .await
                     .map(|res| {
@@ -1320,8 +1343,10 @@ pub fn create_canister_with_invalid_freezing_threshold_fails(
                     canister
                         .update(
                             wasm().call(
-                                management::create_canister(2_000_000_000_000)
-                                    .with_freezing_threshold(invalid_value.clone()),
+                                management::create_canister(
+                                    Cycles::from(2_000_000_000_000u64).into_parts(),
+                                )
+                                .with_freezing_threshold(invalid_value.clone()),
                             ),
                         )
                         .await,
@@ -1448,7 +1473,7 @@ pub fn refunds_after_uninstall_are_refunded(handle: IcHandle, ctx: &ic_fondue::p
                                         .on_reply(wasm().reply()),
                                 ),
                             ),
-                            50,
+                            Cycles::from(50).into_parts(),
                         ),
                     )
                     .await,
@@ -1523,7 +1548,9 @@ pub fn creating_canisters_fails_if_limit_of_allowed_canisters_is_reached(
             // limit.
             assert_reject(
                 canister
-                    .update(wasm().call(management::create_canister(100_000_000_000)))
+                    .update(wasm().call(management::create_canister(
+                        Cycles::from(100_000_000_000u64).into_parts(),
+                    )))
                     .await,
                 RejectCode::CanisterReject,
             );

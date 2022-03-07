@@ -9,23 +9,24 @@ use std::convert::TryFrom;
 ///
 /// ```
 /// use ic_universal_canister::{wasm, management, CallInterface};
+/// use ic_types::Cycles;
 ///
 /// // Create a new canister with some cycles.
-/// wasm().call(management::create_canister(2_000_000_000_000));
+/// wasm().call(management::create_canister(Cycles::from(2_000_000_000_000u64).into_parts()));
 ///
 /// // Create a new canister with a specific freezing threshold.
 /// wasm().call(
-///   management::create_canister(2_000_000_000_000)
+///   management::create_canister(Cycles::from(2_000_000_000_000u64).into_parts())
 ///      .with_freezing_threshold(1234)
 /// );
 ///
 /// // Create a new canister with custom callbacks.
-/// wasm().call(management::create_canister(2_000_000_000_000)
+/// wasm().call(management::create_canister(Cycles::from(2_000_000_000_000u64).into_parts())
 ///   .on_reply(wasm().noop()) // custom on_reply
 ///   .on_reject(wasm().noop()) // custom on_reject
 ///   .on_cleanup(wasm().noop())); // custom on_cleanup
 /// ```
-pub fn create_canister(cycles: u64) -> CandidCallBuilder<CreateCanisterArgs> {
+pub fn create_canister(cycles: (u64, u64)) -> CandidCallBuilder<CreateCanisterArgs> {
     CandidCallBuilder {
         args: CreateCanisterArgs { settings: None },
         call: Call::new(Principal::management_canister(), "create_canister").cycles(cycles),

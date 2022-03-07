@@ -45,7 +45,6 @@ enum Ops {
     PushInt64 = 31,
     CallNew = 32,
     CallDataAppend = 33,
-    CallCyclesAdd = 34,
     CallPerform = 35,
     SetHeartbeat = 40,
     AcceptMessage = 41,
@@ -59,6 +58,7 @@ enum Ops {
     StableWrite64 = 49,
     Int64ToBlob = 50,
     AcceptCycles128 = 54,
+    CallCyclesAdd128 = 55,
 }
 
 /// A succinct shortcut for creating a `PayloadBuilder`, which is used to encode
@@ -256,9 +256,9 @@ impl PayloadBuilder {
         callee: P,
         method: S,
         call_args: CallArgs,
-        num_cycles: u64,
+        cycles: (u64, u64),
     ) -> Self {
-        self = self.call_helper(callee, method, call_args, Some(num_cycles));
+        self = self.call_helper(callee, method, call_args, Some(cycles));
         self
     }
 
@@ -267,7 +267,7 @@ impl PayloadBuilder {
         callee: P,
         method: S,
         call_args: CallArgs,
-        num_cycles: Option<u64>,
+        cycles: Option<(u64, u64)>,
     ) -> Self {
         self = self.push_bytes(callee.as_ref());
         self = self.push_bytes(method.to_string().as_bytes());
@@ -280,9 +280,10 @@ impl PayloadBuilder {
             self = self.push_bytes(on_cleanup.as_slice());
             self.0.push(Ops::CallOnCleanup as u8);
         }
-        if let Some(num_cycles) = num_cycles {
-            self = self.push_int64(num_cycles);
-            self.0.push(Ops::CallCyclesAdd as u8);
+        if let Some((high_amount, low_amount)) = cycles {
+            self = self.push_int64(high_amount);
+            self = self.push_int64(low_amount);
+            self.0.push(Ops::CallCyclesAdd128 as u8);
         }
         self.0.push(Ops::CallPerform as u8);
         self
@@ -372,7 +373,8 @@ impl PayloadBuilder {
         self
     }
 
-    pub fn accept_cycles128(mut self, amount_high: u64, amount_low: u64) -> Self {
+    pub fn accept_cycles128(mut self, amount: (u64, u64)) -> Self {
+        let (amount_high, amount_low) = amount;
         self = self.push_int64(amount_high);
         self = self.push_int64(amount_low);
         self.0.push(Ops::AcceptCycles128 as u8);
@@ -395,7 +397,7 @@ pub struct Call {
     callee: Vec<u8>,
     method: String,
     args: CallArgs,
-    cycles: u64,
+    cycles: (u64, u64),
 }
 
 impl CallInterface for Call {
@@ -412,7 +414,7 @@ impl Call {
             callee: callee_vec,
             method: method.into(),
             args: CallArgs::default(),
-            cycles: 0,
+            cycles: (0, 0),
         }
     }
 
@@ -424,7 +426,7 @@ impl Call {
 pub trait CallInterface {
     fn call(&mut self) -> &mut Call;
 
-    fn cycles(mut self, cycles: u64) -> Self
+    fn cycles(mut self, cycles: (u64, u64)) -> Self
     where
         Self: std::marker::Sized,
     {
