@@ -14,6 +14,7 @@ members = [
   "canister_client",
   "cycles_account_manager",
   "canister_http/adapter",
+  "canister_http/adapter_service",
   "canister_sandbox",
   "canister_sandbox/backend_lib",
   "canister_sandbox/common",

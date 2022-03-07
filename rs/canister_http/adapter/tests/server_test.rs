@@ -6,9 +6,9 @@ use tonic::transport::{Channel, Endpoint, Server, Uri};
 use tower::service_fn;
 use uuid::Uuid;
 
-use ic_canister_http_adapter::{
-    proto::{http_adapter_client::HttpAdapterClient, http_adapter_server::HttpAdapterServer},
-    HttpFromCanister,
+use ic_canister_http_adapter::HttpFromCanister;
+use ic_canister_http_adapter_service::{
+    http_adapter_client::HttpAdapterClient, http_adapter_server::HttpAdapterServer,
 };
 use ic_protobuf::canister_http::v1::{CanisterHttpRequest, HttpHeader};
 use unix::UnixListenerDrop;
