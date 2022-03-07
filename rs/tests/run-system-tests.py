@@ -204,7 +204,7 @@ def main(runner_args: str, folders_to_remove: List[str]) -> int:
         ARTIFACT_DIR = f"{CI_PROJECT_DIR}/artifacts"
         RUN_CMD = f"{ARTIFACT_DIR}/prod-test-driver"
         RESULT_FILE = f"{CI_PROJECT_DIR}/test-results.json"
-        SUMMARY_ARGS = f"--test_results {RESULT_FILE}"
+        SUMMARY_ARGS = f"--test_results {RESULT_FILE} "
 
     canisters_path = os.path.join(CI_PROJECT_DIR, f"{ARTIFACT_DIR}/canisters")
     release_path = os.path.join(CI_PROJECT_DIR, f"{ARTIFACT_DIR}/release")
@@ -218,8 +218,7 @@ def main(runner_args: str, folders_to_remove: List[str]) -> int:
     logging.debug(
         f"CI_PROJECT_DIR={CI_PROJECT_DIR}, TEST_ES_HOSTNAMES={TEST_ES_HOSTNAMES}, SHELL_WRAPPER={SHELL_WRAPPER}, "
         f"SSH_KEY_DIR={SSH_KEY_DIR}, IC_VERSION_ID={IC_VERSION_ID}, JOB_ID={JOB_ID}, DEV_IMG_URL={DEV_IMG_URL}, "
-        f"DEV_IMG_SHA256={DEV_IMG_SHA256}, CI_PARENT_PIPELINE_SOURCE={CI_PARENT_PIPELINE_SOURCE}, "
-        f"SUMMARY_ARGS={SUMMARY_ARGS}"
+        f"DEV_IMG_SHA256={DEV_IMG_SHA256}, CI_PARENT_PIPELINE_SOURCE={CI_PARENT_PIPELINE_SOURCE}"
     )
 
     if use_locally_prebuilt_artifacts:
@@ -275,6 +274,8 @@ def main(runner_args: str, folders_to_remove: List[str]) -> int:
 
     if is_slack_notify:
         SUMMARY_ARGS += f'--slack_message "Pot \`{{}}\` *failed*. <{CI_JOB_URL}|log>. Commit: <{CI_PROJECT_URL}/-/commit/{CI_COMMIT_SHA}|{CI_COMMIT_SHORT_SHA}>."'  # noqa
+
+    logging.debug(f"SUMMARY_ARGS={SUMMARY_ARGS}")
 
     # NOTE: redirect stdout to stderr, to show the output in gitlab CI.
     # This hack should be reworked by importing the script and passing the logger.
