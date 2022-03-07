@@ -4,8 +4,9 @@ use ic_logger::ReplicaLogger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::Memory;
 use ic_replicated_state::{
-    canister_state::execution_state::WasmBinary, page_map::PageMap, CanisterMetrics, CanisterState,
-    ExecutionState, NumWasmPages, ReplicatedState, SchedulerState, SystemState,
+    bitcoin_state::BitcoinState, canister_state::execution_state::WasmBinary, page_map::PageMap,
+    CanisterMetrics, CanisterState, ExecutionState, NumWasmPages, ReplicatedState, SchedulerState,
+    SystemState,
 };
 use ic_state_layout::{
     CanisterLayout, CanisterStateBits, CheckpointLayout, ExecutionStateBits, ReadPolicy, RwPolicy,
@@ -78,6 +79,10 @@ fn serialize_to_tip(
     let results = parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
         serialize_canister_to_tip(log, canister_state, tip)
     });
+
+    tip.bitcoin_testnet()?
+        .bitcoin_state()
+        .serialize(state.bitcoin_testnet().into())?;
 
     for result in results.into_iter() {
         result?;
@@ -229,12 +234,22 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
         }
     }
 
+    let bitcoin_testnet_layout = checkpoint_layout.bitcoin_testnet()?;
+    let bitcoin_state_proto = bitcoin_testnet_layout.bitcoin_state().deserialize_opt()?;
+
+    let bitcoin_testnet: BitcoinState =
+        bitcoin_state_proto.map_or(Ok(BitcoinState::default()), |v| {
+            BitcoinState::try_from(v)
+                .map_err(|err| into_checkpoint_error("BitcoinState".into(), err))
+        })?;
+
     let state = ReplicatedState::new_from_checkpoint(
         canister_states,
         metadata,
         subnet_queues,
         // Consensus queue needs to be empty at the end of every round.
         Vec::new(),
+        bitcoin_testnet,
         checkpoint_layout.raw_path().into(),
     );
 

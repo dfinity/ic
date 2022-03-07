@@ -4,6 +4,7 @@ use crate::error::LayoutError;
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_logger::ReplicaLogger;
 use ic_protobuf::{
+    bitcoin::v1 as pb_bitcoin,
     proxy::{try_from_option_field, ProxyDecodeError},
     state::{
         canister_state_bits::v1 as pb_canister_state_bits, queues::v1 as pb_queues,
@@ -199,6 +200,9 @@ pub struct CanisterStateBits {
 /// │── tip
 /// │   ├── system_metadata.pbuf
 /// │   ├── subnet_queues.pbuf
+/// │   ├── bitcoin
+/// |   |   └── testnet
+/// |   |       └── state.pbuf
 /// │   └── canister_states
 /// │       └── <hex(canister_id)>
 /// │           ├── queues.pbuf
@@ -211,6 +215,9 @@ pub struct CanisterStateBits {
 /// │   └──<hex(round)>
 /// │      ├── system_metadata.pbuf
 /// │      ├── subnet_queues.pbuf
+/// |      ├── bitcoin
+/// |      |   └── testnet
+/// |      |       └── state.pbuf
 /// │      └── canister_states
 /// │          └── <hex(canister_id)>
 /// │              ├── queues.pbuf
@@ -682,6 +689,10 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         )
     }
 
+    pub fn bitcoin_testnet(&self) -> Result<BitcoinStateLayout<Permissions>, LayoutError> {
+        BitcoinStateLayout::new(self.root.join("bitcoin").join("testnet"))
+    }
+
     pub fn height(&self) -> Height {
         self.height
     }
@@ -750,6 +761,29 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
 
     pub fn is_marked_deleted(&self) -> bool {
         Path::new(&self.tombstone()).exists()
+    }
+}
+
+pub struct BitcoinStateLayout<Permissions: AccessPolicy> {
+    bitcoin_root: PathBuf,
+    permissions_tag: PhantomData<Permissions>,
+}
+
+impl<Permissions: AccessPolicy> BitcoinStateLayout<Permissions> {
+    pub fn new(bitcoin_root: PathBuf) -> Result<Self, LayoutError> {
+        Permissions::check_dir(&bitcoin_root)?;
+        Ok(Self {
+            bitcoin_root,
+            permissions_tag: PhantomData,
+        })
+    }
+
+    pub fn raw_path(&self) -> PathBuf {
+        self.bitcoin_root.clone()
+    }
+
+    pub fn bitcoin_state(&self) -> ProtoFileWith<pb_bitcoin::BitcoinState, Permissions> {
+        self.bitcoin_root.join("state.pbuf").into()
     }
 }
 
@@ -858,6 +892,9 @@ where
         })
     }
 
+    /// Deserializes the value if the underlying file exists.
+    /// If the proto file does not exist, returns Ok(None).
+    /// Returns an error for all other I/O errors.
     pub fn deserialize_opt(&self) -> Result<Option<T>, LayoutError> {
         match open_for_read(&self.path) {
             Ok(f) => self.deserialize_file(f).map(Some),

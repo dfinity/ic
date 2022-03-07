@@ -1275,9 +1275,10 @@ fn state_sync_message_contains_manifest() {
         let msg = state_manager
             .get_validated_by_identifier(&id)
             .expect("failed to get state sync messages");
-        // Only "system_metadata.cbor" and "subnet_queues.cbor" as we don't have
-        // any canisters in the default state.
-        assert_eq!(2, msg.manifest.file_table.len());
+        // Only "system_metadata.pbuf", "subnet_queues.pbuf" and
+        // "bitcoin/testnet/state.pbuf" as we don't have any
+        // canisters in the default state.
+        assert_eq!(3, msg.manifest.file_table.len());
 
         // Check that all the files are accessible
         for file_info in msg.manifest.file_table.iter() {

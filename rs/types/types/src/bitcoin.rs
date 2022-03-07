@@ -5,7 +5,10 @@ use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
 };
 use serde::{Deserialize, Serialize};
-use std::{convert::TryFrom, hash::Hasher};
+use std::{
+    convert::{TryFrom, TryInto},
+    hash::Hasher,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GetSuccessorsRequest {
@@ -28,6 +31,101 @@ impl From<v1::GetSuccessorsRequest> for GetSuccessorsRequest {
             processed_block_hashes: request.processed_block_hashes,
             anchor: request.anchor,
         }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SendTransactionRequest {
+    pub raw_tx: Vec<u8>,
+}
+
+impl From<&SendTransactionRequest> for v1::SendTransactionRequest {
+    fn from(request: &SendTransactionRequest) -> Self {
+        v1::SendTransactionRequest {
+            raw_tx: request.raw_tx.clone(),
+        }
+    }
+}
+
+impl From<v1::SendTransactionRequest> for SendTransactionRequest {
+    fn from(request: v1::SendTransactionRequest) -> Self {
+        SendTransactionRequest {
+            raw_tx: request.raw_tx,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum BitcoinAdapterRequestWrapper {
+    GetSuccessorsRequest(GetSuccessorsRequest),
+    SendTransactionRequest(SendTransactionRequest),
+}
+
+impl From<&BitcoinAdapterRequestWrapper> for v1::BitcoinAdapterRequestWrapper {
+    fn from(request_wrapper: &BitcoinAdapterRequestWrapper) -> Self {
+        match request_wrapper {
+            BitcoinAdapterRequestWrapper::GetSuccessorsRequest(request) => {
+                v1::BitcoinAdapterRequestWrapper {
+                    r: Some(
+                        v1::bitcoin_adapter_request_wrapper::R::GetSuccessorsRequest(
+                            request.into(),
+                        ),
+                    ),
+                }
+            }
+            BitcoinAdapterRequestWrapper::SendTransactionRequest(request) => {
+                v1::BitcoinAdapterRequestWrapper {
+                    r: Some(
+                        v1::bitcoin_adapter_request_wrapper::R::SendTransactionRequest(
+                            request.into(),
+                        ),
+                    ),
+                }
+            }
+        }
+    }
+}
+
+impl TryFrom<v1::BitcoinAdapterRequestWrapper> for BitcoinAdapterRequestWrapper {
+    type Error = ProxyDecodeError;
+    fn try_from(request_wrapper: v1::BitcoinAdapterRequestWrapper) -> Result<Self, Self::Error> {
+        match request_wrapper.r.ok_or(ProxyDecodeError::MissingField(
+            "BitcoinAdapterRequestWrapper::r",
+        ))? {
+            v1::bitcoin_adapter_request_wrapper::R::GetSuccessorsRequest(r) => Ok(
+                BitcoinAdapterRequestWrapper::GetSuccessorsRequest(r.try_into()?),
+            ),
+            v1::bitcoin_adapter_request_wrapper::R::SendTransactionRequest(r) => Ok(
+                BitcoinAdapterRequestWrapper::SendTransactionRequest(r.try_into()?),
+            ),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BitcoinAdapterRequest {
+    pub request: BitcoinAdapterRequestWrapper,
+    pub callback_id: u64,
+}
+
+impl From<&BitcoinAdapterRequest> for v1::BitcoinAdapterRequest {
+    fn from(request: &BitcoinAdapterRequest) -> Self {
+        v1::BitcoinAdapterRequest {
+            request: Some((&request.request).into()),
+            callback_id: request.callback_id,
+        }
+    }
+}
+
+impl TryFrom<v1::BitcoinAdapterRequest> for BitcoinAdapterRequest {
+    type Error = ProxyDecodeError;
+    fn try_from(request: v1::BitcoinAdapterRequest) -> Result<Self, Self::Error> {
+        let wrapped_request =
+            try_from_option_field(request.request, "BitcoinAdapterRequest::request")?;
+        Ok(BitcoinAdapterRequest {
+            request: wrapped_request,
+            callback_id: request.callback_id,
+        })
     }
 }
 
@@ -137,6 +235,116 @@ impl TryFrom<v1::GetSuccessorsResponse> for GetSuccessorsResponse {
             blocks,
             next: response.next.into_iter().map(BlockHeader::from).collect(),
         })
+    }
+}
+
+#[derive(Clone, Debug, Default, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SendTransactionResponse {}
+
+impl From<&SendTransactionResponse> for v1::SendTransactionResponse {
+    fn from(_response: &SendTransactionResponse) -> Self {
+        v1::SendTransactionResponse {}
+    }
+}
+
+impl From<v1::SendTransactionResponse> for SendTransactionResponse {
+    fn from(_response: v1::SendTransactionResponse) -> Self {
+        SendTransactionResponse {}
+    }
+}
+
+impl CountBytes for SendTransactionResponse {
+    fn count_bytes(&self) -> usize {
+        0
+    }
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BitcoinAdapterResponseWrapper {
+    GetSuccessorsResponse(GetSuccessorsResponse),
+    SendTransactionResponse(SendTransactionResponse),
+}
+
+impl CountBytes for BitcoinAdapterResponseWrapper {
+    fn count_bytes(&self) -> usize {
+        match self {
+            BitcoinAdapterResponseWrapper::GetSuccessorsResponse(r) => r.count_bytes(),
+            BitcoinAdapterResponseWrapper::SendTransactionResponse(r) => r.count_bytes(),
+        }
+    }
+}
+
+impl From<&BitcoinAdapterResponseWrapper> for v1::BitcoinAdapterResponseWrapper {
+    fn from(response_wrapper: &BitcoinAdapterResponseWrapper) -> Self {
+        match response_wrapper {
+            BitcoinAdapterResponseWrapper::GetSuccessorsResponse(response) => {
+                v1::BitcoinAdapterResponseWrapper {
+                    r: Some(
+                        v1::bitcoin_adapter_response_wrapper::R::GetSuccessorsResponse(
+                            response.into(),
+                        ),
+                    ),
+                }
+            }
+            BitcoinAdapterResponseWrapper::SendTransactionResponse(response) => {
+                v1::BitcoinAdapterResponseWrapper {
+                    r: Some(
+                        v1::bitcoin_adapter_response_wrapper::R::SendTransactionResponse(
+                            response.into(),
+                        ),
+                    ),
+                }
+            }
+        }
+    }
+}
+
+impl TryFrom<v1::BitcoinAdapterResponseWrapper> for BitcoinAdapterResponseWrapper {
+    type Error = ProxyDecodeError;
+    fn try_from(response_wrapper: v1::BitcoinAdapterResponseWrapper) -> Result<Self, Self::Error> {
+        match response_wrapper.r.ok_or(ProxyDecodeError::MissingField(
+            "BitcoinAdapterResponseWrapper::r",
+        ))? {
+            v1::bitcoin_adapter_response_wrapper::R::GetSuccessorsResponse(r) => Ok(
+                BitcoinAdapterResponseWrapper::GetSuccessorsResponse(r.try_into()?),
+            ),
+            v1::bitcoin_adapter_response_wrapper::R::SendTransactionResponse(r) => Ok(
+                BitcoinAdapterResponseWrapper::SendTransactionResponse(r.try_into()?),
+            ),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BitcoinAdapterResponse {
+    pub response: BitcoinAdapterResponseWrapper,
+    pub callback_id: u64,
+}
+
+impl From<&BitcoinAdapterResponse> for v1::BitcoinAdapterResponse {
+    fn from(response: &BitcoinAdapterResponse) -> Self {
+        v1::BitcoinAdapterResponse {
+            response: Some((&response.response).into()),
+            callback_id: response.callback_id,
+        }
+    }
+}
+
+impl TryFrom<v1::BitcoinAdapterResponse> for BitcoinAdapterResponse {
+    type Error = ProxyDecodeError;
+    fn try_from(response: v1::BitcoinAdapterResponse) -> Result<Self, Self::Error> {
+        let wrapped_response =
+            try_from_option_field(response.response, "BitcoinAdapterResponse::response")?;
+        Ok(BitcoinAdapterResponse {
+            response: wrapped_response,
+            callback_id: response.callback_id,
+        })
+    }
+}
+
+impl CountBytes for BitcoinAdapterResponse {
+    fn count_bytes(&self) -> usize {
+        self.response.count_bytes() + std::mem::size_of::<u64>()
     }
 }
 

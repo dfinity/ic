@@ -545,5 +545,6 @@ fn reject_code_for_state_error(err: &StateError) -> RejectCode {
         StateError::NonMatchingResponse { .. } => RejectCode::SysFatal,
         StateError::InvalidSubnetPayload => RejectCode::CanisterReject,
         StateError::OutOfMemory { .. } => RejectCode::SysTransient,
+        StateError::BitcoinStateError(_) => RejectCode::SysTransient,
     }
 }
