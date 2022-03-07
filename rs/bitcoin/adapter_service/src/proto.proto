@@ -4,13 +4,6 @@ package btc_adapter;
 
 import "bitcoin/v1/bitcoin.proto";
 
-enum Network {
-  BITCOIN = 0;
-  TESTNET = 1;
-  SIGNET = 2;
-  REGTEST = 3;
-}
-
 service BtcAdapter {
     rpc GetSuccessors(bitcoin.v1.GetSuccessorsRequest) returns (bitcoin.v1.GetSuccessorsResponse);
     rpc SendTransaction(bitcoin.v1.SendTransactionRequest) returns (bitcoin.v1.SendTransactionResponse);

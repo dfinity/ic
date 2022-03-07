@@ -3427,10 +3427,10 @@ dependencies = [
  "futures",
  "hex",
  "ic-async-utils",
+ "ic-btc-adapter-service",
  "ic-btc-validation",
  "ic-protobuf",
  "prost",
- "prost-build",
  "rand 0.8.4",
  "serde",
  "serde_json",
@@ -3439,6 +3439,16 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-socks",
+ "tonic",
+]
+
+[[package]]
+name = "ic-btc-adapter-service"
+version = "0.1.0"
+dependencies = [
+ "ic-protobuf",
+ "prost",
+ "prost-build",
  "tonic",
  "tonic-build",
 ]
@@ -5847,7 +5857,7 @@ dependencies = [
  "criterion",
  "hex",
  "ic-async-utils",
- "ic-btc-adapter",
+ "ic-btc-adapter-service",
  "ic-btc-consensus",
  "ic-config",
  "ic-consensus",

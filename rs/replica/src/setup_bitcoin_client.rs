@@ -1,4 +1,4 @@
-use ic_btc_adapter::BtcAdapterClient;
+use ic_btc_adapter_service::btc_adapter_client::BtcAdapterClient;
 use ic_interfaces::bitcoin_adapter_client::{BitcoinAdapterClient, Options, RpcError, RpcResult};
 use ic_logger::{error, ReplicaLogger};
 use ic_protobuf::bitcoin::v1::{

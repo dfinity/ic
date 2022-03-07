@@ -40,17 +40,10 @@ mod transaction_manager;
 
 mod cli;
 
-/// This module contains the protobuf structs to send
-/// messages between the system component and the adapter.
-mod proto {
-    tonic::include_proto!("btc_adapter");
-}
-
 pub use adapter::Adapter;
 pub use cli::Cli;
 use common::BlockHeight;
 pub use config::Config;
-pub use proto::btc_adapter_client::BtcAdapterClient;
 pub use rpc_server::spawn_grpc_server;
 use stream::StreamEvent;
 
