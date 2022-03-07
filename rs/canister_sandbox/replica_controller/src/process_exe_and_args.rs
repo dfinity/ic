@@ -235,12 +235,113 @@ fn make_cargo_argv_for_testing(
         #[cfg(feature = "sigsegv_handler_checksum")]
         "sigsegv_handler_checksum",
     ];
+    let profile_args = get_profile_args(current_binary_path());
+    let profile_args = profile_args.iter().map(|a| a.as_str()).collect();
     let argv = match cargo_command_type {
-        CargoCommandType::Run => vec![vec![cargo_path, "run"], common_args, vec!["--"]],
-        CargoCommandType::Build => vec![vec![cargo_path, "build"], common_args],
+        CargoCommandType::Run => vec![
+            vec![cargo_path, "run"],
+            common_args,
+            profile_args,
+            vec!["--"],
+        ],
+        CargoCommandType::Build => vec![vec![cargo_path, "build"], common_args, profile_args],
     };
     argv.into_iter()
-        .map(|s| s.into_iter().map(|s| s.to_string()))
-        .flatten()
+        .flat_map(|s| s.into_iter().map(|s| s.to_string()))
         .collect()
+}
+
+// Heuristics to get the current profile
+fn get_profile_args(current_exe: Option<PathBuf>) -> Vec<String> {
+    lazy_static::lazy_static! {
+        // Match current_exe directory name after the `/target/`
+        static ref PROFILE_PARSE_RE: regex::Regex = regex::Regex::new(r"/target/(.+/)?(debug|release|release-lto)/").unwrap();
+    }
+    if let Some(current_exe) = current_exe {
+        let current_exe = current_exe.to_string_lossy().to_string();
+        if let Some(caps) = PROFILE_PARSE_RE.captures(&current_exe) {
+            if let Some(dir) = caps.get(2) {
+                // Match directory name to profile
+                match dir.as_str() {
+                    "debug" => return vec![],
+                    p => return vec!["--profile".to_string(), p.to_string()],
+                };
+            }
+        }
+    }
+    vec![]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_profile_args() {
+        assert_eq!(get_profile_args(None), Vec::<String>::new());
+        assert_eq!(
+            get_profile_args(Some("/ic/rs/target/release/test".into())),
+            vec!["--profile", "release"]
+        );
+        assert_eq!(
+            get_profile_args(Some("/ic/rs/target/release-lto/test".into())),
+            vec!["--profile", "release-lto"]
+        );
+        assert_eq!(
+            get_profile_args(Some("/ic/rs/target/debug/test".into())),
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            get_profile_args(Some(
+                "/ic/rs/target/x86_64-unknown-linux-gnu/release/test".into()
+            )),
+            vec!["--profile", "release"]
+        );
+        assert_eq!(
+            get_profile_args(Some(
+                "/ic/rs/target/x86_64-unknown-linux-gnu/release-lto/test".into()
+            )),
+            vec!["--profile", "release-lto"]
+        );
+        assert_eq!(
+            get_profile_args(Some(
+                "/ic/rs/target/x86_64-unknown-linux-gnu/debug/test".into()
+            )),
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            get_profile_args(Some(
+                "/ic/rs/target/wasm32-unknown-unknown/release/test".into()
+            )),
+            vec!["--profile", "release"]
+        );
+        assert_eq!(
+            get_profile_args(Some(
+                "/ic/rs/target/wasm32-unknown-unknown/release-lto/test".into()
+            )),
+            vec!["--profile", "release-lto"]
+        );
+        assert_eq!(
+            get_profile_args(Some(
+                "/ic/rs/target/wasm32-unknown-unknown/debug/test".into()
+            )),
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            get_profile_args(Some("/ic/rs/target/release/deps/test".into())),
+            vec!["--profile", "release"]
+        );
+        assert_eq!(
+            get_profile_args(Some("/ic/rs/target/release-lto/deps/test".into())),
+            vec!["--profile", "release-lto"]
+        );
+        assert_eq!(
+            get_profile_args(Some("/ic/rs/target/debug/deps/test".into())),
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            get_profile_args(Some("/other_path/test".into())),
+            Vec::<String>::new()
+        );
+    }
 }
