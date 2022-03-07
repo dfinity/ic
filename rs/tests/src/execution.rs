@@ -65,15 +65,6 @@ pub fn legacy_config_many_system_subnets() -> LegacyInternetComputer {
 }
 
 // A special configuration for testing memory capacity limits.
-pub fn config_memory_capacity() -> InternetComputer {
-    InternetComputer::new().add_subnet(
-        Subnet::fast_single_node(SubnetType::System)
-            // A tiny memory capacity
-            .with_memory_capacity(20 * 1024 * 1024 /* 20 MiB */),
-    )
-}
-
-// A special configuration for testing memory capacity limits.
 pub fn legacy_config_memory_capacity() -> LegacyInternetComputer {
     LegacyInternetComputer::new().add_subnet(
         LegacySubnet::fast_single_node(SubnetType::System)
