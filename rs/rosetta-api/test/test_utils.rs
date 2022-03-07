@@ -4,8 +4,7 @@ mod store_tests;
 
 use ic_rosetta_api::errors::ApiError;
 use ic_rosetta_api::models::{
-    AccountBalanceRequest, AccountBalanceResponse, EnvelopePair, NetworkListResponse,
-    NetworkRequest, PartialBlockIdentifier, SignedTransaction,
+    AccountBalanceRequest, EnvelopePair, PartialBlockIdentifier, SignedTransaction,
 };
 use ic_rosetta_api::request_types::{
     Request, RequestResult, RequestType, Status, TransactionResults,
@@ -103,27 +102,6 @@ impl Default for TestLedger {
     fn default() -> Self {
         Self::new()
     }
-}
-
-async fn post_json_request(
-    http_client: &reqwest::Client,
-    url: &str,
-    body: Vec<u8>,
-) -> Result<(Vec<u8>, reqwest::StatusCode), String> {
-    let resp = http_client
-        .post(url)
-        .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .body(body)
-        .send()
-        .await
-        .map_err(|err| format!("sending post request failed with {}: ", err))?;
-    let resp_status = resp.status();
-    let resp_body = resp
-        .bytes()
-        .await
-        .map_err(|err| format!("receive post response failed with {}: ", err))?
-        .to_vec();
-    Ok((resp_body, resp_status))
 }
 
 #[async_trait]
@@ -269,83 +247,4 @@ pub async fn get_balance(
     msg.block_identifier = block_id;
     let resp = req_handler.account_balance(msg).await?;
     Ok(Tokens::from_e8s(resp.balances[0].value.parse().unwrap()))
-}
-
-#[actix_rt::test]
-async fn smoke_test_with_server() {
-    init_test_logger();
-
-    let addr = "127.0.0.1:8090".to_string();
-
-    let mut scribe = Scribe::new();
-    let num_transactions = 1000;
-    let num_accounts = 100;
-
-    scribe.gen_accounts(num_accounts, 1_000_000);
-    for _i in 0..num_transactions {
-        scribe.gen_transaction();
-    }
-
-    let ledger = Arc::new(TestLedger::new());
-    let req_handler = RosettaRequestHandler::new(ledger.clone());
-    for b in &scribe.blockchain {
-        ledger.add_block(b.clone()).await.ok();
-    }
-
-    let serv_ledger = ledger.clone();
-    let serv_req_handler = req_handler.clone();
-
-    let serv = Arc::new(
-        RosettaApiServer::new(serv_ledger, serv_req_handler, addr.clone(), false).unwrap(),
-    );
-    let serv_run = serv.clone();
-    let arbiter = actix_rt::Arbiter::new();
-    arbiter.spawn(Box::pin(async move {
-        log::info!("Spawning server");
-        serv_run.run(Default::default()).await.unwrap();
-        log::info!("Server thread done");
-    }));
-
-    let http_client = reqwest::Client::new();
-
-    let msg = NetworkRequest::new(req_handler.network_id());
-    let http_body = serde_json::to_vec(&msg).unwrap();
-    let (res, _) = post_json_request(
-        &http_client,
-        &format!("http://{}/network/list", addr),
-        http_body,
-    )
-    .await
-    .unwrap();
-    let resp: NetworkListResponse = serde_json::from_slice(&res).unwrap();
-
-    assert_eq!(resp.network_identifiers[0], req_handler.network_id());
-
-    let msg = AccountBalanceRequest::new(
-        req_handler.network_id(),
-        to_model_account_identifier(&acc_id(0)),
-    );
-
-    let http_body = serde_json::to_vec(&msg).unwrap();
-    let (res, _) = post_json_request(
-        &http_client,
-        &format!("http://{}/account/balance", addr),
-        http_body,
-    )
-    .await
-    .unwrap();
-    let res: AccountBalanceResponse = serde_json::from_slice(&res).unwrap();
-
-    assert_eq!(
-        res.block_identifier.index,
-        (num_transactions + num_accounts - 1) as i64
-    );
-    assert_eq!(
-        Tokens::from_e8s(u64::from_str(&res.balances[0].value).unwrap()),
-        *scribe.balance_book.get(&acc_id(0)).unwrap()
-    );
-
-    serv.stop().await;
-    arbiter.stop();
-    arbiter.join().unwrap();
 }
