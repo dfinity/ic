@@ -16,7 +16,7 @@ notify-gitlab-success:
       # Limit to "push" pipeline source so that GitLab doesn't send spurious alerts for manual or
       # scheduled pipelines that developers may create off the rc branch.
       if [[ "$CI_PIPELINE_SOURCE" == "push" ]] && [[ "$CI_COMMIT_REF_NAME" =~ ^rc--.* ]]; then
-          if [[ "$CI_COMMIT_DESCRIPTION" =~ ^[hotfix].* ]]; then
+          if [[ "${CI_COMMIT_MESSAGE,,}" =~ hotfix ]]; then
               MESSAGE="✔ Hotfix pipeline <$CI_PIPELINE_URL|$CI_COMMIT_REF_NAME> succeeded. 🫑🫑🫑"
           else
               MESSAGE="✅ Release candidate pipeline <$CI_PIPELINE_URL|$CI_COMMIT_REF_NAME> succeeded. 🎉🎉🎉"
@@ -40,7 +40,7 @@ notify-gitlab-failure:
       # Limit to "push" pipeline source so that GitLab doesn't send spurious alerts for manual or
       # scheduled pipelines that developers may create off the rc branch.
       if [[ "$CI_PIPELINE_SOURCE" == "push" ]] && [[ "$CI_COMMIT_REF_NAME" =~ ^rc--.* ]]; then
-          if [[ "$CI_COMMIT_DESCRIPTION" =~ ^[hotfix].* ]]; then
+          if [[ "${CI_COMMIT_MESSAGE,,}" =~ hotfix ]]; then
               MESSAGE="✘ Hotfix pipeline <$CI_PIPELINE_URL|$CI_COMMIT_REF_NAME> failed. 🌶🌶🌶"
           else
               MESSAGE="❌ Release candidate pipeline <$CI_PIPELINE_URL|$CI_COMMIT_REF_NAME> failed. 😭😭😭"
