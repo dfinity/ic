@@ -120,10 +120,20 @@ fn ensure_not_ca(x509_cert: &X509Certificate) -> Result<(), TlsCertValidationErr
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+fn utc_now() -> DateTime<Utc> {
+    DateTime::<Utc>::from(dfn_core::api::now())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn utc_now() -> DateTime<Utc> {
+    Utc::now()
+}
+
 fn ensure_notbefore_date_is_latest_in_two_minutes_from_now(
     x509_cert: &X509Certificate,
 ) -> Result<(), TlsCertValidationError> {
-    let now = DateTime::<Utc>::from(dfn_core::api::now());
+    let now = utc_now();
     let two_min_from_now = now + Duration::minutes(2);
     let two_min_from_now_asn1 = ASN1Time::from_timestamp(two_min_from_now.timestamp());
 
