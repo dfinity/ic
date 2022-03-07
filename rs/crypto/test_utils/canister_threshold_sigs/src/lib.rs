@@ -20,19 +20,25 @@ use rand::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-pub fn create_dealing(
+pub fn create_and_verify_dealing(
     params: &IDkgTranscriptParams,
     crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
     dealer_id: NodeId,
 ) -> IDkgDealing {
-    crypto_for(dealer_id, crypto_components)
+    let dealing = crypto_for(dealer_id, crypto_components)
         .create_dealing(params)
         .unwrap_or_else(|error| {
             panic!(
                 "failed to create IDkg dealing for {:?}: {:?}",
                 dealer_id, error
             )
-        })
+        });
+    for receiver in params.receivers().get() {
+        assert!(crypto_for(*receiver, crypto_components)
+            .verify_dealing_private(params, dealer_id, &dealing)
+            .is_ok());
+    }
+    dealing
 }
 
 pub fn create_dealings(
@@ -44,7 +50,7 @@ pub fn create_dealings(
         .get()
         .iter()
         .map(|node| {
-            let dealing = create_dealing(params, crypto_components, *node);
+            let dealing = create_and_verify_dealing(params, crypto_components, *node);
             (*node, dealing)
         })
         .collect()
@@ -175,7 +181,7 @@ pub fn load_previous_transcripts_and_create_dealing(
         }
     }
 
-    create_dealing(params, crypto_components, loader_id)
+    create_and_verify_dealing(params, crypto_components, loader_id)
 }
 
 pub fn load_previous_transcripts_and_create_dealings(

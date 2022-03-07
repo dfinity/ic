@@ -405,10 +405,11 @@ impl<C: CryptoServiceProvider> IDkgProtocol for TempCryptoComponentGeneric<C> {
     fn verify_dealing_private(
         &self,
         params: &IDkgTranscriptParams,
+        dealer_id: NodeId,
         dealing: &IDkgDealing,
     ) -> Result<(), IDkgVerifyDealingPrivateError> {
         self.crypto_component
-            .verify_dealing_private(params, dealing)
+            .verify_dealing_private(params, dealer_id, dealing)
     }
 
     fn create_transcript(

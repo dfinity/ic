@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgLoadTranscriptError, IDkgVerifyComplaintError, IDkgVerifyTranscriptError,
+    IDkgLoadTranscriptError, IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError,
+    IDkgVerifyTranscriptError,
 };
 pub use ic_types::crypto::canister_threshold_sig::EcdsaPublicKey;
 pub use ic_types::NodeIndex;
@@ -309,6 +310,20 @@ impl From<ThresholdEcdsaError> for IDkgVerifyDealingInternalError {
             ThresholdEcdsaError::InconsistentCommitments => Self::InvalidCommitment,
             ThresholdEcdsaError::InvalidRecipients => Self::InvalidRecipients,
             x => Self::InternalError(format!("{:?}", x)),
+        }
+    }
+}
+
+impl From<IDkgVerifyDealingInternalError> for IDkgVerifyDealingPrivateError {
+    fn from(error: IDkgVerifyDealingInternalError) -> Self {
+        type Vdie = IDkgVerifyDealingInternalError;
+        type Vdpe = IDkgVerifyDealingPrivateError;
+        match error {
+            Vdie::InvalidCommitment | Vdie::InvalidProof | Vdie::InvalidRecipients => {
+                Vdpe::InvalidDealing(format!("{:?}", error))
+            }
+            Vdie::UnsupportedAlgorithm => Vdpe::InvalidArgument(format!("{:?}", error)),
+            Vdie::InternalError(e) => Vdpe::InternalError(e),
         }
     }
 }

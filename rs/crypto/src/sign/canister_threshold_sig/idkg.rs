@@ -71,6 +71,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
     fn verify_dealing_private(
         &self,
         params: &IDkgTranscriptParams,
+        dealer_id: NodeId,
         dealing: &IDkgDealing,
     ) -> Result<(), IDkgVerifyDealingPrivateError> {
         let logger = new_logger!(&self.logger;
@@ -80,7 +81,14 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         debug!(logger;
             crypto.description => "start",
         );
-        let result = mocks::verify_dealing_private(params, dealing);
+        let result = dealing::verify_dealing_private(
+            &self.csp,
+            &self.node_id,
+            &self.registry_client,
+            params,
+            dealer_id,
+            dealing,
+        );
         debug!(logger;
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),

@@ -24,8 +24,8 @@ use ic_crypto_internal_types::scope::{ConstScope, Scope};
 use ic_logger::debug;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
-    IDkgOpenTranscriptError, IDkgVerifyComplaintError, IDkgVerifyTranscriptError,
-    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+    IDkgOpenTranscriptError, IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError,
+    IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::AlgorithmId;
@@ -59,6 +59,29 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp
             reconstruction_threshold,
             receiver_keys,
             transcript_operation,
+        )
+    }
+
+    fn idkg_verify_dealing_private(
+        &self,
+        algorithm_id: AlgorithmId,
+        dealing: &IDkgDealingInternal,
+        dealer_index: NodeIndex,
+        receiver_index: NodeIndex,
+        receiver_public_key: &MEGaPublicKey,
+        context_data: &[u8],
+    ) -> Result<(), IDkgVerifyDealingPrivateError> {
+        debug!(self.logger; crypto.method_name => "idkg_verify_dealing_private");
+
+        let receiver_key_id = mega_key_id(receiver_public_key);
+
+        self.csp_vault.idkg_verify_dealing_private(
+            algorithm_id,
+            dealing,
+            dealer_index,
+            receiver_index,
+            receiver_key_id,
+            context_data,
         )
     }
 

@@ -41,8 +41,8 @@ use ic_crypto_tls_interfaces::{TlsPublicKeyCert, TlsStream};
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
-    IDkgOpenTranscriptError, IDkgVerifyComplaintError, IDkgVerifyTranscriptError,
-    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+    IDkgOpenTranscriptError, IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError,
+    IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
@@ -376,6 +376,16 @@ mock! {
             receiver_keys: &[MEGaPublicKey],
             transcript_operation: &IDkgTranscriptOperationInternal,
         ) -> Result<IDkgDealingInternal, IDkgCreateDealingError>;
+
+        fn idkg_verify_dealing_private(
+            &self,
+            algorithm_id: AlgorithmId,
+            dealing: &IDkgDealingInternal,
+            dealer_index: NodeIndex,
+            receiver_index: NodeIndex,
+            receiver_public_key: &MEGaPublicKey,
+            context_data: &[u8],
+        ) -> Result<(), IDkgVerifyDealingPrivateError>;
 
         fn idkg_create_transcript(
             &self,
