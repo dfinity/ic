@@ -9,7 +9,6 @@ edition = "2018"
 # use dependencies that can be compiled to WebAssembly.
 ########################################################
 chrono = "0.4.19"
-dfn_core = { path = "../../../rust_canisters/dfn_core" }
 hex = "0.4.2"
 ic-base-types = { path = "../../../types/base_types" }
 ic-crypto-internal-basic-sig-ed25519 = { path = "../../internal/crypto_lib/basic_sig/ed25519" }
@@ -17,6 +16,9 @@ ic-crypto-internal-types = { path = "../../internal/crypto_lib/types" }
 ic-protobuf = { path = "../../../protobuf" }
 ic-types = { path = "../../../types/types" }
 x509-parser = { version = "0.9.1" }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+dfn_core = { path = "../../../rust_canisters/dfn_core" }
 
 [dev-dependencies]
 curve25519-dalek = "3.0.2"
