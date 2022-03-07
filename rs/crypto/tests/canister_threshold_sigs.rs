@@ -27,7 +27,8 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
 };
 use ic_types::crypto::canister_threshold_sig::{
-    ExtendedDerivationPath, PreSignatureQuadruple, ThresholdEcdsaSigInputs,
+    ExtendedDerivationPath, PreSignatureQuadruple, ThresholdEcdsaCombinedSignature,
+    ThresholdEcdsaSigInputs,
 };
 use ic_types::crypto::{AlgorithmId, CombinedMultiSig, CombinedMultiSigOf, CryptoError};
 use ic_types::{Height, NodeId, NodeIndex, Randomness, RegistryVersion};
@@ -986,6 +987,101 @@ fn should_combine_sig_shares_successfully() {
         TempCryptoComponent::new(Arc::clone(&env.registry) as Arc<_>, combiner_id);
     let result = combiner_crypto_component.combine_sig_shares(&inputs, &sig_shares);
     assert!(result.is_ok());
+}
+
+#[test]
+fn should_verify_sig_shares_and_combined_sig_successfully() {
+    let mut rng = thread_rng();
+
+    let subnet_size = rng.gen_range(1, 10);
+    let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
+
+    let key_transcript = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1);
+    let quadruple =
+        generate_presig_quadruple(&env, AlgorithmId::ThresholdEcdsaSecp256k1, &key_transcript);
+
+    let derivation_path = ExtendedDerivationPath {
+        caller: PrincipalId::new_user_test_id(1),
+        derivation_path: vec![],
+    };
+
+    let seed = Randomness::from(rng.gen::<[u8; 32]>());
+
+    let inputs = ThresholdEcdsaSigInputs::new(
+        &derivation_path,
+        &rng.gen::<[u8; 32]>(),
+        seed,
+        quadruple.clone(),
+        key_transcript.clone(),
+    )
+    .expect("failed to create signature inputs");
+
+    let inputs_with_wrong_hash = ThresholdEcdsaSigInputs::new(
+        &derivation_path,
+        &rng.gen::<[u8; 32]>(),
+        seed,
+        quadruple,
+        key_transcript,
+    )
+    .expect("failed to create signature inputs");
+
+    let sig_shares: BTreeMap<_, _> = inputs
+        .receivers()
+        .get()
+        .iter()
+        .map(|&signer_id| {
+            load_input_transcripts(&env.crypto_components, signer_id, &inputs);
+
+            let sig_share = crypto_for(signer_id, &env.crypto_components)
+                .sign_share(&inputs)
+                .expect("failed to create sig share");
+            (signer_id, sig_share)
+        })
+        .collect();
+
+    let verifier_id = random_node_id_excluding(inputs.receivers().get());
+    let verifier_crypto_component =
+        TempCryptoComponent::new(Arc::clone(&env.registry) as Arc<_>, verifier_id);
+
+    // Verify that each signature share can be verified
+    for (signer_id, sig_share) in sig_shares.iter() {
+        assert!(verifier_crypto_component
+            .verify_sig_share(*signer_id, &inputs, sig_share)
+            .is_ok());
+
+        // With wrong hash, share does not verify
+        assert!(verifier_crypto_component
+            .verify_sig_share(*signer_id, &inputs_with_wrong_hash, sig_share)
+            .is_err());
+    }
+
+    // Combiner can be someone not involved in the IDkg
+    let combiner_id = random_node_id_excluding(inputs.receivers().get());
+    let combiner_crypto_component =
+        TempCryptoComponent::new(Arc::clone(&env.registry) as Arc<_>, combiner_id);
+    let signature = combiner_crypto_component
+        .combine_sig_shares(&inputs, &sig_shares)
+        .expect("Failed to generate signature");
+
+    assert!(verifier_crypto_component
+        .verify_combined_sig(&inputs, &signature)
+        .is_ok());
+
+    assert!(verifier_crypto_component
+        .verify_combined_sig(&inputs_with_wrong_hash, &signature)
+        .is_err());
+
+    let modified_signature = ThresholdEcdsaCombinedSignature {
+        signature: {
+            let mut s = signature.signature;
+            s[5] ^= 1;
+            s
+        },
+    };
+
+    assert!(verifier_crypto_component
+        .verify_combined_sig(&inputs, &modified_signature)
+        .is_err());
 }
 
 #[test]

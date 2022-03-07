@@ -228,7 +228,12 @@ pub enum IDkgVerifyOpeningError {}
 impl_display_using_debug!(IDkgVerifyOpeningError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ThresholdEcdsaVerifySigShareError {}
+pub enum ThresholdEcdsaVerifySigShareError {
+    InternalError { internal_error: String },
+    SerializationError { internal_error: String },
+    InvalidSignatureShare,
+    InvalidArgumentMissingSignerInTranscript { signer_id: NodeId },
+}
 impl_display_using_debug!(ThresholdEcdsaVerifySigShareError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -241,7 +246,11 @@ pub enum ThresholdEcdsaSignShareError {
 impl_display_using_debug!(ThresholdEcdsaSignShareError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ThresholdEcdsaVerifyCombinedSignatureError {}
+pub enum ThresholdEcdsaVerifyCombinedSignatureError {
+    InternalError { internal_error: String },
+    InvalidSignature,
+    SerializationError { internal_error: String },
+}
 impl_display_using_debug!(ThresholdEcdsaVerifyCombinedSignatureError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

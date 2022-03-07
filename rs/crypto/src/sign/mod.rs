@@ -481,7 +481,8 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigVerifier for CryptoComponentFatC
         debug!(logger;
             crypto.description => "start",
         );
-        let result = canister_threshold_sig::mocks::verify_sig_share(signer, inputs, share);
+        let result =
+            canister_threshold_sig::ecdsa::verify_sig_share(&self.csp, signer, inputs, share);
         debug!(logger;
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),
@@ -523,7 +524,8 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigVerifier for CryptoComponentFatC
         debug!(logger;
             crypto.description => "start",
         );
-        let result = canister_threshold_sig::mocks::verify_combined_sig(inputs, signature);
+        let result =
+            canister_threshold_sig::ecdsa::verify_combined_signature(&self.csp, inputs, signature);
         debug!(logger;
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),

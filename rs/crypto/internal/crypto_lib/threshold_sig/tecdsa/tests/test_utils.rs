@@ -633,6 +633,10 @@ impl SignatureProtocolSetup {
         };
         ic_crypto_internal_threshold_sig_ecdsa::sign::derive_public_key(&master_public_key, path)
     }
+
+    pub fn alg(&self) -> AlgorithmId {
+        self.setup.alg
+    }
 }
 
 #[derive(Clone, Debug)]

@@ -54,6 +54,32 @@ fn should_return_correct_index_for_dealer_id() {
     assert_eq!(transcript.index_for_dealer_id(node_id(46)), None);
 }
 
+#[test]
+fn should_return_correct_index_for_signer_id() {
+    let transcript = IDkgTranscript {
+        verified_dealings: dummy_dealings(),
+        transcript_id: dummy_transcript_id(),
+        receivers: IDkgReceivers::new(btreeset! {
+            node_id(42),
+            node_id(43),
+            node_id(45),
+            node_id(128),
+        })
+        .unwrap(),
+        registry_version: dummy_registry_version(),
+        transcript_type: dummy_transcript_type(),
+        algorithm_id: dummy_algorithm_id(),
+        internal_transcript_raw: dummy_internal_transcript_raw(),
+    };
+
+    assert_eq!(transcript.index_for_signer_id(node_id(42)), Some(0));
+    assert_eq!(transcript.index_for_signer_id(node_id(43)), Some(1));
+    assert_eq!(transcript.index_for_signer_id(node_id(44)), None);
+    assert_eq!(transcript.index_for_signer_id(node_id(45)), Some(2));
+    assert_eq!(transcript.index_for_signer_id(node_id(46)), None);
+    assert_eq!(transcript.index_for_signer_id(node_id(128)), Some(3));
+}
+
 fn multi_signed_dealing(dealer_id: NodeId) -> IDkgMultiSignedDealing {
     let ecdsa_dealing = EcdsaDealing {
         requested_height: dummy_height(),
@@ -73,6 +99,10 @@ fn multi_signed_dealing(dealer_id: NodeId) -> IDkgMultiSignedDealing {
 
 fn dummy_transcript_id() -> IDkgTranscriptId {
     IDkgTranscriptId::new(subnet_id(0), 0)
+}
+
+fn dummy_dealings() -> std::collections::BTreeMap<crate::NodeIndex, IDkgMultiSignedDealing> {
+    std::collections::BTreeMap::new()
 }
 
 fn dummy_receivers() -> IDkgReceivers {

@@ -9,6 +9,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
     IDkgOpenTranscriptError, IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError,
     IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+    ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::AlgorithmId;
@@ -149,4 +150,32 @@ pub trait CspThresholdEcdsaSigVerifier {
         sig_shares: &BTreeMap<NodeIndex, ThresholdEcdsaSigShareInternal>,
         algorithm_id: AlgorithmId,
     ) -> Result<ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaCombineSigSharesError>;
+
+    /// Verify a signature share
+    fn ecdsa_verify_sig_share(
+        &self,
+        share: &ThresholdEcdsaSigShareInternal,
+        signer_index: NodeIndex,
+        derivation_path: &ExtendedDerivationPath,
+        hashed_message: &[u8],
+        nonce: &Randomness,
+        key: &IDkgTranscriptInternal,
+        kappa_unmasked: &IDkgTranscriptInternal,
+        lambda_masked: &IDkgTranscriptInternal,
+        kappa_times_lambda: &IDkgTranscriptInternal,
+        key_times_lambda: &IDkgTranscriptInternal,
+        algorithm_id: AlgorithmId,
+    ) -> Result<(), ThresholdEcdsaVerifySigShareError>;
+
+    /// Verify a combined ECDSA signature with respect to a particular kappa transcript
+    fn ecdsa_verify_combined_signature(
+        &self,
+        signature: &ThresholdEcdsaCombinedSigInternal,
+        derivation_path: &ExtendedDerivationPath,
+        hashed_message: &[u8],
+        nonce: &Randomness,
+        key: &IDkgTranscriptInternal,
+        kappa_unmasked: &IDkgTranscriptInternal,
+        algorithm_id: AlgorithmId,
+    ) -> Result<(), ThresholdEcdsaVerifyCombinedSignatureError>;
 }

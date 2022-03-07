@@ -1,7 +1,8 @@
 use crate::crypto::ErrorReplication;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError,
-    IDkgVerifyOpeningError, IDkgVerifyTranscriptError, ThresholdEcdsaVerifySigShareError,
+    IDkgVerifyOpeningError, IDkgVerifyTranscriptError, ThresholdEcdsaVerifyCombinedSignatureError,
+    ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::threshold_sig::ni_dkg::errors::create_transcript_error::DkgCreateTranscriptError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError;
@@ -205,8 +206,42 @@ impl ErrorReplication for IDkgVerifyDealingPrivateError {
 
 impl ErrorReplication for ThresholdEcdsaVerifySigShareError {
     fn is_replicated(&self) -> bool {
-        // TODO correctly implement this function
-        false
+        // The match below is intentionally explicit on all possible values,
+        // to avoid defaults, which might be error-prone.
+        // Upon addition of any new error this match has to be updated.
+
+        // Signature share verification does not depend on any local or private
+        // state and so is inherently replicated.
+        match self {
+            // The error returned if signature share commitments are invalid
+            Self::InvalidSignatureShare => true,
+            // The purported signer does exist in the transcript
+            Self::InvalidArgumentMissingSignerInTranscript { .. } => true,
+            // The signature share could not even be deserialized correctly
+            Self::SerializationError { .. } => true,
+            // The share included an invalid commitment type
+            Self::InternalError { .. } => true,
+        }
+    }
+}
+
+impl ErrorReplication for ThresholdEcdsaVerifyCombinedSignatureError {
+    fn is_replicated(&self) -> bool {
+        // The match below is intentionally explicit on all possible values,
+        // to avoid defaults, which might be error-prone.
+        // Upon addition of any new error this match has to be updated.
+
+        // Signature verification does not depend on any local or
+        // private state and so is inherently replicated.
+        match self {
+            // The ECDSA signature was invalid or did not match the
+            // presignature transcript
+            Self::InvalidSignature => true,
+            // The signature could not even be deserialized correctly
+            Self::SerializationError { .. } => true,
+            // Invalid commitment type or wrong algorithm ID
+            Self::InternalError { .. } => true,
+        }
     }
 }
 

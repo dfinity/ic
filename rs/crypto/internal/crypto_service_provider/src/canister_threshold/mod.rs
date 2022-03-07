@@ -15,10 +15,14 @@ use crate::secret_key_store::SecretKeyStore;
 use crate::Csp;
 use ic_crypto_internal_threshold_sig_ecdsa::{
     combine_sig_shares as tecdsa_combine_sig_shares, create_transcript as tecdsa_create_transcript,
-    verify_complaint as tecdsa_verify_complaint, verify_transcript as tecdsa_verify_transcript,
-    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
+    verify_complaint as tecdsa_verify_complaint,
+    verify_signature_share as tecdsa_verify_signature_share,
+    verify_threshold_signature as tecdsa_verify_combined_signature,
+    verify_transcript as tecdsa_verify_transcript, CommitmentOpening, DerivationPath,
+    IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
     IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaCombinedSigInternal,
-    ThresholdEcdsaSigShareInternal,
+    ThresholdEcdsaSigShareInternal, ThresholdEcdsaVerifySigShareInternalError,
+    ThresholdEcdsaVerifySignatureInternalError,
 };
 use ic_crypto_internal_types::scope::{ConstScope, Scope};
 use ic_logger::debug;
@@ -26,6 +30,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
     IDkgOpenTranscriptError, IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError,
     IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+    ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::AlgorithmId;
@@ -271,7 +276,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
         debug!(self.logger; crypto.method_name => "ecdsa_combine_sig_shares");
 
         tecdsa_combine_sig_shares(
-            &derivation_path.into(),
+            &DerivationPath::from(derivation_path),
             hashed_message,
             *nonce,
             key_transcript,
@@ -282,6 +287,94 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
         )
         .map_err(|e| ThresholdEcdsaCombineSigSharesError::InternalError {
             internal_error: format!("{:?}", e),
+        })
+    }
+
+    fn ecdsa_verify_sig_share(
+        &self,
+        share: &ThresholdEcdsaSigShareInternal,
+        signer_index: NodeIndex,
+        derivation_path: &ExtendedDerivationPath,
+        hashed_message: &[u8],
+        nonce: &Randomness,
+        key: &IDkgTranscriptInternal,
+        kappa_unmasked: &IDkgTranscriptInternal,
+        lambda_masked: &IDkgTranscriptInternal,
+        kappa_times_lambda: &IDkgTranscriptInternal,
+        key_times_lambda: &IDkgTranscriptInternal,
+        algorithm_id: AlgorithmId,
+    ) -> Result<(), ThresholdEcdsaVerifySigShareError> {
+        debug!(self.logger; crypto.method_name => "ecdsa_verify_sig_share");
+
+        tecdsa_verify_signature_share(
+            share,
+            &DerivationPath::from(derivation_path),
+            hashed_message,
+            *nonce,
+            signer_index,
+            key,
+            kappa_unmasked,
+            lambda_masked,
+            kappa_times_lambda,
+            key_times_lambda,
+            algorithm_id,
+        )
+        .map_err(|e| match e {
+            ThresholdEcdsaVerifySigShareInternalError::UnsupportedAlgorithm => {
+                ThresholdEcdsaVerifySigShareError::InternalError {
+                    internal_error: "Algorithm not supported".to_string(),
+                }
+            }
+            ThresholdEcdsaVerifySigShareInternalError::InternalError(s) => {
+                ThresholdEcdsaVerifySigShareError::InternalError { internal_error: s }
+            }
+            ThresholdEcdsaVerifySigShareInternalError::InconsistentCommitments => {
+                ThresholdEcdsaVerifySigShareError::InvalidSignatureShare
+            }
+            ThresholdEcdsaVerifySigShareInternalError::InvalidSignatureShare => {
+                ThresholdEcdsaVerifySigShareError::InvalidSignatureShare
+            }
+        })
+    }
+
+    fn ecdsa_verify_combined_signature(
+        &self,
+        signature: &ThresholdEcdsaCombinedSigInternal,
+        derivation_path: &ExtendedDerivationPath,
+        hashed_message: &[u8],
+        nonce: &Randomness,
+        key: &IDkgTranscriptInternal,
+        kappa_unmasked: &IDkgTranscriptInternal,
+        algorithm_id: AlgorithmId,
+    ) -> Result<(), ThresholdEcdsaVerifyCombinedSignatureError> {
+        debug!(self.logger; crypto.method_name => "ecdsa_verify_combined_signature");
+
+        tecdsa_verify_combined_signature(
+            signature,
+            &DerivationPath::from(derivation_path),
+            hashed_message,
+            *nonce,
+            kappa_unmasked,
+            key,
+            algorithm_id,
+        )
+        .map_err(|e| match e {
+            ThresholdEcdsaVerifySignatureInternalError::InvalidSignature => {
+                ThresholdEcdsaVerifyCombinedSignatureError::InvalidSignature
+            }
+            ThresholdEcdsaVerifySignatureInternalError::UnsupportedAlgorithm => {
+                ThresholdEcdsaVerifyCombinedSignatureError::InternalError {
+                    internal_error: "Algorithm not supported".to_string(),
+                }
+            }
+            ThresholdEcdsaVerifySignatureInternalError::InternalError(s) => {
+                ThresholdEcdsaVerifyCombinedSignatureError::InternalError { internal_error: s }
+            }
+            ThresholdEcdsaVerifySignatureInternalError::InconsistentCommitments => {
+                ThresholdEcdsaVerifyCombinedSignatureError::InternalError {
+                    internal_error: "Wrong commitment types".to_string(),
+                }
+            }
         })
     }
 }
