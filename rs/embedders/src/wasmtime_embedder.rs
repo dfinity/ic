@@ -59,12 +59,18 @@ fn wasmtime_error_to_hypervisor_error(err: anyhow::Error) -> HypervisorError {
                     Err(_) => "Conversion of Wasmtime error to string failed.".to_string(),
                 }
             };
-            let re_signature_mismatch =
-                regex::Regex::new("expected \\d+ (arguments|results), got \\d+")
-                    .expect("signature mismatch regex");
-            if message.contains("argument type mismatch")
-                || re_signature_mismatch.is_match(&message)
-            {
+            // Check if the message contains one of:
+            // - "expected ... arguments, got ..."
+            // - "expected ... results, got ..."
+            let arguments_or_results_mismatch = message
+                .find("expected ")
+                .and_then(|i| {
+                    message
+                        .get(i..)
+                        .map(|s| s.contains(" arguments, got ") || s.contains(" results, got "))
+                })
+                .unwrap_or(false);
+            if message.contains("argument type mismatch") || arguments_or_results_mismatch {
                 return HypervisorError::ContractViolation(BAD_SIGNATURE_MESSAGE.to_string());
             }
             HypervisorError::Trapped(TrapCode::Other)

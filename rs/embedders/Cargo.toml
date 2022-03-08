@@ -22,7 +22,6 @@ memory_tracker = { path = "../memory_tracker" }
 nix = "0.23.0"
 parity-wasm = { version = "0.42.2", features = [ "std", "multi_value", "bulk" ] }
 prometheus = { version = "0.12.0", features = [ "process" ] }
-regex = "1.3.9"
 serde = { version = "1.0.99", features = [ "derive" ] }
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
 wasmtime = { version = "0.33.1", default_features = false, features = ['cranelift', 'parallel-compilation', 'posix-signals-on-macos'] }
