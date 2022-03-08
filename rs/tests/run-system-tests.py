@@ -168,10 +168,12 @@ def main(runner_args: str, folders_to_remove: List[str]) -> int:
 
     if TEST_ES_HOSTNAMES is None:
         logging.info("TEST_ES_HOSTNAMES variable is not set, using defaults.")
-        TEST_ES_HOSTNAMES = (
-            "elasticsearch-node-0.testnet.dfinity.systems:443,"
-            "elasticsearch-node-1.testnet.dfinity.systems:443,"
-            "elasticsearch-node-2.testnet.dfinity.systems:443"
+        TEST_ES_HOSTNAMES = ",".join(
+            [
+                "elasticsearch-node-0.testnet.dfinity.systems:443",
+                "elasticsearch-node-1.testnet.dfinity.systems:443",
+                "elasticsearch-node-2.testnet.dfinity.systems:443",
+            ]
         )
     TEST_ES_HOSTNAMES = replace_symbols(text=TEST_ES_HOSTNAMES, symbols_to_replace=["`", "'", " "], replace_with="")
 
