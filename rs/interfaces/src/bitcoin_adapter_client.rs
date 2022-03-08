@@ -1,6 +1,4 @@
-use ic_protobuf::bitcoin::v1::{
-    GetSuccessorsRequest, GetSuccessorsResponse, SendTransactionRequest, SendTransactionResponse,
-};
+use ic_protobuf::bitcoin::v1::{BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper};
 use std::time::Duration;
 use tonic::Status;
 
@@ -13,6 +11,8 @@ pub enum RpcError {
     ConnectionBroken,
     /// Failure at server endpoint
     ServerError(Status),
+    /// Invalid request passed to the client
+    InvalidRequest(BitcoinAdapterRequestWrapper),
 }
 
 pub type RpcResult<T> = Result<T, RpcError>;
@@ -30,17 +30,13 @@ impl Default for Options {
         }
     }
 }
+
 /// Sync interface for communicating with the bitcoin adapter. Note the function calls block the
 /// running thread. Also the calls may panic if called from async context.
-pub trait BitcoinAdapterClient {
-    fn get_successors(
+pub trait BitcoinAdapterClient: Send + Sync {
+    fn send_request(
         &self,
-        request: GetSuccessorsRequest,
+        request: BitcoinAdapterRequestWrapper,
         opts: Options,
-    ) -> RpcResult<GetSuccessorsResponse>;
-    fn send_transaction(
-        &self,
-        request: SendTransactionRequest,
-        opts: Options,
-    ) -> RpcResult<SendTransactionResponse>;
+    ) -> RpcResult<BitcoinAdapterResponseWrapper>;
 }

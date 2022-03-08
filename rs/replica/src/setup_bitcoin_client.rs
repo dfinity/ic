@@ -2,7 +2,8 @@ use ic_btc_adapter_service::btc_adapter_client::BtcAdapterClient;
 use ic_interfaces::bitcoin_adapter_client::{BitcoinAdapterClient, Options, RpcError, RpcResult};
 use ic_logger::{error, ReplicaLogger};
 use ic_protobuf::bitcoin::v1::{
-    GetSuccessorsRequest, GetSuccessorsResponse, SendTransactionRequest, SendTransactionResponse,
+    bitcoin_adapter_request_wrapper, bitcoin_adapter_response_wrapper,
+    BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper,
 };
 use std::{convert::TryFrom, path::PathBuf, sync::Arc};
 use tokio::net::UnixStream;
@@ -22,38 +23,53 @@ impl BitcoinAdapterClientImpl {
 }
 
 impl BitcoinAdapterClient for BitcoinAdapterClientImpl {
-    fn get_successors(
+    fn send_request(
         &self,
-        request: GetSuccessorsRequest,
+        request: BitcoinAdapterRequestWrapper,
         opts: Options,
-    ) -> RpcResult<GetSuccessorsResponse> {
+    ) -> RpcResult<BitcoinAdapterResponseWrapper> {
         let mut client = self.client.clone();
         self.rt_handle.block_on(async move {
-            let mut tonic_request = tonic::Request::new(request);
-            if let Some(timeout) = opts.timeout {
-                tonic_request.set_timeout(timeout);
-            }
-            match client.get_successors(tonic_request).await {
-                Ok(tonic_response) => Ok(tonic_response.into_inner()),
-                Err(tonic_status) => Err(RpcError::ServerError(tonic_status)),
-            }
-        })
-    }
+            match request.r {
+                Some(wrapped_request) => match wrapped_request {
+                    bitcoin_adapter_request_wrapper::R::GetSuccessorsRequest(r) => {
+                        let mut tonic_request = tonic::Request::new(r);
+                        if let Some(timeout) = opts.timeout {
+                            tonic_request.set_timeout(timeout);
+                        }
 
-    fn send_transaction(
-        &self,
-        request: SendTransactionRequest,
-        opts: Options,
-    ) -> RpcResult<SendTransactionResponse> {
-        let mut client = self.client.clone();
-        self.rt_handle.block_on(async move {
-            let mut tonic_request = tonic::Request::new(request);
-            if let Some(timeout) = opts.timeout {
-                tonic_request.set_timeout(timeout);
-            }
-            match client.send_transaction(tonic_request).await {
-                Ok(tonic_response) => Ok(tonic_response.into_inner()),
-                Err(tonic_status) => Err(RpcError::ServerError(tonic_status)),
+                        client
+                            .get_successors(tonic_request)
+                            .await
+                            .map(|tonic_response| BitcoinAdapterResponseWrapper {
+                                r: Some(
+                                    bitcoin_adapter_response_wrapper::R::GetSuccessorsResponse(
+                                        tonic_response.into_inner(),
+                                    ),
+                                ),
+                            })
+                            .map_err(|err| RpcError::ServerError(err))
+                    }
+                    bitcoin_adapter_request_wrapper::R::SendTransactionRequest(r) => {
+                        let mut tonic_request = tonic::Request::new(r);
+                        if let Some(timeout) = opts.timeout {
+                            tonic_request.set_timeout(timeout);
+                        }
+
+                        client
+                            .send_transaction(tonic_request)
+                            .await
+                            .map(|tonic_response| BitcoinAdapterResponseWrapper {
+                                r: Some(
+                                    bitcoin_adapter_response_wrapper::R::SendTransactionResponse(
+                                        tonic_response.into_inner(),
+                                    ),
+                                ),
+                            })
+                            .map_err(|err| RpcError::ServerError(err))
+                    }
+                },
+                None => Err(RpcError::InvalidRequest(request)),
             }
         })
     }
@@ -62,19 +78,11 @@ impl BitcoinAdapterClient for BitcoinAdapterClientImpl {
 struct BrokenConnectionBitcoinClient();
 
 impl BitcoinAdapterClient for BrokenConnectionBitcoinClient {
-    fn get_successors(
+    fn send_request(
         &self,
-        _request: GetSuccessorsRequest,
+        _request: BitcoinAdapterRequestWrapper,
         _opts: Options,
-    ) -> RpcResult<GetSuccessorsResponse> {
-        Err(RpcError::ConnectionBroken)
-    }
-
-    fn send_transaction(
-        &self,
-        _request: SendTransactionRequest,
-        _opts: Options,
-    ) -> RpcResult<SendTransactionResponse> {
+    ) -> RpcResult<BitcoinAdapterResponseWrapper> {
         Err(RpcError::ConnectionBroken)
     }
 }
