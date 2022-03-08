@@ -11,7 +11,7 @@ use std::{
 
 use crate::ic_instance::{node_software_version::NodeSoftwareVersion, port_allocator::AddrType};
 use crate::prod_tests::farm::FarmResult;
-use crate::prod_tests::ic::InternetComputer;
+use crate::prod_tests::ic::{InternetComputer, Node};
 use ic_base_types::NodeId;
 
 use ic_prep_lib::{
@@ -26,10 +26,7 @@ use std::io::Write;
 use std::thread::{self, JoinHandle};
 use url::Url;
 
-use super::{
-    driver_setup::DriverContext,
-    resource::{AllocatedVm, ResourceGroup},
-};
+use super::{driver_setup::DriverContext, resource::AllocatedVm};
 
 pub type UnassignedNodes = BTreeMap<NodeIndex, NodeConfiguration>;
 pub type NodeVms = BTreeMap<NodeId, AllocatedVm>;
@@ -42,13 +39,11 @@ fn mk_compressed_img_path() -> std::string::String {
 
 pub fn init_ic<P: AsRef<Path>>(
     ctx: &DriverContext,
-    prep_dir: P,
     ic: &InternetComputer,
-    res_group: &ResourceGroup,
-) -> (InitializedIc, NodeVms) {
+    prep_dir: P,
+) -> InitializedIc {
     let mut next_node_index = 0u64;
     let working_dir = PathBuf::from(prep_dir.as_ref());
-    let mut node_idx_to_vm: BTreeMap<NodeIndex, AllocatedVm> = Default::default();
 
     // In production, this dummy hash is not actually checked and exists
     // only as a placeholder: Updating individual binaries (replica/orchestrator)
@@ -87,14 +82,10 @@ pub fn init_ic<P: AsRef<Path>>(
         let subnet_index = subnet_idx as u64;
         let mut nodes: BTreeMap<NodeIndex, NodeConfiguration> = BTreeMap::new();
 
-        for _node in subnet.nodes.iter() {
+        for node in &subnet.nodes {
             let node_index = next_node_index;
             next_node_index += 1;
-            let vm = res_group
-                .get_vm(node_index)
-                .expect("Could not find allocated vm for given node index.");
-            node_idx_to_vm.insert(node_index, vm);
-            nodes.insert(node_index, node_to_config(node_index, res_group));
+            nodes.insert(node_index, node_to_config(node));
         }
 
         ic_topology.insert_subnet(
@@ -123,17 +114,10 @@ pub fn init_ic<P: AsRef<Path>>(
         );
     }
 
-    for _node in &ic.unassigned_nodes {
+    for node in &ic.unassigned_nodes {
         let node_index = next_node_index;
         next_node_index += 1;
-        let vm = res_group
-            .get_vm(node_index)
-            .expect("Could not find allocated vm for given node index.");
-        node_idx_to_vm.insert(node_index, vm);
-        ic_topology.insert_unassigned_node(
-            node_index as NodeIndex,
-            node_to_config(node_index, res_group),
-        );
+        ic_topology.insert_unassigned_node(node_index as NodeIndex, node_to_config(node));
     }
 
     let whitelist = ProvisionalWhitelist::All;
@@ -156,34 +140,13 @@ pub fn init_ic<P: AsRef<Path>>(
         ic.ssh_readonly_access_to_unassigned_nodes.clone(),
     );
 
-    let init_ic = ic_config.initialize().expect("can't fail");
-
-    let mut node_vms = BTreeMap::new();
-    init_ic
-        .initialized_topology
-        .values()
-        .flat_map(|s| s.initialized_nodes.iter())
-        .for_each(|(idx, n)| {
-            node_vms.insert(n.node_id, node_idx_to_vm.get(idx).cloned().unwrap());
-        });
-
-    let delta_idx = node_vms.len();
-    init_ic
-        .unassigned_nodes
-        .values()
-        .enumerate()
-        .for_each(|(idx, n)| {
-            let node_idx = (delta_idx + idx) as u64;
-            node_vms.insert(n.node_id, node_idx_to_vm.get(&node_idx).cloned().unwrap());
-        });
-
-    (init_ic, node_vms)
+    ic_config.initialize().expect("can't fail")
 }
 
 pub fn setup_and_start_vms(
     ctx: &DriverContext,
     initialized_ic: &InitializedIc,
-    vms: &NodeVms,
+    group_name: &str,
 ) -> anyhow::Result<()> {
     let mut nodes = vec![];
     for subnet in initialized_ic.initialized_topology.values() {
@@ -197,19 +160,17 @@ pub fn setup_and_start_vms(
 
     let mut join_handles: Vec<JoinHandle<anyhow::Result<()>>> = vec![];
     for node in nodes {
+        let group_name = group_name.to_string();
+        let name = node.node_id.to_string();
         let t_ctx = ctx.clone();
         let local_store_path = initialized_ic.target_dir.join("ic_registry_local_store");
-        let vm = vms
-            .get(&node.node_id)
-            .expect("internal error: vm for given node id not found")
-            .clone();
         join_handles.push(thread::spawn(move || {
-            create_config_disk_image(&t_ctx, &node, &vm.group_name, &local_store_path)?;
-            let image_id = upload_config_disk_image(&t_ctx, &node, &vm.group_name)?;
+            create_config_disk_image(&t_ctx, &node, &group_name, &local_store_path)?;
+            let image_id = upload_config_disk_image(&t_ctx, &node, &group_name)?;
             t_ctx
                 .farm
-                .attach_disk_image(&vm.group_name, &vm.name, "usb-storage", image_id)?;
-            t_ctx.farm.start_vm(&vm.group_name, &vm.name)?;
+                .attach_disk_image(&group_name, &name, "usb-storage", image_id)?;
+            t_ctx.farm.start_vm(&group_name, &name)?;
             Ok(())
         }));
     }
@@ -307,11 +268,8 @@ pub fn create_config_disk_image(
     Ok(())
 }
 
-fn node_to_config(node_index: NodeIndex, res_group: &ResourceGroup) -> NodeConfiguration {
-    let vm = res_group
-        .get_vm(node_index)
-        .expect("Could not find allocated vm for given node index.");
-    let ipv6_addr = vm.ip_addr;
+fn node_to_config(node: &Node) -> NodeConfiguration {
+    let ipv6_addr = node.ip_addr.expect("missing ip_addr");
     let public_api = SocketAddr::new(ipv6_addr, AddrType::PublicApi.into());
     let xnet_api = SocketAddr::new(ipv6_addr, AddrType::Xnet.into());
     let p2p_addr = SocketAddr::new(ipv6_addr, AddrType::P2P.into());
@@ -328,6 +286,6 @@ fn node_to_config(node_index: NodeIndex, res_group: &ResourceGroup) -> NodeConfi
         prometheus_metrics: vec![prometheus_addr.into()],
         // this value will be overridden by IcConfig::with_node_operator()
         node_operator_principal_id: None,
-        secret_key_store: None,
+        secret_key_store: node.secret_key_store.clone(),
     }
 }

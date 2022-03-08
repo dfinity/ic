@@ -119,7 +119,7 @@ fn evaluate_pot(ctx: &DriverContext, mut pot: Pot, path: TestPath) -> Result<Tes
 fn evaluate_pot_with_group(
     ctx: &DriverContext,
     pot: Pot,
-    config: InternetComputer,
+    mut config: InternetComputer,
     pot_path: TestPath,
     group_name: &str,
 ) -> Result<TestResultNode> {
