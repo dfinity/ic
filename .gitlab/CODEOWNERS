@@ -16,7 +16,7 @@
 
 # IC-OS project
 /ic-os/                   @dfinity-lab/teams/node-team
-/ic-os/boundary-guestos/  @dfinity-lab/teams/node-team @dfinity-lab/teams/boundarynode-team
+/ic-os/boundary-guestos/  @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/node-team
 
 # idx responsible for GitLab CI configs
 # and the pre-commit config.
