@@ -240,7 +240,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         debug!(logger;
             crypto.description => "start",
         );
-        let result = mocks::verify_opening(transcript, opener, opening, complaint);
+        let result = transcript::verify_opening(&self.csp, transcript, opener, opening, complaint);
         debug!(logger;
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),

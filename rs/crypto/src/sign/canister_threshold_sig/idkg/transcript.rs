@@ -13,7 +13,7 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
 use ic_interfaces::registry::RegistryClient;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateTranscriptError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
-    IDkgVerifyTranscriptError,
+    IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgComplaint, IDkgMultiSignedDealing, IDkgOpening, IDkgTranscript, IDkgTranscriptParams,
@@ -301,6 +301,39 @@ pub fn open_transcript<C: CspIDkgProtocol>(
         dealer_id: complaint.dealer_id,
         internal_opening_raw,
     })
+}
+
+pub fn verify_opening<C: CspIDkgProtocol>(
+    csp_idkg_client: &C,
+    transcript: &IDkgTranscript,
+    opener_id: NodeId,
+    opening: &IDkgOpening,
+    complaint: &IDkgComplaint,
+) -> Result<(), IDkgVerifyOpeningError> {
+    // Check ID of transcript inside the complaint
+    if (complaint.transcript_id != transcript.transcript_id)
+        || (opening.transcript_id != transcript.transcript_id)
+    {
+        return Err(IDkgVerifyOpeningError::TranscriptIdMismatch);
+    }
+
+    if opening.dealer_id != complaint.dealer_id {
+        return Err(IDkgVerifyOpeningError::DealerIdMismatch);
+    }
+
+    // Extract the accused dealing from the transcript
+    let (_, internal_dealing) = index_and_dealing_of_dealer(complaint.dealer_id, transcript)?;
+    let opener_index = transcript
+        .receivers
+        .position(opener_id)
+        .ok_or(IDkgVerifyOpeningError::MissingOpenerInReceivers { opener_id })?;
+    let internal_opening = CommitmentOpening::try_from(opening).map_err(|e| {
+        IDkgVerifyOpeningError::InternalError {
+            internal_error: format!("Failed to deserialize opening: {:?}", e),
+        }
+    })?;
+
+    csp_idkg_client.idkg_verify_dealing_opening(internal_dealing, opener_index, internal_opening)
 }
 
 fn ensure_sufficient_dealings_collected(

@@ -17,6 +17,7 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
     combine_sig_shares as tecdsa_combine_sig_shares, create_transcript as tecdsa_create_transcript,
     publicly_verify_dealing as tecdsa_verify_dealing_public,
     verify_complaint as tecdsa_verify_complaint,
+    verify_dealing_opening as tecdsa_verify_dealing_opening,
     verify_signature_share as tecdsa_verify_signature_share,
     verify_threshold_signature as tecdsa_verify_combined_signature,
     verify_transcript as tecdsa_verify_transcript, CommitmentOpening, DerivationPath,
@@ -30,9 +31,9 @@ use ic_logger::debug;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
     IDkgOpenTranscriptError, IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError,
-    IDkgVerifyDealingPublicError, IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError,
-    ThresholdEcdsaSignShareError, ThresholdEcdsaVerifyCombinedSignatureError,
-    ThresholdEcdsaVerifySigShareError,
+    IDkgVerifyDealingPublicError, IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
+    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+    ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::AlgorithmId;
@@ -239,6 +240,8 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp
         opener_index: NodeIndex,
         opener_public_key: &MEGaPublicKey,
     ) -> Result<CommitmentOpening, IDkgOpenTranscriptError> {
+        debug!(self.logger; crypto.method_name => "idkg_open_dealing");
+
         let opener_key_id = mega_key_id(opener_public_key);
         self.csp_vault.idkg_open_dealing(
             dealing,
@@ -247,6 +250,21 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp
             opener_index,
             &opener_key_id,
         )
+    }
+
+    fn idkg_verify_dealing_opening(
+        &self,
+        dealing: IDkgDealingInternal,
+        opener_index: NodeIndex,
+        opening: CommitmentOpening,
+    ) -> Result<(), IDkgVerifyOpeningError> {
+        debug!(self.logger; crypto.method_name => "idkg_verify_dealing_opening");
+
+        tecdsa_verify_dealing_opening(&dealing, opener_index, &opening).map_err(|e| {
+            IDkgVerifyOpeningError::InternalError {
+                internal_error: format!("{:?}", e),
+            }
+        })
     }
 }
 
