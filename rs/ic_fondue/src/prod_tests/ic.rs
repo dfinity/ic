@@ -1,19 +1,22 @@
 use super::bootstrap::{init_ic, setup_and_start_vms};
 use super::driver_setup::DriverContext;
-use super::resource::{allocate_resources, get_resource_request};
+use super::resource::{allocate_resources, get_resource_request, ResourceGroup};
 use super::test_setup::create_ic_handle;
 use crate::ic_instance::node_software_version::NodeSoftwareVersion;
 use crate::ic_manager::IcHandle;
 use anyhow::Result;
+use ic_prep_lib::node::NodeSecretKeyStore;
 use ic_protobuf::registry::subnet::v1::GossipConfig;
 use ic_protobuf::registry::subnet::v1::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::p2p::build_default_gossip_config;
-use ic_types::{Height, PrincipalId};
+use ic_types::{Height, NodeId, PrincipalId};
 use phantom_newtype::AmountOf;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use std::net::IpAddr;
+use std::path::Path;
 use std::time::Duration;
 
 /// Builder object to declare a topology of an InternetComputer. Used as input
@@ -80,16 +83,56 @@ impl InternetComputer {
     }
 
     pub fn setup_and_start(
-        &self,
+        &mut self,
         ctx: &DriverContext,
-        temp_dir: &tempfile::TempDir,
+        prep_dir: &tempfile::TempDir,
         group_name: &str,
     ) -> Result<IcHandle> {
+        let tempdir = tempfile::tempdir()?;
+        self.create_secret_key_stores(tempdir.path())?;
         let res_request = get_resource_request(ctx, self, group_name);
         let res_group = allocate_resources(ctx, &res_request)?;
-        let (init_ic, node_vms) = init_ic(ctx, temp_dir.path(), self, &res_group);
-        setup_and_start_vms(ctx, &init_ic, &node_vms)?;
-        Ok(create_ic_handle(ctx, &init_ic, &node_vms))
+        self.propagate_ip_addrs(&res_group);
+        let init_ic = init_ic(ctx, self, prep_dir.path());
+        setup_and_start_vms(ctx, &init_ic, group_name)?;
+        Ok(create_ic_handle(ctx, &init_ic, group_name))
+    }
+
+    fn create_secret_key_stores(&mut self, tempdir: &Path) -> Result<()> {
+        for n in self.unassigned_nodes.iter_mut() {
+            let sks = NodeSecretKeyStore::new(tempdir.join(format!("{:p}", n)))?;
+            n.secret_key_store = Some(sks);
+        }
+        for s in self.subnets.iter_mut() {
+            for n in s.nodes.iter_mut() {
+                let sks = NodeSecretKeyStore::new(tempdir.join(format!("{:p}", n)))?;
+                n.secret_key_store = Some(sks);
+            }
+        }
+        Ok(())
+    }
+
+    fn propagate_ip_addrs(&mut self, res_group: &ResourceGroup) {
+        for n in self.unassigned_nodes.iter_mut() {
+            n.ip_addr = Some(
+                res_group
+                    .vms
+                    .get(&n.id().to_string())
+                    .unwrap_or_else(|| panic!("no VM found for [node_id = {:?}]", n.id()))
+                    .ip_addr,
+            );
+        }
+        for s in self.subnets.iter_mut() {
+            for n in s.nodes.iter_mut() {
+                n.ip_addr = Some(
+                    res_group
+                        .vms
+                        .get(n.id().to_string().as_str())
+                        .unwrap_or_else(|| panic!("no VM found for [node_id = {:?}]", n.id()))
+                        .ip_addr,
+                );
+            }
+        }
     }
 }
 
@@ -290,10 +333,19 @@ pub enum MemoryKiB {}
 pub struct Node {
     pub vcpus: Option<NrOfVCPUs>,
     pub memory_kibibytes: Option<AmountOfMemoryKiB>,
+    pub secret_key_store: Option<NodeSecretKeyStore>,
+    pub ip_addr: Option<IpAddr>,
 }
 
 impl Node {
     pub fn new() -> Self {
         Default::default()
+    }
+
+    pub fn id(&self) -> NodeId {
+        self.secret_key_store
+            .clone()
+            .expect("no secret key store")
+            .node_id
     }
 }

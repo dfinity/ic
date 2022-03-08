@@ -1,8 +1,7 @@
-use std::net::IpAddr;
-
 use crate::prod_tests::ic::{AmountOfMemoryKiB, InternetComputer, Node, NrOfVCPUs};
-use ic_prep_lib::node::NodeIndex;
 use slog::info;
+use std::collections::BTreeMap;
+use std::net::IpAddr;
 use url::Url;
 
 use super::driver_setup::DriverContext;
@@ -67,7 +66,7 @@ pub enum BootImage {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ResourceGroup {
     pub group_name: String,
-    pub vms: Vec<AllocatedVm>,
+    pub vms: BTreeMap<String, AllocatedVm>,
 }
 
 impl ResourceGroup {
@@ -79,13 +78,10 @@ impl ResourceGroup {
     }
 
     pub fn add_vm(&mut self, allocated_vm: AllocatedVm) {
-        self.vms.push(allocated_vm)
-    }
-
-    pub fn get_vm(&self, node_idx: NodeIndex) -> Option<AllocatedVm> {
-        self.vms.get(node_idx as usize).cloned()
+        self.vms.insert(allocated_vm.name.clone(), allocated_vm);
     }
 }
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct AllocatedVm {
     pub name: String,
@@ -103,28 +99,15 @@ pub fn get_resource_request(
     let url = ctx.base_img_url.clone();
     let primary_image_sha256 = ctx.base_img_sha256.clone();
     let mut res_req = ResourceRequest::new(url, primary_image_sha256);
-
     res_req.group_name = group_name.to_string();
-    config
-        .subnets
-        .iter()
-        .enumerate()
-        .flat_map(|(s_idx, s)| {
-            s.nodes
-                .iter()
-                .enumerate()
-                .map(move |(n_idx, n)| (s_idx, n_idx, n))
-        })
-        .for_each(|(s_idx, n_idx, n)| {
-            res_req.add_vm_request(vm_spec_from_node(n, format!("{}-{}", s_idx, n_idx)))
-        });
-    config
-        .unassigned_nodes
-        .iter()
-        .enumerate()
-        .for_each(|(n_idx, n)| {
-            res_req.add_vm_request(vm_spec_from_node(n, format!("unassigned-{}", n_idx)))
-        });
+    for s in &config.subnets {
+        for n in &s.nodes {
+            res_req.add_vm_request(vm_spec_from_node(n));
+        }
+    }
+    for n in &config.unassigned_nodes {
+        res_req.add_vm_request(vm_spec_from_node(n));
+    }
     res_req
 }
 
@@ -159,9 +142,9 @@ pub fn allocate_resources(ctx: &DriverContext, req: &ResourceRequest) -> FarmRes
     Ok(res_group)
 }
 
-fn vm_spec_from_node(n: &Node, name: String) -> VmSpec {
+fn vm_spec_from_node(n: &Node) -> VmSpec {
     VmSpec {
-        name,
+        name: n.id().to_string(),
         vcpus: n.vcpus.unwrap_or(DEFAULT_VCPUS_PER_VM),
         memory_kibibytes: n.memory_kibibytes.unwrap_or(DEFAULT_MEMORY_KIB_PER_VM),
         boot_image: BootImage::GroupDefault,
