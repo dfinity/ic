@@ -8,15 +8,14 @@ DOCKER_IMG_VERSION=$(cat "$REPO_ROOT/gitlab-ci/docker/TAG")
 USER="$(whoami)"
 SET_UID="$(id -u $USER)"
 
-BUILD_ARGS=(--pull)
 if [ $USER != ubuntu ]; then
-    BUILD_ARGS=()
     DOCKER_IMG_VERSION="$USER-$SET_UID-$DOCKER_IMG_VERSION"
-    "$REPO_ROOT"/gitlab-ci/docker/docker-build-local-image.sh
 fi
 
+"$REPO_ROOT"/gitlab-ci/docker/docker-build-local-image.sh
+
 cd "$REPO_ROOT"
-docker image build "${BUILD_ARGS[@]}" -t ic-build-src:$TAG -f- . <<EOF
+docker image build -t ic-build-src:$TAG -f- . <<EOF
 FROM dfinity/ic-build:$DOCKER_IMG_VERSION
 USER $SET_UID
 COPY --chown=${USER:-ubuntu}:${USER:-ubuntu} . /ic

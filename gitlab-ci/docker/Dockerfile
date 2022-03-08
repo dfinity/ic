@@ -98,7 +98,6 @@ RUN mkdir --mode=0700 /home/${USER}/.ssh && \
 RUN cargo install cargo-audit --version 0.16.0
 
 COPY entrypoint.sh /entrypoint.sh
-
 # Install config for capsules.
 COPY dot_capsules.toml /home/${USER}/.capsules.toml
 WORKDIR /

@@ -37,16 +37,19 @@ if [ -n "$NOPUSH" ]; then
     exit 0
 fi
 
+# Push the new image to registry.gitlab.com after building it
+if grep -q "https://index.docker.io" ~/.docker/config.json; then
+    docker push dfinity/ic-build:"$NEWVERSION"
+    docker push dfinity/ic-build:latest
+    docker push dfinity/ic-build-nix:"$NEWVERSION"
+    docker push dfinity/ic-build-nix:latest
+else
+    echo "WARNING: Not logged in to Docker Hub, pushing to Docker Hub skipped"
+fi
+
 if grep -q "registry.gitlab.com" ~/.docker/config.json; then
     docker push registry.gitlab.com/dfinity-lab/core/docker/ic-build:"$NEWVERSION"-"$SHA1ICBUILD"
     docker push registry.gitlab.com/dfinity-lab/core/docker/ic-build-nix:"$NEWVERSION"-"$SHA1ICBUILDNIX"
 else
     echo "WARNING: Not logged in to registry.gitlab.com, pushing to registry.gitlab.com skipped"
 fi
-
-# push to dockerhub as well
-docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
-docker push dfinity/ic-build:"$NEWVERSION"
-docker push dfinity/ic-build:latest
-docker push dfinity/ic-build-nix:"$NEWVERSION"
-docker push dfinity/ic-build-nix:latest
