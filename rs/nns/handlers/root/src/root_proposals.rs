@@ -12,7 +12,7 @@ use dfn_core::api::{call, now, CanisterId};
 use dfn_core::println;
 use ic_base_types::{CanisterInstallMode, NodeId, PrincipalId, SubnetId};
 use ic_nervous_system_root::{
-    CanisterIdRecord, CanisterStatusResult, ChangeNnsCanisterProposalPayload, LOG_PREFIX,
+    CanisterIdRecord, CanisterStatusResult, ChangeCanisterProposal, LOG_PREFIX,
 };
 use ic_nns_common::registry::get_value;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -86,7 +86,7 @@ pub struct GovernanceUpgradeRootProposal {
     /// governance canister.
     pub current_wasm_sha: Vec<u8>,
     /// The proposal payload to ugprade the governance canister.
-    pub payload: ChangeNnsCanisterProposalPayload,
+    pub payload: ChangeCanisterProposal,
     /// The sha of the binary the proposer wants to upgrade to.
     pub proposed_wasm_sha: Vec<u8>,
     /// The principal id of the proposer (must be one of the node
@@ -174,7 +174,7 @@ async fn get_current_governance_canister_wasm() -> Vec<u8> {
 pub async fn submit_root_proposal_to_upgrade_governance_canister(
     caller: PrincipalId,
     expected_governance_wasm_sha: Vec<u8>,
-    payload: ChangeNnsCanisterProposalPayload,
+    proposal: ChangeCanisterProposal,
 ) -> Result<(), String> {
     let now = now()
         .duration_since(SystemTime::UNIX_EPOCH)
@@ -186,9 +186,9 @@ pub async fn submit_root_proposal_to_upgrade_governance_canister(
     // - That the wasm has some bytes in it.
     // - That it targets the governance canister.
     // - That it is an upgrade (reinstall is not supported).
-    if payload.wasm_module.is_empty()
-        || payload.canister_id != GOVERNANCE_CANISTER_ID
-        || payload.mode != CanisterInstallMode::Upgrade
+    if proposal.wasm_module.is_empty()
+        || proposal.canister_id != GOVERNANCE_CANISTER_ID
+        || proposal.mode != CanisterInstallMode::Upgrade
     {
         let message = format!(
             "{}Invalid proposal. Proposal must be an upgrade proposal \
@@ -267,7 +267,7 @@ pub async fn submit_root_proposal_to_upgrade_governance_canister(
         // Store the proposal, the current list of principals that can vote,
         // together with the version number and as many votes for 'yes' as the
         // number of nodes the caller's principal operates, in the nns subnetwork.
-        let proposed_wasm_sha = ic_crypto_sha::Sha256::hash(&payload.wasm_module).to_vec();
+        let proposed_wasm_sha = ic_crypto_sha::Sha256::hash(&proposal.wasm_module).to_vec();
 
         proposals.borrow_mut().insert(
             caller,
@@ -275,7 +275,7 @@ pub async fn submit_root_proposal_to_upgrade_governance_canister(
                 nns_subnet_id,
                 current_wasm_sha: current_governance_wasm_sha.clone(),
                 proposed_wasm_sha: proposed_wasm_sha.clone(),
-                payload,
+                payload: proposal,
                 proposer: caller,
                 node_operator_ballots,
                 subnet_membership_registry_version,

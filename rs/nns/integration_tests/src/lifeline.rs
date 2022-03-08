@@ -14,7 +14,7 @@ use ic_nns_governance::pb::v1::{
 use ic_nns_governance::proposal_submission::create_external_update_proposal_candid;
 use ic_nns_test_utils::ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID};
 use ic_nns_test_utils::{
-    governance::{get_pending_proposals, wait_for_final_state, UpgradeRootProposalPayload},
+    governance::{get_pending_proposals, wait_for_final_state, UpgradeRootProposal},
     itest_helpers::{local_test_on_nns_subnet, NnsCanisters, NnsInitPayloadsBuilder},
 };
 
@@ -75,7 +75,7 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
             "",
             "",
             NnsFunction::NnsRootUpgrade,
-            UpgradeRootProposalPayload {
+            UpgradeRootProposal {
                 wasm_module: wasm_module.clone(),
                 module_arg: magic.to_vec(),
                 stop_upgrade_start: true,
@@ -197,7 +197,7 @@ fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
             "",
             "",
             NnsFunction::NnsRootUpgrade,
-            UpgradeRootProposalPayload {
+            UpgradeRootProposal {
                 wasm_module: empty_wasm.to_vec(),
                 module_arg: init_arg.to_vec(),
                 stop_upgrade_start: false,

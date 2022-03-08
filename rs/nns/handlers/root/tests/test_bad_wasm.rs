@@ -6,7 +6,7 @@ use dfn_candid::candid;
 
 use ic_base_types::CanisterInstallMode::{self, Reinstall, Upgrade};
 use ic_nervous_system_root::{
-    CanisterIdRecord, CanisterStatusResult, CanisterStatusType, ChangeNnsCanisterProposalPayload,
+    CanisterIdRecord, CanisterStatusResult, CanisterStatusType, ChangeCanisterProposal,
 };
 use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
 use ic_nns_test_utils::itest_helpers::{
@@ -55,12 +55,9 @@ async fn install_invalid_wasm(
         .await
         .unwrap();
 
-    let proposal_payload = ChangeNnsCanisterProposalPayload::new(
-        stop_before_installing,
-        mode,
-        universal.canister_id(),
-    )
-    .with_wasm(b"This is not legal wasm binary.".to_vec());
+    let proposal =
+        ChangeCanisterProposal::new(stop_before_installing, mode, universal.canister_id())
+            .with_wasm(b"This is not legal wasm binary.".to_vec());
 
     // Due to the self-call, the initial call succeeds
     assert!(
@@ -68,7 +65,7 @@ async fn install_invalid_wasm(
             &fake_proposal_canister,
             &root,
             "change_nns_canister",
-            Encode!(&proposal_payload).unwrap()
+            Encode!(&proposal).unwrap()
         )
         .await
     );

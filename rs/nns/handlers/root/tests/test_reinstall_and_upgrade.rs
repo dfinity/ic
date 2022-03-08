@@ -5,8 +5,7 @@ use dfn_candid::candid;
 
 use ic_base_types::CanisterInstallMode::{self, Install, Reinstall, Upgrade};
 use ic_nervous_system_root::{
-    CanisterIdRecord, CanisterStatusResult, CanisterStatusType::Running,
-    ChangeNnsCanisterProposalPayload,
+    CanisterIdRecord, CanisterStatusResult, CanisterStatusType::Running, ChangeCanisterProposal,
 };
 use ic_nns_handler_root::init::RootCanisterInitPayload;
 use ic_nns_test_utils::itest_helpers::{
@@ -64,12 +63,9 @@ async fn install_stable_memory_reader(
         .await
         .unwrap();
 
-    let proposal_payload = ChangeNnsCanisterProposalPayload::new(
-        stop_before_installing,
-        mode,
-        universal.canister_id(),
-    )
-    .with_wasm(STABLE_MEMORY_READER_WASM.clone());
+    let proposal =
+        ChangeCanisterProposal::new(stop_before_installing, mode, universal.canister_id())
+            .with_wasm(STABLE_MEMORY_READER_WASM.clone());
 
     // The upgrade should work
     assert!(
@@ -77,7 +73,7 @@ async fn install_stable_memory_reader(
             &fake_proposal_canister,
             &root,
             "change_nns_canister",
-            Encode!(&proposal_payload).unwrap()
+            Encode!(&proposal).unwrap()
         )
         .await
     );
@@ -178,10 +174,9 @@ fn test_init_payload_is_passed_through_upgrades() {
             .await
             .unwrap();
 
-        let proposal_payload =
-            ChangeNnsCanisterProposalPayload::new(false, Upgrade, universal.canister_id())
-                .with_wasm(test_wasm)
-                .with_arg(test_byte_array.to_vec());
+        let proposal = ChangeCanisterProposal::new(false, Upgrade, universal.canister_id())
+            .with_wasm(test_wasm)
+            .with_arg(test_byte_array.to_vec());
 
         // The upgrade should work
         assert!(
@@ -189,7 +184,7 @@ fn test_init_payload_is_passed_through_upgrades() {
                 &fake_proposal_canister,
                 &root,
                 "change_nns_canister",
-                Encode!(&proposal_payload).unwrap()
+                Encode!(&proposal).unwrap()
             )
             .await
         );

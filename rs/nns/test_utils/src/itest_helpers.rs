@@ -31,8 +31,7 @@ use ic_base_types::{CanisterId, CanisterInstallMode};
 use ic_canister_client::Sender;
 use ic_config::{subnet_config::SubnetConfig, Config};
 use ic_nervous_system_root::{
-    CanisterIdRecord, CanisterStatusResult, CanisterStatusType::Running,
-    ChangeNnsCanisterProposalPayload,
+    CanisterIdRecord, CanisterStatusResult, CanisterStatusType::Running, ChangeCanisterProposal,
 };
 use ic_nns_common::{
     init::{LifelineCanisterInitPayload, LifelineCanisterInitPayloadBuilder},
@@ -726,14 +725,13 @@ async fn change_nns_canister_by_proposal(
     let old_module_hash = status.module_hash.unwrap();
     assert_ne!(old_module_hash.as_slice(), new_module_hash, "change_nns_canister_by_proposal: both module hashes prev, cur are the same {:?}, but they should be different for upgrade", old_module_hash);
 
-    let proposal_payload =
-        ChangeNnsCanisterProposalPayload::new(stop_before_installing, how, canister_id)
-            .with_memory_allocation(ic_nns_constants::memory_allocation_of(canister_id))
-            .with_wasm(wasm);
-    let proposal_payload = if let Some(arg) = arg {
-        proposal_payload.with_arg(arg)
+    let proposal = ChangeCanisterProposal::new(stop_before_installing, how, canister_id)
+        .with_memory_allocation(ic_nns_constants::memory_allocation_of(canister_id))
+        .with_wasm(wasm);
+    let proposal = if let Some(arg) = arg {
+        proposal.with_arg(arg)
     } else {
-        proposal_payload
+        proposal
     };
 
     // Submitting a proposal also implicitly records a vote from the proposer,
@@ -743,7 +741,7 @@ async fn change_nns_canister_by_proposal(
         Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
         NeuronId(TEST_NEURON_1_ID),
         NnsFunction::NnsCanisterUpgrade,
-        proposal_payload,
+        proposal,
         "Upgrade NNS Canister".to_string(),
         "<proposal created by change_nns_canister_by_proposal>".to_string(),
     )
