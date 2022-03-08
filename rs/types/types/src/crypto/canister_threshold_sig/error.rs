@@ -162,7 +162,10 @@ pub enum IDkgCreateDealingError {
 impl_display_using_debug!(IDkgCreateDealingError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum IDkgVerifyDealingPublicError {}
+pub enum IDkgVerifyDealingPublicError {
+    TranscriptIdMismatch,
+    InvalidDealing { reason: String },
+}
 impl_display_using_debug!(IDkgVerifyDealingPublicError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

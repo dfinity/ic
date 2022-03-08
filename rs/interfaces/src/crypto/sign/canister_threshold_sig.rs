@@ -45,6 +45,7 @@ pub trait IDkgProtocol {
     fn verify_dealing_public(
         &self,
         params: &IDkgTranscriptParams,
+        dealer_id: NodeId,
         dealing: &IDkgDealing,
     ) -> Result<(), IDkgVerifyDealingPublicError>;
 

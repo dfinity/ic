@@ -132,8 +132,18 @@ impl ErrorReplication for IDkgVerifyTranscriptError {
 
 impl ErrorReplication for IDkgVerifyDealingPublicError {
     fn is_replicated(&self) -> bool {
-        // TODO correctly implement this function
-        false
+        // The match below is intentionally explicit on all possible values,
+        // to avoid defaults, which might be error-prone.
+        // Upon addition of any new error this match has to be updated.
+
+        // Public dealing verification does not depend on any local or private
+        // state and so is inherently replicated.
+        match self {
+            // The dealer wasn't even in the transcript
+            Self::TranscriptIdMismatch => true,
+            // The dealing was publically invalid
+            Self::InvalidDealing { .. } => true,
+        }
     }
 }
 
@@ -158,6 +168,7 @@ impl ErrorReplication for IDkgVerifyComplaintError {
             // true, as the public key is fetched from the registry and the
             // registry is guaranteed to be consistent across replicas
             IDkgVerifyComplaintError::MalformedComplainerPublicKey { .. } => true,
+
             // true, as the set of supported algorithms is stable (bound to code version)
             IDkgVerifyComplaintError::UnsupportedComplainerPublicKeyAlgorithm { .. } => true,
             // true, as (de)serialization is stable across replicas

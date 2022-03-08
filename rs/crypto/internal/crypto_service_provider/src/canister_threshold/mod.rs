@@ -15,6 +15,7 @@ use crate::secret_key_store::SecretKeyStore;
 use crate::Csp;
 use ic_crypto_internal_threshold_sig_ecdsa::{
     combine_sig_shares as tecdsa_combine_sig_shares, create_transcript as tecdsa_create_transcript,
+    publicly_verify_dealing as tecdsa_verify_dealing_public,
     verify_complaint as tecdsa_verify_complaint,
     verify_signature_share as tecdsa_verify_signature_share,
     verify_threshold_signature as tecdsa_verify_combined_signature,
@@ -29,8 +30,9 @@ use ic_logger::debug;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
     IDkgOpenTranscriptError, IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError,
-    IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
-    ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
+    IDkgVerifyDealingPublicError, IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError,
+    ThresholdEcdsaSignShareError, ThresholdEcdsaVerifyCombinedSignatureError,
+    ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::AlgorithmId;
@@ -88,6 +90,32 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp
             receiver_key_id,
             context_data,
         )
+    }
+
+    fn idkg_verify_dealing_public(
+        &self,
+        algorithm_id: AlgorithmId,
+        dealing: &IDkgDealingInternal,
+        operation_mode: &IDkgTranscriptOperationInternal,
+        reconstruction_threshold: NumberOfNodes,
+        dealer_index: NodeIndex,
+        number_of_receivers: NumberOfNodes,
+        context_data: &[u8],
+    ) -> Result<(), IDkgVerifyDealingPublicError> {
+        debug!(self.logger; crypto.method_name => "idkg_verify_dealing_public");
+
+        tecdsa_verify_dealing_public(
+            algorithm_id,
+            dealing,
+            operation_mode,
+            reconstruction_threshold,
+            dealer_index,
+            number_of_receivers,
+            context_data,
+        )
+        .map_err(|e| IDkgVerifyDealingPublicError::InvalidDealing {
+            reason: format!("{:?}", e),
+        })
     }
 
     fn idkg_create_transcript(
