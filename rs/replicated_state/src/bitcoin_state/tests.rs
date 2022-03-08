@@ -79,7 +79,7 @@ fn can_detect_in_flight_get_successors_requests() {
 
     // Enqueue a `SendTransactionRequest` -- should not affect the in flight `GetSuccessorsRequest`s.
     let request = BitcoinAdapterRequestWrapper::SendTransactionRequest(SendTransactionRequest {
-        raw_tx: vec![5; 32],
+        transaction: vec![5; 32],
     });
     bitcoin_state.push_request(request).unwrap();
     assert!(!bitcoin_state.has_in_flight_get_successors_requests());

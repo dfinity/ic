@@ -112,7 +112,7 @@ impl BtcAdapter for BtcAdapterImpl {
         &self,
         request: Request<v1::SendTransactionRequest>,
     ) -> Result<Response<v1::SendTransactionResponse>, Status> {
-        let transaction = request.into_inner().raw_tx;
+        let transaction = request.into_inner().transaction;
         self.adapter.lock().await.send_transaction(transaction);
         Ok(Response::new(v1::SendTransactionResponse {}))
     }

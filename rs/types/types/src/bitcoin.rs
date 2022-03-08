@@ -36,13 +36,13 @@ impl From<v1::GetSuccessorsRequest> for GetSuccessorsRequest {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SendTransactionRequest {
-    pub raw_tx: Vec<u8>,
+    pub transaction: Vec<u8>,
 }
 
 impl From<&SendTransactionRequest> for v1::SendTransactionRequest {
     fn from(request: &SendTransactionRequest) -> Self {
         v1::SendTransactionRequest {
-            raw_tx: request.raw_tx.clone(),
+            transaction: request.transaction.clone(),
         }
     }
 }
@@ -50,7 +50,7 @@ impl From<&SendTransactionRequest> for v1::SendTransactionRequest {
 impl From<v1::SendTransactionRequest> for SendTransactionRequest {
     fn from(request: v1::SendTransactionRequest) -> Self {
         SendTransactionRequest {
-            raw_tx: request.raw_tx,
+            transaction: request.transaction,
         }
     }
 }
