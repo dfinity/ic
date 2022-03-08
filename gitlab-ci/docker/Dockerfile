@@ -1,7 +1,7 @@
 ARG SRC_IMG_PATH=undefined
 FROM ${SRC_IMG_PATH} as src_img
 
-FROM ubuntu:20.04
+FROM ubuntu@sha256:9c152418e380c6e6dd7e19567bb6762b67e22b1d0612e4f5074bda6e6040c64a
 
 # The image expects the following volumes mounted from the host:
 # /cache - holding the sccache artifacts
