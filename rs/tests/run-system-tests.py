@@ -53,7 +53,7 @@ def exit_with_log(msg: str) -> None:
     sys.exit(1)
 
 
-def extract_artifacts(source_dir: str, dest_dir: str, keep_original: bool, is_set_executable: bool) -> None:
+def extract_artifacts(source_dir: str, dest_dir: str, delete_source_dir: bool, is_set_executable: bool) -> None:
     logging.info(f"Unzipping files in {source_dir} dir.")
     files_list = os.listdir(source_dir)
     for file in files_list:
@@ -63,14 +63,16 @@ def extract_artifacts(source_dir: str, dest_dir: str, keep_original: bool, is_se
                 # Take filename without extension.
                 save_file = os.path.splitext(file_name)[0]
                 with open(save_file, "wb") as f_out:
-                    if not keep_original:
-                        shutil.copyfileobj(f_in, f_out)
+                    shutil.copyfileobj(f_in, f_out)
                     # Set executable attribute (chmod +x).
                     if is_set_executable:
                         st = os.stat(save_file)
                         os.chmod(save_file, st.st_mode | stat.S_IEXEC)
                     # Move the file after extraction (overwrite if exists).
                     shutil.move(save_file, os.path.join(dest_dir, os.path.basename(save_file)))
+    if delete_source_dir:
+        logging.info(f"Deleting source {source_dir} dir.")
+        shutil.rmtree(source_dir, ignore_errors=True)
 
 
 def replace_symbols(text: str, symbols_to_replace: List[str], replace_with: str) -> str:
@@ -119,6 +121,8 @@ def generate_default_job_id() -> str:
 
 
 def main(runner_args: str, folders_to_remove: List[str]) -> int:
+    # From this path the script was started.
+    base_path = os.getcwd()
     # Set path to the script path (in case script is launched from non-parent dir).
     current_path = Path(os.path.dirname(os.path.abspath(__file__)))
     os.chdir(current_path.absolute())
@@ -142,6 +146,9 @@ def main(runner_args: str, folders_to_remove: List[str]) -> int:
     # Start set variables.
     is_local_run = JOB_ID is None
     use_locally_prebuilt_artifacts = ARTIFACT_DIR != ""
+    # Handle relative ARTIFACT_DIR path.
+    if is_local_run and not os.path.isabs(ARTIFACT_DIR):
+        ARTIFACT_DIR = os.path.join(base_path, ARTIFACT_DIR)
     is_merge_request = CI_PARENT_PIPELINE_SOURCE == "merge_request_event"
     is_honeycomb_push = not is_local_run
     is_slack_notify = not is_local_run and CI_PIPELINE_SOURCE == "schedule"
@@ -194,10 +201,13 @@ def main(runner_args: str, folders_to_remove: List[str]) -> int:
         JOB_ID = generate_default_job_id()
         RUN_CMD = "cargo"
         ADDITIONAL_ARGS = "run --bin prod-test-driver --"
-        if not use_locally_prebuilt_artifacts:
-            artifacts_tmp_dir = tempfile.mkdtemp()
-            ARTIFACT_DIR = f"{artifacts_tmp_dir}/artifacts"
-            folders_to_remove.append(artifacts_tmp_dir)
+        artifacts_tmp_dir = tempfile.mkdtemp()
+        folders_to_remove.append(artifacts_tmp_dir)
+        _tmp = f"{artifacts_tmp_dir}/artifacts"
+        if use_locally_prebuilt_artifacts:
+            logging.info(f"Copying prebuilt artifacts from {ARTIFACT_DIR} to {_tmp}")
+            shutil.copytree(ARTIFACT_DIR, _tmp)
+        ARTIFACT_DIR = _tmp
         results_tmp_dir = tempfile.mkdtemp()
         folders_to_remove.append(results_tmp_dir)
         RESULT_FILE = f"{results_tmp_dir}/test-results.json"
@@ -225,15 +235,21 @@ def main(runner_args: str, folders_to_remove: List[str]) -> int:
 
     if use_locally_prebuilt_artifacts:
         logging.info(f"Extracting artifacts from the locally prebuilt {ARTIFACT_DIR} dir.")
-        extract_artifacts(source_dir=canisters_path, dest_dir=ARTIFACT_DIR, keep_original=True, is_set_executable=False)
-        extract_artifacts(source_dir=icos_path, dest_dir=ARTIFACT_DIR, keep_original=True, is_set_executable=False)
-        extract_artifacts(source_dir=release_path, dest_dir=ARTIFACT_DIR, keep_original=True, is_set_executable=True)
+        extract_artifacts(
+            source_dir=canisters_path, dest_dir=ARTIFACT_DIR, delete_source_dir=False, is_set_executable=False
+        )
+        extract_artifacts(source_dir=icos_path, dest_dir=ARTIFACT_DIR, delete_source_dir=False, is_set_executable=False)
+        extract_artifacts(
+            source_dir=release_path, dest_dir=ARTIFACT_DIR, delete_source_dir=False, is_set_executable=True
+        )
     elif is_merge_request:
         logging.info(f"Extracting artifacts from {ARTIFACT_DIR} dir.")
         extract_artifacts(
-            source_dir=canisters_path, dest_dir=ARTIFACT_DIR, keep_original=False, is_set_executable=False
+            source_dir=canisters_path, dest_dir=ARTIFACT_DIR, delete_source_dir=True, is_set_executable=False
         )
-        extract_artifacts(source_dir=release_path, dest_dir=ARTIFACT_DIR, keep_original=False, is_set_executable=True)
+        extract_artifacts(
+            source_dir=release_path, dest_dir=ARTIFACT_DIR, delete_source_dir=True, is_set_executable=True
+        )
     else:
         logging.info(f"Downloading dependencies built from commit: {RED}{IC_VERSION_ID}{NC}")
         RCLONE_ARGS = f"--git-rev {IC_VERSION_ID} --out={ARTIFACT_DIR} --unpack --mark-executable"
