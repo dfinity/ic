@@ -75,13 +75,11 @@ use crate::{
 use async_trait::async_trait;
 use ic_interfaces::{
     ingress_pool::IngressPoolThrottler,
-    registry::RegistryClient,
     transport::{AsyncTransportEventHandler, SendError},
 };
 use ic_logger::{info, replica_logger::ReplicaLogger, trace};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy, registry::subnet::v1::GossipConfig};
-use ic_registry_client::helper::subnet::SubnetRegistry;
 use ic_types::{
     artifact::AdvertClass,
     canonical_error::{unavailable_error, CanonicalError},
@@ -91,7 +89,7 @@ use ic_types::{
         FlowId, TransportError, TransportErrorCode, TransportNotification, TransportPayload,
         TransportStateChange,
     },
-    NodeId, SubnetId,
+    NodeId,
 };
 use parking_lot::RwLock;
 use std::{
@@ -114,22 +112,8 @@ const P2P_MAX_INGRESS_THREADS: usize = 2;
 const P2P_MAX_ADVERT_THREADS: usize = 1;
 const P2P_MAX_EVENT_HANDLER_THREADS: usize = 6;
 
-/// Fetch the Gossip configuration from the registry.
-pub fn fetch_gossip_config(
-    registry_client: Arc<dyn RegistryClient>,
-    subnet_id: SubnetId,
-) -> GossipConfig {
-    if let Ok(Some(Some(gossip_config))) =
-        registry_client.get_gossip_config(subnet_id, registry_client.get_latest_version())
-    {
-        gossip_config
-    } else {
-        ic_types::p2p::build_default_gossip_config()
-    }
-}
-
 /// A *Gossip* type with atomic reference counting.
-pub type GossipArc = Arc<
+type GossipArc = Arc<
     dyn Gossip<
             GossipAdvert = GossipAdvert,
             GossipChunkRequest = GossipChunkRequest,
@@ -243,7 +227,7 @@ impl FlowWorker {
 
 /// The struct implements the async event handler traits for consumption by
 /// transport, ingress, artifact manager, and node addition/removal.
-pub struct P2PEventHandlerImpl {
+pub struct AsyncTransportEventHandlerImpl {
     /// The replica node ID.
     node_id: NodeId,
     /// The logger.
@@ -300,9 +284,7 @@ impl From<GossipConfig> for ChannelConfig {
     }
 }
 
-impl P2PEventHandlerImpl {
-    /// The function creates a `P2PEventHandlerImpl` instance.
-    #[allow(dead_code, clippy::too_many_arguments)] // pending integration with P2P crate
+impl AsyncTransportEventHandlerImpl {
     pub fn new(
         node_id: NodeId,
         log: ReplicaLogger,
@@ -359,9 +341,8 @@ impl P2PEventHandlerImpl {
     }
 }
 
-/// `P2PEventHandlerImpl` implements the `AsyncTransportEventHandler` trait.
 #[async_trait]
-impl AsyncTransportEventHandler for P2PEventHandlerImpl {
+impl AsyncTransportEventHandler for AsyncTransportEventHandlerImpl {
     /// The method sends the given message on the flow associated with the given
     /// flow ID.
     async fn send_message(&self, flow: FlowId, message: TransportPayload) -> Result<(), SendError> {
@@ -713,13 +694,13 @@ pub mod tests {
     pub(crate) fn new_test_event_handler(
         advert_max_depth: usize,
         node_id: NodeId,
-    ) -> (P2PEventHandlerImpl, AdvertSubscriber) {
+    ) -> (AsyncTransportEventHandlerImpl, AdvertSubscriber) {
         let mut channel_config = ChannelConfig::from(ic_types::p2p::build_default_gossip_config());
         channel_config
             .map
             .insert(FlowType::Advert, advert_max_depth);
 
-        let handler = P2PEventHandlerImpl::new(
+        let handler = AsyncTransportEventHandlerImpl::new(
             node_id,
             p2p_test_setup_logger().root.clone().into(),
             &MetricsRegistry::new(),
@@ -737,7 +718,7 @@ pub mod tests {
 
     /// The function sends the given number of messages to the peer with the
     /// given node ID.
-    async fn send_advert(count: usize, handler: &P2PEventHandlerImpl, peer_id: NodeId) {
+    async fn send_advert(count: usize, handler: &AsyncTransportEventHandlerImpl, peer_id: NodeId) {
         for i in 0..count {
             let message = GossipMessage::Advert(make_gossip_advert(i as u64));
             let message = TransportPayload(pb::GossipMessage::proxy_encode(message).unwrap());

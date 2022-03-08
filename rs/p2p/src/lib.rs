@@ -94,10 +94,15 @@
 //! <img src="../../../../../docs/assets/p2p.png" height="960"
 //! width="540"/> </div> <hr/>
 
+use ic_protobuf::registry::subnet::v1::GossipConfig;
+use ic_registry_client::client::RegistryClient;
+use ic_registry_client::helper::subnet::SubnetRegistry;
+use ic_types::SubnetId;
 use serde::{Deserialize, Serialize};
 use std::{
     error,
     fmt::{Display, Formatter, Result as FmtResult},
+    sync::Arc,
 };
 
 mod artifact_download_list;
@@ -224,6 +229,20 @@ pub(crate) mod advert_utils {
         }
 
         Ok(())
+    }
+}
+
+/// Fetch the Gossip configuration from the registry.
+pub fn fetch_gossip_config(
+    registry_client: Arc<dyn RegistryClient>,
+    subnet_id: SubnetId,
+) -> GossipConfig {
+    if let Ok(Some(Some(gossip_config))) =
+        registry_client.get_gossip_config(subnet_id, registry_client.get_latest_version())
+    {
+        gossip_config
+    } else {
+        ic_types::p2p::build_default_gossip_config()
     }
 }
 

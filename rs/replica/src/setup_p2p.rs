@@ -223,7 +223,7 @@ pub fn construct_ic_stack(
     let self_validating_payload_builder = NoOpSelfValidatingPayloadBuilder {};
     let self_validating_payload_builder = Arc::new(self_validating_payload_builder);
 
-    let (p2p_event_handler, p2p_runner) = create_networking_stack(
+    let (ingress_ingestion_service, p2p_runner) = create_networking_stack(
         metrics_registry,
         replica_logger,
         tokio::runtime::Handle::current(),
@@ -259,7 +259,7 @@ pub fn construct_ic_stack(
         sync_query_handler,
         async_query_handler,
         p2p_runner,
-        p2p_event_handler,
+        ingress_ingestion_service,
         artifact_pools.consensus_pool_cache,
         ingress_filter,
         xnet_endpoint,
