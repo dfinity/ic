@@ -101,8 +101,9 @@ def get_datapoints(target_rps=500, rps_min=50, rps_max=20000, increment=50, expo
     return datapoints
 
 
-def verify(metric: str, actual: float, expected: float, threshold: float, result_file: str = None):
+def verify(metric: str, is_update: bool, actual: float, expected: float, threshold: float, result_file: str = None):
     """Check deviation is within threshold between actual and expected rate."""
+    call_method = "Update" if is_update is True else "Query"
     delta = get_difference_rate(actual, expected)
 
     if (
@@ -110,7 +111,7 @@ def verify(metric: str, actual: float, expected: float, threshold: float, result
         or (threshold > 0 and delta > threshold)
         or (threshold < 0 and delta < threshold)
     ):
-        result = f"❌ {metric} has a delta of {delta} between actual rate {actual} and expected rate {expected}, and is beyond threshold {threshold}, fail!\n"
+        result = f"❌{call_method} {metric} has a delta of {delta} between actual rate {actual} and expected rate {expected}, and is beyond threshold {threshold}, fail!\n"
 
         if result_file is None:
             print(result)
@@ -120,7 +121,7 @@ def verify(metric: str, actual: float, expected: float, threshold: float, result
 
         return 1
     else:
-        result = f"✅ {metric} has a delta of {delta} between actual rate {actual} and expected rate {expected}, and is within threshold {threshold}, success!\n"
+        result = f"✅{call_method} {metric} has a delta of {delta} between actual rate {actual} and expected rate {expected}, and is within threshold {threshold}, success!\n"
 
         if result_file is None:
             print(result)

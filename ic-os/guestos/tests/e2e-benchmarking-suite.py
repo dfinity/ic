@@ -89,7 +89,7 @@ def main(argv):
         [
             "python3",
             "run_xnet_experiment.py",
-            "--duration",
+            "--iter_duration",
             "20",
             "--tests_first_subnet_index",
             "0",
@@ -106,7 +106,7 @@ def main(argv):
         [
             "python3",
             "run_system_baseline_experiment.py",
-            "--duration",
+            "--iter_duration",
             "10",
             "--load",
             "50",
@@ -122,7 +122,7 @@ def main(argv):
         [
             "python3",
             "run_system_baseline_experiment.py",
-            "--duration",
+            "--iter_duration",
             "10",
             "--load",
             "5",
@@ -139,7 +139,7 @@ def main(argv):
         [
             "python3",
             "max_capacity_large_payload.py",
-            "--duration",
+            "--iter_duration",
             "10",
             "--max_block_payload_size",
             "50",
@@ -169,10 +169,12 @@ def main(argv):
         [
             "python3",
             "run_large_memory_experiment.py",
-            "--duration",
+            "--iter_duration",
             "10",
-            "--initial_rps",
-            "10",
+            "--target_update_load",
+            "5",
+            "--use_updates=True",
+            "--median_latency_threshold=6000",
         ]
         + base_arguments_load_test
     )
