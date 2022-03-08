@@ -190,6 +190,12 @@ inherits = "release"
 # See: https://doc.rust-lang.org/cargo/reference/profiles.html#lto
 lto = "thin"
 
+[profile.canister-release]
+inherits = "release"
+debug = false
+lto = true
+opt-level = 'z'
+
 [profile.dev.package.miracl_core_bls12381]
 # Optimise the miracl_core_bls12381 cryptographic library, or else NiDKG tests take 4 hours.
 opt-level = 3
