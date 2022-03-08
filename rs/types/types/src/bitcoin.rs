@@ -61,6 +61,15 @@ pub enum BitcoinAdapterRequestWrapper {
     SendTransactionRequest(SendTransactionRequest),
 }
 
+impl BitcoinAdapterRequestWrapper {
+    pub fn to_request_type_label(&self) -> &str {
+        match self {
+            BitcoinAdapterRequestWrapper::GetSuccessorsRequest(_) => "get_successors",
+            BitcoinAdapterRequestWrapper::SendTransactionRequest(_) => "send_transaction",
+        }
+    }
+}
+
 impl From<&BitcoinAdapterRequestWrapper> for v1::BitcoinAdapterRequestWrapper {
     fn from(request_wrapper: &BitcoinAdapterRequestWrapper) -> Self {
         match request_wrapper {

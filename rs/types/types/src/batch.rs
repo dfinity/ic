@@ -6,6 +6,7 @@ use super::{
     xnet::CertifiedStreamSlice,
     CountBytes, Height, Randomness, RegistryVersion, SubnetId, Time,
 };
+use crate::bitcoin::BitcoinAdapterResponse;
 use crate::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
 use ic_protobuf::messaging::xnet::v1 as messaging_pb;
 use ic_protobuf::types::v1 as pb;
@@ -100,31 +101,41 @@ impl BatchPayload {
 
 /// Payload that contains SelfValidating messages.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct SelfValidatingPayload {}
+pub struct SelfValidatingPayload(Vec<BitcoinAdapterResponse>);
 
 impl SelfValidatingPayload {
-    pub fn new() -> SelfValidatingPayload {
-        SelfValidatingPayload {}
+    pub fn new(responses: Vec<BitcoinAdapterResponse>) -> SelfValidatingPayload {
+        SelfValidatingPayload(responses)
+    }
+
+    pub fn get(&self) -> &[BitcoinAdapterResponse] {
+        &self.0
     }
 }
 
 impl From<&SelfValidatingPayload> for pb::SelfValidatingPayload {
-    fn from(_self_validating_payload: &SelfValidatingPayload) -> Self {
-        Self {}
+    fn from(self_validating_payload: &SelfValidatingPayload) -> Self {
+        Self {
+            testnet_responses: self_validating_payload.0.iter().map(|x| x.into()).collect(),
+        }
     }
 }
 
 impl TryFrom<pb::SelfValidatingPayload> for SelfValidatingPayload {
     type Error = String;
 
-    fn try_from(_value: pb::SelfValidatingPayload) -> Result<Self, Self::Error> {
-        Ok(Self {})
+    fn try_from(value: pb::SelfValidatingPayload) -> Result<Self, Self::Error> {
+        let mut responses = vec![];
+        for r in value.testnet_responses.into_iter() {
+            responses.push(BitcoinAdapterResponse::try_from(r).map_err(|err| err.to_string())?);
+        }
+        Ok(Self(responses))
     }
 }
 
 impl CountBytes for SelfValidatingPayload {
     fn count_bytes(&self) -> usize {
-        0
+        self.0.iter().map(|x| x.count_bytes()).sum()
     }
 }
 
