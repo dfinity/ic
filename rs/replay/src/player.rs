@@ -398,7 +398,7 @@ impl Player {
                         break;
                     }
                     Err(StateHashError::Transient(err)) => {
-                        println!("Transient state hash error: {:?}", err);
+                        println!("Waiting for state hash: {:?}", err);
                     }
                     // This only happens for partially certified heights.
                     Err(StateHashError::Permanent(

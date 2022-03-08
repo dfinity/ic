@@ -406,22 +406,24 @@ pub(crate) fn assert_consistency_and_clean_up<T>(
     if last_cup.height() == Height::from(0) {
         return;
     }
-    let hash = match state_manager.get_state_hash_at(last_cup.height()) {
-        Ok(hash) => hash,
-        Err(StateHashError::Transient(err)) => {
-            println!(
-                "REPLAY WARN: no hash for the state at CUP height {:?}: {:?}",
-                last_cup.height(),
-                err
-            );
-            return;
-        }
-        Err(StateHashError::Permanent(err)) => {
-            panic!(
-                "REPLAY ERROR: couldn't fetch the state at CUP height {:?}: {:?}",
-                last_cup.height(),
-                err
-            );
+    let hash = loop {
+        match state_manager.get_state_hash_at(last_cup.height()) {
+            Ok(hash) => break hash,
+            Err(StateHashError::Transient(err)) => {
+                println!(
+                    "REPLAY WARN: no hash for the state at CUP height {:?}: {:?}; waiting...",
+                    last_cup.height(),
+                    err
+                );
+                std::thread::sleep(std::time::Duration::from_secs(3));
+            }
+            Err(StateHashError::Permanent(err)) => {
+                panic!(
+                    "REPLAY ERROR: couldn't fetch the state at CUP height {:?}: {:?}",
+                    last_cup.height(),
+                    err
+                );
+            }
         }
     };
     assert_eq!(
