@@ -349,21 +349,28 @@ impl DownloadPrioritizerMetrics {
 }
 
 /// The event handler metrics.
-pub struct EventHandlerMetrics {
+#[derive(Clone)]
+pub struct FlowWorkerMetrics {
     /// The times required for send message calls.
-    pub send_message_duration_ms: HistogramVec,
+    pub execute_message_duration: HistogramVec,
+    pub waiting_for_peer_permit: IntCounterVec,
 }
 
-impl EventHandlerMetrics {
+impl FlowWorkerMetrics {
     /// The constructor returns an `EventHandlerMetrics` instance.
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
-            send_message_duration_ms: metrics_registry.histogram_vec(
-                "send_message_duration_msec",
-                "Time taken by event handler for send message call, in milliseconds",
-                // 1ms, 2ms, 5ms - 100 sec, 200 sec, 500 sec
-                decimal_buckets(0, 5),
-                &["msg_type"],
+            execute_message_duration: metrics_registry.histogram_vec(
+                "replica_p2p_flow_worker_execute_message_duration_secs",
+                "Time taken by the flow worker to complete executing a message call, in seconds.",
+                // 1ms, 2ms, 5ms, 10ms, 20ms, ..., 10s, 15s, 20s, 50s
+                decimal_buckets(-3, 1),
+                &["flow_type"],
+            ),
+            waiting_for_peer_permit: metrics_registry.int_counter_vec(
+                "replica_p2p_flow_worker_waiting_for_peer_permit_total",
+                "Count of times when a peer permit was not available immediately.",
+                &["flow_type"],
             ),
         }
     }
