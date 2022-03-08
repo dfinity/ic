@@ -60,7 +60,7 @@ message GetSuccessorsResponse {
 }
 
 message SendTransactionRequest {
-  bytes raw_tx = 1;
+  bytes transaction = 1;
 }
 
 message SendTransactionResponse {};
