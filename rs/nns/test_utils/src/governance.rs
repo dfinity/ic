@@ -13,8 +13,7 @@ use dfn_candid::{candid, candid_one};
 use ic_base_types::CanisterInstallMode;
 use ic_canister_client::Sender;
 use ic_nervous_system_root::{
-    CanisterIdRecord, CanisterStatusResult, CanisterStatusType::Running,
-    ChangeNnsCanisterProposalPayload,
+    CanisterIdRecord, CanisterStatusResult, CanisterStatusType::Running, ChangeCanisterProposal,
 };
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::{ids::TEST_NEURON_1_OWNER_KEYPAIR, ROOT_CANISTER_ID};
@@ -37,15 +36,15 @@ pub async fn submit_proposal(
         .unwrap()
 }
 
-/// Wraps the given proposal_payload into a proposal; sends it to the governance
+/// Wraps the given nns_function_input into a proposal; sends it to the governance
 /// canister; returns the proposal id or, in case of failure, a
 /// `GovernanceError`.
 pub async fn submit_external_update_proposal_allowing_error(
     governance_canister: &Canister<'_>,
     proposer: Sender,
     proposer_neuron_id: NeuronId,
-    update_type: NnsFunction,
-    proposal_payload: impl CandidType,
+    nns_function: NnsFunction,
+    nns_function_input: impl CandidType,
     title: String,
     summary: String,
 ) -> Result<ProposalId, GovernanceError> {
@@ -54,8 +53,8 @@ pub async fn submit_external_update_proposal_allowing_error(
         summary,
         url: "".to_string(),
         action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
-            nns_function: update_type as i32,
-            payload: Encode!(&proposal_payload).expect("Error encoding proposal payload"),
+            nns_function: nns_function as i32,
+            payload: Encode!(&nns_function_input).expect("Error encoding proposal payload"),
         })),
     };
 
@@ -81,14 +80,14 @@ pub async fn submit_external_update_proposal_allowing_error(
     }
 }
 
-/// Wraps the given proposal_payload into a proposal; sends it to the governance
+/// Wraps the given nns_function_input into a proposal; sends it to the governance
 /// canister; returns the proposal id.
 pub async fn submit_external_update_proposal(
     governance_canister: &Canister<'_>,
     proposer: Sender,
     proposer_neuron_id: NeuronId,
-    update_type: NnsFunction,
-    proposal_payload: impl CandidType,
+    nns_function: NnsFunction,
+    nns_function_input: impl CandidType,
     title: String,
     summary: String,
 ) -> ProposalId {
@@ -97,8 +96,8 @@ pub async fn submit_external_update_proposal(
         summary,
         url: "".to_string(),
         action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
-            nns_function: update_type as i32,
-            payload: Encode!(&proposal_payload).expect("Error encoding proposal payload"),
+            nns_function: nns_function as i32,
+            payload: Encode!(&nns_function_input).expect("Error encoding proposal payload"),
         })),
     };
 
@@ -123,14 +122,14 @@ pub async fn submit_external_update_proposal(
     }
 }
 
-/// Wraps the given proposal_payload into a proposal; sends it to the governance
+/// Wraps the given nns_function_input into a proposal; sends it to the governance
 /// canister; returns the proposal id.
 pub async fn submit_external_update_proposal_binary(
     governance_canister: &Canister<'_>,
     proposer: Sender,
     proposer_neuron_id: NeuronId,
-    update_type: NnsFunction,
-    proposal_payload: Vec<u8>,
+    nns_function: NnsFunction,
+    nns_function_input: Vec<u8>,
     title: String,
     summary: String,
 ) -> ProposalId {
@@ -138,8 +137,8 @@ pub async fn submit_external_update_proposal_binary(
         governance_canister,
         proposer,
         proposer_neuron_id,
-        update_type,
-        proposal_payload,
+        nns_function,
+        nns_function_input,
         title,
         summary,
     )
@@ -151,14 +150,14 @@ pub async fn submit_external_update_proposal_binary(
     }
 }
 
-/// Wraps the given proposal_payload into a proposal; sends it to the governance
+/// Wraps the given nns_function_input into a proposal; sends it to the governance
 /// canister; returns the `ManageNeuronResponse`
 pub async fn submit_external_update_proposal_binary_with_response(
     governance_canister: &Canister<'_>,
     proposer: Sender,
     proposer_neuron_id: NeuronId,
-    update_type: NnsFunction,
-    proposal_payload: Vec<u8>,
+    nns_function: NnsFunction,
+    nns_function_input: Vec<u8>,
     title: String,
     summary: String,
 ) -> ManageNeuronResponse {
@@ -167,8 +166,8 @@ pub async fn submit_external_update_proposal_binary_with_response(
         summary,
         url: "".to_string(),
         action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
-            nns_function: update_type as i32,
-            payload: proposal_payload,
+            nns_function: nns_function as i32,
+            payload: nns_function_input,
         })),
     };
 
@@ -281,7 +280,7 @@ pub fn append_inert(wasm: Option<&Wasm>) -> Wasm {
 
 /// Payload to upgrade the root canister.
 #[derive(CandidType)]
-pub struct UpgradeRootProposalPayload {
+pub struct UpgradeRootProposal {
     pub wasm_module: Vec<u8>,
     pub module_arg: Vec<u8>,
     pub stop_upgrade_start: bool,
@@ -301,7 +300,7 @@ pub async fn upgrade_root_canister_by_proposal(
         Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
         NeuronId(TEST_NEURON_1_ID),
         NnsFunction::NnsRootUpgrade,
-        UpgradeRootProposalPayload {
+        UpgradeRootProposal {
             wasm_module: wasm,
             module_arg: Vec::<u8>::new(),
             stop_upgrade_start: false,
@@ -366,16 +365,15 @@ async fn change_nns_canister_by_proposal(
     let old_module_hash = status.module_hash.unwrap();
     assert_ne!(old_module_hash.as_slice(), new_module_hash, "change_nns_canister_by_proposal: both module hashes prev, cur are the same {:?}, but they should be different for upgrade", old_module_hash);
 
-    let proposal_payload =
-        ChangeNnsCanisterProposalPayload::new(stop_before_installing, how, canister.canister_id())
-            .with_memory_allocation(ic_nns_constants::memory_allocation_of(
-                canister.canister_id(),
-            ))
-            .with_wasm(wasm);
-    let proposal_payload = if let Some(arg) = arg {
-        proposal_payload.with_arg(arg)
+    let proposal = ChangeCanisterProposal::new(stop_before_installing, how, canister.canister_id())
+        .with_memory_allocation(ic_nns_constants::memory_allocation_of(
+            canister.canister_id(),
+        ))
+        .with_wasm(wasm);
+    let proposal = if let Some(arg) = arg {
+        proposal.with_arg(arg)
     } else {
-        proposal_payload
+        proposal
     };
 
     // Submitting a proposal also implicitly records a vote from the proposer,
@@ -385,7 +383,7 @@ async fn change_nns_canister_by_proposal(
         Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
         NeuronId(TEST_NEURON_1_ID),
         NnsFunction::NnsCanisterUpgrade,
-        proposal_payload,
+        proposal,
         "Upgrade NNS Canister".to_string(),
         "<proposal created by change_nns_canister_by_proposal>".to_string(),
     )

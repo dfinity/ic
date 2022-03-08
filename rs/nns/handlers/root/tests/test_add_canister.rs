@@ -4,8 +4,7 @@ use dfn_candid::candid;
 use ic_nns_constants::{REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
 
 use ic_nervous_system_root::{
-    AddNnsCanisterProposalPayload, CanisterIdRecord, CanisterStatusResult,
-    CanisterStatusType::Running,
+    AddCanisterProposal, CanisterIdRecord, CanisterStatusResult, CanisterStatusType::Running,
 };
 use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
 use ic_nns_test_utils::{
@@ -56,7 +55,7 @@ fn test_add_nns_canister() {
 
         let name = "i dunno, what would be a good canister name?".to_string();
 
-        let proposal_payload = AddNnsCanisterProposalPayload {
+        let proposal = AddCanisterProposal {
             name: name.clone(),
             wasm_module: EMPTY_WASM.to_vec(),
             arg: vec![],
@@ -72,7 +71,7 @@ fn test_add_nns_canister() {
                 &fake_governance_canister,
                 &root,
                 "add_nns_canister",
-                Encode!(&proposal_payload).unwrap(),
+                Encode!(&proposal).unwrap(),
             )
             .await
         );

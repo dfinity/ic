@@ -71,7 +71,7 @@ impl CanisterStatusResult {
 
 /// The payload to a proposal to upgrade a canister.
 #[derive(CandidType, Serialize, Deserialize, Clone)]
-pub struct ChangeNnsCanisterProposalPayload {
+pub struct ChangeCanisterProposal {
     /// Whether the canister should first be stopped before the install_code
     /// method is called.
     ///
@@ -89,10 +89,9 @@ pub struct ChangeNnsCanisterProposalPayload {
     // The fields below are copied from ic_types::ic00::InstallCodeArgs.
     /// Whether to Reinstall or Upgrade a canister.
     ///
-    /// To be able to repair the NNS in all circumstances, maximum flexibility
-    /// is provided. However, using mode `Reinstall` on a stateful canister
-    /// is very dangerous: proposal reviewer should be very cautious when
-    /// voting on a `Reinstall` proposal.
+    /// Using mode `Reinstall` on a stateful canister is very dangerous;
+    /// however, this field is provided so that repairing a nervous system
+    /// (e.g. NNS) is possible even under extreme circumstances.
     pub mode: CanisterInstallMode,
 
     /// The id of the canister to change.
@@ -118,7 +117,7 @@ pub struct ChangeNnsCanisterProposalPayload {
     pub authz_changes: Vec<MethodAuthzChange>,
 }
 
-impl ChangeNnsCanisterProposalPayload {
+impl ChangeCanisterProposal {
     fn format(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut wasm_sha = Sha256::new();
         wasm_sha.write(&self.wasm_module);
@@ -127,7 +126,7 @@ impl ChangeNnsCanisterProposalPayload {
         arg_sha.write(&self.arg);
         let arg_sha = arg_sha.finish();
 
-        f.debug_struct("ChangeNnsCanisterProposalPayload")
+        f.debug_struct("ChangeCanisterProposal")
             .field("stop_before_installing", &self.stop_before_installing)
             .field("mode", &self.mode)
             .field("canister_id", &self.canister_id)
@@ -141,19 +140,19 @@ impl ChangeNnsCanisterProposalPayload {
     }
 }
 
-impl std::fmt::Debug for ChangeNnsCanisterProposalPayload {
+impl std::fmt::Debug for ChangeCanisterProposal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.format(f)
     }
 }
 
-impl std::fmt::Display for ChangeNnsCanisterProposalPayload {
+impl std::fmt::Display for ChangeCanisterProposal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.format(f)
     }
 }
 
-impl ChangeNnsCanisterProposalPayload {
+impl ChangeCanisterProposal {
     pub fn new(
         stop_before_installing: bool,
         mode: CanisterInstallMode,
@@ -191,8 +190,8 @@ impl ChangeNnsCanisterProposalPayload {
 }
 
 #[derive(CandidType, Serialize, Deserialize, Clone)]
-pub struct AddNnsCanisterProposalPayload {
-    /// A unique name for this NNS canister.
+pub struct AddCanisterProposal {
+    /// A unique name for this canister.
     pub name: String,
 
     // The field belows are copied from ic_types::ic00::InstallCodeArgs.
@@ -212,14 +211,14 @@ pub struct AddNnsCanisterProposalPayload {
     pub initial_cycles: u64,
 
     /// A list of authz changes to enact, in addition to installing the new
-    /// canister. The expected use is to make other NNS canisters allow
-    /// calls coming from the newly-added NNS-canister. Authz changes to the
-    /// newly added canisters are not expected to be here: instead, they are
-    /// expected to belong to the init payload, `arg`.
+    /// canister. The expected use is to make other canisters in the nervous
+    /// system allow calls coming from the newly-added nervous system canister.
+    /// Authz changes to the newly added canisters are not expected to be here:
+    /// instead, they are expected to belong to the init payload, `arg`.
     pub authz_changes: Vec<MethodAuthzChange>,
 }
 
-impl AddNnsCanisterProposalPayload {
+impl AddCanisterProposal {
     fn format(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut wasm_sha = Sha256::new();
         wasm_sha.write(&self.wasm_module);
@@ -228,7 +227,7 @@ impl AddNnsCanisterProposalPayload {
         arg_sha.write(&self.arg);
         let arg_sha = arg_sha.finish();
 
-        f.debug_struct("AddNnsCanisterProposalPayload")
+        f.debug_struct("AddCanisterProposal")
             .field("name", &self.name)
             .field("wasm_module_sha256", &format!("{:x?}", wasm_sha))
             .field("arg_sha256", &format!("{:x?}", arg_sha))
@@ -241,13 +240,13 @@ impl AddNnsCanisterProposalPayload {
     }
 }
 
-impl std::fmt::Debug for AddNnsCanisterProposalPayload {
+impl std::fmt::Debug for AddCanisterProposal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.format(f)
     }
 }
 
-impl std::fmt::Display for AddNnsCanisterProposalPayload {
+impl std::fmt::Display for AddCanisterProposal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.format(f)
     }
@@ -260,9 +259,9 @@ pub enum CanisterAction {
     Start,
 }
 
-// A proposal payload to start/stop any NNS canister.
+// A proposal payload to start/stop a nervous system canister.
 #[derive(candid::CandidType, Serialize, candid::Deserialize, Clone, Debug)]
-pub struct StopOrStartNnsCanisterProposalPayload {
+pub struct StopOrStartCanisterProposal {
     pub canister_id: CanisterId,
     pub action: CanisterAction,
 }

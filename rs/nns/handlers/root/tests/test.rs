@@ -2,9 +2,7 @@ use assert_matches::assert_matches;
 use candid::Encode;
 use dfn_candid::candid;
 use ic_base_types::CanisterInstallMode::Upgrade;
-use ic_nervous_system_root::{
-    CanisterIdRecord, CanisterStatusResult, ChangeNnsCanisterProposalPayload,
-};
+use ic_nervous_system_root::{CanisterIdRecord, CanisterStatusResult, ChangeCanisterProposal};
 use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
 use ic_nns_test_utils::itest_helpers::{
     forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_root_canister,
@@ -55,14 +53,13 @@ fn test_the_anonymous_user_cannot_change_an_nns_canister() {
             .await
             .unwrap();
 
-        let proposal_payload =
-            ChangeNnsCanisterProposalPayload::new(false, Upgrade, universal.canister_id())
-                .with_wasm(UNIVERSAL_CANISTER_WASM.to_vec());
+        let proposal = ChangeCanisterProposal::new(false, Upgrade, universal.canister_id())
+            .with_wasm(UNIVERSAL_CANISTER_WASM.to_vec());
 
         // The anonymous end-user tries to upgrade an NNS canister a subnet, bypassing
         // the proposals This should be rejected.
         let response: Result<(), String> = root
-            .update_("change_nns_canister", candid, (proposal_payload.clone(),))
+            .update_("change_nns_canister", candid, (proposal.clone(),))
             .await;
         assert_matches!(response,
                             Err(s) if s.contains("Only the Governance canister is allowed to call this method"));
@@ -70,7 +67,7 @@ fn test_the_anonymous_user_cannot_change_an_nns_canister() {
         // Go through an upgrade cycle, and verify that it still works the same
         root.upgrade_to_self_binary(vec![]).await.unwrap();
         let response: Result<(), String> = root
-            .update_("change_nns_canister", candid, (proposal_payload.clone(),))
+            .update_("change_nns_canister", candid, (proposal.clone(),))
             .await;
         assert_matches!(response,
                             Err(s) if s.contains("Only the Governance canister is allowed to call this method"));
@@ -100,16 +97,15 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_change_an_nns_canist
             attacker_canister.canister_id(),
             ic_nns_constants::GOVERNANCE_CANISTER_ID
         );
-        let proposal_payload =
-            ChangeNnsCanisterProposalPayload::new(false, Upgrade, universal.canister_id())
-                .with_wasm(UNIVERSAL_CANISTER_WASM.to_vec());
+        let proposal = ChangeCanisterProposal::new(false, Upgrade, universal.canister_id())
+            .with_wasm(UNIVERSAL_CANISTER_WASM.to_vec());
 
         assert!(
             !forward_call_via_universal_canister(
                 &attacker_canister,
                 &root,
                 "change_nns_canister",
-                Encode!(&proposal_payload).unwrap()
+                Encode!(&proposal).unwrap()
             )
             .await
         );

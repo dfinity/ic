@@ -7,9 +7,8 @@ use futures::future::join_all;
 use ic_ic00_types::{InstallCodeArgs, IC_00};
 use ic_nervous_system_common::{AuthzChangeOp, MethodAuthzChange};
 use ic_nervous_system_root::{
-    AddNnsCanisterProposalPayload, CanisterAction, CanisterIdRecord, CanisterStatusResult,
-    CanisterStatusType, ChangeNnsCanisterProposalPayload, StopOrStartNnsCanisterProposalPayload,
-    LOG_PREFIX,
+    AddCanisterProposal, CanisterAction, CanisterIdRecord, CanisterStatusResult,
+    CanisterStatusType, ChangeCanisterProposal, StopOrStartCanisterProposal, LOG_PREFIX,
 };
 use ic_nns_common::registry::{encode_or_panic, get_value, mutate_registry};
 use ic_protobuf::registry::nns::v1::{NnsCanisterRecord, NnsCanisterRecords};
@@ -97,10 +96,10 @@ pub async fn update_authz(
     .await;
 }
 
-pub async fn do_change_nns_canister(payload: ChangeNnsCanisterProposalPayload) {
-    let canister_id = payload.canister_id;
-    let authz_changes = payload.authz_changes.clone();
-    let stop_before_installing = payload.stop_before_installing;
+pub async fn do_change_nns_canister(proposal: ChangeCanisterProposal) {
+    let canister_id = proposal.canister_id;
+    let authz_changes = proposal.authz_changes.clone();
+    let stop_before_installing = proposal.stop_before_installing;
 
     if stop_before_installing {
         stop_canister(canister_id).await;
@@ -113,7 +112,7 @@ pub async fn do_change_nns_canister(payload: ChangeNnsCanisterProposalPayload) {
     // because there could be a concurrent proposal to restart it. This could be
     // guaranteed with a "stopped precondition" in the management canister, or
     // with some locking here.
-    let res = install_code(payload).await;
+    let res = install_code(proposal).await;
     // For once, we don't want to unwrap the result here. The reason is that, if the
     // installation failed (e.g., the wasm was rejected because it's invalid),
     // then we want to restart the canister. So we just keep the res to be
@@ -132,17 +131,15 @@ pub async fn do_change_nns_canister(payload: ChangeNnsCanisterProposalPayload) {
 }
 
 /// Calls the "install_code" method of the management canister.
-async fn install_code(
-    payload: ChangeNnsCanisterProposalPayload,
-) -> ic_cdk::api::call::CallResult<()> {
+async fn install_code(proposal: ChangeCanisterProposal) -> ic_cdk::api::call::CallResult<()> {
     let install_code_args = InstallCodeArgs {
-        mode: payload.mode,
-        canister_id: payload.canister_id.get(),
-        wasm_module: payload.wasm_module,
-        arg: payload.arg,
-        compute_allocation: payload.compute_allocation,
-        memory_allocation: payload.memory_allocation,
-        query_allocation: payload.query_allocation,
+        mode: proposal.mode,
+        canister_id: proposal.canister_id.get(),
+        wasm_module: proposal.wasm_module,
+        arg: proposal.arg,
+        compute_allocation: proposal.compute_allocation,
+        memory_allocation: proposal.memory_allocation,
+        query_allocation: proposal.query_allocation,
     };
     // Warning: despite dfn_core::call returning a Result, it actually traps when
     // the callee traps! Use the public cdk instead, which does not have this
@@ -210,10 +207,10 @@ async fn stop_canister(canister_id: CanisterId) {
     }
 }
 
-pub async fn do_add_nns_canister(payload: AddNnsCanisterProposalPayload) {
+pub async fn do_add_nns_canister(proposal: AddCanisterProposal) {
     let key = make_nns_canister_records_key().into_bytes();
-    let authz_changes = payload.authz_changes.clone();
-    let name = payload.name.clone();
+    let authz_changes = proposal.authz_changes.clone();
+    let name = proposal.name.clone();
 
     // We first need to claim the name of this new canister. Indeed, even though we
     // don't yet know its ID, if we create it first and then find out the name
@@ -240,7 +237,13 @@ pub async fn do_add_nns_canister(payload: AddNnsCanisterProposalPayload) {
     let old_record = nns_canister_records
         .canisters
         .insert(name.clone(), NnsCanisterRecord::default());
-    assert!(old_record.is_none(), "Trying to add an NNS canister called '{}', but we already have a record for that name: '{:?}'", payload.name, old_record);
+    assert!(
+        old_record.is_none(),
+        "Trying to add an NNS canister called '{}', but we already have \
+             a record for that name: '{:?}'",
+        proposal.name,
+        old_record
+    );
 
     // Commit, so as to reserve the name
     let name_reserved_version = mutate_registry(
@@ -257,7 +260,7 @@ pub async fn do_add_nns_canister(payload: AddNnsCanisterProposalPayload) {
     .await
     .unwrap();
 
-    let id_or_error = try_to_create_and_install_canister(payload).await;
+    let id_or_error = try_to_create_and_install_canister(proposal).await;
     let id = id_or_error.unwrap();
     // TODO(NNS-81): If it did not work, remove the name from the registry
 
@@ -288,18 +291,18 @@ pub async fn do_add_nns_canister(payload: AddNnsCanisterProposalPayload) {
     update_authz(id, authz_changes).await;
 }
 
-/// Tries to create and install the canister specified in the payload. Does not
+/// Tries to create and install the canister specified in the proposal. Does not
 /// care about the name service. This function is supposed never to panic, so
 /// that cleanup can be done if the install does not go through.
 async fn try_to_create_and_install_canister(
-    payload: AddNnsCanisterProposalPayload,
+    proposal: AddCanisterProposal,
 ) -> Result<CanisterId, String> {
     let (id,): (CanisterIdRecord,) = call_with_funds(
         CanisterId::ic_00(),
         "create_canister",
         dfn_candid::candid_multi_arity,
         (),
-        Funds::new(payload.initial_cycles),
+        Funds::new(proposal.initial_cycles),
     )
     .await
     .map_err(|(code, msg)| {
@@ -313,11 +316,11 @@ async fn try_to_create_and_install_canister(
     let install_args = InstallCodeArgs {
         mode: Install,
         canister_id: id.get_canister_id().get(),
-        wasm_module: payload.wasm_module,
-        arg: payload.arg,
-        compute_allocation: payload.compute_allocation,
-        memory_allocation: payload.memory_allocation,
-        query_allocation: payload.query_allocation,
+        wasm_module: proposal.wasm_module,
+        arg: proposal.arg,
+        compute_allocation: proposal.compute_allocation,
+        memory_allocation: proposal.memory_allocation,
+        query_allocation: proposal.query_allocation,
     };
     let install_res: Result<(), (Option<i32>, String)> = call(
         CanisterId::ic_00(),
@@ -338,9 +341,9 @@ async fn try_to_create_and_install_canister(
 }
 
 // Stops or starts any NNS canister.
-pub async fn stop_or_start_nns_canister(payload: StopOrStartNnsCanisterProposalPayload) {
-    match payload.action {
-        CanisterAction::Start => start_canister(payload.canister_id).await,
-        CanisterAction::Stop => stop_canister(payload.canister_id).await,
+pub async fn stop_or_start_nns_canister(proposal: StopOrStartCanisterProposal) {
+    match proposal.action {
+        CanisterAction::Start => start_canister(proposal.canister_id).await,
+        CanisterAction::Stop => stop_canister(proposal.canister_id).await,
     }
 }

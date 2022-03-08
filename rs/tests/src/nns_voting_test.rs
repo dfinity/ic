@@ -55,7 +55,7 @@ use dfn_candid::candid_one;
 use ic_nns_test_utils::ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID, TEST_NEURON_3_ID};
 
 use ic_canister_client::Sender;
-use ic_nervous_system_root::ChangeNnsCanisterProposalPayload;
+use ic_nervous_system_root::ChangeCanisterProposal;
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::{
     ids::{TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR, TEST_NEURON_3_OWNER_KEYPAIR},
@@ -366,7 +366,7 @@ async fn submit_proposal_by_neuron(
 ) -> Result<ProposalId, GovernanceError> {
     let root = Canister::new(runtime, ROOT_CANISTER_ID);
     let governance = Canister::new(runtime, GOVERNANCE_CANISTER_ID);
-    let proposal_payload = ChangeNnsCanisterProposalPayload::new(
+    let proposal = ChangeCanisterProposal::new(
         false,
         ic_base_types::CanisterInstallMode::Upgrade,
         root.canister_id(),
@@ -376,7 +376,7 @@ async fn submit_proposal_by_neuron(
         Sender::from_keypair(keypair),
         neuron,
         NnsCanisterUpgrade,
-        proposal_payload,
+        proposal,
         "<proposal created by submit_proposal_by_neuron>".to_string(),
         "".to_string(),
     )

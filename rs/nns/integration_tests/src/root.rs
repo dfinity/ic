@@ -3,9 +3,7 @@ use canister_test::Runtime;
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_canister_client::Sender;
-use ic_nervous_system_root::{
-    AddNnsCanisterProposalPayload, CanisterAction, StopOrStartNnsCanisterProposalPayload,
-};
+use ic_nervous_system_root::{AddCanisterProposal, CanisterAction, StopOrStartCanisterProposal};
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
 use ic_nns_constants::{
     ids::{TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR, TEST_USER1_KEYPAIR},
@@ -47,7 +45,7 @@ async fn add_nns_canister(runtime: &Runtime, upgrade_scenario: UpgradeTestingSce
     let name = "new_mega_important_handler".to_string();
 
     // Test adding a new canister to the NNS.
-    let proposal_payload = AddNnsCanisterProposalPayload {
+    let proposal_payload = AddCanisterProposal {
         name: name.clone(),
         wasm_module: UNIVERSAL_CANISTER_WASM.to_vec(),
         arg: vec![],
@@ -152,7 +150,7 @@ fn test_stop_start_nns_canister() {
                 .expect("Couldn't send funds.");
 
             // Submit a proposal to stop the ledger.
-            let payload = StopOrStartNnsCanisterProposalPayload {
+            let payload = StopOrStartCanisterProposal {
                 canister_id: LEDGER_CANISTER_ID,
                 action: CanisterAction::Stop,
             };
@@ -217,7 +215,7 @@ fn test_stop_start_nns_canister() {
 
             assert!(result.unwrap_err().contains("is stopped"));
 
-            let payload = StopOrStartNnsCanisterProposalPayload {
+            let payload = StopOrStartCanisterProposal {
                 canister_id: LEDGER_CANISTER_ID,
                 action: CanisterAction::Start,
             };

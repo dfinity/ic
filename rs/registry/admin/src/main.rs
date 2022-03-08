@@ -22,8 +22,8 @@ extern crate ic_admin_derive;
 use ic_consensus::dkg::make_registry_cup;
 use ic_interfaces::registry::RegistryClient;
 use ic_nervous_system_root::{
-    AddNnsCanisterProposalPayload, CanisterAction, CanisterStatusResult,
-    ChangeNnsCanisterProposalPayload, StopOrStartNnsCanisterProposalPayload,
+    AddCanisterProposal, CanisterAction, CanisterStatusResult, ChangeCanisterProposal,
+    StopOrStartCanisterProposal,
 };
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::{
@@ -634,7 +634,7 @@ struct StartCanisterCmd {
 }
 
 #[async_trait]
-impl ProposalTitleAndPayload<StopOrStartNnsCanisterProposalPayload> for StartCanisterCmd {
+impl ProposalTitleAndPayload<StopOrStartCanisterProposal> for StartCanisterCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -642,8 +642,8 @@ impl ProposalTitleAndPayload<StopOrStartNnsCanisterProposalPayload> for StartCan
         }
     }
 
-    async fn payload(&self, _: Url) -> StopOrStartNnsCanisterProposalPayload {
-        StopOrStartNnsCanisterProposalPayload {
+    async fn payload(&self, _: Url) -> StopOrStartCanisterProposal {
+        StopOrStartCanisterProposal {
             canister_id: self.canister_id,
             action: CanisterAction::Start,
         }
@@ -659,7 +659,7 @@ struct StopCanisterCmd {
 }
 
 #[async_trait]
-impl ProposalTitleAndPayload<StopOrStartNnsCanisterProposalPayload> for StopCanisterCmd {
+impl ProposalTitleAndPayload<StopOrStartCanisterProposal> for StopCanisterCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -667,8 +667,8 @@ impl ProposalTitleAndPayload<StopOrStartNnsCanisterProposalPayload> for StopCani
         }
     }
 
-    async fn payload(&self, _: Url) -> StopOrStartNnsCanisterProposalPayload {
-        StopOrStartNnsCanisterProposalPayload {
+    async fn payload(&self, _: Url) -> StopOrStartCanisterProposal {
+        StopOrStartCanisterProposal {
             canister_id: self.canister_id,
             action: CanisterAction::Stop,
         }
@@ -1410,7 +1410,7 @@ impl ProposalTitleAndPayload<UpgradeRootProposalPayload> for ProposeToChangeNnsC
 }
 
 #[async_trait]
-impl ProposalTitleAndPayload<ChangeNnsCanisterProposalPayload> for ProposeToChangeNnsCanisterCmd {
+impl ProposalTitleAndPayload<ChangeCanisterProposal> for ProposeToChangeNnsCanisterCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -1421,7 +1421,7 @@ impl ProposalTitleAndPayload<ChangeNnsCanisterProposalPayload> for ProposeToChan
         }
     }
 
-    async fn payload(&self, _: Url) -> ChangeNnsCanisterProposalPayload {
+    async fn payload(&self, _: Url) -> ChangeCanisterProposal {
         let wasm_module = read_wasm_module(
             &self.wasm_module_path,
             &self.wasm_module_url,
@@ -1432,7 +1432,7 @@ impl ProposalTitleAndPayload<ChangeNnsCanisterProposalPayload> for ProposeToChan
             .arg
             .as_ref()
             .map_or(vec![], |path| read_file_fully(path));
-        ChangeNnsCanisterProposalPayload {
+        ChangeCanisterProposal {
             stop_before_installing: !self.skip_stopping_before_installing,
             mode: self.mode,
             canister_id: self.canister_id,
@@ -1512,7 +1512,7 @@ struct ProposeToAddNnsCanisterCmd {
 }
 
 #[async_trait]
-impl ProposalTitleAndPayload<AddNnsCanisterProposalPayload> for ProposeToAddNnsCanisterCmd {
+impl ProposalTitleAndPayload<AddCanisterProposal> for ProposeToAddNnsCanisterCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -1520,7 +1520,7 @@ impl ProposalTitleAndPayload<AddNnsCanisterProposalPayload> for ProposeToAddNnsC
         }
     }
 
-    async fn payload(&self, _: Url) -> AddNnsCanisterProposalPayload {
+    async fn payload(&self, _: Url) -> AddCanisterProposal {
         let wasm_module = read_wasm_module(
             &self.wasm_module_path,
             &self.wasm_module_url,
@@ -1532,7 +1532,7 @@ impl ProposalTitleAndPayload<AddNnsCanisterProposalPayload> for ProposeToAddNnsC
             .clone()
             .map_or(vec![], |path| read_file_fully(&path));
 
-        AddNnsCanisterProposalPayload {
+        AddCanisterProposal {
             name: self.name.clone(),
             wasm_module,
             arg,
@@ -2530,7 +2530,7 @@ async fn main() {
                 .await;
             } else {
                 propose_external_proposal_from_command::<
-                    ChangeNnsCanisterProposalPayload,
+                    ChangeCanisterProposal,
                     ProposeToChangeNnsCanisterCmd,
                 >(cmd, NnsFunction::NnsCanisterUpgrade, opts.nns_url, sender)
                 .await;
@@ -3638,13 +3638,10 @@ impl RootCanisterClient {
             &cmd.wasm_module_sha256,
         )
         .await;
-        let root_proposal = ChangeNnsCanisterProposalPayload::new(
-            true,
-            CanisterInstallMode::Upgrade,
-            GOVERNANCE_CANISTER_ID,
-        )
-        .with_memory_allocation(memory_allocation_of(GOVERNANCE_CANISTER_ID))
-        .with_wasm(wasm_module);
+        let root_proposal =
+            ChangeCanisterProposal::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
+                .with_memory_allocation(memory_allocation_of(GOVERNANCE_CANISTER_ID))
+                .with_wasm(wasm_module);
 
         let serialized = Encode!(&CanisterIdRecord::from(GOVERNANCE_CANISTER_ID)).unwrap();
         let response = self
