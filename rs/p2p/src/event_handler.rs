@@ -70,7 +70,7 @@
 use crate::{
     advert_utils::AdvertRequestBuilder,
     gossip_protocol::{Gossip, GossipChunk, GossipChunkRequest, GossipMessage},
-    metrics::EventHandlerMetrics,
+    metrics::FlowWorkerMetrics,
 };
 use async_trait::async_trait;
 use ic_interfaces::{
@@ -105,7 +105,7 @@ use std::{
     task::{Context, Poll},
 };
 use strum::IntoEnumIterator;
-use strum_macros::EnumIter;
+use strum_macros::{EnumIter, IntoStaticStr};
 use threadpool::ThreadPool;
 use tokio::sync::{Semaphore, TryAcquireError};
 use tower_service::Service;
@@ -145,7 +145,7 @@ pub type GossipArc = Arc<
 /// from being flooded by data from eager senders.
 ///
 /// The FlowType enum specifies which message is passed on each flow.
-#[derive(EnumIter, PartialOrd, Ord, Eq, PartialEq)]
+#[derive(EnumIter, PartialOrd, Ord, Eq, PartialEq, IntoStaticStr)]
 enum FlowType {
     /// Advert variant.
     Advert,
@@ -160,7 +160,10 @@ enum FlowType {
 }
 
 /// We have a single worker for all flows with the same flow type.
-struct FlowTypeWorker {
+struct FlowWorker {
+    flow_type_name: &'static str,
+    /// The flow type worker metrics.
+    metrics: FlowWorkerMetrics,
     /// The threadpool is used for executing messages from all flows with the
     /// given flow type.
     threadpool: Arc<Mutex<ThreadPool>>,
@@ -171,9 +174,16 @@ struct FlowTypeWorker {
     max_inflight_requests: usize,
 }
 
-impl FlowTypeWorker {
-    fn new(threadpool: ThreadPool, max_inflight_requests: usize) -> Self {
+impl FlowWorker {
+    fn new(
+        flow_type_name: &'static str,
+        metrics: FlowWorkerMetrics,
+        threadpool: ThreadPool,
+        max_inflight_requests: usize,
+    ) -> Self {
         Self {
+            flow_type_name,
+            metrics,
             threadpool: Arc::new(Mutex::new(threadpool)),
             sem_map: Arc::new(RwLock::new(BTreeMap::new())),
             max_inflight_requests,
@@ -188,14 +198,29 @@ impl FlowTypeWorker {
     ) where
         F: Fn(T, NodeId) + Clone + Send + 'static,
     {
+        let send_timer = self
+            .metrics
+            .execute_message_duration
+            .with_label_values(&[self.flow_type_name])
+            .start_timer();
+
         let sem = self.insert_peer_semaphore_if_missing(node_id);
         // Acquiring a permit must always succeed because we never close the semaphore.
-        let permit = sem
-            .acquire_owned()
-            .await
-            .expect("acquiring a permit failed");
+        let permit = match sem.clone().try_acquire_owned() {
+            Ok(permit) => permit,
+            Err(_) => {
+                self.metrics
+                    .waiting_for_peer_permit
+                    .with_label_values(&[self.flow_type_name])
+                    .inc();
+                sem.acquire_owned()
+                    .await
+                    .expect("Acquiring a permit can't fail because we never close the semaphore.")
+            }
+        };
         self.threadpool.lock().unwrap().execute(move || {
             let _permit = permit;
+            let _send_timer = send_timer;
             consume_message_fn(msg, node_id);
         });
     }
@@ -223,21 +248,19 @@ pub struct P2PEventHandlerImpl {
     node_id: NodeId,
     /// The logger.
     log: ReplicaLogger,
-    /// The event handler metrics.
-    pub metrics: EventHandlerMetrics,
     /// The peer flows.
     gossip: Arc<RwLock<Option<GossipArc>>>,
 
     /// The current flows of received adverts.
-    advert: FlowTypeWorker,
+    advert: FlowWorker,
     /// The current flows of received chunk requests.
-    request: FlowTypeWorker,
+    request: FlowWorker,
     /// The current flows of received chunk requests.
-    chunk: FlowTypeWorker,
+    chunk: FlowWorker,
     /// The current flows of retransmission requests.
-    retransmission: FlowTypeWorker,
+    retransmission: FlowWorker,
     /// The current flows of transport notifications.
-    transport: FlowTypeWorker,
+    transport: FlowWorker,
 }
 
 /// The maximum number of buffered adverts.
@@ -290,23 +313,42 @@ impl P2PEventHandlerImpl {
             .num_threads(P2P_MAX_EVENT_HANDLER_THREADS)
             .thread_name("P2P_Thread".into())
             .build();
+        let flow_worker_metrics = FlowWorkerMetrics::new(metrics_registry);
         Self {
             node_id,
             log,
-            metrics: EventHandlerMetrics::new(metrics_registry),
             gossip: Arc::new(RwLock::new(None)),
 
-            advert: FlowTypeWorker::new(threadpool.clone(), channel_config.map[&FlowType::Advert]),
-            request: FlowTypeWorker::new(
+            advert: FlowWorker::new(
+                FlowType::Advert.into(),
+                flow_worker_metrics.clone(),
+                threadpool.clone(),
+                channel_config.map[&FlowType::Advert],
+            ),
+            request: FlowWorker::new(
+                FlowType::Request.into(),
+                flow_worker_metrics.clone(),
                 threadpool.clone(),
                 channel_config.map[&FlowType::Request],
             ),
-            chunk: FlowTypeWorker::new(threadpool.clone(), channel_config.map[&FlowType::Chunk]),
-            retransmission: FlowTypeWorker::new(
+            chunk: FlowWorker::new(
+                FlowType::Chunk.into(),
+                flow_worker_metrics.clone(),
+                threadpool.clone(),
+                channel_config.map[&FlowType::Chunk],
+            ),
+            retransmission: FlowWorker::new(
+                FlowType::Retransmission.into(),
+                flow_worker_metrics.clone(),
                 threadpool.clone(),
                 channel_config.map[&FlowType::Retransmission],
             ),
-            transport: FlowTypeWorker::new(threadpool, channel_config.map[&FlowType::Transport]),
+            transport: FlowWorker::new(
+                FlowType::Transport.into(),
+                flow_worker_metrics,
+                threadpool,
+                channel_config.map[&FlowType::Transport],
+            ),
         }
     }
 
@@ -331,29 +373,25 @@ impl AsyncTransportEventHandler for P2PEventHandlerImpl {
             SendError::DeserializationFailed
         })?;
 
-        let start_time = std::time::Instant::now();
         let c_gossip = self.gossip.read().as_ref().unwrap().clone();
-        let msg_type = match gossip_message {
+        match gossip_message {
             GossipMessage::Advert(msg) => {
                 let consume_fn = move |item, peer_id| {
                     c_gossip.on_advert(item, peer_id);
                 };
                 self.advert.execute(flow.peer_id, msg, consume_fn).await;
-                "Advert"
             }
             GossipMessage::ChunkRequest(msg) => {
                 let consume_fn = move |item, peer_id| {
                     c_gossip.on_chunk_request(item, peer_id);
                 };
                 self.request.execute(flow.peer_id, msg, consume_fn).await;
-                "Request"
             }
             GossipMessage::Chunk(msg) => {
                 let consume_fn = move |item, peer_id| {
                     c_gossip.on_chunk(item, peer_id);
                 };
                 self.chunk.execute(flow.peer_id, msg, consume_fn).await;
-                "Chunk"
             }
             GossipMessage::RetransmissionRequest(msg) => {
                 let consume_fn = move |item, peer_id| {
@@ -362,13 +400,8 @@ impl AsyncTransportEventHandler for P2PEventHandlerImpl {
                 self.retransmission
                     .execute(flow.peer_id, msg, consume_fn)
                     .await;
-                "Retransmission"
             }
         };
-        self.metrics
-            .send_message_duration_ms
-            .with_label_values(&[msg_type])
-            .observe(start_time.elapsed().as_millis() as f64);
         Ok(())
     }
 
