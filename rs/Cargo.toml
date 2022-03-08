@@ -9,7 +9,7 @@ members = [
   "bitcoin/canister",
   "bitcoin/consensus",
   "bitcoin/validation",
-  "bitcoin/types",
+  "bitcoin/types/public",
   "boundary_node/control_plane",
   "boundary_node/prober",
   "canister_client",
