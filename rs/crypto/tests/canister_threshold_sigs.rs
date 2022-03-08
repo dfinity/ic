@@ -1311,13 +1311,16 @@ fn should_derive_differing_ecdsa_public_keys() {
 fn should_run_verify_dealing_public() {
     let crypto_components = temp_crypto_components_for(&[NODE_1]);
     let params = fake_params_for(NODE_1);
+
+    let dealer_id = NodeId::from(PrincipalId::new_node_test_id(0));
     let dealing = IDkgDealing {
         transcript_id: dummy_idkg_transcript_id_for_tests(1),
-        dealer_id: NodeId::from(PrincipalId::new_node_test_id(0)),
+        dealer_id,
         internal_dealing_raw: vec![],
     };
-    let result = crypto_for(NODE_1, &crypto_components).verify_dealing_public(&params, &dealing);
-    assert!(result.is_ok());
+    let result =
+        crypto_for(NODE_1, &crypto_components).verify_dealing_public(&params, dealer_id, &dealing);
+    assert!(result.is_err());
 }
 
 #[test]

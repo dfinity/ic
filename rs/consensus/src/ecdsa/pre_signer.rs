@@ -554,35 +554,40 @@ impl EcdsaPreSignerImpl {
             }
         }
 
-        IDkgProtocol::verify_dealing_public(&*self.crypto, transcript_params, &dealing.idkg_dealing)
-            .map_or_else(
-                |error| {
-                    if error.is_replicated() {
-                        self.metrics.pre_sign_errors_inc("verify_dealing_permanent");
-                        vec![EcdsaChangeAction::HandleInvalid(
-                            id.clone(),
-                            format!(
-                                "Dealing validation(permanent error): {}, error = {:?}",
-                                signed_dealing, error
-                            ),
-                        )]
-                    } else {
-                        // Defer in case of transient errors
-                        debug!(
-                            self.log,
-                            "Dealing validation(transient error): {}, error = {:?}",
-                            signed_dealing,
-                            error
-                        );
-                        self.metrics.pre_sign_errors_inc("verify_dealing_transient");
-                        Default::default()
-                    }
-                },
-                |()| {
-                    self.metrics.pre_sign_metrics_inc("dealing_received");
-                    vec![EcdsaChangeAction::MoveToValidated(id.clone())]
-                },
-            )
+        IDkgProtocol::verify_dealing_public(
+            &*self.crypto,
+            transcript_params,
+            dealing.idkg_dealing.dealer_id,
+            &dealing.idkg_dealing,
+        )
+        .map_or_else(
+            |error| {
+                if error.is_replicated() {
+                    self.metrics.pre_sign_errors_inc("verify_dealing_permanent");
+                    vec![EcdsaChangeAction::HandleInvalid(
+                        id.clone(),
+                        format!(
+                            "Dealing validation(permanent error): {}, error = {:?}",
+                            signed_dealing, error
+                        ),
+                    )]
+                } else {
+                    // Defer in case of transient errors
+                    debug!(
+                        self.log,
+                        "Dealing validation(transient error): {}, error = {:?}",
+                        signed_dealing,
+                        error
+                    );
+                    self.metrics.pre_sign_errors_inc("verify_dealing_transient");
+                    Default::default()
+                }
+            },
+            |()| {
+                self.metrics.pre_sign_metrics_inc("dealing_received");
+                vec![EcdsaChangeAction::MoveToValidated(id.clone())]
+            },
+        )
     }
 
     /// Helper to corrupt the crypto dealing for malicious testing

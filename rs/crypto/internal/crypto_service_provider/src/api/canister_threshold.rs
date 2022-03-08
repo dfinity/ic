@@ -8,8 +8,9 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
     IDkgOpenTranscriptError, IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError,
-    IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
-    ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
+    IDkgVerifyDealingPublicError, IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError,
+    ThresholdEcdsaSignShareError, ThresholdEcdsaVerifyCombinedSignatureError,
+    ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::AlgorithmId;
@@ -43,6 +44,18 @@ pub trait CspIDkgProtocol {
         receiver_public_key: &MEGaPublicKey,
         context_data: &[u8],
     ) -> Result<(), IDkgVerifyDealingPrivateError>;
+
+    /// Verify the public parts of a dealing
+    fn idkg_verify_dealing_public(
+        &self,
+        algorithm_id: AlgorithmId,
+        dealing: &IDkgDealingInternal,
+        operation_mode: &IDkgTranscriptOperationInternal,
+        reconstruction_threshold: NumberOfNodes,
+        dealer_index: NodeIndex,
+        number_of_receivers: NumberOfNodes,
+        context_data: &[u8],
+    ) -> Result<(), IDkgVerifyDealingPublicError>;
 
     /// Generates an IDkg transcript from verified IDkg dealings
     fn idkg_create_transcript(

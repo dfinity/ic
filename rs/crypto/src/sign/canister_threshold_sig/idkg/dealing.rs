@@ -9,7 +9,7 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
 };
 use ic_interfaces::registry::RegistryClient;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgCreateDealingError, IDkgVerifyDealingPrivateError,
+    IDkgCreateDealingError, IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealing, IDkgTranscriptParams};
 use ic_types::NodeId;
@@ -128,4 +128,47 @@ impl From<MegaKeyFromRegistryError> for IDkgVerifyDealingPrivateError {
             }
         }
     }
+}
+
+pub fn verify_dealing_public<C: CspIDkgProtocol>(
+    csp_client: &C,
+    params: &IDkgTranscriptParams,
+    dealer_id: NodeId,
+    dealing: &IDkgDealing,
+) -> Result<(), IDkgVerifyDealingPublicError> {
+    // Check the dealing is for the correct transcript ID
+    if params.transcript_id() != dealing.transcript_id {
+        return Err(IDkgVerifyDealingPublicError::TranscriptIdMismatch);
+    }
+
+    let internal_dealing = IDkgDealingInternal::deserialize(&dealing.internal_dealing_raw)
+        .map_err(|e| IDkgVerifyDealingPublicError::InvalidDealing {
+            reason: format!("{:?}", e),
+        })?;
+
+    // Compute CSP operation. Same of IDKM operation type, but wrapping the polynomial commitment from the transcripts.
+
+    let internal_operation = IDkgTranscriptOperationInternal::try_from(params.operation_type())
+        .map_err(|e| IDkgVerifyDealingPublicError::InvalidDealing {
+            reason: format!("{:?}", e),
+        })?;
+
+    let dealer_index =
+        params
+            .dealer_index(dealer_id)
+            .ok_or(IDkgVerifyDealingPublicError::InvalidDealing {
+                reason: "No such dealer".to_string(),
+            })?;
+
+    let number_of_receivers = params.receivers().count();
+
+    csp_client.idkg_verify_dealing_public(
+        params.algorithm_id(),
+        &internal_dealing,
+        &internal_operation,
+        params.reconstruction_threshold(),
+        dealer_index,
+        number_of_receivers,
+        &params.context_data(),
+    )
 }

@@ -397,9 +397,11 @@ impl<C: CryptoServiceProvider> IDkgProtocol for TempCryptoComponentGeneric<C> {
     fn verify_dealing_public(
         &self,
         params: &IDkgTranscriptParams,
+        dealing_id: NodeId,
         dealing: &IDkgDealing,
     ) -> Result<(), IDkgVerifyDealingPublicError> {
-        self.crypto_component.verify_dealing_public(params, dealing)
+        self.crypto_component
+            .verify_dealing_public(params, dealing_id, dealing)
     }
 
     fn verify_dealing_private(

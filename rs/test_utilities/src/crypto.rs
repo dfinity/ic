@@ -504,6 +504,7 @@ impl IDkgProtocol for CryptoReturningOk {
     fn verify_dealing_public(
         &self,
         _params: &IDkgTranscriptParams,
+        _dealer_id: NodeId,
         _dealing: &IDkgDealing,
     ) -> Result<(), IDkgVerifyDealingPublicError> {
         Ok(())
