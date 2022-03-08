@@ -13,6 +13,18 @@ gflags.MarkFlagAsRequired("disk_image")
 gflags.DEFINE_string("artifacts_path", "", "Path to the artifacts directory")
 
 
+def run(args):
+    print("Running ", args)
+    proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    # Fetch stdout and stderr from the running process immediate to avoid
+    # output appearing in an incorrect order.
+    for c in iter(lambda: proc.stdout.read(1), b""):
+        sys.stdout.buffer.write(c)
+    proc.wait()
+    print(f"Benchmarked {args} returned with {proc.returncode}")
+    assert proc.returncode == 0
+
+
 def main(argv):
     argv = FLAGS(argv)
 
@@ -72,23 +84,25 @@ def main(argv):
     # --------------------------------------------------
     # These have to go first, since we turn of a replica for the load generator ones
 
-    subprocess.run(
+    print("📂 Xnet experiment")
+    run(
         [
             "python3",
             "run_xnet_experiment.py",
-            "--runtime",
+            "--duration",
             "20",
+            "--tests_first_subnet_index",
+            "0",
         ]
-        + base_arguments,
-        capture_output=True,
-        text=True,
+        + base_arguments
     )
 
     # Benchmarks WITH load generation
     # --------------------------------------------------
     # Turns off replicas, so only load based benchmarks from this point onward.
 
-    subprocess.run(
+    print("📂 System baseline experiment with queries")
+    run(
         [
             "python3",
             "run_system_baseline_experiment.py",
@@ -100,11 +114,11 @@ def main(argv):
             "--num_workload_generators",
             "1",
         ]
-        + base_arguments_load_test,
-        check=True,
+        + base_arguments_load_test
     )
 
-    subprocess.run(
+    print("📂 System baseline experiment with updates")
+    run(
         [
             "python3",
             "run_system_baseline_experiment.py",
@@ -117,11 +131,11 @@ def main(argv):
             "--num_workload_generators",
             "1",
         ]
-        + base_arguments_load_test,
-        check=True,
+        + base_arguments_load_test
     )
 
-    subprocess.run(
+    print("📂 Large payload max capacity with updates")
+    run(
         [
             "python3",
             "max_capacity_large_payload.py",
@@ -135,11 +149,11 @@ def main(argv):
             "--max_iterations",
             "1",
         ]
-        + base_arguments_load_test,
-        check=True,
+        + base_arguments_load_test
     )
 
-    subprocess.run(
+    print("📂 Gossip experiment")
+    run(
         [
             "python3",
             "run_gossip_experiment.py",
@@ -147,11 +161,11 @@ def main(argv):
             "10",
             "--skip_generate_report=True",
         ]
-        + base_arguments_load_test,
-        check=True,
+        + base_arguments_load_test
     )
 
-    subprocess.run(
+    print("📂 Large memory experiment with queries")
+    run(
         [
             "python3",
             "run_large_memory_experiment.py",
@@ -160,8 +174,7 @@ def main(argv):
             "--initial_rps",
             "10",
         ]
-        + base_arguments_load_test,
-        check=True,
+        + base_arguments_load_test
     )
 
     machines[0].stop()

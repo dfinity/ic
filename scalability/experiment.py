@@ -139,8 +139,8 @@ class Experiment:
                 ["../ic-os/guestos/scripts/get-artifacts.sh"], encoding="utf-8", env=artifacts_env
             )
             match = re.findall(r"Downloading artifacts for revision ([a-f0-9]*)", output)[0]
-            f = open(f_artifacts_hash, "wt", encoding="utf-8")
-            f.write(match)
+            with open(f_artifacts_hash, "wt", encoding="utf-8") as f:
+                f.write(match)
         else:
             print(
                 (
@@ -164,10 +164,8 @@ class Experiment:
 
     def get_machine_to_instrument(self) -> str:
         """Return the machine to instrument."""
-        res = subprocess.check_output(
-            [self.get_ic_admin_path(), "--nns-url", self.get_nns_url(), "get-topology"], encoding="utf-8"
-        )
-        for subnet, info in json.loads(res)["topology"]["subnets"].items():
+        topology = self.get_topology()
+        for subnet, info in topology["topology"]["subnets"].items():
             subnet_type = info["records"][0]["value"]["subnet_type"]
             members = info["records"][0]["value"]["membership"]
             if subnet_type == "application":
@@ -175,10 +173,8 @@ class Experiment:
 
     def get_subnet_to_instrument(self) -> str:
         """Return the subnet to instrument."""
-        res = subprocess.check_output(
-            [self.get_ic_admin_path(), "--nns-url", self.get_nns_url(), "get-topology"], encoding="utf-8"
-        )
-        for subnet, info in json.loads(res)["topology"]["subnets"].items():
+        topology = self.get_topology()
+        for subnet, info in topology["topology"]["subnets"].items():
             subnet_type = info["records"][0]["value"]["subnet_type"]
             if subnet_type == "application":
                 return subnet
@@ -327,13 +323,18 @@ class Experiment:
         return subnet_info[subnet_index]["records"][0]["value"]["membership"]
 
     def get_nns_url(self):
-        """Get the testnets NNS url."""
+        """
+        Get the testnets NNS url.
+
+        The NNS url can either be specified by a command line flag, the mainnet NNS url can be
+        used the ansible configuration files can be parsed for benchmarking testnets.
+        """
         if len(FLAGS.nns_url) > 0:
             return FLAGS.nns_url
         ip = (
             "2001:920:401a:1708:5000:4fff:fe92:48f1"
             if FLAGS.testnet == "mercury"
-            else self.get_hostnames(FLAGS.testnet, NNS_SUBNET_INDEX)[0]
+            else ansible.get_ansible_hostnames_for_subnet(FLAGS.testnet, NNS_SUBNET_INDEX)[0]
         )
         return f"http://[{ip}]:8080"
 
@@ -444,23 +445,15 @@ class Experiment:
 
         return this_canister_id
 
-    def get_machines(self, testnet, subnet=0):
-        """Get a list of machines for the given subnetwork."""
-        j = ansible.get_testnet(testnet)
-
-        hosts = [
-            info
-            for (_, info) in j["_meta"]["hostvars"].items()
-            if "subnet_index" in info and info["subnet_index"] == subnet
-        ]
-
-        return hosts
-
-    def get_hostnames(self, testnet=None, subnet=0):
-        """Return hostnames of all machines in the given testnet and subnet."""
-        if testnet is None:
-            testnet = FLAGS.testnet
-        return sorted([h["ansible_host"] for h in self.get_machines(testnet, subnet)])
+    def get_hostnames(self, for_subnet_idx=0):
+        """Return hostnames of all machines in the given testnet and subnet from the registry."""
+        topology = self.get_topology()
+        for curr_subnet_idx, (subnet, info) in enumerate(topology["topology"]["subnets"].items()):
+            subnet_type = info["records"][0]["value"]["subnet_type"]
+            members = info["records"][0]["value"]["membership"]
+            assert curr_subnet_idx != 0 or subnet_type == "system"
+            if for_subnet_idx == curr_subnet_idx:
+                return sorted([self.get_node_ip_address(member) for member in members])
 
     def build_summary_file(self):
         """Build dictionary to be used to build the summary file."""

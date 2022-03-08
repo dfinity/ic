@@ -35,6 +35,7 @@ class EvaluatedSummaries:
         total_number,
         num_success,
         num_fail,
+        succ_rate_histograms,
     ):
         """Store evaluated summary data."""
         self.failure_rate = failure_rate
@@ -47,6 +48,7 @@ class EvaluatedSummaries:
         self.total_number = total_number
         self.num_success = num_success
         self.num_fail = num_fail
+        self.succ_rate_histograms = succ_rate_histograms
 
     def convert_tuple(self):
         """Mostly used for backward compatibility."""
@@ -62,6 +64,29 @@ class EvaluatedSummaries:
             self.num_fail,
         )
 
+    def get_success_rate_histograms(self):
+        # Aggregate historgram of successful requests
+        import itertools
+
+        aggregated_rates = {}
+        succ_rate_histogram_keys = set(itertools.chain.from_iterable(self.succ_rate_histograms))
+        for key in succ_rate_histogram_keys:
+            key_as_int = int(key)
+            aggregated_rates[key_as_int] = 0
+            for succ_rate_histogram in self.succ_rate_histograms:
+                if key in succ_rate_histogram:
+                    aggregated_rates[key_as_int] += succ_rate_histogram[key]
+
+        sorted_histograms = sorted([(k, v) for (k, v) in aggregated_rates.items()])
+        return sorted_histograms
+
+    def get_avg_success_rate(self, duration):
+        """Return the average rate of successful requests for the given duration."""
+        sorted_histogram = self.get_success_rate_histograms()
+        filtered = list(filter(lambda i: i[0] < duration, sorted_histogram))
+        rate = float(sum([v for (k, v) in filtered])) / duration
+        return rate
+
 
 def evaluate_summaries(summaries):
     """Evaluate a list of workload generator summary files."""
@@ -72,22 +97,22 @@ def evaluate_summaries(summaries):
     t_average = []
     t_percentile = []
     failure_rates = []
+    succ_rate_histograms = []
 
     num_machines = 0
     for summary in summaries:
         try:
             with open(summary, "r") as infile:
-                print("Evaluating summary file: ", summary)
                 num_machines += 1
-                data = json.load(infile)
+                summary_data = json.load(infile)[0]
 
                 # Print content of file
-                # print(json.dumps(data, indent=2, sort_keys=True))
+                # print(json.dumps(summary_data, indent=2, sort_keys=True))
 
                 num_succ = 0
                 num_fail = 0
 
-                for (c, number) in data[0]["status_counts"].items():
+                for (c, number) in summary_data["status_counts"].items():
                     code = int(c)
                     if code not in result:
                         result[code] = 0
@@ -98,13 +123,16 @@ def evaluate_summaries(summaries):
                     else:
                         num_fail += number
 
-                t_percentile.append(convert_duration(data[0]["percentiles"]))
+                t_percentile.append(convert_duration(summary_data["percentiles"]))
 
-                t_median.append(convert_time_from_summary(data[0]["median"]))
-                t_max.append(convert_time_from_summary(data[0]["max"]))
-                t_min.append(convert_time_from_summary(data[0]["min"]))
-                t_average.append(convert_time_from_summary(data[0]["average"]))
+                t_median.append(convert_time_from_summary(summary_data["median"]))
+                t_max.append(convert_time_from_summary(summary_data["max"]))
+                t_min.append(convert_time_from_summary(summary_data["min"]))
+                t_average.append(convert_time_from_summary(summary_data["average"]))
                 failure_rates.append(num_fail / (num_succ + num_fail) if (num_succ + num_fail) > 0 else -1)
+                if "succ_rate_histogram" in summary_data:
+                    succ_rate_histograms.append(summary_data["succ_rate_histogram"])
+
         except Exception as e:
             print("⚠️  Failed to read one summary file from workload gnerators, continuing ..")
             print(e)
@@ -118,7 +146,9 @@ def evaluate_summaries(summaries):
 
     percentiles = [mean_or_minus_one([x[p] for x in t_percentile]) for p in range(0, 100)]
 
-    failure_rate = success[False] / (success[True] + success[False])
+    sum_requests = success[True] + success[False]
+    failure_rate = success[False] / sum_requests if sum_requests != 0 else 1.0
+
     return EvaluatedSummaries(
         failure_rate,
         failure_rates,
@@ -130,6 +160,7 @@ def evaluate_summaries(summaries):
         total_number,
         success[True],
         success[False],
+        succ_rate_histograms,
     )
 
 

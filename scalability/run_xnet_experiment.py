@@ -22,6 +22,11 @@ gflags.DEFINE_integer("duration", 600, "Duration of each iteration of the Xnet b
 gflags.DEFINE_integer("payload_size", 1024, "Payload size for Xnet messages")
 gflags.DEFINE_integer("rate", 10, "Rate at which to send Xnet messages")
 gflags.DEFINE_integer("num_canisters_per_subnet", 2, "Number of canisters per subnetwork")
+gflags.DEFINE_integer(
+    "tests_first_subnet_index",
+    1,
+    "Start installing canisters on subnet with given index. Useful to avoid installing in NNS.",
+)
 
 CANISTER = "xnet-test-canister.wasm"
 
@@ -43,9 +48,13 @@ class ExperimentXnet(experiment.Experiment):
         self.host_each_subnet = []
         self.canisters_per_host = {}
 
-        for subnet_index in range(1, len(self.get_subnets())):
+        num_subnets = len(self.get_subnets())
+        print(f"Number of subnetworks is: {num_subnets}")
+        for subnet_index in range(FLAGS.tests_first_subnet_index, num_subnets):
             # Take the first hostname of each subnetwork
-            first_host = self.get_hostnames(subnet=subnet_index)[0]
+            hostnames_in_subnet = self.get_hostnames(subnet_index)
+            print(subnet_index, hostnames_in_subnet)
+            first_host = hostnames_in_subnet[0]
             self.host_each_subnet.append(first_host)
             self.canisters_per_host[first_host] = []
 
@@ -153,10 +162,11 @@ class ExperimentXnet(experiment.Experiment):
 
         # Get Prometheus metrics
         # --------------------------------------------------
-        r = prometheus.get_xnet_stream_size(self.testnet, t_start, int(time.time()))
-        out = json.dumps(r, indent=2)
-        with open(os.path.join(self.iter_outdir, "xnet-stream-size.json"), "w") as iter_file:
-            iter_file.write(out)
+        if not FLAGS.no_prometheus:
+            r = prometheus.get_xnet_stream_size(self.testnet, t_start, int(time.time()))
+            out = json.dumps(r, indent=2)
+            with open(os.path.join(self.iter_outdir, "xnet-stream-size.json"), "w") as iter_file:
+                iter_file.write(out)
 
     def parse(path: str):
         """Parse the given json file containing Prometheus xnet-stream data."""
