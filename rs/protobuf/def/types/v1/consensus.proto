@@ -3,6 +3,7 @@
 syntax = "proto3";
 package types.v1;
 
+import "bitcoin/v1/bitcoin.proto";
 import "types/v1/types.proto";
 import "types/v1/dkg.proto";
 import "messaging/xnet/v1/certified_stream_slice.proto";
@@ -82,6 +83,8 @@ message SubnetStreamSlice {
 }
 
 message SelfValidatingPayload {
+	// Responses from the Bitcoin Adapter talking to the Bitcoin testnet.
+	repeated bitcoin.v1.BitcoinAdapterResponse testnet_responses = 1;
 }
 
 message XNetPayload {

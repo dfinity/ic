@@ -1,5 +1,6 @@
 pub mod artifact_pool_config;
 pub mod assert_utils;
+pub mod bitcoin_adapter_client;
 pub mod certified_stream_store;
 pub mod consensus;
 pub mod crypto;

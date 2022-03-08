@@ -57,7 +57,7 @@ impl SelfValidatingPayloadBuilder for NoOpSelfValidatingPayloadBuilder {
         _past_payloads: &[&SelfValidatingPayload],
         _byte_limit: NumBytes,
     ) -> SelfValidatingPayload {
-        SelfValidatingPayload::new()
+        SelfValidatingPayload::default()
     }
 
     fn validate_self_validating_payload(

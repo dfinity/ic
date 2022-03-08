@@ -1,18 +1,23 @@
 use crate::metrics::BitcoinPayloadBuilderMetrics;
 use ic_interfaces::{
+    bitcoin_adapter_client::{BitcoinAdapterClient, Options},
     self_validating_payload::{SelfValidatingPayloadBuilder, SelfValidatingPayloadValidationError},
     state_manager::{StateManager, StateManagerError},
 };
 use ic_logger::{log, ReplicaLogger};
 use ic_metrics::{MetricsRegistry, Timer};
+use ic_registry_subnet_features::BitcoinFeature;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::{SelfValidatingPayload, ValidationContext},
+    bitcoin::{BitcoinAdapterResponse, BitcoinAdapterResponseWrapper},
     CountBytes, Height, NumBytes,
 };
-use std::sync::Arc;
+use std::{convert::TryFrom, sync::Arc};
 use thiserror::Error;
 
+const ADAPTER_REQUEST_STATUS_FAILURE: &str = "failed";
+const ADAPTER_REQUEST_STATUS_SUCCESS: &str = "success";
 const BUILD_PAYLOAD_STATUS_SUCCESS: &str = "success";
 const VALIDATION_STATUS_VALID: &str = "valid";
 const INVALID_SELF_VALIDATING_PAYLOAD: &str = "InvalidSelfValidatingPayload";
@@ -43,6 +48,7 @@ impl GetPayloadError {
 pub struct BitcoinPayloadBuilder {
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     metrics: Arc<BitcoinPayloadBuilderMetrics>,
+    bitcoin_adapter_client: Arc<dyn BitcoinAdapterClient>,
     log: ReplicaLogger,
 }
 
@@ -50,11 +56,13 @@ impl BitcoinPayloadBuilder {
     pub fn new(
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         metrics_registry: &MetricsRegistry,
+        bitcoin_adapter_client: Arc<dyn BitcoinAdapterClient>,
         log: ReplicaLogger,
     ) -> Self {
         Self {
             state_manager,
             metrics: Arc::new(BitcoinPayloadBuilderMetrics::new(metrics_registry)),
+            bitcoin_adapter_client,
             log,
         }
     }
@@ -62,20 +70,102 @@ impl BitcoinPayloadBuilder {
     fn get_self_validating_payload_impl(
         &self,
         validation_context: &ValidationContext,
-        _past_payloads: &[&SelfValidatingPayload],
-        _byte_limit: NumBytes,
+        past_payloads: &[&SelfValidatingPayload],
+        byte_limit: NumBytes,
     ) -> Result<SelfValidatingPayload, GetPayloadError> {
         // Retrieve the `ReplicatedState` required by `validation_context`.
-        let _state = self
+        let state = self
             .state_manager
             .get_state_at(validation_context.certified_height)
             .map_err(|e| GetPayloadError::GetStateFailed(validation_context.certified_height, e))?
             .take();
 
-        // TODO(EXC-784): read the requests from the state.
-        // TODO(EXC-785): send request to bitcoin adapter and get response.
+        // We should only send requests to the adapter if the bitcoin testnet
+        // feature is enabled, otherwise return an empty payload.
+        match state.metadata.own_subnet_features.bitcoin_testnet() {
+            BitcoinFeature::Disabled => Ok(SelfValidatingPayload::default()),
+            BitcoinFeature::Paused => Ok(SelfValidatingPayload::default()),
+            BitcoinFeature::Enabled => {
+                let past_callback_ids: std::collections::HashSet<u64> = past_payloads
+                    .iter()
+                    .flat_map(|x| x.get())
+                    .map(|x| x.callback_id)
+                    .collect();
 
-        Ok(SelfValidatingPayload {})
+                let mut responses = vec![];
+                let mut current_payload_size: u64 = 0;
+                for (callback_id, request) in state.bitcoin_testnet().adapter_requests_iter() {
+                    // We have already created a payload with the response for
+                    // this callback id, so skip it.
+                    if past_callback_ids.contains(callback_id) {
+                        continue;
+                    }
+
+                    // If we're above the allowed byte_limit, stop sending more requests.
+                    if current_payload_size >= byte_limit.get() {
+                        break;
+                    }
+
+                    let timer = Timer::start();
+                    let result = self
+                        .bitcoin_adapter_client
+                        .send_request((&request.request).into(), Options::default());
+                    match result {
+                        Ok(r) => match BitcoinAdapterResponseWrapper::try_from(r) {
+                            Ok(response_wrapper) => {
+                                self.metrics.observe_adapter_request_duration(
+                                    ADAPTER_REQUEST_STATUS_SUCCESS,
+                                    request.request.to_request_type_label(),
+                                    timer,
+                                );
+                                let response = BitcoinAdapterResponse {
+                                    response: response_wrapper,
+                                    callback_id: *callback_id,
+                                };
+                                let response_size = response.count_bytes() as u64;
+                                // Ensure we don't exceed the byte limit by
+                                // adding a new response but also ensure we
+                                // allow at least one response to be included.
+                                if !responses.is_empty()
+                                    && response_size + current_payload_size > byte_limit.get()
+                                {
+                                    break;
+                                }
+                                current_payload_size += response_size;
+                                responses.push(response);
+                            }
+                            Err(err) => {
+                                self.metrics.observe_adapter_request_duration(
+                                    ADAPTER_REQUEST_STATUS_FAILURE,
+                                    request.request.to_request_type_label(),
+                                    timer,
+                                );
+                                log!(
+                                    self.log,
+                                    slog::Level::Error,
+                                    "Failed to parse response with callback id {} from the adapter: {}",
+                                    callback_id, err
+                                );
+                            }
+                        },
+                        Err(err) => {
+                            self.metrics.observe_adapter_request_duration(
+                                ADAPTER_REQUEST_STATUS_FAILURE,
+                                request.request.to_request_type_label(),
+                                timer,
+                            );
+                            log!(
+                                self.log,
+                                slog::Level::Error,
+                                "Sending the request with callback id {} to the adapter failed with {:?}",
+                                callback_id, err
+                            );
+                        }
+                    }
+                }
+                Ok(SelfValidatingPayload::new(responses))
+            }
+        }
     }
 }
 
@@ -126,7 +216,6 @@ impl SelfValidatingPayloadBuilder for BitcoinPayloadBuilder {
             }
         };
 
-        debug_assert!(payload.count_bytes() <= byte_limit.get() as usize);
         payload
     }
 
@@ -146,3 +235,6 @@ impl SelfValidatingPayloadBuilder for BitcoinPayloadBuilder {
         Ok(0.into())
     }
 }
+
+#[cfg(test)]
+mod tests;

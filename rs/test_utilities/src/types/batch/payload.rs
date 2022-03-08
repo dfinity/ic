@@ -12,7 +12,7 @@ impl Default for PayloadBuilder {
                 ingress: super::ingress_payload::IngressPayloadBuilder::default().build(),
                 xnet: super::xnet_payload::XNetPayloadBuilder::default().build(),
                 // TODO(MR-70): use payload builder
-                self_validating: SelfValidatingPayload::new(),
+                self_validating: SelfValidatingPayload::default(),
             },
         }
     }
