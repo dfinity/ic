@@ -4683,7 +4683,6 @@ dependencies = [
  "pretty_assertions 0.6.1",
  "prometheus",
  "proptest 0.9.6",
- "regex",
  "serde",
  "slog",
  "slog-async",
