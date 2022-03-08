@@ -25,6 +25,7 @@ use ic_config::{
     consensus::ConsensusConfig,
     crypto::CryptoConfig,
     execution_environment::Config as HypervisorConfig,
+    flag_status::FlagStatus,
     http_handler,
     http_handler::PortConfig,
     logger::Config as LoggerConfig,
@@ -39,6 +40,7 @@ use ic_prep_lib::{
     node::{NodeConfiguration, NodeIndex},
     subnet_configuration::SubnetConfig,
 };
+use ic_protobuf::registry::subnet::v1::SubnetFeatures;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
@@ -120,7 +122,7 @@ fn main() -> Result<()> {
                 None,
                 None,
                 None,
-                None,
+                Some(config.subnet_features),
                 None,
                 vec![],
                 vec![],
@@ -287,6 +289,11 @@ struct CliArgs {
     #[structopt(long = "consensus-pool-backend",
                 possible_values = &["lmdb", "rocksdb"])]
     consensus_pool_backend: Option<String>,
+
+    /// Subnet features
+    #[structopt(long = "subnet-features",
+                possible_values = &["ecdsa_signatures", "canister_sandboxing", "http_requests", "bitcoin_testnet_feature"])]
+    subnet_features: Vec<String>,
 }
 
 impl CliArgs {
@@ -460,7 +467,25 @@ impl CliArgs {
             dkg_interval_length: self.dkg_interval_length.map(Height::from),
             detect_consensus_starvation: self.detect_consensus_starvation,
             consensus_pool_backend: self.consensus_pool_backend,
+            subnet_features: to_subnet_features(&self.subnet_features),
         })
+    }
+}
+
+fn to_subnet_features(features: &[String]) -> SubnetFeatures {
+    let ecdsa_signatures = features.iter().any(|s| s.as_str() == "ecdsa_signatures");
+    let canister_sandboxing = features.iter().any(|s| s.as_str() == "canister_sandboxing");
+    let http_requests = features.iter().any(|s| s.as_str() == "http_requests");
+    let bitcoin_testnet_feature = features
+        .iter()
+        .find(|s| s.as_str() == "bitcoin_testnet_feature")
+        .map(|_| 2); // BitcoinFeature::Enabled
+
+    SubnetFeatures {
+        ecdsa_signatures,
+        canister_sandboxing,
+        http_requests,
+        bitcoin_testnet_feature,
     }
 }
 
@@ -485,6 +510,7 @@ struct ValidatedConfig {
     dkg_interval_length: Option<Height>,
     detect_consensus_starvation: Option<bool>,
     consensus_pool_backend: Option<String>,
+    subnet_features: SubnetFeatures,
 
     // Not intended to ever be read: role is to keep the temp dir from being deleted.
     _state_dir_holder: Option<TempDir>,
@@ -533,7 +559,15 @@ impl ValidatedConfig {
             }],
         });
 
-        let hypervisor_config = HypervisorConfig::default();
+        let hypervisor_config = HypervisorConfig {
+            canister_sandboxing_flag: if self.subnet_features.canister_sandboxing {
+                FlagStatus::Enabled
+            } else {
+                FlagStatus::Disabled
+            },
+            ..HypervisorConfig::default()
+        };
+
         let hypervisor = Some(hypervisor_config);
 
         let consensus = self.detect_consensus_starvation.map(ConsensusConfig::new);
