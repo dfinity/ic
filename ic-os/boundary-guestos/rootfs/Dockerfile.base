@@ -15,7 +15,7 @@
 # 2. On the next hourly master pipeline, click the "deploy-boundary-os-baseimg" job
 # 3. Note the sha256 and update the sha256 reference in the neighboring Dockerfiles.
 
-FROM ubuntu:focal-20211006
+FROM ubuntu:20.04
 
 ENV TZ=UTC
 ENV SOURCE_DATE_EPOCH=0
@@ -38,6 +38,7 @@ RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommend
     curl \
     faketime \
     fdisk \
+    dante-server \
     haveged \
     initramfs-tools \
     inotify-tools \
@@ -65,6 +66,7 @@ RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommend
     python3-dev \
     rsync \
     ssl-cert \
+    stunnel \
     sudo \
     systemd systemd-sysv systemd-journal-remote \
     udev \
