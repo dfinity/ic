@@ -227,7 +227,13 @@ pub enum IDkgVerifyComplaintError {
 impl_display_using_debug!(IDkgVerifyComplaintError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum IDkgVerifyOpeningError {}
+pub enum IDkgVerifyOpeningError {
+    TranscriptIdMismatch,
+    DealerIdMismatch,
+    MissingDealingInTranscript { dealer_id: NodeId },
+    MissingOpenerInReceivers { opener_id: NodeId },
+    InternalError { internal_error: String },
+}
 impl_display_using_debug!(IDkgVerifyOpeningError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

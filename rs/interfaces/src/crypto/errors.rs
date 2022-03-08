@@ -258,8 +258,18 @@ impl ErrorReplication for ThresholdEcdsaVerifyCombinedSignatureError {
 
 impl ErrorReplication for IDkgVerifyOpeningError {
     fn is_replicated(&self) -> bool {
-        // TODO correctly implement this function
-        false
+        match self {
+            // true, as this is a stable property of the arguments.
+            IDkgVerifyOpeningError::TranscriptIdMismatch => true,
+            // true, as this is a stable property of the arguments.
+            IDkgVerifyOpeningError::DealerIdMismatch => true,
+            // true, as this is a stable property of the arguments.
+            IDkgVerifyOpeningError::MissingDealingInTranscript { .. } => true,
+            // true, as this is a stable property of the arguments.
+            IDkgVerifyOpeningError::MissingOpenerInReceivers { .. } => true,
+            // true, as this is a stable property of the arguments.
+            IDkgVerifyOpeningError::InternalError { .. } => true,
+        }
     }
 }
 

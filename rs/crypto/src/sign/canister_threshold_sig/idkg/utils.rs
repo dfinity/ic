@@ -11,7 +11,7 @@ use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_registry_client::helper::crypto::CryptoRegistry;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgOpenTranscriptError, IDkgVerifyComplaintError,
+    IDkgOpenTranscriptError, IDkgVerifyComplaintError, IDkgVerifyOpeningError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgReceivers, IDkgTranscript};
 use ic_types::crypto::KeyPurpose;
@@ -106,8 +106,22 @@ impl From<IDkgDealingExtractionError> for IDkgOpenTranscriptError {
         }
     }
 }
+
+impl From<IDkgDealingExtractionError> for IDkgVerifyOpeningError {
+    fn from(e: IDkgDealingExtractionError) -> Self {
+        match e {
+            IDkgDealingExtractionError::MissingDealingInTranscript { dealer_id } => {
+                IDkgVerifyOpeningError::MissingDealingInTranscript { dealer_id }
+            }
+            IDkgDealingExtractionError::SerializationError { internal_error } => {
+                IDkgVerifyOpeningError::InternalError { internal_error }
+            }
+        }
+    }
+}
+
 /// Finds in `transcript` the dealing of the dealer `dealer_id`, and returns
-/// the this dealing together with the index that corresponds to the dealer.
+/// this dealing together with the index that corresponds to the dealer.
 pub fn index_and_dealing_of_dealer(
     dealer_id: NodeId,
     transcript: &IDkgTranscript,

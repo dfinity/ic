@@ -8,9 +8,9 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
     IDkgOpenTranscriptError, IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError,
-    IDkgVerifyDealingPublicError, IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError,
-    ThresholdEcdsaSignShareError, ThresholdEcdsaVerifyCombinedSignatureError,
-    ThresholdEcdsaVerifySigShareError,
+    IDkgVerifyDealingPublicError, IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
+    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+    ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::AlgorithmId;
@@ -117,7 +117,7 @@ pub trait CspIDkgProtocol {
         context_data: &[u8],
     ) -> Result<(), IDkgVerifyComplaintError>;
 
-    /// Opens
+    /// Opens `dealing`.
     fn idkg_open_dealing(
         &self,
         dealing: IDkgDealingInternal,
@@ -126,6 +126,14 @@ pub trait CspIDkgProtocol {
         opener_index: NodeIndex,
         opener_public_key: &MEGaPublicKey,
     ) -> Result<CommitmentOpening, IDkgOpenTranscriptError>;
+
+    /// Verifies an `opening` of `dealing`.
+    fn idkg_verify_dealing_opening(
+        &self,
+        dealing: IDkgDealingInternal,
+        opener_index: NodeIndex,
+        opening: CommitmentOpening,
+    ) -> Result<(), IDkgVerifyOpeningError>;
 }
 
 /// Crypto service provider (CSP) client for threshold ECDSA signature share

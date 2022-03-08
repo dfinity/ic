@@ -42,9 +42,9 @@ use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
     IDkgOpenTranscriptError, IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError,
-    IDkgVerifyDealingPublicError, IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError,
-    ThresholdEcdsaSignShareError, ThresholdEcdsaVerifyCombinedSignatureError,
-    ThresholdEcdsaVerifySigShareError,
+    IDkgVerifyDealingPublicError, IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
+    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+    ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
@@ -456,6 +456,13 @@ mock! {
             opener_index: NodeIndex,
             opener_public_key: &MEGaPublicKey,
         ) -> Result<CommitmentOpening, IDkgOpenTranscriptError>;
+
+        fn idkg_verify_dealing_opening(
+            &self,
+            dealing: IDkgDealingInternal,
+            opener_index: NodeIndex,
+            opening: CommitmentOpening,
+        ) -> Result<(), IDkgVerifyOpeningError>;
     }
 
     pub trait CspThresholdEcdsaSigner {

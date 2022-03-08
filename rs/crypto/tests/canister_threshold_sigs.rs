@@ -19,7 +19,8 @@ use ic_test_utilities::types::ids::NODE_1;
 use ic_types::consensus::ecdsa::EcdsaDealing;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgOpenTranscriptError,
-    IDkgVerifyComplaintError, ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+    IDkgVerifyComplaintError, IDkgVerifyOpeningError, ThresholdEcdsaCombineSigSharesError,
+    ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgComplaint, IDkgDealing, IDkgMaskedTranscriptOrigin, IDkgMultiSignedDealing, IDkgOpening,
@@ -1349,7 +1350,14 @@ fn should_run_verify_opening() {
         &opening,
         &complaint,
     );
-    assert!(result.is_ok());
+    // TODO(CRP-1367): `verify_opening(...) calls real verify_opening() on the given
+    // fake transcript and fake opening, so the call fails, but the test passes, as `open_transcript()`
+    // is called.  This is however suboptimal, so should be fixed when adding more tests.
+    let err = result.unwrap_err();
+    assert!(matches!(
+        err,
+        IDkgVerifyOpeningError::MissingDealingInTranscript { .. }
+    ));
 }
 
 #[test]
