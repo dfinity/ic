@@ -166,7 +166,7 @@ class Experiment1(workload_experiment.WorkloadExperiment):
                 rps_max_iter.append(rps_max)
                 if failure_rate < FLAGS.allowable_failure_rate and t_median < allowable_t_median:
                     if num_success / duration_in_iteration > rps_max:
-                        rps_max = num_success / duration_in_iteration
+                        rps_max = evaluated_summaries.get_avg_success_rate()
                         rps_max_in = load_total
 
                 run = (

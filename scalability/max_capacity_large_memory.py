@@ -95,7 +95,7 @@ if __name__ == "__main__":
 
         if failure_rate < FLAGS.allowable_failure_rate and t_median < FLAGS.allowable_t_median:
             if num_succ / exp.last_duration > rps_max:
-                rps_max = num_succ / exp.last_duration
+                rps_max = evaluated_summaries.get_avg_success_rate()
                 rps_max_in = load_total
 
         run = failure_rate < FLAGS.stop_failure_rate and t_median < FLAGS.stop_t_median and iteration < len(datapoints)
@@ -110,6 +110,7 @@ if __name__ == "__main__":
                 "rps_max": rps_max,
                 "rps_max_in": rps_max_in,
                 "num_succ_per_iteration": num_succ_per_iteration,
+                "target_duration": FLAGS.duration,
             },
             rps,
             "requests / s",

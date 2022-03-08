@@ -14,19 +14,35 @@
           min-width: 1em;
           min-height: 1em;
       }
+
+      .date {
+          margin: 2em;
+          padding: 0.2em;
+          background-color: #969696;
+      }
     </style>
+    <script>
+      function display_times() {
+          let timestamps = document.getElementsByClassName("timestamp");
+          for (var i=0; i < timestamps.length; i++) {
+              let ts = timestamps[i].innerHTML;
+              let date = new Date(parseInt(ts * 1000));
+              timestamps[i].innerHTML += "<span class=\"date\">" + date + "</span>"
+          }
+      }
+    </script>
   </head>
-<body>
+<body onload="display_times()">
   <div class="w3-container">
     Experiment timestamp: {{timestamp}}<br>
-    Git hash: <a href="https://gitlab.com/dfinity-lab/core/ic/-/commit/{{githash}}">
+    Git hash: <a href="https://gitlab.com/dfinity-lab/public/ic/-/commit/{{githash}}">
       <i class="fa fa-brands fa-gitlab"></i> {{githash}}</a><br>
     Artifacts git hash:
-    <a href="https://gitlab.com/dfinity-lab/core/ic/-/commit/{{experiment.artifacts_githash}}">
+    <a href="https://gitlab.com/dfinity-lab/public/ic/-/commit/{{experiment.artifacts_githash}}">
       <i class="fa fa-brands fa-gitlab"></i> {{experiment.artifacts_githash}}</a><br>
-    Testnet: <a href="https://gitlab.com/dfinity-lab/core/ic/-/blob/master/testnet/env/{{experiment.testnet}}/hosts.ini">
+    Testnet: <a href="https://gitlab.com/dfinity-lab/public/ic/-/blob/master/testnet/env/{{experiment.testnet}}/hosts.ini">
       {{experiment.testnet}}</a><br>
-    Workload generator testnet: <a href="https://gitlab.com/dfinity-lab/core/ic/-/blob/master/testnet/env/{{experiment.wg_testnet}}/hosts.ini">
+    Workload generator testnet: <a href="https://gitlab.com/dfinity-lab/public/ic/-/blob/master/testnet/env/{{experiment.wg_testnet}}/hosts.ini">
       {{experiment.wg_testnet}}</a><br>
     Canister Id: {{experiment.canister_id}}<br>
     Subnet ID: {{experiment.subnet_id}}<br>
@@ -43,8 +59,8 @@
       <li>{{this.name}} ({{this.host}} {{this.country}})
       {{/each}}
     </ul>
-    Time experiment start: {{experiment.t_experiment_start}}<br>
-    Time experiment end: {{experiment.t_experiment_end}}<br>
+    Time experiment start: <span class="timestamp">{{experiment.t_experiment_start}}</span><br>
+    Time experiment end: <span class="timestamp">{{experiment.t_experiment_end}}</span><br>
 
     <button onclick="showAccordion('lscpu')" class="w3-btn w3-green">📂 Show lscpu</button><br />
     <div id="lscpu" class="w3-container w3-hide">
@@ -100,7 +116,7 @@
 
     This is measured by the replica
 
-    <div id="plot-http-latency" style="width:600px;height:250px;"></div>
+    <div id="plot-http-latency" style="max-height:500px;"></div>
     <script>
       plot = document.getElementById('plot-http-latency');
       Plotly.newPlot( plot, {{{plot-http-latency}}}, {{{layout-http-latency}}} );
@@ -136,6 +152,16 @@
       Plotly.newPlot( plot, {{{plot-wg-failure-rate}}}, {{{layout-wg-failure-rate}}} );
     </script>
 
+    <h2>Finalization rate per iteration</h2>
+
+    Each datapoint represents the average finalization rate for the duration of a single iteration.
+
+    <div id="plot-finalization-rate" style="max-height:500px;"></div>
+    <script>
+      plot = document.getElementById('plot-finalization-rate');
+      Plotly.newPlot( plot, {{{plot-finalization-rate}}}, {{{layout-finalization-rate}}} );
+    </script>
+
     <h2>Iterations</h2>
 
     Experiments run in iteration.
@@ -151,7 +177,7 @@
     Failure rate: <span class="w3-tag w3-round w3-{{this.failure_rate_color}}">
       {{this.failure_rate}}%</span><br>
     <button onclick="showAccordion('iteration-{{this.header}}')" class="w3-btn w3-green">📂 Show details for iteration {{this.header}}</button><br />
-    <div id="iteration-{{this.header}}" class="w3-container w3-hide">
+    <div id="iteration-{{this.header}}" class="w3-container w3-hide" style="width: 100%;">
 
     Latency average: {{this.t_average}}ms<br>
     Latency max: {{this.t_max}}ms<br>
@@ -160,12 +186,12 @@
     90th percentile latency: {{this.t_90}}ms<br>
     Total number of requests executed: {{this.total_requests}}<br>
     <br>
-    Median finalization rate: {{this.prometheus.finalization_rate.1}}<br>
+    Average finalization rate: {{this.prometheus.finalization_rate.1}}<br>
     Total load: {{this.configuration.configuration.load_total}}<br>
     <!-- HTTP request duration: {{this.prometheus.http_request_duration}} -->
     
 {{#if this.prometheus.http_request_rate_plot }}
-    <div id="plot-{{this.header}}-http-request-rate" style="width:600px;height:250px;"></div>
+    <div id="plot-{{this.header}}-http-request-rate" style="max-height:500px; width: 100%;"></div>
     <script>
       window.addEventListener("load", function(event) {
           plot = document.getElementById('plot-{{this.header}}-http-request-rate');

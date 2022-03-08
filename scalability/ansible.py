@@ -10,8 +10,8 @@ gflags.DEFINE_string(
 )
 
 
-def get_testnet(testnet):
-    """Get info about the given testnet."""
+def get_ansible_inventory(testnet):
+    """Return the json-parsed ansible inventory for the given testnet."""
     ansible_env = os.environ.copy()
     ansible_env["HOSTS_INI_FILENAME"] = FLAGS.hosts_ini_filename
     p = subprocess.run(
@@ -27,7 +27,25 @@ def get_testnet(testnet):
 
 def get_host_for_ip(testnet: str, ip: str):
     """Get host name for the given IP address."""
-    j = get_testnet(testnet)
+    j = get_ansible_inventory(testnet)
     for (_, info) in j["_meta"]["hostvars"].items():
         if "ipv6" in info and info["ipv6"] == ip:
             return info["ic_host"]
+
+
+def get_ansible_machine_info_for_subnet(testnet, subnet=0):
+    """Get a list of ansible machine configurations for the given subnetwork and testnet."""
+    j = get_ansible_inventory(testnet)
+
+    hosts = [
+        info
+        for (_, info) in j["_meta"]["hostvars"].items()
+        if "subnet_index" in info and info["subnet_index"] == subnet
+    ]
+
+    return hosts
+
+
+def get_ansible_hostnames_for_subnet(testnet, subnet=0):
+    """Return hostnames of all machines in the given testnet and subnet from ansible files."""
+    return sorted([h["ansible_host"] for h in get_ansible_machine_info_for_subnet(testnet, subnet)])
