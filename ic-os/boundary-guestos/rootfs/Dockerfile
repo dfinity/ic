@@ -1,6 +1,6 @@
 # First build stage: download software, build and verify it (such that it
 # does not change under our noses).
-FROM ubuntu:focal-20211006 AS download
+FROM ubuntu:20.04 AS download
 
 ENV TZ=UTC
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
