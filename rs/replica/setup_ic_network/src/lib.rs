@@ -36,9 +36,9 @@ use ic_logger::{debug, info, replica_logger::ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_p2p::{
     event_handler::{
-        fetch_gossip_config, AdvertSubscriber, ChannelConfig, IngressEventHandler,
-        P2PEventHandlerImpl,
+        AdvertSubscriber, AsyncTransportEventHandlerImpl, ChannelConfig, IngressEventHandler,
     },
+    fetch_gossip_config,
     gossip_protocol::GossipImpl,
 };
 use ic_registry_client::helper::subnet::SubnetRegistry;
@@ -94,7 +94,7 @@ struct P2P {
     /// Flag indicating if P2P has been terminated.
     killed: Arc<AtomicBool>,
     /// The P2P event handler control with automatic reference counting.
-    event_handler: Arc<P2PEventHandlerImpl>,
+    event_handler: Arc<AsyncTransportEventHandlerImpl>,
 }
 
 /// The P2P state sync client.
@@ -175,7 +175,7 @@ pub fn create_networking_stack(
         .map(|flow_config| FlowTag::from(flow_config.flow_tag))
         .collect();
 
-    let event_handler = Arc::new(P2PEventHandlerImpl::new(
+    let event_handler = Arc::new(AsyncTransportEventHandlerImpl::new(
         node_id,
         log.clone(),
         &metrics_registry,

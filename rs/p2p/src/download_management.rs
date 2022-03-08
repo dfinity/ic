@@ -857,9 +857,7 @@ impl DownloadManagerImpl {
         log: ReplicaLogger,
         metrics_registry: &MetricsRegistry,
     ) -> Self {
-        let gossip_config =
-            crate::event_handler::fetch_gossip_config(registry_client.clone(), subnet_id);
-
+        let gossip_config = crate::fetch_gossip_config(registry_client.clone(), subnet_id);
         let current_peers = Arc::new(Mutex::new(PeerContextDictionary::default()));
         let peer_manager = Arc::new(PeerManagerImpl::new(
             node_id,
