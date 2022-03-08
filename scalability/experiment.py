@@ -41,6 +41,11 @@ gflags.DEFINE_boolean("is_ci_job", False, "This is a test run exercised by CI. D
 gflags.DEFINE_string(
     "artifacts_git_revision", "HEAD", "GIT revision to use for the artifacts (e.g. workload generator)"
 )
+gflags.DEFINE_string(
+    "branch",
+    "N/A",
+    'Git branch to measure performance. E.g. "origin/rc--2022-01-01_18-31" or "origin/feature-branch-name".',
+)
 
 
 def parse_command_line_args():

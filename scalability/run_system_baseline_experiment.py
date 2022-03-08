@@ -39,13 +39,8 @@ from elasticsearch import ElasticSearch
 from termcolor import colored
 
 FLAGS = gflags.FLAGS
-gflags.DEFINE_integer("duration", 60, "Duration to run the workload in seconds")
 gflags.DEFINE_integer("load", 50, "Load in requests per second to issue")
 gflags.DEFINE_integer("num_workload_generators", 2, "Number of workload generators to run")
-gflags.DEFINE_string(
-    "revision", "", 'Git revision hash to measure performance. E.g. "391fd19f2154471f01068aaa771084eac010a099".'
-)
-gflags.DEFINE_string("branch", "", 'Git branch to measure performance. E.g. "origin/rc--2022-01-01_18-31".')
 gflags.DEFINE_integer("iter_duration", 300, "Duration in seconds for which to execute workload in each round.")
 gflags.DEFINE_integer("median_latency_threshold", 380, "Median latency threshold for query calls.")
 
@@ -121,7 +116,7 @@ class Experiment1(workload_experiment.WorkloadExperiment):
             rps.append(load_total)
             print(f"🚀 Testing with load: {load_total} and updates={self.use_updates}")
 
-            iter_duration = FLAGS.iter_duration if "iter_duration" in FLAGS else FLAGS.duration
+            iter_duration = FLAGS.iter_duration
             t_start = int(time.time())
             evaluated_summaries = super().run_experiment(
                 {
@@ -232,11 +227,10 @@ if __name__ == "__main__":
         rps,
     ) = exp.run_iterations([FLAGS.load])
 
-    perf_failures += misc.verify(f"{exp.request_type} failure rate", failure_rate, 0, 0, result_file)
+    perf_failures += misc.verify("failure rate", exp.request_type, failure_rate, 0, 0, result_file)
     perf_failures += misc.verify(
-        f"{exp.request_type} median latency", t_median, FLAGS.median_latency_threshold, 0.01, result_file
+        "median latency", exp.request_type, t_median, FLAGS.median_latency_threshold, 0.01, result_file
     )
-    perf_failures += misc.verify(f"{exp.request_type} throughput", rps, FLAGS.load, -0.2, result_file)
 
     ElasticSearch.send_perf(
         experiment_name,
@@ -249,9 +243,7 @@ if __name__ == "__main__":
     )
 
     if perf_failures > 0:
-        print(
-            "❌ Performance did not meet expectation. Check verification_results.txt file for more detailed results. 😭😭😭"
-        )
+        print(f"❌ Performance did not meet expectation. Check {result_file} file for more detailed results. 😭😭😭")
         sys.exit(1)
 
     print("✅ Performance verifications passed! 🎉🎉🎉")

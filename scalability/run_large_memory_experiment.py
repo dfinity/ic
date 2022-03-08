@@ -6,7 +6,7 @@ Purpose: Measure memory performance for a canister that has a high memory demand
 For request type t in { Query, Update }
 
   Topology: 13 node subnet, 1 machine NNS
-  Deploy as many memory test canisters on subnet as possible (so that we can execute concurrent updates)
+  Deploy memory test canister on subnet
   Increase memory footprint of query + update calls over time
   Run workload generators on 13 machines at 50% max_capacity
   Measure and determine:
@@ -29,18 +29,28 @@ Maximum number of updates not be below xxx updates per second with less than 20%
 import codecs
 import json
 import os
+import sys
 import time
+from statistics import mean
 
 import experiment
 import gflags
+import misc
 import workload_experiment
-
-FLAGS = gflags.FLAGS
-gflags.DEFINE_integer("payload_size", 5000000, "Payload size to pass to memory test canister")
-gflags.DEFINE_integer("initial_rps", 20, "Requests per second to issue")
-gflags.DEFINE_integer("duration", 60, "Duration of the benchmark")
+from elasticsearch import ElasticSearch
 
 CANISTER = "memory-test-canister.wasm"
+
+FLAGS = gflags.FLAGS
+gflags.DEFINE_integer("target_query_load", 160, "Target query load in queries per second to issue.")
+gflags.DEFINE_integer("target_update_load", 20, "Target update load in queries per second to issue.")
+gflags.DEFINE_integer("payload_size", 5000000, "Payload size to pass to memory test canister")
+gflags.DEFINE_integer("iter_duration", 60, "Duration in seconds for which to execute workload in each round.")
+gflags.DEFINE_integer(
+    "median_latency_threshold",
+    3000,
+    'Median latency threshold for query calls or update calls, depending on how "is_update" flag is set.',
+)
 
 
 class Experiment2(workload_experiment.WorkloadExperiment):
@@ -65,6 +75,7 @@ class Experiment2(workload_experiment.WorkloadExperiment):
         """Run workload generator with the load specified in config."""
         duration = config["duration"] if "duration" in config else 300
         load = config["load_total"]
+        call_method = config["call_method"]
         t_start = int(time.time())
         r = self.run_workload_generator(
             self.machines,
@@ -73,7 +84,7 @@ class Experiment2(workload_experiment.WorkloadExperiment):
             outdir=self.iter_outdir,
             payload=codecs.encode(json.dumps({"size": config["payload_size"]}).encode("utf-8"), "hex"),
             method="Update" if self.use_updates else "Query",
-            call_method="update_copy" if self.use_updates else "query_copy",
+            call_method=call_method,
             duration=duration,
         )
         self.last_duration = int(time.time()) - t_start
@@ -82,25 +93,145 @@ class Experiment2(workload_experiment.WorkloadExperiment):
         print(f"🚀  ... failure rate for {load} rps was {r.failure_rate} median latency is {t_median}")
         return r
 
+    def run_iterations(self, datapoints=None):
+        """Run heavy memory experiment in defined iterations."""
+        self.start_experiment()
+
+        failure_rate = 0.0
+        t_median = 0.0
+        run = True
+        rps = []
+
+        rps_max = 0
+        rps_max_in = None
+
+        num_succ_per_iteration = []
+
+        iteration = 0
+
+        while run:
+
+            load_total = datapoints[iteration]
+            iteration += 1
+
+            rps.append(load_total)
+            print(f"🚀 Testing with load: {load_total} and updates={self.use_updates}")
+
+            evaluated_summaries = super().run_experiment(
+                {
+                    "load_total": load_total,
+                    "payload_size": FLAGS.payload_size,
+                    "duration": FLAGS.iter_duration,
+                    "call_method": "update_copy" if self.use_updates else "query_copy",
+                }
+            )
+            (
+                failure_rate,
+                t_median_list,
+                t_average_list,
+                t_max_list,
+                t_min_list,
+                _,
+                total_requests,
+                num_success,
+                num_failure,
+            ) = evaluated_summaries.convert_tuple()
+
+            t_median = max(t_median_list)
+            t_average = mean(t_average_list)
+            t_max = max(t_max_list)
+            t_min = max(t_min_list)
+            num_succ_per_iteration.append(num_success)
+
+            print(f"🚀  ... failure rate for {load_total} rps was {failure_rate} median latency is {t_median}")
+
+            if len(datapoints) == 1:
+                rps_max = num_success / self.last_duration
+                rps_max_in = load_total
+                run = False
+
+            else:
+
+                if failure_rate < FLAGS.max_failure_rate and t_median < FLAGS.max_t_median:
+                    if num_success / self.last_duration > rps_max:
+                        rps_max = num_success / self.last_duration
+                        rps_max_in = load_total
+
+                run = (
+                    failure_rate < FLAGS.stop_failure_rate
+                    and t_median < FLAGS.stop_t_median
+                    and iteration < len(datapoints)
+                )
+
+            # Write summary file in each iteration including experiment specific data.
+            rtype = "update_copy" if self.use_updates else "query_copy"
+            state = "running" if run else "done"
+            self.write_summary_file(
+                "run_large_memory_experiment",
+                {
+                    "rps": rps,
+                    "rps_max": rps_max,
+                    "rps_max_in": rps_max_in,
+                    "num_succ_per_iteration": num_succ_per_iteration,
+                    "target_duration": FLAGS.iter_duration,
+                },
+                rps,
+                "requests / s",
+                rtype=rtype,
+                state=state,
+            )
+
+            print(f"🚀  ... maximum capacity so far is {rps_max}")
+            return (failure_rate, t_median, t_average, t_max, t_min, total_requests, num_success, num_failure, rps_max)
+
+        exp.end_experiment()
+
 
 if __name__ == "__main__":
     experiment.parse_command_line_args()
 
     exp = Experiment2()
 
-    exp.start_experiment()
-    exp.run_experiment(
-        {
-            "load_total": FLAGS.initial_rps,
-            "payload_size": FLAGS.payload_size,
-            "duration": FLAGS.duration,
-        }
-    )
-    exp.write_summary_file(
-        "run_large_memory_experiment",
-        {"rps": [FLAGS.initial_rps], "target_duration": FLAGS.duration},
-        [FLAGS.initial_rps],
-        "requests / s",
+    perf_failures = 0
+    experiment_name = os.path.basename(__file__).replace(".py", "")
+    result_file = f"{exp.out_dir}/verification_results.txt"
+    datapoints = [FLAGS.target_update_load]
+
+    (
+        failure_rate,
+        t_median,
+        t_average,
+        t_max,
+        t_min,
+        total_requests,
+        num_success,
+        num_failure,
+        rps,
+    ) = exp.run_iterations(datapoints)
+
+    # Verify results
+    perf_failures += misc.verify("failure rate", True, failure_rate, 0, 0, result_file)
+    perf_failures += misc.verify("median latency", True, t_median, FLAGS.median_latency_threshold, 0.01, result_file)
+
+    ElasticSearch.send_perf(
+        experiment_name,
+        perf_failures <= 0,
+        "Update",
+        exp.git_hash,
+        FLAGS.branch,
+        FLAGS.is_ci_job,
+        (
+            failure_rate,
+            0,
+            t_median,
+            FLAGS.median_latency_threshold,
+            rps,
+            FLAGS.target_update_load,
+        ),
     )
 
-    exp.end_experiment()
+    if perf_failures > 0:
+        print(f"❌ Performance did not meet expectation. Check {result_file} file for more detailed results. 😭😭😭")
+        sys.exit(1)
+
+    print("✅ Performance verifications passed! 🎉🎉🎉")

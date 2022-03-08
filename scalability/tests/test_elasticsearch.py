@@ -1,11 +1,18 @@
 """Unit tests for elasticsearch.py."""
+import sys
+import unittest
 from unittest import TestCase
 
+import gflags
 from elasticsearch import ElasticSearch
 
 
 class Test_ElasticSearch(TestCase):
     """Unit tests for elasticsearch.py."""
+
+    def setUp(self):
+        """Set up needed dependencies."""
+        gflags.FLAGS(sys.argv)
 
     def test_send_perf_trend_success(self):
         """The success case where a metric is successfully sent to ES."""
@@ -49,6 +56,10 @@ class Test_ElasticSearch(TestCase):
         is_ci_job = False
         rps = 89
         sent = ElasticSearch.send_max_capacity(
-            name, request_type, experiment_revision, experiment_branch, is_ci_job, rps
+            name, request_type, experiment_revision, experiment_branch, is_ci_job, rps, "./"
         )
         self.assertTrue(sent)
+
+
+if __name__ == "__main__":
+    unittest.main()

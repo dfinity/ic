@@ -59,11 +59,11 @@ class ElasticSearch:
             return True
 
         (
-            experiment_failure_rate,
+            failure_rate,
             failure_rate_threshold,
-            experiment_median_latency,
+            median_latency,
             median_latency_threshold,
-            experiment_throughput,
+            throughput,
             throughput_threshold,
         ) = summaries
 
@@ -79,15 +79,15 @@ class ElasticSearch:
                 "is_success": is_success,
                 "metrics": {
                     "failure_rate": {
-                        "value": experiment_failure_rate,
+                        "value": failure_rate,
                         "threshold": failure_rate_threshold,
                     },
                     "median_latency": {
-                        "value": experiment_median_latency,
+                        "value": median_latency,
                         "threshold": median_latency_threshold,
                     },
                     "throughput": {
-                        "value": experiment_throughput,
+                        "value": throughput,
                         "threshold": throughput_threshold,
                     },
                 },

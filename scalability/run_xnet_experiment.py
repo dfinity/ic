@@ -18,7 +18,7 @@ from ic.principal import Principal
 from termcolor import colored
 
 FLAGS = gflags.FLAGS
-gflags.DEFINE_integer("duration", 600, "Duration of each iteration of the Xnet benchmark")
+gflags.DEFINE_integer("iter_duration", 600, "Duration of each iteration of the Xnet benchmark")
 gflags.DEFINE_integer("payload_size", 1024, "Payload size for Xnet messages")
 gflags.DEFINE_integer("rate", 10, "Rate at which to send Xnet messages")
 gflags.DEFINE_integer("num_canisters_per_subnet", 2, "Number of canisters per subnetwork")
@@ -198,7 +198,7 @@ if __name__ == "__main__":
 
         exp.run_experiment(
             {
-                "duration": FLAGS.duration,
+                "duration": FLAGS.iter_duration,
                 "payload_size": FLAGS.payload_size,
                 "rate": FLAGS.rate,
             }
