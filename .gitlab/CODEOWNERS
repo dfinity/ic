@@ -67,7 +67,6 @@
 /testnet/tests/scripts/nns-backup.sh                       @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
 /testnet/tests/scripts/nns_backup_deprecated.sh            @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
 /testnet/tests/scripts/nns_registry_changes.sh             @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners
-/testnet/tests/scripts/nns_workload.sh                     @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/nns-team
 /testnet/tests/scripts/rejoin_test.sh                      @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/message-routing-owners
 /testnet/tests/scripts/subnet_query_workload.sh            @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
 

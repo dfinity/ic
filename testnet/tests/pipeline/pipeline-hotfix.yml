@@ -48,18 +48,6 @@ subnet-recovery-nns-test-hotfix:
       export GIT_REVISION
       $SHELL_WRAPPER ./testnet/tests/scripts/subnet_recovery_nns_test.sh "$TESTNET" "$CI_JOB_STAGE/$CI_JOB_NAME"
 
-nns-workload-hotfix:
-  extends: .prod-hotfix-test-group-2
-  script:
-    - |
-      set -eExou pipefail
-      git fetch
-      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
-      export GIT_REVISION
-
-      $SHELL_WRAPPER ./testnet/tests/scripts/nns_workload.sh "$TESTNET" 180 5 10 normal 0.25 "$CI_JOB_STAGE/$CI_JOB_NAME"
-  retry: 2
-
 xnet-slo-hotfix:
   extends: .prod-hotfix-test-group-2
   script:

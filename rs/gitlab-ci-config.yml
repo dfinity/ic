@@ -78,7 +78,6 @@ ci_jobs_required:
   # prod tests
   - generic-hourly
   - subnet-update-workload-nightly
-  - nns-workload-nightly
   - xnet-slo-nightly
   - xnet-slo-nightly-many-single-node-subnets
   - network-reliability-test
@@ -95,7 +94,6 @@ ci_jobs_required:
   - xnet-slo-test-slo
   - xnet-slo-test-slo-29-subnets
   - rejoin-test-slo
-  - nns-workload-test-slo
   - maximum-capacity-rejoin-script
   - maximum-capacity-xnet-script
   - maximum-capacity-large-subnet-update
