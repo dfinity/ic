@@ -52,10 +52,10 @@ const MAX_NEXT_BLOCK_HEADERS_LENGTH: usize = 100;
 const MAX_BLOCK_SYNC_QUEUE_SIZE: usize = 200;
 
 /// Max height for sending multiple blocks when connecting the Bitcoin mainnet.
-const MAX_MULTI_MAINNET_ANCHOR_HEIGHT: BlockHeight = 700_000;
+const MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT: BlockHeight = 700_000;
 
 /// Max height for sending multiple blocks when connecting the Bitcoin testnet.
-const MAX_MULTI_TESTNET_ANCHOR_HEIGHT: BlockHeight = 2_164_000;
+const TESTNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT: BlockHeight = 2_164_000;
 
 /// Block locators. Consists of starting hashes and a stop hash.
 type Locators = (Vec<BlockHash>, BlockHash);
@@ -108,7 +108,7 @@ pub enum ReceivedBlockMessageError {
 
 #[derive(Debug)]
 pub struct GetSuccessorsRequest {
-    /// Most recent stable block in the canister.
+    /// Hash of the most recent stable block in the Bitcoin canister.
     pub anchor: BlockHash,
     /// Most recent block hashes that have been processed by the canister.
     pub processed_block_hashes: Vec<BlockHash>,
@@ -122,7 +122,7 @@ pub struct GetSuccessorsResponse {
     pub next: Vec<BlockHeader>,
 }
 
-/// This struct stores the information regarding a peer w.r.t synchronizing blockchain.
+/// This struct stores the information regarding a peer with respect to synchronizing the blockchain.
 /// This information is useful to keep track of the commands that have been sent to the peer,
 /// and how much blockchain state has already been synced with the peer.
 #[derive(Debug)]
@@ -652,7 +652,7 @@ impl BlockchainManager {
         &self,
         anchor: &BlockHash,
         processed_block_hashes: &[BlockHash],
-    ) -> (Vec<Block>, Vec<BlockHash>) {
+    ) -> Vec<Block> {
         let anchor_height = self
             .blockchain
             .get_cached_header(anchor)
@@ -662,7 +662,6 @@ impl BlockchainManager {
 
         let mut successor_blocks = vec![];
         // Block hashes that should be looked at in subsequent breadth-first searches.
-        let mut searchable_block_hashes = vec![];
         let mut response_block_size: usize = 0;
         let mut queue: VecDeque<BlockHash> =
             self.blockchain.get_children(anchor).into_iter().collect();
@@ -678,14 +677,12 @@ impl BlockchainManager {
                         if response_block_size >= MAX_GET_SUCCESSORS_RESPONSE_BLOCKS_SIZE_BYTES
                             || single_block_only
                         {
-                            searchable_block_hashes.push(node);
                             break;
                         }
                     }
                     None => {
                         // Cache miss has occurred. This block or any of its successors cannot
                         // be returned. Discarding this subtree from the BFS.
-                        searchable_block_hashes.push(node);
                         continue;
                     }
                 }
@@ -695,12 +692,23 @@ impl BlockchainManager {
             queue.extend(children);
         }
 
-        (successor_blocks, searchable_block_hashes)
+        successor_blocks
     }
 
     /// Get the next headers for blocks that may possibly be sent in upcoming GetSuccessor responses.
-    fn get_next_headers(&self, searchable_block_hashes: &[BlockHash]) -> Vec<BlockHeader> {
-        let mut queue: VecDeque<BlockHash> = searchable_block_hashes.iter().copied().collect();
+    fn get_next_headers(
+        &self,
+        anchor: &BlockHash,
+        processed_block_hashes: &[BlockHash],
+        blocks: &[Block],
+    ) -> Vec<BlockHeader> {
+        let seen: HashSet<BlockHash> = processed_block_hashes
+            .iter()
+            .copied()
+            .chain(blocks.iter().map(|b| b.block_hash()))
+            .collect();
+        let mut queue: VecDeque<BlockHash> =
+            self.blockchain.get_children(anchor).into_iter().collect();
         let mut next_headers = vec![];
         while let Some(node) = queue.pop_front() {
             if next_headers.len() >= MAX_NEXT_BLOCK_HEADERS_LENGTH {
@@ -708,7 +716,11 @@ impl BlockchainManager {
             }
 
             match self.blockchain.get_cached_header(&node) {
-                Some(cached) => next_headers.push(cached.header),
+                Some(cached) => {
+                    if !seen.contains(&cached.header.block_hash()) {
+                        next_headers.push(cached.header);
+                    }
+                }
                 None => {
                     // Missing header, something has gone very wrong.
                     slog::error!(
@@ -728,15 +740,16 @@ impl BlockchainManager {
 
     /// Add block hashes to the sync queue that are not already being synced, planned to be synced,
     /// or in the block cache.
-    fn enqueue_new_blocks_to_download(&mut self, searchable_block_hashes: &[BlockHash]) {
+    fn enqueue_new_blocks_to_download(&mut self, next_headers: &[BlockHeader]) {
         let active_sent_hashes: HashSet<_> = self.getdata_request_info.keys().copied().collect();
-        let already_queued_hashes: HashSet<_> = self.block_sync_queue.iter().copied().collect();
-        let mut queue: VecDeque<BlockHash> = searchable_block_hashes.iter().copied().collect();
+        let mut already_queued_hashes: HashSet<_> = self.block_sync_queue.iter().copied().collect();
+        let mut queue: VecDeque<BlockHash> = next_headers.iter().map(|h| h.block_hash()).collect();
         while let Some(node) = queue.pop_front() {
             if !already_queued_hashes.contains(&node)
                 && !active_sent_hashes.contains(&node)
                 && self.blockchain.get_block(&node).is_none()
             {
+                already_queued_hashes.insert(node);
                 self.block_sync_queue.push_back(node);
             }
 
@@ -766,10 +779,10 @@ impl BlockchainManager {
             "Received a GetSuccessorsRequest for anchor hash: {:?}",
             anchor,
         );
-        let (successor_blocks, searchable_block_hashes) =
-            self.get_successor_blocks(&anchor, &processed_block_hashes);
-        let next_headers = self.get_next_headers(&searchable_block_hashes);
-        self.enqueue_new_blocks_to_download(&searchable_block_hashes);
+        let successor_blocks = self.get_successor_blocks(&anchor, &processed_block_hashes);
+        let next_headers =
+            self.get_next_headers(&anchor, &processed_block_hashes, &successor_blocks);
+        self.enqueue_new_blocks_to_download(&next_headers);
         self.blockchain.prune_old_blocks(&processed_block_hashes);
 
         slog::info!(
@@ -796,8 +809,8 @@ impl HasHeight for BlockchainManager {
 /// Helper used to determine if only a single block should be returned.
 fn is_single_block_only_mode_enabled(network: Network, anchor_height: BlockHeight) -> bool {
     match network {
-        Network::Bitcoin => anchor_height > MAX_MULTI_MAINNET_ANCHOR_HEIGHT,
-        Network::Testnet => anchor_height > MAX_MULTI_TESTNET_ANCHOR_HEIGHT,
+        Network::Bitcoin => anchor_height > MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT,
+        Network::Testnet => anchor_height > TESTNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT,
         Network::Signet | Network::Regtest => false,
     }
 }
@@ -1105,55 +1118,144 @@ pub mod test {
         }
     }
 
-    /// This tests ensures that `BlockchainManager::handle_client_request(...)` does the following:
-    /// 1. Retrieves immediate successor hashes and returns block 1.
-    /// 2. Adds block 2 to `blockchain_manager.block_sync_queue`.
-    /// 3. Syncs the blocks.
-    /// 4. Retrieves an empty set of blocks when provided a set of hashes containing block 1's hash.
-    ///     a. Ensure that no blocks are returned as block 2 has yet to be retrieved.
-    ///     b. Ensure Block 1 has been pruned from the block cache.
-    ///     c. Ensure Block 2 is no longer in the `blockchain_manager.block_sync_queue` field as it has been requested.
+    /// This tests ensures that `BlockchainManager::get_successors(...)` will return relevant blocks
+    /// with the next headers of many forks and enqueue missing block hashes. It should also
+    /// prune old blocks.
     #[test]
     fn test_get_successors() {
-        let test_state = TestState::setup();
-        let config = ConfigBuilder::new().build();
-        let addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
-        let headers = vec![test_state.block_1.header, test_state.block_2.header];
+        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let mut blockchain_manager = BlockchainManager::new(&config, make_logger());
-        blockchain_manager.add_peer(&addr);
-        let (added_headers, _) = blockchain_manager.blockchain.add_headers(&headers);
-        assert_eq!(added_headers.len(), 2);
+        // Set up the following chain:
+        // |--> 1'---> 2'
+        // 0 -> 1 ---> 2 ---> 3 -> 4
+        // |--> 1'' -> 2'' -> 3''
+        let mut previous_hashes = vec![];
+        let main_chain = generate_headers(
+            blockchain_manager.blockchain.genesis().header.block_hash(),
+            blockchain_manager.blockchain.genesis().header.time,
+            4,
+            &[],
+        );
+        previous_hashes.extend(
+            main_chain
+                .iter()
+                .map(|h| h.block_hash())
+                .collect::<Vec<_>>(),
+        );
+        let side_chain = generate_headers(
+            blockchain_manager.blockchain.genesis().header.block_hash(),
+            blockchain_manager.blockchain.genesis().header.time,
+            2,
+            &previous_hashes,
+        );
+        previous_hashes.extend(
+            side_chain
+                .iter()
+                .map(|h| h.block_hash())
+                .collect::<Vec<_>>(),
+        );
+        let side_chain_2 = generate_headers(
+            blockchain_manager.blockchain.genesis().header.block_hash(),
+            blockchain_manager.blockchain.genesis().header.time,
+            3,
+            &previous_hashes,
+        );
 
+        let main_block_2 = Block {
+            header: main_chain[1],
+            txdata: vec![],
+        };
+        let side_1 = side_chain.get(0).cloned().expect("Should have 1 header");
+        let side_block_1 = Block {
+            header: side_1,
+            txdata: vec![],
+        };
+
+        blockchain_manager.blockchain.add_headers(&main_chain);
+        blockchain_manager.blockchain.add_headers(&side_chain);
+        blockchain_manager.blockchain.add_headers(&side_chain_2);
+        // Add main block 2
         blockchain_manager
             .blockchain
-            .add_block(test_state.block_1.clone())
+            .add_block(main_block_2)
+            .expect("invalid block");
+        // Add side block 1
+        blockchain_manager
+            .blockchain
+            .add_block(side_block_1.clone())
             .expect("invalid block");
 
+        // Create a request with the anchor block as the block 0 and processed block hashes contain
+        // block 1 and 2.
         let request = GetSuccessorsRequest {
             anchor: blockchain_manager.blockchain.genesis().header.block_hash(),
-            processed_block_hashes: vec![],
+            processed_block_hashes: vec![main_chain[0].block_hash(), main_chain[1].block_hash()],
         };
         let response = blockchain_manager.get_successors(request);
-        let block_1_hash = test_state.block_1.block_hash();
-        let block_2_hash = test_state.block_2.block_hash();
+        // Check that blocks contain block 1.
+        assert_eq!(response.blocks.len(), 1);
         assert!(
-            matches!(response.blocks.first(), Some(block) if block.block_hash() == block_1_hash)
+            matches!(response.blocks.get(0), Some(block) if block.block_hash() == side_block_1.block_hash())
         );
-        assert_eq!(blockchain_manager.block_sync_queue.len(), 1);
-        assert!(blockchain_manager.block_sync_queue.contains(&block_2_hash));
 
-        blockchain_manager.sync_blocks();
-        let request = GetSuccessorsRequest {
-            anchor: blockchain_manager.blockchain.genesis().header.block_hash(),
-            processed_block_hashes: vec![block_1_hash],
-        };
-        let response = blockchain_manager.get_successors(request);
-        assert!(response.blocks.is_empty());
+        assert_eq!(response.next.len(), 6);
+
+        let next_hashes = response
+            .next
+            .iter()
+            .map(|h| h.block_hash())
+            .collect::<Vec<BlockHash>>();
+
+        assert_eq!(
+            next_hashes,
+            vec![
+                side_chain_2[0].block_hash(), // 1''
+                side_chain[1].block_hash(),   // 2'
+                side_chain_2[1].block_hash(), // 2''
+                main_chain[2].block_hash(),   // 3
+                side_chain_2[2].block_hash(), // 3'
+                main_chain[3].block_hash(),   // 4
+            ],
+            "main = {:#?}, side = {:#?}, side 2 = {:#?}, next hashes = {:#?}",
+            main_chain
+                .iter()
+                .map(|h| h.block_hash())
+                .collect::<Vec<BlockHash>>(),
+            side_chain
+                .iter()
+                .map(|h| h.block_hash())
+                .collect::<Vec<BlockHash>>(),
+            side_chain_2
+                .iter()
+                .map(|h| h.block_hash())
+                .collect::<Vec<BlockHash>>(),
+            next_hashes
+        );
+
+        let synced_queue = blockchain_manager
+            .block_sync_queue
+            .iter()
+            .copied()
+            .collect::<Vec<BlockHash>>();
+        // Synced should contain all block hashes except for 1' and 2 as they were
+        // in the block cache.
+        assert_eq!(
+            synced_queue,
+            vec![
+                side_chain_2[0].block_hash(), // 1''
+                side_chain[1].block_hash(),   // 2'
+                side_chain_2[1].block_hash(), // 2''
+                main_chain[2].block_hash(),   // 3
+                side_chain_2[2].block_hash(), // 3'
+                main_chain[3].block_hash(),   // 4
+            ]
+        );
+
+        // Ensure block 2 has been removed from the block cache.
         assert!(blockchain_manager
             .blockchain
-            .get_block(&block_1_hash)
+            .get_block(&main_chain[1].block_hash())
             .is_none());
-        assert!(blockchain_manager.block_sync_queue.is_empty());
     }
 
     /// This tests ensures that `BlockchainManager::handle_client_request(...)` returns multiple
