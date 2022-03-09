@@ -226,7 +226,7 @@ pub fn generate_responses_to_subnet_calls(
                 summary.dkg.transcripts_for_new_subnets(),
                 log,
             ));
-        } else if let Some(ecdsa_payload) = &block_payload.as_ref().as_data().ecdsa {
+        } else if let Some(payload) = &block_payload.as_ref().as_data().ecdsa {
             let sign_with_ecdsa_contexts = &state
                 .get_ref()
                 .metadata
@@ -234,7 +234,7 @@ pub fn generate_responses_to_subnet_calls(
                 .sign_with_ecdsa_contexts;
             consensus_responses.append(&mut generate_responses_to_sign_with_ecdsa_calls(
                 sign_with_ecdsa_contexts,
-                ecdsa_payload,
+                &payload.ecdsa_payload,
             ));
         }
 
@@ -377,7 +377,7 @@ pub fn generate_responses_to_sign_with_mock_ecdsa_calls(
 /// signature.
 pub fn generate_responses_to_sign_with_ecdsa_calls(
     contexts: &BTreeMap<CallbackId, SignWithEcdsaContext>,
-    ecdsa_payload: &ecdsa::EcdsaDataPayload,
+    ecdsa_payload: &ecdsa::EcdsaPayload,
 ) -> Vec<Response> {
     use ic_ic00_types::{Payload, SignWithECDSAReply};
     let mut consensus_responses = Vec::<Response>::new();
