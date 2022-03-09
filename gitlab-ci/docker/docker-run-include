@@ -37,13 +37,21 @@ DOCKER_RUN_ARGS=(
 
 # if i'm not withing docker already, bind mount the source
 if [ ! -e /.dockerenv ]; then
+    mkdir -p "${REPO_ROOT}/rs/target"
+    # Important: The mount points inside the docker container must match
+    # the corresponding environment variables [e.g. defined in the Dockerfile]
     DOCKER_RUN_ARGS+=(
         # we would make this readonly to ensure people don't accidentally chown things
-        # to ubuntu, but it also prevents cargo from updating Cargo.lock
-        --mount type=bind,source="$REPO_ROOT",target=$WORKDIR
-        # cache the build directories locally (not on CI) to save time between runs
-        --mount type=volume,source="ic-target-${USER}",destination=/ic/cargo_target
-        --mount type=volume,source="ic-cargo-${USER}",destination=/ic/cargo
+        # to ubuntu, but it also prevents cargo from updating Cargo.lock.
+        # But at this moment this isn't practical because build time gen rules
+        # [e.g. proto gen rules] need to write into the repo source directory.
+        --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"
+
+        # target must match CARGO_TARGET_DIR.
+        --mount type=bind,source="${REPO_ROOT}/rs/target",target=/cargo_target
+        # destination must match CARGO_HOME.
+        --mount type=volume,source="ic-cargo-${USER}",destination=/cargo
+        # destination must match RUSTUP_HOME.
         --mount type=volume,source="ic-rustup-${USER}",destination=/opt/rustup
     )
 else
