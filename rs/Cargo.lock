@@ -3746,7 +3746,7 @@ dependencies = [
  "ic-protobuf",
  "ic-registry-subnet-type",
  "ic-types 0.8.0",
- "json5 0.2.7",
+ "json5",
  "proptest 0.9.6",
  "proptest-derive",
  "serde",
@@ -3887,7 +3887,6 @@ dependencies = [
  "ic-test-utilities",
  "ic-types 0.8.0",
  "ic-utils 0.8.0",
- "json5 0.2.7",
  "lazy_static",
  "libsecp256k1",
  "maplit",
@@ -4493,7 +4492,7 @@ dependencies = [
  "ic-crypto-test-utils",
  "ic-protobuf",
  "ic-types 0.8.0",
- "json5 0.2.7",
+ "json5",
  "maplit",
  "openssl",
  "serde",
@@ -5554,7 +5553,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-registry-transport",
  "ic-types 0.8.0",
- "json5 0.3.0",
+ "json5",
  "maplit",
  "openssl",
  "phantom_newtype",
@@ -5873,7 +5872,6 @@ dependencies = [
  "ic-utils 0.8.0",
  "jemalloc-ctl",
  "jemallocator",
- "json5 0.2.7",
  "libc",
  "nix 0.23.0",
  "pprof",
@@ -7030,20 +7028,9 @@ dependencies = [
 
 [[package]]
 name = "json5"
-version = "0.2.7"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e2c66e14426d55dbeadb25a0b0750fbfddb9ddc6ce3f6f193f9fac8fbe36e51"
-dependencies = [
- "pest",
- "pest_derive",
- "serde",
-]
-
-[[package]]
-name = "json5"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d993b17585f39e5e3bd98ff52bbd9e2a6d6b3f5b09d8abcec9d1873fb04cf3f"
+checksum = "96b0db21af676c1ce64250b5f40f3ce2cf27e4e47cb91ed91eb6fe9350b430c1"
 dependencies = [
  "pest",
  "pest_derive",
@@ -11092,7 +11079,7 @@ dependencies = [
  "ic-universal-canister",
  "ic-utils 0.11.1",
  "itertools 0.10.0",
- "json5 0.2.7",
+ "json5",
  "lazy_static",
  "ledger-canister",
  "lifeline",

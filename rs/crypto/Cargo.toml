@@ -80,7 +80,6 @@ ic-crypto-test-utils-multi-sigs = { path = "test_utils/multi_sigs" }
 ic-crypto-test-utils-threshold-sigs = { path = "test_utils/threshold_sigs" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "test_utils/canister_threshold_sigs" }
 ic-test-utilities = { path = "../test_utilities" }
-json5 = "0.2.7"
 maplit = "1.0.2"
 mockall = "0.8.3"
 proptest = "0.9.4"
