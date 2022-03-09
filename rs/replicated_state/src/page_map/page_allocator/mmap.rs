@@ -6,10 +6,9 @@ use super::{
 };
 use cvt::{cvt, cvt_r};
 use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
-use libc::{c_void, close, ftruncate64};
-use nix::sys::memfd::{memfd_create, MemFdCreateFlag};
+use libc::{c_void, close};
 use nix::sys::mman::{madvise, mmap, munmap, MapFlags, MmapAdvise, ProtFlags};
-use std::ffi::CString;
+use std::os::raw::c_int;
 use std::os::unix::io::RawFd;
 use std::sync::{Arc, Mutex};
 
@@ -121,14 +120,17 @@ impl MmapBasedPage {
 }
 
 /// A page allocator that uses a memory-mapped file as a backing store of pages.
-/// In the initial version the file is created in-memory using `memfd_create`,
-/// so it works only on Linux. Future versions will use an actual file.
+///
+/// On Linux the page allocator uses `memfd_create` to create the file in memory.
+/// Since MacOS does not support `memfd_create`, the page allocator falls back
+/// to a temporary file.
 ///
 /// The design of the allocator is based on the idea of a region or a zone
 /// allocator (https://en.wikipedia.org/wiki/Region-based_memory_management):
 /// - allocate pages by growing the file and memory-mapping a new chunk.
-/// - dropping page is a no-op and does not free the underlying memory.
-/// - all memory is freed at once when the page allocator itself is dropped.
+/// - the physical memory of a dropped page is freed using `madvise` when
+///   there is sufficient number of dropped pages.
+/// - all virtual memory is freed at once the page allocator itself is dropped.
 /// This approach works well with the checkpoints and allows us to avoid all
 /// the complexity and inefficiency of maintaing a thread-safe free-list.
 ///
@@ -404,8 +406,7 @@ impl Drop for MmapBasedPageAllocatorCore {
 
 impl MmapBasedPageAllocatorCore {
     fn new() -> Self {
-        let fd = memfd_create(&CString::default(), MemFdCreateFlag::empty())
-            .expect("MmapPageAllocatorCore failed to create a memory file");
+        let fd = create_backing_file();
         Self::open(FileDescriptor { fd }, BackingFileOwner::CurrentAllocator)
     }
 
@@ -469,7 +470,7 @@ impl MmapBasedPageAllocatorCore {
 
         self.file_len += mmap_size as i64;
         // SAFETY: The file descriptor is valid.  We need `cvt_r` to handle `EINTR`.
-        cvt_r(|| unsafe { ftruncate64(self.file_descriptor, self.file_len) }).unwrap_or_else(
+        cvt_r(|| unsafe { truncate_file(self.file_descriptor, self.file_len) }).unwrap_or_else(
             |err| {
                 panic!(
                     "MmapPageAllocator failed to grow the memory file #{} to {} bytes: {}",
@@ -612,8 +613,14 @@ unsafe fn madvise_remove(start_ptr: *mut u8, end_ptr: *mut u8) {
     let ptr = start_ptr as *mut c_void;
     let size = end_ptr.offset_from(start_ptr);
     assert!(size > 0);
+    // MacOS does not support punching holes in the file with `MADV_REMOVE`.
+    // On MacOS we use the closest option: `MADV_DONTNEED`.
+    #[cfg(target_os = "linux")]
+    let advise = MmapAdvise::MADV_REMOVE;
+    #[cfg(not(target_os = "linux"))]
+    let advise = MmapAdvise::MADV_DONTNEED;
     // SAFETY: the range is mapped as shared and writable by precondition.
-    madvise(ptr, size as usize, MmapAdvise::MADV_REMOVE).unwrap_or_else(|err| {
+    madvise(ptr, size as usize, advise).unwrap_or_else(|err| {
         panic!(
             "Failed to madvise a page range {:?}..{:?}:
         {}",
@@ -658,9 +665,68 @@ fn free_pages(mut pages: Vec<PagePtr>) {
     unsafe { madvise_remove(start_ptr, end_ptr) }
 }
 
+// A platform-specific function that creates the backing file of the page allocator.
+// On Linux it uses `memfd_create` to create an in-memory file.
+// On MacOS it uses an ordinary temporary file.
+#[cfg(target_os = "linux")]
+fn create_backing_file() -> RawFd {
+    match nix::sys::memfd::memfd_create(
+        &std::ffi::CString::default(),
+        nix::sys::memfd::MemFdCreateFlag::empty(),
+    ) {
+        Ok(fd) => fd,
+        Err(err) => {
+            panic!(
+                "MmapPageAllocatorCore failed to create the backing file {}",
+                err
+            )
+        }
+    }
+}
+#[cfg(not(target_os = "linux"))]
+fn create_backing_file() -> RawFd {
+    use std::os::unix::io::IntoRawFd;
+    match tempfile::tempfile() {
+        Ok(file) => file.into_raw_fd(),
+        Err(err) => {
+            panic!(
+                "MmapPageAllocatorCore failed to create the backing file {}",
+                err
+            )
+        }
+    }
+}
+
+// A platform-specific function to truncate a file.
+// On Linux it uses `ftruncate64()`.
+// On MacOS it uses `ftruncate()` that accepts 64-bit offset.
+#[cfg(target_os = "linux")]
+unsafe fn truncate_file(fd: RawFd, offset: FileOffset) -> c_int {
+    libc::ftruncate64(fd, offset)
+}
+#[cfg(not(target_os = "linux"))]
+unsafe fn truncate_file(fd: RawFd, offset: FileOffset) -> c_int {
+    libc::ftruncate(fd, offset)
+}
+
+// A platform-specific function to get the length of a file.
+// On Linux it uses `fstat64()`.
+// On MacOS it uses `fstat()` that returns 64-bit `st_size`.
+#[cfg(target_os = "linux")]
 unsafe fn get_file_length(fd: RawFd) -> FileOffset {
     let mut stat = std::mem::MaybeUninit::<libc::stat64>::uninit();
     cvt(libc::fstat64(fd, stat.as_mut_ptr())).unwrap_or_else(|err| {
+        panic!(
+            "MmapPageAllocator failed get the length of the file #{}: {}",
+            fd, err
+        )
+    });
+    stat.assume_init().st_size
+}
+#[cfg(not(target_os = "linux"))]
+unsafe fn get_file_length(fd: RawFd) -> FileOffset {
+    let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
+    cvt(libc::fstat(fd, stat.as_mut_ptr())).unwrap_or_else(|err| {
         panic!(
             "MmapPageAllocator failed get the length of the file #{}: {}",
             fd, err
