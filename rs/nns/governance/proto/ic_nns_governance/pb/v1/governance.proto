@@ -1450,6 +1450,12 @@ message ListKnownNeuronsResponse {
   repeated KnownNeuron known_neurons = 1;
 }
 
+// Response to list_node_providers
+message ListNodeProvidersResponse {
+  // List of all "NodeProviders"
+  repeated NodeProvider node_providers = 1;
+}
+
 // The arguments to the method `claim_or_refresh_neuron_from_account`.
 //
 // DEPRECATED: Use ManageNeuron::ClaimOrRefresh.

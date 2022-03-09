@@ -41,7 +41,9 @@ use ic_nns_common::{
 extern crate ic_nns_common;
 
 use ic_nns_constants::LEDGER_CANISTER_ID;
-use ic_nns_governance::pb::v1::{NodeProvider, RewardEvent, UpdateNodeProvider};
+use ic_nns_governance::pb::v1::{
+    ListNodeProvidersResponse, NodeProvider, RewardEvent, UpdateNodeProvider,
+};
 use ic_nns_governance::stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter};
 use ic_nns_governance::{
     governance::{Environment, Governance},
@@ -718,6 +720,18 @@ fn get_node_provider_by_caller() {
 #[candid_method(query, rename = "get_node_provider_by_caller")]
 fn get_node_provider_by_caller_(_: ()) -> Result<NodeProvider, GovernanceError> {
     governance().get_node_provider(&caller())
+}
+
+#[export_name = "canister_query list_node_providers"]
+fn list_node_providers() {
+    println!("{}list_node_providers", LOG_PREFIX);
+    over(candid, |()| list_node_providers_());
+}
+
+#[candid_method(query, rename = "list_node_providers")]
+fn list_node_providers_() -> ListNodeProvidersResponse {
+    let node_providers = governance().get_node_providers().to_vec();
+    ListNodeProvidersResponse { node_providers }
 }
 
 /// Encodes

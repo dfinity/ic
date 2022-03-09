@@ -101,3 +101,6 @@ mod known_neurons;
 
 #[cfg(test)]
 mod update_node_provider;
+
+#[cfg(test)]
+mod list_node_providers;

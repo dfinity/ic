@@ -137,6 +137,7 @@ type ListNeuronsResponse = record {
   neuron_infos : vec record { nat64; NeuronInfo };
   full_neurons : vec Neuron;
 };
+type ListNodeProvidersResponse = record { node_providers : vec NodeProvider };
 type ListProposalInfo = record {
   include_reward_status : vec int32;
   before_proposal : opt NeuronId;
@@ -339,6 +340,7 @@ service : (Governance) -> {
   get_proposal_info : (nat64) -> (opt ProposalInfo) query;
   list_known_neurons : () -> (ListKnownNeuronsResponse) query;
   list_neurons : (ListNeurons) -> (ListNeuronsResponse) query;
+  list_node_providers : () -> (ListNodeProvidersResponse) query;
   list_proposals : (ListProposalInfo) -> (ListProposalInfoResponse) query;
   manage_neuron : (ManageNeuron) -> (ManageNeuronResponse);
   transfer_gtc_neuron : (NeuronId, NeuronId) -> (Result);
