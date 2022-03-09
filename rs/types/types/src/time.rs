@@ -2,8 +2,8 @@
 #![cfg_attr(test, allow(clippy::unit_arg))]
 //! Defines the [`Time`] type used by the Internet Computer.
 
-use crate::ingress::{MAX_INGRESS_TTL, PERMITTED_DRIFT};
 use chrono::{TimeZone, Utc};
+use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT};
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};

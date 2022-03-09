@@ -393,12 +393,13 @@ impl IngressPoolThrottler for IngressPoolImpl {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ic_constants::MAX_INGRESS_TTL;
     use ic_interfaces::time_source::TimeSource;
     use ic_test_utilities::{
         mock_time, types::ids::node_test_id, types::messages::SignedIngressBuilder,
         with_test_replica_logger, FastForwardTimeSource,
     };
-    use ic_types::{artifact::IngressMessageAttribute, ingress::MAX_INGRESS_TTL};
+    use ic_types::artifact::IngressMessageAttribute;
     use rand::Rng;
     use std::time::Duration;
 

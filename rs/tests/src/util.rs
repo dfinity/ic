@@ -12,10 +12,11 @@ use slog::info;
 
 use dfn_protobuf::{protobuf, ProtoBuf};
 use ic_agent::export::Principal;
+use ic_constants::MAX_INGRESS_TTL;
 use ic_nns_test_utils::governance::upgrade_nns_canister_by_proposal;
 use ic_registry_subnet_type::SubnetType;
 use ic_rosetta_api::convert::to_arg;
-use ic_types::{ingress::MAX_INGRESS_TTL, CanisterId, Cycles, PrincipalId};
+use ic_types::{CanisterId, Cycles, PrincipalId};
 use ic_universal_canister::wasm as universal_canister_argument_builder;
 use ic_universal_canister::{call_args, UNIVERSAL_CANISTER_WASM};
 use ic_utils::call::AsyncCall;

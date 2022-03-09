@@ -752,8 +752,8 @@ impl RosettaRequestHandler {
         })?;
         let transactions = convert::from_operations(&ops, false, self.ledger.token_symbol())?;
 
-        let interval = ic_types::ingress::MAX_INGRESS_TTL
-            - ic_types::ingress::PERMITTED_DRIFT
+        let interval = ic_constants::MAX_INGRESS_TTL
+            - ic_constants::PERMITTED_DRIFT
             - Duration::from_secs(120);
 
         let meta = msg.metadata.as_ref();
@@ -782,8 +782,8 @@ impl RosettaRequestHandler {
         let mut ingress_expiries = vec![];
         let mut now = ingress_start;
         while now < ingress_end {
-            let ingress_expiry = (now + ic_types::ingress::MAX_INGRESS_TTL
-                - ic_types::ingress::PERMITTED_DRIFT)
+            let ingress_expiry = (now + ic_constants::MAX_INGRESS_TTL
+                - ic_constants::PERMITTED_DRIFT)
                 .as_nanos_since_unix_epoch();
             ingress_expiries.push(ingress_expiry);
             now += interval;

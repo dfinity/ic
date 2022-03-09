@@ -1,6 +1,7 @@
 use super::*;
 use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager;
 use ic_base_types::HttpMethodType;
+use ic_constants::MAX_INGRESS_TTL;
 use ic_test_utilities::{
     mock_time,
     types::{
@@ -14,7 +15,7 @@ use ic_test_utilities::{
 };
 use ic_types::{
     canister_http::CanisterHttpRequestContext,
-    ingress::{WasmResult, MAX_INGRESS_TTL},
+    ingress::WasmResult,
     messages::{CallbackId, Payload},
 };
 use maplit::btreemap;

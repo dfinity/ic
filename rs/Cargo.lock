@@ -3311,6 +3311,7 @@ dependencies = [
  "ic-artifact-pool",
  "ic-config",
  "ic-consensus-message",
+ "ic-constants",
  "ic-crypto",
  "ic-ecdsa-object",
  "ic-interfaces",
@@ -3334,6 +3335,7 @@ dependencies = [
  "criterion",
  "ic-config",
  "ic-consensus-message",
+ "ic-constants",
  "ic-crypto",
  "ic-ecdsa-object",
  "ic-interfaces",
@@ -3765,6 +3767,7 @@ dependencies = [
  "ic-artifact-pool",
  "ic-config",
  "ic-consensus-message",
+ "ic-constants",
  "ic-crypto",
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-cycles-account-manager",
@@ -3815,6 +3818,10 @@ dependencies = [
  "ic-interfaces",
  "ic-types 0.8.0",
 ]
+
+[[package]]
+name = "ic-constants"
+version = "0.8.0"
 
 [[package]]
 name = "ic-context-logger"
@@ -4929,6 +4936,7 @@ dependencies = [
  "ed25519-dalek",
  "ic-artifact-pool",
  "ic-config",
+ "ic-constants",
  "ic-crypto",
  "ic-cycles-account-manager",
  "ic-interfaces",
@@ -5976,6 +5984,7 @@ dependencies = [
  "ic-base-types",
  "ic-btc-types-internal",
  "ic-config",
+ "ic-constants",
  "ic-interfaces",
  "ic-logger",
  "ic-protobuf",
@@ -6020,6 +6029,7 @@ dependencies = [
  "hex",
  "ic-base-types",
  "ic-canister-client",
+ "ic-constants",
  "ic-crypto",
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-crypto-sha",
@@ -6621,6 +6631,7 @@ dependencies = [
  "http",
  "ic-base-types",
  "ic-btc-types-internal",
+ "ic-constants",
  "ic-crypto-internal-types",
  "ic-crypto-sha",
  "ic-crypto-tree-hash",
@@ -6729,6 +6740,7 @@ dependencies = [
  "base64 0.11.0",
  "chrono",
  "hex",
+ "ic-constants",
  "ic-crypto",
  "ic-crypto-sha",
  "ic-interfaces",
@@ -7155,9 +7167,10 @@ dependencies = [
  "hex",
  "ic-base-types",
  "ic-canister-client",
+ "ic-constants",
  "ic-crypto-sha",
+ "ic-ic00-types",
  "ic-nns-constants",
- "ic-types 0.8.0",
  "ic-utils 0.8.0",
  "intmap",
  "lazy_static",
@@ -11047,6 +11060,7 @@ dependencies = [
  "ic-canister-client",
  "ic-certified-vars",
  "ic-config",
+ "ic-constants",
  "ic-crypto",
  "ic-crypto-sha",
  "ic-crypto-tree-hash",

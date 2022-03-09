@@ -19,6 +19,7 @@ dfn_macro = {path = "../rust_canisters/dfn_macro"}
 dfn_protobuf = {path = "../rust_canisters/dfn_protobuf"}
 hex = "0.4.2"
 ic-canister-client = { path = "../canister_client" }
+ic-constants = { path = "../constants" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-internal-threshold-sig-bls12381 = { path = "../crypto/internal/crypto_lib/threshold_sig/bls12_381" }
 ic-crypto-sha = {path = "../crypto/sha/"}

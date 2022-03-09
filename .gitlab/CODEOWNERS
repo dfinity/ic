@@ -165,6 +165,7 @@
 /rs/transport/                       @dfinity-lab/teams/networking-team
 /rs/transport_test_client/           @dfinity-lab/teams/networking-team
 /rs/tree_deserializer/               @dfinity-lab/teams/message-routing-owners
+/rs/constants                        @dfinity-lab/teams/interface-owners
 /rs/types/base_types/                @dfinity-lab/teams/interface-owners
 /rs/types/types/                     @dfinity-lab/teams/interface-owners
 /rs/types/types/src/consensus.rs     @dfinity-lab/teams/consensus-owners

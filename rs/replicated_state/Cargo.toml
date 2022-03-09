@@ -9,6 +9,7 @@ debug_stub_derive = "0.3.0"
 ic-btc-types-internal = { path = "../bitcoin/types/internal" }
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
+ic-constants = { path = "../constants" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
 ic-protobuf = { path = "../protobuf" }

@@ -18,6 +18,7 @@ use ic_consensus::consensus::{
     pool_reader::PoolReader,
 };
 use ic_consensus_message::ConsensusMessageHashable;
+use ic_constants::MAX_INGRESS_TTL;
 use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
@@ -50,7 +51,7 @@ use ic_types::{
     consensus::*,
     crypto::Signed,
     ic00::IC_00,
-    ingress::{IngressStatus, MAX_INGRESS_TTL},
+    ingress::IngressStatus,
     signature::*,
     Height, PrincipalId, RegistryVersion, Time, UserId,
 };

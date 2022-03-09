@@ -607,7 +607,7 @@ impl LedgerClient {
                 let ingress_expiry =
                     ic_types::Time::from_nanos_since_unix_epoch(update.content.ingress_expiry());
                 let ingress_start = ingress_expiry
-                    - (ic_types::ingress::MAX_INGRESS_TTL - ic_types::ingress::PERMITTED_DRIFT);
+                    - (ic_constants::MAX_INGRESS_TTL - ic_constants::PERMITTED_DRIFT);
                 ingress_start <= now && ingress_expiry > now
             })
             .ok_or(ApiError::TransactionExpired)?;

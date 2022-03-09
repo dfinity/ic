@@ -2,6 +2,7 @@
 
 use crate::artifact::*;
 use crate::processors::ArtifactProcessorManager;
+use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_ARTIFACT_MANAGER};
 use ic_interfaces::{
     artifact_manager::{AdvertMismatchError, ArtifactAcceptance, ArtifactClient, OnArtifactError},
     artifact_pool::{ArtifactPoolError, ReplicaVersionMismatch, UnvalidatedArtifact},
@@ -26,7 +27,6 @@ use ic_types::{
         certification::CertificationMessage, dkg::Message as DkgMessage, ConsensusMessage,
         HasVersion,
     },
-    ingress::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_ARTIFACT_MANAGER},
     malicious_flags::MaliciousFlags,
     messages::{SignedIngress, SignedRequestBytes},
     p2p, NodeId, ReplicaVersion,

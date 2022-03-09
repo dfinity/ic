@@ -5,7 +5,7 @@ use dfn_core::{
     over, over_async, over_init, printer, setup, stable, BytesS,
 };
 use dfn_protobuf::protobuf;
-use ic_types::CanisterId;
+use ic_base_types::CanisterId;
 use ledger_canister::*;
 use std::time::Duration;
 use std::{
