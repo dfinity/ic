@@ -546,10 +546,30 @@ impl CanisterQueues {
         self.input_queues_stats.message_count
     }
 
+    /// Number of reservations and responses in input queues.
+    ///
+    /// Time complexity: O(num_input_queues).
+    pub fn count_input_queues_reservations(&self) -> usize {
+        let mut number_of_reservations = 0;
+        for input_queue in self.input_queues.values() {
+            number_of_reservations += input_queue.reserved_slots()
+        }
+        number_of_reservations
+    }
+
     /// Returns the total byte size of canister input queues (queues +
     /// messages).
     pub fn input_queues_size_bytes(&self) -> usize {
         self.input_queues_stats.size_bytes
+    }
+
+    pub fn input_queues_response_count(&self) -> usize {
+        self.input_queues_stats.response_count
+    }
+
+    /// Returns input queues stats.
+    pub fn input_queues_stats(&self) -> &InputQueuesStats {
+        &self.input_queues_stats
     }
 
     /// Returns the memory usage of this `CanisterQueues`.
@@ -630,8 +650,13 @@ impl CanisterQueues {
         input_queues: &BTreeMap<CanisterId, InputQueue>,
     ) -> InputQueuesStats {
         let mut stats = InputQueuesStats::default();
+        let response_count = |msg: &RequestOrResponse| match *msg {
+            RequestOrResponse::Request(_) => 0,
+            RequestOrResponse::Response(_) => 1,
+        };
         for q in input_queues.values() {
             stats.message_count += q.num_messages();
+            stats.response_count += q.calculate_stat_sum(response_count);
             stats.size_bytes += q.calculate_size_bytes();
         }
         stats
@@ -802,9 +827,12 @@ impl TryFrom<pb_queues::CanisterQueues> for CanisterQueues {
 /// a `QueueOp` that only applied to memory usage stats; and would result in
 /// adding lots of zeros in lots of places.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-struct InputQueuesStats {
+pub struct InputQueuesStats {
     /// Count of messages in input queues.
     message_count: usize,
+
+    /// Count of responses in input queues.
+    response_count: usize,
 
     /// Byte size of input queues (queues + messages).
     size_bytes: usize,
@@ -814,8 +842,13 @@ impl InputQueuesStats {
     /// Calculates the change in input queue stats caused by pushing (+) or
     /// popping (-) the given message.
     fn stats_delta(msg: &RequestOrResponse) -> InputQueuesStats {
+        let response_count = match msg {
+            RequestOrResponse::Response(_) => 1,
+            RequestOrResponse::Request(_) => 0,
+        };
         InputQueuesStats {
             message_count: 1,
+            response_count,
             size_bytes: msg.count_bytes(),
         }
     }
@@ -824,6 +857,7 @@ impl InputQueuesStats {
 impl AddAssign<InputQueuesStats> for InputQueuesStats {
     fn add_assign(&mut self, rhs: InputQueuesStats) {
         self.message_count += rhs.message_count;
+        self.response_count += rhs.response_count;
         self.size_bytes += rhs.size_bytes;
     }
 }
@@ -831,6 +865,7 @@ impl AddAssign<InputQueuesStats> for InputQueuesStats {
 impl SubAssign<InputQueuesStats> for InputQueuesStats {
     fn sub_assign(&mut self, rhs: InputQueuesStats) {
         self.message_count -= rhs.message_count;
+        self.response_count -= rhs.response_count;
         self.size_bytes -= rhs.size_bytes;
     }
 }
