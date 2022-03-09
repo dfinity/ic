@@ -66,9 +66,11 @@ e2e-scalability-suite-test:
       cd "${CI_PROJECT_DIR}/scalability"
 
       # Actual test script, sets up VMs and drives the test.
-      pip3 install --user -r requirements.txt
+      pipenv --python 3
+      pipenv install -r requirements.txt
+
       capsule -v -i "../ic-os/guestos/tests/*.py" -i "../scalability/**/*" -i "../gitlab-runner-tmp/**/*" -- \
-      "${CI_PROJECT_DIR}/ic-os/guestos/tests/e2e-benchmarking-suite.py" \
+      pipenv run "${CI_PROJECT_DIR}/ic-os/guestos/tests/e2e-benchmarking-suite.py" \
           --vmtoolscfg=internal \
           --timeout "$GUEST_OS_TEST_TIMEOUT" \
           --disk_image "$GUESTOS_IMG" \

@@ -42,13 +42,10 @@ A clean way of managing dependencies for a python project, is via isolated virtu
   $ cd ic/scalability
   ``` 
   ```
-  $ pipenv --python 3.8.10 # or some other python version
+  $ pipenv --python 3
   ```
   ```
-  $ pipenv shell # this will activate the environment
-  ```
-  ```
-  $ pip install -r requirements.txt
+  $ pipenv install -r requirements.txt
   ```
 
 # Deploy IC on the testnet
@@ -87,13 +84,13 @@ Depending on your requirements, boot the testnets as usual.
 
 As described above, make sure you have *two* testnets reserved, then:
 
-- Run the python script corresponding to your benchmark (make sure you are within the `pipenv shell`). A good starting point is the following, which benchmarks system overhead by stressing with query and update calls (default are queries, use `--use_updates=True` for update calls):
+- Run the python script corresponding to your benchmark. A good starting point is the following, which benchmarks system overhead by stressing with query and update calls. Default are queries, use `--use_updates=True` for update calls:
 
   ```
-  $  ./max_capacity_system_baseline.py --testnet $TESTNET --wg_testnet $WG_TESTNET
+  $  pipenv run ./max_capacity_system_baseline.py --testnet $TESTNET --wg_testnet $WG_TESTNET
   ```
 - You can observe the benchmark on the following dashboard: https://grafana.dfinity.systems/d/u016YUeGz/workload-generator-metrics?orgId=1&refresh=5s - make sure to select the target subnetwork *as well as* the subnetwork with workload generators under "IC" and "IC workload generator" at the top respectively.
-- Create the report `python generate_report.py githash timestamp`. This is normally called from the suite automatically, so in many cases you won't to manually run it.
+- Create the report `pipenv run generate_report.py githash timestamp`. This is normally called from the suite automatically, so in many cases you won't to manually run it.
 
 # Run against mainnet
 
@@ -111,7 +108,7 @@ The suite will then not get a flamegraph and hardware information, but the bench
  4. Open a tmux session (just type `tmux` on e.g. spm34).
  5. `cd` into you `scalability` in your IC checkout
  5. Configure the desired rate of updates/second per subnetwork by setting variable `LOAD_MAX`.
- 5. Run `python3 run_mainnet.py`
+ 5. Run `pipenv run run_mainnet.py`
  
  Observe the dashboards
 
@@ -119,12 +116,12 @@ The suite will then not get a flamegraph and hardware information, but the bench
 
 In order to add a new experiment:
 
- - Create a new file `run_experiment_n.py`
- - Create a class `ExperimentN` with inherits from `Experiment`
- - Implement method `init_experiment` which is being called exactly once when the experiment is first started 
+ - Create a new file `run_experiment_foobar.py`
+ - Create a class `ExperimentFoobar` with inherits from `Experiment` or `WorkloadExperiment` depending on whether you need to run workload generator to stress your system.
+ - Implement method `init_experiment` which is being called exactly once when the experiment is first set up.
  - Implement method `run_experiment_internal` which implements the actual benchmark logic. It's typically configurable, so that the benchmark can be executed repeatedly with e.g. increasing load. `config` is a dict that can be used to pass on configuration arguments.
-  - Implement `if __name__ == "__main__":` that initializes your experiment, calls `start_experiment` followed by `run_experiment` with a sensible configuration for your experiment.
-  - Finally call `write_summary_file` and `end_experiment` to generate a report.
- - Add a template file for your experiment to add more details to the generated report in `templates/experiment_n.html.hb`. Have a look at existing ones for inspiration.  
+ - Implement `if __name__ == "__main__":` that initializes your experiment, calls `start_experiment` followed by (potentially a series of) `run_experiment` with a sensible configuration for your experiment.
+ - Finally call `write_summary_file` and `end_experiment` to generate a report.
+ - Add a template file for your experiment to add more details to the generated report in `templates/experiment_foobar.html.hb`. Have a look at existing ones for inspiration.  
   
-Consider other experiments `run_experiment_*.py` for inspiration.
+Consider other experiments `run_experiment_*.py` for inspiration. Notable `run_system_baseline_experiment.py` for an example of a workload experiment as well as `run_xnet_experiment.py` for one that doesn't.
