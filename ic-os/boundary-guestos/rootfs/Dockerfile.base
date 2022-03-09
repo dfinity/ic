@@ -12,7 +12,7 @@
 # operations to get your changes deployed.
 #
 # 1. Get your MR approved and merged into master
-# 2. On the next hourly master pipeline, click the "deploy-boundary-os-baseimg" job
+# 2. On the next hourly master pipeline (Run post-merge tests), click the "deploy-guest-os-baseimg" job
 # 3. Note the sha256 and update the sha256 reference in the neighboring Dockerfiles.
 
 FROM ubuntu:20.04
