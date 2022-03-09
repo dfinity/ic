@@ -52,6 +52,12 @@ pub struct EcdsaPayload {
 
     /// Transcripts created at this height.
     pub idkg_transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
+
+    /// Resharing requests in progress.
+    pub ongoing_xnet_reshares: BTreeMap<EcdsaReshareRequest, ReshareOfUnmaskedParams>,
+
+    /// Completed resharing requests.
+    pub xnet_reshare_agreements: BTreeMap<EcdsaReshareRequest, CompletedReshareRequest>,
 }
 
 /// The payload information necessary for ECDSA threshold signatures, that is
@@ -110,11 +116,16 @@ impl EcdsaPayload {
     pub fn iter_transcript_configs_in_creation(
         &self,
     ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
+        let iter = self
+            .ongoing_xnet_reshares
+            .values()
+            .map(|reshare_param| reshare_param.as_ref());
         Box::new(
             self.quadruples_in_creation
                 .iter()
                 .map(|(_, quadruple)| quadruple.iter_transcript_configs_in_creation())
-                .flatten(),
+                .flatten()
+                .chain(iter),
         )
     }
 }
@@ -152,6 +163,14 @@ impl EcdsaDataPayload {
         }
         for obj in ecdsa_payload.quadruples_in_creation.values() {
             active_refs.append(&mut obj.get_refs());
+        }
+        for obj in ecdsa_payload.ongoing_xnet_reshares.values() {
+            active_refs.append(&mut obj.as_ref().get_refs());
+        }
+        for obj in ecdsa_payload.xnet_reshare_agreements.values() {
+            if let CompletedReshareRequest::Unreported(response) = obj {
+                active_refs.append(&mut response.reshare_param.as_ref().get_refs());
+            }
         }
         active_refs.append(&mut self.next_key_transcript_creation.get_refs());
 
@@ -211,6 +230,32 @@ impl QuadrupleId {
     pub fn increment(self) -> QuadrupleId {
         QuadrupleId(self.0 + 1)
     }
+}
+
+/// Internal format of the resharing request from execution.
+#[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub struct EcdsaReshareRequest {
+    pub key_id: Vec<u8>,
+    pub receiving_node_ids: Vec<NodeId>,
+    pub registry_version: RegistryVersion,
+}
+
+/// Internal format of the completed response.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub struct EcdsaReshareResponse {
+    /// The transcript param ref used to create the transcript/dealings.
+    /// The references will be resolved to build the IDkgTranscriptParams
+    /// before returning to execution.
+    pub reshare_param: ReshareOfUnmaskedParams,
+
+    /// The verified dealings in the created transcript.
+    pub dealings: Vec<(NodeId, IDkgDealing)>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum CompletedReshareRequest {
+    ReportedToExecution,
+    Unreported(Box<EcdsaReshareResponse>),
 }
 
 /// The ECDSA artifact.
