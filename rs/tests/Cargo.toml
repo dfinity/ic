@@ -56,7 +56,7 @@ ic-test-identity = { path = "../test_utilities/identity" }
 ic-types = { path = "../types/types" }
 ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }
-json5 = "0.2.7"
+json5 = "0.4.1"
 hyper = "0.14.16"
 lazy_static = "1.4.0"
 ledger-canister = { path = "../rosetta-api/ledger_canister" }

@@ -16,4 +16,4 @@ tokio-rustls = "0.22.0"
 [dev-dependencies]
 ic-crypto-test-utils = { path = "../test_utils" }
 maplit = "1.0"
-json5 = "0.2.7"
+json5 = "0.4.1"
