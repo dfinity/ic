@@ -41,6 +41,9 @@ CANISTERS = [
     "xnet-test-canister",
 ]
 
+# message max size is 3MB on system subnets and 2MB on other subnets
+CANISTERS_MAX_SIZE_IN_BYTES = {"ledger-canister.wasm": 1_900_000, "ledger-canister_notify-method.wasm": 1_900_000}
+
 CANISTER_COPY_LIST = {"cow_safety.wasm": "rs/tests/src", "counter.wat": "rs/workload_generator/src"}
 
 artifact_ext = getenv("ARTIFACT_EXT", "")
@@ -73,6 +76,17 @@ def _build_with_features(bin_name, features, target_bin_name: Optional[str] = No
         f"{ENV.cargo_target_dir}/wasm32-unknown-unknown/canister-release/{bin_name}.wasm",
         f"{ENV.cargo_target_dir}/wasm32-unknown-unknown/canister-release/{target_bin_name}.wasm",
     )
+
+
+def _check_canisters_size(artifacts_dir=default_artifacts_dir):
+    for can, max_size_in_bytes in CANISTERS_MAX_SIZE_IN_BYTES.items():
+        can_path = f"{artifacts_dir}/{can}"
+        can_size = path.getsize(can_path)
+        if can_size > max_size_in_bytes:
+            logging.error(
+                f"Size of the canister {can} is {can_size} which is above the maximum allowed {max_size_in_bytes}"
+            )
+            exit(1)
 
 
 def run(artifacts_dir=default_artifacts_dir):
@@ -140,6 +154,8 @@ def run(artifacts_dir=default_artifacts_dir):
         else:
             logging.error(f"unknown (not .wat or .wasm) canister type: {src_filename}")
             exit(1)
+
+    _check_canisters_size(artifacts_dir=default_artifacts_dir)
 
     sh(f"sha256sum {artifacts_dir}/*", shell=True)
     sh(f"pigz -f --no-name {artifacts_dir}/*", shell=True)
