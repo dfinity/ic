@@ -1,0 +1,29 @@
+[package]
+name = "ic-transport-test-client"
+version = "0.8.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+async-trait = "0.1.36"
+clap = "2.33.0"
+crossbeam-channel = "0.5.0"
+futures = "0.3.5"
+ic-config = { path = "../config" }
+ic-crypto = { path = "../crypto" }
+ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
+ic-interfaces = { path = "../interfaces" }
+ic-logger = { path = "../monitoring/logger" }
+ic-metrics = { path = "../monitoring/metrics" }
+ic-protobuf = { path = "../protobuf" }
+ic-registry-client = { path = "../registry/client" }
+ic-registry-common = { path = "../registry/common" }
+ic-registry-keys = { path = "../registry/keys" }
+ic-transport = { path = "../transport" }
+ic-types = { path = "../types/types" }
+notify = "4.0.12"
+rand = "0.7.3"
+slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
+tokio = { version = "1.15.0", features = ["full"] }
+tokio-openssl = "0.6.1"

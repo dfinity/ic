@@ -30,7 +30,7 @@ use std::convert::TryFrom;
 use std::sync::{Arc, Mutex};
 use std::time;
 
-mod test_utils;
+mod utils;
 
 use ic_config::logger::Config as LoggerConfig;
 use ic_config::logger::LogTarget;
@@ -51,8 +51,8 @@ use ic_types::{
 };
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use test_utils::{create_crypto, to_node_id};
 use tokio::time::Duration;
+use utils::{create_crypto, to_node_id};
 
 // From the on_message() handler
 struct TestMessage {

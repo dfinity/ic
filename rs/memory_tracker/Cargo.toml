@@ -18,9 +18,6 @@ slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "rel
 slog-scope = "4.1.2"
 lazy_static = "1.4.0"
 
-[target.'cfg(target_os = "macos")'.dependencies]
-mach = "0.3.2"
-
 [features]
 default = []
 sigsegv_handler_checksum = []

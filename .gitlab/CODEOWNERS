@@ -163,6 +163,7 @@
 /rs/tests/src/orchestrator/          @dfinity-lab/teams/orchestrator-owners @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/orchestrator.rs        @dfinity-lab/teams/orchestrator-owners @dfinity-lab/teams/ic-testing-verification
 /rs/transport/                       @dfinity-lab/teams/networking-team
+/rs/transport_test_client/           @dfinity-lab/teams/networking-team
 /rs/tree_deserializer/               @dfinity-lab/teams/message-routing-owners
 /rs/types/base_types/                @dfinity-lab/teams/interface-owners
 /rs/types/types/                     @dfinity-lab/teams/interface-owners

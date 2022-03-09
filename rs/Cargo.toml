@@ -163,6 +163,7 @@ members = [
   "test_utilities/artifact_pool",
   "tests",
   "transport",
+  "transport_test_client",
   "tree_deserializer",
   "types/types",
   "types/types_test_utils",

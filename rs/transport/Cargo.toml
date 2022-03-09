@@ -9,29 +9,22 @@ bincode = "1.3.1"
 byteorder = "1.3.4"
 bytes = "1.0.1"
 byte-unit = "3.1.3"
-clap = "2.33.0"
 crossbeam-channel = "0.5.0"
 futures = "0.3.5"
-histogram = "0.6.9"
 ic-config = { path = "../config" }
-ic-crypto = { path = "../crypto" }
 ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
 ic-types = { path = "../types/types" }
-ic-registry-client = { path = "../registry/client" }
-ic-registry-common = { path = "../registry/common" }
 ic-registry-keys = { path = "../registry/keys" }
 lazy_static = "1.4.0"
 nix = "0.23.0"
-notify = "4.0.12"
 openssl = "0.10.29"
 phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { version = "0.12.0", features = [ "process" ] }
 rand = "0.7.3"
-ratelimit = "0.4.4"
 serde = { version = "1.0.99", features = [ "derive" ] }
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
 slog-scope = "4.1.2"
@@ -39,20 +32,10 @@ socket2 = { version = "0.3.19", features = ["reuseport"] }
 tempfile = "3.1.0"
 tokio = { version = "1.15.0", features = ["full"] }
 tokio-openssl = "0.6.1"
-toml = "0.5.6"
 
 [dev-dependencies]
 async-trait = "0.1.36"
-proptest = "0.9.4"
-proptest-derive = "0.1.0"
-mockall = "0.7.2"
-tempfile = "3.1.0"
+ic-crypto = { path = "../crypto" }
+ic-registry-client = { path = "../registry/client" }
+ic-registry-common = { path = "../registry/common" }
 ic-test-utilities = { path = "../test_utilities" }
-
-[[bin]]
-name = "transport_test_client"
-path = "src/tests/test_client.rs"
-
-[[bin]]
-name = "tperf"
-path = "src/tests/tperf.rs"
