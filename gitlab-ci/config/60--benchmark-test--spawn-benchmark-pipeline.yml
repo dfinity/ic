@@ -145,7 +145,8 @@ benchmark-xnet:
       $SHELL_WRAPPER pipenv --python 3
       $SHELL_WRAPPER pipenv install -r requirements.txt
 
-      $SHELL_WRAPPER pipenv run run_xnet_experiment.py --testnet $TESTNET --wg_subnet 2 --skip_generate_report=False --hosts_ini_filename=hosts_single_node_subnets.ini  --branch="$CURRENT_BRANCH"
+      $SHELL_WRAPPER pipenv run run_xnet_experiment.py --testnet $TESTNET --skip_generate_report=False --hosts_ini_filename=hosts_single_node_subnets.ini  --branch="$CURRENT_BRANCH"
+
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
 
