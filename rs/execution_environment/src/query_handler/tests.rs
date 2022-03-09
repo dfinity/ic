@@ -89,7 +89,6 @@ where
         let query_handler = InternalHttpQueryHandler::new(
             log,
             hypervisor,
-            subnet_id,
             subnet_type,
             Config::default(),
             &metrics_registry,

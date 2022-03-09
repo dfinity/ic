@@ -6,7 +6,7 @@ use ic_ic00_types::{
     CanisterIdRecord, InstallCodeArgs, Method as Ic00Method, Payload, ProvisionalTopUpCanisterArgs,
     SetControllerArgs, UpdateSettingsArgs,
 };
-use ic_registry_routing_table::RoutingTable;
+use ic_replicated_state::NetworkTopology;
 
 pub(super) enum ResolveDestinationError {
     CandidError(candid::Error),
@@ -23,7 +23,7 @@ impl From<candid::Error> for ResolveDestinationError {
 /// Inspect the method name and payload of a request to ic:00 to figure out to
 /// which subnet it should be sent to.
 pub(super) fn resolve_destination(
-    routing_table: &RoutingTable,
+    network_topology: &NetworkTopology,
     method_name: &str,
     payload: &[u8],
     own_subnet: SubnetId,
@@ -50,24 +50,33 @@ pub(super) fn resolve_destination(
             // Find the destination canister from the payload.
             let args = Decode!(payload, UpdateSettingsArgs)?;
             let canister_id = args.get_canister_id();
-            routing_table.route(canister_id.get()).ok_or({
-                ResolveDestinationError::SubnetNotFound(canister_id, Ic00Method::UpdateSettings)
-            })
+            network_topology
+                .routing_table
+                .route(canister_id.get())
+                .ok_or({
+                    ResolveDestinationError::SubnetNotFound(canister_id, Ic00Method::UpdateSettings)
+                })
         }
         Ok(Ic00Method::InstallCode) => {
             // Find the destination canister from the payload.
             let args = Decode!(payload, InstallCodeArgs)?;
             let canister_id = args.get_canister_id();
-            routing_table.route(canister_id.get()).ok_or({
-                ResolveDestinationError::SubnetNotFound(canister_id, Ic00Method::InstallCode)
-            })
+            network_topology
+                .routing_table
+                .route(canister_id.get())
+                .ok_or({
+                    ResolveDestinationError::SubnetNotFound(canister_id, Ic00Method::InstallCode)
+                })
         }
         Ok(Ic00Method::SetController) => {
             let args = Decode!(payload, SetControllerArgs)?;
             let canister_id = args.get_canister_id();
-            routing_table.route(canister_id.get()).ok_or({
-                ResolveDestinationError::SubnetNotFound(canister_id, Ic00Method::SetController)
-            })
+            network_topology
+                .routing_table
+                .route(canister_id.get())
+                .ok_or({
+                    ResolveDestinationError::SubnetNotFound(canister_id, Ic00Method::SetController)
+                })
         }
         Ok(Ic00Method::CanisterStatus)
         | Ok(Ic00Method::StartCanister)
@@ -77,19 +86,25 @@ pub(super) fn resolve_destination(
         | Ok(Ic00Method::DepositCycles) => {
             let args = Decode!(payload, CanisterIdRecord)?;
             let canister_id = args.get_canister_id();
-            routing_table.route(canister_id.get()).ok_or_else(|| {
-                ResolveDestinationError::SubnetNotFound(canister_id, method.unwrap())
-            })
+            network_topology
+                .routing_table
+                .route(canister_id.get())
+                .ok_or_else(|| {
+                    ResolveDestinationError::SubnetNotFound(canister_id, method.unwrap())
+                })
         }
         Ok(Ic00Method::ProvisionalTopUpCanister) => {
             let args = ProvisionalTopUpCanisterArgs::decode(payload)?;
             let canister_id = args.get_canister_id();
-            routing_table.route(canister_id.get()).ok_or({
-                ResolveDestinationError::SubnetNotFound(
-                    canister_id,
-                    Ic00Method::ProvisionalTopUpCanister,
-                )
-            })
+            network_topology
+                .routing_table
+                .route(canister_id.get())
+                .ok_or({
+                    ResolveDestinationError::SubnetNotFound(
+                        canister_id,
+                        Ic00Method::ProvisionalTopUpCanister,
+                    )
+                })
         }
         Ok(Ic00Method::BitcoinTestnetGetBalance)
         | Ok(Ic00Method::BitcoinTestnetGetUtxos)

@@ -8,7 +8,7 @@ use ic_interfaces::{
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{CallContextAction, CanisterState};
+use ic_replicated_state::{CallContextAction, CanisterState, NetworkTopology, SubnetTopology};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     get_test_replica_logger, mock_time,
@@ -17,12 +17,10 @@ use ic_test_utilities::{
     types::messages::IngressBuilder,
 };
 use ic_types::{
-    CanisterId, Cycles, MemoryAllocation, NumBytes, NumInstructions, PrincipalId, SubnetId, Time,
-    UserId,
+    CanisterId, Cycles, MemoryAllocation, NumBytes, NumInstructions, PrincipalId, Time, UserId,
 };
 use lazy_static::lazy_static;
 use maplit::btreemap;
-use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -39,8 +37,7 @@ struct ExecuteUpdateArgs(
     CanisterState,
     RequestOrIngress,
     Time,
-    Arc<RoutingTable>,
-    Arc<BTreeMap<SubnetId, SubnetType>>,
+    Arc<NetworkTopology>,
     ExecutionParameters,
 );
 
@@ -98,8 +95,15 @@ where
     let routing_table = Arc::new(RoutingTable::try_from(btreemap! {
         CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => subnet_test_id(1),
     }).unwrap());
-    let subnet_records = Arc::new(btreemap! {
-        subnet_test_id(1) => SubnetType::Application,
+    let network_topology = Arc::new(NetworkTopology {
+        routing_table,
+        subnets: btreemap! {
+            subnet_test_id(1) => SubnetTopology {
+                subnet_type: SubnetType::Application,
+                ..SubnetTopology::default()
+            }
+        },
+        ..NetworkTopology::default()
     });
     let execution_parameters = ExecutionParameters {
         instruction_limit: MAX_NUM_INSTRUCTIONS,
@@ -113,8 +117,7 @@ where
         canister_state,
         request,
         time,
-        routing_table,
-        subnet_records,
+        network_topology,
         execution_parameters,
     )
 }
@@ -155,16 +158,14 @@ pub fn run_benchmark<I, W>(
                     cloned_canister_state,
                     cloned_request,
                     cloned_time,
-                    cloned_routing_table,
-                    cloned_subnet_records,
+                    cloned_network_topology,
                     cloned_execution_parameters,
                 )| {
                     let (_state, instructions, action, _bytes) = hypervisor.execute_update(
                         cloned_canister_state,
                         cloned_request,
                         cloned_time,
-                        cloned_routing_table,
-                        cloned_subnet_records,
+                        cloned_network_topology,
                         cloned_execution_parameters,
                     );
                     match action {

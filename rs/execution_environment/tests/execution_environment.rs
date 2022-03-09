@@ -17,7 +17,9 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
+use ic_replicated_state::{
+    canister_state::WASM_PAGE_SIZE_IN_BYTES, NetworkTopology, SubnetTopology,
+};
 use ic_replicated_state::{
     canister_state::{ENFORCE_MESSAGE_MEMORY_USAGE, QUEUE_INDEX_NONE},
     testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
@@ -62,11 +64,7 @@ use ic_types::{
 };
 use lazy_static::lazy_static;
 use maplit::btreemap;
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    convert::TryFrom,
-    sync::Arc,
-};
+use std::{collections::BTreeSet, convert::TryFrom, sync::Arc};
 use tempfile::TempDir;
 
 const CANISTER_CREATION_FEE: Cycles = Cycles::new(1_000_000_000_000);
@@ -80,13 +78,7 @@ const MAX_NUMBER_OF_CANISTERS: u64 = 0;
 
 fn initial_state(
     subnet_type: SubnetType,
-) -> (
-    TempDir,
-    SubnetId,
-    Arc<RoutingTable>,
-    Arc<BTreeMap<SubnetId, SubnetType>>,
-    ReplicatedState,
-) {
+) -> (TempDir, SubnetId, Arc<NetworkTopology>, ReplicatedState) {
     let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
     let subnet_id = subnet_test_id(1);
     let routing_table = Arc::new(
@@ -95,36 +87,33 @@ fn initial_state(
         })
         .unwrap(),
     );
-    let subnet_records = Arc::new(btreemap! {
-        subnet_id => subnet_type,
-    });
     let mut replicated_state = ReplicatedState::new_rooted_at(
         subnet_id,
         SubnetType::Application,
         tmpdir.path().to_path_buf(),
     );
     replicated_state.metadata.network_topology.routing_table = Arc::clone(&routing_table);
+    replicated_state.metadata.network_topology.subnets.insert(
+        subnet_id,
+        SubnetTopology {
+            subnet_type,
+            ..SubnetTopology::default()
+        },
+    );
     (
         tmpdir,
         subnet_id,
-        routing_table,
-        subnet_records,
+        Arc::new(replicated_state.metadata.network_topology.clone()),
         replicated_state,
     )
 }
 
 pub fn with_setup<F>(subnet_type: SubnetType, f: F)
 where
-    F: FnOnce(
-        ExecutionEnvironmentImpl,
-        ReplicatedState,
-        SubnetId,
-        Arc<RoutingTable>,
-        Arc<BTreeMap<SubnetId, SubnetType>>,
-    ),
+    F: FnOnce(ExecutionEnvironmentImpl, ReplicatedState, SubnetId, Arc<NetworkTopology>),
 {
     with_test_replica_logger(|log| {
-        let (_, subnet_id, routing_table, subnet_records, state) = initial_state(subnet_type);
+        let (_, subnet_id, network_topology, state) = initial_state(subnet_type);
         let metrics_registry = MetricsRegistry::new();
         let cycles_account_manager = Arc::new(
             CyclesAccountManagerBuilder::new()
@@ -153,7 +142,7 @@ where
             execution_environment::Config::default(),
             cycles_account_manager,
         );
-        f(exec_env, state, subnet_id, routing_table, subnet_records)
+        f(exec_env, state, subnet_id, network_topology)
     });
 }
 
@@ -164,7 +153,7 @@ fn test_outgoing_messages(
 ) {
     let subnet_type = SubnetType::Application;
     with_test_replica_logger(|log| {
-        let (_, subnet_id, routing_table, subnet_records, _) = initial_state(subnet_type);
+        let (_, subnet_id, network_topology, _) = initial_state(subnet_type);
         let metrics_registry = MetricsRegistry::new();
         let cycles_account_manager = Arc::new(
             CyclesAccountManagerBuilder::new()
@@ -217,8 +206,7 @@ fn test_outgoing_messages(
             MAX_NUM_INSTRUCTIONS,
             input_message,
             mock_time(),
-            routing_table,
-            subnet_records,
+            network_topology,
             MAX_SUBNET_AVAILABLE_MEMORY.clone(),
         );
 
@@ -493,7 +481,7 @@ fn test_ingress_message_side_effects_3() {
 fn test_allocate_memory_for_output_requests() {
     with_setup(
         SubnetType::Application,
-        |exec_env, _, _, routing_table, subnet_records| {
+        |exec_env, _, _, network_topology| {
             // Canister enqueues an outgoing request when its `test()` method is called.
             let wasm_binary = wabt::wat2wasm(CALL_SIMPLE_WAT).unwrap();
             let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
@@ -532,8 +520,7 @@ fn test_allocate_memory_for_output_requests() {
                 MAX_NUM_INSTRUCTIONS,
                 input_message.clone(),
                 mock_time(),
-                Arc::clone(&routing_table),
-                subnet_records.clone(),
+                network_topology.clone(),
                 subnet_available_memory.clone(),
             );
             canister = execute_message_result.canister;
@@ -554,8 +541,7 @@ fn test_allocate_memory_for_output_requests() {
                 MAX_NUM_INSTRUCTIONS,
                 input_message.clone(),
                 mock_time(),
-                Arc::clone(&routing_table),
-                subnet_records.clone(),
+                network_topology.clone(),
                 subnet_available_memory.clone(),
             );
             canister = execute_message_result.canister;
@@ -577,8 +563,7 @@ fn test_allocate_memory_for_output_requests() {
                 MAX_NUM_INSTRUCTIONS,
                 input_message,
                 mock_time(),
-                routing_table,
-                subnet_records,
+                network_topology,
                 subnet_available_memory.clone(),
             );
             canister = execute_message_result.canister;
@@ -886,7 +871,7 @@ fn test_repeated_response() {
 fn stopping_canister_rejects_requests() {
     with_setup(
         SubnetType::Application,
-        |exec_env, mut state, _, routing_table, subnet_records| {
+        |exec_env, mut state, _, routing_table| {
             // Since we can't enqueue a request into a stopping canister, create a canister
             // that is running and enqueue the request in it.
             let mut canister = get_running_canister(canister_test_id(0));
@@ -951,7 +936,6 @@ fn stopping_canister_rejects_requests() {
                 msg,
                 mock_time(),
                 routing_table,
-                subnet_records,
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
             );
             assert_eq!(
@@ -979,147 +963,135 @@ fn stopping_canister_rejects_requests() {
 
 #[test]
 fn stopping_canister_rejects_ingress() {
-    with_setup(
-        SubnetType::Application,
-        |exec_env, _, _, routing_table, subnet_records| {
-            let canister = get_stopping_canister(canister_test_id(0));
-            let ingress = IngressBuilder::new().build();
+    with_setup(SubnetType::Application, |exec_env, _, _, routing_table| {
+        let canister = get_stopping_canister(canister_test_id(0));
+        let ingress = IngressBuilder::new().build();
 
-            assert_eq!(
-                exec_env
-                    .execute_canister_message(
-                        canister,
-                        MAX_NUM_INSTRUCTIONS,
-                        CanisterInputMessage::Ingress(ingress),
-                        mock_time(),
-                        routing_table,
-                        subnet_records,
-                        MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                    )
-                    .ingress_status
-                    .unwrap()
-                    .1,
-                IngressStatus::Failed {
-                    receiver: canister_test_id(0).get(),
-                    user_id: user_test_id(2),
-                    error: UserError::new(
-                        ErrorCode::CanisterStopped,
-                        format!(
-                            "Canister {} is not running and cannot accept ingress messages.",
-                            canister_test_id(0)
-                        ),
+        assert_eq!(
+            exec_env
+                .execute_canister_message(
+                    canister,
+                    MAX_NUM_INSTRUCTIONS,
+                    CanisterInputMessage::Ingress(ingress),
+                    mock_time(),
+                    routing_table,
+                    MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                )
+                .ingress_status
+                .unwrap()
+                .1,
+            IngressStatus::Failed {
+                receiver: canister_test_id(0).get(),
+                user_id: user_test_id(2),
+                error: UserError::new(
+                    ErrorCode::CanisterStopped,
+                    format!(
+                        "Canister {} is not running and cannot accept ingress messages.",
+                        canister_test_id(0)
                     ),
-                    time: mock_time(),
-                }
-            );
-        },
-    );
+                ),
+                time: mock_time(),
+            }
+        );
+    });
 }
 
 #[test]
 fn stopped_canister_rejects_requests() {
-    with_setup(
-        SubnetType::Application,
-        |exec_env, _, _, routing_table, subnet_records| {
-            // Since we can't enqueue a request into a stopped canister, create a canister
-            // that is running and enqueue the request in it.
-            let mut canister = get_running_canister(canister_test_id(0));
+    with_setup(SubnetType::Application, |exec_env, _, _, routing_table| {
+        // Since we can't enqueue a request into a stopped canister, create a canister
+        // that is running and enqueue the request in it.
+        let mut canister = get_running_canister(canister_test_id(0));
 
-            let cycles = 30;
-            let req = RequestBuilder::new()
-                .sender(canister_test_id(13))
-                .payment(Cycles::from(cycles))
-                .build();
-            let reply_callback = req.sender_reply_callback;
-            canister
+        let cycles = 30;
+        let req = RequestBuilder::new()
+            .sender(canister_test_id(13))
+            .payment(Cycles::from(cycles))
+            .build();
+        let reply_callback = req.sender_reply_callback;
+        canister
+            .system_state
+            .queues_mut()
+            .push_input(
+                QueueIndex::from(0),
+                RequestOrResponse::Request(req),
+                InputQueueType::RemoteSubnet,
+            )
+            .unwrap();
+
+        // Stop the canister. Here we manually stop the canister as opposed
+        // to the proper way sending a stop_canister request to exec_env. That way, we
+        // get the canister into a state where it is stopped and has requests in its
+        // input queue.
+        let mut canister = running_canister_into_stopped(canister);
+
+        let msg = canister.pop_input().unwrap();
+        let canister_id = canister.canister_id();
+        let mut result = exec_env.execute_canister_message(
+            canister,
+            MAX_NUM_INSTRUCTIONS,
+            msg,
+            mock_time(),
+            routing_table,
+            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+        );
+        assert_eq!(
+            result
+                .canister
                 .system_state
                 .queues_mut()
-                .push_input(
-                    QueueIndex::from(0),
-                    RequestOrResponse::Request(req),
-                    InputQueueType::RemoteSubnet,
-                )
-                .unwrap();
-
-            // Stop the canister. Here we manually stop the canister as opposed
-            // to the proper way sending a stop_canister request to exec_env. That way, we
-            // get the canister into a state where it is stopped and has requests in its
-            // input queue.
-            let mut canister = running_canister_into_stopped(canister);
-
-            let msg = canister.pop_input().unwrap();
-            let canister_id = canister.canister_id();
-            let mut result = exec_env.execute_canister_message(
-                canister,
-                MAX_NUM_INSTRUCTIONS,
-                msg,
-                mock_time(),
-                routing_table,
-                subnet_records,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            );
-            assert_eq!(
-                result
-                    .canister
-                    .system_state
-                    .queues_mut()
-                    .pop_canister_output(&canister_test_id(13))
-                    .unwrap()
-                    .1,
-                RequestOrResponse::Response(Response {
-                    originator: canister_test_id(13),
-                    respondent: canister_test_id(0),
-                    originator_reply_callback: reply_callback,
-                    refund: Cycles::from(cycles),
-                    response_payload: Payload::Reject(RejectContext {
-                        code: RejectCode::SysFatal,
-                        message: format!("Canister {} is not running", canister_id),
-                    }),
-                })
-            );
-        },
-    );
+                .pop_canister_output(&canister_test_id(13))
+                .unwrap()
+                .1,
+            RequestOrResponse::Response(Response {
+                originator: canister_test_id(13),
+                respondent: canister_test_id(0),
+                originator_reply_callback: reply_callback,
+                refund: Cycles::from(cycles),
+                response_payload: Payload::Reject(RejectContext {
+                    code: RejectCode::SysFatal,
+                    message: format!("Canister {} is not running", canister_id),
+                }),
+            })
+        );
+    });
 }
 
 #[test]
 fn stopped_canister_rejects_ingress() {
-    with_setup(
-        SubnetType::Application,
-        |exec_env, _, _, routing_table, subnet_records| {
-            let canister = get_stopped_canister(canister_test_id(0));
-            let ingress = IngressBuilder::new().build();
-            let result = exec_env.execute_canister_message(
-                canister,
-                MAX_NUM_INSTRUCTIONS,
-                CanisterInputMessage::Ingress(ingress),
-                mock_time(),
-                routing_table,
-                subnet_records,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            );
+    with_setup(SubnetType::Application, |exec_env, _, _, routing_table| {
+        let canister = get_stopped_canister(canister_test_id(0));
+        let ingress = IngressBuilder::new().build();
+        let result = exec_env.execute_canister_message(
+            canister,
+            MAX_NUM_INSTRUCTIONS,
+            CanisterInputMessage::Ingress(ingress),
+            mock_time(),
+            routing_table,
+            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+        );
 
-            assert_eq!(
-                result.ingress_status.unwrap().1,
-                IngressStatus::Failed {
-                    receiver: canister_test_id(0).get(),
-                    user_id: user_test_id(2),
-                    error: UserError::new(
-                        ErrorCode::CanisterStopped,
-                        format!(
-                            "Canister {} is not running and cannot accept ingress messages.",
-                            canister_test_id(0)
-                        ),
+        assert_eq!(
+            result.ingress_status.unwrap().1,
+            IngressStatus::Failed {
+                receiver: canister_test_id(0).get(),
+                user_id: user_test_id(2),
+                error: UserError::new(
+                    ErrorCode::CanisterStopped,
+                    format!(
+                        "Canister {} is not running and cannot accept ingress messages.",
+                        canister_test_id(0)
                     ),
-                    time: mock_time(),
-                }
-            );
-        },
-    );
+                ),
+                time: mock_time(),
+            }
+        );
+    });
 }
 
 #[test]
 fn execute_stop_canister_updates_ingress_history_when_called_on_already_stopped_canister() {
-    with_setup(SubnetType::Application, |exec_env, mut state, _, _, _| {
+    with_setup(SubnetType::Application, |exec_env, mut state, _, _| {
         let canister = get_stopped_canister(canister_test_id(0));
         state.put_canister_state(canister);
 
@@ -1158,7 +1130,7 @@ fn execute_stop_canister_updates_ingress_history_when_called_on_already_stopped_
 
 #[test]
 fn execute_stop_canister_does_not_update_ingress_history_when_called_on_running_canister() {
-    with_setup(SubnetType::Application, |exec_env, mut state, _, _, _| {
+    with_setup(SubnetType::Application, |exec_env, mut state, _, _| {
         let canister = get_stopping_canister(canister_test_id(0));
         state.put_canister_state(canister);
 
@@ -1191,7 +1163,7 @@ fn execute_stop_canister_does_not_update_ingress_history_when_called_on_running_
 
 #[test]
 fn execute_stop_canister_does_not_update_ingress_history_when_called_on_stopping_canister() {
-    with_setup(SubnetType::Application, |exec_env, mut state, _, _, _| {
+    with_setup(SubnetType::Application, |exec_env, mut state, _, _| {
         let canister = get_stopping_canister(canister_test_id(0));
         state.put_canister_state(canister);
 
@@ -1225,7 +1197,7 @@ fn execute_stop_canister_does_not_update_ingress_history_when_called_on_stopping
 
 #[test]
 fn execute_stop_canister_writes_failure_to_ingress_history_when_called_with_incorrect_controller() {
-    with_setup(SubnetType::Application, |exec_env, mut state, _, _, _| {
+    with_setup(SubnetType::Application, |exec_env, mut state, _, _| {
         let canister = get_running_canister(canister_test_id(0));
         state.put_canister_state(canister);
 
@@ -1277,7 +1249,7 @@ fn test_canister_status_helper(
     canister: CanisterState,
     expected_status_result: CanisterStatusResultV2,
 ) {
-    with_setup(SubnetType::Application, |exec_env, mut state, _, _, _| {
+    with_setup(SubnetType::Application, |exec_env, mut state, _, _| {
         let controller_id = canister.system_state.controllers.iter().next().unwrap();
         let controller = CanisterId::new(*controller_id).unwrap();
         let canister_id = canister.canister_id();
@@ -1338,7 +1310,7 @@ fn test_canister_status_helper(
 }
 
 fn test_request_nonexistent_canister(method: Method) {
-    with_setup(SubnetType::Application, |exec_env, mut state, _, _, _| {
+    with_setup(SubnetType::Application, |exec_env, mut state, _, _| {
         let controller = canister_test_id(1);
         let canister_id = canister_test_id(0);
         let cycles = 42;
@@ -1486,7 +1458,7 @@ fn deposit_cycles_to_non_existing_canister_fails() {
 
 #[test]
 fn start_canister_from_another_canister() {
-    with_setup(SubnetType::Application, |exec_env, mut state, _, _, _| {
+    with_setup(SubnetType::Application, |exec_env, mut state, _, _| {
         let controller = canister_test_id(1);
         let canister_id = canister_test_id(0);
         let canister = get_stopped_canister_with_controller(canister_id, *controller.get_ref());
@@ -1554,7 +1526,7 @@ fn start_canister_from_another_canister() {
 
 #[test]
 fn stop_canister_from_another_canister() {
-    with_setup(SubnetType::Application, |exec_env, mut state, _, _, _| {
+    with_setup(SubnetType::Application, |exec_env, mut state, _, _| {
         let controller = canister_test_id(1);
         let canister_id = canister_test_id(0);
         let canister =
@@ -1625,7 +1597,7 @@ fn stop_canister_from_another_canister() {
 
 #[test]
 fn starting_a_stopping_canister_succeeds() {
-    with_setup(SubnetType::Application, |exec_env, mut state, _, _, _| {
+    with_setup(SubnetType::Application, |exec_env, mut state, _, _| {
         let mut canister = get_stopping_canister(canister_test_id(0));
 
         let stop_msg_ids = [message_test_id(0), message_test_id(1)];
@@ -1701,7 +1673,7 @@ fn starting_a_stopping_canister_succeeds() {
 
 #[test]
 fn subnet_ingress_message_unknown_method() {
-    with_setup(SubnetType::Application, |exec_env, state, _, _, _| {
+    with_setup(SubnetType::Application, |exec_env, state, _, _| {
         let sender = user_test_id(1);
 
         let state = exec_env
@@ -1742,7 +1714,7 @@ fn subnet_ingress_message_unknown_method() {
 
 #[test]
 fn subnet_canister_request_unknown_method() {
-    with_setup(SubnetType::Application, |exec_env, mut state, _, _, _| {
+    with_setup(SubnetType::Application, |exec_env, mut state, _, _| {
         let sender = canister_test_id(1);
         let receiver = CanisterId::new(subnet_test_id(1).get()).unwrap();
         let cycles = 100;
@@ -1800,7 +1772,7 @@ fn subnet_canister_request_unknown_method() {
 
 #[test]
 fn subnet_ingress_message_on_create_canister_fails() {
-    with_setup(SubnetType::Application, |exec_env, state, _, _, _| {
+    with_setup(SubnetType::Application, |exec_env, state, _, _| {
         let sender = user_test_id(1);
         let receiver = CanisterId::from(1);
         let install_args = InstallCodeArgs::new(
@@ -1850,7 +1822,7 @@ fn subnet_ingress_message_on_create_canister_fails() {
 
 #[test]
 fn subnet_canister_request_bad_candid_payload() {
-    with_setup(SubnetType::Application, |exec_env, mut state, _, _, _| {
+    with_setup(SubnetType::Application, |exec_env, mut state, _, _| {
         let sender = canister_test_id(1);
         let receiver = CanisterId::new(subnet_test_id(1).get()).unwrap();
         let cycles = 1;
@@ -2294,7 +2266,7 @@ fn setup_initial_dkg_sender_not_on_nns() {
 
 #[test]
 fn install_code_fails_on_invalid_compute_allocation() {
-    with_setup(SubnetType::Application, |exec_env, state, _, _, _| {
+    with_setup(SubnetType::Application, |exec_env, state, _, _| {
         let install_args = InstallCodeArgs::new(
             CanisterInstallMode::Install,
             CanisterId::new(PrincipalId::try_from([1, 2, 3].as_ref()).unwrap()).unwrap(),
@@ -2345,7 +2317,7 @@ fn install_code_fails_on_invalid_compute_allocation() {
 
 #[test]
 fn install_code_fails_on_invalid_memory_allocation() {
-    with_setup(SubnetType::Application, |exec_env, state, _, _, _| {
+    with_setup(SubnetType::Application, |exec_env, state, _, _| {
         let install_args = InstallCodeArgs::new(
             CanisterInstallMode::Install,
             CanisterId::new(PrincipalId::try_from([1, 2, 3].as_ref()).unwrap()).unwrap(),
@@ -2430,7 +2402,7 @@ fn metrics_are_observed_for_subnet_messages() {
 
         // Send a subnet message to some of the ic:00 methods, but with malformed
         // candid. The request should fail and an error should be observed in metrics.
-        let (_, _, _, _, state) = initial_state(subnet_type);
+        let (_, _, _, state) = initial_state(subnet_type);
 
         let methods: [ic00::Method; 6] = [
             ic00::Method::CreateCanister,
@@ -2547,75 +2519,67 @@ fn metrics_are_observed_for_subnet_messages() {
 
 #[test]
 fn can_update_canisters_cycles_account_when_an_ingress_is_executed() {
-    with_setup(
-        SubnetType::Application,
-        |exec_env, _, _, routing_table, subnet_records| {
-            let canister = get_running_canister(canister_test_id(0));
-            let initial_cycles_balance = canister.system_state.balance();
-            let ingress = IngressBuilder::new().build();
+    with_setup(SubnetType::Application, |exec_env, _, _, routing_table| {
+        let canister = get_running_canister(canister_test_id(0));
+        let initial_cycles_balance = canister.system_state.balance();
+        let ingress = IngressBuilder::new().build();
 
-            let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-            let result = exec_env.execute_canister_message(
-                canister,
-                MAX_NUM_INSTRUCTIONS,
-                CanisterInputMessage::Ingress(ingress),
-                mock_time(),
-                routing_table,
-                subnet_records,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            );
+        let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
+        let result = exec_env.execute_canister_message(
+            canister,
+            MAX_NUM_INSTRUCTIONS,
+            CanisterInputMessage::Ingress(ingress),
+            mock_time(),
+            routing_table,
+            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+        );
 
-            assert_eq!(
-                result.canister.system_state.balance(),
-                initial_cycles_balance
-                    - cycles_account_manager
-                        .execution_cost(MAX_NUM_INSTRUCTIONS - result.num_instructions_left,),
-            );
-        },
-    );
+        assert_eq!(
+            result.canister.system_state.balance(),
+            initial_cycles_balance
+                - cycles_account_manager
+                    .execution_cost(MAX_NUM_INSTRUCTIONS - result.num_instructions_left,),
+        );
+    });
 }
 
 #[test]
 fn can_reject_a_request_when_canister_is_out_of_cycles() {
-    with_setup(
-        SubnetType::Application,
-        |exec_env, _, _, routing_table, subnet_records| {
-            // Set the canister's cycles balance to a low value to force the request to be
-            // rejected.
-            let available_cycles = Cycles::from(1000);
-            let mut canister =
-                get_running_canister_with_balance(canister_test_id(0), available_cycles);
-            canister.system_state.freeze_threshold = NumSeconds::from(0);
-            let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
+    with_setup(SubnetType::Application, |exec_env, _, _, routing_table| {
+        // Set the canister's cycles balance to a low value to force the request to be
+        // rejected.
+        let available_cycles = Cycles::from(1000);
+        let mut canister = get_running_canister_with_balance(canister_test_id(0), available_cycles);
+        canister.system_state.freeze_threshold = NumSeconds::from(0);
+        let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
 
-            let cycles = 50;
-            let req = RequestBuilder::new()
-                .sender(canister_test_id(13))
-                .payment(Cycles::from(cycles))
-                .build();
-            let reply_callback = req.sender_reply_callback;
-            canister
-                .system_state
-                .queues_mut()
-                .push_input(
-                    QueueIndex::from(0),
-                    RequestOrResponse::Request(req),
-                    InputQueueType::RemoteSubnet,
-                )
-                .unwrap();
+        let cycles = 50;
+        let req = RequestBuilder::new()
+            .sender(canister_test_id(13))
+            .payment(Cycles::from(cycles))
+            .build();
+        let reply_callback = req.sender_reply_callback;
+        canister
+            .system_state
+            .queues_mut()
+            .push_input(
+                QueueIndex::from(0),
+                RequestOrResponse::Request(req),
+                InputQueueType::RemoteSubnet,
+            )
+            .unwrap();
 
-            let msg = canister.pop_input().unwrap();
-            let canister_id = canister.canister_id();
-            let mut result = exec_env.execute_canister_message(
-                canister,
-                MAX_NUM_INSTRUCTIONS,
-                msg,
-                mock_time(),
-                routing_table,
-                subnet_records,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            );
-            assert_eq!(
+        let msg = canister.pop_input().unwrap();
+        let canister_id = canister.canister_id();
+        let mut result = exec_env.execute_canister_message(
+            canister,
+            MAX_NUM_INSTRUCTIONS,
+            msg,
+            mock_time(),
+            routing_table,
+            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+        );
+        assert_eq!(
             result
                 .canister
                 .system_state
@@ -2640,36 +2604,32 @@ fn can_reject_a_request_when_canister_is_out_of_cycles() {
                 }),
             })
         );
-            // Verify the canister's cycles balance is still the same.
-            assert_eq!(result.canister.system_state.balance(), Cycles::from(1000));
-        },
-    );
+        // Verify the canister's cycles balance is still the same.
+        assert_eq!(result.canister.system_state.balance(), Cycles::from(1000));
+    });
 }
 
 #[test]
 fn can_reject_an_ingress_when_canister_is_out_of_cycles() {
-    with_setup(
-        SubnetType::Application,
-        |exec_env, _, _, routing_table, subnet_records| {
-            // Set the canister's cycles balance to a low value to force the request to be
-            // rejected.
-            let available_cycles = Cycles::from(1000);
-            let canister = get_running_canister_with_balance(canister_test_id(0), available_cycles);
-            let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-            let ingress = IngressBuilder::new().build();
-            let source = ingress.source;
+    with_setup(SubnetType::Application, |exec_env, _, _, routing_table| {
+        // Set the canister's cycles balance to a low value to force the request to be
+        // rejected.
+        let available_cycles = Cycles::from(1000);
+        let canister = get_running_canister_with_balance(canister_test_id(0), available_cycles);
+        let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
+        let ingress = IngressBuilder::new().build();
+        let source = ingress.source;
 
-            let canister_id = canister.canister_id();
-            let result = exec_env.execute_canister_message(
-                canister,
-                MAX_NUM_INSTRUCTIONS,
-                CanisterInputMessage::Ingress(ingress),
-                mock_time(),
-                routing_table,
-                subnet_records,
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            );
-            assert_eq!(
+        let canister_id = canister.canister_id();
+        let result = exec_env.execute_canister_message(
+            canister,
+            MAX_NUM_INSTRUCTIONS,
+            CanisterInputMessage::Ingress(ingress),
+            mock_time(),
+            routing_table,
+            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+        );
+        assert_eq!(
             result.ingress_status,
             Some((MessageId::from([0; 32]), IngressStatus::Failed {
                 receiver: canister_id.get(),
@@ -2687,71 +2647,62 @@ fn can_reject_an_ingress_when_canister_is_out_of_cycles() {
                 time: mock_time(),
             }))
         );
-            // Verify the canister's cycles balance is still the same.
-            assert_eq!(result.canister.system_state.balance(), Cycles::from(1000));
-        },
-    );
+        // Verify the canister's cycles balance is still the same.
+        assert_eq!(result.canister.system_state.balance(), Cycles::from(1000));
+    });
 }
 
 #[test]
 fn canister_heartbeat_doesnt_run_when_canister_is_stopped() {
-    with_setup(
-        SubnetType::System,
-        |exec_env, _, _, routing_table, subnet_records| {
-            let canister = get_stopped_canister_on_system_subnet(canister_test_id(0));
+    with_setup(SubnetType::System, |exec_env, _, _, routing_table| {
+        let canister = get_stopped_canister_on_system_subnet(canister_test_id(0));
 
-            let result = exec_env
-                .execute_canister_heartbeat(
-                    canister,
-                    MAX_NUM_INSTRUCTIONS,
-                    routing_table,
-                    subnet_records,
-                    mock_time(),
-                    MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                )
-                .2;
+        let result = exec_env
+            .execute_canister_heartbeat(
+                canister,
+                MAX_NUM_INSTRUCTIONS,
+                routing_table,
+                mock_time(),
+                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+            )
+            .2;
 
-            assert_eq!(
-                result,
-                Err(CanisterHeartbeatError::CanisterNotRunning {
-                    status: CanisterStatusType::Stopped,
-                })
-            );
-        },
-    );
+        assert_eq!(
+            result,
+            Err(CanisterHeartbeatError::CanisterNotRunning {
+                status: CanisterStatusType::Stopped,
+            })
+        );
+    });
 }
 
 #[test]
 fn canister_heartbeat_doesnt_run_when_canister_is_stopping() {
-    with_setup(
-        SubnetType::System,
-        |exec_env, _, _, routing_table, subnet_records| {
-            let canister = get_stopping_canister_on_nns(canister_test_id(0));
+    with_setup(SubnetType::System, |exec_env, _, _, routing_table| {
+        let canister = get_stopping_canister_on_nns(canister_test_id(0));
 
-            let result = exec_env
-                .execute_canister_heartbeat(
-                    canister,
-                    MAX_NUM_INSTRUCTIONS,
-                    routing_table,
-                    subnet_records,
-                    mock_time(),
-                    MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                )
-                .2;
+        let result = exec_env
+            .execute_canister_heartbeat(
+                canister,
+                MAX_NUM_INSTRUCTIONS,
+                routing_table,
+                mock_time(),
+                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+            )
+            .2;
 
-            assert_eq!(
-                result,
-                Err(CanisterHeartbeatError::CanisterNotRunning {
-                    status: CanisterStatusType::Stopping,
-                })
-            );
-        },
-    );
+        assert_eq!(
+            result,
+            Err(CanisterHeartbeatError::CanisterNotRunning {
+                status: CanisterStatusType::Stopping,
+            })
+        );
+    });
 }
 
 #[test]
 fn message_to_canister_with_not_enough_balance_is_rejected() {
-    with_setup(SubnetType::Application, |exec_env, _, _, _, _| {
+    with_setup(SubnetType::Application, |exec_env, _, _, _| {
         let canister_id = canister_test_id(0);
         let ingress = SignedIngressBuilder::new()
             .canister_id(canister_id)
@@ -2796,7 +2747,7 @@ fn message_to_canister_with_not_enough_balance_is_rejected() {
 
 #[test]
 fn message_to_canister_with_enough_balance_is_accepted() {
-    with_setup(SubnetType::Application, |exec_env, _, _, _, _| {
+    with_setup(SubnetType::Application, |exec_env, _, _, _| {
         let ingress = SignedIngressBuilder::new()
             .canister_id(canister_test_id(0))
             .build()
@@ -2836,7 +2787,7 @@ fn message_to_canister_with_enough_balance_is_accepted() {
 
 #[test]
 fn management_message_to_canister_with_enough_balance_is_accepted() {
-    with_setup(SubnetType::Application, |exec_env, _, _, _, _| {
+    with_setup(SubnetType::Application, |exec_env, _, _, _| {
         for receiver in [IC_00, CanisterId::from(subnet_test_id(1))].iter() {
             let ingress = SignedIngressBuilder::new()
                 .sender(user_test_id(0))
@@ -2870,7 +2821,7 @@ fn management_message_to_canister_with_enough_balance_is_accepted() {
 
 #[test]
 fn management_message_to_canister_with_not_enough_balance_is_not_accepted() {
-    with_setup(SubnetType::Application, |exec_env, _, _, _, _| {
+    with_setup(SubnetType::Application, |exec_env, _, _, _| {
         for receiver in [IC_00, CanisterId::from(subnet_test_id(1))].iter() {
             let canister_id = canister_test_id(0);
             let ingress = SignedIngressBuilder::new()
@@ -2918,7 +2869,7 @@ fn management_message_to_canister_with_not_enough_balance_is_not_accepted() {
 
 #[test]
 fn management_message_to_canister_that_doesnt_exist_is_not_accepted() {
-    with_setup(SubnetType::Application, |exec_env, _, _, _, _| {
+    with_setup(SubnetType::Application, |exec_env, _, _, _| {
         for receiver in [IC_00, CanisterId::from(subnet_test_id(1))].iter() {
             let ingress = SignedIngressBuilder::new()
                 .sender(user_test_id(0))
@@ -2943,7 +2894,7 @@ fn management_message_to_canister_that_doesnt_exist_is_not_accepted() {
 
 #[test]
 fn management_message_with_invalid_payload_is_not_accepted() {
-    with_setup(SubnetType::Application, |exec_env, _, _, _, _| {
+    with_setup(SubnetType::Application, |exec_env, _, _, _| {
         for receiver in [IC_00, CanisterId::from(subnet_test_id(1))].iter() {
             let ingress = SignedIngressBuilder::new()
                 .sender(user_test_id(0))
@@ -2968,7 +2919,7 @@ fn management_message_with_invalid_payload_is_not_accepted() {
 
 #[test]
 fn management_message_with_invalid_method_is_not_accepted() {
-    with_setup(SubnetType::Application, |exec_env, _, _, _, _| {
+    with_setup(SubnetType::Application, |exec_env, _, _, _| {
         for receiver in [IC_00, CanisterId::from(subnet_test_id(1))].iter() {
             let ingress = SignedIngressBuilder::new()
                 .sender(user_test_id(0))
@@ -3025,115 +2976,105 @@ const MEMORY_ALLOCATION_WAT: &str = r#"(module
 /// subnet's available memory.
 #[test]
 fn subnet_available_memory_reclaimed_when_execution_fails() {
-    with_setup(
-        SubnetType::Application,
-        |exec_env, _, _, routing_table, subnet_records| {
-            let wasm_binary = wabt::wat2wasm(MEMORY_ALLOCATION_WAT).unwrap();
-            let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
+    with_setup(SubnetType::Application, |exec_env, _, _, routing_table| {
+        let wasm_binary = wabt::wat2wasm(MEMORY_ALLOCATION_WAT).unwrap();
+        let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
 
-            let system_state = SystemStateBuilder::default()
-                .freeze_threshold(NumSeconds::from(0))
-                .build();
+        let system_state = SystemStateBuilder::default()
+            .freeze_threshold(NumSeconds::from(0))
+            .build();
 
-            let execution_state = exec_env
-                .hypervisor_for_testing()
-                .create_execution_state(
-                    wasm_binary,
-                    tmpdir.path().to_path_buf(),
-                    system_state.canister_id(),
-                )
-                .unwrap();
+        let execution_state = exec_env
+            .hypervisor_for_testing()
+            .create_execution_state(
+                wasm_binary,
+                tmpdir.path().to_path_buf(),
+                system_state.canister_id(),
+            )
+            .unwrap();
 
-            let mut canister = CanisterState {
-                system_state,
-                execution_state: Some(execution_state),
-                scheduler_state: SchedulerState::default(),
-            };
+        let mut canister = CanisterState {
+            system_state,
+            execution_state: Some(execution_state),
+            scheduler_state: SchedulerState::default(),
+        };
 
-            let input_message = CanisterInputMessage::Ingress(
-                IngressBuilder::default()
-                    .method_name("test_with_trap".to_string())
-                    .build(),
-            );
+        let input_message = CanisterInputMessage::Ingress(
+            IngressBuilder::default()
+                .method_name("test_with_trap".to_string())
+                .build(),
+        );
 
-            let subnet_available_memory_bytes_num = 1 << 30;
-            let subnet_available_memory =
-                SubnetAvailableMemory::new(subnet_available_memory_bytes_num);
-            canister.system_state.memory_allocation =
-                MemoryAllocation::try_from(NumBytes::new(1 << 30)).unwrap();
-            exec_env.execute_canister_message(
-                canister,
-                MAX_NUM_INSTRUCTIONS,
-                input_message,
-                mock_time(),
-                routing_table,
-                subnet_records,
-                subnet_available_memory.clone(),
-            );
-            assert_eq!(
-                subnet_available_memory_bytes_num,
-                subnet_available_memory.get()
-            );
-        },
-    );
+        let subnet_available_memory_bytes_num = 1 << 30;
+        let subnet_available_memory = SubnetAvailableMemory::new(subnet_available_memory_bytes_num);
+        canister.system_state.memory_allocation =
+            MemoryAllocation::try_from(NumBytes::new(1 << 30)).unwrap();
+        exec_env.execute_canister_message(
+            canister,
+            MAX_NUM_INSTRUCTIONS,
+            input_message,
+            mock_time(),
+            routing_table,
+            subnet_available_memory.clone(),
+        );
+        assert_eq!(
+            subnet_available_memory_bytes_num,
+            subnet_available_memory.get()
+        );
+    });
 }
 
 #[test]
 fn test_allocating_memory_reduces_subnet_available_memory() {
-    with_setup(
-        SubnetType::Application,
-        |exec_env, _, _, routing_table, subnet_records| {
-            let wasm_binary = wabt::wat2wasm(MEMORY_ALLOCATION_WAT).unwrap();
-            let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
+    with_setup(SubnetType::Application, |exec_env, _, _, routing_table| {
+        let wasm_binary = wabt::wat2wasm(MEMORY_ALLOCATION_WAT).unwrap();
+        let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
 
-            let system_state = SystemStateBuilder::default()
-                .freeze_threshold(NumSeconds::from(0))
-                .build();
+        let system_state = SystemStateBuilder::default()
+            .freeze_threshold(NumSeconds::from(0))
+            .build();
 
-            let execution_state = exec_env
-                .hypervisor_for_testing()
-                .create_execution_state(
-                    wasm_binary,
-                    tmpdir.path().to_path_buf(),
-                    system_state.canister_id(),
-                )
-                .unwrap();
+        let execution_state = exec_env
+            .hypervisor_for_testing()
+            .create_execution_state(
+                wasm_binary,
+                tmpdir.path().to_path_buf(),
+                system_state.canister_id(),
+            )
+            .unwrap();
 
-            let mut canister = CanisterState {
-                system_state,
-                execution_state: Some(execution_state),
-                scheduler_state: SchedulerState::default(),
-            };
+        let mut canister = CanisterState {
+            system_state,
+            execution_state: Some(execution_state),
+            scheduler_state: SchedulerState::default(),
+        };
 
-            let input_message = CanisterInputMessage::Ingress(
-                IngressBuilder::default()
-                    .method_name("test_without_trap".to_string())
-                    .build(),
-            );
+        let input_message = CanisterInputMessage::Ingress(
+            IngressBuilder::default()
+                .method_name("test_without_trap".to_string())
+                .build(),
+        );
 
-            let subnet_available_memory_bytes_num = 1 << 30;
-            let subnet_available_memory =
-                SubnetAvailableMemory::new(subnet_available_memory_bytes_num);
-            canister.system_state.memory_allocation =
-                MemoryAllocation::try_from(NumBytes::new(1 << 30)).unwrap();
-            exec_env.execute_canister_message(
-                canister,
-                MAX_NUM_INSTRUCTIONS,
-                input_message,
-                mock_time(),
-                routing_table,
-                subnet_records,
-                subnet_available_memory.clone(),
-            );
-            // The canister allocates 10 wasm pages in the heap and 10 wasm pages of stable
-            // memory.
-            let new_memory_allocated = 20 * WASM_PAGE_SIZE_IN_BYTES as i64;
-            assert_eq!(
-                subnet_available_memory_bytes_num - new_memory_allocated,
-                subnet_available_memory.get()
-            );
-        },
-    );
+        let subnet_available_memory_bytes_num = 1 << 30;
+        let subnet_available_memory = SubnetAvailableMemory::new(subnet_available_memory_bytes_num);
+        canister.system_state.memory_allocation =
+            MemoryAllocation::try_from(NumBytes::new(1 << 30)).unwrap();
+        exec_env.execute_canister_message(
+            canister,
+            MAX_NUM_INSTRUCTIONS,
+            input_message,
+            mock_time(),
+            routing_table,
+            subnet_available_memory.clone(),
+        );
+        // The canister allocates 10 wasm pages in the heap and 10 wasm pages of stable
+        // memory.
+        let new_memory_allocated = 20 * WASM_PAGE_SIZE_IN_BYTES as i64;
+        assert_eq!(
+            subnet_available_memory_bytes_num - new_memory_allocated,
+            subnet_available_memory.get()
+        );
+    });
 }
 
 #[test]

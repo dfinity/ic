@@ -25,9 +25,8 @@ use ic_interfaces::{
 };
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
-use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::ReplicatedState;
+use ic_replicated_state::{NetworkTopology, ReplicatedState};
 use ic_system_api::NonReplicatedQueryKind;
 use ic_types::{messages::CallContextId, SubnetId};
 use ingress_filter::IngressFilter;
@@ -55,7 +54,7 @@ pub enum QueryExecutionType {
     /// generally indicate that the message being handled is a Query message.
     NonReplicated {
         call_context_id: CallContextId,
-        routing_table: Arc<RoutingTable>,
+        network_topology: Arc<NetworkTopology>,
         query_kind: NonReplicatedQueryKind,
     },
 }
@@ -109,7 +108,6 @@ pub fn setup_execution(
     let sync_query_handler = Arc::new(InternalHttpQueryHandler::new(
         logger.clone(),
         hypervisor,
-        own_subnet_id,
         own_subnet_type,
         config.clone(),
         metrics_registry,

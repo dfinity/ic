@@ -25,7 +25,7 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     page_map, testing::CanisterQueuesTesting, CallContextAction, CallContextManager, CallOrigin,
-    CanisterStatus, NumWasmPages, PageMap, ReplicatedState,
+    CanisterStatus, NumWasmPages, PageMap, ReplicatedState, SubnetTopology,
 };
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
@@ -3625,16 +3625,18 @@ fn test_upgrade_preserves_stable_memory() {
             )
             .source(user_id)
             .build();
-        let subnet_records = Arc::new(btreemap! {
-            subnet_id => SubnetType::Application,
-        });
-
+        state.metadata.network_topology.subnets.insert(
+            subnet_id,
+            SubnetTopology {
+                subnet_type: SubnetType::Application,
+                ..SubnetTopology::default()
+            },
+        );
         let (canister, _, action, _) = hypervisor.execute_update(
             canister,
             RequestOrIngress::Ingress(req),
             mock_time(),
-            state.routing_table(),
-            subnet_records,
+            Arc::new(state.metadata.network_topology.clone()),
             EXECUTION_PARAMETERS.clone(),
         );
         match action {

@@ -46,9 +46,10 @@ use ic_interfaces::execution_environment::{
     ExecutionMode, ExecutionParameters, HypervisorError, HypervisorResult, SubnetAvailableMemory,
 };
 use ic_logger::{debug, error, fatal, warn, ReplicaLogger};
-use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{CallContextAction, CallOrigin, CanisterState, ReplicatedState};
+use ic_replicated_state::{
+    CallContextAction, CallOrigin, CanisterState, NetworkTopology, ReplicatedState,
+};
 use ic_system_api::NonReplicatedQueryKind;
 use ic_types::{
     ingress::WasmResult,
@@ -57,7 +58,7 @@ use ic_types::{
         UserQuery,
     },
     user_error::{ErrorCode, RejectCode, UserError},
-    CanisterId, Cycles, NumInstructions, NumMessages, PrincipalId, QueryAllocation, SubnetId,
+    CanisterId, Cycles, NumInstructions, NumMessages, PrincipalId, QueryAllocation,
 };
 use std::{
     collections::BTreeMap,
@@ -97,11 +98,10 @@ fn generate_response(request: Request, payload: Payload) -> Response {
 pub(super) struct QueryContext<'a> {
     log: &'a ReplicaLogger,
     hypervisor: &'a Hypervisor,
-    own_subnet_id: SubnetId,
     own_subnet_type: SubnetType,
     // The state against which all queries in the context will be executed.
     state: Arc<ReplicatedState>,
-    routing_table: Arc<RoutingTable>,
+    network_topology: Arc<NetworkTopology>,
     data_certificate: Vec<u8>,
     canisters: BTreeMap<CanisterId, CanisterState>,
     outstanding_requests: Vec<Request>,
@@ -120,7 +120,6 @@ impl<'a> QueryContext<'a> {
     pub(super) fn new(
         log: &'a ReplicaLogger,
         hypervisor: &'a Hypervisor,
-        own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
         state: Arc<ReplicatedState>,
         data_certificate: Vec<u8>,
@@ -129,11 +128,10 @@ impl<'a> QueryContext<'a> {
         max_canister_memory_size: NumBytes,
         max_instructions_per_message: NumInstructions,
     ) -> Self {
-        let routing_table = Arc::clone(&state.metadata.network_topology.routing_table);
+        let network_topology = Arc::new(state.metadata.network_topology.clone());
         Self {
             log,
             hypervisor,
-            own_subnet_id,
             own_subnet_type,
             canisters: BTreeMap::new(),
             outstanding_requests: Vec::new(),
@@ -141,7 +139,7 @@ impl<'a> QueryContext<'a> {
             state,
             data_certificate,
             query_allocations_used,
-            routing_table,
+            network_topology,
             subnet_available_memory,
             max_canister_memory_size,
             max_instructions_per_message,
@@ -415,7 +413,7 @@ impl<'a> QueryContext<'a> {
         let (canister, instructions_left, result) = self.hypervisor.execute_query(
             QueryExecutionType::NonReplicated {
                 call_context_id,
-                routing_table: Arc::clone(&self.routing_table),
+                network_topology: Arc::clone(&self.network_topology),
                 query_kind,
             },
             method_name,
@@ -473,13 +471,6 @@ impl<'a> QueryContext<'a> {
             .unwrap();
         let call_context_id = callback.call_context_id;
 
-        // We do not support inter canister queries between subnets so
-        // we can use nominal values for these fields to satisfy the
-        // constraints.
-        let mut subnet_records = BTreeMap::new();
-        subnet_records.insert(self.own_subnet_id, self.own_subnet_type);
-        let subnet_records = Arc::new(subnet_records);
-
         let instruction_limit = self.max_instructions_per_message.min(
             self.query_allocations_used
                 .write()
@@ -497,8 +488,7 @@ impl<'a> QueryContext<'a> {
                 // No cycles are refunded in a response to a query call.
                 Cycles::from(0),
                 self.state.time(),
-                Arc::clone(&self.routing_table),
-                subnet_records,
+                Arc::clone(&self.network_topology),
                 execution_parameters,
             );
         let instructions_executed = instruction_limit - instructions_left;

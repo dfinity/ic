@@ -10,8 +10,8 @@ use ic_interfaces::execution_environment::{
 use ic_interfaces::messages::RequestOrIngress;
 use ic_logger::{debug, fatal, ReplicaLogger};
 use ic_metrics::{buckets::exponential_buckets, MetricsRegistry};
-use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::NetworkTopology;
 use ic_replicated_state::{
     page_map::allocated_pages_count, CallContextAction, CallOrigin, CanisterState, ExecutionState,
     SchedulerState, SystemState,
@@ -28,7 +28,7 @@ use ic_types::{
     CanisterId, CanisterStatusType, Cycles, NumBytes, NumInstructions, PrincipalId, SubnetId, Time,
 };
 use prometheus::{Histogram, IntCounterVec, IntGauge};
-use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc};
 
 #[doc(hidden)] // pub for usage in tests
 pub struct HypervisorMetrics {
@@ -117,8 +117,7 @@ impl Hypervisor {
         canister: CanisterState,
         mut request: RequestOrIngress,
         time: Time,
-        routing_table: Arc<RoutingTable>,
-        subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
+        network_topology: Arc<NetworkTopology>,
         execution_parameters: ExecutionParameters,
     ) -> (CanisterState, NumInstructions, CallContextAction, NumBytes) {
         debug!(self.log, "execute_update: method {}", request.method_name());
@@ -184,8 +183,7 @@ impl Hypervisor {
             call_context_id,
             self.own_subnet_id,
             self.own_subnet_type,
-            routing_table,
-            subnet_records,
+            network_topology,
         );
         let (output, output_execution_state, output_system_state) = self.execute(
             api_type,
@@ -297,7 +295,7 @@ impl Hypervisor {
             }
             QueryExecutionType::NonReplicated {
                 call_context_id,
-                routing_table,
+                network_topology,
                 query_kind,
             } => {
                 let api_type = ApiType::non_replicated_query(
@@ -306,7 +304,7 @@ impl Hypervisor {
                     caller,
                     call_context_id,
                     self.own_subnet_id,
-                    routing_table,
+                    network_topology,
                     data_certificate,
                     query_kind.clone(),
                 );
@@ -362,8 +360,7 @@ impl Hypervisor {
         payload: Payload,
         incoming_cycles: Cycles,
         time: Time,
-        routing_table: Arc<RoutingTable>,
-        subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
+        network_topology: Arc<NetworkTopology>,
         execution_parameters: ExecutionParameters,
     ) -> (
         CanisterState,
@@ -414,8 +411,7 @@ impl Hypervisor {
                 call_responded,
                 self.own_subnet_id,
                 self.own_subnet_type,
-                routing_table,
-                subnet_records,
+                network_topology,
             ),
             Payload::Reject(context) => ApiType::reject_callback(
                 time,
@@ -425,8 +421,7 @@ impl Hypervisor {
                 call_responded,
                 self.own_subnet_id,
                 self.own_subnet_type,
-                routing_table,
-                subnet_records,
+                network_topology,
             ),
         };
 
@@ -870,8 +865,7 @@ impl Hypervisor {
     pub fn execute_canister_heartbeat(
         &self,
         canister: CanisterState,
-        routing_table: Arc<RoutingTable>,
-        subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
+        network_topology: Arc<NetworkTopology>,
         time: Time,
         execution_parameters: ExecutionParameters,
     ) -> (CanisterState, NumInstructions, HypervisorResult<NumBytes>) {
@@ -911,8 +905,7 @@ impl Hypervisor {
             call_context_id,
             self.own_subnet_id,
             self.own_subnet_type,
-            routing_table,
-            subnet_records,
+            network_topology,
         );
 
         let (output, output_execution_state, output_system_state) = self.execute(

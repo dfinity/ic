@@ -12,11 +12,10 @@ use ic_interfaces::execution_environment::{
     TrapCode::CyclesAmountTooBigFor64Bit,
 };
 use ic_logger::{error, info, ReplicaLogger};
-use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::ENFORCE_MESSAGE_MEMORY_USAGE, memory_required_to_push_request,
-    page_map::PAGE_SIZE, Memory, NumWasmPages, PageIndex, StateError,
+    page_map::PAGE_SIZE, Memory, NetworkTopology, NumWasmPages, PageIndex, StateError,
 };
 use ic_sys::PageBytes;
 use ic_types::{
@@ -32,7 +31,6 @@ use sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState, Syst
 use serde::{Deserialize, Serialize};
 use stable_memory::StableMemory;
 use std::{
-    collections::BTreeMap,
     convert::{From, TryFrom},
     sync::Arc,
 };
@@ -152,10 +150,7 @@ pub enum ApiType {
         own_subnet_type: SubnetType,
         #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
         #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
-        routing_table: Arc<RoutingTable>,
-        #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
-        #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
-        subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
+        network_topology: Arc<NetworkTopology>,
         /// Optional outgoing request under construction. If `None` no outgoing
         /// request is currently under construction.
         outgoing_request: Option<RequestInPrep>,
@@ -185,7 +180,7 @@ pub enum ApiType {
         own_subnet_id: SubnetId,
         #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
         #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
-        routing_table: Arc<RoutingTable>,
+        network_topology: Arc<NetworkTopology>,
         /// Optional outgoing request under construction. If `None` no outgoing
         /// request is currently under construction.
         outgoing_request: Option<RequestInPrep>,
@@ -212,10 +207,7 @@ pub enum ApiType {
         own_subnet_type: SubnetType,
         #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
         #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
-        routing_table: Arc<RoutingTable>,
-        #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
-        #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
-        subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
+        network_topology: Arc<NetworkTopology>,
         /// Optional outgoing request under construction. If `None` no outgoing
         /// request is currently under construction.
         outgoing_request: Option<RequestInPrep>,
@@ -236,10 +228,7 @@ pub enum ApiType {
         own_subnet_type: SubnetType,
         #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
         #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
-        routing_table: Arc<RoutingTable>,
-        #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
-        #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
-        subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
+        network_topology: Arc<NetworkTopology>,
         /// Optional outgoing request under construction. If `None` no outgoing
         /// request is currently under construction.
         outgoing_request: Option<RequestInPrep>,
@@ -271,10 +260,7 @@ pub enum ApiType {
         own_subnet_type: SubnetType,
         #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
         #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
-        routing_table: Arc<RoutingTable>,
-        #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
-        #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
-        subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
+        network_topology: Arc<NetworkTopology>,
         /// Optional outgoing request under construction. If `None` no outgoing
         /// request is currently under construction.
         outgoing_request: Option<RequestInPrep>,
@@ -309,16 +295,14 @@ impl ApiType {
         call_context_id: CallContextId,
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
-        routing_table: Arc<RoutingTable>,
-        subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
+        network_topology: Arc<NetworkTopology>,
     ) -> Self {
         Self::Heartbeat {
             time,
             call_context_id,
             own_subnet_id,
             own_subnet_type,
-            routing_table,
-            subnet_records,
+            network_topology,
             outgoing_request: None,
         }
     }
@@ -332,8 +316,7 @@ impl ApiType {
         call_context_id: CallContextId,
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
-        routing_table: Arc<RoutingTable>,
-        subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
+        network_topology: Arc<NetworkTopology>,
     ) -> Self {
         Self::Update {
             time,
@@ -345,8 +328,7 @@ impl ApiType {
             response_status: ResponseStatus::NotRepliedYet,
             own_subnet_id,
             own_subnet_type,
-            routing_table,
-            subnet_records,
+            network_topology,
             outgoing_request: None,
             max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
         }
@@ -376,7 +358,7 @@ impl ApiType {
         caller: PrincipalId,
         call_context_id: CallContextId,
         own_subnet_id: SubnetId,
-        routing_table: Arc<RoutingTable>,
+        network_topology: Arc<NetworkTopology>,
         data_certificate: Option<Vec<u8>>,
         query_kind: NonReplicatedQueryKind,
     ) -> Self {
@@ -386,7 +368,7 @@ impl ApiType {
             caller,
             call_context_id,
             own_subnet_id,
-            routing_table,
+            network_topology,
             data_certificate,
             outgoing_request: None,
             response_data: vec![],
@@ -405,8 +387,7 @@ impl ApiType {
         replied: bool,
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
-        routing_table: Arc<RoutingTable>,
-        subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
+        network_topology: Arc<NetworkTopology>,
     ) -> Self {
         Self::ReplyCallback {
             time,
@@ -421,8 +402,7 @@ impl ApiType {
             },
             own_subnet_id,
             own_subnet_type,
-            routing_table,
-            subnet_records,
+            network_topology,
             outgoing_request: None,
             max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
         }
@@ -437,8 +417,7 @@ impl ApiType {
         replied: bool,
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
-        routing_table: Arc<RoutingTable>,
-        subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
+        network_topology: Arc<NetworkTopology>,
     ) -> Self {
         Self::RejectCallback {
             time,
@@ -453,8 +432,7 @@ impl ApiType {
             },
             own_subnet_id,
             own_subnet_type,
-            routing_table,
-            subnet_records,
+            network_topology,
             outgoing_request: None,
             max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
         }
@@ -1595,32 +1573,32 @@ impl SystemApi for SystemApiImpl {
             ApiType::Update {
                 call_context_id,
                 own_subnet_id,
-                routing_table,
+                network_topology,
                 ..
             }
             | ApiType::NonReplicatedQuery {
                 call_context_id,
                 own_subnet_id,
-                routing_table,
+                network_topology,
                 query_kind: NonReplicatedQueryKind::Stateful,
                 ..
             }
             | ApiType::Heartbeat {
                 call_context_id,
                 own_subnet_id,
-                routing_table,
+                network_topology,
                 ..
             }
             | ApiType::ReplyCallback {
                 call_context_id,
                 own_subnet_id,
-                routing_table,
+                network_topology,
                 ..
             }
             | ApiType::RejectCallback {
                 call_context_id,
                 own_subnet_id,
-                routing_table,
+                network_topology,
                 ..
             } => {
                 if data_len as u64 > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES.get() {
@@ -1649,7 +1627,7 @@ impl SystemApi for SystemApiImpl {
                 let callee = if callee == IC_00.get() {
                     // This is a request to ic:00. Update `callee` to be the appropriate subnet.
                     let callee = routing::resolve_destination(
-                        routing_table,
+                        network_topology,
                         method_name.as_str(),
                         payload.as_slice(),
                         *own_subnet_id,
@@ -1914,8 +1892,7 @@ impl SystemApi for SystemApiImpl {
                 own_subnet_id,
                 own_subnet_type,
                 outgoing_request,
-                routing_table,
-                subnet_records,
+                network_topology,
                 ..
             }
             | ApiType::Heartbeat {
@@ -1923,8 +1900,7 @@ impl SystemApi for SystemApiImpl {
                 own_subnet_id,
                 own_subnet_type,
                 outgoing_request,
-                routing_table,
-                subnet_records,
+                network_topology,
                 ..
             }
             | ApiType::ReplyCallback {
@@ -1932,8 +1908,7 @@ impl SystemApi for SystemApiImpl {
                 own_subnet_id,
                 own_subnet_type,
                 outgoing_request,
-                routing_table,
-                subnet_records,
+                network_topology,
                 ..
             }
             | ApiType::RejectCallback {
@@ -1941,8 +1916,7 @@ impl SystemApi for SystemApiImpl {
                 own_subnet_id,
                 own_subnet_type,
                 outgoing_request,
-                routing_table,
-                subnet_records,
+                network_topology,
                 ..
             } => {
                 let req_in_prep = outgoing_request.take().ok_or_else(|| {
@@ -1952,8 +1926,7 @@ impl SystemApi for SystemApiImpl {
                 })?;
 
                 let req = into_request(
-                    routing_table,
-                    subnet_records,
+                    network_topology,
                     req_in_prep,
                     *call_context_id,
                     *own_subnet_id,
@@ -1968,7 +1941,7 @@ impl SystemApi for SystemApiImpl {
                 call_context_id,
                 own_subnet_id,
                 outgoing_request,
-                routing_table,
+                network_topology,
                 query_kind: NonReplicatedQueryKind::Stateful,
                 ..
             } => {
@@ -1978,20 +1951,16 @@ impl SystemApi for SystemApiImpl {
                     )
                 })?;
 
-                // We do not support inter canister queries between subnets so
-                // we can use nominal values for these fields to satisfy the
-                // constraints.
-                let own_subnet_type = SubnetType::Application;
-                let mut subnet_records = BTreeMap::new();
-                subnet_records.insert(*own_subnet_id, own_subnet_type);
-
                 let req = into_request(
-                    routing_table,
-                    &subnet_records,
+                    network_topology,
                     req_in_prep,
                     *call_context_id,
                     *own_subnet_id,
-                    own_subnet_type,
+                    // The subnet type is only used to prevent sending cycles
+                    // from Application to VerifiedApplication subnets. But we
+                    // can't send cycles in this context anyway, so there's
+                    // nothing wrong with fixing the type as `Application`.
+                    SubnetType::Application,
                     &mut self.sandbox_safe_system_state,
                     &self.log,
                 )?;

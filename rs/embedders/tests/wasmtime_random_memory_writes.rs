@@ -7,7 +7,7 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{Memory, NumWasmPages};
+use ic_replicated_state::{Memory, NetworkTopology, NumWasmPages, SubnetTopology};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType, SystemApiImpl};
 use ic_test_utilities::{
@@ -50,8 +50,15 @@ fn test_api_for_update(
         })
         .unwrap(),
     );
-    let subnet_records = Arc::new(btreemap! {
-        subnet_id => subnet_type,
+    let network_topology = Arc::new(NetworkTopology {
+        routing_table,
+        subnets: btreemap! {
+            subnet_id => SubnetTopology {
+                subnet_type,
+                ..SubnetTopology::default()
+            }
+        },
+        ..NetworkTopology::default()
     });
     let system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = Arc::new(
@@ -72,8 +79,7 @@ fn test_api_for_update(
             call_context_test_id(13),
             subnet_id,
             subnet_type,
-            routing_table,
-            subnet_records,
+            network_topology,
         ),
         static_system_state,
         canister_current_memory_usage,

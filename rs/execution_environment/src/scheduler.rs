@@ -13,11 +13,9 @@ use ic_interfaces::{
 use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_registry_routing_table::RoutingTable;
-use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::QUEUE_INDEX_NONE, CanisterState, CanisterStatus, InputQueueType,
-    ReplicatedState,
+    NetworkTopology, ReplicatedState,
 };
 use ic_types::{
     crypto::canister_threshold_sig::MasterEcdsaPublicKey,
@@ -342,16 +340,6 @@ impl SchedulerImpl {
         let mut is_first_iteration = true;
         let mut round_filtered_canisters = FilteredCanisters::new();
 
-        let subnet_records: Arc<BTreeMap<SubnetId, SubnetType>> = Arc::new(
-            state
-                .metadata
-                .network_topology
-                .subnets
-                .iter()
-                .map(|(subnet_id, subnet_topology)| (*subnet_id, subnet_topology.subnet_type))
-                .collect(),
-        );
-
         // Keep executing till either the execution of a round does not actually
         // consume any additional instructions or the maximum allowed instructions
         // per round have been consumed.
@@ -416,8 +404,7 @@ impl SchedulerImpl {
                 current_round,
                 state.time(),
                 subnet_available_memory / self.config.scheduler_cores as i64,
-                Arc::clone(&state.metadata.network_topology.routing_table),
-                subnet_records.clone(),
+                Arc::new(state.metadata.network_topology.clone()),
                 heartbeat_handling,
                 &measurement_scope,
             );
@@ -519,8 +506,7 @@ impl SchedulerImpl {
         round_id: ExecutionRound,
         time: Time,
         subnet_available_memory: i64,
-        routing_table: Arc<RoutingTable>,
-        subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
+        network_topology: Arc<NetworkTopology>,
         heartbeat_handling: HeartbeatHandling,
         measurement_scope: &MeasurementScope,
     ) -> (
@@ -563,8 +549,7 @@ impl SchedulerImpl {
 
             // Start execution of the canisters on each thread.
             for (canisters, result) in execution_data_by_thread {
-                let routing_table = Arc::clone(&routing_table);
-                let subnet_records = Arc::clone(&subnet_records);
+                let network_topology = Arc::clone(&network_topology);
                 let metrics = Arc::clone(&self.metrics);
                 let logger = new_logger!(self.log; messaging.round => round_id.get());
                 let canister_execution_limits = canister_execution_limits.clone();
@@ -577,8 +562,7 @@ impl SchedulerImpl {
                         round_id,
                         time,
                         SubnetAvailableMemory::new(subnet_available_memory),
-                        routing_table,
-                        subnet_records,
+                        network_topology,
                         heartbeat_handling,
                         logger,
                     );
@@ -1191,8 +1175,7 @@ fn execute_canisters_on_thread(
     round_id: ExecutionRound,
     time: Time,
     subnet_available_memory: SubnetAvailableMemory,
-    routing_table: Arc<RoutingTable>,
-    subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
+    network_topology: Arc<NetworkTopology>,
     heartbeat_handling: HeartbeatHandling,
     logger: ReplicaLogger,
 ) -> ExecutionThreadResult {
@@ -1236,8 +1219,7 @@ fn execute_canisters_on_thread(
                     .execute_canister_heartbeat(
                         canister,
                         canister_execution_limits.instruction_limit_per_message,
-                        Arc::clone(&routing_table),
-                        Arc::clone(&subnet_records),
+                        Arc::clone(&network_topology),
                         time,
                         subnet_available_memory.clone(),
                     );
@@ -1304,8 +1286,7 @@ fn execute_canisters_on_thread(
                 canister_execution_limits.instruction_limit_per_message,
                 message,
                 time,
-                Arc::clone(&routing_table),
-                Arc::clone(&subnet_records),
+                Arc::clone(&network_topology),
                 subnet_available_memory.clone(),
             );
             let instructions_consumed = canister_execution_limits.instruction_limit_per_message

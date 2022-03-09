@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, convert::TryFrom, sync::Arc};
+use std::{convert::TryFrom, sync::Arc};
 
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
 use ic_cycles_account_manager::CyclesAccountManager;
@@ -9,7 +9,7 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{CallOrigin, Memory, SystemState};
+use ic_replicated_state::{CallOrigin, Memory, NetworkTopology, SubnetTopology, SystemState};
 use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType, SystemApiImpl};
 use ic_test_utilities::{
     mock_time,
@@ -38,8 +38,7 @@ pub fn execution_parameters() -> ExecutionParameters {
 pub struct ApiTypeBuilder {
     pub own_subnet_id: SubnetId,
     pub own_subnet_type: SubnetType,
-    pub routing_table: Arc<RoutingTable>,
-    pub subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
+    pub network_topology: Arc<NetworkTopology>,
 }
 
 // Note some methods of the builder might be unused in different test crates
@@ -52,14 +51,20 @@ impl ApiTypeBuilder {
         let routing_table = Arc::new(RoutingTable::try_from(btreemap! {
             CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => own_subnet_id,
         }).unwrap());
-        let subnet_records = Arc::new(btreemap! {
-            own_subnet_id => own_subnet_type,
+        let network_topology = Arc::new(NetworkTopology {
+            routing_table,
+            subnets: btreemap! {
+                own_subnet_id => SubnetTopology {
+                    subnet_type: own_subnet_type,
+                    ..SubnetTopology::default()
+                }
+            },
+            ..NetworkTopology::default()
         });
         Self {
             own_subnet_id,
             own_subnet_type,
-            routing_table,
-            subnet_records,
+            network_topology,
         }
     }
 
@@ -72,8 +77,7 @@ impl ApiTypeBuilder {
             CallContextId::from(1),
             self.own_subnet_id,
             self.own_subnet_type,
-            self.routing_table,
-            self.subnet_records,
+            self.network_topology,
         )
     }
 
@@ -83,8 +87,7 @@ impl ApiTypeBuilder {
             CallContextId::from(1),
             self.own_subnet_id,
             self.own_subnet_type,
-            self.routing_table,
-            self.subnet_records,
+            self.network_topology,
         )
     }
 
@@ -97,8 +100,7 @@ impl ApiTypeBuilder {
             false,
             self.own_subnet_id,
             self.own_subnet_type,
-            self.routing_table,
-            self.subnet_records,
+            self.network_topology,
         )
     }
 
@@ -111,8 +113,7 @@ impl ApiTypeBuilder {
             false,
             self.own_subnet_id,
             self.own_subnet_type,
-            self.routing_table,
-            self.subnet_records,
+            self.network_topology,
         )
     }
 }
