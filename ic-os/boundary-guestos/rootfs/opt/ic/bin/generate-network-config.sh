@@ -22,6 +22,8 @@ function read_variables() {
         case "$key" in
             "ipv6_address") ipv6_address="${value}" ;;
             "ipv6_gateway") ipv6_gateway="${value}" ;;
+            "ipv4_address") ipv4_address="${value}" ;;
+            "ipv4_gateway") ipv4_gateway="${value}" ;;
             "name_servers") name_servers="${value}" ;;
         esac
     done <"$1"
@@ -40,6 +42,7 @@ function generate_name_server_list() {
 #       Should be /run/systemd/network/ for production.
 function generate_config_files() {
     TARGET_DIR="$1"
+    # Handle ipv6 ...
     (
         cat <<EOF
 [Match]
@@ -69,6 +72,32 @@ EOF
         fi
         generate_name_server_list
     ) >"${TARGET_DIR}/10-enp1s0.network"
+
+    # Handle ipv4 ...
+    (
+        cat <<EOF
+[Match]
+Name=enp2s0
+
+EOF
+        if [ "${ipv4_address}" != "" ]; then
+            # If we have an IPv6 address given, just configure
+            # it.
+            cat <<EOF
+[Network]
+Address=$ipv4_address
+Gateway=$ipv4_gateway
+EOF
+
+        else
+            cat <<EOF
+[Network]
+DHCP=ipv4
+LinkLocalAddressing=no
+EOF
+        fi
+        generate_name_server_list
+    ) >"${TARGET_DIR}/enp2s0.network"
 }
 
 if [ -e "$1" ]; then

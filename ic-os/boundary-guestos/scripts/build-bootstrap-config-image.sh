@@ -27,6 +27,11 @@ options may be specified:
   --ipv6_gateway a:b::c
     Default IPv6 gateway.
 
+  --ipv4_address a.b.c.d
+
+  --ipv4_gateway a.b.c.d
+    Default IPv4 gateway.
+
   --hostname name
     Name to assign to the host. Will be used in logging.
 
@@ -71,6 +76,7 @@ function build_ic_bootstrap_tar() {
     shift
 
     local IPV6_ADDRESS IPV6_GATEWAY NAME_SERVERS HOSTNAME
+    local IPV4_ADDRESS IPV4_GATEWAY NAME_SERVERS HOSTNAME
     local NNS_URL NNS_PUBLIC_KEY
     local JOURNALBEAT_HOSTS JOURNALBEAT_TAGS
     local ACCOUNTS_SSH_AUTHORIZED_KEYS
@@ -84,6 +90,12 @@ function build_ic_bootstrap_tar() {
                 ;;
             --ipv6_gateway)
                 IPV6_GATEWAY="$2"
+                ;;
+            --ipv4_address)
+                IPV4_ADDRESS="$2"
+                ;;
+            --ipv4_gateway)
+                IPV4_GATEWAY="$2"
                 ;;
             --hostname)
                 HOSTNAME="$2"
@@ -126,6 +138,8 @@ function build_ic_bootstrap_tar() {
     cat >"${BOOTSTRAP_TMPDIR}/network.conf" <<EOF
 ipv6_address=$IPV6_ADDRESS
 ipv6_gateway=$IPV6_GATEWAY
+ipv4_address=$IPV4_ADDRESS
+ipv4_gateway=$IPV4_GATEWAY
 name_servers=$NAME_SERVERS
 hostname=$HOSTNAME
 EOF
