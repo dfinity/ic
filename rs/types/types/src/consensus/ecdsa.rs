@@ -19,7 +19,7 @@ use crate::crypto::{
     canister_threshold_sig::{ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigShare},
     CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator,
 };
-use crate::{Height, NodeId};
+use crate::{Height, NodeId, RegistryVersion};
 
 /// For completed signature requests, we differentiate between those
 /// that have already been reported and those that have not. This is
@@ -30,11 +30,11 @@ pub enum CompletedSignature {
     Unreported(ThresholdEcdsaCombinedSignature),
 }
 
-/// The payload information necessary for ECDSA threshold signatures, that is
-/// published on every consensus round. It represents the current state of
-/// the protocol since the summary block.
+/// Common data that is carried in both `EcdsaSummaryPayload` and `EcdsaDataPayload`.
+/// published on every consensus round. It represents the current state of the
+/// protocol since the summary block.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct EcdsaDataPayload {
+pub struct EcdsaPayload {
     /// Collection of completed signatures.
     pub signature_agreements: BTreeMap<RequestId, CompletedSignature>,
 
@@ -50,11 +50,19 @@ pub struct EcdsaDataPayload {
     /// Next TranscriptId that is incremented after creating a new transcript.
     pub next_unused_transcript_id: IDkgTranscriptId,
 
-    /// Progress of creating the next ECDSA key transcript.
-    pub next_key_transcript_creation: Option<KeyTranscriptCreation>,
-
     /// Transcripts created at this height.
     pub idkg_transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
+}
+
+/// The payload information necessary for ECDSA threshold signatures, that is
+/// published on every consensus round. It represents the current state of
+/// the protocol since the summary block.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct EcdsaDataPayload {
+    /// Ecdsa Payload data
+    pub ecdsa_payload: EcdsaPayload,
+    /// Progress of creating the next ECDSA key transcript.
+    pub next_key_transcript_creation: KeyTranscriptCreation,
 }
 
 /// The creation of an ecdsa key transcript goes through one of the two paths below:
@@ -73,6 +81,7 @@ pub struct EcdsaDataPayload {
 /// the next 'EcdsaSummaryPayload'.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum KeyTranscriptCreation {
+    Begin,
     // Configuration to create initial random transcript.
     RandomTranscriptParams(RandomTranscriptParams),
     // Configuration to create initial key transcript by resharing the random transcript.
@@ -86,11 +95,27 @@ pub enum KeyTranscriptCreation {
 impl KeyTranscriptCreation {
     pub fn get_refs(&self) -> Vec<TranscriptRef> {
         match self {
+            Self::Begin => vec![],
             Self::RandomTranscriptParams(params) => params.as_ref().get_refs(),
             Self::ReshareOfMaskedParams(params) => params.as_ref().get_refs(),
             Self::ReshareOfUnmaskedParams(params) => params.as_ref().get_refs(),
             Self::Created(unmasked) => vec![*unmasked.as_ref()],
         }
+    }
+}
+
+impl EcdsaPayload {
+    /// Return an iterator of all transcript configs that have no matching
+    /// results yet.
+    pub fn iter_transcript_configs_in_creation(
+        &self,
+    ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
+        Box::new(
+            self.quadruples_in_creation
+                .iter()
+                .map(|(_, quadruple)| quadruple.iter_transcript_configs_in_creation())
+                .flatten(),
+        )
     }
 }
 
@@ -100,22 +125,37 @@ impl EcdsaDataPayload {
     pub fn iter_transcript_configs_in_creation(
         &self,
     ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
-        let iter =
-            self.next_key_transcript_creation
-                .iter()
-                .filter_map(|transcript| match transcript {
-                    KeyTranscriptCreation::RandomTranscriptParams(x) => Some(x.as_ref()),
-                    KeyTranscriptCreation::ReshareOfMaskedParams(x) => Some(x.as_ref()),
-                    KeyTranscriptCreation::ReshareOfUnmaskedParams(x) => Some(x.as_ref()),
-                    KeyTranscriptCreation::Created(_) => None,
-                });
+        let iter = match &self.next_key_transcript_creation {
+            KeyTranscriptCreation::RandomTranscriptParams(x) => Some(x.as_ref()),
+            KeyTranscriptCreation::ReshareOfMaskedParams(x) => Some(x.as_ref()),
+            KeyTranscriptCreation::ReshareOfUnmaskedParams(x) => Some(x.as_ref()),
+            KeyTranscriptCreation::Begin => None,
+            KeyTranscriptCreation::Created(_) => None,
+        }
+        .into_iter();
         Box::new(
-            self.quadruples_in_creation
-                .iter()
-                .map(|(_, quadruple)| quadruple.iter_transcript_configs_in_creation())
-                .flatten()
+            self.ecdsa_payload
+                .iter_transcript_configs_in_creation()
                 .chain(iter),
         )
+    }
+
+    /// Return active transcript references in the data payload.
+    pub fn active_transcripts(&self) -> Vec<TranscriptRef> {
+        let ecdsa_payload = &self.ecdsa_payload;
+        let mut active_refs = Vec::new();
+        for obj in ecdsa_payload.ongoing_signatures.values() {
+            active_refs.append(&mut obj.get_refs());
+        }
+        for obj in ecdsa_payload.available_quadruples.values() {
+            active_refs.append(&mut obj.get_refs());
+        }
+        for obj in ecdsa_payload.quadruples_in_creation.values() {
+            active_refs.append(&mut obj.get_refs());
+        }
+        active_refs.append(&mut self.next_key_transcript_creation.get_refs());
+
+        active_refs
     }
 }
 
@@ -123,23 +163,43 @@ impl EcdsaDataPayload {
 /// published on summary blocks.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct EcdsaSummaryPayload {
-    /// Carry over completed signatures from the previous data payload.
-    pub signature_agreements: BTreeMap<RequestId, CompletedSignature>,
-
-    /// The `RequestIds` for which we are currently generating signatures.
-    pub ongoing_signatures: BTreeMap<RequestId, ThresholdEcdsaSigInputsRef>,
-
+    /// Ecdsa payload data.
+    pub ecdsa_payload: EcdsaPayload,
     /// The ECDSA key transcript used for the corresponding interval.
     pub current_key_transcript: UnmaskedTranscript,
+}
 
-    /// ECDSA transcript quadruples that we can use to create ECDSA signatures.
-    pub available_quadruples: BTreeMap<QuadrupleId, PreSignatureQuadrupleRef>,
-
-    /// Next TranscriptId that is incremented after creating a new transcript.
-    pub next_unused_transcript_id: IDkgTranscriptId,
-
-    /// Full copy of the transcripts referred to by the parent payload block.
-    pub idkg_transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
+impl EcdsaSummaryPayload {
+    /// Return the oldest registry version required to keep nodes in the subnet
+    /// in order to finish signature signing. It is important for security purpose
+    /// to require ongoing signature requests to finish before we can let nodes
+    /// move off a subnet.
+    ///
+    /// Note that we do not consider available quadruples here because it would
+    /// prevent nodes from leaving when the quadruples are not consumed.
+    pub(crate) fn get_oldest_registry_version_in_use(&self) -> Option<RegistryVersion> {
+        let idkg_transcripts = &self.ecdsa_payload.idkg_transcripts;
+        let key_transcript_id = self.current_key_transcript.as_ref().transcript_id;
+        let registry_version = idkg_transcripts
+            .get(&key_transcript_id)
+            .map(|transcript| transcript.registry_version);
+        self.ecdsa_payload.ongoing_signatures.iter().fold(
+            registry_version,
+            |mut registry_version, (_, sig_input_ref)| {
+                for r in sig_input_ref.get_refs() {
+                    let transcript_version = idkg_transcripts
+                        .get(&r.transcript_id)
+                        .map(|transcript| transcript.registry_version);
+                    if registry_version.is_none() {
+                        registry_version = transcript_version;
+                    } else {
+                        registry_version = registry_version.min(transcript_version)
+                    }
+                }
+                registry_version
+            },
+        )
+    }
 }
 
 #[derive(

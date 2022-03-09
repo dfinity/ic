@@ -33,7 +33,17 @@ impl SummaryPayload {
     /// between the one returned from this function and the current
     /// `RegistryVersion`.
     pub fn get_oldest_registry_version_in_use(&self) -> RegistryVersion {
-        self.dkg.get_oldest_registry_version_in_use()
+        let dkg_version = self.dkg.get_oldest_registry_version_in_use();
+        if let Some(ecdsa_version) = self
+            .ecdsa
+            .as_ref()
+            .map(|payload| payload.get_oldest_registry_version_in_use())
+            .flatten()
+        {
+            dkg_version.min(ecdsa_version)
+        } else {
+            dkg_version
+        }
     }
 }
 

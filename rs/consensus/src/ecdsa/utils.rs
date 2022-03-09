@@ -54,31 +54,15 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
     ) -> Box<dyn Iterator<Item = (&RequestId, &ThresholdEcdsaSigInputsRef)> + '_> {
         self.tip_ecdsa_payload
             .as_ref()
-            .map_or(Box::new(std::iter::empty()), |ecdsa_payload| {
-                Box::new(ecdsa_payload.ongoing_signatures.iter())
+            .map_or(Box::new(std::iter::empty()), |payload| {
+                Box::new(payload.ecdsa_payload.ongoing_signatures.iter())
             })
     }
 
     fn active_transcripts(&self) -> Vec<TranscriptRef> {
         self.tip_ecdsa_payload
             .as_ref()
-            .map_or(Vec::new(), |ecdsa_payload| {
-                let mut active_refs = Vec::new();
-                for obj in ecdsa_payload.ongoing_signatures.values() {
-                    active_refs.append(&mut obj.get_refs());
-                }
-                for obj in ecdsa_payload.available_quadruples.values() {
-                    active_refs.append(&mut obj.get_refs());
-                }
-                for obj in ecdsa_payload.quadruples_in_creation.values() {
-                    active_refs.append(&mut obj.get_refs());
-                }
-                if let Some(key) = &ecdsa_payload.next_key_transcript_creation {
-                    active_refs.append(&mut key.get_refs());
-                }
-
-                active_refs
-            })
+            .map_or(Vec::new(), |payload| payload.active_transcripts())
     }
 
     fn transcript(
@@ -97,12 +81,14 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
                 .into_summary()
                 .ecdsa
                 .ok_or(TranscriptLookupError::NoEcdsaSummary(*transcript_ref))?
+                .ecdsa_payload
                 .idkg_transcripts
         } else {
             block_payload
                 .into_data()
                 .ecdsa
                 .ok_or(TranscriptLookupError::NoEcdsaPayload(*transcript_ref))?
+                .ecdsa_payload
                 .idkg_transcripts
         };
 
