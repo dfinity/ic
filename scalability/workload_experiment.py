@@ -64,7 +64,7 @@ class WorkloadExperiment(experiment.Experiment):
         workload_generator_machines = (
             FLAGS.workload_generator_machines.split(",")
             if len(FLAGS.workload_generator_machines) > 0
-            else self.get_hostnames(self.wg_testnet, FLAGS.wg_subnet)
+            else self.get_hostnames(FLAGS.wg_subnet)
         )
         if self.num_workload_gen > len(workload_generator_machines):
             raise Exception(
@@ -154,7 +154,7 @@ class WorkloadExperiment(experiment.Experiment):
         if len(FLAGS.targets) > 0:
             return FLAGS.targets.split(",")
 
-        node_ips = self.get_hostnames(self.testnet, FLAGS.subnet)
+        node_ips = self.get_hostnames(FLAGS.subnet)
 
         if self.request_type == "call" or FLAGS.target_all:
             return node_ips
