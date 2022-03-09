@@ -53,9 +53,9 @@ pub enum AddHeaderError {
 
 #[derive(Debug, Error)]
 pub enum AddBlockError {
-    /// Used to indicate when the block validation has failed in `add_block`.
-    #[error("Received an invalid block: {0}")]
-    InvalidBlock(BlockHash),
+    /// Used to indicate that the merkle root of the block is invalid.
+    #[error("Received a block with an invalid merkle root: {0}")]
+    InvalidMerkleRoot(BlockHash),
     // Used to indicate when the header causes an error while adding a block to the state.
     #[error("Block's header caused an error: {0}")]
     Header(AddHeaderError),
@@ -83,7 +83,7 @@ pub struct BlockchainState {
     /// This field contains the known tips of the header cache.
     tips: Vec<Tip>,
 
-    ///
+    /// Used to determine how validation should be handled with `validate_header`.
     network: Network,
 }
 
@@ -228,22 +228,18 @@ impl BlockchainState {
         Ok(AddHeaderResult::HeaderAdded(cached_header))
     }
 
-    /// This method verifies if the input block is valid.
-    /// TODO: ER-1546: Validate incoming blocks
-    fn is_block_valid(&self, block: &Block) -> bool {
-        block.check_merkle_root()
-    }
-
     /// This method adds a new block to the `block_cache`
     pub fn add_block(&mut self, block: Block) -> Result<BlockHeight, AddBlockError> {
-        // If the block's header is not added before, then add the header into the `header_cache` first.
         let block_hash = block.block_hash();
+
+        if !block.check_merkle_root() {
+            return Err(AddBlockError::InvalidMerkleRoot(block_hash));
+        }
+
+        // If the block's header is not added before, then add the header into the `header_cache` first.
         let result = self
             .add_header(block.header)
             .map_err(AddBlockError::Header)?;
-        if !self.is_block_valid(&block) {
-            return Err(AddBlockError::InvalidBlock(block_hash));
-        }
         self.block_cache.insert(block_hash, block);
         Ok(match result {
             AddHeaderResult::HeaderAdded(cached) => cached.height,
@@ -347,6 +343,8 @@ impl HeaderStore for BlockchainState {
 
 #[cfg(test)]
 mod test {
+    use bitcoin::TxMerkleNode;
+
     use super::*;
     use crate::{
         common::test_common::{block_1, block_2, generate_headers, TestState},
@@ -530,19 +528,29 @@ mod test {
     #[test]
     fn test_adding_blocks_to_the_cache() {
         let block_1 = block_1();
-        let block_2 = block_2();
+        let mut block_2 = block_2();
 
         let config = ConfigBuilder::new().build();
         let mut state = BlockchainState::new(&config);
 
+        // Attempt to add block 2 to the cache before block 1's header has been added.
         let block_2_hash = block_2.header.block_hash();
-        let result = state.add_block(block_2);
+        let result = state.add_block(block_2.clone());
         assert!(
             matches!(result, Err(AddBlockError::Header(AddHeaderError::InvalidHeader(stop_hash, err))) if stop_hash == block_2_hash && matches!(err, ValidateHeaderError::PrevHeaderNotFound)),
         );
 
         let result = state.add_block(block_1);
         assert!(matches!(result, Ok(height) if height == 1));
+
+        // Make a block 2's merkle root invalid and try to add the block to the cache.
+        block_2.header.merkle_root = TxMerkleNode::default();
+        // Block 2's hash will now be changed because of the merkle root change.
+        let block_2_hash = block_2.block_hash();
+        let result = state.add_block(block_2);
+        assert!(
+            matches!(result, Err(AddBlockError::InvalidMerkleRoot(stop_hash)) if stop_hash == block_2_hash),
+        );
     }
 
     /// Tests the functionality of `BlockchainState::prune_old_blocks(...)` to ensure
