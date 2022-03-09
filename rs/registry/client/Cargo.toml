@@ -7,7 +7,6 @@ edition = "2018"
 anyhow = "1.0.31"
 ic-config = { path = "../../config" }
 ic-interfaces = { path = "../../interfaces" }
-ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-common = { path = "../common" }

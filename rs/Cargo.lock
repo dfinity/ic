@@ -270,12 +270,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "15af2628f6890fe2609a3b91bef4c83450512802e59489f9c1cb1fa5df064a61"
 
 [[package]]
-name = "anymap"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33954243bd79057c2de7338850b85983a44588021f8a5fee574a8888c6de4344"
-
-[[package]]
 name = "approx"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3009,12 +3003,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "histogram"
-version = "0.6.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12cb882ccb290b8646e554b157ab0b71e64e8d5bef775cd66b6531e52d302669"
-
-[[package]]
 name = "hmac"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3381,7 +3369,6 @@ name = "ic-async-utils"
 version = "0.8.0"
 dependencies = [
  "async-stream",
- "crossbeam-channel 0.5.1",
  "futures",
  "prometheus",
  "slog",
@@ -3493,7 +3480,6 @@ version = "0.1.0"
 dependencies = [
  "bitcoin",
  "csv",
- "thiserror",
 ]
 
 [[package]]
@@ -3601,7 +3587,6 @@ version = "0.8.0"
 dependencies = [
  "bincode",
  "bytes",
- "ic-embedders",
  "ic-interfaces",
  "ic-registry-subnet-type",
  "ic-replicated-state",
@@ -3947,7 +3932,6 @@ version = "0.8.0"
 dependencies = [
  "hex",
  "ic-crypto-internal-test-vectors",
- "ic-crypto-secrets-containers",
  "ic-types 0.8.0",
  "simple_asn1 0.5.4",
 ]
@@ -4964,7 +4948,6 @@ dependencies = [
  "ic-crypto-tree-hash",
  "ic-protobuf",
  "ic-registry-provisional-whitelist",
- "ic-registry-routing-table",
  "ic-registry-subnet-type",
  "ic-registry-transport",
  "ic-sys",
@@ -5645,7 +5628,6 @@ dependencies = [
  "assert_matches",
  "ic-config",
  "ic-interfaces",
- "ic-logger",
  "ic-metrics",
  "ic-protobuf",
  "ic-registry-common",
@@ -5673,7 +5655,6 @@ version = "0.8.0"
 dependencies = [
  "bytes",
  "chrono",
- "futures",
  "hyper",
  "hyper-tls",
  "ic-canister-client",
@@ -5685,7 +5666,6 @@ dependencies = [
  "ic-interfaces",
  "ic-nns-constants",
  "ic-protobuf",
- "ic-registry-keys",
  "ic-registry-transport",
  "ic-types 0.8.0",
  "ic-utils 0.8.0",
@@ -5695,7 +5675,6 @@ dependencies = [
  "prost-build",
  "prost-types",
  "rand 0.7.3",
- "reqwest",
  "serde",
  "serde_cbor",
  "tempfile",
@@ -5763,8 +5742,6 @@ dependencies = [
  "candid",
  "ic-protobuf",
  "serde",
- "strum 0.23.0",
- "strum_macros 0.23.1",
 ]
 
 [[package]]
@@ -5845,7 +5822,6 @@ dependencies = [
 name = "ic-replica"
 version = "0.8.0"
 dependencies = [
- "anymap",
  "assert_cmd",
  "base64 0.11.0",
  "canister-test",
@@ -6543,10 +6519,8 @@ dependencies = [
  "byte-unit",
  "byteorder",
  "bytes",
- "clap 2.33.3",
  "crossbeam-channel 0.5.1",
  "futures",
- "histogram",
  "ic-config",
  "ic-crypto",
  "ic-crypto-tls-interfaces",
@@ -6560,16 +6534,11 @@ dependencies = [
  "ic-test-utilities",
  "ic-types 0.8.0",
  "lazy_static",
- "mockall 0.7.2",
  "nix 0.23.0",
- "notify",
  "openssl",
  "phantom_newtype",
  "prometheus",
- "proptest 0.9.6",
- "proptest-derive",
  "rand 0.7.3",
- "ratelimit",
  "serde",
  "slog",
  "slog-scope",
@@ -6577,7 +6546,33 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-openssl",
- "toml",
+]
+
+[[package]]
+name = "ic-transport-test-client"
+version = "0.8.0"
+dependencies = [
+ "async-trait",
+ "clap 2.33.3",
+ "crossbeam-channel 0.5.1",
+ "futures",
+ "ic-config",
+ "ic-crypto",
+ "ic-crypto-tls-interfaces",
+ "ic-interfaces",
+ "ic-logger",
+ "ic-metrics",
+ "ic-protobuf",
+ "ic-registry-client",
+ "ic-registry-common",
+ "ic-registry-keys",
+ "ic-transport",
+ "ic-types 0.8.0",
+ "notify",
+ "rand 0.7.3",
+ "slog",
+ "tokio",
+ "tokio-openssl",
 ]
 
 [[package]]
@@ -7594,7 +7589,6 @@ dependencies = [
  "ic-utils 0.8.0",
  "lazy_static",
  "libc",
- "mach",
  "nix 0.23.0",
  "slog",
  "slog-scope",
@@ -9346,12 +9340,6 @@ checksum = "278094e13a8eff59f106bf2a2040d966bd5cddb0c5b639e7447bbd9b1689c15c"
 dependencies = [
  "libc",
 ]
-
-[[package]]
-name = "ratelimit"
-version = "0.4.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c4777eb47471c2a42bee8b553b22b8e5c496f657dc6f8b8e29bd69662f31e7e"
 
 [[package]]
 name = "rawpointer"
