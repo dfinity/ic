@@ -7731,9 +7731,9 @@ dependencies = [
 
 [[package]]
 name = "miracl_core_bls12381"
-version = "4.1.0"
+version = "4.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09f7f7889f1a842b4c79a1a0bcca95c795f13b275ffbb1e48ff2af87b0d5f115"
+checksum = "eb5c13471499e00775be202c9007d365fdab9b1c65624c95b238b2f3037a2c1c"
 
 [[package]]
 name = "mockall"
