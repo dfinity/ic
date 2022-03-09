@@ -8,21 +8,21 @@ use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{CallContextAction, CanisterState};
+use ic_replicated_state::{CallContextAction, CanisterState, NetworkTopology, SubnetTopology};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder, mock_time, state::SystemStateBuilder,
     types::ids::subnet_test_id, types::ids::user_test_id, types::messages::IngressBuilder,
     with_test_replica_logger,
 };
 use ic_types::{
-    ingress::WasmResult, CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, SubnetId,
+    ingress::WasmResult, CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions,
 };
 use maplit::btreemap;
 use proptest::{
     prelude::*,
     test_runner::{TestRng, TestRunner},
 };
-use std::{collections::BTreeMap, convert::TryFrom, sync::Arc};
+use std::{convert::TryFrom, sync::Arc};
 
 fn execution_parameters() -> ExecutionParameters {
     ExecutionParameters {
@@ -38,8 +38,7 @@ fn execution_parameters() -> ExecutionParameters {
 struct HypervisorTest {
     hypervisor: Hypervisor,
     canister: CanisterState,
-    routing_table: Arc<RoutingTable>,
-    subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
+    network_topology: Arc<NetworkTopology>,
 }
 
 impl HypervisorTest {
@@ -49,8 +48,15 @@ impl HypervisorTest {
         let routing_table = Arc::new(RoutingTable::try_from(btreemap! {
             CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => subnet_id,
         }).unwrap());
-        let subnet_records = Arc::new(btreemap! {
-            subnet_id => subnet_type,
+        let network_topology = Arc::new(NetworkTopology {
+            routing_table,
+            subnets: btreemap!(
+                subnet_id => SubnetTopology {
+                    subnet_type,
+                    ..SubnetTopology::default()
+                }
+            ),
+            ..NetworkTopology::default()
         });
         let registry = MetricsRegistry::new();
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
@@ -84,8 +90,7 @@ impl HypervisorTest {
         Self {
             hypervisor,
             canister,
-            routing_table,
-            subnet_records,
+            network_topology,
         }
     }
 
@@ -100,8 +105,7 @@ impl HypervisorTest {
             self.canister.clone(),
             RequestOrIngress::Ingress(ingress),
             mock_time(),
-            Arc::clone(&self.routing_table),
-            self.subnet_records.clone(),
+            self.network_topology.clone(),
             execution_parameters(),
         );
         self.canister = canister;

@@ -27,7 +27,7 @@ use ic_types::{
         UserQuery,
     },
     user_error::{ErrorCode, RejectCode, UserError},
-    CanisterId, NumInstructions, SubnetId,
+    CanisterId, NumInstructions,
 };
 use query_allocations::QueryAllocationsUsed;
 use serde::Serialize;
@@ -89,7 +89,6 @@ fn label<T: Into<Label>>(t: T) -> Label {
 pub(crate) struct InternalHttpQueryHandler {
     log: ReplicaLogger,
     hypervisor: Arc<Hypervisor>,
-    own_subnet_id: SubnetId,
     own_subnet_type: SubnetType,
     query_allocations_used: Arc<RwLock<QueryAllocationsUsed>>,
     config: Config,
@@ -108,7 +107,6 @@ impl InternalHttpQueryHandler {
     pub(crate) fn new(
         log: ReplicaLogger,
         hypervisor: Arc<Hypervisor>,
-        own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
         config: Config,
         metrics_registry: &MetricsRegistry,
@@ -117,7 +115,6 @@ impl InternalHttpQueryHandler {
         Self {
             log,
             hypervisor,
-            own_subnet_id,
             own_subnet_type,
             query_allocations_used: Arc::new(RwLock::new(QueryAllocationsUsed::new())),
             config,
@@ -156,7 +153,6 @@ impl QueryHandler for InternalHttpQueryHandler {
         let mut context = query_context::QueryContext::new(
             &self.log,
             self.hypervisor.as_ref(),
-            self.own_subnet_id,
             self.own_subnet_type,
             state,
             data_certificate,

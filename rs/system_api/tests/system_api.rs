@@ -298,7 +298,7 @@ fn test_canister_stateful_query_support() {
             user_test_id(1).get(),
             CallContextId::from(1),
             builder.own_subnet_id,
-            builder.routing_table,
+            builder.network_topology,
             Some(vec![1]),
             NonReplicatedQueryKind::Stateful,
         ),

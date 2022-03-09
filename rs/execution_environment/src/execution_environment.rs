@@ -26,11 +26,10 @@ use ic_interfaces::{
 use ic_logger::{error, fatal, info, warn, ReplicaLogger};
 use ic_metrics::{MetricsRegistry, Timer};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::{SetupInitialDkgContext, SignWithEcdsaContext},
-    CallContextAction, CallOrigin, CanisterState, ReplicatedState,
+    CallContextAction, CallOrigin, CanisterState, NetworkTopology, ReplicatedState,
 };
 use ic_types::{
     canister_http::CanisterHttpRequestContext,
@@ -50,7 +49,7 @@ use ic_types::{
 use mockall::automock;
 use rand::RngCore;
 use std::str::FromStr;
-use std::{collections::BTreeMap, convert::Into, convert::TryFrom, sync::Arc};
+use std::{convert::Into, convert::TryFrom, sync::Arc};
 use strum::ParseError;
 
 /// ExecutionEnvironment is the component responsible for executing messages
@@ -90,8 +89,7 @@ pub trait ExecutionEnvironment: Sync + Send {
         instructions_limit: NumInstructions,
         msg: CanisterInputMessage,
         time: Time,
-        routing_table: Arc<RoutingTable>,
-        subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
+        network_topology: Arc<NetworkTopology>,
         subnet_available_memory: SubnetAvailableMemory,
     ) -> ExecuteMessageResult<CanisterState>;
 
@@ -101,8 +99,7 @@ pub trait ExecutionEnvironment: Sync + Send {
         &self,
         canister_state: CanisterState,
         instructions_limit: NumInstructions,
-        routing_table: Arc<RoutingTable>,
-        subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
+        network_topology: Arc<NetworkTopology>,
         time: Time,
         subnet_available_memory: SubnetAvailableMemory,
     ) -> (
@@ -741,8 +738,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
         instructions_limit: NumInstructions,
         msg: CanisterInputMessage,
         time: Time,
-        routing_table: Arc<RoutingTable>,
-        subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
+        network_topology: Arc<NetworkTopology>,
         subnet_available_memory: SubnetAvailableMemory,
     ) -> ExecuteMessageResult<CanisterState> {
         let (should_refund_remaining_cycles, mut res) = match msg {
@@ -774,8 +770,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                         request,
                         instructions_limit,
                         time,
-                        routing_table,
-                        subnet_records,
+                        network_topology,
                         subnet_available_memory,
                     ),
                 )
@@ -817,8 +812,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                         ingress,
                         instructions_limit,
                         time,
-                        routing_table,
-                        subnet_records,
+                        network_topology,
                         subnet_available_memory,
                     ),
                 )
@@ -829,8 +823,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                 response,
                 instructions_limit,
                 time,
-                routing_table,
-                subnet_records,
+                network_topology,
                 subnet_available_memory,
             ),
         };
@@ -851,8 +844,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
         &self,
         mut canister: CanisterState,
         instructions_limit: NumInstructions,
-        routing_table: Arc<RoutingTable>,
-        subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
+        network_topology: Arc<NetworkTopology>,
         time: Time,
         subnet_available_memory: SubnetAvailableMemory,
     ) -> (
@@ -891,14 +883,9 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
             ExecutionMode::Replicated,
         );
 
-        let (mut canister, num_instructions_left, result) =
-            self.hypervisor.execute_canister_heartbeat(
-                canister,
-                routing_table,
-                subnet_records,
-                time,
-                execution_parameters,
-            );
+        let (mut canister, num_instructions_left, result) = self
+            .hypervisor
+            .execute_canister_heartbeat(canister, network_topology, time, execution_parameters);
 
         // Clone the `cycles_account_manager` to avoid having to require 'static
         // lifetime bound on `self`.
@@ -1139,8 +1126,7 @@ impl ExecutionEnvironmentImpl {
         mut resp: Response,
         cycles: NumInstructions,
         time: Time,
-        routing_table: Arc<RoutingTable>,
-        subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
+        network_topology: Arc<NetworkTopology>,
         subnet_available_memory: SubnetAvailableMemory,
     ) -> (bool, ExecuteMessageResult<CanisterState>) {
         let call_context_manager = match canister.status() {
@@ -1293,8 +1279,7 @@ impl ExecutionEnvironmentImpl {
                 resp.response_payload,
                 refunded_cycles,
                 time,
-                routing_table,
-                subnet_records,
+                network_topology,
                 execution_parameters,
             );
 
@@ -1351,8 +1336,7 @@ impl ExecutionEnvironmentImpl {
         req: Request,
         cycles: NumInstructions,
         time: Time,
-        routing_table: Arc<RoutingTable>,
-        subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
+        network_topology: Arc<NetworkTopology>,
         subnet_available_memory: SubnetAvailableMemory,
     ) -> ExecuteMessageResult<CanisterState> {
         if CanisterStatusType::Running != canister.status() {
@@ -1378,8 +1362,7 @@ impl ExecutionEnvironmentImpl {
                 req,
                 cycles,
                 time,
-                routing_table,
-                subnet_records,
+                network_topology,
                 subnet_available_memory,
             )
         }
@@ -1418,8 +1401,7 @@ impl ExecutionEnvironmentImpl {
         req: Request,
         cycles: NumInstructions,
         time: Time,
-        routing_table: Arc<RoutingTable>,
-        subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
+        network_topology: Arc<NetworkTopology>,
         subnet_available_memory: SubnetAvailableMemory,
     ) -> ExecuteMessageResult<CanisterState> {
         let sender = req.sender;
@@ -1436,8 +1418,7 @@ impl ExecutionEnvironmentImpl {
             canister,
             RequestOrIngress::Request(req),
             time,
-            routing_table,
-            subnet_records,
+            network_topology,
             execution_parameters,
         );
 
@@ -1589,8 +1570,7 @@ impl ExecutionEnvironmentImpl {
         ingress: Ingress,
         num_instructions: NumInstructions,
         time: Time,
-        routing_table: Arc<RoutingTable>,
-        subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
+        network_topology: Arc<NetworkTopology>,
         subnet_available_memory: SubnetAvailableMemory,
     ) -> ExecuteMessageResult<CanisterState> {
         let canister_id = canister.canister_id();
@@ -1649,8 +1629,7 @@ impl ExecutionEnvironmentImpl {
                 ingress,
                 num_instructions,
                 time,
-                routing_table,
-                subnet_records,
+                network_topology,
                 subnet_available_memory,
             )
         }
@@ -1664,8 +1643,7 @@ impl ExecutionEnvironmentImpl {
         ingress: Ingress,
         cycles: NumInstructions,
         time: Time,
-        routing_table: Arc<RoutingTable>,
-        subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
+        network_topology: Arc<NetworkTopology>,
         subnet_available_memory: SubnetAvailableMemory,
     ) -> ExecuteMessageResult<CanisterState> {
         let message_id = ingress.message_id.clone();
@@ -1681,8 +1659,7 @@ impl ExecutionEnvironmentImpl {
             canister,
             RequestOrIngress::Ingress(ingress),
             time,
-            routing_table,
-            subnet_records,
+            network_topology,
             execution_parameters,
         );
 

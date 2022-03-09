@@ -16,7 +16,7 @@ use ic_replicated_state::{
     testing::CanisterQueuesTesting, CallContextAction, CallOrigin, CanisterState, Global,
     NumWasmPages, SystemState,
 };
-use ic_replicated_state::{ExportedFunctions, PageIndex};
+use ic_replicated_state::{ExportedFunctions, NetworkTopology, PageIndex, SubnetTopology};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::ApiType;
 use ic_test_utilities::types::messages::{IngressBuilder, RequestBuilder};
@@ -45,7 +45,7 @@ use proptest::prelude::*;
 use proptest::test_runner::{TestRng, TestRunner};
 use std::collections::BTreeSet;
 use std::path::PathBuf;
-use std::{collections::BTreeMap, convert::TryFrom, sync::Arc, time::Duration};
+use std::{convert::TryFrom, sync::Arc, time::Duration};
 
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
 const EMPTY_PAYLOAD: Vec<u8> = Vec::new();
@@ -92,12 +92,7 @@ fn test_caller() -> PrincipalId {
     user_test_id(1).get()
 }
 
-fn setup() -> (
-    SubnetId,
-    SubnetType,
-    Arc<RoutingTable>,
-    Arc<BTreeMap<SubnetId, SubnetType>>,
-) {
+fn setup() -> (SubnetId, SubnetType, Arc<NetworkTopology>) {
     let subnet_id = subnet_test_id(1);
     let subnet_id_2 = subnet_test_id(2);
     let subnet_type = SubnetType::Application;
@@ -108,16 +103,26 @@ fn setup() -> (
         })
         .unwrap(),
     );
-    let subnet_records = Arc::new(btreemap! {
-        subnet_id => subnet_type,
-        subnet_id_2 => SubnetType::VerifiedApplication,
+    let network_topology = Arc::new(NetworkTopology {
+        routing_table,
+        subnets: btreemap! {
+            subnet_id => SubnetTopology {
+                subnet_type,
+                ..SubnetTopology::default()
+            },
+            subnet_id_2 => SubnetTopology {
+                subnet_type: SubnetType::VerifiedApplication,
+                ..SubnetTopology::default()
+            }
+        },
+        ..NetworkTopology::default()
     });
-    (subnet_id, subnet_type, routing_table, subnet_records)
+    (subnet_id, subnet_type, network_topology)
 }
 
 fn test_api_type_for_update(caller: Option<PrincipalId>, payload: Vec<u8>) -> ApiType {
     let caller = caller.unwrap_or_else(|| user_test_id(24).get());
-    let (subnet_id, subnet_type, routing_table, subnet_records) = setup();
+    let (subnet_id, subnet_type, network_topology) = setup();
     ApiType::update(
         mock_time(),
         payload,
@@ -126,13 +131,12 @@ fn test_api_type_for_update(caller: Option<PrincipalId>, payload: Vec<u8>) -> Ap
         call_context_test_id(13),
         subnet_id,
         subnet_type,
-        routing_table,
-        subnet_records,
+        network_topology,
     )
 }
 
 fn test_api_type_for_reject(reject_context: RejectContext) -> ApiType {
-    let (subnet_id, subnet_type, routing_table, subnet_records) = setup();
+    let (subnet_id, subnet_type, network_topology) = setup();
     ApiType::reject_callback(
         mock_time(),
         reject_context,
@@ -141,8 +145,7 @@ fn test_api_type_for_reject(reject_context: RejectContext) -> ApiType {
         false,
         subnet_id,
         subnet_type,
-        routing_table,
-        subnet_records,
+        network_topology,
     )
 }
 
@@ -227,7 +230,7 @@ fn execute_update_with_cycles_memory_time_subnet_memory(
         .source(source)
         .build();
 
-    let (_, _, routing_table, subnet_records) = setup();
+    let (_, _, network_topology) = setup();
     let execution_parameters = execution_parameters_with_unique_subnet_available_memory(
         &canister,
         instructions_limit,
@@ -237,8 +240,7 @@ fn execute_update_with_cycles_memory_time_subnet_memory(
         canister,
         RequestOrIngress::Ingress(req),
         time,
-        routing_table,
-        subnet_records,
+        network_topology,
         execution_parameters,
     );
 
@@ -276,14 +278,13 @@ fn execute_update_with_cycles_memory_time(
         .receiver(receiver)
         .build();
 
-    let (_, _, routing_table, subnet_records) = setup();
+    let (_, _, network_topology) = setup();
     let execution_parameters = execution_parameters(&canister, instructions_limit);
     let (canister, num_instructions_left, action, heap_delta) = hypervisor.execute_update(
         canister,
         RequestOrIngress::Ingress(req),
         time,
-        routing_table,
-        subnet_records,
+        network_topology,
         execution_parameters,
     );
 
@@ -320,14 +321,13 @@ fn execute_update_for_request(
         .payment(payment)
         .build();
 
-    let (_, _, routing_table, subnet_records) = setup();
+    let (_, _, network_topology) = setup();
     let execution_parameters = execution_parameters(&canister, instructions_limit);
     let (canister, num_instructions_left, action, _) = hypervisor.execute_update(
         canister,
         RequestOrIngress::Request(req),
         time,
-        routing_table,
-        subnet_records,
+        network_topology,
         execution_parameters,
     );
 
@@ -3710,7 +3710,7 @@ fn test_non_existing_system_method(system_method: SystemMethod) {
 
         let canister = canister_from_exec_state(execution_state, canister_id);
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
-        let (_, _, routing_table, subnet_records) = setup();
+        let (_, _, network_topology) = setup();
         // Run the non-existing system method.
         let (_, cycles, res) = match system_method {
             SystemMethod::CanisterPostUpgrade => hypervisor.execute_canister_post_upgrade(
@@ -3740,8 +3740,7 @@ fn test_non_existing_system_method(system_method: SystemMethod) {
             SystemMethod::Empty => unimplemented!(),
             SystemMethod::CanisterHeartbeat => hypervisor.execute_canister_heartbeat(
                 canister,
-                routing_table,
-                subnet_records,
+                network_topology,
                 mock_time(),
                 execution_parameters,
             ),
@@ -4091,7 +4090,7 @@ fn changes_to_stable_memory_in_canister_post_upgrade_are_rolled_back_on_failure(
 fn cannot_execute_update_on_stopping_canister() {
     with_hypervisor(|hypervisor, _| {
         let canister = get_stopping_canister(canister_test_id(0));
-        let (_, _, routing_table, subnet_records) = setup();
+        let (_, _, network_topology) = setup();
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
         assert_eq!(
@@ -4100,8 +4099,7 @@ fn cannot_execute_update_on_stopping_canister() {
                     canister,
                     RequestOrIngress::Ingress(IngressBuilder::new().build()),
                     mock_time(),
-                    routing_table,
-                    subnet_records,
+                    network_topology,
                     execution_parameters,
                 )
                 .2,
@@ -4117,7 +4115,7 @@ fn cannot_execute_update_on_stopping_canister() {
 fn cannot_execute_update_on_stopped_canister() {
     with_hypervisor(|hypervisor, _| {
         let canister = get_stopped_canister(canister_test_id(0));
-        let (_, _, routing_table, subnet_records) = setup();
+        let (_, _, network_topology) = setup();
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
         assert_eq!(
@@ -4126,8 +4124,7 @@ fn cannot_execute_update_on_stopped_canister() {
                     canister,
                     RequestOrIngress::Ingress(IngressBuilder::new().build()),
                     mock_time(),
-                    routing_table,
-                    subnet_records,
+                    network_topology,
                     execution_parameters,
                 )
                 .2,
@@ -4191,7 +4188,7 @@ fn cannot_execute_query_on_stopped_canister() {
 fn cannot_execute_callback_on_stopped_canister() {
     with_hypervisor(|hypervisor, _| {
         let canister = get_stopped_canister(canister_test_id(0));
-        let (_, _, routing_table, subnet_records) = setup();
+        let (_, _, network_topology) = setup();
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
         assert_eq!(
@@ -4211,8 +4208,7 @@ fn cannot_execute_callback_on_stopped_canister() {
                     Payload::Data(EMPTY_PAYLOAD),
                     Cycles::from(0),
                     mock_time(),
-                    routing_table,
-                    subnet_records,
+                    network_topology,
                     execution_parameters,
                 )
                 .3,
@@ -4298,15 +4294,14 @@ fn canister_heartbeat() {
             .create_execution_state(wasm, tmp_path, canister_id)
             .unwrap();
         let canister = canister_from_exec_state(execution_state, canister_id);
-        let (_, _, routing_table, subnet_records) = setup();
+        let (_, _, network_topology) = setup();
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
         assert_eq!(
             hypervisor
                 .execute_canister_heartbeat(
                     canister,
-                    routing_table,
-                    subnet_records,
+                    network_topology,
                     mock_time(),
                     execution_parameters,
                 )
@@ -4335,13 +4330,12 @@ fn execute_canister_heartbeat_produces_heap_delta() {
             .create_execution_state(wasm, tmp_path, canister_id)
             .unwrap();
         let canister = canister_from_exec_state(execution_state, canister_id);
-        let (_, _, routing_table, subnet_records) = setup();
+        let (_, _, network_topology) = setup();
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
         let (_, _, result) = hypervisor.execute_canister_heartbeat(
             canister,
-            routing_table,
-            subnet_records,
+            network_topology,
             mock_time(),
             execution_parameters,
         );
@@ -4371,7 +4365,7 @@ fn execute_update_produces_heap_delta() {
             .create_execution_state(wasm, tmp_path, canister_id)
             .unwrap();
         let canister = canister_from_exec_state(execution_state, canister_id);
-        let (_, _, routing_table, subnet_records) = setup();
+        let (_, _, network_topology) = setup();
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
         let message = RequestOrIngress::Ingress(
@@ -4384,8 +4378,7 @@ fn execute_update_produces_heap_delta() {
             canister,
             message,
             mock_time(),
-            routing_table,
-            subnet_records,
+            network_topology,
             execution_parameters,
         );
         // the wasm module touched one memory location so that should produce one page
@@ -4562,8 +4555,7 @@ const WASM_PAGE_SIZE: i32 = 65536;
 struct MemoryAccessor {
     hypervisor: Hypervisor,
     canister: CanisterState,
-    routing_table: Arc<RoutingTable>,
-    subnet_records: Arc<BTreeMap<SubnetId, SubnetType>>,
+    network_topology: Arc<NetworkTopology>,
     execution_parameters: ExecutionParameters,
 }
 
@@ -4578,12 +4570,11 @@ impl MemoryAccessor {
 
         let canister = canister_from_exec_state(execution_state, canister_id);
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
-        let (_, _, routing_table, subnet_records) = setup();
+        let (_, _, network_topology) = setup();
         Self {
             hypervisor,
             canister,
-            routing_table,
-            subnet_records,
+            network_topology,
             execution_parameters,
         }
     }
@@ -4603,8 +4594,7 @@ impl MemoryAccessor {
             self.canister.clone(),
             RequestOrIngress::Ingress(req),
             mock_time(),
-            Arc::clone(&self.routing_table),
-            Arc::clone(&self.subnet_records),
+            Arc::clone(&self.network_topology),
             self.execution_parameters.clone(),
         );
         self.canister = result.0;
@@ -4626,8 +4616,7 @@ impl MemoryAccessor {
             self.canister.clone(),
             RequestOrIngress::Ingress(req),
             mock_time(),
-            Arc::clone(&self.routing_table),
-            Arc::clone(&self.subnet_records),
+            Arc::clone(&self.network_topology),
             self.execution_parameters.clone(),
         );
         self.canister = result.0;
@@ -4647,8 +4636,7 @@ impl MemoryAccessor {
             self.canister.clone(),
             RequestOrIngress::Ingress(req),
             mock_time(),
-            Arc::clone(&self.routing_table),
-            Arc::clone(&self.subnet_records),
+            Arc::clone(&self.network_topology),
             self.execution_parameters.clone(),
         );
         self.canister = result.0;
@@ -4669,8 +4657,7 @@ impl MemoryAccessor {
             self.canister.clone(),
             RequestOrIngress::Ingress(req),
             mock_time(),
-            Arc::clone(&self.routing_table),
-            Arc::clone(&self.subnet_records),
+            Arc::clone(&self.network_topology),
             self.execution_parameters.clone(),
         );
         self.canister = result.0;

@@ -2,15 +2,15 @@ use crate::{routing, sandbox_safe_system_state::SandboxSafeSystemState, valid_su
 use ic_ic00_types::IC_00;
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_logger::{info, ReplicaLogger};
-use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::NetworkTopology;
 use ic_types::{
     messages::{CallContextId, Request},
     methods::{Callback, WasmClosure},
     CanisterId, Cycles, NumBytes, PrincipalId, SubnetId,
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, convert::TryFrom};
+use std::convert::TryFrom;
 
 /// Represents an under construction `Request`.
 ///
@@ -147,8 +147,7 @@ impl RequestInPrep {
 /// Turns a `RequestInPrep` into a `Request`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn into_request(
-    routing_table: &RoutingTable,
-    subnet_records: &BTreeMap<SubnetId, SubnetType>,
+    network_topology: &NetworkTopology,
     RequestInPrep {
         sender,
         callee,
@@ -171,7 +170,7 @@ pub(crate) fn into_request(
         // This is a request to ic:00. Update `callee` to be the appropriate
         // subnet.
         let destination_subnet = routing::resolve_destination(
-            routing_table,
+            network_topology,
             method_name.as_str(),
             method_payload.as_slice(),
             own_subnet_id,
@@ -192,15 +191,16 @@ pub(crate) fn into_request(
     } else {
         let destination_canister =
             CanisterId::new(callee).map_err(HypervisorError::InvalidCanisterId)?;
-        let destination_subnet = routing_table
+        let destination_subnet = network_topology
+            .routing_table
             .route(destination_canister.get())
             .unwrap_or(own_subnet_id);
         (destination_canister, destination_subnet)
     };
 
-    let destination_subnet_type = match subnet_records.get(&destination_subnet) {
+    let destination_subnet_type = match network_topology.subnets.get(&destination_subnet) {
         None => own_subnet_type,
-        Some(subnet_type) => *subnet_type,
+        Some(subnet_topology) => subnet_topology.subnet_type,
     };
 
     // are on, apply the desired constraints.

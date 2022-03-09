@@ -108,9 +108,8 @@ mod tests {
     use ic_interfaces::execution_environment::{
         ExecutionMode, ExecutionParameters, SubnetAvailableMemory,
     };
-    use ic_registry_routing_table::RoutingTable;
     use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{Global, NumWasmPages, PageIndex, PageMap};
+    use ic_replicated_state::{Global, NetworkTopology, NumWasmPages, PageIndex, PageMap};
     use ic_system_api::{
         sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState},
         ApiType,
@@ -191,8 +190,7 @@ mod tests {
                 CallContextId::from(0),
                 SubnetId::from(PrincipalId::new_subnet_test_id(0)),
                 SubnetType::Application,
-                Arc::new(RoutingTable::new()),
-                Arc::new(BTreeMap::new()),
+                Arc::new(NetworkTopology::default()),
             ),
             globals,
             canister_current_memory_usage: NumBytes::from(0),

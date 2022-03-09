@@ -26,6 +26,7 @@ use ic_types::{
     xnet::{StreamHeader, StreamIndex, StreamIndexedQueue, StreamSlice},
     CountBytes, CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, SubnetId,
 };
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::{From, TryFrom, TryInto},
@@ -118,9 +119,15 @@ pub struct SystemMetadata {
     pub time_of_last_allocation_charge: Time,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// Full description of the IC network toplogy.
+///
+/// Contains [`Arc`] references, so it is only safe to serialize for read-only
+/// use.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NetworkTopology {
     pub subnets: BTreeMap<SubnetId, SubnetTopology>,
+    #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
+    #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
     pub routing_table: Arc<RoutingTable>,
     pub nns_subnet_id: SubnetId,
 }
@@ -208,7 +215,7 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SubnetTopology {
     /// The public key of the subnet (a DER-encoded BLS key, see
     /// https://sdk.dfinity.org/docs/interface-spec/index.html#certification)
@@ -265,7 +272,7 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NodeTopology {
     pub ip_address: String,
     pub http_port: u16,
