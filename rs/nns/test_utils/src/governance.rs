@@ -17,10 +17,13 @@ use ic_nervous_system_root::{
 };
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::{ids::TEST_NEURON_1_OWNER_KEYPAIR, ROOT_CANISTER_ID};
+use ic_nns_governance::pb::v1::add_or_remove_node_provider::Change;
+use ic_nns_governance::pb::v1::proposal::Action;
 use ic_nns_governance::pb::v1::{
     manage_neuron::{Command, NeuronIdOrSubaccount},
     manage_neuron_response::Command as CommandResponse,
-    proposal, ExecuteNnsFunction, GovernanceError, ManageNeuron, ManageNeuronResponse, NnsFunction,
+    proposal, AddOrRemoveNodeProvider, ExecuteNnsFunction, GovernanceError,
+    ListNodeProvidersResponse, ManageNeuron, ManageNeuronResponse, NnsFunction, NodeProvider,
     Proposal, ProposalInfo, ProposalStatus,
 };
 
@@ -240,6 +243,56 @@ pub async fn execute_eligible_proposals(governance_canister: &Canister<'_>) {
         .update_("execute_eligible_proposals", candid, ())
         .await
         .unwrap()
+}
+
+// Wrapper around list_node_providers query to governance canister
+pub async fn list_node_providers(governance_canister: &Canister<'_>) -> ListNodeProvidersResponse {
+    governance_canister
+        .query_("list_node_providers", candid_one, ())
+        .await
+        .expect("Response was expected from list_node_providers query to governance canister.")
+}
+
+/// Submit and execute a proposal to add the given node provider
+pub async fn add_node_provider(nns_canisters: &NnsCanisters<'_>, np: NodeProvider) {
+    let result: ManageNeuronResponse = nns_canisters
+        .governance
+        .update_from_sender(
+            "manage_neuron",
+            candid_one,
+            ManageNeuron {
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
+                    ic_nns_common::pb::v1::NeuronId {
+                        id: TEST_NEURON_1_ID,
+                    },
+                )),
+                id: None,
+                command: Some(Command::MakeProposal(Box::new(Proposal {
+                    title: Some("Add a Node Provider".to_string()),
+                    summary: "".to_string(),
+                    url: "".to_string(),
+                    action: Some(Action::AddOrRemoveNodeProvider(AddOrRemoveNodeProvider {
+                        change: Some(Change::ToAdd(np)),
+                    })),
+                }))),
+            },
+            &Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
+        )
+        .await
+        .expect("Error calling the manage_neuron api.");
+
+    let pid = match result.expect("Error making proposal").command.unwrap() {
+        CommandResponse::MakeProposal(resp) => resp.proposal_id.unwrap(),
+        _ => panic!("Invalid response"),
+    };
+
+    // Wait for the proposal to be accepted and executed.
+    assert_eq!(
+        wait_for_final_state(&nns_canisters.governance, ProposalId::from(pid))
+            .await
+            .status(),
+        ProposalStatus::Executed
+    );
 }
 
 /// Polls on the state of the proposal until a final state is reached and

@@ -5,14 +5,13 @@ use ic_nns_constants::ids::{
     TEST_USER4_PRINCIPAL, TEST_USER5_PRINCIPAL, TEST_USER6_PRINCIPAL, TEST_USER7_PRINCIPAL,
 };
 use ic_nns_governance::pb::v1::{
-    add_or_remove_node_provider::Change,
     manage_neuron::{Command, NeuronIdOrSubaccount},
     manage_neuron_response::Command as CommandResponse,
     proposal::Action,
-    AddOrRemoveNodeProvider, GovernanceError, ManageNeuron, ManageNeuronResponse, NnsFunction,
-    NodeProvider, Proposal, ProposalStatus, RewardNodeProvider, RewardNodeProviders,
+    GovernanceError, ManageNeuron, ManageNeuronResponse, NnsFunction, NodeProvider, Proposal,
+    ProposalStatus, RewardNodeProvider, RewardNodeProviders,
 };
-use ic_nns_test_utils::governance::submit_external_update_proposal;
+use ic_nns_test_utils::governance::{add_node_provider, submit_external_update_proposal};
 use ic_nns_test_utils::{
     governance::{get_pending_proposals, wait_for_final_state},
     ids::TEST_NEURON_1_ID,
@@ -460,48 +459,6 @@ async fn add_node_operator(
     // No proposals should be pending now.
     let pending_proposals = get_pending_proposals(&nns_canisters.governance).await;
     assert_eq!(pending_proposals, vec![]);
-}
-
-/// Submit and execute a proposal to add the given node provider
-pub async fn add_node_provider(nns_canisters: &NnsCanisters<'_>, np: NodeProvider) {
-    let result: ManageNeuronResponse = nns_canisters
-        .governance
-        .update_from_sender(
-            "manage_neuron",
-            candid_one,
-            ManageNeuron {
-                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
-                    ic_nns_common::pb::v1::NeuronId {
-                        id: TEST_NEURON_1_ID,
-                    },
-                )),
-                id: None,
-                command: Some(Command::MakeProposal(Box::new(Proposal {
-                    title: Some("Add a Node Provider".to_string()),
-                    summary: "".to_string(),
-                    url: "".to_string(),
-                    action: Some(Action::AddOrRemoveNodeProvider(AddOrRemoveNodeProvider {
-                        change: Some(Change::ToAdd(np)),
-                    })),
-                }))),
-            },
-            &Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
-        )
-        .await
-        .expect("Error calling the manage_neuron api.");
-
-    let pid = match result.expect("Error making proposal").command.unwrap() {
-        CommandResponse::MakeProposal(resp) => resp.proposal_id.unwrap(),
-        _ => panic!("Invalid response"),
-    };
-
-    // Wait for the proposal to be accepted and executed.
-    assert_eq!(
-        wait_for_final_state(&nns_canisters.governance, ProposalId::from(pid))
-            .await
-            .status(),
-        ProposalStatus::Executed
-    );
 }
 
 /// Submit and execute a proposal to set the given conversion rate

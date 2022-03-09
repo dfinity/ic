@@ -606,6 +606,10 @@ fn main() {
         "#[derive(candid::CandidType, candid::Deserialize)]",
     );
     config.type_attribute(
+        "ic_nns_governance.pb.v1.ListNodeProvidersResponse",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
         "ic_nns_governance.pb.v1.Governance",
         [
             "#[derive(candid::CandidType, candid::Deserialize)]",
