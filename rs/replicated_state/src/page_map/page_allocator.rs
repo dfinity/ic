@@ -11,25 +11,14 @@ mod page_bytes;
 pub use heap::{HeapBasedPage, HeapBasedPageAllocator};
 
 mod heap;
-// MmapBasedPageAllocator currenly uses memfd_create that is
-// available only on linux.
-#[cfg(target_os = "linux")]
-pub mod mmap;
+mod mmap;
 
-#[cfg(target_os = "linux")]
 mod default_implementation {
     pub use super::mmap::{MmapBasedPage, MmapBasedPageAllocator};
     // Exported publicly for benchmarking.
     // TODO(EXC-883): Re-enable with sandboxing after fixing crashes.
     pub type DefaultPageImpl = MmapBasedPage;
     pub type DefaultPageAllocatorImpl = MmapBasedPageAllocator;
-}
-#[cfg(not(target_os = "linux"))]
-mod default_implementation {
-    use super::{HeapBasedPage, HeapBasedPageAllocator};
-    // Exported publicly for benchmarking.
-    pub type DefaultPageImpl = HeapBasedPage;
-    pub type DefaultPageAllocatorImpl = HeapBasedPageAllocator;
 }
 pub use default_implementation::*;
 
