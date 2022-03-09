@@ -6,8 +6,8 @@ use super::{
     xnet::CertifiedStreamSlice,
     CountBytes, Height, Randomness, RegistryVersion, SubnetId, Time,
 };
-use crate::bitcoin::BitcoinAdapterResponse;
 use crate::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
+use ic_btc_types_internal::BitcoinAdapterResponse;
 use ic_protobuf::messaging::xnet::v1 as messaging_pb;
 use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};

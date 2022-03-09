@@ -1,4 +1,8 @@
 use crate::BitcoinPayloadBuilder;
+use ic_btc_types_internal::{
+    BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
+    GetSuccessorsRequest, GetSuccessorsResponse,
+};
 use ic_interfaces::{
     bitcoin_adapter_client::RpcError, self_validating_payload::SelfValidatingPayloadBuilder,
 };
@@ -10,14 +14,7 @@ use ic_test_utilities::{
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
     state::ReplicatedStateBuilder, state_manager::MockStateManager, with_test_replica_logger,
 };
-use ic_types::{
-    batch::ValidationContext,
-    bitcoin::{
-        BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
-        GetSuccessorsRequest, GetSuccessorsResponse,
-    },
-    CountBytes, Height, NumBytes, RegistryVersion,
-};
+use ic_types::{batch::ValidationContext, Height, NumBytes, RegistryVersion};
 use std::{str::FromStr, sync::Arc};
 
 const CERTIFIED_HEIGHT: Height = Height::new(9);

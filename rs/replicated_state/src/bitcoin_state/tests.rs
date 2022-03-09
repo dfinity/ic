@@ -1,5 +1,5 @@
 use crate::{BitcoinState, BitcoinStateError};
-use ic_types::bitcoin::{
+use ic_btc_types_internal::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
     GetSuccessorsRequest, GetSuccessorsResponse, SendTransactionRequest, SendTransactionResponse,
 };

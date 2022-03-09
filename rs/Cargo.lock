@@ -3469,6 +3469,7 @@ dependencies = [
 name = "ic-btc-consensus"
 version = "0.1.0"
 dependencies = [
+ "ic-btc-types-internal",
  "ic-interfaces",
  "ic-logger",
  "ic-metrics",
@@ -3487,6 +3488,15 @@ name = "ic-btc-types"
 version = "0.1.0"
 dependencies = [
  "candid",
+ "serde",
+]
+
+[[package]]
+name = "ic-btc-types-internal"
+version = "0.1.0"
+dependencies = [
+ "bitcoin",
+ "ic-protobuf",
  "serde",
 ]
 
@@ -5990,6 +6000,7 @@ dependencies = [
  "cvt",
  "debug_stub_derive",
  "ic-base-types",
+ "ic-btc-types-internal",
  "ic-config",
  "ic-interfaces",
  "ic-logger",
@@ -6484,6 +6495,7 @@ dependencies = [
  "hex-literal 0.2.1",
  "ic-artifact-pool",
  "ic-base-types",
+ "ic-btc-types-internal",
  "ic-canister-client",
  "ic-config",
  "ic-consensus",
@@ -6607,7 +6619,6 @@ dependencies = [
  "base32",
  "base64 0.11.0",
  "bincode",
- "bitcoin",
  "byte-unit",
  "candid",
  "chrono",
@@ -6616,6 +6627,7 @@ dependencies = [
  "hex-literal 0.2.1",
  "http",
  "ic-base-types",
+ "ic-btc-types-internal",
  "ic-crypto-internal-types",
  "ic-crypto-sha",
  "ic-crypto-tree-hash",

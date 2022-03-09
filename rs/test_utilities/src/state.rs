@@ -7,6 +7,7 @@ use crate::{
     },
 };
 use ic_base_types::NumSeconds;
+use ic_btc_types_internal::BitcoinAdapterRequestWrapper;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -25,7 +26,6 @@ use ic_replicated_state::{
 use ic_types::messages::CallbackId;
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::{
-    bitcoin::BitcoinAdapterRequestWrapper,
     messages::{Ingress, Request, RequestOrResponse},
     xnet::{QueueId, StreamIndex, StreamIndexedQueue},
     CanisterId, CanisterStatusType, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation,

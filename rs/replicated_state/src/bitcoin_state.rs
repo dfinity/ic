@@ -1,9 +1,9 @@
+use ic_btc_types_internal::{
+    BitcoinAdapterRequest, BitcoinAdapterRequestWrapper, BitcoinAdapterResponse,
+};
 use ic_protobuf::{
     bitcoin::v1 as pb_bitcoin,
     proxy::{try_from_option_field, ProxyDecodeError},
-};
-use ic_types::bitcoin::{
-    BitcoinAdapterRequest, BitcoinAdapterRequestWrapper, BitcoinAdapterResponse,
 };
 use serde::{Deserialize, Serialize};
 use std::{

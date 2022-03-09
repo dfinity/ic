@@ -1,4 +1,3 @@
-use crate::CountBytes;
 use bitcoin::{hashes::Hash, Block, OutPoint, TxOut, Txid};
 use ic_protobuf::{
     bitcoin::v1,
@@ -148,8 +147,9 @@ pub struct BlockHeader {
     pub nonce: u32,
 }
 
-impl CountBytes for BlockHeader {
-    fn count_bytes(&self) -> usize {
+impl BlockHeader {
+    /// Returns the size of this `BlockHeader` in bytes.
+    pub fn count_bytes(&self) -> usize {
         std::mem::size_of::<i32>()
             + self.prev_blockhash.len()
             + self.merkle_root.len()
@@ -189,8 +189,9 @@ pub struct GetSuccessorsResponse {
     pub next: Vec<BlockHeader>,
 }
 
-impl CountBytes for GetSuccessorsResponse {
-    fn count_bytes(&self) -> usize {
+impl GetSuccessorsResponse {
+    /// Returns the size of this `GetSuccessorsResponse` in bytes.
+    pub fn count_bytes(&self) -> usize {
         self.blocks.iter().map(|x| x.get_size()).sum::<usize>()
             + self.next.iter().map(|x| x.count_bytes()).sum::<usize>()
     }
@@ -262,8 +263,9 @@ impl From<v1::SendTransactionResponse> for SendTransactionResponse {
     }
 }
 
-impl CountBytes for SendTransactionResponse {
-    fn count_bytes(&self) -> usize {
+impl SendTransactionResponse {
+    /// Returns the size of this `SendTransactionResponse` in bytes.
+    pub fn count_bytes(&self) -> usize {
         0
     }
 }
@@ -274,7 +276,8 @@ pub enum BitcoinAdapterResponseWrapper {
     SendTransactionResponse(SendTransactionResponse),
 }
 
-impl CountBytes for BitcoinAdapterResponseWrapper {
+impl BitcoinAdapterResponseWrapper {
+    /// Returns the size of this `BitcoinAdapterResponseWrapper` in bytes.
     fn count_bytes(&self) -> usize {
         match self {
             BitcoinAdapterResponseWrapper::GetSuccessorsResponse(r) => r.count_bytes(),
@@ -351,8 +354,9 @@ impl TryFrom<v1::BitcoinAdapterResponse> for BitcoinAdapterResponse {
     }
 }
 
-impl CountBytes for BitcoinAdapterResponse {
-    fn count_bytes(&self) -> usize {
+impl BitcoinAdapterResponse {
+    /// Returns the size of this `BitcoinAdapterResponse` in bytes.
+    pub fn count_bytes(&self) -> usize {
         self.response.count_bytes() + std::mem::size_of::<u64>()
     }
 }

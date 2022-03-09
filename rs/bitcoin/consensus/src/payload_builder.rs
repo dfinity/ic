@@ -1,4 +1,5 @@
 use crate::metrics::BitcoinPayloadBuilderMetrics;
+use ic_btc_types_internal::{BitcoinAdapterResponse, BitcoinAdapterResponseWrapper};
 use ic_interfaces::{
     bitcoin_adapter_client::{BitcoinAdapterClient, Options},
     self_validating_payload::{SelfValidatingPayloadBuilder, SelfValidatingPayloadValidationError},
@@ -10,8 +11,7 @@ use ic_registry_subnet_features::BitcoinFeature;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::{SelfValidatingPayload, ValidationContext},
-    bitcoin::{BitcoinAdapterResponse, BitcoinAdapterResponseWrapper},
-    CountBytes, Height, NumBytes,
+    Height, NumBytes,
 };
 use std::{convert::TryFrom, sync::Arc};
 use thiserror::Error;
