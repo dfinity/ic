@@ -6,7 +6,7 @@ edition = "2018"
 [dependencies]
 hex = "0.4.2"
 lazy_static = "1.4.0"
-miracl_core = { version = "4.1.0", package = "miracl_core_bls12381" }
+miracl_core = { version = "4.1.2", package = "miracl_core_bls12381" }
 rand_chacha = "0.2.2"
 zeroize = "1.1.1"
 ic-crypto-internal-bls12381-common ={path ="../bls12_381/common"}
