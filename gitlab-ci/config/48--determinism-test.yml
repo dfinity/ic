@@ -3,6 +3,7 @@ build-determinism-binaries:
     - .ubuntu-nix-docker
     - .rules-parent-pipeline
   stage: build-determinism-test
+  allow_failure: true
   needs:
     - cargo-build-release-linux-native
     - docker-build-ic-bin
@@ -41,6 +42,7 @@ build-determinism-canisters:
     - .ubuntu-nix-docker
     - .rules-parent-pipeline
   stage: build-determinism-test
+  allow_failure: true
   needs:
     - cargo-build-canisters
     - docker-build-ic-bin
