@@ -1066,6 +1066,25 @@ impl CanisterManager {
             }
             Err(err) => return (instructions_left, Err((canister_id, err).into())),
         }
+        if old_canister.system_state.queues().input_queues_stats()
+            != new_canister.system_state.queues().input_queues_stats()
+        {
+            error!(
+                self.log,
+                "Input queues changed after upgrade. Before: {:?}. After: {:?}",
+                old_canister.system_state.queues().input_queues_stats(),
+                new_canister.system_state.queues().input_queues_stats()
+            );
+            return (
+                instructions_left,
+                Err(CanisterManagerError::Hypervisor(
+                    new_canister.canister_id(),
+                    HypervisorError::ContractViolation(
+                        "Input queues changed after upgrade".to_string(),
+                    ),
+                )),
+            );
+        }
 
         (instructions_left, Ok((total_heap_delta, new_canister)))
     }

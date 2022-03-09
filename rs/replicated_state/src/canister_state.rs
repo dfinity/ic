@@ -268,6 +268,22 @@ impl CanisterState {
             )));
         }
 
+        let num_contexts = self
+            .system_state
+            .call_context_manager()
+            .map(|ccm| ccm.call_contexts().len())
+            .unwrap_or(0);
+        let num_responses = self.system_state.queues().input_queues_response_count();
+        let num_reservations = self.system_state.queues().count_input_queues_reservations();
+        if num_contexts != num_reservations + num_responses {
+            return Err(StateError::InvariantBroken(format!(
+                "Canister {}: Number of call contexts ({}) is different than the accumulated number of reservations and responses ({})",
+                self.canister_id(),
+                num_contexts,
+                num_reservations + num_responses
+            )));
+        }
+
         Ok(())
     }
 
