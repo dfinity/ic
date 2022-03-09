@@ -9,6 +9,7 @@ bincode = "1.2.1"
 ed25519-dalek = "1.0.1"
 hex-literal = "0.2.1"
 ic-base-types = { path = "../types/base_types" }
+ic-btc-types-internal = { path = "../bitcoin/types/internal" }
 ic-canister-client = { path = "../canister_client" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }

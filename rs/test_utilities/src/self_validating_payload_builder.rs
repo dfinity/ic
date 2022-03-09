@@ -1,9 +1,9 @@
+use ic_btc_types_internal::BitcoinAdapterResponse;
 use ic_interfaces::self_validating_payload::{
     SelfValidatingPayloadBuilder, SelfValidatingPayloadValidationError,
 };
 use ic_types::{
     batch::{SelfValidatingPayload, ValidationContext},
-    bitcoin::BitcoinAdapterResponse,
     NumBytes,
 };
 

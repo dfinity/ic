@@ -1,0 +1,9 @@
+[package]
+name = "ic-btc-types-internal"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+bitcoin = { version = "0.27.1", features = ["use-serde"]}
+ic-protobuf = { path = "../../../protobuf" }
+serde = "1.0.132"

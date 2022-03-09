@@ -6,6 +6,7 @@ edition = "2018"
 [dependencies]
 cvt = "0.1.1"
 debug_stub_derive = "0.3.0"
+ic-btc-types-internal = { path = "../bitcoin/types/internal" }
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
 ic-interfaces = { path = "../interfaces" }

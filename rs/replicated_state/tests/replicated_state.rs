@@ -1,4 +1,8 @@
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
+use ic_btc_types_internal::{
+    BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
+    GetSuccessorsRequest, GetSuccessorsResponse,
+};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::replicated_state::testing::ReplicatedStateTesting;
@@ -17,10 +21,6 @@ use ic_test_utilities::types::{
     messages::{RequestBuilder, ResponseBuilder},
 };
 use ic_types::{
-    bitcoin::{
-        BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
-        GetSuccessorsRequest, GetSuccessorsResponse,
-    },
     messages::{CallbackId, RequestOrResponse, MAX_RESPONSE_COUNT_BYTES},
     CountBytes, Cycles, QueueIndex,
 };

@@ -12,6 +12,7 @@ use crate::{
     CanisterQueues,
 };
 use ic_base_types::PrincipalId;
+use ic_btc_types_internal::{BitcoinAdapterRequestWrapper, BitcoinAdapterResponse};
 use ic_interfaces::{
     execution_environment::CanisterOutOfCyclesError, messages::CanisterInputMessage,
 };
@@ -20,7 +21,6 @@ use ic_registry_subnet_features::BitcoinFeature;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::CallbackId;
 use ic_types::{
-    bitcoin::{BitcoinAdapterRequestWrapper, BitcoinAdapterResponse},
     ingress::IngressStatus,
     messages::{is_subnet_message, MessageId, RequestOrResponse, Response, SignedIngressContent},
     user_error::{ErrorCode, UserError},
