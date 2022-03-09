@@ -26,6 +26,19 @@ SELF_DIR = os.path.split(__file__)[0]
 
 DIDC = candid_changes_are_backwards_compatible.find_didc_or_exit()
 
+# Commits that serve as test data.
+NO_DO_STUFF_METHOD_SHA = "019035c1b0a832d9c5da3cebea6ad07b074338cc"  # example.did lacks the do_stuff method.
+HAS_SECRET_METHOD_SHA = "b6c2758bf772669035a4ae06191f1e7fbb6055e6"  # example.did has a new method named secret_method.
+
+
+def fetch_commit(commit):
+    repo = "git@gitlab.com:dfinity-lab/public/ic.git"
+    try:
+        # Do not bother decoding output.
+        subprocess.run(["git", "show", commit], capture_output=True, timeout=5.0, check=True)
+    except subprocess.CalledProcessError:
+        run(["git", "fetch", "--depth=1", repo, commit])
+
 
 def decode(s):
     return bytes.decode(s, "utf8")
@@ -119,6 +132,9 @@ class CommandLineTest(unittest.TestCase):
     def setUpClass():
         """Prepare the world to run all test_* methods."""
         self = CommandLineTest
+
+        fetch_commit(NO_DO_STUFF_METHOD_SHA)
+        fetch_commit(HAS_SECRET_METHOD_SHA)
 
         self.original_working_dir = os.getcwd()
         print(f"Original working directory: {CommandLineTest.original_working_dir}")
@@ -216,11 +232,9 @@ class CommandLineTest(unittest.TestCase):
 
         run_against("example.did", also_reverse=True)
 
-    @unittest.skip("Test is flaky, temporarily disable")
     def test_gitlab_ci_diff_base(self):
         """What happens when it looks like we are in Gitlab CI mode."""
         # Make it look like we added a method.
-        NO_DO_STUFF_METHOD_SHA = "019035c1b0a832d9c5da3cebea6ad07b074338cc"
         with env("CI_MERGE_REQUEST_DIFF_BASE_SHA", NO_DO_STUFF_METHOD_SHA):
             # Ok when run in forward-only mode.
             run_against("example.did")
@@ -230,7 +244,6 @@ class CommandLineTest(unittest.TestCase):
                 run_against("example.did", also_reverse=True)
 
         # Make it look like we deleted a method.
-        HAS_SECRET_METHOD_SHA = "b6c2758bf772669035a4ae06191f1e7fbb6055e6"
         with env("CI_MERGE_REQUEST_DIFF_BASE_SHA", HAS_SECRET_METHOD_SHA):
             # Not ok regardless of whether --also-reverse is used.
             with self.assertRaises(subprocess.CalledProcessError):
