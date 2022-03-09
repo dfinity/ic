@@ -27,6 +27,20 @@ usually providing little value."#
             dependency_kind: DepKind::normal(),
             defined_in: std::file!(),
         },
+        Rule {
+            package: pkg("ic-replica"),
+            should_not_depend_on: pkg("orchestrator"),
+            justification: "Replica must not depend on the orchestrator binary.".to_string(),
+            dependency_kind: DepKind::normal(),
+            defined_in: std::file!(),
+        },
+        Rule {
+            package: pkg("ic-replica"),
+            should_not_depend_on: pkg("ic-workload-generator"),
+            justification: "Replica must not depend on the workload generator binary.".to_string(),
+            dependency_kind: DepKind::normal(),
+            defined_in: std::file!(),
+        },
     ];
 
     let metadata = cargo_metadata::MetadataCommand::new().exec().unwrap();
