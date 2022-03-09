@@ -216,6 +216,7 @@ class CommandLineTest(unittest.TestCase):
 
         run_against("example.did", also_reverse=True)
 
+    @unittest.skip("Test is flaky, temporarily disable")
     def test_gitlab_ci_diff_base(self):
         """What happens when it looks like we are in Gitlab CI mode."""
         # Make it look like we added a method.
