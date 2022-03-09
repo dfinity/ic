@@ -361,7 +361,7 @@ impl FlowWorkerMetrics {
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
             execute_message_duration: metrics_registry.histogram_vec(
-                "replica_p2p_flow_worker_execute_message_duration_secs",
+                "replica_p2p_flow_worker_execute_message_duration_seconds",
                 "Time taken by the flow worker to complete executing a message call, in seconds.",
                 // 1ms, 2ms, 5ms, 10ms, 20ms, ..., 10s, 15s, 20s, 50s
                 decimal_buckets(-3, 1),
