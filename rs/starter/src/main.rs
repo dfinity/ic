@@ -118,7 +118,7 @@ fn main() -> Result<()> {
                 config.initial_notary_delay,
                 config.dkg_interval_length,
                 None,
-                SubnetType::System,
+                config.subnet_type,
                 None,
                 None,
                 None,
@@ -294,6 +294,11 @@ struct CliArgs {
     #[structopt(long = "subnet-features",
                 possible_values = &["ecdsa_signatures", "canister_sandboxing", "http_requests", "bitcoin_testnet_feature"])]
     subnet_features: Vec<String>,
+
+    /// Subnet type
+    #[structopt(long = "subnet-type",
+                possible_values = &["application", "verified_application", "system"])]
+    subnet_type: Option<String>,
 }
 
 impl CliArgs {
@@ -446,6 +451,18 @@ impl CliArgs {
         let unit_delay = self.unit_delay_millis.map(Duration::from_millis);
         let initial_notary_delay = self.initial_notary_delay_millis.map(Duration::from_millis);
 
+        let subnet_type = match self.subnet_type.as_deref() {
+            Some("application") => SubnetType::Application,
+            Some("verified_application") => SubnetType::VerifiedApplication,
+            Some("system") | None => SubnetType::System,
+            Some(s) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("Invalid subnet_type: {}", s),
+                ))
+            }
+        };
+
         Ok(ValidatedConfig {
             replica_path,
             replica_version,
@@ -468,6 +485,7 @@ impl CliArgs {
             detect_consensus_starvation: self.detect_consensus_starvation,
             consensus_pool_backend: self.consensus_pool_backend,
             subnet_features: to_subnet_features(&self.subnet_features),
+            subnet_type,
         })
     }
 }
@@ -511,6 +529,7 @@ struct ValidatedConfig {
     detect_consensus_starvation: Option<bool>,
     consensus_pool_backend: Option<String>,
     subnet_features: SubnetFeatures,
+    subnet_type: SubnetType,
 
     // Not intended to ever be read: role is to keep the temp dir from being deleted.
     _state_dir_holder: Option<TempDir>,
