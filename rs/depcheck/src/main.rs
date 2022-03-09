@@ -41,6 +41,15 @@ usually providing little value."#
             dependency_kind: DepKind::normal(),
             defined_in: std::file!(),
         },
+        Rule {
+            package: pkg("ic-constants"),
+            should_not_depend_on: PackageSpec::Wildcard,
+            justification: r#"You do not need dependencies to define IC constants.
+If your constants need dependencies, define them in a separate package."#
+                .to_string(),
+            dependency_kind: DepKind::normal(),
+            defined_in: std::file!(),
+        },
     ];
 
     let metadata = cargo_metadata::MetadataCommand::new().exec().unwrap();

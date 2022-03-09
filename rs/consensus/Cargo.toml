@@ -7,6 +7,7 @@ edition = "2018"
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-config = { path = "../config" }
 ic-consensus-message = { path = "./message" }
+ic-constants = { path = "../constants" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs", optional = true }
 ic-ic00-types = { path = "../types/ic00_types" }

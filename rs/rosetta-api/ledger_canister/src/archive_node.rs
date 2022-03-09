@@ -23,7 +23,7 @@ struct ArchiveNodeState {
     pub block_height_offset: u64,
     pub blocks: Vec<EncodedBlock>,
     pub total_block_size: usize,
-    pub ledger_canister_id: ic_types::CanisterId,
+    pub ledger_canister_id: ic_base_types::CanisterId,
     #[serde(skip)]
     pub last_upgrade_timestamp: u64,
 }
@@ -32,7 +32,7 @@ const DEFAULT_MAX_MEMORY_SIZE: usize = 1024 * 1024 * 1024;
 
 impl ArchiveNodeState {
     pub fn new(
-        archive_main_canister_id: ic_types::CanisterId,
+        archive_main_canister_id: ic_base_types::CanisterId,
         block_height_offset: u64,
         max_memory_size_bytes: Option<usize>,
     ) -> Self {
@@ -89,7 +89,7 @@ fn remaining_capacity() -> usize {
 }
 
 fn init(
-    archive_main_canister_id: ic_types::CanisterId,
+    archive_main_canister_id: ic_base_types::CanisterId,
     block_height_offset: u64,
     max_memory_size_bytes: Option<usize>,
 ) {

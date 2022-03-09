@@ -16,6 +16,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_artifact_pool::ingress_pool::IngressPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
+use ic_constants::MAX_INGRESS_TTL;
 use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
     artifact_pool::UnvalidatedArtifact, ingress_manager::IngressHandler,
@@ -43,7 +44,7 @@ use ic_test_utilities::{
     FastForwardTimeSource,
 };
 use ic_types::{
-    ingress::{IngressStatus, MAX_INGRESS_TTL},
+    ingress::IngressStatus,
     malicious_flags::MaliciousFlags,
     messages::{MessageId, SignedIngress},
     Height, RegistryVersion, SubnetId, Time,

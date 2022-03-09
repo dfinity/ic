@@ -1,7 +1,7 @@
 use candid::CandidType;
 use dfn_protobuf::ProtoBuf;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha::Sha256;
-use ic_types::{CanisterId, PrincipalId};
 use intmap::IntMap;
 use lazy_static::lazy_static;
 use on_wire::{FromWire, IntoWire};
@@ -879,7 +879,7 @@ impl Ledger {
             }));
         }
 
-        if created_at_time > now + ic_types::ingress::PERMITTED_DRIFT {
+        if created_at_time > now + ic_constants::PERMITTED_DRIFT {
             return Err(PaymentError::TransferError(
                 TransferError::TxCreatedInFuture,
             ));

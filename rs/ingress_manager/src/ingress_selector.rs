@@ -3,6 +3,7 @@
 //! messages of Consensus payloads and to keep track of finalized Ingress
 //! Messages to ensure that no message is added to a block more than once.
 use crate::IngressManager;
+use ic_constants::MAX_INGRESS_TTL;
 use ic_cycles_account_manager::IngressInductionCost;
 use ic_interfaces::{
     execution_environment::IngressHistoryReader,
@@ -18,7 +19,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     artifact::IngressMessageId,
     batch::{IngressPayload, ValidationContext},
-    ingress::{IngressStatus, MAX_INGRESS_TTL},
+    ingress::IngressStatus,
     messages::{MessageId, SignedIngress},
     CanisterId, CountBytes, Cycles, Height, NumBytes, Time,
 };

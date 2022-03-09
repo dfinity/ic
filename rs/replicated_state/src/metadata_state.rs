@@ -4,6 +4,7 @@ mod tests;
 
 use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager;
 use ic_base_types::CanisterId;
+use ic_constants::MAX_INGRESS_TTL;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     registry::subnet::v1 as pb_subnet,
@@ -18,7 +19,7 @@ use ic_registry_subnet_features::{BitcoinFeature, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     crypto::CryptoHash,
-    ingress::{IngressStatus, MAX_INGRESS_TTL},
+    ingress::IngressStatus,
     messages::{MessageId, RequestOrResponse},
     node_id_into_protobuf, node_id_try_from_protobuf, subnet_id_into_protobuf,
     subnet_id_try_from_protobuf,

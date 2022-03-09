@@ -1,9 +1,6 @@
 use dfn_core::api::Funds;
-use ic_base_types::CanisterInstallMode;
-use ic_types::{
-    ic00::{CanisterIdRecord, InstallCodeArgs, Method, IC_00},
-    CanisterId,
-};
+use ic_base_types::{CanisterId, CanisterInstallMode};
+use ic_ic00_types::{CanisterIdRecord, InstallCodeArgs, Method, IC_00};
 
 use on_wire::IntoWire;
 
@@ -41,7 +38,7 @@ pub async fn create_canister(cycles_for_canister_creation: u64) -> CanisterId {
         IC_00,
         &Method::CreateCanister.to_string(),
         dfn_candid::candid_one,
-        ic_types::ic00::CreateCanisterArgs::default(),
+        ic_ic00_types::CreateCanisterArgs::default(),
         Funds::new(cycles_for_canister_creation),
     )
     .await;

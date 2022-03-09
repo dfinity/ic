@@ -2,8 +2,8 @@ use candid::CandidType;
 use canister_test::*;
 use dfn_candid::{candid, candid_one, CandidOne};
 use dfn_protobuf::protobuf;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_client::Sender;
-use ic_types::{CanisterId, PrincipalId};
 use ledger_canister::{
     AccountBalanceArgs, AccountIdentifier, ArchiveOptions, Archives, BinaryAccountBalanceArgs,
     Block, BlockArg, BlockHeight, BlockRange, BlockRes, CandidBlock, EncodedBlock, GetBlocksArgs,

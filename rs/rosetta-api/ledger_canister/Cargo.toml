@@ -14,8 +14,10 @@ dfn_http = {path = "../../rust_canisters/dfn_http"}
 dfn_protobuf = {path = "../../rust_canisters/dfn_protobuf"}
 lazy_static = "1.4.0"
 serde = "1.0"
+ic-base-types = { path="../../types/base_types" }
+ic-constants = { path = "../../constants" }
+ic-ic00-types = { path="../../types/ic00_types" }
 ic-crypto-sha = {path = "../../crypto/sha/"}
-ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
 hex = {version = "0.4.2", features = ["serde"] }
 digest = "0.9.0"
@@ -23,7 +25,6 @@ phantom_newtype = { path = "../../phantom_newtype" }
 byteorder = "1.4"
 serde_bytes = "0.11"
 serde_cbor = "0.11"
-ic-base-types = {path="../../types/base_types"}
 on_wire = {path = "../../rust_canisters/on_wire"}
 intmap = "0.7.0"
 crc32fast = "1.2.0"

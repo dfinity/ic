@@ -1,4 +1,5 @@
 use crate::IngressManager;
+use ic_constants::MAX_INGRESS_TTL;
 use ic_interfaces::{
     ingress_manager::IngressHandler,
     ingress_pool::{
@@ -11,7 +12,7 @@ use ic_interfaces::{
 use ic_logger::{debug, warn};
 use ic_types::{
     artifact::{IngressMessageAttribute, IngressMessageId},
-    ingress::{IngressStatus, MAX_INGRESS_TTL},
+    ingress::IngressStatus,
     time::current_time,
     CountBytes,
 };

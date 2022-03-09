@@ -26,6 +26,7 @@ hex = "0.4.2"
 ic-canister-client = { path = "../canister_client" }
 ic-certified-vars = { path = "../certified_vars" }
 ic-config = { path = "../config" }
+ic-constants = { path = "../constants" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-sha = { path = "../crypto/sha" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }

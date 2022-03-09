@@ -1,8 +1,8 @@
 use crate::{spawn, EncodedBlock};
 use candid::CandidType;
 use dfn_core::api::print;
-use ic_types::ic00::{Method, IC_00};
-use ic_types::CanisterId;
+use ic_base_types::CanisterId;
+use ic_ic00_types::{Method, IC_00};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::sync::{Arc, RwLock};
@@ -326,7 +326,7 @@ async fn create_and_initialize_node_canister(
         IC_00,
         &Method::SetController.to_string(),
         dfn_candid::candid_multi_arity,
-        (ic_types::ic00::SetControllerArgs::new(
+        (ic_ic00_types::SetControllerArgs::new(
             node_canister_id,
             controller_id.into(),
         ),),

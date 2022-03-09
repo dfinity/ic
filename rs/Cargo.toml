@@ -29,6 +29,7 @@ members = [
   "consensus",
   "consensus/message",
   "consensus/ecdsa_object",
+  "constants",
   "cow_state",
   "criterion_time",
   "crypto",
