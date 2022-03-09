@@ -657,7 +657,7 @@ impl BlockchainManager {
             .blockchain
             .get_cached_header(anchor)
             .map_or(0, |cached| cached.height);
-        let single_block_only = is_single_block_only_mode_enabled(self.network, anchor_height);
+        let allow_multiple_blocks = are_multiple_blocks_allowed(self.network, anchor_height);
         let seen: HashSet<BlockHash> = processed_block_hashes.iter().copied().collect();
 
         let mut successor_blocks = vec![];
@@ -672,11 +672,15 @@ impl BlockchainManager {
                 // Retrieve the block from the cache.
                 match self.blockchain.get_block(&node) {
                     Some(block) => {
-                        successor_blocks.push(block.clone());
-                        response_block_size += block.get_size();
-                        if response_block_size >= MAX_GET_SUCCESSORS_RESPONSE_BLOCKS_SIZE_BYTES
-                            || single_block_only
+                        let block_size = block.get_size();
+                        if response_block_size == 0
+                            || (response_block_size + block_size
+                                <= MAX_GET_SUCCESSORS_RESPONSE_BLOCKS_SIZE_BYTES
+                                && allow_multiple_blocks)
                         {
+                            successor_blocks.push(block.clone());
+                            response_block_size += block_size;
+                        } else {
                             break;
                         }
                     }
@@ -806,12 +810,12 @@ impl HasHeight for BlockchainManager {
     }
 }
 
-/// Helper used to determine if only a single block should be returned.
-fn is_single_block_only_mode_enabled(network: Network, anchor_height: BlockHeight) -> bool {
+/// Helper used to determine if multiple blocks should be returned.
+fn are_multiple_blocks_allowed(network: Network, anchor_height: BlockHeight) -> bool {
     match network {
-        Network::Bitcoin => anchor_height > MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT,
-        Network::Testnet => anchor_height > TESTNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT,
-        Network::Signet | Network::Regtest => false,
+        Network::Bitcoin => anchor_height <= MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT,
+        Network::Testnet => anchor_height <= TESTNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT,
+        Network::Signet | Network::Regtest => true,
     }
 }
 
@@ -1424,13 +1428,20 @@ pub mod test {
         let blockchain_manager = BlockchainManager::new(&config, make_logger());
         let genesis = blockchain_manager.blockchain.genesis();
 
+        // Generate a blockchain with one large block.
         let large_blocks =
             generate_large_block_blockchain(genesis.header.block_hash(), genesis.header.time, 1);
         let large_block = large_blocks.first().cloned().unwrap();
         let headers: Vec<BlockHeader> = large_blocks.iter().map(|b| b.header).collect();
 
-        let additional_headers =
-            generate_headers(large_block.block_hash(), large_block.header.time, 1, &[]);
+        let previous_hashes = headers.iter().map(|h| h.block_hash()).collect::<Vec<_>>();
+        let additional_headers = generate_headers(
+            large_block.block_hash(),
+            large_block.header.time,
+            1,
+            &previous_hashes,
+        );
+        // Add an additional smaller block to the chain.
         let small_block = Block {
             header: additional_headers[0],
             txdata: vec![],
@@ -1459,11 +1470,72 @@ pub mod test {
             processed_block_hashes: vec![],
         };
         let response = blockchain_manager.get_successors(request);
+        // There are 2 blocks in the chain: {large, small}.
+        // Only the large block should be returned in this response.
         assert_eq!(response.blocks.len(), 1);
         assert!(
             matches!(response.blocks.first(), Some(block) if block.block_hash() == large_block.block_hash() && block.txdata.len() == large_block.txdata.len())
         );
+        // The smaller block's header should be in the next field.
+        assert!(
+            matches!(response.next.first(), Some(header) if header.block_hash() == additional_headers[0].block_hash())
+        );
         assert_eq!(blockchain_manager.block_sync_queue.len(), 0);
+    }
+
+    /// This test ensures that `BlockchainManager::get_successors(...)` sends blocks up to the cap limit.
+    #[test]
+    fn test_get_successors_many_blocks_until_size_cap_is_met() {
+        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let mut blockchain_manager = BlockchainManager::new(&config, make_logger());
+
+        let main_chain = generate_headers(
+            blockchain_manager.blockchain.genesis().header.block_hash(),
+            blockchain_manager.blockchain.genesis().header.time,
+            5,
+            &[],
+        );
+
+        let (added_headers, _) = blockchain_manager.blockchain.add_headers(&main_chain);
+        assert_eq!(added_headers.len(), 5);
+        let main_blocks = main_chain
+            .iter()
+            .map(|h| Block {
+                header: *h,
+                txdata: vec![],
+            })
+            .collect::<Vec<_>>();
+        for block in main_blocks {
+            blockchain_manager.blockchain.add_block(block).unwrap();
+        }
+
+        let large_blocks =
+            generate_large_block_blockchain(main_chain[4].block_hash(), main_chain[4].time, 1);
+        for block in &large_blocks {
+            blockchain_manager
+                .blockchain
+                .add_block(block.clone())
+                .unwrap();
+        }
+
+        let request = GetSuccessorsRequest {
+            anchor: blockchain_manager.blockchain.genesis().header.block_hash(),
+            processed_block_hashes: vec![],
+        };
+        let response = blockchain_manager.get_successors(request);
+
+        // Six blocks in the chain. First 5 are small blocks and the last block is large.
+        // Should return the first 5 blocks as the total size is below the cap.
+        assert_eq!(response.blocks.len(), 5);
+        assert!(
+            matches!(response.blocks.last(), Some(block) if block.block_hash() == main_chain.last().unwrap().block_hash())
+        );
+
+        // The next field should contain the large block header as it is too large for the request.
+        assert_eq!(response.next.len(), 1);
+        assert!(
+            matches!(response.next.first(), Some(header) if large_blocks[0].block_hash() == header.block_hash())
+        );
     }
 
     /// This function tests to ensure that the BlockchainManager does not send out `getdata`
@@ -1542,5 +1614,49 @@ pub mod test {
             .get_block(&block_2_hash)
             .is_none());
         assert_eq!(blockchain_manager.peer_info.len(), 0);
+    }
+
+    #[test]
+    fn test_are_multiple_blocks_allowed() {
+        // Mainnet
+        assert!(
+            are_multiple_blocks_allowed(Network::Bitcoin, 100_500),
+            "Multiple blocks are allowed at 100_500"
+        );
+        assert!(
+            are_multiple_blocks_allowed(Network::Bitcoin, MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT),
+            "Multiple blocks are allowed at {}",
+            MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT
+        );
+        assert!(
+            !are_multiple_blocks_allowed(Network::Bitcoin, 900_000),
+            "Multiple blocks are not allowed at 900_000"
+        );
+
+        // Testnet
+        assert!(
+            are_multiple_blocks_allowed(Network::Testnet, 1_000_000),
+            "Multiple blocks are allowed at 1_000_000"
+        );
+        assert!(
+            are_multiple_blocks_allowed(Network::Testnet, TESTNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT),
+            "Multiple blocks are allowed at {}",
+            TESTNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT
+        );
+        assert!(
+            !are_multiple_blocks_allowed(Network::Testnet, 3_000_000),
+            "Multiple blocks are not allowed at 3_000_000"
+        );
+
+        // Regtest
+        assert!(
+            are_multiple_blocks_allowed(Network::Regtest, 1),
+            "Multiple blocks are allowed at 1"
+        );
+        assert!(
+            are_multiple_blocks_allowed(Network::Regtest, u32::MAX),
+            "Multiple blocks are allowed at {}",
+            u32::MAX
+        );
     }
 }
