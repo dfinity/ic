@@ -8,12 +8,15 @@ use std::{
 use anyhow::{bail, Result};
 use crossbeam::select;
 use crossbeam_channel::Receiver;
+use futures_util::FutureExt;
 use humantime::parse_duration;
+use ic_async_utils::shutdown_signal;
 use ic_config::metrics::{Config as MetricsConfig, Exporter};
 use ic_metrics::MetricsRegistry;
 use ic_metrics_exporter::MetricsRuntimeImpl;
 use ic_p8s_service_discovery::titanium::{
-    ic_discovery::IcServiceDiscoveryImpl,
+    file_sd::FileSd,
+    ic_discovery::{IcServiceDiscovery, IcServiceDiscoveryImpl, JOB_NAMES},
     mainnet_registry::{create_local_store_from_changelog, get_mainnet_delta_6d_c1},
     metrics::Metrics,
     rest_api::start_http_server,
@@ -26,6 +29,7 @@ fn main() -> Result<()> {
     let rt = tokio::runtime::Runtime::new()?;
     let log = make_logger();
     let metrics_registry = MetricsRegistry::new();
+    let shutdown_signal = shutdown_signal(log.clone()).shared();
 
     info!(log, "Starting ic-p8s-sd ...");
     let mercury_dir = cli_args.targets_dir.join("mercury");
@@ -46,12 +50,30 @@ fn main() -> Result<()> {
         cli_args.registry_query_timeout,
     )?);
 
-    info!(log, "Starting REST API ...");
-    let http_handle = rt.spawn(start_http_server(
-        log.clone(),
-        ic_discovery.clone(),
-        cli_args.listen_addr,
-    ));
+    let file_sd = if let Some(file_sd_base_path) = &cli_args.file_sd_base_path {
+        info!(
+            log,
+            "Writing service discovery files to base dir: {:?}", file_sd_base_path
+        );
+        let file_sd = FileSd::new(file_sd_base_path);
+        for job_name in JOB_NAMES {
+            let targets = ic_discovery.get_prometheus_target_groups(job_name)?;
+            file_sd.write_sd_config(job_name, targets)?;
+        }
+        Some(file_sd)
+    } else {
+        None
+    };
+
+    let http_handle = cli_args.listen_addr.map(|listen_addr| {
+        info!(log, "Starting REST API ...");
+        rt.spawn(start_http_server(
+            log.clone(),
+            ic_discovery.clone(),
+            listen_addr,
+            shutdown_signal.clone(),
+        ))
+    });
 
     let scrape_handle = if !cli_args.no_poll {
         let (stop_signal_sender, stop_signal_rcv) = crossbeam::channel::bounded::<()>(0);
@@ -61,6 +83,7 @@ fn main() -> Result<()> {
             stop_signal_rcv,
             cli_args.poll_interval,
             Metrics::new(metrics_registry.clone()),
+            file_sd,
         );
 
         info!(
@@ -88,7 +111,10 @@ fn main() -> Result<()> {
         &log,
     );
 
-    let _ = rt.block_on(http_handle)?;
+    rt.block_on(shutdown_signal);
+    if let Some(http_handle) = http_handle {
+        let _ = rt.block_on(http_handle)?;
+    }
     std::mem::drop(metrics_runtime);
 
     if let Some((stop_signal_handler, join_handle)) = scrape_handle {
@@ -104,20 +130,21 @@ fn make_poll_loop(
     stop_signal: Receiver<()>,
     poll_interval: Duration,
     metrics: Metrics,
-) -> impl Fn() {
+    file_sd: Option<FileSd>,
+) -> impl FnMut() {
     let interval = crossbeam::channel::tick(poll_interval);
     move || {
         let mut tick = Instant::now();
         loop {
             let mut err = false;
             info!(log, "Loading new scraping targets (tick: {:?})", tick);
-            if let Err(e) = ic_discovery.load_new_scraping_targets() {
+            if let Err(e) = ic_discovery.load_new_ics() {
                 warn!(
                     log,
                     "Failed to load new scraping targets @ interval {:?}: {:?}", tick, e
                 );
                 metrics
-                    .error_count
+                    .poll_error_count
                     .with_label_values(&["load_new_scraping_targets"])
                     .inc();
                 err = true;
@@ -130,10 +157,29 @@ fn make_poll_loop(
                     "Failed to sync registry @ interval {:?}: {:?}", tick, e
                 );
                 metrics
-                    .error_count
+                    .poll_error_count
                     .with_label_values(&["update_registries"])
                     .inc();
                 err = true;
+            }
+            if let Some(file_sd) = &file_sd {
+                for job_name in JOB_NAMES {
+                    let targets = match ic_discovery.get_prometheus_target_groups(job_name) {
+                        Ok(t) => t,
+                        Err(e) => {
+                            warn!(
+                                log,
+                                "Failed to retrieve targets for job {}: {:?}", job_name, e
+                            );
+                            err = true;
+                            continue;
+                        }
+                    };
+                    if let Err(e) = file_sd.write_sd_config(job_name, targets) {
+                        warn!(log, "Failed to write targets for job {}: {:?}", job_name, e);
+                        err = true;
+                    }
+                }
             }
             std::mem::drop(timer);
             let poll_status = if err { "error" } else { "successful" };
@@ -213,13 +259,23 @@ The HTTP-request timeout used when quering for registry updates.
 
     #[structopt(
         long = "listen-addr",
-        default_value = "[::]:11235",
         help = r#"
 The listen address for service discovery.
 
 "#
     )]
-    listen_addr: SocketAddr,
+    listen_addr: Option<SocketAddr>,
+
+    #[structopt(
+        long = "file-sd-base-path",
+        help = r#"
+If specified, for each job, a json file containing the targets will be written
+to <base_directory>/<job_name>/ic_p8s_sd.json containing the corresponding
+targets.
+
+"#
+    )]
+    file_sd_base_path: Option<PathBuf>,
 
     #[structopt(
         long = "metrics-listen-addr",
@@ -239,6 +295,12 @@ impl CliArgs {
 
         if !self.targets_dir.is_dir() {
             bail!("Not a directory: {:?}", self.targets_dir);
+        }
+
+        if let Some(file_sd_base_path) = &self.file_sd_base_path {
+            if !file_sd_base_path.is_dir() {
+                bail!("Not a directory: {:?}", file_sd_base_path)
+            }
         }
 
         Ok(self)

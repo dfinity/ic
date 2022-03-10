@@ -1,7 +1,18 @@
+//! IcServiceDiscovery
+//!
+//! The target IP addresses and labels are the same for all endpoints, except
+//! that the host IPv6 addresses for `host_node_exporter` are inferred from the
+//! the one used for `replica` according to a fixed address schema. The ports
+//! are set as follows:
+//!
+//! * `host_node_exporter` -> 9100
+//! * `node_exporter`      -> 9100
+//! * `orchestrator`       -> 9091
+//! * `replica`            -> 9090
 use std::{
     collections::{btree_map::Entry, BTreeMap, BTreeSet},
     convert::TryFrom,
-    net::SocketAddr,
+    net::{IpAddr, Ipv6Addr, SocketAddr},
     path::{Path, PathBuf},
     sync::{Arc, RwLock},
     time::Duration,
@@ -18,25 +29,42 @@ use ic_types::{
     NodeId, RegistryVersion, SubnetId,
 };
 use thiserror::Error;
+
+pub const REPLICA_JOB_NAME: &str = "replica";
+pub const ORCHESTRATOR_JOB_NAME: &str = "orchestrator";
+pub const NODE_EXPORTER_JOB_NAME: &str = "node_exporter";
+pub const HOST_NODE_EXPORTER_JOB_NAME: &str = "host_node_exporter";
+pub const JOB_NAMES: &[&str; 4] = &[
+    REPLICA_JOB_NAME,
+    ORCHESTRATOR_JOB_NAME,
+    NODE_EXPORTER_JOB_NAME,
+    HOST_NODE_EXPORTER_JOB_NAME,
+];
+
 /// Provide service discovery for Prometheus for a set of Internet Computers.
 pub trait IcServiceDiscovery: Send + Sync {
-    /// Returns a list of [PrometheusTargetGroup] encompassing the nodes to be scraped
+    /// Returns a list of [PrometheusTargetGroup] containing all prometheus
+    /// targets for the given `job_name`.
+    ///
+    /// The job name must be one of `replica`, `orchestrator`, `node_exporter`,
+    /// or `host_node_exporter`.
     fn get_prometheus_target_groups(
         &self,
-    ) -> Result<Vec<PrometheusTargetGroup>, IcServiceDiscoveryError>;
+        job_name: &str,
+    ) -> Result<BTreeSet<PrometheusTargetGroup>, IcServiceDiscoveryError>;
 }
 
 /// A [PrometheusTargetGroup] associates a set of prometheus scrape targets with
 /// a set of labels.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PrometheusTargetGroup {
+    pub node_id: NodeId,
+    pub ic_name: String,
     /// A set of targets to be scraped by prometheus that share the same labels.
-    pub targets: Vec<SocketAddr>,
+    pub targets: BTreeSet<SocketAddr>,
     /// A set of labels that are associated with the targets listed in
     /// `socket_addr`.
     pub subnet_id: Option<SubnetId>,
-    pub node_id: NodeId,
-    pub ic_name: String,
 }
 
 /// Exposes service discovery data for a set of Internet Computers. Manages a
@@ -74,7 +102,7 @@ impl IcServiceDiscoveryImpl {
             registry_query_timeout,
             registries,
         };
-        self_.load_new_scraping_targets()?;
+        self_.load_new_ics()?;
         Ok(self_)
     }
 
@@ -108,7 +136,7 @@ impl IcServiceDiscoveryImpl {
     /// * The set of scraped ICs currently strictly grows throughout the
     /// lifetime of a service instance. I.e., removing an IC as a scrape target
     /// requires rebooting the service.
-    pub fn load_new_scraping_targets(&self) -> Result<(), IcServiceDiscoveryError> {
+    pub fn load_new_ics(&self) -> Result<(), IcServiceDiscoveryError> {
         let paths = std::fs::read_dir(&self.ic_scraping_targets_dir)?;
         let mut registries_lock_guard = self.registries.write().unwrap();
         for path in paths {
@@ -132,7 +160,7 @@ impl IcServiceDiscoveryImpl {
     fn get_prometheus_targets(
         reg_client: &dyn RegistryClient,
         ic_name: &str,
-    ) -> Result<Vec<PrometheusTargetGroup>, IcServiceDiscoveryError> {
+    ) -> Result<BTreeSet<PrometheusTargetGroup>, IcServiceDiscoveryError> {
         use ic_registry_client::helper::{
             node::NodeRegistry,
             subnet::{SubnetListRegistry, SubnetTransportRegistry},
@@ -145,7 +173,7 @@ impl IcServiceDiscoveryImpl {
             .into_iter()
             .collect::<BTreeSet<_>>();
 
-        let mut node_targets = vec![];
+        let mut node_targets = BTreeSet::new();
         let subnet_ids = reg_client
             .get_subnet_ids(latest_version)
             .map_registry_err(latest_version, "get_subnet_ids")?;
@@ -158,8 +186,8 @@ impl IcServiceDiscoveryImpl {
             for (node_id, node_record) in t_infos {
                 let socket_addr =
                     Self::node_record_to_target_addr(node_id, latest_version, node_record)?;
-                node_targets.push(PrometheusTargetGroup {
-                    targets: vec![socket_addr],
+                node_targets.insert(PrometheusTargetGroup {
+                    targets: vec![socket_addr].into_iter().collect(),
                     subnet_id: Some(subnet_id),
                     node_id,
                     ic_name: ic_name.into(),
@@ -177,8 +205,8 @@ impl IcServiceDiscoveryImpl {
             let socket_addr =
                 Self::node_record_to_target_addr(node_id, latest_version, node_record)?;
 
-            node_targets.push(PrometheusTargetGroup {
-                targets: vec![socket_addr],
+            node_targets.insert(PrometheusTargetGroup {
+                targets: vec![socket_addr].into_iter().collect(),
                 subnet_id: None,
                 node_id,
                 ic_name: ic_name.into(),
@@ -244,20 +272,66 @@ impl IcServiceDiscoveryImpl {
 impl IcServiceDiscovery for IcServiceDiscoveryImpl {
     fn get_prometheus_target_groups(
         &self,
-    ) -> Result<Vec<PrometheusTargetGroup>, IcServiceDiscoveryError> {
+        job_name: &str,
+    ) -> Result<BTreeSet<PrometheusTargetGroup>, IcServiceDiscoveryError> {
+        let mapping = match job_name {
+            HOST_NODE_EXPORTER_JOB_NAME => {
+                Box::new(|sockaddr: SocketAddr| guest_to_host_address((set_port(9100))(sockaddr)))
+            }
+            NODE_EXPORTER_JOB_NAME => set_port(9100),
+            ORCHESTRATOR_JOB_NAME => set_port(9091),
+            REPLICA_JOB_NAME => set_port(9090),
+            _ => {
+                return Err(IcServiceDiscoveryError::JobNameNotFound {
+                    job_name: job_name.to_string(),
+                })
+            }
+        };
         let registries_lock_guard = self.registries.read().unwrap();
-        let prometheus_target_list =
-            registries_lock_guard
-                .iter()
-                .try_fold(vec![], |mut a, (ic_name, registry)| {
-                    a.append(&mut Self::get_prometheus_targets(registry, ic_name)?);
-                    Ok::<_, IcServiceDiscoveryError>(a)
-                })?;
+        let prometheus_target_list = registries_lock_guard.iter().try_fold(
+            BTreeSet::new(),
+            |mut a, (ic_name, registry)| {
+                a.append(&mut Self::get_prometheus_targets(registry, ic_name)?);
+                Ok::<_, IcServiceDiscoveryError>(a)
+            },
+        )?;
 
-        Ok(prometheus_target_list)
+        Ok(prometheus_target_list
+            .into_iter()
+            .map(|target_group| {
+                let targets: BTreeSet<_> = target_group.targets.into_iter().map(&mapping).collect();
+                PrometheusTargetGroup {
+                    targets,
+                    ..target_group
+                }
+            })
+            .collect::<BTreeSet<_>>())
     }
 }
 
+fn set_port(port: u16) -> Box<dyn Fn(SocketAddr) -> SocketAddr> {
+    Box::new(move |mut sockaddr: SocketAddr| {
+        sockaddr.set_port(port);
+        sockaddr
+    })
+}
+
+/// By convention, the first two bytes of the host-part of the replica's IP
+/// address are 0x6801. The corresponding segment for the host is 0x6800.
+///
+/// (The MAC starts with 0x6a00. The 7'th bit of the first byte is flipped. See
+/// https://en.wikipedia.org/wiki/MAC_address)
+fn guest_to_host_address(sockaddr: SocketAddr) -> SocketAddr {
+    let ip = match sockaddr.ip() {
+        IpAddr::V6(a) if a.segments()[4] == 0x6801 => {
+            let s = a.segments();
+            let new_addr = Ipv6Addr::new(s[0], s[1], s[2], s[3], 0x6800, s[5], s[6], s[7]);
+            IpAddr::V6(new_addr)
+        }
+        ip => ip,
+    };
+    SocketAddr::new(ip, sockaddr.port())
+}
 trait MapRegistryClientErr<T> {
     fn map_registry_err(
         self,
@@ -329,6 +403,8 @@ pub enum IcServiceDiscoveryError {
     SyncWithNnsFailed {
         failures: Vec<(String, LocalRegistryError)>,
     },
+    #[error("job name not found: {job_name}")]
+    JobNameNotFound { job_name: String },
 }
 
 #[cfg(test)]
@@ -352,8 +428,8 @@ mod tests {
         let _store = create_local_store_from_changelog(ic_dir, get_mainnet_delta_6d_c1());
 
         let ic_scraper = IcServiceDiscoveryImpl::new(tempdir.path(), QUERY_TIMEOUT).unwrap();
-        ic_scraper.load_new_scraping_targets().unwrap();
-        let target_groups = ic_scraper.get_prometheus_target_groups().unwrap();
+        ic_scraper.load_new_ics().unwrap();
+        let target_groups = ic_scraper.get_prometheus_target_groups("replica").unwrap();
 
         let nns_targets: HashSet<_> = target_groups
             .iter()
@@ -366,7 +442,7 @@ mod tests {
             })
             .unique_by(|g| g.node_id)
             .unique_by(|g| &g.targets)
-            .map(|g| g.targets.first().unwrap().to_string())
+            .map(|g| g.targets.iter().next().unwrap().to_string())
             .collect();
 
         let expected_nns_targets: HashSet<_> = (&[
