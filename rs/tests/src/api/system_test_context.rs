@@ -146,7 +146,7 @@ use url::Url;
 
 const REGISTRY_QUERY_TIMEOUT: Duration = Duration::from_secs(5);
 const READY_RESPONSE_TIMEOUT: Duration = Duration::from_secs(6);
-const RETRY_TIMEOUT: Duration = Duration::from_secs(90);
+const RETRY_TIMEOUT: Duration = Duration::from_secs(120);
 const RETRY_BACKOFF: Duration = Duration::from_secs(5);
 
 /// Note: The SystemTestContext itself can be cloned/copied.
