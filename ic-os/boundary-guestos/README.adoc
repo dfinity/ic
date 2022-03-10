@@ -1,0 +1,80 @@
+= Boundary Node Guest OS
+
+This contains the build scripts for using system images of Ubuntu for a Boundary Node as units of deployment and upgrades. More detailed informnation can be found link:doc/README.adoc[here].
+
+== Dependencies
+In addition to a standard installation of Ubuntu 20.4 at least the following packages are required:
+
+* docker
+* mtools (mmd)
+* faketime
+* android-sdk-ext4-utils (make_ext4fs)
+
+== Prerequisites
+
+The Boundary Node needs two IC binaries: `boundary-node-control-plane` and `boundary-node-prober`.
+These can be build as described link:../../README.adoc#building-the-code[here].
+
+== Quick build and test instructions (Linux)
+To build a full system image, run:
+
+[source,shell]
+----
+ scripts/build-disk-image.sh -o /tmp/disk.img
+----
+
+A password for testing can be specified:
+
+[source,shell]
+----
+  scripts/build-disk-image.sh -o /tmp/disk.img -p password
+----
+
+If you want to include IC binaries (see above) that you have been locally building, append `-x`.
+You might also want to set the version number to be used `-v`.
+
+This can then, for example, be booted with libvirt, e.g.:
+
+[source,shell]
+----
+  virt-install --disk /tmp/disk.img --import --memory 4096 \
+   --os-variant ubuntu20.04 --network bridge=br0,mac=52:54:00:4f:f8:ec \
+   --network bridge=vlan66,mac=52:54:00:33:4e:b0 --graphics none \
+   --name boundary-guestos --console pty,target.type=virtio \
+   --serial pty --boot uefi
+----
+
+== Developing with the system
+
+The entirety of the actual Ubuntu operating system is contained in the
+`rootfs/` subdirectory. See instructions link:rootfs/README.adoc[there] on how to
+make changes to the OS and the included components.
+
+== Directory organization
+
+The directory `rootfs/` contains everything related to building a bootable Ubuntu system. It uses various template
+directories (e.g., `opt/`) that are simply copied verbatim to the target system -- you can just drop files there to
+include them into the image.
+
+The directory `bootloader/` contains everything related to building EFI firmware and the grub bootloader image. 
+
+All build scripts are contained in the 'scripts/' subdirectory.
+
+== CI build
+
+For CI purposes, the build is split such that the network-dependent
+part (docker) is separated from the other parts of the build pipeline.
+
+To run these two steps separately, execute:
+
+[source,shell]
+----
+  scripts/build-docker.sh /tmp/dockertmp
+  scripts/build-disk-image.sh -o /tmp/disk.img -t /tmp/dockertmp/bootloader.tar -u /tmp/dockertmp/rootfs.tar
+----
+
+== Under the hood
+
+The Ubuntu system is built by converting the official Ubuntu docker image
+into a bootable "bare-metal" image (or "virtual-metal" VM image). This
+results in a very minimal system with basically no services running at all.

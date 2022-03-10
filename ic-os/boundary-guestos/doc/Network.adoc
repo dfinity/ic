@@ -1,0 +1,3 @@
+= Network settings of the Boundary Guest OS
+TODO: BOUN-205 Provide a detailed documentation regarding the network configuration
+

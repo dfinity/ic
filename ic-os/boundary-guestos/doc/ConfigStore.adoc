@@ -1,0 +1,63 @@
+= Boundary Node  Guest OS config store
+
+This specifies the contents of the `config` partition (`/dev/vda3` in the
+Boundary Node Guest OS disk image). It stores information that must be preserved across
+system upgrades, and that (usually) needs to be available at early boot time
+(and therefore cannot live within the encrypted payload data partition).
+
+In the absence of a sealing key (to become available in SEV-protected
+trusted execution environments), all contents are stored in plain-text
+and without integrity protection. When a sealing key becomes available,
+this should be converted into an authenticated + integrity-protected
+data store (either for the partition in its entirety, or on a per-file
+basis).
+
+== `/boot/config/CONFIGURED`
+
+This is a tag file to mark that one-time bootstrap configuration has completed.
+If this file is not present, then boot sequence will look for a virtual
+USB stick containing injected IC node configuration. This configuration
+process can only happen once at initial boot time.
+
+== `/boot/config/ssh`
+
+Contains ssh host keys. They need to be persisted across upgrades and
+are transferred to +/etc/ssh+ during boot.
+
+== `/boot/config/accounts_ssh_authorized_keys`
+
+This is a directory that contains individual files named
+`admin`, `readonly` and `root` (this last one for dev/debug builds
+only). The contents of these files are used as `authorized_keys` files
+for the respectively named role account.
+
+TODO: BOUN-180 -- might require some consolidation
+
+== `/boot/config/node_exporter`
+
+Contains node exporter TLS keys. They need to persisted across upgrades
+and are transferred to +/etc/node_exporter+ during boot.
+
+== `/boot/network.conf`
+
+Must be a text file consisting of key/value pairs (one per line).
+The following keys are recognized:
+
+- `ipv6_address`: The IPv6 address of the node. It will be used for the node to “identify” itself (via registry).
+  All public IC services are offered through this address. Will be assigned to the enp1s0 interface. If left blank, SLAAC is used on the interface.
+
+- `ipv6_gateway`: Default IPv6 gateway, only meaningful if ipv6_address is given as well.
+
+- `name_servers`: Name servers to be used. Multiple servers to be separated by spaces, if needed. Only meaningful
+  if not using dhcp / SLAAC.
+
+- `hostname`: Hostname, in principle freetext, but generally derived from
+  ID of physical host (e.g. MAC address).
+
+- `ipv4_address`:  TODO: BOUN-180 -- if/how this is set is still in flux
+
+== `nns.conf`
+
+Must be a text file consisting of key/value pairs (one per line). The following keys are recognized:
+
+- `nns_url`: The URL (http) of the NNS node(s). If multiple are given, they need to be separated by whitespace.

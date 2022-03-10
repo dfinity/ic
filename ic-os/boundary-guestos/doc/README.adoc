@@ -1,0 +1,12 @@
+= Boundary Node Guest OS
+
+This is the Boundary Node Guest OS running in front of the IC.
+
+Refer to detailed documentation on:
+
+* link:DiskLayout{outfilesuffix}[Disk layout]
+** Layout of the link:ConfigStore{outfilesuffix}[config store] partition
+* link:Boot{outfilesuffix}[Boot sequence]
+* link:Build{outfilesuffix}[Disk image build]
+* link:Components{outfilesuffix}[Components of the Boundary Node]
+* link:Network{outfilesuffix}[Network settings]
