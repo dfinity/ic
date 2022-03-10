@@ -1,0 +1,65 @@
+= IC_Replica_PrometheusTargetMissing
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+A Target being monitored by Prometheus disappeared.
+
+The full list of Targets being monitored by Prometheus can be enumerated here:
+
+http://prometheus.dfinity.systems:9090/targets
+
+These targets are enumerated via static and dynamic configurations by p8s-service-discovery against the live mercury topology.
+
+Service Name "IC Replica" and Integration "Infra Prometheus" means that the IC monitored at `prometheus.dfinity.systems` was what generated the alert.
+
+This is typically indicative of a node or host becoming unreachable for various reasons. It could be a hardware failure, or it could be a network connectivity problem.
+
+When an alert fires, troubleshooting connectivity to the node or host in question is the first step.
+
+For connectivity checks:
+
+- `ping` and/or 'ping6' can show ICMP connectivity for the IPv6 address of the node or host in the alert.
+- `curl` can show TCP connectivity to the well known ports such as 8080 for IC replica
+- `ssh` can show SSH connectivity to TCP port 22 for nodes and DFINITY-owned hosts that aren't locked down.
+
+If ping/ping6, curl, and ssh fail, it is a good bet that connectivity to the target has been lost.
+
+The alert always shows the node ID and IPv6 of the guests.
+The guest IP can be pinged by establishing a pritunl VPN and running ping6 for the IPv6 address in the alert.
+The host IP can be found by copying and pasting the node ID into the search field in topology dashboard ([https://dashboard.mercury.dfinity.systems/network](https://dashboard.mercury.dfinity.systems/network)), taking the hostname from the corresponding search result and extending it to the FQDN of the host system.
+
+Sample:
+
+    Alert: PrometheusTargetMissing mercury pjljw-kztyl-46ud4-ofrj6-nzkhm-3n4nt-wi3jt-ypmav-ijqkt-gjf66-uae page (aws-ic-prom kdbxb-7nggf-jmkny-ynxdh-i54bd-7lnlz-t2ahj-c26vp-xxnhw-xvcyn-uae [2600:3006:1400:1500:5000:a5ff:fee8:faa6]
+
+A search in the topology dashboard for a part of the node principal, e.g. `kdbxb` gives us all details. We can confirm the IPv6 address `2600:3006:1400:1500:5000:a5ff:fee8:faa6`, and get the hostname `lv1-dll10`.
+Once connectivity is proven to be lost to the node's IPv6 address `2600:3006:1400:1500:5000:a5ff:fee8:faa6` or host `lv1-dll10.lv1.dfinity.network`, searching Jira for `lv1-dll10` will typically uncover failed hardware in the process of being triaged over time.
+
+If no existing Jira tickets exist, this may be a new hardware or network failure that needs to be further investigated.
+
+Given that alerts can be silenced, it is often the case where an older alert was silenced and suddenly expires and starts alerting as down again.
+
+
+== Silencing alerts
+
+The IC alert manager can be reached here:
+
+http://prometheus.dfinity.systems:9093/#/alerts
+
+From here, new "Silence" rules can be added to stop alerting for some period of time for a given alertname, severity, and tags. 
+
+
+== Escalating
+Independently from the debugging results up to three missing prometheus targets per subnet isn't seen as critical event because there is still sufficient redundancy given. 
+In this case an ICSUP incident ticket needs to be created with a minor severity (S3) and the ticket needs to be shared in #first-incident-responder-team tagging @release-engs. 
+
+With four nodes from a single subnet missing the corresponding ICSUP incident needs to be escalated to a major incident (S2). In case no one from @release-engs is available, the FIT role can decide to follow the runbook for replacing the failed nodes (https://www.notion.so/Runbooks-release-cli-d6d3befd278e4cc49d6adcf1950934f6) or call the team lead of the release team (Luis: +41 79 449 2222).      
+
+If all of the IC nodes and/or IC hosts _at a datacenter_ (same IPv6 prefix) all simulatenously start alerting, you should assign the PagerDuty incident to "PFOps (DCS)" Service in Pagerduty or otherwise create a new Pagerduty Incident for the PlatformOps team so that the current on-call engineer gets paged and can respond immediately.
+
+https://dfinity.pagerduty.com/service-directory/P5O2EYA
+
+With five nodes being down in a 13-node subnet (over 1/3 of the nodes being down), the subnet cannot make progress and could already get into a critical state. See the Node replacement runbook above.
+
