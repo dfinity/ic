@@ -1,0 +1,88 @@
+= Ubuntu base OS development
+
+The Ubuntu-based Boundary Node OS is built similar to the IC OS we still recap the
+necessary steps:
+
+* creating a root filesystem image using docker -- this is based on the
+  official Ubuntu docker image and simply adds the OS kernel plus our
+  required services to it
+
+* converting this root filesystem into filesystem images for `/` and `/boot`
+  via `mke2fs` (`make_ext4fs`)
+
+The build instructions in the Dockerfile define the actual process.
+
+The following template directories are simply copied verbatim onto the target
+system:
+
+* `etc`
+* `opt`
+* `boot`
+* `var` (temporarily)
+
+If you need to add files to the system, simply drop them into the
+appropriate target directory. At present, all dfinity-specific binaries
+and scripts go to `opt/ic/bin`.
+
+If you install new systemd services, drop an appropriate unit file into
+`etc/systemd/system` and add an activation to the Dockerfile.
+
+Various more detailed implementation aspects of the system are documented
+below.
+
+== Dynamic file system mounts
+
+Currently, dynamic file system mounts for the Boundary Node OS are only prepared
+but not used. See additional details in the IC OS documentation. For now
+the following mapping is fixed.
+
+* A: `/dev/vda4` -> `/boot`, `/dev/vda5` -> `/` and `/dev/vda6` -> `/var`
+
+== First boot actions
+
+Several preparatory operations are performed when the system boots for the
+first time. This documents what actions are performed presently and might
+serve as a guide on how to add further actions.
+
+=== ssh key generation
+
+The `setup-ssh-keys` (and corresponding shell script) service performs one of
+two things: If this is the first boot ever (on a newly installed system), it
+generates ssh keys and stashes them away in a location that is preserved across
+reboots and in the future upgrades.
+
+=== Boundary node bootstrap
+
+The `bootstrap-ic-node` service (and its corresponding) shell script performs
+customization of the installation using node-specific information. This includes:
+
+* network environment: `network.conf` (more details below)
+* essential information about the IC: `nns.conf`
+* configuration related to monitoring: `journalbeat.conf` (more details below)
+
+For all of mentioned parameters, the system expects a file `ic-bootstrap.tar` - either
+already present at `/mnt` or supplied on a removable storage medium (e.g.
+a USB stick or an optical medium).
+
+==== Network configuration
+
+The network configuration is performed using a file `network.conf` in the
+bootstrap tarball. It must contain lines of "key=value" statements,
+with the following keys supported:
+
+* `ipv6_address`: address used for the IC replica service
+* `ipv6_gateway`: gateway used for the primary interface
+* `name_servers`: space-separated list of DNS servers
+* TODO: BOUN-180 ipv4_address
+
+This configuration file is simply copied to the `config` partition and evaluated
+on each boot to set up network.
+
+==== Journalbeat configuration
+
+The Journalbeat configuration is performed using a file `journalbeat.conf` in
+the bootstrap tarball. It must contain lines of "key=value"-statements,
+with the following keys supported:
+
+* `journalbeat_hosts`:    space-separated list of logging hosts
+* `journalbeat_tags`:     space-separated list of tags

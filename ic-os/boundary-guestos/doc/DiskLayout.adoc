@@ -1,0 +1,39 @@
+= Boundary Node guest OS disk layout
+
+The (virtual) disk of the IC guest OS is structured to allow
+system upgrades with A/B partition switching (see
+link:Upgrades{outfilesuffix}[upgrades]) while ensuring system
+integrity and confidentiality for secure VMs.
+
+
+
+The partition structure is as follows:
+
+- `/dev/vda1` *esp*: (EFI system partition)
+- `/dev/vda2` *grub* Grub bootloader modules and config
+- `/dev/vda3` *config* System config store
+- `/dev/vda4` *A_boot* Boot partition for system A
+- `/dev/vda5` *A_root* Root partition for system A
+
+In preparation for future releases:
+
+- `/dev/vda6` *A_var* Mutable data partition for system A
+
+- `/dev/vda7` *B_boot* Boot partition for system B
+- `/dev/vda8` *B_root* Root partition for system B
+- `/dev/vda9` *B_var* Mutable data partition for system B
+
+== *esp*: EFI system partition
+
+Please refer to the link:../../guestos/doc/DiskLayout.adoc#esp-efi-system-partition[documentation] of IC guest OS.
+
+== *grub*: Grub bootloader and configuration
+
+Please refer to the link:../../guestos/doc/DiskLayout.adoc#grub-grub-bootloader-and-configuration[documentation] of IC guest OS.
+
+== *config* System config store
+
+Contains the config store persisted across system upgrades.
+See link:ConfigStore{outfilesuffix}[config store] for a
+specification of its contents.
+
