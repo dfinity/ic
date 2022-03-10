@@ -1,13 +1,10 @@
-use bitcoin::{hashes::Hash, Block, OutPoint, TxOut, Txid};
 use ic_protobuf::{
     bitcoin::v1,
     proxy::{try_from_option_field, ProxyDecodeError},
 };
 use serde::{Deserialize, Serialize};
-use std::{
-    convert::{TryFrom, TryInto},
-    hash::Hasher,
-};
+use std::convert::{TryFrom, TryInto};
+use std::mem::size_of_val;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GetSuccessorsRequest {
@@ -137,10 +134,12 @@ impl TryFrom<v1::BitcoinAdapterRequest> for BitcoinAdapterRequest {
     }
 }
 
-#[derive(Clone, Debug, Default, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Hash, Serialize, Deserialize, PartialEq, Eq)]
 pub struct BlockHeader {
     pub version: i32,
+    #[serde(with = "serde_bytes")]
     pub prev_blockhash: Vec<u8>,
+    #[serde(with = "serde_bytes")]
     pub merkle_root: Vec<u8>,
     pub time: u32,
     pub bits: u32,
@@ -150,10 +149,12 @@ pub struct BlockHeader {
 impl BlockHeader {
     /// Returns the size of this `BlockHeader` in bytes.
     pub fn count_bytes(&self) -> usize {
-        std::mem::size_of::<i32>()
+        size_of_val(&self.version)
             + self.prev_blockhash.len()
             + self.merkle_root.len()
-            + std::mem::size_of::<u32>() * 3
+            + size_of_val(&self.time)
+            + size_of_val(&self.bits)
+            + size_of_val(&self.nonce)
     }
 }
 
@@ -183,7 +184,83 @@ impl From<v1::BlockHeader> for BlockHeader {
     }
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Hash, Serialize, Deserialize, Eq, PartialEq)]
+pub struct Block {
+    pub header: BlockHeader,
+    pub txdata: Vec<Transaction>,
+}
+
+impl Block {
+    pub fn count_bytes(&self) -> usize {
+        self.header.count_bytes() + self.txdata.iter().map(|tx| tx.count_bytes()).sum::<usize>()
+    }
+}
+
+#[derive(Clone, Debug, Default, Hash, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Transaction {
+    pub version: i32,
+    pub lock_time: u32,
+    pub input: Vec<TxIn>,
+    pub output: Vec<TxOut>,
+}
+
+impl Transaction {
+    pub fn count_bytes(&self) -> usize {
+        size_of_val(&self.version)
+            + size_of_val(&self.lock_time)
+            + self.input.iter().map(|i| i.count_bytes()).sum::<usize>()
+            + self.output.iter().map(|o| o.count_bytes()).sum::<usize>()
+    }
+}
+
+pub const HASH_LEN: usize = 32;
+
+pub type Hash = [u8; HASH_LEN];
+pub type Txid = Hash;
+
+#[derive(Clone, Debug, Default, Hash, Serialize, Deserialize, PartialEq, Eq)]
+pub struct OutPoint {
+    pub txid: Txid,
+    pub vout: u32,
+}
+
+impl OutPoint {
+    pub fn count_bytes(&self) -> usize {
+        size_of_val(&self.txid) + size_of_val(&self.vout)
+    }
+}
+
+#[derive(Clone, Debug, Default, Hash, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TxIn {
+    pub previous_output: OutPoint,
+    #[serde(with = "serde_bytes")]
+    pub script_sig: Vec<u8>,
+    pub sequence: u32,
+    pub witness: Vec<serde_bytes::ByteBuf>,
+}
+
+impl TxIn {
+    pub fn count_bytes(&self) -> usize {
+        self.previous_output.count_bytes()
+            + self.script_sig.len()
+            + size_of_val(&self.sequence)
+            + self.witness.iter().map(|w| w.len()).sum::<usize>()
+    }
+}
+
+#[derive(Clone, Debug, Default, Hash, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TxOut {
+    pub value: u64,
+    pub script_pubkey: serde_bytes::ByteBuf,
+}
+
+impl TxOut {
+    pub fn count_bytes(&self) -> usize {
+        size_of_val(&self.value) + self.script_pubkey.len()
+    }
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, Hash, PartialEq, Eq)]
 pub struct GetSuccessorsResponse {
     pub blocks: Vec<Block>,
     pub next: Vec<BlockHeader>,
@@ -192,43 +269,15 @@ pub struct GetSuccessorsResponse {
 impl GetSuccessorsResponse {
     /// Returns the size of this `GetSuccessorsResponse` in bytes.
     pub fn count_bytes(&self) -> usize {
-        self.blocks.iter().map(|x| x.get_size()).sum::<usize>()
+        self.blocks.iter().map(|x| x.count_bytes()).sum::<usize>()
             + self.next.iter().map(|x| x.count_bytes()).sum::<usize>()
-    }
-}
-
-// Implement `PartialEq` and `Eq` because we need to implement `Hash` as well.
-// See below for an explanation why we need to implement `Hash`.
-impl PartialEq for GetSuccessorsResponse {
-    fn eq(&self, other: &Self) -> bool {
-        self.blocks.len() == other.blocks.len()
-            && self
-                .blocks
-                .iter()
-                .zip(other.blocks.iter())
-                .all(|(a, b)| a == b)
-    }
-}
-
-impl Eq for GetSuccessorsResponse {}
-
-// Implement `Hash` because it's a requirement for structs stored in a consensus
-// block and we can't derive it since `bitcoin::Block` doesn't derive it.
-impl std::hash::Hash for GetSuccessorsResponse {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        for b in self.blocks.iter() {
-            b.block_hash().hash(state);
-        }
-        for h in self.next.iter() {
-            h.hash(state);
-        }
     }
 }
 
 impl From<&GetSuccessorsResponse> for v1::GetSuccessorsResponse {
     fn from(response: &GetSuccessorsResponse) -> Self {
         v1::GetSuccessorsResponse {
-            blocks: response.blocks.iter().map(block_to_proto).collect(),
+            blocks: response.blocks.iter().map(v1::Block::from).collect(),
             next: response.next.iter().map(v1::BlockHeader::from).collect(),
         }
     }
@@ -239,7 +288,7 @@ impl TryFrom<v1::GetSuccessorsResponse> for GetSuccessorsResponse {
     fn try_from(response: v1::GetSuccessorsResponse) -> Result<Self, Self::Error> {
         let mut blocks = vec![];
         for b in response.blocks.into_iter() {
-            blocks.push(block_try_from_proto(b)?);
+            blocks.push(Block::try_from(b)?);
         }
         Ok(GetSuccessorsResponse {
             blocks,
@@ -361,118 +410,124 @@ impl BitcoinAdapterResponse {
     }
 }
 
-// Helper function to convert a `bitcoin::TxIn` to a protobuf `TxIn`.
-// The function is needed because both types are defined in different crates
-// and we cannot idiomatic `From`, `TryFrom` implementations.
-fn txin_to_proto(txin: &bitcoin::TxIn) -> v1::TxIn {
-    v1::TxIn {
-        previous_output: Some(v1::OutPoint {
-            txid: txin.previous_output.txid.to_vec(),
-            vout: txin.previous_output.vout,
-        }),
-        script_sig: txin.script_sig.to_bytes(),
-        sequence: txin.sequence,
-        witness: txin.witness.to_vec(),
-    }
-}
-
-// Helper function to convert a protobuf `TxIn` to a `bitcoin::TxIn`.
-// The function is needed because both types are defined in different crates
-// and we cannot idiomatic `From`, `TryFrom` implementations.
-fn txin_try_from_proto(txin: v1::TxIn) -> Result<bitcoin::TxIn, ProxyDecodeError> {
-    let previous_output = match txin.previous_output {
-        Some(previous_output) => previous_output,
-        None => return Err(ProxyDecodeError::MissingField("Bitcoin::OutPoint")),
-    };
-    Ok(bitcoin::TxIn {
-        previous_output: OutPoint {
-            txid: Txid::from_hash(
-                Hash::from_slice(&previous_output.txid)
-                    .map_err(|e| ProxyDecodeError::Other(e.to_string()))?,
-            ),
-            vout: previous_output.vout,
-        },
-        script_sig: bitcoin::Script::from(txin.script_sig),
-        sequence: txin.sequence,
-        witness: txin.witness,
-    })
-}
-
-// Helper function to convert a `bitcoin::Block` to a protobuf `Block`.
-// The function is needed because both types are defined in different crates
-// and we cannot idiomatic `From`, `TryFrom` implementations.
-fn block_to_proto(block: &Block) -> v1::Block {
-    v1::Block {
-        header: Some(v1::BlockHeader {
-            version: block.header.version,
-            prev_blockhash: block.header.prev_blockhash.to_vec(),
-            merkle_root: block.header.merkle_root.to_vec(),
-            time: block.header.time,
-            bits: block.header.bits,
-            nonce: block.header.nonce,
-        }),
-        txdata: block
-            .txdata
-            .iter()
-            .map(|x| v1::Transaction {
-                version: x.version,
-                lock_time: x.lock_time,
-                input: x.input.iter().map(txin_to_proto).collect(),
-                output: x
-                    .output
-                    .iter()
-                    .map(|x| v1::TxOut {
-                        value: x.value,
-                        script_pubkey: x.script_pubkey.to_bytes(),
-                    })
-                    .collect(),
-            })
-            .collect(),
-    }
-}
-
-// Helper function to convert a protobuf `Block` to a protobuf `bitcoin::Block`.
-// The function is needed because both types are defined in different crates
-// and we cannot idiomatic `From`, `TryFrom` implementations.
-fn block_try_from_proto(block: v1::Block) -> Result<Block, ProxyDecodeError> {
-    let header = match block.header {
-        Some(header) => bitcoin::BlockHeader {
-            version: header.version,
-            prev_blockhash: bitcoin::BlockHash::from_hash(
-                Hash::from_slice(&header.prev_blockhash)
-                    .map_err(|e| ProxyDecodeError::Other(e.to_string()))?,
-            ),
-            merkle_root: bitcoin::TxMerkleNode::from_hash(
-                Hash::from_slice(&header.merkle_root)
-                    .map_err(|e| ProxyDecodeError::Other(e.to_string()))?,
-            ),
-            time: header.time,
-            bits: header.bits,
-            nonce: header.nonce,
-        },
-        None => return Err(ProxyDecodeError::MissingField("Bitcoin::BlockHeader")),
-    };
-
-    let mut txdata: Vec<bitcoin::Transaction> = vec![];
-    for tx in block.txdata.into_iter() {
-        let mut input = vec![];
-        for txin in tx.input.into_iter() {
-            input.push(txin_try_from_proto(txin)?);
+impl From<&TxIn> for v1::TxIn {
+    fn from(txin: &TxIn) -> v1::TxIn {
+        v1::TxIn {
+            previous_output: Some(v1::OutPoint {
+                txid: txin.previous_output.txid.to_vec(),
+                vout: txin.previous_output.vout,
+            }),
+            script_sig: txin.script_sig.to_vec(),
+            sequence: txin.sequence,
+            witness: txin.witness.iter().map(|v| v.to_vec()).collect(),
         }
-        txdata.push(bitcoin::Transaction {
-            version: tx.version,
-            lock_time: tx.lock_time,
-            input,
-            output: tx
-                .output
+    }
+}
+
+impl TryFrom<v1::TxIn> for TxIn {
+    type Error = ProxyDecodeError;
+    fn try_from(txin: v1::TxIn) -> Result<TxIn, ProxyDecodeError> {
+        let previous_output = match txin.previous_output {
+            Some(previous_output) => previous_output,
+            None => return Err(ProxyDecodeError::MissingField("Bitcoin::OutPoint")),
+        };
+        Ok(TxIn {
+            previous_output: OutPoint {
+                txid: Txid::try_from(&previous_output.txid[..])
+                    .map_err(|e| ProxyDecodeError::Other(e.to_string()))?,
+                vout: previous_output.vout,
+            },
+            script_sig: txin.script_sig,
+            sequence: txin.sequence,
+            witness: txin
+                .witness
                 .into_iter()
-                .map(|x| TxOut {
-                    value: x.value,
-                    script_pubkey: bitcoin::Script::from(x.script_pubkey),
+                .map(serde_bytes::ByteBuf::from)
+                .collect(),
+        })
+    }
+}
+
+impl From<&Block> for v1::Block {
+    fn from(block: &Block) -> v1::Block {
+        v1::Block {
+            header: Some(v1::BlockHeader {
+                version: block.header.version,
+                prev_blockhash: block.header.prev_blockhash.to_vec(),
+                merkle_root: block.header.merkle_root.to_vec(),
+                time: block.header.time,
+                bits: block.header.bits,
+                nonce: block.header.nonce,
+            }),
+            txdata: block
+                .txdata
+                .iter()
+                .map(|x| v1::Transaction {
+                    version: x.version,
+                    lock_time: x.lock_time,
+                    input: x.input.iter().map(v1::TxIn::from).collect(),
+                    output: x
+                        .output
+                        .iter()
+                        .map(|x| v1::TxOut {
+                            value: x.value,
+                            script_pubkey: x.script_pubkey.clone().into_vec(),
+                        })
+                        .collect(),
                 })
                 .collect(),
-        });
+        }
     }
+}
 
-    Ok(Block { header, txdata })
+fn validate_hash(bytes: Vec<u8>) -> Result<Vec<u8>, ProxyDecodeError> {
+    if bytes.len() != HASH_LEN {
+        Err(ProxyDecodeError::InvalidDigestLength {
+            expected: HASH_LEN,
+            actual: bytes.len(),
+        })
+    } else {
+        Ok(bytes)
+    }
+}
+
+impl TryFrom<v1::Block> for Block {
+    type Error = ProxyDecodeError;
+
+    fn try_from(block: v1::Block) -> Result<Block, ProxyDecodeError> {
+        let header = match block.header {
+            Some(header) => BlockHeader {
+                version: header.version,
+                prev_blockhash: validate_hash(header.prev_blockhash)?,
+                merkle_root: validate_hash(header.merkle_root)?,
+                time: header.time,
+                bits: header.bits,
+                nonce: header.nonce,
+            },
+            None => return Err(ProxyDecodeError::MissingField("Bitcoin::BlockHeader")),
+        };
+
+        let mut txdata: Vec<Transaction> = vec![];
+        for tx in block.txdata.into_iter() {
+            let mut input = vec![];
+            for txin in tx.input.into_iter() {
+                input.push(TxIn::try_from(txin)?);
+            }
+            txdata.push(Transaction {
+                version: tx.version,
+                lock_time: tx.lock_time,
+                input,
+                output: tx
+                    .output
+                    .into_iter()
+                    .map(|x| TxOut {
+                        value: x.value,
+                        script_pubkey: serde_bytes::ByteBuf::from(x.script_pubkey),
+                    })
+                    .collect(),
+            });
+        }
+
+        Ok(Block { header, txdata })
+    }
 }
