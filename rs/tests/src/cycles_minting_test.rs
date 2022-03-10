@@ -43,8 +43,8 @@ use ic_types::{
 };
 use ledger_canister::protobuf::TipOfChainRequest;
 use ledger_canister::{
-    self, Block, BlockArg, BlockHeight, BlockRes, CyclesResponse, NotifyCanisterArgs, Operation,
-    Subaccount, TipOfChainRes, Tokens, DEFAULT_TRANSFER_FEE,
+    AccountBalanceArgs, AccountIdentifier, Block, BlockArg, BlockHeight, BlockRes, CyclesResponse,
+    NotifyCanisterArgs, Operation, Subaccount, TipOfChainRes, Tokens, DEFAULT_TRANSFER_FEE,
 };
 use on_wire::{FromWire, IntoWire};
 use slog::info;
@@ -88,12 +88,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             CYCLES_MINTING_CANISTER_ID,
         );
 
-        let (
-            _controller_user_id,
-            controller_user_keypair,
-            _controller_user_public_key,
-            controller_pid,
-        ) = make_user(7);
+        let (_acc, controller_user_keypair, _pk, controller_pid) = make_user(7);
 
         let xdr_permyriad_per_icp = 5_000; // = 0.5 XDR/ICP
         let icpts_to_cycles = TokensToCycles {
@@ -262,12 +257,12 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             .unwrap();
 
         /* Create with funds < the canister creation fee. */
-        info!(ctx.logger, "creating canister (not enough funds)");
+        info!(ctx.logger, "creating canister (not enough funds 1)");
 
-        let insufficient_amount1 = Tokens::new(0, 10_000_000).unwrap();
+        let small_amount = Tokens::new(0, 10_000_000).unwrap();
 
         let (err, refund_block) = user1
-            .create_canister_cmc(insufficient_amount1, None, &controller_pid)
+            .create_canister_cmc(small_amount, None, &controller_pid)
             .await
             .unwrap_err();
 
@@ -275,17 +270,13 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         assert!(err.contains("Creating a canister requires a fee of"));
 
         let refund_block = refund_block.unwrap();
-        tst.check_refund(
-            refund_block,
-            insufficient_amount1,
-            CREATE_CANISTER_REFUND_FEE,
-        )
-        .await;
+        tst.check_refund(refund_block, small_amount, CREATE_CANISTER_REFUND_FEE)
+            .await;
 
         // remove when ledger notify goes away
         {
             let (err, refund_block) = user1
-                .create_canister_ledger(insufficient_amount1, None, &controller_pid)
+                .create_canister_ledger(small_amount, None, &controller_pid)
                 .await
                 .unwrap_err();
 
@@ -293,21 +284,17 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             assert!(err.contains("Creating a canister requires a fee of"));
 
             let refund_block = refund_block.unwrap();
-            tst.check_refund(
-                refund_block,
-                insufficient_amount1,
-                CREATE_CANISTER_REFUND_FEE,
-            )
-            .await;
+            tst.check_refund(refund_block, small_amount, CREATE_CANISTER_REFUND_FEE)
+                .await;
         }
 
         /* Create with funds < the refund fee. */
-        info!(ctx.logger, "creating canister (not enough funds)");
+        info!(ctx.logger, "creating canister (not enough funds 2)");
 
-        let insufficient_amount2 = (DEFAULT_TRANSFER_FEE + Tokens::from_e8s(10_000)).unwrap();
+        let tiny_amount = (DEFAULT_TRANSFER_FEE + Tokens::from_e8s(10_000)).unwrap();
 
         let (err, no_refund_block) = user1
-            .create_canister_cmc(insufficient_amount2, None, &controller_pid)
+            .create_canister_cmc(tiny_amount, None, &controller_pid)
             .await
             .unwrap_err();
 
@@ -321,11 +308,9 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         let txn = block.transaction();
 
         match txn.operation {
-            Operation::Burn { amount, .. } => {
-                assert_eq!(
-                    (insufficient_amount2 - DEFAULT_TRANSFER_FEE).unwrap(),
-                    amount
-                );
+            Operation::Burn { from, amount } => {
+                assert_eq!(tiny_amount, amount);
+                assert_eq!(tst.get_balance(from).await, Tokens::ZERO);
             }
             _ => panic!("unexpected block {:?}", txn),
         }
@@ -333,7 +318,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         // remove when ledger notify goes away
         {
             let (err, no_refund_block) = user1
-                .create_canister_ledger(insufficient_amount2, None, &controller_pid)
+                .create_canister_ledger(tiny_amount, None, &controller_pid)
                 .await
                 .unwrap_err();
 
@@ -347,11 +332,9 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             let txn = block.transaction();
 
             match txn.operation {
-                Operation::Burn { amount, .. } => {
-                    assert_eq!(
-                        (insufficient_amount2 - DEFAULT_TRANSFER_FEE).unwrap(),
-                        amount
-                    );
+                Operation::Burn { from, amount } => {
+                    assert_eq!(tiny_amount, amount);
+                    assert_eq!(tst.get_balance(from).await, Tokens::ZERO);
                 }
                 _ => panic!("unexpected block {:?}", txn),
             }
@@ -375,8 +358,9 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         let txn = block.transaction();
 
         match txn.operation {
-            Operation::Burn { amount, .. } => {
-                assert_eq!((amount + DEFAULT_TRANSFER_FEE).unwrap(), initial_amount);
+            Operation::Burn { from, amount } => {
+                assert_eq!(amount, initial_amount);
+                assert_eq!(tst.get_balance(from).await, Tokens::ZERO);
             }
             _ => panic!("unexpected block {:?}", txn),
         }
@@ -398,6 +382,11 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             .top_up_canister_cmc(topup1, None, &new_canister_id)
             .await
             .unwrap();
+        assert_eq!(
+            tst.get_balance(user1.acc_for_topup(&new_canister_id)).await,
+            Tokens::ZERO,
+            "All funds from cmc subaccount should have disappeared"
+        );
 
         let bh = user1.pay_for_topup(topup2, None, &new_canister_id).await;
         user1
@@ -421,6 +410,12 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             .notify_top_up_ledger(bh, None, &new_canister_id)
             .await
             .unwrap_err();
+
+        assert_eq!(
+            tst.get_balance(user1.acc_for_topup(&new_canister_id)).await,
+            Tokens::ZERO,
+            "All funds from cmc subaccount should have disappeared after topups"
+        );
 
         //notification by a different user should fail (to be decided)
         user2
@@ -472,8 +467,9 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         let txn = block.transaction();
 
         match txn.operation {
-            Operation::Burn { amount, .. } => {
-                assert_eq!((amount + DEFAULT_TRANSFER_FEE).unwrap(), topup3);
+            Operation::Burn { from, amount } => {
+                assert_eq!(amount, topup3);
+                assert_eq!(tst.get_balance(from).await, Tokens::ZERO);
             }
             _ => panic!("unexpected block {:?}", txn),
         }
@@ -490,8 +486,9 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             let txn = block.transaction();
 
             match txn.operation {
-                Operation::Burn { amount, .. } => {
-                    assert_eq!((amount + DEFAULT_TRANSFER_FEE).unwrap(), initial_amount);
+                Operation::Burn { from, amount } => {
+                    assert_eq!(amount, initial_amount);
+                    assert_eq!(tst.get_balance(from).await, Tokens::ZERO);
                 }
                 _ => panic!("unexpected block {:?}", txn),
             }
@@ -545,8 +542,9 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             let txn = block.transaction();
 
             match txn.operation {
-                Operation::Burn { amount, .. } => {
-                    assert_eq!((amount + DEFAULT_TRANSFER_FEE).unwrap(), top_up_amount);
+                Operation::Burn { from, amount } => {
+                    assert_eq!(amount, top_up_amount);
+                    assert_eq!(tst.get_balance(from).await, Tokens::ZERO);
                 }
                 _ => panic!("unexpected block {:?}", txn),
             }
@@ -646,8 +644,11 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         .await;
 
         info!(ctx.logger, "creating NNS canister (will fail)");
+        let block = user1
+            .pay_for_canister(nns_amount, None, &controller_pid)
+            .await;
         let err = user1
-            .create_canister_cmc(nns_amount, None, &controller_pid)
+            .notify_canister_create_cmc(block, None, &controller_pid)
             .await
             .unwrap_err();
 
@@ -660,7 +661,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         // remove when ledger notify goes away
         {
             let err = user1
-                .create_canister_ledger(nns_amount, None, &controller_pid)
+                .notify_canister_create_ledger(block, None, &controller_pid)
                 .await
                 .unwrap_err();
 
@@ -690,7 +691,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         info!(ctx.logger, "creating NNS canister");
 
         user1
-            .create_canister_cmc(nns_amount, None, &controller_pid)
+            .notify_canister_create_cmc(block, None, &controller_pid)
             .await
             .unwrap();
 
@@ -743,9 +744,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             .await
             .unwrap();
 
-        let total_icpts = (((((insufficient_amount1 + insufficient_amount2).unwrap()
-            + initial_amount)
-            .unwrap()
+        let total_icpts = (((((small_amount + tiny_amount).unwrap() + initial_amount).unwrap()
             + top_up_amount)
             .unwrap()
             + nns_amount)
@@ -796,6 +795,14 @@ impl TestAgent {
         }
     }
 
+    pub async fn get_balance(&self, acc: AccountIdentifier) -> Tokens {
+        let arg = AccountBalanceArgs::new(acc);
+        let res: Result<Tokens, String> = self
+            .query_pb(&LEDGER_CANISTER_ID, "account_balance_pb", arg)
+            .await;
+        res.unwrap()
+    }
+
     pub async fn get_tip(&self) -> Result<Block, String> {
         let resp: Result<TipOfChainRes, String> = self
             .query_pb(&LEDGER_CANISTER_ID, "tip_of_chain_pb", TipOfChainRequest {})
@@ -828,8 +835,10 @@ impl TestAgent {
         let txn = block.transaction();
 
         match txn.operation {
-            Operation::Burn { amount, .. } => {
+            Operation::Burn { from, amount } => {
                 assert_eq!(refund_fee, amount);
+                let balance = self.get_balance(from).await;
+                assert_eq!(balance, Tokens::ZERO, "All funds should have been burned");
             }
             _ => panic!("unexpected block {:?}", txn),
         }
@@ -954,6 +963,10 @@ impl UserHandle {
             .await;
         self.notify_top_up_cmc(block_idx, sender_subaccount, target_canister_id)
             .await
+    }
+
+    fn acc_for_topup(&self, target_canister_id: &CanisterId) -> AccountIdentifier {
+        AccountIdentifier::new(self.cmc_id.into(), Some(target_canister_id.into()))
     }
 
     pub async fn pay_for_canister(

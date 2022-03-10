@@ -19,7 +19,7 @@ use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_types::ic00::{CanisterIdRecord, CanisterSettingsArgs, CreateCanisterArgs, Method, IC_00};
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use ledger_canister::{
-    AccountIdentifier, BlockHeight, CyclesResponse, Memo, SendArgs, Tokens,
+    AccountIdentifier, BlockHeight, CyclesResponse, Memo, SendArgs, Subaccount, Tokens,
     TransactionNotification, DEFAULT_TRANSFER_FEE,
 };
 use on_wire::{FromWire, IntoWire, NewType};
@@ -492,7 +492,7 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
             "[cycles] No conversion rate found in CMC, transaction {:?} by {} refunded",
             tn, caller
         ));
-        let refund_block = refund(&tn, &ledger_canister_id, Tokens::ZERO).await?;
+        let refund_block = refund(&tn, Tokens::ZERO).await?;
         return Ok(CyclesResponse::Refunded(
             "No conversion rate found in CMC or Registry, amount refunded".to_string(),
             refund_block,
@@ -522,13 +522,7 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
         // notification cannot be retried.
         let res = create_canister(controller, cycles).await;
 
-        let refund_block = burn_or_refund(
-            res.is_ok(),
-            CREATE_CANISTER_REFUND_FEE,
-            &tn,
-            &ledger_canister_id,
-        )
-        .await?;
+        let refund_block = burn_or_refund(res.is_ok(), CREATE_CANISTER_REFUND_FEE, &tn).await?;
 
         Ok(match res {
             Ok(cid) => CyclesResponse::CanisterCreated(cid),
@@ -548,13 +542,7 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
 
         let res = deposit_cycles(canister_id, cycles).await;
 
-        let refund_block = burn_or_refund(
-            res.is_ok(),
-            TOP_UP_CANISTER_REFUND_FEE,
-            &tn,
-            &ledger_canister_id,
-        )
-        .await?;
+        let refund_block = burn_or_refund(res.is_ok(), TOP_UP_CANISTER_REFUND_FEE, &tn).await?;
 
         Ok(match res {
             Ok(()) => CyclesResponse::ToppedUp(()),
@@ -572,75 +560,52 @@ async fn burn_or_refund(
     is_ok: bool,
     extra_fee: Tokens,
     tn: &TransactionNotification,
-    ledger_canister_id: &CanisterId,
 ) -> Result<Option<BlockHeight>, String> {
     if is_ok {
-        if let Ok(amount) = tn.amount - DEFAULT_TRANSFER_FEE {
-            burn_and_log(tn, amount, ledger_canister_id).await;
-        }
+        burn_and_log(&tn.from, tn.to_subaccount, tn.amount).await;
         Ok(None)
     } else {
-        refund(tn, ledger_canister_id, extra_fee).await
+        refund(tn, extra_fee).await
     }
 }
 
-/// Burn funds and log but ignore any errors. When canister creation /
-/// topping up succeeded, we don't want to reject the transaction
+/// Attempt to burn the funds.
+/// Burning doesn't return errors - we don't want to reject the transaction
 /// notification because then it could be retried.
-async fn burn_and_log(
-    tn: &TransactionNotification,
-    amount: Tokens,
-    ledger_canister_id: &CanisterId,
-) {
-    if let Err(err) = burn(tn, amount, ledger_canister_id).await {
-        print(format!("Burning {} ICPTs failed: {}", tn.amount, err));
-    }
-}
-
-/// Burn the funds for canister creation or top up to prevent
-/// accumulating a lot of dead accounts on the ledger.
-async fn burn(
-    tn: &TransactionNotification,
-    amount: Tokens,
-    ledger_canister_id: &CanisterId,
-) -> Result<(), String> {
+async fn burn_and_log(from: &PrincipalId, sub: Option<Subaccount>, amount: Tokens) {
+    let msg = format!("Burning of {} ICPTs from {}", amount, from);
     let minting_account_id = STATE.read().unwrap().minting_account_id;
+    if minting_account_id.is_none() {
+        print(format!("{} failed: minting_account_id not set", msg));
+        return;
+    }
+    let minting_account_id = minting_account_id.unwrap();
+    let ledger_canister_id = STATE.read().unwrap().ledger_canister_id;
 
-    if let Some(minting_account_id) = minting_account_id {
-        let send_args = SendArgs {
-            memo: Memo::default(),
-            amount,
-            fee: Tokens::ZERO,
-            from_subaccount: tn.to_subaccount,
-            to: minting_account_id,
-            created_at_time: None,
-        };
-
-        let res: Result<BlockHeight, (Option<i32>, String)> = dfn_core::api::call_with_cleanup(
-            *ledger_canister_id,
-            "send_pb",
-            protobuf,
-            send_args.clone(),
-        )
-        .await;
-
-        let block = res.map_err(|(code, msg)| {
-            format!(
-                "Burning of {} ICPTs from {} failed with code {}: {:?}",
-                send_args.amount,
-                tn.from,
-                code.unwrap_or_default(),
-                msg
-            )
-        })?;
-
-        print(format!(
-            "Burning of {} ICPTs from {} done in block {}.",
-            send_args.amount, tn.from, block
-        ));
+    if amount < DEFAULT_TRANSFER_FEE {
+        print(format!("{}: amount too small ({})", msg, amount));
+        return;
     }
 
-    Ok(())
+    let send_args = SendArgs {
+        memo: Memo::default(),
+        amount,
+        fee: Tokens::ZERO,
+        from_subaccount: sub,
+        to: minting_account_id,
+        created_at_time: None,
+    };
+
+    let res: Result<BlockHeight, (Option<i32>, String)> =
+        dfn_core::api::call_with_cleanup(ledger_canister_id, "send_pb", protobuf, send_args).await;
+
+    match res {
+        Ok(block) => print(format!("{} done in block {}.", msg, block)),
+        Err((code, err)) => {
+            let code = code.unwrap_or_default();
+            print(format!("{} failed with code {}: {:?}", msg, code, err))
+        }
+    }
 }
 
 /// Send the funds for canister creation or top up back to the sender,
@@ -649,25 +614,19 @@ async fn burn(
 /// the refund was done.
 async fn refund(
     tn: &TransactionNotification,
-    ledger_canister_id: &CanisterId,
     extra_fee: Tokens,
 ) -> Result<Option<BlockHeight>, String> {
+    let ledger_canister_id = STATE.read().unwrap().ledger_canister_id;
     let mut refund_block_index = None;
 
-    // Don't refund a negative amount.
-    let amount_minus_fee = if let Ok(amount) = tn.amount - DEFAULT_TRANSFER_FEE {
-        amount
-    } else {
-        return Ok(None);
-    };
-
-    let (refunded, burned) = if let Ok(amount) = amount_minus_fee - extra_fee {
-        (amount, extra_fee)
-    } else {
-        (Tokens::ZERO, amount_minus_fee)
-    };
-
-    assert_eq!(Ok(amount_minus_fee), refunded + burned);
+    let mut burned = tn.amount;
+    let mut refunded = Tokens::ZERO;
+    if let Ok(to_refund) = (tn.amount - DEFAULT_TRANSFER_FEE).and_then(|x| x - extra_fee) {
+        if to_refund > Tokens::ZERO {
+            burned = extra_fee;
+            refunded = to_refund;
+        }
+    }
 
     if refunded != Tokens::ZERO {
         let send_args = SendArgs {
@@ -678,34 +637,24 @@ async fn refund(
             to: AccountIdentifier::new(tn.from, tn.from_subaccount),
             created_at_time: None,
         };
+        let msg = format!("Refund to {}", send_args.to);
 
-        let res: Result<BlockHeight, (Option<i32>, String)> = dfn_core::api::call_with_cleanup(
-            *ledger_canister_id,
-            "send_pb",
-            protobuf,
-            send_args.clone(),
-        )
-        .await;
+        let res: Result<BlockHeight, (Option<i32>, String)> =
+            dfn_core::api::call_with_cleanup(ledger_canister_id, "send_pb", protobuf, send_args)
+                .await;
 
-        let block = res.map_err(|(code, msg)| {
-            format!(
-                "Refund to {} failed with code {}: {:?}",
-                send_args.to,
-                code.unwrap_or_default(),
-                msg
-            )
+        let block = res.map_err(|(code, err)| {
+            let code = code.unwrap_or_default();
+            format!(" {} failed with code {}: {:?}", msg, code, err)
         })?;
 
-        print(format!(
-            "Refund to {} done in block {}.",
-            send_args.to, block
-        ));
+        print(format!("{} done in block {}.", msg, block));
 
         refund_block_index = Some(block);
     }
 
     if burned != Tokens::ZERO {
-        burn_and_log(tn, burned, ledger_canister_id).await;
+        burn_and_log(&tn.from, tn.to_subaccount, burned).await;
     }
 
     Ok(refund_block_index)
