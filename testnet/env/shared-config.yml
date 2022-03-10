@@ -17,6 +17,10 @@ data_centers:
     vars:
       ipv6_prefix: "2607:f6f0:3004:1"
       ipv6_subnet: "/64"
+  dm1:
+    vars:
+      ipv6_prefix: "2604:6800:258:1"
+      ipv6_subnet: "/64"
   fr1:
     vars:
       ipv6_prefix: "2001:4d78:40d"
