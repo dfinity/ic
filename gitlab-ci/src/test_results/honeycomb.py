@@ -70,7 +70,7 @@ def main():
 
     libhoney.init(writekey=api_token, dataset="gitlab-ci-dfinity", debug=False)
     root = input.read_test_results(args.test_results)
-    create_and_export_spans(root, args.type, args.trace_id, args.parent_id)
+    create_and_export_spans(root, args.trace_id, args.parent_id, args.type)
     libhoney.close()
 
 
