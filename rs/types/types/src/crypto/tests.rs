@@ -53,6 +53,22 @@ fn should_correctly_convert_algorithm_id_to_i32() {
     assert_eq!(AlgorithmId::MegaSecp256k1 as i32, 16)
 }
 
+#[test]
+fn should_correctly_convert_usize_to_key_purpose() {
+    // ensure _all_ key purposes are compared (i.e., no key purpose was forgotten)
+    assert_eq!(KeyPurpose::iter().count(), 6);
+
+    assert_eq!(KeyPurpose::from(0), KeyPurpose::Placeholder);
+    assert_eq!(KeyPurpose::from(1), KeyPurpose::NodeSigning);
+    assert_eq!(KeyPurpose::from(2), KeyPurpose::QueryResponseSigning);
+    assert_eq!(KeyPurpose::from(3), KeyPurpose::DkgDealingEncryption);
+    assert_eq!(KeyPurpose::from(4), KeyPurpose::CommitteeSigning);
+    assert_eq!(KeyPurpose::from(5), KeyPurpose::IDkgMEGaEncryption);
+
+    // Verify that an unknown usize maps onto Placeholder
+    assert_eq!(AlgorithmId::from(42), AlgorithmId::Placeholder);
+}
+
 pub fn set_of(node_ids: &[NodeId]) -> BTreeSet<NodeId> {
     let mut dealers = BTreeSet::new();
     node_ids.iter().for_each(|node_id| {

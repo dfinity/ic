@@ -4368,6 +4368,7 @@ dependencies = [
  "ic-crypto-internal-fs-ni-dkg",
  "ic-crypto-internal-multi-sig-bls12381",
  "ic-crypto-internal-threshold-sig-bls12381",
+ "ic-crypto-internal-threshold-sig-ecdsa",
  "ic-crypto-internal-types",
  "ic-crypto-tls-cert-validation",
  "ic-protobuf",

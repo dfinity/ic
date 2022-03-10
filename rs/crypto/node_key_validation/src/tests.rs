@@ -7,6 +7,7 @@ use ic_test_utilities::crypto::temp_dir::temp_dir;
 #[test]
 fn should_succeed_on_valid_keys() {
     let (keys, node_id) = valid_node_keys_and_node_id();
+    assert!(keys.version >= 1);
 
     let valid_keys = ValidNodePublicKeys::try_from(&keys, node_id).unwrap();
 
@@ -22,6 +23,11 @@ fn should_succeed_on_valid_keys() {
     assert_eq!(
         valid_keys.dkg_dealing_encryption_key(),
         &keys.dkg_dealing_encryption_pk.unwrap()
+    );
+    assert!(valid_keys.idkg_dealing_encryption_key().is_some());
+    assert_eq!(
+        valid_keys.idkg_dealing_encryption_key().unwrap(),
+        &keys.idkg_dealing_encryption_pk.unwrap()
     );
     assert_eq!(valid_keys.tls_certificate(), &keys.tls_certificate.unwrap());
 }
@@ -299,6 +305,120 @@ fn should_correctly_display_key_validation_error() {
         .to_string(),
         "KeyValidationError { error: \"description\" }".to_string()
     );
+}
+
+#[test]
+fn should_fail_if_idkg_dealing_encryption_key_is_missing() {
+    let (keys, node_id) = {
+        let (mut keys, node_id) = valid_node_keys_and_node_id();
+        assert!(keys.version >= 1);
+        keys.idkg_dealing_encryption_pk = None;
+        (keys, node_id)
+    };
+
+    let result = ValidNodePublicKeys::try_from(&keys, node_id);
+
+    assert!(matches!(result, Err(KeyValidationError { error })
+        if error == "invalid I-DKG dealing encryption key: key is missing"
+    ));
+}
+
+#[test]
+fn should_fail_if_idkg_dealing_encryption_key_algorithm_unsupported() {
+    let (keys, node_id) = {
+        let (mut keys, node_id) = valid_node_keys_and_node_id();
+        assert!(keys.version >= 1);
+        if let Some(pk) = keys.idkg_dealing_encryption_pk.as_mut() {
+            pk.algorithm = AlgorithmIdProto::Unspecified as i32;
+        }
+        (keys, node_id)
+    };
+
+    let result = ValidNodePublicKeys::try_from(&keys, node_id);
+
+    assert!(matches!(result, Err(KeyValidationError { error })
+        if error == "invalid I-DKG dealing encryption key: unsupported algorithm: Some(Unspecified)"
+    ));
+}
+
+#[test]
+fn should_fail_if_idkg_dealing_encryption_key_is_invalid() {
+    let (keys, node_id) = {
+        let (mut keys, node_id) = valid_node_keys_and_node_id();
+        assert!(keys.version >= 1);
+        if let Some(pk) = keys.idkg_dealing_encryption_pk.as_mut() {
+            pk.key_value = b"invalid key".to_vec();
+        }
+        (keys, node_id)
+    };
+
+    let result = ValidNodePublicKeys::try_from(&keys, node_id);
+
+    assert!(matches!(result, Err(KeyValidationError { error })
+        if error == "invalid I-DKG dealing encryption key: verification failed: InvalidPublicKey"));
+}
+
+#[test]
+fn should_not_fail_if_idkg_dealing_encryption_key_is_missing_in_version_0() {
+    let (keys, node_id) = {
+        let (mut keys, node_id) = valid_node_keys_and_node_id();
+        keys.idkg_dealing_encryption_pk = None;
+        keys.version = 0;
+        (keys, node_id)
+    };
+
+    let result = ValidNodePublicKeys::try_from(&keys, node_id);
+
+    assert!(result.is_ok());
+}
+
+#[test]
+fn should_not_fail_if_idkg_dealing_encryption_key_algorithm_unsupported_in_version_0() {
+    let (keys, node_id) = {
+        let (mut keys, node_id) = valid_node_keys_and_node_id();
+        assert!(keys.idkg_dealing_encryption_pk.is_some());
+        if let Some(pk) = keys.idkg_dealing_encryption_pk.as_mut() {
+            pk.algorithm = AlgorithmIdProto::Unspecified as i32;
+        }
+        keys.version = 0;
+        (keys, node_id)
+    };
+
+    let result = ValidNodePublicKeys::try_from(&keys, node_id);
+
+    assert!(result.is_ok());
+}
+
+#[test]
+fn should_not_fail_if_idkg_dealing_encryption_key_is_invalid_in_version_0() {
+    let (keys, node_id) = {
+        let (mut keys, node_id) = valid_node_keys_and_node_id();
+        assert!(keys.idkg_dealing_encryption_pk.is_some());
+        if let Some(pk) = keys.idkg_dealing_encryption_pk.as_mut() {
+            pk.key_value = b"invalid key".to_vec();
+        }
+        keys.version = 0;
+        (keys, node_id)
+    };
+
+    let result = ValidNodePublicKeys::try_from(&keys, node_id);
+
+    assert!(result.is_ok());
+}
+
+#[test]
+fn should_not_include_some_idkg_dealing_encryption_key_in_valid_keys_in_version_0() {
+    let (keys, node_id) = {
+        let (mut keys, node_id) = valid_node_keys_and_node_id();
+        assert!(keys.version >= 1);
+        assert!(keys.idkg_dealing_encryption_pk.is_some());
+        keys.version = 0;
+        (keys, node_id)
+    };
+
+    let result = ValidNodePublicKeys::try_from(&keys, node_id);
+
+    assert!(matches!(result, Ok(valid_keys) if valid_keys.idkg_dealing_encryption_key().is_none()));
 }
 
 /// TLS certificate validation is only smoke tested here. Detailed tests can be

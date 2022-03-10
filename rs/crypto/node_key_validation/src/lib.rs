@@ -17,11 +17,17 @@
 //! * the public key's proof of possession (PoP) is valid
 //! * the public key is a point on the curve and in the right subgroup
 //!
-//! Validation of a *node's DKG dealing encryption key* includes verifying
-//! that
+//! Validation of a *node's non-interactive DKG dealing encryption key* includes
+//! verifying that
 //! * the key is present and well-formed
 //! * the public key's proof of possession (PoP) is valid
 //! * the public key is a point on the curve and in the right subgroup
+//!
+//! Validation of a *node's interactive DKG dealing encryption key* is done
+//! if (and only if) the key material version is >= 1 and includes verifying
+//! that
+//! * the key is present and well-formed
+//! * the public key is a valid point on the curve
 //!
 //! How a *node's TLS certificate* is validated is described in the Rust doc of
 //! `ic_crypto_tls_cert_validation::validate_tls_certificate`. Note that the
@@ -35,8 +41,10 @@ use ic_base_types::{NodeId, PrincipalId};
 use ic_crypto_internal_basic_sig_ed25519::types::PublicKeyBytes as BasicSigEd25519PublicKeyBytes;
 use ic_crypto_internal_multi_sig_bls12381::types::PopBytes as MultiSigBls12381PopBytes;
 use ic_crypto_internal_multi_sig_bls12381::types::PublicKeyBytes as MultiSigBls12381PublicKeyBytes;
+use ic_crypto_internal_threshold_sig_ecdsa::{verify_mega_public_key, EccCurveType};
 use ic_crypto_tls_cert_validation::TlsCertValidationError;
 use ic_protobuf::crypto::v1::NodePublicKeys;
+use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use std::convert::TryFrom;
@@ -60,6 +68,7 @@ pub struct ValidNodePublicKeys {
     node_signing_pubkey: PublicKey,
     committee_signing_pubkey: PublicKey,
     dkg_dealing_encryption_pubkey: PublicKey,
+    idkg_dealing_encryption_pubkey: Option<PublicKey>,
     tls_certificate: X509PublicKeyCert,
 }
 
@@ -76,6 +85,9 @@ impl ValidNodePublicKeys {
         validate_committee_signing_key(&keys.committee_signing_pk)?;
         validate_dkg_dealing_encryption_key(&keys.dkg_dealing_encryption_pk, node_id)?;
         validate_tls_certificate(&keys.tls_certificate, node_id)?;
+        if keys.version >= 1 {
+            validate_idkg_dealing_encryption_key(&keys.idkg_dealing_encryption_pk)?;
+        }
 
         let node_signing_pubkey = keys
             .node_signing_pk
@@ -92,6 +104,18 @@ impl ValidNodePublicKeys {
             .as_ref()
             .expect("Value missing")
             .clone();
+        let idkg_dealing_encryption_pubkey = {
+            if keys.version >= 1 {
+                let idkg_pubkey = keys
+                    .idkg_dealing_encryption_pk
+                    .as_ref()
+                    .expect("Value missing")
+                    .clone();
+                Some(idkg_pubkey)
+            } else {
+                None
+            }
+        };
         let tls_certificate = keys
             .tls_certificate
             .as_ref()
@@ -103,6 +127,7 @@ impl ValidNodePublicKeys {
             node_signing_pubkey,
             committee_signing_pubkey,
             dkg_dealing_encryption_pubkey,
+            idkg_dealing_encryption_pubkey,
             tls_certificate,
         })
     }
@@ -126,6 +151,11 @@ impl ValidNodePublicKeys {
     /// Returns the validated DKG dealing encryption key.
     pub fn dkg_dealing_encryption_key(&self) -> &PublicKey {
         &self.dkg_dealing_encryption_pubkey
+    }
+
+    /// Returns the validated DKG dealing encryption key.
+    pub fn idkg_dealing_encryption_key(&self) -> Option<&PublicKey> {
+        self.idkg_dealing_encryption_pubkey.as_ref()
     }
 
     /// Returns the validated TLS certificate.
@@ -193,7 +223,7 @@ fn validate_committee_signing_key(
         .map_err(|e| invalid_committee_signing_key_error(format!("{}", e)))
 }
 
-/// Validates a node's DKG dealing encryption key
+/// Validates a node's non-interactive DKG dealing encryption key.
 ///
 /// See the crate documentation for the exact checks that are performed.
 fn validate_dkg_dealing_encryption_key(
@@ -211,6 +241,30 @@ fn validate_dkg_dealing_encryption_key(
     if !fs_ni_dkg_pubkey.verify(node_id.get().as_slice()) {
         return Err(invalid_dkg_dealing_enc_pubkey_error("verification failed"));
     }
+    Ok(())
+}
+
+/// Validates a node's interactive DKG dealing encryption key.
+///
+/// See the crate documentation for the exact checks that are performed.
+fn validate_idkg_dealing_encryption_key(
+    idkg_dealing_encryption_key: &Option<PublicKey>,
+) -> Result<(), KeyValidationError> {
+    let pubkey_proto = idkg_dealing_encryption_key
+        .as_ref()
+        .ok_or_else(|| invalid_idkg_dealing_enc_pubkey_error("key is missing"))?;
+
+    let curve_type = match AlgorithmIdProto::from_i32(pubkey_proto.algorithm) {
+        Some(AlgorithmIdProto::MegaSecp256k1) => Ok(EccCurveType::K256),
+        alg_id => Err(invalid_idkg_dealing_enc_pubkey_error(format!(
+            "unsupported algorithm: {:?}",
+            alg_id
+        ))),
+    }?;
+    // `verify_mega_public_key` also ensures that the public key is a valid point on the curve.
+    verify_mega_public_key(curve_type, &pubkey_proto.key_value).map_err(|e| {
+        invalid_idkg_dealing_enc_pubkey_error(format!("verification failed: {:?}", e))
+    })?;
     Ok(())
 }
 
@@ -248,6 +302,15 @@ fn invalid_dkg_dealing_enc_pubkey_error<S: Into<String>>(internal_error: S) -> K
     KeyValidationError {
         error: format!(
             "invalid DKG dealing encryption key: {}",
+            internal_error.into()
+        ),
+    }
+}
+
+fn invalid_idkg_dealing_enc_pubkey_error<S: Into<String>>(internal_error: S) -> KeyValidationError {
+    KeyValidationError {
+        error: format!(
+            "invalid I-DKG dealing encryption key: {}",
             internal_error.into()
         ),
     }

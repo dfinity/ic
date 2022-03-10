@@ -115,6 +115,7 @@ fn all_node_keys_are_present(node_pks: &NodePublicKeys) -> bool {
         && node_pks.committee_signing_pk.is_some()
         && node_pks.tls_certificate.is_some()
         && node_pks.dkg_dealing_encryption_pk.is_some()
+        && node_pks.idkg_dealing_encryption_pk.is_some()
 }
 
 #[test]
@@ -217,6 +218,7 @@ fn should_fail_check_keys_with_registry_if_cert_is_malformed() {
         generate_node_signing_keys: true,
         generate_committee_signing_keys: true,
         generate_dkg_dealing_encryption_keys: true,
+        generate_idkg_dealing_encryption_keys: true,
         generate_tls_keys_and_certificate: false,
     };
     let malformed_cert = X509PublicKeyCert {
@@ -652,6 +654,7 @@ fn well_formed_dkg_dealing_encryption_pk() -> PublicKey {
             generate_node_signing_keys: false,
             generate_committee_signing_keys: false,
             generate_dkg_dealing_encryption_keys: true,
+            generate_idkg_dealing_encryption_keys: false,
             generate_tls_keys_and_certificate: false,
         },
     );

@@ -154,6 +154,7 @@ impl From<usize> for KeyPurpose {
             2 => KeyPurpose::QueryResponseSigning,
             3 => KeyPurpose::DkgDealingEncryption,
             4 => KeyPurpose::CommitteeSigning,
+            5 => KeyPurpose::IDkgMEGaEncryption,
             _ => KeyPurpose::Placeholder,
         }
     }

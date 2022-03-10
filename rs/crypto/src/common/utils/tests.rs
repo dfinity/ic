@@ -14,6 +14,7 @@ fn should_generate_all_keys_for_new_node() {
     CryptoConfig::run_with_temp_config(|config| {
         let (node_pks, _node_id) = get_node_keys_or_generate_if_missing(&config.crypto_root);
         assert!(all_node_keys_are_present(&node_pks));
+        assert_eq!(node_pks.version, 1);
         let result = check_keys_locally(&config.crypto_root);
         assert!(result.is_ok());
         let maybe_pks = result.unwrap();
@@ -37,6 +38,124 @@ fn should_generate_all_keys_for_a_node_without_public_keys() {
         let node_pks = maybe_pks.unwrap();
         assert_ne!(first_node_signing_pk, node_pks.node_signing_pk.unwrap());
         // TODO(CRP-356): add a check for the derived node_id.
+    })
+}
+
+#[test]
+fn should_correctly_generate_idkg_dealing_encryption_key() {
+    CryptoConfig::run_with_temp_config(|config| {
+        let public_key = generate_idkg_dealing_encryption_keys(&config.crypto_root);
+        assert_eq!(public_key.version, 0);
+        assert_eq!(public_key.algorithm, AlgorithmIdProto::MegaSecp256k1 as i32);
+        assert!(!public_key.key_value.is_empty());
+        assert!(public_key.proof_data.is_none());
+    })
+}
+
+#[test]
+fn should_correctly_generate_idkg_keys_if_other_keys_already_present_with_version_0_and_not_regenerate_others(
+) {
+    CryptoConfig::run_with_temp_config(|config| {
+        let (npks_before, node_id_1) = {
+            let (npks, node_id) = get_node_keys_or_generate_if_missing(&config.crypto_root);
+            assert!(all_node_keys_are_present(&npks));
+            assert_eq!(npks.version, 1);
+            let npks_version_0_without_idkg_dealing_encryption_key = NodePublicKeys {
+                version: 0,
+                idkg_dealing_encryption_pk: None,
+                ..npks
+            };
+            store_public_keys(
+                &config.crypto_root,
+                &npks_version_0_without_idkg_dealing_encryption_key,
+            );
+            assert_eq!(
+                read_public_keys(&config.crypto_root).unwrap(),
+                npks_version_0_without_idkg_dealing_encryption_key
+            );
+            (npks_version_0_without_idkg_dealing_encryption_key, node_id)
+        };
+
+        let (npks_after, node_id_2) = get_node_keys_or_generate_if_missing(&config.crypto_root);
+        // Ensure keys have version 1 and are correctly stored
+        assert_eq!(npks_after.version, 1);
+        assert!(all_node_keys_are_present(&npks_after));
+        assert_eq!(read_public_keys(&config.crypto_root).unwrap(), npks_after);
+
+        // Ensure I-DKG key is present and generated correctly
+        assert!(npks_after.idkg_dealing_encryption_pk.is_some());
+        if let Some(idkg_pk) = npks_after.idkg_dealing_encryption_pk {
+            assert_eq!(idkg_pk.version, 0);
+            assert_eq!(idkg_pk.algorithm, AlgorithmIdProto::MegaSecp256k1 as i32);
+            assert!(!idkg_pk.key_value.is_empty());
+            assert!(idkg_pk.proof_data.is_none());
+        }
+
+        // Ensure node ID and pre-existing key material is unchanged
+        assert_eq!(node_id_1, node_id_2);
+        assert_eq!(npks_before.node_signing_pk, npks_after.node_signing_pk);
+        assert_eq!(
+            npks_before.committee_signing_pk,
+            npks_after.committee_signing_pk
+        );
+        assert_eq!(
+            npks_before.dkg_dealing_encryption_pk,
+            npks_after.dkg_dealing_encryption_pk
+        );
+        assert_eq!(npks_before.tls_certificate, npks_after.tls_certificate);
+    })
+}
+
+#[test]
+fn should_correctly_generate_idkg_keys_if_other_keys_already_present_with_version_1_and_not_regenerate_others(
+) {
+    CryptoConfig::run_with_temp_config(|config| {
+        let (npks_before, node_id_1) = {
+            let (npks, node_id) = get_node_keys_or_generate_if_missing(&config.crypto_root);
+            assert!(all_node_keys_are_present(&npks));
+            assert_eq!(npks.version, 1);
+            let npks_version_1_without_idkg_dealing_encryption_key = NodePublicKeys {
+                idkg_dealing_encryption_pk: None,
+                ..npks
+            };
+            store_public_keys(
+                &config.crypto_root,
+                &npks_version_1_without_idkg_dealing_encryption_key,
+            );
+            assert_eq!(
+                read_public_keys(&config.crypto_root).unwrap(),
+                npks_version_1_without_idkg_dealing_encryption_key
+            );
+            (npks_version_1_without_idkg_dealing_encryption_key, node_id)
+        };
+
+        let (npks_after, node_id_2) = get_node_keys_or_generate_if_missing(&config.crypto_root);
+        // Ensure keys have version 1 and are correctly stored
+        assert_eq!(npks_after.version, 1);
+        assert!(all_node_keys_are_present(&npks_after));
+        assert_eq!(read_public_keys(&config.crypto_root).unwrap(), npks_after);
+
+        // Ensure I-DKG key is present and generated correctly
+        assert!(npks_after.idkg_dealing_encryption_pk.is_some());
+        if let Some(idkg_pk) = npks_after.idkg_dealing_encryption_pk {
+            assert_eq!(idkg_pk.version, 0);
+            assert_eq!(idkg_pk.algorithm, AlgorithmIdProto::MegaSecp256k1 as i32);
+            assert!(!idkg_pk.key_value.is_empty());
+            assert!(idkg_pk.proof_data.is_none());
+        }
+
+        // Ensure node ID and pre-existing key material is unchanged
+        assert_eq!(node_id_1, node_id_2);
+        assert_eq!(npks_before.node_signing_pk, npks_after.node_signing_pk);
+        assert_eq!(
+            npks_before.committee_signing_pk,
+            npks_after.committee_signing_pk
+        );
+        assert_eq!(
+            npks_before.dkg_dealing_encryption_pk,
+            npks_after.dkg_dealing_encryption_pk
+        );
+        assert_eq!(npks_before.tls_certificate, npks_after.tls_certificate);
     })
 }
 
@@ -264,4 +383,5 @@ fn all_node_keys_are_present(node_pks: &NodePublicKeys) -> bool {
         && node_pks.committee_signing_pk.is_some()
         && node_pks.tls_certificate.is_some()
         && node_pks.dkg_dealing_encryption_pk.is_some()
+        && node_pks.idkg_dealing_encryption_pk.is_some()
 }
