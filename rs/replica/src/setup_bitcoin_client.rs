@@ -48,7 +48,7 @@ impl BitcoinAdapterClient for BitcoinAdapterClientImpl {
                                     ),
                                 ),
                             })
-                            .map_err(|err| RpcError::ServerError(err))
+                            .map_err(RpcError::ServerError)
                     }
                     bitcoin_adapter_request_wrapper::R::SendTransactionRequest(r) => {
                         let mut tonic_request = tonic::Request::new(r);
@@ -66,7 +66,7 @@ impl BitcoinAdapterClient for BitcoinAdapterClientImpl {
                                     ),
                                 ),
                             })
-                            .map_err(|err| RpcError::ServerError(err))
+                            .map_err(RpcError::ServerError)
                     }
                 },
                 None => Err(RpcError::InvalidRequest(request)),

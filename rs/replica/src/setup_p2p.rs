@@ -26,6 +26,7 @@ use std::sync::Arc;
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 pub fn construct_ic_stack(
     replica_logger: ReplicaLogger,
+    rt_handle: tokio::runtime::Handle,
     config: Config,
     subnet_config: SubnetConfig,
     node_id: NodeId,
@@ -197,7 +198,7 @@ pub fn construct_ic_stack(
         XNetEndpointConfig::from(Arc::clone(&registry) as Arc<_>, node_id, &replica_logger);
 
     let xnet_endpoint = XNetEndpoint::new(
-        tokio::runtime::Handle::current(),
+        rt_handle.clone(),
         Arc::clone(&certified_stream_store),
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&registry),
@@ -212,7 +213,7 @@ pub fn construct_ic_stack(
         Arc::clone(&certified_stream_store) as Arc<_>,
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&registry) as Arc<_>,
-        tokio::runtime::Handle::current(),
+        rt_handle.clone(),
         node_id,
         subnet_id,
         &metrics_registry,
@@ -226,7 +227,7 @@ pub fn construct_ic_stack(
     let (ingress_ingestion_service, p2p_runner) = create_networking_stack(
         metrics_registry,
         replica_logger,
-        tokio::runtime::Handle::current(),
+        rt_handle,
         config.transport,
         config.consensus,
         config.malicious_behaviour.malicious_flags,
