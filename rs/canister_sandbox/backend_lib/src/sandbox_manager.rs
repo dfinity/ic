@@ -38,6 +38,7 @@ use ic_interfaces::execution_environment::{
 use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::page_map::PageMapSerialization;
 use ic_replicated_state::{EmbedderCache, Memory, PageMap};
+use ic_system_api::DefaultOutOfInstructionsHandler;
 use ic_types::CanisterId;
 use ic_wasm_types::BinaryEncodedWasm;
 
@@ -132,6 +133,7 @@ impl Execution {
             &exec_input.globals,
             no_op_logger(),
             exec_input.wasm_reserved_pages,
+            Arc::new(DefaultOutOfInstructionsHandler {}),
         );
 
         match wasm_result {

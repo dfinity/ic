@@ -806,8 +806,8 @@ pub(crate) fn syscalls<S: SystemApi>(
     linker
         .func_wrap("__", "out_of_instructions", {
             move |mut caller: Caller<'_, StoreData<S>>| -> Result<(), _> {
-                let err = with_system_api(&mut caller, |s| s.out_of_instructions());
-                Err(process_err(caller, err))
+                let result = with_system_api(&mut caller, |s| s.out_of_instructions());
+                result.map_err(|err| process_err(caller, err))
             }
         })
         .unwrap();

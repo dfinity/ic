@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use ic_embedders::{
     wasm_utils::instrumentation::{instrument, InstructionCostTable},
     wasmtime_embedder::WasmtimeInstance,
@@ -89,6 +91,7 @@ impl WasmtimeInstanceBuilder {
             ic_types::NumBytes::from(0),
             execution_parameters(),
             Memory::default(),
+            Arc::new(ic_system_api::DefaultOutOfInstructionsHandler {}),
             log,
         );
 

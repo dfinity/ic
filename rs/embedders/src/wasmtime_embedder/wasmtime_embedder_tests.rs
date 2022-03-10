@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::{system_api, StoreData, NUM_INSTRUCTION_GLOBAL_NAME};
 use crate::wasm_utils::instrumentation::{instrument, InstructionCostTable};
 use ic_interfaces::execution_environment::{
@@ -6,7 +8,10 @@ use ic_interfaces::execution_environment::{
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{Memory, SystemState};
-use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType, SystemApiImpl};
+use ic_system_api::{
+    sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
+    SystemApiImpl,
+};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder, types::ids::canister_test_id,
 };
@@ -45,6 +50,7 @@ fn test_wasmtime_system_api() {
             execution_mode: ExecutionMode::Replicated,
         },
         Memory::default(),
+        Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),
     );
     let mut store = Store::new(

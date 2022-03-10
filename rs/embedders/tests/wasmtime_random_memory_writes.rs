@@ -9,6 +9,7 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{Memory, NetworkTopology, NumWasmPages, SubnetTopology};
 use ic_sys::PAGE_SIZE;
+use ic_system_api::DefaultOutOfInstructionsHandler;
 use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType, SystemApiImpl};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
@@ -92,6 +93,7 @@ fn test_api_for_update(
             execution_mode: ExecutionMode::Replicated,
         },
         Memory::default(),
+        Arc::new(DefaultOutOfInstructionsHandler {}),
         log,
     )
 }

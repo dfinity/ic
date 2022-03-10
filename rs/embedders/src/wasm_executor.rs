@@ -1,10 +1,11 @@
 use std::collections::BTreeSet;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use ic_replicated_state::canister_state::execution_state::WasmBinary;
 use ic_replicated_state::{ExportedFunctions, Global, Memory, NumWasmPages, PageMap};
 use ic_system_api::sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateChanges};
-use ic_system_api::ApiType;
+use ic_system_api::{ApiType, DefaultOutOfInstructionsHandler};
 use ic_types::methods::{FuncRef, WasmMethod};
 use prometheus::{Histogram, IntCounter};
 
@@ -17,8 +18,8 @@ use crate::{
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::{
-    ExecutionParameters, HypervisorError, HypervisorResult, InstanceStats, SystemApi,
-    WasmExecutionOutput,
+    ExecutionParameters, HypervisorError, HypervisorResult, InstanceStats,
+    OutOfInstructionsHandler, SystemApi, WasmExecutionOutput,
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::buckets::decimal_buckets_with_zero;
@@ -225,6 +226,7 @@ impl WasmExecutor {
             &execution_state.exported_globals,
             self.log.clone(),
             wasm_reserved_pages,
+            Arc::new(DefaultOutOfInstructionsHandler {}),
         );
 
         // Collect logs only when the flag is enabled to avoid producing too much data.
@@ -420,6 +422,7 @@ pub fn process(
     globals: &[Global],
     logger: ReplicaLogger,
     wasm_reserved_pages: NumWasmPages,
+    out_of_instructions_handler: Arc<dyn OutOfInstructionsHandler>,
 ) -> (
     WasmExecutionOutput,
     Option<WasmStateChanges>,
@@ -434,6 +437,7 @@ pub fn process(
         canister_current_memory_usage,
         execution_parameters,
         stable_memory.clone(),
+        out_of_instructions_handler,
         logger,
     );
 

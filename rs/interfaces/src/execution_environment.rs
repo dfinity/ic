@@ -212,6 +212,13 @@ pub trait IngressHistoryWriter: Send + Sync {
     fn set_status(&self, state: &mut Self::State, message_id: MessageId, status: IngressStatus);
 }
 
+/// A trait for handling `out_of_instructions()` calls from the Wasm module.
+pub trait OutOfInstructionsHandler {
+    /// Returns `Ok` if the execution should continue. Otherwise,
+    /// returns `Err` to abort the execution with a trap.
+    fn out_of_instructions(&self) -> Result<(), HypervisorError>;
+}
+
 /// A trait for providing all necessary imports to a Wasm module.
 pub trait SystemApi {
     /// Stores the execution error, so that the user can evaluate it later.
@@ -527,7 +534,10 @@ pub trait SystemApi {
 
     /// This system call is not part of the public spec and used by the
     /// hypervisor, when execution runs out of instructions.
-    fn out_of_instructions(&self) -> HypervisorError;
+    ///
+    /// Returns `Ok` if the execution should continue. Otherwise,
+    /// returns `Err` to abort the execution with a trap.
+    fn out_of_instructions(&self) -> Result<(), HypervisorError>;
 
     /// This system call is not part of the public spec. It's called after a
     /// native `memory.grow` has been called to check whether there's enough

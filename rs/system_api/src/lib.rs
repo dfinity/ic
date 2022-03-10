@@ -8,7 +8,7 @@ use ic_ic00_types::IC_00;
 use ic_interfaces::execution_environment::{
     ExecutionParameters,
     HypervisorError::{self, *},
-    HypervisorResult, SubnetAvailableMemory, SystemApi,
+    HypervisorResult, OutOfInstructionsHandler, SubnetAvailableMemory, SystemApi,
     TrapCode::CyclesAmountTooBigFor64Bit,
 };
 use ic_logger::{error, info, ReplicaLogger};
@@ -631,6 +631,8 @@ pub struct SystemApiImpl {
     /// communication between the sandboxed canister process and the main
     /// replica process.
     sandbox_safe_system_state: SandboxSafeSystemState,
+
+    out_of_instructions_handler: Arc<dyn OutOfInstructionsHandler>,
 }
 
 impl SystemApiImpl {
@@ -640,6 +642,7 @@ impl SystemApiImpl {
         canister_current_memory_usage: NumBytes,
         execution_parameters: ExecutionParameters,
         stable_memory: Memory,
+        out_of_instructions_handler: Arc<dyn OutOfInstructionsHandler>,
         log: ReplicaLogger,
     ) -> Self {
         let memory_usage = MemoryUsage::new(
@@ -658,6 +661,7 @@ impl SystemApiImpl {
             execution_parameters,
             stable_memory,
             sandbox_safe_system_state,
+            out_of_instructions_handler,
             log,
         }
     }
@@ -2234,8 +2238,8 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
-    fn out_of_instructions(&self) -> HypervisorError {
-        let result = HypervisorError::InstructionLimitExceeded;
+    fn out_of_instructions(&self) -> Result<(), HypervisorError> {
+        let result = self.out_of_instructions_handler.out_of_instructions();
         trace_syscall!(self, out_of_instructions, result);
         result
     }
@@ -2629,6 +2633,16 @@ impl SystemApi for SystemApiImpl {
         };
         trace_syscall!(self, ic0_trap, src, size, summarize(heap, src, size));
         result
+    }
+}
+
+/// The default implementation of the `OutOfInstructionHandler` trait.
+/// It simply returns an out-of-instructions error.
+pub struct DefaultOutOfInstructionsHandler {}
+
+impl OutOfInstructionsHandler for DefaultOutOfInstructionsHandler {
+    fn out_of_instructions(&self) -> Result<(), HypervisorError> {
+        Err(HypervisorError::InstructionLimitExceeded)
     }
 }
 
