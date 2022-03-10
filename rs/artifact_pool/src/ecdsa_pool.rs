@@ -278,7 +278,9 @@ impl MutableEcdsaPool for EcdsaPoolImpl {
                     }
                 }
                 EcdsaChangeAction::HandleInvalid(ref msg_id, _) => {
-                    if self.unvalidated.remove_object(msg_id).is_none() {
+                    if self.unvalidated.remove_object(msg_id).is_none()
+                        && self.validated.remove_object(msg_id).is_none()
+                    {
                         warn!(
                             self.log,
                             "HandleInvalid:: artifact was not found: {:?}", action
@@ -631,7 +633,7 @@ mod tests {
     }
 
     #[test]
-    fn test_ecdsa_pool_handle_invalid() {
+    fn test_ecdsa_pool_handle_invalid_unvalidated() {
         let mut ecdsa_pool = EcdsaPoolImpl::new(
             ic_logger::replica_logger::no_op_logger(),
             MetricsRegistry::new(),
@@ -650,6 +652,32 @@ mod tests {
             msg_id
         };
         check_state(&ecdsa_pool, &[msg_id.clone()], &[]);
+
+        ecdsa_pool.apply_changes(vec![EcdsaChangeAction::HandleInvalid(
+            msg_id,
+            "test".to_string(),
+        )]);
+        check_state(&ecdsa_pool, &[], &[]);
+    }
+
+    #[test]
+    fn test_ecdsa_pool_handle_invalid_validated() {
+        let mut ecdsa_pool = EcdsaPoolImpl::new(
+            ic_logger::replica_logger::no_op_logger(),
+            MetricsRegistry::new(),
+        );
+
+        let msg_id = {
+            let ecdsa_dealing = create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(100));
+            let key = ecdsa_dealing.key();
+            let msg_id = EcdsaSignedDealing::key_to_outer_hash(&key);
+            let change_set = vec![EcdsaChangeAction::AddToValidated(
+                EcdsaMessage::EcdsaSignedDealing(ecdsa_dealing),
+            )];
+            ecdsa_pool.apply_changes(change_set);
+            msg_id
+        };
+        check_state(&ecdsa_pool, &[], &[msg_id.clone()]);
 
         ecdsa_pool.apply_changes(vec![EcdsaChangeAction::HandleInvalid(
             msg_id,
