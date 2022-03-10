@@ -35,7 +35,7 @@ repos:
 
   - id: candid_changes_are_backwards_compatible
     name: Candid changes are backwards compatible
-    entry: gitlab-ci/src/checks/candid_changes_are_backwards_compatible.py --also-reverse
+    entry: gitlab-ci/src/checks/candid_changes_are_backwards_compatible.py # TODO: Uncomment (once we figure out how to not cause lots of problems for people): --also-reverse
     # Run against all .did files where the path contains nns or registry.
     files: (nns|registry).+[.]did$
     # Not sure why this exists (might be a piece of test data, but it should not be checked,
