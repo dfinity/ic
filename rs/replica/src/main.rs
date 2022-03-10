@@ -291,6 +291,7 @@ async fn run() -> io::Result<()> {
         _xnet_endpoint,
     ) = ic_replica::setup_p2p::construct_ic_stack(
         logger.clone(),
+        tokio::runtime::Handle::current(),
         config.clone(),
         subnet_config,
         node_id,

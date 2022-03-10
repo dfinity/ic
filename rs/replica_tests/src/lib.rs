@@ -383,6 +383,7 @@ where
         let (_, state_manager, query_handler, _, mut p2p, ingress_ingestion_service, _, _, _) =
             ic_replica::setup_p2p::construct_ic_stack(
                 logger,
+                tokio::runtime::Handle::current(),
                 config.clone(),
                 subnet_config,
                 temp_node,
