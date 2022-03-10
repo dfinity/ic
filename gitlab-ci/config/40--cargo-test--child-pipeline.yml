@@ -35,6 +35,10 @@ check-bins-linux:
   image:
     # 21.04
     name: ubuntu@sha256:b5a61709a9a44284d88fb12e5c48db0409cfad5b69d4ff8224077c57302df9cf
+  tags:
+    - dfinity
+    - docker
+    - ubuntu
   before_script: /bin/true
   after_script: /bin/true
   variables:
