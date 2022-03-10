@@ -7,6 +7,7 @@ pub type Satoshi = u64;
 /// A reference to a transaction output.
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq, Hash)]
 pub struct OutPoint {
+    #[serde(with = "serde_bytes")]
     pub txid: Vec<u8>,
     pub vout: u32,
 }
@@ -61,6 +62,7 @@ impl From<GetUtxosError> for GetBalanceError {
 
 #[derive(CandidType, Debug, Deserialize, PartialEq)]
 pub struct SendTransactionRequest {
+    #[serde(with = "serde_bytes")]
     pub transaction: Vec<u8>,
 }
 

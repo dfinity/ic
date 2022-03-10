@@ -3478,15 +3478,16 @@ version = "0.1.0"
 dependencies = [
  "candid",
  "serde",
+ "serde_bytes",
 ]
 
 [[package]]
 name = "ic-btc-types-internal"
 version = "0.1.0"
 dependencies = [
- "bitcoin",
  "ic-protobuf",
  "serde",
+ "serde_bytes",
 ]
 
 [[package]]

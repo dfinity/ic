@@ -42,6 +42,16 @@ usually providing little value."#
             defined_in: std::file!(),
         },
         Rule {
+            package: pkg("ic-types"),
+            should_not_depend_on: pkg("bitcoin"),
+            justification:
+                r#"Bitcoin is a large package, we only need a few type definitions from it.
+Copy the types that you need to work with."#
+                    .to_string(),
+            dependency_kind: DepKind::normal(),
+            defined_in: std::file!(),
+        },
+        Rule {
             package: pkg("ic-constants"),
             should_not_depend_on: PackageSpec::Wildcard,
             justification: r#"You do not need dependencies to define IC constants.
