@@ -29,9 +29,7 @@ use ic_types::{
     messages::{CallbackId, Response},
     CountBytes, ReplicaVersion,
 };
-use secp256k1::{Message, Secp256k1, SecretKey};
 use std::collections::BTreeMap;
-use std::time::Duration;
 
 /// Deliver all finalized blocks from
 /// `message_routing.expected_batch_height` to `finalized_height` via
@@ -237,16 +235,6 @@ pub fn generate_responses_to_subnet_calls(
                 &payload.ecdsa_payload,
             ));
         }
-
-        let sign_with_mock_ecdsa_contexts = &state
-            .get_ref()
-            .metadata
-            .subnet_call_context_manager
-            .sign_with_mock_ecdsa_contexts;
-        consensus_responses.append(&mut generate_responses_to_sign_with_mock_ecdsa_calls(
-            sign_with_mock_ecdsa_contexts,
-            block.context.time,
-        ));
     }
     consensus_responses
 }
@@ -330,37 +318,6 @@ pub fn generate_responses_to_setup_initial_dkg_calls(
         };
 
         if let Some(response_payload) = payload {
-            consensus_responses.push(Response {
-                originator: CanisterId::ic_00(),
-                respondent: CanisterId::ic_00(),
-                originator_reply_callback: *callback_id,
-                refund: Cycles::zero(),
-                response_payload,
-            });
-        }
-    }
-    consensus_responses
-}
-
-const MOCK_ECDSA_DELAY_MILLIS: u64 = 30000;
-/// This function creates responses to the SignWithMockECDSA system calls with
-/// the computed MOCK(!) signature.
-pub fn generate_responses_to_sign_with_mock_ecdsa_calls(
-    contexts: &BTreeMap<CallbackId, SignWithEcdsaContext>,
-    batch_time: Time,
-) -> Vec<Response> {
-    let mut consensus_responses = Vec::<Response>::new();
-    if contexts.is_empty() {
-        return consensus_responses;
-    }
-    let secp = Secp256k1::new();
-    let secret_key = SecretKey::from_slice(&[0xcd; 32]).expect("32 bytes, within curve order");
-
-    for (callback_id, context) in contexts.iter() {
-        if batch_time > context.batch_time + Duration::from_millis(MOCK_ECDSA_DELAY_MILLIS) {
-            let hash = Message::from_slice(&context.message_hash).unwrap();
-            let sig = secp.sign(&hash, &secret_key);
-            let response_payload = messages::Payload::Data(sig.serialize_compact().to_vec());
             consensus_responses.push(Response {
                 originator: CanisterId::ic_00(),
                 respondent: CanisterId::ic_00(),

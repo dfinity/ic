@@ -1481,14 +1481,12 @@ fn get_instructions_limit_for_subnet_message(
             | CreateCanister
             | DeleteCanister
             | DepositCycles
-            | GetECDSAPublicKey
-            | GetMockECDSAPublicKey
+            | ECDSAPublicKey
             | RawRand
             | SetController
             | HttpRequest
             | SetupInitialDKG
             | SignWithECDSA
-            | SignWithMockECDSA
             | StartCanister
             | StopCanister
             | UninstallCode

@@ -91,7 +91,8 @@ message SubnetCallContextManager {
     reserved "contexts";
     repeated SetupInitialDkgContextTree setup_initial_dkg_contexts = 3;
     repeated SignWithEcdsaContextTree sign_with_ecdsa_contexts = 4;
-    repeated SignWithEcdsaContextTree sign_with_mock_ecdsa_contexts = 5;
+    reserved 5;
+    reserved "sign_with_mock_ecdsa_contexts";
     repeated CanisterHttpRequestContextTree canister_http_request_contexts = 6;
 }
 

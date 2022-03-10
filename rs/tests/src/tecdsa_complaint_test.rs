@@ -28,7 +28,7 @@ pub fn enable_ecdsa_signatures_feature() -> InternetComputer {
 }
 
 /// Tests whether a call to `sign_with_ecdsa` is responded with a signature
-/// that is verifiable with the result from `get_ecdsa_public_key`. This is done
+/// that is verifiable with the result from `ecdsa_public_key`. This is done
 /// in the presence of corrupted dealings/complaints.
 pub fn test_threshold_ecdsa_complaint(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");

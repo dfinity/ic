@@ -34,9 +34,7 @@ pub(super) fn resolve_destination(
         Ok(Ic00Method::CreateCanister)
         | Ok(Ic00Method::RawRand)
         | Ok(Ic00Method::ProvisionalCreateCanisterWithCycles)
-        | Ok(Ic00Method::GetECDSAPublicKey)
-        | Ok(Ic00Method::GetMockECDSAPublicKey)
-        | Ok(Ic00Method::SignWithMockECDSA)
+        | Ok(Ic00Method::ECDSAPublicKey)
         | Ok(Ic00Method::SignWithECDSA)
         | Ok(Ic00Method::HttpRequest) => Ok(own_subnet),
         // This message needs to be routed to the NNS subnet.  We assume that

@@ -22,8 +22,7 @@ use ic_fondue::{
     prod_tests::ic::{InternetComputer, Subnet},
 };
 use ic_ic00_types::{
-    GetECDSAPublicKeyArgs, GetECDSAPublicKeyResponse, Payload, SignWithECDSAArgs,
-    SignWithECDSAReply,
+    ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, Payload, SignWithECDSAArgs, SignWithECDSAReply,
 };
 use ic_protobuf::registry::subnet::v1::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -49,7 +48,7 @@ pub(crate) async fn get_public_key(
     uni_can: &UniversalCanister<'_>,
     ctx: &ic_fondue::pot::Context,
 ) -> PublicKey {
-    let public_key_request = GetECDSAPublicKeyArgs {
+    let public_key_request = ECDSAPublicKeyArgs {
         canister_id: None,
         derivation_path: vec![],
         key_id: KEY_ID.to_string(),
@@ -60,30 +59,27 @@ pub(crate) async fn get_public_key(
         let res = uni_can
             .forward_to(
                 &Principal::management_canister(),
-                "get_ecdsa_public_key",
+                "ecdsa_public_key",
                 Encode!(&public_key_request).unwrap(),
             )
             .await;
         match res {
             Ok(bytes) => {
-                let key = GetECDSAPublicKeyResponse::decode(&bytes)
+                let key = ECDSAPublicKeyResponse::decode(&bytes)
                     .expect("failed to decode ECDSAPublicKeyResponse");
                 break key.public_key;
             }
             Err(err) => {
                 count += 1;
                 if count < 10 {
-                    debug!(
-                        ctx.logger,
-                        "get_ecdsa_public_key returns {}, try again...", err
-                    );
+                    debug!(ctx.logger, "ecdsa_public_key returns {}, try again...", err);
                 } else {
-                    panic!("get_ecdsa_public_key failed after {} tries.", count);
+                    panic!("ecdsa_public_key failed after {} tries.", count);
                 }
             }
         }
     };
-    info!(ctx.logger, "get_ecdsa_public_key returns {:?}", public_key);
+    info!(ctx.logger, "ecdsa_public_key returns {:?}", public_key);
     PublicKey::from_slice(&public_key).expect("Response is not a valid public key")
 }
 
@@ -130,7 +126,7 @@ pub(crate) fn verify_signature(message_hash: &[u8], public_key: &PublicKey, sign
 }
 
 /// Tests whether a call to `sign_with_ecdsa` is responded with a signature
-/// that is verifiable with the result from `get_ecdsa_public_key`.
+/// that is verifiable with the result from `ecdsa_public_key`.
 pub fn test_threshold_ecdsa_signature(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     let mut rng = ctx.rng.clone();
