@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """
 P0 Experiment 1: System baseline overhead under load.
 

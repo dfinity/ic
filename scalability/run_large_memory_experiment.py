@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 P0 Experiment 2: Memory under load.
 
