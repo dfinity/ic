@@ -28,6 +28,10 @@ impl MEGaPublicKey {
         Self { point }
     }
 
+    /// Deserializes a byte array into a MEGa public key.
+    ///
+    /// A successful deserialization also guarantees that the public
+    /// key is valid, that is, that it is a point on the curve.
     pub fn deserialize(curve: EccCurveType, value: &[u8]) -> ThresholdEcdsaResult<Self> {
         let point = EccPoint::deserialize(curve, value)
             .map_err(|e| ThresholdEcdsaError::SerializationError(format!("{:?}", e)))?;

@@ -246,11 +246,12 @@ fn valid_keys_from_payload(
 
     // 4. get the keys for verification -- for that, we need to create
     let node_pks = NodePublicKeys {
-        version: 1, // irrelevant
+        version: 0,
         node_signing_pk: Some(node_signing_pk),
         committee_signing_pk: Some(committee_signing_pk),
         tls_certificate: Some(tls_certificate),
         dkg_dealing_encryption_pk: Some(dkg_dealing_encryption_pk),
+        idkg_dealing_encryption_pk: None,
     };
 
     // 5. validate the keys and the node_id

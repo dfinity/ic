@@ -9,9 +9,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::util::{write_proto_to_file_raw, write_registry_entry};
-use ic_crypto::utils::{
-    generate_idkg_dealing_encryption_keys, get_node_keys_or_generate_if_missing,
-};
+use ic_crypto::utils::get_node_keys_or_generate_if_missing;
 use ic_protobuf::{
     crypto::v1::NodePublicKeys,
     registry::{
@@ -383,8 +381,6 @@ impl NodeConfiguration {
         use prost::Message;
         let node_id = sks.node_id;
         let node_pks = NodePublicKeys::decode(sks.node_pks.as_slice()).unwrap();
-        let idkg_mega_encryption_pubkey =
-            PublicKey::decode(sks.idkg_mega_encryption_pubkey.as_slice()).unwrap();
         Ok(InitializedNode {
             node_id,
             pk_committee_signing: node_pks.committee_signing_pk.unwrap(),
@@ -393,7 +389,7 @@ impl NodeConfiguration {
             node_path: PathBuf::from(node_path.as_ref()),
             node_config: self,
             dkg_dealing_encryption_pubkey: node_pks.dkg_dealing_encryption_pk.unwrap(),
-            idkg_mega_encryption_pubkey,
+            idkg_mega_encryption_pubkey: node_pks.idkg_dealing_encryption_pk.unwrap(),
         })
     }
 }
@@ -404,8 +400,6 @@ pub struct NodeSecretKeyStore {
     /// Serialized protobuf of node public keys. The serialized version of the
     /// buffer is trivially (Partial)Eq + (Partial)Ord
     pub node_pks: Vec<u8>,
-    /// Serialized protobuf containing idkg public key
-    pub idkg_mega_encryption_pubkey: Vec<u8>,
     pub path: PathBuf,
 }
 
@@ -424,18 +418,13 @@ impl NodeSecretKeyStore {
         })?;
         Self::set_permissions(&path)?;
         let (node_pks, node_id) = get_node_keys_or_generate_if_missing(&path);
-        // CRP-1273: Remove the following call when the encryption keys are generated
-        // together with the rest of the node keys.
-        let idkg_mega_encryption_pubkey = generate_idkg_dealing_encryption_keys(&path);
 
         use prost::Message;
         let node_pks = node_pks.encode_to_vec();
-        let idkg_mega_encryption_pubkey = idkg_mega_encryption_pubkey.encode_to_vec();
 
         Ok(Self {
             node_id,
             node_pks,
-            idkg_mega_encryption_pubkey,
             path,
         })
     }

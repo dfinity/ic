@@ -99,13 +99,15 @@ pub fn get_node_keys_or_generate_if_missing(crypto_root: &Path) -> (NodePublicKe
             let node_id = derive_node_id(&node_signing_pk);
             let dkg_dealing_encryption_pk =
                 generate_dkg_dealing_encryption_keys(crypto_root, node_id);
+            let idkg_dealing_encryption_pk = generate_idkg_dealing_encryption_keys(crypto_root);
             let tls_certificate = generate_tls_keys(crypto_root, node_id).to_proto();
             let node_pks = NodePublicKeys {
-                version: 0,
+                version: 1,
                 node_signing_pk: Some(node_signing_pk),
                 committee_signing_pk: Some(committee_signing_pk),
                 tls_certificate: Some(tls_certificate),
                 dkg_dealing_encryption_pk: Some(dkg_dealing_encryption_pk),
+                idkg_dealing_encryption_pk: Some(idkg_dealing_encryption_pk),
             };
             public_key_store::store_node_public_keys(crypto_root, &node_pks)
                 .unwrap_or_else(|_| panic!("Failed to store public key material"));
@@ -118,7 +120,26 @@ pub fn get_node_keys_or_generate_if_missing(crypto_root: &Path) -> (NodePublicKe
             }
             (node_pks, node_id)
         }
-        Ok(Some(node_pks)) => {
+        Ok(Some(mut node_pks)) => {
+            // Generate I-DKG key if it is not present yet: we generate the key
+            // purely based on whether it already exists and at the same time
+            // set the key material version to 1, so that afterwards the
+            // version will be consistent on all nodes, no matter what it was
+            // before.
+            if node_pks.idkg_dealing_encryption_pk.is_none() {
+                let idkg_dealing_encryption_pk = generate_idkg_dealing_encryption_keys(crypto_root);
+                node_pks.idkg_dealing_encryption_pk = Some(idkg_dealing_encryption_pk);
+                node_pks.version = 1;
+                public_key_store::store_node_public_keys(crypto_root, &node_pks)
+                    .unwrap_or_else(|_| panic!("Failed to store public key material"));
+                // Re-check the generated keys.
+                let stored_keys = check_keys_locally(crypto_root)
+                    .expect("Could not read generated keys.")
+                    .expect("Newly generated keys are inconsistent.");
+                if stored_keys != node_pks {
+                    panic!("Generated keys differ from the stored ones.");
+                }
+            }
             let node_signing_pk = node_pks
                 .node_signing_pk
                 .as_ref()
@@ -183,6 +204,7 @@ fn node_public_keys_are_empty(node_pks: &NodePublicKeys) -> bool {
     node_pks.node_signing_pk.is_none()
         && node_pks.committee_signing_pk.is_none()
         && node_pks.dkg_dealing_encryption_pk.is_none()
+        && node_pks.idkg_dealing_encryption_pk.is_none()
         && node_pks.tls_certificate.is_none()
 }
 

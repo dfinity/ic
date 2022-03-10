@@ -218,6 +218,10 @@ impl TempCryptoComponent {
             )),
             false => None,
         };
+        let idkg_dealing_encryption_pk = match selector.generate_idkg_dealing_encryption_keys {
+            true => Some(generate_idkg_dealing_encryption_keys(&temp_dir_path)),
+            false => None,
+        };
         let tls_certificate = match selector.generate_tls_keys_and_certificate {
             true => Some(generate_tls_keys(&temp_dir_path, node_id).to_proto()),
             false => None,
@@ -228,6 +232,7 @@ impl TempCryptoComponent {
             node_signing_pk,
             committee_signing_pk,
             dkg_dealing_encryption_pk,
+            idkg_dealing_encryption_pk,
             tls_certificate,
         };
 
@@ -286,6 +291,7 @@ pub struct NodeKeysToGenerate {
     pub generate_node_signing_keys: bool,
     pub generate_committee_signing_keys: bool,
     pub generate_dkg_dealing_encryption_keys: bool,
+    pub generate_idkg_dealing_encryption_keys: bool,
     pub generate_tls_keys_and_certificate: bool,
 }
 
@@ -295,6 +301,7 @@ impl NodeKeysToGenerate {
             generate_node_signing_keys: true,
             generate_committee_signing_keys: true,
             generate_dkg_dealing_encryption_keys: true,
+            generate_idkg_dealing_encryption_keys: true,
             generate_tls_keys_and_certificate: true,
         }
     }
@@ -304,6 +311,7 @@ impl NodeKeysToGenerate {
             generate_node_signing_keys: false,
             generate_committee_signing_keys: false,
             generate_dkg_dealing_encryption_keys: false,
+            generate_idkg_dealing_encryption_keys: false,
             generate_tls_keys_and_certificate: false,
         }
     }
