@@ -38,7 +38,7 @@ use ic_nns_common::{
 
 // Makes expose_build_metadata! available.
 #[macro_use]
-extern crate ic_nns_common;
+extern crate ic_nervous_system_common;
 
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::pb::v1::{

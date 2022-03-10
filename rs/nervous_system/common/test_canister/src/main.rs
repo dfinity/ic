@@ -1,5 +1,5 @@
 #[macro_use]
-extern crate ic_nns_common;
+extern crate ic_nervous_system_common;
 
 expose_build_metadata! {}
 

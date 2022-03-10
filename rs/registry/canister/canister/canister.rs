@@ -58,7 +58,7 @@ use registry_canister::mutations::do_set_firewall_config::SetFirewallConfigPaylo
 
 // Makes expose_build_metadata! available.
 #[macro_use]
-extern crate ic_nns_common;
+extern crate ic_nervous_system_common;
 
 static mut REGISTRY: Option<Registry> = None;
 
