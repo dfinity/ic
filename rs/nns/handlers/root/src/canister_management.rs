@@ -18,17 +18,6 @@ use ic_registry_transport::pb::v1::{registry_mutation::Type, Precondition, Regis
 use std::collections::HashMap;
 use std::convert::TryFrom;
 
-pub async fn canister_status(canister_id_record: CanisterIdRecord) -> CanisterStatusResult {
-    call(
-        IC_00,
-        "canister_status",
-        dfn_candid::candid,
-        (canister_id_record,),
-    )
-    .await
-    .unwrap()
-}
-
 pub async fn update_authz(
     changed_canister: CanisterId,
     methods_authz_changes: Vec<MethodAuthzChange>,

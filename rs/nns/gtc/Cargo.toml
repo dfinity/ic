@@ -18,6 +18,7 @@ hex = "0.4.2"
 hex-literal = "0.3.1"
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha = {path = "../../crypto/sha/"}
+ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nns-governance = { path = "../governance" }
 ic-nns-common = { path = "../common" }
 ic-nns-constants = { path = "../constants" }

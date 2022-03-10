@@ -7,6 +7,7 @@ use std::fmt::Formatter;
 
 use ic_base_types::PrincipalId;
 
+pub mod export_build_metadata_via_candid;
 pub mod ledger;
 
 /// A general purpose error indicating something went wrong.

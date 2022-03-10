@@ -1,5 +1,4 @@
 pub mod access_control;
-pub mod export_build_metadata_via_candid;
 pub mod init;
 pub mod pb;
 pub mod registry;

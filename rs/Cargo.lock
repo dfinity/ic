@@ -882,9 +882,9 @@ dependencies = [
 
 [[package]]
 name = "build-info"
-version = "0.0.25"
+version = "0.0.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ba6aab796645620a69cbaca2eae382ce5bc5c86e15691a05e4b8676405280b2"
+checksum = "242c6293ad5acf5d9adb75231c1bd0c9cb0aecb64dd40e6579e36e0da7260f9b"
 dependencies = [
  "build-info-proc",
  "proc-macro-hack",
@@ -892,9 +892,9 @@ dependencies = [
 
 [[package]]
 name = "build-info-build"
-version = "0.0.25"
+version = "0.0.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22a5f411661cae69a077c6c2e6b459c4474dd8507722abd7df5c5c3e77994332"
+checksum = "1ebfef0dcb94d65cc2cd98ce285de89ed40c9a1d2bb10175f548867d0e26cda0"
 dependencies = [
  "anyhow",
  "base64 0.13.0",
@@ -912,9 +912,9 @@ dependencies = [
 
 [[package]]
 name = "build-info-common"
-version = "0.0.25"
+version = "0.0.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2283a43c396636e32eb6a4c2c4bcec4b10fc78debe2d8964ab84fe149086b79"
+checksum = "db629469a6955021b15eb99cf5983ae8dcf9d0432ba2a8295715efee232da912"
 dependencies = [
  "chrono",
  "derive_more 0.99.16",
@@ -924,9 +924,9 @@ dependencies = [
 
 [[package]]
 name = "build-info-proc"
-version = "0.0.25"
+version = "0.0.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ccf7bcaf579dd2d5343f257177f268fc6d8a86b23e46e50b08b371e579cfd757"
+checksum = "0965fa7159aa2cee4c5428ccec2d09dabb6ac5db2fe80d81cb8a158f5c47b335"
 dependencies = [
  "anyhow",
  "base64 0.13.0",
@@ -1794,6 +1794,7 @@ dependencies = [
  "ic-base-types",
  "ic-certified-map",
  "ic-crypto-tree-hash",
+ "ic-nervous-system-common",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-protobuf",
@@ -5090,7 +5091,10 @@ name = "ic-nervous-system-common"
 version = "0.8.0"
 dependencies = [
  "async-trait",
+ "build-info",
+ "build-info-build",
  "candid",
+ "dfn_candid",
  "dfn_core",
  "dfn_protobuf",
  "ic-base-types",
@@ -5100,13 +5104,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-common-test-canister"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "ic-nervous-system-common",
+]
+
+[[package]]
 name = "ic-nervous-system-root"
 version = "0.1.0"
 dependencies = [
  "candid",
+ "dfn_candid",
  "dfn_core",
  "ic-base-types",
  "ic-crypto-sha",
+ "ic-ic00-types",
  "ic-nervous-system-common",
  "serde",
  "serde_bytes",
@@ -5116,11 +5130,8 @@ dependencies = [
 name = "ic-nns-common"
 version = "0.8.0"
 dependencies = [
- "build-info",
- "build-info-build",
  "candid",
  "comparable",
- "dfn_candid",
  "dfn_core",
  "ic-base-types",
  "ic-crypto-sha",
@@ -5138,14 +5149,6 @@ dependencies = [
  "serde",
  "serial_test",
  "sha2 0.9.9",
-]
-
-[[package]]
-name = "ic-nns-common-test-canister"
-version = "0.1.0"
-dependencies = [
- "candid",
- "ic-nns-common",
 ]
 
 [[package]]
@@ -5213,6 +5216,7 @@ dependencies = [
  "hex-literal 0.3.3",
  "ic-base-types",
  "ic-crypto-sha",
+ "ic-nervous-system-common",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
@@ -6226,6 +6230,17 @@ dependencies = [
  "ic-types 0.8.0",
  "ledger-canister",
  "on_wire",
+]
+
+[[package]]
+name = "ic-sns-root"
+version = "0.8.0"
+dependencies = [
+ "candid",
+ "dfn_candid",
+ "dfn_core",
+ "ic-nervous-system-common",
+ "ic-nervous-system-root",
 ]
 
 [[package]]

@@ -11,6 +11,7 @@ dfn_protobuf = {path = "../../rust_canisters/dfn_protobuf"}
 dfn_core = {path = "../../rust_canisters/dfn_core"}
 ic-base-types = {path="../../types/base_types"}
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
+ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-protobuf = { path = "../../protobuf" }

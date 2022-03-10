@@ -1,7 +1,8 @@
 use candid::{CandidType, Deserialize};
-use dfn_core::api::CanisterId;
+use dfn_core::api::{call, CanisterId};
 use ic_base_types::{CanisterInstallMode, PrincipalId};
 use ic_crypto_sha::Sha256;
+use ic_ic00_types::IC_00;
 use ic_nervous_system_common::MethodAuthzChange;
 
 use serde::Serialize;
@@ -275,4 +276,15 @@ where
         Some(num) => serializer.serialize_str(&num.to_string()),
         None => serializer.serialize_none(),
     }
+}
+
+pub async fn canister_status((canister_id_record,): (CanisterIdRecord,)) -> CanisterStatusResult {
+    call(
+        IC_00,
+        "canister_status",
+        dfn_candid::candid,
+        (canister_id_record,),
+    )
+    .await
+    .unwrap()
 }
