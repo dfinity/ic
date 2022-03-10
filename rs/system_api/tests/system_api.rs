@@ -10,8 +10,8 @@ use ic_replicated_state::{
     Memory, NumWasmPages, PageMap, SystemState,
 };
 use ic_system_api::{
-    sandbox_safe_system_state::SandboxSafeSystemState, ApiType, NonReplicatedQueryKind,
-    SystemApiImpl,
+    sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
+    NonReplicatedQueryKind, SystemApiImpl,
 };
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
@@ -28,7 +28,10 @@ use ic_types::{
     user_error::RejectCode,
     CountBytes, Cycles, NumBytes, NumInstructions, Time,
 };
-use std::convert::{From, TryInto};
+use std::{
+    convert::{From, TryInto},
+    sync::Arc,
+};
 
 mod common;
 use common::*;
@@ -1390,6 +1393,7 @@ fn stable_grow_updates_subnet_available_memory() {
             ..execution_parameters()
         },
         Memory::default(),
+        Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),
     );
 
@@ -1419,6 +1423,7 @@ fn stable_grow_returns_allocated_memory_on_error() {
             ..execution_parameters()
         },
         Memory::new(PageMap::default(), NumWasmPages::new(1 << 32)),
+        Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),
     );
 
@@ -1456,6 +1461,7 @@ fn update_available_memory_updates_subnet_available_memory() {
             ..execution_parameters()
         },
         Memory::default(),
+        Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),
     );
 
@@ -1495,6 +1501,7 @@ fn push_output_request_respects_memory_limits() {
             ..execution_parameters()
         },
         Memory::default(),
+        Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),
     );
 
@@ -1570,6 +1577,7 @@ fn push_output_request_oversized_request_memory_limits() {
             ..execution_parameters()
         },
         Memory::default(),
+        Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),
     );
 
