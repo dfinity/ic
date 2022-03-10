@@ -16,7 +16,7 @@ from unittest import TestCase
 
 IC_BINARY_NAME = "ic-p8s-sd"
 # Don't start scraping mainnet
-DEFAULT_ARGUMENTS = "--no-poll"
+DEFAULT_ARGUMENTS = "--no-poll --listen-addr=[::]:11235"
 # Seconds to wait for the deamon to start up
 DAEMON_STARTUP_TIMEOUT_SECONDS = 270
 
@@ -71,14 +71,15 @@ class IcP8sDaemonTest(TestCase):
     def setUp(self):
         """Set up tests."""
         self.targets_dir = tempfile.mkdtemp()
-        self.daemon = start_daemon(Path(self.targets_dir))
+        self.file_sd_dir = tempfile.mkdtemp()
+        self.daemon = start_daemon(Path(self.targets_dir), Path(self.file_sd_dir))
         retry_with_timeout(lambda: get_request("replica"))
 
     def test_mainnet_targets_expose(self):
         """test_mainnet_targets_expose."""
 
-        def get_tdb26_targets(path: str) -> list:
-            resp = json.loads(get_request(path))
+        def get_tdb26_targets(content: bytes) -> list:
+            resp = json.loads(content)
             return set(
                 item["targets"][0]
                 for item in filter(
@@ -91,16 +92,22 @@ class IcP8sDaemonTest(TestCase):
             expected_targets = set("{}:{}".format(item, port) for item in TDB26_TARGET_ADDRS)
             self.assertEqual(targets, expected_targets)
 
-        assert_port_matches(get_tdb26_targets("replica"), 9090)
-        assert_port_matches(get_tdb26_targets("orchestrator"), 9091)
-        assert_port_matches(get_tdb26_targets("host_node_exporter"), 9100)
-        assert_port_matches(get_tdb26_targets("node_exporter"), 9100)
+        jobs = [("replica", 9090), ("orchestrator", 9091), ("host_node_exporter", 9100), ("node_exporter", 9100)]
+        for src in [get_request, self.read_sd_file]:
+            for job in jobs:
+                assert_port_matches(get_tdb26_targets(src(job[0])), job[1])
+
+    def read_sd_file(self, job_name: str):
+        """Read service discovery file."""
+        with open(os.path.join(self.file_sd_dir, job_name, "ic_p8s_sd.json")) as f:
+            return f.read()
 
     def tearDown(self):
         """Tear down resources."""
         self.daemon.kill()
         self.daemon.wait()
         shutil.rmtree(self.targets_dir)
+        shutil.rmtree(self.file_sd_dir)
 
 
 def in_ci_env() -> bool:
@@ -108,9 +115,9 @@ def in_ci_env() -> bool:
     return "CI_JOB_ID" in os.environ
 
 
-def start_daemon(targets_dir: Path) -> Popen:
+def start_daemon(targets_dir: Path, file_sd_config_dir: Path) -> Popen:
     """Start the discovery daemon, either by invoking 'cargo run'."""
-    args = "{} --targets-dir {}".format(DEFAULT_ARGUMENTS, targets_dir)
+    args = "{} --file-sd-base-path {} --targets-dir {}".format(DEFAULT_ARGUMENTS, file_sd_config_dir, targets_dir)
     if in_ci_env():
         # On CI, we assume that someone else cleanups after us.
         tmpdir = tempfile.mkdtemp()

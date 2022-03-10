@@ -10,7 +10,7 @@ pub struct Metrics {
     pub poll_count: IntCounterVec,
     /// Iff an error occurs during the a poll interval, a respective counter
     /// is increased.
-    pub error_count: IntCounterVec,
+    pub poll_error_count: IntCounterVec,
     /// A histogram tracking the latency for updating all polled registries.
     pub registries_update_latency_seconds: Histogram,
 }
@@ -26,7 +26,7 @@ impl Metrics {
                 "Count of successful poll iterations.",
                 &[POLL_STATUS],
             ),
-            error_count: metrics_registry.int_counter_vec(
+            poll_error_count: metrics_registry.int_counter_vec(
                 "discovery_error_count",
                 "Total number of errors that occured while scraping ICs.",
                 &[ERROR_TYPE],
