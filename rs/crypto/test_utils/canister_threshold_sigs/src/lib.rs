@@ -34,17 +34,17 @@ pub fn create_and_verify_dealing(
             )
         });
 
-    for receiver in params.receivers().get() {
-        assert!(crypto_for(*receiver, crypto_components)
-            .verify_dealing_private(params, dealer_id, &dealing)
-            .is_ok());
-    }
-
     // Verify the dealing is publicly valid
     let csp = crypto_for(dealer_id, crypto_components);
-    assert!(csp
-        .verify_dealing_public(params, dealer_id, &dealing)
-        .is_ok());
+    csp.verify_dealing_public(params, dealer_id, &dealing)
+        .expect("unexpectedly invalid dealing");
+
+    // Verify the dealing is privately valid for all receivers
+    for receiver in params.receivers().get() {
+        crypto_for(*receiver, crypto_components)
+            .verify_dealing_private(params, dealer_id, &dealing)
+            .expect("unexpectedly invalid dealing (private verification)");
+    }
 
     dealing
 }
