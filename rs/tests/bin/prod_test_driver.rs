@@ -204,10 +204,11 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     node_restart_test::config,
                     par(vec![t("node_restart_test", node_restart_test)]),
                 ),
-                pot(
+                pot_with_time_limit(
                     "cycles_minting_pot",
                     cycles_minting_test::config,
                     par(vec![t("cycles_minting_test", cycles_minting_test::test)]),
+                    Duration::from_secs(60 * 15) // 15 minutes
                 ),
                 pot(
                     "nns_voting_fuzzing_poc_pot",
