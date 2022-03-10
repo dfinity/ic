@@ -40,7 +40,6 @@ impl FileSd {
         let mut last_targets = self.last_targets.write().unwrap();
         let last_job_targets = last_targets.entry(job_name.to_string()).or_default();
         if last_job_targets == &p8s_target_groups {
-            println!("Cache hit!");
             return Ok(());
         }
         let job_path = self.base_directory.join(job_name);
