@@ -29,6 +29,9 @@
 
 .prod-nightly-test:
   extends: .prod-test
+  # [IDX-2138] Experiment to run all stages in parallel. Multiple testnets are provided.
+  # A testnet will still only run one test at a time.
+  needs: []
   variables:
     cd_target_env: "NIGHTLY"
   timeout: 3 hours
