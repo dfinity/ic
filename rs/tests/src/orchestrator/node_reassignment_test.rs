@@ -78,9 +78,11 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
 
     let nns_can_id = block_on(store_message(&node1.url, nns_msg));
     assert!(block_on(can_read_msg(log, &node1.url, nns_can_id, nns_msg)));
-    assert!(block_on(can_read_msg(log, &node2.url, nns_can_id, nns_msg)));
+    assert!(block_on(can_read_msg_with_retries(
+        log, &node2.url, nns_can_id, nns_msg, 5
+    )));
 
-    info!(ctx.logger, "message on both nns nodes verified!");
+    info!(ctx.logger, "Message on both nns nodes verified!");
 
     // Now we store another message on the app subnet.
     let app_node = get_random_application_node_endpoint(&handle, &mut rng);
@@ -93,7 +95,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         app_can_id,
         app_msg
     )));
-    info!(ctx.logger, "message on app node verified!");
+    info!(ctx.logger, "Message on app node verified!");
 
     // Unassign 2 nns nodes
     let node_ids: Vec<_> = vec![node1.node_id, node2.node_id];
@@ -113,23 +115,19 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         ctx.logger,
         "Waiting for moved nodes to return the app subnet message..."
     );
-
-    let mut retries = 50;
-    while retries > 0
-        && (!block_on(can_read_msg(log, &node1.url, app_can_id, app_msg))
-            || !block_on(can_read_msg(log, &node2.url, app_can_id, app_msg)))
-    {
-        std::thread::sleep(std::time::Duration::from_secs(5));
-        retries -= 1;
-    }
-
-    block_on(node3.assert_ready(ctx));
-    block_on(node4.assert_ready(ctx));
-
+    assert!(block_on(can_read_msg_with_retries(
+        log, &node1.url, app_can_id, app_msg, 50
+    )));
+    assert!(block_on(can_read_msg_with_retries(
+        log, &node2.url, app_can_id, app_msg, 5
+    )));
     info!(
         ctx.logger,
         "App message on former NNS nodes could be retrieved!"
     );
+
+    block_on(node3.assert_ready(ctx));
+    block_on(node4.assert_ready(ctx));
     assert!(block_on(can_read_msg(log, &node3.url, nns_can_id, nns_msg)));
     assert!(block_on(can_read_msg(log, &node4.url, nns_can_id, nns_msg)));
     info!(
@@ -138,22 +136,26 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     );
 
     // Now make sure the subnets are able to store new messages
+    info!(ctx.logger, "Try to store new messages on NNS...");
     let nns_msg_2 = "hello again on nns!";
     let nns_can_id_2 = block_on(store_message(&node3.url, nns_msg_2));
-    assert!(block_on(can_read_msg(
+    assert!(block_on(can_read_msg_with_retries(
         log,
         &node4.url,
         nns_can_id_2,
-        nns_msg_2
+        nns_msg_2,
+        5
     )));
 
+    info!(ctx.logger, "Try to store new messages on app subnet...");
     let app_msg_2 = "hello again on app subnet!";
     let app_can_id_2 = block_on(store_message(&app_node.url, app_msg_2));
-    assert!(block_on(can_read_msg(
+    assert!(block_on(can_read_msg_with_retries(
         log,
         &node1.url,
         app_can_id_2,
-        app_msg_2
+        app_msg_2,
+        5
     )));
     info!(
         ctx.logger,
@@ -178,6 +180,16 @@ pub async fn can_read_msg(
     canister_id: Principal,
     msg: &str,
 ) -> bool {
+    can_read_msg_with_retries(log, url, canister_id, msg, 0).await
+}
+
+pub async fn can_read_msg_with_retries(
+    log: &slog::Logger,
+    url: &Url,
+    canister_id: Principal,
+    msg: &str,
+    mut retries: usize,
+) -> bool {
     let bytes = msg.as_bytes();
     let agent = match create_agent(url.as_str()).await {
         Ok(val) => val,
@@ -187,6 +199,15 @@ pub async fn can_read_msg(
         }
     };
     let ucan = UniversalCanister::from_canister_id(&agent, canister_id);
-    // query stored data
+    // query stored data\
+    while retries > 0 && ucan.read_stable(0, msg.len() as u32).await != Ok(bytes.to_vec()) {
+        info!(
+            log,
+            "Node {:?}'s message is not expected message.",
+            url.as_str()
+        );
+        std::thread::sleep(std::time::Duration::from_secs(5));
+        retries -= 1;
+    }
     ucan.read_stable(0, msg.len() as u32).await == Ok(bytes.to_vec())
 }
