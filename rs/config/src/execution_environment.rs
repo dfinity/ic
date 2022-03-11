@@ -17,10 +17,10 @@ const GB: u64 = 1024 * 1024 * 1024;
 /// of the canister. The actual storage used by the nodes can be higher as the
 /// IC protocol requires storing copies of the canister state.
 ///
-/// The gen 1 machines in production will have 3TiB disks. We offer 300GiB to
+/// The gen 1 machines in production will have 3TiB disks. We offer 350GiB to
 /// canisters. The rest will be used to for storing additional copies of the
 /// canister's data and the deltas.
-const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(300 * GB);
+const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(350 * GB);
 
 /// This is the upper limit on how much memory can be used by all canister
 /// messages on a given subnet.
@@ -38,11 +38,11 @@ const SUBNET_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(50 * GB);
 ///
 /// Currently heap delta pages are stored in memory and not backed by a file.
 /// The gen 1 machines in production have 500GiB of RAM available to replica.
-/// Set the upper limit to 200GiB to reserve memory for other components and
+/// Set the upper limit to 150GiB to reserve memory for other components and
 /// potential fragmentation. This limit should be larger than the maximum
 /// canister memory size to guarantee that a message that overwrites the whole
 /// memory can succeed.
-pub(crate) const SUBNET_HEAP_DELTA_CAPACITY: NumBytes = NumBytes::new(200 * GB);
+pub(crate) const SUBNET_HEAP_DELTA_CAPACITY: NumBytes = NumBytes::new(150 * GB);
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(default)]

@@ -30,8 +30,8 @@ use std::{
 pub mod cache;
 
 // If set to true, we validate chunks even in situations where it might not be
-// necessary
-const ALWAYS_VALIDATE: bool = true;
+// necessary.
+const ALWAYS_VALIDATE: bool = false;
 
 /// The state of the communication with up-to-date nodes.
 #[derive(Clone)]
