@@ -286,7 +286,9 @@ class WorkloadExperiment(experiment.Experiment):
 
         # Set timeout to 2 + len(targets) of the duration.
         # E.g. timeout will linearly increase as target machines number incrase
-        timeout = (len(targets) / 10 + 2) * duration
+        # Wait at least 120s, as there is a potentially high startup overhead for super-small
+        # workloads.
+        timeout = max((len(targets) / 10 + 2) * duration, 120)
         print(f"Setting workload generator timeout to: {timeout}")
         ssh.run_all_ssh_in_parallel(machines, commands, f_stdout, f_stderr, timeout)
 
