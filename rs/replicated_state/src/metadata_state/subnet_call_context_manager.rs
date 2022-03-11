@@ -19,7 +19,6 @@ pub struct SubnetCallContextManager {
     next_callback_id: u64,
     pub setup_initial_dkg_contexts: BTreeMap<CallbackId, SetupInitialDkgContext>,
     pub sign_with_ecdsa_contexts: BTreeMap<CallbackId, SignWithEcdsaContext>,
-    pub sign_with_mock_ecdsa_contexts: BTreeMap<CallbackId, SignWithEcdsaContext>,
     pub canister_http_request_contexts: BTreeMap<CallbackId, CanisterHttpRequestContext>,
 }
 
@@ -31,15 +30,10 @@ impl SubnetCallContextManager {
         self.setup_initial_dkg_contexts.insert(callback_id, context);
     }
 
-    pub fn push_sign_with_ecdsa_request(&mut self, context: SignWithEcdsaContext, is_mock: bool) {
+    pub fn push_sign_with_ecdsa_request(&mut self, context: SignWithEcdsaContext) {
         let callback_id = CallbackId::new(self.next_callback_id);
         self.next_callback_id += 1;
-        match is_mock {
-            true => self
-                .sign_with_mock_ecdsa_contexts
-                .insert(callback_id, context),
-            false => self.sign_with_ecdsa_contexts.insert(callback_id, context),
-        };
+        self.sign_with_ecdsa_contexts.insert(callback_id, context);
     }
 
     pub fn push_http_request(&mut self, context: CanisterHttpRequestContext) {
@@ -72,19 +66,6 @@ impl SubnetCallContextManager {
                         info!(
                             logger,
                             "Received the response for SignWithECDSA request with id {:?} from {:?}",
-                            context.pseudo_random_id,
-                            context.request.sender
-                        );
-                        context.request
-                    })
-            })
-            .or_else(|| {
-                self.sign_with_mock_ecdsa_contexts
-                    .remove(&callback_id)
-                    .map(|context| {
-                        info!(
-                            logger,
-                            "Received the response for SignWithMockECDSA request with id {:?} from {:?}",
                             context.pseudo_random_id,
                             context.request.sender
                         );
@@ -131,16 +112,6 @@ impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {
                     },
                 )
                 .collect(),
-            sign_with_mock_ecdsa_contexts: item
-                .sign_with_mock_ecdsa_contexts
-                .iter()
-                .map(
-                    |(callback_id, context)| pb_metadata::SignWithEcdsaContextTree {
-                        callback_id: callback_id.get(),
-                        context: Some(context.into()),
-                    },
-                )
-                .collect(),
             canister_http_request_contexts: item
                 .canister_http_request_contexts
                 .iter()
@@ -172,13 +143,6 @@ impl TryFrom<pb_metadata::SubnetCallContextManager> for SubnetCallContextManager
             sign_with_ecdsa_contexts.insert(CallbackId::new(entry.callback_id), context);
         }
 
-        let mut sign_with_mock_ecdsa_contexts = BTreeMap::<CallbackId, SignWithEcdsaContext>::new();
-        for entry in item.sign_with_mock_ecdsa_contexts {
-            let context: SignWithEcdsaContext =
-                try_from_option_field(entry.context, "SystemMetadata::SignWithMockEcdsaContext")?;
-            sign_with_mock_ecdsa_contexts.insert(CallbackId::new(entry.callback_id), context);
-        }
-
         let mut canister_http_request_contexts =
             BTreeMap::<CallbackId, CanisterHttpRequestContext>::new();
         for entry in item.canister_http_request_contexts {
@@ -191,7 +155,6 @@ impl TryFrom<pb_metadata::SubnetCallContextManager> for SubnetCallContextManager
             next_callback_id: item.next_callback_id,
             setup_initial_dkg_contexts,
             sign_with_ecdsa_contexts,
-            sign_with_mock_ecdsa_contexts,
             canister_http_request_contexts,
         })
     }

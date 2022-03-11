@@ -25,7 +25,7 @@ pub enum Method {
     DeleteCanister,
     DepositCycles,
     HttpRequest,
-    GetECDSAPublicKey,
+    ECDSAPublicKey,
     InstallCode,
     RawRand,
     SetController,
@@ -45,10 +45,6 @@ pub enum Method {
     // They should be removed afterwards.
     ProvisionalCreateCanisterWithCycles,
     ProvisionalTopUpCanister,
-
-    // Mock implementations
-    GetMockECDSAPublicKey,
-    SignWithMockECDSA,
 }
 
 /// A trait to be implemented by all structs that are used as payloads
@@ -690,7 +686,7 @@ pub struct SignWithECDSAReply {
 
 impl Payload<'_> for SignWithECDSAReply {}
 
-/// Represents the argument of the get_ecdsa_public_key API.
+/// Represents the argument of the ecdsa_public_key API.
 /// ```text
 /// (record {
 ///   canister_id : opt canister_id;
@@ -699,15 +695,15 @@ impl Payload<'_> for SignWithECDSAReply {}
 /// })
 /// ```
 #[derive(CandidType, Deserialize, Debug)]
-pub struct GetECDSAPublicKeyArgs {
+pub struct ECDSAPublicKeyArgs {
     pub canister_id: Option<CanisterId>,
     pub derivation_path: Vec<Vec<u8>>,
     pub key_id: String,
 }
 
-impl Payload<'_> for GetECDSAPublicKeyArgs {}
+impl Payload<'_> for ECDSAPublicKeyArgs {}
 
-/// Represents the response of the get_ecdsa_public_key API.
+/// Represents the response of the ecdsa_public_key API.
 /// ```text
 /// (record {
 ///   public_key : blob;
@@ -715,9 +711,9 @@ impl Payload<'_> for GetECDSAPublicKeyArgs {}
 /// })
 /// ```
 #[derive(CandidType, Deserialize, Debug)]
-pub struct GetECDSAPublicKeyResponse {
+pub struct ECDSAPublicKeyResponse {
     pub public_key: Vec<u8>,
     pub chain_code: Vec<u8>,
 }
 
-impl Payload<'_> for GetECDSAPublicKeyResponse {}
+impl Payload<'_> for ECDSAPublicKeyResponse {}

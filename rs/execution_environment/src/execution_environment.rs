@@ -11,8 +11,8 @@ use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_crypto::derive_tecdsa_public_key;
 use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost};
 use ic_ic00_types::{
-    CanisterHttpRequestArgs, CanisterIdRecord, CanisterSettingsArgs, CreateCanisterArgs, EmptyBlob,
-    GetECDSAPublicKeyArgs, GetECDSAPublicKeyResponse, InstallCodeArgs, Method as Ic00Method,
+    CanisterHttpRequestArgs, CanisterIdRecord, CanisterSettingsArgs, CreateCanisterArgs,
+    ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EmptyBlob, InstallCodeArgs, Method as Ic00Method,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
     SetControllerArgs, SetupInitialDKGArgs, SignWithECDSAArgs, UpdateSettingsArgs, IC_00,
 };
@@ -532,7 +532,6 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                                 args.message_hash,
                                 args.derivation_path,
                                 &args.key_id,
-                                false,
                                 &mut state,
                                 rng,
                             )
@@ -553,42 +552,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                 }
             },
 
-            Ok(Ic00Method::SignWithMockECDSA) => {
-                let res = match &msg {
-                    RequestOrIngress::Request(request) => {
-                        if !state.metadata.own_subnet_features.ecdsa_signatures {
-                            Some(UserError::new(ErrorCode::CanisterContractViolation,
-                            "This API is not enabled on this subnet".to_string()))
-                        }
-                        else {
-                            match SignWithECDSAArgs::decode(payload) {
-                                Err(err) => Some(err.into()),
-                                Ok(args) => self
-                                    .sign_with_ecdsa(
-                                        request.clone(),
-                                        args.message_hash,
-                                        args.derivation_path,
-                                        &args.key_id,
-                                        true,
-                                        &mut state,
-                                        rng,
-                                    ).map_or_else(Some, |()| None),
-                            }
-                        }
-                    }
-                    RequestOrIngress::Ingress(_) => {
-                        error!(self.log, "[EXC-BUG] Ingress messages to SignWithECDSA should've been filtered earlier.");
-                        let error_string = format!(
-                            "SignWithMockECDSA is called by user {}. It can only be called by a canister.",
-                            msg.sender()
-                        );
-                        Some(UserError::new(ErrorCode::CanisterContractViolation, error_string))
-                    }
-                }.map(|err| (Err(err), msg.take_cycles()));
-                (res, instructions_limit)
-            }
-
-            Ok(Ic00Method::GetECDSAPublicKey) => {
+            Ok(Ic00Method::ECDSAPublicKey) => {
                 let res = match &msg {
                     RequestOrIngress::Request(_request) => {
                         if !state.metadata.own_subnet_features.ecdsa_signatures {
@@ -596,7 +560,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                               "This API is not enabled on this subnet".to_string())))
                         }
                         else {
-                            match GetECDSAPublicKeyArgs::decode(payload) {
+                            match ECDSAPublicKeyArgs::decode(payload) {
                                 Err(err) => Some(Err(err.into())),
                                 Ok(args) => match ecdsa_subnet_public_key {
                                     None => Some(Err(UserError::new(ErrorCode::CanisterRejectedMessage,
@@ -618,34 +582,9 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                         }
                     }
                     RequestOrIngress::Ingress(_) => {
-                        error!(self.log, "[EXC-BUG] Ingress messages to GetECDSAPublicKey should've been filtered earlier.");
+                        error!(self.log, "[EXC-BUG] Ingress messages to ECDSAPublicKey should've been filtered earlier.");
                         let error_string = format!(
-                            "GetECDSAPublicKey is called by user {}. It can only be called by a canister.",
-                            msg.sender()
-                        );
-                        Some(Err(UserError::new(ErrorCode::CanisterContractViolation, error_string)))
-                    }
-                }.map(|res| (res, msg.take_cycles()));
-                (res, instructions_limit)
-            }
-
-            Ok(Ic00Method::GetMockECDSAPublicKey) => {
-                let res = match &msg {
-                    RequestOrIngress::Request(_request) => {
-                        if !state.metadata.own_subnet_features.ecdsa_signatures {
-                            Some(Err(UserError::new(ErrorCode::CanisterContractViolation,
-                            "This API is not enabled on this subnet".to_string())))
-                        }
-                        else {
-                            Some(Ok([2, 185, 138, 127, 184, 204, 0, 112, 72, 98, 91,
-                                     100, 70, 173, 73, 161, 179, 167, 34, 223, 140, 28,
-                                     169, 117, 184, 113, 96, 2, 62, 20, 209, 144, 151].to_vec()))
-                        }
-                    }
-                    RequestOrIngress::Ingress(_) => {
-                        error!(self.log, "[EXC-BUG] Ingress messages to SignWithECDSA should've been filtered earlier.");
-                        let error_string = format!(
-                            "GetMockECDSAPublicKey is called by user {}. It can only be called by a canister.",
+                            "ECDSAPublicKey is called by user {}. It can only be called by a canister.",
                             msg.sender()
                         );
                         Some(Err(UserError::new(ErrorCode::CanisterContractViolation, error_string)))
@@ -1903,7 +1842,7 @@ impl ExecutionEnvironmentImpl {
         principal_id: PrincipalId,
         derivation_path: Vec<Vec<u8>>,
         key_id: &str,
-    ) -> Result<GetECDSAPublicKeyResponse, UserError> {
+    ) -> Result<ECDSAPublicKeyResponse, UserError> {
         let _ = CanisterId::new(principal_id).map_err(|err| {
             UserError::new(
                 ErrorCode::CanisterContractViolation,
@@ -1922,7 +1861,7 @@ impl ExecutionEnvironmentImpl {
         };
         derive_tecdsa_public_key(subnet_public_key, &path)
             .map_err(|err| UserError::new(ErrorCode::CanisterRejectedMessage, format!("{}", err)))
-            .map(|res| GetECDSAPublicKeyResponse {
+            .map(|res| ECDSAPublicKeyResponse {
                 public_key: res.public_key,
                 chain_code: res.chain_key,
             })
@@ -1935,7 +1874,6 @@ impl ExecutionEnvironmentImpl {
         message_hash: Vec<u8>,
         derivation_path: Vec<Vec<u8>>,
         key_id: &str,
-        is_mock: bool,
         state: &mut ReplicatedState,
         rng: &mut (dyn RngCore + 'static),
     ) -> Result<(), UserError> {
@@ -1964,16 +1902,13 @@ impl ExecutionEnvironmentImpl {
         state
             .metadata
             .subnet_call_context_manager
-            .push_sign_with_ecdsa_request(
-                SignWithEcdsaContext {
-                    request,
-                    message_hash,
-                    derivation_path,
-                    pseudo_random_id,
-                    batch_time: state.metadata.batch_time,
-                },
-                is_mock,
-            );
+            .push_sign_with_ecdsa_request(SignWithEcdsaContext {
+                request,
+                message_hash,
+                derivation_path,
+                pseudo_random_id,
+                batch_time: state.metadata.batch_time,
+            });
         Ok(())
     }
 
