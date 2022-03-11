@@ -318,11 +318,16 @@ pub const SAMPLE_CONFIG: &str = r#"
     nns_registry_replicator: {
       poll_delay_duration_ms: 5000
     },
-    // =================================
+    // ====================================
+    // Configuration of various adapters. 
+    // ====================================
     adapters_config: {
-        bitcoin_uds_path: "/tmp/bitcoin_uds"
-    }
-    // =================================
+        bitcoin_uds_path: "/tmp/bitcoin_uds",
+        // IPC socket path for canister http adapter. This UDS path has to be the same as
+        // specified in the systemd socket file.
+        // The canister http adapter socket file is: /ic-os/guestos/rootfs/systemd/system/ic-canister-http-adapter.socket
+        canister_http_uds_path: "/run/ic-node/canister-http-adapter/socket",
+    },
 }
 "#;
 

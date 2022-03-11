@@ -126,6 +126,16 @@
         // to get the key from a secure place.
         show_root_key_in_status: true,
     },
+    
+    // ====================================
+    // Configuration of various adapters. 
+    // ====================================
+    adapters_config: {
+        // IPC socket path for canister http adapter. This UDS path has to be the same as
+        // specified in the systemd socket file.
+        // The canister http adapter socket file is: /ic-os/guestos/rootfs/systemd/system/ic-canister-http-adapter.socket
+        canister_http_uds_path: "/run/ic-node/canister-http-adapter/socket",
+    },
 
     // ==================================================
     // Configuration of the metrics collection subsystem.

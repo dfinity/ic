@@ -27,4 +27,5 @@ http = "0.2"
 async-stream = "0.3.2"
 
 [dev-dependencies]
+tempfile = "3.3.0"
 uuid = { version = "0.8.2", features = ["v4"] }
