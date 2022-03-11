@@ -2,10 +2,9 @@ rosetta-api-docker-image:
   extends:
     - .ubuntu-nix-docker-protected
     - .rules-protected-branch-manual
-  needs: []
-  dependencies:
-    - cargo-build-release-linux-native
   stage: guest-os-build
+  needs:
+    - cargo-build-release-linux-native
   script:
     - |
       set -exuo pipefail
