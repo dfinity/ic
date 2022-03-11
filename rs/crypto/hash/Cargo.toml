@@ -1,0 +1,14 @@
+[package]
+name = "ic-crypto-hash"
+version = "0.8.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ic-crypto-sha = { path = "../sha" }
+ic-interfaces = { path = "../../interfaces" }
+ic-types = { path = "../../types/types" }
+
+[dev-dependencies]
+hex = "0.4.2"
