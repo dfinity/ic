@@ -1,5 +1,4 @@
 """Unit tests for elasticsearch.py."""
-import sys
 import unittest
 from unittest import TestCase
 
@@ -12,7 +11,7 @@ class Test_ElasticSearch(TestCase):
 
     def setUp(self):
         """Set up needed dependencies."""
-        gflags.FLAGS(sys.argv)
+        gflags.FLAGS.send_perf_metrics = True
 
     def test_send_perf_trend_success(self):
         """The success case where a metric is successfully sent to ES."""

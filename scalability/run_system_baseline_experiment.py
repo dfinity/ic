@@ -29,21 +29,19 @@ Suggested success criteria (Updates):
 Maximum number of queries not be below xxx queries per second with less than 20% failure and a maximum latency of 10000ms
 """
 import os
-import sys
 import time
 
 import experiment
 import gflags
-import misc
 import workload_experiment
 from elasticsearch import ElasticSearch
 from termcolor import colored
+from verify_perf import VerifyPerf
 
 FLAGS = gflags.FLAGS
 gflags.DEFINE_integer("load", 50, "Load in requests per second to issue")
 gflags.DEFINE_integer("num_workload_generators", 2, "Number of workload generators to run")
 gflags.DEFINE_integer("iter_duration", 300, "Duration in seconds for which to execute workload in each round.")
-gflags.DEFINE_integer("median_latency_threshold", 380, "Median latency threshold for query calls.")
 
 
 class Experiment1(workload_experiment.WorkloadExperiment):
@@ -211,10 +209,9 @@ if __name__ == "__main__":
     experiment.parse_command_line_args()
 
     experiment_name = os.path.basename(__file__).replace(".py", "")
-    perf_failures = 0
     start_time = int(time.time())
     exp = Experiment1()
-    result_file = f"{exp.out_dir}/verification_results.txt"
+    verifier = VerifyPerf(f"{exp.out_dir}/verification_results.txt")
 
     (
         failure_rate,
@@ -228,23 +225,17 @@ if __name__ == "__main__":
         rps,
     ) = exp.run_iterations([FLAGS.load])
 
-    perf_failures += misc.verify("failure rate", exp.request_type, failure_rate, 0, 0, result_file)
-    perf_failures += misc.verify(
-        "median latency", exp.request_type, t_median, FLAGS.median_latency_threshold, 0.01, result_file
-    )
+    verifier.verify("failure rate", FLAGS.use_updates, failure_rate, 0)
+    verifier.verify("median latency", FLAGS.use_updates, t_median, FLAGS.median_latency_threshold)
+    verifier.verify("throughput", FLAGS.use_updates, rps, FLAGS.load)
 
     ElasticSearch.send_perf(
         experiment_name,
-        perf_failures <= 0,
+        verifier.is_success(),
         "Update",
         exp.git_hash,
         FLAGS.branch,
         FLAGS.is_ci_job,
         (failure_rate, 0, t_median, FLAGS.median_latency_threshold, rps, FLAGS.load),
     )
-
-    if perf_failures > 0:
-        print(f"❌ Performance did not meet expectation. Check {result_file} file for more detailed results. 😭😭😭")
-        sys.exit(1)
-
-    print("✅ Performance verifications passed! 🎉🎉🎉")
+    verifier.conclude()

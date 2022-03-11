@@ -30,15 +30,14 @@ Maximum number of updates not be below xxx updates per second with less than 20%
 import codecs
 import json
 import os
-import sys
 import time
 from statistics import mean
 
 import experiment
 import gflags
-import misc
 import workload_experiment
 from elasticsearch import ElasticSearch
+from verify_perf import VerifyPerf
 
 CANISTER = "memory-test-canister.wasm"
 
@@ -47,11 +46,6 @@ gflags.DEFINE_integer("target_query_load", 160, "Target query load in queries pe
 gflags.DEFINE_integer("target_update_load", 20, "Target update load in queries per second to issue.")
 gflags.DEFINE_integer("payload_size", 5000000, "Payload size to pass to memory test canister")
 gflags.DEFINE_integer("iter_duration", 60, "Duration in seconds for which to execute workload in each round.")
-gflags.DEFINE_integer(
-    "median_latency_threshold",
-    3000,
-    'Median latency threshold for query calls or update calls, depending on how "is_update" flag is set.',
-)
 
 
 class Experiment2(workload_experiment.WorkloadExperiment):
@@ -193,10 +187,9 @@ if __name__ == "__main__":
 
     exp = Experiment2()
 
-    perf_failures = 0
     experiment_name = os.path.basename(__file__).replace(".py", "")
-    result_file = f"{exp.out_dir}/verification_results.txt"
     datapoints = [FLAGS.target_update_load]
+    verifier = VerifyPerf(f"{exp.out_dir}/verification_results.txt")
 
     (
         failure_rate,
@@ -211,12 +204,13 @@ if __name__ == "__main__":
     ) = exp.run_iterations(datapoints)
 
     # Verify results
-    perf_failures += misc.verify("failure rate", True, failure_rate, 0, 0, result_file)
-    perf_failures += misc.verify("median latency", True, t_median, FLAGS.median_latency_threshold, 0.01, result_file)
+    verifier.verify("failure rate", FLAGS.use_updates, failure_rate, 0)
+    verifier.verify("median latency", FLAGS.use_updates, t_median, FLAGS.median_latency_threshold)
+    verifier.verify("throughput", FLAGS.use_updates, rps, FLAGS.target_update_load)
 
     ElasticSearch.send_perf(
         experiment_name,
-        perf_failures <= 0,
+        verifier.is_success(),
         "Update",
         exp.git_hash,
         FLAGS.branch,
@@ -230,9 +224,4 @@ if __name__ == "__main__":
             FLAGS.target_update_load,
         ),
     )
-
-    if perf_failures > 0:
-        print(f"❌ Performance did not meet expectation. Check {result_file} file for more detailed results. 😭😭😭")
-        sys.exit(1)
-
-    print("✅ Performance verifications passed! 🎉🎉🎉")
+    verifier.conclude()
