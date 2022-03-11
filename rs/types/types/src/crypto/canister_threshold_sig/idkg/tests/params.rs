@@ -1,16 +1,18 @@
 use super::super::*;
 use crate::crypto::AlgorithmId;
+use crate::NodeId;
 use crate::RegistryVersion;
-use crate::{NodeId, PrincipalId, SubnetId};
 use maplit::btreeset;
 use std::collections::BTreeSet;
 
+use crate::crypto::canister_threshold_sig::idkg::test_utils::{
+    mock_masked_transcript_type, mock_transcript, mock_unmasked_transcript_type, node_id,
+    set_of_nodes, transcript_id_generator,
+};
+
 #[test]
 fn should_return_correct_dealer_index_for_random() {
-    let mut dealers = BTreeSet::new();
-    dealers.insert(node_id(42));
-    dealers.insert(node_id(43));
-    dealers.insert(node_id(45));
+    let dealers = set_of_nodes(&[42, 43, 45]);
 
     let params = IDkgTranscriptParams::new(
         transcript_id_generator(),
@@ -32,19 +34,12 @@ fn should_return_correct_dealer_index_for_random() {
 
 #[test]
 fn should_return_correct_dealer_index_for_reshare_masked() {
-    let mut previous_receivers = BTreeSet::new();
-    previous_receivers.insert(node_id(35));
-    previous_receivers.insert(node_id(36));
-    previous_receivers.insert(node_id(37));
-    previous_receivers.insert(node_id(38));
+    let previous_receivers = set_of_nodes(&[35, 36, 37, 38]);
 
     let previous_transcript =
         mock_transcript(Some(previous_receivers), mock_masked_transcript_type());
 
-    let mut dealers = BTreeSet::new();
-    dealers.insert(node_id(35));
-    dealers.insert(node_id(36));
-    dealers.insert(node_id(38));
+    let dealers = set_of_nodes(&[35, 36, 38]);
 
     // For a Resharing Masked transcript, the dealer set should be a subset of the previous receiver set.
     assert!(dealers.is_subset(previous_transcript.receivers.get()));
@@ -70,19 +65,12 @@ fn should_return_correct_dealer_index_for_reshare_masked() {
 
 #[test]
 fn should_return_correct_dealer_index_for_reshare_unmasked() {
-    let mut previous_receivers = BTreeSet::new();
-    previous_receivers.insert(node_id(35));
-    previous_receivers.insert(node_id(36));
-    previous_receivers.insert(node_id(37));
-    previous_receivers.insert(node_id(38));
+    let previous_receivers = set_of_nodes(&[35, 36, 37, 38]);
 
     let previous_transcript =
         mock_transcript(Some(previous_receivers), mock_unmasked_transcript_type());
 
-    let mut dealers = BTreeSet::new();
-    dealers.insert(node_id(35));
-    dealers.insert(node_id(36));
-    dealers.insert(node_id(38));
+    let dealers = set_of_nodes(&[35, 36, 38]);
 
     // For a Resharing Unmasked transcript, the dealer set should be a subset of the previous receiver set.
     assert!(dealers.is_subset(previous_transcript.receivers.get()));
@@ -108,11 +96,7 @@ fn should_return_correct_dealer_index_for_reshare_unmasked() {
 
 #[test]
 fn should_return_correct_dealer_index_for_unmasked_times_masked() {
-    let mut previous_receivers = BTreeSet::new();
-    previous_receivers.insert(node_id(35));
-    previous_receivers.insert(node_id(36));
-    previous_receivers.insert(node_id(37));
-    previous_receivers.insert(node_id(38));
+    let previous_receivers = set_of_nodes(&[35, 36, 37, 38]);
 
     let previous_unmasked_transcript = mock_transcript(
         Some(previous_receivers.clone()),
@@ -121,10 +105,7 @@ fn should_return_correct_dealer_index_for_unmasked_times_masked() {
     let previous_masked_transcript =
         mock_transcript(Some(previous_receivers), mock_masked_transcript_type());
 
-    let mut dealers = BTreeSet::new();
-    dealers.insert(node_id(35));
-    dealers.insert(node_id(36));
-    dealers.insert(node_id(38));
+    let dealers = set_of_nodes(&[35, 36, 38]);
 
     // For unmasked times masked transcript, the dealer set should be a subset of the previous receiver set.
     assert!(dealers.is_subset(previous_unmasked_transcript.receivers.get()));
@@ -153,11 +134,114 @@ fn should_return_correct_dealer_index_for_unmasked_times_masked() {
 }
 
 #[test]
+fn should_return_none_initial_dealings_collection_threshold_for_random() {
+    let dealers = set_of_nodes(&[1, 2, 3]);
+
+    let params = IDkgTranscriptParams::new(
+        transcript_id_generator(),
+        dealers.clone(),
+        dealers,
+        RegistryVersion::from(0),
+        AlgorithmId::ThresholdEcdsaSecp256k1,
+        IDkgTranscriptOperation::Random,
+    )
+    .expect("Failed to create IDKG params");
+
+    // Random params should not have initial dealings collection threshold.
+    assert_eq!(params.unverified_dealings_collection_threshold(), None);
+}
+
+#[test]
+fn should_return_none_initial_dealings_collection_threshold_for_masked() {
+    let dealers = set_of_nodes(&[1, 2, 3]);
+
+    let masked_transcript = mock_transcript(Some(dealers.clone()), mock_masked_transcript_type());
+    let params = IDkgTranscriptParams::new(
+        transcript_id_generator(),
+        dealers.clone(),
+        dealers,
+        RegistryVersion::from(0),
+        AlgorithmId::ThresholdEcdsaSecp256k1,
+        IDkgTranscriptOperation::ReshareOfMasked(masked_transcript),
+    )
+    .expect("Failed to create IDKG params");
+
+    // Resharing masked params should not have initial dealings collection threshold.
+    assert_eq!(params.unverified_dealings_collection_threshold(), None);
+}
+
+#[test]
+fn should_return_none_initial_dealings_collection_threshold_for_unmasked_times_masked() {
+    let dealers = set_of_nodes(&[1, 2, 3]);
+
+    let masked_transcript = mock_transcript(Some(dealers.clone()), mock_masked_transcript_type());
+    let unmasked_transcript =
+        mock_transcript(Some(dealers.clone()), mock_unmasked_transcript_type());
+
+    let params = IDkgTranscriptParams::new(
+        transcript_id_generator(),
+        dealers.clone(),
+        dealers,
+        RegistryVersion::from(0),
+        AlgorithmId::ThresholdEcdsaSecp256k1,
+        IDkgTranscriptOperation::UnmaskedTimesMasked(unmasked_transcript, masked_transcript),
+    )
+    .expect("Failed to create IDKG params");
+
+    // Unmasked times masked params should not have initial dealings collection threshold.
+    assert_eq!(params.unverified_dealings_collection_threshold(), None);
+}
+
+#[test]
+fn should_return_correct_initial_dealings_collection_threshold_for_unmasked() {
+    // For 10 dealers, f = 3 and the initial_collection_threhold=2*f+1=7
+    check_unverified_dealings_collection_threshold_for_unmasked(10, 7);
+
+    // For 7 to 9 dealers, f = 2 and the initial_collection_threhold=2*f+1=5
+    for number_of_dealers in [7, 8, 9] {
+        check_unverified_dealings_collection_threshold_for_unmasked(number_of_dealers, 5);
+    }
+
+    // For 4 to 6 dealers, f = 1 and the initial_collection_threhold=2*f+1=3
+    for number_of_dealers in [4, 5, 6] {
+        check_unverified_dealings_collection_threshold_for_unmasked(number_of_dealers, 3);
+    }
+
+    // For 1 to 3 dealers, f = 0 and the initial_collection_threhold=2*f+1=1
+    for number_of_dealers in [1, 2, 3] {
+        check_unverified_dealings_collection_threshold_for_unmasked(number_of_dealers, 1);
+    }
+}
+
+fn check_unverified_dealings_collection_threshold_for_unmasked(
+    number_of_dealers: u32,
+    expected_threshold: u32,
+) {
+    let dealers = set_of_nodes(&(0..number_of_dealers as u64).collect::<Vec<_>>());
+
+    let transcript = mock_transcript(Some(dealers.clone()), mock_unmasked_transcript_type());
+    let params = IDkgTranscriptParams::new(
+        transcript_id_generator(),
+        dealers.clone(),
+        dealers,
+        RegistryVersion::from(0),
+        AlgorithmId::ThresholdEcdsaSecp256k1,
+        IDkgTranscriptOperation::ReshareOfUnmasked(transcript),
+    )
+    .expect("Failed to create IDKG params");
+
+    assert_eq!(
+        params.unverified_dealings_collection_threshold(),
+        Some(NumberOfNodes::from(expected_threshold))
+    );
+}
+
+#[test]
 fn should_return_correct_receiver_index() {
     let params = IDkgTranscriptParams::new(
         transcript_id_generator(),
-        btreeset! {node_id(42), node_id(43), node_id(45)},
-        btreeset! {node_id(43), node_id(45), node_id(46)},
+        set_of_nodes(&[42, 43, 45]),
+        set_of_nodes(&[43, 45, 46]),
         RegistryVersion::from(0),
         AlgorithmId::ThresholdEcdsaSecp256k1,
         IDkgTranscriptOperation::Random,
@@ -218,23 +302,14 @@ fn should_not_create_with_empty_receivers() {
 fn should_not_create_reshare_masked_with_too_few_dealers() {
     // 13 receivers will require (4+1)=5 shares for recombination
     let previous_transcript = {
-        let mut previous_receivers = BTreeSet::new();
-        for i in 1..14 {
-            previous_receivers.insert(node_id(i));
-        }
-
+        let previous_receivers = set_of_nodes(&(1..14).collect::<Vec<_>>());
         mock_transcript(Some(previous_receivers), mock_masked_transcript_type())
     };
 
     // 5 dealers (and receivers),
     // which means tolerated_faulty_nodes=1,
     // so collection_threshold is (5+1)=6
-    let mut nodes = BTreeSet::new();
-    nodes.insert(node_id(1));
-    nodes.insert(node_id(2));
-    nodes.insert(node_id(3));
-    nodes.insert(node_id(4));
-    nodes.insert(node_id(5));
+    let nodes = set_of_nodes(&[1, 2, 3, 4, 5]);
     check_params_creation(
         Some(nodes),
         IDkgTranscriptOperation::ReshareOfMasked(previous_transcript),
@@ -249,23 +324,14 @@ fn should_not_create_reshare_masked_with_too_few_dealers() {
 fn should_not_create_reshare_unmasked_with_too_few_dealers() {
     // 13 receivers will require (4+1)=5 shares for recombination
     let previous_transcript = {
-        let mut previous_receivers = BTreeSet::new();
-        for i in 1..14 {
-            previous_receivers.insert(node_id(i));
-        }
-
+        let previous_receivers = set_of_nodes(&(1..14).collect::<Vec<_>>());
         mock_transcript(Some(previous_receivers), mock_unmasked_transcript_type())
     };
 
     // 5 dealers (and receivers),
     // which means tolerated_faulty_nodes=1,
     // so collection_threshold is (5+1)=6
-    let mut nodes = BTreeSet::new();
-    nodes.insert(node_id(1));
-    nodes.insert(node_id(2));
-    nodes.insert(node_id(3));
-    nodes.insert(node_id(4));
-    nodes.insert(node_id(5));
+    let nodes = set_of_nodes(&[1, 2, 3, 4, 5]);
     check_params_creation(
         Some(nodes),
         IDkgTranscriptOperation::ReshareOfUnmasked(previous_transcript),
@@ -280,10 +346,7 @@ fn should_not_create_reshare_unmasked_with_too_few_dealers() {
 fn should_not_create_unmasked_times_masked_with_too_few_dealers() {
     // 10 receivers will require 7 shares for recombination, after multiplication
     let (previous_unmasked, previous_masked) = {
-        let mut previous_receivers = BTreeSet::new();
-        for i in 1..11 {
-            previous_receivers.insert(node_id(i));
-        }
+        let previous_receivers = set_of_nodes(&(1..11).collect::<Vec<_>>());
 
         let previous_unmasked = mock_transcript(
             Some(previous_receivers.clone()),
@@ -298,15 +361,7 @@ fn should_not_create_unmasked_times_masked_with_too_few_dealers() {
     // 8 dealers (and receivers),
     // which means tolerated_faulty_nodes=2,
     // so collection_threshold is (7+2)=9
-    let mut nodes = BTreeSet::new();
-    nodes.insert(node_id(1));
-    nodes.insert(node_id(2));
-    nodes.insert(node_id(3));
-    nodes.insert(node_id(4));
-    nodes.insert(node_id(5));
-    nodes.insert(node_id(6));
-    nodes.insert(node_id(7));
-    nodes.insert(node_id(8));
+    let nodes = set_of_nodes(&(1..9).collect::<Vec<_>>());
     check_params_creation(
         Some(nodes),
         IDkgTranscriptOperation::UnmaskedTimesMasked(previous_unmasked, previous_masked),
@@ -341,8 +396,7 @@ fn should_not_create_with_placeholder_algid() {
 
 #[test]
 fn should_not_create_with_wrong_algid() {
-    let mut nodes = BTreeSet::new();
-    nodes.insert(node_id(1));
+    let nodes = set_of_nodes(&[1]);
 
     let result = IDkgTranscriptParams::new(
         transcript_id_generator(),
@@ -589,55 +643,8 @@ fn should_not_create_unmasked_times_masked_with_dealers_unequal_from_original_re
     );
 }
 
-fn node_id(id: u64) -> NodeId {
-    NodeId::from(PrincipalId::new_node_test_id(id))
-}
-
-fn mock_transcript(
-    receivers: Option<BTreeSet<NodeId>>,
-    transcript_type: IDkgTranscriptType,
-) -> IDkgTranscript {
-    let receivers = match receivers {
-        Some(receivers) => receivers,
-        None => original_node_set(),
-    };
-
-    IDkgTranscript {
-        transcript_id: transcript_id_generator(),
-        receivers: IDkgReceivers::new(receivers).unwrap(),
-        registry_version: RegistryVersion::from(314),
-        verified_dealings: BTreeMap::new(),
-        transcript_type,
-        algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-        internal_transcript_raw: vec![],
-    }
-}
-
-fn original_node_set() -> BTreeSet<NodeId> {
-    let mut nodes = BTreeSet::new();
-    for i in 1..10 {
-        nodes.insert(node_id(i));
-    }
-    nodes
-}
-
 fn disjoint_set() -> BTreeSet<NodeId> {
-    let mut nodes = BTreeSet::new();
-    for i in 11..20 {
-        nodes.insert(node_id(i));
-    }
-
-    nodes
-}
-
-fn mock_unmasked_transcript_type() -> IDkgTranscriptType {
-    IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(
-        transcript_id_generator(),
-    ))
-}
-
-fn mock_masked_transcript_type() -> IDkgTranscriptType {
-    IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random)
+    set_of_nodes(&(11..20).collect::<Vec<_>>())
 }
 
 fn check_params_creation(
@@ -647,13 +654,7 @@ fn check_params_creation(
 ) {
     let node_set = match node_set {
         Some(node_set) => node_set,
-        None => {
-            let mut node_set = BTreeSet::new();
-            for i in 1..10 {
-                node_set.insert(node_id(i));
-            }
-            node_set
-        }
+        None => set_of_nodes(&(1..10).collect::<Vec<_>>()),
     };
 
     let result = IDkgTranscriptParams::new(
@@ -674,21 +675,4 @@ fn check_params_creation(
             assert_eq!(err, expected_err);
         }
     }
-}
-
-// Stupid way to get non-repeating IDs, without needing an RNG
-fn transcript_id_generator() -> IDkgTranscriptId {
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
-    let transcript_ids: Vec<usize> = (1..100).collect();
-    static TRANSCRIPT_ID_POSITION: AtomicUsize = AtomicUsize::new(0);
-
-    let id_pos = TRANSCRIPT_ID_POSITION.load(Ordering::SeqCst);
-    TRANSCRIPT_ID_POSITION.fetch_add(1, Ordering::SeqCst);
-
-    let id = transcript_ids[id_pos];
-    const SUBNET_ID: u64 = 314159;
-    let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(SUBNET_ID));
-
-    IDkgTranscriptId::new(subnet, id)
 }
