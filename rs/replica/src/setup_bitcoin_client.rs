@@ -10,6 +10,14 @@ use tokio::net::UnixStream;
 use tonic::transport::{Channel, Endpoint, Uri};
 use tower::service_fn;
 
+fn convert_tonic_error(status: tonic::Status) -> RpcError {
+    RpcError::ServerError {
+        status_code: status.code() as u16,
+        message: status.message().to_string(),
+        source: Box::new(status),
+    }
+}
+
 struct BitcoinAdapterClientImpl {
     rt_handle: tokio::runtime::Handle,
     client: BtcAdapterClient<Channel>,
@@ -48,7 +56,7 @@ impl BitcoinAdapterClient for BitcoinAdapterClientImpl {
                                     ),
                                 ),
                             })
-                            .map_err(RpcError::ServerError)
+                            .map_err(convert_tonic_error)
                     }
                     bitcoin_adapter_request_wrapper::R::SendTransactionRequest(r) => {
                         let mut tonic_request = tonic::Request::new(r);
@@ -66,7 +74,7 @@ impl BitcoinAdapterClient for BitcoinAdapterClientImpl {
                                     ),
                                 ),
                             })
-                            .map_err(RpcError::ServerError)
+                            .map_err(convert_tonic_error)
                     }
                 },
                 None => Err(RpcError::InvalidRequest(request)),

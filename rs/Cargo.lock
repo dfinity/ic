@@ -4982,7 +4982,6 @@ dependencies = [
  "serde_bytes",
  "thiserror",
  "tokio",
- "tonic",
  "tower",
 ]
 
