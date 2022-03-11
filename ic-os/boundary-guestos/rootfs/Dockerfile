@@ -260,12 +260,6 @@ COPY var/www/html /var/www/html
 RUN chown www-data:www-data /var/www/html && \
     chmod 0755 /var/www/html/*
 
-# Generate DH parameters
-# -dsaparam & 2048 feild prime is suseptible to logjam attacks
-# TODO: BOUN-171  Generate 4096 bit DH parameters for prod boundary vms
-#RUN /usr/bin/openssl dhparam -out /etc/nginx/dhparam.pem 4096
-RUN /usr/bin/openssl dhparam -dsaparam -out /etc/nginx/dhparam.pem 2048
-
 # Point to a self signed certificate
 # TODO: BOUN-167
 #     FLASHING WARNING.
