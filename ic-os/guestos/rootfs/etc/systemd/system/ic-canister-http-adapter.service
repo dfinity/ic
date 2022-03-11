@@ -9,7 +9,7 @@ StartLimitIntervalSec=0
 
 [Service]
 User=ic-replica
-ExecStart=/opt/ic/bin/ic-canister-http-adapter
+ExecStart=/opt/ic/bin/ic-canister-http-adapter /etc/ic/adapters/canister_http_adapter_config.json
 NotifyAccess=main
 Restart=always
 
