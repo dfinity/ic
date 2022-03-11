@@ -108,9 +108,10 @@ use threadpool::ThreadPool;
 use tokio::sync::{Semaphore, TryAcquireError};
 use tower_service::Service;
 
-const P2P_MAX_INGRESS_THREADS: usize = 2;
-const P2P_MAX_ADVERT_THREADS: usize = 1;
-const P2P_MAX_EVENT_HANDLER_THREADS: usize = 6;
+// Each message for each flow is being executed on the same code path. Unless those codepaths are
+// lock free (which is not the case because Gossip has locks) there is no point in having more
+// than 1 thread processing messages per flow.
+const P2P_PER_FLOW_THREADS: usize = 1;
 
 /// A *Gossip* type with atomic reference counting.
 type GossipArc = Arc<
@@ -162,9 +163,13 @@ impl FlowWorker {
     fn new(
         flow_type_name: &'static str,
         metrics: FlowWorkerMetrics,
-        threadpool: ThreadPool,
         max_inflight_requests: usize,
     ) -> Self {
+        let threadpool = threadpool::Builder::new()
+            .num_threads(P2P_PER_FLOW_THREADS)
+            .thread_name(format!("P2P_{}_Thread", flow_type_name))
+            .build();
+
         Self {
             flow_type_name,
             metrics,
@@ -291,10 +296,6 @@ impl AsyncTransportEventHandlerImpl {
         metrics_registry: &MetricsRegistry,
         channel_config: ChannelConfig,
     ) -> Self {
-        let threadpool = threadpool::Builder::new()
-            .num_threads(P2P_MAX_EVENT_HANDLER_THREADS)
-            .thread_name("P2P_Thread".into())
-            .build();
         let flow_worker_metrics = FlowWorkerMetrics::new(metrics_registry);
         Self {
             node_id,
@@ -304,31 +305,26 @@ impl AsyncTransportEventHandlerImpl {
             advert: FlowWorker::new(
                 FlowType::Advert.into(),
                 flow_worker_metrics.clone(),
-                threadpool.clone(),
                 channel_config.map[&FlowType::Advert],
             ),
             request: FlowWorker::new(
                 FlowType::Request.into(),
                 flow_worker_metrics.clone(),
-                threadpool.clone(),
                 channel_config.map[&FlowType::Request],
             ),
             chunk: FlowWorker::new(
                 FlowType::Chunk.into(),
                 flow_worker_metrics.clone(),
-                threadpool.clone(),
                 channel_config.map[&FlowType::Chunk],
             ),
             retransmission: FlowWorker::new(
                 FlowType::Retransmission.into(),
                 flow_worker_metrics.clone(),
-                threadpool.clone(),
                 channel_config.map[&FlowType::Retransmission],
             ),
             transport: FlowWorker::new(
                 FlowType::Transport.into(),
                 flow_worker_metrics,
-                threadpool,
                 channel_config.map[&FlowType::Transport],
             ),
         }
@@ -438,8 +434,8 @@ impl IngressEventHandler {
     /// The function creates an `IngressEventHandler` instance.
     pub fn new(ingress_throttler: IngressThrottler, gossip: GossipArc, node_id: NodeId) -> Self {
         let threadpool = threadpool::Builder::new()
-            .num_threads(P2P_MAX_INGRESS_THREADS)
-            .thread_name("P2P_Thread".into())
+            .num_threads(P2P_PER_FLOW_THREADS)
+            .thread_name("P2P_Ingress_Thread".into())
             .build();
 
         Self {
@@ -500,9 +496,14 @@ impl AdvertSubscriber {
         metrics_registry: &MetricsRegistry,
         gossip_config: GossipConfig,
     ) -> Self {
+        let threadpool = threadpool::Builder::new()
+            .num_threads(P2P_PER_FLOW_THREADS)
+            .thread_name("P2P_Advert_Thread".into())
+            .build();
+
         Self {
             log: log.clone(),
-            threadpool: ThreadPool::new(P2P_MAX_ADVERT_THREADS),
+            threadpool,
             gossip: Arc::new(RwLock::new(None)),
 
             advert_builder: AdvertRequestBuilder::new(
