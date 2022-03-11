@@ -1,7 +1,9 @@
 //! Defines interactive distributed key generation (IDkg) types.
 use crate::consensus::ecdsa::EcdsaDealing;
 use crate::consensus::get_faults_tolerated;
-use crate::crypto::canister_threshold_sig::error::IDkgParamsValidationError;
+use crate::crypto::canister_threshold_sig::error::{
+    IDkgParamsValidationError, InitialIDkgDealingsValidationError,
+};
 use crate::crypto::{AlgorithmId, CombinedMultiSigOf};
 use crate::{NodeId, NumberOfNodes, RegistryVersion};
 use ic_base_types::SubnetId;
@@ -16,6 +18,9 @@ pub use conversions::*;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod test_utils;
 
 /// Unique identifier for an IDkg transcript.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
@@ -368,7 +373,7 @@ impl IDkgTranscriptParams {
         self.receivers.verification_threshold()
     }
 
-    /// Number of verified dealings needed for a transcript.
+    /// Number of verified dealings needed to create a transcript.
     pub fn collection_threshold(&self) -> NumberOfNodes {
         match &self.operation_type {
             IDkgTranscriptOperation::Random => {
@@ -380,6 +385,27 @@ impl IDkgTranscriptParams {
             IDkgTranscriptOperation::UnmaskedTimesMasked(s, t) => {
                 t.reconstruction_threshold() + s.reconstruction_threshold() - NumberOfNodes::from(1)
             }
+        }
+    }
+
+    /// Returns the number of unverified dealings needed to reshare an unmasked transcript to a different subnet.
+    /// For params used in transcript operations other than `ReshareOfUnmasked` this method returns `None`.
+    ///
+    /// This threshold guarantees that the receiving subnet will receive a sufficient number of honest dealings to be able to finalize the transcript.
+    pub fn unverified_dealings_collection_threshold(&self) -> Option<NumberOfNodes> {
+        match &self.operation_type {
+            // Random operation not currently supported for distinct dealer and receiver subnets.
+            IDkgTranscriptOperation::Random => None,
+            // Reshare of masked transcript not currently supported for distinct dealer and receiver subnets.
+            IDkgTranscriptOperation::ReshareOfMasked(_) => None,
+            IDkgTranscriptOperation::ReshareOfUnmasked(_) => {
+                let faulty = get_faults_tolerated(self.dealers.count.get() as usize);
+                let collection_threshold = number_of_nodes_from_usize(2 * faulty + 1)
+                    .expect("by construction, this fits in a u32");
+                Some(collection_threshold)
+            }
+            // Assuming fault tolerance of `f` nodes out of `3*f+1`, it cannot be guaranteed that the receiving subnet will be able to finalize a transcript for UnmaskedTimesMasked operation.
+            IDkgTranscriptOperation::UnmaskedTimesMasked(_, _) => None,
         }
     }
 
@@ -465,6 +491,61 @@ impl IDkgTranscriptParams {
             }
             _ => Err(IDkgParamsValidationError::WrongTypeForOriginalTranscript),
         }
+    }
+}
+
+/// Initial params and dealings for a set of receivers assigned to a different subnet.
+/// Only dealings indended for resharing an unmasked transcript can be included in InitialIDkgDealings.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InitialIDkgDealings {
+    params: IDkgTranscriptParams,
+    dealings: BTreeMap<NodeId, IDkgDealing>,
+}
+
+impl InitialIDkgDealings {
+    /// Creates an initial set of dealings for receivers on a different subnet.
+    ///
+    /// A `InitialIDkgDealings` can only be created if the following invariants hold:
+    /// * The `params.operation_type` is `IDkgTranscriptOperation::ReshareOfUnmasked`, otherwise the error `InitialIDkgDealingsValidationError::InvalidTranscriptOperation` is returned.
+    /// * The dealings are from nodes in `params.dealers`, otherwise the error `InitialIDkgDealingsValidationError::DealerNotAllowed` is returned.
+    /// * The dealings are for the transcript `params.transcript_id`, otherwise the error `InitialIDkgDealingsValidationError::MismatchingDealing` is returned.
+    /// * The number of dealings is greater than `params.unverified_dealings_collection_threshold`, otherwise the error `InitialIDkgDealingsValidationError::UnsatisfiedCollectionThreshold` is returned.
+    pub fn new(
+        params: IDkgTranscriptParams,
+        dealings: BTreeMap<NodeId, IDkgDealing>,
+    ) -> Result<Self, InitialIDkgDealingsValidationError> {
+        match params.unverified_dealings_collection_threshold() {
+            Some(threshold) => {
+                if dealings.len() < threshold.get() as usize {
+                    return Err(
+                        InitialIDkgDealingsValidationError::UnsatisfiedCollectionThreshold {
+                            threshold: threshold.get(),
+                            dealings_count: dealings.len() as u32,
+                        },
+                    );
+                }
+                for (&dealer, dealing) in &dealings {
+                    if params.dealer_index(dealer).is_none() {
+                        return Err(InitialIDkgDealingsValidationError::DealerNotAllowed {
+                            node_id: dealer,
+                        });
+                    }
+                    if dealing.transcript_id != params.transcript_id {
+                        return Err(InitialIDkgDealingsValidationError::MismatchingDealing);
+                    }
+                }
+
+                Ok(Self { params, dealings })
+            }
+            None => Err(InitialIDkgDealingsValidationError::InvalidTranscriptOperation),
+        }
+    }
+
+    pub fn params(&self) -> IDkgTranscriptParams {
+        self.params.clone()
+    }
+    pub fn dealings(&self) -> BTreeMap<NodeId, IDkgDealing> {
+        self.dealings.clone()
     }
 }
 

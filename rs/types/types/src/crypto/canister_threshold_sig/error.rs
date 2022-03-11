@@ -47,6 +47,15 @@ pub enum IDkgParamsValidationError {
 impl_display_using_debug!(IDkgParamsValidationError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum InitialIDkgDealingsValidationError {
+    DealerNotAllowed { node_id: NodeId },
+    MismatchingDealing,
+    InvalidTranscriptOperation,
+    UnsatisfiedCollectionThreshold { threshold: u32, dealings_count: u32 },
+}
+impl_display_using_debug!(InitialIDkgDealingsValidationError);
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ThresholdEcdsaGetPublicKeyError {
     InvalidArgument(String),
     InternalError(String),
