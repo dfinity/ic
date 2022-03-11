@@ -134,12 +134,6 @@ RUN echo "set dash/sh false" | debconf-communicate && dpkg-reconfigure -fnoninte
 RUN addgroup --system nonconfidential && \
     addgroup --system confidential
 
-# TODO (NODE-242): Consolidation of users
-
-# User which will run the boundary node service.
-# TODO (NODE-243): This is legacy from generic-guestos and the user should be named different.
-RUN adduser --system --disabled-password --home /var/lib/ic --group --no-create-home dfinity
-
 # Accounts to allow remote access to state bits
 
 # The "backup" user account. We simply use the existing "backup" account and
