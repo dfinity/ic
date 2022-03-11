@@ -101,42 +101,6 @@ def get_datapoints(target_rps=500, rps_min=50, rps_max=20000, increment=50, expo
     return datapoints
 
 
-def verify(metric: str, is_update: bool, actual: float, expected: float, threshold: float, result_file: str = None):
-    """Check deviation is within threshold between actual and expected rate."""
-    call_method = "Update" if is_update is True else "Query"
-    delta = get_difference_rate(actual, expected)
-
-    if (
-        (threshold == 0 and delta != 0)
-        or (threshold > 0 and delta > threshold)
-        or (threshold < 0 and delta < threshold)
-    ):
-        result = f"❌{call_method} {metric} has a delta of {delta} between actual rate {actual} and expected rate {expected}, and is beyond threshold {threshold}, fail!\n"
-
-        if result_file is None:
-            print(result)
-        else:
-            with open(result_file, "a") as ver_results:
-                ver_results.write(result)
-
-        return 1
-    else:
-        result = f"✅{call_method} {metric} has a delta of {delta} between actual rate {actual} and expected rate {expected}, and is within threshold {threshold}, success!\n"
-
-        if result_file is None:
-            print(result)
-        else:
-            with open(result_file, "a") as ver_results:
-                ver_results.write(result)
-
-        return 0
-
-
-def get_difference_rate(actual, expected):
-    """Calculate difference rate between actual value and expected value."""
-    return actual if expected == 0 else (actual - expected) / expected
-
-
 def get_equally_distributed_datapoints(rps_min, rps_max, increment):
     """Get an equal distribution of measurements for the given configuration."""
     return range(rps_min, rps_max, increment)
