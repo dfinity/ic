@@ -95,7 +95,7 @@ impl From<ErrorCode> for RejectCode {
             InvalidManagementPayload => CanisterReject,
             InsufficientCyclesInCall => CanisterError,
             CanisterWasmEngineError => CanisterError,
-            CanisterCyclesLimitExceeded => CanisterError,
+            CanisterInstructionLimitExceeded => CanisterError,
             CanisterInstallCodeRateLimited => SysTransient,
         }
     }
@@ -143,7 +143,7 @@ pub enum ErrorCode {
     InvalidManagementPayload = 519,
     InsufficientCyclesInCall = 520,
     CanisterWasmEngineError = 521,
-    CanisterCyclesLimitExceeded = 522,
+    CanisterInstructionLimitExceeded = 522,
     CanisterInstallCodeRateLimited = 523,
 }
 
@@ -194,7 +194,7 @@ impl TryFrom<u64> for ErrorCode {
             519 => Ok(ErrorCode::InvalidManagementPayload),
             520 => Ok(ErrorCode::InsufficientCyclesInCall),
             521 => Ok(ErrorCode::CanisterWasmEngineError),
-            522 => Ok(ErrorCode::CanisterCyclesLimitExceeded),
+            522 => Ok(ErrorCode::CanisterInstructionLimitExceeded),
             523 => Ok(ErrorCode::CanisterInstallCodeRateLimited),
             _ => Err(ProxyDecodeError::ValueOutOfRange {
                 typ: "ErrorCode",

@@ -239,8 +239,8 @@ impl HypervisorError {
                 ),
             ),
             Self::InstructionLimitExceeded => UserError::new(
-                E::CanisterCyclesLimitExceeded,
-                format!("Canister {} exceeded the cycles limit for single message execution.", canister_id),
+                E::CanisterInstructionLimitExceeded,
+                format!("Canister {} exceeded the instruction limit for single message execution.", canister_id),
             ),
             Self::InvalidWasm(err) => UserError::new(
                 E::CanisterInvalidWasm,

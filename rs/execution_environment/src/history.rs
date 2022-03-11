@@ -254,8 +254,8 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         InvalidManagementPayload => "Invalid management message payload",
         InsufficientCyclesInCall => "Canister tried to keep more cycles than available in the call",
         CanisterWasmEngineError => "Wasm engine error",
-        CanisterCyclesLimitExceeded => {
-            "Canister Cycles Limit for Single Message Execution Exceeded"
+        CanisterInstructionLimitExceeded => {
+            "Canister exceeded the instruction limit for single message execution"
         }
         CanisterInstallCodeRateLimited => {
             "Canister is rate limited because it executed too many instructions in the previous install_code messages"
