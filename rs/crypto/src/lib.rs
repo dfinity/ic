@@ -11,14 +11,13 @@
 
 pub mod cli;
 mod common;
-mod hash;
 mod keygen;
 pub mod prng;
 mod sign;
 mod tls_stub;
 
 pub use common::utils;
-pub use hash::crypto_hash;
+pub use ic_crypto_hash::crypto_hash;
 pub use sign::utils::{
     combined_threshold_signature_and_public_key, ecdsa_p256_signature_from_der_bytes,
     ed25519_public_key_to_der, rsa_signature_from_bytes, threshold_sig_public_key_from_der,

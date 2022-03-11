@@ -3864,6 +3864,7 @@ dependencies = [
  "hex",
  "ic-base-types",
  "ic-config",
+ "ic-crypto-hash",
  "ic-crypto-internal-basic-sig-der-utils",
  "ic-crypto-internal-basic-sig-ecdsa-secp256k1",
  "ic-crypto-internal-basic-sig-ecdsa-secp256r1",
@@ -3930,6 +3931,16 @@ dependencies = [
  "tokio-openssl",
  "tokio-rustls 0.22.0",
  "zeroize",
+]
+
+[[package]]
+name = "ic-crypto-hash"
+version = "0.8.0"
+dependencies = [
+ "hex",
+ "ic-crypto-sha",
+ "ic-interfaces",
+ "ic-types 0.8.0",
 ]
 
 [[package]]
@@ -6363,7 +6374,7 @@ dependencies = [
  "ic-base-types",
  "ic-canonical-state",
  "ic-config",
- "ic-crypto",
+ "ic-crypto-hash",
  "ic-crypto-sha",
  "ic-crypto-tree-hash",
  "ic-interfaces",

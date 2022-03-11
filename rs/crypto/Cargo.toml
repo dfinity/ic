@@ -11,6 +11,7 @@ clap = "2.33.3"
 ed25519-dalek = "1.0.1"
 hex = "0.4.2"
 ic-config = { path = "../config" }
+ic-crypto-hash = { path = "./hash" }
 ic-crypto-internal-basic-sig-ed25519 = { path = "internal/crypto_lib/basic_sig/ed25519" }
 ic-crypto-internal-csp = { path = "internal/crypto_service_provider" }
 ic-crypto-internal-fs-ni-dkg = { path = "internal/crypto_lib/fs_ni_dkg" }

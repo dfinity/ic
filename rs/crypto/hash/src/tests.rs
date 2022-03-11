@@ -1,6 +1,5 @@
 mod crypto_hash_tests {
     use super::super::*;
-    use crate::common::test_utils::hex_to_32_bytes;
     use ic_crypto_sha::{DomainSeparationContext, Sha256};
     use ic_interfaces::crypto::{CryptoHashDomain, CryptoHashableTestDummy};
     use std::hash::Hash;
@@ -21,7 +20,7 @@ mod crypto_hash_tests {
         let crypto_hash = crypto_hash(&struct_to_hash);
 
         assert_eq!(crypto_hash.get_ref().0.len(), 256 / 8);
-        assert_eq!(crypto_hash.get_ref().0, hex_to_32_bytes(EXPECTED_HASH));
+        assert_eq!(crypto_hash.get_ref().0, hex::decode(EXPECTED_HASH).unwrap());
     }
 
     #[test]

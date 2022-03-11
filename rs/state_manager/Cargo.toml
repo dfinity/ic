@@ -10,7 +10,7 @@ hex = "0.4.2"
 ic-base-types = { path = "../types/base_types" }
 ic-canonical-state = { path = "../canonical_state" }
 ic-config = { path = "../config" }
-ic-crypto = { path = "../crypto" }
+ic-crypto-hash = { path = "../crypto/hash" }
 ic-crypto-sha = { path = "../crypto/sha" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-interfaces = { path = "../interfaces" }
@@ -41,7 +41,6 @@ bench = false
 assert_matches = "1.3.0"
 criterion = "0.3"
 criterion-time = { path = "../criterion_time" }
-ic-crypto = { path = "../crypto" }
 ic-sys = { path = "../sys" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-wasm-types = { path = "../types/wasm_types" }
