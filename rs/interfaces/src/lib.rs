@@ -19,7 +19,6 @@ pub mod ingress_manager;
 pub mod ingress_pool;
 pub mod messages;
 pub mod messaging;
-pub mod p2p;
 pub mod registry;
 pub mod replica_config;
 pub mod rpc_bridge;

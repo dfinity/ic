@@ -7,9 +7,9 @@ use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_interfaces::registry::RegistryClient;
 use ic_interfaces::{
     execution_environment::{IngressHistoryReader, QueryHandler},
-    p2p::IngressIngestionService,
     state_manager::StateReader,
 };
+use ic_interfaces_p2p::IngressIngestionService;
 use ic_metrics::MetricsRegistry;
 use ic_prep_lib::internet_computer::{IcConfig, TopologyConfig};
 use ic_prep_lib::node::{NodeConfiguration, NodeIndex, NodeSecretKeyStore};

@@ -81,6 +81,7 @@ members = [
   "identity",
   "ingress_manager",
   "interfaces",
+  "interfaces/p2p",
   "log_analyzer",
   "memory_tracker",
   "messaging",

@@ -1,5 +1,6 @@
+use ic_interfaces::registry::RegistryClient;
 /// This file contains the helper functions required to setup testing framework.
-use ic_interfaces::{p2p::P2PRunner, registry::RegistryClient};
+use ic_interfaces_p2p::P2PRunner;
 use ic_logger::*;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::{

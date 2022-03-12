@@ -7,11 +7,10 @@ use ic_interfaces::{
     certified_stream_store::CertifiedStreamStore,
     consensus_pool::ConsensusPoolCache,
     execution_environment::{IngressFilterService, QueryExecutionService, QueryHandler},
-    p2p::IngressIngestionService,
-    p2p::P2PRunner,
     registry::{LocalStoreCertifiedTimeReader, RegistryClient},
     self_validating_payload::NoOpSelfValidatingPayloadBuilder,
 };
+use ic_interfaces_p2p::{IngressIngestionService, P2PRunner};
 use ic_logger::{info, ReplicaLogger};
 use ic_messaging::{MessageRoutingImpl, XNetEndpoint, XNetEndpointConfig, XNetPayloadBuilderImpl};
 use ic_registry_subnet_type::SubnetType;

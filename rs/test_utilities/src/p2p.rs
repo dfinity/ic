@@ -5,7 +5,8 @@ use crate::{
     types::ids::node_test_id,
 };
 use ic_config::logger::{default_logtarget, Config as LoggerConfig, LogFormat};
-use ic_interfaces::{p2p::P2PRunner, registry::RegistryClient};
+use ic_interfaces::registry::RegistryClient;
+use ic_interfaces_p2p::P2PRunner;
 use ic_logger::*;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::node::v1::{
