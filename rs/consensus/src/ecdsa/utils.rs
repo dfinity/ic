@@ -155,7 +155,7 @@ pub(crate) mod test_utils {
     use crate::ecdsa::complaints::{
         EcdsaComplaintHandlerImpl, EcdsaTranscriptLoader, TranscriptLoadStatus,
     };
-    use crate::ecdsa::pre_signer::EcdsaPreSignerImpl;
+    use crate::ecdsa::pre_signer::{EcdsaPreSignerImpl, EcdsaTranscriptBuilder};
     use crate::ecdsa::signer::EcdsaSignerImpl;
     use ic_artifact_pool::ecdsa_pool::EcdsaPoolImpl;
     use ic_config::artifact_pool::ArtifactPoolConfig;
@@ -371,6 +371,43 @@ pub(crate) mod test_utils {
     impl Default for TestEcdsaTranscriptLoader {
         fn default() -> Self {
             Self::new(TestTranscriptLoadStatus::Success)
+        }
+    }
+
+    pub(crate) struct TestEcdsaTranscriptBuilder {
+        transcripts: Mutex<BTreeMap<IDkgTranscriptId, IDkgTranscript>>,
+    }
+
+    impl TestEcdsaTranscriptBuilder {
+        pub(crate) fn new() -> Self {
+            Self {
+                transcripts: Mutex::new(BTreeMap::new()),
+            }
+        }
+
+        pub(crate) fn add_transcript(
+            &self,
+            transcript_id: IDkgTranscriptId,
+            transcript: IDkgTranscript,
+        ) {
+            self.transcripts
+                .lock()
+                .unwrap()
+                .insert(transcript_id, transcript);
+        }
+    }
+
+    impl EcdsaTranscriptBuilder for TestEcdsaTranscriptBuilder {
+        fn get_completed_transcript(
+            &self,
+            transcript_id: IDkgTranscriptId,
+            _ecdsa_pool: &dyn EcdsaPool,
+        ) -> Option<IDkgTranscript> {
+            self.transcripts
+                .lock()
+                .unwrap()
+                .get(&transcript_id)
+                .cloned()
         }
     }
 
