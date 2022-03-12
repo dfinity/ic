@@ -7,7 +7,7 @@ use crate::api::dkg_errors::DkgCreateEphemeralError;
 use crate::dkg::secp256k1::types::{
     EphemeralPopBytes, EphemeralPublicKeyBytes, EphemeralSecretKey, EphemeralSecretKeyBytes,
 };
-use ic_types::{IDkgId, Randomness};
+use ic_types::IDkgId;
 use ic_types_test_utils::arbitrary as arbitrary_types;
 use proptest::prelude::*;
 use rand::{CryptoRng, Rng};
@@ -26,7 +26,7 @@ proptest! {
     /// Note: This should pass if and only if validation passes, however this test failure is much easier to debug.
     #[test]
     fn pop_data_should_match(
-      seed:  Randomness,
+      seed:  [u8; 32],
       dkg_id in arbitrary_types::dkg_id(),
       sender in proptest::collection::vec(any::<u8>(), 0..100),
     ) {
@@ -36,7 +36,7 @@ proptest! {
     /// Verify that keys validate if used as intended.
     #[test]
     fn honest_keys_should_validate(
-      seed:  Randomness,
+      seed:  [u8; 32],
       dkg_id in arbitrary_types::dkg_id(),
       sender in proptest::collection::vec(any::<u8>(), 0..100),
     ) {
@@ -45,7 +45,7 @@ proptest! {
 
     #[test]
     fn incorrect_dkg_should_not_validate(
-      seed:  Randomness,
+      seed:  [u8; 32],
       dkg_id in arbitrary_types::dkg_id(),
       incorrect_dkg_id in arbitrary_types::dkg_id(),
       sender in proptest::collection::vec(any::<u8>(), 0..100),
@@ -56,7 +56,7 @@ proptest! {
 
     #[test]
     fn incorrect_sender_should_not_validate(
-      seed:  Randomness,
+      seed:  [u8; 32],
       dkg_id in arbitrary_types::dkg_id(),
       sender in proptest::collection::vec(any::<u8>(), 0..100),
       incorrect_sender in proptest::collection::vec(any::<u8>(), 0..100),
@@ -92,8 +92,8 @@ mod test {
     /// inputs to the hash are different.  That is great, but makes problems
     /// hard to debug. Here we compare the intermediate values so that we
     /// can diagnose problems easily.
-    pub fn pop_data_should_match(seed: Randomness, dkg_id: IDkgId, sender: &[u8]) {
-        let mut rng = ChaChaRng::from_seed(seed.get());
+    pub fn pop_data_should_match(seed: [u8; 32], dkg_id: IDkgId, sender: &[u8]) {
+        let mut rng = ChaChaRng::from_seed(seed);
         let secret_key = EphemeralSecretKey::random(&mut rng);
 
         let left = create_pop_data(&mut rng, dkg_id, &secret_key, sender);
@@ -107,14 +107,14 @@ mod test {
             panic!("Pop data does not match:\n\n{:#?}\n\n{:#?}", left, right);
         }
     }
-    pub fn honest_keys_should_validate(seed: Randomness, dkg_id: IDkgId, sender: &[u8]) {
-        let mut rng = ChaChaRng::from_seed(seed.get());
+    pub fn honest_keys_should_validate(seed: [u8; 32], dkg_id: IDkgId, sender: &[u8]) {
+        let mut rng = ChaChaRng::from_seed(seed);
         let (_secret_key_bytes, public_key_bytes, pop_bytes) =
             create_ephemeral(&mut rng, dkg_id, sender);
         assert!(verify_ephemeral(dkg_id, sender, (public_key_bytes, pop_bytes)).is_ok())
     }
     pub fn incorrect_dkg_should_not_validate(
-        seed: Randomness,
+        seed: [u8; 32],
         dkg_id: IDkgId,
         incorrect_dkg_id: IDkgId,
         sender: &[u8],
@@ -123,13 +123,13 @@ mod test {
             dkg_id, incorrect_dkg_id,
             "Invalid test: DkgIds should differ"
         );
-        let mut rng = ChaChaRng::from_seed(seed.get());
+        let mut rng = ChaChaRng::from_seed(seed);
         let (_secret_key_bytes, public_key_bytes, pop_bytes) =
             create_ephemeral(&mut rng, dkg_id, sender);
         assert!(verify_ephemeral(incorrect_dkg_id, sender, (public_key_bytes, pop_bytes)).is_err())
     }
     pub fn incorrect_sender_should_not_validate(
-        seed: Randomness,
+        seed: [u8; 32],
         dkg_id: IDkgId,
         sender: &[u8],
         incorrect_sender: &[u8],
@@ -138,7 +138,7 @@ mod test {
             sender, incorrect_sender,
             "Invalid test: Senders should differ"
         );
-        let mut rng = ChaChaRng::from_seed(seed.get());
+        let mut rng = ChaChaRng::from_seed(seed);
         let (_secret_key_bytes, public_key_bytes, pop_bytes) =
             create_ephemeral(&mut rng, dkg_id, sender);
         assert!(verify_ephemeral(dkg_id, incorrect_sender, (public_key_bytes, pop_bytes)).is_err())

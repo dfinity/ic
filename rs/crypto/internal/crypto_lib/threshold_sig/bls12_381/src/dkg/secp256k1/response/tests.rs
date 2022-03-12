@@ -74,7 +74,7 @@ pub struct ResponseFixtureConfig {
 /// Generates an arbitrary fixture.
 pub fn arbitrary_response_fixture(config: ResponseFixtureConfig) -> BoxedStrategy<ResponseFixture> {
     let parameter_strategy = (
-        any::<Randomness>(),
+        any::<[u8; 32]>(),
         arbitrary_types::dkg_id(),
         config.threshold_range.0..config.threshold_range.1,
         config.redundancy_range.0..config.redundancy_range.1,
@@ -88,7 +88,7 @@ pub fn arbitrary_response_fixture(config: ResponseFixtureConfig) -> BoxedStrateg
             let num_dealers = num_dealers as usize;
 
             (
-                Just(seed),
+                Just(Randomness::new(seed)),
                 Just(dkg_id),
                 Just(threshold),
                 Just(redundancy),

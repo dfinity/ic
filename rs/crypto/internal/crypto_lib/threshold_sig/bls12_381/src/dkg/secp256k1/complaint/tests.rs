@@ -28,7 +28,7 @@ struct BadTest {
 type ValidTest<T> = Result<T, BadTest>;
 
 fn test_honest_dealing_gets_no_complaints(
-    seed: Randomness,
+    seed: [u8; 32],
     dealer_secret_key_bytes: EphemeralSecretKeyBytes,
     dkg_id: IDkgId,
     threshold: NumberOfNodes,
@@ -36,7 +36,7 @@ fn test_honest_dealing_gets_no_complaints(
     receiver_secret_keys: Vec<EphemeralSecretKeyBytes>,
 ) -> ValidTest<()> {
     // Key setup:
-    let mut rng = ChaChaRng::from_seed(seed.get());
+    let mut rng = ChaChaRng::from_seed(seed);
     let dealer_secret_key: EphemeralSecretKey = dealer_secret_key_bytes
         .try_into()
         .expect("Failed to generate dealer secret key bytes");
@@ -101,7 +101,7 @@ fn test_honest_dealing_gets_no_complaints(
 }
 
 fn test_incorrect_share_gets_verified_complaint(
-    seed: Randomness,
+    seed: [u8; 32],
     dealer_secret_key_bytes: EphemeralSecretKeyBytes,
     dkg_id: IDkgId,
     threshold: NumberOfNodes,
@@ -109,7 +109,7 @@ fn test_incorrect_share_gets_verified_complaint(
     receiver_secret_keys: Vec<EphemeralSecretKeyBytes>,
 ) -> ValidTest<()> {
     // Key setup:
-    let mut rng = ChaChaRng::from_seed(seed.get());
+    let mut rng = ChaChaRng::from_seed(seed);
     let dealer_secret_key: EphemeralSecretKey = dealer_secret_key_bytes
         .try_into()
         .expect("Failed to generate dealer secret key bytes");
@@ -216,7 +216,7 @@ proptest! {
 
     #[test]
     fn honest_dealing_gets_no_complaints(
-        seed: Randomness,
+        seed: [u8; 32],
         dealer_secret_key_bytes: EphemeralSecretKeyBytes,
         dkg_id in arbitrary_types::dkg_id(),
         threshold in 0_u32..4,
@@ -229,7 +229,7 @@ proptest! {
 
     #[test]
     fn bad_share_gets_verified_complaint (
-        seed: Randomness,
+        seed: [u8; 32],
         dealer_secret_key_bytes: EphemeralSecretKeyBytes,
         dkg_id in arbitrary_types::dkg_id(),
         threshold in 1_u32..4,
