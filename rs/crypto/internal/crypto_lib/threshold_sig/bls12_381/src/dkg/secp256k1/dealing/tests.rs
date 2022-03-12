@@ -116,14 +116,14 @@ pub struct DealingFixture {
 
 prop_compose! {
     pub fn arbitrary_dealing_fixture() (
-        seed: Randomness,
+        seed: [u8; 32],
         dealer_secret_key_bytes: EphemeralSecretKeyBytes,
         dkg_id in arbitrary_types::dkg_id(),
         threshold in 1_u32..4,
         redundancy in 0_u32..4,
         receiver_secret_keys in proptest::collection::vec(any::<EphemeralSecretKeyBytes>(), 8..10),
     ) -> DealingFixture {
-        let mut rng = ChaChaRng::from_seed(seed.get());
+        let mut rng = ChaChaRng::from_seed(seed);
         let dealer_secret_key: EphemeralSecretKey = dealer_secret_key_bytes.try_into().expect("Failed to generate dealer secret key bytes");
         let all_receiver_keys: Vec<(EphemeralPublicKeyBytes, EphemeralPopBytes)> = receiver_secret_keys.iter().enumerate().map(|(index, secret_key_bytes)|{
             let sender = format!("Node Number {}", index);
@@ -201,7 +201,7 @@ proptest! {
 
     #[test]
     fn different_selection_of_potential_receivers_fails(
-        seed: Randomness,
+        seed: [u8; 32],
         dealer_secret_key_bytes: EphemeralSecretKeyBytes,
         dkg_id in arbitrary_types::dkg_id(),
         threshold in 0_u32..4,
@@ -209,7 +209,7 @@ proptest! {
         verifier_redundancy in 0_u32..4,
         receiver_secret_keys in proptest::collection::vec(any::<EphemeralSecretKeyBytes>(), 8..10),
     ) {
-        let mut rng = ChaChaRng::from_seed(seed.get());
+        let mut rng = ChaChaRng::from_seed(seed);
         let dealer_secret_key: EphemeralSecretKey = dealer_secret_key_bytes.try_into().expect("Failed to generate dealer secret key bytes");
         let all_receiver_keys: Vec<(EphemeralPublicKeyBytes, EphemeralPopBytes)> = receiver_secret_keys.iter().enumerate().map(|(index, secret_key_bytes)|{
             let sender = format!("Node Number {}", index);

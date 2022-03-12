@@ -5,11 +5,6 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 
-#[cfg(not(target_arch = "wasm32"))]
-use proptest::prelude::Arbitrary;
-#[cfg(not(target_arch = "wasm32"))]
-use proptest::strategy::{MapInto, Strategy};
-
 /// `Id<Entity, Repr>` provides a type-safe way to keep ids of
 /// entities. Note that there's no default for `Repr` type, the type
 /// of the identifier should be always provided explicitly.
@@ -295,16 +290,6 @@ where
         S: candid::types::Serializer,
     {
         self.0.idl_serialize(serializer)
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl<Entity, Repr: fmt::Debug + Arbitrary> Arbitrary for Id<Entity, Repr> {
-    type Parameters = Repr::Parameters;
-    type Strategy = MapInto<Repr::Strategy, Id<Entity, Repr>>;
-
-    fn arbitrary_with(args: Self::Parameters) -> Self::Strategy {
-        Repr::arbitrary_with(args).prop_map_into()
     }
 }
 

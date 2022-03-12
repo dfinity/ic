@@ -4,13 +4,12 @@ use crate::dkg::secp256k1::test_fixtures::{
 use crate::types::PublicKey;
 use bls12_381::G2Projective;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
-use ic_types::Randomness;
 use proptest::prelude::*;
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
 
-fn test_resharing_dealing(seed: Randomness) {
-    let mut rng = ChaChaRng::from_seed(seed.get());
+fn test_resharing_dealing(seed: [u8; 32]) {
+    let mut rng = ChaChaRng::from_seed(seed);
 
     let state = StateWithThresholdKey::random(&mut rng);
     let state = StateWithEphemeralKeys::random(&mut rng, state);
@@ -44,7 +43,7 @@ proptest! {
     })]
 
     #[test]
-    fn resharing_dealing(seed: Randomness) {
+    fn resharing_dealing(seed: [u8; 32]) {
         test_resharing_dealing(seed);
     }
 }

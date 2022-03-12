@@ -3,14 +3,13 @@ use crate::dkg::secp256k1::test_fixtures::{
     StateWithTranscript,
 };
 use crate::types::public_coefficients::conversions::pub_key_bytes_from_pub_coeff_bytes;
-use ic_types::Randomness;
 use proptest::prelude::*;
 use rand::Rng;
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
 
-fn test_reshared_transcript_is_compatible_with_previous_combined_signatures(seed: Randomness) {
-    let mut rng = ChaChaRng::from_seed(seed.get());
+fn test_reshared_transcript_is_compatible_with_previous_combined_signatures(seed: [u8; 32]) {
+    let mut rng = ChaChaRng::from_seed(seed);
     // Initial threshold key:
     let state = StateWithThresholdKey::random(&mut rng);
     let message = &rng.gen::<[u8; 11]>()[..];
@@ -52,7 +51,7 @@ proptest! {
     })]
 
     #[test]
-    fn reshared_transcript_is_compatible_with_previous_combined_signatures(seed: Randomness) {
+    fn reshared_transcript_is_compatible_with_previous_combined_signatures(seed: [u8; 32]) {
         test_reshared_transcript_is_compatible_with_previous_combined_signatures(seed);
     }
 }

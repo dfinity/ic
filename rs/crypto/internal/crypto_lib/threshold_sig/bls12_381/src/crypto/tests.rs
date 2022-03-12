@@ -367,10 +367,10 @@ proptest! {
             threshold in 0_u32..10,
             eligible in 0_u32..10,
             ineligible in 0_u32..10,
-            seed: Randomness,
+            seed: [u8; 32],
         ) {
             let all_nodes = vec![true;(eligible+ineligible) as usize];
-            let eligible_nodes: Vec<bool> = select_n(seed, NumberOfNodes::from(eligible), &all_nodes).iter().map(|entry| entry.is_some()).collect();
+            let eligible_nodes: Vec<bool> = select_n(Randomness::new(seed), NumberOfNodes::from(eligible), &all_nodes).iter().map(|entry| entry.is_some()).collect();
             assert_eq!(crypto::verify_keygen_args(NumberOfNodes::from(threshold), &eligible_nodes).is_ok(), eligible >= threshold);
         }
 
@@ -383,9 +383,9 @@ proptest! {
             threshold in 1_u32..5,
             redundancy in 0_u32..5,
             idle_receivers in 0_u32..5,
-            seed: Randomness
+            seed: [u8; 32]
         ) {
-            let mut rng = ChaChaRng::from_seed(seed.get());
+            let mut rng = ChaChaRng::from_seed(seed);
             let receivers_size = (threshold+redundancy+idle_receivers) as usize;
 
             let secret_key = random_bls12_381_scalar(&mut rng);

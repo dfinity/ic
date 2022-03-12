@@ -1,5 +1,4 @@
 use super::*;
-use ic_types::Randomness;
 use libsecp256k1::curve::Scalar;
 use proptest::prelude::*;
 use rand_chacha::ChaChaRng;
@@ -154,8 +153,8 @@ mod arithmetic {
         /// Verifies that public key addition is correct for arbitrary values:
         /// * `PublicKey(x) + PublicKey(y) == PublicKey(x + y)`
         #[test]
-        fn public_key_add_assign_is_correct(seed: Randomness) {
-            let mut rng = ChaChaRng::from_seed(seed.get());
+        fn public_key_add_assign_is_correct(seed: [u8; 32]) {
+            let mut rng = ChaChaRng::from_seed(seed);
             let x = EphemeralSecretKey::random(&mut rng);
             let y = EphemeralSecretKey::random(&mut rng);
 
@@ -173,8 +172,8 @@ mod arithmetic {
         /// Verifies that adding scalars to a public key works for arbitrary values:
         /// * `PublicKey(x) + scalar == PublicKey(x + scalar)`
         #[test]
-        fn public_key_add_assign_secret_is_correct(seed: Randomness) {
-            let mut rng = ChaChaRng::from_seed(seed.get());
+        fn public_key_add_assign_secret_is_correct(seed: [u8; 32]) {
+            let mut rng = ChaChaRng::from_seed(seed);
             let x = EphemeralSecretKey::random(&mut rng);
             let scalar = EphemeralSecretKey::random(&mut rng);
 
@@ -191,8 +190,8 @@ mod arithmetic {
         /// Verifies that multiplying scalars to a public key works for arbitrary values:
         /// * `PublicKey(x) * scalar == PublicKey(x * scalar)`
         #[test]
-        fn public_key_mul_assign_secret_is_correct(seed: Randomness) {
-            let mut rng = ChaChaRng::from_seed(seed.get());
+        fn public_key_mul_assign_secret_is_correct(seed: [u8; 32]) {
+            let mut rng = ChaChaRng::from_seed(seed);
             let x = EphemeralSecretKey::random(&mut rng);
             let scalar = EphemeralSecretKey::random(&mut rng);
 

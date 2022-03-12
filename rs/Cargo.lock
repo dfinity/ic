@@ -8649,7 +8649,6 @@ name = "phantom_newtype"
 version = "0.8.0"
 dependencies = [
  "candid",
- "proptest 0.9.6",
  "serde",
  "serde_json",
  "slog",
