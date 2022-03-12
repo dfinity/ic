@@ -9,10 +9,8 @@ use crate::{
     HttpHandlerMetrics, IngressFilterService, UNKNOWN_LABEL,
 };
 use hyper::{Body, Response, StatusCode};
-use ic_interfaces::{
-    crypto::IngressSigVerifier,
-    {p2p::IngressIngestionService, registry::RegistryClient},
-};
+use ic_interfaces::{crypto::IngressSigVerifier, registry::RegistryClient};
+use ic_interfaces_p2p::IngressIngestionService;
 use ic_logger::{error, info_sample, warn, ReplicaLogger};
 use ic_registry_client::helper::{
     provisional_whitelist::ProvisionalWhitelistRegistry,

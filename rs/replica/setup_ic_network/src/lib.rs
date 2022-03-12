@@ -25,13 +25,13 @@ use ic_interfaces::{
     crypto::{Crypto, IngressSigVerifier},
     execution_environment::IngressHistoryReader,
     messaging::{MessageRouting, XNetPayloadBuilder},
-    p2p::{IngressIngestionService, P2PRunner},
     registry::RegistryClient,
     self_validating_payload::SelfValidatingPayloadBuilder,
     state_manager::StateManager,
     time_source::SysTimeSource,
     transport::Transport,
 };
+use ic_interfaces_p2p::{IngressIngestionService, P2PRunner};
 use ic_logger::{debug, info, replica_logger::ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_p2p::{

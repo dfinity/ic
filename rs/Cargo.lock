@@ -4855,6 +4855,7 @@ dependencies = [
  "ic-crypto-tls-interfaces",
  "ic-crypto-tree-hash",
  "ic-interfaces",
+ "ic-interfaces-p2p",
  "ic-logger",
  "ic-metrics",
  "ic-pprof",
@@ -4994,6 +4995,14 @@ dependencies = [
  "serde_bytes",
  "thiserror",
  "tokio",
+ "tower",
+]
+
+[[package]]
+name = "ic-interfaces-p2p"
+version = "0.8.0"
+dependencies = [
+ "ic-types 0.8.0",
  "tower",
 ]
 
@@ -5877,6 +5886,7 @@ dependencies = [
  "ic-execution-environment",
  "ic-http-handler",
  "ic-interfaces",
+ "ic-interfaces-p2p",
  "ic-logger",
  "ic-messaging",
  "ic-metrics",
@@ -5933,6 +5943,7 @@ dependencies = [
  "ic-cycles-account-manager",
  "ic-ingress-manager",
  "ic-interfaces",
+ "ic-interfaces-p2p",
  "ic-logger",
  "ic-metrics",
  "ic-p2p",
@@ -5961,6 +5972,7 @@ dependencies = [
  "ic-crypto-sha",
  "ic-execution-environment",
  "ic-interfaces",
+ "ic-interfaces-p2p",
  "ic-logger",
  "ic-metrics",
  "ic-prep",
@@ -6521,6 +6533,7 @@ dependencies = [
  "ic-cycles-account-manager",
  "ic-embedders",
  "ic-interfaces",
+ "ic-interfaces-p2p",
  "ic-logger",
  "ic-metrics",
  "ic-protobuf",

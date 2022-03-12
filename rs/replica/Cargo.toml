@@ -21,6 +21,7 @@ ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-http-handler = { path = "../http_handler" }
 ic-interfaces = { path = "../interfaces" }
+ic-interfaces-p2p = { path = "../interfaces/p2p" }
 ic-logger = { path = "../monitoring/logger" }
 ic-messaging = { path = "../messaging" }
 ic-metrics = { path = "../monitoring/metrics" }

@@ -1,0 +1,8 @@
+[package]
+name = "ic-interfaces-p2p"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+ic-types = { path = "../../types/types" }
+tower = { version = "0.4.8", features = ["util", "buffer"] }

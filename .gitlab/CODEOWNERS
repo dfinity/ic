@@ -97,6 +97,7 @@
 /rs/ic_fondue/                       @dfinity-lab/teams/ic-testing-verification
 /rs/ingress_manager/                 @dfinity-lab/teams/consensus-owners
 /rs/interfaces/                      @dfinity-lab/teams/interface-owners
+/rs/interfaces/p2p/                  @dfinity-lab/teams/networking-team
 /rs/interfaces/src/artifact_pool.rs  @dfinity-lab/teams/consensus-owners
 /rs/interfaces/src/consensus.rs      @dfinity-lab/teams/consensus-owners
 /rs/interfaces/src/consensus_pool.rs @dfinity-lab/teams/consensus-owners
@@ -105,7 +106,6 @@
 /rs/interfaces/src/crypto/           @dfinity-lab/teams/crypto-owners
 /rs/interfaces/src/execution_environment.rs    @dfinity-lab/teams/execution-owners
 /rs/interfaces/src/messaging.rs      @dfinity-lab/teams/message-routing-owners
-/rs/interfaces/src/p2p.rs            @dfinity-lab/teams/networking-team
 /rs/interfaces/src/registry.rs       @dfinity-lab/teams/node-team
 /rs/interfaces/src/rpc_bridge.rs     @dfinity-lab/teams/networking-team
 /rs/interfaces/src/transport.rs      @dfinity-lab/teams/networking-team
