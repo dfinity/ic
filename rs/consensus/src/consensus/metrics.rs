@@ -424,6 +424,9 @@ impl EcdsaSignerMetrics {
 pub struct EcdsaPayloadMetrics {
     pub payload_metrics: IntGaugeVec,
     pub payload_errors: IntCounterVec,
+    pub transcript_builder_metrics: IntCounterVec,
+    pub transcript_builder_errors: IntCounterVec,
+    pub transcript_builder_duration: HistogramVec,
 }
 
 impl EcdsaPayloadMetrics {
@@ -439,6 +442,24 @@ impl EcdsaPayloadMetrics {
                 "ECDSA payload related errors",
                 &["type"],
             ),
+            transcript_builder_metrics: metrics_registry.int_counter_vec(
+                "ecdsa_transcript_builder_metrics",
+                "ECDSA transcript builder metrics",
+                &["type"],
+            ),
+            transcript_builder_errors: metrics_registry.int_counter_vec(
+                "ecdsa_transcript_builder_errors",
+                "ECDSA transcript builder related errors",
+                &["type"],
+            ),
+            transcript_builder_duration: metrics_registry.histogram_vec(
+                "ecdsa_transcript_builder_duration_seconds",
+                "Time taken by transcript builder, in seconds",
+                // 0.1ms, 0.2ms, 0.5ms, 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, 100ms, 200ms, 500ms,
+                // 1s, 2s, 5s, 10s, 20s, 50s, 100s, 200s, 500s
+                decimal_buckets(-4, 2),
+                &["sub_component"],
+            ),
         }
     }
 
@@ -452,6 +473,24 @@ impl EcdsaPayloadMetrics {
 
     pub fn payload_errors_inc(&self, label: &str) {
         self.payload_errors.with_label_values(&[label]).inc();
+    }
+
+    pub fn transcript_builder_metrics_inc(&self, label: &str) {
+        self.transcript_builder_metrics
+            .with_label_values(&[label])
+            .inc();
+    }
+
+    pub fn transcript_builder_metrics_inc_by(&self, value: u64, label: &str) {
+        self.transcript_builder_metrics
+            .with_label_values(&[label])
+            .inc_by(value);
+    }
+
+    pub fn transcript_builder_errors_inc(&self, label: &str) {
+        self.transcript_builder_errors
+            .with_label_values(&[label])
+            .inc();
     }
 }
 
