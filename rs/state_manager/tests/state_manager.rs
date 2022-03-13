@@ -1620,6 +1620,60 @@ fn can_state_sync_into_existing_checkpoint() {
 }
 
 #[test]
+fn can_commit_after_prev_state_is_gone() {
+    state_manager_test(|src_metrics, src_state_manager| {
+        let (_height, mut tip) = src_state_manager.take_tip();
+        insert_dummy_canister(&mut tip, canister_test_id(100));
+        src_state_manager.commit_and_certify(tip, height(1), CertificationScope::Metadata);
+
+        let (_height, tip) = src_state_manager.take_tip();
+        src_state_manager.commit_and_certify(tip, height(2), CertificationScope::Metadata);
+
+        let (_height, tip) = src_state_manager.take_tip();
+        src_state_manager.commit_and_certify(tip, height(3), CertificationScope::Full);
+
+        let hash = wait_for_checkpoint(&src_state_manager, height(3));
+        let id = StateSyncArtifactId {
+            height: height(3),
+            hash,
+        };
+
+        let msg = src_state_manager
+            .get_validated_by_identifier(&id)
+            .expect("failed to get state sync messages");
+
+        assert_error_counters(src_metrics);
+
+        state_manager_test(|dst_metrics, dst_state_manager| {
+            let (_height, mut tip) = dst_state_manager.take_tip();
+            insert_dummy_canister(&mut tip, canister_test_id(100));
+            dst_state_manager.commit_and_certify(tip, height(1), CertificationScope::Metadata);
+
+            let (_height, tip) = dst_state_manager.take_tip();
+
+            let chunkable = dst_state_manager.create_chunkable_state(&id);
+            let dst_msg = pipe_state_sync(msg, chunkable);
+            dst_state_manager
+                .check_artifact_acceptance(dst_msg, &node_test_id(0))
+                .expect("Failed to process state sync artifact");
+
+            dst_state_manager.remove_states_below(height(2));
+
+            assert_eq!(height(3), dst_state_manager.latest_state_height());
+            assert_eq!(
+                dst_state_manager.get_state_at(height(1)),
+                Err(StateManagerError::StateRemoved(height(1)))
+            );
+
+            // Check that we can still commit the old tip.
+            dst_state_manager.commit_and_certify(tip, height(2), CertificationScope::Metadata);
+
+            assert_error_counters(dst_metrics);
+        })
+    })
+}
+
+#[test]
 fn can_state_sync_based_on_old_checkpoint() {
     state_manager_test(|src_metrics, src_state_manager| {
         let (_height, mut state) = src_state_manager.take_tip();

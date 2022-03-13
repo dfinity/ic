@@ -1544,28 +1544,11 @@ impl StateManagerImpl {
 
         let states = self.states.read();
         if let Some(metadata) = states.certifications_metadata.get(&prev_height) {
-            state.metadata.prev_state_hash = Some(CryptoHashOfPartialState::from(
-                metadata.certified_state_hash.clone(),
-            ));
-        } else {
-            let checkpoint_heights = self
-                .state_layout
-                .checkpoint_heights()
-                .unwrap_or_else(|err| {
-                    fatal!(
-                        &self.log,
-                        "Failed to retrieve checkpoint heights: {:?}",
-                        err
-                    )
-                });
-            fatal!(
-                self.log,
-                "Couldn't populate previous state hash for height {}.\nLatest state: {:?}\nLoaded states: {:?}\nHave metadata for states: {:?}\nCheckpoints: {:?}",
-                height,
-                self.latest_state_height.load(Ordering::Relaxed),
-                states.snapshots.iter().map(|s| s.height).collect::<Vec<_>>(),
-                states.certifications_metadata.keys().collect::<Vec<_>>(),
-                checkpoint_heights,
+            assert_eq!(
+                state.metadata.prev_state_hash,
+                Some(CryptoHashOfPartialState::from(
+                    metadata.certified_state_hash.clone(),
+                ))
             );
         }
     }
@@ -1807,7 +1790,7 @@ impl StateManager for StateManagerImpl {
             .start_timer();
 
         let mut states = self.states.write();
-        let (tip_height, tip) = states.tip.take().expect("failed to get TIP");
+        let (tip_height, mut tip) = states.tip.take().expect("failed to get TIP");
         let checkpoints = self
             .state_layout
             .checkpoint_heights()
@@ -1824,6 +1807,18 @@ impl StateManager for StateManagerImpl {
                 );
                 return (*checkpoint_height, new_tip);
             }
+        }
+        if tip_height > Self::INITIAL_STATE_HEIGHT {
+            let tip_metadata = states
+                .certifications_metadata
+                .get(&tip_height)
+                .unwrap_or_else(|| fatal!(self.log, "Bug: missing tip metadata @{}", tip_height));
+
+            // Since the state machine will use this tip to compute the *next* state,
+            // we populate the prev_state_hash with the hash of the current tip.
+            tip.metadata.prev_state_hash = Some(CryptoHashOfPartialState::from(
+                tip_metadata.certified_state_hash.clone(),
+            ));
         }
         (tip_height, tip)
     }
