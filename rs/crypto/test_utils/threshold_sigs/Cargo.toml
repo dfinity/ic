@@ -8,8 +8,8 @@ ic-config = { path = "../../../config" }
 ic-crypto = { path = "../.." }
 ic-crypto-internal-types = { path = "../../internal/crypto_lib/types" }
 ic-interfaces = { path = "../../../interfaces" }
-ic-registry-client = { path = "../../../registry/client" }
-ic-registry-common = { path = "../../../registry/common" }
+ic-registry-client-fake = { path = "../../../registry/fake" }
 ic-registry-keys = { path = "../../../registry/keys" }
+ic-registry-proto-data-provider = { path = "../../../registry/proto_data_provider" }
 ic-types = { path = "../../../types/types" }
 rand = "0.7.3"

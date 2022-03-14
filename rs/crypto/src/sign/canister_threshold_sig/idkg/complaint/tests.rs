@@ -9,14 +9,13 @@ use crate::sign::tests::{
 use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, IDkgDealingInternal, MEGaPublicKey};
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
-use ic_registry_client::client::RegistryClientError;
 use ic_test_utilities::types::ids::{NODE_1, NODE_2, NODE_3, NODE_4, SUBNET_42};
 use ic_types::consensus::ecdsa::EcdsaDealing;
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscriptId, IDkgTranscriptType,
 };
 use ic_types::crypto::{AlgorithmId, CombinedMultiSig, CombinedMultiSigOf, KeyPurpose};
-use ic_types::{Height, Randomness, RegistryVersion};
+use ic_types::{registry::RegistryClientError, Height, Randomness, RegistryVersion};
 use rand::{thread_rng, Rng};
 use std::collections::BTreeSet;
 

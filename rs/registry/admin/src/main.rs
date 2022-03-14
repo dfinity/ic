@@ -67,7 +67,7 @@ use ic_protobuf::registry::{
     node_operator::v1::RemoveNodeOperatorsPayload,
 };
 use ic_registry_client::client::RegistryClientImpl;
-use ic_registry_client::helper::{crypto::CryptoRegistry, subnet::SubnetRegistry};
+use ic_registry_client_helpers::{crypto::CryptoRegistry, subnet::SubnetRegistry};
 use ic_registry_common::data_provider::NnsDataProvider;
 use ic_registry_common::local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,

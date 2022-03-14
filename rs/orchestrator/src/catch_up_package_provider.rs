@@ -62,7 +62,7 @@ impl CatchUpPackageProvider {
         current_cup: Option<&CUPWithOriginalProtobuf>,
     ) -> Option<CUPWithOriginalProtobuf> {
         use ic_protobuf::registry::node::v1::NodeRecord;
-        use ic_registry_client::helper::subnet::SubnetTransportRegistry;
+        use ic_registry_client_helpers::subnet::SubnetTransportRegistry;
         use ic_types::NodeId;
         use rand::seq::SliceRandom;
 

@@ -12,8 +12,7 @@ ic-crypto = { path = "../crypto" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs", optional = true }
 ic-ic00-types = { path = "../types/ic00_types" }
 ic-interfaces = { path = "../interfaces" }
-ic-registry-client = { path = "../registry/client" }
-ic-registry-common = { path = "../registry/common" }
+ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-logger = { path = "../monitoring/logger" }
@@ -43,6 +42,8 @@ ic-ecdsa-object = { path = "./ecdsa_object" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-ingress-manager = { path = "../ingress_manager" }
 ic-messaging = { path = "../messaging" }
+ic-registry-client-fake = { path = "../registry/fake" }
+ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-state-manager = { path = "../state_manager" }
 ic-test-artifact-pool = { path = "../test_utilities/artifact_pool" }

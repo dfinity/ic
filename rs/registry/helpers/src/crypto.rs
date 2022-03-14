@@ -1,3 +1,4 @@
+use crate::deserialize_registry_value;
 use ic_interfaces::registry::{
     RegistryClient, RegistryClientResult, RegistryClientVersionedResult, RegistryVersionedRecord,
 };
@@ -6,7 +7,6 @@ use ic_protobuf::registry::{
     crypto::v1::X509PublicKeyCert,
     subnet::v1::{CatchUpPackageContents, InitialNiDkgTranscriptRecord},
 };
-use ic_registry_common::values::deserialize_registry_value;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,

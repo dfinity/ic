@@ -13,7 +13,7 @@ use ic_logger::{debug, info, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry, Timer};
 use ic_protobuf::messaging::xnet::v1 as pb;
 use ic_protobuf::proxy::ProtoProxy;
-use ic_registry_client::helper::node::NodeRegistry;
+use ic_registry_client_helpers::node::NodeRegistry;
 use ic_types::{
     registry::connection_endpoint::ConnectionEndpoint, xnet::StreamIndex, NodeId, PrincipalId,
     SubnetId,

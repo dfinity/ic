@@ -18,7 +18,7 @@ use ic_protobuf::registry::{
     replica_version::v1::ReplicaVersionRecord,
     subnet::v1::{CatchUpPackageContents, RegistryStoreUri, SubnetRecord, SubnetType},
 };
-use ic_registry_client::helper::subnet::get_node_ids_from_subnet_record;
+use ic_registry_client_helpers::subnet::get_node_ids_from_subnet_record;
 use ic_registry_keys::{
     make_blessed_replica_version_key, make_catch_up_package_contents_key, make_replica_version_key,
     make_subnet_record_key,

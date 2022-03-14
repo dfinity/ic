@@ -17,9 +17,9 @@ ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
-ic-registry-client = { path = "../registry/client" }
-ic-registry-common = { path = "../registry/common" }
+ic-registry-client-fake = { path = "../registry/fake" }
 ic-registry-keys = { path = "../registry/keys" }
+ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-transport = { path = "../transport" }
 ic-types = { path = "../types/types" }
 notify = "4.0.12"

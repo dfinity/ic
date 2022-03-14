@@ -9,7 +9,7 @@ use ic_nns_constants::NNS_CANISTER_WASMS;
 use ic_registry_common::local_store::{
     ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreReader,
 };
-use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
 use ic_registry_transport::{delete, upsert};

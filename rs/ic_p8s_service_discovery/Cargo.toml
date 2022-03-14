@@ -23,6 +23,7 @@ ic-metrics = { path = "../monitoring/metrics" }
 ic-metrics-exporter = { path = "../monitoring/metrics_exporter" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-client = { path = "../registry/client" }
+ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-common = { path = "../registry/common" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils/" }

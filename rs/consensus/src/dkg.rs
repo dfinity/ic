@@ -16,7 +16,7 @@ use ic_interfaces::{
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::buckets::{decimal_buckets, linear_buckets};
 use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
-use ic_registry_client::helper::{
+use ic_registry_client_helpers::{
     crypto::{initial_ni_dkg_transcript_from_registry_record, DkgTranscripts},
     subnet::SubnetRegistry,
 };

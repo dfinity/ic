@@ -7,7 +7,7 @@ use ic_crypto_tls_interfaces::{
     TlsServerHandshakeError, TlsWriteHalf,
 };
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
-use ic_registry_client::fake::FakeRegistryClient;
+use ic_registry_client_fake::FakeRegistryClient;
 use ic_types::NodeId;
 use proptest::std_facade::BTreeSet;
 use std::collections::HashSet;

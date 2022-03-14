@@ -1,8 +1,8 @@
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
-use ic_registry_client::fake::FakeRegistryClient;
-use ic_registry_client::helper::node::NodeRecord;
-use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
+use ic_registry_client_fake::FakeRegistryClient;
+use ic_registry_client_helpers::node::NodeRecord;
 use ic_registry_keys::{make_crypto_tls_cert_key, make_node_record_key};
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::{NodeId, RegistryVersion};
 use openssl::x509::X509;
 use std::sync::Arc;

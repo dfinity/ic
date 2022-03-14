@@ -95,7 +95,7 @@ use crate::{
 
 extern crate lru;
 use ic_protobuf::registry::subnet::v1::GossipConfig;
-use ic_registry_client::helper::subnet::SubnetTransportRegistry;
+use ic_registry_client_helpers::subnet::SubnetTransportRegistry;
 use lru::LruCache;
 
 use std::{
@@ -1523,8 +1523,7 @@ pub mod tests {
     use ic_interfaces::artifact_manager::OnArtifactError;
     use ic_logger::LoggerImpl;
     use ic_metrics::MetricsRegistry;
-    use ic_registry_client::client::RegistryClientImpl;
-    use ic_registry_client::fake::FakeRegistryClient;
+    use ic_registry_client_fake::FakeRegistryClient;
     use ic_test_utilities::consensus::fake::FakeSigner;
     use ic_test_utilities::port_allocation::allocate_ports;
     use ic_test_utilities::registry::{add_subnet_record, SubnetRecordBuilder};
@@ -1767,8 +1766,8 @@ pub mod tests {
         let node_port_allocation = Arc::new(node_port_allocation);
         let data_provider =
             test_group_set_registry(subnet_test_id(P2P_SUBNET_ID_DEFAULT), node_port_allocation);
-        let registry_client = Arc::new(RegistryClientImpl::new(data_provider, None));
-        registry_client.fetch_and_start_polling().unwrap();
+        let registry_client = Arc::new(FakeRegistryClient::new(data_provider));
+        registry_client.update_to_latest_version();
 
         let mut mock_consensus_cache = MockConsensusCache::new();
         mock_consensus_cache

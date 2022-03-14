@@ -16,7 +16,7 @@ use ic_logger::{debug, fatal, info, warn, ReplicaLogger};
 use ic_metrics::buckets::{add_bucket, decimal_buckets};
 use ic_metrics::{MetricsRegistry, Timer};
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
-use ic_registry_client::helper::{
+use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
     node::NodeRegistry,
     provisional_whitelist::ProvisionalWhitelistRegistry,

@@ -1,9 +1,9 @@
 //! Utilities for testing multisignature operations.
 
 use ic_crypto::utils::{NodeKeysToGenerate, TempCryptoComponent};
-use ic_registry_client::fake::FakeRegistryClient;
-use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
+use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::KeyPurpose;
 use ic_types::{NodeId, PrincipalId, RegistryVersion};
 use rand::prelude::*;

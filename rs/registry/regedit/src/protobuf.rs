@@ -16,7 +16,7 @@ use ic_protobuf::{
     },
     types::v1::SubnetId as SubnetIdProto,
 };
-use ic_registry_client::helper::node::NodeRecord;
+use ic_registry_client_helpers::node::NodeRecord;
 use ic_registry_keys::{
     make_blessed_replica_version_key, make_firewall_config_record_key,
     make_icp_xdr_conversion_rate_record_key, make_nns_canister_records_key,

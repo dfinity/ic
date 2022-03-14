@@ -20,8 +20,8 @@ use ic_protobuf::{
         },
     },
 };
-use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
 use ic_registry_keys::{make_crypto_node_key, make_crypto_tls_cert_key, make_node_record_key};
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::{
     crypto::KeyPurpose,
     registry::connection_endpoint::{ConnectionEndpoint, ConnectionEndpointTryFromError},

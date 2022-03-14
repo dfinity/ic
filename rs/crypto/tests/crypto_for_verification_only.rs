@@ -1,8 +1,8 @@
 use crate::ed25519_utils::ed25519_signature_and_public_key;
 use ic_crypto::CryptoComponent;
 use ic_interfaces::crypto::BasicSigVerifierByPublicKey;
-use ic_registry_client::fake::FakeRegistryClient;
-use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
+use ic_registry_client_fake::FakeRegistryClient;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::messages::MessageId;
 use std::sync::Arc;
 

@@ -5,7 +5,7 @@ use crate::sign::threshold_sig::store::TranscriptData;
 use ic_crypto_internal_csp::api::{CspThresholdSignError, ThresholdSignatureCspClient};
 use ic_crypto_internal_csp::types::CspPublicCoefficients;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
-use ic_registry_client::helper::crypto::CryptoRegistry;
+use ic_registry_client_helpers::crypto::CryptoRegistry;
 use ic_types::crypto::threshold_sig::errors::threshold_sig_data_not_found_error::ThresholdSigDataNotFoundError;
 use ic_types::crypto::threshold_sig::ni_dkg::{DkgId, NiDkgTag, NiDkgTranscript};
 use ic_types::crypto::{CombinedThresholdSigOf, ThresholdSigShareOf};

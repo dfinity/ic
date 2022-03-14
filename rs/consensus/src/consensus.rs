@@ -63,7 +63,7 @@ use ic_interfaces::{
 };
 use ic_logger::{debug, error, info, trace, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_registry_client::helper::subnet::SubnetRegistry;
+use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     artifact::{ConsensusMessageFilter, ConsensusMessageId, PriorityFn},

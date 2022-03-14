@@ -29,6 +29,7 @@ ic-http-utils = { path = "../../http_utils" }
 ic-interfaces = { path = "../../interfaces" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-client = { path = "../client" }
+ic-registry-client-helpers = { path = "../helpers" }
 ic-registry-common = { path = "../common" }
 ic-registry-keys = { path = "../keys" }
 ic-registry-provisional-whitelist = { path = "../provisional_whitelist" }

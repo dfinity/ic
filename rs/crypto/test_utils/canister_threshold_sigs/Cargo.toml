@@ -1,4 +1,3 @@
-
 [package]
 name = "ic-crypto-test-utils-canister-threshold-sigs"
 version = "0.8.0"
@@ -8,8 +7,8 @@ edition = "2018"
 ic-crypto = { path = "../.." }
 ic-interfaces = { path = "../../../interfaces" }
 ic-crypto-internal-threshold-sig-ecdsa = { path = "../../internal/crypto_lib/threshold_sig/tecdsa" }
-ic-registry-client = { path = "../../../registry/client" }
-ic-registry-common = { path = "../../../registry/common" }
+ic-registry-client-fake = { path = "../../../registry/fake" }
 ic-registry-keys = { path = "../../../registry/keys" }
+ic-registry-proto-data-provider = { path = "../../../registry/proto_data_provider" }
 ic-types = { path = "../../../types/types" }
 rand = "0.7.3"

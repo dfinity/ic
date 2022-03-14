@@ -1,7 +1,7 @@
 use crate::error::{OrchestratorError, OrchestratorResult};
 use crate::{metrics::OrchestratorMetrics, registry_helper::RegistryHelper};
 use ic_logger::{debug, warn, ReplicaLogger};
-use ic_registry_client::helper::unassigned_nodes::UnassignedNodeRegistry;
+use ic_registry_client_helpers::unassigned_nodes::UnassignedNodeRegistry;
 use ic_types::{RegistryVersion, SubnetId};
 use std::io::Write;
 use std::process::{Command, Stdio};

@@ -161,7 +161,7 @@ impl IcServiceDiscoveryImpl {
         reg_client: &dyn RegistryClient,
         ic_name: &str,
     ) -> Result<BTreeSet<PrometheusTargetGroup>, IcServiceDiscoveryError> {
-        use ic_registry_client::helper::{
+        use ic_registry_client_helpers::{
             node::NodeRegistry,
             subnet::{SubnetListRegistry, SubnetTransportRegistry},
         };

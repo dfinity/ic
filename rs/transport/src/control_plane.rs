@@ -918,9 +918,9 @@ mod tests {
     use ic_protobuf::registry::node::v1::{
         connection_endpoint::Protocol, ConnectionEndpoint, FlowEndpoint, NodeRecord,
     };
-    use ic_registry_client::fake::FakeRegistryClient;
-    use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
+    use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::make_crypto_tls_cert_key;
+    use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_utilities::types::ids::{NODE_1, NODE_2};
     use ic_test_utilities::with_test_replica_logger;
     use ic_types::transport::TransportErrorCode;

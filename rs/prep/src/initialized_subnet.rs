@@ -7,11 +7,11 @@ use ic_protobuf::registry::{
     crypto::v1::PublicKey,
     subnet::v1::{CatchUpPackageContents, SubnetRecord},
 };
-use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
     make_subnet_record_key,
 };
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::{RegistryVersion, SubnetId};
 
 use crate::{node::InitializedNode, util::write_registry_entry};

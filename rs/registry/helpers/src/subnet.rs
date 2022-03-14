@@ -1,3 +1,4 @@
+use crate::deserialize_registry_value;
 use ic_interfaces::registry::{
     RegistryClient, RegistryClientResult, RegistryClientVersionedResult, RegistryVersionedRecord,
 };
@@ -9,7 +10,6 @@ use ic_protobuf::registry::{
     },
 };
 use ic_protobuf::types::v1::SubnetId as SubnetIdProto;
-use ic_registry_common::values::deserialize_registry_value;
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_node_record_key, make_replica_version_key,
     make_subnet_list_record_key, make_subnet_record_key, ROOT_SUBNET_ID_KEY,
@@ -501,8 +501,8 @@ impl<T: RegistryClient + ?Sized> SubnetTransportRegistry for T {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::client::RegistryClientImpl;
-    use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
+    use ic_registry_client_fake::FakeRegistryClient;
+    use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_types::PrincipalId;
     use std::sync::Arc;
 
@@ -514,8 +514,8 @@ mod tests {
         SubnetId::from(PrincipalId::new_subnet_test_id(id))
     }
 
-    #[tokio::test]
-    async fn can_get_node_ids_from_subnet() {
+    #[test]
+    fn can_get_node_ids_from_subnet() {
         let subnet_id = subnet_id(4);
         let version = RegistryVersion::from(2);
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
@@ -534,9 +534,9 @@ mod tests {
             )
             .unwrap();
 
-        let registry = Arc::new(RegistryClientImpl::new(data_provider, None));
+        let registry = Arc::new(FakeRegistryClient::new(data_provider));
+        registry.update_to_latest_version();
         // The trait can also "wrap" an arc of registry client.
-        registry.fetch_and_start_polling().unwrap();
         let registry: Arc<dyn RegistryClient> = registry;
 
         let node_ids = registry.get_node_ids_on_subnet(subnet_id, version).unwrap();
@@ -544,8 +544,8 @@ mod tests {
         assert_eq!(node_ids, Some(vec![node_id(32), node_id(33)]));
     }
 
-    #[tokio::test]
-    async fn can_get_replica_version_from_subnet() {
+    #[test]
+    fn can_get_replica_version_from_subnet() {
         let subnet_id = subnet_id(4);
         let version = RegistryVersion::from(2);
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
@@ -569,9 +569,9 @@ mod tests {
             )
             .unwrap();
 
-        let registry = Arc::new(RegistryClientImpl::new(data_provider, None));
+        let registry = Arc::new(FakeRegistryClient::new(data_provider));
+        registry.update_to_latest_version();
         // The trait can also "wrap" an arc of registry client.
-        registry.fetch_and_start_polling().unwrap();
         let registry: Arc<dyn RegistryClient> = registry;
 
         let result = registry.get_replica_version(subnet_id, version).unwrap();

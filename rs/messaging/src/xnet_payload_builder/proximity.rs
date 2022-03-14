@@ -5,7 +5,7 @@ use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_interfaces::registry::RegistryClient;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
-use ic_registry_client::helper::{
+use ic_registry_client_helpers::{
     node::{NodeRecord, NodeRegistry},
     subnet::SubnetRegistry,
 };

@@ -9,9 +9,11 @@ ic-config = { path = "../config" }
 ic-canister-client = { path = "../canister_client" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-replica = { path = "../replica" }
-ic-registry-client = { path = "../registry/client" }
+ic-registry-client-fake = { path = "../registry/fake" }
+ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-registry-common = { path = "../registry/common" }
+ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-interfaces = { path = "../interfaces" }

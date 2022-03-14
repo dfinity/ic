@@ -6,7 +6,7 @@ use ic_interfaces::{
 };
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
-use ic_registry_client::helper::subnet::{NotarizationDelaySettings, SubnetRegistry};
+use ic_registry_client_helpers::subnet::{NotarizationDelaySettings, SubnetRegistry};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     consensus::Rank,

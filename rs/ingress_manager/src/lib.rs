@@ -13,7 +13,7 @@ use ic_interfaces::{
 };
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
-use ic_registry_client::helper::subnet::{IngressMessageSettings, SubnetRegistry};
+use ic_registry_client_helpers::subnet::{IngressMessageSettings, SubnetRegistry};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     artifact::IngressMessageId,
@@ -152,8 +152,8 @@ mod tests {
     use ic_interfaces::registry::RegistryClient;
     use ic_metrics::MetricsRegistry;
     use ic_registry_client::client::RegistryClientImpl;
-    use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
     use ic_registry_keys::make_subnet_record_key;
+    use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_utilities::{
         artifact_pool_config::with_test_pool_config,
         consensus::MockConsensusCache,

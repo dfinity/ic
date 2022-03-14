@@ -7,9 +7,9 @@ use ic_interfaces::{
     validation::ValidationResult,
 };
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
-use ic_registry_client::fake::FakeRegistryClient;
-use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
+use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::ROOT_SUBNET_ID_KEY;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
 use ic_test_utilities::{
     crypto::CryptoReturningOk,

@@ -2,8 +2,8 @@ use super::*;
 use ic_crypto_internal_basic_sig_iccsa as iccsa;
 use ic_crypto_internal_basic_sig_iccsa::types::PublicKeyBytes;
 use ic_crypto_internal_basic_sig_iccsa::types::SignatureBytes;
-use ic_registry_client::client::ThresholdSigPublicKey;
-use ic_registry_client::helper::{crypto::CryptoRegistry, subnet::SubnetRegistry};
+use ic_registry_client_helpers::{crypto::CryptoRegistry, subnet::SubnetRegistry};
+use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 
 pub fn verify_canister_sig<S: Signable>(
     registry: Arc<dyn RegistryClient>,

@@ -9,7 +9,7 @@ use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, IDkgDealingInternal, 
 use ic_interfaces::registry::RegistryClient;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
-use ic_registry_client::helper::crypto::CryptoRegistry;
+use ic_registry_client_helpers::crypto::CryptoRegistry;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgOpenTranscriptError, IDkgVerifyComplaintError, IDkgVerifyOpeningError,
 };

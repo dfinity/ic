@@ -249,7 +249,7 @@ fn tls_cert_from_registry(
     node_id: NodeId,
     registry_version: RegistryVersion,
 ) -> Result<TlsPublicKeyCert, TlsCertFromRegistryError> {
-    use ic_registry_client::helper::crypto::CryptoRegistry;
+    use ic_registry_client_helpers::crypto::CryptoRegistry;
     registry
         .get_tls_certificate(node_id, registry_version)?
         .map_or_else(

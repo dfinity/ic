@@ -16,7 +16,7 @@ ic-types = { path = "../types/types" }
 ic-protobuf = { path = "../protobuf" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
-ic-registry-client = { path = "../registry/client" }
+ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 linked-hash-map = "0.5.3"
 lru = { version = "0.7.1", default-features = false }
@@ -37,6 +37,8 @@ ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-registry-common = { path = "../registry/common" }
 ic-test-utilities = { path = "../test_utilities" }
+ic-registry-client = { path = "../registry/client" }
+ic-registry-client-fake = { path = "../registry/fake" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-logger = { path = "../monitoring/logger" }
 ic-replica-setup-ic-network = { path = "../replica/setup_ic_network" }

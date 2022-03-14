@@ -9,6 +9,7 @@ structopt = "0.3.21"
 ic-crypto-sha = {path = "../../crypto/sha/"}
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-client = { path = "../client" }
+ic-registry-client-helpers = { path = "../helpers" }
 ic-registry-common = { path = "../common" }
 ic-registry-keys = { path = "../keys" }
 ic-registry-subnet-type = { path = "../subnet_type" }

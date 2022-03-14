@@ -124,15 +124,15 @@
 /rs/registry/canister/               @dfinity-lab/teams/nns-team
 /rs/registry/client/                 @dfinity-lab/teams/node-team
 # Individual registry client helpers are owned by component owners
-/rs/registry/client/src/helper/crypto/                      @dfinity-lab/teams/crypto-owners
-/rs/registry/client/src/helper/crypto.rs                    @dfinity-lab/teams/crypto-owners
-/rs/registry/client/src/helper/firewall.rs                  @dfinity-lab/teams/networking-team
-/rs/registry/client/src/helper/node.rs                      @dfinity-lab/teams/node-owners
-/rs/registry/client/src/helper/provisional_whitelist.rs     @dfinity-lab/teams/execution-owners
-/rs/registry/client/src/helper/routing_table.rs             @dfinity-lab/teams/execution-owners @dfinity-lab/teams/message-routing-owners
-/rs/registry/client/src/helper/subnet.rs                    @dfinity-lab/teams/consensus-owners
-/rs/registry/client/src/helper/unassigned_nodes.rs          @dfinity-lab/teams/consensus-owners
 /rs/registry/common/                 @dfinity-lab/teams/nns-team
+/rs/registry/helpers/src/crypto/                      @dfinity-lab/teams/crypto-owners
+/rs/registry/helpers/src/crypto.rs                    @dfinity-lab/teams/crypto-owners
+/rs/registry/helpers/src/firewall.rs                  @dfinity-lab/teams/networking-team
+/rs/registry/helpers/src/node.rs                      @dfinity-lab/teams/node-owners
+/rs/registry/helpers/src/provisional_whitelist.rs     @dfinity-lab/teams/execution-owners
+/rs/registry/helpers/src/routing_table.rs             @dfinity-lab/teams/execution-owners @dfinity-lab/teams/message-routing-owners
+/rs/registry/helpers/src/subnet.rs                    @dfinity-lab/teams/consensus-owners
+/rs/registry/helpers/src/unassigned_nodes.rs          @dfinity-lab/teams/consensus-owners
 /rs/registry/transport/              @dfinity-lab/teams/nns-team
 /rs/replay/                          @dfinity-lab/teams/orchestrator-owners
 /rs/replica/                         @dfinity-lab/teams/networking-team

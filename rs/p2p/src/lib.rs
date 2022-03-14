@@ -94,9 +94,9 @@
 //! <img src="../../../../../docs/assets/p2p.png" height="960"
 //! width="540"/> </div> <hr/>
 
+use ic_interfaces::registry::RegistryClient;
 use ic_protobuf::registry::subnet::v1::GossipConfig;
-use ic_registry_client::client::RegistryClient;
-use ic_registry_client::helper::subnet::SubnetRegistry;
+use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::SubnetId;
 use serde::{Deserialize, Serialize};
 use std::{

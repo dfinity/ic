@@ -10,9 +10,9 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_common::local_store::LocalStoreImpl;
 use ic_registry_common::{
     data_provider::{CertifiedNnsDataProvider, NnsDataProvider},
-    proto_registry_data_provider::ProtoRegistryDataProvider,
     registry::RegistryCanister,
 };
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 pub use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey,
     registry::{RegistryClientError, RegistryDataProviderError},
@@ -366,10 +366,9 @@ mod tests {
     use super::*;
     use assert_matches::assert_matches;
     use ic_interfaces::registry::ZERO_REGISTRY_VERSION;
-    use ic_registry_common::{
-        pb::test_protos::v1::TestProto, proto_registry_data_provider::ProtoRegistryDataProvider,
-        test_proto::TestProtoHelper,
-    };
+    use ic_registry_client_helpers::test_proto::TestProtoHelper;
+    use ic_registry_common_proto::pb::test_protos::v1::TestProto;
+    use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use std::collections::HashSet;
     use std::sync::atomic::AtomicUsize;
     use std::sync::{Arc, RwLock};

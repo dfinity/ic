@@ -1,6 +1,6 @@
-use crate::pb::proto_registry::v1::{ProtoRegistry, ProtoRegistryRecord};
 use bytes::{Buf, BufMut};
 use ic_interfaces::registry::{RegistryDataProvider, RegistryTransportRecord, RegistryValue};
+use ic_registry_common_proto::pb::proto_registry::v1::{ProtoRegistry, ProtoRegistryRecord};
 use ic_registry_transport::pb::v1::RegistryMutation;
 use ic_types::{registry::RegistryDataProviderError, RegistryVersion};
 use ic_utils::fs::write_atomically;
@@ -183,8 +183,8 @@ impl RegistryDataProvider for ProtoRegistryDataProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pb::test_protos::v1::TestProto;
     use ic_interfaces::registry::ZERO_REGISTRY_VERSION;
+    use ic_registry_common_proto::pb::test_protos::v1::TestProto;
 
     #[test]
     fn round_trip() {

@@ -16,7 +16,7 @@ ic-interfaces-p2p = { path = "../../interfaces/p2p" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-p2p = { path = "../../p2p" }
-ic-registry-client = { path = "../../registry/client" }
+ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-state-manager = { path = "../../state_manager" }
 ic-transport = { path = "../../transport" }

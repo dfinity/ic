@@ -133,7 +133,8 @@ use ic_agent::Agent;
 use ic_fondue::ic_manager::IcHandle;
 use ic_interfaces::registry::{RegistryClient, RegistryClientResult};
 use ic_protobuf::registry::{node::v1 as pb_node, subnet::v1 as pb_subnet};
-use ic_registry_client::{helper::node::NodeRegistry, local_registry::LocalRegistry};
+use ic_registry_client::local_registry::LocalRegistry;
+use ic_registry_client_helpers::node::NodeRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     messages::{HttpStatusResponse, ReplicaHealthStatus},
@@ -211,7 +212,7 @@ pub struct TopologySnapshot {
 
 impl TopologySnapshot {
     pub fn subnets(&self) -> Box<dyn Iterator<Item = SubnetSnapshot>> {
-        use ic_registry_client::helper::subnet::SubnetListRegistry;
+        use ic_registry_client_helpers::subnet::SubnetListRegistry;
         let registry_version = self.ctx.local_registry.get_latest_version();
         Box::new(
             self.ctx
@@ -245,7 +246,7 @@ impl SubnetSnapshot {
     }
 
     pub fn raw_subnet_record(&self) -> pb_subnet::SubnetRecord {
-        use ic_registry_client::helper::subnet::SubnetRegistry;
+        use ic_registry_client_helpers::subnet::SubnetRegistry;
 
         self.ctx
             .local_registry
@@ -413,7 +414,7 @@ pub trait IcNodeContainer {
 
 impl IcNodeContainer for SubnetSnapshot {
     fn nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
-        use ic_registry_client::helper::subnet::SubnetRegistry;
+        use ic_registry_client_helpers::subnet::SubnetRegistry;
 
         let registry_version = self.registry_version;
         let node_ids = self

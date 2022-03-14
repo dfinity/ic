@@ -241,8 +241,8 @@ impl CryptoComponentFatClient<Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStor
     /// use ic_crypto::CryptoComponent;
     /// use ic_logger::replica_logger::no_op_logger;
     /// use std::sync::Arc;
-    /// use ic_registry_client::fake::FakeRegistryClient;
-    /// use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
+    /// use ic_registry_client_fake::FakeRegistryClient;
+    /// use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     /// use ic_crypto::utils::get_node_keys_or_generate_if_missing;
     /// use ic_metrics::MetricsRegistry;
     ///
@@ -340,7 +340,7 @@ fn key_from_registry(
     key_purpose: KeyPurpose,
     registry_version: RegistryVersion,
 ) -> CryptoResult<PublicKeyProto> {
-    use ic_registry_client::helper::crypto::CryptoRegistry;
+    use ic_registry_client_helpers::crypto::CryptoRegistry;
     let maybe_pk_proto =
         registry.get_crypto_key_for_node(node_id, key_purpose, registry_version)?;
     match maybe_pk_proto {

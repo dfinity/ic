@@ -26,8 +26,8 @@ use ic_interfaces::{
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_client::client::RegistryClientImpl;
-use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
 use ic_registry_keys::make_subnet_record_key;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{BitcoinState, CanisterQueues, ReplicatedState, SystemMetadata};
 use ic_test_utilities::{

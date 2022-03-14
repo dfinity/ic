@@ -1,0 +1,21 @@
+[package]
+name = "ic-registry-client-helpers"
+version = "0.8.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ic-interfaces = { path = "../../interfaces" }
+ic-protobuf = { path = "../../protobuf" }
+ic-registry-common-proto = { path = "../proto" }
+ic-registry-keys = { path = "../keys" }
+ic-registry-provisional-whitelist = { path = "../provisional_whitelist" }
+ic-registry-routing-table = { path = "../routing_table" }
+ic-registry-subnet-features = { path = "../subnet_features" }
+ic-types = { path = "../../types/types" }
+serde_cbor = "0.11.1"
+
+[dev-dependencies]
+ic-registry-client-fake = { path = "../fake" }
+ic-registry-proto-data-provider = { path = "../proto_data_provider" }

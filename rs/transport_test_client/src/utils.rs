@@ -2,9 +2,9 @@
 
 use ic_crypto::utils::TempCryptoComponent;
 use ic_crypto_tls_interfaces::TlsHandshake;
-use ic_registry_client::fake::FakeRegistryClient;
-use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
+use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_tls_cert_key;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::{NodeId, PrincipalId, RegistryVersion};
 use notify::{watcher, RecursiveMode, Watcher};
 use std::convert::TryFrom;

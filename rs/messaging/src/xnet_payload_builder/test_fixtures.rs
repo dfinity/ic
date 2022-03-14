@@ -7,9 +7,9 @@ use ic_protobuf::registry::{
     node::v1::{connection_endpoint::Protocol, ConnectionEndpoint, NodeRecord},
     subnet::v1::SubnetListRecord,
 };
-use ic_registry_client::client::RegistryClientImpl;
-use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
+use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key, make_subnet_record_key};
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_replicated_state::{
     metadata_state::StreamMap, testing::ReplicatedStateTesting, ReplicatedState, Stream,
 };
@@ -238,7 +238,7 @@ pub(crate) fn get_validation_context_for_test() -> ValidationContext {
 pub(crate) fn get_registry_and_urls_for_test(
     subnet_count: u8,
     mut expected_indices: BTreeMap<SubnetId, ExpectedIndices>,
-) -> (Arc<RegistryClientImpl>, Vec<String>) {
+) -> (Arc<FakeRegistryClient>, Vec<String>) {
     let mut urls = vec![];
     let mut subnets: Vec<Vec<u8>> = vec![];
 
@@ -314,9 +314,9 @@ pub(crate) fn get_registry_and_urls_for_test(
         )
         .expect("Coult not add subnet list record.");
 
-    let registry_client = RegistryClientImpl::new(Arc::new(data_provider), None);
-    registry_client.fetch_and_start_polling().unwrap();
-    (Arc::new(registry_client), urls)
+    let registry_client = Arc::new(FakeRegistryClient::new(Arc::new(data_provider)));
+    registry_client.update_to_latest_version();
+    (registry_client, urls)
 }
 
 /// Generates a `RegistryClient` at version zero, i.e. with no records.
@@ -331,9 +331,9 @@ pub fn get_empty_registry_for_test() -> Arc<dyn RegistryClient> {
             Some(NodeRecord::default()),
         )
         .expect("Could not add node record.");
-    let registry_client = RegistryClientImpl::new(Arc::new(data_provider), None);
-    registry_client.fetch_and_start_polling().unwrap();
-    Arc::new(registry_client)
+    let registry_client = Arc::new(FakeRegistryClient::new(Arc::new(data_provider)));
+    registry_client.update_to_latest_version();
+    registry_client
 }
 
 /// Adds a node record with the given values to the given data provider.
@@ -387,7 +387,7 @@ fn add_subnet_record(
 /// * `REMOTE_SUBNET` consisting of 3 nodes: `LOCAL_NODE_1_OPERATOR_1` and
 ///   `LOCAL_NODE_2_OPERATOR_1` (both operated by node operator 1) and
 ///   `LOCAL_NODE_3_OPERATOR_2` (operated by node operator 2).
-pub(crate) fn create_xnet_endpoint_url_test_fixture() -> Arc<RegistryClientImpl> {
+pub(crate) fn create_xnet_endpoint_url_test_fixture() -> Arc<FakeRegistryClient> {
     let data_provider = ProtoRegistryDataProvider::new();
 
     add_node_record_with_node_operator_id(
@@ -426,9 +426,9 @@ pub(crate) fn create_xnet_endpoint_url_test_fixture() -> Arc<RegistryClientImpl>
         ],
     );
 
-    let registry_client = RegistryClientImpl::new(Arc::new(data_provider), None);
-    registry_client.fetch_and_start_polling().unwrap();
-    Arc::new(registry_client)
+    let registry_client = Arc::new(FakeRegistryClient::new(Arc::new(data_provider)));
+    registry_client.update_to_latest_version();
+    registry_client
 }
 
 /// Returns a mock `GenRangeFn` that for a given `gen_range(low, high)` call

@@ -10,6 +10,7 @@ ic-base-types = {path="../../types/base_types"}
 ic-canister-client = { path = "../../canister_client" }
 ic-interfaces = { path = "../../interfaces" }
 ic-registry-common = { path = "../../registry/common" }
+ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 ic-registry-transport = { path="../../registry/transport" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-nns-common = { path = "../common" }

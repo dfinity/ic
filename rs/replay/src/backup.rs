@@ -13,7 +13,7 @@ use ic_interfaces::{
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_protobuf::types::v1 as pb;
-use ic_registry_client::helper::subnet::SubnetRegistry;
+use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
     consensus::{
         certification::Certification, BlockProposal, CatchUpContentProtobufBytes, CatchUpPackage,

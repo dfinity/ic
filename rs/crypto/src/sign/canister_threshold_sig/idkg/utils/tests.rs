@@ -3,9 +3,9 @@ use crate::sign::canister_threshold_sig::idkg::utils::{
 };
 use crate::utils::generate_idkg_dealing_encryption_keys;
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion};
-use ic_registry_client::fake::FakeRegistryClient;
-use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
+use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities::crypto::temp_dir::temp_dir;
 use ic_types::crypto::KeyPurpose;
 use std::sync::Arc;
