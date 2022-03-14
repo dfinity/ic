@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+
+# This is a wrapper script to rclone that tries to run it trough the proxy and fall back to direct mode if it does not work.
+
+set -eEuo pipefail
+
+: ${RCLONE_S3_ENDPOINT:='http://s3-proxy.dfinity.systems:8080'}
+
+if (curl --connect-timeout 5 --head ${RCLONE_S3_ENDPOINT}); then
+    echo "Trying rclone trough the s3 proxy '${RCLONE_S3_ENDPOINT}' ..." >&2
+    export RCLONE_S3_ENDPOINT
+    rclone "$@" && exit
+    echo "Failed to go through s3 proxy." >&2
+fi
+
+echo "Falling back to the direct mode ..." >&2
+unset RCLONE_S3_ENDPOINT
+exec rclone "$@"
