@@ -3,8 +3,8 @@ use ic_nns_common::{
     registry::MAX_NUM_SSH_KEYS,
     types::{NeuronId, ProposalId},
 };
-use ic_nns_constants::ids::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
+use ic_nns_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_test_utils::registry::get_value;
 use ic_nns_test_utils::{
     governance::{get_pending_proposals, submit_external_update_proposal, wait_for_final_state},

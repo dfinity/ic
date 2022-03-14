@@ -87,7 +87,7 @@ impl GovernanceCanisterInitPayloadBuilder {
         use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 
         const TWELVE_MONTHS_SECONDS: u64 = 30 * 12 * 24 * 60 * 60;
-        use ic_nns_constants::ids::{
+        use ic_nns_test_keys::{
             TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
             TEST_NEURON_3_OWNER_PRINCIPAL,
         };

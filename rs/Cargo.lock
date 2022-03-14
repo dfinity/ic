@@ -3202,6 +3202,7 @@ dependencies = [
  "ic-nns-governance",
  "ic-nns-handler-root",
  "ic-nns-init",
+ "ic-nns-test-keys",
  "ic-nns-test-utils",
  "ic-prep",
  "ic-protobuf",
@@ -5174,12 +5175,8 @@ dependencies = [
 name = "ic-nns-constants"
 version = "0.8.0"
 dependencies = [
- "ed25519-dalek",
  "ic-base-types",
- "ic-types 0.8.0",
  "lazy_static",
- "rand_chacha 0.2.2",
- "rand_core 0.5.1",
 ]
 
 [[package]]
@@ -5205,6 +5202,7 @@ dependencies = [
  "ic-nervous-system-common",
  "ic-nns-common",
  "ic-nns-constants",
+ "ic-nns-test-keys",
  "ic-protobuf",
  "ic-types 0.8.0",
  "ledger-canister",
@@ -5371,6 +5369,7 @@ dependencies = [
  "ic-nns-governance",
  "ic-nns-gtc",
  "ic-nns-handler-root",
+ "ic-nns-test-keys",
  "ic-nns-test-utils",
  "ic-nns-test-utils-macros",
  "ic-protobuf",
@@ -5401,6 +5400,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nns-test-keys"
+version = "0.8.0"
+dependencies = [
+ "ed25519-dalek",
+ "ic-base-types",
+ "ic-types 0.8.0",
+ "lazy_static",
+ "rand_chacha 0.2.2",
+ "rand_core 0.5.1",
+]
+
+[[package]]
 name = "ic-nns-test-utils"
 version = "0.8.0"
 dependencies = [
@@ -5424,6 +5435,7 @@ dependencies = [
  "ic-nns-gtc",
  "ic-nns-gtc-accounts",
  "ic-nns-handler-root",
+ "ic-nns-test-keys",
  "ic-protobuf",
  "ic-registry-keys",
  "ic-registry-routing-table",
@@ -6247,6 +6259,7 @@ dependencies = [
  "ic-crypto-sha",
  "ic-nervous-system-common",
  "ic-nns-constants",
+ "ic-nns-test-keys",
  "ic-sns-governance",
  "ic-sns-test-utils",
  "ic-types 0.8.0",
@@ -9563,6 +9576,7 @@ dependencies = [
  "ic-nervous-system-common",
  "ic-nns-common",
  "ic-nns-constants",
+ "ic-nns-test-keys",
  "ic-nns-test-utils",
  "ic-nns-test-utils-macros",
  "ic-protobuf",
@@ -11116,6 +11130,7 @@ dependencies = [
  "ic-nns-governance",
  "ic-nns-handler-root",
  "ic-nns-init",
+ "ic-nns-test-keys",
  "ic-nns-test-utils",
  "ic-prep",
  "ic-protobuf",

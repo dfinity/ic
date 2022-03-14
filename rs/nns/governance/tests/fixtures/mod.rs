@@ -14,7 +14,6 @@ use ic_crypto_sha::Sha256;
 use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
-use ic_nns_constants::ids::{TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL};
 use ic_nns_governance::{
     governance::{
         governance_minting_account, neuron_subaccount, subaccount_from_slice, Environment,
@@ -59,6 +58,7 @@ use ic_nns_governance::{
         RewardEvent, RewardNodeProvider, SetDefaultFollowees, Tally, Topic, Vote,
     },
 };
+use ic_nns_test_keys::{TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL};
 use ledger_canister::{AccountIdentifier, Memo, Tokens};
 use maplit::hashmap;
 use rand::rngs::StdRng;

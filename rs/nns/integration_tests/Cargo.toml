@@ -47,6 +47,7 @@ ic-crypto-sha = { path = "../../crypto/sha" }
 ic-error-types = {path="../../types/error_types"}
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nns-constants = { path = "../constants" }
+ic-nns-test-keys = { path = "../test_keys" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nns-handler-root = { path = "../handlers/root" }
 ic-nns-gtc = { path = "../gtc" }

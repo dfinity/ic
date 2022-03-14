@@ -168,7 +168,7 @@ mod tests {
 
     use super::*;
     use ic_nns_common::registry::encode_or_panic;
-    use ic_nns_constants::ids::TEST_USER1_PRINCIPAL;
+    use ic_nns_test_keys::TEST_USER1_PRINCIPAL;
     use ic_nns_test_utils::registry::invariant_compliant_mutation;
     use ic_protobuf::registry::{
         node_operator::v1::NodeOperatorRecord, routing_table::v1::RoutingTable,

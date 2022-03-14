@@ -1,11 +1,6 @@
-use std::str::FromStr;
-
-use lazy_static::lazy_static;
-
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
-
-#[cfg(target_arch = "x86_64")]
-pub mod ids;
+use lazy_static::lazy_static;
+use std::str::FromStr;
 
 // WARNING: The NNS canisters MUST be installed in the NNS subnet,
 // in the following order, otherwise they won't be able to find

@@ -13,14 +13,12 @@ use ic_fondue::{
 };
 use ic_interfaces::registry::ZERO_REGISTRY_VERSION;
 use ic_nns_common::types::{NeuronId, ProposalId};
-use ic_nns_constants::{
-    ids::TEST_NEURON_1_OWNER_KEYPAIR, ids::TEST_USER1_PRINCIPAL, CYCLES_MINTING_CANISTER_ID,
-    GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID,
-};
+use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID};
 use ic_nns_governance::pb::v1::{
     manage_neuron::{Command, NeuronIdOrSubaccount, RegisterVote},
     ManageNeuron, ManageNeuronResponse, NnsFunction, ProposalInfo, ProposalStatus, Vote,
 };
+use ic_nns_test_keys::{TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_PRINCIPAL};
 use ic_nns_test_utils::governance::submit_external_update_proposal_allowing_error;
 use ic_nns_test_utils::{governance::get_proposal_info, ids::TEST_NEURON_1_ID};
 use ic_nns_test_utils::{

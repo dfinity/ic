@@ -2,7 +2,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use dfn_candid::{candid, candid_one};
 use ic_canister_client::Sender;
-use ic_nns_constants::ids::{TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR};
+use ic_nns_test_keys::{TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR};
 use ic_sns_governance::pb::v1::get_proposal_response::Result::Error;
 use ic_sns_governance::pb::v1::get_proposal_response::Result::Proposal as ResponseProposal;
 use ic_sns_governance::pb::v1::governance_error::ErrorType;

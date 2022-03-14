@@ -86,7 +86,7 @@ impl Registry {
 mod tests {
     use super::*;
     use crate::mutations::do_add_node_operator::AddNodeOperatorPayload;
-    use ic_nns_constants::ids::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
+    use ic_nns_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
     use ic_nns_test_utils::registry::invariant_compliant_mutation;
     use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
     use ic_protobuf::registry::node_rewards::v2::{

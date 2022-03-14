@@ -23,12 +23,12 @@ use ic_crypto_tree_hash::MixedHashTree;
 use ic_fondue::{ic_manager::IcHandle, prod_tests::ic::InternetComputer};
 use ic_nns_common::types::{NeuronId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{
-    ids::{
-        TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_KEYPAIR,
-    },
     CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, ROOT_CANISTER_ID,
 };
 use ic_nns_governance::pb::v1::NnsFunction;
+use ic_nns_test_keys::{
+    TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_KEYPAIR,
+};
 use ic_nns_test_utils::{
     governance::{
         submit_external_update_proposal_allowing_error, upgrade_nns_canister_by_proposal,

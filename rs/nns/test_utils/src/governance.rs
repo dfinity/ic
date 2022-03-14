@@ -16,7 +16,7 @@ use ic_nervous_system_root::{
     CanisterIdRecord, CanisterStatusResult, CanisterStatusType::Running, ChangeCanisterProposal,
 };
 use ic_nns_common::types::{NeuronId, ProposalId};
-use ic_nns_constants::{ids::TEST_NEURON_1_OWNER_KEYPAIR, ROOT_CANISTER_ID};
+use ic_nns_constants::ROOT_CANISTER_ID;
 use ic_nns_governance::pb::v1::add_or_remove_node_provider::Change;
 use ic_nns_governance::pb::v1::proposal::Action;
 use ic_nns_governance::pb::v1::{
@@ -26,6 +26,7 @@ use ic_nns_governance::pb::v1::{
     ListNodeProvidersResponse, ManageNeuron, ManageNeuronResponse, NnsFunction, NodeProvider,
     Proposal, ProposalInfo, ProposalStatus,
 };
+use ic_nns_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 
 /// Thin-wrapper around submit_proposal to handle
 /// serialization/deserialization

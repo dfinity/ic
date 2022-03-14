@@ -12,7 +12,6 @@ use ic_base_types::PrincipalId;
 use ic_crypto_sha::Sha256;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
-use ic_nns_constants::ids::{TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 #[cfg(feature = "test")]
 use ic_nns_governance::governance::governance_minting_account;
@@ -67,6 +66,7 @@ use ic_nns_governance::{
         RewardEvent, RewardNodeProvider, SetDefaultFollowees, Tally, Topic, Vote,
     },
 };
+use ic_nns_test_keys::{TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL};
 use ledger_canister::{AccountIdentifier, Memo, Tokens};
 use maplit::hashmap;
 use proptest::prelude::{prop_assert, prop_assert_eq, proptest, TestCaseError};
