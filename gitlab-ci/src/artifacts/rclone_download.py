@@ -117,7 +117,7 @@ class RcloneDownload:
 
             local_path = pathlib.Path(self.out or f"{self.repo_root}/artifacts/{git_rev}/{self.remote_path}")
             cmd = [
-                "rclone",
+                f"{self.repo_root}/gitlab-ci/tools/rclone",
                 f"--config={self.config}",
                 "--transfers=100",
                 "--multi-thread-cutoff=1M",
