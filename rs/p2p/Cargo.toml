@@ -10,7 +10,7 @@ futures = "0.3.10"
 rand = "0.7.3"
 ic-artifact-manager = { path = "../artifact_manager" }
 ic-config = { path = "../config" }
-ic-crypto = { path = "../crypto" }
+ic-crypto-hash = { path = "../crypto/hash" }
 ic-interfaces = { path = "../interfaces" }
 ic-types = { path = "../types/types" }
 ic-protobuf = { path = "../protobuf" }

@@ -3314,7 +3314,7 @@ dependencies = [
  "ic-config",
  "ic-consensus-message",
  "ic-constants",
- "ic-crypto",
+ "ic-crypto-hash",
  "ic-ecdsa-object",
  "ic-interfaces",
  "ic-logger",
@@ -3817,7 +3817,7 @@ dependencies = [
 name = "ic-consensus-message"
 version = "0.8.0"
 dependencies = [
- "ic-crypto",
+ "ic-crypto-hash",
  "ic-interfaces",
  "ic-types 0.8.0",
 ]
@@ -4666,7 +4666,7 @@ dependencies = [
 name = "ic-ecdsa-object"
 version = "0.8.0"
 dependencies = [
- "ic-crypto",
+ "ic-crypto-hash",
  "ic-interfaces",
  "ic-types 0.8.0",
 ]
@@ -5471,7 +5471,7 @@ dependencies = [
  "ic-artifact-manager",
  "ic-config",
  "ic-consensus-message",
- "ic-crypto",
+ "ic-crypto-hash",
  "ic-cycles-account-manager",
  "ic-execution-environment",
  "ic-interfaces",

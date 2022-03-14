@@ -7,7 +7,7 @@ edition = "2018"
 bincode = "1.2.1"
 ic-consensus-message = { path = "../consensus/message" }
 ic-constants = { path = "../constants" }
-ic-crypto = { path = "../crypto" }
+ic-crypto-hash = { path = "../crypto/hash" }
 ic-ecdsa-object = { path = "../consensus/ecdsa_object" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
