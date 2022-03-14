@@ -4,9 +4,10 @@
 /// systemd service ic-os/guestos/rootfs/etc/systemd/system/ic-canister-http-adapter.service
 /// systemd socket ic-os/guestos/rootfs/etc/systemd/system/ic-canister-http-adapter.socket
 use clap::Clap;
+
 use ic_async_utils::{ensure_single_systemd_socket, incoming_from_first_systemd_socket};
+use ic_canister_http_adapter::CanisterHttp;
 use ic_canister_http_adapter::Cli;
-use ic_canister_http_adapter::HttpFromCanister;
 use ic_canister_http_adapter_service::http_adapter_server::HttpAdapterServer;
 use serde_json::to_string_pretty;
 use slog::{error, info, slog_o, Drain, Logger};
@@ -47,9 +48,9 @@ pub async fn main() {
     // Make sure to only call this function once in this process. Calling it multiple times leads to multiple socket listeners
     let incoming = incoming_from_first_systemd_socket();
 
-    let http_from_canister = HttpFromCanister::new();
+    let canister_http = CanisterHttp::new();
     let server = Server::builder()
-        .add_service(HttpAdapterServer::new(http_from_canister))
+        .add_service(HttpAdapterServer::new(canister_http))
         .serve_with_incoming(incoming);
 
     // Run this server for... forever!

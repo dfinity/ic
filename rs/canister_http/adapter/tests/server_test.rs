@@ -6,7 +6,7 @@ use tonic::transport::{Channel, Endpoint, Server, Uri};
 use tower::service_fn;
 use uuid::Uuid;
 
-use ic_canister_http_adapter::HttpFromCanister;
+use ic_canister_http_adapter::CanisterHttp;
 use ic_canister_http_adapter_service::{
     http_adapter_client::HttpAdapterClient, http_adapter_server::HttpAdapterServer,
 };
@@ -83,7 +83,7 @@ async fn setup_loop_channel_unix() -> Channel {
     let uuid = Uuid::new_v4();
     let path = "/tmp/canister-http-test-".to_string() + &uuid.to_string();
 
-    let canister_http = HttpFromCanister::new();
+    let canister_http = CanisterHttp::new();
 
     // anonymous type that implements stream trait with item type: Result<UnixStream, Error>.
     let incoming = {
