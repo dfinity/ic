@@ -4,7 +4,7 @@ use crate::{
 };
 
 use bitcoin::{hashes::Hash, Block, BlockHash, BlockHeader};
-use ic_async_utils::{ensure_single_named_systemd_socket, incoming_from_first_systemd_socket};
+use ic_async_utils::{ensure_single_systemd_socket, incoming_from_first_systemd_socket};
 use ic_btc_adapter_service::btc_adapter_server::{BtcAdapter, BtcAdapterServer};
 use ic_protobuf::bitcoin::v1;
 use std::{
@@ -118,12 +118,10 @@ impl BtcAdapter for BtcAdapterImpl {
     }
 }
 
-const IC_BTC_ADAPTER_SOCKET_NAME: &str = "ic-btc-adapter.socket";
-
 /// Spawns in a separate Tokio task the BTC adapter gRPC service.
 pub fn spawn_grpc_server(adapter: Arc<Mutex<Adapter>>) {
-    // make sure we receive the correct socket from systemd (and only one)
-    ensure_single_named_systemd_socket(IC_BTC_ADAPTER_SOCKET_NAME);
+    // make sure we receive only one socket from systemd
+    ensure_single_systemd_socket();
 
     tokio::spawn(async move {
         let btc_adapter_impl = BtcAdapterImpl { adapter };

@@ -4,7 +4,7 @@
 /// systemd service ic-os/guestos/rootfs/etc/systemd/system/ic-canister-http-adapter.service
 /// systemd socket ic-os/guestos/rootfs/etc/systemd/system/ic-canister-http-adapter.socket
 use clap::Clap;
-use ic_async_utils::incoming_from_first_systemd_socket;
+use ic_async_utils::{ensure_single_systemd_socket, incoming_from_first_systemd_socket};
 use ic_canister_http_adapter::Cli;
 use ic_canister_http_adapter::HttpFromCanister;
 use ic_canister_http_adapter_service::http_adapter_server::HttpAdapterServer;
@@ -39,6 +39,9 @@ pub async fn main() {
         "Starting the adapter with config: {}",
         to_string_pretty(&config).unwrap()
     );
+
+    // make sure we receive only one socket from systemd
+    ensure_single_systemd_socket();
 
     // Creates an async stream from the socket file descripter passed to this process by systemd (as FD #3).
     // Make sure to only call this function once in this process. Calling it multiple times leads to multiple socket listeners
