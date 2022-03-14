@@ -10,7 +10,7 @@ use canister_test::Canister;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_crypto::utils::get_node_keys_or_generate_if_missing;
 use ic_nns_common::registry::encode_or_panic;
-use ic_nns_constants::ids::{
+use ic_nns_test_keys::{
     TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL, TEST_USER4_PRINCIPAL,
     TEST_USER5_PRINCIPAL, TEST_USER6_PRINCIPAL, TEST_USER7_PRINCIPAL,
 };

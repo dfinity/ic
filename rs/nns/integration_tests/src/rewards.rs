@@ -3,7 +3,6 @@ use dfn_protobuf::protobuf;
 use ic_canister_client::Sender;
 use ic_crypto_sha::Sha256;
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
-use ic_nns_constants::ids::{TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_governance::pb::v1::{
     add_or_remove_node_provider::Change,
     manage_neuron::{Command, NeuronIdOrSubaccount},
@@ -13,6 +12,7 @@ use ic_nns_governance::pb::v1::{
     AddOrRemoveNodeProvider, ManageNeuron, ManageNeuronResponse, NodeProvider, Proposal,
     ProposalStatus, RewardNodeProvider,
 };
+use ic_nns_test_keys::{TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
 use ic_nns_test_utils::{
     governance::wait_for_final_state,

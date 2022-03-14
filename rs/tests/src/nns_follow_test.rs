@@ -46,9 +46,9 @@ use assert_matches::assert_matches;
 use ed25519_dalek::Keypair;
 use ic_canister_client::Sender;
 use ic_nns_common::types::{NeuronId, ProposalId};
-use ic_nns_constants::{
-    ids::{TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR, TEST_NEURON_3_OWNER_KEYPAIR},
-    GOVERNANCE_CANISTER_ID,
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_test_keys::{
+    TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR, TEST_NEURON_3_OWNER_KEYPAIR,
 };
 use ic_registry_subnet_type::SubnetType;
 use rand::Rng;

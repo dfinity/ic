@@ -107,6 +107,7 @@ members = [
   "nns/integration_tests",
   "nns/governance",
   "nns/nns-ui",
+  "nns/test_keys",
   "nns/test_utils",
   "nns/test_utils_macros",
   "nns/gtc",

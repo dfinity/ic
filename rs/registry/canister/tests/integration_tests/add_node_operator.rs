@@ -2,7 +2,7 @@ use candid::Encode;
 use dfn_candid::candid;
 use dfn_core::api::PrincipalId;
 
-use ic_nns_constants::ids::TEST_NEURON_1_OWNER_PRINCIPAL;
+use ic_nns_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
 use ic_nns_test_utils::registry::invariant_compliant_mutation_as_atomic_req;
 use ic_nns_test_utils::{
     itest_helpers::{

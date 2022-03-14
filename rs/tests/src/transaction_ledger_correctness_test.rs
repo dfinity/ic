@@ -35,10 +35,10 @@ use dfn_protobuf::protobuf;
 use ed25519_dalek::{Keypair, PublicKey, SecretKey};
 use ic_agent::Agent;
 use ic_canister_client::Sender;
-use ic_nns_constants::ids::ed25519_public_key_to_der;
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, ROOT_CANISTER_ID,
 };
+use ic_nns_test_keys::ed25519_public_key_to_der;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{CanisterId, PrincipalId};
 use ledger_canister::{

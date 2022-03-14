@@ -6,7 +6,7 @@ use dfn_candid::candid;
 use ic_base_types::PrincipalId;
 use ic_canister_client::Sender;
 use ic_nns_common::registry::encode_or_panic;
-use ic_nns_constants::ids::TEST_NEURON_1_OWNER_KEYPAIR;
+use ic_nns_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_test_utils::{
     itest_helpers::{
         forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,

@@ -2,15 +2,13 @@ use canister_test::{Canister, Project};
 use ic_base_types::{CanisterInstallMode, PrincipalId};
 use ic_canister_client::Sender;
 use ic_nervous_system_root::{CanisterIdRecord, CanisterStatusResult, ChangeCanisterProposal};
-use ic_nns_constants::{
-    ids::{
-        TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_KEYPAIR,
-        TEST_USER2_PRINCIPAL, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR, TEST_USER5_KEYPAIR,
-        TEST_USER6_KEYPAIR,
-    },
-    GOVERNANCE_CANISTER_ID,
-};
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
+use ic_nns_test_keys::{
+    TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_KEYPAIR,
+    TEST_USER2_PRINCIPAL, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR, TEST_USER5_KEYPAIR,
+    TEST_USER6_KEYPAIR,
+};
 use ic_nns_test_utils::{
     itest_helpers::{NnsCanisters, NnsInitPayloadsBuilder},
     registry::initial_mutations_for_a_multinode_nns_subnet,

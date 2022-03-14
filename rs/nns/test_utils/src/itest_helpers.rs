@@ -37,7 +37,6 @@ use ic_nns_common::{
     init::{LifelineCanisterInitPayload, LifelineCanisterInitPayloadBuilder},
     types::NeuronId,
 };
-use ic_nns_constants::ids::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_constants::*;
 use ic_nns_governance::{
     init::GovernanceCanisterInitPayloadBuilder,
@@ -46,6 +45,7 @@ use ic_nns_governance::{
 use ic_nns_gtc::{init::GenesisTokenCanisterInitPayloadBuilder, pb::v1::Gtc};
 use ic_nns_gtc_accounts::{ECT_ACCOUNTS, SEED_ROUND_ACCOUNTS};
 use ic_nns_handler_root::init::{RootCanisterInitPayload, RootCanisterInitPayloadBuilder};
+use ic_nns_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_registry_transport::pb::v1::{RegistryAtomicMutateRequest, RegistryMutation};
 use ic_test_utilities::universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,

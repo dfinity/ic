@@ -21,7 +21,7 @@ end::catalog[] */
 use std::convert::TryFrom;
 use std::time::Duration;
 
-use ic_nns_constants::ids::TEST_NEURON_1_OWNER_KEYPAIR;
+use ic_nns_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 
 use ic_base_types::SubnetId;
 use ic_fondue::{

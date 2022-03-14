@@ -4,7 +4,6 @@ use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_canister_client::Sender;
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
-use ic_nns_constants::ids::{TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_governance::pb::v1::manage_neuron::Command;
 use ic_nns_governance::pb::v1::manage_neuron::Merge;
 use ic_nns_governance::pb::v1::manage_neuron::NeuronIdOrSubaccount;
@@ -12,6 +11,7 @@ use ic_nns_governance::pb::v1::manage_neuron_response::{self, MergeResponse};
 use ic_nns_governance::pb::v1::{
     neuron::DissolveState, ManageNeuron, ManageNeuronResponse, Neuron,
 };
+use ic_nns_test_keys::{TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
 use ic_nns_test_utils::itest_helpers::{
     local_test_on_nns_subnet, NnsCanisters, NnsInitPayloadsBuilder,

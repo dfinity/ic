@@ -2,7 +2,6 @@ use dfn_candid::candid_one;
 use ic_base_types::NodeId;
 use ic_canister_client::Sender;
 use ic_nns_common::{types::NeuronId, types::ProposalId};
-use ic_nns_constants::ids::{TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_governance::pb::v1::{
     add_or_remove_node_provider::Change,
     manage_neuron::{Command, NeuronIdOrSubaccount},
@@ -11,6 +10,7 @@ use ic_nns_governance::pb::v1::{
     AddOrRemoveNodeProvider, ManageNeuron, ManageNeuronResponse, NnsFunction, NodeProvider,
     Proposal, ProposalStatus,
 };
+use ic_nns_test_keys::{TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_test_utils::{
     governance::{submit_external_update_proposal, wait_for_final_state},
     ids::TEST_NEURON_1_ID,

@@ -10,16 +10,14 @@ use ic_canister_client::Sender;
 use ic_nns_common::{
     pb::v1::MethodAuthzInfo, types::NeuronId, types::UpdateIcpXdrConversionRatePayload,
 };
-use ic_nns_constants::{
-    ids::{TEST_NEURON_2_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_PRINCIPAL},
-    GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID,
-};
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID};
 use ic_nns_governance::pb::v1::{Governance as GovernanceProto, NnsFunction};
 use ic_nns_gtc::{
     der_encode,
     pb::v1::{AccountState, Gtc as GtcProto},
     test_constants::{TEST_IDENTITY_1, TEST_IDENTITY_2, TEST_IDENTITY_3, TEST_IDENTITY_4},
 };
+use ic_nns_test_keys::{TEST_NEURON_2_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_PRINCIPAL};
 use ic_nns_test_utils::{
     governance::{
         append_inert, get_pending_proposals, reinstall_nns_canister_by_proposal,

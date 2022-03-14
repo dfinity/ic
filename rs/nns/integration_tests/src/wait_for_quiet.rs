@@ -1,8 +1,5 @@
 use dfn_candid::{candid, candid_one};
 use ic_canister_client::Sender;
-use ic_nns_constants::ids::{
-    TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_KEYPAIR, TEST_NEURON_3_OWNER_KEYPAIR,
-};
 use ic_nns_governance::pb::v1::{
     add_or_remove_node_provider::Change,
     manage_neuron::{self, Command, NeuronIdOrSubaccount},
@@ -10,6 +7,9 @@ use ic_nns_governance::pb::v1::{
     proposal::Action,
     AddOrRemoveNodeProvider, ManageNeuron, ManageNeuronResponse, NodeProvider, Proposal,
     ProposalInfo, Vote,
+};
+use ic_nns_test_keys::{
+    TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_KEYPAIR, TEST_NEURON_3_OWNER_KEYPAIR,
 };
 use ic_nns_test_utils::{
     ids::{TEST_NEURON_2_ID, TEST_NEURON_3_ID},

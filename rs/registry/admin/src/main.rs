@@ -26,14 +26,7 @@ use ic_nervous_system_root::{
     StopOrStartCanisterProposal,
 };
 use ic_nns_common::types::{NeuronId, ProposalId};
-use ic_nns_constants::{
-    ids::{
-        TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_KEYPAIR,
-        TEST_USER2_PRINCIPAL, TEST_USER3_KEYPAIR, TEST_USER3_PRINCIPAL, TEST_USER4_KEYPAIR,
-        TEST_USER4_PRINCIPAL,
-    },
-    memory_allocation_of, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID,
-};
+use ic_nns_constants::{memory_allocation_of, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance::pb::v1::{
     add_or_remove_node_provider::Change, manage_neuron::Command, proposal::Action,
     AddOrRemoveNodeProvider, GovernanceError, ManageNeuron, NodeProvider, Proposal,
@@ -48,6 +41,11 @@ use ic_nns_governance::{
 };
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
 use ic_nns_init::make_hsm_sender;
+use ic_nns_test_keys::{
+    TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_KEYPAIR,
+    TEST_USER2_PRINCIPAL, TEST_USER3_KEYPAIR, TEST_USER3_PRINCIPAL, TEST_USER4_KEYPAIR,
+    TEST_USER4_PRINCIPAL,
+};
 use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
 use ic_protobuf::registry::node_rewards::v2::{
     NodeRewardsTable, UpdateNodeRewardsTableProposalPayload,

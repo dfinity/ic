@@ -19,6 +19,7 @@ ic-crypto-utils-basic-sig = { path = "../../crypto/utils/basic_sig" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
+ic-nns-test-keys = { path = "../../nns/test_keys" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-routing-table = { path = "../../registry/routing_table" }
@@ -39,6 +40,7 @@ canister-test = { path = "../../rust_canisters/canister_test" }
 ic-canister-client = { path = "../../canister_client" }
 ic-crypto = { path = "../../crypto" }
 ic-interfaces = { path = "../../interfaces" }
+ic-nns-test-keys = { path = "../../nns/test_keys" }
 ic-registry-common = { path = "../common" }
 ic-test-utilities = { path = "../../test_utilities" }
 lazy_static = "1.4.0"

@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use dfn_candid::candid;
 use ic_canister_client::Sender;
 use ic_nns_common::registry::encode_or_panic;
-use ic_nns_constants::ids::{
+use ic_nns_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_USER1_KEYPAIR,
 };
 use ic_nns_test_utils::{

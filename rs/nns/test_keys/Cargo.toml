@@ -1,8 +1,12 @@
 [package]
-name = "ic-nns-constants"
+name = "ic-nns-test-keys"
 version = "0.8.0"
 edition = "2018"
 
 [dependencies]
 ic-base-types = { path = "../../types/base_types"}
+ic-types = { path = "../../types/types" }
+ed25519-dalek = "1.0.1"
 lazy_static = "1.4.0"
+rand_chacha = "0.2.2"
+rand_core = "0.5.1"

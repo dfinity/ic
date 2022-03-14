@@ -3,7 +3,7 @@ use dfn_protobuf::protobuf;
 use ic_base_types::PrincipalId;
 use ic_canister_client::Sender;
 use ic_crypto_sha::Sha256;
-use ic_nns_constants::ids::TEST_USER1_KEYPAIR;
+use ic_nns_test_keys::TEST_USER1_KEYPAIR;
 use ic_sns_governance::pb::v1::manage_neuron_response::Command as CommandResponse;
 
 use ic_sns_governance::pb::v1::manage_neuron::claim_or_refresh::{By, MemoAndController};

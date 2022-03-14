@@ -3,7 +3,7 @@ use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_canister_client::Sender;
 use ic_crypto_sha::Sha256;
-use ic_nns_constants::ids::{
+use ic_nns_test_keys::{
     TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
 };
 use ic_sns_governance::pb::v1::governance_error::ErrorType;
