@@ -1,7 +1,7 @@
 //! Definitions for the ECDSA objects that are stored in the ECDSA artifact
 //! pool.
 
-use ic_crypto::crypto_hash;
+use ic_crypto_hash::crypto_hash;
 use ic_interfaces::crypto::CryptoHashable;
 use ic_types::consensus::ecdsa::{
     EcdsaComplaint, EcdsaDealingSupport, EcdsaMessage, EcdsaMessageHash, EcdsaOpening,

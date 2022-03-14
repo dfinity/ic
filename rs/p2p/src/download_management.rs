@@ -577,15 +577,15 @@ impl DownloadManager for DownloadManagerImpl {
         // This construction to compute the integrity hash over all variants of an enum
         // may be updated in the future.
         let expected_ih = match &completed_artifact {
-            Artifact::ConsensusMessage(msg) => ic_crypto::crypto_hash(msg).get(),
-            Artifact::IngressMessage(msg) => ic_crypto::crypto_hash(msg).get(),
-            Artifact::CertificationMessage(msg) => ic_crypto::crypto_hash(msg).get(),
-            Artifact::DkgMessage(msg) => ic_crypto::crypto_hash(msg).get(),
-            Artifact::EcdsaMessage(msg) => ic_crypto::crypto_hash(msg).get(),
+            Artifact::ConsensusMessage(msg) => ic_crypto_hash::crypto_hash(msg).get(),
+            Artifact::IngressMessage(msg) => ic_crypto_hash::crypto_hash(msg).get(),
+            Artifact::CertificationMessage(msg) => ic_crypto_hash::crypto_hash(msg).get(),
+            Artifact::DkgMessage(msg) => ic_crypto_hash::crypto_hash(msg).get(),
+            Artifact::EcdsaMessage(msg) => ic_crypto_hash::crypto_hash(msg).get(),
             // FileTreeSync is not of ArtifactKind kind, and it's used only for testing.
             // Thus, we make up the integrity_hash.
             Artifact::FileTreeSync(_msg) => CryptoHash(vec![]),
-            Artifact::StateSync(msg) => ic_crypto::crypto_hash(msg).get(),
+            Artifact::StateSync(msg) => ic_crypto_hash::crypto_hash(msg).get(),
         };
 
         if expected_ih != advert.integrity_hash {
@@ -2241,7 +2241,7 @@ pub mod tests {
         let mut result = vec![];
         for advert_number in range {
             let msg = receive_check_test_create_message(advert_number);
-            let artifact_id = CryptoHashOf::from(ic_crypto::crypto_hash(&msg).get());
+            let artifact_id = CryptoHashOf::from(ic_crypto_hash::crypto_hash(&msg).get());
             let attribute = DkgMessageAttribute {
                 interval_start_height: Default::default(),
             };
@@ -2249,7 +2249,7 @@ pub mod tests {
                 artifact_id: ArtifactId::DkgMessage(artifact_id),
                 attribute: ArtifactAttribute::DkgMessage(attribute),
                 size: 0,
-                integrity_hash: ic_crypto::crypto_hash(&msg).get(),
+                integrity_hash: ic_crypto_hash::crypto_hash(&msg).get(),
             };
             result.push(gossip_advert);
         }
@@ -2276,7 +2276,7 @@ pub mod tests {
         let mut adverts = receive_check_test_create_adverts(0..max_adverts);
         let msg = receive_check_test_create_message(0);
         let artifact_id =
-            ArtifactId::DkgMessage(CryptoHashOf::from(ic_crypto::crypto_hash(&msg).get()));
+            ArtifactId::DkgMessage(CryptoHashOf::from(ic_crypto_hash::crypto_hash(&msg).get()));
         for mut advert in &mut adverts {
             advert.artifact_id = artifact_id.clone();
         }
@@ -2294,7 +2294,7 @@ pub mod tests {
             assert_eq!(chunk_req.artifact_id, artifact_id);
             assert_eq!(
                 chunk_req.integrity_hash,
-                ic_crypto::crypto_hash(&receive_check_test_create_message(index as u32)).get(),
+                ic_crypto_hash::crypto_hash(&receive_check_test_create_message(index as u32)).get(),
             );
             assert_eq!(chunk_req.chunk_id, ChunkId::from(0));
 

@@ -23,7 +23,7 @@ impl ConsensusMessageHashable for Finalization {
     }
 
     fn get_cm_hash(&self) -> ConsensusMessageHash {
-        ConsensusMessageHash::Finalization(ic_crypto::crypto_hash(self))
+        ConsensusMessageHash::Finalization(ic_crypto_hash::crypto_hash(self))
     }
 
     fn assert(msg: &ConsensusMessage) -> Option<&Self> {
@@ -48,7 +48,7 @@ impl ConsensusMessageHashable for FinalizationShare {
     }
 
     fn get_cm_hash(&self) -> ConsensusMessageHash {
-        ConsensusMessageHash::FinalizationShare(ic_crypto::crypto_hash(self))
+        ConsensusMessageHash::FinalizationShare(ic_crypto_hash::crypto_hash(self))
     }
 
     fn assert(msg: &ConsensusMessage) -> Option<&Self> {
@@ -73,7 +73,7 @@ impl ConsensusMessageHashable for Notarization {
     }
 
     fn get_cm_hash(&self) -> ConsensusMessageHash {
-        ConsensusMessageHash::Notarization(ic_crypto::crypto_hash(self))
+        ConsensusMessageHash::Notarization(ic_crypto_hash::crypto_hash(self))
     }
 
     fn assert(msg: &ConsensusMessage) -> Option<&Self> {
@@ -98,7 +98,7 @@ impl ConsensusMessageHashable for NotarizationShare {
     }
 
     fn get_cm_hash(&self) -> ConsensusMessageHash {
-        ConsensusMessageHash::NotarizationShare(ic_crypto::crypto_hash(self))
+        ConsensusMessageHash::NotarizationShare(ic_crypto_hash::crypto_hash(self))
     }
 
     fn assert(msg: &ConsensusMessage) -> Option<&Self> {
@@ -123,7 +123,7 @@ impl ConsensusMessageHashable for RandomBeacon {
     }
 
     fn get_cm_hash(&self) -> ConsensusMessageHash {
-        ConsensusMessageHash::RandomBeacon(ic_crypto::crypto_hash(self))
+        ConsensusMessageHash::RandomBeacon(ic_crypto_hash::crypto_hash(self))
     }
 
     fn assert(msg: &ConsensusMessage) -> Option<&Self> {
@@ -148,7 +148,7 @@ impl ConsensusMessageHashable for RandomBeaconShare {
     }
 
     fn get_cm_hash(&self) -> ConsensusMessageHash {
-        ConsensusMessageHash::RandomBeaconShare(ic_crypto::crypto_hash(self))
+        ConsensusMessageHash::RandomBeaconShare(ic_crypto_hash::crypto_hash(self))
     }
 
     fn assert(msg: &ConsensusMessage) -> Option<&Self> {
@@ -173,7 +173,7 @@ impl ConsensusMessageHashable for BlockProposal {
     }
 
     fn get_cm_hash(&self) -> ConsensusMessageHash {
-        ConsensusMessageHash::BlockProposal(ic_crypto::crypto_hash(self))
+        ConsensusMessageHash::BlockProposal(ic_crypto_hash::crypto_hash(self))
     }
 
     fn assert(msg: &ConsensusMessage) -> Option<&Self> {
@@ -194,8 +194,8 @@ impl ConsensusMessageHashable for BlockProposal {
         let payload_hash = block.payload.get_hash();
         let block_payload = block.payload.as_ref();
         block.payload.is_summary() == block_payload.is_summary()
-            && &ic_crypto::crypto_hash(block_payload) == payload_hash
-            && &ic_crypto::crypto_hash(block) == block_hash
+            && &ic_crypto_hash::crypto_hash(block_payload) == payload_hash
+            && &ic_crypto_hash::crypto_hash(block) == block_hash
     }
 }
 
@@ -208,7 +208,7 @@ impl ConsensusMessageHashable for RandomTape {
     }
 
     fn get_cm_hash(&self) -> ConsensusMessageHash {
-        ConsensusMessageHash::RandomTape(ic_crypto::crypto_hash(self))
+        ConsensusMessageHash::RandomTape(ic_crypto_hash::crypto_hash(self))
     }
 
     fn assert(msg: &ConsensusMessage) -> Option<&Self> {
@@ -233,7 +233,7 @@ impl ConsensusMessageHashable for RandomTapeShare {
     }
 
     fn get_cm_hash(&self) -> ConsensusMessageHash {
-        ConsensusMessageHash::RandomTapeShare(ic_crypto::crypto_hash(self))
+        ConsensusMessageHash::RandomTapeShare(ic_crypto_hash::crypto_hash(self))
     }
 
     fn assert(msg: &ConsensusMessage) -> Option<&Self> {
@@ -258,7 +258,7 @@ impl ConsensusMessageHashable for CatchUpPackage {
     }
 
     fn get_cm_hash(&self) -> ConsensusMessageHash {
-        ConsensusMessageHash::CatchUpPackage(ic_crypto::crypto_hash(self))
+        ConsensusMessageHash::CatchUpPackage(ic_crypto_hash::crypto_hash(self))
     }
 
     fn assert(msg: &ConsensusMessage) -> Option<&Self> {
@@ -282,9 +282,9 @@ impl ConsensusMessageHashable for CatchUpPackage {
         let payload_hash = block.payload.get_hash();
         let block_payload = block.payload.as_ref();
         block.payload.is_summary() == block_payload.is_summary()
-            && &ic_crypto::crypto_hash(random_beacon) == random_beacon_hash
-            && &ic_crypto::crypto_hash(block) == block_hash
-            && &ic_crypto::crypto_hash(block_payload) == payload_hash
+            && &ic_crypto_hash::crypto_hash(random_beacon) == random_beacon_hash
+            && &ic_crypto_hash::crypto_hash(block) == block_hash
+            && &ic_crypto_hash::crypto_hash(block_payload) == payload_hash
     }
 }
 
@@ -297,7 +297,7 @@ impl ConsensusMessageHashable for CatchUpPackageShare {
     }
 
     fn get_cm_hash(&self) -> ConsensusMessageHash {
-        ConsensusMessageHash::CatchUpPackageShare(ic_crypto::crypto_hash(self))
+        ConsensusMessageHash::CatchUpPackageShare(ic_crypto_hash::crypto_hash(self))
     }
 
     fn assert(msg: &ConsensusMessage) -> Option<&Self> {
@@ -315,7 +315,7 @@ impl ConsensusMessageHashable for CatchUpPackageShare {
     fn check_integrity(&self) -> bool {
         let content = &self.content;
         let random_beacon_hash = content.random_beacon.get_hash();
-        &ic_crypto::crypto_hash(content.random_beacon.as_ref()) == random_beacon_hash
+        &ic_crypto_hash::crypto_hash(content.random_beacon.as_ref()) == random_beacon_hash
     }
 }
 
