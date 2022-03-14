@@ -9,27 +9,27 @@ use tonic::{Request, Response, Status};
 
 #[derive(Debug)]
 /// implements RPC
-pub struct HttpFromCanister {
+pub struct CanisterHttp {
     https_client: Client<HttpsConnector<HttpConnector>>,
 }
 
-impl HttpFromCanister {
+impl CanisterHttp {
     /// initalize new hyper clients
-    pub fn new() -> HttpFromCanister {
+    pub fn new() -> CanisterHttp {
         let https = HttpsConnector::new();
         let https_client = Client::builder().build::<_, hyper::Body>(https);
         Self { https_client }
     }
 }
 
-impl Default for HttpFromCanister {
+impl Default for CanisterHttp {
     fn default() -> Self {
         Self::new()
     }
 }
 
 #[tonic::async_trait]
-impl HttpAdapter for HttpFromCanister {
+impl HttpAdapter for CanisterHttp {
     async fn send_http_request(
         &self,
         request: Request<CanisterHttpRequest>,

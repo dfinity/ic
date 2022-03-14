@@ -10,4 +10,4 @@ mod config;
 
 pub use cli::Cli;
 pub use config::Config;
-pub use rpc_server::HttpFromCanister;
+pub use rpc_server::CanisterHttp;
