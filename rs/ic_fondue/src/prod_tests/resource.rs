@@ -143,10 +143,13 @@ pub fn allocate_resources(ctx: &DriverContext, req: &ResourceRequest) -> FarmRes
 }
 
 fn vm_spec_from_node(n: &Node) -> VmSpec {
+    let vm_resources = &n.vm_resources;
     VmSpec {
         name: n.id().to_string(),
-        vcpus: n.vcpus.unwrap_or(DEFAULT_VCPUS_PER_VM),
-        memory_kibibytes: n.memory_kibibytes.unwrap_or(DEFAULT_MEMORY_KIB_PER_VM),
+        vcpus: vm_resources.vcpus.unwrap_or(DEFAULT_VCPUS_PER_VM),
+        memory_kibibytes: vm_resources
+            .memory_kibibytes
+            .unwrap_or(DEFAULT_MEMORY_KIB_PER_VM),
         boot_image: BootImage::GroupDefault,
     }
 }

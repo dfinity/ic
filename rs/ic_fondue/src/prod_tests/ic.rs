@@ -25,6 +25,7 @@ use std::time::Duration;
 pub struct InternetComputer {
     pub initial_version: Option<NodeSoftwareVersion>,
     pub vm_allocation: Option<VmAllocation>,
+    pub default_vm_resources: VmResources,
     pub subnets: Vec<Subnet>,
     pub node_operator: Option<PrincipalId>,
     pub node_provider: Option<PrincipalId>,
@@ -45,6 +46,17 @@ impl InternetComputer {
         Self::default()
     }
 
+    /// Set the VM resources (like number of virtual CPUs and memory) of all
+    /// implicitly constructed subnets and nodes (like unassigned nodes
+    /// added via `with_unassigned_nodes`).
+    ///
+    /// Setting the VM resources for explicitly constructed subnets
+    /// has to be done on the subnet itself.
+    pub fn with_default_vm_resources(mut self, default_vm_resources: VmResources) -> Self {
+        self.default_vm_resources = default_vm_resources;
+        self
+    }
+
     pub fn add_subnet(mut self, subnet: Subnet) -> Self {
         self.subnets.push(subnet);
         self
@@ -54,8 +66,12 @@ impl InternetComputer {
     ///
     /// The subnet is able to execute calls faster because the block time
     /// on the node is reduced.
+    ///
+    /// The subnet inherits the VM resources of the IC.
     pub fn add_fast_single_node_subnet(mut self, subnet_type: SubnetType) -> Self {
-        self.subnets.push(Subnet::fast_single_node(subnet_type));
+        let mut subnet = Subnet::fast_single_node(subnet_type);
+        subnet.default_vm_resources = self.default_vm_resources;
+        self.subnets.push(subnet);
         self
     }
 
@@ -74,10 +90,13 @@ impl InternetComputer {
         self
     }
 
+    /// Add the given number of unassigned nodes to the IC.
+    ///
+    /// The nodes inherit the VM resources of the IC.
     pub fn with_unassigned_nodes(mut self, no_of_nodes: i32) -> Self {
         for _ in 0..no_of_nodes {
-            let node = Node::new();
-            self.unassigned_nodes.push(node);
+            self.unassigned_nodes
+                .push(Node::new_with_vm_resources(self.default_vm_resources));
         }
         self
     }
@@ -139,6 +158,7 @@ impl InternetComputer {
 /// A builder for the initial configuration of a subnetwork.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Subnet {
+    pub default_vm_resources: VmResources,
     pub nodes: Vec<Node>,
     pub max_ingress_bytes_per_message: Option<u64>,
     pub ingress_bytes_per_block_soft_cap: Option<u64>,
@@ -164,6 +184,7 @@ pub struct Subnet {
 impl Subnet {
     pub fn new(subnet_type: SubnetType) -> Self {
         Self {
+            default_vm_resources: Default::default(),
             nodes: vec![],
             max_ingress_bytes_per_message: None,
             ingress_bytes_per_block_soft_cap: None,
@@ -183,6 +204,16 @@ impl Subnet {
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
         }
+    }
+
+    /// Set the VM resources (like number of virtual CPUs and memory) of all
+    /// implicitly constructed nodes.
+    ///
+    /// Setting the VM resources for explicitly constructed nodes
+    /// has to be via `Node::new_with_vm_resources`.
+    pub fn with_default_vm_resources(mut self, default_vm_resources: VmResources) -> Self {
+        self.default_vm_resources = default_vm_resources;
+        self
     }
 
     /// An empty subnet that's optimized to be "fast".
@@ -236,9 +267,14 @@ impl Subnet {
             .with_initial_notary_delay(Duration::from_millis(5000))
     }
 
-    pub fn add_nodes(mut self, no_of_nodes: usize) -> Self {
-        (0..no_of_nodes).for_each(|_| self.nodes.push(Default::default()));
-        self
+    /// Add the given number of nodes to the subnet.
+    ///
+    /// The nodes will inherit the VM resources of the subnet.
+    pub fn add_nodes(self, no_of_nodes: usize) -> Self {
+        (0..no_of_nodes).fold(self, |subnet, _| {
+            let default_vm_resources = subnet.default_vm_resources;
+            subnet.add_node(Node::new_with_vm_resources(default_vm_resources))
+        })
     }
 
     pub fn add_node(mut self, node: Node) -> Self {
@@ -300,6 +336,7 @@ impl Subnet {
 impl Default for Subnet {
     fn default() -> Self {
         Self {
+            default_vm_resources: Default::default(),
             nodes: vec![],
             max_ingress_bytes_per_message: None,
             ingress_bytes_per_block_soft_cap: None,
@@ -328,11 +365,17 @@ pub type AmountOfMemoryKiB = AmountOf<MemoryKiB, u64>;
 pub enum VCPUs {}
 pub enum MemoryKiB {}
 
+/// Resources that the VM will use like number of virtual CPUs and memory.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub struct VmResources {
+    pub vcpus: Option<NrOfVCPUs>,
+    pub memory_kibibytes: Option<AmountOfMemoryKiB>,
+}
+
 /// A builder for the initial configuration of a node.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Node {
-    pub vcpus: Option<NrOfVCPUs>,
-    pub memory_kibibytes: Option<AmountOfMemoryKiB>,
+    pub vm_resources: VmResources,
     pub secret_key_store: Option<NodeSecretKeyStore>,
     pub ip_addr: Option<IpAddr>,
 }
@@ -340,6 +383,12 @@ pub struct Node {
 impl Node {
     pub fn new() -> Self {
         Default::default()
+    }
+
+    pub fn new_with_vm_resources(vm_resources: VmResources) -> Self {
+        let mut node = Node::new();
+        node.vm_resources = vm_resources;
+        node
     }
 
     pub fn id(&self) -> NodeId {
