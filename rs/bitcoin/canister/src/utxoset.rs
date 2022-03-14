@@ -79,12 +79,14 @@ fn remove_spent_txs(utxo_set: &mut UtxoSet, tx: &Transaction) {
 // Iterates over transaction outputs and adds unspents.
 fn insert_unspent_txs(utxo_set: &mut UtxoSet, tx: &Transaction, height: Height) {
     for (vout, output) in tx.output.iter().enumerate() {
-        insert_utxo(
-            utxo_set,
-            OutPoint::new(tx.txid(), vout as u32),
-            output.clone(),
-            height,
-        );
+        if !(output.script_pubkey.is_provably_unspendable()) {
+            insert_utxo(
+                utxo_set,
+                OutPoint::new(tx.txid(), vout as u32),
+                output.clone(),
+                height,
+            );
+        }
     }
 }
 
@@ -127,9 +129,11 @@ pub(crate) fn insert_utxo(
 mod test {
     use super::*;
     use crate::test_builder::TransactionBuilder;
+    use bitcoin::blockdata::{opcodes::all::OP_RETURN, script::Builder};
     use bitcoin::secp256k1::rand::rngs::OsRng;
     use bitcoin::secp256k1::Secp256k1;
     use bitcoin::{Address, Network, PublicKey, TxOut};
+    use std::collections::HashMap;
 
     #[test]
     fn coinbase_tx() {
@@ -163,6 +167,45 @@ mod test {
 
             assert_eq!(utxo.clone().into_set(), expected);
             assert_eq!(get_utxos(&utxo, &address.to_string()).into_set(), expected);
+        }
+    }
+
+    #[test]
+    fn tx_without_outputs_leaves_utxo_set_unchanged() {
+        for network in [Network::Bitcoin, Network::Regtest, Network::Testnet].iter() {
+            let mut utxo = UtxoSet::new(true, *network);
+
+            // no output coinbase
+            let mut coinbase_empty_tx = TransactionBuilder::coinbase().build();
+            coinbase_empty_tx.output.clear();
+            insert_tx(&mut utxo, &coinbase_empty_tx, 0);
+
+            assert_eq!(utxo.utxos, HashMap::default());
+
+            assert_eq!(utxo.address_to_outpoints, maplit::btreemap! {});
+        }
+    }
+
+    #[test]
+    fn filter_provably_unspendable_utxos() {
+        for network in [Network::Bitcoin, Network::Regtest, Network::Testnet].iter() {
+            let mut utxo = UtxoSet::new(true, *network);
+
+            // op return coinbase
+            let coinbase_op_return_tx = Transaction {
+                output: vec![TxOut {
+                    value: 50_0000_0000,
+                    script_pubkey: Builder::new().push_opcode(OP_RETURN).into_script(),
+                }],
+                input: vec![],
+                version: 1,
+                lock_time: 0,
+            };
+            insert_tx(&mut utxo, &coinbase_op_return_tx, 0);
+
+            assert_eq!(utxo.utxos, HashMap::default());
+
+            assert_eq!(utxo.address_to_outpoints, maplit::btreemap! {});
         }
     }
 
