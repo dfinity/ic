@@ -99,7 +99,7 @@ impl Default for Config {
             // Maximum number of controllers allowed in a request (specified in the public
             // Spec).
             max_controllers: 10,
-            canister_sandboxing_flag: FlagStatus::Enabled,
+            canister_sandboxing_flag: FlagStatus::Disabled,
             query_execution_threads: QUERY_EXECUTION_THREADS,
         }
     }
