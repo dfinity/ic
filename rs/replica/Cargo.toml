@@ -30,8 +30,10 @@ ic-nns-constants = { path = "../nns/constants" }
 ic-p2p = { path = "../p2p" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-client = { path = "../registry/client" }
+ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-replica-setup-ic-network =  { path = "./setup_ic_network" }
 ic-registry-common = { path = "../registry/common" }
+ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-state-manager = { path = "../state_manager" }

@@ -13,12 +13,10 @@ use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::{
     node::v1::connection_endpoint::Protocol, subnet::v1::SubnetListRecord,
 };
-use ic_registry_client::{
-    client::RegistryClientImpl,
-    helper::node::{ConnectionEndpoint, NodeRecord},
-};
-use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
+use ic_registry_client_fake::FakeRegistryClient;
+use ic_registry_client_helpers::node::{ConnectionEndpoint, NodeRecord};
 use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key, make_subnet_record_key};
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::Stream;
 use ic_state_manager::StateManagerImpl;
@@ -49,7 +47,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tempfile::TempDir;
-use tokio::{runtime::Handle, time::Duration};
+use tokio::time::Duration;
 
 mod common;
 use common::*;
@@ -74,7 +72,7 @@ impl XNetPayloadBuilderFixture {
 
         // Throwaway runtime, we don't need registry polling or pool refill.
         let runtime_handle = tokio::runtime::Runtime::new().unwrap().handle().clone();
-        let registry = get_registry_for_test(runtime_handle.clone());
+        let registry = get_registry_for_test();
 
         let xnet_payload_builder = XNetPayloadBuilderImpl::new(
             Arc::clone(&state_manager) as Arc<_>,
@@ -162,7 +160,7 @@ impl XNetPayloadBuilderFixture {
 /// through `SUBNET_5` (each consisting of one node, with a corresponding node
 /// record) and a subnet list record covering `SUBNET_1` through `SUBNET_5` (so
 /// they're considered for payload building).
-fn get_registry_for_test(runtime_handle: Handle) -> Arc<dyn RegistryClient> {
+fn get_registry_for_test() -> Arc<dyn RegistryClient> {
     let data_provider = ProtoRegistryDataProvider::new();
 
     for (i, node) in [OWN_NODE, NODE_1, NODE_2, NODE_3, NODE_4, NODE_5]
@@ -219,9 +217,9 @@ fn get_registry_for_test(runtime_handle: Handle) -> Arc<dyn RegistryClient> {
         )
         .unwrap();
 
-    let registry_client = RegistryClientImpl::new(Arc::new(data_provider), None);
-    runtime_handle.block_on(async { registry_client.fetch_and_start_polling().unwrap() });
-    Arc::new(registry_client)
+    let registry = Arc::new(FakeRegistryClient::new(Arc::new(data_provider)));
+    registry.update_to_latest_version();
+    registry
 }
 
 /// Creates an incoming `CertifiedStreamSlice` containing `msg_count` messages
@@ -645,7 +643,7 @@ proptest! {
                 .unwrap()
                 .garbage_collect(btreemap! [REMOTE_SUBNET => stream_position.clone()]);
 
-            let registry = get_registry_for_test(runtime.handle().clone());
+            let registry = get_registry_for_test();
             let proximity_map = Arc::new(ProximityMap::new(OWN_NODE, registry.clone(), &metrics_registry, log.clone()));
             let endpoint_resolver =
                 XNetEndpointResolver::new(registry, OWN_NODE, OWN_SUBNET, proximity_map, log.clone());
@@ -742,7 +740,7 @@ proptest! {
                 pool.garbage_collect(btreemap! [REMOTE_SUBNET => stream_position.clone()]);
             }
 
-            let registry = get_registry_for_test(runtime.handle().clone());
+            let registry = get_registry_for_test();
             let proximity_map = Arc::new(ProximityMap::new(OWN_NODE, registry.clone(), &metrics_registry, log.clone()));
             let endpoint_resolver =
                 XNetEndpointResolver::new(registry, OWN_NODE, OWN_SUBNET, proximity_map, log.clone());

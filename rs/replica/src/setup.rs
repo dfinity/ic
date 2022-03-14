@@ -7,8 +7,8 @@ use ic_logger::{fatal, info, new_replica_logger, warn, LoggerImpl, ReplicaLogger
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_client::client::{create_data_provider, RegistryClientImpl};
-use ic_registry_client::helper::subnet::{SubnetListRegistry, SubnetRegistry};
-use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
+use ic_registry_client_helpers::subnet::{SubnetListRegistry, SubnetRegistry};
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::consensus::catchup::{CUPWithOriginalProtobuf, CatchUpPackage};
 use ic_types::{NodeId, RegistryVersion, ReplicaVersion, SubnetId};

@@ -19,6 +19,7 @@ use std::{
 
 use ic_interfaces::registry::{RegistryClient, RegistryClientResult, ZERO_REGISTRY_VERSION};
 use ic_protobuf::registry::node::v1::ConnectionEndpoint as PbConnectionEndpoint;
+use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_common::local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
 };
@@ -30,12 +31,9 @@ use ic_types::{
 use thiserror::Error;
 use url::Url;
 
-use crate::{
-    fake::FakeRegistryClient,
-    helper::{
-        crypto::CryptoRegistry,
-        subnet::{SubnetRegistry, SubnetTransportRegistry},
-    },
+use ic_registry_client_helpers::{
+    crypto::CryptoRegistry,
+    subnet::{SubnetRegistry, SubnetTransportRegistry},
 };
 
 pub struct LocalRegistry {
@@ -329,7 +327,7 @@ mod tests {
     use std::collections::HashSet;
 
     use super::*;
-    use crate::helper::subnet::SubnetListRegistry;
+    use ic_registry_client_helpers::subnet::SubnetListRegistry;
     use ic_registry_common::local_store::compact_delta_to_changelog;
     use ic_types::PrincipalId;
     use tempfile::TempDir;

@@ -28,10 +28,10 @@ use ic_protobuf::registry::{
     replica_version::v1::BlessedReplicaVersions, subnet::v1::SubnetRecord,
 };
 use ic_registry_client::client::{create_data_provider, RegistryClientImpl};
+use ic_registry_client_helpers::deserialize_registry_value;
 use ic_registry_common::{
     local_store::{Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter},
     registry::registry_deltas_to_registry_transport_records,
-    values::deserialize_registry_value,
 };
 use ic_registry_keys::{make_blessed_replica_version_key, make_subnet_record_key};
 use ic_registry_transport::{

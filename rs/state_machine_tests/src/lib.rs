@@ -17,11 +17,11 @@ use ic_protobuf::registry::{
 };
 use ic_protobuf::types::v1::PrincipalId as PrincipalIdIdProto;
 use ic_protobuf::types::v1::SubnetId as SubnetIdProto;
-use ic_registry_client::client::RegistryClientImpl;
-use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
+use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{
     make_provisional_whitelist_record_key, make_routing_table_record_key, ROOT_SUBNET_ID_KEY,
 };
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{routing_table_insert_subnet, CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
@@ -56,11 +56,10 @@ use tempfile::TempDir;
 /// specified SUBNET_ID, with the node with the specified NODE_ID assigned to
 /// it.
 fn make_single_node_registry(
-    metrics_registry: &MetricsRegistry,
     subnet_id: SubnetId,
     subnet_type: SubnetType,
     node_id: NodeId,
-) -> (Arc<ProtoRegistryDataProvider>, Arc<RegistryClientImpl>) {
+) -> (Arc<ProtoRegistryDataProvider>, Arc<FakeRegistryClient>) {
     let registry_version = RegistryVersion::from(1);
     let data_provider = Arc::new(ProtoRegistryDataProvider::new());
 
@@ -103,11 +102,8 @@ fn make_single_node_registry(
     insert_initial_dkg_transcript(registry_version.get(), subnet_id, &record, &data_provider);
     add_subnet_record(&data_provider, registry_version.get(), subnet_id, record);
 
-    let registry_client = Arc::new(RegistryClientImpl::new(
-        Arc::clone(&data_provider) as _,
-        Some(metrics_registry),
-    ));
-    registry_client.fetch_and_start_polling().unwrap();
+    let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&data_provider) as _));
+    registry_client.update_to_latest_version();
     (data_provider, registry_client)
 }
 
@@ -115,7 +111,7 @@ fn make_single_node_registry(
 /// can be used to test this part of the stack in isolation.
 pub struct StateMachine {
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
-    registry_client: Arc<RegistryClientImpl>,
+    registry_client: Arc<FakeRegistryClient>,
     state_manager: Arc<StateManagerImpl>,
     message_routing: MessageRoutingImpl,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
@@ -186,7 +182,7 @@ impl StateMachine {
         };
 
         let (registry_data_provider, registry_client) =
-            make_single_node_registry(&metrics_registry, subnet_id, subnet_type, node_id);
+            make_single_node_registry(subnet_id, subnet_type, node_id);
 
         let sm_config = ic_config::state_manager::Config::new(state_dir.path().to_path_buf());
         let hypervisor_config = ic_config::execution_environment::Config {
@@ -601,7 +597,7 @@ impl StateMachine {
         canister_range: std::ops::RangeInclusive<CanisterId>,
         destination: SubnetId,
     ) {
-        use ic_registry_client::helper::routing_table::RoutingTableRegistry;
+        use ic_registry_client_helpers::routing_table::RoutingTableRegistry;
 
         let last_version = self.registry_client.get_latest_version();
         let next_version = last_version.increment();
@@ -627,10 +623,8 @@ impl StateMachine {
                 Some(PbRoutingTable::from(routing_table)),
             )
             .unwrap();
+        self.registry_client.update_to_latest_version();
 
-        self.registry_client
-            .poll_once()
-            .expect("failed to pull registry changes");
         assert_eq!(next_version, self.registry_client.get_latest_version());
     }
 }

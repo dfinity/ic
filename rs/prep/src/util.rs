@@ -1,6 +1,6 @@
 use ic_crypto::threshold_sig_public_key_to_der;
 use ic_protobuf::registry::crypto::v1::PublicKey as PbPublicKey;
-use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::RegistryVersion;
 use prost::Message;

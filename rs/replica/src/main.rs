@@ -10,7 +10,7 @@ use ic_interfaces::registry::{LocalStoreCertifiedTimeReader, RegistryClient};
 use ic_logger::info;
 use ic_metrics::MetricsRegistry;
 use ic_metrics_exporter::MetricsRuntimeImpl;
-use ic_registry_client::helper::subnet::SubnetRegistry;
+use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replica::{args::ReplicaArgs, setup};
 use ic_sys::PAGE_SIZE;
 use ic_types::{replica_version::REPLICA_BINARY_HASH, PrincipalId, ReplicaVersion, SubnetId};

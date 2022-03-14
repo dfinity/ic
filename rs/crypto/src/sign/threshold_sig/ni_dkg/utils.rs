@@ -3,7 +3,7 @@ use ic_crypto_internal_types::encrypt::forward_secure::MalformedFsEncryptionPubl
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspFsEncryptionPublicKey;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
-use ic_registry_client::helper::crypto::CryptoRegistry;
+use ic_registry_client_helpers::crypto::CryptoRegistry;
 use ic_types::crypto::threshold_sig::ni_dkg::config::dealers::NiDkgDealers;
 use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::FsEncryptionPublicKeyNotInRegistryError;

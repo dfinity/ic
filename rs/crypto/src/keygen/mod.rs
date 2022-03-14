@@ -10,7 +10,7 @@ use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_interfaces::crypto::KeyManager;
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
-use ic_registry_client::helper::crypto::CryptoRegistry;
+use ic_registry_client_helpers::crypto::CryptoRegistry;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult, KeyPurpose};
 use ic_types::RegistryVersion;
 use std::convert::TryFrom;

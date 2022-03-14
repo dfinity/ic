@@ -2,13 +2,11 @@ use ic_config::registry_client::DataProviderConfig;
 use ic_crypto_utils_threshold_sig::parse_threshold_sig_key;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::SubnetType;
-use ic_registry_client::{
-    client::{create_data_provider, RegistryClient, RegistryClientImpl},
-    helper::{
-        node::NodeRegistry,
-        routing_table::RoutingTableRegistry,
-        subnet::{SubnetListRegistry, SubnetRegistry},
-    },
+use ic_registry_client::client::{create_data_provider, RegistryClient, RegistryClientImpl};
+use ic_registry_client_helpers::{
+    node::NodeRegistry,
+    routing_table::RoutingTableRegistry,
+    subnet::{SubnetListRegistry, SubnetRegistry},
 };
 use ic_registry_routing_table::RoutingTable;
 use ic_types::{registry::connection_endpoint::ConnectionEndpoint, NodeId, PrincipalId, SubnetId};

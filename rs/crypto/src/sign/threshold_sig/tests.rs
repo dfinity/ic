@@ -1194,9 +1194,9 @@ mod verify_combined_threshold_sig_by_public_key {
         ni_dkg_groth20_bls12_381, CspNiDkgTranscript,
     };
     use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
-    use ic_registry_client::fake::FakeRegistryClient;
-    use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
+    use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::make_catch_up_package_contents_key;
+    use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_utilities::crypto::{basic_utilities::set_of, empty_ni_dkg_transcripts};
     use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
     use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;

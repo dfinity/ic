@@ -12,7 +12,7 @@ use hyper::{Body, Response, StatusCode};
 use ic_interfaces::{crypto::IngressSigVerifier, registry::RegistryClient};
 use ic_interfaces_p2p::IngressIngestionService;
 use ic_logger::{error, info_sample, warn, ReplicaLogger};
-use ic_registry_client::helper::{
+use ic_registry_client_helpers::{
     provisional_whitelist::ProvisionalWhitelistRegistry,
     subnet::{IngressMessageSettings, SubnetRegistry},
 };

@@ -14,7 +14,7 @@ use ic_interfaces::{
     registry::RegistryClient,
     validation::*,
 };
-use ic_registry_client::helper::subnet::SubnetRegistry;
+use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
     artifact::*,
     batch::ValidationContext,

@@ -7,8 +7,8 @@ use ic_crypto::{
 use ic_crypto_internal_test_vectors::test_data;
 use ic_interfaces::crypto::{BasicSigVerifierByPublicKey, SignableMock, DOMAIN_IC_REQUEST};
 use ic_logger::replica_logger::no_op_logger;
-use ic_registry_client::fake::FakeRegistryClient;
-use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
+use ic_registry_client_fake::FakeRegistryClient;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities::types::ids::node_test_id;
 use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, UserPublicKey};
 use ic_types::messages::MessageId;

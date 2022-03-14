@@ -21,12 +21,10 @@ use tokio::time;
 use ecs::SetTo;
 use elastic_common_schema as ecs;
 use ic_protobuf::registry::node::v1::ConnectionEndpoint as pbConnectionEndpoint;
-use ic_registry_client::{
-    client::{RegistryClient, RegistryClientError, RegistryVersion},
-    helper::{
-        node::{NodeId, NodeRegistry, SubnetId},
-        subnet::{SubnetListRegistry, SubnetRegistry},
-    },
+use ic_registry_client::client::{RegistryClient, RegistryClientError, RegistryVersion};
+use ic_registry_client_helpers::{
+    node::{NodeId, NodeRegistry, SubnetId},
+    subnet::{SubnetListRegistry, SubnetRegistry},
 };
 use ic_types::registry::connection_endpoint::{
     ConnectionEndpoint, ConnectionEndpointTryFromProtoError,

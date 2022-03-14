@@ -1,16 +1,15 @@
-use crate::pb::local_store::v1::{
-    CertifiedTime as PbCertifiedTime, ChangelogEntry as PbChangelogEntry, Delta as PbDelta,
-    KeyMutation as PbKeyMutation, MutationType,
-};
 use ic_interfaces::registry::{
     LocalStoreCertifiedTimeReader, RegistryDataProvider, RegistryTransportRecord,
+};
+use ic_registry_common_proto::pb::local_store::v1::{
+    CertifiedTime as PbCertifiedTime, ChangelogEntry as PbChangelogEntry, Delta as PbDelta,
+    KeyMutation as PbKeyMutation, MutationType,
 };
 use ic_types::registry::RegistryDataProviderError;
 use ic_types::RegistryVersion;
 use ic_utils::fs::write_protobuf_using_tmp_file;
 use prost::Message;
 use std::{
-    convert::TryFrom,
     io::{self},
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
@@ -141,7 +140,9 @@ impl LocalStoreReader for LocalStoreImpl {
             .map(|i| self.get_path(i))
             .take_while(|p| p.exists())
             .try_fold(vec![], |mut res, p| {
-                res.push(ChangelogEntry::try_from(Self::read_changelog_entry(p)?)?);
+                res.push(changelog_entry_try_from_proto(Self::read_changelog_entry(
+                    p,
+                )?)?);
                 Ok(res)
             })
     }
@@ -200,65 +201,57 @@ impl RegistryDataProvider for LocalStoreImpl {
     }
 }
 
-impl TryFrom<PbChangelogEntry> for ChangelogEntry {
-    type Error = io::Error;
-
-    fn try_from(value: PbChangelogEntry) -> Result<Self, Self::Error> {
-        if value.key_mutations.is_empty() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Empty changelog Entry.",
-            ));
-        }
-        value
-            .key_mutations
-            .iter()
-            .try_fold(vec![], |mut res, mutation| {
-                res.push(KeyMutation::try_from(mutation)?);
-                Ok(res)
-            })
+fn changelog_entry_try_from_proto(value: PbChangelogEntry) -> Result<ChangelogEntry, io::Error> {
+    if value.key_mutations.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Empty changelog Entry.",
+        ));
     }
+    value
+        .key_mutations
+        .iter()
+        .try_fold(vec![], |mut res, mutation| {
+            res.push(key_mutation_try_from_proto(mutation)?);
+            Ok(res)
+        })
 }
 
-impl TryFrom<&PbKeyMutation> for KeyMutation {
-    type Error = io::Error;
-
-    fn try_from(value: &PbKeyMutation) -> Result<Self, Self::Error> {
-        let mut_type = match MutationType::from_i32(value.mutation_type) {
-            Some(v) => v,
-            None => {
+fn key_mutation_try_from_proto(value: &PbKeyMutation) -> Result<KeyMutation, io::Error> {
+    let mut_type = match MutationType::from_i32(value.mutation_type) {
+        Some(v) => v,
+        None => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Invalid mutation type.",
+            ))
+        }
+    };
+    let res = match mut_type {
+        MutationType::InvalidState => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Invalid mutation type.",
+            ));
+        }
+        MutationType::Unset => {
+            if !value.value.is_empty() {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
-                    "Invalid mutation type.",
-                ))
-            }
-        };
-        let res = match mut_type {
-            MutationType::InvalidState => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "Invalid mutation type.",
+                    "Non-empty value for UNSET.",
                 ));
             }
-            MutationType::Unset => {
-                if !value.value.is_empty() {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        "Non-empty value for UNSET.",
-                    ));
-                }
-                KeyMutation {
-                    key: value.key.clone(),
-                    value: None,
-                }
-            }
-            MutationType::Set => KeyMutation {
+            KeyMutation {
                 key: value.key.clone(),
-                value: Some(value.value.clone()),
-            },
-        };
-        Ok(res)
-    }
+                value: None,
+            }
+        }
+        MutationType::Set => KeyMutation {
+            key: value.key.clone(),
+            value: Some(value.value.clone()),
+        },
+    };
+    Ok(res)
 }
 
 impl LocalStoreCertifiedTimeReader for LocalStoreImpl {
@@ -307,7 +300,7 @@ pub fn compact_delta_to_changelog(source: &[u8]) -> std::io::Result<(RegistryVer
                     .changelog
                     .into_iter()
                     .try_fold(vec![], |mut changelog, entry| {
-                        changelog.push(ChangelogEntry::try_from(entry)?);
+                        changelog.push(changelog_entry_try_from_proto(entry)?);
                         Ok::<_, std::io::Error>(changelog)
                     })?;
             Ok((RegistryVersion::from(delta.registry_version), changelog))

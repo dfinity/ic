@@ -19,7 +19,7 @@ ic-interfaces-p2p = { path = "../interfaces/p2p" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-pprof = { path = "../monitoring/pprof" }
-ic-registry-client = { path = "../registry/client" }
+ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }

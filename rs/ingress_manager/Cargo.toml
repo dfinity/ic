@@ -10,7 +10,7 @@ ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
-ic-registry-client = { path = "../registry/client" }
+ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
@@ -28,7 +28,7 @@ ic-artifact-pool = { path = "../artifact_pool" }
 ic-config = { path = "../config" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-client = { path = "../registry/client" }
-ic-registry-common = { path = "../registry/common" }
+ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-test-utilities = { path = "../test_utilities" }
 rand = "0.7.3"
 tokio = { version = "1.15.0", features = ["full"] }

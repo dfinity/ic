@@ -30,10 +30,10 @@ use ic_prep_lib::{
     subnet_configuration::{self, duration_to_millis},
 };
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
+use ic_registry_client_helpers::deserialize_registry_value;
 use ic_registry_common::{
     local_store::{ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreReader},
     registry::RegistryCanister,
-    values::deserialize_registry_value,
 };
 use ic_registry_keys::{get_node_record_node_id, make_subnet_list_record_key};
 use ic_registry_subnet_features::SubnetFeatures;

@@ -1,0 +1,15 @@
+[package]
+name = "ic-registry-proto-data-provider"
+version = "0.8.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bytes = "1.0.1"
+ic-interfaces = { path = "../../interfaces" }
+ic-registry-common-proto = { path = "../proto" }
+ic-registry-transport = { path = "../transport" }
+ic-types = { path = "../../types/types" }
+ic-utils = { path = "../../utils" }
+thiserror = "1.0"

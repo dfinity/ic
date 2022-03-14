@@ -41,7 +41,7 @@ use ic_p2p::{
     fetch_gossip_config,
     gossip_protocol::GossipImpl,
 };
-use ic_registry_client::helper::subnet::SubnetRegistry;
+use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::StateManagerImpl;
 use ic_transport::transport::create_transport;

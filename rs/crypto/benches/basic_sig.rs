@@ -7,9 +7,9 @@ use ic_interfaces::crypto::{
 };
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
-use ic_registry_client::fake::FakeRegistryClient;
-use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
+use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities::types::ids::{NODE_1, NODE_2};
 use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, KeyPurpose, UserPublicKey};
 use ic_types::messages::MessageId;

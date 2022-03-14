@@ -45,7 +45,7 @@ impl Membership {
 
     /// Return the node IDs from the registry.
     fn get_nodes(&self, height: Height) -> Result<Vec<NodeId>, MembershipError> {
-        use ic_registry_client::helper::subnet::SubnetRegistry;
+        use ic_registry_client_helpers::subnet::SubnetRegistry;
         let registry_version = registry_version_at_height(self.consensus_cache.as_ref(), height)
             .ok_or(MembershipError::UnableToRetrieveDkgSummary(height))?;
 

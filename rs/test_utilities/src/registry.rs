@@ -6,11 +6,11 @@ use ic_interfaces::registry::{
 };
 use ic_interfaces::time_source::TimeSource;
 use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord};
-use ic_registry_client::fake::FakeRegistryClient;
-use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
+use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_subnet_list_record_key, make_subnet_record_key,
 };
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTag;
 use ic_types::{registry::RegistryClientError, PrincipalId, Time};

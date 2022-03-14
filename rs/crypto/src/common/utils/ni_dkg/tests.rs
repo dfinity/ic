@@ -3,10 +3,10 @@
 use super::*;
 use ic_interfaces::registry::RegistryClient;
 use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, InitialNiDkgTranscriptRecord};
-use ic_registry_client::fake::FakeRegistryClient;
-use ic_registry_client::helper::crypto::CryptoRegistry;
-use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
+use ic_registry_client_fake::FakeRegistryClient;
+use ic_registry_client_helpers::crypto::CryptoRegistry;
 use ic_registry_keys::make_catch_up_package_contents_key;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities::crypto::basic_utilities::{map_of, set_of};
 use ic_test_utilities::types::ids::{node_test_id, NODE_1, SUBNET_1};
 use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;

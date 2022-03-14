@@ -8,7 +8,7 @@ use ic_protobuf::{
     },
     types::v1::{PrincipalId as PrincipalIdProto, SubnetId as SubnetIdProto},
 };
-use ic_registry_client::helper::{
+use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
     routing_table::RoutingTableRegistry,
     subnet::{SubnetRegistry, SubnetTransportRegistry},

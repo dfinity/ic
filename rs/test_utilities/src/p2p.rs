@@ -12,7 +12,7 @@ use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::node::v1::{
     connection_endpoint::Protocol, ConnectionEndpoint, FlowEndpoint, NodeRecord,
 };
-use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::{
     replica_config::ReplicaConfig,
     transport::{TransportConfig, TransportFlowConfig},
@@ -38,7 +38,7 @@ pub fn get_nodes_from_registry(
     registry: Arc<dyn RegistryClient>,
     subnet_id: SubnetId,
 ) -> Vec<(NodeId, NodeRecord)> {
-    use ic_registry_client::helper::subnet::SubnetTransportRegistry;
+    use ic_registry_client_helpers::subnet::SubnetTransportRegistry;
     let latest_version = registry.get_latest_version();
     registry
         .get_subnet_transport_infos(subnet_id, latest_version)

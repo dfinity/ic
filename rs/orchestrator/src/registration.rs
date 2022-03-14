@@ -73,7 +73,7 @@ impl NodeRegistration {
             version = self.registry_client.get_latest_version();
         }
 
-        use ic_registry_client::helper::{node::NodeRegistry, subnet::SubnetRegistry};
+        use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 
         let nns_subnet_id = self
             .registry_client

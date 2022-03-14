@@ -12,6 +12,7 @@ ic-interfaces = { path = "../../interfaces" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-transport = { path = "../transport" }
+ic-registry-common-proto = { path = "../proto" }
 ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
 bytes = "1.0.1"
@@ -23,17 +24,13 @@ prost-types = "0.9.0"
 rand = "0.7.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_cbor = "0.11.1"
-tokio = "1.15.0"
+tokio = { version = "1.15.0", features = ["full"] }
 tree-deserializer = { path = "../../tree_deserializer" }
 lazy_static = "1.4.0"
 url = { version = "2.1.1", features = ["serde"] }
 tempfile = "3.0"
-thiserror = "1.0"
 
 [dev-dependencies]
 ic-crypto = { path = "../../crypto" }
 ic-certified-vars-test-utils = { path = "../../certified_vars/test-utils" }
 leb128 = "0.2.4"
-
-[build-dependencies]
-prost-build = "0.9.0"

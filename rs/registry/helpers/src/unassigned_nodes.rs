@@ -1,6 +1,6 @@
+use crate::deserialize_registry_value;
 use ic_interfaces::registry::{RegistryClient, RegistryClientResult};
 use ic_protobuf::registry::unassigned_nodes_config::v1::UnassignedNodesConfigRecord;
-use ic_registry_common::values::deserialize_registry_value;
 use ic_registry_keys::make_unassigned_nodes_config_record_key;
 use ic_types::RegistryVersion;
 

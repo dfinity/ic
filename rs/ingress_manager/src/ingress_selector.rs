@@ -14,7 +14,7 @@ use ic_interfaces::{
     validation::{ValidationError, ValidationResult},
 };
 use ic_logger::{error, warn};
-use ic_registry_client::helper::subnet::IngressMessageSettings;
+use ic_registry_client_helpers::subnet::IngressMessageSettings;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     artifact::IngressMessageId,

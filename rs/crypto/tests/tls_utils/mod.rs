@@ -1,6 +1,6 @@
 use ic_crypto::utils::TempCryptoComponent;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_registry_client::fake::FakeRegistryClient;
+use ic_registry_client_fake::FakeRegistryClient;
 use ic_types::NodeId;
 use std::sync::Arc;
 

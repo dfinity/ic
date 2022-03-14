@@ -3,9 +3,9 @@ use ic_config::crypto::CryptoConfig;
 use ic_crypto::utils::TempCryptoComponent;
 use ic_crypto_internal_types::NodeIndex;
 use ic_interfaces::crypto::{NiDkgAlgorithm, Signable, ThresholdSigner};
-use ic_registry_client::fake::FakeRegistryClient;
-use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
+use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::consensus::get_faults_tolerated;
 use ic_types::crypto::threshold_sig::ni_dkg::config::{NiDkgConfig, NiDkgConfigData};
 use ic_types::crypto::threshold_sig::ni_dkg::{

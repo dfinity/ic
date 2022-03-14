@@ -8,7 +8,7 @@ use ic_crypto_tls_interfaces::{
     SomeOrAllNodes, TlsPublicKeyCert, TlsServerHandshakeError, TlsStream,
 };
 use ic_interfaces::registry::RegistryClient;
-use ic_registry_client::helper::node::NodeRegistry;
+use ic_registry_client_helpers::node::NodeRegistry;
 use ic_types::{NodeId, RegistryVersion};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;

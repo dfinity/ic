@@ -12,17 +12,15 @@ use hyper::{
 use hyper_tls::HttpsConnector;
 use ic_crypto_utils_basic_sig::conversions::pem::der_to_pem;
 use ic_crypto_utils_threshold_sig::parse_threshold_sig_key;
-use ic_registry_client::{
-    client::{
-        create_data_provider, DataProviderConfig, RegistryClient, RegistryClientImpl,
-        RegistryDataProvider,
-    },
-    helper::{
-        crypto::CryptoRegistry,
-        node::NodeRegistry,
-        routing_table::RoutingTableRegistry,
-        subnet::{SubnetListRegistry, SubnetRegistry},
-    },
+use ic_registry_client::client::{
+    create_data_provider, DataProviderConfig, RegistryClient, RegistryClientImpl,
+    RegistryDataProvider,
+};
+use ic_registry_client_helpers::{
+    crypto::CryptoRegistry,
+    node::NodeRegistry,
+    routing_table::RoutingTableRegistry,
+    subnet::{SubnetListRegistry, SubnetRegistry},
 };
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use lazy_static::lazy_static;

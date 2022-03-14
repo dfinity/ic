@@ -16,8 +16,8 @@ ic-metrics = { path = "../monitoring/metrics" }
 ic-metrics-exporter = { path = "../monitoring/metrics_exporter" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-client = { path = "../registry/client" }
-ic-registry-common = { path = "../registry/common" }
 ic-registry-keys = { path = "../registry/keys" }
+ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
 ic-registry-routing-table = { path = "../registry/routing_table" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }

@@ -46,6 +46,7 @@ ic-nns-test-utils = { path = "../nns/test_utils" }
 ic-prep = { path = "../prep" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-client = { path = "../registry/client" }
+ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-common = { path = "../registry/common" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }

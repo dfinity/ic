@@ -4,9 +4,9 @@ use ic_crypto::utils::TempCryptoComponent;
 use ic_crypto_internal_threshold_sig_ecdsa::test_utils::corrupt_dealing;
 use ic_crypto_internal_threshold_sig_ecdsa::IDkgDealingInternal;
 use ic_interfaces::crypto::{IDkgProtocol, MultiSigVerifier, MultiSigner};
-use ic_registry_client::fake::FakeRegistryClient;
-use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
+use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::consensus::ecdsa::EcdsaDealing;
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgDealing, IDkgMultiSignedDealing, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,

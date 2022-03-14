@@ -8,8 +8,8 @@ use ic_crypto_tls_interfaces::{
     TlsServerHandshakeError,
 };
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
-use ic_registry_client::fake::FakeRegistryClient;
-use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
+use ic_registry_client_fake::FakeRegistryClient;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities::types::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5};
 use ic_types::NodeId;
 use std::sync::Arc;

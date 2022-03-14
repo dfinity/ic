@@ -17,8 +17,8 @@ mod tests {
     use super::*;
     use ic_crypto::utils::get_node_keys_or_generate_if_missing;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_registry_client::fake::FakeRegistryClient;
-    use ic_registry_common::proto_registry_data_provider::ProtoRegistryDataProvider;
+    use ic_registry_client_fake::FakeRegistryClient;
+    use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 
     #[test]
     fn should_create_crypto_with_default_config() {
