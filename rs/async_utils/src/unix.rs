@@ -15,7 +15,7 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tonic::transport::server::Connected;
 
 /// listener_from_first_systemd_socket() takes the first FD(3) passed by systemd. It does not check if
-/// more FDs are passed to the process. Make sure to call ensure_single_named_systemd_socket() before!
+/// more FDs are passed to the process. Make sure to call ensure_single_systemd_socket() before!
 /// To ensure that only one listener on the socket exists this function should only be called once!
 fn listener_from_first_systemd_socket() -> tokio::net::UnixListener {
     const SD_LISTEN_FDS_START: i32 = 3; // see https://www.freedesktop.org/software/systemd/man/sd_listen_fds.html
@@ -37,20 +37,21 @@ fn listener_from_first_systemd_socket() -> tokio::net::UnixListener {
         .expect("Failed to convert UnixListener into Tokio equivalent")
 }
 
-/// ensure_single_named_systemd_socket() ensures that the correct file descriptor is passed by
-/// checking the name. Additionally it makes sure that only one FD is received.
-pub fn ensure_single_named_systemd_socket(socket_name: &str) {
+/// ensure_single_systemd_socket() makes sure that only one FD is received.
+pub fn ensure_single_systemd_socket() {
     // This env. variable is set by the systemd service manager and can be used to check what file
     // descriptors are passed.
     // Setting the env. variable is done by ic-os/guestos/rootfs/etc/systemd/system/*.socket.
     // For more info see https://www.freedesktop.org/software/systemd/man/sd_listen_fds.html
-    const SYSTEMD_SOCKET_NAMES: &str = "LISTEN_FDNAMES";
-    let systemd_socket_names =
-        std::env::var(SYSTEMD_SOCKET_NAMES).expect("failed to read systemd socket names");
-    if systemd_socket_names != socket_name {
+    const SYSTEMD_SOCKET_NAMES: &str = "LISTEN_FDS";
+    let systemd_sockets: u64 = std::env::var(SYSTEMD_SOCKET_NAMES)
+        .expect("failed to read number systemd sockets")
+        .parse()
+        .expect("failed to parse number of socket to integer");
+    if systemd_sockets != 1 {
         panic!(
-            "Expected to receive a single systemd socket named '{}' but instead got '{}'",
-            socket_name, systemd_socket_names
+            "Expected to receive a single systemd socket but instead got '{}'",
+            systemd_sockets
         );
     }
 }
