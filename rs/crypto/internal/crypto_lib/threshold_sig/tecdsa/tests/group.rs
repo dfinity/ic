@@ -1,6 +1,28 @@
 use ic_crypto_internal_threshold_sig_ecdsa::*;
 
 #[test]
+fn not_affected_by_point_serialization_bug() -> ThresholdEcdsaResult<()> {
+    // Repro of https://github.com/RustCrypto/elliptic-curves/issues/529
+    let curve = EccCurveType::K256;
+
+    let pts = [
+        "024b395881d9965c4621459ad2ec12716fa7f669b6108ad3b8b82b91644fb44808",
+        "02e77d7b458fb3a2df7d201806e8e1dbce8c1138303156c43398ac62891c43e3cc",
+        "02f973e12be0ea160cc82c16563753749b5e6590d22a0b9ab16cd48b9bd951b167",
+    ];
+
+    for pt in pts {
+        let bytes = hex::decode(pt).unwrap();
+        let pt = EccPoint::deserialize(curve, &bytes)?;
+        let pt_bytes = pt.serialize();
+
+        assert_eq!(bytes, pt_bytes);
+    }
+
+    Ok(())
+}
+
+#[test]
 fn hash_to_scalar_is_deterministic() -> ThresholdEcdsaResult<()> {
     let input = "test input string".as_bytes();
     let domain_separator = "domain sep".as_bytes();

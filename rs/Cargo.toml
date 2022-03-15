@@ -211,6 +211,10 @@ opt-level = 'z'
 # Optimise the miracl_core_bls12381 cryptographic library, or else NiDKG tests take 4 hours.
 opt-level = 3
 
+# Bug workaround https://github.com/RustCrypto/elliptic-curves/issues/529
+[profile.release.package.k256]
+debug-assertions = true
+
 [patch.crates-io]
 # TODO (CRP-1204): Remove this once tokio-rustls has been updated.
 webpki = { git = "https://github.com/dfinity-lab/webpki", branch = "v0.21.4-v3-no-extensions" }
