@@ -190,10 +190,6 @@ fn build_registry_proto() {
     config.out_dir("gen/registry");
 
     config.type_attribute(
-        ".registry.conversion_rate",
-        "#[derive(serde::Serialize, serde::Deserialize)]",
-    );
-    config.type_attribute(
         ".registry.crypto",
         "#[derive(serde::Serialize, serde::Deserialize)]",
     );
@@ -250,7 +246,6 @@ fn build_registry_proto() {
     );
 
     let registry_files = [
-        "def/registry/conversion_rate/v1/conversion_rate.proto",
         "def/registry/crypto/v1/crypto.proto",
         "def/registry/node_operator/v1/node_operator.proto",
         "def/registry/nns/v1/nns.proto",

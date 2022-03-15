@@ -4,7 +4,6 @@ use serde_json::Value;
 
 use ic_protobuf::{
     registry::{
-        conversion_rate::v1::IcpXdrConversionRateRecord,
         crypto::v1::{PublicKey, X509PublicKeyCert},
         firewall::v1::FirewallConfig,
         nns::v1::NnsCanisterRecords,
@@ -19,11 +18,11 @@ use ic_protobuf::{
 use ic_registry_client_helpers::node::NodeRecord;
 use ic_registry_keys::{
     make_blessed_replica_version_key, make_firewall_config_record_key,
-    make_icp_xdr_conversion_rate_record_key, make_nns_canister_records_key,
-    make_provisional_whitelist_record_key, make_routing_table_record_key,
-    make_subnet_list_record_key, CRYPTO_RECORD_KEY_PREFIX, CRYPTO_THRESHOLD_SIGNING_KEY_PREFIX,
-    CRYPTO_TLS_CERT_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_RECORD_KEY_PREFIX,
-    REPLICA_VERSION_KEY_PREFIX, ROOT_SUBNET_ID_KEY, SUBNET_RECORD_KEY_PREFIX,
+    make_nns_canister_records_key, make_provisional_whitelist_record_key,
+    make_routing_table_record_key, make_subnet_list_record_key, CRYPTO_RECORD_KEY_PREFIX,
+    CRYPTO_THRESHOLD_SIGNING_KEY_PREFIX, CRYPTO_TLS_CERT_KEY_PREFIX,
+    NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_RECORD_KEY_PREFIX, REPLICA_VERSION_KEY_PREFIX,
+    ROOT_SUBNET_ID_KEY, SUBNET_RECORD_KEY_PREFIX,
 };
 pub(crate) trait Transformable {
     fn pb_to_value(data: &[u8]) -> Value;
@@ -73,8 +72,6 @@ fn get_transformer(key: &str) -> Transformers {
         SubnetIdProto::transformers()
     } else if key == make_subnet_list_record_key() {
         SubnetListRecord::transformers()
-    } else if key == make_icp_xdr_conversion_rate_record_key() {
-        IcpXdrConversionRateRecord::transformers()
     } else if key.starts_with(NODE_RECORD_KEY_PREFIX) {
         NodeRecord::transformers()
     } else if key.starts_with(NODE_OPERATOR_RECORD_KEY_PREFIX) {
