@@ -375,7 +375,7 @@ mod tests {
     };
     use ic_types::messages::StopCanisterContext;
     use ic_types::{CanisterId, CanisterStatusType, Cycles, ExecutionRound, Height};
-    use ic_wasm_types::BinaryEncodedWasm;
+    use ic_wasm_types::CanisterModule;
     use std::collections::BTreeSet;
     use tempfile::Builder;
 
@@ -390,8 +390,8 @@ mod tests {
         scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS)
     }
 
-    fn empty_wasm() -> BinaryEncodedWasm {
-        BinaryEncodedWasm::new(vec![
+    fn empty_wasm() -> CanisterModule {
+        CanisterModule::new(vec![
             0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x00, 0x08, 0x04, 0x6e, 0x61, 0x6d,
             0x65, 0x02, 0x01, 0x00,
         ])

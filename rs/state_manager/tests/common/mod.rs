@@ -30,12 +30,12 @@ use ic_types::{
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
     CanisterId, CryptoHashOfState, Cycles, Height, RegistryVersion, SubnetId,
 };
-use ic_wasm_types::BinaryEncodedWasm;
+use ic_wasm_types::CanisterModule;
 use std::{collections::HashSet, sync::Arc};
 use tempfile::Builder;
 
-pub fn empty_wasm() -> BinaryEncodedWasm {
-    BinaryEncodedWasm::new(vec![
+pub fn empty_wasm() -> CanisterModule {
+    CanisterModule::new(vec![
         0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x00, 0x08, 0x04, 0x6e, 0x61, 0x6d, 0x65,
         0x02, 0x01, 0x00,
     ])

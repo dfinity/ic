@@ -67,7 +67,7 @@ mod tests {
         types::ids::{canister_test_id, subnet_test_id, user_test_id},
     };
     use ic_types::{CanisterId, Cycles, ExecutionRound};
-    use ic_wasm_types::BinaryEncodedWasm;
+    use ic_wasm_types::CanisterModule;
     use maplit::btreemap;
     use std::collections::BTreeSet;
     use std::convert::TryFrom;
@@ -235,8 +235,8 @@ mod tests {
             NumSeconds::from(100_000),
         );
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-        let wasm_binary = WasmBinary::new(BinaryEncodedWasm::new(vec![]));
-        let wasm_binary_hash = wasm_binary.binary.hash_sha256();
+        let wasm_binary = WasmBinary::new(CanisterModule::new(vec![]));
+        let wasm_binary_hash = wasm_binary.binary.module_hash();
         let wasm_memory = Memory::new(PageMap::default(), NumWasmPages::from(2));
 
         let metadata = btreemap! {

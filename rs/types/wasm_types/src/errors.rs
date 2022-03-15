@@ -30,6 +30,8 @@ pub enum WasmValidationError {
     ParityDeserializeError(ParityWasmError),
     /// wasmtime::Module::validate() failed
     WasmtimeValidation(String),
+    /// Failed to decode the canister module.
+    DecodingError(String),
     /// Module contains an invalid function signature
     InvalidFunctionSignature(String),
     /// Module contains an invalid import section
@@ -58,6 +60,9 @@ impl std::fmt::Display for WasmValidationError {
             }
             Self::WasmtimeValidation(err) => {
                 write!(f, "Wasmtime failed to validate wasm module {}", err)
+            }
+            Self::DecodingError(err) => {
+                write!(f, "Failed to decode wasm module: {}", err)
             }
             Self::InvalidFunctionSignature(err) => {
                 write!(f, "Wasm module has an invalid function signature. {}", err)

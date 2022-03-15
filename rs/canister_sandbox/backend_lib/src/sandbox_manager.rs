@@ -27,6 +27,7 @@ use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
     wasm_executor::WasmStateChanges,
     wasm_utils::{
+        decoding::decode_wasm,
         instrumentation::{instrument, InstructionCostTable},
         validation::validate_wasm_binary,
     },
@@ -40,7 +41,6 @@ use ic_replicated_state::page_map::PageMapSerialization;
 use ic_replicated_state::{EmbedderCache, Memory, PageMap};
 use ic_system_api::DefaultOutOfInstructionsHandler;
 use ic_types::CanisterId;
-use ic_wasm_types::BinaryEncodedWasm;
 
 struct ExecutionInstantiateError;
 
@@ -227,7 +227,7 @@ impl CanisterWasm {
         embedder: &Arc<WasmtimeEmbedder>,
         wasm_src: Vec<u8>,
     ) -> HypervisorResult<Self> {
-        let wasm = BinaryEncodedWasm::new(wasm_src);
+        let wasm = decode_wasm(Arc::new(wasm_src))?;
         let instrumentation_output = validate_wasm_binary(&wasm, config)
             .map_err(HypervisorError::from)
             .and_then(|_| {
@@ -406,7 +406,7 @@ impl SandboxManager {
         canister_id: CanisterId,
     ) -> HypervisorResult<CreateExecutionStateSuccessReply> {
         // Get the compiled binary from the cache.
-        let binary_encoded_wasm = BinaryEncodedWasm::new(wasm_source);
+        let binary_encoded_wasm = decode_wasm(Arc::new(wasm_source))?;
         let (embedder_cache, embedder) = {
             let guard = self.repr.lock().unwrap();
             let canister_wasm = guard.canister_wasms.get(&wasm_id).unwrap_or_else(|| {

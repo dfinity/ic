@@ -34,6 +34,8 @@ tempfile = "3.1.0"
 wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" }
 
 [dev-dependencies]
+ic-crypto-sha = { path = "../crypto/sha" }
+libflate = "1.1.2"
 tokio = { version = "1.15.0", features = ["macros"] }
 
 [[test]]

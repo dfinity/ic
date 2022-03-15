@@ -10,6 +10,7 @@ use ic_types::methods::{FuncRef, WasmMethod};
 use prometheus::{Histogram, IntCounter};
 
 use crate::{
+    wasm_utils::decoding::decode_wasm,
     wasm_utils::instrumentation::{instrument, InstructionCostTable},
     wasm_utils::validation::{validate_wasm_binary, WasmImportsDetails, WasmValidationDetails},
     wasmtime_embedder::WasmtimeInstance,
@@ -28,7 +29,7 @@ use ic_replicated_state::{EmbedderCache, ExecutionState};
 use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
 use ic_system_api::{system_api_empty::SystemApiEmpty, ModificationTracking, SystemApiImpl};
 use ic_types::{CanisterId, NumBytes, NumInstructions};
-use ic_wasm_types::BinaryEncodedWasm;
+use ic_wasm_types::{BinaryEncodedWasm, CanisterModule};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
@@ -162,16 +163,25 @@ impl WasmExecutor {
             .and_then(|output| self.wasm_embedder.compile(&output.binary))
     }
 
-    fn get_embedder_cache(&self, wasm_binary: &WasmBinary) -> HypervisorResult<EmbedderCache> {
+    fn get_embedder_cache(
+        &self,
+        decoded_wasm: Option<&BinaryEncodedWasm>,
+        wasm_binary: &WasmBinary,
+    ) -> HypervisorResult<EmbedderCache> {
         let mut guard = wasm_binary.embedder_cache.lock().unwrap();
         if let Some(embedder_cache) = &*guard {
             Ok(embedder_cache.clone())
         } else {
+            use std::borrow::Cow;
             // The wasm_binary stored in the `ExecutionState` is not
             // instrumented so instrument it before compiling. Further, due to
             // IC upgrades, it is possible that the `validate_wasm_binary()`
             // function has changed, so also validate the binary.
-            match self.compile(&wasm_binary.binary) {
+            let decoded_wasm: Cow<'_, BinaryEncodedWasm> = match decoded_wasm {
+                Some(wasm) => Cow::Borrowed(wasm),
+                None => Cow::Owned(decode_wasm(wasm_binary.binary.to_shared_vec())?),
+            };
+            match self.compile(decoded_wasm.as_ref()) {
                 Ok(cache) => {
                     *guard = Some(cache.clone());
                     Ok(cache)
@@ -193,7 +203,7 @@ impl WasmExecutor {
         }: WasmExecutionInput,
     ) -> (WasmExecutionOutput, ExecutionState, SystemStateChanges) {
         // Ensure that Wasm is compiled.
-        let embedder_cache = match self.get_embedder_cache(&execution_state.wasm_binary) {
+        let embedder_cache = match self.get_embedder_cache(None, &execution_state.wasm_binary) {
             Ok(embedder_cache) => embedder_cache,
             Err(err) => {
                 return (
@@ -254,9 +264,9 @@ impl WasmExecutor {
         canister_id: CanisterId,
     ) -> HypervisorResult<ExecutionState> {
         // Compile Wasm binary and cache it.
-        let binary_encoded_wasm = BinaryEncodedWasm::new(wasm_source);
-        let wasm_binary = WasmBinary::new(binary_encoded_wasm.clone());
-        let embedder_cache = self.get_embedder_cache(&wasm_binary)?;
+        let wasm_binary = WasmBinary::new(CanisterModule::new(wasm_source));
+        let binary_encoded_wasm = decode_wasm(wasm_binary.binary.to_shared_vec())?;
+        let embedder_cache = self.get_embedder_cache(Some(&binary_encoded_wasm), &wasm_binary)?;
         let mut wasm_page_map = PageMap::default();
 
         let (

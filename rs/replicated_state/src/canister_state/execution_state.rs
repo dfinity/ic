@@ -5,7 +5,7 @@ use ic_protobuf::{
     state::canister_state_bits::v1 as pb,
 };
 use ic_types::{methods::WasmMethod, ExecutionRound, NumBytes};
-use ic_wasm_types::BinaryEncodedWasm;
+use ic_wasm_types::CanisterModule;
 use maplit::btreemap;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -182,9 +182,9 @@ impl TryFrom<Vec<pb::WasmMethod>> for ExportedFunctions {
 /// Represent a wasm binary.
 #[derive(debug_stub_derive::DebugStub)]
 pub struct WasmBinary {
-    /// The raw wasm binary (after validation). Remains immutable after
+    /// The raw canister module provided by the user. Remains immutable after
     /// creating a WasmBinary object.
-    pub binary: BinaryEncodedWasm,
+    pub binary: CanisterModule,
 
     /// Cached compiled representation of the binary. Lower layers will assign
     /// to this field to create a compiled representation of the wasm, and
@@ -193,7 +193,7 @@ pub struct WasmBinary {
 }
 
 impl WasmBinary {
-    pub fn new(binary: BinaryEncodedWasm) -> Arc<Self> {
+    pub fn new(binary: CanisterModule) -> Arc<Self> {
         Arc::new(WasmBinary {
             binary,
             embedder_cache: Arc::new(std::sync::Mutex::new(None)),

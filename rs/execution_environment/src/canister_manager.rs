@@ -713,7 +713,7 @@ impl CanisterManager {
             canister
                 .execution_state
                 .as_ref()
-                .map(|es| es.wasm_binary.binary.hash_sha256().to_vec()),
+                .map(|es| es.wasm_binary.binary.module_hash().to_vec()),
             *controller,
             controllers,
             canister.memory_usage(self.config.own_subnet_type),
@@ -1352,7 +1352,7 @@ impl CanisterManager {
         canister
             .execution_state
             .as_ref()
-            .map(|execution_state| execution_state.wasm_binary.binary.hash_sha256())
+            .map(|execution_state| execution_state.wasm_binary.binary.module_hash())
     }
 }
 #[doc(hidden)] // pub for usage in tests
