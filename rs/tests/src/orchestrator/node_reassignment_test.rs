@@ -115,6 +115,8 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         ctx.logger,
         "Waiting for moved nodes to return the app subnet message..."
     );
+    block_on(node1.assert_ready(ctx));
+    block_on(node2.assert_ready(ctx));
     assert!(block_on(can_read_msg_with_retries(
         log, &node1.url, app_can_id, app_msg, 50
     )));
