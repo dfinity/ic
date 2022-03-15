@@ -46,10 +46,9 @@ fn test_motion_proposal_execution() {
                 .stake_and_claim_neuron(&user, Some(ONE_YEAR_SECONDS as u32))
                 .await;
 
-            let subaccount = match neuron_id.subaccount() {
-                Ok(s) => s,
-                Err(e) => panic!("Error creating the subaccount, {}", e),
-            };
+            let subaccount = neuron_id
+                .subaccount()
+                .expect("Error creating the subaccount");
 
             let proposal_payload = Proposal {
                 title: "Test Motion proposal".into(),
@@ -115,10 +114,9 @@ fn test_manage_nervous_system_parameters_proposal_execution() {
                 .stake_and_claim_neuron(&user, Some(ONE_YEAR_SECONDS as u32))
                 .await;
 
-            let subaccount = match neuron_id.subaccount() {
-                Ok(s) => s,
-                Err(e) => panic!("Error creating the subaccount, {}", e),
-            };
+            let subaccount = neuron_id
+                .subaccount()
+                .expect("Error creating the subaccount");
 
             // Assert that invalid params are rejected on proposal submission
             let proposal_payload = Proposal {

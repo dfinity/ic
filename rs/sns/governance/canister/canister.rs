@@ -28,7 +28,7 @@ use dfn_core::{
 
 use ic_base_types::CanisterId;
 use ic_nervous_system_common::ledger::LedgerCanister;
-use ic_sns_governance::governance::{log_prefix, Governance};
+use ic_sns_governance::governance::{log_prefix, Governance, TimeWarp};
 use ic_sns_governance::pb::v1::proposal::Action;
 use ic_sns_governance::pb::v1::{
     governance_error::ErrorType, ExecuteNervousSystemFunction, GetNeuron, GetNeuronResponse,
@@ -67,6 +67,7 @@ fn governance_mut() -> &'static mut Governance {
 
 struct CanisterEnv {
     rng: StdRng,
+    time_warp: TimeWarp,
 }
 
 impl CanisterEnv {
@@ -91,16 +92,23 @@ impl CanisterEnv {
                 seed[16..32].copy_from_slice(&now_nanos.to_be_bytes());
                 StdRng::from_seed(seed)
             },
+            time_warp: TimeWarp { delta_s: 0 },
         }
     }
 }
 
 impl Environment for CanisterEnv {
     fn now(&self) -> u64 {
-        now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .expect("Could not get the duration.")
-            .as_secs()
+        self.time_warp.apply(
+            now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .expect("Could not get the duration.")
+                .as_secs(),
+        )
+    }
+
+    fn set_time_warp(&mut self, new_time_warp: TimeWarp) {
+        self.time_warp = new_time_warp;
     }
 
     fn random_u64(&mut self) -> u64 {
@@ -287,6 +295,17 @@ fn canister_post_upgrade() {
     .expect("Couldn't upgrade canister.");
 }
 
+#[cfg(feature = "test")]
+#[export_name = "canister_update set_time_warp"]
+fn set_time_warp() {
+    over(candid_one, set_time_warp_);
+}
+
+#[cfg(feature = "test")]
+fn set_time_warp_(new_time_warp: TimeWarp) {
+    governance_mut().env.set_time_warp(new_time_warp);
+}
+
 /// Returns Governance's NervousSystemParameters
 #[export_name = "canister_query get_nervous_system_parameters"]
 fn get_nervous_system_parameters() {
@@ -466,4 +485,16 @@ fn check_governance_candid_file() {
             rs/sns/governance to update canister/governance.did."
         )
     }
+}
+
+#[test]
+fn test_set_time_warp() {
+    let mut environment = CanisterEnv::new();
+
+    let start = environment.now();
+    environment.set_time_warp(TimeWarp { delta_s: 1_000 });
+    let delta_s = environment.now() - start;
+
+    assert!(delta_s >= 1000, "delta_s = {}", delta_s);
+    assert!(delta_s < 1005, "delta_s = {}", delta_s);
 }

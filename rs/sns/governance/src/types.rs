@@ -1,6 +1,6 @@
-use crate::governance::{log_prefix, Governance};
+use crate::governance::{log_prefix, Governance, TimeWarp};
 use crate::pb::v1::governance_error::ErrorType;
-use crate::pb::v1::manage_neuron_response::MergeMaturityResponse;
+use crate::pb::v1::manage_neuron_response::{DisburseMaturityResponse, MergeMaturityResponse};
 use crate::pb::v1::proposal::Action;
 use crate::pb::v1::{
     manage_neuron_response, DefaultFollowees, ExecuteNervousSystemFunction, GovernanceError,
@@ -463,6 +463,12 @@ impl ManageNeuronResponse {
         }
     }
 
+    pub fn disburse_maturity_response(response: DisburseMaturityResponse) -> Self {
+        ManageNeuronResponse {
+            command: Some(manage_neuron_response::Command::DisburseMaturity(response)),
+        }
+    }
+
     pub fn follow_response() -> Self {
         ManageNeuronResponse {
             command: Some(manage_neuron_response::Command::Follow(
@@ -564,7 +570,7 @@ impl fmt::Display for RewardEvent {
             f,
             "RewardEvent {{ day_after_genesis: {} distributed_e8s_equivalent: {}\
                    actual_timestamp_seconds: {} settled_proposals: <vec of size {}> }})",
-            self.day_after_genesis,
+            self.periods_since_genesis,
             self.distributed_e8s_equivalent,
             self.actual_timestamp_seconds,
             self.settled_proposals.len()
@@ -576,6 +582,11 @@ impl fmt::Display for RewardEvent {
 pub trait Environment: Send + Sync {
     /// Returns the current time, in seconds since the epoch.
     fn now(&self) -> u64;
+
+    // An optional feature that is currently only used by CanisterEnv.
+    fn set_time_warp(&mut self, _new_time_warp: TimeWarp) {
+        panic!("Not implemented.");
+    }
 
     /// Returns a random number.
     ///

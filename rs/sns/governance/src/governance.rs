@@ -35,7 +35,8 @@ use strum::IntoEnumIterator;
 use dfn_core::println;
 
 use crate::neuron::{NeuronState, MAX_LIST_NEURONS_RESULTS};
-use crate::pb::v1::manage_neuron_response::MergeMaturityResponse;
+use crate::pb::v1::manage_neuron::Command::DisburseMaturity;
+use crate::pb::v1::manage_neuron_response::{DisburseMaturityResponse, MergeMaturityResponse};
 use crate::pb::v1::proposal::Action;
 use crate::pb::v1::WaitForQuietState;
 use crate::proposal::{
@@ -336,7 +337,7 @@ impl Governance {
             // very first reward distribution.
             proto.latest_reward_event = Some(RewardEvent {
                 actual_timestamp_seconds: env.now(),
-                day_after_genesis: 0,
+                periods_since_genesis: 0,
                 settled_proposals: vec![],
                 distributed_e8s_equivalent: 0,
             })
@@ -871,8 +872,7 @@ impl Governance {
         let parent_neuron = self.get_neuron_result(id)?.clone();
         let parent_nid = parent_neuron.id.as_ref().expect("Neurons must have an id");
 
-        // TODO NNS1-1013 - split_neuron will have it's own permission
-        parent_neuron.check_authorized(caller, NeuronPermissionType::Disburse)?;
+        parent_neuron.check_authorized(caller, NeuronPermissionType::Split)?;
 
         if split.amount_e8s < min_stake + transaction_fee_e8s {
             return Err(GovernanceError::new_with_message(
@@ -1003,7 +1003,7 @@ impl Governance {
     /// - The neuron has some maturity to merge.
     /// - The e8s equivalent of the amount of maturity to merge must be more
     ///   than the transaction fee.
-    pub async fn merge_maturity_of_neuron(
+    pub async fn merge_maturity(
         &mut self,
         id: &NeuronId,
         caller: &PrincipalId,
@@ -1013,7 +1013,7 @@ impl Governance {
         let nid = neuron.id.as_ref().expect("Neurons must have an id");
         let subaccount = neuron.subaccount()?;
 
-        neuron.check_authorized(caller, NeuronPermissionType::ManageMaturity)?;
+        neuron.check_authorized(caller, NeuronPermissionType::MergeMaturity)?;
 
         if merge_maturity.percentage_to_merge > 100 || merge_maturity.percentage_to_merge == 0 {
             return Err(GovernanceError::new_with_message(
@@ -1085,6 +1085,93 @@ impl Governance {
         Ok(MergeMaturityResponse {
             merged_maturity_e8s: maturity_to_merge,
             new_stake_e8s,
+        })
+    }
+
+    pub async fn disburse_maturity(
+        &mut self,
+        id: &NeuronId,
+        caller: &PrincipalId,
+        disburse_maturity: &manage_neuron::DisburseMaturity,
+    ) -> Result<DisburseMaturityResponse, GovernanceError> {
+        let neuron = self.get_neuron_result(id)?;
+        neuron.check_authorized(caller, NeuronPermissionType::DisburseMaturity)?;
+
+        // If no account was provided, transfer to the caller's account.
+        let to_account: AccountIdentifier = match disburse_maturity.to_account.as_ref() {
+            None => AccountIdentifier::new(*caller, None),
+            Some(account_identifier) => {
+                AccountIdentifier::try_from(account_identifier).map_err(|e| {
+                    GovernanceError::new_with_message(
+                        ErrorType::InvalidCommand,
+                        format!(
+                            "The given account to disburse the maturity to is invalid due to: {}",
+                            e
+                        ),
+                    )
+                })?
+            }
+        };
+
+        if disburse_maturity.percentage_to_disburse > 100
+            || disburse_maturity.percentage_to_disburse == 0
+        {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "The percentage of maturity to disburse must be a value between 1 and 100 (inclusive)."));
+        }
+
+        let maturity_to_disburse = neuron
+            .maturity_e8s_equivalent
+            .checked_mul(disburse_maturity.percentage_to_disburse as u64)
+            .expect("Overflow while processing maturity to disburse.")
+            .checked_div(100)
+            .expect("Error when processing maturity to disburse.");
+
+        // Add the neuron's id to the set of neurons with ongoing ledger updates.
+        let _neuron_lock = self.lock_neuron_for_command(
+            id,
+            NeuronInFlightCommand {
+                timestamp: self.env.now(),
+                command: Some(InFlightCommand::DisburseMaturity(disburse_maturity.clone())),
+            },
+        )?;
+
+        let transaction_fee_e8s = self.transaction_fee();
+        if maturity_to_disburse < transaction_fee_e8s {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                format!(
+                    "Ledger transfers of an amount({}) less than \
+                    transaction fee({}) not supported.",
+                    maturity_to_disburse, transaction_fee_e8s
+                ),
+            ));
+        }
+
+        // Do the transfer, this is a minting transfer, from the governance canister's
+        // main account (which is also the minting account) to the provided account.
+        let block_height = self
+            .ledger
+            .transfer_funds(
+                maturity_to_disburse,
+                0,    // Minting transfers don't pay a fee.
+                None, // This is a minting transfer, no 'from' account is needed
+                to_account,
+                self.env.now(), // The memo(nonce) for the ledger's transaction
+            )
+            .await?;
+
+        // Re-borrow the neuron mutably to update now that the maturity has been
+        // disbursed.
+        let mut neuron = self.get_neuron_result_mut(id)?;
+        neuron.maturity_e8s_equivalent = neuron
+            .maturity_e8s_equivalent
+            .saturating_sub(maturity_to_disburse);
+
+        Ok(DisburseMaturityResponse {
+            transfer_block_height: block_height,
+            amount_disbursed_e8s: maturity_to_disburse,
         })
     }
 
@@ -2308,9 +2395,13 @@ impl Governance {
                 .await
                 .map(ManageNeuronResponse::disburse_response),
             Some(manage_neuron::Command::MergeMaturity(m)) => self
-                .merge_maturity_of_neuron(&id, caller, m)
+                .merge_maturity(&id, caller, m)
                 .await
                 .map(ManageNeuronResponse::merge_maturity_response),
+            Some(DisburseMaturity(d)) => self
+                .disburse_maturity(&id, caller, d)
+                .await
+                .map(ManageNeuronResponse::disburse_maturity_response),
             Some(manage_neuron::Command::Split(s)) => self
                 .split_neuron(&id, caller, s)
                 .await
@@ -2430,7 +2521,7 @@ impl Governance {
 
         self.env.now()
             >= self.proto.genesis_timestamp_seconds
-                + (self.latest_reward_event().day_after_genesis + 1)
+                + (self.latest_reward_event().periods_since_genesis + 1)
                     * reward_distribution_period_seconds
     }
 
@@ -2449,28 +2540,28 @@ impl Governance {
             .reward_distribution_period_seconds
             .expect("NervousSystemParameters must have reward_distribution_period_seconds");
 
-        let day_after_genesis = (self.env.now() - self.proto.genesis_timestamp_seconds)
+        let periods_since_genesis = (self.env.now() - self.proto.genesis_timestamp_seconds)
             / reward_distribution_period_seconds;
 
-        if day_after_genesis <= self.latest_reward_event().day_after_genesis {
+        if periods_since_genesis <= self.latest_reward_event().periods_since_genesis {
             // This may happen, in case consider_distributing_rewards was called
             // several times at almost the same time. This is
             // harmless, just abandon.
             return;
         }
 
-        if day_after_genesis > 1 + self.latest_reward_event().day_after_genesis {
+        if periods_since_genesis > 1 + self.latest_reward_event().periods_since_genesis {
             println!(
                 "{}Some reward distribution should have happened, but were missed.\
-                      It is now {} full days since genesis, and the last distribution\
+                      It is now {} full days since genesis, and the last distribution \
                       nominally happened at {} full days since genesis.",
                 log_prefix(),
-                day_after_genesis,
-                self.latest_reward_event().day_after_genesis
+                periods_since_genesis,
+                self.latest_reward_event().periods_since_genesis
             );
         }
-        let days = self.latest_reward_event().day_after_genesis..day_after_genesis;
-        let fraction: f64 = days
+        let periods = self.latest_reward_event().periods_since_genesis..periods_since_genesis;
+        let fraction: f64 = periods
             .map(crate::reward::rewards_pool_to_distribute_in_supply_fraction_for_one_day)
             .sum();
 
@@ -2572,13 +2663,13 @@ impl Governance {
                             total:0,
                         })
                     };
-                    p.reward_event_round = day_after_genesis;
+                    p.reward_event_round = periods_since_genesis;
                     p.ballots.clear();
                 }
             };
         }
         self.proto.latest_reward_event = Some(RewardEvent {
-            day_after_genesis,
+            periods_since_genesis,
             actual_timestamp_seconds: now,
             settled_proposals: considered_proposals,
             distributed_e8s_equivalent: actually_distributed_e8s_equivalent,
@@ -2634,6 +2725,36 @@ impl Governance {
             .get_mut(&nid.to_string())
             .ok_or_else(|| Self::neuron_not_found_error(nid))
     }
+}
+
+/// Affects the perception of time by users of CanisterEnv (i.e. Governance).
+///
+/// Specifically, the time that Governance sees is the real time + delta.
+#[derive(PartialEq, Clone, Copy, Debug, candid::CandidType, serde::Deserialize)]
+pub struct TimeWarp {
+    pub delta_s: i64,
+}
+
+impl TimeWarp {
+    pub fn apply(&self, timestamp_s: u64) -> u64 {
+        if self.delta_s >= 0 {
+            timestamp_s + (self.delta_s as u64)
+        } else {
+            timestamp_s - ((-self.delta_s) as u64)
+        }
+    }
+}
+
+#[test]
+fn test_time_warp() {
+    let w = TimeWarp { delta_s: 0_i64 };
+    assert_eq!(w.apply(100_u64), 100);
+
+    let w = TimeWarp { delta_s: 42_i64 };
+    assert_eq!(w.apply(100_u64), 142);
+
+    let w = TimeWarp { delta_s: -42_i64 };
+    assert_eq!(w.apply(100_u64), 58);
 }
 
 #[cfg(test)]
