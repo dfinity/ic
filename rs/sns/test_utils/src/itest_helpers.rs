@@ -1,6 +1,5 @@
 use canister_test::{local_test_with_config_e, Canister, Project, Runtime};
 use dfn_candid::{candid_one, CandidOne};
-use futures::future::join_all;
 use ic_config::subnet_config::SubnetConfig;
 use ic_config::Config;
 use ic_sns_governance::init::GovernanceCanisterInitPayloadBuilder;
@@ -28,16 +27,14 @@ use std::future::Future;
 use std::path::Path;
 use std::time::{Duration, SystemTime};
 
-use crate::{
-    memory_allocation_of, ALL_SNS_CANISTER_IDS, NUM_SNS_CANISTERS, TEST_GOVERNANCE_CANISTER_ID,
-    TEST_LEDGER_CANISTER_ID, TEST_ROOT_CANISTER_ID,
-};
+use crate::{NUM_SNS_CANISTERS, SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES};
 use dfn_protobuf::protobuf;
 use ic_canister_client::Sender;
 use ic_crypto_sha::Sha256;
 use ic_sns_governance::governance::TimeWarp;
 use ic_sns_governance::pb::v1::proposal::Action;
-use ic_types::PrincipalId;
+use ic_types::{CanisterId, PrincipalId};
+use maplit::hashset;
 
 /// All the SNS canisters
 #[derive(Clone)]
@@ -66,7 +63,8 @@ impl SnsInitPayloadsBuilder {
         SnsInitPayloadsBuilder {
             governance: GovernanceCanisterInitPayloadBuilder::new(),
             ledger: LedgerCanisterInitPayload {
-                minting_account: TEST_GOVERNANCE_CANISTER_ID.get().into(),
+                // minting_account will be set when the Governance canister ID is allocated
+                minting_account: AccountIdentifier { hash: [0; 28] },
                 initial_values: HashMap::new(),
                 archive_options: Some(ledger::ArchiveOptions {
                     trigger_threshold: 2000,
@@ -75,13 +73,15 @@ impl SnsInitPayloadsBuilder {
                     node_max_memory_size_bytes: Some(1024 * 1024 * 1024),
                     // 128kb
                     max_message_size_bytes: Some(128 * 1024),
-                    controller_id: TEST_ROOT_CANISTER_ID,
+                    // controller_id will be set when the Root canister ID is allocated
+                    controller_id: CanisterId::from_u64(0),
                     cycles_for_archive_creation: Some(0),
                 }),
                 max_message_size_bytes: Some(128 * 1024),
                 // 24 hour transaction window
                 transaction_window: Some(Duration::from_secs(24 * 60 * 60)),
-                send_whitelist: ALL_SNS_CANISTER_IDS.iter().map(|&x| *x).collect(),
+                // send_whitelist will be populated with SNS canister IDs when they're allocated
+                send_whitelist: hashset! {},
                 transfer_fee: Some(DEFAULT_TRANSFER_FEE),
                 token_symbol: None,
                 token_name: None,
@@ -129,28 +129,6 @@ impl SnsInitPayloadsBuilder {
     }
 
     pub fn build(&mut self) -> SnsInitPayloads {
-        assert!(self
-            .ledger
-            .initial_values
-            .get(&TEST_GOVERNANCE_CANISTER_ID.get().into())
-            .is_none());
-
-        for n in self.governance.proto.neurons.values() {
-            let sub = n
-                .subaccount()
-                .unwrap_or_else(|e| panic!("Couldn't calculate subaccount from neuron: {}", e));
-            let aid = ledger::AccountIdentifier::new(TEST_GOVERNANCE_CANISTER_ID.get(), Some(sub));
-            let previous_value = self
-                .ledger
-                .initial_values
-                .insert(aid, Tokens::from_e8s(n.cached_neuron_stake_e8s));
-
-            assert_eq!(previous_value, None);
-        }
-
-        self.governance
-            .with_ledger_canister_id(TEST_LEDGER_CANISTER_ID);
-
         SnsInitPayloads {
             governance: self.governance.build(),
             ledger: self.ledger.clone(),
@@ -160,27 +138,64 @@ impl SnsInitPayloadsBuilder {
 
 impl SnsCanisters<'_> {
     /// Creates and installs all of the SNS canisters
-    pub async fn set_up(runtime: &'_ Runtime, init_payloads: SnsInitPayloads) -> SnsCanisters<'_> {
+    pub async fn set_up(
+        runtime: &'_ Runtime,
+        mut init_payloads: SnsInitPayloads,
+    ) -> SnsCanisters<'_> {
         let since_start_secs = {
             let s = SystemTime::now();
             move || (SystemTime::now().duration_since(s).unwrap()).as_secs_f32()
         };
 
-        // First, create as many canisters as we need. Ordering does not matter, we just
-        // need enough canisters, and them we'll grab them in the order we want.
-        let maybe_canisters: Result<Vec<Canister<'_>>, String> = join_all(
-            (0..NUM_SNS_CANISTERS).map(|_| runtime.create_canister_max_cycles_with_retries()),
-        )
-        .await
-        .into_iter()
-        .collect();
+        let root = runtime
+            .create_canister_max_cycles_with_retries()
+            .await
+            .expect("Couldn't create Root canister");
 
-        maybe_canisters.unwrap_or_else(|e| panic!("At least one canister creation failed: {}", e));
-        eprintln!("SNS canisters created after {:.1} s", since_start_secs());
+        let mut governance = runtime
+            .create_canister_max_cycles_with_retries()
+            .await
+            .expect("Couldn't create Governance canister");
 
-        let root = Canister::new(runtime, TEST_ROOT_CANISTER_ID);
-        let mut governance = Canister::new(runtime, TEST_GOVERNANCE_CANISTER_ID);
-        let mut ledger = Canister::new(runtime, TEST_LEDGER_CANISTER_ID);
+        let mut ledger = runtime
+            .create_canister_max_cycles_with_retries()
+            .await
+            .expect("Couldn't create Ledger canister");
+
+        let root_canister_id = root.canister_id();
+        let governance_canister_id = governance.canister_id();
+        let ledger_canister_id = ledger.canister_id();
+
+        init_payloads.governance.ledger_canister_id = Some(ledger_canister_id.into());
+        init_payloads.ledger.minting_account = governance_canister_id.into();
+        init_payloads.ledger.send_whitelist =
+            hashset! { governance_canister_id, ledger_canister_id };
+        init_payloads
+            .ledger
+            .archive_options
+            .as_mut()
+            .expect("Archive options not set")
+            .controller_id = root.canister_id();
+
+        assert!(init_payloads
+            .ledger
+            .initial_values
+            .get(&governance_canister_id.get().into())
+            .is_none());
+
+        // Set initial neurons
+        for n in init_payloads.governance.neurons.values() {
+            let sub = n
+                .subaccount()
+                .unwrap_or_else(|e| panic!("Couldn't calculate subaccount from neuron: {}", e));
+            let aid = ledger::AccountIdentifier::new(governance_canister_id.get(), Some(sub));
+            let previous_value = init_payloads
+                .ledger
+                .initial_values
+                .insert(aid, Tokens::from_e8s(n.cached_neuron_stake_e8s));
+
+            assert_eq!(previous_value, None);
+        }
 
         // Install canisters
         futures::join!(
@@ -193,8 +208,8 @@ impl SnsCanisters<'_> {
         // We can set all the controllers at once. Several -- or all -- may go
         // into the same block, this makes setup faster.
         futures::try_join!(
-            governance.set_controller_with_retries(TEST_ROOT_CANISTER_ID.get()),
-            ledger.set_controller_with_retries(TEST_ROOT_CANISTER_ID.get()),
+            governance.set_controller_with_retries(root_canister_id.get()),
+            ledger.set_controller_with_retries(root_canister_id.get()),
         )
         .unwrap();
 
@@ -324,7 +339,7 @@ impl SnsCanisters<'_> {
                     fee: DEFAULT_TRANSFER_FEE,
                     from_subaccount: None,
                     to: AccountIdentifier::new(
-                        PrincipalId::from(TEST_GOVERNANCE_CANISTER_ID),
+                        PrincipalId::from(self.governance.canister_id()),
                         Some(to_subaccount),
                     ),
                     created_at_time: None,
@@ -565,25 +580,6 @@ pub async fn install_rust_canister_with_memory_allocation(
     );
 }
 
-/// Install a rust canister bytecode in a subnet.
-pub async fn install_rust_canister(
-    canister: &mut Canister<'_>,
-    relative_path_from_rs: impl AsRef<Path>,
-    binary_name: impl AsRef<str>,
-    cargo_features: &[&str],
-    canister_init_payload: Option<Vec<u8>>,
-) {
-    install_rust_canister_with_memory_allocation(
-        canister,
-        relative_path_from_rs,
-        binary_name,
-        cargo_features,
-        canister_init_payload,
-        memory_allocation_of(canister.canister_id()),
-    )
-    .await
-}
-
 /// Runs a local test on the sns subnetwork, so that the canister will be
 /// assigned the same ids as in prod.
 pub fn local_test_on_sns_subnet<Fut, Out, F>(run: F) -> Out
@@ -602,12 +598,13 @@ pub async fn install_governance_canister(canister: &mut Canister<'_>, init_paylo
     init_payload
         .encode(&mut serialized)
         .expect("Couldn't serialize init payload.");
-    install_rust_canister(
+    install_rust_canister_with_memory_allocation(
         canister,
         "sns/governance",
         "sns-governance-canister",
         &[],
         Some(serialized),
+        SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES,
     )
     .await;
 }
@@ -627,12 +624,13 @@ pub async fn install_ledger_canister<'runtime, 'a>(
     canister: &mut Canister<'runtime>,
     args: LedgerCanisterInitPayload,
 ) {
-    install_rust_canister(
+    install_rust_canister_with_memory_allocation(
         canister,
         "rosetta-api/ledger_canister",
         "ledger-canister",
         &["notify-method"],
         Some(CandidOne(args).into_bytes().unwrap()),
+        SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES,
     )
     .await
 }

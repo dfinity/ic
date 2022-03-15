@@ -24,7 +24,6 @@ use ic_sns_governance::types::ONE_YEAR_SECONDS;
 use ic_sns_test_utils::itest_helpers::{
     local_test_on_sns_subnet, SnsCanisters, SnsInitPayloadsBuilder,
 };
-use ic_sns_test_utils::TEST_GOVERNANCE_CANISTER_ID;
 use ic_types::PrincipalId;
 use ledger_canister::{AccountIdentifier, Tokens};
 use ledger_canister::{Memo, SendArgs, Subaccount, DEFAULT_TRANSFER_FEE};
@@ -500,7 +499,7 @@ fn test_one_user_cannot_claim_other_users_neuron() {
                     fee: DEFAULT_TRANSFER_FEE,
                     from_subaccount: None,
                     to: AccountIdentifier::new(
-                        PrincipalId::from(TEST_GOVERNANCE_CANISTER_ID),
+                        PrincipalId::from(sns_canisters.governance.canister_id()),
                         Some(to_subaccount),
                     ),
                     created_at_time: None,

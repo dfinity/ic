@@ -6359,6 +6359,7 @@ dependencies = [
  "ic-utils 0.8.0",
  "lazy_static",
  "ledger-canister",
+ "maplit",
  "on_wire",
  "prost",
  "rand_chacha 0.2.2",
