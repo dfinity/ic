@@ -239,6 +239,7 @@ rosetta-pre-master:
 
 upgrade-compatibility-pre-master:
   extends: .system-tests
+  allow_failure: true  # VER-1537
   variables:
     SUITE_NAME: "upgrade_compatibility"
   script:
