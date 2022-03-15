@@ -116,7 +116,7 @@ impl SelfValidatingPayload {
 impl From<&SelfValidatingPayload> for pb::SelfValidatingPayload {
     fn from(self_validating_payload: &SelfValidatingPayload) -> Self {
         Self {
-            testnet_responses: self_validating_payload.0.iter().map(|x| x.into()).collect(),
+            bitcoin_testnet_payload: self_validating_payload.0.iter().map(|x| x.into()).collect(),
         }
     }
 }
@@ -126,7 +126,7 @@ impl TryFrom<pb::SelfValidatingPayload> for SelfValidatingPayload {
 
     fn try_from(value: pb::SelfValidatingPayload) -> Result<Self, Self::Error> {
         let mut responses = vec![];
-        for r in value.testnet_responses.into_iter() {
+        for r in value.bitcoin_testnet_payload.into_iter() {
             responses.push(BitcoinAdapterResponse::try_from(r).map_err(|err| err.to_string())?);
         }
         Ok(Self(responses))

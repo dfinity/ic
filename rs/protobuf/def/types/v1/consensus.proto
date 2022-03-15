@@ -84,7 +84,7 @@ message SubnetStreamSlice {
 
 message SelfValidatingPayload {
 	// Responses from the Bitcoin Adapter talking to the Bitcoin testnet.
-	repeated bitcoin.v1.BitcoinAdapterResponse testnet_responses = 1;
+	repeated bitcoin.v1.BitcoinAdapterResponse bitcoin_testnet_payload = 1;
 }
 
 message XNetPayload {
