@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.4.0] - 2022-03-14
 ### Added
 - Support for `MERGE_MATURITY` neuron management operation.
-- Optional parameter `percentage_to_spawn` to allow partial spawning of neuron maturity with the existing `SPAWN_MATURITY` operation.
+- Optional parameter `percentage_to_spawn` to allow partial spawning of neuron maturity with the existing `SPAWN` operation.
 
 ### Changed
 - --token-name parameter renamed to --token-symbol
