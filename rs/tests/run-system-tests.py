@@ -278,6 +278,11 @@ def main(runner_args: str, folders_to_remove: List[str]) -> int:
     )
     testrun_returncode = run_command(command=run_test_driver_cmd, env=env_dict)
 
+    # Both 0 and 1 (case with some failed tests) exit codes are considered to be successful executions of the test suite.
+    # All other exit codes are treated as errors. For those we don't generate summary, or push messages to slack or honeycomb.
+    if not (testrun_returncode == 0 or testrun_returncode == 1):
+        exit_with_log(f"Execution of prod-test-driver failed unexpectedly with {testrun_returncode} exit code.")
+
     if is_honeycomb_push:
         logging.info("Pushing results to honeycomb.")
         honeycomb_cmd = (
