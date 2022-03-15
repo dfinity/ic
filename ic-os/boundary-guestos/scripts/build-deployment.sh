@@ -205,9 +205,7 @@ function generate_boundary_node_config() {
             local subnet_idx=$(echo ${nodes} | jq -r '.subnet_idx')
             local node_idx=$(echo ${nodes} | jq -r '.node_idx')
             NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
-            # TODO (NODE-244): Copy the NNS public key in the correct place
-            # Currently Boundary Nodes tests do not depend on nns_public_key
-            #cp "${IC_PREP_DIR}/nns_public_key.pem" "${CONFIG_DIR}/$NODE_PREFIX/nns_public_key.pem"
+            cp "${IC_PREP_DIR}/nns_public_key.pem" "${CONFIG_DIR}/$NODE_PREFIX/nns_public_key.pem"
             echo "nns_url=${NNS_URL}" >"${CONFIG_DIR}/$NODE_PREFIX/nns.conf"
         done
     done
