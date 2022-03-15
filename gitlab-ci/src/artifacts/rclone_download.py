@@ -37,7 +37,7 @@ MAX_RCLONE_ATTEMPTS = 10
 class RcloneDownload:
     """Utilities to rclone from a given the IC CDN."""
 
-    def __init__(self, config, remote_path, out, timeout, dry_run, unpack, mark_executable):
+    def __init__(self, config, remote_path, out, timeout, dry_run, unpack, mark_executable, verbose):
         """Init the object with configuration settings."""
         self._local_repo = None
         # Setting the repo_root relies on the relative path of the script in the repo
@@ -54,6 +54,7 @@ class RcloneDownload:
         self.dry_run = dry_run
         self.unpack = unpack
         self.mark_executable = mark_executable
+        self.verbose = verbose
 
     @property
     def local_repo(self):
@@ -73,7 +74,7 @@ class RcloneDownload:
         for i in range(MAX_RCLONE_ATTEMPTS):
             try:
                 p = subprocess.run(
-                    ["rclone", f"--config={self.config}", "ls", cdn_path],
+                    ["rclone", f"--verbose={self.verbose}", f"--config={self.config}", "ls", cdn_path],
                     timeout=300,  # Listing files should be instant, 20 seconds is plenty
                     capture_output=True,
                 )
@@ -118,6 +119,7 @@ class RcloneDownload:
             local_path = pathlib.Path(self.out or f"{self.repo_root}/artifacts/{git_rev}/{self.remote_path}")
             cmd = [
                 f"{self.repo_root}/gitlab-ci/tools/rclone",
+                f"--verbose={self.verbose}",
                 f"--config={self.config}",
                 "--checksum",
                 "--include",
@@ -135,7 +137,8 @@ class RcloneDownload:
 
             for i in range(MAX_RCLONE_ATTEMPTS):
                 try:
-                    subprocess.run(cmd, timeout=self.timeout, capture_output=True)
+                    p = subprocess.run(cmd, timeout=self.timeout, capture_output=True)
+                    logging.info("rclone completed successfully.\nStdout:\n%s\nStderr:\n%s\n", p.stdout, p.stderr)
                     logging.info("CDN artifacts from %s downloaded to %s", cdn_path, local_path)
                     self._postprocess_downloads(local_path)
                     return True
@@ -293,7 +296,7 @@ def main() -> None:
         nargs="?",
     )
 
-    parser.add_argument("--verbose", "-v", action="store_true", help="Verbose mode")
+    parser.add_argument("--verbose", "-v", action="store", default=1, help="Verbose mode")
 
     args = parser.parse_args()
     logging.basicConfig(level=logging.DEBUG)
@@ -306,6 +309,7 @@ def main() -> None:
         args.dry_run,
         args.unpack,
         args.mark_executable,
+        args.verbose,
     )
 
     if args.merge_base:
