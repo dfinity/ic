@@ -2282,18 +2282,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "enum_dispatch"
-version = "0.3.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8946e241a7774d5327d92749c50806f275f57d031d2229ecbfd65469a8ad338e"
-dependencies = [
- "once_cell",
- "proc-macro2 1.0.27",
- "quote 1.0.7",
- "syn 1.0.80",
-]
-
-[[package]]
 name = "env_logger"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3834,24 +3822,6 @@ name = "ic-context-logger"
 version = "0.8.0"
 dependencies = [
  "slog",
-]
-
-[[package]]
-name = "ic-cow-state"
-version = "0.8.0"
-dependencies = [
- "byteorder",
- "enum_dispatch",
- "ic-sys",
- "ic-utils 0.8.0",
- "lazy_static",
- "libc",
- "lmdb-rkv",
- "nix 0.23.0",
- "num-integer",
- "parking_lot 0.11.1",
- "rand 0.7.3",
- "tempfile",
 ]
 
 [[package]]
