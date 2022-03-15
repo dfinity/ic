@@ -374,3 +374,29 @@ async fn automatic_stopped_canister_removal() {
         .unwrap_err();
     assert_eq!(user_error.code(), ErrorCode::CanisterNotFound);
 }
+
+#[tokio::test]
+async fn compressed_canisters_support() {
+    let env = StateMachine::new();
+
+    let test_canister_wasm = wabt::wat2wasm(TEST_CANISTER).expect("invalid WAT");
+    let compressed_wasm = {
+        let mut encoder = libflate::gzip::Encoder::new(Vec::new()).unwrap();
+        std::io::copy(&mut &test_canister_wasm[..], &mut encoder).unwrap();
+        encoder.finish().into_result().unwrap()
+    };
+    let compressed_hash = ic_crypto_sha::Sha256::hash(&compressed_wasm);
+
+    let canister_id = env.install_canister(compressed_wasm, vec![], None).unwrap();
+
+    assert_eq!(env.module_hash(canister_id), Some(compressed_hash));
+    let env = env.restart_node();
+    assert_eq!(env.module_hash(canister_id), Some(compressed_hash));
+
+    let val = env.query(canister_id, "read", vec![]).unwrap().bytes();
+    assert_eq!(to_int(val), 0);
+
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    let val = env.query(canister_id, "read", vec![]).unwrap().bytes();
+    assert_eq!(to_int(val), 1);
+}

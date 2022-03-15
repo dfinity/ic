@@ -346,7 +346,7 @@ fn canisters_as_tree(
                     .with_tree_if(
                         certification_version > 0,
                         "module_hash",
-                        blob(move || execution_state.wasm_binary.binary.hash_sha256().to_vec()),
+                        blob(move || execution_state.wasm_binary.binary.module_hash().to_vec()),
                     )
                     .with_tree_if(
                         certification_version > 1,

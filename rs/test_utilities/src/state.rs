@@ -31,7 +31,7 @@ use ic_types::{
     CanisterId, CanisterStatusType, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation,
     NumBytes, PrincipalId, QueueIndex, SubnetId, Time,
 };
-use ic_wasm_types::BinaryEncodedWasm;
+use ic_wasm_types::CanisterModule;
 use proptest::prelude::*;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::TryFrom;
@@ -296,7 +296,7 @@ impl CanisterStateBuilder {
         let execution_state = match self.wasm {
             Some(wasm_binary) => {
                 let mut ee = initial_execution_state();
-                ee.wasm_binary = WasmBinary::new(BinaryEncodedWasm::new(wasm_binary));
+                ee.wasm_binary = WasmBinary::new(CanisterModule::new(wasm_binary));
                 ee.stable_memory = stable_memory;
                 Some(ee)
             }
@@ -456,7 +456,7 @@ pub fn initial_execution_state() -> ExecutionState {
     ExecutionState {
         canister_root: "NOT_USED".into(),
         session_nonce: None,
-        wasm_binary: WasmBinary::new(BinaryEncodedWasm::new(vec![])),
+        wasm_binary: WasmBinary::new(CanisterModule::new(vec![])),
         wasm_memory: Memory::default(),
         stable_memory: Memory::default(),
         exported_globals: vec![],
@@ -670,7 +670,7 @@ pub fn insert_dummy_canister(
     canister_id: CanisterId,
     controller: PrincipalId,
 ) {
-    let wasm = BinaryEncodedWasm::new(vec![]);
+    let wasm = CanisterModule::new(vec![]);
     let mut canister_state = new_canister_state(
         canister_id,
         controller,
@@ -739,7 +739,7 @@ prop_compose! {
         (allocation, round) in arb_compute_allocation_and_last_round(last_round_max)
     ) -> CanisterState {
         let mut execution_state = initial_execution_state();
-        execution_state.wasm_binary = WasmBinary::new(BinaryEncodedWasm::new(wabt::wat2wasm(r#"(module)"#).unwrap()));
+        execution_state.wasm_binary = WasmBinary::new(CanisterModule::new(wabt::wat2wasm(r#"(module)"#).unwrap()));
         let scheduler_state = SchedulerState::default();
         let system_state = SystemState::new_running(
             canister_test_id(0),

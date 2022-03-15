@@ -424,7 +424,7 @@ impl StateMachine {
         mode: CanisterInstallMode,
         wasm: Vec<u8>,
         payload: Vec<u8>,
-    ) {
+    ) -> Result<(), UserError> {
         let state = self.state_manager.get_latest_state().take();
         let sender = state
             .canister_state(&canister_id)
@@ -436,12 +436,12 @@ impl StateMachine {
             Method::InstallCode,
             InstallCodeArgs::new(mode, canister_id, wasm, payload, None, None, None).encode(),
         )
-        .expect("failed to install canister code");
+        .map(|_| ())
     }
 
     /// Compiles specified WAT to Wasm and installs it for the canister using
     /// the specified ID in the provided install mode.
-    fn install_in_mode(
+    fn install_wat_in_mode(
         &self,
         canister_id: CanisterId,
         mode: CanisterInstallMode,
@@ -454,6 +454,43 @@ impl StateMachine {
             wabt::wat2wasm(wat).expect("invalid WAT"),
             payload,
         )
+        .expect("failed to install canister");
+    }
+
+    /// Creates a new canister and returns the canister principal.
+    pub fn create_canister(&self, settings: Option<CanisterSettingsArgs>) -> CanisterId {
+        let wasm_result = self
+            .execute_ingress(
+                ic00::IC_00,
+                ic00::Method::ProvisionalCreateCanisterWithCycles,
+                ic00::ProvisionalCreateCanisterWithCyclesArgs {
+                    amount: Some(candid::Nat::from(0)),
+                    settings,
+                }
+                .encode(),
+            )
+            .expect("failed to create canister");
+        match wasm_result {
+            WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes[..])
+                .expect("failed to decode canister id record")
+                .get_canister_id(),
+            WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
+        }
+    }
+
+    /// Creates a new canister and installs its code.
+    /// Returns the ID of the newly created canister.
+    ///
+    /// This function is synchronous.
+    pub fn install_canister(
+        &self,
+        module: Vec<u8>,
+        payload: Vec<u8>,
+        settings: Option<CanisterSettingsArgs>,
+    ) -> Result<CanisterId, UserError> {
+        let canister_id = self.create_canister(settings);
+        self.install_wasm_in_mode(canister_id, CanisterInstallMode::Install, module, payload)?;
+        Ok(canister_id)
     }
 
     /// Creates a new canister and installs its code specified by WAT string.
@@ -470,37 +507,21 @@ impl StateMachine {
         payload: Vec<u8>,
         settings: Option<CanisterSettingsArgs>,
     ) -> CanisterId {
-        let wasm_result = self
-            .execute_ingress(
-                ic00::IC_00,
-                ic00::Method::ProvisionalCreateCanisterWithCycles,
-                ic00::ProvisionalCreateCanisterWithCyclesArgs {
-                    amount: Some(candid::Nat::from(0)),
-                    settings,
-                }
-                .encode(),
-            )
-            .expect("failed to create canister");
-        let canister_id = match wasm_result {
-            WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes[..])
-                .expect("failed to decode canister id record")
-                .get_canister_id(),
-            WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
-        };
-        self.install_in_mode(canister_id, CanisterInstallMode::Install, wat, payload);
+        let canister_id = self.create_canister(settings);
+        self.install_wat_in_mode(canister_id, CanisterInstallMode::Install, wat, payload);
         canister_id
     }
 
     /// Erases the previous state and code of the canister with the specified ID
     /// and replaces the code with the compiled form of the provided WAT.
     pub fn reinstall_canister_wat(&self, canister_id: CanisterId, wat: &str, payload: Vec<u8>) {
-        self.install_in_mode(canister_id, CanisterInstallMode::Reinstall, wat, payload);
+        self.install_wat_in_mode(canister_id, CanisterInstallMode::Reinstall, wat, payload);
     }
 
     /// Performs upgrade of the canister with the specified ID to the
     /// code obtained by compiling the provided WAT.
     pub fn upgrade_canister_wat(&self, canister_id: CanisterId, wat: &str, payload: Vec<u8>) {
-        self.install_in_mode(canister_id, CanisterInstallMode::Upgrade, wat, payload);
+        self.install_wat_in_mode(canister_id, CanisterInstallMode::Upgrade, wat, payload);
     }
 
     /// Queries the canister with the specified ID.
@@ -521,6 +542,20 @@ impl StateMachine {
             },
             self.state_manager.get_latest_state().take(),
             Vec::new(),
+        )
+    }
+
+    /// Returns the module hash of the specified canister.
+    pub fn module_hash(&self, canister_id: CanisterId) -> Option<[u8; 32]> {
+        let state = self.state_manager.get_latest_state().take();
+        let canister_state = state.canister_state(&canister_id)?;
+        Some(
+            canister_state
+                .execution_state
+                .as_ref()?
+                .wasm_binary
+                .binary
+                .module_hash(),
         )
     }
 

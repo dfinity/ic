@@ -1,10 +1,12 @@
+pub mod decoding;
 pub mod errors;
 pub mod instrumentation;
 pub mod validation;
 pub mod wasm_module_builder;
 
-use ic_wasm_types::BinaryEncodedWasm;
+use decoding::decode_wasm;
 use instrumentation::{instrument, InstructionCostTable, InstrumentationOutput};
+use std::sync::Arc;
 use validation::validate_wasm_binary;
 
 use ic_config::embedders::Config as EmbeddersConfig;
@@ -22,12 +24,13 @@ Usage: {} wasm_file
 fn instrument_wasm(filename: &str) -> std::io::Result<()> {
     use std::io::Write;
 
-    let contents = std::fs::read(filename).map(BinaryEncodedWasm::new)?;
-    if let Err(err) = validate_wasm_binary(&contents, &EmbeddersConfig::default()) {
+    let contents = std::fs::read(filename)?;
+    let decoded = decode_wasm(Arc::new(contents)).expect("failed to decode canister module");
+    if let Err(err) = validate_wasm_binary(&decoded, &EmbeddersConfig::default()) {
         eprintln!("Failed to validate wasm file {}: {}", filename, err);
         std::process::exit(1);
     }
-    match instrument(&contents, &InstructionCostTable::default()) {
+    match instrument(&decoded, &InstructionCostTable::default()) {
         Ok(InstrumentationOutput { binary, .. }) => std::io::stdout().write_all(binary.as_slice()),
         Err(err) => {
             eprintln!("Failed to instrument wasm file {}: {}", filename, err);

@@ -226,6 +226,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ccc9a9dd069569f212bc4330af9f17c4afb5e8ce185e83dbb14f1349dda18b10"
 
 [[package]]
+name = "adler32"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aae1277d39aeec15cb388266ecc24b11c80469deae6067e17a1a7aa9e5c1f234"
+
+[[package]]
 name = "ahash"
 version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3594,6 +3600,7 @@ dependencies = [
  "ic-utils 0.8.0",
  "ic-wasm-types",
  "libc",
+ "libflate",
  "memory_tracker",
  "mockall 0.7.2",
  "nix 0.23.0",
@@ -4699,6 +4706,7 @@ dependencies = [
  "insta",
  "lazy_static",
  "libc",
+ "libflate",
  "maplit",
  "memory_tracker",
  "nix 0.23.0",
@@ -4764,6 +4772,7 @@ dependencies = [
  "ic-wasm-types",
  "itertools 0.10.0",
  "lazy_static",
+ "libflate",
  "maplit",
  "memory_tracker",
  "mockall 0.7.2",
@@ -6428,6 +6437,7 @@ version = "0.8.0"
 dependencies = [
  "candid",
  "ic-config",
+ "ic-crypto-sha",
  "ic-cycles-account-manager",
  "ic-error-types",
  "ic-execution-environment",
@@ -6448,6 +6458,7 @@ dependencies = [
  "ic-state-manager",
  "ic-test-utilities",
  "ic-types 0.8.0",
+ "libflate",
  "slog",
  "slog-term",
  "tempfile",
@@ -7333,6 +7344,26 @@ name = "libc"
 version = "0.2.119"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1bf2e165bb3457c8e098ea76f3e3bc9db55f87aa90d52d0e6be741470916aaa4"
+
+[[package]]
+name = "libflate"
+version = "1.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2d57e534717ac3e0b8dc459fe338bdfb4e29d7eea8fd0926ba649ddd3f4765f"
+dependencies = [
+ "adler32",
+ "crc32fast",
+ "libflate_lz77",
+]
+
+[[package]]
+name = "libflate_lz77"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "39a734c0493409afcd49deee13c006a04e3586b9761a03543c6272c9c51f2f5a"
+dependencies = [
+ "rle-decode-fast",
+]
 
 [[package]]
 name = "libloading"
@@ -9777,6 +9808,12 @@ dependencies = [
  "digest 0.9.0",
  "opaque-debug 0.3.0",
 ]
+
+[[package]]
+name = "rle-decode-fast"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3582f63211428f83597b51b2ddb88e2a91a9d52d12831f9d08f5e624e8977422"
 
 [[package]]
 name = "rocksdb"

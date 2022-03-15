@@ -18,7 +18,7 @@ use ic_replicated_state::canister_state::execution_state::{
 use ic_replicated_state::{EmbedderCache, ExecutionState, ExportedFunctions, Memory, PageMap};
 use ic_system_api::sandbox_safe_system_state::SystemStateChanges;
 use ic_types::{CanisterId, NumInstructions};
-use ic_wasm_types::BinaryEncodedWasm;
+use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, HistogramVec, IntGauge};
 use std::collections::{HashMap, VecDeque};
 use std::convert::TryInto;
@@ -697,8 +697,7 @@ impl SandboxedExecutionController {
         let sandbox_process = self.get_sandbox_process(canister_id);
 
         // Step 1: Compile Wasm binary and cache it.
-        let binary_encoded_wasm = BinaryEncodedWasm::new(wasm_source.clone());
-        let wasm_binary = WasmBinary::new(binary_encoded_wasm);
+        let wasm_binary = WasmBinary::new(CanisterModule::new(wasm_source.clone()));
         let (wasm_id, compile_count) = open_wasm(&sandbox_process, &wasm_binary)?;
         if compile_count > 0 {
             self.compile_count_for_testing

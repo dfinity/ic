@@ -81,7 +81,7 @@ mod tests {
         xnet::{StreamIndex, StreamIndexedQueue},
         Cycles, ExecutionRound,
     };
-    use ic_wasm_types::BinaryEncodedWasm;
+    use ic_wasm_types::CanisterModule;
     use std::collections::BTreeSet;
 
     const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
@@ -175,7 +175,7 @@ mod tests {
             wasm_memory
                 .page_map
                 .update(&[(PageIndex::from(1), &[0u8; PAGE_SIZE])]);
-            let wasm_binary = WasmBinary::new(BinaryEncodedWasm::new(vec![]));
+            let wasm_binary = WasmBinary::new(CanisterModule::new(vec![]));
             let execution_state = ExecutionState {
                 canister_root: "NOT_USED".into(),
                 session_nonce: None,

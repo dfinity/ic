@@ -19,7 +19,7 @@ use ic_types::{
     nominal_cycles::NominalCycles, AccumulatedPriority, CanisterId, ComputeAllocation, Cycles,
     ExecutionRound, Height, MemoryAllocation, NumInstructions, PrincipalId,
 };
-use ic_wasm_types::BinaryEncodedWasm;
+use ic_wasm_types::CanisterModule;
 use std::convert::{From, TryFrom, TryInto};
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -939,8 +939,8 @@ impl<T> WasmFile<T>
 where
     T: ReadPolicy,
 {
-    pub fn deserialize(&self) -> Result<BinaryEncodedWasm, LayoutError> {
-        BinaryEncodedWasm::new_from_file(self.path.clone()).map_err(|err| LayoutError::IoError {
+    pub fn deserialize(&self) -> Result<CanisterModule, LayoutError> {
+        CanisterModule::new_from_file(self.path.clone()).map_err(|err| LayoutError::IoError {
             path: self.path.clone(),
             message: "Failed to read file contents".to_string(),
             io_err: err,
@@ -952,7 +952,7 @@ impl<T> WasmFile<T>
 where
     T: WritePolicy,
 {
-    pub fn serialize(&self, wasm: &BinaryEncodedWasm) -> Result<(), LayoutError> {
+    pub fn serialize(&self, wasm: &CanisterModule) -> Result<(), LayoutError> {
         let mut file = open_for_write(&self.path)?;
         file.write_all(wasm.as_slice())
             .map_err(|err| LayoutError::IoError {

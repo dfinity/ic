@@ -12,7 +12,7 @@ use ic_types::{
     Time,
 };
 use ic_types::{messages::MAX_RESPONSE_COUNT_BYTES, CountBytes, Cycles};
-use ic_wasm_types::BinaryEncodedWasm;
+use ic_wasm_types::CanisterModule;
 
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 const MAX_CANISTER_MEMORY_SIZE: NumBytes = NumBytes::new(u64::MAX / 2);
@@ -352,7 +352,7 @@ fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execut
         // And an execution state with non-zero size.
         canister_state.execution_state = Some(ExecutionState::new(
             Default::default(),
-            execution_state::WasmBinary::new(BinaryEncodedWasm::new(vec![1, 2, 3])),
+            execution_state::WasmBinary::new(CanisterModule::new(vec![1, 2, 3])),
             ExportedFunctions::new(Default::default()),
             Default::default(),
             Default::default(),
@@ -526,10 +526,10 @@ fn wasm_can_be_loaded_from_a_file() {
     use std::io::Write;
 
     let mut tmp = tempfile::NamedTempFile::new().expect("failed to create a temporary file");
-    let wasm_in_memory = BinaryEncodedWasm::new(vec![0x00, 0x61, 0x73, 0x6d]);
+    let wasm_in_memory = CanisterModule::new(vec![0x00, 0x61, 0x73, 0x6d]);
     tmp.write_all(wasm_in_memory.as_slice())
         .expect("failed to write Wasm to a temporary file");
-    let wasm_on_disk = BinaryEncodedWasm::new_from_file(tmp.path().to_owned())
+    let wasm_on_disk = CanisterModule::new_from_file(tmp.path().to_owned())
         .expect("failed to read Wasm from disk");
 
     assert_eq!(wasm_in_memory.file(), None);
