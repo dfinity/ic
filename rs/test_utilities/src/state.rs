@@ -563,7 +563,7 @@ pub fn running_canister_into_stopped(mut canister: CanisterState) -> CanisterSta
     canister
 }
 
-/// Returns a `ReplicatedState` with variable amount of canisters, input
+/// Returns a `ReplicatedState` with SubnetType::Application, variable amount of canisters, input
 /// messages per canister and methods that are to be called.
 pub fn get_initial_state(canister_num: u64, message_num_per_canister: u64) -> ReplicatedState {
     get_initial_state_with_balance(
@@ -571,6 +571,20 @@ pub fn get_initial_state(canister_num: u64, message_num_per_canister: u64) -> Re
         message_num_per_canister,
         INITIAL_CYCLES,
         SubnetType::Application,
+    )
+}
+
+/// Returns a `ReplicatedState` with SubnetType::System, variable amount of canisters, input
+/// messages per canister and methods that are to be called.
+pub fn get_initial_system_subnet_state(
+    canister_num: u64,
+    message_num_per_canister: u64,
+) -> ReplicatedState {
+    get_initial_state_with_balance(
+        canister_num,
+        message_num_per_canister,
+        INITIAL_CYCLES,
+        SubnetType::System,
     )
 }
 

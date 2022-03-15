@@ -14,7 +14,7 @@ use ic_config::execution_environment::Config;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::{
     execution_environment::{
-        ExecutionMode, ExecutionParameters, HypervisorError, SubnetAvailableMemory,
+        AvailableMemory, ExecutionMode, ExecutionParameters, HypervisorError, SubnetAvailableMemory,
     },
     messages::RequestOrIngress,
 };
@@ -76,7 +76,7 @@ const MINIMAL_WASM: [u8; 8] = [
 
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
-        SubnetAvailableMemory::new(i64::MAX / 2);
+        AvailableMemory::new(i64::MAX / 2, i64::MAX / 2).into();
     static ref INITIAL_CYCLES: Cycles =
         CANISTER_FREEZE_BALANCE_RESERVE + Cycles::new(5_000_000_000_000);
     static ref EXECUTION_PARAMETERS: ExecutionParameters = ExecutionParameters {

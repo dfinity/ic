@@ -27,9 +27,9 @@ use ic_test_utilities::{
     },
     mock_time,
     state::{
-        arb_replicated_state, get_initial_state, get_running_canister, get_stopped_canister,
-        get_stopping_canister, initial_execution_state, new_canister_state, CallContextBuilder,
-        CanisterStateBuilder, ReplicatedStateBuilder,
+        arb_replicated_state, get_initial_state, get_initial_system_subnet_state,
+        get_running_canister, get_stopped_canister, get_stopping_canister, initial_execution_state,
+        new_canister_state, CallContextBuilder, CanisterStateBuilder, ReplicatedStateBuilder,
     },
     types::{
         ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
@@ -69,7 +69,10 @@ const MAX_NUMBER_OF_CANISTERS: u64 = 0;
 lazy_static! {
     static ref INITIAL_CYCLES: Cycles =
         CANISTER_FREEZE_BALANCE_RESERVE + Cycles::new(5_000_000_000_000);
-    static ref SUBNET_AVAILABLE_MEMORY: i64 = MAX_MEMORY_ALLOCATION.get() as i64;
+    static ref SUBNET_AVAILABLE_MEMORY: AvailableMemory = AvailableMemory::new(
+        MAX_MEMORY_ALLOCATION.get() as i64,
+        MAX_MEMORY_ALLOCATION.get() as i64
+    );
 }
 
 fn assert_floats_are_equal(val0: f64, val1: f64) {
@@ -642,91 +645,114 @@ fn induct_messages_to_self_works() {
 /// output queue into the corresponding input queue.
 #[test]
 fn induct_messages_on_same_subnet_respects_memory_limits() {
-    let ingress_history_writer = Arc::new(default_ingress_history_writer_mock(0));
-    let scheduler_test_fixture = SchedulerTestFixture {
-        scheduler_config: SchedulerConfig {
-            scheduler_cores: 1,
-            max_instructions_per_round: NumInstructions::from(1),
-            max_instructions_per_message: NumInstructions::from(1),
-            instruction_overhead_per_message: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
-        },
-        metrics_registry: MetricsRegistry::new(),
-        canister_num: 2,
-        message_num_per_canister: 0,
+    // Runs a test with the given `available_memory` (expected to be limited to 2
+    // requests plus epsilon). Checks that the limit is enforced on application
+    // subnets and ignored on system subnets.
+    let run_test = |subnet_available_memory, subnet_type| {
+        let ingress_history_writer = Arc::new(default_ingress_history_writer_mock(0));
+        let scheduler_test_fixture = SchedulerTestFixture {
+            scheduler_config: SchedulerConfig {
+                scheduler_cores: 1,
+                max_instructions_per_round: NumInstructions::from(1),
+                max_instructions_per_message: NumInstructions::from(1),
+                instruction_overhead_per_message: NumInstructions::from(0),
+                ..SchedulerConfig::application_subnet()
+            },
+            metrics_registry: MetricsRegistry::new(),
+            canister_num: 2,
+            message_num_per_canister: 0,
+        };
+
+        let mut exec_env = MockExecutionEnvironment::new();
+        exec_env
+            .expect_subnet_available_memory()
+            .times(..)
+            .return_const(subnet_available_memory);
+        // Canisters can have up to 5 outstanding requests (plus epsilon). I.e. for
+        // source canister, 4 outgoing + 1 incoming request plus small responses.
+        exec_env
+            .expect_max_canister_memory_size()
+            .times(..)
+            .return_const(NumBytes::from(MAX_RESPONSE_COUNT_BYTES as u64 * 55 / 10));
+        let exec_env = Arc::new(exec_env);
+
+        scheduler_test(
+            &scheduler_test_fixture,
+            |scheduler| {
+                let mut state = match subnet_type {
+                    SubnetType::Application => get_initial_state(2, 0),
+                    SubnetType::System => get_initial_system_subnet_state(2, 0),
+                    _ => unreachable!(),
+                };
+                let mut canisters = state.take_canister_states();
+                let mut canister_ids: Vec<CanisterId> = canisters.keys().copied().collect();
+                let source_canister_id = canister_ids.pop().unwrap();
+                let dest_canister_id = canister_ids.pop().unwrap();
+
+                let source_canister = canisters.get_mut(&source_canister_id).unwrap();
+                let self_request = RequestBuilder::default()
+                    .sender(source_canister_id)
+                    .receiver(source_canister_id)
+                    .build();
+                source_canister
+                    .push_output_request(self_request.clone())
+                    .unwrap();
+                source_canister.push_output_request(self_request).unwrap();
+                let other_request = RequestBuilder::default()
+                    .sender(source_canister_id)
+                    .receiver(dest_canister_id)
+                    .build();
+                source_canister
+                    .push_output_request(other_request.clone())
+                    .unwrap();
+                source_canister.push_output_request(other_request).unwrap();
+                state.put_canister_states(canisters);
+
+                let (own_subnet_id, routing_table) = setup_routing_table();
+                state.metadata.network_topology.routing_table = Arc::new(routing_table);
+                state.metadata.own_subnet_id = own_subnet_id;
+
+                scheduler.induct_messages_on_same_subnet(&mut state);
+
+                let mut canisters = state.take_canister_states();
+                let source_canister = canisters.remove(&source_canister_id).unwrap();
+                let dest_canister = canisters.remove(&dest_canister_id).unwrap();
+                let source_canister_queues = source_canister.system_state.queues();
+                let dest_canister_queues = dest_canister.system_state.queues();
+                if ENFORCE_MESSAGE_MEMORY_USAGE && subnet_type == SubnetType::Application {
+                    // Only one message should have been inducted from each queue: we first induct
+                    // messages to self and hit the canister memory limit (1 more reserved slot);
+                    // then induct messages for `dest_canister` and hit the subnet memory limit (2
+                    // more reserved slots, minus the 1 before).
+                    assert_eq!(2, source_canister_queues.output_message_count());
+                    assert_eq!(1, source_canister_queues.input_queues_message_count());
+                    assert_eq!(1, dest_canister_queues.input_queues_message_count());
+                } else {
+                    // Without memory limits all messages should have been inducted.
+                    assert_eq!(0, source_canister_queues.output_message_count());
+                    assert_eq!(2, source_canister_queues.input_queues_message_count());
+                    assert_eq!(2, dest_canister_queues.input_queues_message_count());
+                }
+            },
+            ingress_history_writer,
+            exec_env,
+        )
     };
 
-    let mut exec_env = MockExecutionEnvironment::new();
     // Subnet has memory for 2 more requests (plus epsilon, for small responses).
-    exec_env
-        .expect_subnet_available_memory()
-        .times(..)
-        .return_const(MAX_RESPONSE_COUNT_BYTES as i64 * 25 / 10);
-    // Canisters can have up to 5 outstanding requests (plus epsilon). I.e. for
-    // source canister, 4 outgoing + 1 incoming request plus small responses.
-    exec_env
-        .expect_max_canister_memory_size()
-        .times(..)
-        .return_const(NumBytes::from(MAX_RESPONSE_COUNT_BYTES as u64 * 55 / 10));
-    let exec_env = Arc::new(exec_env);
+    run_test(
+        AvailableMemory::new(MAX_RESPONSE_COUNT_BYTES as i64 * 25 / 10, 1 << 30),
+        SubnetType::Application,
+    );
+    // Subnet has message memory for 2 more requests (plus epsilon, for small responses).
+    run_test(
+        AvailableMemory::new(1 << 30, MAX_RESPONSE_COUNT_BYTES as i64 * 25 / 10),
+        SubnetType::Application,
+    );
 
-    scheduler_test(
-        &scheduler_test_fixture,
-        |scheduler| {
-            let mut state = get_initial_state(2, 0);
-            let mut canisters = state.take_canister_states();
-            let mut canister_ids: Vec<CanisterId> = canisters.keys().copied().collect();
-            let source_canister_id = canister_ids.pop().unwrap();
-            let dest_canister_id = canister_ids.pop().unwrap();
-
-            let source_canister = canisters.get_mut(&source_canister_id).unwrap();
-            let self_request = RequestBuilder::default()
-                .sender(source_canister_id)
-                .receiver(source_canister_id)
-                .build();
-            source_canister
-                .push_output_request(self_request.clone())
-                .unwrap();
-            source_canister.push_output_request(self_request).unwrap();
-            let other_request = RequestBuilder::default()
-                .sender(source_canister_id)
-                .receiver(dest_canister_id)
-                .build();
-            source_canister
-                .push_output_request(other_request.clone())
-                .unwrap();
-            source_canister.push_output_request(other_request).unwrap();
-            state.put_canister_states(canisters);
-
-            let (own_subnet_id, routing_table) = setup_routing_table();
-            state.metadata.network_topology.routing_table = Arc::new(routing_table);
-            state.metadata.own_subnet_id = own_subnet_id;
-
-            scheduler.induct_messages_on_same_subnet(&mut state);
-
-            let mut canisters = state.take_canister_states();
-            let source_canister = canisters.remove(&source_canister_id).unwrap();
-            let dest_canister = canisters.remove(&dest_canister_id).unwrap();
-            let source_canister_queues = source_canister.system_state.queues();
-            let dest_canister_queues = dest_canister.system_state.queues();
-            if ENFORCE_MESSAGE_MEMORY_USAGE {
-                // Only one message should have been inducted from each queue: we first induct
-                // messages to self and hit the canister memory limit (1 more reserved slot);
-                // then induct messages for `dest_canister` and hit the subnet memory limit (2
-                // more reserved slots, minus the 1 before).
-                assert_eq!(2, source_canister_queues.output_message_count());
-                assert_eq!(1, source_canister_queues.input_queues_message_count());
-                assert_eq!(1, dest_canister_queues.input_queues_message_count());
-            } else {
-                // Without memory limits all messages should have been inducted.
-                assert_eq!(0, source_canister_queues.output_message_count());
-                assert_eq!(2, source_canister_queues.input_queues_message_count());
-                assert_eq!(2, dest_canister_queues.input_queues_message_count());
-            }
-        },
-        ingress_history_writer,
-        exec_env,
-    )
+    // On system subnets limits will not be enforced for local messages, so running with 0 available
+    // memory should also lead to inducting messages on local subnet.
+    run_test(AvailableMemory::new(0, 0), SubnetType::System);
 }
 
 /// Verifies that the [`SchedulerConfig::instruction_overhead_per_message`] puts

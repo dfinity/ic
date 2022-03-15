@@ -5,10 +5,11 @@ use ic_config::{execution_environment, subnet_config::CyclesAccountManagerConfig
 use ic_execution_environment::{
     ExecutionEnvironment, ExecutionEnvironmentImpl, Hypervisor, IngressHistoryWriterImpl,
 };
+use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_interfaces::{
     execution_environment::{
-        CanisterHeartbeatError, CanisterOutOfCyclesError, ExecuteMessageResult, ExecutionMode,
-        SubnetAvailableMemory,
+        AvailableMemory, CanisterHeartbeatError, CanisterOutOfCyclesError, ExecuteMessageResult,
+        ExecutionMode,
     },
     messages::CanisterInputMessage,
 };
@@ -72,7 +73,7 @@ const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000
 const INITIAL_CYCLES: Cycles = Cycles::new(5_000_000_000_000);
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
-        SubnetAvailableMemory::new(i64::MAX / 2);
+        AvailableMemory::new(i64::MAX / 2, i64::MAX / 2).into();
 }
 const MAX_NUMBER_OF_CANISTERS: u64 = 0;
 
@@ -476,6 +477,61 @@ fn test_ingress_message_side_effects_3() {
 }
 
 #[test]
+/// Output requests can be enqueued on system subnets, irrespective of memory limits.
+fn test_allocate_memory_for_output_request_system_subnet() {
+    with_setup(SubnetType::System, |exec_env, _, _, network_topology| {
+        // Canister enqueues an outgoing request when its `test()` method is called.
+        let wasm_binary = wabt::wat2wasm(CALL_SIMPLE_WAT).unwrap();
+        let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
+
+        let system_state = SystemStateBuilder::default()
+            .freeze_threshold(NumSeconds::from(0))
+            .build();
+
+        let execution_state = exec_env
+            .hypervisor_for_testing()
+            .create_execution_state(
+                wasm_binary,
+                tmpdir.path().to_path_buf(),
+                system_state.canister_id(),
+            )
+            .unwrap();
+
+        let mut canister = CanisterState {
+            system_state,
+            execution_state: Some(execution_state),
+            scheduler_state: SchedulerState::default(),
+        };
+
+        let input_message = CanisterInputMessage::Ingress(
+            IngressBuilder::default()
+                .method_name("test".to_string())
+                .build(),
+        );
+
+        let subnet_available_memory: SubnetAvailableMemory = AvailableMemory::new(13, 13).into();
+        canister.system_state.memory_allocation =
+            MemoryAllocation::try_from(NumBytes::new(13)).unwrap();
+        let execute_message_result = exec_env.execute_canister_message(
+            canister,
+            MAX_NUM_INSTRUCTIONS,
+            input_message,
+            mock_time(),
+            network_topology,
+            subnet_available_memory.clone(),
+        );
+        canister = execute_message_result.canister;
+        // There should be one reserved slot in the queues.
+        assert_eq!(1, canister.system_state.queues().reserved_slots());
+        // Subnet available memory should have remained the same.
+        assert_eq!(13, subnet_available_memory.get_total_memory());
+        assert_eq!(13, subnet_available_memory.get_message_memory());
+        // And the expected request should be enqueued.
+        assert_correct_request(&mut canister.system_state);
+    });
+}
+
+#[test]
 /// Output requests use up canister and subnet memory and can't be enqueued if
 /// any of them is above the limit.
 fn test_allocate_memory_for_output_requests() {
@@ -512,7 +568,8 @@ fn test_allocate_memory_for_output_requests() {
             );
 
             // Tiny canister memory allocation prevents enqueuing an output request.
-            let subnet_available_memory = SubnetAvailableMemory::new(1 << 30);
+            let subnet_available_memory: SubnetAvailableMemory =
+                AvailableMemory::new(1 << 30, 1 << 30).into();
             canister.system_state.memory_allocation =
                 MemoryAllocation::try_from(NumBytes::new(13)).unwrap();
             let execute_message_result = exec_env.execute_canister_message(
@@ -524,7 +581,8 @@ fn test_allocate_memory_for_output_requests() {
                 subnet_available_memory.clone(),
             );
             canister = execute_message_result.canister;
-            assert_eq!(1 << 30, subnet_available_memory.get());
+            assert_eq!(1 << 30, subnet_available_memory.get_total_memory());
+            assert_eq!(1 << 30, subnet_available_memory.get_message_memory());
             if ENFORCE_MESSAGE_MEMORY_USAGE {
                 assert!(!canister.system_state.queues().has_output());
             } else {
@@ -533,7 +591,8 @@ fn test_allocate_memory_for_output_requests() {
             }
 
             // Tiny `SubnetAvailableMemory` also prevents enqueuing an output request.
-            let subnet_available_memory = SubnetAvailableMemory::new(13);
+            let subnet_available_memory: SubnetAvailableMemory =
+                AvailableMemory::new(13, 1 << 30).into();
             canister.system_state.memory_allocation =
                 MemoryAllocation::try_from(NumBytes::new(1 << 30)).unwrap();
             let execute_message_result = exec_env.execute_canister_message(
@@ -545,7 +604,8 @@ fn test_allocate_memory_for_output_requests() {
                 subnet_available_memory.clone(),
             );
             canister = execute_message_result.canister;
-            assert_eq!(13, subnet_available_memory.get());
+            assert_eq!(13, subnet_available_memory.get_total_memory());
+            assert_eq!(1 << 30, subnet_available_memory.get_message_memory());
             if ENFORCE_MESSAGE_MEMORY_USAGE {
                 assert!(!canister.system_state.queues().has_output());
             } else {
@@ -553,9 +613,33 @@ fn test_allocate_memory_for_output_requests() {
                 assert_correct_request(&mut canister.system_state);
             }
 
+            // Tiny `SubnetAvailableMessageMemory` also prevents enqueuing an output request.
+            let subnet_available_memory: SubnetAvailableMemory =
+                AvailableMemory::new(1 << 30, 13).into();
+            canister.system_state.memory_allocation =
+                MemoryAllocation::try_from(NumBytes::new(1 << 30)).unwrap();
+            let execute_message_result = exec_env.execute_canister_message(
+                canister,
+                MAX_NUM_INSTRUCTIONS,
+                input_message.clone(),
+                mock_time(),
+                network_topology.clone(),
+                subnet_available_memory.clone(),
+            );
+            canister = execute_message_result.canister;
+            assert_eq!(1 << 30, subnet_available_memory.get_total_memory());
+            assert_eq!(13, subnet_available_memory.get_message_memory());
+            if ENFORCE_MESSAGE_MEMORY_USAGE {
+                assert!(!canister.system_state.queues().has_output());
+            } else {
+                assert_eq!(3, canister.system_state.queues().reserved_slots());
+                assert_correct_request(&mut canister.system_state);
+            }
+
             // But large enough canister memory allocation and `SubnetAvailableMemory` allow
             // enqueuing an outgoing request.
-            let subnet_available_memory = SubnetAvailableMemory::new(1 << 30);
+            let subnet_available_memory: SubnetAvailableMemory =
+                AvailableMemory::new(1 << 30, 1 << 30).into();
             canister.system_state.memory_allocation =
                 MemoryAllocation::try_from(NumBytes::new(1 << 30)).unwrap();
             let execute_message_result = exec_env.execute_canister_message(
@@ -573,11 +657,16 @@ fn test_allocate_memory_for_output_requests() {
                 // Subnet available memory should have decreased by `MAX_RESPONSE_COUNT_BYTES`.
                 assert_eq!(
                     (1 << 30) - MAX_RESPONSE_COUNT_BYTES as i64,
-                    subnet_available_memory.get()
+                    subnet_available_memory.get_total_memory()
                 );
+                assert_eq!(
+                    (1 << 30) - MAX_RESPONSE_COUNT_BYTES as i64,
+                    subnet_available_memory.get_message_memory()
+                )
             } else {
-                assert_eq!(3, canister.system_state.queues().reserved_slots());
-                assert_eq!(1 << 30, subnet_available_memory.get());
+                assert_eq!(4, canister.system_state.queues().reserved_slots());
+                assert_eq!(1 << 30, subnet_available_memory.get_total_memory());
+                assert_eq!(1 << 30, subnet_available_memory.get_message_memory());
             }
             // And the expected request should be enqueued.
             assert_correct_request(&mut canister.system_state);
@@ -3006,7 +3095,11 @@ fn subnet_available_memory_reclaimed_when_execution_fails() {
         );
 
         let subnet_available_memory_bytes_num = 1 << 30;
-        let subnet_available_memory = SubnetAvailableMemory::new(subnet_available_memory_bytes_num);
+        let subnet_available_memory: SubnetAvailableMemory = AvailableMemory::new(
+            subnet_available_memory_bytes_num,
+            subnet_available_memory_bytes_num,
+        )
+        .into();
         canister.system_state.memory_allocation =
             MemoryAllocation::try_from(NumBytes::new(1 << 30)).unwrap();
         exec_env.execute_canister_message(
@@ -3019,7 +3112,11 @@ fn subnet_available_memory_reclaimed_when_execution_fails() {
         );
         assert_eq!(
             subnet_available_memory_bytes_num,
-            subnet_available_memory.get()
+            subnet_available_memory.get_total_memory()
+        );
+        assert_eq!(
+            subnet_available_memory_bytes_num,
+            subnet_available_memory.get_message_memory()
         );
     });
 }
@@ -3056,7 +3153,11 @@ fn test_allocating_memory_reduces_subnet_available_memory() {
         );
 
         let subnet_available_memory_bytes_num = 1 << 30;
-        let subnet_available_memory = SubnetAvailableMemory::new(subnet_available_memory_bytes_num);
+        let subnet_available_memory: SubnetAvailableMemory = AvailableMemory::new(
+            subnet_available_memory_bytes_num,
+            subnet_available_memory_bytes_num,
+        )
+        .into();
         canister.system_state.memory_allocation =
             MemoryAllocation::try_from(NumBytes::new(1 << 30)).unwrap();
         exec_env.execute_canister_message(
@@ -3072,7 +3173,11 @@ fn test_allocating_memory_reduces_subnet_available_memory() {
         let new_memory_allocated = 20 * WASM_PAGE_SIZE_IN_BYTES as i64;
         assert_eq!(
             subnet_available_memory_bytes_num - new_memory_allocated,
-            subnet_available_memory.get()
+            subnet_available_memory.get_total_memory()
+        );
+        assert_eq!(
+            subnet_available_memory_bytes_num,
+            subnet_available_memory.get_message_memory()
         );
     });
 }

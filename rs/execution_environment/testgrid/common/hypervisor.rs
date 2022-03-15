@@ -1,10 +1,10 @@
 use crate::config;
 use ic_execution_environment::{Hypervisor, QueryExecutionType};
-use ic_interfaces::execution_environment::ExecutionMode;
 use ic_interfaces::execution_environment::{
-    ExecutionParameters, HypervisorError, HypervisorError::ContractViolation, HypervisorResult,
-    SubnetAvailableMemory, TrapCode,
+    AvailableMemory, ExecutionParameters, HypervisorError, HypervisorError::ContractViolation,
+    HypervisorResult, TrapCode,
 };
+use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
 use ic_interfaces::messages::RequestOrIngress;
 use ic_metrics::MetricsRegistry;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
@@ -55,7 +55,7 @@ const INITIAL_CYCLES: Cycles = Cycles::new(5_000_000_000_000);
 
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
-        SubnetAvailableMemory::new(i64::MAX / 2);
+        AvailableMemory::new(i64::MAX / 2, i64::MAX / 2).into();
 }
 
 fn execution_parameters_with_unique_subnet_available_memory(
@@ -3235,7 +3235,8 @@ fn sys_api_call_update_available_memory_2() {
 fn available_memory_is_updated() {
     let available_memory = ic_replicated_state::num_bytes_try_from(NumWasmPages::from(9)).unwrap();
     with_hypervisor(|hypervisor, tmp_path| {
-        let subnet_available_memory = SubnetAvailableMemory::new(1_000_000_000);
+        let subnet_available_memory: SubnetAvailableMemory =
+            AvailableMemory::new(1_000_000_000, 1 << 30).into();
         let initial_subnet_available_memory = subnet_available_memory.get();
         let _ = execute_update_with_cycles_memory_time_subnet_memory(
             &hypervisor,
@@ -3258,9 +3259,13 @@ fn available_memory_is_updated() {
             subnet_available_memory.clone(),
         );
         assert_eq!(
-            initial_subnet_available_memory - WASM_PAGE_SIZE as i64,
-            subnet_available_memory.get()
+            initial_subnet_available_memory.get_total_memory() - WASM_PAGE_SIZE as i64,
+            subnet_available_memory.get_total_memory()
         );
+        assert_eq!(
+            initial_subnet_available_memory.get_message_memory(),
+            subnet_available_memory.get_message_memory()
+        )
     });
 }
 
@@ -3269,8 +3274,9 @@ fn available_memory_is_updated() {
 fn available_memory_isnt_updated_from_failed_message() {
     let available_memory = ic_replicated_state::num_bytes_try_from(NumWasmPages::from(9)).unwrap();
     with_hypervisor(|hypervisor, tmp_path| {
-        let subnet_available_memory = SubnetAvailableMemory::new(1_000_000_000);
-        let initial_subnet_available_memory = subnet_available_memory.get();
+        let subnet_available_memory: SubnetAvailableMemory =
+            AvailableMemory::new(1_000_000_000, 1_000_000_000).into();
+        let initial_subnet_available_memory = subnet_available_memory.get_total_memory();
         let _ = execute_update_with_cycles_memory_time_subnet_memory(
             &hypervisor,
             r#"
@@ -3294,8 +3300,12 @@ fn available_memory_isnt_updated_from_failed_message() {
         );
         assert_eq!(
             initial_subnet_available_memory,
-            subnet_available_memory.get()
+            subnet_available_memory.get_total_memory()
         );
+        assert_eq!(
+            initial_subnet_available_memory,
+            subnet_available_memory.get_message_memory()
+        )
     });
 }
 

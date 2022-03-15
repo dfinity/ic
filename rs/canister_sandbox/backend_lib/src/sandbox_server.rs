@@ -106,7 +106,7 @@ mod tests {
     use ic_config::subnet_config::CyclesAccountManagerConfig;
     use ic_cycles_account_manager::CyclesAccountManager;
     use ic_interfaces::execution_environment::{
-        ExecutionMode, ExecutionParameters, SubnetAvailableMemory,
+        AvailableMemory, ExecutionMode, ExecutionParameters,
     };
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{Global, NetworkTopology, NumWasmPages, PageIndex, PageMap};
@@ -132,7 +132,7 @@ mod tests {
         ExecutionParameters {
             instruction_limit: NumInstructions::new(1000),
             canister_memory_limit: NumBytes::new(4 << 30),
-            subnet_available_memory: SubnetAvailableMemory::new(i64::MAX / 2),
+            subnet_available_memory: AvailableMemory::new(i64::MAX / 2, i64::MAX / 2).into(),
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,
             execution_mode: ExecutionMode::Replicated,

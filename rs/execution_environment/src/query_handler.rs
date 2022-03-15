@@ -6,6 +6,7 @@ mod query_context;
 #[cfg(test)]
 mod tests;
 
+use crate::execution_environment::subnet_memory_capacity;
 use crate::{
     hypervisor::Hypervisor,
     metrics::{MeasurementScope, QueryHandlerMetrics},
@@ -13,7 +14,7 @@ use crate::{
 use ic_config::execution_environment::Config;
 use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, LabeledTree::SubTree};
 use ic_interfaces::{
-    execution_environment::{QueryExecutionService, QueryHandler, SubnetAvailableMemory},
+    execution_environment::{QueryExecutionService, QueryHandler},
     state_manager::StateReader,
 };
 use ic_logger::ReplicaLogger;
@@ -146,8 +147,7 @@ impl QueryHandler for InternalHttpQueryHandler {
 
         // Letting the canister grow arbitrarily when executing the
         // query is fine as we do not persist state modifications.
-        let subnet_available_memory =
-            SubnetAvailableMemory::new(self.config.subnet_memory_capacity.get() as i64);
+        let subnet_available_memory = subnet_memory_capacity(&self.config);
         let max_canister_memory_size = self.config.max_canister_memory_size;
 
         let mut context = query_context::QueryContext::new(

@@ -1,4 +1,6 @@
-use ic_interfaces::execution_environment::{ExecutionParameters, WasmExecutionOutput};
+use ic_interfaces::execution_environment::{
+    AvailableMemory, ExecutionParameters, WasmExecutionOutput,
+};
 use ic_replicated_state::{
     page_map::PageDeltaSerialization, Global, Memory, NumWasmPages, PageIndex,
 };
@@ -55,9 +57,9 @@ pub struct StateModifications {
     /// Modifications in the stable memory.
     pub stable_memory: MemoryModifications,
 
-    /// The number of free bytes of memory left on the subnet after executing
+    /// The available memory left on the subnet after executing
     /// the message.
-    pub subnet_available_memory: i64,
+    pub subnet_available_memory: AvailableMemory,
 
     pub system_state_changes: SystemStateChanges,
 }
@@ -69,7 +71,7 @@ impl StateModifications {
         stable_memory: &Memory,
         wasm_memory_delta: &[PageIndex],
         stable_memory_delta: &[PageIndex],
-        subnet_available_memory: i64,
+        subnet_available_memory: AvailableMemory,
         system_state_changes: SystemStateChanges,
     ) -> Self {
         let wasm_memory = MemoryModifications {

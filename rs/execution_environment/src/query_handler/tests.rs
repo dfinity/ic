@@ -7,7 +7,7 @@ use crate::{
 use ic_base_types::NumSeconds;
 use ic_config::execution_environment::Config;
 use ic_interfaces::execution_environment::{
-    ExecutionMode, ExecutionParameters, QueryHandler, SubnetAvailableMemory,
+    AvailableMemory, ExecutionMode, ExecutionParameters, QueryHandler,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
@@ -127,7 +127,11 @@ fn universal_canister(
             ExecutionParameters {
                 instruction_limit: INSTRUCTION_LIMIT,
                 canister_memory_limit: MEMORY_CAPACITY,
-                subnet_available_memory: SubnetAvailableMemory::new(MEMORY_CAPACITY.get() as i64),
+                subnet_available_memory: AvailableMemory::new(
+                    MEMORY_CAPACITY.get() as i64,
+                    MEMORY_CAPACITY.get() as i64,
+                )
+                .into(),
                 compute_allocation: ComputeAllocation::default(),
                 subnet_type: SubnetType::Application,
                 execution_mode: ExecutionMode::Replicated,

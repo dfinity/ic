@@ -2,7 +2,9 @@ use criterion::{BatchSize, Criterion};
 use ic_config::execution_environment::Config;
 use ic_execution_environment::Hypervisor;
 use ic_interfaces::{
-    execution_environment::{ExecutionMode, ExecutionParameters, SubnetAvailableMemory},
+    execution_environment::{
+        AvailableMemory, ExecutionMode, ExecutionParameters, SubnetAvailableMemory,
+    },
     messages::RequestOrIngress,
 };
 use ic_metrics::MetricsRegistry;
@@ -29,7 +31,7 @@ const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(10_000_000_00
 
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
-        SubnetAvailableMemory::new(i64::MAX);
+        AvailableMemory::new(i64::MAX, i64::MAX).into();
 }
 
 #[derive(Clone)]

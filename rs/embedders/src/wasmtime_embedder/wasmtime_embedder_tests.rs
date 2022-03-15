@@ -3,7 +3,7 @@ use std::sync::Arc;
 use super::{system_api, StoreData, NUM_INSTRUCTION_GLOBAL_NAME};
 use crate::wasm_utils::instrumentation::{instrument, InstructionCostTable};
 use ic_interfaces::execution_environment::{
-    ExecutionMode, ExecutionParameters, SubnetAvailableMemory,
+    AvailableMemory, ExecutionMode, ExecutionParameters, SubnetAvailableMemory,
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
@@ -23,7 +23,7 @@ use wasmtime::{Config, Engine, Module, Store, Val};
 
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
-        SubnetAvailableMemory::new(i64::MAX / 2);
+        AvailableMemory::new(i64::MAX / 2, i64::MAX / 2).into();
 }
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
 
