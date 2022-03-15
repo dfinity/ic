@@ -3,9 +3,8 @@ use ic_btc_types_internal::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
     GetSuccessorsRequest, GetSuccessorsResponse,
 };
-use ic_interfaces::{
-    bitcoin_adapter_client::RpcError, self_validating_payload::SelfValidatingPayloadBuilder,
-};
+use ic_interfaces::self_validating_payload::SelfValidatingPayloadBuilder;
+use ic_interfaces_bitcoin_adapter_client::RpcError;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::bitcoin::v1 as pb_bitcoin;
 use ic_registry_subnet_features::SubnetFeatures;

@@ -1,0 +1,9 @@
+[package]
+name = "ic-interfaces-bitcoin-adapter-client"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+ic-protobuf = { path = "../../protobuf" }
+tonic = "0.6.2"
+

@@ -3459,6 +3459,7 @@ version = "0.1.0"
 dependencies = [
  "ic-btc-types-internal",
  "ic-interfaces",
+ "ic-interfaces-bitcoin-adapter-client",
  "ic-logger",
  "ic-metrics",
  "ic-protobuf",
@@ -4988,6 +4989,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-interfaces-bitcoin-adapter-client"
+version = "0.8.0"
+dependencies = [
+ "ic-protobuf",
+ "tonic",
+]
+
+[[package]]
 name = "ic-interfaces-p2p"
 version = "0.8.0"
 dependencies = [
@@ -5945,6 +5954,7 @@ dependencies = [
  "ic-execution-environment",
  "ic-http-handler",
  "ic-interfaces",
+ "ic-interfaces-bitcoin-adapter-client",
  "ic-interfaces-p2p",
  "ic-logger",
  "ic-messaging",
@@ -6602,6 +6612,7 @@ dependencies = [
  "ic-cycles-account-manager",
  "ic-embedders",
  "ic-interfaces",
+ "ic-interfaces-bitcoin-adapter-client",
  "ic-interfaces-p2p",
  "ic-logger",
  "ic-metrics",
