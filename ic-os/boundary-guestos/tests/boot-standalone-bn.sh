@@ -10,9 +10,10 @@ TEMPDIR=$(mktemp -d /tmp/boot-standalone-bn.sh.XXXXXXXXXX)
 function usage() {
     cat <<EOF
 Usage:
-  boot-standalone-bn.sh [--farm-base-url FARM_BASE_URL] [--ttl TTL]
+  boot-standalone-bn.sh [--farm-base-url FARM_BASE_URL] [--ttl TTL] [--img-CI-id  <ID>] [--disk-image <image>] [--config-image <config>]
 
-  This locally builds a boundary node VM image or takes the ID of an image build by the CI pipeline.
+  This locally builds a boundary node VM image, takes a disk image as parameter
+  or takes the ID of an image build by the CI pipeline.
 
   It also creates a minimal config image or requires one as parameter.
 
@@ -21,6 +22,10 @@ Usage:
   It will then wait for the VM to be pingable over IPv6 before printing a handy message how to SSH to the VM.
 
   The script will then wait until the user presses Enter after which the group and the associated VM will be deleted.
+
+  Example:
+      ic-os/boundary-guestos/scripts/build-disk-image.sh -o /tmp/disk.img
+      boot-standalone-bn.sh --disk-image /tmp/disk.img
 
   --help
 
@@ -42,6 +47,10 @@ Usage:
       https://download.dfinity.systems/ic/<ID>/boundary-os/disk-img/disk-img.tar.gz
     To get the latest image ID from master:
        gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh master
+
+  --disk-image
+    Provide a disk image that has been build locally via:
+      ic-os/boundary-guestos/scripts/build-disk-image.sh
 
   --config-image
 
@@ -73,6 +82,11 @@ while [[ $# -gt 0 ]]; do
             shift
             shift
             ;;
+        --disk-image)
+            DISK_IMAGE="$2"
+            shift
+            shift
+            ;;
         --config-image)
             CONFIG_IMAGE="$2"
             shift
@@ -90,24 +104,31 @@ base="$FARM_BASE_URL/group/$group"
 
 info() { echo "$*" 1>&2; }
 
-if [[ -z ${IMG_ID:-} ]]; then
-    info "Building boundary guestos image ..."
-    image=$TEMPDIR/disk.img
-    cd $REPO_ROOT/ic-os/boundary-guestos
-    ./scripts/build-disk-image.sh -o $image
-    info "Compress image ..."
-    zstd $image
-    image=$image.zst
-    du -h "$image"
-fi
-
 finalize() {
     info "Deleting group $group..."
     curl --silent --show-error --fail -X DELETE "$base"
     info "Delete $TEMPDIR?"
 }
-
 trap finalize EXIT
+
+if [ -z ${IMG_ID:-} ]; then
+    if [ -z ${DISK_IMAGE:-} ]; then
+        info "Building boundary guestos image ..."
+        image=$TEMPDIR/disk.img
+        cd $REPO_ROOT/ic-os/boundary-guestos
+        ./scripts/build-disk-image.sh -o $image
+    else
+        if [[ "${DISK_IMAGE:0:1}" == / || "${DISK_IMAGE:0:2}" == ~[/a-z] ]]; then
+            image=$DISK_IMAGE
+        else
+            image=$CURRENT/$DISK_IMAGE
+        fi
+    fi
+    info "Compress image ..."
+    zstd $image
+    image=$image.zst
+    du -h "$image"
+fi
 
 info "Creating group $group on $FARM_BASE_URL..."
 groupExpiresAt="$(curl --silent --show-error --fail -X POST "$base" \

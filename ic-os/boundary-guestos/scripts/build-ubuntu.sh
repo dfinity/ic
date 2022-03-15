@@ -68,6 +68,12 @@ function install_executables() {
     local SRCDIR="$1"
     local TGTDIR="$2"
     for EXECUTABLE in "${IC_EXECUTABLES[@]}"; do
+
+        # Useful if pointing to ic/artifacts/release
+        if [ ! -f "${SRCDIR}/${EXECUTABLE}" ] && [ -f "${SRCDIR}/${EXECUTABLE}.gz" ]; then
+            gzip --keep -d "${SRCDIR}/${EXECUTABLE}.gz"
+        fi
+
         if [ ! -f "${TGTDIR}/${EXECUTABLE}" -o "${SRCDIR}/${EXECUTABLE}" -nt "${TGTDIR}/${EXECUTABLE}" ]; then
             echo "Install and strip ${EXECUTABLE}"
             cp "${SRCDIR}/${EXECUTABLE}" "${TGTDIR}/${EXECUTABLE}"

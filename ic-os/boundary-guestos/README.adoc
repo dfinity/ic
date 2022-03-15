@@ -9,6 +9,7 @@ In addition to a standard installation of Ubuntu 20.4 at least the following pac
 * mtools (mmd)
 * faketime
 * android-sdk-ext4-utils (make_ext4fs)
+* jo (JSON output from a shell)
 
 == Prerequisites
 
