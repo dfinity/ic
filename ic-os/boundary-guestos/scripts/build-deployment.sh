@@ -128,7 +128,7 @@ function prepare_build_directories() {
 
 function download_binaries() {
     "${REPO_ROOT}"/gitlab-ci/src/artifacts/rclone_download.py \
-        --git-rev "$GIT_REVISION" --remote-path=release --out="${IC_PREP_DIR}/bin"
+        --git-rev "$GIT_REVISION" --remote-path=release --include "boundary-node-control-plane.gz" --include "boundary-node-prober.gz" --out="${IC_PREP_DIR}/bin/"
 
     find "${IC_PREP_DIR}/bin/" -name "*.gz" -print0 | xargs -P100 -0I{} bash -c "gunzip -f {} && basename {} .gz | xargs -I[] chmod +x ${IC_PREP_DIR}/bin/[]"
 
