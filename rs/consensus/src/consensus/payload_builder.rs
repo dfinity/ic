@@ -16,7 +16,7 @@ use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
     artifact::IngressMessageId,
-    batch::{BatchPayload, SelfValidatingPayload, ValidationContext, XNetPayload},
+    batch::{BatchPayload, ValidationContext},
     consensus::{BlockPayload, Payload},
     crypto::CryptoHashOf,
     messages::MAX_XNET_PAYLOAD_IN_BYTES,
@@ -150,8 +150,7 @@ impl PayloadBuilder for PayloadBuilderImpl {
             None => context.time,
             Some((_, time, _)) => *time,
         };
-        let (past_ingress, past_xnet, past_self_validating) =
-            split_past_payloads(&mut ingress_payload_cache, past_payloads);
+        let past_ingress = self.filter_past_ingress(&mut ingress_payload_cache, past_payloads);
         self.metrics
             .past_payloads_length
             .observe(past_payloads.len() as f64);
@@ -172,8 +171,13 @@ impl PayloadBuilder for PayloadBuilderImpl {
             )
         };
         let get_xnet_payload = |byte_limit| {
-            self.xnet_payload_builder
-                .get_xnet_payload(context, &past_xnet, byte_limit)
+            self.xnet_payload_builder.get_xnet_payload(
+                context,
+                &self
+                    .xnet_payload_builder
+                    .filter_past_payloads(past_payloads),
+                byte_limit,
+            )
         };
 
         let (ingress, xnet) = if height.get() % 2 == 0 {
@@ -196,7 +200,13 @@ impl PayloadBuilder for PayloadBuilderImpl {
 
         let self_validating = self
             .self_validating_payload_builder
-            .get_self_validating_payload(context, &past_self_validating, MAX_XNET_PAYLOAD_IN_BYTES);
+            .get_self_validating_payload(
+                context,
+                &self
+                    .self_validating_payload_builder
+                    .filter_past_payloads(past_payloads),
+                MAX_XNET_PAYLOAD_IN_BYTES,
+            );
 
         BatchPayload {
             ingress,
@@ -221,8 +231,7 @@ impl PayloadBuilder for PayloadBuilderImpl {
             None => context.time,
             Some((_, time, _)) => *time,
         };
-        let (past_ingress, past_xnet, past_self_validating) =
-            split_past_payloads(&mut ingress_payload_cache, past_payloads);
+        let past_ingress = self.filter_past_ingress(&mut ingress_payload_cache, past_payloads);
         self.metrics
             .ingress_payload_cache_size
             .set(ingress_payload_cache.len() as i64);
@@ -262,7 +271,9 @@ impl PayloadBuilder for PayloadBuilderImpl {
         let xnet_size = self.xnet_payload_builder.validate_xnet_payload(
             &batch_payload.xnet,
             context,
-            &past_xnet,
+            &self
+                .xnet_payload_builder
+                .filter_past_payloads(past_payloads),
         )?;
 
         // The size of both payloads together must not exceed the block payload size.
@@ -283,7 +294,9 @@ impl PayloadBuilder for PayloadBuilderImpl {
             .validate_self_validating_payload(
                 &batch_payload.self_validating,
                 context,
-                &past_self_validating,
+                &self
+                    .self_validating_payload_builder
+                    .filter_past_payloads(past_payloads),
             )?;
 
         Ok(())
@@ -313,75 +326,54 @@ impl PayloadBuilderImpl {
 
         NumBytes::new(max_block_payload_size)
     }
-}
 
-/// Split past_payloads into past_ingress and past_xnet payloads. The
-/// past_ingress is actually a list of HashSet of MessageIds taken from the
-/// ingress_payload_cache.
-#[allow(clippy::type_complexity)]
-fn split_past_payloads<'a, 'b>(
-    ingress_payload_cache: &'a mut IngressPayloadCache,
-    past_payloads: &'b [(Height, Time, Payload)],
-) -> (
-    Vec<Arc<HashSet<IngressMessageId>>>,
-    Vec<&'b XNetPayload>,
-    Vec<&'b SelfValidatingPayload>,
-) {
-    let past_xnet: Vec<_> = past_payloads
-        .iter()
-        .filter_map(|(_, _, payload)| {
-            if payload.is_summary() {
-                None
-            } else {
-                Some(&payload.as_ref().as_data().batch.xnet)
-            }
-        })
-        .collect();
-    let past_ingress: Vec<_> = past_payloads
-        .iter()
-        .filter_map(|(height, _, payload)| {
-            if payload.is_summary() {
-                None
-            } else {
-                let payload_hash = payload.get_hash();
-                let batch = &payload.as_ref().as_data().batch;
-                let ingress = ingress_payload_cache
-                    .entry((*height, payload_hash.clone()))
-                    .or_insert_with(|| Arc::new(batch.ingress.message_ids().into_iter().collect()));
-                Some(ingress.clone())
-            }
-        })
-        .collect();
-    let past_self_validating: Vec<_> = past_payloads
-        .iter()
-        .filter_map(|(_, _, payload)| {
-            if payload.is_summary() {
-                None
-            } else {
-                Some(&payload.as_ref().as_data().batch.self_validating)
-            }
-        })
-        .collect();
-    // We assume that 'past_payloads' comes in descending heights, following the
-    // block parent traversal order.
-    if let Some((min_height, _, _)) = past_payloads.last() {
-        // The step below is to garbage collect no longer used past ingress payload
-        // cache. It assumes the sequence of calls to payload selection/validation
-        // leads to a monotonic sequence of lower-bound (min_height).
-        //
-        // Usually this is true, but even when it is not true (e.g. in tests) it is
-        // always safe to remove entries from ingress_payload_cache at the expense
-        // of having to re-compute them.
-        let keys: Vec<_> = ingress_payload_cache.keys().cloned().collect();
-        for key in keys {
-            if key.0 < *min_height {
-                ingress_payload_cache.remove(&key);
+    /// Extracts the sequence of past ingress messages from `past_payloads`. The
+    /// past_ingress is actually a list of HashSet of MessageIds taken from the
+    /// ingress_payload_cache.
+    #[allow(clippy::type_complexity)]
+    fn filter_past_ingress<'a>(
+        &self,
+        ingress_payload_cache: &'a mut IngressPayloadCache,
+        past_payloads: &'_ [(Height, Time, Payload)],
+    ) -> Vec<Arc<HashSet<IngressMessageId>>> {
+        let past_ingress: Vec<_> = past_payloads
+            .iter()
+            .filter_map(|(height, _, payload)| {
+                if payload.is_summary() {
+                    None
+                } else {
+                    let payload_hash = payload.get_hash();
+                    let batch = &payload.as_ref().as_data().batch;
+                    let ingress = ingress_payload_cache
+                        .entry((*height, payload_hash.clone()))
+                        .or_insert_with(|| {
+                            Arc::new(batch.ingress.message_ids().into_iter().collect())
+                        });
+                    Some(ingress.clone())
+                }
+            })
+            .collect();
+
+        // We assume that 'past_payloads' comes in descending heights, following the
+        // block parent traversal order.
+        if let Some((min_height, _, _)) = past_payloads.last() {
+            // The step below is to garbage collect no longer used past ingress payload
+            // cache. It assumes the sequence of calls to payload selection/validation
+            // leads to a monotonic sequence of lower-bound (min_height).
+            //
+            // Usually this is true, but even when it is not true (e.g. in tests) it is
+            // always safe to remove entries from ingress_payload_cache at the expense
+            // of having to re-compute them.
+            let keys: Vec<_> = ingress_payload_cache.keys().cloned().collect();
+            for key in keys {
+                if key.0 < *min_height {
+                    ingress_payload_cache.remove(&key);
+                }
             }
         }
+        past_ingress
     }
-    (past_ingress, past_xnet, past_self_validating)
 }
-
 #[cfg(test)]
 mod test {
     use super::*;
