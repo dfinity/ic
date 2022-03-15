@@ -1,0 +1,17 @@
+[Unit]
+Description=Set variable files, i.e., nns key, for nginx
+Before=systemd-networkd.target
+DefaultDependencies=no
+After=bootstrap-ic-node.service
+Before=systemd-networkd.service
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/setup-nginx.sh
+
+[Install]
+WantedBy=multi-user.target
