@@ -1395,7 +1395,7 @@ fn observe_replicated_state_metrics(
         }
         if let Some(manager) = canister.system_state.call_context_manager() {
             let old_call_contexts =
-                manager.call_contexts_older_than(state.time(), OLD_CALL_CONTEXT_CUTOFF);
+                manager.call_contexts_older_than(state.time(), OLD_CALL_CONTEXT_CUTOFF_ONE_DAY);
             for (origin, origin_time) in &old_call_contexts {
                 error!(
                     logger,
@@ -1410,6 +1410,7 @@ fn observe_replicated_state_metrics(
     });
     metrics
         .old_open_call_contexts
+        .with_label_values(&[OLD_CALL_CONTEXT_LABEL_ONE_DAY])
         .set(old_call_contexts_count as i64);
     let streams_response_bytes = state
         .metadata

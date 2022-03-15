@@ -3600,7 +3600,9 @@ fn long_open_call_context_is_recorded() {
 
             let registry = &scheduler_test_fixture.metrics_registry;
             assert_eq!(
-                fetch_int_gauge(registry, "scheduler_old_open_call_contexts").unwrap(),
+                fetch_int_gauge_vec(registry, "scheduler_old_open_call_contexts")[&btreemap! {
+                    "age".to_string() => "1d".to_string()
+                }],
                 1
             );
         },
