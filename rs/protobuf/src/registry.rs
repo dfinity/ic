@@ -1,4 +1,3 @@
-pub mod conversion_rate;
 pub mod crypto;
 pub mod dc;
 pub mod firewall;
