@@ -26,6 +26,7 @@ Arguments:
   -i=, --input=                         JSON formatted input file (Default: ./subnet.json)
   -o=, --output=                        removable media output directory (Default: ./build-out/)
   -s=, --ssh=                           specify directory holding SSH authorized_key files (Default: ../../testnet/config/ssh_authorized_keys)
+  -n=, --nns_urls=                      specify a file that lists on each line a nns url of the form http://[ip]:port this file will override nns urls derived from input json file
        --git-revision=                  git revision for which to prepare the media
   -x,  --debug                enable verbose console output
 '
@@ -41,6 +42,10 @@ Arguments:
             ;;
         -s=* | --ssh=*)
             SSH="${argument#*=}"
+            shift
+            ;;
+        -n=* | --nns_url=*)
+            NNS_URL_OVERRIDE="${argument#*=}"
             shift
             ;;
         --git-revision=*)
@@ -174,19 +179,25 @@ function generate_journalbeat_config() {
 }
 
 function generate_boundary_node_config() {
-    # Query and list all NNS nodes in subnet
-    echo ${CONFIG} | jq -c '.datacenters[]' | while read datacenters; do
-        local ipv6_prefix=$(echo ${datacenters} | jq -r '.ipv6_prefix')
-        echo ${datacenters} | jq -c '.nodes[]' | while read nodes; do
-            NNS_DC_URL=$(echo ${nodes} | jq -c 'select(.subnet_type|test("root_subnet"))' | while read nns_node; do
-                local ipv6_address=$(echo "${nns_node}" | jq -r '.ipv6_address')
-                echo -n "http://[${ipv6_address}]:8080"
-            done)
-            echo ${NNS_DC_URL} >>"${IC_PREP_DIR}/NNS_URL"
+    rm -rf ${IC_PREP_DIR}/NNS_URL
+    if [ -z ${NNS_URL_OVERRIDE+x} ]; then
+        # Query and list all NNS nodes in subnet
+        echo ${CONFIG} | jq -c '.datacenters[]' | while read datacenters; do
+            local ipv6_prefix=$(echo ${datacenters} | jq -r '.ipv6_prefix')
+            echo ${datacenters} | jq -c '.nodes[]' | while read nodes; do
+                NNS_DC_URL=$(echo ${nodes} | jq -c 'select(.subnet_type|test("root_subnet"))' | while read nns_node; do
+                    local ipv6_address=$(echo "${nns_node}" | jq -r '.ipv6_address')
+                    echo -n "http://[${ipv6_address}]:8080"
+                done)
+                echo ${NNS_DC_URL} >>"${IC_PREP_DIR}/NNS_URL"
+            done
         done
-    done
-    NNS_URL="$(cat ${IC_PREP_DIR}/NNS_URL | awk '$1=$1' ORS=',' | sed 's@,$@@g')"
-    rm -f "${IC_PREP_DIR}/NNS_URL)"
+        NNS_URL_FILE=${IC_PREP_DIR}/NNS_URL
+    else
+        NNS_URL_FILE=${NNS_URL_OVERRIDE}
+    fi
+    NNS_URL="$(cat ${NNS_URL_FILE} | awk '$1=$1' ORS=',' | sed 's@,$@@g')"
+    #echo ${NNS_URL}
 
     # nns config for boundary nodes
     echo ${CONFIG} | jq -c '.datacenters[]' | while read datacenters; do
