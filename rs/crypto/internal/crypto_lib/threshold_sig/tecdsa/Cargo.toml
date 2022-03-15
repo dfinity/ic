@@ -11,7 +11,7 @@ ic-crypto-sha = { path = "../../../../sha" }
 ic-crypto-internal-types = { path = "../../types" }
 ic-crypto-internal-hmac = { path = "../../hmac" }
 ic-types = { path = "../../../../../types/types" }
-k256 = { version = "0.10", default-features = false, features = ["arithmetic"] }
+k256 = { version = "0.10.3", default-features = false, features = ["arithmetic"] }
 p256 = { version = "0.10", default-features = false, features = ["arithmetic"] }
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 rand_core = "0.5"
@@ -28,7 +28,7 @@ lazy_static = "1.4.0"
 [dev-dependencies]
 rand = "0.7"
 criterion = { version = "0.3", features = ["html_reports"] }
-k256 = { version = "0.10", features = ["ecdsa"] }
+k256 = { version = "0.10.3", features = ["ecdsa"] }
 bip32 = { version = "0.3", features = ["secp256k1"] }
 
 [[bench]]
