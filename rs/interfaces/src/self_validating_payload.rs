@@ -2,7 +2,8 @@ use crate::validation::ValidationError;
 
 use ic_types::{
     batch::{SelfValidatingPayload, ValidationContext},
-    NumBytes,
+    consensus::Payload,
+    Height, NumBytes, Time,
 };
 
 /// A SelfValidatingPayload error from which it is not possible to recover.
@@ -45,6 +46,23 @@ pub trait SelfValidatingPayloadBuilder: Send + Sync {
         validation_context: &ValidationContext,
         past_payloads: &[&SelfValidatingPayload],
     ) -> Result<NumBytes, SelfValidatingPayloadValidationError>;
+
+    /// Extracts the sequence of past `SelfValidatingPayloads` from `past_payloads`.
+    fn filter_past_payloads<'a>(
+        &self,
+        past_payloads: &'a [(Height, Time, Payload)],
+    ) -> Vec<&'a SelfValidatingPayload> {
+        past_payloads
+            .iter()
+            .filter_map(|(_, _, payload)| {
+                if payload.is_summary() {
+                    None
+                } else {
+                    Some(&payload.as_ref().as_data().batch.self_validating)
+                }
+            })
+            .collect()
+    }
 }
 
 // TODO: Remove this once a real SelfValidatingPayloadBuilder is ready.
