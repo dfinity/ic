@@ -26,7 +26,7 @@ use ic_tests::{
     execution, message_routing,
 };
 use ic_tests::{
-    cycles_minting_test, feature_flags,
+    cycles_minting_test,
     networking::firewall::{self, change_to_firewall_rules_takes_effect},
     nns_canister_upgrade_test, nns_uninstall_canister_by_proposal_test,
     registry_authentication_test, tecdsa_add_nodes_test, tecdsa_remove_nodes_test,
@@ -343,14 +343,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "upgrade_reject_pot",
                     upgrade_reject::config,
                     par(vec![t("upgrade_reject_test", upgrade_reject::test)]),
-                ),
-                pot(
-                    "basic_pot_with_all_features_enabled",
-                    feature_flags::basic_config_with_all_features_enabled,
-                    par(vec![t(
-                        "mock_ecdsa_signatures_are_supported",
-                        feature_flags::mock_ecdsa_signatures_are_supported,
-                    )]),
                 ),
                 pot(
                     "tecdsa_add_nodes_pot",
