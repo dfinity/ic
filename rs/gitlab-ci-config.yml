@@ -5,8 +5,6 @@
 # Precede every crate with a tracking bug.
 
 crates_allowed_to_fail:
-  # https://gitlab.com/dfinity-lab/core/dfinity/-/issues/1
-  - ic-cow-state
 
 # Crates for which the tests should be built in release mode.
 # The total job time is build + test execution time, and if a test runs
