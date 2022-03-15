@@ -3422,6 +3422,7 @@ dependencies = [
  "tokio",
  "tokio-socks",
  "tonic",
+ "tower",
 ]
 
 [[package]]
