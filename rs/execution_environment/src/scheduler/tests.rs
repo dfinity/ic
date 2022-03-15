@@ -3609,6 +3609,142 @@ fn long_open_call_context_is_recorded() {
     );
 }
 
+// In the following tests we check that the order of the canisters
+// inside `inner_round` is the same as the one provided by the scheduling strategy.
+#[test]
+fn scheduler_maintains_canister_order() {
+    // A list of canisters with different computation allocation values set.
+    let canisters = vec![
+        CanisterStateBuilder::new()
+            .with_canister_id(canister_test_id(0))
+            .with_compute_allocation(ComputeAllocation::try_from(60).unwrap())
+            .build(),
+        CanisterStateBuilder::new()
+            .with_canister_id(canister_test_id(1))
+            .with_compute_allocation(ComputeAllocation::try_from(100).unwrap())
+            .build(),
+        CanisterStateBuilder::new()
+            .with_canister_id(canister_test_id(2))
+            .with_compute_allocation(ComputeAllocation::try_from(90).unwrap())
+            .build(),
+        CanisterStateBuilder::new()
+            .with_canister_id(canister_test_id(4))
+            .with_compute_allocation(ComputeAllocation::try_from(60).unwrap())
+            .build(),
+    ];
+    let mut state = ReplicatedState::new_rooted_at(
+        subnet_test_id(1),
+        SubnetType::Application,
+        "NOT_USED".into(),
+    );
+    for mut canister in canisters {
+        canister.push_ingress(
+            SignedIngressBuilder::new()
+                .canister_id(canister.canister_id())
+                .build()
+                .into(),
+        );
+        state.put_canister_state(canister);
+    }
+    // This canister has no messages.
+    state.put_canister_state(
+        CanisterStateBuilder::new()
+            .with_canister_id(canister_test_id(100))
+            .with_compute_allocation(ComputeAllocation::try_from(0).unwrap())
+            .build(),
+    );
+
+    let num_messages = 4;
+    let scheduler_cores = 1;
+    let current_round = ExecutionRound::from(1);
+    let num_instructions_consumed_per_msg = NumInstructions::from(5);
+    let scheduler_test_fixture = SchedulerTestFixture {
+        scheduler_config: SchedulerConfig {
+            scheduler_cores,
+            max_instructions_per_round: NumInstructions::from(1 << 30),
+            max_instructions_per_message: num_instructions_consumed_per_msg
+                + NumInstructions::from(1),
+            instruction_overhead_per_message: NumInstructions::from(0),
+            ..SchedulerConfig::application_subnet()
+        },
+        metrics_registry: MetricsRegistry::new(),
+        canister_num: state.canister_states.len() as u64,
+        message_num_per_canister: 1,
+    };
+
+    let mut exec_env = MockExecutionEnvironment::new();
+    let num_instructions_left = scheduler_test_fixture
+        .scheduler_config
+        .max_instructions_per_message
+        - num_instructions_consumed_per_msg;
+
+    // The expected order which will be used to execute canisters.
+    let expected_ordered_canisters = apply_scheduling_strategy(
+        scheduler_cores,
+        current_round,
+        &mut state.canister_states.clone(),
+    );
+    let ordered_canisters = expected_ordered_canisters.clone();
+
+    // Return sufficiently large subnet and canister memory limits.
+    exec_env
+        .expect_subnet_available_memory()
+        .times(..)
+        .return_const(*SUBNET_AVAILABLE_MEMORY);
+    exec_env
+        .expect_max_canister_memory_size()
+        .times(..)
+        .return_const(MAX_CANISTER_MEMORY_SIZE);
+    exec_env
+        .expect_subnet_memory_capacity()
+        .times(..)
+        .return_const(SUBNET_MEMORY_CAPACITY);
+    let mut index = 0;
+    exec_env
+        .expect_execute_canister_message()
+        .times(num_messages)
+        .returning(move |canister, _, msg, _, _, _| {
+            if let CanisterInputMessage::Ingress(msg) = msg {
+                let canister_id = canister.canister_id();
+                // Canister 5 does not have any messages.
+                assert!(canister_id != canister_test_id(5));
+                assert_eq!(expected_ordered_canisters[index], canister_id);
+                index += 1;
+
+                ExecuteMessageResult {
+                    canister: canister.clone(),
+                    num_instructions_left,
+                    ingress_status: Some((
+                        msg.message_id,
+                        IngressStatus::Completed {
+                            receiver: canister.canister_id().get(),
+                            user_id: user_test_id(0),
+                            result: WasmResult::Reply(vec![]),
+                            time: mock_time(),
+                        },
+                    )),
+                    heap_delta: NumBytes::new(0),
+                }
+            } else {
+                unreachable!("Only ingress messages are expected.");
+            }
+        });
+    let exec_env = Arc::new(exec_env);
+
+    let ingress_history_writer = default_ingress_history_writer_mock(num_messages);
+    let ingress_history_writer = Arc::new(ingress_history_writer);
+
+    scheduler_test(
+        &scheduler_test_fixture,
+        |scheduler| {
+            let measurement_scope = MeasurementScope::root(&scheduler.metrics.round);
+            scheduler.inner_round(state, &ordered_canisters, current_round, &measurement_scope);
+        },
+        ingress_history_writer,
+        exec_env,
+    );
+}
+
 proptest! {
     // In the following tests we use a notion of `minimum_executed_messages` per
     // execution round. The minimum is defined as `min(available_messages,
