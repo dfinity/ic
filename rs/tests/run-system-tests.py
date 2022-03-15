@@ -87,8 +87,9 @@ def remove_folders(folders: List[str]) -> None:
         shutil.rmtree(folder, ignore_errors=True)
 
 
-def create_env_variables(is_local_run: bool, artifact_dir: str, ci_project_dir: str) -> Dict:
+def create_env_variables(is_local_run: bool, artifact_dir: str, ci_project_dir: str, tmp_dir: str) -> Dict:
     env = os.environ.copy()
+    env["TMPDIR"] = tmp_dir
     env["PATH"] = f"{artifact_dir}:" + env["PATH"]
     env["PATH"] = f"{ci_project_dir}/ic-os/guestos/scripts:" + env["PATH"]
     if not is_local_run:
@@ -120,7 +121,7 @@ def generate_default_job_id() -> str:
     return f"{getpass.getuser()}-{socket.gethostname()}-{int(time.time())}"
 
 
-def main(runner_args: str, folders_to_remove: List[str]) -> int:
+def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_folder: bool) -> int:
     # From this path the script was started.
     base_path = os.getcwd()
     # Set path to the script path (in case script is launched from non-parent dir).
@@ -201,8 +202,9 @@ def main(runner_args: str, folders_to_remove: List[str]) -> int:
         JOB_ID = generate_default_job_id()
         RUN_CMD = "cargo"
         ADDITIONAL_ARGS = "run --bin prod-test-driver --"
-        artifacts_tmp_dir = tempfile.mkdtemp()
-        folders_to_remove.append(artifacts_tmp_dir)
+        artifacts_tmp_dir = tempfile.mkdtemp(prefix="tmp_artifacts_")
+        if not keep_tmp_artifacts_folder:
+            folders_to_remove.append(artifacts_tmp_dir)
         _tmp = f"{artifacts_tmp_dir}/artifacts"
         if use_locally_prebuilt_artifacts:
             logging.info(f"Copying prebuilt artifacts from {ARTIFACT_DIR} to {_tmp}")
@@ -224,7 +226,14 @@ def main(runner_args: str, folders_to_remove: List[str]) -> int:
 
     logging.info(f"Artifacts will be stored in: {ARTIFACT_DIR}.")
 
-    env_dict = create_env_variables(is_local_run, ARTIFACT_DIR, CI_PROJECT_DIR)
+    # For an easy deletion of all artifact folders produced by the `prod-test-driver` process,
+    # we create a dedicated tmp directory for this process and set TMPDIR env variable.
+    test_driver_tmp_dir = tempfile.mkdtemp(prefix="tmp_test_driver_")
+    folders_to_remove.append(test_driver_tmp_dir)
+
+    env_dict = create_env_variables(
+        is_local_run=is_local_run, artifact_dir=ARTIFACT_DIR, ci_project_dir=CI_PROJECT_DIR, tmp_dir=test_driver_tmp_dir
+    )
 
     # Print all input environmental variables.
     logging.debug(
@@ -318,13 +327,21 @@ if __name__ == "__main__":
     if any([i in runner_args for i in ["-h", "--help"]]):
         run_help_command()
         sys.exit(0)
+    keep_tmp_artifacts_folder = False
+    # Check if optional flag of keeping tmp artifact folder is set.
+    if "--keep_artifacts" in runner_args:
+        keep_tmp_artifacts_folder = True
+        # Delete the flag from the arguments, as it is not intended for `prod-test-driver`
+        runner_args = runner_args.replace("--keep_artifacts", "")
     # Run main() in try/catch to delete tmp folders (marked for deletion) in case of exceptions or user interrupts.
     folders_to_remove: List[str] = []
     testrun_returncode = 1
     try:
-        testrun_returncode = main(runner_args, folders_to_remove)
+        testrun_returncode = main(runner_args, folders_to_remove, keep_tmp_artifacts_folder)
     except Exception as e:
         logging.exception(f"Raised exception: {e}")
     finally:
         remove_folders(folders_to_remove)
+        if keep_tmp_artifacts_folder:
+            logging.info(f"{RED}Artifacts folder is not deleted `--keep_artifacts` was set by the user.{NC}")
     sys.exit(testrun_returncode)
