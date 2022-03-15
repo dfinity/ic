@@ -7,6 +7,10 @@ use crate::pot::Context;
 use crate::prod_tests::driver_setup::tee_logger;
 use crate::prod_tests::farm::GroupSpec;
 use crate::prod_tests::ic::InternetComputer;
+use crate::prod_tests::test_env::TestEnv;
+use crate::prod_tests::test_setup::{
+    IcHandleConstructor, AUTHORIZED_SSH_ACCOUNTS, FARM_BASE_URL, FARM_GROUP_NAME,
+};
 use crate::result::*;
 use anyhow::{bail, Result};
 use crossbeam_channel::{bounded, Receiver, Sender};
@@ -91,6 +95,7 @@ fn evaluate_pot(ctx: &DriverContext, mut pot: Pot, path: TestPath) -> Result<Tes
     // set up the group
     let pot_path = path.join(&pot.name);
     let logger = ctx.logger();
+
     let group_name = format!("{}-{}", pot_path.url_string(), ctx.job_id)
         .replace(":", "_")
         .replace(".", "_");
@@ -136,7 +141,14 @@ fn evaluate_pot_with_group(
 
     let temp_dir = tempfile::tempdir().expect("Could not create temp directory");
     info!(&ctx.logger, "temp_dir: {:?}", temp_dir.path());
-    let ic_handle = config.setup_and_start(ctx, &temp_dir, group_name)?;
+    let env = TestEnv::new(temp_dir.into_path());
+
+    env.write_object(FARM_GROUP_NAME, group_name)?;
+    env.write_object(FARM_BASE_URL, &ctx.farm.base_url)?;
+    env.write_object(AUTHORIZED_SSH_ACCOUNTS, &ctx.authorized_ssh_accounts)?;
+
+    config.setup_and_start(ctx, &env)?;
+    let ic_handle = env.ic_handle()?;
 
     let (sender, receiver) = bounded(tests_num);
     let chunks = chunk(tests, no_threads);

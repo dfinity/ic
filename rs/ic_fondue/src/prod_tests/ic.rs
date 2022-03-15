@@ -1,9 +1,8 @@
 use super::bootstrap::{init_ic, setup_and_start_vms};
 use super::driver_setup::DriverContext;
 use super::resource::{allocate_resources, get_resource_request, ResourceGroup};
-use super::test_setup::create_ic_handle;
+use super::test_env::TestEnv;
 use crate::ic_instance::node_software_version::NodeSoftwareVersion;
-use crate::ic_manager::IcHandle;
 use anyhow::Result;
 use ic_prep_lib::node::NodeSecretKeyStore;
 use ic_protobuf::registry::subnet::v1::GossipConfig;
@@ -101,30 +100,26 @@ impl InternetComputer {
         self
     }
 
-    pub fn setup_and_start(
-        &mut self,
-        ctx: &DriverContext,
-        prep_dir: &tempfile::TempDir,
-        group_name: &str,
-    ) -> Result<IcHandle> {
+    pub fn setup_and_start(&mut self, ctx: &DriverContext, env: &TestEnv) -> Result<()> {
+        let group_name: String = env.read_object("farm/group_name")?;
         let tempdir = tempfile::tempdir()?;
         self.create_secret_key_stores(tempdir.path())?;
-        let res_request = get_resource_request(ctx, self, group_name);
+        let res_request = get_resource_request(ctx, self, &group_name);
         let res_group = allocate_resources(ctx, &res_request)?;
         self.propagate_ip_addrs(&res_group);
-        let init_ic = init_ic(ctx, self, prep_dir.path());
-        setup_and_start_vms(ctx, &init_ic, group_name)?;
-        Ok(create_ic_handle(ctx, &init_ic, group_name))
+        let init_ic = init_ic(ctx, self, env.get_path(""));
+        setup_and_start_vms(ctx, &init_ic, &group_name)?;
+        Ok(())
     }
 
     fn create_secret_key_stores(&mut self, tempdir: &Path) -> Result<()> {
         for n in self.unassigned_nodes.iter_mut() {
-            let sks = NodeSecretKeyStore::new(tempdir.join(format!("{:p}", n)))?;
+            let sks = NodeSecretKeyStore::new(tempdir.join(format!("node-{:p}", n)))?;
             n.secret_key_store = Some(sks);
         }
         for s in self.subnets.iter_mut() {
             for n in s.nodes.iter_mut() {
-                let sks = NodeSecretKeyStore::new(tempdir.join(format!("{:p}", n)))?;
+                let sks = NodeSecretKeyStore::new(tempdir.join(format!("node-{:p}", n)))?;
                 n.secret_key_store = Some(sks);
             }
         }

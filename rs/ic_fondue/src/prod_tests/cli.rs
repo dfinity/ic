@@ -2,6 +2,7 @@ use anyhow::{bail, Result};
 use humantime::parse_duration;
 use ic_types::ReplicaVersion;
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use std::{
     convert::TryFrom,
     path::{Path, PathBuf},
@@ -227,7 +228,7 @@ pub type PrivateKeyFileContent = Vec<u8>;
 pub type PublicKeyFileContent = Vec<u8>;
 
 /// The key pair of an authorized ssh account.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AuthorizedSshAccount {
     pub name: String,
     pub private_key: PrivateKeyFileContent,

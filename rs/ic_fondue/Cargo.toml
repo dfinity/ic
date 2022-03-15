@@ -23,6 +23,8 @@ ic-interfaces = { path = "../interfaces" }
 ic-nns-init = { path = "../nns/init" }
 ic-prep = { path = "../prep" }
 ic-protobuf = { path = "../protobuf" }
+ic-registry-client = { path = "../registry/client"}
+ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-common = { path = "../registry/common" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }

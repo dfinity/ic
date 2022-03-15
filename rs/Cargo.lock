@@ -4786,6 +4786,8 @@ dependencies = [
  "ic-nns-init",
  "ic-prep",
  "ic-protobuf",
+ "ic-registry-client",
+ "ic-registry-client-helpers",
  "ic-registry-common",
  "ic-registry-provisional-whitelist",
  "ic-registry-subnet-type",
