@@ -2,6 +2,23 @@ use std::net::SocketAddr;
 
 use bitcoin::Network;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+/// The source of the unix domain socket to be used for inter-process
+/// communication.
+pub enum IncomingSource {
+    /// We use systemd's created socket.
+    Systemd,
+    /// We use the corresponing path as socket.
+    Path(PathBuf),
+}
+
+impl Default for IncomingSource {
+    fn default() -> Self {
+        IncomingSource::Systemd
+    }
+}
 
 /// This struct contains configuration options for the BTC Adapter.
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -26,6 +43,9 @@ pub struct Config {
     /// that support IPv6.
     #[serde(default)]
     pub ipv6_only: bool,
+    /// Specifies which unix domain socket should be used for serving incoming requests.
+    #[serde(default)]
+    pub incoming_source: IncomingSource,
 }
 
 fn default_idle_seconds() -> u64 {
@@ -52,6 +72,7 @@ impl Default for Config {
             nodes: vec![],
             idle_seconds: 5,
             ipv6_only: false,
+            incoming_source: Default::default(),
         }
     }
 }

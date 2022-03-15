@@ -5,5 +5,8 @@
         "seed.tbtc.petertodd.org",
         "seed.testnet.bitcoin.sprovoost.nl",
         "testnet-seed.bluematt.me"
-    ]
+    ],
+    "incoming_source": {
+        "Path": "/tmp/ic-btc-adapter.socket"
+    }
 }

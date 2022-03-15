@@ -50,7 +50,9 @@ impl Cli {
 #[cfg(test)]
 pub mod test {
     use super::*;
+    use crate::IncomingSource;
     use bitcoin::Network;
+    use std::path::PathBuf;
     use std::str::FromStr;
 
     /// This function tests the `Cli::get_logging_level()` function.
@@ -119,6 +121,7 @@ pub mod test {
         assert_eq!(config.network, Network::Bitcoin);
         assert_eq!(config.dns_seeds.len(), 9);
         assert_eq!(config.socks_proxy, None);
+        assert_eq!(config.incoming_source, IncomingSource::Systemd);
     }
 
     #[test]
@@ -134,5 +137,9 @@ pub mod test {
         assert_eq!(config.network, Network::Testnet);
         assert_eq!(config.dns_seeds.len(), 4);
         assert_eq!(config.socks_proxy, None);
+        assert_eq!(
+            config.incoming_source,
+            IncomingSource::Path(PathBuf::from("/tmp/ic-btc-adapter.socket"))
+        );
     }
 }

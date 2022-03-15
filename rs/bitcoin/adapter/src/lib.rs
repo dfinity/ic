@@ -43,7 +43,7 @@ mod cli;
 pub use adapter::Adapter;
 pub use cli::Cli;
 use common::BlockHeight;
-pub use config::Config;
+pub use config::{Config, IncomingSource};
 pub use rpc_server::spawn_grpc_server;
 use stream::StreamEvent;
 

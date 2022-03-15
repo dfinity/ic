@@ -14,6 +14,20 @@ use std::{
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tonic::transport::server::Connected;
 
+/// The function uses the passed 'path' for creating a unix domain socket
+/// for serving inter-process communication requests.
+pub fn incoming_from_path<P: AsRef<std::path::Path>>(
+    path: P,
+) -> AsyncStream<Result<UnixStream, std::io::Error>, impl futures::Future<Output = ()>> {
+    let uds = tokio::net::UnixListener::bind(path).expect("Failed to bind path.");
+    async_stream::stream! {
+        loop {
+            let item = uds.accept().map_ok(|(stream, _)| UnixStream(stream)).await;
+            yield item;
+        }
+    }
+}
+
 /// listener_from_first_systemd_socket() takes the first FD(3) passed by systemd. It does not check if
 /// more FDs are passed to the process. Make sure to call ensure_single_systemd_socket() before!
 /// To ensure that only one listener on the socket exists this function should only be called once!
