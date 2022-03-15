@@ -5,9 +5,7 @@ use ic_embedders::{
     wasmtime_embedder::WasmtimeInstance,
     WasmtimeEmbedder,
 };
-use ic_interfaces::execution_environment::{
-    ExecutionMode, ExecutionParameters, SubnetAvailableMemory,
-};
+use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode, ExecutionParameters};
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{Global, Memory, PageMap};
@@ -30,7 +28,7 @@ fn execution_parameters() -> ExecutionParameters {
     ExecutionParameters {
         instruction_limit: DEFAULT_NUM_INSTRUCTIONS,
         canister_memory_limit: ic_types::NumBytes::from(4 << 30),
-        subnet_available_memory: SubnetAvailableMemory::new(i64::MAX / 2),
+        subnet_available_memory: AvailableMemory::new(i64::MAX / 2, i64::MAX / 2).into(),
         compute_allocation: ComputeAllocation::default(),
         subnet_type: SubnetType::Application,
         execution_mode: ExecutionMode::Replicated,

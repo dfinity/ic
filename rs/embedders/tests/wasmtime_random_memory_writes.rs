@@ -2,7 +2,7 @@ use ic_config::embedders::Config;
 use ic_embedders::wasm_utils::instrumentation::{instrument, InstructionCostTable};
 use ic_embedders::WasmtimeEmbedder;
 use ic_interfaces::execution_environment::{
-    ExecutionMode, ExecutionParameters, SubnetAvailableMemory,
+    AvailableMemory, ExecutionMode, ExecutionParameters, SubnetAvailableMemory,
 };
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
@@ -34,7 +34,7 @@ const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000
 
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
-        SubnetAvailableMemory::new(i64::MAX / 2);
+        AvailableMemory::new(i64::MAX / 2, i64::MAX / 2).into();
 }
 
 fn test_api_for_update(

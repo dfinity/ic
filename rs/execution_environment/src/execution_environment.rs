@@ -16,6 +16,7 @@ use ic_ic00_types::{
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
     SetControllerArgs, SetupInitialDKGArgs, SignWithECDSAArgs, UpdateSettingsArgs, IC_00,
 };
+use ic_interfaces::execution_environment::AvailableMemory;
 use ic_interfaces::{
     execution_environment::{
         CanisterHeartbeatError, ExecuteMessageResult, ExecutionMode, ExecutionParameters,
@@ -110,7 +111,7 @@ pub trait ExecutionEnvironment: Sync + Send {
 
     /// Look up the current amount of memory available on the subnet.
     /// EXC-185 will make this method obsolete.
-    fn subnet_available_memory(&self, state: &ReplicatedState) -> i64;
+    fn subnet_available_memory(&self, state: &ReplicatedState) -> AvailableMemory;
 
     /// Returns the maximum amount of memory that can be utilized by a single
     /// canister.
@@ -145,8 +146,13 @@ pub struct ExecutionEnvironmentImpl {
 }
 
 impl ExecutionEnvironment for ExecutionEnvironmentImpl {
-    fn subnet_available_memory(&self, state: &ReplicatedState) -> i64 {
-        self.config.subnet_memory_capacity.get() as i64 - state.total_memory_taken().get() as i64
+    fn subnet_available_memory(&self, state: &ReplicatedState) -> AvailableMemory {
+        AvailableMemory::new(
+            self.config.subnet_memory_capacity.get() as i64
+                - state.total_memory_taken().get() as i64,
+            self.config.subnet_message_memory_capacity.get() as i64
+                - state.message_memory_taken().get() as i64,
+        )
     }
 
     #[allow(clippy::cognitive_complexity)]
@@ -1380,8 +1386,7 @@ impl ExecutionEnvironmentImpl {
     ) -> ExecuteMessageResult<CanisterState> {
         // Letting the canister grow arbitrarily when executing the
         // query is fine as we do not persist state modifications.
-        let subnet_available_memory =
-            SubnetAvailableMemory::new(self.config.subnet_memory_capacity.get() as i64);
+        let subnet_available_memory = subnet_memory_capacity(&self.config);
         let execution_parameters = self.execution_parameters(
             &canister,
             cycles,
@@ -1477,8 +1482,7 @@ impl ExecutionEnvironmentImpl {
                 Some(canister) => {
                     // Letting the canister grow arbitrarily when executing the
                     // query is fine as we do not persist state modifications.
-                    let subnet_available_memory =
-                        SubnetAvailableMemory::new(self.config.subnet_memory_capacity.get() as i64);
+                    let subnet_available_memory = subnet_memory_capacity(&self.config);
                     let execution_parameters = self.execution_parameters(
                         canister,
                         self.config.max_instructions_for_message_acceptance_calls,
@@ -1622,8 +1626,7 @@ impl ExecutionEnvironmentImpl {
     ) -> ExecuteMessageResult<CanisterState> {
         // Letting the canister grow arbitrarily when executing the
         // query is fine as we do not persist state modifications.
-        let subnet_available_memory =
-            SubnetAvailableMemory::new(self.config.subnet_memory_capacity.get() as i64);
+        let subnet_available_memory = subnet_memory_capacity(&self.config);
         let execution_parameters = self.execution_parameters(
             &canister,
             cycles,
@@ -2015,6 +2018,15 @@ impl ExecutionEnvironmentImpl {
     pub fn hypervisor_for_testing(&self) -> &Hypervisor {
         &*self.hypervisor
     }
+}
+
+/// Returns the subnet's configured memory capacity (ignoring current usage).
+pub(crate) fn subnet_memory_capacity(config: &ExecutionConfig) -> SubnetAvailableMemory {
+    AvailableMemory::new(
+        config.subnet_memory_capacity.get() as i64,
+        config.subnet_message_memory_capacity.get() as i64,
+    )
+    .into()
 }
 
 fn get_canister_mut(

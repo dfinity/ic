@@ -1,7 +1,8 @@
 use ic_config::execution_environment::Config;
 use ic_execution_environment::{Hypervisor, QueryExecutionType};
+use ic_interfaces::execution_environment::AvailableMemory;
 use ic_interfaces::{
-    execution_environment::{ExecutionMode, ExecutionParameters, SubnetAvailableMemory},
+    execution_environment::{ExecutionMode, ExecutionParameters},
     messages::RequestOrIngress,
 };
 use ic_logger::ReplicaLogger;
@@ -28,7 +29,7 @@ fn execution_parameters() -> ExecutionParameters {
     ExecutionParameters {
         instruction_limit: NumInstructions::new(1_000_000_000),
         canister_memory_limit: NumBytes::new(u64::MAX / 2),
-        subnet_available_memory: SubnetAvailableMemory::new(i64::MAX / 2),
+        subnet_available_memory: AvailableMemory::new(i64::MAX / 2, i64::MAX / 2).into(),
         compute_allocation: ComputeAllocation::default(),
         subnet_type: SubnetType::Application,
         execution_mode: ExecutionMode::Replicated,

@@ -6,6 +6,7 @@ use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto::prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_ic00_types::Method as Ic00Method;
+use ic_interfaces::execution_environment::AvailableMemory;
 use ic_interfaces::{
     execution_environment::{IngressHistoryWriter, Scheduler, SubnetAvailableMemory},
     messages::CanisterInputMessage,
@@ -505,7 +506,7 @@ impl SchedulerImpl {
         current_config: SchedulerConfig,
         round_id: ExecutionRound,
         time: Time,
-        subnet_available_memory: i64,
+        subnet_available_memory: AvailableMemory,
         network_topology: Arc<NetworkTopology>,
         heartbeat_handling: HeartbeatHandling,
         measurement_scope: &MeasurementScope,
@@ -561,7 +562,7 @@ impl SchedulerImpl {
                         metrics,
                         round_id,
                         time,
-                        SubnetAvailableMemory::new(subnet_available_memory),
+                        subnet_available_memory.into(),
                         network_topology,
                         heartbeat_handling,
                         logger,
@@ -798,7 +799,11 @@ impl SchedulerImpl {
     /// through message routing.
     pub fn induct_messages_on_same_subnet(&self, state: &mut ReplicatedState) {
         // Compute subnet available memory *before* taking out the canisters.
-        let mut subnet_available_memory = self.exec_env.subnet_available_memory(state);
+        let mut subnet_available_memory = self
+            .exec_env
+            .subnet_available_memory(state)
+            .max_available_message_memory();
+
         let max_canister_memory_size = self.exec_env.max_canister_memory_size();
 
         let mut canisters = state.take_canister_states();
@@ -899,7 +904,7 @@ impl Scheduler for SchedulerImpl {
         let measurement_scope = MeasurementScope::root(&self.metrics.round);
 
         let round_log;
-        let subnet_available_memory;
+        let subnet_available_memory: SubnetAvailableMemory;
         let mut csprng;
         {
             let _timer = self.metrics.round_preparation_duration.start_timer();
@@ -947,8 +952,7 @@ impl Scheduler for SchedulerImpl {
                 &ExecutionThread(self.config.scheduler_cores as u32),
             );
 
-            subnet_available_memory =
-                SubnetAvailableMemory::new(self.exec_env.subnet_available_memory(&state));
+            subnet_available_memory = self.exec_env.subnet_available_memory(&state).into();
         }
 
         // Execute subnet messages.
