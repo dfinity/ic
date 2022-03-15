@@ -347,6 +347,7 @@ impl CyclesAccountManager {
                 | Ok(Method::RawRand)
                 | Ok(Method::ECDSAPublicKey)
                 | Ok(Method::SignWithECDSA)
+                | Ok(Method::ComputeInitialEcdsaDealings)
                 | Ok(Method::BitcoinTestnetGetBalance)
                 | Ok(Method::BitcoinTestnetGetUtxos)
                 | Ok(Method::BitcoinTestnetSendTransaction)

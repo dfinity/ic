@@ -85,6 +85,18 @@ message CanisterHttpRequestContextTree {
     CanisterHttpRequestContext context = 2;
 }
 
+message EcdsaDealingsContext {
+    state.queues.v1.Request request = 1;
+    string key_id = 2;
+    repeated types.v1.NodeId nodes = 3;
+    uint64 registry_version = 4;
+}
+
+message EcdsaDealingsContextTree {
+    uint64 callback_id = 1;
+    EcdsaDealingsContext context = 2;
+}
+
 message SubnetCallContextManager {
     uint64 next_callback_id = 1;
     reserved 2;
@@ -94,6 +106,7 @@ message SubnetCallContextManager {
     reserved 5;
     reserved "sign_with_mock_ecdsa_contexts";
     repeated CanisterHttpRequestContextTree canister_http_request_contexts = 6;
+    repeated EcdsaDealingsContextTree ecdsa_dealings_contexts = 7;
 }
 
 message TimeOfLastAllocationCharge {

@@ -20,6 +20,7 @@ pub struct SubnetCallContextManager {
     pub setup_initial_dkg_contexts: BTreeMap<CallbackId, SetupInitialDkgContext>,
     pub sign_with_ecdsa_contexts: BTreeMap<CallbackId, SignWithEcdsaContext>,
     pub canister_http_request_contexts: BTreeMap<CallbackId, CanisterHttpRequestContext>,
+    pub ecdsa_dealings_contexts: BTreeMap<CallbackId, EcdsaDealingsContext>,
 }
 
 impl SubnetCallContextManager {
@@ -42,6 +43,13 @@ impl SubnetCallContextManager {
 
         self.canister_http_request_contexts
             .insert(callback_id, context);
+    }
+
+    pub fn push_ecdsa_dealings_request(&mut self, context: EcdsaDealingsContext) {
+        let callback_id = CallbackId::new(self.next_callback_id);
+        self.next_callback_id += 1;
+
+        self.ecdsa_dealings_contexts.insert(callback_id, context);
     }
 
     pub fn retrieve_request(
@@ -122,6 +130,16 @@ impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {
                     },
                 )
                 .collect(),
+            ecdsa_dealings_contexts: item
+                .ecdsa_dealings_contexts
+                .iter()
+                .map(
+                    |(callback_id, context)| pb_metadata::EcdsaDealingsContextTree {
+                        callback_id: callback_id.get(),
+                        context: Some(context.into()),
+                    },
+                )
+                .collect(),
         }
     }
 }
@@ -151,11 +169,19 @@ impl TryFrom<pb_metadata::SubnetCallContextManager> for SubnetCallContextManager
             canister_http_request_contexts.insert(CallbackId::new(entry.callback_id), context);
         }
 
+        let mut ecdsa_dealings_contexts = BTreeMap::<CallbackId, EcdsaDealingsContext>::new();
+        for entry in item.ecdsa_dealings_contexts {
+            let context: EcdsaDealingsContext =
+                try_from_option_field(entry.context, "SystemMetadata::EcdsaDealingsContext")?;
+            ecdsa_dealings_contexts.insert(CallbackId::new(entry.callback_id), context);
+        }
+
         Ok(Self {
             next_callback_id: item.next_callback_id,
             setup_initial_dkg_contexts,
             sign_with_ecdsa_contexts,
             canister_http_request_contexts,
+            ecdsa_dealings_contexts,
         })
     }
 }
@@ -243,6 +269,47 @@ impl TryFrom<pb_metadata::SignWithEcdsaContext> for SignWithEcdsaContext {
                 id
             },
             batch_time: Time::from_nanos_since_unix_epoch(context.batch_time),
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EcdsaDealingsContext {
+    pub request: Request,
+    pub key_id: String,
+    pub nodes: BTreeSet<NodeId>,
+    pub registry_version: RegistryVersion,
+}
+
+impl From<&EcdsaDealingsContext> for pb_metadata::EcdsaDealingsContext {
+    fn from(context: &EcdsaDealingsContext) -> Self {
+        pb_metadata::EcdsaDealingsContext {
+            request: Some((&context.request).into()),
+            key_id: context.key_id.clone(),
+            nodes: context
+                .nodes
+                .iter()
+                .map(|node_id| node_id_into_protobuf(*node_id))
+                .collect(),
+            registry_version: context.registry_version.get(),
+        }
+    }
+}
+
+impl TryFrom<pb_metadata::EcdsaDealingsContext> for EcdsaDealingsContext {
+    type Error = ProxyDecodeError;
+    fn try_from(context: pb_metadata::EcdsaDealingsContext) -> Result<Self, Self::Error> {
+        let request: Request =
+            try_from_option_field(context.request, "EcdsaDealingsContext::request")?;
+        let mut nodes = BTreeSet::<NodeId>::new();
+        for node_id in context.nodes {
+            nodes.insert(node_id_try_from_protobuf(node_id)?);
+        }
+        Ok(EcdsaDealingsContext {
+            request,
+            key_id: context.key_id,
+            nodes,
+            registry_version: RegistryVersion::from(context.registry_version),
         })
     }
 }

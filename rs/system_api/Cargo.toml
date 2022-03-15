@@ -24,6 +24,7 @@ serde_bytes = "0.11"
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
 
 [dev-dependencies]
+ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-test-utilities = { path = "../test_utilities" }
 lazy_static = "1.4.0"
 maplit = "1.0.2"
