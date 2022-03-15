@@ -11,8 +11,8 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_client_helpers::unassigned_nodes::UnassignedNodeRegistry;
 use ic_registry_common::local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
-use ic_types::consensus::CatchUpPackage;
-use ic_types::{NodeId, RegistryVersion, ReplicaVersion, SubnetId};
+use ic_types::consensus::{CatchUpPackage, HasHeight};
+use ic_types::{Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId};
 use std::convert::TryFrom;
 use std::path::PathBuf;
 use std::process::{exit, Command};
@@ -104,6 +104,7 @@ impl Upgrade {
         };
 
         // When we arrived here, we are an assigned node.
+        let old_cup_height = local_cup.as_ref().map(|cup| cup.cup.content.height());
 
         // Get the latest available CUP from the disk, peers or registry and
         // persist it if necesasry.
@@ -113,8 +114,8 @@ impl Upgrade {
             .await?;
 
         // If the CUP is unsigned, it's a registry CUP and we're in a genesis or subnet
-        // recovery scenario. Check if we're in an NNS subnet recovery case and download the new
-        // registry if needed.
+        // recovery scenario. Check if we're in an NNS subnet recovery case and download
+        // the new registry if needed.
         if cup.cup.signature.signature.clone().get().0.is_empty() {
             info!(
                 self.logger,
@@ -161,6 +162,11 @@ impl Upgrade {
             // below.
             return self.download_and_upgrade(&new_replica_version).await;
         }
+
+        // If we arrive here, we are on the newest replica version.
+        // Now we check if a subnet recovery is in progress.
+        // If it is, we restart to pass the unsigned CUP to consensus.
+        self.stop_replica_if_new_recovery_cup(&cup.cup, old_cup_height);
 
         // This will start a new replica process if none is running.
         self.ensure_replica_is_running(&self.replica_version, subnet_id)?;
@@ -315,6 +321,30 @@ impl Upgrade {
                 e,
             )
         })
+    }
+
+    // Stop the replica if the given CUP is unsigned and higher than the given height.
+    // Without restart, consensus would reject the unsigned artifact.
+    // If stopping the replica fails, restart the current process instead.
+    fn stop_replica_if_new_recovery_cup(
+        &self,
+        cup: &CatchUpPackage,
+        old_cup_height: Option<Height>,
+    ) {
+        let is_unsigned_cup = cup.signature.signature.clone().get().0.is_empty();
+        let new_height = cup.content.height();
+        if is_unsigned_cup && old_cup_height.is_some() && Some(new_height) > old_cup_height {
+            info!(
+                self.logger,
+                "Found higher unsigned CUP, restarting replica for subnet recovery..."
+            );
+            // Restarting the replica is enough to pass the unsigned CUP forward.
+            // If we fail, restart the current process instead.
+            if let Err(e) = self.stop_replica() {
+                warn!(self.logger, "Failed to stop replica with error {:?}", e);
+                utils::reexec_current_process(&self.logger);
+            }
+        }
     }
 
     // Start the replica process if not running already
