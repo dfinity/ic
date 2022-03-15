@@ -314,12 +314,14 @@ fn get_test_suites() -> HashMap<String, Suite> {
             "hourly",
             vec![
                 pot(
-                    "basic_health_pot",
-                    basic_health_test::config,
-                    par(vec![
-                        t("basic_health_test", basic_health_test),
-                        t("basic_health_test2", basic_health_test),
-                    ]),
+                    "basic_health_pot_single_host",
+                    basic_health_test::config_single_host,
+                    par(vec![t("basic_health_test", basic_health_test)]),
+                ),
+                pot(
+                    "basic_health_pot_multiple_hosts",
+                    basic_health_test::config_multiple_hosts,
+                    par(vec![t("basic_health_test", basic_health_test)]),
                 ),
                 pot(
                     "node_reassignment_pot",

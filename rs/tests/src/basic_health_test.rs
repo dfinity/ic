@@ -32,6 +32,7 @@ Coverage::
 end::catalog[] */
 
 use crate::{api::system_test_context::*, util::*}; // to use the universal canister
+use ic_fondue::prod_tests::ic::VmAllocationStrategy;
 use ic_fondue::{
     ic_instance::{LegacyInternetComputer, Subnet as LegacySubnet}, // which is declared through these types
     ic_manager::IcHandle,                                          // we run the test on the IC
@@ -44,10 +45,17 @@ use slog::info;
 /// is to combine tests that request compatible environments to reduce startup
 /// time. Please keep this in mind when writing your tests by only requesting
 /// what is needed to satisfy the Goal of the test!
-pub fn config() -> InternetComputer {
+pub fn config_single_host() -> InternetComputer {
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(4))
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(4))
+}
+
+pub fn config_multiple_hosts() -> InternetComputer {
+    InternetComputer::new()
+        .add_subnet(Subnet::new(SubnetType::System).add_nodes(4))
+        .add_subnet(Subnet::new(SubnetType::System).add_nodes(4))
+        .with_allocation_strategy(VmAllocationStrategy::DistributeAcrossDcs)
 }
 
 pub fn legacy_config() -> LegacyInternetComputer {

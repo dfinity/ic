@@ -5,7 +5,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::prod_tests::ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocation};
+use crate::prod_tests::ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocationStrategy};
 use anyhow::Result;
 use reqwest::blocking::{multipart, Client, RequestBuilder};
 use serde::{Deserialize, Serialize};
@@ -209,7 +209,7 @@ struct CreateGroupRequest {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct GroupSpec {
     #[serde(rename = "vmAllocation")]
-    pub vm_allocation: Option<VmAllocation>,
+    pub vm_allocation: Option<VmAllocationStrategy>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
