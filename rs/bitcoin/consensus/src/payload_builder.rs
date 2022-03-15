@@ -118,11 +118,18 @@ impl BitcoinPayloadBuilder {
                                     request.request.to_request_type_label(),
                                     timer,
                                 );
+                                if let BitcoinAdapterResponseWrapper::GetSuccessorsResponse(r) =
+                                    &response_wrapper
+                                {
+                                    self.metrics
+                                        .observe_blocks_per_get_successors_response(r.blocks.len());
+                                }
                                 let response = BitcoinAdapterResponse {
                                     response: response_wrapper,
                                     callback_id: *callback_id,
                                 };
                                 let response_size = response.count_bytes() as u64;
+                                self.metrics.observe_adapter_response_size(response_size);
                                 // Ensure we don't exceed the byte limit by
                                 // adding a new response but also ensure we
                                 // allow at least one response to be included.

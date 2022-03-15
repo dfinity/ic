@@ -1,11 +1,14 @@
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry, Timer};
-use prometheus::HistogramVec;
+use prometheus::{Histogram, HistogramVec};
 
 const LABEL_STATUS: &str = "status";
 const LABEL_TYPE: &str = "type";
 const METRIC_BUILD_PAYLOAD_DURATION: &str = "bitcoin_builder_build_payload_duration_seconds";
 const METRIC_VALIDATE_PAYLOAD_DURATION: &str = "bitcoin_builder_validate_payload_duration_seconds";
 const METRIC_ADAPTER_REQUEST_DURATION: &str = "bitcoin_builder_adapter_request_duration_seconds";
+const METRIC_BLOCKS_PER_GET_SUCCESSORS_RESPONSE: &str =
+    "bitcoin_builder_blocks_per_get_successors_response";
+const METRIC_ADAPTER_RESPONSE_SIZE_BYTES: &str = "bitcoin_builder_adapter_response_size_bytes";
 
 pub struct BitcoinPayloadBuilderMetrics {
     // Records the time it took to build the payload, by status.
@@ -15,6 +18,12 @@ pub struct BitcoinPayloadBuilderMetrics {
     // Records the time it took to send a request to the Bitcoin
     // Adapter and receive the response, by status and type.
     adapter_request_duration: HistogramVec,
+    // Records the number of blocks per `GetSuccessorsResponse`
+    // received from the Bitcoin Adapter.
+    blocks_per_get_successors_response: Histogram,
+    // Records the size of responses received from the Bitcoin
+    // Adapter.
+    adapter_response_size_bytes: Histogram,
 }
 
 impl BitcoinPayloadBuilderMetrics {
@@ -41,6 +50,18 @@ impl BitcoinPayloadBuilderMetrics {
                 decimal_buckets(-6, 0),
                 &[LABEL_STATUS, LABEL_TYPE],
             ),
+            blocks_per_get_successors_response: metrics_registry.histogram(
+                METRIC_BLOCKS_PER_GET_SUCCESSORS_RESPONSE,
+                "Number of blocks included per get successors response",
+                // 0, 1, 2, 5, 10, ..., 1000
+                decimal_buckets(0, 3),
+            ),
+            adapter_response_size_bytes: metrics_registry.histogram(
+                METRIC_ADAPTER_RESPONSE_SIZE_BYTES,
+                "Size of responses received from the adapter in bytes.",
+                // 0, 1, 2, 5, 10, ..., 10MB
+                decimal_buckets(0, 7),
+            ),
         }
     }
 
@@ -63,5 +84,17 @@ impl BitcoinPayloadBuilderMetrics {
         self.adapter_request_duration
             .with_label_values(&[status, request_type])
             .observe(timer.elapsed());
+    }
+
+    // Records the number of blocks per `GetSuccessorsResponse`.
+    pub fn observe_blocks_per_get_successors_response(&self, num_blocks: usize) {
+        self.blocks_per_get_successors_response
+            .observe(num_blocks as f64);
+    }
+
+    // Records the size of a response received from the Bitcoin Adapter.
+    pub fn observe_adapter_response_size(&self, response_size: u64) {
+        self.adapter_response_size_bytes
+            .observe(response_size as f64);
     }
 }
