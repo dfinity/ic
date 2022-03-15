@@ -1,4 +1,4 @@
-use ic_interfaces::bitcoin_adapter_client::{BitcoinAdapterClient, Options, RpcResult};
+use ic_interfaces_bitcoin_adapter_client::{BitcoinAdapterClient, Options, RpcResult};
 use ic_protobuf::bitcoin::v1::{BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper};
 use mockall::*;
 
