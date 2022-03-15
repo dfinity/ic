@@ -11,8 +11,9 @@ use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_crypto::derive_tecdsa_public_key;
 use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost};
 use ic_ic00_types::{
-    CanisterHttpRequestArgs, CanisterIdRecord, CanisterSettingsArgs, CreateCanisterArgs,
-    ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EmptyBlob, InstallCodeArgs, Method as Ic00Method,
+    CanisterHttpRequestArgs, CanisterIdRecord, CanisterSettingsArgs,
+    ComputeInitialEcdsaDealingsArgs, CreateCanisterArgs, ECDSAPublicKeyArgs,
+    ECDSAPublicKeyResponse, EmptyBlob, InstallCodeArgs, Method as Ic00Method,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
     SetControllerArgs, SetupInitialDKGArgs, SignWithECDSAArgs, UpdateSettingsArgs, IC_00,
 };
@@ -29,7 +30,9 @@ use ic_metrics::{MetricsRegistry, Timer};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    metadata_state::subnet_call_context_manager::{SetupInitialDkgContext, SignWithEcdsaContext},
+    metadata_state::subnet_call_context_manager::{
+        EcdsaDealingsContext, SetupInitialDkgContext, SignWithEcdsaContext,
+    },
     CallContextAction, CallOrigin, CanisterState, NetworkTopology, ReplicatedState,
 };
 use ic_types::{
@@ -599,6 +602,45 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                 (res, instructions_limit)
             }
 
+            Ok(Ic00Method::ComputeInitialEcdsaDealings) => {
+                let res = match &msg {
+                    RequestOrIngress::Request(request) => {
+                        if !state.metadata.own_subnet_features.ecdsa_signatures {
+                            Some(
+                                UserError::new(
+                                    ErrorCode::CanisterContractViolation,
+                                    format!(
+                                        "The {} API is not enabled on this subnet.", Ic00Method::ComputeInitialEcdsaDealings
+                                    )
+                                )
+                            )
+                        }
+                        else {
+                            match ComputeInitialEcdsaDealingsArgs::decode(payload) {
+                                Err(err) => Some(err.into()),
+                                Ok(args) => {
+                                    self.compute_initial_ecdsa_dealings(
+                                        &mut state,
+                                        msg.sender(),
+                                        args,
+                                        request)
+                                        .map_or_else(Some, |()| None)
+                                }
+                            }
+                        }
+                    }
+                    RequestOrIngress::Ingress(_) => {
+                        error!(self.log, "[EXC-BUG] Ingress messages to ComputeInitialEcdsaDealings should've been filtered earlier.");
+                        let error_string = format!(
+                            "ComputeInitialEcdsaDealings is called by user {}. It can only be called by a canister.",
+                            msg.sender()
+                        );
+                        Some(UserError::new(ErrorCode::CanisterContractViolation, error_string))
+                    }
+                }.map(|err| (Err(err), msg.take_cycles()));
+                (res, instructions_limit)
+            }
+
             Ok(Ic00Method::ProvisionalCreateCanisterWithCycles) => {
                 let res = match ProvisionalCreateCanisterWithCyclesArgs::decode(payload) {
                     Err(err) => Err(err.into()),
@@ -870,6 +912,17 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
             subnet_type: self.own_subnet_type,
             execution_mode,
         }
+    }
+}
+
+fn verify_ecdsa_key_id(key_id: &str) -> Result<(), UserError> {
+    if key_id != "secp256k1" {
+        Err(UserError::new(
+            ErrorCode::CanisterRejectedMessage,
+            "key_id must be \"secp256k1\"",
+        ))
+    } else {
+        Ok(())
     }
 }
 
@@ -1852,12 +1905,7 @@ impl ExecutionEnvironmentImpl {
                 format!("Not a canister id: {}", err),
             )
         })?;
-        if key_id != "secp256k1" {
-            return Err(UserError::new(
-                ErrorCode::CanisterRejectedMessage,
-                "key_id must be \"secp256k1\"",
-            ));
-        };
+        verify_ecdsa_key_id(key_id)?;
         let path = ExtendedDerivationPath {
             caller: principal_id,
             derivation_path,
@@ -1886,12 +1934,7 @@ impl ExecutionEnvironmentImpl {
                 "message_hash must be 32 bytes",
             ));
         }
-        if key_id != "secp256k1" {
-            return Err(UserError::new(
-                ErrorCode::CanisterRejectedMessage,
-                "key_id must be \"secp256k1\"",
-            ));
-        };
+        verify_ecdsa_key_id(key_id)?;
 
         let mut pseudo_random_id = [0u8; 32];
         rng.fill_bytes(&mut pseudo_random_id);
@@ -1911,6 +1954,40 @@ impl ExecutionEnvironmentImpl {
                 derivation_path,
                 pseudo_random_id,
                 batch_time: state.metadata.batch_time,
+            });
+        Ok(())
+    }
+
+    fn compute_initial_ecdsa_dealings(
+        &self,
+        state: &mut ReplicatedState,
+        sender: &PrincipalId,
+        args: ComputeInitialEcdsaDealingsArgs,
+        request: &Request,
+    ) -> Result<(), UserError> {
+        verify_ecdsa_key_id(&args.key_id)?;
+        let sender_subnet_id = state.find_subnet_id(*sender)?;
+
+        if sender_subnet_id != state.metadata.network_topology.nns_subnet_id {
+            return Err(UserError::new(
+                ErrorCode::CanisterContractViolation,
+                format!(
+                    "{} is called by {}. It can only be called by NNS.",
+                    Ic00Method::ComputeInitialEcdsaDealings,
+                    sender,
+                ),
+            ));
+        }
+        let nodes = args.get_set_of_nodes()?;
+        let registry_version = args.get_registry_version();
+        state
+            .metadata
+            .subnet_call_context_manager
+            .push_ecdsa_dealings_request(EcdsaDealingsContext {
+                request: request.clone(),
+                key_id: args.key_id,
+                nodes,
+                registry_version,
             });
         Ok(())
     }

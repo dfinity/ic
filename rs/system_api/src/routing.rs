@@ -3,11 +3,12 @@ use std::str::FromStr;
 use candid::Decode;
 use ic_base_types::{CanisterId, SubnetId};
 use ic_ic00_types::{
-    CanisterIdRecord, InstallCodeArgs, Method as Ic00Method, Payload, ProvisionalTopUpCanisterArgs,
-    SetControllerArgs, UpdateSettingsArgs,
+    CanisterIdRecord, ComputeInitialEcdsaDealingsArgs, InstallCodeArgs, Method as Ic00Method,
+    Payload, ProvisionalTopUpCanisterArgs, SetControllerArgs, UpdateSettingsArgs, IC_00,
 };
 use ic_replicated_state::NetworkTopology;
 
+#[derive(Debug)]
 pub(super) enum ResolveDestinationError {
     CandidError(candid::Error),
     MethodNotFound(String),
@@ -111,8 +112,93 @@ pub(super) fn resolve_destination(
             // For now, we return our own subnet ID.
             Ok(own_subnet)
         }
+        Ok(Ic00Method::ComputeInitialEcdsaDealings) => {
+            let _args = Decode!(payload, ComputeInitialEcdsaDealingsArgs)?;
+            // We currently assume there is only one subnet with ecdsa enabled.
+            // When there is more than one, we should look up the subnet based on the key_id.
+            if let Some(subnet_id) = network_topology.ecdsa_subnets().get(0) {
+                Ok(*subnet_id)
+            } else {
+                Err(ResolveDestinationError::SubnetNotFound(
+                    CanisterId::new(IC_00.get()).unwrap(),
+                    Ic00Method::ComputeInitialEcdsaDealings,
+                ))
+            }
+        }
         Err(_) => Err(ResolveDestinationError::MethodNotFound(
             method_name.to_string(),
         )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use candid::Encode;
+    use ic_base_types::RegistryVersion;
+    use ic_registry_subnet_features::SubnetFeatures;
+    use ic_replicated_state::SubnetTopology;
+    use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
+    use maplit::btreemap;
+
+    use super::*;
+
+    fn network_with_ecdsa_on_subnet_0() -> NetworkTopology {
+        let subnet_id = subnet_test_id(0);
+        NetworkTopology {
+            subnets: btreemap! {
+                subnet_id => SubnetTopology {
+                    subnet_features: SubnetFeatures {
+                        ecdsa_signatures: true,
+                        ..SubnetFeatures::default()
+                    },
+                    ..SubnetTopology::default()
+                }
+            },
+            ..NetworkTopology::default()
+        }
+    }
+
+    fn network_without_ecdsa_subnet() -> NetworkTopology {
+        let subnet_id = subnet_test_id(0);
+        NetworkTopology {
+            subnets: btreemap! {
+                subnet_id => SubnetTopology::default()
+            },
+            ..NetworkTopology::default()
+        }
+    }
+
+    fn compute_initial_ecdsa_dealings_req() -> Vec<u8> {
+        let args = ComputeInitialEcdsaDealingsArgs::new(
+            "some_key".to_string(),
+            vec![node_test_id(0)].into_iter().collect(),
+            RegistryVersion::from(100),
+        );
+        Encode!(&args).unwrap()
+    }
+
+    #[test]
+    fn resolve_compute_initial_ecdsa_dealings() {
+        assert_eq!(
+            resolve_destination(
+                &network_with_ecdsa_on_subnet_0(),
+                &Ic00Method::ComputeInitialEcdsaDealings.to_string(),
+                &compute_initial_ecdsa_dealings_req(),
+                subnet_test_id(1),
+            )
+            .unwrap(),
+            subnet_test_id(0)
+        )
+    }
+
+    #[test]
+    fn resolve_compute_initial_ecdsa_dealings_error() {
+        assert!(resolve_destination(
+            &network_without_ecdsa_subnet(),
+            &Ic00Method::ComputeInitialEcdsaDealings.to_string(),
+            &compute_initial_ecdsa_dealings_req(),
+            subnet_test_id(1),
+        )
+        .is_err())
     }
 }

@@ -6530,6 +6530,7 @@ dependencies = [
  "ic-logger",
  "ic-nns-constants",
  "ic-registry-routing-table",
+ "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-replicated-state",
  "ic-sys",

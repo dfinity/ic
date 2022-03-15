@@ -1492,6 +1492,7 @@ fn get_instructions_limit_for_subnet_message(
             | HttpRequest
             | SetupInitialDKG
             | SignWithECDSA
+            | ComputeInitialEcdsaDealings
             | StartCanister
             | StopCanister
             | UninstallCode

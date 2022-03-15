@@ -3258,3 +3258,194 @@ fn execute_canister_http_request() {
         assert_eq!(http_request_context.request, request);
     });
 }
+
+fn execute_compute_initial_ecdsa_dealings(
+    sender: CanisterId,
+    nns_subnet_id: SubnetId,
+    own_subnet_id: SubnetId,
+    sender_subnet_id: SubnetId,
+    subnet_type: SubnetType,
+    own_subnet_is_ecdsa_enabled: bool,
+    key_id: String,
+    log: ReplicaLogger,
+) -> ReplicatedState {
+    let receiver = canister_test_id(1);
+
+    let (mut state, exec_env) = get_execution_environment(
+        nns_subnet_id,
+        own_subnet_id,
+        sender_subnet_id,
+        subnet_type,
+        log,
+    );
+    state.metadata.own_subnet_features.ecdsa_signatures = own_subnet_is_ecdsa_enabled;
+
+    let node_ids = vec![node_test_id(1), node_test_id(2)].into_iter().collect();
+    let request_payload =
+        ic00::ComputeInitialEcdsaDealingsArgs::new(key_id, node_ids, RegistryVersion::from(100));
+    state
+        .subnet_queues_mut()
+        .push_input(
+            QUEUE_INDEX_NONE,
+            RequestOrResponse::Request(
+                RequestBuilder::new()
+                    .sender(sender)
+                    .receiver(receiver)
+                    .method_name(Method::ComputeInitialEcdsaDealings)
+                    .method_payload(Encode!(&request_payload).unwrap())
+                    .payment(Cycles::from(0u64))
+                    .build(),
+            ),
+            InputQueueType::RemoteSubnet,
+        )
+        .unwrap();
+
+    exec_env
+        .execute_subnet_message(
+            state.subnet_queues_mut().pop_input().unwrap(),
+            state,
+            MAX_NUM_INSTRUCTIONS,
+            &mut mock_random_number_generator(),
+            &None,
+            &ProvisionalWhitelist::Set(BTreeSet::new()),
+            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+            MAX_NUMBER_OF_CANISTERS,
+        )
+        .0
+}
+
+fn get_reject_message(response: RequestOrResponse) -> String {
+    match response {
+        RequestOrResponse::Request(_) => panic!("Expected Response"),
+        RequestOrResponse::Response(resp) => match resp.response_payload {
+            Payload::Data(_) => panic!("Expected Reject"),
+            Payload::Reject(reject) => reject.message,
+        },
+    }
+}
+
+#[test]
+fn compute_initial_ecdsa_dealings_sender_on_nns() {
+    with_test_replica_logger(|log| {
+        let subnet_type = SubnetType::Application;
+        let sender = canister_test_id(0x100); // 0x100..0x1ff mapped to sender subnet
+        let nns_subnet_id = subnet_test_id(2);
+        let own_subnet_id = subnet_test_id(1);
+        let sender_subnet_id = subnet_test_id(2); // sender on nns subnet
+
+        let mut state = execute_compute_initial_ecdsa_dealings(
+            sender,
+            nns_subnet_id,
+            own_subnet_id,
+            sender_subnet_id,
+            subnet_type,
+            true,
+            "secp256k1".to_string(),
+            log,
+        );
+
+        assert_eq!(state.subnet_queues_mut().pop_canister_output(&sender), None);
+    });
+}
+
+#[test]
+fn compute_initial_ecdsa_dealings_sender_not_on_nns() {
+    with_test_replica_logger(|log| {
+        let subnet_type = SubnetType::Application;
+        let sender = canister_test_id(0x100); // 0x100..0x1ff mapped to sender subnet
+        let nns_subnet_id = subnet_test_id(2);
+        let own_subnet_id = subnet_test_id(1);
+        let sender_subnet_id = subnet_test_id(3); // sender not on nns subnet
+
+        let mut state = execute_compute_initial_ecdsa_dealings(
+            sender,
+            nns_subnet_id,
+            own_subnet_id,
+            sender_subnet_id,
+            subnet_type,
+            true,
+            "secp256k1".to_string(),
+            log,
+        );
+
+        let (_refund, response) = state
+            .subnet_queues_mut()
+            .pop_canister_output(&sender)
+            .unwrap();
+
+        assert_eq!(
+            get_reject_message(response),
+            format!(
+                "{} is called by {sender}. It can only be called by NNS.",
+                Method::ComputeInitialEcdsaDealings
+            )
+        )
+    });
+}
+
+#[test]
+fn compute_initial_ecdsa_dealings_without_ecdsa_enabled() {
+    with_test_replica_logger(|log| {
+        let subnet_type = SubnetType::Application;
+        let sender = canister_test_id(0x100); // 0x100..0x1ff mapped to sender subnet
+        let nns_subnet_id = subnet_test_id(2);
+        let own_subnet_id = subnet_test_id(1);
+        let sender_subnet_id = subnet_test_id(2); // sender on nns subnet
+
+        let mut state = execute_compute_initial_ecdsa_dealings(
+            sender,
+            nns_subnet_id,
+            own_subnet_id,
+            sender_subnet_id,
+            subnet_type,
+            false,
+            "secp256k1".to_string(),
+            log,
+        );
+
+        let (_refund, response) = state
+            .subnet_queues_mut()
+            .pop_canister_output(&sender)
+            .unwrap();
+
+        assert_eq!(
+            get_reject_message(response),
+            format!(
+                "The {} API is not enabled on this subnet.",
+                Method::ComputeInitialEcdsaDealings
+            )
+        )
+    });
+}
+
+#[test]
+fn compute_initial_ecdsa_dealings_with_unknown_key() {
+    with_test_replica_logger(|log| {
+        let subnet_type = SubnetType::Application;
+        let sender = canister_test_id(0x100); // 0x100..0x1ff mapped to sender subnet
+        let nns_subnet_id = subnet_test_id(2);
+        let own_subnet_id = subnet_test_id(1);
+        let sender_subnet_id = subnet_test_id(2); // sender on nns subnet
+
+        let mut state = execute_compute_initial_ecdsa_dealings(
+            sender,
+            nns_subnet_id,
+            own_subnet_id,
+            sender_subnet_id,
+            subnet_type,
+            true,
+            "foo".to_string(),
+            log,
+        );
+
+        let (_refund, response) = state
+            .subnet_queues_mut()
+            .pop_canister_output(&sender)
+            .unwrap();
+
+        assert_eq!(
+            get_reject_message(response),
+            "key_id must be \"secp256k1\"".to_string()
+        )
+    });
+}

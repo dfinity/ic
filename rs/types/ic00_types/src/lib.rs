@@ -35,6 +35,7 @@ pub enum Method {
     StopCanister,
     UninstallCode,
     UpdateSettings,
+    ComputeInitialEcdsaDealings,
 
     // Bitcoin Testnet Canister
     BitcoinTestnetGetBalance,
@@ -717,3 +718,48 @@ pub struct ECDSAPublicKeyResponse {
 }
 
 impl Payload<'_> for ECDSAPublicKeyResponse {}
+
+/// Argument of the compute_initial_ecdsa_dealings API.
+/// `(record {
+///     key_id: text;
+///     nodes: vec principal;
+///     registry_version: nat;
+/// })`
+#[derive(CandidType, Deserialize, Debug, Eq, PartialEq)]
+pub struct ComputeInitialEcdsaDealingsArgs {
+    pub key_id: String,
+    nodes: Vec<PrincipalId>,
+    registry_version: u64,
+}
+
+impl ComputeInitialEcdsaDealingsArgs {
+    pub fn new(key_id: String, nodes: BTreeSet<NodeId>, registry_version: RegistryVersion) -> Self {
+        Self {
+            key_id,
+            nodes: nodes.iter().map(|id| id.get()).collect(),
+            registry_version: registry_version.get(),
+        }
+    }
+
+    pub fn get_set_of_nodes(&self) -> Result<BTreeSet<NodeId>, UserError> {
+        let mut set = BTreeSet::<NodeId>::new();
+        for node_id in self.nodes.iter() {
+            if !set.insert(NodeId::new(*node_id)) {
+                return Err(UserError::new(
+                    ErrorCode::CanisterContractViolation,
+                    format!(
+                        "Expected a set of NodeIds. The NodeId {} is repeated",
+                        node_id
+                    ),
+                ));
+            }
+        }
+        Ok(set)
+    }
+
+    pub fn get_registry_version(&self) -> RegistryVersion {
+        RegistryVersion::new(self.registry_version)
+    }
+}
+
+impl Payload<'_> for ComputeInitialEcdsaDealingsArgs {}
