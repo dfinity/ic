@@ -122,7 +122,7 @@ function prepare_build_directories() {
     CONFIG_DIR="$TEMPDIR/CONFIG"
     TARBALL_DIR="$TEMPDIR/TARBALL"
 
-    mkdir -p "${IC_PREP_DIR}"
+    mkdir -p "${IC_PREP_DIR}/bin"
     mkdir -p "${CONFIG_DIR}"
     mkdir -p "${TARBALL_DIR}"
 
@@ -132,8 +132,10 @@ function prepare_build_directories() {
 }
 
 function download_binaries() {
-    "${REPO_ROOT}"/gitlab-ci/src/artifacts/rclone_download.py \
-        --git-rev "$GIT_REVISION" --remote-path=release --include "boundary-node-control-plane.gz" --include "boundary-node-prober.gz" --out="${IC_PREP_DIR}/bin/"
+    for filename in "boundary-node-control-plane.gz" "boundary-node-prober.gz"; do
+        "${REPO_ROOT}"/gitlab-ci/src/artifacts/rclone_download.py \
+            --git-rev "$GIT_REVISION" --remote-path=release --include ${filename} --out="${IC_PREP_DIR}/bin/"
+    done
 
     find "${IC_PREP_DIR}/bin/" -name "*.gz" -print0 | xargs -P100 -0I{} bash -c "gunzip -f {} && basename {} .gz | xargs -I[] chmod +x ${IC_PREP_DIR}/bin/[]"
 
