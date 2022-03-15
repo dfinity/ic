@@ -364,6 +364,14 @@ fn main() {
         .join(" "),
     );
     config.type_attribute(
+        "ic_sns_governance.pb.v1.ManageNeuron.DisburseMaturity",
+        [
+            "#[derive(candid::CandidType, candid::Deserialize)]",
+            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
+        ]
+        .join(" "),
+    );
+    config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuron.Follow",
         [
             "#[derive(candid::CandidType, candid::Deserialize)]",
@@ -446,6 +454,14 @@ fn main() {
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuronResponse.MergeMaturityResponse",
+        [
+            "#[derive(candid::CandidType, candid::Deserialize)]",
+            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
+        ]
+        .join(" "),
+    );
+    config.type_attribute(
+        "ic_sns_governance.pb.v1.ManageNeuronResponse.DisburseMaturityResponse",
         [
             "#[derive(candid::CandidType, candid::Deserialize)]",
             "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",

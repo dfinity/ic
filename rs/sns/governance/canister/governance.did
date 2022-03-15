@@ -21,6 +21,7 @@ type ClaimOrRefreshResponse = record { refreshed_neuron_id : opt NeuronId };
 type Command = variant {
   Split : Split;
   Follow : Follow;
+  DisburseMaturity : DisburseMaturity;
   ClaimOrRefresh : ClaimOrRefresh;
   Configure : Configure;
   RegisterVote : RegisterVote;
@@ -32,6 +33,7 @@ type Command_1 = variant {
   Error : GovernanceError;
   Split : SplitResponse;
   Follow : record {};
+  DisburseMaturity : DisburseMaturityResponse;
   ClaimOrRefresh : ClaimOrRefreshResponse;
   Configure : record {};
   RegisterVote : record {};
@@ -41,6 +43,7 @@ type Command_1 = variant {
 };
 type Command_2 = variant {
   Split : Split;
+  DisburseMaturity : DisburseMaturity;
   ClaimOrRefreshNeuron : ClaimOrRefresh;
   MergeMaturity : MergeMaturity;
   Disburse : Disburse;
@@ -50,6 +53,14 @@ type DefaultFollowees = record { followees : vec record { nat64; Followees } };
 type Disburse = record {
   to_account : opt AccountIdentifier;
   amount : opt Amount;
+};
+type DisburseMaturity = record {
+  to_account : opt AccountIdentifier;
+  percentage_to_disburse : nat32;
+};
+type DisburseMaturityResponse = record {
+  transfer_block_height : nat64;
+  amount_disbursed_e8s : nat64;
 };
 type DisburseResponse = record { transfer_block_height : nat64 };
 type DissolveState = variant {
@@ -193,8 +204,8 @@ type RegisterVote = record { vote : int32; proposal : opt ProposalId };
 type Result = variant { Error : GovernanceError; Neuron : Neuron };
 type Result_1 = variant { Error : GovernanceError; Proposal : ProposalData };
 type RewardEvent = record {
-  day_after_genesis : nat64;
   actual_timestamp_seconds : nat64;
+  periods_since_genesis : nat64;
   distributed_e8s_equivalent : nat64;
   settled_proposals : vec ProposalId;
 };

@@ -139,10 +139,9 @@ fn test_stake_and_disburse_neuron_with_notification() {
                 alloc
             );
 
-            let subaccount = match neuron_id.subaccount() {
-                Ok(s) => s,
-                Err(e) => panic!("Error creating the subaccount, {}", e),
-            };
+            let subaccount = neuron_id
+                .subaccount()
+                .expect("Error creating the subaccount");
 
             // Disburse the neuron.
             let result: ManageNeuronResponse = sns_canisters

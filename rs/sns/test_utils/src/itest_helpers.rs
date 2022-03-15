@@ -13,13 +13,13 @@ use ic_sns_governance::pb::v1::{
         ClaimOrRefresh, Command, Configure, IncreaseDissolveDelay, RegisterVote,
     },
     GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse, Governance, GovernanceError,
-    ManageNeuron, ManageNeuronResponse, NervousSystemParameters, Neuron, NeuronId, Proposal,
-    ProposalData, ProposalId, Vote,
+    ListNeurons, ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, Motion,
+    NervousSystemParameters, Neuron, NeuronId, Proposal, ProposalData, ProposalId, Vote,
 };
 use ledger_canister as ledger;
 use ledger_canister::{
-    AccountIdentifier, LedgerCanisterInitPayload, Memo, SendArgs, Subaccount, Tokens,
-    DEFAULT_TRANSFER_FEE,
+    AccountBalanceArgs, AccountIdentifier, LedgerCanisterInitPayload, Memo, SendArgs, Subaccount,
+    Tokens, DEFAULT_TRANSFER_FEE,
 };
 use on_wire::IntoWire;
 use prost::Message;
@@ -35,6 +35,8 @@ use crate::{
 use dfn_protobuf::protobuf;
 use ic_canister_client::Sender;
 use ic_crypto_sha::Sha256;
+use ic_sns_governance::governance::TimeWarp;
+use ic_sns_governance::pb::v1::proposal::Action;
 use ic_types::PrincipalId;
 
 /// All the SNS canisters
@@ -265,14 +267,14 @@ impl SnsCanisters<'_> {
     }
 
     /// Get a neuron
-    pub async fn get_neuron(&self, neuron_id: NeuronId) -> Neuron {
+    pub async fn get_neuron(&self, neuron_id: &NeuronId) -> Neuron {
         let get_neuron_response: GetNeuronResponse = self
             .governance
             .query_(
                 "get_neuron",
                 candid_one,
                 GetNeuron {
-                    neuron_id: Some(neuron_id),
+                    neuron_id: Some(neuron_id.clone()),
                 },
             )
             .await
@@ -438,6 +440,99 @@ impl SnsCanisters<'_> {
             .expect("Vote request failed");
 
         response
+    }
+
+    pub async fn get_user_account_balance(&self, user: &Sender) -> Tokens {
+        // The balance now should have been deducted the stake.
+        self.ledger
+            .query_(
+                "account_balance_pb",
+                protobuf,
+                AccountBalanceArgs {
+                    account: user.get_principal_id().into(),
+                },
+            )
+            .await
+            .expect("Error calling the Ledger's get_account_balancer")
+    }
+
+    pub async fn list_neurons(&self, user: &Sender) -> Vec<Neuron> {
+        let list_neuron_response: ListNeuronsResponse = self
+            .governance
+            .query_from_sender(
+                "list_neurons",
+                candid_one,
+                ListNeurons {
+                    limit: 100,
+                    after_neuron: None,
+                    of_principal: None,
+                },
+                user,
+            )
+            .await
+            .expect("Error calling the list_neurons API");
+
+        list_neuron_response.neurons
+    }
+
+    pub async fn get_nervous_system_parameters(&self) -> NervousSystemParameters {
+        self.governance
+            .query_("get_nervous_system_parameters", candid_one, ())
+            .await
+            .expect("Error calling the get_nervous_system_parameters API")
+    }
+
+    /// Earn maturity for the given NeuronId. NOTE: This method is only usable
+    /// if there is a single neuron created in the SNS as it relies on
+    /// submitting proposals that automatically pass via majority voting. It will
+    /// also advance time using TimeWarp which is only available in non-production
+    /// builds of the SNS.
+    pub async fn earn_maturity(&self, neuron_id: &NeuronId, user: &Sender) -> Result<(), String> {
+        if self.list_neurons(user).await.len() != 1 {
+            panic!("earn_maturity cannot be invoked with more than one neuron in the SNS");
+        }
+
+        // Make and immediately vote on a proposal so that the neuron earns some rewards aka maturity.
+        let proposal = Proposal {
+            title: "A proposal that should pass unanimously".into(),
+            action: Some(Action::Motion(Motion {
+                motion_text: "GIMMIE MATURITY".into(),
+            })),
+            ..Default::default()
+        };
+
+        let subaccount = neuron_id
+            .subaccount()
+            .expect("Error creating the subaccount");
+
+        // Submit a motion proposal. It should then be executed because the
+        // submitter has a majority stake and submitting also votes automatically.
+        let proposal_id = self
+            .make_proposal(user, &subaccount, proposal)
+            .await
+            .unwrap();
+
+        let initial_voting_period = self
+            .get_nervous_system_parameters()
+            .await
+            .initial_voting_period
+            .unwrap();
+
+        // Advance time to have the proposal be eligible for rewards
+        let delta_s = (initial_voting_period + 1) as i64;
+        self.governance
+            .update_("set_time_warp", candid_one, TimeWarp { delta_s })
+            .await?;
+
+        let mut proposal = self.get_proposal(proposal_id).await;
+
+        // Wait for a canister heartbeat to allow this proposal to be rewarded
+        while proposal.reward_event_round == 0 {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            proposal = self.get_proposal(proposal_id).await;
+        }
+
+        Ok(())
     }
 }
 

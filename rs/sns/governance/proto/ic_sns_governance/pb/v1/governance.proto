@@ -28,13 +28,19 @@ enum NeuronPermissionType {
   // This is not a balance changing operation.
   NEURON_PERMISSION_TYPE_VOTE = 4;
 
-  // TODO NNS1-1013 - Split merge/split and disburse into two separate permissions.
-  // The principal has permission to disburse, split or merge the neuron.
+  // The principal has permission to disburse the neuron.
   NEURON_PERMISSION_TYPE_DISBURSE = 5;
 
-  // The principal has permission to merge the maturity or disburse it directly
-  // to the governance token.
-  NEURON_PERMISSION_TYPE_MANAGE_MATURITY = 6;
+  // The principal has permission to split the neuron.
+  NEURON_PERMISSION_TYPE_SPLIT = 6;
+
+  // The principal has permission to merge the neuron's maturity into
+  // the neuron's stake.
+  NEURON_PERMISSION_TYPE_MERGE_MATURITY = 7;
+
+  // The principal has permission to disburse the neuron's maturity to a
+  // given ledger account.
+  NEURON_PERMISSION_TYPE_DISBURSE_MATURITY = 8;
 }
 
 // A principal with a particular set of permissions over a neuron.
@@ -582,18 +588,19 @@ message NeuronPermissionList {
 
 // A reward event is an event at which neuron maturity is increased
 message RewardEvent {
-  // This reward event correspond to a time interval that ends at the end of
-  // genesis + day_after_genesis days, where days_after_genesis starts at canister install.
+  // This reward event corresponds to a time interval that ends at the end of
+  // genesis + periods_since_genesis, where periods_since_genesis starts at canister install.
   //
   // For instance: when this is 0, this is for a period that ends at genesis -- there can
   // never be a reward for this.
   //
-  // When this is 1, this is for the first day after genesis.
+  // When this is 1, this is for the first reward_distribution_period_seconds after genesis.
   //
-  // On rare occasions, the reward event may cover several days ending at genesis + day_after_genesis days,
-  // when it was not possible to proceed to a reward event for a while. This makes that day_after_genesis
-  // does not have to be consecutive.
-  uint64 day_after_genesis = 1;
+  // On rare occasions, the reward event may cover several periods ending at genesis +
+  // periods_since_genesis periods, when it was not possible to proceed to a reward
+  // event for a while. This makes that periods_since_genesis does not have to be
+  // consecutive.
+  uint64 periods_since_genesis = 1;
 
   // The timestamp at which this reward event took place, in seconds since the unix epoch.
   //
@@ -639,7 +646,8 @@ message Governance {
       ManageNeuron.Disburse disburse = 2;
       ManageNeuron.Split split = 3;
       ManageNeuron.MergeMaturity merge_maturity = 4;
-      ManageNeuron.ClaimOrRefresh claim_or_refresh_neuron = 5;
+      ManageNeuron.DisburseMaturity disburse_maturity = 5;
+      ManageNeuron.ClaimOrRefresh claim_or_refresh_neuron = 6;
     }
   }
 
@@ -779,6 +787,19 @@ message ManageNeuron {
     uint32 percentage_to_merge = 1;
   }
 
+  // Disburse the maturity of a neuron to any ledger account. If an account
+  // is not specified, the caller's account will be used. The caller can choose
+  // a percentage of the current maturity to disburse to the ledger account. The
+  // resulting amount to disburse must be greater than or equal to the
+  // transaction fee.
+  message DisburseMaturity {
+    // The percentage to disburse, from 1 to 100
+    uint32 percentage_to_disburse = 1;
+
+    // The (optional) principal to which to transfer the stake.
+    ic_ledger.pb.v1.AccountIdentifier to_account = 2;
+  }
+
   // Add a rule that automatically triggers a vote for a neuron for
   // proposals of a certain type, by specifying a group
   // of followee neurons whose majority vote is followed. The
@@ -845,6 +866,7 @@ message ManageNeuron {
     Split split = 7;
     ClaimOrRefresh claim_or_refresh = 8;
     MergeMaturity merge_maturity = 9;
+    DisburseMaturity disburse_maturity = 10;
   }
 }
 
@@ -862,6 +884,14 @@ message ManageNeuronResponse {
   message MergeMaturityResponse {
     uint64 merged_maturity_e8s = 1;
     uint64 new_stake_e8s = 2;
+  }
+
+  message DisburseMaturityResponse {
+    // The block height at which the disburse maturity transfer happened.
+    uint64 transfer_block_height = 1;
+
+    // The amount disbursed in e8s of the governance token.
+    uint64 amount_disbursed_e8s = 2;
   }
 
   message FollowResponse {}
@@ -892,6 +922,7 @@ message ManageNeuronResponse {
     SplitResponse split = 7;
     ClaimOrRefreshResponse claim_or_refresh = 8;
     MergeMaturityResponse merge_maturity = 9;
+    DisburseMaturityResponse disburse_maturity = 10;
   }
 }
 
