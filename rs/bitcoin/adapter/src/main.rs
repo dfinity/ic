@@ -35,7 +35,7 @@ pub async fn main() {
     );
 
     let adapter = Arc::new(Mutex::new(Adapter::new(&config, logger.clone())));
-    spawn_grpc_server(Arc::clone(&adapter));
+    spawn_grpc_server(config, Arc::clone(&adapter));
 
     loop {
         adapter.lock().await.tick();
