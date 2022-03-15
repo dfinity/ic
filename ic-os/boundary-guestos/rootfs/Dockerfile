@@ -41,8 +41,8 @@ RUN cd /tmp/ && \
 
 # Download icx-proxy.deb 
 RUN cd /tmp/ && \
-   curl -L -O https://github.com/dfinity/icx-proxy/releases/download/5967469/icx-proxy.deb && \
-   echo "686db806f492995a61dd2a1f741425f2d0ecf683  ./icx-proxy.deb" > icx-proxy.sha256 && \
+   curl -L -O https://github.com/dfinity/icx-proxy/releases/download/39bc74c/icx-proxy.deb && \
+   echo "56c819a65c05df78748225b92df69e6655e9b45f  ./icx-proxy.deb" > icx-proxy.sha256 && \
    shasum -c icx-proxy.sha256
 
 # Second build stage: construct the actual target image (root filesystem of the
