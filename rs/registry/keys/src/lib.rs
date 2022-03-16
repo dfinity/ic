@@ -53,6 +53,10 @@ pub fn make_routing_table_record_key() -> String {
     "routing_table".to_string()
 }
 
+pub fn make_canister_migrations_record_key() -> String {
+    "canister_migrations".to_string()
+}
+
 pub fn make_firewall_config_record_key() -> String {
     "firewall_config".to_string()
 }

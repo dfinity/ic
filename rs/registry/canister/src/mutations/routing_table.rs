@@ -4,18 +4,39 @@ use std::convert::TryFrom;
 
 use ic_base_types::SubnetId;
 use ic_protobuf::registry::routing_table::v1 as pb;
-use ic_registry_keys::make_routing_table_record_key;
-use ic_registry_routing_table::{routing_table_insert_subnet, CanisterIdRange, RoutingTable};
+use ic_registry_keys::{make_canister_migrations_record_key, make_routing_table_record_key};
+use ic_registry_routing_table::{
+    routing_table_insert_subnet, CanisterIdRange, CanisterMigrations, RoutingTable,
+};
 use ic_registry_transport::pb::v1::{RegistryMutation, RegistryValue};
 use prost::Message;
 
-fn into_registry_mutation(routing_table: RoutingTable, mutation_type: i32) -> RegistryMutation {
+fn routing_table_into_registry_mutation(
+    routing_table: RoutingTable,
+    mutation_type: i32,
+) -> RegistryMutation {
     let routing_table = pb::RoutingTable::from(routing_table);
     let mut buf = vec![];
     routing_table.encode(&mut buf).unwrap();
     RegistryMutation {
         mutation_type,
         key: make_routing_table_record_key().as_bytes().to_vec(),
+        value: buf,
+    }
+}
+
+#[allow(dead_code)]
+// The function will be used when canister migration mutation is fully supported in the future.
+fn canister_migrations_into_registry_mutation(
+    canister_migrations: CanisterMigrations,
+    mutation_type: i32,
+) -> RegistryMutation {
+    let canister_migrations = pb::CanisterMigrations::from(canister_migrations);
+    let mut buf = vec![];
+    canister_migrations.encode(&mut buf).unwrap();
+    RegistryMutation {
+        mutation_type,
+        key: make_canister_migrations_record_key().as_bytes().to_vec(),
         value: buf,
     }
 }
@@ -39,7 +60,7 @@ impl Registry {
         ))
         .expect("failed to decode the routing table from protobuf");
         f(&mut routing_table);
-        into_registry_mutation(routing_table, 1)
+        routing_table_into_registry_mutation(routing_table, 1)
     }
 
     /// Handle adding a subnet to the routing table.

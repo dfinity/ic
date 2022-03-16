@@ -1,11 +1,14 @@
-use super::{CanisterIdRange, CanisterIdRanges, RoutingTable};
+use super::{CanisterIdRange, CanisterIdRanges, CanisterMigrations, RoutingTable};
 use ic_base_types::{subnet_id_into_protobuf, subnet_id_try_from_protobuf, CanisterId};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     registry::routing_table::v1 as pb,
     types::v1 as pb_types,
 };
-use std::{collections::BTreeMap, convert::TryFrom};
+use std::{
+    collections::BTreeMap,
+    convert::{TryFrom, TryInto},
+};
 
 impl From<CanisterIdRange> for pb::CanisterIdRange {
     fn from(src: CanisterIdRange) -> Self {
@@ -90,5 +93,51 @@ impl TryFrom<pb::RoutingTable> for RoutingTable {
             }
         }
         Ok(Self(map))
+    }
+}
+
+impl From<CanisterMigrations> for pb::CanisterMigrations {
+    fn from(src: CanisterMigrations) -> Self {
+        Self::from(&src)
+    }
+}
+
+impl From<&CanisterMigrations> for pb::CanisterMigrations {
+    fn from(src: &CanisterMigrations) -> Self {
+        let entries = src
+            .0
+            .iter()
+            .map(|(range, subnet_ids)| pb::canister_migrations::Entry {
+                range: Some(pb::CanisterIdRange::from(*range)),
+                subnet_ids: subnet_ids
+                    .iter()
+                    .map(|subnet_id| subnet_id_into_protobuf(*subnet_id))
+                    .collect(),
+            })
+            .collect();
+        Self { entries }
+    }
+}
+
+impl TryFrom<pb::CanisterMigrations> for CanisterMigrations {
+    type Error = ProxyDecodeError;
+
+    fn try_from(src: pb::CanisterMigrations) -> Result<Self, Self::Error> {
+        let mut map = BTreeMap::new();
+        for entry in src.entries {
+            let range = try_from_option_field(entry.range, "CanisterMigrations::Entry::range")?;
+            let mut subnet_ids = Vec::new();
+            for subnet_id in entry.subnet_ids {
+                subnet_ids.push(subnet_id_try_from_protobuf(subnet_id)?);
+            }
+            if let Some(prev_subnet_ids) = map.insert(range, subnet_ids.clone()) {
+                return Err(ProxyDecodeError::DuplicateEntry {
+                    key: format!("{:?}", range),
+                    v1: format!("{:?}", prev_subnet_ids),
+                    v2: format!("{:?}", subnet_ids),
+                });
+            }
+        }
+        Ok(map.try_into()?)
     }
 }

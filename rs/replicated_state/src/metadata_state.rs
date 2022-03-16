@@ -14,7 +14,7 @@ use ic_protobuf::{
         system_metadata::v1::{self as pb_metadata, TimeOfLastAllocationCharge},
     },
 };
-use ic_registry_routing_table::RoutingTable;
+use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
 use ic_registry_subnet_features::{BitcoinFeature, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
@@ -130,6 +130,9 @@ pub struct NetworkTopology {
     #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
     #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
     pub routing_table: Arc<RoutingTable>,
+    #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
+    #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
+    pub canister_migrations: Arc<CanisterMigrations>,
     pub nns_subnet_id: SubnetId,
 }
 
@@ -138,6 +141,7 @@ impl Default for NetworkTopology {
         Self {
             subnets: Default::default(),
             routing_table: Default::default(),
+            canister_migrations: Default::default(),
             nns_subnet_id: SubnetId::new(PrincipalId::new_anonymous()),
         }
     }
@@ -179,6 +183,7 @@ impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
                 .collect(),
             routing_table: Some(item.routing_table.as_ref().into()),
             nns_subnet_id: Some(subnet_id_into_protobuf(item.nns_subnet_id)),
+            canister_migrations: Some(item.canister_migrations.as_ref().into()),
         }
     }
 }
@@ -211,6 +216,13 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
                 "NetworkTopology::routing_table",
             )
             .map(Arc::new)?,
+            // `None` value needs to be allowed here because all the existing states don't have this field yet.
+            canister_migrations: item
+                .canister_migrations
+                .map(CanisterMigrations::try_from)
+                .transpose()?
+                .unwrap_or_default()
+                .into(),
             nns_subnet_id,
         })
     }

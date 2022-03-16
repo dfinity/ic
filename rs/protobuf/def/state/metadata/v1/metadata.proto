@@ -35,6 +35,7 @@ message NetworkTopology {
     repeated SubnetsEntry subnets = 1;
     registry.routing_table.v1.RoutingTable routing_table = 2;
     types.v1.SubnetId nns_subnet_id = 3;
+    registry.routing_table.v1.CanisterMigrations canister_migrations = 4;
 }
 
 message SetupInitialDkgContext {
