@@ -18,8 +18,6 @@ ic-registry-routing-table = { path = "../../registry/routing_table" }
 ic-types = { path = "../../types/types" }
 prost = "0.9.0"
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
-slog-async = { version = "2.5", features = ["nested-values"] }
-slog-term = "2.6.0"
 tokio = { version = "1.15.0", features = ["full"] }
 url = "2.1.1"
 
