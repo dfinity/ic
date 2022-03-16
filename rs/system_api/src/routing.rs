@@ -3,8 +3,8 @@ use std::str::FromStr;
 use candid::Decode;
 use ic_base_types::{CanisterId, SubnetId};
 use ic_ic00_types::{
-    CanisterIdRecord, ComputeInitialEcdsaDealingsArgs, InstallCodeArgs, Method as Ic00Method,
-    Payload, ProvisionalTopUpCanisterArgs, SetControllerArgs, UpdateSettingsArgs, IC_00,
+    CanisterIdRecord, InstallCodeArgs, Method as Ic00Method, Payload, ProvisionalTopUpCanisterArgs,
+    SetControllerArgs, UpdateSettingsArgs, IC_00,
 };
 use ic_replicated_state::NetworkTopology;
 
@@ -35,8 +35,6 @@ pub(super) fn resolve_destination(
         Ok(Ic00Method::CreateCanister)
         | Ok(Ic00Method::RawRand)
         | Ok(Ic00Method::ProvisionalCreateCanisterWithCycles)
-        | Ok(Ic00Method::ECDSAPublicKey)
-        | Ok(Ic00Method::SignWithECDSA)
         | Ok(Ic00Method::HttpRequest) => Ok(own_subnet),
         // This message needs to be routed to the NNS subnet.  We assume that
         // this message can only be sent by canisters on the NNS subnet hence
@@ -112,17 +110,16 @@ pub(super) fn resolve_destination(
             // For now, we return our own subnet ID.
             Ok(own_subnet)
         }
-        Ok(Ic00Method::ComputeInitialEcdsaDealings) => {
-            let _args = Decode!(payload, ComputeInitialEcdsaDealingsArgs)?;
+        Ok(method @ Ic00Method::ECDSAPublicKey)
+        | Ok(method @ Ic00Method::SignWithECDSA)
+        | Ok(method @ Ic00Method::ComputeInitialEcdsaDealings) => {
             // We currently assume there is only one subnet with ecdsa enabled.
-            // When there is more than one, we should look up the subnet based on the key_id.
+            // When there is more than one, we should decode the payload to get
+            // the `key_id` and route to the subnet with that key.
             if let Some(subnet_id) = network_topology.ecdsa_subnets().get(0) {
                 Ok(*subnet_id)
             } else {
-                Err(ResolveDestinationError::SubnetNotFound(
-                    CanisterId::new(IC_00.get()).unwrap(),
-                    Ic00Method::ComputeInitialEcdsaDealings,
-                ))
+                Err(ResolveDestinationError::SubnetNotFound(IC_00, method))
             }
         }
         Err(_) => Err(ResolveDestinationError::MethodNotFound(
@@ -135,6 +132,7 @@ pub(super) fn resolve_destination(
 mod tests {
     use candid::Encode;
     use ic_base_types::RegistryVersion;
+    use ic_ic00_types::{ComputeInitialEcdsaDealingsArgs, SignWithECDSAArgs};
     use ic_registry_subnet_features::SubnetFeatures;
     use ic_replicated_state::SubnetTopology;
     use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
@@ -177,6 +175,15 @@ mod tests {
         Encode!(&args).unwrap()
     }
 
+    fn ecdsa_sign_req() -> Vec<u8> {
+        let args = SignWithECDSAArgs {
+            message_hash: vec![1; 32],
+            derivation_path: vec![vec![0; 10]],
+            key_id: "some_key".to_string(),
+        };
+        Encode!(&args).unwrap()
+    }
+
     #[test]
     fn resolve_compute_initial_ecdsa_dealings() {
         assert_eq!(
@@ -193,12 +200,43 @@ mod tests {
 
     #[test]
     fn resolve_compute_initial_ecdsa_dealings_error() {
-        assert!(resolve_destination(
-            &network_without_ecdsa_subnet(),
-            &Ic00Method::ComputeInitialEcdsaDealings.to_string(),
-            &compute_initial_ecdsa_dealings_req(),
-            subnet_test_id(1),
+        assert!(matches!(
+            resolve_destination(
+                &network_without_ecdsa_subnet(),
+                &Ic00Method::ComputeInitialEcdsaDealings.to_string(),
+                &compute_initial_ecdsa_dealings_req(),
+                subnet_test_id(1),
+            )
+            .unwrap_err(),
+            ResolveDestinationError::SubnetNotFound(_, Ic00Method::ComputeInitialEcdsaDealings,)
+        ))
+    }
+
+    #[test]
+    fn resolve_ecdsa_sign() {
+        assert_eq!(
+            resolve_destination(
+                &network_with_ecdsa_on_subnet_0(),
+                &Ic00Method::SignWithECDSA.to_string(),
+                &ecdsa_sign_req(),
+                subnet_test_id(1),
+            )
+            .unwrap(),
+            subnet_test_id(0)
         )
-        .is_err())
+    }
+
+    #[test]
+    fn resolve_ecdsa_sign_error() {
+        assert!(matches!(
+            resolve_destination(
+                &network_without_ecdsa_subnet(),
+                &Ic00Method::SignWithECDSA.to_string(),
+                &ecdsa_sign_req(),
+                subnet_test_id(1),
+            )
+            .unwrap_err(),
+            ResolveDestinationError::SubnetNotFound(_, Ic00Method::SignWithECDSA,)
+        ))
     }
 }

@@ -370,10 +370,16 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 pot(
                     "tecdsa_signature_test_pot",
                     tecdsa_signature_test::enable_ecdsa_signatures_feature,
-                    par(vec![t(
-                        "test_threshold_ecdsa_signature",
-                        tecdsa_signature_test::test_threshold_ecdsa_signature,
-                    )]),
+                    par(vec![
+                        t(
+                            "test_threshold_ecdsa_signature",
+                            tecdsa_signature_test::test_threshold_ecdsa_signature,
+                        ),
+                        t(
+                            "test_threshold_ecdsa_signature_from_other_subnet",
+                            tecdsa_signature_test::test_threshold_ecdsa_signature_from_other_subnet,
+                        ),
+                    ]),
                 ),
             ],
         ),

@@ -32,16 +32,24 @@ use slog::{debug, info};
 
 const KEY_ID: &str = "secp256k1";
 
+/// Create one system subnet with ecdsa enabled and one application subnet
+/// without ecdsa enabled.
 pub fn enable_ecdsa_signatures_feature() -> InternetComputer {
-    InternetComputer::new().add_subnet(
-        Subnet::new(SubnetType::System)
-            .with_dkg_interval_length(Height::from(19))
-            .add_nodes(4)
-            .with_features(SubnetFeatures {
-                ecdsa_signatures: true,
-                ..SubnetFeatures::default()
-            }),
-    )
+    InternetComputer::new()
+        .add_subnet(
+            Subnet::new(SubnetType::System)
+                .with_dkg_interval_length(Height::from(19))
+                .add_nodes(4)
+                .with_features(SubnetFeatures {
+                    ecdsa_signatures: true,
+                    ..SubnetFeatures::default()
+                }),
+        )
+        .add_subnet(
+            Subnet::new(SubnetType::Application)
+                .with_dkg_interval_length(Height::from(19))
+                .add_nodes(4),
+        )
 }
 
 pub(crate) async fn get_public_key(
@@ -132,7 +140,31 @@ pub fn test_threshold_ecdsa_signature(handle: IcHandle, ctx: &ic_fondue::pot::Co
     let mut rng = ctx.rng.clone();
 
     rt.block_on(async move {
-        let endpoint = get_random_node_endpoint(&handle, &mut rng);
+        // The system subnet has ecdsa enabled.
+        let endpoint = get_random_system_node_endpoint(&handle, &mut rng);
+        endpoint.assert_ready(ctx).await;
+        let agent = assert_create_agent(endpoint.url.as_str()).await;
+        let uni_can = UniversalCanister::new(&agent).await;
+        let message_hash = [0xabu8; 32];
+        let public_key = get_public_key(&uni_can, ctx).await;
+        let signature = get_signature(&message_hash, &uni_can, ctx).await;
+        verify_signature(&message_hash, &public_key, &signature);
+    });
+}
+
+/// Tests whether a call to `sign_with_ecdsa` is responded with a signature that
+/// is verifiable with the result from `get_ecdsa_public_key` when the subnet
+/// sending the request doesn't have ecdsa signing enabled.
+pub fn test_threshold_ecdsa_signature_from_other_subnet(
+    handle: IcHandle,
+    ctx: &ic_fondue::pot::Context,
+) {
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+    let mut rng = ctx.rng.clone();
+
+    rt.block_on(async move {
+        // The application subnet does not have ecdsa enabled.
+        let endpoint = get_random_application_node_endpoint(&handle, &mut rng);
         endpoint.assert_ready(ctx).await;
         let agent = assert_create_agent(endpoint.url.as_str()).await;
         let uni_can = UniversalCanister::new(&agent).await;
