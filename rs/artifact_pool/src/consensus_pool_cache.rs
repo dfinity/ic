@@ -1,5 +1,6 @@
 //! We define a cache for consensus objects/values that is updated whenever
 //! consensus updates the consensus pool.
+use crate::consensus_pool::BlockChainIterator;
 use ic_interfaces::consensus_pool::{
     ChainIterator, ChangeAction, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool,
     ConsensusPoolCache,
@@ -334,7 +335,7 @@ impl ConsensusBlockChainImpl {
         tip: &Block,
         blocks: &mut BTreeMap<Height, Block>,
     ) {
-        ChainIterator::new(consensus_pool, tip.clone(), None)
+        BlockChainIterator::new(consensus_pool, tip.clone())
             .take_while(|block| block.height() >= start_height)
             .for_each(|block| {
                 blocks.insert(block.height(), block);

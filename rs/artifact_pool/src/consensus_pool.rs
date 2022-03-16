@@ -24,6 +24,7 @@ use ic_types::{
     Height, SubnetId, Time,
 };
 use prometheus::{labels, opts, IntGauge};
+use std::cmp::Ordering;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Duration;
@@ -697,6 +698,83 @@ impl GossipPool<ConsensusMessage, ChangeSet> for ConsensusPoolImpl {
 
 impl ConsensusGossipPool for ConsensusPoolImpl {}
 
+/// An iterator for block ancestors.
+/// TODO: this is currently used only for ConsensusBlockChainImpl. Migrate
+/// other call sites from ChainIterator to BlockChainIterator.
+#[allow(dead_code)]
+pub struct BlockChainIterator<'a> {
+    consensus_pool: &'a dyn ConsensusPool,
+    summary_height: Height,
+    cursor: Option<Block>,
+}
+
+impl<'a> BlockChainIterator<'a> {
+    /// Return an iterator that iterates block ancestors, going backwards
+    /// from the `from_block` to the nearest summary block ancestor (both inclusive),
+    /// or until a parent is not found in the consensus pool.
+    pub fn new(consensus_pool: &'a dyn ConsensusPool, from_block: Block) -> Self {
+        Self {
+            consensus_pool,
+            summary_height: from_block.payload.as_ref().dkg_interval_start_height(),
+            cursor: Some(from_block),
+        }
+    }
+
+    fn get_parent_block(&self, block: &Block) -> Option<Block> {
+        if block.height() == Height::from(0) {
+            return None;
+        }
+
+        let parent_height = block.height().decrement();
+        let parent_hash = &block.parent;
+
+        // First look up the block proposals
+        self.consensus_pool
+            .validated()
+            .block_proposal()
+            .get_by_height(parent_height)
+            .find_map(|proposal| {
+                if proposal.content.get_hash() == parent_hash {
+                    Some(proposal.content.into_inner())
+                } else {
+                    None
+                }
+            })
+            .or_else(|| {
+                // Parent block proposal not found, look up the CUPs only if parent
+                // is the summary height
+                if parent_height.cmp(&self.summary_height) == Ordering::Equal {
+                    self.consensus_pool
+                        .validated()
+                        .catch_up_package()
+                        .get_by_height(parent_height)
+                        .find_map(|cup| {
+                            if cup.content.block.get_hash() == parent_hash {
+                                Some(cup.content.block.into_inner())
+                            } else {
+                                None
+                            }
+                        })
+                } else {
+                    None
+                }
+            })
+    }
+}
+
+impl<'a> Iterator for BlockChainIterator<'a> {
+    type Item = Block;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let cur_block = self.cursor.as_ref()?;
+        let parent_block = match cur_block.height().cmp(&self.summary_height) {
+            Ordering::Greater => self.get_parent_block(cur_block),
+            Ordering::Equal | Ordering::Less => None,
+        };
+        std::mem::replace(&mut self.cursor, parent_block)
+    }
+}
+
 /// Returns the block chain cache between the given start/end
 /// blocks (inclusive)
 pub fn build_consensus_block_chain(
@@ -714,9 +792,13 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::types::v1 as pb;
+    use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::{
         consensus::{fake::*, make_genesis},
+        crypto::CryptoReturningOk,
         mock_time,
+        registry::{setup_registry, SubnetRecordBuilder},
+        state_manager::FakeStateManager,
         types::ids::{node_test_id, subnet_test_id},
         FastForwardTimeSource,
     };
@@ -1228,6 +1310,73 @@ mod tests {
         })
     }
 
+    #[test]
+    fn test_block_chain_iterator() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let time_source = FastForwardTimeSource::new();
+            let subnet_id = subnet_test_id(1);
+            let committee = vec![node_test_id(0)];
+            let dkg_interval_length = 5;
+            let subnet_records = vec![(
+                1,
+                SubnetRecordBuilder::from(&committee)
+                    .with_dkg_interval_length(dkg_interval_length)
+                    .build(),
+            )];
+            let registry = setup_registry(subnet_id, subnet_records);
+            let state_manager = FakeStateManager::new();
+            let state_manager = Arc::new(state_manager);
+            let mut pool = TestConsensusPool::new(
+                subnet_id,
+                pool_config,
+                time_source,
+                registry,
+                Arc::new(CryptoReturningOk::default()),
+                state_manager,
+                None,
+            );
+
+            // Only genesis to start with
+            check_iterator(&pool, pool.as_cache().finalized_block(), vec![0]);
+
+            // Two finalized rounds added
+            assert_eq!(pool.advance_round_normal_operation_n(2), Height::from(2));
+            check_iterator(&pool, pool.as_cache().finalized_block(), vec![2, 1, 0]);
+
+            // Two notarized rounds added
+            let block = pool.make_next_block();
+            pool.insert_validated(block.clone());
+            pool.notarize(&block);
+
+            let block = pool.make_next_block();
+            pool.insert_validated(block.clone());
+            pool.notarize(&block);
+            check_iterator(&pool, block.clone().into(), vec![4, 3, 2, 1, 0]);
+
+            pool.finalize(&block);
+            pool.insert_validated(pool.make_next_beacon());
+            pool.insert_validated(pool.make_next_beacon());
+            pool.insert_validated(pool.make_next_tape());
+            pool.insert_validated(pool.make_next_tape());
+            check_iterator(&pool, block.into(), vec![4, 3, 2, 1, 0]);
+
+            // Next summary interval starts(height = 6), iterator should stop at the summary block
+            assert_eq!(pool.advance_round_normal_operation_n(3), Height::from(7));
+            check_iterator(&pool, pool.as_cache().finalized_block(), vec![7, 6]);
+
+            // Start from CUP height
+            check_iterator(
+                &pool,
+                pool.as_cache()
+                    .catch_up_package()
+                    .content
+                    .block
+                    .into_inner(),
+                vec![6],
+            );
+        })
+    }
+
     fn sleep_until(time: Instant, test_start_time: Instant) {
         let now = Instant::now();
 
@@ -1242,5 +1391,16 @@ mod tests {
             now.duration_since(test_start_time).as_millis(),
             time.duration_since(test_start_time).as_millis()
         );
+    }
+
+    // Verifies the iterator output, starting from the given block
+    fn check_iterator(pool: &dyn ConsensusPool, from: Block, expected_heights: Vec<u64>) {
+        let mut blocks = Vec::new();
+        BlockChainIterator::new(pool, from).for_each(|block| blocks.push(block));
+        assert_eq!(blocks.len(), expected_heights.len());
+
+        for (block, expected_height) in blocks.iter().zip(expected_heights.iter()) {
+            assert_eq!(block.height(), Height::from(*expected_height));
+        }
     }
 }

@@ -324,6 +324,7 @@ impl BlockMaker {
                         &*self.state_manager,
                         &context,
                         &parent,
+                        &self.ecdsa_payload_metrics,
                         self.log.clone(),
                     )
                     .map_err(|err| warn!(self.log, "Payload construction has failed: {:?}", err))

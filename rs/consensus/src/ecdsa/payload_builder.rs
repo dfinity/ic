@@ -54,6 +54,7 @@ pub enum EcdsaPayloadError {
     EcdsaConfigNotFound(RegistryVersion),
     ThresholdEcdsaSigInputsCreationError(ThresholdEcdsaSigInputsCreationError),
     TranscriptCastError(ecdsa::TranscriptCastError),
+    InvalidChainCacheError(String),
 }
 
 impl From<RegistryClientError> for EcdsaPayloadError {
@@ -155,7 +156,8 @@ pub(crate) fn create_summary_payload(
     _state_manager: &dyn StateManager<State = ReplicatedState>,
     _context: &ValidationContext,
     parent_block: &Block,
-    _log: ReplicaLogger,
+    ecdsa_payload_metrics: &EcdsaPayloadMetrics,
+    log: ReplicaLogger,
 ) -> Result<ecdsa::Summary, EcdsaPayloadError> {
     let height = parent_block.height().increment();
     if !ecdsa_feature_is_enabled(subnet_id, registry_client, pool_reader, height)? {
@@ -217,8 +219,13 @@ pub(crate) fn create_summary_payload(
                 ecdsa_payload,
                 current_key_transcript,
             };
-
-            update_summary_refs(&mut summary, pool_reader, parent_block);
+            update_summary_refs(
+                &mut summary,
+                pool_reader,
+                parent_block,
+                ecdsa_payload_metrics,
+                &log,
+            )?;
             Ok(Some(summary))
         }
     }
@@ -228,7 +235,9 @@ fn update_summary_refs(
     summary: &mut ecdsa::EcdsaSummaryPayload,
     pool_reader: &PoolReader<'_>,
     parent_block: &Block,
-) {
+    ecdsa_payload_metrics: &EcdsaPayloadMetrics,
+    log: &ReplicaLogger,
+) -> Result<(), EcdsaPayloadError> {
     // Gather the refs and update them to point to the new
     // summary block height.
     let height = Some(parent_block.height().increment());
@@ -260,8 +269,17 @@ fn update_summary_refs(
     // Resolve the transcript refs pointing into the parent chain,
     // copy the resolved transcripts into the summary block.
     let summary_block = pool_reader.get_highest_summary_block();
-    let parent_chain =
-        build_consensus_block_chain(pool_reader.pool(), &summary_block, parent_block);
+    let parent_chain = match block_chain_cache(pool_reader, &summary_block, parent_block) {
+        Ok(parent_chain) => parent_chain,
+        Err(err) => {
+            warn!(
+                log,
+                "create_summary_payload(): failed to build chain cache: {:?}", err
+            );
+            ecdsa_payload_metrics.payload_errors_inc("summary_invalid_chain_cache");
+            return Err(err);
+        }
+    };
     let block_reader = EcdsaBlockReaderImpl::new(parent_chain);
     summary.ecdsa_payload.idkg_transcripts.clear();
     for transcript_ref in prev_refs {
@@ -274,6 +292,8 @@ fn update_summary_refs(
                 || block_reader.transcript(&transcript_ref).unwrap(),
             );
     }
+
+    Ok(())
 }
 
 fn get_subnet_nodes(
@@ -388,8 +408,17 @@ pub(crate) fn create_data_payload(
     // the last few blocks may have references to heights after the finalized
     // tip. So use the chain ending at the parent to resolve refs, rather than the
     // finalized chain.
-    let parent_chain =
-        build_consensus_block_chain(pool_reader.pool(), &summary_block, parent_block);
+    let parent_chain = match block_chain_cache(pool_reader, &summary_block, parent_block) {
+        Ok(parent_chain) => parent_chain,
+        Err(err) => {
+            warn!(
+                log,
+                "create_data_payload(): failed to build chain cache: {:?}", err
+            );
+            ecdsa_payload_metrics.payload_errors_inc("payload_invalid_chain_cache");
+            return Err(err);
+        }
+    };
     let current_key_transcript = summary
         .ecdsa
         .as_ref()
@@ -454,6 +483,7 @@ pub(crate) fn create_data_payload(
         log,
     )? {
         new_transcripts.push(new_transcript);
+        ecdsa_payload_metrics.payload_metrics_inc("key_transcripts_created");
     };
 
     // Drop transcripts from last round and keep only the
@@ -1175,6 +1205,34 @@ fn get_reshare_requests() -> BTreeSet<ecdsa::EcdsaReshareRequest> {
     // TODO: once the replicated state context is defined for resharing requests,
     // read/translate from replicated state
     BTreeSet::new()
+}
+
+/// Wrapper to build the chain cache and perform sanity checks on the returned chain
+pub fn block_chain_cache(
+    pool_reader: &PoolReader<'_>,
+    start: &Block,
+    end: &Block,
+) -> Result<Arc<dyn ConsensusBlockChain>, EcdsaPayloadError> {
+    let chain = build_consensus_block_chain(pool_reader.pool(), start, end);
+    let expected_len = (end.height().get() - start.height().get() + 1) as usize;
+    let chain_len = chain.len();
+    if chain_len == expected_len {
+        Ok(chain)
+    } else {
+        Err(EcdsaPayloadError::InvalidChainCacheError(format!(
+            "Invalid chain cache length: expected = {:?}, actual = {:?}, \
+             start = {:?}, end = {:?}, tip = {:?}, \
+             notarized_height = {:?}, finalized_height = {:?}, CUP height = {:?}",
+            expected_len,
+            chain_len,
+            start.height(),
+            end.height(),
+            chain.tip().height(),
+            pool_reader.get_notarized_height(),
+            pool_reader.get_finalized_height(),
+            pool_reader.get_catch_up_height()
+        )))
+    }
 }
 
 #[cfg(test)]
@@ -2202,7 +2260,14 @@ mod tests {
                 }
             }
 
-            update_summary_refs(&mut summary, &pool_reader, &parent_block);
+            assert!(update_summary_refs(
+                &mut summary,
+                &pool_reader,
+                &parent_block,
+                &EcdsaPayloadMetrics::new(MetricsRegistry::new()),
+                &no_op_logger()
+            )
+            .is_ok());
 
             // Verify that all the transcript references in the parent block
             // have been updated to point to the new summary height
