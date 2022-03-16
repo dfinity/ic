@@ -3,11 +3,11 @@ use bitcoin::{
     network::{constants::ServiceFlags, Address},
     Network,
 };
+use ic_logger::{debug, info, ReplicaLogger};
 use rand::{
     prelude::{IteratorRandom, SliceRandom, StdRng},
     SeedableRng,
 };
-use slog::Logger;
 use std::{
     collections::{HashSet, VecDeque},
     net::{SocketAddr, ToSocketAddrs},
@@ -74,7 +74,6 @@ impl AddressEntry {
 /// This struct stores addresses that will be used to create new connections.
 /// It also tracks addresses that are in current use to encourage use from
 /// non-utilized addresses.
-#[cfg_attr(test, derive(Debug))]
 pub struct AddressBook {
     /// The DNS seeds provided by the configuration. These are used to build the seed queue.
     dns_seeds: Vec<String>,
@@ -87,7 +86,7 @@ pub struct AddressBook {
     /// This field contains the addresses that will be used for connections.
     known_addresses: HashSet<SocketAddr>,
     /// This field is used to store an instance of the logger.
-    logger: Logger,
+    logger: ReplicaLogger,
     /// The number of addresses needed to be maintained in the address book.
     min_addresses: usize,
     /// The maximum number of addresses that can be stored in the address book.
@@ -102,7 +101,7 @@ impl AddressBook {
     /// config provided. If no addresses found, a panic will be issued as a connection
     /// cannot be made without an address. If not enough addresses are found to
     /// meet the minimum number of connections, a panic will be issued.
-    pub fn new(config: &Config, logger: Logger) -> Self {
+    pub fn new(config: &Config, logger: ReplicaLogger) -> Self {
         let (min_addresses, max_addresses) = address_limits(config.network);
         let known_addresses: HashSet<SocketAddr> = config.nodes.iter().cloned().collect();
         Self {
@@ -190,7 +189,7 @@ impl AddressBook {
             }
 
             if !validate_services(&address.services) {
-                slog::debug!(
+                debug!(
                     self.logger,
                     "Address {:?} does not provide the network or network limited services.",
                     address.address
@@ -213,11 +212,9 @@ impl AddressBook {
         }
 
         if added_addresses > 0 {
-            slog::info!(
+            info!(
                 self.logger,
-                "Added {} addresses from {:?}.",
-                added_addresses,
-                sender
+                "Added {} addresses from {:?}.", added_addresses, sender
             );
         }
 
@@ -232,10 +229,9 @@ impl AddressBook {
 
         let added = self.known_addresses.insert(addr);
         if added {
-            slog::debug!(
+            debug!(
                 self.logger,
-                "Added {} to the list of known addresses.",
-                addr
+                "Added {} to the list of known addresses.", addr
             );
         }
     }
@@ -339,12 +335,10 @@ fn address_limits(network: Network) -> (usize, usize) {
 
 #[cfg(test)]
 mod test {
-
-    use std::str::FromStr;
-
-    use crate::{common::test_common::make_logger, config::test::ConfigBuilder};
-
     use super::*;
+    use crate::config::test::ConfigBuilder;
+    use ic_logger::replica_logger::no_op_logger;
+    use std::str::FromStr;
 
     /// This function tests the address manager basic interactions `mark_as_active`
     /// and `remove_from_active`.
@@ -353,7 +347,7 @@ mod test {
         let config = ConfigBuilder::new()
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
-        let mut book = AddressBook::new(&config, make_logger());
+        let mut book = AddressBook::new(&config, no_op_logger());
         // Check if the address from the known_addresses.json has been loaded.
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
 
@@ -390,7 +384,7 @@ mod test {
         let config = ConfigBuilder::new()
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
-        let mut book = AddressBook::new(&config, make_logger());
+        let mut book = AddressBook::new(&config, no_op_logger());
 
         let seed = book.pop_seed().expect("there should be 1 seed");
         let socket_1 = SocketAddr::from_str("127.0.0.1:8444").expect("bad address format");
@@ -418,7 +412,7 @@ mod test {
             .with_dns_seeds(vec![String::from("127.0.0.1"), String::from("::1")])
             .with_ipv6_only(true)
             .build();
-        let mut book = AddressBook::new(&config, make_logger());
+        let mut book = AddressBook::new(&config, no_op_logger());
 
         let seed = book.pop_seed().expect("there should be 1 seed");
         let socket_1 = SocketAddr::from_str("127.0.0.1:8444").expect("bad address format");
@@ -449,7 +443,7 @@ mod test {
         let config = ConfigBuilder::new()
             .with_dns_seeds(vec![String::from("127.0.0.1"), String::from("192.168.1.1")])
             .build();
-        let mut book = AddressBook::new(&config, make_logger());
+        let mut book = AddressBook::new(&config, no_op_logger());
         let seed = book.pop_seed().expect("there should be 1 seed");
         let socket = SocketAddr::from_str("127.0.0.1:8444").expect("bad address format");
         let address = Address::new(
@@ -485,7 +479,7 @@ mod test {
             .with_network(Network::Regtest)
             .with_nodes(vec![SocketAddr::from_str("127.0.0.1:8333").unwrap()])
             .build();
-        let mut book = AddressBook::new(&config, make_logger());
+        let mut book = AddressBook::new(&config, no_op_logger());
         let entry = book.pop().expect("address from nodes should be there");
         assert_eq!(book.active_addresses.len(), 1);
 
@@ -505,7 +499,7 @@ mod test {
             .with_network(Network::Signet)
             .with_dns_seeds(vec![String::from("127.0.0.1"), String::from("192.168.1.1")])
             .build();
-        let mut book = AddressBook::new(&config, make_logger());
+        let mut book = AddressBook::new(&config, no_op_logger());
         book.pop_seed().expect("there should be 1 seed");
         assert_eq!(book.seed_queue.len(), 1);
 
@@ -537,7 +531,7 @@ mod test {
             ])
             .with_ipv6_only(true)
             .build();
-        let mut book = AddressBook::new(&config, make_logger());
+        let mut book = AddressBook::new(&config, no_op_logger());
         assert_eq!(book.seed_queue.len(), 0);
         book.build_seed_queue();
         assert_eq!(book.seed_queue.len(), 1);
@@ -553,7 +547,7 @@ mod test {
         let config = ConfigBuilder::new()
             .with_dns_seeds(vec![String::from("127.0.0.1"), String::from("192.168.1.1")])
             .build();
-        let mut book = AddressBook::new(&config, make_logger());
+        let mut book = AddressBook::new(&config, no_op_logger());
         let seed = book.pop_seed().expect("there should be 1 seed");
         let socket = SocketAddr::from_str("127.0.0.1:8444").expect("bad address format");
         let address = Address::new(

@@ -1,7 +1,7 @@
-use std::net::SocketAddr;
-
 use bitcoin::Network;
+use ic_config::logger::Config as LoggerConfig;
 use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
 use std::path::PathBuf;
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -43,6 +43,9 @@ pub struct Config {
     /// that support IPv6.
     #[serde(default)]
     pub ipv6_only: bool,
+    /// Logger config.
+    #[serde(default)]
+    pub logger: LoggerConfig,
     /// Specifies which unix domain socket should be used for serving incoming requests.
     #[serde(default)]
     pub incoming_source: IncomingSource,
@@ -72,6 +75,7 @@ impl Default for Config {
             nodes: vec![],
             idle_seconds: 5,
             ipv6_only: false,
+            logger: LoggerConfig::default(),
             incoming_source: Default::default(),
         }
     }

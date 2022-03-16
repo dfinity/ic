@@ -1,33 +1,31 @@
 use clap::Clap;
-use ic_btc_adapter::{spawn_grpc_server, Adapter, Cli};
+use ic_btc_adapter::{spawn_grpc_server, Adapter, Cli, Config};
+use ic_logger::{info, new_replica_logger, LoggerImpl, ReplicaLogger};
 use serde_json::to_string_pretty;
-use slog::{error, info, slog_o, Drain, Logger};
-use std::io::stdout;
+use slog_async::AsyncGuard;
 use std::sync::Arc;
 use tokio::{
     sync::Mutex,
     time::{sleep, Duration},
 };
 
+pub fn get_logger(config: &Config) -> (ReplicaLogger, AsyncGuard) {
+    let base_logger = LoggerImpl::new(&config.logger, "Logger".to_string());
+    let logger = new_replica_logger(base_logger.root.clone(), &config.logger);
+    (logger, base_logger.async_log_guard)
+}
+
 #[tokio::main]
 pub async fn main() {
     let cli = Cli::parse();
-    let plain = slog_term::PlainSyncDecorator::new(stdout());
-    let drain = slog_term::FullFormat::new(plain)
-        .build()
-        .filter_level(cli.get_logging_level())
-        .fuse();
-    let logger = Logger::root(drain, slog_o!());
     let config = match cli.get_config() {
         Ok(config) => config,
         Err(err) => {
-            error!(
-                logger,
-                "An error occurred while getting the config: {}", err
-            );
-            return;
+            panic!("An error occurred while getting the config: {}", err);
         }
     };
+    let (logger, _async_log_guard) = get_logger(&config);
+
     info!(
         logger,
         "Starting the adapter with config: {}",

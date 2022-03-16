@@ -11,8 +11,8 @@ use bitcoin::network::{
     message_network::VersionMessage,
     Address,
 };
+use ic_logger::{debug, error, info, warn, ReplicaLogger};
 use rand::prelude::*;
-use slog::Logger;
 use thiserror::Error;
 use tokio::{
     sync::mpsc::{channel, Sender},
@@ -70,7 +70,6 @@ pub type ConnectionManagerResult<T> = Result<T, ConnectionManagerError>;
 
 /// This struct manages the connection connections that the adapter uses to communicate
 /// with Bitcoin nodes.
-#[cfg_attr(test, derive(Debug))]
 pub struct ConnectionManager {
     /// This field contains the address book.
     address_book: AddressBook,
@@ -78,7 +77,7 @@ pub struct ConnectionManager {
     /// address book.
     initial_address_discovery: bool,
     /// This field is used to store an instance of the logger.
-    logger: Logger,
+    logger: ReplicaLogger,
     /// This field is used to provide the magic value to the raw network message.
     /// The magic number is used to identity the type of Bitcoin network being accessed.
     magic: u32,
@@ -104,7 +103,7 @@ pub struct ConnectionManager {
 
 impl ConnectionManager {
     /// This function is used to create a new connection manager with a provided config.
-    pub fn new(config: &Config, logger: Logger) -> Self {
+    pub fn new(config: &Config, logger: ReplicaLogger) -> Self {
         let address_book = AddressBook::new(config, logger.clone());
         let (stream_event_sender, stream_event_receiver) =
             channel::<StreamEvent>(DEFAULT_CHANNEL_BUFFER_SIZE);
@@ -150,7 +149,7 @@ impl ConnectionManager {
         self.current_height = has_height_impl.get_height();
 
         if let Err(ConnectionManagerError::AddressBook(err)) = self.manage_connections(handle) {
-            slog::error!(self.logger, "{}", err);
+            error!(self.logger, "{}", err);
         }
     }
 
@@ -209,7 +208,7 @@ impl ConnectionManager {
         }
 
         for addr in needs_ping {
-            slog::info!(self.logger, "Sending ping to {}", addr);
+            info!(self.logger, "Sending ping to {}", addr);
             self.send_ping(&addr).ok();
         }
     }
@@ -251,7 +250,7 @@ impl ConnectionManager {
         for (addr, conn) in self.connections.iter() {
             match conn.state() {
                 ConnectionState::AdapterDiscarded { .. } => {
-                    slog::warn!(
+                    warn!(
                         self.logger,
                         "Adapter discarded connection {}",
                         conn.address_entry().addr(),
@@ -259,7 +258,7 @@ impl ConnectionManager {
                     self.address_book.discard(conn.address_entry());
                 }
                 ConnectionState::NodeDisconnected { .. } => {
-                    slog::debug!(
+                    debug!(
                         self.logger,
                         "Node {} disconnected from adapter",
                         conn.address_entry().addr(),
@@ -354,25 +353,25 @@ impl ConnectionManager {
             self.current_height as i32,
         ));
 
-        slog::debug!(self.logger, "Sending version to {}", addr);
+        debug!(self.logger, "Sending version to {}", addr);
         self.send_to(addr, message)
     }
 
     /// This function is used to send a `verack` message to a specified connection.
     fn send_verack(&mut self, addr: &SocketAddr) -> ConnectionManagerResult<()> {
-        slog::debug!(self.logger, "Sending verack to {}", addr);
+        debug!(self.logger, "Sending verack to {}", addr);
         self.send_to(addr, NetworkMessage::Verack)
     }
 
     /// This function is used to send a `getaddr` message to a specified connection.
     fn send_getaddr(&mut self, addr: &SocketAddr) -> ConnectionManagerResult<()> {
-        slog::debug!(self.logger, "Sending getaddr to {}", addr);
+        debug!(self.logger, "Sending getaddr to {}", addr);
         self.send_to(addr, NetworkMessage::GetAddr)
     }
 
     /// This function is used to send a `ping` message to a specified connection.
     fn send_ping(&mut self, addr: &SocketAddr) -> ConnectionManagerResult<()> {
-        slog::debug!(self.logger, "Sending ping to {}", addr);
+        debug!(self.logger, "Sending ping to {}", addr);
         let nonce = self.rng.gen();
         let conn = self.get_connection(addr)?;
         conn.expect_pong(nonce);
@@ -421,9 +420,9 @@ impl ConnectionManager {
         address: &SocketAddr,
         message: &VersionMessage,
     ) -> Result<(), ProcessEventError> {
-        slog::info!(self.logger, "Received version from {}", address);
+        info!(self.logger, "Received version from {}", address);
         if !self.validate_received_version(message) {
-            slog::warn!(self.logger, "Received an invalid version from {}", address);
+            warn!(self.logger, "Received an invalid version from {}", address);
             return Err(ProcessEventError::InvalidMessage);
         }
         self.send_verack(address).ok();
@@ -436,7 +435,7 @@ impl ConnectionManager {
     }
 
     fn process_verack_message(&mut self, address: &SocketAddr) -> Result<(), ProcessEventError> {
-        slog::info!(self.logger, "Received verack from {}", address);
+        info!(self.logger, "Received verack from {}", address);
         if let Ok(conn) = self.get_connection(address) {
             match conn.address_entry() {
                 AddressEntry::Seed(_) => conn.awaiting_addresses(),
@@ -444,10 +443,9 @@ impl ConnectionManager {
             };
         }
 
-        slog::info!(
+        info!(
             self.logger,
-            "Completed the version handshake with {}",
-            address
+            "Completed the version handshake with {}", address
         );
         Ok(())
     }
@@ -460,7 +458,7 @@ impl ConnectionManager {
     ) -> Result<(), ProcessEventError> {
         // If we cannot find the connection, the connection has been cleaned up before the
         // message has been received. It can be skipped.
-        slog::debug!(self.logger, "Received ping from {}", address);
+        debug!(self.logger, "Received ping from {}", address);
         self.send_pong(address, nonce).ok();
         Ok(())
     }
@@ -473,7 +471,7 @@ impl ConnectionManager {
     ) -> Result<(), ProcessEventError> {
         // If we cannot find the connection, the connection has been cleaned up before the
         // message has been received. It can be skipped.
-        slog::info!(self.logger, "Received pong from {}", address);
+        info!(self.logger, "Received pong from {}", address);
         if let Ok(conn) = self.get_connection(address) {
             let valid_pong = match conn.ping_state() {
                 PingState::ExpectingPong {
@@ -508,12 +506,9 @@ impl ConnectionManager {
             max_amount,
         }) = result
         {
-            slog::warn!(
+            warn!(
                 self.logger,
-                "Received {} addresses from {} (max: {})",
-                received,
-                address,
-                max_amount
+                "Received {} addresses from {} (max: {})", received, address, max_amount
             );
             return Err(ProcessEventError::InvalidMessage);
         }
@@ -539,7 +534,7 @@ impl ConnectionManager {
     ) -> Result<(), ProcessEventError> {
         // If we receive an unknown message from a BTC node, the adapter should log
         // the message for further analysis.
-        slog::warn!(
+        warn!(
             self.logger,
             "Received an unknown message from {}, command: {}, payload: {}",
             address,
@@ -602,11 +597,11 @@ impl ProcessEvent for ConnectionManager {
                     match result {
                         Ok(_) => {
                             conn.connected();
-                            slog::info!(self.logger, "Connected to {}", event.address);
+                            info!(self.logger, "Connected to {}", event.address);
                         }
                         Err(err) => {
                             conn.disconnect();
-                            slog::error!(self.logger, "{}", err);
+                            error!(self.logger, "{}", err);
                         }
                     };
                 }
@@ -653,14 +648,11 @@ fn connection_limits(address_book: &AddressBook) -> (usize, usize) {
 
 #[cfg(test)]
 mod test {
-
-    use std::str::FromStr;
-
-    use bitcoin::{network::constants::ServiceFlags, Network};
-
-    use crate::{common::test_common::make_logger, config::test::ConfigBuilder};
-
     use super::*;
+    use crate::config::test::ConfigBuilder;
+    use bitcoin::{network::constants::ServiceFlags, Network};
+    use ic_logger::replica_logger::no_op_logger;
+    use std::str::FromStr;
 
     struct HasHeightImpl;
 
@@ -691,7 +683,7 @@ mod test {
         );
         version_message.version = MINIMUM_VERSION_NUMBER - 1;
 
-        let manager = ConnectionManager::new(&config, make_logger());
+        let manager = ConnectionManager::new(&config, no_op_logger());
         assert!(!manager.validate_received_version(&version_message));
     }
 
@@ -715,7 +707,7 @@ mod test {
         let config = ConfigBuilder::new()
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
-        let mut manager = ConnectionManager::new(&config, make_logger());
+        let mut manager = ConnectionManager::new(&config, no_op_logger());
         manager.current_height = 100_000;
 
         assert!(!manager.validate_received_version(&version_message));
@@ -741,7 +733,7 @@ mod test {
         let config = ConfigBuilder::new()
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
-        let manager = ConnectionManager::new(&config, make_logger());
+        let manager = ConnectionManager::new(&config, no_op_logger());
 
         assert!(!manager.validate_received_version(&version_message));
     }
@@ -832,7 +824,7 @@ mod test {
             .with_network(Network::Signet)
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
-        let mut manager = ConnectionManager::new(&config, make_logger());
+        let mut manager = ConnectionManager::new(&config, no_op_logger());
         let has_height_impl = HasHeightImpl {};
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
         assert!(manager.initial_address_discovery);
@@ -888,7 +880,7 @@ mod test {
         let config = ConfigBuilder::new()
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
-        let mut manager = ConnectionManager::new(&config, make_logger());
+        let mut manager = ConnectionManager::new(&config, no_op_logger());
         let timestamp = SystemTime::now() - Duration::from_secs(60);
         let (writer, _) = unbounded_channel();
         runtime.block_on(async {
@@ -925,7 +917,7 @@ mod test {
         let config = ConfigBuilder::new()
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
-        let mut manager = ConnectionManager::new(&config, make_logger());
+        let mut manager = ConnectionManager::new(&config, no_op_logger());
         let timestamp1 = SystemTime::now() - Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
         let timestamp2 = SystemTime::now() + Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
         let (writer, _) = unbounded_channel();
@@ -986,7 +978,7 @@ mod test {
         let config = ConfigBuilder::new()
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
-        let mut manager = ConnectionManager::new(&config, make_logger());
+        let mut manager = ConnectionManager::new(&config, no_op_logger());
         let timestamp1 = SystemTime::now() - Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
         let timestamp2 = SystemTime::now() + Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
         let (writer, _) = unbounded_channel();

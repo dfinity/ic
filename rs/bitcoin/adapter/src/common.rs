@@ -30,7 +30,6 @@ pub mod test_common {
     };
     use hex::FromHex;
     use rand::{prelude::StdRng, Rng, SeedableRng};
-    use slog::Logger;
 
     use super::BlockHeight;
 
@@ -108,12 +107,6 @@ pub mod test_common {
         block.header.merkle_root = block.merkle_root();
         solve_proof_of_work(&mut block.header);
         block
-    }
-
-    /// This function creates a [Logger](slog::Logger) that discards all
-    /// logging messages.
-    pub fn make_logger() -> Logger {
-        Logger::root(slog::Discard, slog::o!())
     }
 
     /// Generates a blockchain containing large blocks (blocks over 2MiB) starting at a given hash and time.

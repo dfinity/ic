@@ -5,7 +5,7 @@ use crate::{
     transaction_manager::TransactionManager,
     Config, ProcessEvent, ProcessEventError,
 };
-use slog::Logger;
+use ic_logger::ReplicaLogger;
 use std::{net::SocketAddr, time::Instant};
 
 enum AdapterState {
@@ -31,10 +31,10 @@ pub struct Adapter {
 
 impl Adapter {
     /// Constructs a new adapter.
-    pub fn new(config: &Config, logger: Logger) -> Self {
+    pub fn new(config: &Config, logger: ReplicaLogger) -> Self {
         let connection_manager = ConnectionManager::new(config, logger.clone());
         let blockchain_manager = BlockchainManager::new(config, logger.clone());
-        let transaction_manager = TransactionManager::new(logger.clone());
+        let transaction_manager = TransactionManager::new(logger);
 
         Self {
             blockchain_manager,
