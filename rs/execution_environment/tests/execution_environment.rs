@@ -27,6 +27,7 @@ use ic_replicated_state::{
     CallContextManager, CallOrigin, CanisterState, CanisterStatus, InputQueueType, ReplicatedState,
     SchedulerState, SystemState,
 };
+use ic_test_utilities::execution_environment::ExecutionEnvironmentBuilder;
 use ic_test_utilities::state::get_stopping_canister_on_nns;
 use ic_test_utilities::{
     crypto::mock_random_number_generator,
@@ -1966,56 +1967,6 @@ fn subnet_canister_request_bad_candid_payload() {
     });
 }
 
-fn get_execution_environment(
-    nns_subnet_id: SubnetId,
-    own_subnet_id: SubnetId,
-    sender_subnet_id: SubnetId,
-    subnet_type: SubnetType,
-    log: ReplicaLogger,
-) -> (ReplicatedState, ExecutionEnvironmentImpl) {
-    let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-
-    let routing_table = Arc::new(RoutingTable::try_from(btreemap! {
-        CanisterIdRange{ start: CanisterId::from(0x0), end: CanisterId::from(0xff) } => own_subnet_id,
-        CanisterIdRange{ start: CanisterId::from(0x100), end: CanisterId::from(0x1ff) } => sender_subnet_id,
-    }).unwrap());
-
-    let mut state =
-        ReplicatedState::new_rooted_at(own_subnet_id, subnet_type, tmpdir.path().to_path_buf());
-    state.metadata.network_topology.routing_table = routing_table;
-    state.metadata.network_topology.nns_subnet_id = nns_subnet_id;
-
-    let metrics_registry = MetricsRegistry::new();
-    let cycles_account_manager = Arc::new(
-        CyclesAccountManagerBuilder::new()
-            .with_subnet_type(subnet_type)
-            .build(),
-    );
-    let hypervisor = Hypervisor::new(
-        execution_environment::Config::default(),
-        &metrics_registry,
-        own_subnet_id,
-        subnet_type,
-        log.clone(),
-        Arc::clone(&cycles_account_manager),
-    );
-    let hypervisor = Arc::new(hypervisor);
-    let ingress_history_writer = IngressHistoryWriterImpl::new(log.clone(), &metrics_registry);
-    let ingress_history_writer = Arc::new(ingress_history_writer);
-    let exec_env = ExecutionEnvironmentImpl::new(
-        log,
-        hypervisor,
-        ingress_history_writer,
-        &metrics_registry,
-        own_subnet_id,
-        subnet_type,
-        1,
-        execution_environment::Config::default(),
-        cycles_account_manager,
-    );
-    (state, exec_env)
-}
-
 fn execute_create_canister_request(
     sender: CanisterId,
     nns_subnet_id: SubnetId,
@@ -2027,13 +1978,14 @@ fn execute_create_canister_request(
     let receiver = canister_test_id(1);
     let cycles = CANISTER_CREATION_FEE + Cycles::from(1);
 
-    let (mut state, exec_env) = get_execution_environment(
-        nns_subnet_id,
-        own_subnet_id,
-        sender_subnet_id,
-        own_subnet_type,
-        log,
-    );
+    let (mut state, exec_env) = ExecutionEnvironmentBuilder::new()
+        .with_log(log)
+        .with_nns_subnet_id(nns_subnet_id)
+        .with_own_subnet_id(own_subnet_id)
+        .with_sender_subnet_id(sender_subnet_id)
+        .with_subnet_type(own_subnet_type)
+        .with_sender_canister(sender)
+        .build();
 
     state
         .subnet_queues_mut()
@@ -2104,7 +2056,7 @@ fn check_create_canister_fails(
 fn create_canister_different_subnets_on_nns_and_sender_not_on_nns() {
     with_test_replica_logger(|log| {
         let own_subnet_type = SubnetType::System;
-        let sender = canister_test_id(257); // sender not on nns
+        let sender = canister_test_id(1);
         let nns_subnet_id = subnet_test_id(1);
         let own_subnet_id = subnet_test_id(1);
         let sender_subnet_id = subnet_test_id(2);
@@ -2124,7 +2076,7 @@ fn create_canister_different_subnets_on_nns_and_sender_not_on_nns() {
 fn create_canister_different_subnets_not_on_nns_and_sender_not_on_nns() {
     with_test_replica_logger(|log| {
         let own_subnet_type = SubnetType::Application;
-        let sender = canister_test_id(257); // sender not on NNS
+        let sender = canister_test_id(1);
         let nns_subnet_id = subnet_test_id(0);
         let own_subnet_id = subnet_test_id(1);
         let sender_subnet_id = subnet_test_id(2);
@@ -2180,7 +2132,7 @@ fn check_create_canister_succeeds(
 fn create_canister_different_subnets_not_on_nns_sender_on_nns() {
     with_test_replica_logger(|log| {
         let own_subnet_type = SubnetType::Application;
-        let sender = canister_test_id(257);
+        let sender = canister_test_id(1);
         let nns_subnet_id = subnet_test_id(2);
         let own_subnet_id = subnet_test_id(1);
         let sender_subnet_id = subnet_test_id(2); // sender is on nns
@@ -2247,13 +2199,13 @@ fn execute_setup_initial_dkg_request(
     let receiver = canister_test_id(1);
     let cycles = CANISTER_CREATION_FEE;
 
-    let (mut state, exec_env) = get_execution_environment(
-        nns_subnet_id,
-        own_subnet_id,
-        sender_subnet_id,
-        subnet_type,
-        log,
-    );
+    let (mut state, exec_env) = ExecutionEnvironmentBuilder::new()
+        .with_nns_subnet_id(nns_subnet_id)
+        .with_own_subnet_id(own_subnet_id)
+        .with_sender_subnet_id(sender_subnet_id)
+        .with_subnet_type(subnet_type)
+        .with_log(log)
+        .build();
 
     let node_ids = vec![node_test_id(1)];
     let request_payload = ic00::SetupInitialDKGArgs::new(node_ids, RegistryVersion::new(1));
@@ -2292,10 +2244,10 @@ fn execute_setup_initial_dkg_request(
 fn setup_initial_dkg_sender_on_nns() {
     with_test_replica_logger(|log| {
         let subnet_type = SubnetType::Application;
-        let sender = canister_test_id(257);
+        let sender = canister_test_id(1);
         let nns_subnet_id = subnet_test_id(2);
         let own_subnet_id = subnet_test_id(1);
-        let sender_subnet_id = subnet_test_id(2); // sender on nns subnet
+        let sender_subnet_id = nns_subnet_id;
 
         let mut state = execute_setup_initial_dkg_request(
             sender,
@@ -2317,7 +2269,7 @@ fn setup_initial_dkg_sender_not_on_nns() {
         let sender = canister_test_id(10);
         let nns_subnet_id = subnet_test_id(2);
         let own_subnet_id = subnet_test_id(1);
-        let sender_subnet_id = subnet_test_id(1); // sender not on nns subnet
+        let sender_subnet_id = own_subnet_id;
 
         let mut state = execute_setup_initial_dkg_request(
             sender,
@@ -3185,18 +3137,7 @@ fn test_allocating_memory_reduces_subnet_available_memory() {
 #[test]
 fn execute_canister_http_request() {
     with_test_replica_logger(|log| {
-        let subnet_type = SubnetType::Application;
-        let nns_subnet_id = subnet_test_id(2);
-        let own_subnet_id = subnet_test_id(1);
-        let sender_subnet_id = subnet_test_id(1);
-
-        let (mut state, exec_env) = get_execution_environment(
-            nns_subnet_id,
-            own_subnet_id,
-            sender_subnet_id,
-            subnet_type,
-            log,
-        );
+        let (mut state, exec_env) = ExecutionEnvironmentBuilder::new().with_log(log).build();
 
         // Create payload of the request.
         let url = "https::/".to_string();
@@ -3264,20 +3205,20 @@ fn execute_compute_initial_ecdsa_dealings(
     nns_subnet_id: SubnetId,
     own_subnet_id: SubnetId,
     sender_subnet_id: SubnetId,
-    subnet_type: SubnetType,
     own_subnet_is_ecdsa_enabled: bool,
     key_id: String,
     log: ReplicaLogger,
 ) -> ReplicatedState {
     let receiver = canister_test_id(1);
 
-    let (mut state, exec_env) = get_execution_environment(
-        nns_subnet_id,
-        own_subnet_id,
-        sender_subnet_id,
-        subnet_type,
-        log,
-    );
+    let (mut state, exec_env) = ExecutionEnvironmentBuilder::new()
+        .with_log(log)
+        .with_nns_subnet_id(nns_subnet_id)
+        .with_own_subnet_id(own_subnet_id)
+        .with_sender_subnet_id(sender_subnet_id)
+        .with_sender_canister(sender)
+        .build();
+
     state.metadata.own_subnet_features.ecdsa_signatures = own_subnet_is_ecdsa_enabled;
 
     let node_ids = vec![node_test_id(1), node_test_id(2)].into_iter().collect();
@@ -3327,18 +3268,16 @@ fn get_reject_message(response: RequestOrResponse) -> String {
 #[test]
 fn compute_initial_ecdsa_dealings_sender_on_nns() {
     with_test_replica_logger(|log| {
-        let subnet_type = SubnetType::Application;
-        let sender = canister_test_id(0x100); // 0x100..0x1ff mapped to sender subnet
+        let sender = canister_test_id(0x10);
         let nns_subnet_id = subnet_test_id(2);
         let own_subnet_id = subnet_test_id(1);
-        let sender_subnet_id = subnet_test_id(2); // sender on nns subnet
+        let sender_subnet_id = nns_subnet_id;
 
         let mut state = execute_compute_initial_ecdsa_dealings(
             sender,
             nns_subnet_id,
             own_subnet_id,
             sender_subnet_id,
-            subnet_type,
             true,
             "secp256k1".to_string(),
             log,
@@ -3351,8 +3290,7 @@ fn compute_initial_ecdsa_dealings_sender_on_nns() {
 #[test]
 fn compute_initial_ecdsa_dealings_sender_not_on_nns() {
     with_test_replica_logger(|log| {
-        let subnet_type = SubnetType::Application;
-        let sender = canister_test_id(0x100); // 0x100..0x1ff mapped to sender subnet
+        let sender = canister_test_id(0x10);
         let nns_subnet_id = subnet_test_id(2);
         let own_subnet_id = subnet_test_id(1);
         let sender_subnet_id = subnet_test_id(3); // sender not on nns subnet
@@ -3362,7 +3300,6 @@ fn compute_initial_ecdsa_dealings_sender_not_on_nns() {
             nns_subnet_id,
             own_subnet_id,
             sender_subnet_id,
-            subnet_type,
             true,
             "secp256k1".to_string(),
             log,
@@ -3386,18 +3323,16 @@ fn compute_initial_ecdsa_dealings_sender_not_on_nns() {
 #[test]
 fn compute_initial_ecdsa_dealings_without_ecdsa_enabled() {
     with_test_replica_logger(|log| {
-        let subnet_type = SubnetType::Application;
-        let sender = canister_test_id(0x100); // 0x100..0x1ff mapped to sender subnet
+        let sender = canister_test_id(0x10);
         let nns_subnet_id = subnet_test_id(2);
         let own_subnet_id = subnet_test_id(1);
-        let sender_subnet_id = subnet_test_id(2); // sender on nns subnet
+        let sender_subnet_id = nns_subnet_id;
 
         let mut state = execute_compute_initial_ecdsa_dealings(
             sender,
             nns_subnet_id,
             own_subnet_id,
             sender_subnet_id,
-            subnet_type,
             false,
             "secp256k1".to_string(),
             log,
@@ -3421,18 +3356,16 @@ fn compute_initial_ecdsa_dealings_without_ecdsa_enabled() {
 #[test]
 fn compute_initial_ecdsa_dealings_with_unknown_key() {
     with_test_replica_logger(|log| {
-        let subnet_type = SubnetType::Application;
-        let sender = canister_test_id(0x100); // 0x100..0x1ff mapped to sender subnet
+        let sender = canister_test_id(0x10);
         let nns_subnet_id = subnet_test_id(2);
         let own_subnet_id = subnet_test_id(1);
-        let sender_subnet_id = subnet_test_id(2); // sender on nns subnet
+        let sender_subnet_id = nns_subnet_id;
 
         let mut state = execute_compute_initial_ecdsa_dealings(
             sender,
             nns_subnet_id,
             own_subnet_id,
             sender_subnet_id,
-            subnet_type,
             true,
             "foo".to_string(),
             log,

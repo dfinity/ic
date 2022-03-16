@@ -6,6 +6,7 @@ pub mod consensus;
 pub mod crypto;
 pub mod cycles_account_manager;
 pub mod empty_wasm;
+pub mod execution_environment;
 pub mod history;
 pub mod ingress_selector;
 pub mod message_routing;
