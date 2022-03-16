@@ -1,22 +1,24 @@
 use futures::TryFutureExt;
 use http::StatusCode;
-use std::convert::TryFrom;
-use tokio::net::UnixStream;
-use tonic::transport::{Channel, Endpoint, Server, Uri};
-use tower::service_fn;
-use uuid::Uuid;
-
-use ic_canister_http_adapter::CanisterHttp;
+use ic_canister_http_adapter::{get_canister_http_logger, CanisterHttp, Config};
 use ic_canister_http_adapter_service::{
     http_adapter_client::HttpAdapterClient, http_adapter_server::HttpAdapterServer,
 };
 use ic_protobuf::canister_http::v1::{CanisterHttpRequest, HttpHeader};
+use std::convert::TryFrom;
+use tokio::net::UnixStream;
+use tonic::transport::{Channel, Endpoint, Server, Uri};
+use tower::service_fn;
 use unix::UnixListenerDrop;
+use uuid::Uuid;
 
 #[tokio::test]
 async fn test_https() {
     // setup unix domain socket and start gRPC server on one side of the UDS
-    let channel = setup_loop_channel_unix().await;
+    let config = Config::default();
+    let (logger, _async_log_guard) = get_canister_http_logger(&config.logger);
+    let canister_http = CanisterHttp::new(logger);
+    let channel = setup_loop_channel_unix(canister_http).await;
 
     // create gRPC client that communicated with gRPC server through UDS channel
     let mut client = HttpAdapterClient::new(channel);
@@ -36,7 +38,10 @@ async fn test_https() {
 
 #[tokio::test]
 async fn test_http() {
-    let channel = setup_loop_channel_unix().await;
+    let config = Config::default();
+    let (logger, _async_log_guard) = get_canister_http_logger(&config.logger);
+    let canister_http = CanisterHttp::new(logger);
+    let channel = setup_loop_channel_unix(canister_http).await;
 
     let mut client = HttpAdapterClient::new(channel);
 
@@ -55,7 +60,10 @@ async fn test_http() {
 
 #[tokio::test]
 async fn test_no_http() {
-    let channel = setup_loop_channel_unix().await;
+    let config = Config::default();
+    let (logger, _async_log_guard) = get_canister_http_logger(&config.logger);
+    let canister_http = CanisterHttp::new(logger);
+    let channel = setup_loop_channel_unix(canister_http).await;
 
     let mut client = HttpAdapterClient::new(channel);
 
@@ -79,11 +87,9 @@ fn build_http_canister_request(url: String) -> CanisterHttpRequest {
     }
 }
 
-async fn setup_loop_channel_unix() -> Channel {
+async fn setup_loop_channel_unix(canister_http: CanisterHttp) -> Channel {
     let uuid = Uuid::new_v4();
     let path = "/tmp/canister-http-test-".to_string() + &uuid.to_string();
-
-    let canister_http = CanisterHttp::new();
 
     // anonymous type that implements stream trait with item type: Result<UnixStream, Error>.
     let incoming = {

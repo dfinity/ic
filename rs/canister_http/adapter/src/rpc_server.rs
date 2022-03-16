@@ -3,28 +3,25 @@ use hyper::client::HttpConnector;
 use hyper::{body, Body, Client, Method};
 use hyper_tls::HttpsConnector;
 use ic_canister_http_adapter_service::http_adapter_server::HttpAdapter;
+use ic_logger::{debug, ReplicaLogger};
 use ic_protobuf::canister_http::v1::{CanisterHttpRequest, CanisterHttpResponse, HttpHeader};
-use std::fmt::Debug;
 use tonic::{Request, Response, Status};
 
-#[derive(Debug)]
 /// implements RPC
 pub struct CanisterHttp {
     https_client: Client<HttpsConnector<HttpConnector>>,
+    logger: ReplicaLogger,
 }
 
 impl CanisterHttp {
     /// initalize new hyper clients
-    pub fn new() -> CanisterHttp {
+    pub fn new(logger: ReplicaLogger) -> CanisterHttp {
         let https = HttpsConnector::new();
         let https_client = Client::builder().build::<_, hyper::Body>(https);
-        Self { https_client }
-    }
-}
-
-impl Default for CanisterHttp {
-    fn default() -> Self {
-        Self::new()
+        Self {
+            https_client,
+            logger,
+        }
     }
 }
 
@@ -36,25 +33,25 @@ impl HttpAdapter for CanisterHttp {
     ) -> Result<Response<CanisterHttpResponse>, Status> {
         let req = request.into_inner();
 
-        let uri = req
-            .url
-            .parse::<Uri>()
-            .map_err(|_| Status::new(tonic::Code::InvalidArgument, "Failed to parse url"))?;
+        let uri = req.url.parse::<Uri>().map_err(|err| {
+            debug!(self.logger, "Failed to parse URL: {}", err);
+            Status::new(tonic::Code::InvalidArgument, "Failed to parse url")
+        })?;
 
         // TODO: Connect to SOCKS proxy (NET-881)
         let http_req = hyper::Request::builder()
             .method(Method::GET)
             .uri(uri)
             .body(Body::from(req.body))
-            .map_err(|_| {
+            .map_err(|err| {
+                debug!(self.logger, "Failed to build HTTP request URL: {}", err);
                 Status::new(tonic::Code::InvalidArgument, "Failed to build http request")
             })?;
 
-        let http_resp = self
-            .https_client
-            .request(http_req)
-            .await
-            .map_err(|_| Status::new(tonic::Code::Unavailable, "Failed to connect"))?;
+        let http_resp = self.https_client.request(http_req).await.map_err(|err| {
+            debug!(self.logger, "Failed to connect: {}", err);
+            Status::new(tonic::Code::Unavailable, "Failed to connect")
+        })?;
 
         let status = http_resp.status().as_u16() as u32;
 
@@ -68,9 +65,10 @@ impl HttpAdapter for CanisterHttp {
             .collect::<Vec<HttpHeader>>();
 
         // TODO: replace this with a bounded version with timeout. (NET-882)
-        let body_bytes = body::to_bytes(http_resp)
-            .await
-            .map_err(|_| Status::new(tonic::Code::Unavailable, "Failed to fetch body"))?;
+        let body_bytes = body::to_bytes(http_resp).await.map_err(|err| {
+            debug!(self.logger, "Failed to fetch body: {}", err);
+            Status::new(tonic::Code::Unavailable, "Failed to fetch body")
+        })?;
 
         Ok(Response::new(CanisterHttpResponse {
             status,
