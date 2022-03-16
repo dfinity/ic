@@ -1,5 +1,7 @@
 legacy-system-tests:
-  extends: .cargo-build-docker
+  extends:
+    - .ubuntu-nix-docker-pinned-dc
+    - .rules-parent-pipeline
   # System tests are very flaky due to replica non-determinism.
   retry: 2
   stage: cargo-test
@@ -28,6 +30,7 @@ legacy-system-tests:
 
 check-bins-linux:
   extends:
+    - .ubuntu-nix-docker-pinned-dc
     - .rules-parent-pipeline
   stage: cargo-test
   needs:
@@ -35,10 +38,6 @@ check-bins-linux:
   image:
     # 21.04
     name: ubuntu@sha256:b5a61709a9a44284d88fb12e5c48db0409cfad5b69d4ff8224077c57302df9cf
-  tags:
-    - dfinity
-    - docker
-    - ubuntu
   before_script: /bin/true
   after_script: /bin/true
   variables:
@@ -85,7 +84,9 @@ check-bins-darwin:
       /tmp/ic-starter --version
 
 ic-p8s-sd-e2e-test:
-  extends: .cargo-build-docker
+  extends:
+    - .ubuntu-nix-docker-pinned-dc
+    - .rules-parent-pipeline
   needs:
     - cargo-build-release-linux-native
   stage: cargo-test

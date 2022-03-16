@@ -1,6 +1,6 @@
 docker-build-ic-bin:
   extends:
-    - .ubuntu-nix-docker
+    - .ubuntu-nix-docker-pinned-dc
     - .rules-parent-pipeline
   needs: []
   stage: cargo-build
@@ -14,7 +14,7 @@ docker-build-ic-bin:
 
 docker-build-ic-img:
   extends:
-    - .ubuntu-nix-docker
+    - .ubuntu-nix-docker-pinned-dc
     - .rules-parent-pipeline
   needs:
     - cargo-build-canisters

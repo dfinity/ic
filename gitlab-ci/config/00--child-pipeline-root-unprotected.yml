@@ -3,4 +3,4 @@ include:
 
 .ubuntu-nix-docker-protected:
   extends:
-    - .ubuntu-nix-docker
+    - .ubuntu-nix-docker-pinned-dc

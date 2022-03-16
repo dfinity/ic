@@ -257,6 +257,15 @@ after_script:
     # This MUST match the directory used in our `docker-build-ic` script
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
 
+.ubuntu-nix-docker-pinned-dc:
+  extends: .ubuntu-nix-docker
+  tags:
+    # We override tags to add $SELECTED_DC so we can pin jobs to one DC
+    - dfinity
+    - docker
+    - ubuntu
+    - $SELECTED_DC
+
 .macos-nix-native:
   extends:
      - .nix-build-env-base

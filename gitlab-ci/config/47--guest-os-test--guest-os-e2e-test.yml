@@ -2,7 +2,7 @@
   extends:
     # Use untrusted builders for e2e tests.
     # The trusted builders don't work with IPv6 right now.
-    - .ubuntu-nix-docker
+    - .ubuntu-nix-docker-pinned-dc
     - .rules-parent-pipeline
   stage: guest-os-test
   retry: 2
