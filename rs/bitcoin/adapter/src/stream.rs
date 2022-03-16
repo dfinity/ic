@@ -3,7 +3,7 @@ use bitcoin::{
     network::message::RawNetworkMessage,
     {consensus::encode, network::message::NetworkMessage},
 };
-use slog::Logger;
+use ic_logger::{debug, error, ReplicaLogger};
 use std::{io, net::SocketAddr, pin::Pin, time::Duration};
 use thiserror::Error;
 use tokio::{
@@ -55,7 +55,7 @@ pub struct StreamConfig {
     /// This field represents the target address that the stream will connect to.
     pub address: SocketAddr,
     /// This field is used to provide an instance of the logger.
-    pub logger: Logger,
+    pub logger: ReplicaLogger,
     /// This field is used to provide the magic value to the raw network message.
     /// The magic number is used to identity the type of Bitcoin network being accessed.
     pub magic: u32,
@@ -267,7 +267,7 @@ pub async fn handle_stream(config: StreamConfig) {
     let logger = config.logger.clone();
     // Clone the sender here to handle errors that the Stream may return.
     let stream_event_sender = config.stream_event_sender.clone();
-    slog::debug!(logger, "Connecting to {}", address);
+    debug!(logger, "Connecting to {}", address);
     let stream_result = Stream::connect(config).await;
     let mut stream = match stream_result {
         Ok(stream) => {
@@ -283,15 +283,15 @@ pub async fn handle_stream(config: StreamConfig) {
         Err(err) => {
             let kind = match err {
                 StreamError::Io(err) => {
-                    slog::debug!(logger, "{}", err);
+                    debug!(logger, "{}", err);
                     StreamEventKind::FailedToConnect
                 }
                 StreamError::Timeout => {
-                    slog::debug!(logger, "Timed out connecting to {}", address);
+                    debug!(logger, "Timed out connecting to {}", address);
                     StreamEventKind::FailedToConnect
                 }
                 _ => {
-                    slog::error!(logger, "{}", err);
+                    error!(logger, "{}", err);
                     StreamEventKind::Disconnected
                 }
             };

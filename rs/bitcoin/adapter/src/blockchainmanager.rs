@@ -12,7 +12,7 @@ use bitcoin::{
     },
     Block, BlockHash, BlockHeader, Network,
 };
-use slog::Logger;
+use ic_logger::{debug, error, info, warn, ReplicaLogger};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     net::SocketAddr,
@@ -153,7 +153,6 @@ pub struct GetDataRequestInfo {
 }
 
 /// The BlockChainManager struct handles interactions that involve the headers.
-#[derive(Debug)]
 pub struct BlockchainManager {
     /// This field contains the BlockchainState, which stores and manages
     /// all the information related to the headers and blocks.
@@ -182,7 +181,7 @@ pub struct BlockchainManager {
     /// This vector stores the list of messages that are to be sent to the Bitcoin network.
     outgoing_command_queue: Vec<Command>,
     /// This field contains a logger for the blockchain manager's use.
-    logger: Logger,
+    logger: ReplicaLogger,
     /// Contains the network type the adapter is connecting to.
     network: Network,
 }
@@ -191,7 +190,7 @@ impl BlockchainManager {
     /// This function instantiates a BlockChainManager struct. A node is provided
     /// in order to get its client so the manager can send messages to the
     /// BTC network.
-    pub fn new(config: &Config, logger: Logger) -> Self {
+    pub fn new(config: &Config, logger: ReplicaLogger) -> Self {
         let blockchain = BlockchainState::new(config);
         let peer_info = HashMap::new();
         let getdata_request_info = HashMap::new();
@@ -224,7 +223,7 @@ impl BlockchainManager {
         // TODO: ER-1394: Timeouts must for getheaders calls must be handled.
         //If the peer address is not stored in peer_info, then return;
         if let Some(peer_info) = self.peer_info.get_mut(addr) {
-            slog::info!(
+            info!(
                 self.logger,
                 "Sending getheaders to {} : Locator hashes {:?}, Stop hash {}",
                 addr,
@@ -261,11 +260,9 @@ impl BlockchainManager {
         }
 
         // If the inv message is received from a peer that is not connected, then reject it.
-        slog::info!(
+        info!(
             self.logger,
-            "Received inv message from {} : Inventory {:?}",
-            addr,
-            inventory
+            "Received inv message from {} : Inventory {:?}", addr, inventory
         );
 
         let peer = self
@@ -304,7 +301,7 @@ impl BlockchainManager {
             .peer_info
             .get_mut(addr)
             .ok_or(ReceivedHeadersMessageError::UnknownPeer)?;
-        slog::info!(
+        info!(
             self.logger,
             "Received headers from {}: {}",
             addr,
@@ -332,7 +329,7 @@ impl BlockchainManager {
         let (added_headers, maybe_err) = self.blockchain.add_headers(headers);
         let active_tip = self.blockchain.get_active_chain_tip();
         if prev_tip_height < active_tip.height {
-            slog::info!(
+            info!(
                 self.logger,
                 "Added headers in the headers message. State Changed. Height = {}, Active chain's tip = {}",
                 active_tip.height,
@@ -357,12 +354,9 @@ impl BlockchainManager {
             if last.height > peer.height {
                 peer.tip = last.header.block_hash();
                 peer.height = last.height;
-                slog::debug!(
+                debug!(
                     self.logger,
-                    "Peer {}'s height = {}, tip = {}",
-                    addr,
-                    peer.height,
-                    peer.tip
+                    "Peer {}'s height = {}, tip = {}", addr, peer.height, peer.tip
                 );
             }
         }
@@ -421,7 +415,7 @@ impl BlockchainManager {
             None => Duration::new(0, 0),
         };
 
-        slog::info!(
+        info!(
             self.logger,
             "Received block message from {} : Took {:?}sec. Block {:?}",
             addr,
@@ -434,18 +428,16 @@ impl BlockchainManager {
 
         match self.blockchain.add_block(block.clone()) {
             Ok(block_height) => {
-                slog::info!(
+                info!(
                     self.logger,
-                    "Block added to the cache successfully at height = {}",
-                    block_height
+                    "Block added to the cache successfully at height = {}", block_height
                 );
                 Ok(())
             }
             Err(err) => {
-                slog::warn!(
+                warn!(
                     self.logger,
-                    "Unable to add the received block in blockchain. Error: {:?}",
-                    err
+                    "Unable to add the received block in blockchain. Error: {:?}", err
                 );
                 Err(ReceivedBlockMessageError::BlockNotAdded)
             }
@@ -458,7 +450,7 @@ impl BlockchainManager {
         if self.peer_info.contains_key(addr) {
             return;
         }
-        slog::info!(self.logger, "Adding peer_info with addr : {} ", addr);
+        info!(self.logger, "Adding peer_info with addr : {} ", addr);
         let initial_hash = self.blockchain.genesis().header.block_hash();
         self.peer_info.insert(
             *addr,
@@ -478,7 +470,7 @@ impl BlockchainManager {
     /// This function adds a new peer to `peer_info`
     /// and initiates sync with the peer by sending `getheaders` message.
     fn remove_peer(&mut self, addr: &SocketAddr) {
-        slog::info!(self.logger, "Removing peer_info with addr : {} ", addr);
+        info!(self.logger, "Removing peer_info with addr : {} ", addr);
         self.peer_info.remove(addr);
         // Removing all the `getdata` requests that have been sent to the peer before.
         self.getdata_request_info.retain(|_, v| v.socket != *addr);
@@ -496,7 +488,7 @@ impl BlockchainManager {
             return;
         }
 
-        slog::debug!(
+        debug!(
             self.logger,
             "Cache Size: {}, Max Size: {}",
             self.blockchain.get_block_cache_size(),
@@ -506,7 +498,7 @@ impl BlockchainManager {
             return;
         }
 
-        slog::debug!(
+        debug!(
             self.logger,
             "Syncing blocks. Blocks to be synced : {:?}",
             self.block_sync_queue.len()
@@ -552,11 +544,9 @@ impl BlockchainManager {
                 break;
             }
 
-            slog::info!(
+            info!(
                 self.logger,
-                "Sending getdata to {} : Inventory {:?}",
-                peer.socket,
-                selected_inventory
+                "Sending getdata to {} : Inventory {:?}", peer.socket, selected_inventory
             );
 
             //Send 'getdata' request for the inventory to the peer.
@@ -727,7 +717,7 @@ impl BlockchainManager {
                 }
                 None => {
                     // Missing header, something has gone very wrong.
-                    slog::error!(
+                    error!(
                         self.logger,
                         "[ADAPTER-BUG] Missing header cache entry for block hash: {:?}. This should never happen.",
                         node
@@ -778,10 +768,9 @@ impl BlockchainManager {
             processed_block_hashes,
         } = request;
 
-        slog::debug!(
+        debug!(
             self.logger,
-            "Received a GetSuccessorsRequest for anchor hash: {:?}",
-            anchor,
+            "Received a GetSuccessorsRequest for anchor hash: {:?}", anchor,
         );
         let successor_blocks = self.get_successor_blocks(&anchor, &processed_block_hashes);
         let next_headers =
@@ -789,7 +778,7 @@ impl BlockchainManager {
         self.enqueue_new_blocks_to_download(&next_headers);
         self.blockchain.prune_old_blocks(&processed_block_hashes);
 
-        slog::info!(
+        info!(
             self.logger,
             "Number of blocks cached: {}, Number of uncached successor blocks : {}",
             successor_blocks.len(),
@@ -823,8 +812,8 @@ fn are_multiple_blocks_allowed(network: Network, anchor_height: BlockHeight) -> 
 pub mod test {
     use super::*;
     use crate::common::test_common::{
-        generate_headers, generate_large_block_blockchain, headers_to_hashes, make_logger,
-        TestState, BLOCK_1_ENCODED, BLOCK_2_ENCODED,
+        generate_headers, generate_large_block_blockchain, headers_to_hashes, TestState,
+        BLOCK_1_ENCODED, BLOCK_2_ENCODED,
     };
     use crate::config::test::ConfigBuilder;
     use crate::config::Config;
@@ -834,6 +823,7 @@ pub mod test {
         network::message::NetworkMessage, network::message_blockdata::Inventory, BlockHash,
     };
     use hex::FromHex;
+    use ic_logger::replica_logger::no_op_logger;
     use std::net::SocketAddr;
     use std::str::FromStr;
 
@@ -842,7 +832,7 @@ pub mod test {
     #[test]
     fn test_manager_can_send_getheaders_messages() {
         let config = ConfigBuilder::new().build();
-        let mut blockchain_manager = BlockchainManager::new(&config, make_logger());
+        let mut blockchain_manager = BlockchainManager::new(&config, no_op_logger());
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
         blockchain_manager.add_peer(&addr);
         assert_eq!(blockchain_manager.outgoing_command_queue.len(), 1);
@@ -889,7 +879,7 @@ pub mod test {
     #[test]
     fn test_init_sync() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
-        let mut blockchain_manager = BlockchainManager::new(&config, make_logger());
+        let mut blockchain_manager = BlockchainManager::new(&config, no_op_logger());
 
         // Create an arbitrary chain and adding to the BlockchainState.
         let chain = generate_headers(
@@ -958,7 +948,7 @@ pub mod test {
     /// The test then sends an inv message for a fork chain, and verifies if the BlockChainManager responds correctly.
     fn test_received_inv() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
-        let mut blockchain_manager = BlockchainManager::new(&config, make_logger());
+        let mut blockchain_manager = BlockchainManager::new(&config, no_op_logger());
 
         // Create an arbitrary chain and adding to the BlockchainState.
         let chain = generate_headers(
@@ -1060,7 +1050,7 @@ pub mod test {
         let block_2: Block = deserialize(&encoded_block_2).expect("failed to decoded block 2");
 
         let config = Config::default();
-        let mut blockchain_manager = BlockchainManager::new(&config, make_logger());
+        let mut blockchain_manager = BlockchainManager::new(&config, no_op_logger());
         let headers = vec![block_1.header, block_2.header];
         // Initialize the blockchain manager state
         let (added_headers, maybe_err) = blockchain_manager.blockchain.add_headers(&headers);
@@ -1128,7 +1118,7 @@ pub mod test {
     #[test]
     fn test_get_successors() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
-        let mut blockchain_manager = BlockchainManager::new(&config, make_logger());
+        let mut blockchain_manager = BlockchainManager::new(&config, no_op_logger());
         // Set up the following chain:
         // |--> 1'---> 2'
         // 0 -> 1 ---> 2 ---> 3 -> 4
@@ -1267,7 +1257,7 @@ pub mod test {
     #[test]
     fn test_get_successors_multiple_blocks() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
-        let mut blockchain_manager = BlockchainManager::new(&config, make_logger());
+        let mut blockchain_manager = BlockchainManager::new(&config, no_op_logger());
         // Set up the following chain:
         // |-> 1'
         // 0 -> 1 -> 2
@@ -1336,7 +1326,7 @@ pub mod test {
     #[test]
     fn test_get_successors_multiple_blocks_out_of_order() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
-        let mut blockchain_manager = BlockchainManager::new(&config, make_logger());
+        let mut blockchain_manager = BlockchainManager::new(&config, no_op_logger());
         // Set up the following chain:
         // |-> 1'
         // 0 -> 1 -> 2
@@ -1425,7 +1415,7 @@ pub mod test {
     fn test_get_successors_large_block() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
-        let blockchain_manager = BlockchainManager::new(&config, make_logger());
+        let blockchain_manager = BlockchainManager::new(&config, no_op_logger());
         let genesis = blockchain_manager.blockchain.genesis();
 
         // Generate a blockchain with one large block.
@@ -1447,7 +1437,7 @@ pub mod test {
             txdata: vec![],
         };
 
-        let mut blockchain_manager = BlockchainManager::new(&config, make_logger());
+        let mut blockchain_manager = BlockchainManager::new(&config, no_op_logger());
         blockchain_manager.add_peer(&addr);
         let (added_headers, _) = blockchain_manager.blockchain.add_headers(&headers);
         assert_eq!(added_headers.len(), 1);
@@ -1487,7 +1477,7 @@ pub mod test {
     #[test]
     fn test_get_successors_many_blocks_until_size_cap_is_met() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
-        let mut blockchain_manager = BlockchainManager::new(&config, make_logger());
+        let mut blockchain_manager = BlockchainManager::new(&config, no_op_logger());
 
         let main_chain = generate_headers(
             blockchain_manager.blockchain.genesis().header.block_hash(),
@@ -1544,7 +1534,7 @@ pub mod test {
     fn test_sync_blocks_size_limit() {
         let test_state = TestState::setup();
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
-        let mut blockchain_manager = BlockchainManager::new(&config, make_logger());
+        let mut blockchain_manager = BlockchainManager::new(&config, no_op_logger());
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
 
         // Make 5 large blocks that are around 2MiB each.
@@ -1585,7 +1575,7 @@ pub mod test {
         let block_2_hash = block_2.block_hash();
 
         let config = Config::default();
-        let mut blockchain_manager = BlockchainManager::new(&config, make_logger());
+        let mut blockchain_manager = BlockchainManager::new(&config, no_op_logger());
         let headers = vec![block_1.header, block_2.header];
         // Initialize the blockchain manager state
         let (added_headers, maybe_err) = blockchain_manager.blockchain.add_headers(&headers);

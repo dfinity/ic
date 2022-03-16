@@ -3411,12 +3411,15 @@ dependencies = [
  "ic-async-utils",
  "ic-btc-adapter-service",
  "ic-btc-validation",
+ "ic-config",
+ "ic-logger",
  "ic-protobuf",
  "prost",
  "rand 0.8.4",
  "serde",
  "serde_json",
  "slog",
+ "slog-async",
  "slog-term",
  "thiserror",
  "tokio",
@@ -10567,11 +10570,11 @@ dependencies = [
 
 [[package]]
 name = "slog-async"
-version = "2.5.0"
+version = "2.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51b3336ce47ce2f96673499fc07eb85e3472727b9a7a2959964b002c2ce8fbbb"
+checksum = "766c59b252e62a34651412870ff55d8c4e6d04df19b43eecb2703e417b097ffe"
 dependencies = [
- "crossbeam-channel 0.4.2",
+ "crossbeam-channel 0.5.1",
  "slog",
  "take_mut",
  "thread_local",
