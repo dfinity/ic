@@ -305,7 +305,14 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
             logging.error(f"{RED}Failed to push results to honeycomb.{NC}")
 
     if is_slack_notify:
-        SUMMARY_ARGS += f'--slack_message "Pot \`{{}}\` *failed*. <{CI_JOB_URL}|log>. Commit: <{CI_PROJECT_URL}/-/commit/{CI_COMMIT_SHA}|{CI_COMMIT_SHORT_SHA}>."'  # noqa
+        msg = " ".join(
+            [
+                f"Pot \`{{}}\` *failed*. <{CI_JOB_URL}|log>.",  # noqa
+                f"Commit: <{CI_PROJECT_URL}/-/commit/{CI_COMMIT_SHA}|{CI_COMMIT_SHORT_SHA}>.",
+                f"IC_VERSION_ID: \`{IC_VERSION_ID}\`.",  # noqa
+            ]
+        )
+        SUMMARY_ARGS += f'--slack_message "{msg}"'
 
     logging.debug(f"SUMMARY_ARGS={SUMMARY_ARGS}")
 
