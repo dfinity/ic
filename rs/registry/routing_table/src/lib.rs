@@ -1,6 +1,7 @@
 mod proto;
 
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
+use ic_protobuf::proxy::ProxyDecodeError;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, convert::TryFrom};
 
@@ -36,10 +37,19 @@ pub struct CanisterIdRange {
 // error.  This could be further improved.
 #[derive(Debug, Eq, PartialEq)]
 pub enum WellFormedError {
-    CanisterIdRangeNonClosedRange(String),
+    CanisterIdRangeEmptyRange(String),
     CanisterIdRangeNotSortedOrNotDisjoint(String),
-    RoutingTableNonEmptyRange(String),
+    RoutingTableEmptyRange(String),
     RoutingTableNotDisjoint(String),
+    CanisterMigrationsEmptyRange(String),
+    CanisterMigrationsNotDisjoint(String),
+    CanisterMigrationsInvalidTrace(String),
+}
+
+impl From<WellFormedError> for ProxyDecodeError {
+    fn from(err: WellFormedError) -> Self {
+        Self::Other(format!("{:?}", err))
+    }
 }
 
 /// A list of closed `CanisterId` ranges that are present in the `RoutingTable`
@@ -47,14 +57,15 @@ pub enum WellFormedError {
 pub struct CanisterIdRanges(Vec<CanisterIdRange>);
 
 impl CanisterIdRanges {
-    /// Returns Ok if this collection of canister ID ranges is well-formed.
+    /// Returns Ok if this collection of canister ID ranges is well-formed
+    /// (non-empty, sorted and disjoint).
     fn well_formed(&self) -> Result<(), WellFormedError> {
         use WellFormedError::*;
 
         // Ranges are non-empty (ranges are closed).
         for range in self.iter() {
             if range.start > range.end {
-                return Err(CanisterIdRangeNonClosedRange(format!(
+                return Err(CanisterIdRangeEmptyRange(format!(
                     "start {} is greater than end {}",
                     range.start, range.end,
                 )));
@@ -315,7 +326,8 @@ impl RoutingTable {
         self.0.is_empty()
     }
 
-    /// Returns Ok if the routing table is well-formed.
+    /// Returns Ok if the routing table is well-formed (ranges are non-empty and
+    /// disjoint).
     pub fn well_formed(&self) -> Result<(), WellFormedError> {
         use WellFormedError::*;
 
@@ -325,7 +337,7 @@ impl RoutingTable {
         for range in self.0.keys() {
             // Check that ranges are non-empty (ranges are closed).
             if range.start > range.end {
-                return Err(RoutingTableNonEmptyRange(format!(
+                return Err(RoutingTableEmptyRange(format!(
                     "start {} is greater than end {}",
                     range.start, range.end
                 )));
@@ -363,48 +375,7 @@ impl RoutingTable {
         // If the `principal_id` was not a subnet, it must be a `CanisterId` (otherwise
         // we can't route to it).
         match CanisterId::try_from(principal_id) {
-            Ok(canister_id) => {
-                // In simple terms, we need to do a binary search of all the interval
-                // ranges tracked in self to see if `canister_id` in included in any of
-                // them.  BTreeMap offers this functionality in the form of the
-                // `range()` function.  In particular, assume self is [a1, b1] ... [an,
-                // bn].  Pretend to insert [canister_id, u64::MAX] into this sequence.
-                // We look for the interval [i1, i2] that is before (or equal to) the
-                // position where [caniter_id, u64::MAX] would be inserted.
-                let before = self
-                    .0
-                    .range(
-                        ..=(CanisterIdRange {
-                            start: canister_id,
-                            end: CanisterId::from(u64::MAX),
-                        }),
-                    )
-                    .next_back();
-                if let Some((interval, subnet_id)) = before {
-                    // We found an interval [star, end], it must be the case that
-                    // [start, end]<=[canister_id, u64::MAX] lexicographically, whence
-                    // start <= canister_id.
-                    assert!(interval.start <= canister_id);
-                    // If canister_id is in the interval then we found our answer.
-                    if canister_id <= interval.end {
-                        Some(*subnet_id)
-                    } else {
-                        // In this case, either [start, end] is the last interval in the
-                        // map and c comes after end, or there is an interval [a,b] in
-                        // the map such that lexicographically [start, end] <= [c,
-                        // u64::MAX] < [a, b]. This means that canister_id < a so
-                        // canister_id is not assigned to any subnetwork. Because if
-                        // canister_id == a, then u64::MAX < b which is impossible.
-                        None
-                    }
-                } else {
-                    // All intervals [a,b] of the map are lexicographically > than
-                    // [canister_id, u64::MAX]. But if [a, b] > [canister_id, u64::MAX]
-                    // then a > canister_id, which means that canister_id is unassigned
-                    // (or a == b and b > u64::MAX which is impossible).
-                    None
-                }
-            }
+            Ok(canister_id) => lookup_in_ranges(&self.0, canister_id),
             // Cannot route to any subnet as we couldn't convert to a `CanisterId`.
             Err(_) => None,
         }
@@ -412,15 +383,13 @@ impl RoutingTable {
 
     /// Find all canister ranges that are assigned to subnet_id.
     pub fn ranges(&self, subnet_id: SubnetId) -> CanisterIdRanges {
-        let mut ranges = Vec::new();
-        for (range, range_subnet_id) in self.0.iter() {
-            if subnet_id == *range_subnet_id {
-                ranges.push(*range);
-            }
-        }
-        let res = CanisterIdRanges(ranges);
-        debug_assert_eq!(res.well_formed(), Ok(()));
-        res
+        let ranges = CanisterIdRanges(
+            self.iter()
+                .filter_map(|(range, sid)| (*sid == subnet_id).then(|| *range))
+                .collect(),
+        );
+        debug_assert_eq!(ranges.well_formed(), Ok(()));
+        ranges
     }
 }
 
@@ -430,6 +399,126 @@ impl IntoIterator for RoutingTable {
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CanisterMigrations(BTreeMap<CanisterIdRange, Vec<SubnetId>>);
+
+impl TryFrom<BTreeMap<CanisterIdRange, Vec<SubnetId>>> for CanisterMigrations {
+    type Error = WellFormedError;
+
+    fn try_from(map: BTreeMap<CanisterIdRange, Vec<SubnetId>>) -> Result<Self, WellFormedError> {
+        let t = Self(map);
+        t.well_formed()?;
+        Ok(t)
+    }
+}
+
+impl CanisterMigrations {
+    /// Constructs an empty migration trace.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Returns Ok if the canister migrations are well-formed (ranges are non-empty
+    /// and disjoint; migration traces consist of at least 2 subnets, with no two
+    /// successive subnets being the same).
+    pub fn well_formed(&self) -> Result<(), WellFormedError> {
+        use WellFormedError::*;
+
+        // Used to track the end of the previous end used to check that the
+        // ranges are disjoint.
+        let mut previous_end: Option<CanisterId> = None;
+        for (range, trace) in self.0.iter() {
+            // Check that ranges are non-empty (ranges are closed).
+            if range.start > range.end {
+                return Err(CanisterMigrationsEmptyRange(format!(
+                    "start {} is greater than end {}",
+                    range.start, range.end
+                )));
+            }
+
+            // Check that this range starts strictly after the
+            // previous range (remember that the endpoints of ranges
+            // are inclusive).
+            if previous_end >= Some(range.start) {
+                return Err(CanisterMigrationsNotDisjoint(format!(
+                    "Previous end {:?} >= current start {}",
+                    previous_end, range.start
+                )));
+            }
+            previous_end = Some(range.end);
+
+            // Check that the migration trace lists at least 2 subnets and no two successive
+            // subnets are the same.
+            if trace.len() < 2 {
+                return Err(CanisterMigrationsInvalidTrace(format!(
+                    "Trace length {} < 2",
+                    trace.len()
+                )));
+            }
+            for (from, to) in trace.iter().zip(trace.iter().skip(1)) {
+                if from == to {
+                    return Err(CanisterMigrationsInvalidTrace(format!(
+                        "Repeated subnet in canister migration trace: {}",
+                        from
+                    )));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn lookup(&self, canister_id: CanisterId) -> Option<Vec<SubnetId>> {
+        lookup_in_ranges(&self.0, canister_id)
+    }
+}
+
+fn lookup_in_ranges<V: Clone>(
+    canister_id_range_to_value: &BTreeMap<CanisterIdRange, V>,
+    canister_id: CanisterId,
+) -> Option<V> {
+    // In simple terms, we need to do a binary search of all the interval
+    // ranges tracked in self to see if `canister_id` in included in any of
+    // them.  BTreeMap offers this functionality in the form of the
+    // `range()` function.  In particular, assume self is [a1, b1] ... [an,
+    // bn].  Pretend to insert [canister_id, u64::MAX] into this sequence.
+    // We look for the interval [i1, i2] that is before (or equal to) the
+    // position where [canister_id, u64::MAX] would be inserted.
+    let before = canister_id_range_to_value
+        .range(
+            ..=(CanisterIdRange {
+                start: canister_id,
+                end: CanisterId::from(u64::MAX),
+            }),
+        )
+        .next_back();
+
+    if let Some((interval, value)) = before {
+        // We found an interval [star, end], it must be the case that
+        // [start, end]<=[canister_id, u64::MAX] lexicographically, whence
+        // start <= canister_id.
+        assert!(interval.start <= canister_id);
+        // If canister_id is in the interval then we found our answer.
+        if canister_id <= interval.end {
+            Some(value.clone())
+        } else {
+            // In this case, either [start, end] is the last interval in the
+            // map and c comes after end, or there is an interval [a, b] in
+            // the map such that lexicographically [start, end] <= [c,
+            // u64::MAX] < [a, b]. This means that canister_id < a so
+            // canister_id is not assigned to any subnetwork. Because if
+            // canister_id == a, then u64::MAX < b which is impossible.
+            None
+        }
+    } else {
+        // All intervals [a, b] of the map are lexicographically > than
+        // [canister_id, u64::MAX]. But if [a, b] > [canister_id, u64::MAX]
+        // then a > canister_id, which means that canister_id is unassigned
+        // (or a == b and b > u64::MAX which is impossible).
+        None
     }
 }
 

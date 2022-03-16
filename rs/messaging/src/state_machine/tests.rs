@@ -111,6 +111,7 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
         subnets,
         routing_table: Default::default(),
         nns_subnet_id: SubnetId::from(PrincipalId::new_subnet_test_id(0)),
+        canister_migrations: Default::default(),
     };
 
     StateMachineTestFixture {

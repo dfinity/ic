@@ -1,54 +1,6 @@
 use super::*;
 use assert_matches::assert_matches;
 use ic_test_utilities::types::ids::subnet_test_id;
-use std::{
-    collections::hash_map::DefaultHasher,
-    hash::{Hash, Hasher},
-};
-
-fn hash(seed: u64, counter: u32) -> u64 {
-    let mut s = DefaultHasher::new();
-    seed.hash(&mut s);
-    counter.hash(&mut s);
-    s.finish()
-}
-
-fn allocate_canister_id(
-    rt: &RoutingTable,
-    me: SubnetId,
-    seed: u64,
-    seq_no: &mut u32,
-    canister_find: &dyn Fn(CanisterId) -> bool,
-) -> CanisterId {
-    let ranges: CanisterIdRanges = rt.ranges(me);
-    // The sum of the length of all ranges.
-    let r = ranges.total_count();
-    assert!(r > 0x100);
-    // Try 1000 times
-    for _ in 0..1000 {
-        // Compute a random Canister ID h in the current range of the subnet's
-        // allocation.
-        let h = 0x100 * (hash(seed, *seq_no) as u128 % (r / 0x100));
-        // Increase the sequence number.
-        *seq_no += 1;
-        // .locate() returns the h'th Canister ID across all the ranges
-        let cid = ranges.locate(h as u64);
-        // Check that we got an application group ID.
-        assert!(canister_id_into_u64(cid).trailing_zeros() >= 8);
-        // Sanity check: the Canister ID routes to our SN.
-        assert_eq!(rt.route(cid.get()), Some(me));
-        // Check in our canister map if the Canister ID is already
-        // mapped to a canister.
-        if canister_find(cid) {
-            println!("Very unlikely event happened: a Canister ID clash for 0x{:x?} at sequence number {}!",
-                     cid, *seq_no);
-            continue;
-        }
-        return cid;
-    }
-    // Then panic.
-    panic!();
-}
 
 fn new_canister_id_ranges(ranges: Vec<(u64, u64)>) -> CanisterIdRanges {
     let ranges = ranges
@@ -73,6 +25,18 @@ fn new_routing_table(ranges: Vec<((u64, u64), u64)>) -> RoutingTable {
     RoutingTable(map)
 }
 
+fn new_canister_migrations(migrations: Vec<((u64, u64), Vec<u64>)>) -> CanisterMigrations {
+    let mut map = BTreeMap::new();
+    for ((start, end), subnet_ids) in migrations {
+        let range = CanisterIdRange {
+            start: CanisterId::from(start),
+            end: CanisterId::from(end),
+        };
+        map.insert(range, subnet_ids.into_iter().map(subnet_test_id).collect());
+    }
+    CanisterMigrations(map)
+}
+
 #[test]
 fn invalid_canister_id_ranges() {
     let ranges = CanisterIdRanges(vec![CanisterIdRange {
@@ -81,7 +45,7 @@ fn invalid_canister_id_ranges() {
     }]);
     assert_matches!(
         ranges.well_formed(),
-        Err(WellFormedError::CanisterIdRangeNonClosedRange(_))
+        Err(WellFormedError::CanisterIdRangeEmptyRange(_))
     );
 
     let ranges = CanisterIdRanges(vec![
@@ -102,14 +66,14 @@ fn invalid_canister_id_ranges() {
 
 #[test]
 fn invalid_routing_table() {
-    // empty range
+    // Empty range.
     let rt = new_routing_table([((0x1000, 0x1ff), 0)].to_vec());
     assert_matches!(
         rt.well_formed(),
-        Err(WellFormedError::RoutingTableNonEmptyRange(_))
+        Err(WellFormedError::RoutingTableEmptyRange(_))
     );
 
-    // overlaping ranges.
+    // Overlapping ranges.
     let rt = new_routing_table([((0, 0x100ff), 123), ((0x10000, 0x200ff), 7)].to_vec());
     assert_matches!(
         rt.well_formed(),
@@ -118,7 +82,7 @@ fn invalid_routing_table() {
 }
 
 #[test]
-fn valid_example() {
+fn valid_routing_table() {
     // Valid example
     let rt = new_routing_table(
         [
@@ -131,7 +95,9 @@ fn valid_example() {
         ]
         .to_vec(),
     );
+
     assert_eq!(rt.well_formed(), Ok(()));
+
     assert!(rt.route(CanisterId::from(0).get()) == None);
     assert!(rt.route(CanisterId::from(0x99).get()) == None);
     assert!(rt.route(CanisterId::from(0x100).get()) == Some(subnet_test_id(1)));
@@ -145,21 +111,12 @@ fn valid_example() {
     assert!(rt.route(CanisterId::from(0x8ffff).get()) == Some(subnet_test_id(8)));
     assert!(rt.route(CanisterId::from(0x90000).get()) == Some(subnet_test_id(9)));
     assert!(rt.route(CanisterId::from(0xffffffffffffffff).get()) == Some(subnet_test_id(0xf)));
+
     assert_eq!(rt.ranges(subnet_test_id(1)).well_formed(), Ok(()));
     assert!(
         rt.ranges(subnet_test_id(1)).0
             == new_canister_id_ranges(vec![(0x100, 0x100ff), (0x50000, 0x50fff)]).0
     );
-    let mut seq_no = 0;
-    let cid = allocate_canister_id(
-        &rt,
-        subnet_test_id(1),
-        17,
-        &mut seq_no,
-        &(|x| x <= CanisterId::from(0x100ff)),
-    );
-    println!("CID 0x{:x?}, seq_no {}", cid, seq_no);
-    assert!(cid > CanisterId::from(0x10000));
 }
 
 #[test]
@@ -311,4 +268,106 @@ fn can_optimize_routing_table() {
             rt.route(CanisterId::from(i).into())
         );
     }
+}
+
+#[test]
+fn canister_migrations_empty_range() {
+    let cm = new_canister_migrations(vec![((0x1000, 0x1ff), vec![0, 1])]);
+    assert_matches!(
+        cm.well_formed(),
+        Err(WellFormedError::CanisterMigrationsEmptyRange(_))
+    );
+}
+
+#[test]
+fn canister_migrations_overlapping_ranges() {
+    let cm = new_canister_migrations(vec![
+        ((0, 0x100ff), vec![0, 1]),
+        ((0x10000, 0x200ff), vec![0, 1]),
+    ]);
+    assert_matches!(
+        cm.well_formed(),
+        Err(WellFormedError::CanisterMigrationsNotDisjoint(_))
+    );
+}
+
+#[test]
+fn canister_migrations_single_subnet_trace() {
+    let cm = new_canister_migrations(vec![((0, 0x1000), vec![0])]);
+    assert_matches!(
+        cm.well_formed(),
+        Err(WellFormedError::CanisterMigrationsInvalidTrace(_))
+    );
+}
+
+#[test]
+fn canister_migrations_repeated_subnet_in_trace() {
+    let cm = new_canister_migrations(vec![((0, 0x1000), vec![0, 1, 1])]);
+    assert_matches!(
+        cm.well_formed(),
+        Err(WellFormedError::CanisterMigrationsInvalidTrace(_))
+    );
+}
+
+#[test]
+fn canister_migrations_try_from_success() {
+    let mut map = BTreeMap::new();
+    map.insert(
+        CanisterIdRange {
+            start: CanisterId::from(0),
+            end: CanisterId::from(1),
+        },
+        vec![subnet_test_id(13), subnet_test_id(14)],
+    );
+    assert_matches!(CanisterMigrations::try_from(map), Ok(_));
+}
+
+#[test]
+fn canister_migrations_try_from_invalid() {
+    let mut map = BTreeMap::new();
+    map.insert(
+        CanisterIdRange {
+            start: CanisterId::from(0),
+            end: CanisterId::from(1),
+        },
+        vec![],
+    );
+    assert_matches!(
+        CanisterMigrations::try_from(map),
+        Err(WellFormedError::CanisterMigrationsInvalidTrace(_))
+    );
+}
+
+#[test]
+fn valid_canister_migrations() {
+    fn trace(trace: &[u64]) -> Option<Vec<SubnetId>> {
+        Some(trace.iter().map(|&subnet| subnet_test_id(subnet)).collect())
+    }
+
+    let t1 = vec![1, 2];
+    let t2 = vec![2, 3];
+    let t3 = vec![1, 3];
+    let t4 = vec![8, 9, 8]; // Same subnet twice.
+    let t5 = vec![9, 8];
+
+    let rt = new_canister_migrations(vec![
+        ((0x100, 0x100ff), t1.clone()),
+        ((0x20000, 0x2ffff), t2.clone()),
+        ((0x50000, 0x50fff), t3.clone()),
+        ((0x80000, 0x8ffff), t4.clone()),
+        ((0x90000, 0xfffff), t5.clone()),
+    ]);
+
+    assert_eq!(rt.well_formed(), Ok(()));
+
+    assert_eq!(None, rt.lookup(CanisterId::from(0)));
+    assert_eq!(None, rt.lookup(CanisterId::from(0x99)));
+    assert_eq!(trace(&t1), rt.lookup(CanisterId::from(0x100)));
+    assert_eq!(None, rt.lookup(CanisterId::from(0x10100)));
+    assert_eq!(trace(&t2), rt.lookup(CanisterId::from(0x20500)));
+    assert_eq!(trace(&t3), rt.lookup(CanisterId::from(0x50050)));
+    assert_eq!(None, rt.lookup(CanisterId::from(0x100000)));
+    assert_eq!(trace(&t4), rt.lookup(CanisterId::from(0x8ffff)));
+    assert_eq!(trace(&t5), rt.lookup(CanisterId::from(0x90000)));
+    assert_eq!(None, rt.lookup(CanisterId::from(0xffffffffffffffff)));
 }

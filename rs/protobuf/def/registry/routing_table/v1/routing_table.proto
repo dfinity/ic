@@ -28,3 +28,22 @@ message RoutingTable {
   // Defined as `repeated` instead of `map` in order to preserve ordering.
   repeated Entry entries = 1;
 }
+
+// In-progress canister migrations.
+message CanisterMigrations {
+  // Describes an in-progress canister migration.
+  //
+  // The canisters in `range` are being sequentially migrated between the subnet
+  // IDs in the list (usually only two, i.e. `A -> B`; but not necessarily, e.g.
+  // `A -> B -> C` or even `A -> B -> A`).
+  message Entry {
+    // Canister ID range being migrated.
+    CanisterIdRange range = 1;
+
+    // Ordered list of subnet IDs tracing the path of the migration.
+    repeated types.v1.SubnetId subnet_ids = 2;
+  }
+
+  // Defined as `repeated` instead of `map` in order to preserve ordering.
+  repeated Entry entries = 1;
+}

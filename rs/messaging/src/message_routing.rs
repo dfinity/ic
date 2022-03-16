@@ -534,12 +534,17 @@ impl BatchProcessorImpl {
 
         let routing_table_record = self.registry.get_routing_table(registry_version)?;
         let routing_table = routing_table_record.unwrap_or_default();
+        let canister_migrations = self
+            .registry
+            .get_canister_migrations(registry_version)?
+            .unwrap_or_default();
         let nns_subnet_id = self.get_nns_subnet_id(registry_version);
 
         Ok(NetworkTopology {
             subnets,
             routing_table: Arc::new(routing_table),
             nns_subnet_id,
+            canister_migrations: Arc::new(canister_migrations),
         })
     }
 

@@ -251,6 +251,7 @@ fn empty_network_topology() {
     let network_topology = NetworkTopology {
         subnets: BTreeMap::new(),
         routing_table: Arc::new(RoutingTable::default()),
+        canister_migrations: Arc::new(CanisterMigrations::default()),
         nns_subnet_id: subnet_test_id(42),
     };
 
@@ -287,6 +288,7 @@ fn network_topology_bitcoin_testnet_subnets() {
             }
         ],
         routing_table: Arc::new(RoutingTable::default()),
+        canister_migrations: Arc::new(CanisterMigrations::default()),
         nns_subnet_id: subnet_test_id(42),
     };
 
@@ -317,6 +319,7 @@ fn network_topology_ecdsa_subnets() {
             }
         ],
         routing_table: Arc::new(RoutingTable::default()),
+        canister_migrations: Arc::new(CanisterMigrations::default()),
         nns_subnet_id: subnet_test_id(42),
     };
 
