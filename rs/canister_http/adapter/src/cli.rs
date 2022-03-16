@@ -50,7 +50,6 @@ impl Cli {
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use crate::config;
     use std::io::Write;
     use std::str::FromStr;
     use tempfile::NamedTempFile;
@@ -124,18 +123,8 @@ pub mod test {
         };
         let result = cli.get_config();
         let config = result.unwrap();
-        assert_eq!(
-            config.http_connect_timeout_secs,
-            config::default_http_connect_timeout_secs()
-        );
-        assert_eq!(
-            config.http_request_timeout_secs,
-            config::default_http_request_timeout_secs()
-        );
-        assert_eq!(
-            config.http_request_size_limit_bytes,
-            config::default_http_request_size_limit_bytes()
-        );
+        let expected_config = Config::default();
+        assert_eq!(config, expected_config);
     }
 
     // This function tests having an unknown field in the JSON. The unknown field is ignored and it falls back to the defaults.
@@ -154,28 +143,22 @@ pub mod test {
         };
         let result = cli.get_config();
         let config = result.unwrap();
-        assert_eq!(
-            config.http_connect_timeout_secs,
-            config::default_http_connect_timeout_secs()
-        );
-        assert_eq!(
-            config.http_request_timeout_secs,
-            config::default_http_request_timeout_secs()
-        );
-        assert_eq!(
-            config.http_request_size_limit_bytes,
-            config::default_http_request_size_limit_bytes()
-        );
+        let expected_config = Config::default();
+        assert_eq!(config, expected_config);
     }
 
-    // This function tests a fully specified config file. It overwrites all default values.
+    // This function tests a partially specified config file. It overwrites all default values.
     #[test]
-    fn test_cli_get_full_config_json() {
+    fn test_cli_get_partial_config_json() {
         let json = r#"
         {
-            "http_connect_timeout_secs": 3,
-            "http_request_timeout_secs": 10,
-            "http_request_size_limit_bytes": 1073741824
+            "http_request_timeout_secs": 20,
+            "logger": {
+                "dc_id": 200,
+                "format": "text_full",
+                "debug_overrides": [],
+                "block_on_overflow": false
+            }        
         }       
         "#;
 
@@ -189,8 +172,65 @@ pub mod test {
         };
         let result = cli.get_config();
         let config = result.unwrap();
-        assert_eq!(config.http_connect_timeout_secs, 3);
-        assert_eq!(config.http_request_timeout_secs, 10);
-        assert_eq!(config.http_request_size_limit_bytes, 1073741824);
+        let expected_config = Config {
+            http_request_timeout_secs: 20,
+            logger: ic_config::logger::Config {
+                dc_id: 200,
+                format: ic_config::logger::LogFormat::TextFull,
+                debug_overrides: Vec::new(),
+                block_on_overflow: false,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        assert_eq!(config, expected_config);
+    }
+
+    // This function tests a fully specified config file. It overwrites all default values.
+    #[test]
+    fn test_cli_get_full_config_json() {
+        let json = r#"
+        {
+            "http_connect_timeout_secs": 20,
+            "http_request_timeout_secs": 50,
+            "http_request_size_limit_bytes": 1073741824,
+            "logger": {
+                "node_id": 0,
+                "dc_id": 200,
+                "level": "info",
+                "format": "json",
+                "debug_overrides": [],
+                "enabled_tags": [],
+                "block_on_overflow": true
+            }        
+        }       
+        "#;
+
+        let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
+        writeln!(tmpfile, "{}", json).expect("Failed to write to tmp file");
+
+        // should use the default values
+        let cli = Cli {
+            config: tmpfile.path().to_owned(),
+            verbose: true,
+        };
+        let result = cli.get_config();
+        let config = result.unwrap();
+        let expected_config = Config {
+            http_connect_timeout_secs: 20,
+            http_request_timeout_secs: 50,
+            http_request_size_limit_bytes: 1073741824,
+            logger: ic_config::logger::Config {
+                node_id: 0,
+                dc_id: 200,
+                level: slog::Level::Info,
+                format: ic_config::logger::LogFormat::Json,
+                debug_overrides: Vec::new(),
+                ..Default::default()
+            },
+        };
+
+        assert_eq!(config, expected_config);
     }
 }
