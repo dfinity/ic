@@ -569,7 +569,15 @@ class IcDeploymentInventory:
                 else:
                     node_config["subnet_type"] = "app_subnet"
 
-                node_config["ipv6_address"] = node_vars["ipv6"]
+                if "ipv6" in node_vars.keys():
+                    node_config["ipv6_address"] = node_vars["ipv6"]
+                if "ipv6_gateway" in node_vars.keys():
+                    node_config["ipv6_gateway"] = node_vars["ipv6_gateway"]
+                if "ipv4_address" in node_vars.keys():
+                    node_config["ipv4_address"] = node_vars["ipv4_address"]
+                if "ipv4_gateway" in node_vars.keys():
+                    node_config["ipv4_gateway"] = node_vars["ipv4_gateway"]
+
                 use_hsm = node_vars.get("use_hsm")
                 if use_hsm:
                     node_config["use_hsm"] = use_hsm
