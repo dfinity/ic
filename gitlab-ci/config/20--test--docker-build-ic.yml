@@ -17,16 +17,24 @@ docker-build-ic-img:
     - .ubuntu-nix-docker-pinned-dc
     - .rules-parent-pipeline
   needs:
-    - cargo-build-canisters
-    - cargo-build-release-linux-native
     - artifacts-upload-to-s3
   stage: guest-os-build
   script:
     - |
       set -euo pipefail
       echo "Pipeline source: ${CI_PIPELINE_SOURCE}"
-      VERSION=$("${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/find-build-id.sh)
+      VERSION=$(cat VERSION)
       export VERSION
+
+      # release
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
+          --git-rev="${VERSION}" --remote-path="release" \
+          --out="artifacts/release"
+      # canisters
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
+          --git-rev="${VERSION}" --remote-path="canisters" \
+          --out="artifacts/canisters"
+
       capsule -v -t "${VERSION}" -- \
       gitlab-ci/tools/docker-build-ic -a=i
       # we only collect artifacts/docker-build-ic/icos

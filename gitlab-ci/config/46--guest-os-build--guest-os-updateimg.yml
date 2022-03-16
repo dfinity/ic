@@ -5,8 +5,7 @@ guest-os-updateimg-build:
   retry: 1
   stage: guest-os-build
   needs:
-    - cargo-build-canisters   # For build-id
-    - cargo-build-release-linux-native
+    - artifacts-upload-to-s3
   variables:
       BUILD_EXTRA_ARGS: ""
       BUILD_EXTRA_SUFFIX: ""
@@ -16,8 +15,13 @@ guest-os-updateimg-build:
 
       BUILD_OUT="build-out/update-img${BUILD_EXTRA_SUFFIX}"
       UPLOAD_TARGET="guest-os/update-img${BUILD_EXTRA_SUFFIX}"
-      VERSION=$("${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/find-build-id.sh)
+      VERSION=$(cat VERSION)
+      export VERSION
       echo "Build ID: ${VERSION}"
+
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
+          --git-rev="${VERSION}" --remote-path="release" \
+          --out="artifacts/release"
 
       ls -lah /var/run/docker.sock; groups
 

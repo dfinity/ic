@@ -2,15 +2,30 @@ e2e-scalability-suite-test:
   extends:
     - .e2e-test-base
   needs:
-    - guest-os-diskimg
-    - cargo-build-release-linux-native
-    - cargo-build-canisters
+    - job: artifacts-upload-to-s3
+    - job: guest-os-diskimg
+      artifacts: false
   artifacts:
     paths:
     - ic-os/guestos/test-out/e2e-scalability-suite-test
     - scalability/
   script:
     - |
+      VERSION=$(cat VERSION)
+      export VERSION
+      # release
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
+          --git-rev="${VERSION}" --remote-path="release" \
+          --out="artifacts/release"
+      # canisters
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
+          --git-rev="${VERSION}" --remote-path="canisters" \
+          --out="artifacts/canisters"
+      # disk-img
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
+          --git-rev="${VERSION}" --remote-path="guest-os/disk-img" \
+          --out="ic-os/guestos/build-out/disk-img"
+
       # Make sure the host has mounted necessary devices into the docker container.
       # And check dependencies.
       ls -lah /dev/kvm /dev/net/tun "${CI_PROJECT_DIR}/artifacts/release" "${CI_PROJECT_DIR}/ic-os/guestos/build-out"
