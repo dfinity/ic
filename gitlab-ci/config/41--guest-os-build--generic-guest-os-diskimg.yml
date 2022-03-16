@@ -4,14 +4,17 @@ generic-guest-os-diskimg:
     - .rules-parent-pipeline-autorun-on-trigger
   stage: guest-os-build
   needs:
-    - cargo-build-canisters  # Needed for correct calculation of the Build ID
-    - cargo-build-release-linux-native
+    - artifacts-upload-to-s3
   script:
     - |
       set -xeuo pipefail
 
-      VERSION=$("${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/find-build-id.sh)
+      VERSION=$(cat VERSION)
+      export VERSION
       echo "Build ID: ${VERSION}"
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
+          --git-rev="${VERSION}" --remote-path="release" \
+          --out="artifacts/release"
 
       ls -lah /var/run/docker.sock; groups
 

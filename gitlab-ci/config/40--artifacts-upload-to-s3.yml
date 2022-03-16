@@ -15,12 +15,16 @@ artifacts-upload-to-s3:
       optional: true
     - job: dfx-build-release-darwin
       optional: true
+  artifacts:
+    paths:
+    - VERSION
   script:
     - |
       set -exuo pipefail
 
       VERSION=$("${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/find-build-id.sh)
       echo "Build ID: ${VERSION}"
+      echo "$VERSION" > VERSION
 
       buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
         gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" "artifacts/release" release
