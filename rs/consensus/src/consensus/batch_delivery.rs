@@ -118,10 +118,18 @@ pub fn deliver_batches(
                     ecdsa_summary.and_then(|ecdsa| {
                         let chain = build_consensus_block_chain(pool.pool(), &summary, &block);
                         let block_reader = EcdsaBlockReaderImpl::new(chain);
-                        block_reader
-                            .transcript(ecdsa.current_key_transcript.as_ref())
-                            .ok()
-                            .and_then(|transcript| get_tecdsa_master_public_key(&transcript).ok())
+                        let transcript_ref = ecdsa.current_key_transcript.as_ref();
+                        match block_reader.transcript(transcript_ref) {
+                            Ok(transcript) =>  get_tecdsa_master_public_key(&transcript).ok(),
+                            Err(err) => {
+                                warn!(
+                                    log,
+                                    "deliver_batches(): failed to translate transcript ref {:?}: {:?}",
+                                    transcript_ref, err
+                                );
+                                None
+                            }
+                        }
                     })
                 });
 
