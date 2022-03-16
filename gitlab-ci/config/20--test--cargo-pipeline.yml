@@ -12,9 +12,16 @@ gen-cargo-pipeline:
       $SHELL_WRAPPER nix-shell --run "
         python gen_gitlab_cargo_pipeline.py ../../../rs/ ../../../ic-os -v --out=../../../child-pipeline.yml
       " ../shell.nix
+      cd -
+      # this tags are required on ci runners
+      DCS=("zh" "ch" "sf")
+      RANDOM=$$$(date +%s)
+      echo "DC_TAG=${DCS[$RANDOM % ${#DCS[@]} ]}" >> dc.env
   artifacts:
     paths:
       - child-pipeline.yml
+    reports:
+      dotenv: dc.env
 
 cargo-pipeline:
   extends: .cargo-rules-autorun-on-trigger
@@ -25,6 +32,7 @@ cargo-pipeline:
       optional: true
   variables:
     CI_PARENT_PIPELINE_SOURCE: "${CI_PIPELINE_SOURCE}"
+    SELECTED_DC: "$DC_TAG"
   trigger:
     include:
       - artifact: child-pipeline.yml

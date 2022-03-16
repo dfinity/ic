@@ -1,6 +1,6 @@
 build-determinism-binaries:
   extends:
-    - .ubuntu-nix-docker
+    - .ubuntu-nix-docker-pinned-dc
     - .rules-parent-pipeline
   stage: build-determinism-test
   allow_failure: true
@@ -39,7 +39,7 @@ build-determinism-binaries:
 
 build-determinism-canisters:
   extends:
-    - .ubuntu-nix-docker
+    - .ubuntu-nix-docker-pinned-dc
     - .rules-parent-pipeline
   stage: build-determinism-test
   allow_failure: true
@@ -73,7 +73,7 @@ build-determinism-canisters:
 
 build-determinism-update-img:
   extends:
-    - .ubuntu-nix-docker
+    - .ubuntu-nix-docker-pinned-dc
     - .rules-parent-pipeline
   stage: build-determinism-test
   needs:
