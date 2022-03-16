@@ -92,6 +92,8 @@ VALUES=$(echo ${CONFIG} \
     .ipv6_prefix,
     .ipv6_subnet,
     .ipv6_address,
+    .ipv4_gateway,
+    .ipv4_address,
     .hostname,
     .subnet_type,
     .subnet_idx,
@@ -99,11 +101,13 @@ VALUES=$(echo ${CONFIG} \
     .use_hsm,
     .type
 ] | join("\u0001")')
-while IFS=$'\1' read -r ipv6_prefix ipv6_subnet ipv6_address hostname subnet_type subnet_idx node_idx use_hsm type; do
+while IFS=$'\1' read -r ipv6_prefix ipv6_subnet ipv6_address ipv4_gateway ipv4_address hostname subnet_type subnet_idx node_idx use_hsm type; do
     eval "declare -A __RAW_NODE_$NODES=(
         ['ipv6_prefix']=$ipv6_prefix
         ['ipv6_subnet']=$ipv6_subnet
         ['ipv6_address']=$ipv6_address
+	['ipv4_gateway']=$ipv4_gateway
+        ['ipv4_address']=$ipv4_address
         ['subnet_type']=$subnet_type
         ['hostname']=$hostname
         ['subnet_idx']=$subnet_idx
@@ -207,7 +211,9 @@ function generate_boundary_node_config() {
             local subnet_idx=$(echo ${nodes} | jq -r '.subnet_idx')
             local node_idx=$(echo ${nodes} | jq -r '.node_idx')
             NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
-            cp "${IC_PREP_DIR}/nns_public_key.pem" "${CONFIG_DIR}/$NODE_PREFIX/nns_public_key.pem"
+            if [ -f "${IC_PREP_DIR}/nns_public_key.pem" ]; then
+                cp "${IC_PREP_DIR}/nns_public_key.pem" "${CONFIG_DIR}/$NODE_PREFIX/nns_public_key.pem"
+            fi
             echo "nns_url=${NNS_URL}" >"${CONFIG_DIR}/$NODE_PREFIX/nns.conf"
         done
     done
@@ -220,6 +226,8 @@ function generate_network_config() {
             local hostname=${NODE["hostname"]}
             local subnet_idx=${NODE["subnet_idx"]}
             local node_idx=${NODE["node_idx"]}
+            local ipv4_address=${NODE["ipv4_address"]}
+            local ipv4_gateway=${NODE["ipv4_gateway"]}
 
             # Define hostname
             NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
@@ -229,6 +237,21 @@ function generate_network_config() {
             echo "name_servers=${NAME_SERVERS}" >>"${CONFIG_DIR}/$NODE_PREFIX/network.conf"
             echo "name_servers_fallback=${NAME_SERVERS_FALLBACK}" >>"${CONFIG_DIR}/$NODE_PREFIX/network.conf"
 
+            # Set ipv4 address
+            if [ -z ${ipv4_address:-} ]; then
+                echo "ipv4_address is unset"
+            else
+                echo "ip_address=${ipv4_address}" >>"${CONFIG_DIR}/$NODE_PREFIX/network.conf"
+            fi
+
+            # Set ipv4 gateway
+            if [ -z ${ipv4_gateway:-} ]; then
+                echo "ipv4_gateway is unset"
+            else
+                echo "ip_gateway=${ipv4_gateway}" >>"${CONFIG_DIR}/$NODE_PREFIX/network.conf"
+            fi
+
+            cat "${CONFIG_DIR}/$NODE_PREFIX/network.conf"
             # IPv6 network configuration is obtained from the Router Advertisement.
         fi
     done
