@@ -20,7 +20,6 @@ pub mod messages;
 pub mod messaging;
 pub mod registry;
 pub mod replica_config;
-pub mod rpc_bridge;
 pub mod self_validating_payload;
 pub mod state_manager;
 pub mod time_source;
