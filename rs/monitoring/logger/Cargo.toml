@@ -8,7 +8,6 @@ chrono = "0.4.19"
 ic-config = { path = "../../config" }
 ic-context-logger = { path = "../context_logger" }
 ic-protobuf = { path = "../../protobuf" }
-ic-types = { path = "../../types/types" }
 serde = { version = "1.0.99", features = [ "derive" ] }
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
 slog-async = { version = "2.5", features = ["nested-values"] }

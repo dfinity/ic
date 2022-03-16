@@ -37,14 +37,12 @@ slog = { version = "2.5.2", features = [
     "max_level_trace",
     "release_max_level_debug",
 ] }
-slog-term = "2.6.0"
 tempfile = "3.1.0"
 thiserror = "1.0"
 url = "2.1.1"
 
 [dev-dependencies]
 assert_matches = "1"
-slog-async = "2.5.0"
 pretty_assertions = "0.6"
 
 [lib]

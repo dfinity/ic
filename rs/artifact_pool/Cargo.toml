@@ -28,7 +28,6 @@ serde = { version = "1.0.99", features = [ "derive" ] }
 serde_json = "1.0.40"
 serde-bytes-repr = "0.1.5"
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
-slog-scope = "4.1.2"
 tempfile = "3.1.0"
 lmdb-rkv-sys = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "1cf86b5cc09947e94a787065cadd163a42ef7f18" }
 nix = "0.23.0"
