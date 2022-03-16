@@ -1,0 +1,30 @@
+package(
+  default_visibility = ["//visibility:public"]
+)
+
+filegroup(
+  name = "all_sources",
+  srcs = glob(["**"], exclude = ["target", "*.swp"]),
+)
+
+genrule(
+  name = "binaries",
+  srcs = [":all_sources"],
+  outs = [
+    "ic-replica",
+    "ic-orchestrator",
+    "ic-admin",
+  ],
+  local = True,
+  cmd_bash = """
+  cargo build --manifest-path rs/Cargo.toml --release \
+    --bin replica \
+    --bin orchestrator \
+    --bin ic-admin
+  cp $$CARGO_TARGET_DIR/release/replica "$(location ic-replica)"
+  cp $$CARGO_TARGET_DIR/release/orchestrator "$(location ic-orchestrator)"
+  cp $$CARGO_TARGET_DIR/release/ic-admin "$(location ic-admin)"
+  """,
+)
+
+

@@ -16,15 +16,18 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
         apt-transport-https ca-certificates curl gnupg lsb-release && \
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg && \
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null && \
+    curl -fsSL https://bazel.build/bazel-release.pub.gpg | gpg --dearmor -o /etc/apt/trusted.gpg.d/bazel.gpg && \
+    echo "deb [arch=amd64] https://storage.googleapis.com/bazel-apt stable jdk1.8" | tee /etc/apt/sources.list.d/bazel.list > /dev/null && \
     apt -yq update && \
     apt -yqq install --no-install-recommends \
         build-essential pkg-config libssl-dev llvm-10-dev llvm-dev liblmdb-dev clang clang-10 cmake libbz2-dev gcc-multilib zlib1g-dev \
         lldb libc-bin libclang-10-dev liblz4-dev librocksdb-dev libsnappy-dev libzstd-dev zstd vim emacs nano jq \
         zip unzip rclone rsync bc csmith gcc lld lld-10 libc++-10-dev libcsmith-dev sqlite3 libsqlite3-dev libselinux-dev libunwind-dev \
         qemu-system-x86 ovmf iproute2 dosfstools mtools fakeroot faketime android-sdk-ext4-utils \
-        policycoreutils python3 python3-requests python3-pip python3-gflags python3-cbor pipenv shellcheck \
+        policycoreutils python3 python3-requests python3-pip python3-gflags python3-cbor pipenv shellcheck bazel-5.0.0 \
         sudo docker-ce-cli ripgrep patchelf asciidoctor plantuml graphviz cpio nodejs npm gosu pigz && \
-    gem install asciidoctor-diagram rouge
+    gem install asciidoctor-diagram rouge && \
+    ln -s $(which bazel-5.0.0) /usr/bin/bazel
 
 # Add the `${USER}` user, and the required folders
 ARG USER=ubuntu
