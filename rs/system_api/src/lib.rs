@@ -2668,7 +2668,7 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
-    fn ic0_debug_print(&self, src: u32, size: u32, heap: &[u8]) {
+    fn ic0_debug_print(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()> {
         let msg = match valid_subslice("ic0.debug_print", src, size, heap) {
             Ok(bytes) => String::from_utf8_lossy(bytes).to_string(),
             Err(_) => {
@@ -2683,9 +2683,10 @@ impl SystemApi for SystemApiImpl {
             self.sandbox_safe_system_state.canister_id, msg
         );
         trace_syscall!(self, ic0_debug_print, src, size, summarize(heap, src, size));
+        Ok(())
     }
 
-    fn ic0_trap(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorError {
+    fn ic0_trap(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()> {
         let result = {
             let msg = valid_subslice("trap", src, size, heap)
                 .map(|bytes| String::from_utf8_lossy(bytes).to_string())
@@ -2693,7 +2694,7 @@ impl SystemApi for SystemApiImpl {
             CalledTrap(msg)
         };
         trace_syscall!(self, ic0_trap, src, size, summarize(heap, src, size));
-        result
+        Err(result)
     }
 }
 
