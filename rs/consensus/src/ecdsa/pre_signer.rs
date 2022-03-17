@@ -602,9 +602,12 @@ impl EcdsaPreSignerImpl {
         }
 
         let mut rng = rand::thread_rng();
+        let mut exclude_set = BTreeSet::new();
+        exclude_set.insert(self.node_id);
         match ic_crypto_test_utils_canister_threshold_sigs::corrupt_idkg_dealing(
             &idkg_dealing,
             transcript_params,
+            &exclude_set,
             &mut rng,
         ) {
             Ok(dealing) => {
@@ -647,6 +650,12 @@ impl EcdsaPreSignerImpl {
             if error.is_replicated() {
                 self.metrics
                     .pre_sign_errors_inc("verify_dealing_private_permanent");
+                warn!(
+                    self.log,
+                    "Dealing private verification(permanent error): {}, error = {:?}",
+                    dealing,
+                    error
+                );
                 return vec![EcdsaChangeAction::HandleInvalid(
                     id.clone(),
                     format!(
@@ -935,6 +944,21 @@ impl<'a> EcdsaTranscriptBuilderImpl<'a> {
                             }
                         })
                         .collect();
+
+                    // Debug for now
+                    let mut content_hash = BTreeSet::new();
+                    for share in &support_shares {
+                        content_hash.insert(ic_crypto::crypto_hash(&share.content));
+                    }
+                    if content_hash.len() > 1 {
+                        warn!(
+                            self.log,
+                            "Unexpected multi share content: support_shares = {}, content_hash = {}",
+                            support_shares.len(),
+                            content_hash.len()
+                        );
+                        self.metrics.payload_errors_inc("invalid_content_hash");
+                    }
 
                     if let Some(multi_sig) = self.crypto_aggregate_dealing_support(
                         transcript_state.transcript_params,

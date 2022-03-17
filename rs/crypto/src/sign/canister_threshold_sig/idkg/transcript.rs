@@ -523,7 +523,7 @@ fn ensure_sufficient_openings(
 
     for complaint_openings in openings.values() {
         if complaint_openings.len() < reconstruction_threshold_usize {
-            return Err(IDkgLoadTranscriptError::InvalidArguments {
+            return Err(IDkgLoadTranscriptError::InsufficientOpenings {
                 internal_error: format!(
                     "insufficient number of openings: got {}, but required {}",
                     complaint_openings.len(),
