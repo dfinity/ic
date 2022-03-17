@@ -17,18 +17,32 @@ use ic_registry_client_helpers::subnet::{IngressMessageSettings, SubnetRegistry}
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     artifact::IngressMessageId,
+    consensus::BlockPayload,
+    crypto::CryptoHashOf,
     malicious_flags::MaliciousFlags,
     time::{Time, UNIX_EPOCH},
-    RegistryVersion, SubnetId,
+    Height, RegistryVersion, SubnetId,
 };
-use prometheus::Histogram;
-use std::sync::{Arc, RwLock};
+use prometheus::{Histogram, IntGauge};
+use std::{
+    collections::{BTreeMap, HashSet},
+    sync::{Arc, RwLock},
+};
+
+/// Cache of sets of message ids for past payloads. The index used here is a
+/// tuple (Height, HashOfBatchPayload) for two reasons:
+/// 1. We want to purge this cache by height, for those below certified height.
+/// 2. There could be more than one payloads at a given height due to blockchain
+/// branching.
+type IngressPayloadCache =
+    BTreeMap<(Height, CryptoHashOf<BlockPayload>), Arc<HashSet<IngressMessageId>>>;
 
 /// Keeps the metrics to be exported by the IngressManager
 struct IngressManagerMetrics {
     ingress_handler_time: Histogram,
     ingress_selector_get_payload_time: Histogram,
     ingress_selector_validate_payload_time: Histogram,
+    ingress_payload_cache_size: IntGauge,
 }
 
 impl IngressManagerMetrics {
@@ -49,6 +63,10 @@ impl IngressManagerMetrics {
                 "Ingress Selector vaidate_payload execution time in seconds",
                 decimal_buckets(-3, 1),
             ),
+            ingress_payload_cache_size: metrics_registry.int_gauge(
+                "ingress_payload_cache_size",
+                "The number of HashSets in payload builder's ingress payload cache.",
+            ),
         }
     }
 }
@@ -59,6 +77,7 @@ impl IngressManagerMetrics {
 pub struct IngressManager {
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     ingress_hist_reader: Box<dyn IngressHistoryReader>,
+    ingress_payload_cache: Arc<RwLock<IngressPayloadCache>>,
     registry_client: Arc<dyn RegistryClient>,
     ingress_signature_crypto: Arc<dyn IngressSigVerifier + Send + Sync>,
     metrics: IngressManagerMetrics,
@@ -91,6 +110,7 @@ impl IngressManager {
         Self {
             consensus_pool_cache,
             ingress_hist_reader,
+            ingress_payload_cache: Arc::new(RwLock::new(BTreeMap::new())),
             registry_client,
             ingress_signature_crypto,
             metrics: IngressManagerMetrics::new(metrics_registry),

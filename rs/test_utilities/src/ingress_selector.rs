@@ -7,9 +7,11 @@ use ic_interfaces::{
 use ic_types::{
     artifact::IngressMessageId,
     batch::{IngressPayload, ValidationContext},
+    consensus::Payload,
     messages::SignedIngress,
-    NumBytes,
+    Height, NumBytes, Time,
 };
+use std::{collections::HashSet, sync::Arc};
 
 /// A fake `IngressSelector` implementation based on a `FakeQueue` of ingress
 /// message batches.
@@ -32,6 +34,15 @@ impl IngressSelector for FakeIngressSelector {
         _context: &ValidationContext,
     ) -> ValidationResult<IngressPayloadValidationError> {
         Ok(())
+    }
+
+    fn filter_past_payloads(
+        &self,
+        _past_payloads: &[(Height, Time, Payload)],
+    ) -> Vec<Arc<HashSet<IngressMessageId>>> {
+        // NOTE: This is valid, since we never look at the past_payloads in
+        // `get_ingress_payload` and `validate_ingress_payload`
+        vec![]
     }
 
     fn request_purge_finalized_messages(&self, _message_ids: Vec<IngressMessageId>) {}

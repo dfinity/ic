@@ -187,7 +187,6 @@ impl NotaryMetrics {
 pub struct PayloadBuilderMetrics {
     pub get_payload_duration: Histogram,
     pub validate_payload_duration: Histogram,
-    pub ingress_payload_cache_size: IntGauge,
     pub past_payloads_length: Histogram,
 }
 
@@ -207,10 +206,6 @@ impl PayloadBuilderMetrics {
                 // 0.1ms, 0.2ms, 0.5ms, 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, 100ms, 200ms, 500ms,
                 // 1s, 2s, 5s
                 decimal_buckets(-4, 0),
-            ),
-            ingress_payload_cache_size: metrics_registry.int_gauge(
-                "ingress_payload_cache_size",
-                "The number of HashSets in payload builder's ingress payload cache.",
             ),
             past_payloads_length: metrics_registry.histogram(
                 "consensus_past_payloads_length",
