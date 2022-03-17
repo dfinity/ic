@@ -4,11 +4,14 @@ use bitcoin::{
     {consensus::encode, network::message::NetworkMessage},
 };
 use ic_logger::{debug, error, ReplicaLogger};
-use std::{io, net::SocketAddr, pin::Pin, time::Duration};
+use std::{io, net::SocketAddr, time::Duration};
 use thiserror::Error;
 use tokio::{
-    io::{AsyncRead, AsyncWrite, AsyncWriteExt},
-    net::TcpStream,
+    io::AsyncWriteExt,
+    net::{
+        tcp::{OwnedReadHalf, OwnedWriteHalf},
+        TcpStream,
+    },
     sync::mpsc::{Sender, UnboundedReceiver},
     time::timeout,
 };
@@ -100,7 +103,8 @@ pub struct Stream {
     /// This field is used as the buffer for reading messages.
     data: Vec<u8>,
     /// This field contains the actual stream handling the network connection.
-    inner: TcpStream,
+    read_half: OwnedReadHalf,
+    write_half: OwnedWriteHalf,
     /// This field is used to provide the magic value to the raw network message.
     /// The magic number is used to identity the type of Bitcoin network being accessed.
     magic: u32,
@@ -154,10 +158,12 @@ impl Stream {
                 connect_result.map_err(StreamError::Io)?
             }
         };
+        let (read_half, write_half) = inner.into_split();
         Ok(Self {
             address,
             data,
-            inner,
+            read_half,
+            write_half,
             magic,
             network_message_receiver,
             stream_event_sender,
@@ -180,7 +186,7 @@ impl Stream {
                 // return the unexpected end-of-file error.
                 Err(encode::Error::Io(ref err)) if err.kind() == io::ErrorKind::UnexpectedEof => {
                     let count = self
-                        .inner
+                        .read_half
                         .try_read(&mut self.data)
                         .map_err(StreamError::Io)?;
 
@@ -220,10 +226,11 @@ impl Stream {
             payload: network_message,
         };
         let bytes = serialize(&raw_network_message);
-        self.write(bytes.as_slice())
+        self.write_half
+            .write(bytes.as_slice())
             .await
             .map_err(StreamError::Io)?;
-        self.flush().await.map_err(StreamError::Io)
+        self.write_half.flush().await.map_err(StreamError::Io)
     }
 
     /// This function is used to handle a single iteration of the stream.
@@ -231,7 +238,7 @@ impl Stream {
     /// Second, the stream attempt to read a message from the BTC node. If no message is found,
     /// the stream tick completes. If a message is found, the stream sends a StreamEvent on the
     /// stream event sender so the Network struct may react.
-    pub async fn tick(&mut self) -> StreamResult<()> {
+    async fn tick(&mut self) -> StreamResult<()> {
         if let Ok(network_message) = self.network_message_receiver.try_recv() {
             self.write_message(network_message).await?;
         }
@@ -262,93 +269,61 @@ impl Stream {
 
 /// This function is used to kick off a new stream that will be connected to a
 /// the Network struct and related connection struct via a set of channels.
-pub async fn handle_stream(config: StreamConfig) {
-    let address = config.address;
-    let logger = config.logger.clone();
-    // Clone the sender here to handle errors that the Stream may return.
-    let stream_event_sender = config.stream_event_sender.clone();
-    debug!(logger, "Connecting to {}", address);
-    let stream_result = Stream::connect(config).await;
-    let mut stream = match stream_result {
-        Ok(stream) => {
-            stream_event_sender
-                .send(StreamEvent {
-                    address,
-                    kind: StreamEventKind::Connected,
-                })
-                .await
-                .ok();
-            stream
-        }
-        Err(err) => {
-            let kind = match err {
-                StreamError::Io(err) => {
-                    debug!(logger, "{}", err);
-                    StreamEventKind::FailedToConnect
-                }
-                StreamError::Timeout => {
-                    debug!(logger, "Timed out connecting to {}", address);
-                    StreamEventKind::FailedToConnect
-                }
-                _ => {
-                    error!(logger, "{}", err);
-                    StreamEventKind::Disconnected
-                }
-            };
-            stream_event_sender
-                .send(StreamEvent { address, kind })
-                .await
-                .ok();
-            return;
-        }
-    };
-
-    loop {
-        if stream.tick().await.is_err() {
-            stream_event_sender
-                .send(StreamEvent {
-                    address,
-                    kind: StreamEventKind::Disconnected,
-                })
-                .await
-                .ok();
-            return;
+pub fn handle_stream(config: StreamConfig) -> tokio::task::JoinHandle<()> {
+    tokio::task::spawn(async move {
+        let address = config.address;
+        let logger = config.logger.clone();
+        // Clone the sender here to handle errors that the Stream may return.
+        let stream_event_sender = config.stream_event_sender.clone();
+        debug!(logger, "Connecting to {}", address);
+        let stream_result = Stream::connect(config).await;
+        let mut stream = match stream_result {
+            Ok(stream) => {
+                stream_event_sender
+                    .send(StreamEvent {
+                        address,
+                        kind: StreamEventKind::Connected,
+                    })
+                    .await
+                    .ok();
+                stream
+            }
+            Err(err) => {
+                let kind = match err {
+                    StreamError::Io(err) => {
+                        debug!(logger, "{}", err);
+                        StreamEventKind::FailedToConnect
+                    }
+                    StreamError::Timeout => {
+                        debug!(logger, "Timed out connecting to {}", address);
+                        StreamEventKind::FailedToConnect
+                    }
+                    _ => {
+                        error!(logger, "{}", err);
+                        StreamEventKind::Disconnected
+                    }
+                };
+                stream_event_sender
+                    .send(StreamEvent { address, kind })
+                    .await
+                    .ok();
+                return;
+            }
         };
 
-        tokio::time::sleep(Duration::from_millis(250)).await;
-    }
-}
+        loop {
+            if stream.tick().await.is_err() {
+                stream_event_sender
+                    .send(StreamEvent {
+                        address,
+                        kind: StreamEventKind::Disconnected,
+                    })
+                    .await
+                    .ok();
+                return;
+            };
 
-impl AsyncRead for Stream {
-    fn poll_read(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &mut tokio::io::ReadBuf<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        AsyncRead::poll_read(Pin::new(&mut self.inner), cx, buf)
-    }
-}
-
-impl AsyncWrite for Stream {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &[u8],
-    ) -> std::task::Poll<Result<usize, std::io::Error>> {
-        AsyncWrite::poll_write(Pin::new(&mut self.inner), cx, buf)
-    }
-
-    fn poll_flush(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), std::io::Error>> {
-        AsyncWrite::poll_flush(Pin::new(&mut self.inner), cx)
-    }
-
-    fn poll_shutdown(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), std::io::Error>> {
-        AsyncWrite::poll_shutdown(Pin::new(&mut self.inner), cx)
-    }
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        }
+    })
 }

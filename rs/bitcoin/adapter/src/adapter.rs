@@ -3,7 +3,7 @@ use crate::{
     connectionmanager::ConnectionManager,
     stream::handle_stream,
     transaction_manager::TransactionManager,
-    Config, ProcessEvent, ProcessEventError,
+    Config, HasHeight, ProcessEvent, ProcessEventError,
 };
 use ic_logger::ReplicaLogger;
 use std::{net::SocketAddr, time::Instant};
@@ -84,7 +84,7 @@ impl Adapter {
         // After an event is dispatched, the managers `tick` method is called to process possible
         // outgoing messages.
         self.connection_manager
-            .tick(&self.blockchain_manager, handle_stream);
+            .tick(self.blockchain_manager.get_height(), handle_stream);
         self.blockchain_manager.tick(&mut self.connection_manager);
         self.transaction_manager.tick(&mut self.connection_manager);
     }
