@@ -9,5 +9,5 @@ mod rpc_server;
 mod config;
 
 pub use cli::Cli;
-pub use config::{get_canister_http_logger, Config};
+pub use config::{get_canister_http_logger, Config, IncomingSource};
 pub use rpc_server::CanisterHttp;
