@@ -102,7 +102,15 @@ pub enum ResponseStatus {
 /// a case the caller has too keep the state until the callee returns.
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub enum NonReplicatedQueryKind {
-    Stateful,
+    Stateful {
+        call_context_id: CallContextId,
+        #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
+        #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
+        network_topology: Arc<NetworkTopology>,
+        /// Optional outgoing request under construction. If `None` no outgoing
+        /// request is currently under construction.
+        outgoing_request: Option<RequestInPrep>,
+    },
     Pure,
 }
 
@@ -172,18 +180,11 @@ pub enum ApiType {
 
     NonReplicatedQuery {
         time: Time,
+        caller: PrincipalId,
+        own_subnet_id: SubnetId,
         #[serde(with = "serde_bytes")]
         incoming_payload: Vec<u8>,
-        caller: PrincipalId,
-        call_context_id: CallContextId,
         data_certificate: Option<Vec<u8>>,
-        own_subnet_id: SubnetId,
-        #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
-        #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
-        network_topology: Arc<NetworkTopology>,
-        /// Optional outgoing request under construction. If `None` no outgoing
-        /// request is currently under construction.
-        outgoing_request: Option<RequestInPrep>,
         // Begins as empty and used to accumulate data for sending replies.
         #[serde(with = "serde_bytes")]
         response_data: Vec<u8>,
@@ -354,23 +355,18 @@ impl ApiType {
     #[allow(clippy::too_many_arguments)]
     pub fn non_replicated_query(
         time: Time,
-        incoming_payload: Vec<u8>,
         caller: PrincipalId,
-        call_context_id: CallContextId,
         own_subnet_id: SubnetId,
-        network_topology: Arc<NetworkTopology>,
+        incoming_payload: Vec<u8>,
         data_certificate: Option<Vec<u8>>,
         query_kind: NonReplicatedQueryKind,
     ) -> Self {
         Self::NonReplicatedQuery {
             time,
-            incoming_payload,
             caller,
-            call_context_id,
             own_subnet_id,
-            network_topology,
+            incoming_payload,
             data_certificate,
-            outgoing_request: None,
             response_data: vec![],
             response_status: ResponseStatus::NotRepliedYet,
             max_reply_size: MAX_NON_REPLICATED_QUERY_REPLY_SIZE,
@@ -468,7 +464,7 @@ impl ApiType {
             }
             | ApiType::InspectMessage { .. } => ModificationTracking::Ignore,
             ApiType::NonReplicatedQuery {
-                query_kind: NonReplicatedQueryKind::Stateful,
+                query_kind: NonReplicatedQueryKind::Stateful { .. },
                 ..
             }
             | ApiType::Start
@@ -816,6 +812,22 @@ impl SystemApiImpl {
         ))
     }
 
+    fn get_msg_caller_id(&self, method_name: &str) -> Result<PrincipalId, HypervisorError> {
+        match &self.api_type {
+            ApiType::Start { .. }
+            | ApiType::Heartbeat { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. } => Err(self.error_for(method_name)),
+            ApiType::Init { caller, .. }
+            | ApiType::Update { caller, .. }
+            | ApiType::ReplicatedQuery { caller, .. }
+            | ApiType::PreUpgrade { caller, .. }
+            | ApiType::InspectMessage { caller, .. }
+            | ApiType::NonReplicatedQuery { caller, .. } => Ok(*caller),
+        }
+    }
+
     fn get_response_info(&mut self) -> Option<(&mut Vec<u8>, &NumBytes, &mut ResponseStatus)> {
         match &mut self.api_type {
             ApiType::Start { .. }
@@ -1117,19 +1129,9 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn ic0_msg_caller_size(&self) -> HypervisorResult<u32> {
-        let result = match &self.api_type {
-            ApiType::Start { .. }
-            | ApiType::Heartbeat { .. }
-            | ApiType::Cleanup { .. }
-            | ApiType::ReplyCallback { .. }
-            | ApiType::RejectCallback { .. } => Err(self.error_for("ic0_msg_caller_size")),
-            ApiType::Init { caller, .. }
-            | ApiType::Update { caller, .. }
-            | ApiType::ReplicatedQuery { caller, .. }
-            | ApiType::NonReplicatedQuery { caller, .. }
-            | ApiType::PreUpgrade { caller, .. }
-            | ApiType::InspectMessage { caller, .. } => Ok(caller.as_slice().len() as u32),
-        };
+        let result = self
+            .get_msg_caller_id("ic0_msg_caller_size")
+            .map(|caller_id| caller_id.as_slice().len() as u32);
         trace_syscall!(self, ic0_msg_caller_size, result);
         result
     }
@@ -1141,25 +1143,16 @@ impl SystemApi for SystemApiImpl {
         size: u32,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
-        let result = match &self.api_type {
-            ApiType::Start { .. }
-            | ApiType::Heartbeat { .. }
-            | ApiType::Cleanup { .. }
-            | ApiType::ReplyCallback { .. }
-            | ApiType::RejectCallback { .. } => Err(self.error_for("ic0_msg_caller_copy")),
-            ApiType::Init { caller, .. }
-            | ApiType::Update { caller, .. }
-            | ApiType::ReplicatedQuery { caller, .. }
-            | ApiType::PreUpgrade { caller, .. }
-            | ApiType::InspectMessage { caller, .. }
-            | ApiType::NonReplicatedQuery { caller, .. } => {
-                let id_bytes = caller.as_slice();
+        let result = match self.get_msg_caller_id("ic0_msg_caller_copy") {
+            Ok(caller_id) => {
+                let id_bytes = caller_id.as_slice();
                 valid_subslice("ic0.msg_caller_copy heap", dst, size, heap)?;
                 let slice = valid_subslice("ic0.msg_caller_copy id", offset, size, id_bytes)?;
                 let (dst, size) = (dst as usize, size as usize);
                 deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
                 Ok(())
             }
+            Err(err) => Err(err),
         };
         trace_syscall!(
             self,
@@ -1642,10 +1635,13 @@ impl SystemApi for SystemApiImpl {
                 ..
             }
             | ApiType::NonReplicatedQuery {
-                call_context_id,
                 own_subnet_id,
-                network_topology,
-                query_kind: NonReplicatedQueryKind::Stateful,
+                query_kind:
+                    NonReplicatedQueryKind::Stateful {
+                        call_context_id,
+                        network_topology,
+                        ..
+                    },
                 ..
             }
             | ApiType::Heartbeat {
@@ -1784,8 +1780,10 @@ impl SystemApi for SystemApiImpl {
                 outgoing_request, ..
             }
             | ApiType::NonReplicatedQuery {
-                outgoing_request,
-                query_kind: NonReplicatedQueryKind::Stateful,
+                query_kind:
+                    NonReplicatedQueryKind::Stateful {
+                        outgoing_request, ..
+                    },
                 ..
             }
             | ApiType::Heartbeat {
@@ -1851,8 +1849,10 @@ impl SystemApi for SystemApiImpl {
                 outgoing_request, ..
             }
             | ApiType::NonReplicatedQuery {
-                outgoing_request,
-                query_kind: NonReplicatedQueryKind::Stateful,
+                query_kind:
+                    NonReplicatedQueryKind::Stateful {
+                        outgoing_request, ..
+                    },
                 ..
             }
             | ApiType::Heartbeat {
@@ -1896,8 +1896,10 @@ impl SystemApi for SystemApiImpl {
                 outgoing_request, ..
             }
             | ApiType::NonReplicatedQuery {
-                outgoing_request,
-                query_kind: NonReplicatedQueryKind::Stateful,
+                query_kind:
+                    NonReplicatedQueryKind::Stateful {
+                        outgoing_request, ..
+                    },
                 ..
             }
             | ApiType::Heartbeat {
@@ -2003,11 +2005,13 @@ impl SystemApi for SystemApiImpl {
                 self.push_output_request(req)
             }
             ApiType::NonReplicatedQuery {
-                call_context_id,
                 own_subnet_id,
-                outgoing_request,
-                network_topology,
-                query_kind: NonReplicatedQueryKind::Stateful,
+                query_kind:
+                    NonReplicatedQueryKind::Stateful {
+                        call_context_id,
+                        network_topology,
+                        outgoing_request,
+                    },
                 ..
             } => {
                 let req_in_prep = outgoing_request.take().ok_or_else(|| {
@@ -2654,7 +2658,6 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_mint_cycles")),
-
             ApiType::Update { .. }
             | ApiType::Heartbeat { .. }
             | ApiType::ReplyCallback { .. }

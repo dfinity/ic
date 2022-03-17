@@ -309,13 +309,15 @@ fn test_canister_stateful_query_support() {
     let mut api = get_system_api(
         ApiType::non_replicated_query(
             mock_time(),
-            vec![],
             user_test_id(1).get(),
-            CallContextId::from(1),
             builder.own_subnet_id,
-            builder.network_topology,
+            vec![],
             Some(vec![1]),
-            NonReplicatedQueryKind::Stateful,
+            NonReplicatedQueryKind::Stateful {
+                call_context_id: CallContextId::from(1),
+                network_topology: builder.network_topology,
+                outgoing_request: None,
+            },
         ),
         &get_system_state(),
         cycles_account_manager,

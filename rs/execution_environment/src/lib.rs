@@ -27,7 +27,6 @@ use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{NetworkTopology, ReplicatedState};
-use ic_system_api::NonReplicatedQueryKind;
 use ic_types::{messages::CallContextId, SubnetId};
 use ingress_filter::IngressFilter;
 use query_handler::{HttpQueryHandler, InternalHttpQueryHandler};
@@ -57,6 +56,15 @@ pub enum QueryExecutionType {
         network_topology: Arc<NetworkTopology>,
         query_kind: NonReplicatedQueryKind,
     },
+}
+
+/// This enum indicates whether execution of a non-replicated query
+/// should keep track of the state or not.
+#[doc(hidden)]
+#[derive(Clone, PartialEq, Eq)]
+pub enum NonReplicatedQueryKind {
+    Stateful,
+    Pure,
 }
 
 /// Helper function to constructs the public facing components that the
