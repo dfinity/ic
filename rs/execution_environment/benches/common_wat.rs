@@ -18,6 +18,8 @@ pub enum Module {
     Test,
     /// WAT module with a test function with stable memory import.
     StableTest,
+    /// WAT module with a `ic0_call_new()` System API call in a loop.
+    CallNewLoop,
 }
 
 impl Module {
@@ -27,7 +29,12 @@ impl Module {
         N: std::fmt::Display,
         P: RenderParams,
     {
-        self.from_sections(Self::sections(LoopIterations::Mi, name, params, result))
+        let loop_iterations = match self {
+            Module::Test | Module::StableTest => LoopIterations::Mi,
+            // The call new module has a built-in loop with a `ic0_call_new()`
+            Module::CallNewLoop => LoopIterations::One,
+        };
+        self.from_sections(Self::sections(loop_iterations, name, params, result))
     }
 
     /// Render a complete WAT module from imports and body.
@@ -65,6 +72,43 @@ impl Module {
             (func $test (export "canister_update test")
                 (local $i i32) (local $s i32)
                 (drop (call $ic0_stable_grow (i32.const 1)))
+                {BODY}
+            )
+        )
+            "#,
+                    IMPORTS = imports,
+                    BODY = body
+                )
+            }
+            Module::CallNewLoop => {
+                let body = Self::render_loop(
+                    LoopIterations::Mi,
+                    format!(
+                        r#"
+                            (call $ic0_call_new
+                                (i32.const 0)   (i32.const 10)
+                                (i32.const 100) (i32.const 18)
+                                (i32.const 11)  (i32.const 0) ;; non-existent function
+                                (i32.const 22)  (i32.const 0) ;; non-existent function
+                            )
+                            {BODY}"#,
+                        BODY = body
+                    ),
+                );
+                format!(
+                    r#"
+        (module
+            (import "ic0" "call_new"
+                (func $ic0_call_new
+                (param $callee_src i32)         (param $callee_size i32)
+                (param $name_src i32)           (param $name_size i32)
+                (param $reply_fun i32)          (param $reply_env i32)
+                (param $reject_fun i32)         (param $reject_env i32)
+            ))
+            {IMPORTS}
+            (memory $mem 1)
+            (func $test (export "canister_update test")
+                (local $i i32) (local $s i32)
                 {BODY}
             )
         )

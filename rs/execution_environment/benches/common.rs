@@ -31,6 +31,7 @@ use std::sync::Arc;
 pub const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(10_000_000_000);
 // Note: this canister ID is required for the `ic0_mint_cycles()`
 pub const LOCAL_CANISTER_ID: u64 = CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET;
+pub const REMOTE_CANISTER_ID: u64 = 1;
 pub const USER_ID: u64 = 0;
 pub const SUBNET_ID: u64 = 1;
 
