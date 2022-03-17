@@ -146,6 +146,9 @@ pub trait Gossip {
 
     /// The method reacts to a transport error message.
     fn on_transport_error(&self, transport_error: TransportError);
+
+    /// The method is called periodically from a dedicated thread.
+    fn on_timer(&self);
 }
 
 /// A request for an artifact sent to the peer.
@@ -360,23 +363,6 @@ impl GossipImpl {
             warn!(self.log, "Malicious behavior: This should never happen!");
         }
     }
-
-    /// The method is called on a periodic timer event.
-    ///
-    /// The periodic invocation of this method guarantees IC liveness.
-    /// Specifically, the following actions occur on each call:
-    ///
-    /// - It polls all artifact clients, enabling the IC to make
-    /// progress without the need for any external triggers.
-    ///
-    /// - It checks each peer for request timeouts and advert download
-    /// eligibility.
-    ///
-    /// In short, the method is a catch-all for a periodic and
-    /// holistic refresh of IC state.
-    pub fn on_timer(&self) {
-        self.download_manager.on_timer();
-    }
 }
 
 /// Canonical Implementation for the *Gossip* trait.
@@ -522,6 +508,23 @@ impl Gossip for GossipImpl {
         // could throttle them (as we would anyway do even with
         // multiple flows support), but then we'll end up with
         // periodic retransmission and not event-based.
+    }
+
+    /// The method is called on a periodic timer event.
+    ///
+    /// The periodic invocation of this method guarantees IC liveness.
+    /// Specifically, the following actions occur on each call:
+    ///
+    /// - It polls all artifact clients, enabling the IC to make
+    /// progress without the need for any external triggers.
+    ///
+    /// - It checks each peer for request timeouts and advert download
+    /// eligibility.
+    ///
+    /// In short, the method is a catch-all for a periodic and
+    /// holistic refresh of IC state.
+    fn on_timer(&self) {
+        self.download_manager.on_timer();
     }
 }
 

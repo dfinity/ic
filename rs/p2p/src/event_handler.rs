@@ -77,7 +77,7 @@ use ic_interfaces::{
     ingress_pool::IngressPoolThrottler,
     transport::{AsyncTransportEventHandler, SendError},
 };
-use ic_logger::{info, replica_logger::ReplicaLogger, trace};
+use ic_logger::{debug, info, replica_logger::ReplicaLogger, trace};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy, registry::subnet::v1::GossipConfig};
 use ic_types::{
@@ -99,8 +99,13 @@ use std::{
     fmt::Debug,
     future::Future,
     pin::Pin,
-    sync::{Arc, Condvar, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering::SeqCst},
+        Arc, Condvar, Mutex,
+    },
     task::{Context, Poll},
+    thread::JoinHandle,
+    time::Duration,
 };
 use strum::IntoEnumIterator;
 use strum_macros::{EnumIter, IntoStaticStr};
@@ -477,6 +482,60 @@ impl Service<SignedIngress> for IngressEventHandler {
     }
 }
 
+/// The P2P struct, which encapsulates all relevant components including gossip
+/// and event handler control.
+#[allow(unused)]
+pub struct P2PTickerThreadJoiner {
+    /// The logger.
+    log: ReplicaLogger,
+    /// The *Gossip* struct with automatic reference counting.
+    gossip: GossipArc,
+    /// The task handles.
+    join_handle: Option<JoinHandle<()>>,
+    /// Flag indicating if P2P has been terminated.
+    killed: Arc<AtomicBool>,
+}
+
+/// Periodic timer duration in milliseconds between polling calls to the P2P
+/// component.
+const P2P_TIMER_DURATION_MS: u64 = 100;
+
+impl P2PTickerThreadJoiner {
+    /// The method starts the P2P timer task in the background.
+    pub fn new(log: ReplicaLogger, gossip: GossipArc) -> Self {
+        let gossip_c = gossip.clone();
+        let log_c = log.clone();
+        let killed = Arc::new(AtomicBool::new(false));
+        let killed_c = Arc::clone(&killed);
+        let join_handle = std::thread::Builder::new()
+            .name("P2P_OnTimer_Thread".into())
+            .spawn(move || {
+                debug!(log_c, "P2P::p2p_timer(): started processing",);
+
+                let timer_duration = Duration::from_millis(P2P_TIMER_DURATION_MS);
+                while !killed_c.load(SeqCst) {
+                    std::thread::sleep(timer_duration);
+                    gossip_c.on_timer();
+                }
+            })
+            .unwrap();
+        Self {
+            log,
+            gossip,
+            killed,
+            join_handle: Some(join_handle),
+        }
+    }
+}
+
+impl Drop for P2PTickerThreadJoiner {
+    /// The method signals the tasks to exit and waits for them to complete.
+    fn drop(&mut self) {
+        self.killed.store(true, SeqCst);
+        self.join_handle.take().unwrap().join().unwrap();
+    }
+}
+
 #[derive(Clone)]
 pub struct AdvertSubscriber {
     log: ReplicaLogger,
@@ -687,6 +746,10 @@ pub mod tests {
 
         /// The method is called on a transport error.
         fn on_transport_error(&self, _transport_error: TransportError) {
+            // Do nothing
+        }
+
+        fn on_timer(&self) {
             // Do nothing
         }
     }
