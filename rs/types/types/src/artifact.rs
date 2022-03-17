@@ -581,7 +581,7 @@ impl TryFrom<pb::ArtifactFilter> for ArtifactFilter {
             )),
             certification_filter: try_from_option_field(
                 filter.certification_message_filter,
-                "ArtifactFilter.ingress_filter",
+                "ArtifactFilter.certification_message_filter",
             )?,
             state_sync_filter: try_from_option_field(
                 filter.state_sync_filter,
