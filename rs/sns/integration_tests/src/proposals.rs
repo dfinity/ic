@@ -302,7 +302,7 @@ fn test_voting_with_three_neurons_with_the_same_stake() {
                     ballot
                 );
                 assert!(
-                    age_seconds < 5.0,
+                    age_seconds < 30.0,
                     "age_seconds = {}. ballot = {:?}",
                     age_seconds,
                     ballot
@@ -324,7 +324,10 @@ fn test_voting_with_three_neurons_with_the_same_stake() {
                 let approval_rating = yes / total;
                 let disapproval_rating = no / total;
 
-                let epsilon = 1e-9;
+                // This may seem a bit generous, but it's actually hard to
+                // precisely predict neuron voting power, because it slowly
+                // grows over time.
+                let epsilon = 10.0e-9;
                 assert!(
                     (2.0 / 3.0 - approval_rating).abs() < epsilon,
                     "{:?}",
