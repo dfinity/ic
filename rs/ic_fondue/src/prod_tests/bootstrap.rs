@@ -1,17 +1,14 @@
-use anyhow::bail;
+use anyhow::{bail, Result};
 use flate2::{write::GzEncoder, Compression};
-use std::{
-    collections::BTreeMap,
-    fs::File,
-    io,
-    net::SocketAddr,
-    path::{Path, PathBuf},
-    process::Command,
-};
+use std::{collections::BTreeMap, fs::File, io, net::SocketAddr, path::PathBuf, process::Command};
 
 use crate::ic_instance::{node_software_version::NodeSoftwareVersion, port_allocator::AddrType};
+use crate::prod_tests::driver_setup::{
+    AUTHORIZED_SSH_ACCOUNTS_DIR, INITIAL_REPLICA_VERSION, JOURNALBEAT_HOSTS, LOG_DEBUG_OVERRIDES,
+};
 use crate::prod_tests::farm::FarmResult;
 use crate::prod_tests::ic::{InternetComputer, Node};
+use crate::prod_tests::test_env::TestEnv;
 use ic_base_types::NodeId;
 
 use ic_prep_lib::{
@@ -21,12 +18,13 @@ use ic_prep_lib::{
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
-use slog::{info, warn};
+use slog::{info, warn, Logger};
 use std::io::Write;
 use std::thread::{self, JoinHandle};
 use url::Url;
 
-use super::{driver_setup::DriverContext, resource::AllocatedVm};
+use super::resource::AllocatedVm;
+use ic_types::ReplicaVersion;
 
 pub type UnassignedNodes = BTreeMap<NodeIndex, NodeConfiguration>;
 pub type NodeVms = BTreeMap<NodeId, AllocatedVm>;
@@ -37,34 +35,35 @@ fn mk_compressed_img_path() -> std::string::String {
     return format!("{}.gz", CONF_IMG_FNAME);
 }
 
-pub fn init_ic<P: AsRef<Path>>(
-    ctx: &DriverContext,
+pub fn init_ic(
     ic: &InternetComputer,
-    prep_dir: P,
-) -> InitializedIc {
+    test_env: &TestEnv,
+    logger: &Logger,
+) -> Result<InitializedIc> {
     let mut next_node_index = 0u64;
-    let working_dir = PathBuf::from(prep_dir.as_ref());
+    let working_dir = test_env.get_path("");
 
     // In production, this dummy hash is not actually checked and exists
     // only as a placeholder: Updating individual binaries (replica/orchestrator)
     // is not supported anymore.
     let dummy_hash = "60958ccac3e5dfa6ae74aa4f8d6206fd33a5fc9546b8abaad65e3f1c4023c5bf".to_string();
+    let initial_replica_version: ReplicaVersion = test_env.read_object(INITIAL_REPLICA_VERSION)?;
     info!(
-        ctx.logger,
-        "Replica Version that is passed in: {:?}", ctx.initial_replica_version
+        logger,
+        "Replica Version that is passed in: {:?}", &initial_replica_version
     );
     let initial_replica = ic
         .initial_version
         .clone()
         .unwrap_or_else(|| NodeSoftwareVersion {
-            replica_version: ctx.initial_replica_version.clone(),
+            replica_version: initial_replica_version,
             // the following are dummy values, these are not used in production
             replica_url: Url::parse("file:///opt/replica").unwrap(),
             replica_hash: dummy_hash.clone(),
             orchestrator_url: Url::parse("file:///opt/replica").unwrap(),
             orchestrator_hash: dummy_hash,
         });
-    info!(ctx.logger, "initial_replica: {:?}", initial_replica);
+    info!(logger, "initial_replica: {:?}", initial_replica);
 
     // Note: NNS subnet should be selected from among the system subnets.
     // If there is no system subnet, fall back on choosing the first one.
@@ -140,12 +139,15 @@ pub fn init_ic<P: AsRef<Path>>(
         ic.ssh_readonly_access_to_unassigned_nodes.clone(),
     );
 
-    ic_config.initialize().expect("can't fail")
+    Ok(ic_config.initialize().expect("can't fail"))
 }
 
+use crate::prod_tests::farm::Farm;
+
 pub fn setup_and_start_vms(
-    ctx: &DriverContext,
     initialized_ic: &InitializedIc,
+    env: &TestEnv,
+    farm: &Farm,
     group_name: &str,
 ) -> anyhow::Result<()> {
     let mut nodes = vec![];
@@ -161,16 +163,14 @@ pub fn setup_and_start_vms(
     let mut join_handles: Vec<JoinHandle<anyhow::Result<()>>> = vec![];
     for node in nodes {
         let group_name = group_name.to_string();
-        let name = node.node_id.to_string();
-        let t_ctx = ctx.clone();
-        let local_store_path = initialized_ic.target_dir.join("ic_registry_local_store");
+        let vm_name = node.node_id.to_string();
+        let t_farm = farm.clone();
+        let t_env = env.clone();
         join_handles.push(thread::spawn(move || {
-            create_config_disk_image(&t_ctx, &node, &group_name, &local_store_path)?;
-            let image_id = upload_config_disk_image(&t_ctx, &node, &group_name)?;
-            t_ctx
-                .farm
-                .attach_disk_image(&group_name, &name, "usb-storage", image_id)?;
-            t_ctx.farm.start_vm(&group_name, &name)?;
+            create_config_disk_image(&node, &t_env, &group_name)?;
+            let image_id = upload_config_disk_image(&node, &t_farm, &group_name)?;
+            t_farm.attach_disk_image(&group_name, &vm_name, "usb-storage", image_id)?;
+            t_farm.start_vm(&group_name, &vm_name)?;
             Ok(())
         }));
     }
@@ -179,7 +179,7 @@ pub fn setup_and_start_vms(
     // Wait for all threads to finish and return an error if any of them fails.
     for jh in join_handles {
         if let Err(e) = jh.join().expect("waiting for a thread failed") {
-            warn!(ctx.logger, "starting VM failed with: {:?}", e);
+            warn!(farm.logger, "starting VM failed with: {:?}", e);
             result = Err(anyhow::anyhow!("failed to set up and start a VM pool"));
         }
     }
@@ -187,48 +187,50 @@ pub fn setup_and_start_vms(
 }
 
 pub fn upload_config_disk_image(
-    ctx: &DriverContext,
     node: &InitializedNode,
+    farm: &Farm,
     group_name: &str,
 ) -> FarmResult<String> {
     let compressed_img_path = mk_compressed_img_path();
     let target_file = PathBuf::from(&node.node_path).join(compressed_img_path.clone());
-    let image_id = ctx
-        .farm
-        .upload_image(group_name, target_file, compressed_img_path)?;
-    info!(ctx.logger, "Uploaded image: {}", image_id);
+    let image_id = farm.upload_image(group_name, target_file, compressed_img_path)?;
+    info!(farm.logger, "Uploaded image: {}", image_id);
     Ok(image_id)
 }
 
 /// side-effectful function that creates the config disk images in the node
 /// directories.
 pub fn create_config_disk_image(
-    ctx: &DriverContext,
     node: &InitializedNode,
+    test_env: &TestEnv,
     group_name: &str,
-    local_store_path: &Path,
 ) -> anyhow::Result<()> {
     let img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
     let mut cmd = Command::new("build-bootstrap-config-image.sh");
+
+    let authorized_ssh_accounts_dir: PathBuf = test_env.get_path(AUTHORIZED_SSH_ACCOUNTS_DIR);
+    let journalbeat_hosts: Vec<String> = test_env.read_object(JOURNALBEAT_HOSTS)?;
+    let log_debug_overrides: Vec<String> = test_env.read_object(LOG_DEBUG_OVERRIDES)?;
+
     cmd.arg(img_path.clone())
         .arg("--ic_registry_local_store")
-        .arg(&local_store_path)
+        .arg(test_env.get_path("ic_registry_local_store"))
         .arg("--ic_crypto")
         .arg(node.crypto_path())
         .arg("--accounts_ssh_authorized_keys")
-        .arg(ctx.authorized_ssh_accounts_dir.path())
+        .arg(authorized_ssh_accounts_dir)
         .arg("--journalbeat_tags")
         .arg(format!("system_test {}", group_name));
 
-    if !ctx.journalbeat_hosts.is_empty() {
+    if !journalbeat_hosts.is_empty() {
         cmd.arg("--journalbeat_hosts")
-            .arg(ctx.journalbeat_hosts.join(" "));
+            .arg(journalbeat_hosts.join(" "));
     }
 
-    if !ctx.log_debug_overrides.is_empty() {
+    if !log_debug_overrides.is_empty() {
         let log_debug_overrides_val = format!(
             "[{}]",
-            ctx.log_debug_overrides
+            log_debug_overrides
                 .iter()
                 .map(|component_unquoted| format!("\"{}\"", component_unquoted))
                 .collect::<Vec<_>>()

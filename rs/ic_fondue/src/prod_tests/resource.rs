@@ -1,12 +1,14 @@
 use crate::prod_tests::ic::{AmountOfMemoryKiB, InternetComputer, Node, NrOfVCPUs};
-use slog::info;
+use anyhow;
 use std::collections::BTreeMap;
 use std::net::IpAddr;
 use url::Url;
 
-use super::driver_setup::DriverContext;
 use super::farm::{CreateVmRequest, PrimaryImage};
+use crate::prod_tests::driver_setup::{BASE_IMG_SHA256, BASE_IMG_URL};
+use crate::prod_tests::farm::Farm;
 use crate::prod_tests::farm::FarmResult;
+use crate::prod_tests::test_env::TestEnv;
 
 const DEFAULT_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(4);
 const DEFAULT_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(25165824); // 24GiB
@@ -92,12 +94,12 @@ pub struct AllocatedVm {
 /// This translates the configuration structure from InternetComputer to a
 /// request for resources (vms)
 pub fn get_resource_request(
-    ctx: &DriverContext,
     config: &InternetComputer,
+    test_env: &TestEnv,
     group_name: &str,
-) -> ResourceRequest {
-    let url = ctx.base_img_url.clone();
-    let primary_image_sha256 = ctx.base_img_sha256.clone();
+) -> anyhow::Result<ResourceRequest> {
+    let url = test_env.read_object(BASE_IMG_URL)?;
+    let primary_image_sha256 = test_env.read_object(BASE_IMG_SHA256)?;
     let mut res_req = ResourceRequest::new(url, primary_image_sha256);
     res_req.group_name = group_name.to_string();
     for s in &config.subnets {
@@ -108,10 +110,10 @@ pub fn get_resource_request(
     for n in &config.unassigned_nodes {
         res_req.add_vm_request(vm_spec_from_node(n));
     }
-    res_req
+    Ok(res_req)
 }
 
-pub fn allocate_resources(ctx: &DriverContext, req: &ResourceRequest) -> FarmResult<ResourceGroup> {
+pub fn allocate_resources(farm: &Farm, req: &ResourceRequest) -> FarmResult<ResourceGroup> {
     let group_name = &req.group_name;
     let mut res_group = ResourceGroup::new(group_name.clone());
     for vm_config in req.vm_configs.iter() {
@@ -131,8 +133,7 @@ pub fn allocate_resources(ctx: &DriverContext, req: &ResourceRequest) -> FarmRes
             },
         );
 
-        let ip_addr = ctx.farm.create_vm(group_name, create_vm_request)?;
-        info!(ctx.logger, "VM({}) IP-Addr: {}", name, ip_addr);
+        let ip_addr = farm.create_vm(group_name, create_vm_request)?;
         res_group.add_vm(AllocatedVm {
             name,
             group_name: group_name.clone(),

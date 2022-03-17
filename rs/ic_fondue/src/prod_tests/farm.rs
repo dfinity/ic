@@ -25,8 +25,8 @@ const MAX_NUMBER_OF_RETRIES: usize = 3;
 #[derive(Clone, Debug)]
 pub struct Farm {
     pub base_url: Url,
+    pub logger: Logger,
     client: Client,
-    logger: Logger,
 }
 
 impl Farm {
@@ -54,11 +54,13 @@ impl Farm {
     /// creates a vm under the group `group_name` and returns the associated
     /// IpAddr
     pub fn create_vm(&self, group_name: &str, vm: CreateVmRequest) -> FarmResult<IpAddr> {
-        let path = format!("group/{}/vm/{}", group_name, vm.name);
+        let path = format!("group/{}/vm/{}", group_name, &vm.name);
         let rb = Self::json(self.post(&path), &vm);
         let resp = self.retry_until_success(rb)?;
         let created_vm = resp.json::<VMCreateResponse>()?;
-        Ok(created_vm.ipv6.parse()?)
+        let ip = created_vm.ipv6.parse()?;
+        info!(self.logger, "VM({}) IP-Addr: {}", &vm.name, &ip);
+        Ok(ip)
     }
 
     /// uploads an image an returns the image id

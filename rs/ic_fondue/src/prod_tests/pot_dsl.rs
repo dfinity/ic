@@ -4,28 +4,43 @@ use std::panic::{catch_unwind, UnwindSafe};
 use crate::ic_manager::IcHandle;
 use crate::pot::FondueTestFn;
 use crate::prod_tests::ic::InternetComputer;
+use crate::prod_tests::test_env::TestEnv;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-pub trait PotConfigFn: FnOnce() -> InternetComputer + UnwindSafe + Send + Sync + 'static {}
-impl<T: FnOnce() -> InternetComputer + UnwindSafe + Send + Sync + 'static> PotConfigFn for T {}
+pub trait PotSetupFn: FnOnce(TestEnv) + UnwindSafe + Send + Sync + 'static {}
+impl<T: FnOnce(TestEnv) + UnwindSafe + Send + Sync + 'static> PotSetupFn for T {}
 
 pub fn suite(name: &str, pots: Vec<Pot>) -> Suite {
     let name = name.to_string();
     Suite { name, pots }
 }
 
-pub fn pot_with_time_limit<F: PotConfigFn>(
+pub fn pot_with_time_limit(
     name: &str,
-    config: F,
+    mut ic: InternetComputer,
     testset: TestSet,
     time_limit: Duration,
 ) -> Pot {
-    Pot::new(name, ExecutionMode::Run, config, testset, Some(time_limit))
+    Pot::new(
+        name,
+        ExecutionMode::Run,
+        move |env| ic.setup_and_start(&env).expect("failed to start IC"),
+        testset,
+        Some(time_limit),
+    )
 }
 
-pub fn pot<F: PotConfigFn>(name: &str, config: F, testset: TestSet) -> Pot {
-    Pot::new(name, ExecutionMode::Run, config, testset, None)
+pub fn pot_with_setup<F: PotSetupFn>(name: &str, setup: F, testset: TestSet) -> Pot {
+    Pot::new(name, ExecutionMode::Run, setup, testset, None)
+}
+
+pub fn pot(name: &str, mut ic: InternetComputer, testset: TestSet) -> Pot {
+    pot_with_setup(
+        name,
+        move |env| ic.setup_and_start(&env).expect("failed to start IC"),
+        testset,
+    )
 }
 
 pub fn seq(tests: Vec<Test>) -> TestSet {
@@ -50,7 +65,7 @@ where
 pub struct Pot {
     pub name: String,
     pub execution_mode: ExecutionMode,
-    pub config: ConfigState,
+    pub setup: ConfigState,
     pub testset: TestSet,
     pub pot_timeout: Option<Duration>,
 }
@@ -59,19 +74,20 @@ pub struct Pot {
 // ownership of it and thus move it out of the object.
 #[allow(clippy::large_enum_variant)]
 pub enum ConfigState {
-    Function(Box<dyn PotConfigFn>),
-    Evaluated(std::thread::Result<InternetComputer>),
+    Function(Box<dyn PotSetupFn>),
+    Evaluated(std::thread::Result<()>),
 }
 
 impl ConfigState {
-    pub fn evaluate(&mut self) -> &std::thread::Result<InternetComputer> {
-        fn dummy() -> InternetComputer {
+    pub fn evaluate(&mut self, test_env: &TestEnv) -> &std::thread::Result<()> {
+        fn dummy(_: TestEnv) {
             unimplemented!()
         }
         let mut tmp = Self::Function(Box::new(dummy));
         std::mem::swap(&mut tmp, self);
+        let env = test_env.clone();
         tmp = match tmp {
-            ConfigState::Function(f) => ConfigState::Evaluated(catch_unwind(f)),
+            ConfigState::Function(f) => ConfigState::Evaluated(catch_unwind(move || f(env))),
             r @ ConfigState::Evaluated(_) => r,
         };
         std::mem::swap(&mut tmp, self);
@@ -80,17 +96,10 @@ impl ConfigState {
         }
         unreachable!()
     }
-
-    pub fn unwrap_ref(&self) -> &InternetComputer {
-        match self {
-            ConfigState::Function(_) => panic!("Called unwrap on not evaluated result!"),
-            ConfigState::Evaluated(r) => r.as_ref().unwrap(),
-        }
-    }
 }
 
 impl Pot {
-    pub fn new<F: PotConfigFn>(
+    pub fn new<F: PotSetupFn>(
         name: &str,
         execution_mode: ExecutionMode,
         config: F,
@@ -100,7 +109,7 @@ impl Pot {
         Self {
             name: name.to_string(),
             execution_mode,
-            config: ConfigState::Function(Box::new(config)),
+            setup: ConfigState::Function(Box::new(config)),
             testset,
             pot_timeout,
         }
@@ -197,14 +206,17 @@ mod tests {
 
     #[test]
     fn config_can_be_lazily_evaluated() {
-        let mut config_state = ConfigState::Function(Box::new(InternetComputer::new));
-        config_state.evaluate().as_ref().unwrap();
+        let mut config_state = ConfigState::Function(Box::new(|_| {}));
+        config_state.evaluate(&TestEnv::new(PathBuf::new()));
     }
 
     #[test]
     fn failing_config_evaluation_can_be_caught() {
-        let mut config_state = ConfigState::Function(Box::new(|| panic!("magic error!")));
-        let e = config_state.evaluate().as_ref().unwrap_err();
+        let mut config_state = ConfigState::Function(Box::new(|_| panic!("magic error!")));
+        let e = config_state
+            .evaluate(&TestEnv::new(PathBuf::new()))
+            .as_ref()
+            .unwrap_err();
         if let Some(s) = e.downcast_ref::<&str>() {
             assert!(s.contains("magic error!"));
         } else {
