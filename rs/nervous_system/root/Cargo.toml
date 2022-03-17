@@ -9,7 +9,9 @@ edition = "2021"
 candid = "0.7.5"
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
+futures = "0.3.8"
 ic-base-types = { path = "../../types/base_types" }
+ic-cdk = { version = "0.3.1", default-features = false }
 ic-crypto-sha = { path = "../../crypto/sha/" }
 ic-nervous-system-common = { path="../common" }
 ic-ic00-types = { path = "../../types/ic00_types" }
