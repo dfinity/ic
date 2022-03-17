@@ -63,7 +63,7 @@ impl ValidationContext {
 
 /// The payload of a batch.
 ///
-/// Contains ingress and XNet messages.
+/// Contains ingress messages, XNet messages and self-validating messages.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct BatchPayload {
     pub ingress: IngressPayload,
@@ -71,8 +71,12 @@ pub struct BatchPayload {
     pub self_validating: SelfValidatingPayload,
 }
 
-/// Return ingress messages, xnet messages, and consensus responses.
-pub type IngressAndXNetMessages = (Vec<SignedIngress>, BTreeMap<SubnetId, CertifiedStreamSlice>);
+/// Return ingress messages, xnet messages, and responses from the bitcoin adapter.
+pub type BatchMessages = (
+    Vec<SignedIngress>,
+    BTreeMap<SubnetId, CertifiedStreamSlice>,
+    Vec<BitcoinAdapterResponse>,
+);
 
 impl BatchPayload {
     pub fn new(
@@ -90,8 +94,12 @@ impl BatchPayload {
     /// Extract and return the set of ingress and xnet messages in a
     /// BatchPayload.
     /// Return error if deserialization of ingress payload fails.
-    pub fn into_messages(self) -> Result<IngressAndXNetMessages, InvalidIngressPayload> {
-        Ok((self.ingress.try_into()?, self.xnet.stream_slices))
+    pub fn into_messages(self) -> Result<BatchMessages, InvalidIngressPayload> {
+        Ok((
+            self.ingress.try_into()?,
+            self.xnet.stream_slices,
+            self.self_validating.0,
+        ))
     }
 
     pub fn is_empty(&self) -> bool {

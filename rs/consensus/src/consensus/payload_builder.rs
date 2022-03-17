@@ -378,7 +378,9 @@ impl PayloadBuilderImpl {
 mod test {
     use super::*;
     use crate::consensus::mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
-    use ic_interfaces::self_validating_payload::NoOpSelfValidatingPayloadBuilder;
+    use ic_btc_types_internal::{
+        BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, GetSuccessorsResponse,
+    };
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_artifact_pool::ingress_pool::TestIngressPool;
     use ic_test_utilities::{
@@ -386,6 +388,7 @@ mod test {
         ingress_selector::FakeIngressSelector,
         mock_time,
         registry::SubnetRecordBuilder,
+        self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
         types::ids::{node_test_id, subnet_test_id},
         types::messages::SignedIngressBuilder,
         xnet_payload_builder::FakeXNetPayloadBuilder,
@@ -409,6 +412,7 @@ mod test {
         registry: Arc<dyn RegistryClient>,
         mut ingress_messages: Vec<Vec<SignedIngress>>,
         mut certified_streams: Vec<BTreeMap<SubnetId, CertifiedStreamSlice>>,
+        responses_from_adapter: Vec<BitcoinAdapterResponse>,
     ) -> PayloadBuilderImpl {
         let ingress_selector = FakeIngressSelector::new();
         ingress_messages
@@ -416,7 +420,8 @@ mod test {
             .for_each(|im| ingress_selector.enqueue(im));
         let xnet_payload_builder =
             FakeXNetPayloadBuilder::make(certified_streams.drain(..).collect());
-        let self_validating_payload_builder = NoOpSelfValidatingPayloadBuilder {};
+        let self_validating_payload_builder =
+            FakeSelfValidatingPayloadBuilder::new().with_responses(responses_from_adapter);
 
         PayloadBuilderImpl::new(
             subnet_test_id(0),
@@ -468,6 +473,7 @@ mod test {
     fn test_get_messages(
         provided_ingress_messages: Vec<SignedIngress>,
         provided_certified_streams: BTreeMap<SubnetId, CertifiedStreamSlice>,
+        provided_responses_from_adapter: Vec<BitcoinAdapterResponse>,
     ) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies { registry, .. } = dependencies(pool_config.clone(), 1);
@@ -475,6 +481,7 @@ mod test {
                 registry,
                 vec![provided_ingress_messages.clone()],
                 vec![provided_certified_streams.clone()],
+                provided_responses_from_adapter.clone(),
             );
             let ingress_pool = TestIngressPool::new(pool_config);
 
@@ -490,7 +497,7 @@ mod test {
                 stable: subnet_record,
             };
 
-            let (ingress_msgs, stream_msgs) = payload_builder
+            let (ingress_msgs, stream_msgs, responses_from_adapter) = payload_builder
                 .get_payload(
                     Height::from(1),
                     &ingress_pool,
@@ -501,17 +508,9 @@ mod test {
                 .into_messages()
                 .unwrap();
 
-            assert_eq!(ingress_msgs.len(), provided_ingress_messages.len());
-            provided_ingress_messages
-                .into_iter()
-                .zip(ingress_msgs.into_iter())
-                .for_each(|(a, b)| assert_eq!(a, b));
-
-            assert_eq!(stream_msgs.len(), provided_certified_streams.len());
-            provided_certified_streams
-                .iter()
-                .zip(stream_msgs.iter())
-                .for_each(|(a, b)| assert_eq!(a, b));
+            assert_eq!(ingress_msgs, provided_ingress_messages);
+            assert_eq!(stream_msgs, provided_certified_streams);
+            assert_eq!(responses_from_adapter, provided_responses_from_adapter);
         })
     }
 
@@ -528,8 +527,14 @@ mod test {
                 )
             })
             .collect();
+        let responses_from_adapter = vec![BitcoinAdapterResponse {
+            response: BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
+                GetSuccessorsResponse::default(),
+            ),
+            callback_id: 0,
+        }];
 
-        test_get_messages(inputs, certified_streams)
+        test_get_messages(inputs, certified_streams, responses_from_adapter)
     }
 
     #[test]
@@ -606,7 +611,8 @@ mod test {
                 make_ingress(1, THREE_QUARTER),
                 make_ingress(2, THREE_QUARTER),
             ];
-            let payload_builder = make_test_payload_impl(registry, ingress, certified_streams);
+            let payload_builder =
+                make_test_payload_impl(registry, ingress, certified_streams, vec![]);
 
             // Build first payload and then validate it
             let payload0 = payload_builder.get_payload(

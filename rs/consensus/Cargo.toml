@@ -36,6 +36,7 @@ strum_macros = "0.23.0"
 assert_matches = "1.3.0"
 criterion = "0.3"
 ic-artifact-pool = { path = "../artifact_pool" }
+ic-btc-types-internal = { path = "../bitcoin/types/internal" }
 ic-config = { path = "../config" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
 ic-ecdsa-object = { path = "./ecdsa_object" }
