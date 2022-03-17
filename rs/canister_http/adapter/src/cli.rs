@@ -50,7 +50,9 @@ impl Cli {
 #[cfg(test)]
 pub mod test {
     use super::*;
+    use crate::IncomingSource;
     use std::io::Write;
+    use std::path::PathBuf;
     use std::str::FromStr;
     use tempfile::NamedTempFile;
 
@@ -153,6 +155,7 @@ pub mod test {
         let json = r#"
         {
             "http_request_timeout_secs": 20,
+            "incoming_source": "Systemd",
             "logger": {
                 "dc_id": 200,
                 "format": "text_full",
@@ -174,6 +177,7 @@ pub mod test {
         let config = result.unwrap();
         let expected_config = Config {
             http_request_timeout_secs: 20,
+            incoming_source: IncomingSource::Systemd,
             logger: ic_config::logger::Config {
                 dc_id: 200,
                 format: ic_config::logger::LogFormat::TextFull,
@@ -195,6 +199,9 @@ pub mod test {
             "http_connect_timeout_secs": 20,
             "http_request_timeout_secs": 50,
             "http_request_size_limit_bytes": 1073741824,
+            "incoming_source": {
+                    "Path": "/tmp/path.socket"
+            },
             "logger": {
                 "node_id": 0,
                 "dc_id": 200,
@@ -221,6 +228,7 @@ pub mod test {
             http_connect_timeout_secs: 20,
             http_request_timeout_secs: 50,
             http_request_size_limit_bytes: 1073741824,
+            incoming_source: IncomingSource::Path(PathBuf::from("/tmp/path.socket")),
             logger: ic_config::logger::Config {
                 node_id: 0,
                 dc_id: 200,
