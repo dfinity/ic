@@ -19,9 +19,7 @@ candid = "0.7.5"
 dfn_candid = {path="../../../rust_canisters/dfn_candid"}
 dfn_core = { path = "../../../rust_canisters/dfn_core" }
 dfn_macro = { path = "../../../rust_canisters/dfn_macro" }
-futures = "0.3.8"
 ic-base-types = {path="../../../types/base_types"}
-ic-cdk = { version = "0.3.1", default-features = false }
 ic-crypto-sha = {path = "../../../crypto/sha/"}
 ic-ic00-types = {path="../../../types/ic00_types"}
 ic-nervous-system-common = { path = "../../../nervous_system/common" }

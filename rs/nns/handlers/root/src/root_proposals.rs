@@ -1,5 +1,3 @@
-use crate::canister_management::do_change_nns_canister;
-
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
@@ -12,7 +10,7 @@ use dfn_core::api::{call, now, CanisterId};
 use dfn_core::println;
 use ic_base_types::{CanisterInstallMode, NodeId, PrincipalId, SubnetId};
 use ic_nervous_system_root::{
-    CanisterIdRecord, CanisterStatusResult, ChangeCanisterProposal, LOG_PREFIX,
+    change_canister, CanisterIdRecord, CanisterStatusResult, ChangeCanisterProposal, LOG_PREFIX,
 };
 use ic_nns_common::registry::get_value;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -439,7 +437,7 @@ pub async fn vote_on_root_proposal_to_upgrade_governance_canister(
             println!("{}", message);
             return Err(message);
         }
-        do_change_nns_canister(payload).await;
+        change_canister(payload).await;
         Ok(())
     } else if proposal.is_byzantine_majority_no() {
         PROPOSALS.with(|proposals| proposals.borrow_mut().remove(&proposer));

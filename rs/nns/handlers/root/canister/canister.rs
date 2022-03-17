@@ -6,7 +6,8 @@ use dfn_core::{
 };
 use ic_base_types::PrincipalId;
 use ic_nervous_system_root::{
-    AddCanisterProposal, ChangeCanisterProposal, StopOrStartCanisterProposal, LOG_PREFIX,
+    change_canister, AddCanisterProposal, ChangeCanisterProposal, StopOrStartCanisterProposal,
+    LOG_PREFIX,
 };
 use ic_nns_common::access_control::check_caller_is_governance;
 use ic_nns_handler_root::{
@@ -115,11 +116,11 @@ fn change_nns_canister() {
     // To do so, we use `over` instead of the more common `over_async`.
     //
     // This will effectively reply synchronously with the first call to the
-    // management canister in do_change_nns_canister.
+    // management canister in change_canister.
     over(candid, |(proposal,): (ChangeCanisterProposal,)| {
-        // Because do_change_nns_canister is async, and because we can't directly use
+        // Because change_canister is async, and because we can't directly use
         // `await`, we need to use the `spawn` trick.
-        let future = canister_management::do_change_nns_canister(proposal);
+        let future = change_canister(proposal);
 
         // Starts the proposal execution, which will continue after this function has
         // returned.

@@ -5136,7 +5136,9 @@ dependencies = [
  "candid",
  "dfn_candid",
  "dfn_core",
+ "futures",
  "ic-base-types",
+ "ic-cdk",
  "ic-crypto-sha",
  "ic-ic00-types",
  "ic-nervous-system-common",
@@ -5264,10 +5266,8 @@ dependencies = [
  "dfn_candid",
  "dfn_core",
  "dfn_macro",
- "futures",
  "hex",
  "ic-base-types",
- "ic-cdk",
  "ic-crypto-sha",
  "ic-ic00-types",
  "ic-nervous-system-common",
@@ -6329,8 +6329,12 @@ dependencies = [
  "candid",
  "dfn_candid",
  "dfn_core",
+ "ic-base-types",
  "ic-nervous-system-common",
  "ic-nervous-system-root",
+ "prost",
+ "prost-build",
+ "serde",
 ]
 
 [[package]]
