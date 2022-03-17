@@ -359,9 +359,12 @@ pub fn bench_execute_update(c: &mut Criterion) {
          common::BenchmarkArgs(
             cloned_canister_state,
             cloned_ingress,
+            _cloned_reject,
             cloned_time,
             cloned_network_topology,
             cloned_execution_parameters,
+            _cloned_call_origin,
+            _cloned_callback,
         )| {
             let (_state, instructions, action, _bytes) = hypervisor.execute_update(
                 cloned_canister_state,

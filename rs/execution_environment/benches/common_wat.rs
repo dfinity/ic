@@ -20,6 +20,8 @@ pub enum Module {
     StableTest,
     /// WAT module with a `ic0_call_new()` System API call in a loop.
     CallNewLoop,
+    /// WAT module with a message callback handler.
+    Callback,
 }
 
 impl Module {
@@ -30,7 +32,7 @@ impl Module {
         P: RenderParams,
     {
         let loop_iterations = match self {
-            Module::Test | Module::StableTest => LoopIterations::Mi,
+            Module::Test | Module::StableTest | Module::Callback => LoopIterations::Mi,
             // The call new module has a built-in loop with a `ic0_call_new()`
             Module::CallNewLoop => LoopIterations::One,
         };
@@ -108,6 +110,23 @@ impl Module {
             {IMPORTS}
             (memory $mem 1)
             (func $test (export "canister_update test")
+                (local $i i32) (local $s i32)
+                {BODY}
+            )
+        )
+            "#,
+                    IMPORTS = imports,
+                    BODY = body
+                )
+            }
+            Module::Callback => {
+                format!(
+                    r#"
+        (module
+            {IMPORTS}
+            (memory $mem 1)
+            (table funcref (elem $test))
+            (func $test (param $env i32)
                 (local $i i32) (local $s i32)
                 {BODY}
             )
