@@ -31,7 +31,7 @@ use ic_interfaces::{
     time_source::SysTimeSource,
     transport::Transport,
 };
-use ic_interfaces_p2p::{IngressIngestionService, P2PRunner};
+use ic_interfaces_p2p::IngressIngestionService;
 use ic_logger::{debug, info, replica_logger::ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_p2p::{
@@ -84,17 +84,15 @@ const MAX_INGRESS_MESSAGES_PER_SECOND: u64 = 100;
 /// The P2P struct, which encapsulates all relevant components including gossip
 /// and event handler control.
 #[allow(unused)]
-struct P2P {
+pub struct P2PThreadJoiner {
     /// The logger.
-    pub(crate) log: ReplicaLogger,
+    log: ReplicaLogger,
     /// The *Gossip* struct with automatic reference counting.
     gossip: Arc<GossipImpl>,
     /// The task handles.
-    task_handles: Option<JoinHandle<()>>,
+    join_handle: Option<JoinHandle<()>>,
     /// Flag indicating if P2P has been terminated.
     killed: Arc<AtomicBool>,
-    /// The P2P event handler control with automatic reference counting.
-    event_handler: Arc<AsyncTransportEventHandlerImpl>,
 }
 
 /// The P2P state sync client.
@@ -157,38 +155,10 @@ pub fn create_networking_stack(
     cycles_account_manager: Arc<CyclesAccountManager>,
     local_store_time_reader: Option<Arc<dyn LocalStoreCertifiedTimeReader>>,
     registry_poll_delay_duration_ms: u64,
-) -> Result<(IngressIngestionService, Box<dyn P2PRunner>), String> {
-    let transport = transport.unwrap_or_else(|| {
-        create_transport(
-            node_id,
-            transport_config.clone(),
-            registry_client.get_latest_version(),
-            metrics_registry.clone(),
-            tls_handshake,
-            rt_handle.clone(),
-            log.clone(),
-        )
-    });
-    let p2p_flow_tags = transport_config
-        .p2p_flows
-        .iter()
-        .map(|flow_config| FlowTag::from(flow_config.flow_tag))
-        .collect();
-
-    let event_handler = Arc::new(AsyncTransportEventHandlerImpl::new(
-        node_id,
-        log.clone(),
-        &metrics_registry,
-        ChannelConfig::from(fetch_gossip_config(registry_client.clone(), subnet_id)),
-    ));
-    transport
-        .register_client(event_handler.clone())
-        .map_err(|e| format!("transport registration failed: {:?}", e))?;
-    let advert_subscriber = AdvertSubscriber::new(
-        log.clone(),
-        &metrics_registry,
-        fetch_gossip_config(registry_client.clone(), subnet_id),
-    );
+) -> (IngressIngestionService, P2PThreadJoiner) {
+    let gossip_config = fetch_gossip_config(registry_client.clone(), subnet_id);
+    let advert_subscriber =
+        AdvertSubscriber::new(log.clone(), &metrics_registry, gossip_config.clone());
 
     // Now we setup the Artifact Pools and the manager.
     let artifact_manager = setup_artifact_manager(
@@ -217,6 +187,33 @@ pub fn create_networking_stack(
     )
     .unwrap();
 
+    let transport = transport.unwrap_or_else(|| {
+        create_transport(
+            node_id,
+            transport_config.clone(),
+            registry_client.get_latest_version(),
+            metrics_registry.clone(),
+            tls_handshake,
+            rt_handle.clone(),
+            log.clone(),
+        )
+    });
+
+    let event_handler = Arc::new(AsyncTransportEventHandlerImpl::new(
+        node_id,
+        log.clone(),
+        &metrics_registry,
+        ChannelConfig::from(gossip_config),
+    ));
+    transport
+        .register_client(event_handler.clone())
+        .expect("transport registration failed");
+
+    let p2p_flow_tags = transport_config
+        .p2p_flows
+        .iter()
+        .map(|flow_config| FlowTag::from(flow_config.flow_tag))
+        .collect();
     let gossip = Arc::new(GossipImpl::new(
         node_id,
         subnet_id,
@@ -232,13 +229,7 @@ pub fn create_networking_stack(
     event_handler.start(gossip.clone());
     advert_subscriber.start(gossip.clone());
 
-    let p2p = P2P {
-        log,
-        gossip: gossip.clone(),
-        task_handles: None,
-        killed: Arc::new(AtomicBool::new(false)),
-        event_handler,
-    };
+    let p2p_thread_joiner = P2PThreadJoiner::new(log, gossip.clone());
 
     let ingress_event_handler = BoxService::new(IngressEventHandler::new(
         artifact_pools.ingress_pool.clone(),
@@ -255,38 +246,42 @@ pub fn create_networking_stack(
     let ingress_ingestion_service = ServiceBuilder::new()
         .buffer(MAX_BUFFERED_INGRESS_MESSAGES)
         .service(ingress_ingestion_service);
-    Ok((ingress_ingestion_service, Box::new(p2p)))
+    (ingress_ingestion_service, p2p_thread_joiner)
 }
 
-impl P2PRunner for P2P {
+impl P2PThreadJoiner {
     /// The method starts the P2P timer task in the background.
-    fn run(&mut self) {
-        let gossip = self.gossip.clone();
-        let log = self.log.clone();
-        let killed = Arc::clone(&self.killed);
-        let handle = std::thread::Builder::new()
+    fn new(log: ReplicaLogger, gossip: Arc<GossipImpl>) -> Self {
+        let gossip_c = gossip.clone();
+        let log_c = log.clone();
+        let killed = Arc::new(AtomicBool::new(false));
+        let killed_c = Arc::clone(&killed);
+        let join_handle = std::thread::Builder::new()
             .name("P2P_OnTimer".into())
             .spawn(move || {
-                debug!(log, "P2P::p2p_timer(): started processing",);
+                debug!(log_c, "P2P::p2p_timer(): started processing",);
 
                 let timer_duration = Duration::from_millis(P2P_TIMER_DURATION_MS);
-                while !killed.load(SeqCst) {
+                while !killed_c.load(SeqCst) {
                     std::thread::sleep(timer_duration);
-                    gossip.on_timer();
+                    gossip_c.on_timer();
                 }
             })
             .unwrap();
-        self.task_handles.replace(handle);
+        Self {
+            log,
+            gossip,
+            killed,
+            join_handle: Some(join_handle),
+        }
     }
 }
 
-impl Drop for P2P {
+impl Drop for P2PThreadJoiner {
     /// The method signals the tasks to exit and waits for them to complete.
     fn drop(&mut self) {
         self.killed.store(true, SeqCst);
-        if let Some(handle) = self.task_handles.take() {
-            handle.join().unwrap();
-        }
+        self.join_handle.take().unwrap().join().unwrap();
     }
 }
 

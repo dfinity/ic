@@ -284,7 +284,7 @@ async fn run() -> io::Result<()> {
         state_manager,
         _,
         async_query_handler,
-        mut p2p_runner,
+        _p2p_thread_joiner,
         ingress_ingestion_service,
         consensus_pool_cache,
         ingress_message_filter,
@@ -303,8 +303,6 @@ async fn run() -> io::Result<()> {
         cup_with_proto,
         registry_certified_time_reader,
     )?;
-
-    p2p_runner.run();
 
     let malicious_behaviour = &config.malicious_behaviour;
 
@@ -354,8 +352,6 @@ async fn run() -> io::Result<()> {
     // otherwise.
     tmpdir.close()?;
     info!(logger, "IC Replica Terminated");
-    // Ensure we join any threads etc.
-    std::mem::drop(p2p_runner);
     Ok(())
 }
 

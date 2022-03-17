@@ -380,29 +380,36 @@ where
             queue_size: 0,
         }];
         let temp_node = node_id;
-        let (_, state_manager, query_handler, _, mut p2p, ingress_ingestion_service, _, _, _) =
-            ic_replica::setup_p2p::construct_ic_stack(
-                logger,
-                tokio::runtime::Handle::current(),
-                config.clone(),
-                subnet_config,
-                temp_node,
-                subnet_id,
-                subnet_type,
-                registry.clone(),
-                crypto,
-                metrics_registry,
-                None,
-                None,
-            )
-            .expect("Failed to setup p2p");
+        let (
+            _,
+            state_manager,
+            query_handler,
+            _,
+            _p2p_thread_joiner,
+            ingress_ingestion_service,
+            _,
+            _,
+            _,
+        ) = ic_replica::setup_p2p::construct_ic_stack(
+            logger,
+            tokio::runtime::Handle::current(),
+            config.clone(),
+            subnet_config,
+            temp_node,
+            subnet_id,
+            subnet_type,
+            registry.clone(),
+            crypto,
+            metrics_registry,
+            None,
+            None,
+        )
+        .expect("Failed to setup p2p");
 
         let ingress_history_reader =
             IngressHistoryReaderImpl::new(Arc::clone(&state_manager) as Arc<_>);
 
         let ingress_sender = Mutex::new(Some(ingress_ingestion_service));
-
-        p2p.run();
 
         std::thread::sleep(std::time::Duration::from_millis(1000));
         // Before height 1 the replica hasn't figured out what

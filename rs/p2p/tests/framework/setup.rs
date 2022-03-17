@@ -1,6 +1,4 @@
 use ic_interfaces::registry::RegistryClient;
-/// This file contains the helper functions required to setup testing framework.
-use ic_interfaces_p2p::P2PRunner;
 use ic_logger::*;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::{
@@ -11,6 +9,8 @@ use ic_registry_common::{
     keys::{make_node_record_key, make_subnet_list_record_key, make_subnet_record_key},
     proto_registry_data_provider::ProtoRegistryDataProvider,
 };
+/// This file contains the helper functions required to setup testing framework.
+use ic_replica_setup_networking_stack::P2PThreadJoiner;
 use ic_test_utilities::types::ids::node_test_id;
 use ic_types::{
     replica_config::ReplicaConfig,
@@ -68,7 +68,7 @@ pub struct P2PTestContext {
     pub subnet_id: SubnetId,                    // Dummy test subnet ID
     pub metrics_registry: MetricsRegistry,      // monitor metrics from various ICP layers
     pub test_synchronizer: P2PTestSynchronizer, // Provide basic inter-test synchronization
-    pub p2p: Box<dyn P2PRunner>,                // p2p object to drive the ICP stack
+    pub _p2p_thread_joiner: P2PThreadJoiner,    // p2p object to drive the ICP stack
 }
 
 impl P2PTestContext {
@@ -77,14 +77,14 @@ impl P2PTestContext {
         subnet_id: SubnetId,
         metrics_registry: MetricsRegistry,
         test_synchronizer: P2PTestSynchronizer,
-        p2p: Box<dyn P2PRunner>,
+        p2p_thread_joiner: P2PThreadJoiner,
     ) -> Self {
         P2PTestContext {
             node_id,
             subnet_id,
             metrics_registry,
             test_synchronizer,
-            p2p,
+            p2p_thread_joiner,
         }
     }
 }
