@@ -40,13 +40,14 @@ use ic_rosetta_api::convert::{
     neuron_subaccount_bytes_from_public_key, to_hex, to_model_account_identifier,
 };
 use ic_rosetta_api::request_types::{
-    AddHotKey, Disburse, MergeMaturity, PublicKeyOrPrincipal, Request, RequestResult,
-    SetDissolveTimestamp, Spawn, Stake, StartDissolve, Status, StopDissolve,
+    AddHotKey, Disburse, MergeMaturity, NeuronInfo as NeuronInfoRequest, PublicKeyOrPrincipal,
+    Request, RequestResult, SetDissolveTimestamp, Spawn, Stake, StartDissolve, Status,
+    StopDissolve,
 };
 use ic_rosetta_test_utils::{
-    acc_id, assert_canister_error, assert_ic_error, do_multiple_txn, do_txn, make_user,
-    prepare_txn, rosetta_api_serv::RosettaApiHandle, send_icpts, sign_txn, to_public_key,
-    EdKeypair, RequestInfo,
+    acc_id, assert_canister_error, assert_ic_error, do_multiple_txn, do_multiple_txn_external,
+    do_txn, make_user, prepare_txn, rosetta_api_serv::RosettaApiHandle, send_icpts, sign_txn,
+    to_public_key, EdKeypair, RequestInfo,
 };
 use ic_types::{messages::Blob, CanisterId, PrincipalId};
 use lazy_static::lazy_static;
@@ -265,6 +266,36 @@ pub fn test_everything(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         |neuron| {
             neuron.dissolve_state = None;
             neuron.maturity_e8s_equivalent = 420_000_000;
+        },
+    );
+
+    neuron_tests.add(
+        &mut ledger_balances,
+        "Test get neuron info",
+        rand::random(),
+        |neuron| {
+            neuron.dissolve_state = Some(
+                ic_nns_governance::pb::v1::neuron::DissolveState::DissolveDelaySeconds(
+                    2 * 365 * 24 * 60 * 60,
+                ),
+            );
+            neuron.maturity_e8s_equivalent = 345_000_000;
+            neuron.kyc_verified = true;
+        },
+    );
+
+    neuron_tests.add(
+        &mut ledger_balances,
+        "Test get neuron info with hotkey",
+        rand::random(),
+        |neuron| {
+            neuron.dissolve_state = Some(
+                ic_nns_governance::pb::v1::neuron::DissolveState::DissolveDelaySeconds(
+                    3 * 365 * 24 * 60 * 60,
+                ),
+            );
+            neuron.maturity_e8s_equivalent = 678_000_000;
+            neuron.kyc_verified = true;
         },
     );
 
@@ -545,6 +576,13 @@ pub fn test_everything(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         test_merge_maturity_partial(&rosetta_api_serv, &ledger_for_governance, neuron_info).await;
         let neuron_info= neuron_tests.get_neuron_for_test("Test merge neuron maturity invalid");
         test_merge_maturity_invalid(&rosetta_api_serv, neuron_info).await;
+
+        info!(&ctx.logger, "Test get neuron info");
+        let neuron_info= neuron_tests.get_neuron_for_test("Test get neuron info");
+        test_neuron_info(&rosetta_api_serv, &ledger_for_governance, neuron_info).await;
+        info!(&ctx.logger, "Test get neuron info with hotkey");
+        let neuron_info= neuron_tests.get_neuron_for_test("Test get neuron info with hotkey");
+        test_neuron_info_with_hotkey(&rosetta_api_serv, &ledger_for_governance, neuron_info).await;
 
         info!(&ctx.logger, "Test staking");
         let _ = test_staking(&rosetta_api_serv, acc_b, Arc::clone(&kp_b)).await;
@@ -2383,6 +2421,163 @@ async fn test_merge_maturity_invalid(ros: &RosettaApiHandle, neuron_info: Neuron
     assert!(
         res.is_err(),
         "Error expected while trying to merge neuron maturity with an invalid percentage"
+    );
+}
+
+async fn test_neuron_info(ros: &RosettaApiHandle, _ledger: &Canister<'_>, neuron_info: NeuronInfo) {
+    let acc = neuron_info.account_id;
+    let neuron_index = neuron_info.neuron_subaccount_identifier;
+    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.into();
+    let _expected_type = "NEURON_INFO".to_string();
+    let res = do_multiple_txn_external(
+        ros,
+        &[RequestInfo {
+            request: Request::NeuronInfo(NeuronInfoRequest {
+                account: acc,
+                controller: None,
+                neuron_index,
+            }),
+            sender_keypair: Arc::clone(&key_pair),
+        }],
+        false,
+        Some(one_day_from_now_nanos()),
+        None,
+    )
+    .await
+    .map(|(tx_id, results, _)| {
+        assert!(!tx_id.is_transfer());
+        assert!(matches!(
+            results
+                .operations
+                .first()
+                .expect("Expected one neuron info operation."),
+            ic_rosetta_api::models::Operation {
+                _type: _expected_type,
+                ..
+            }
+        ));
+        results
+    })
+    .expect("Failed to retrieve neuron info");
+
+    assert_eq!(1, res.operations.len());
+    let metadata: &Object = res
+        .operations
+        .get(0)
+        .unwrap()
+        .metadata
+        .as_ref()
+        .expect("No metadata found.");
+    let maturity = metadata
+        .get("maturity_e8s_equivalent")
+        .expect("Maturity expected");
+    let kyc = metadata.get("kyc_verified").expect("KYC status expected");
+    assert_eq!(345_000_000, maturity.as_u64().unwrap());
+    assert!(kyc.as_bool().unwrap());
+    assert_eq!(
+        "NOT_DISSOLVING",
+        metadata
+            .get("state")
+            .expect("State expected")
+            .as_str()
+            .unwrap()
+    );
+}
+
+async fn test_neuron_info_with_hotkey(
+    ros: &RosettaApiHandle,
+    _ledger: &Canister<'_>,
+    neuron_info: NeuronInfo,
+) {
+    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.into();
+    let acc = neuron_info.account_id;
+    let neuron_index = neuron_info.neuron_subaccount_identifier;
+    let neuron_controller = neuron_info.principal_id;
+
+    // Add hotkey.
+    let (hotkey_acc, hotkey_keypair, hotkey_pk, _) = make_user(5000);
+    do_multiple_txn(
+        ros,
+        &[RequestInfo {
+            request: Request::AddHotKey(AddHotKey {
+                account: acc,
+                neuron_index,
+                key: PublicKeyOrPrincipal::PublicKey(hotkey_pk),
+            }),
+            sender_keypair: Arc::clone(&key_pair),
+        }],
+        false,
+        Some(one_day_from_now_nanos()),
+        None,
+    )
+    .await
+    .map(|(tx_id, results, _)| {
+        assert!(!tx_id.is_transfer());
+        assert!(matches!(
+            results.operations.first().unwrap(),
+            RequestResult {
+                _type: Request::AddHotKey(_),
+                ..
+            }
+        ));
+    })
+    .expect("Error while adding hotkey.");
+    let hotkey_keypair: Arc<EdKeypair> = hotkey_keypair.into();
+    println!("Added hotkey for neuron management");
+
+    // Test neuron info operation using the hotkey.
+    let res = do_multiple_txn_external(
+        ros,
+        &[RequestInfo {
+            request: Request::NeuronInfo(NeuronInfoRequest {
+                account: hotkey_acc,
+                controller: Some(neuron_controller),
+                neuron_index,
+            }),
+            sender_keypair: Arc::clone(&hotkey_keypair),
+        }],
+        false,
+        Some(one_day_from_now_nanos()),
+        None,
+    )
+    .await
+    .map(|(tx_id, results, _)| {
+        assert!(!tx_id.is_transfer());
+        assert_eq!(
+            results.operations.len(),
+            1,
+            "Expecting exactly one operation."
+        );
+        assert_eq!(
+            ic_rosetta_api::models::OperationType::NeuronInfo,
+            results.operations[0]._type,
+            "Expecting one neuron info operation."
+        );
+        results
+    })
+    .expect("Failed to retrieve neuron info with hotkey");
+
+    assert_eq!(1, res.operations.len());
+    let metadata: &Object = res
+        .operations
+        .get(0)
+        .unwrap()
+        .metadata
+        .as_ref()
+        .expect("No metadata found.");
+    let maturity = metadata
+        .get("maturity_e8s_equivalent")
+        .expect("Maturity expected");
+    let kyc = metadata.get("kyc_verified").expect("KYC status expected");
+    assert_eq!(678_000_000, maturity.as_u64().unwrap());
+    assert!(kyc.as_bool().unwrap());
+    assert_eq!(
+        "NOT_DISSOLVING",
+        metadata
+            .get("state")
+            .expect("State expected")
+            .as_str()
+            .unwrap()
     );
 }
 

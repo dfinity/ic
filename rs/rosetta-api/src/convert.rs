@@ -5,9 +5,10 @@ use crate::models::{
 };
 use crate::request_types::{
     AddHotKey, Disburse, DisburseMetadata, KeyMetadata, MergeMaturity, MergeMaturityMetadata,
-    NeuronIdentifierMetadata, PublicKeyOrPrincipal, Request, RequestResult, RequestResultMetadata,
-    SetDissolveTimestamp, SetDissolveTimestampMetadata, Spawn, SpawnMetadata, Stake, StartDissolve,
-    Status, StopDissolve, TransactionOperationResults, TransactionResults, STATUS_COMPLETED,
+    NeuronIdentifierMetadata, NeuronInfo, NeuronInfoMetadata, PublicKeyOrPrincipal, Request,
+    RequestResult, RequestResultMetadata, SetDissolveTimestamp, SetDissolveTimestampMetadata,
+    Spawn, SpawnMetadata, Stake, StartDissolve, Status, StopDissolve, TransactionOperationResults,
+    TransactionResults, STATUS_COMPLETED,
 };
 use crate::store::HashedBlock;
 use crate::time::Seconds;
@@ -312,6 +313,21 @@ impl State {
         }));
         Ok(())
     }
+
+    fn neuron_info(
+        &mut self,
+        account: ledger_canister::AccountIdentifier,
+        controller: Option<PrincipalId>,
+        neuron_index: u64,
+    ) -> Result<(), ApiError> {
+        self.flush()?;
+        self.actions.push(Request::NeuronInfo(NeuronInfo {
+            account,
+            controller,
+            neuron_index,
+        }));
+        Ok(())
+    }
 }
 
 pub fn from_operations(
@@ -451,6 +467,14 @@ pub fn from_operations(
                 validate_neuron_management_op()?;
                 state.merge_maturity(account, neuron_index, percentage_to_merge)?;
             }
+            OperationType::NeuronInfo => {
+                let NeuronInfoMetadata {
+                    controller,
+                    neuron_index,
+                } = o.metadata.clone().try_into()?;
+                validate_neuron_management_op()?;
+                state.neuron_info(account, controller, neuron_index)?;
+            }
             OperationType::Burn | OperationType::Mint => {
                 let msg = format!("Unsupported operation type: {}", o._type);
                 return Err(op_error(o, msg));
@@ -562,15 +586,24 @@ pub fn neuron_subaccount_bytes_from_public_key(
     neuron_index: u64,
 ) -> Result<[u8; 32], ApiError> {
     let controller = principal_id_from_public_key(pk)?;
+    Ok(neuron_subaccount_hash(&controller, neuron_index))
+}
 
-    // FIXME: cut&paste from compute_neuron_staking_subaccount() in
-    // rs/nns/governance/src/governance.rs.
+/// `neuron_index` must also be the `nonce` of neuron management commands.
+pub fn neuron_subaccount_bytes_from_principal(
+    controller: &PrincipalId,
+    neuron_index: u64,
+) -> [u8; 32] {
+    neuron_subaccount_hash(controller, neuron_index)
+}
+
+fn neuron_subaccount_hash(principal: &PrincipalId, nonce: u64) -> [u8; 32] {
     let mut state = ic_crypto_sha::Sha256::new();
     state.write(&[0x0c]);
     state.write(b"neuron-stake");
-    state.write(controller.as_slice());
-    state.write(&neuron_index.to_be_bytes());
-    Ok(state.finish())
+    state.write(principal.as_slice());
+    state.write(&nonce.to_be_bytes());
+    state.finish()
 }
 
 /// `neuron_index` must also be the `nonce` of neuron management commands.
@@ -586,6 +619,15 @@ pub fn neuron_account_from_public_key(
             Some(Subaccount(subaccount_bytes)),
         ),
     ))
+}
+
+pub fn principal_id_from_public_key_or_principal(
+    pkp: PublicKeyOrPrincipal,
+) -> Result<PrincipalId, ApiError> {
+    match pkp {
+        PublicKeyOrPrincipal::Principal(p) => Ok(p),
+        PublicKeyOrPrincipal::PublicKey(pk) => principal_id_from_public_key(&pk),
+    }
 }
 
 pub fn principal_id_from_public_key(pk: &models::PublicKey) -> Result<PrincipalId, ApiError> {
@@ -691,6 +733,7 @@ pub fn from_transaction_operation_results(
             neuron_id,
             transaction_identifier,
             status,
+            response: None,
         });
     }
 

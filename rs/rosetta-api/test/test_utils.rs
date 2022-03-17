@@ -200,6 +200,7 @@ impl LedgerAccess for TestLedger {
                 block_index: None,
                 neuron_id: None,
                 status: Status::Completed,
+                response: None,
             });
         }
 

@@ -442,6 +442,7 @@ If specified, the value must be an integer between 1 and 100 (bounds included).
 
 == Accessing neuron attributes
 
+=== Accessing public information
 [cols="1,1"]
 |===
 | Since version
@@ -462,7 +463,7 @@ Call the `/account/balance` endpoint to access the staked amount and publicly av
   * The request should not specify any block identifier because the endpoint always returns the latest state of the neuron.
 ====
 
-=== Request
+==== Request
 
 [source,json]
 ----
@@ -485,7 +486,7 @@ Call the `/account/balance` endpoint to access the staked amount and publicly av
 }
 ----
 
-=== Response
+==== Response
 
 [source,json]
 ----
@@ -511,6 +512,96 @@ Call the `/account/balance` endpoint to access the staked amount and publicly av
     "dissolve_delay_seconds": 240269355,
     "voting_power": 195170955,
     "created_timestamp_seconds": 1638802541
+  }
+}
+----
+
+=== Accessing protected information
+
+[cols="1,1"]
+|===
+| Since version
+| 1.5.0
+
+| Idempotent?
+| yes
+
+| Minimal access level
+| hotkey
+|===
+
+The `NEURON_INFO` operation retrieves the state of the neuron from the governance canister smart contract, including protected fields such as maturity.
+This operation does not change the state of the neuron.
+Either the neuron controller or a hotkey can execute this operation.
+
+.Preconditions
+* `account.address` is the ledger address of the neuron controller or hotkey.
+
+.Calling `NEURON_INFO` as a controller:
+[source,json]
+----
+{
+  "operation_identifier": { "index": 0 },
+  "type": "NEURON_INFO",
+  "account": { "address": "907ff6c714a545110b42982b72aa39c5b7742d610e234a9d40bf8cf624e7a70d" },
+  "metadata": {
+    "neuron_index": 0
+  }
+}
+----
+
+
+.Calling `NEURON_INFO` with a hotkey:
+[source,json]
+----
+{
+  "operation_identifier": { "index": 0 },
+  "type": "NEURON_INFO",
+  "account": { "address": "8af54f1fa09faeca18d294e0787346264f9f1d6189ed20ff14f029a160b787e8" },
+  "metadata": {
+    "neuron_index": 0,
+    "controller": {
+      "hex_bytes": "ba5242d02642aede88a5f9fe82482a9fd0b6dc25f38c729253116c6865384a9d",
+      "curve_type": "edwards25519"
+    }
+  }
+}
+----
+
+[NOTE]
+====
+Since Rosetta API identifies neurons by the controller's public key and neuron index, the caller has to specify the public key when executing the operation using a hotkey.
+====
+
+The Rosetta API returns the state of the neuron as operation metadata in the `/construction/submit` endpoint.
+
+.Example response from the /construction/submit endpoint:
+[source,json]
+----
+{
+  "transaction_identifier": {
+    "hash": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "metadata": {
+    "operations": [
+      {
+        "operation_identifier": { "index": 0 },
+        "type": "NEURON_INFO",
+        "status": "COMPLETED",
+        "account": {
+          "address": "8af54f1fa09faeca18d294e0787346264f9f1d6189ed20ff14f029a160b787e8"
+        },
+        "metadata": {
+          "controller": "sp3em-jkiyw-tospm-2huim-jor4p-et4s7-ay35f-q7tnm-hi4k2-pyicb-xae",
+          "kyc_verified": true,
+          "maturity_e8s_equivalent": 1000,
+          "neuron_fees_e8s": 0,
+          "neuron_id": 18089972080608815000,
+          "neuron_index": 0,
+          "state": "DISSOLVING"
+        }
+      }
+    ]
   }
 }
 ----

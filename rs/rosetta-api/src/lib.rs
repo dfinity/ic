@@ -14,11 +14,11 @@ use crate::convert::{
     account_from_public_key, from_arg, from_hex, from_model_account_identifier, from_public_key,
     make_read_state_from_update, neuron_account_from_public_key,
     neuron_subaccount_bytes_from_public_key, principal_id_from_public_key,
-    to_model_account_identifier,
+    principal_id_from_public_key_or_principal, to_model_account_identifier,
 };
 use crate::ledger_client::LedgerAccess;
 use crate::request_types::{
-    AddHotKey, Disburse, MergeMaturity, PublicKeyOrPrincipal, Request, RequestType,
+    AddHotKey, Disburse, MergeMaturity, NeuronInfo, PublicKeyOrPrincipal, Request, RequestType,
     SetDissolveTimestamp, Spawn, Stake, StartDissolve, StopDissolve, TransactionOperationResults,
 };
 use crate::store::HashedBlock;
@@ -423,10 +423,13 @@ impl RosettaRequestHandler {
         let transaction_identifier = if let Some((request_type, envelope_pairs)) =
             envelopes.iter().rev().find(|(rt, _)| rt.is_transfer())
         {
-            TransactionIdentifier::try_from_envelope(*request_type, &envelope_pairs[0].update)
+            TransactionIdentifier::try_from_envelope(
+                request_type.clone(),
+                &envelope_pairs[0].update,
+            )
         } else if envelopes.iter().all(|(r, _)| r.is_neuron_management()) {
             Ok(TransactionIdentifier {
-                hash: transaction_id::NEURON_MANAGEMEN_PSEUDO_HASH.to_owned(),
+                hash: transaction_id::NEURON_MANAGEMENT_PSEUDO_HASH.to_owned(),
             })
         } else {
             Err(ApiError::invalid_request(
@@ -481,7 +484,7 @@ impl RosettaRequestHandler {
                 .iter()
                 .map(
                     |(request_type, updates)| match updates[0].update.content.clone() {
-                        HttpCallContent::Call { update } => (*request_type, update),
+                        HttpCallContent::Call { update } => (request_type.clone(), update),
                     },
                 )
                 .collect(),
@@ -504,7 +507,6 @@ impl RosettaRequestHandler {
                     let SendArgs {
                         amount, fee, to, ..
                     } = from_arg(arg.0)?;
-
                     requests.push(Request::Transfer(Operation::Transfer {
                         from,
                         to,
@@ -720,6 +722,42 @@ impl RosettaRequestHandler {
                         ));
                     }
                 }
+
+                RequestType::NeuronInfo {
+                    neuron_index,
+                    controller,
+                } => {
+                    let _: NeuronIdOrSubaccount =
+                        candid::decode_one(arg.0.as_ref()).map_err(|e| {
+                            ApiError::internal_error(format!(
+                                "Could not decode neuron info argument: {}",
+                                e
+                            ))
+                        })?;
+
+                    match controller
+                        .clone()
+                        .map(|pkp| principal_id_from_public_key_or_principal(pkp))
+                    {
+                        None => {
+                            requests.push(Request::NeuronInfo(NeuronInfo {
+                                account: from,
+                                controller: None,
+                                neuron_index,
+                            }));
+                        }
+                        Some(Ok(pid)) => {
+                            requests.push(Request::NeuronInfo(NeuronInfo {
+                                account: from,
+                                controller: Some(pid),
+                                neuron_index,
+                            }));
+                        }
+                        _ => {
+                            return Err(ApiError::invalid_request("Invalid neuron info request."));
+                        }
+                    }
+                }
             }
         }
 
@@ -893,6 +931,68 @@ impl RosettaRequestHandler {
 
         for t in transactions {
             match t {
+                Request::NeuronInfo(NeuronInfo {
+                    account,
+                    controller,
+                    neuron_index,
+                }) => {
+                    let neuron_subaccount = match controller {
+                        Some(neuron_controller) => {
+                            // Hotkey (or any explicit controller).
+                            crate::convert::neuron_subaccount_bytes_from_principal(
+                                &neuron_controller,
+                                neuron_index,
+                            )
+                        }
+                        None => {
+                            // Default controller.
+                            let pk = pks_map.get(&account).ok_or_else(|| {
+                                ApiError::internal_error(format!(
+                                    "NeuronInfo - Cannot find public key for account {}",
+                                    account,
+                                ))
+                            })?;
+                            crate::convert::neuron_subaccount_bytes_from_public_key(
+                                pk,
+                                neuron_index,
+                            )?
+                        }
+                    };
+
+                    // In the case of an hotkey, account will be derived from the hotkey so
+                    // we can use the same logic for controller or hotkey.
+                    let pk = pks_map.get(&account).ok_or_else(|| {
+                        ApiError::internal_error(format!(
+                            "NeuronInfo - Cannot find public key for account {}",
+                            account,
+                        ))
+                    })?;
+                    let sender = convert::principal_id_from_public_key(pk)?;
+
+                    // Argument for the method called on the governance canister.
+                    let args = NeuronIdOrSubaccount::Subaccount(neuron_subaccount.to_vec());
+                    let update = HttpCanisterUpdate {
+                        canister_id: Blob(ic_nns_constants::GOVERNANCE_CANISTER_ID.get().to_vec()),
+                        method_name: "get_full_neuron_by_id_or_subaccount".to_string(),
+                        arg: Blob(CandidOne(args).into_bytes().expect("Serialization failed")),
+                        nonce: None,
+                        sender: Blob(sender.into_vec()), // Sender is controller or hotkey.
+                        ingress_expiry: 0,
+                    };
+                    add_payloads(
+                        &mut payloads,
+                        &ingress_expiries,
+                        &to_model_account_identifier(&account),
+                        &update,
+                    );
+                    updates.push((
+                        RequestType::NeuronInfo {
+                            neuron_index,
+                            controller: controller.map(|pid| PublicKeyOrPrincipal::Principal(pid)),
+                        },
+                        update,
+                    ));
+                }
                 Request::Transfer(Operation::Transfer {
                     from,
                     to,
@@ -1173,7 +1273,8 @@ impl RosettaRequestHandler {
                     | Request::Disburse(Disburse { account, .. })
                     | Request::AddHotKey(AddHotKey { account, .. })
                     | Request::Spawn(Spawn { account, .. })
-                    | Request::MergeMaturity(MergeMaturity { account, .. }) => Ok(account),
+                    | Request::MergeMaturity(MergeMaturity { account, .. })
+                    | Request::NeuronInfo(NeuronInfo { account, .. }) => Ok(account),
                     Request::Transfer(Operation::Burn { .. }) => Err(ApiError::invalid_request(
                         "Burn operations are not supported through rosetta",
                     )),
@@ -1183,13 +1284,13 @@ impl RosettaRequestHandler {
                 })
                 .collect();
 
-        let keys: Vec<_> = required_public_keys?
+        let required_public_keys: Vec<_> = required_public_keys?
             .into_iter()
             .map(|x| to_model_account_identifier(&x))
             .collect();
 
         Ok(ConstructionPreprocessResponse {
-            required_public_keys: Some(keys),
+            required_public_keys: Some(required_public_keys),
             options,
         })
     }
@@ -1215,7 +1316,7 @@ impl RosettaRequestHandler {
                     .iter()
                     .all(|r| r._type.is_neuron_management()));
                 TransactionIdentifier {
-                    hash: transaction_id::NEURON_MANAGEMEN_PSEUDO_HASH.to_owned(),
+                    hash: transaction_id::NEURON_MANAGEMENT_PSEUDO_HASH.to_owned(),
                 }
             });
         let results = TransactionOperationResults::from_transaction_results(

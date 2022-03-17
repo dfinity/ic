@@ -3,14 +3,14 @@ use ic_rosetta_api::convert::{
     principal_id_from_public_key, signed_amount, to_hex, to_model_account_identifier,
 };
 
-use ic_rosetta_api::models::Error as RosettaError;
 use ic_rosetta_api::models::{
-    ConstructionCombineResponse, ConstructionPayloadsRequestMetadata, ConstructionPayloadsResponse,
-    CurveType, OperationType, PublicKey, Signature, SignatureType,
+    ConstructionCombineResponse, ConstructionParseResponse, ConstructionPayloadsRequestMetadata,
+    ConstructionPayloadsResponse, CurveType, OperationType, PublicKey, Signature, SignatureType,
 };
+use ic_rosetta_api::models::{ConstructionSubmitResponse, Error as RosettaError};
 use ic_rosetta_api::request_types::{
-    AddHotKey, Disburse, MergeMaturity, Request, RequestResult, SetDissolveTimestamp, Spawn, Stake,
-    StartDissolve, StopDissolve, TransactionResults,
+    AddHotKey, Disburse, MergeMaturity, NeuronInfo, Request, RequestResult, SetDissolveTimestamp,
+    Spawn, Stake, StartDissolve, StopDissolve, TransactionOperationResults, TransactionResults,
 };
 use ic_rosetta_api::transaction_id::TransactionIdentifier;
 use ic_rosetta_api::{convert, errors, errors::ApiError, DEFAULT_TOKEN_SYMBOL};
@@ -114,7 +114,8 @@ pub async fn prepare_multiple_txn(
             | Request::AddHotKey(AddHotKey { account, .. })
             | Request::Disburse(Disburse { account, .. })
             | Request::Spawn(Spawn { account, .. })
-            | Request::MergeMaturity(MergeMaturity { account, .. }) => {
+            | Request::MergeMaturity(MergeMaturity { account, .. })
+            | Request::NeuronInfo(NeuronInfo { account, .. }) => {
                 all_sender_account_ids.push(to_model_account_identifier(&account));
             }
             Request::Transfer(Operation::Burn { .. }) => {
@@ -310,6 +311,7 @@ pub async fn do_txn(
     .await
 }
 
+// the 'internal' version returning TransactionResults.
 pub async fn do_multiple_txn(
     ros: &RosettaApiHandle,
     requests: &[RequestInfo],
@@ -320,6 +322,84 @@ pub async fn do_multiple_txn(
     (
         TransactionIdentifier,
         TransactionResults,
+        Tokens, // charged fee
+    ),
+    RosettaError,
+> {
+    match do_multiple_txn_submit(
+        ros,
+        requests,
+        accept_suggested_fee,
+        ingress_end,
+        created_at_time,
+    )
+    .await
+    {
+        Ok((submit_res, charged_fee)) => {
+            let results = convert::from_transaction_operation_results(
+                submit_res.metadata,
+                DEFAULT_TOKEN_SYMBOL,
+            )
+            .expect("Couldn't convert metadata to TransactionResults");
+            if let Some(RequestResult {
+                _type: Request::Transfer(_),
+                transaction_identifier,
+                ..
+            }) = results.operations.last()
+            {
+                assert_eq!(
+                    submit_res.transaction_identifier,
+                    transaction_identifier.clone().unwrap()
+                );
+            }
+            Ok((submit_res.transaction_identifier, results, charged_fee))
+        }
+        Err(e) => Err(e),
+    }
+}
+
+// the 'external' version returning TransactionOperationResults.
+pub async fn do_multiple_txn_external(
+    ros: &RosettaApiHandle,
+    requests: &[RequestInfo],
+    accept_suggested_fee: bool,
+    ingress_end: Option<u64>,
+    created_at_time: Option<u64>,
+) -> Result<
+    (
+        TransactionIdentifier,
+        TransactionOperationResults,
+        Tokens, // charged fee
+    ),
+    RosettaError,
+> {
+    match do_multiple_txn_submit(
+        ros,
+        requests,
+        accept_suggested_fee,
+        ingress_end,
+        created_at_time,
+    )
+    .await
+    {
+        Ok((submit_res, charged_fee)) => Ok((
+            submit_res.transaction_identifier,
+            submit_res.metadata,
+            charged_fee,
+        )),
+        Err(e) => Err(e),
+    }
+}
+
+async fn do_multiple_txn_submit(
+    ros: &RosettaApiHandle,
+    requests: &[RequestInfo],
+    accept_suggested_fee: bool,
+    ingress_end: Option<u64>,
+    created_at_time: Option<u64>,
+) -> Result<
+    (
+        ConstructionSubmitResponse,
         Tokens, // charged fee
     ),
     RosettaError,
@@ -338,12 +418,15 @@ pub async fn do_multiple_txn(
         .await
         .unwrap()?;
 
+    // Verify consistency between requests and construction parse response.
+    fn verify_operations(requests: &[RequestInfo], parse_response: ConstructionParseResponse) {
+        let rs1: Vec<_> = requests.iter().map(|r| r.request.clone()).collect();
+        let rs2 = from_operations(&parse_response.operations, false, DEFAULT_TOKEN_SYMBOL).unwrap();
+        assert_eq!(rs1, rs2, "Requests differs: {:?} vs {:?}", rs1, rs2);
+    }
+
     if !accept_suggested_fee {
-        let rs: Vec<_> = requests.iter().map(|r| r.request.clone()).collect();
-        assert_eq!(
-            rs,
-            from_operations(&parse_res.operations, false, DEFAULT_TOKEN_SYMBOL).unwrap()
-        );
+        verify_operations(requests, parse_res);
     }
 
     // check that we got enough unsigned messages
@@ -366,11 +449,7 @@ pub async fn do_multiple_txn(
         .unwrap()?;
 
     if !accept_suggested_fee {
-        let rs: Vec<_> = requests.iter().map(|r| r.request.clone()).collect();
-        assert_eq!(
-            rs,
-            from_operations(&parse_res.operations, false, DEFAULT_TOKEN_SYMBOL).unwrap()
-        );
+        verify_operations(requests, parse_res);
     }
 
     let hash_res = ros
@@ -406,23 +485,7 @@ pub async fn do_multiple_txn(
         .unwrap()?;
     assert_eq!(submit_res, submit_res3);
 
-    let results =
-        convert::from_transaction_operation_results(submit_res.metadata, DEFAULT_TOKEN_SYMBOL)
-            .expect("Couldn't convert metadata to TransactionResults");
-
-    if let Some(RequestResult {
-        _type: Request::Transfer(_),
-        transaction_identifier,
-        ..
-    }) = results.operations.last()
-    {
-        assert_eq!(
-            submit_res.transaction_identifier,
-            transaction_identifier.clone().unwrap()
-        );
-    }
-
-    Ok((submit_res.transaction_identifier, results, charged_fee))
+    Ok((submit_res, charged_fee))
 }
 
 pub async fn send_icpts(
