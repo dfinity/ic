@@ -32,19 +32,14 @@ use ic_interfaces::{
     transport::Transport,
 };
 use ic_interfaces_p2p::IngressIngestionService;
-use ic_logger::{debug, info, replica_logger::ReplicaLogger};
+use ic_logger::{info, replica_logger::ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_p2p::{
-    event_handler::{
-        AdvertSubscriber, AsyncTransportEventHandlerImpl, ChannelConfig, IngressEventHandler,
-    },
-    fetch_gossip_config,
-    gossip_protocol::GossipImpl,
-};
+
+pub use ic_p2p::P2PThreadJoiner;
+use ic_p2p::{fetch_gossip_config, start_p2p, AdvertSubscriber};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::StateManagerImpl;
-use ic_transport::transport::create_transport;
 use ic_types::{
     artifact::{Advert, ArtifactKind, ArtifactTag, FileTreeSyncAttribute},
     consensus::catchup::CUPWithOriginalProtobuf,
@@ -52,48 +47,10 @@ use ic_types::{
     filetree_sync::{FileTreeSyncArtifact, FileTreeSyncId},
     malicious_flags::MaliciousFlags,
     replica_config::ReplicaConfig,
-    transport::{FlowTag, TransportConfig},
+    transport::TransportConfig,
     NodeId, SubnetId,
 };
-use std::sync::{
-    atomic::{AtomicBool, Ordering::SeqCst},
-    Arc, Mutex, RwLock,
-};
-use std::thread::JoinHandle;
-use std::time::Duration;
-use tower::{util::BoxService, ServiceBuilder};
-
-/// Periodic timer duration in milliseconds between polling calls to the P2P
-/// component.
-const P2P_TIMER_DURATION_MS: u64 = 100;
-/// Max number of ingress message we can buffer until the P2P layer is ready to
-/// accept them.
-// The latency SLO for 'call' requests is set for 2s. Given the rate limiter of
-// 100 per second this buffer should not be bigger than 200. We are conservite
-// setting it to 100.
-const MAX_BUFFERED_INGRESS_MESSAGES: usize = 100;
-/// Max number of inflight requests into P2P. Note each each requests requires a
-/// dedicated thread to execute on so this number should be relatively small.
-// Do not increase the number until we get to the root cause of NET-743.
-const MAX_INFLIGHT_INGRESS_MESSAGES: usize = 1;
-/// Max ingress messages per second that can go into P2P.
-// There is some internal contention inside P2P (NET-743). We achieve lower
-// throughput if we process messages one after the other.
-const MAX_INGRESS_MESSAGES_PER_SECOND: u64 = 100;
-
-/// The P2P struct, which encapsulates all relevant components including gossip
-/// and event handler control.
-#[allow(unused)]
-pub struct P2PThreadJoiner {
-    /// The logger.
-    log: ReplicaLogger,
-    /// The *Gossip* struct with automatic reference counting.
-    gossip: Arc<GossipImpl>,
-    /// The task handles.
-    join_handle: Option<JoinHandle<()>>,
-    /// Flag indicating if P2P has been terminated.
-    killed: Arc<AtomicBool>,
-}
+use std::sync::{Arc, Mutex, RwLock};
 
 /// The P2P state sync client.
 #[derive(Clone)]
@@ -187,102 +144,23 @@ pub fn create_networking_stack(
     )
     .unwrap();
 
-    let transport = transport.unwrap_or_else(|| {
-        create_transport(
-            node_id,
-            transport_config.clone(),
-            registry_client.get_latest_version(),
-            metrics_registry.clone(),
-            tls_handshake,
-            rt_handle.clone(),
-            log.clone(),
-        )
-    });
-
-    let event_handler = Arc::new(AsyncTransportEventHandlerImpl::new(
-        node_id,
-        log.clone(),
-        &metrics_registry,
-        ChannelConfig::from(gossip_config),
-    ));
-    transport
-        .register_client(event_handler.clone())
-        .expect("transport registration failed");
-
-    let p2p_flow_tags = transport_config
-        .p2p_flows
-        .iter()
-        .map(|flow_config| FlowTag::from(flow_config.flow_tag))
-        .collect();
-    let gossip = Arc::new(GossipImpl::new(
+    start_p2p(
+        metrics_registry,
+        log,
+        rt_handle,
         node_id,
         subnet_id,
+        transport_config,
+        gossip_config,
+        registry_client,
+        tls_handshake,
+        transport,
         artifact_pools.consensus_pool_cache.clone(),
-        registry_client.clone(),
-        artifact_manager.clone(),
-        transport.clone(),
-        p2p_flow_tags,
-        log.clone(),
-        &metrics_registry,
-        malicious_flags,
-    ));
-    event_handler.start(gossip.clone());
-    advert_subscriber.start(gossip.clone());
-
-    let p2p_thread_joiner = P2PThreadJoiner::new(log, gossip.clone());
-
-    let ingress_event_handler = BoxService::new(IngressEventHandler::new(
+        artifact_manager,
         artifact_pools.ingress_pool.clone(),
-        gossip,
-        node_id,
-    ));
-
-    let ingress_ingestion_service = BoxService::new(
-        ServiceBuilder::new()
-            .concurrency_limit(MAX_INFLIGHT_INGRESS_MESSAGES)
-            .rate_limit(MAX_INGRESS_MESSAGES_PER_SECOND, Duration::from_secs(1))
-            .service(ingress_event_handler),
-    );
-    let ingress_ingestion_service = ServiceBuilder::new()
-        .buffer(MAX_BUFFERED_INGRESS_MESSAGES)
-        .service(ingress_ingestion_service);
-    (ingress_ingestion_service, p2p_thread_joiner)
-}
-
-impl P2PThreadJoiner {
-    /// The method starts the P2P timer task in the background.
-    fn new(log: ReplicaLogger, gossip: Arc<GossipImpl>) -> Self {
-        let gossip_c = gossip.clone();
-        let log_c = log.clone();
-        let killed = Arc::new(AtomicBool::new(false));
-        let killed_c = Arc::clone(&killed);
-        let join_handle = std::thread::Builder::new()
-            .name("P2P_OnTimer".into())
-            .spawn(move || {
-                debug!(log_c, "P2P::p2p_timer(): started processing",);
-
-                let timer_duration = Duration::from_millis(P2P_TIMER_DURATION_MS);
-                while !killed_c.load(SeqCst) {
-                    std::thread::sleep(timer_duration);
-                    gossip_c.on_timer();
-                }
-            })
-            .unwrap();
-        Self {
-            log,
-            gossip,
-            killed,
-            join_handle: Some(join_handle),
-        }
-    }
-}
-
-impl Drop for P2PThreadJoiner {
-    /// The method signals the tasks to exit and waits for them to complete.
-    fn drop(&mut self) {
-        self.killed.store(true, SeqCst);
-        self.join_handle.take().unwrap().join().unwrap();
-    }
+        malicious_flags,
+        &advert_subscriber,
+    )
 }
 
 /// The function sets up and returns the Artifact Manager and Consensus Pool.

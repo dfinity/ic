@@ -39,7 +39,6 @@ ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-state-manager = { path = "../state_manager" }
 ic-sys = { path = "../sys" }
-ic-transport = { path = "../transport" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 jemallocator = "0.3.2"
