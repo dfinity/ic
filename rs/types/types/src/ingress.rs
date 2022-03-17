@@ -275,10 +275,7 @@ impl TryFrom<pb_ingress::IngressStatus> for IngressStatus {
                     )?,
                 },
                 Status::Failed(f) => IngressStatus::Failed {
-                    receiver: try_from_option_field(
-                        f.receiver,
-                        "IngressStatus::Completed::receiver",
-                    )?,
+                    receiver: try_from_option_field(f.receiver, "IngressStatus::Failed::receiver")?,
                     time: Time::from_nanos_since_unix_epoch(f.time_nanos),
                     user_id: crate::user_id_try_from_protobuf(try_from_option_field(
                         f.user_id,
@@ -289,7 +286,7 @@ impl TryFrom<pb_ingress::IngressStatus> for IngressStatus {
                 Status::Processing(p) => IngressStatus::Processing {
                     receiver: try_from_option_field(
                         p.receiver,
-                        "IngressStatus::Completed::receiver",
+                        "IngressStatus::Processing::receiver",
                     )?,
                     time: Time::from_nanos_since_unix_epoch(p.time_nanos),
                     user_id: crate::user_id_try_from_protobuf(try_from_option_field(
