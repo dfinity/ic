@@ -529,7 +529,7 @@ impl EccPoint {
     /// Returns the result of a point multiplied by (index + 1)
     ///
     /// This is a non-constant-time equivalent to
-    /// pt.scalar_mul(EccScalar::from_node_index(scalar)).
+    /// `pt.scalar_mul(EccScalar::from_node_index(scalar))`.
     ///
     /// When verifying commitments, the scalars used in evaluating the
     /// polynomials are small and public (namely, the nodex indexes). By taking

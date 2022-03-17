@@ -1,3 +1,209 @@
+//!
+//! # Threshold ECDSA
+//!
+//! The public interface for the threshold ECDSA implementation is in `src/lib.rs`.
+//!
+//! Internally within the library, the error type `ThresholdEcdsaError` is used. In
+//! the public interfaces, this error is mapped onto function specific error types.
+//!
+//! ## Attack Model
+//!
+//! The code in this crate endeavors to be safe with regards to timing and
+//! cache based side channels. No provision is made with regards to power
+//! analysis attacks, fault attacks, etc.
+//!
+//! ## Protocol: Dealings
+//!
+//! File: `dealings.rs`
+//!
+//! A dealing [`IDkgDealingInternal`] consists of a [MEGa
+//! ciphertext](#protocol-mega-encryption), a commitment to the values
+//! encrypted, and potentially a [`dealings::ZkProof`](zero knowledge
+//! proof).
+//!
+//! The dealing will either be "masked" (the commitments are Pedersen commitments)
+//! or "unmasked" (the commitments are simple dlog commitments).
+//!
+//! There are four types of dealings
+//!  - Random: outputs masked dealing, no proof
+//!  - ReshareOfUnmasked: outputs unmasked dealing, no proof is
+//!    required since equivalence is provable from the commitments
+//!  - ReshareOfMasked: outputs unmasked dealing, contains proof
+//!    that the resharing is correct (`ProofOfMaskedResharing`)
+//!  - UnmaskedTimesMasked: outputs masked dealing, contains
+//!    proof of product (`ProofOfProduct`)
+//!
+//! In addition to being generated, dealings have two forms of verification: public
+//! and private. Public verification can be performed by any party, and checks that
+//! the proof (if included) is correct and that the commitments are of the expected
+//! type. Private verification decrypts the dealing ciphertext and verifies that
+//! the decrypted plaintext is consistent with the commitments.
+//!
+//! ## Protocol: Complaints
+//!
+//! File: `complaints.rs`
+//!
+//! Defines a type for a complaint [`IDkgComplaintInternal`]. Complaints can
+//! be generated and verified. The function `generate_complaints` attempts
+//! to decrypt a set of dealings; any dealing which cannot be decrypted
+//! correctly (with regards to the included commitment) results in a
+//! complaint being generated.
+//!
+//! ## Protocol: Transcripts
+//!
+//! File: `transcript.rs`
+//!
+//! A transcript is a combination of dealings which have been publicly verified.
+//! [`IDkgTranscriptInternal`] is a commitment which commits to the value which is
+//! formed by the set of dealings. Both the transcript and the dealings which
+//! created it are normally provided for further operations.
+//!
+//! Transcript verification refers to the process of creating a new transcript from
+//! a set of dealings. If the new transcript is equal to the given transcript, the
+//! transcript is considered verified with respect to the dealings.
+//!
+//! ## Protocol: Signature Generation and Verification
+//!
+//! File: `sign.rs`
+//!
+//! * Generation and verification of signature shares
+//! * Generation and verification of combined signatures
+//!
+//! ## Protocol: MEGa Encryption
+//!
+//! File: `mega.rs`
+//!
+//! Implements the MEGa encryption/decryption scheme, including key
+//! generation.
+//!
+//! [`RandomOracle`](#utility-functions-random-oracle) is used to
+//! generate the additive masking values.
+//!
+//! ## Protocol: Polynomial Arithmetic and Commitments
+//!
+//! File: `poly.rs`
+//!
+//! Defines [`poly::Polynomial`] - a polynomial with coefficients that
+//! are integers modulo the order of an elliptic curve.
+//!
+//! Also defines two types of commitments to polynomials:
+//! [`poly::SimpleCommitment`] (simple (dlog) commitments)
+//! and [`poly::PedersenCommitment`] (Pedersen commitments).
+//!
+//! ## Protocol: Zero Knowledge Proofs
+//!
+//! File: `zk.rs`
+//!
+//! Defines three zero knowledge proofs used in the protocol:
+//!
+//!  * [`zk::ProofOfEqualOpenings`]: a proof of equal openings of
+//!    simple and Pedersen commitments
+//!  * [`zk::ProofOfProduct`]: a proof that a Pedersen commitment
+//!    opens to the value of the product of openings of a simple and
+//!    another Pedersen commitment.
+//!  * [`zk::ProofOfDLogEquivalence`]: a proof of equal discrete logarithm
+//!
+//! ## Protocol: Key Derivation
+//!
+//! File: `key_derivation.rs`
+//!
+//! Performs (extended) BIP32 key derivation.
+//!
+//! Instead of only using 32-bit indices for the derivation path, this
+//! derivation supports arbitrary byte strings.
+//!
+//! In the case that only 32-bit values are used, it is compatible with
+//! standard BIP32.
+//!
+//! ## Utility Functions: Elliptic Curve Group
+//!
+//! Files: `group.rs` and `group/*.rs`
+//!
+//! To insulate the implementation from API changes in dependencies, and also
+//! to provide a consistent abstraction across multiple curves, wrapper
+//! types are provided, namely [`EccScalar`] and [`EccPoint`].
+//!
+//! An important exception to the general policy of avoiding timing
+//! attacks is in this file. The function [`EccPoint::mul_by_node_index`]
+//! takes advantage of the fact that node indexes are both small and
+//! public. Uses a simple square-and-multiply implementation, which provides
+//! notable performance improvements.
+//!
+//! Currently, curve arithmetic is implemented using the `k256` and `p256`
+//! crates from the RustCrypto project. Wrappers for these types are
+//! included in the `group` subdirectory.
+//!
+//! ## Utility Functions: H2C and XMD
+//!
+//! Files: `hash2curve.rs` and `xmd.rs`
+//!
+//! An implementation of IETF standard hash2curve is implemented in
+//! `hash2curve.rs`. This is actually never called in production; we do
+//! use h2c to derive a `h` generator unrelated to the standard group
+//! generator for Pedersen commitments, but this is done offline.
+//!
+//! The primary entry point for hash2curve is [`EccPoint::hash_to_point`].
+//!
+//! [Note: we may use hash2curve in the future for Proof Of Possession of
+//! MEGa private keys]
+//!
+//! The XMD hash used in hash2curve is implemented in `xmd.rs`. This
+//! derivation function is used elsewhere, namely in [`Seed`] and the
+//! [random oracle](#utility-functions-random-oracle).
+//!
+//! ## Utility Functions: Field Arithmetic
+//!
+//! Files: `fe.rs` and in `fe-derive` crate
+//!
+//! Implementing hash2curve requires arithmetic over the field modulo
+//! the prime (for secp256k1, this is 2**256 - 0x1000003d1). This is
+//! not supported by available Rust libraries so it is included here.
+//!
+//! `fe.rs` provides a wrapper, [`EccFieldElement`], that handles arithmetic
+//! for multiple curves. It is simply an enum which dispatches to the
+//! relevant implementation.
+//!
+//! The implementation of the arithmetic itself is crated via a Rust proc
+//! macro in the associated `fe-derive` crate. It uses a simple packed
+//! `u64` representation with all arithmetic done in Montgomery form. The
+//! Montgomery parameters are computed at compile time by the proc macro.
+//! These are instantiated by the calls to
+//! [`fe_derive::derive_field_element!`] in `fe.rs`.
+//!
+//! ## Utility Functions: Seed
+//!
+//! File: `seed.rs`
+//!
+//! This crate is deterministic; all randomness is provided by the
+//! caller. We may require several different random inputs for various
+//! purposes. To accomplish this, a type called [`Seed`] encapsulates
+//! a crypto variable which can be used to derive additional values
+//! (using XMD) or be turned into a random number generator
+//! (ChaCha20).
+//!
+//! ## Utility Functions: Random Oracle
+//!
+//! File: `ro.rs`
+//!
+//! For purposes including MEGa encryption and while computing zero
+//! knowledge proofs, we must derive some value from multiple
+//! inputs. This is done in a systematic way with
+//! [`ro::RandomOracle`].
+//!
+//! This type takes named inputs of various types (scalars, points,
+//! bytestrings, and small integers), along with a domain separator, and
+//! hashes them using XMD to produce outputs which can be scalars, points,
+//! or bytestrings.
+//!
+//! ## Utility Functions: Testing
+//!
+//! File: `test_utils.rs`
+//!
+//! Contains a function for corrupting dealings which is used when testing
+//! malicious behavior.
+
+#![forbid(unsafe_code)]
+
 use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterEcdsaPublicKey};
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NumberOfNodes, Randomness};
