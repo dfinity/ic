@@ -22,6 +22,8 @@ pub enum Module {
     CallNewLoop,
     /// WAT module with a message callback handler.
     Callback,
+    /// WAT module with an inspect message handler.
+    InspectMessage,
 }
 
 impl Module {
@@ -32,7 +34,9 @@ impl Module {
         P: RenderParams,
     {
         let loop_iterations = match self {
-            Module::Test | Module::StableTest | Module::Callback => LoopIterations::Mi,
+            Module::Test | Module::StableTest | Module::Callback | Module::InspectMessage => {
+                LoopIterations::Mi
+            }
             // The call new module has a built-in loop with a `ic0_call_new()`
             Module::CallNewLoop => LoopIterations::One,
         };
@@ -112,6 +116,24 @@ impl Module {
             (func $test (export "canister_update test")
                 (local $i i32) (local $s i32)
                 {BODY}
+            )
+        )
+            "#,
+                    IMPORTS = imports,
+                    BODY = body
+                )
+            }
+            Module::InspectMessage => {
+                format!(
+                    r#"
+        (module
+            (import "ic0" "accept_message" (func $ic0_accept_message))
+            {IMPORTS}
+            (memory $mem 1)
+            (func (export "canister_inspect_message")
+                (local $i i32) (local $s i32)
+                {BODY}
+                (call $ic0_accept_message)
             )
         )
             "#,

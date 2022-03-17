@@ -80,5 +80,9 @@ name = "execute_callback"
 harness = false
 
 [[bench]]
+name = "execute_inspect_message"
+harness = false
+
+[[bench]]
 name = "execute_update"
 harness = false
