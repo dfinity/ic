@@ -1,3 +1,4 @@
+use crate::convert::principal_id_from_public_key_or_principal;
 use crate::{
     convert::{
         self, amount_, principal_id_from_public_key, signed_amount, to_model_account_identifier,
@@ -34,11 +35,12 @@ pub const DISSOLVE_TIME_UTC_SECONDS: &str = "dissolve_time_utc_seconds";
 pub const ADD_HOT_KEY: &str = "ADD_HOT_KEY";
 pub const SPAWN: &str = "SPAWN";
 pub const MERGE_MATURITY: &str = "MERGE_MATURITY";
+pub const NEURON_INFO: &str = "NEURON_INFO";
 
 /// `RequestType` contains all supported values of `Operation.type`.
 /// Extra information, such as `neuron_index` should only be included
 /// if it cannot be parsed from the submit payload.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub enum RequestType {
     // Aliases for backwards compatibility
     #[serde(rename = "TRANSACTION")]
@@ -68,10 +70,16 @@ pub enum RequestType {
     #[serde(rename = "MERGE_MATURITY")]
     #[serde(alias = "MergeMaturity")]
     MergeMaturity { neuron_index: u64 },
+    #[serde(rename = "NEURON_INFO")]
+    #[serde(alias = "NeuronInfo")]
+    NeuronInfo {
+        neuron_index: u64,
+        controller: Option<PublicKeyOrPrincipal>,
+    },
 }
 
 impl RequestType {
-    pub const fn into_str(self) -> &'static str {
+    pub fn into_str(self) -> &'static str {
         match self {
             RequestType::Send { .. } => TRANSACTION,
             RequestType::Stake { .. } => STAKE,
@@ -82,6 +90,7 @@ impl RequestType {
             RequestType::AddHotKey { .. } => ADD_HOT_KEY,
             RequestType::Spawn { .. } => SPAWN,
             RequestType::MergeMaturity { .. } => MERGE_MATURITY,
+            RequestType::NeuronInfo { .. } => NEURON_INFO,
         }
     }
 
@@ -100,6 +109,7 @@ impl RequestType {
                 | RequestType::AddHotKey { .. }
                 | RequestType::Spawn { .. }
                 | RequestType::MergeMaturity { .. }
+                | RequestType::NeuronInfo { .. }
         )
     }
 }
@@ -140,6 +150,12 @@ impl TransactionOperationResults {
             let rrmd = Object::from(rrmd);
             for (k, v) in rrmd {
                 metadata.insert(k, v);
+            }
+            // Add optional response data (may contains content from client).
+            if let Some(data) = rr.response.clone() {
+                for (k, v) in data.into_iter() {
+                    metadata.insert(k, v);
+                }
             }
             o.metadata = if metadata.is_empty() {
                 None
@@ -329,6 +345,9 @@ pub struct RequestResult {
     pub transaction_identifier: Option<TransactionIdentifier>,
     #[serde(flatten)]
     pub status: Status,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub response: Option<Object>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -397,6 +416,8 @@ pub enum Request {
     Spawn(Spawn),
     #[serde(rename = "MERGE_MATURITY")]
     MergeMaturity(MergeMaturity),
+    #[serde(rename = "NEURON_INFO")]
+    NeuronInfo(NeuronInfo),
 }
 
 impl Request {
@@ -441,6 +462,14 @@ impl Request {
                     neuron_index: *neuron_index,
                 })
             }
+            Request::NeuronInfo(NeuronInfo {
+                neuron_index,
+                controller,
+                ..
+            }) => Ok(RequestType::NeuronInfo {
+                neuron_index: *neuron_index,
+                controller: controller.map(|pid| PublicKeyOrPrincipal::Principal(pid)),
+            }),
         }
     }
 
@@ -464,6 +493,7 @@ impl Request {
                 Request::AddHotKey(o) => builder.add_hot_key(o),
                 Request::Spawn(o) => builder.spawn(o),
                 Request::MergeMaturity(o) => builder.merge_maturity(o),
+                Request::NeuronInfo(o) => builder.neuron_info(o),
             };
         }
         Ok(builder.build())
@@ -484,6 +514,7 @@ impl Request {
                 | Request::AddHotKey(_)
                 | Request::Spawn(_)
                 | Request::MergeMaturity(_)
+                | Request::NeuronInfo(_) // not neuron management but we need it signed.
         )
     }
 }
@@ -595,7 +626,6 @@ impl TryFrom<&models::Request> for Request {
                     Err(ApiError::invalid_request("Request is missing recipient"))
                 }
             }
-
             RequestType::AddHotKey { neuron_index } => {
                 if let Some(Command::Configure(Configure {
                     operation:
@@ -614,7 +644,6 @@ impl TryFrom<&models::Request> for Request {
                     Err(ApiError::invalid_request("Request is missing set hotkey."))
                 }
             }
-
             RequestType::Spawn { neuron_index } => {
                 if let Some(Command::Spawn(manage_neuron::Spawn {
                     new_controller,
@@ -651,6 +680,28 @@ impl TryFrom<&models::Request> for Request {
                     }))
                 } else {
                     Err(ApiError::invalid_request("Invalid merge maturity request."))
+                }
+            }
+            RequestType::NeuronInfo {
+                neuron_index,
+                controller,
+                ..
+            } => {
+                match controller
+                    .clone()
+                    .map(|pkp| principal_id_from_public_key_or_principal(pkp))
+                {
+                    None => Ok(Request::NeuronInfo(NeuronInfo {
+                        account,
+                        controller: None,
+                        neuron_index: *neuron_index,
+                    })),
+                    Some(Ok(pid)) => Ok(Request::NeuronInfo(NeuronInfo {
+                        account,
+                        controller: Some(pid),
+                        neuron_index: *neuron_index,
+                    })),
+                    Some(Err(e)) => Err(e),
                 }
             }
         }
@@ -784,6 +835,14 @@ pub struct Spawn {
 pub struct MergeMaturity {
     pub account: ledger_canister::AccountIdentifier,
     pub percentage_to_merge: u32,
+    #[serde(default)]
+    pub neuron_index: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct NeuronInfo {
+    pub account: ledger_canister::AccountIdentifier,
+    pub controller: Option<PrincipalId>,
     #[serde(default)]
     pub neuron_index: u64,
 }
@@ -1049,6 +1108,34 @@ impl TryFrom<Option<Object>> for MergeMaturityMetadata {
 
 impl From<MergeMaturityMetadata> for Object {
     fn from(m: MergeMaturityMetadata) -> Self {
+        match serde_json::to_value(m) {
+            Ok(Value::Object(o)) => o,
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+pub struct NeuronInfoMetadata {
+    pub controller: Option<PrincipalId>,
+    #[serde(default)]
+    pub neuron_index: u64,
+}
+
+impl TryFrom<Option<Object>> for NeuronInfoMetadata {
+    type Error = ApiError;
+    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+        serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
+            ApiError::internal_error(format!(
+                "Could not parse a `neuron_index` from metadata JSON object: {}",
+                e
+            ))
+        })
+    }
+}
+
+impl From<NeuronInfoMetadata> for Object {
+    fn from(m: NeuronInfoMetadata) -> Self {
         match serde_json::to_value(m) {
             Ok(Value::Object(o)) => o,
             _ => unreachable!(),
@@ -1353,6 +1440,31 @@ impl TransactionBuilder {
             metadata: Some(
                 MergeMaturityMetadata {
                     percentage_to_merge: Option::from(*percentage_to_merge),
+                    neuron_index: *neuron_index,
+                }
+                .into(),
+            ),
+        });
+    }
+
+    pub fn neuron_info(&mut self, req: &NeuronInfo) {
+        let NeuronInfo {
+            account,
+            controller,
+            neuron_index,
+        } = req;
+        let operation_identifier = self.allocate_op_id();
+        self.ops.push(Operation {
+            operation_identifier,
+            _type: OperationType::NeuronInfo,
+            status: None,
+            account: Some(to_model_account_identifier(account)),
+            amount: None,
+            related_operations: None,
+            coin_change: None,
+            metadata: Some(
+                NeuronInfoMetadata {
+                    controller: *controller,
                     neuron_index: *neuron_index,
                 }
                 .into(),

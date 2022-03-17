@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{convert, errors::ApiError, request_types::RequestType};
 
-pub const NEURON_MANAGEMEN_PSEUDO_HASH: &str =
+pub const NEURON_MANAGEMENT_PSEUDO_HASH: &str =
     "0000000000000000000000000000000000000000000000000000000000000000";
 
 /// Neuron management commands have no transaction identifier.
@@ -29,7 +29,7 @@ pub struct TransactionIdentifier {
 
 impl TransactionIdentifier {
     pub fn is_transfer(&self) -> bool {
-        self.hash != NEURON_MANAGEMEN_PSEUDO_HASH
+        self.hash != NEURON_MANAGEMENT_PSEUDO_HASH
     }
 
     /// This could be `TryFrom<&HttpRequestEnvelope<HttpCallContent>>`,
@@ -69,10 +69,11 @@ impl TransactionIdentifier {
             | RequestType::Disburse { .. }
             | RequestType::AddHotKey { .. }
             | RequestType::Spawn { .. }
-            | RequestType::MergeMaturity { .. } => {
+            | RequestType::MergeMaturity { .. }
+            | RequestType::NeuronInfo { .. } => {
                 // Unfortunately, staking operations don't really have a transaction ID
                 Ok(TransactionIdentifier {
-                    hash: NEURON_MANAGEMEN_PSEUDO_HASH.to_string(),
+                    hash: NEURON_MANAGEMENT_PSEUDO_HASH.to_string(),
                 })
             }
         }

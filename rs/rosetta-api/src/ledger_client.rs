@@ -3,11 +3,12 @@ use std::collections::{HashMap, VecDeque};
 use std::convert::TryFrom;
 use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use log::{debug, error, info, trace, warn};
 use reqwest::Client;
+use serde_json::Value;
 use tokio::sync::RwLock;
 use tokio::task::{spawn, JoinHandle};
 use url::Url;
@@ -21,11 +22,12 @@ use ic_nns_governance::pb::v1::manage_neuron_response::{
 use ic_nns_governance::pb::v1::{
     claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshResult,
     governance_error, manage_neuron::NeuronIdOrSubaccount, manage_neuron_response,
-    ClaimOrRefreshNeuronFromAccountResponse, GovernanceError, ManageNeuronResponse, NeuronInfo,
+    ClaimOrRefreshNeuronFromAccountResponse, GovernanceError, ManageNeuronResponse, Neuron,
+    NeuronInfo, NeuronState,
 };
 use ic_types::messages::{HttpCallContent, MessageId};
-use ic_types::CanisterId;
 use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, messages::SignedRequestBytes};
+use ic_types::{CanisterId, PrincipalId};
 use ledger_canister::protobuf::{ArchiveIndexEntry, ArchiveIndexResponse};
 use ledger_canister::{
     protobuf::TipOfChainRequest, AccountIdentifier, BlockArg, BlockHeight, BlockRes, EncodedBlock,
@@ -36,14 +38,14 @@ use on_wire::{FromWire, IntoWire};
 
 use crate::balance_book::BalanceBook;
 use crate::certification::verify_block_hash;
-use crate::convert;
 use crate::errors::{ApiError, Details, ICError};
-use crate::models::{EnvelopePair, SignedTransaction};
+use crate::models::{EnvelopePair, Object, SignedTransaction};
 use crate::request_types::START_DISSOLVE;
 use crate::request_types::STOP_DISSOLVE;
 use crate::request_types::{Request, RequestResult, RequestType, Status, TransactionResults};
 use crate::store::{BlockStoreError, HashedBlock, SQLiteStore};
 use crate::transaction_id::TransactionIdentifier;
+use crate::{convert, models};
 
 // If pruning is enabled, instead of pruning after each new block
 // we'll wait for PRUNE_DELAY blocks to accumulate and prune them in one go
@@ -438,9 +440,7 @@ impl LedgerAccess for LedgerClient {
         if self.offline {
             return Err(ApiError::NotAvailableOffline(false, Details::default()));
         }
-
         let start_time = Instant::now();
-
         let http_client = reqwest::Client::new();
 
         let mut results: TransactionResults = envelopes
@@ -452,6 +452,7 @@ impl LedgerAccess for LedgerClient {
                     neuron_id: None,
                     transaction_identifier: None,
                     status: crate::request_types::Status::NotAttempted,
+                    response: None,
                 })
             })
             .collect::<Result<Vec<_>, _>>()?
@@ -623,7 +624,7 @@ impl LedgerClient {
         };
 
         let request_id = MessageId::from(update.content.representation_independent_hash());
-        let txn_id = TransactionIdentifier::try_from_envelope(request_type, &update)?;
+        let txn_id = TransactionIdentifier::try_from_envelope(request_type.clone(), &update)?;
 
         if txn_id.is_transfer() {
             result.transaction_identifier = Some(txn_id.clone());
@@ -670,7 +671,6 @@ impl LedgerClient {
                     if status.is_success() {
                         break;
                     }
-
                     // Retry on 5xx errors. We don't want to retry on
                     // e.g. authentication errors.
                     let body =
@@ -695,6 +695,12 @@ impl LedgerClient {
             poll_interval = poll_interval
                 .mul_f32(Self::POLL_INTERVAL_MULTIPLIER)
                 .min(Self::MAX_POLL_INTERVAL);
+        }
+
+        enum OperationOutput {
+            BlockIndex(BlockHeight),
+            NeuronId(u64),
+            NeuronResponse(NeuronResponse),
         }
 
         // Do read-state calls until the result becomes available.
@@ -748,7 +754,7 @@ impl LedgerClient {
                                     "replied" => {
                                         match status.reply {
                                             Some(bytes) => {
-                                                match request_type {
+                                                match request_type.clone() {
                                                     RequestType::Send => {
                                                         let block_index: BlockHeight =
                                                         ProtoBuf::from_bytes(bytes)
@@ -759,7 +765,11 @@ impl LedgerClient {
                                                                 err
                                                             )
                                                         })?;
-                                                        return Ok(Ok(Some(block_index)));
+                                                        return Ok(Ok(Some(
+                                                            OperationOutput::BlockIndex(
+                                                                block_index,
+                                                            ),
+                                                        )));
                                                     }
                                                     RequestType::Stake { .. } => {
                                                         let res: ClaimOrRefreshNeuronFromAccountResponse = candid::decode_one(&bytes)
@@ -776,7 +786,11 @@ impl LedgerClient {
                                                                 format!("Could not claim neuron: {}", err).into())));
                                                             }
                                                             ClaimOrRefreshResult::NeuronId(nid) => {
-                                                                return Ok(Ok(Some(nid.id)));
+                                                                return Ok(Ok(Some(
+                                                                    OperationOutput::NeuronId(
+                                                                        nid.id,
+                                                                    ),
+                                                                )));
                                                             }
                                                         };
                                                     }
@@ -821,9 +835,10 @@ impl LedgerClient {
                                                             return Ok(Ok(None));
                                                         }
                                                         Some(manage_neuron_response::Command::Error(err)) => {
-                                                            if (request_type.into_str() ==  START_DISSOLVE
+                                                            let req_str= request_type.into_str();
+                                                            if (req_str ==  START_DISSOLVE
                                                                 && err.error_type == governance_error::ErrorType::RequiresNotDissolving as i32)
-                                                                || (request_type.into_str() == STOP_DISSOLVE
+                                                                || (req_str == STOP_DISSOLVE
                                                                     && err.error_type == governance_error::ErrorType::RequiresDissolving as i32)
                                                             {
                                                                 return Ok(Ok(None));
@@ -852,7 +867,7 @@ impl LedgerClient {
 
                                                         match &response.command {
                                                         Some(manage_neuron_response::Command::Disburse(DisburseResponse {transfer_block_height})) => {
-                                                            return Ok(Ok(Some(*transfer_block_height)));
+                                                            return Ok(Ok(Some(OperationOutput::BlockIndex(*transfer_block_height))));
                                                         }
                                                         Some(manage_neuron_response::Command::Error(err)) => {
                                                                 return Ok(Err(ApiError::TransactionRejected(
@@ -944,6 +959,45 @@ impl LedgerClient {
                                                             ),
                                                         }
                                                     }
+                                                    RequestType::NeuronInfo { .. } => {
+                                                        // Check the response from governance call.
+                                                        let response: Result<Neuron, GovernanceError> =
+                                                            candid::decode_one(bytes.as_ref())
+                                                                .map_err(|err| {
+                                                                    format!(
+                                                                        "Could not decode neuron response: {}",
+                                                                        err
+                                                                    )
+                                                                })?;
+                                                        return match response {
+                                                            Err(e) => {
+                                                                Ok(Err(ApiError::InvalidRequest(
+                                                                    false,
+                                                                    format!("Could not retrieve neuron information: {}", e.error_message).into()
+                                                                )))
+                                                            },
+                                                            Ok(neuron) => {
+                                                                let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+                                                                let state = neuron.state(now);
+                                                                let state = match state{
+                                                                    NeuronState::NotDissolving => models::NeuronState::NotDissolving,
+                                                                    NeuronState::Dissolving => models::NeuronState::Dissolving,
+                                                                    NeuronState::Dissolved => models::NeuronState::Dissolved,
+                                                                    NeuronState::Unspecified => models::NeuronState::Dissolved,
+                                                                };
+
+                                                                let output = OperationOutput::NeuronResponse(NeuronResponse {
+                                                                    neuron_id: neuron.id.as_ref().unwrap().id,
+                                                                    controller: neuron.controller.unwrap(),
+                                                                    kyc_verified: neuron.kyc_verified,
+                                                                    state,
+                                                                    maturity_e8s_equivalent: neuron.maturity_e8s_equivalent,
+                                                                    neuron_fees_e8s: neuron.neuron_fees_e8s,
+                                                                });
+                                                                return Ok(Ok(Some(output)));
+                                                            }
+                                                        };
+                                                    }
                                                 }
                                             }
                                             None => {
@@ -1008,12 +1062,22 @@ impl LedgerClient {
          * 200 result with no block index. */
         match wait_for_result().await {
             // Success
-            Ok(Ok(id)) => {
-                if let Request::Stake(_) = result._type {
-                    result.neuron_id = id;
-                } else {
-                    result.block_index = id;
+            Ok(Ok(Some(output))) => {
+                match output {
+                    OperationOutput::BlockIndex(block_height) => {
+                        result.block_index = Some(block_height);
+                    }
+                    OperationOutput::NeuronId(neuron_id) => {
+                        result.neuron_id = Some(neuron_id);
+                    }
+                    OperationOutput::NeuronResponse(response) => {
+                        result.response = Some(Object::from(response));
+                    }
                 }
+                result.status = Status::Completed;
+                Ok(())
+            }
+            Ok(Ok(None)) => {
                 result.status = Status::Completed;
                 Ok(())
             }
@@ -1028,6 +1092,25 @@ impl LedgerClient {
                 result.status = Status::Failed(ApiError::internal_error(e_msg));
                 Ok(())
             }
+        }
+    }
+}
+
+#[derive(serde::Serialize)]
+struct NeuronResponse {
+    neuron_id: u64,
+    controller: PrincipalId,
+    kyc_verified: bool,
+    state: models::NeuronState,
+    maturity_e8s_equivalent: u64,
+    neuron_fees_e8s: u64,
+}
+
+impl From<NeuronResponse> for Object {
+    fn from(r: NeuronResponse) -> Self {
+        match serde_json::to_value(r) {
+            Ok(Value::Object(o)) => o,
+            _ => Object::default(),
         }
     }
 }
