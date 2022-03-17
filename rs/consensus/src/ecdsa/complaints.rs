@@ -17,6 +17,7 @@ use ic_types::consensus::ecdsa::{
     EcdsaBlockReader, EcdsaComplaint, EcdsaComplaintContent, EcdsaMessage, EcdsaOpening,
     EcdsaOpeningContent,
 };
+use ic_types::crypto::canister_threshold_sig::error::IDkgLoadTranscriptError;
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgComplaint, IDkgOpening, IDkgTranscript, IDkgTranscriptId,
 };
@@ -838,9 +839,7 @@ impl EcdsaTranscriptLoader for EcdsaComplaintHandlerImpl {
         let mut openings = BTreeMap::new();
         for complaint in old_complaints {
             let complaint_openings = self.get_openings_for_complaint(ecdsa_pool, &complaint);
-            if !complaint_openings.is_empty() {
-                openings.insert(complaint, complaint_openings);
-            }
+            openings.insert(complaint, complaint_openings);
         }
         // TODO: check num openings satisfies the threshold
         match IDkgProtocol::load_transcript_with_openings(&*self.crypto, transcript, &openings) {
@@ -848,6 +847,11 @@ impl EcdsaTranscriptLoader for EcdsaComplaintHandlerImpl {
                 self.metrics
                     .complaint_metrics_inc("transcripts_loaded_with_openings");
                 TranscriptLoadStatus::Success
+            }
+            Err(IDkgLoadTranscriptError::InsufficientOpenings { .. }) => {
+                self.metrics
+                    .complaint_errors_inc("load_transcript_with_openings_threshold");
+                TranscriptLoadStatus::Failure
             }
             Err(err) => {
                 warn!(

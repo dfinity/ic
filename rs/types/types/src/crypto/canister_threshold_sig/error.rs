@@ -113,6 +113,9 @@ impl_display_using_debug!(IDkgOpenTranscriptError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgLoadTranscriptError {
+    InsufficientOpenings {
+        internal_error: String,
+    },
     InvalidArguments {
         internal_error: String,
     },
