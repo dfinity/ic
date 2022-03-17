@@ -17,13 +17,12 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
     artifact::IngressMessageId,
     batch::{BatchPayload, ValidationContext},
-    consensus::{BlockPayload, Payload},
-    crypto::CryptoHashOf,
+    consensus::Payload,
     messages::MAX_XNET_PAYLOAD_IN_BYTES,
     CountBytes, Height, NumBytes, SubnetId, Time,
 };
-use std::collections::{BTreeMap, HashSet};
-use std::sync::{Arc, RwLock};
+use std::collections::HashSet;
+use std::sync::Arc;
 
 use super::block_maker::SubnetRecords;
 
@@ -58,14 +57,6 @@ pub trait PayloadBuilder: Send + Sync {
     ) -> ValidationResult<PayloadValidationError>;
 }
 
-/// Cache of sets of message ids for past payloads. The index used here is a
-/// tuple (Height, HashOfBatchPayload) for two reasons:
-/// 1. We want to purge this cache by height, for those below certified height.
-/// 2. There could be more than one payloads at a given height due to blockchain
-/// branching.
-type IngressPayloadCache =
-    BTreeMap<(Height, CryptoHashOf<BlockPayload>), Arc<HashSet<IngressMessageId>>>;
-
 /// A list of hashsets that implements IngressSetQuery.
 struct IngressSets {
     hash_sets: Vec<Arc<HashSet<IngressMessageId>>>,
@@ -99,7 +90,6 @@ pub struct PayloadBuilderImpl {
     xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
     self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
     metrics: PayloadBuilderMetrics,
-    ingress_payload_cache: RwLock<IngressPayloadCache>,
     logger: ReplicaLogger,
 }
 
@@ -121,7 +111,6 @@ impl PayloadBuilderImpl {
             xnet_payload_builder,
             self_validating_payload_builder,
             metrics: PayloadBuilderMetrics::new(metrics),
-            ingress_payload_cache: RwLock::new(BTreeMap::new()),
             logger,
         }
     }
@@ -141,20 +130,12 @@ impl PayloadBuilder for PayloadBuilderImpl {
             .past_payloads_length
             .observe(past_payloads.len() as f64);
 
-        let mut ingress_payload_cache = self.ingress_payload_cache.write().unwrap();
-        self.metrics
-            .ingress_payload_cache_size
-            .set(ingress_payload_cache.len() as i64);
-
         let min_block_time = match past_payloads.last() {
             None => context.time,
             Some((_, time, _)) => *time,
         };
-        let past_ingress = self.filter_past_ingress(&mut ingress_payload_cache, past_payloads);
-        self.metrics
-            .past_payloads_length
-            .observe(past_payloads.len() as f64);
 
+        let past_ingress = self.ingress_selector.filter_past_payloads(past_payloads);
         let ingress_query = IngressSets::new(past_ingress, min_block_time);
 
         // We enforce the block_payload limit in the following way:
@@ -226,15 +207,11 @@ impl PayloadBuilder for PayloadBuilderImpl {
             return Ok(());
         }
         let batch_payload = &payload.as_ref().as_data().batch;
-        let mut ingress_payload_cache = self.ingress_payload_cache.write().unwrap();
         let min_block_time = match past_payloads.last() {
             None => context.time,
             Some((_, time, _)) => *time,
         };
-        let past_ingress = self.filter_past_ingress(&mut ingress_payload_cache, past_payloads);
-        self.metrics
-            .ingress_payload_cache_size
-            .set(ingress_payload_cache.len() as i64);
+        let past_ingress = self.ingress_selector.filter_past_payloads(past_payloads);
 
         let ingress_query = IngressSets::new(past_ingress, min_block_time);
 
@@ -326,53 +303,6 @@ impl PayloadBuilderImpl {
 
         NumBytes::new(max_block_payload_size)
     }
-
-    /// Extracts the sequence of past ingress messages from `past_payloads`. The
-    /// past_ingress is actually a list of HashSet of MessageIds taken from the
-    /// ingress_payload_cache.
-    #[allow(clippy::type_complexity)]
-    fn filter_past_ingress<'a>(
-        &self,
-        ingress_payload_cache: &'a mut IngressPayloadCache,
-        past_payloads: &'_ [(Height, Time, Payload)],
-    ) -> Vec<Arc<HashSet<IngressMessageId>>> {
-        let past_ingress: Vec<_> = past_payloads
-            .iter()
-            .filter_map(|(height, _, payload)| {
-                if payload.is_summary() {
-                    None
-                } else {
-                    let payload_hash = payload.get_hash();
-                    let batch = &payload.as_ref().as_data().batch;
-                    let ingress = ingress_payload_cache
-                        .entry((*height, payload_hash.clone()))
-                        .or_insert_with(|| {
-                            Arc::new(batch.ingress.message_ids().into_iter().collect())
-                        });
-                    Some(ingress.clone())
-                }
-            })
-            .collect();
-
-        // We assume that 'past_payloads' comes in descending heights, following the
-        // block parent traversal order.
-        if let Some((min_height, _, _)) = past_payloads.last() {
-            // The step below is to garbage collect no longer used past ingress payload
-            // cache. It assumes the sequence of calls to payload selection/validation
-            // leads to a monotonic sequence of lower-bound (min_height).
-            //
-            // Usually this is true, but even when it is not true (e.g. in tests) it is
-            // always safe to remove entries from ingress_payload_cache at the expense
-            // of having to re-compute them.
-            let keys: Vec<_> = ingress_payload_cache.keys().cloned().collect();
-            for key in keys {
-                if key.0 < *min_height {
-                    ingress_payload_cache.remove(&key);
-                }
-            }
-        }
-        past_ingress
-    }
 }
 #[cfg(test)]
 mod test {
@@ -397,7 +327,7 @@ mod test {
         consensus::{
             certification::{Certification, CertificationContent},
             dkg::Dealings,
-            DataPayload, Payload,
+            BlockPayload, DataPayload, Payload,
         },
         crypto::{CryptoHash, Signed},
         messages::SignedIngress,

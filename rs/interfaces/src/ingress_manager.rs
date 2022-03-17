@@ -8,12 +8,13 @@ use crate::{
 use ic_types::{
     artifact::IngressMessageId,
     batch::{IngressPayload, IngressPayloadError, ValidationContext},
+    consensus::Payload,
     crypto::CryptoError,
     messages::MessageId,
     time::{Time, UNIX_EPOCH},
-    CanisterId, NumBytes,
+    CanisterId, Height, NumBytes,
 };
-use std::collections::HashSet;
+use std::{collections::HashSet, sync::Arc};
 
 /// An generic interface that allows checking ingress existence.
 pub trait IngressSetQuery {
@@ -164,6 +165,14 @@ pub trait IngressSelector: Send + Sync {
         past_ingress: &dyn IngressSetQuery,
         context: &ValidationContext,
     ) -> ValidationResult<IngressPayloadValidationError>;
+
+    /// Extracts the sequence of past ingress messages from `past_payloads`. The
+    /// past_ingress is actually a list of HashSet of MessageIds taken from the
+    /// ingress_payload_cache.
+    fn filter_past_payloads(
+        &self,
+        past_payloads: &[(Height, Time, Payload)],
+    ) -> Vec<Arc<HashSet<IngressMessageId>>>;
 
     /// Request purge of the given ingress messages from the pool when
     /// they have already been included in finalized blocks.

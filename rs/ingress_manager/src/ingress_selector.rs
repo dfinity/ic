@@ -19,12 +19,16 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     artifact::IngressMessageId,
     batch::{IngressPayload, ValidationContext},
+    consensus::Payload,
     ingress::IngressStatus,
     messages::{MessageId, SignedIngress},
     CanisterId, CountBytes, Cycles, Height, NumBytes, Time,
 };
 use ic_validator::{validate_request, RequestValidationError};
-use std::collections::BTreeMap;
+use std::{
+    collections::{BTreeMap, HashSet},
+    sync::Arc,
+};
 
 impl<'a> IngressSelector for IngressManager {
     fn get_ingress_payload(
@@ -202,6 +206,55 @@ impl<'a> IngressSelector for IngressManager {
         }
 
         Ok(())
+    }
+
+    fn filter_past_payloads(
+        &self,
+        past_payloads: &[(Height, Time, Payload)],
+    ) -> Vec<Arc<HashSet<IngressMessageId>>> {
+        let mut ingress_payload_cache = self.ingress_payload_cache.write().unwrap();
+
+        // Record the metrics
+        self.metrics
+            .ingress_payload_cache_size
+            .set(ingress_payload_cache.len() as i64);
+
+        let past_ingress: Vec<_> = past_payloads
+            .iter()
+            .filter_map(|(height, _, payload)| {
+                if payload.is_summary() {
+                    None
+                } else {
+                    let payload_hash = payload.get_hash();
+                    let batch = &payload.as_ref().as_data().batch;
+                    let ingress = ingress_payload_cache
+                        .entry((*height, payload_hash.clone()))
+                        .or_insert_with(|| {
+                            Arc::new(batch.ingress.message_ids().into_iter().collect())
+                        });
+                    Some(ingress.clone())
+                }
+            })
+            .collect();
+
+        // We assume that 'past_payloads' comes in descending heights, following the
+        // block parent traversal order.
+        if let Some((min_height, _, _)) = past_payloads.last() {
+            // The step below is to garbage collect no longer used past ingress payload
+            // cache. It assumes the sequence of calls to payload selection/validation
+            // leads to a monotonic sequence of lower-bound (min_height).
+            //
+            // Usually this is true, but even when it is not true (e.g. in tests) it is
+            // always safe to remove entries from ingress_payload_cache at the expense
+            // of having to re-compute them.
+            let keys: Vec<_> = ingress_payload_cache.keys().cloned().collect();
+            for key in keys {
+                if key.0 < *min_height {
+                    ingress_payload_cache.remove(&key);
+                }
+            }
+        }
+        past_ingress
     }
 
     fn request_purge_finalized_messages(&self, message_ids: Vec<IngressMessageId>) {
