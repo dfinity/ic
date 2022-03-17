@@ -13,8 +13,13 @@ gen-cargo-pipeline:
         python gen_gitlab_cargo_pipeline.py ../../../rs/ ../../../ic-os -v --out=../../../child-pipeline.yml
       " ../shell.nix
       cd -
+      # slots: zh=48 (22%), sf=64 (29%), ch=108 (49%)
       # this tags are required on ci runners
-      DCS=("zh" "ch" "sf")
+      DCS=(
+          "zh" "zh" "zh" "zh"
+          "sf" "sf" "sf" "sf" "sf" "sf"
+          "ch" "ch" "ch" "ch" "ch" "ch" "ch" "ch" "ch" "ch"
+      )
       RANDOM=$$$(date +%s)
       echo "DC_TAG=${DCS[$RANDOM % ${#DCS[@]} ]}" >> dc.env
   artifacts:
