@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    future::Future,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -17,7 +16,7 @@ use thiserror::Error;
 use tokio::{
     sync::mpsc::{channel, Sender},
     sync::mpsc::{unbounded_channel, Receiver},
-    task,
+    task::JoinHandle,
 };
 
 use crate::{
@@ -28,7 +27,7 @@ use crate::{
     common::*,
     connection::{Connection, ConnectionConfig, ConnectionState, PingState},
     stream::{StreamConfig, StreamEvent, StreamEventKind},
-    Channel, ChannelError, Command, Config, HasHeight, ProcessEvent, ProcessEventError,
+    Channel, ChannelError, Command, Config, ProcessEvent, ProcessEventError,
 };
 
 /// How the adapter identifies itself to other Bitcoin nodes.
@@ -142,11 +141,12 @@ impl ConnectionManager {
 
     /// This function contains the actions the must occur every time the connection
     /// manager must execute actions.
-    pub fn tick<T>(&mut self, has_height_impl: &impl HasHeight, handle: fn(StreamConfig) -> T)
-    where
-        T: Future + Send + 'static,
-    {
-        self.current_height = has_height_impl.get_height();
+    pub fn tick(
+        &mut self,
+        current_height: BlockHeight,
+        handle: fn(StreamConfig) -> JoinHandle<()>,
+    ) {
+        self.current_height = current_height;
 
         if let Err(ConnectionManagerError::AddressBook(err)) = self.manage_connections(handle) {
             error!(self.logger, "{}", err);
@@ -164,13 +164,10 @@ impl ConnectionManager {
     }
 
     /// This function will remove disconnects and establish new connections.
-    fn manage_connections<T>(
+    fn manage_connections(
         &mut self,
-        handle: fn(StreamConfig) -> T,
-    ) -> ConnectionManagerResult<()>
-    where
-        T: Future + Send + 'static,
-    {
+        handle: fn(StreamConfig) -> JoinHandle<()>,
+    ) -> ConnectionManagerResult<()> {
         self.manage_ping_states();
         self.flag_version_handshake_timeouts();
         self.flag_seed_addr_retrieval_timeouts();
@@ -279,10 +276,10 @@ impl ConnectionManager {
     }
 
     /// This function creates a new connection with a stream to a BTC node.
-    fn make_connection<T>(&mut self, handle: fn(StreamConfig) -> T) -> ConnectionManagerResult<()>
-    where
-        T: Future + Send + 'static,
-    {
+    fn make_connection(
+        &mut self,
+        handle: fn(StreamConfig) -> JoinHandle<()>,
+    ) -> ConnectionManagerResult<()> {
         let address_entry_result = if !self.address_book.has_enough_addresses() {
             self.address_book.pop_seed()
         } else {
@@ -305,12 +302,10 @@ impl ConnectionManager {
             socks_proxy,
             stream_event_sender,
         };
-        let handle = task::spawn(async move {
-            handle(stream_config).await;
-        });
+        let join_handle = handle(stream_config);
         let conn = Connection::new(ConnectionConfig {
             address_entry,
-            handle,
+            handle: join_handle,
             writer,
         });
         self.connections.insert(address, conn);
@@ -654,13 +649,7 @@ mod test {
     use ic_logger::replica_logger::no_op_logger;
     use std::str::FromStr;
 
-    struct HasHeightImpl;
-
-    impl HasHeight for HasHeightImpl {
-        fn get_height(&self) -> BlockHeight {
-            1
-        }
-    }
+    const BLOCK_HEIGHT_FOR_TESTS: BlockHeight = 1;
 
     #[test]
     fn validate_received_version_bad_version_number() {
@@ -738,81 +727,85 @@ mod test {
         assert!(!manager.validate_received_version(&version_message));
     }
 
-    async fn simple_handle(config: StreamConfig) {
-        let StreamConfig {
-            address,
-            mut network_message_receiver,
-            stream_event_sender,
-            ..
-        } = config;
-
-        let adapter_address = SocketAddr::from_str("0.0.0.0:8333").expect("invalid addr");
-        let address_2 = SocketAddr::from_str("192.168.1.1:8333").expect("invalid addr");
-        let now = SystemTime::now();
-        let since_epoch = now
-            .duration_since(UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as u32;
-        let services = ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED;
-        let addresses = vec![
-            (since_epoch, Address::new(&address, services)),
-            (since_epoch, Address::new(&address_2, services)),
-        ];
-
-        stream_event_sender
-            .send(StreamEvent {
+    fn simple_handle(config: StreamConfig) -> JoinHandle<()> {
+        tokio::task::spawn(async move {
+            let StreamConfig {
                 address,
-                kind: StreamEventKind::Connected,
-            })
-            .await
-            .ok();
+                mut network_message_receiver,
+                stream_event_sender,
+                ..
+            } = config;
 
-        loop {
-            let maybe_message = network_message_receiver.recv().await;
-            if maybe_message.is_none() {
-                break; // Something went wrong with the test. Time to escape!
-            }
-            let message = maybe_message.unwrap();
-            match message {
-                NetworkMessage::Version(_) => {
-                    stream_event_sender
-                        .send(StreamEvent {
-                            address,
-                            kind: StreamEventKind::Message(NetworkMessage::Verack),
-                        })
-                        .await
-                        .ok();
-                    stream_event_sender
-                        .send(StreamEvent {
-                            address,
-                            kind: StreamEventKind::Message(NetworkMessage::Version(
-                                VersionMessage::new(
-                                    services,
-                                    since_epoch as i64,
-                                    Address::new(&adapter_address, services),
-                                    Address::new(&address, services),
-                                    0,
-                                    String::from("user-agent"),
-                                    1,
-                                ),
-                            )),
-                        })
-                        .await
-                        .ok();
+            let adapter_address = SocketAddr::from_str("0.0.0.0:8333").expect("invalid addr");
+            let address_2 = SocketAddr::from_str("192.168.1.1:8333").expect("invalid addr");
+            let now = SystemTime::now();
+            let since_epoch = now
+                .duration_since(UNIX_EPOCH)
+                .expect("time went backwards")
+                .as_secs() as u32;
+            let services = ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED;
+            let addresses = vec![
+                (since_epoch, Address::new(&address, services)),
+                (since_epoch, Address::new(&address_2, services)),
+            ];
+
+            stream_event_sender
+                .send(StreamEvent {
+                    address,
+                    kind: StreamEventKind::Connected,
+                })
+                .await
+                .ok();
+
+            loop {
+                let maybe_message = network_message_receiver.recv().await;
+                if maybe_message.is_none() {
+                    break; // Something went wrong with the test. Time to escape!
                 }
-                NetworkMessage::Verack => {}
-                NetworkMessage::GetAddr => {
-                    stream_event_sender
-                        .send(StreamEvent {
-                            address,
-                            kind: StreamEventKind::Message(NetworkMessage::Addr(addresses.clone())),
-                        })
-                        .await
-                        .ok();
+                let message = maybe_message.unwrap();
+                match message {
+                    NetworkMessage::Version(_) => {
+                        stream_event_sender
+                            .send(StreamEvent {
+                                address,
+                                kind: StreamEventKind::Message(NetworkMessage::Verack),
+                            })
+                            .await
+                            .ok();
+                        stream_event_sender
+                            .send(StreamEvent {
+                                address,
+                                kind: StreamEventKind::Message(NetworkMessage::Version(
+                                    VersionMessage::new(
+                                        services,
+                                        since_epoch as i64,
+                                        Address::new(&adapter_address, services),
+                                        Address::new(&address, services),
+                                        0,
+                                        String::from("user-agent"),
+                                        1,
+                                    ),
+                                )),
+                            })
+                            .await
+                            .ok();
+                    }
+                    NetworkMessage::Verack => {}
+                    NetworkMessage::GetAddr => {
+                        stream_event_sender
+                            .send(StreamEvent {
+                                address,
+                                kind: StreamEventKind::Message(NetworkMessage::Addr(
+                                    addresses.clone(),
+                                )),
+                            })
+                            .await
+                            .ok();
+                    }
+                    _ => break,
                 }
-                _ => break,
             }
-        }
+        })
     }
 
     /// This test is used to walk through the initial address discovery process.
@@ -825,7 +818,6 @@ mod test {
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let mut manager = ConnectionManager::new(&config, no_op_logger());
-        let has_height_impl = HasHeightImpl {};
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
         assert!(manager.initial_address_discovery);
         assert_eq!(manager.current_height, 0);
@@ -835,7 +827,7 @@ mod test {
         );
 
         runtime.block_on(async {
-            manager.tick(&has_height_impl, simple_handle);
+            manager.tick(BLOCK_HEIGHT_FOR_TESTS, simple_handle);
             for i in 0..4u8 {
                 let event = manager
                     .stream_event_receiver
@@ -849,7 +841,7 @@ mod test {
                     // has been disconnected.
                     continue;
                 }
-                manager.tick(&has_height_impl, simple_handle);
+                manager.tick(BLOCK_HEIGHT_FOR_TESTS, simple_handle);
             }
         });
 
@@ -887,7 +879,7 @@ mod test {
             let conn = Connection::new_with_state(
                 ConnectionConfig {
                     address_entry: AddressEntry::Discovered(addr),
-                    handle: task::spawn(async {}),
+                    handle: tokio::task::spawn(async {}),
                     writer,
                 },
                 ConnectionState::Connected { timestamp },
@@ -925,7 +917,7 @@ mod test {
             let conn = Connection::new_with_state(
                 ConnectionConfig {
                     address_entry: AddressEntry::Seed(addr),
-                    handle: task::spawn(async {}),
+                    handle: tokio::task::spawn(async {}),
                     writer: writer.clone(),
                 },
                 ConnectionState::AwaitingAddresses {
@@ -936,7 +928,7 @@ mod test {
             let conn2 = Connection::new_with_state(
                 ConnectionConfig {
                     address_entry: AddressEntry::Seed(addr2),
-                    handle: task::spawn(async {}),
+                    handle: tokio::task::spawn(async {}),
                     writer,
                 },
                 ConnectionState::AwaitingAddresses {
@@ -986,7 +978,7 @@ mod test {
             let conn = Connection::new_with_state(
                 ConnectionConfig {
                     address_entry: AddressEntry::Seed(addr),
-                    handle: task::spawn(async {}),
+                    handle: tokio::task::spawn(async {}),
                     writer: writer.clone(),
                 },
                 ConnectionState::AwaitingAddresses {
@@ -997,7 +989,7 @@ mod test {
             let conn2 = Connection::new_with_state(
                 ConnectionConfig {
                     address_entry: AddressEntry::Seed(addr2),
-                    handle: task::spawn(async {}),
+                    handle: tokio::task::spawn(async {}),
                     writer,
                 },
                 ConnectionState::HandshakeComplete {
