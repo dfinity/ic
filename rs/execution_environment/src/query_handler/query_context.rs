@@ -39,7 +39,7 @@ use super::query_allocations::QueryAllocationsUsed;
 use crate::{
     hypervisor::Hypervisor,
     metrics::{MeasurementScope, QueryHandlerMetrics},
-    QueryExecutionType,
+    NonReplicatedQueryKind, QueryExecutionType,
 };
 use ic_base_types::NumBytes;
 use ic_interfaces::execution_environment::{
@@ -50,7 +50,6 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CallContextAction, CallOrigin, CanisterState, NetworkTopology, ReplicatedState,
 };
-use ic_system_api::NonReplicatedQueryKind;
 use ic_types::{
     ingress::WasmResult,
     messages::{

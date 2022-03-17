@@ -1,4 +1,4 @@
-use crate::QueryExecutionType;
+use crate::{NonReplicatedQueryKind as QueryKind, QueryExecutionType};
 use ic_canister_sandbox_replica_controller::sandboxed_execution_controller::SandboxedExecutionController;
 use ic_config::flag_status::FlagStatus;
 use ic_config::{embedders::Config as EmbeddersConfig, execution_environment::Config};
@@ -20,6 +20,7 @@ use ic_sys::PAGE_SIZE;
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, NonReplicatedQueryKind,
 };
+use ic_types::ic00::IC_00;
 use ic_types::{
     canonical_error::{internal_error, not_found_error, permission_denied_error, CanonicalError},
     ingress::WasmResult,
@@ -300,13 +301,18 @@ impl Hypervisor {
             } => {
                 let api_type = ApiType::non_replicated_query(
                     time,
-                    payload.to_vec(),
                     caller,
-                    call_context_id,
                     self.own_subnet_id,
-                    network_topology,
+                    payload.to_vec(),
                     data_certificate,
-                    query_kind.clone(),
+                    match query_kind {
+                        QueryKind::Pure => NonReplicatedQueryKind::Pure,
+                        QueryKind::Stateful => NonReplicatedQueryKind::Stateful {
+                            call_context_id,
+                            network_topology,
+                            outgoing_request: None,
+                        },
+                    },
                 );
                 // As we are executing the query in non-replicated mode, we can
                 // modify the canister as the caller is not going to be able to
@@ -321,8 +327,8 @@ impl Hypervisor {
                 );
 
                 let new_execution_state = match query_kind {
-                    NonReplicatedQueryKind::Pure => execution_state,
-                    NonReplicatedQueryKind::Stateful => output_execution_state,
+                    QueryKind::Pure => execution_state,
+                    QueryKind::Stateful => output_execution_state,
                 };
 
                 let canister = CanisterState::from_parts(
@@ -333,6 +339,83 @@ impl Hypervisor {
                 (canister, output.num_instructions_left, output.wasm_result)
             }
         }
+    }
+
+    /// Execute a query call that has no caller provided.
+    /// This type of query is triggered by the IC only when
+    /// there is a need to execute a query call on the provided canister.
+    #[allow(clippy::type_complexity)]
+    pub fn execute_anonymous_query(
+        &self,
+        time: Time,
+        method: &str,
+        payload: &[u8],
+        canister: CanisterState,
+        data_certificate: Option<Vec<u8>>,
+        execution_parameters: ExecutionParameters,
+    ) -> (
+        CanisterState,
+        NumInstructions,
+        HypervisorResult<Option<WasmResult>>,
+    ) {
+        // Validate that the canister is running.
+        if CanisterStatusType::Running != canister.status() {
+            return (
+                canister,
+                execution_parameters.instruction_limit,
+                Err(HypervisorError::CanisterStopped),
+            );
+        }
+
+        let method = WasmMethod::Query(method.to_string());
+        let memory_usage = canister.memory_usage(self.own_subnet_type);
+        let (execution_state, system_state, scheduler_state) = canister.into_parts();
+
+        // Validate that the Wasm module is present.
+        let execution_state = match execution_state {
+            None => {
+                return (
+                    CanisterState::from_parts(None, system_state, scheduler_state),
+                    execution_parameters.instruction_limit,
+                    Err(HypervisorError::WasmModuleNotFound),
+                );
+            }
+            Some(state) => state,
+        };
+
+        // Validate that the Wasm module exports the method.
+        if !execution_state.exports_method(&method) {
+            return (
+                CanisterState::from_parts(Some(execution_state), system_state, scheduler_state),
+                execution_parameters.instruction_limit,
+                Err(HypervisorError::MethodNotFound(method)),
+            );
+        }
+
+        let api_type = ApiType::non_replicated_query(
+            time,
+            IC_00.get(),
+            self.own_subnet_id,
+            payload.to_vec(),
+            data_certificate,
+            NonReplicatedQueryKind::Pure,
+        );
+        // We do not want to commit updates. Hence, execute on clones
+        // of system and execution states so that we have the original
+        // versions.
+        let (output, _, _) = self.execute(
+            api_type,
+            system_state.clone(),
+            memory_usage,
+            execution_parameters,
+            FuncRef::Method(method),
+            execution_state.clone(),
+        );
+
+        // We return the unmodified version of the canister.
+        let canister =
+            CanisterState::from_parts(Some(execution_state), system_state, scheduler_state);
+        (canister, output.num_instructions_left, output.wasm_result)
     }
 
     /// Execute a callback.
