@@ -1,3 +1,6 @@
+///
+/// Common System API benchmark functions, types, constants.
+///
 use criterion::{BatchSize, Criterion};
 use ic_config::execution_environment::Config;
 use ic_execution_environment::Hypervisor;
@@ -8,40 +11,47 @@ use ic_interfaces::{
     messages::RequestOrIngress,
 };
 use ic_metrics::MetricsRegistry;
+use ic_nns_constants::CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{CallContextAction, CanisterState, NetworkTopology, SubnetTopology};
+use ic_replicated_state::{CanisterState, NetworkTopology, SubnetTopology};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     get_test_replica_logger, mock_time,
     state::canister_from_exec_state,
-    types::ids::{canister_test_id, subnet_test_id},
+    types::ids::{canister_test_id, subnet_test_id, user_test_id},
     types::messages::IngressBuilder,
 };
-use ic_types::{
-    CanisterId, Cycles, MemoryAllocation, NumBytes, NumInstructions, PrincipalId, Time, UserId,
-};
+use ic_types::{CanisterId, MemoryAllocation, NumBytes, NumInstructions, Time};
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use std::convert::TryFrom;
-use std::str::FromStr;
 use std::sync::Arc;
 
-const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(10_000_000_000);
+pub const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(10_000_000_000);
+// Note: this canister ID is required for the `ic0_mint_cycles()`
+pub const LOCAL_CANISTER_ID: u64 = CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET;
+pub const USER_ID: u64 = 0;
+pub const SUBNET_ID: u64 = 1;
 
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
         AvailableMemory::new(i64::MAX, i64::MAX).into();
 }
 
+/// All the pieces needed to execute a benchmark.
+/// Clippy complains if the tuple is used directly.
 #[derive(Clone)]
-struct ExecuteUpdateArgs(
-    CanisterState,
-    RequestOrIngress,
-    Time,
-    Arc<NetworkTopology>,
-    ExecutionParameters,
+pub struct BenchmarkArgs(
+    pub CanisterState,
+    pub RequestOrIngress,
+    pub Time,
+    pub Arc<NetworkTopology>,
+    pub ExecutionParameters,
 );
+
+/// Benchmark to run: name (id), WAT, expected number of instructions.
+pub struct Benchmark(pub &'static str, pub String, pub u64);
 
 pub fn get_hypervisor() -> (Hypervisor, std::path::PathBuf) {
     let log = get_test_replica_logger();
@@ -59,21 +69,19 @@ pub fn get_hypervisor() -> (Hypervisor, std::path::PathBuf) {
     (hypervisor, tmpdir.path().into())
 }
 
-fn setup_update<W>(
+pub fn get_execution_args<W>(
     hypervisor: &Hypervisor,
     canister_root: &std::path::Path,
     wat: W,
-) -> ExecuteUpdateArgs
+) -> BenchmarkArgs
 where
     W: AsRef<str>,
 {
-    let mut features = wabt::Features::new();
-    features.enable_multi_value();
-
-    let canister_id = canister_test_id(0);
+    // Create Canister state
+    let canister_id = canister_test_id(LOCAL_CANISTER_ID);
     let execution_state = hypervisor
         .create_execution_state(
-            wabt::wat2wasm_with_features(wat.as_ref(), features).unwrap(),
+            wabt::wat2wasm_with_features(wat.as_ref(), wabt::Features::new()).unwrap(),
             canister_root.into(),
             canister_id,
         )
@@ -81,32 +89,34 @@ where
     let mut canister_state = canister_from_exec_state(execution_state, canister_id);
     canister_state.system_state.memory_allocation =
         MemoryAllocation::try_from(NumBytes::from(0)).unwrap();
-    let request = RequestOrIngress::Ingress(
+
+    // Create an Ingress message
+    let ingress = RequestOrIngress::Ingress(
         IngressBuilder::new()
             .method_name("test")
             .method_payload(vec![0; 8192])
-            .source(UserId::from(
-                PrincipalId::from_str(
-                    "mvlzf-grr7q-nhzpd-geghp-zdgtp-ib3yt-hzgi6-texkf-kk6rz-p2ejr-iae",
-                )
-                .expect("we know this converts OK"),
-            ))
+            .source(user_test_id(USER_ID))
             .build(),
     );
-    let time = mock_time();
+
+    // Create a routing table
     let routing_table = Arc::new(RoutingTable::try_from(btreemap! {
-        CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => subnet_test_id(1),
+        CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => subnet_test_id(SUBNET_ID),
     }).unwrap());
+
+    // Create network topology
     let network_topology = Arc::new(NetworkTopology {
         routing_table,
         subnets: btreemap! {
-            subnet_test_id(1) => SubnetTopology {
+            subnet_test_id(SUBNET_ID) => SubnetTopology {
                 subnet_type: SubnetType::Application,
                 ..SubnetTopology::default()
             }
         },
         ..NetworkTopology::default()
     });
+
+    // Create execution parameters
     let execution_parameters = ExecutionParameters {
         instruction_limit: MAX_NUM_INSTRUCTIONS,
         canister_memory_limit: canister_state.memory_limit(NumBytes::new(std::u64::MAX)),
@@ -115,28 +125,33 @@ where
         subnet_type: SubnetType::Application,
         execution_mode: ExecutionMode::Replicated,
     };
-    ExecuteUpdateArgs(
+
+    BenchmarkArgs(
         canister_state,
-        request,
-        time,
+        ingress,
+        mock_time(),
         network_topology,
         execution_parameters,
     )
 }
 
-/// Run execute_update() benchmark for a given WAT snippet.
-pub fn run_benchmark<I, W>(
+/// Run benchmark for a given WAT snippet.
+fn run_benchmark<G, I, W, R>(
     c: &mut Criterion,
+    group: G,
     id: I,
     wat: W,
     expected_instructions: u64,
     hypervisor: &Hypervisor,
     canister_root: &std::path::Path,
+    routine: R,
 ) where
+    G: AsRef<str>,
     I: AsRef<str>,
     W: AsRef<str>,
+    R: Fn(&Hypervisor, u64, BenchmarkArgs),
 {
-    let mut group = c.benchmark_group("update");
+    let mut group = c.benchmark_group(group.as_ref());
     let mut bench_args = None;
     group
         .throughput(criterion::Throughput::Elements(expected_instructions))
@@ -151,45 +166,38 @@ pub fn run_benchmark<I, W>(
                             expected_instructions / 1_000_000
                         );
                         println!("    WAT: {}", wat.as_ref());
-                        bench_args = Some(setup_update(hypervisor, canister_root, wat.as_ref()));
+                        bench_args =
+                            Some(get_execution_args(hypervisor, canister_root, wat.as_ref()));
                     }
-                    // let (hypervisor, args) = bench_setup.take().unwrap();
                     bench_args.as_ref().unwrap().clone()
                 },
-                |ExecuteUpdateArgs(
-                    cloned_canister_state,
-                    cloned_request,
-                    cloned_time,
-                    cloned_network_topology,
-                    cloned_execution_parameters,
-                )| {
-                    let (_state, instructions, action, _bytes) = hypervisor.execute_update(
-                        cloned_canister_state,
-                        cloned_request,
-                        cloned_time,
-                        cloned_network_topology,
-                        cloned_execution_parameters,
-                    );
-                    match action {
-                        CallContextAction::NoResponse { .. } => {}
-                        CallContextAction::Reply { .. } => {}
-                        CallContextAction::Reject { .. } => {}
-                        _ => assert_eq!(
-                            action,
-                            CallContextAction::NoResponse {
-                                refund: Cycles::from(0),
-                            },
-                            "The system call should not fail"
-                        ),
-                    }
-                    assert_eq!(
-                        expected_instructions,
-                        MAX_NUM_INSTRUCTIONS.get() - instructions.get(),
-                        "Expected number of instructions is required for IPS metric"
-                    );
+                |args| {
+                    routine(hypervisor, expected_instructions, args);
                 },
                 BatchSize::SmallInput,
             );
         });
     group.finish();
+}
+
+/// Run all benchmark in the list.
+/// List of benchmarks: benchmark id (name), WAT, expected number of instructions.
+pub fn run_benchmarks<G, R>(c: &mut Criterion, group: G, benchmarks: &[Benchmark], routine: R)
+where
+    G: AsRef<str>,
+    R: Fn(&Hypervisor, u64, BenchmarkArgs) + Copy,
+{
+    let (hypervisor, canister_root) = get_hypervisor();
+    for Benchmark(id, wat, expected_instructions) in benchmarks {
+        run_benchmark(
+            c,
+            group.as_ref(),
+            id,
+            wat,
+            *expected_instructions,
+            &hypervisor,
+            &canister_root,
+            routine,
+        );
+    }
 }
