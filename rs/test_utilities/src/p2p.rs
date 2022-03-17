@@ -6,13 +6,13 @@ use crate::{
 };
 use ic_config::logger::{default_logtarget, Config as LoggerConfig, LogFormat};
 use ic_interfaces::registry::RegistryClient;
-use ic_interfaces_p2p::P2PRunner;
 use ic_logger::*;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::node::v1::{
     connection_endpoint::Protocol, ConnectionEndpoint, FlowEndpoint, NodeRecord,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_replica_setup_ic_network::P2PThreadJoiner;
 use ic_types::{
     replica_config::ReplicaConfig,
     transport::{TransportConfig, TransportFlowConfig},
@@ -68,7 +68,7 @@ pub struct P2PTestContext {
     pub subnet_id: SubnetId,               // Dummy test subnet ID
     pub metrics_registry: MetricsRegistry, // monitor metrics from various ICP layers
     pub test_synchronizer: P2PTestSynchronizer, // Provide basic inter-test synchronization
-    pub p2p: Box<dyn P2PRunner>,           // p2p object to drive the ICP stack
+    pub _p2p_thread_joiner: P2PThreadJoiner, // p2p object to drive the ICP stack
 }
 
 impl P2PTestContext {
@@ -77,7 +77,7 @@ impl P2PTestContext {
         subnet_id: SubnetId,
         metrics_registry: MetricsRegistry,
         test_synchronizer: P2PTestSynchronizer,
-        p2p: Box<dyn P2PRunner>,
+        p2p_thread_joiner: P2PThreadJoiner,
     ) -> Self {
         P2PTestContext {
             node_num,
@@ -85,7 +85,7 @@ impl P2PTestContext {
             subnet_id,
             metrics_registry,
             test_synchronizer,
-            p2p,
+            _p2p_thread_joiner: p2p_thread_joiner,
         }
     }
 }

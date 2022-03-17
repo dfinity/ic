@@ -10,12 +10,12 @@ use ic_interfaces::{
     registry::{LocalStoreCertifiedTimeReader, RegistryClient},
     self_validating_payload::NoOpSelfValidatingPayloadBuilder,
 };
-use ic_interfaces_p2p::{IngressIngestionService, P2PRunner};
+use ic_interfaces_p2p::IngressIngestionService;
 use ic_logger::{info, ReplicaLogger};
 use ic_messaging::{MessageRoutingImpl, XNetEndpoint, XNetEndpointConfig, XNetPayloadBuilderImpl};
 use ic_registry_subnet_type::SubnetType;
 use ic_replica_setup_ic_network::{
-    create_networking_stack, init_artifact_pools, P2PStateSyncClient,
+    create_networking_stack, init_artifact_pools, P2PStateSyncClient, P2PThreadJoiner,
 };
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::StateManagerImpl;
@@ -43,7 +43,7 @@ pub fn construct_ic_stack(
     Arc<StateManagerImpl>,
     Arc<dyn QueryHandler<State = ReplicatedState>>,
     QueryExecutionService,
-    Box<dyn P2PRunner>,
+    P2PThreadJoiner,
     IngressIngestionService,
     Arc<dyn ConsensusPoolCache>,
     IngressFilterService,
@@ -250,9 +250,7 @@ pub fn construct_ic_stack(
         cycles_account_manager,
         local_store_time_reader,
         config.nns_registry_replicator.poll_delay_duration_ms,
-    )
-    .expect("Failed to construct p2p");
-
+    );
     Ok((
         crypto,
         state_manager,

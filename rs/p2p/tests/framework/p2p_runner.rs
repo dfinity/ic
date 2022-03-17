@@ -122,8 +122,7 @@ fn execute_test(
             cycles_account_manager,
             None,
             0,
-        )
-        .expect("Failed to initialize P2P");
+        );
 
         let mut p2p_test_context = P2PTestContext::new(
             node_num,
@@ -138,7 +137,6 @@ fn execute_test(
         // Call the test
         test_synchronizer.wait_on_barrier(P2P_TEST_START_BARRIER.to_string());
         test(&mut p2p_test_context);
-        std::mem::drop(p2p_test_context.p2p);
         test_synchronizer.wait_on_barrier(P2P_TEST_END_BARRIER.to_string());
     })
 }
@@ -284,9 +282,7 @@ fn execute_test_chunking_pool(
             cycles_account_manager,
             None,
             0,
-        )
-        .expect("Failed to initialize P2P");
-
+        );
         let mut p2p_test_context = P2PTestContext::new(
             node_num,
             subnet_id,
@@ -300,7 +296,6 @@ fn execute_test_chunking_pool(
         // Call the test
         test_synchronizer.wait_on_barrier(P2P_TEST_START_BARRIER.to_string());
         test(&mut p2p_test_context);
-        std::mem::drop(p2p_test_context.p2p);
         test_synchronizer.wait_on_barrier(P2P_TEST_END_BARRIER.to_string());
     })
 }

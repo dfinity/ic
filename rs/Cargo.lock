@@ -6619,6 +6619,7 @@ dependencies = [
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
+ "ic-replica-setup-ic-network",
  "ic-replicated-state",
  "ic-sys",
  "ic-system-api",

@@ -9,15 +9,3 @@ use tower::{buffer::Buffer, util::BoxService};
 /// be used by the HTTP handler to submit ingress messages.
 pub type IngressIngestionService =
     Buffer<BoxService<SignedIngress, Result<(), CanonicalError>, Infallible>, SignedIngress>;
-
-/// P2P exposes channels that are used to hold artifacts sent by
-/// the *Transport* layer or the HTTP handler. These channels also hold any
-/// errors and notifications sent by the *Transport* layer (such as
-/// connection/disconnection events). `P2PRunner` provides the run interface
-/// used by the replica to start reading from these channels. The artifacts or
-/// notifications received from these channels are sent to *Gossip* for
-/// processing.
-pub trait P2PRunner: Send {
-    /// The method starts the execution of the `P2PRunner`.
-    fn run(&mut self);
-}

@@ -29,7 +29,6 @@ const NUM_TEST_INSTANCES: u16 = 3;
 #[test]
 fn n_node_chunking() {
     framework::spawn_replicas_as_threads(false, NUM_TEST_INSTANCES, |p2p_test_context| {
-        p2p_test_context.p2p.run();
         let mut iter = 0;
         loop {
             std::thread::sleep(Duration::from_millis(600));
