@@ -454,10 +454,10 @@ pub trait SystemApi {
     ) -> HypervisorResult<()>;
 
     /// Outputs the specified bytes on the heap as a string on STDOUT.
-    fn ic0_debug_print(&self, src: u32, size: u32, heap: &[u8]);
+    fn ic0_debug_print(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()>;
 
     /// Traps, with a possibly helpful message
-    fn ic0_trap(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorError;
+    fn ic0_trap(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()>;
 
     /// Creates a pending inter-canister message that will be scheduled if the
     /// current message execution completes successfully.

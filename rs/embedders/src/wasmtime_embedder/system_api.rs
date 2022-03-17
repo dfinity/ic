@@ -423,8 +423,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     SubnetType::Application | SubnetType::VerifiedApplication => Ok(()),
                     SubnetType::System => {
                         with_memory_and_system_api(caller, |system_api, memory| {
-                            system_api.ic0_debug_print(offset as u32, length as u32, memory);
-                            Ok(())
+                            system_api.ic0_debug_print(offset as u32, length as u32, memory)
                         })
                     }
                 }
@@ -444,7 +443,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     length as u32,
                 )?;
                 with_memory_and_system_api(caller, |system_api, memory| {
-                    Err(system_api.ic0_trap(offset as u32, length as u32, memory))
+                    system_api.ic0_trap(offset as u32, length as u32, memory)
                 })
             }
         })

@@ -108,10 +108,10 @@ impl SystemApi for SystemApiEmpty {
     ) -> HypervisorResult<()> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
-    fn ic0_debug_print(&self, _: u32, _: u32, _: &[u8]) {
+    fn ic0_debug_print(&self, _: u32, _: u32, _: &[u8]) -> HypervisorResult<()> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
-    fn ic0_trap(&self, _: u32, _: u32, _: &[u8]) -> HypervisorError {
+    fn ic0_trap(&self, _: u32, _: u32, _: &[u8]) -> HypervisorResult<()> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
     fn ic0_call_simple(
