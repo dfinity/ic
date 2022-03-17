@@ -4,13 +4,9 @@ use super::driver_setup::DriverContext;
 use super::pot_dsl::{ExecutionMode, Pot, Suite, Test, TestPath, TestSet};
 use crate::ic_manager::IcHandle;
 use crate::pot::Context;
-use crate::prod_tests::driver_setup::tee_logger;
-use crate::prod_tests::farm::GroupSpec;
-use crate::prod_tests::ic::InternetComputer;
+use crate::prod_tests::driver_setup::{tee_logger, FARM_GROUP_NAME, POT_TIMEOUT};
 use crate::prod_tests::test_env::TestEnv;
-use crate::prod_tests::test_setup::{
-    IcHandleConstructor, AUTHORIZED_SSH_ACCOUNTS, FARM_BASE_URL, FARM_GROUP_NAME,
-};
+use crate::prod_tests::test_setup::IcHandleConstructor;
 use crate::result::*;
 use anyhow::{bail, Result};
 use crossbeam_channel::{bounded, Receiver, Sender};
@@ -92,28 +88,22 @@ fn evaluate_pot(ctx: &DriverContext, mut pot: Pot, path: TestPath) -> Result<Tes
         });
     }
 
-    // set up the group
     let pot_path = path.join(&pot.name);
-    let logger = ctx.logger();
-
     let group_name = format!("{}-{}", pot_path.url_string(), ctx.job_id)
         .replace(":", "_")
         .replace(".", "_");
-    info!(logger, "creating group '{}'", group_name);
-    let pot_timeout = pot.pot_timeout;
-    let config = match pot.config.evaluate() {
-        Ok(r) => r,
-        Err(e) => {
-            bail!("Could not evaluate pot config: {:?}", e)
-        }
+    info!(ctx.logger, "creating group '{}'", &group_name);
+
+    let pot_working_dir = ctx.working_dir.join(&pot.name);
+    let pot_env = ctx.env.fork(pot_working_dir)?;
+    pot_env.write_object(FARM_GROUP_NAME, &group_name)?;
+    pot_env.write_object(POT_TIMEOUT, &pot.pot_timeout.unwrap_or(ctx.pot_timeout))?;
+
+    if let Err(e) = pot.setup.evaluate(&pot_env) {
+        bail!("Could not evaluate pot config: {:?}", e)
     };
-    let spec = GroupSpec {
-        vm_allocation: config.vm_allocation.clone(),
-    };
-    let config = config.clone();
-    ctx.farm
-        .create_group(&group_name, pot_timeout.unwrap_or(ctx.pot_timeout), spec)?;
-    let res = evaluate_pot_with_group(ctx, pot, config, pot_path, &group_name);
+
+    let res = evaluate_pot_with_group(ctx, pot, pot_path, &pot_env, &group_name);
     if let Err(e) = ctx.farm.delete_group(&group_name) {
         warn!(ctx.logger, "Could not delete group {}: {:?}", group_name, e);
     }
@@ -124,8 +114,8 @@ fn evaluate_pot(ctx: &DriverContext, mut pot: Pot, path: TestPath) -> Result<Tes
 fn evaluate_pot_with_group(
     ctx: &DriverContext,
     pot: Pot,
-    mut config: InternetComputer,
     pot_path: TestPath,
+    env: &TestEnv,
     group_name: &str,
 ) -> Result<TestResultNode> {
     let started_at = Instant::now();
@@ -139,20 +129,10 @@ fn evaluate_pot_with_group(
         .collect();
     let tests_num = tests.len();
 
-    let temp_dir = tempfile::tempdir().expect("Could not create temp directory");
-    info!(&ctx.logger, "temp_dir: {:?}", temp_dir.path());
-    let env = TestEnv::new(temp_dir.into_path());
-
-    env.write_object(FARM_GROUP_NAME, group_name)?;
-    env.write_object(FARM_BASE_URL, &ctx.farm.base_url)?;
-    env.write_object(AUTHORIZED_SSH_ACCOUNTS, &ctx.authorized_ssh_accounts)?;
-
-    config.setup_and_start(ctx, &env)?;
     let ic_handle = env.ic_handle()?;
 
     let (sender, receiver) = bounded(tests_num);
     let chunks = chunk(tests, no_threads);
-
     let mut join_handles = vec![];
 
     for chunk in chunks {

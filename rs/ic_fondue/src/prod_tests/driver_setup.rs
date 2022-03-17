@@ -1,11 +1,10 @@
+use crate::prod_tests::test_env::TestEnv;
 use anyhow::Result;
 use chrono::{DateTime, SecondsFormat, Utc};
 use ic_nns_init::set_up_env_vars_for_all_canisters;
-use ic_types::ReplicaVersion;
 use rand_chacha::{rand_core, ChaCha8Rng};
 use slog::{o, warn, Drain, Logger};
 use slog_async::OverflowStrategy;
-use std::sync::Arc;
 use std::time::SystemTime;
 use std::{
     fs,
@@ -13,7 +12,6 @@ use std::{
     path::{Path, PathBuf},
     time::Duration,
 };
-use tempfile::TempDir;
 use url::Url;
 
 use super::cli::{AuthorizedSshAccount, ValidatedCliArgs};
@@ -21,10 +19,38 @@ use super::farm::Farm;
 use super::pot_dsl;
 
 const ASYNC_CHAN_SIZE: usize = 8192;
-const FARM_BASE_URL: &str = "https://farm.dfinity.systems";
+const DEFAULT_FARM_BASE_URL: &str = "https://farm.dfinity.systems";
+
+pub const FARM_GROUP_NAME: &str = "farm/group_name";
+pub const FARM_BASE_URL: &str = "farm/base_url";
+pub const BASE_IMG_URL: &str = "base_img_url";
+pub const BASE_IMG_SHA256: &str = "base_img_sha256";
+pub const INITIAL_REPLICA_VERSION: &str = "initial_replica_version";
+pub const JOURNALBEAT_HOSTS: &str = "journalbeat_hosts";
+pub const LOG_DEBUG_OVERRIDES: &str = "log_debug_overrides";
+pub const AUTHORIZED_SSH_ACCOUNTS: &str = "ssh/authorized_accounts";
+pub const AUTHORIZED_SSH_ACCOUNTS_DIR: &str = "ssh/authorized_accounts_dir";
+pub const POT_TIMEOUT: &str = "pot_timeout";
+
+pub fn initialize_env(env: &TestEnv, cli_args: &ValidatedCliArgs) -> Result<()> {
+    let farm_base_url = cli_args
+        .farm_base_url
+        .clone()
+        .unwrap_or_else(|| Url::parse(DEFAULT_FARM_BASE_URL).expect("should not fail!"));
+    env.write_object(FARM_BASE_URL, &farm_base_url)?;
+    env.write_object(AUTHORIZED_SSH_ACCOUNTS, &cli_args.authorized_ssh_accounts)?;
+    setup_ssh_key_dir(env, &cli_args.authorized_ssh_accounts)?;
+    env.write_object(BASE_IMG_URL, &cli_args.base_img_url)?;
+    env.write_object(BASE_IMG_SHA256, &cli_args.base_img_sha256)?;
+    env.write_object(JOURNALBEAT_HOSTS, &cli_args.journalbeat_hosts)?;
+    env.write_object(INITIAL_REPLICA_VERSION, &cli_args.initial_replica_version)?;
+    env.write_object(LOG_DEBUG_OVERRIDES, &cli_args.log_debug_overrides)?;
+    Ok(())
+}
 
 pub fn create_driver_context_from_cli(
     cli_args: ValidatedCliArgs,
+    env: TestEnv,
     hostname: Option<String>,
 ) -> DriverContext {
     let created_at = SystemTime::now();
@@ -42,7 +68,7 @@ pub fn create_driver_context_from_cli(
 
     let farm_url = cli_args
         .farm_base_url
-        .unwrap_or_else(|| Url::parse(FARM_BASE_URL).expect("should not fail!"));
+        .unwrap_or_else(|| Url::parse(DEFAULT_FARM_BASE_URL).expect("should not fail!"));
 
     let rng = rand_core::SeedableRng::seed_from_u64(cli_args.rand_seed);
     let logger = mk_logger();
@@ -60,25 +86,16 @@ pub fn create_driver_context_from_cli(
         );
     }
 
-    let ssh_key_dir = Arc::new(
-        setup_ssh_key_dir(&cli_args.authorized_ssh_accounts[..])
-            .expect("Could not setup ssh key dir file."),
-    );
     DriverContext {
         logger: logger.clone(),
         rng,
         created_at,
         job_id,
-        initial_replica_version: cli_args.initial_replica_version,
-        base_img_sha256: cli_args.base_img_sha256,
-        base_img_url: cli_args.base_img_url,
         farm,
         logs_base_dir: cli_args.log_base_dir,
-        authorized_ssh_accounts_dir: ssh_key_dir,
-        authorized_ssh_accounts: cli_args.authorized_ssh_accounts,
-        journalbeat_hosts: cli_args.journalbeat_hosts,
-        log_debug_overrides: cli_args.log_debug_overrides,
         pot_timeout: cli_args.pot_timeout,
+        env,
+        working_dir: cli_args.working_dir,
     }
 }
 
@@ -122,14 +139,16 @@ fn set_up_filepath(base_dir: &Path, test_path: &pot_dsl::TestPath) -> PathBuf {
 }
 
 /// Setup a directory containing files as consumed by the bootstrap script.
-fn setup_ssh_key_dir(key_pairs: &[AuthorizedSshAccount]) -> Result<TempDir> {
-    let tmp_dir = tempfile::tempdir()?;
-    let path = tmp_dir.path();
+fn setup_ssh_key_dir(env: &TestEnv, key_pairs: &[AuthorizedSshAccount]) -> Result<()> {
     for key_pair_files in key_pairs {
-        let pub_path = path.join(&key_pair_files.name);
-        std::fs::write(pub_path, key_pair_files.public_key.as_slice())?;
+        env.write_object(
+            [AUTHORIZED_SSH_ACCOUNTS_DIR, &key_pair_files.name]
+                .iter()
+                .collect::<PathBuf>(),
+            key_pair_files.public_key.as_slice(),
+        )?;
     }
-    Ok(tmp_dir)
+    Ok(())
 }
 
 #[derive(Clone)]
@@ -141,18 +160,12 @@ pub struct DriverContext {
     pub created_at: SystemTime,
     /// A unique id identifying this test run.
     pub job_id: String,
-    /// The initial replica version to be used.
-    pub initial_replica_version: ReplicaVersion,
-    pub base_img_sha256: String,
-    pub base_img_url: Url,
     /// Abstraction for the Farm service
     pub farm: Farm,
     pub logs_base_dir: Option<PathBuf>,
-    pub authorized_ssh_accounts_dir: Arc<TempDir>,
-    pub authorized_ssh_accounts: Vec<AuthorizedSshAccount>,
-    pub journalbeat_hosts: Vec<String>,
-    pub log_debug_overrides: Vec<String>,
     pub pot_timeout: Duration,
+    pub env: TestEnv,
+    pub working_dir: PathBuf,
 }
 
 impl DriverContext {

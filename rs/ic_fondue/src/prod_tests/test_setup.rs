@@ -1,5 +1,6 @@
 use crate::ic_manager::{FarmInfo, IcEndpoint, IcHandle, IcSubnet, RuntimeDescriptor};
 use crate::prod_tests::cli::AuthorizedSshAccount;
+use crate::prod_tests::driver_setup::{AUTHORIZED_SSH_ACCOUNTS, FARM_BASE_URL, FARM_GROUP_NAME};
 use crate::prod_tests::test_env::TestEnv;
 use anyhow::Result;
 use ic_interfaces::registry::{RegistryClient, RegistryClientResult};
@@ -13,10 +14,6 @@ use std::collections::HashSet;
 use std::time::{Duration, Instant};
 use std::{convert::TryFrom, net::IpAddr, str::FromStr, sync::Arc};
 use url::Url;
-
-pub const FARM_GROUP_NAME: &str = "farm/group_name";
-pub const FARM_BASE_URL: &str = "farm/base_url";
-pub const AUTHORIZED_SSH_ACCOUNTS: &str = "authorized_ssh_accounts";
 
 pub trait IcHandleConstructor {
     fn ic_handle(&self) -> Result<IcHandle>;

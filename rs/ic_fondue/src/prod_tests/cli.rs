@@ -127,6 +127,11 @@ The sha256 hash sum of the base image."#
     help = r#"Amount of time to wait before releasing resources allocated for a pot."#
     )]
     pub pot_timeout: Duration,
+    #[structopt(
+        long = "working-dir",
+        about = "Path to a working directory of the test driver."
+    )]
+    working_dir: PathBuf,
 }
 
 impl CliArgs {
@@ -190,6 +195,7 @@ impl CliArgs {
             journalbeat_hosts,
             log_debug_overrides,
             pot_timeout: self.pot_timeout,
+            working_dir: self.working_dir,
         })
     }
 }
@@ -222,6 +228,7 @@ pub struct ValidatedCliArgs {
     pub journalbeat_hosts: Vec<String>,
     pub log_debug_overrides: Vec<String>,
     pub pot_timeout: Duration,
+    pub working_dir: PathBuf,
 }
 
 pub type PrivateKeyFileContent = Vec<u8>;

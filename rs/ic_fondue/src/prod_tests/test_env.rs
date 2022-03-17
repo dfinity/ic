@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 /// A TestEnv represents a directory storing all state related to a test.
 ///
 /// It has operations for reading and writing objects as JSON from paths relative to the directory.
+#[derive(Clone)]
 pub struct TestEnv(PathBuf);
 
 impl TestEnv {
@@ -14,7 +15,7 @@ impl TestEnv {
         TestEnv(path)
     }
     pub fn read_object<T: DeserializeOwned, P: AsRef<Path>>(&self, p: P) -> Result<T> {
-        let file = File::open(self.get_path(p))?;
+        let file = File::open(self.get_path(&p))?;
         serde_json::from_reader(file).map_err(|e| anyhow!(e.to_string()))
     }
     pub fn write_object<T: Serialize, P: AsRef<Path>>(&self, p: P, t: T) -> Result<()> {
@@ -30,5 +31,14 @@ impl TestEnv {
     }
     pub fn get_path<P: AsRef<Path>>(&self, p: P) -> PathBuf {
         self.0.join(p)
+    }
+    pub fn base_dir(&self) -> PathBuf {
+        self.0.clone()
+    }
+    pub fn fork(&self, dir: PathBuf) -> Result<TestEnv> {
+        let mut options = fs_extra::dir::CopyOptions::new();
+        options.copy_inside = true;
+        fs_extra::dir::copy(self.base_dir(), &dir, &options)?;
+        Ok(TestEnv::new(dir))
     }
 }

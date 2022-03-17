@@ -32,7 +32,7 @@ Coverage::
 end::catalog[] */
 
 use crate::{api::system_test_context::*, util::*}; // to use the universal canister
-use ic_fondue::prod_tests::ic::VmAllocationStrategy;
+use ic_fondue::prod_tests::{ic::VmAllocationStrategy, test_env::TestEnv};
 use ic_fondue::{
     ic_instance::{LegacyInternetComputer, Subnet as LegacySubnet}, // which is declared through these types
     ic_manager::IcHandle,                                          // we run the test on the IC
@@ -41,14 +41,12 @@ use ic_fondue::{
 use ic_registry_subnet_type::SubnetType;
 use slog::info;
 
-/// Every system test runs within a given IC configuration. Later on, the plan
-/// is to combine tests that request compatible environments to reduce startup
-/// time. Please keep this in mind when writing your tests by only requesting
-/// what is needed to satisfy the Goal of the test!
-pub fn config_single_host() -> InternetComputer {
+pub fn config_single_host(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(4))
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(4))
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test")
 }
 
 pub fn config_multiple_hosts() -> InternetComputer {

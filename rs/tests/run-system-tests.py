@@ -155,6 +155,8 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
     is_slack_notify = not is_local_run and CI_PIPELINE_SOURCE == "schedule"
     # End set variables.
 
+    WORKING_DIR = tempfile.mkdtemp()
+
     if not is_local_run and use_locally_prebuilt_artifacts:
         exit_with_log("One can't use locally prebuilt artifacts on the CI.")
 
@@ -283,7 +285,8 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
         f"--initial-replica-version={IC_VERSION_ID} --base-img-url={DEV_IMG_URL} "
         f"--base-img-sha256={DEV_IMG_SHA256} --nns-canister-path={ARTIFACT_DIR} "
         f"--authorized-ssh-accounts={SSH_KEY_DIR} --result-file={RESULT_FILE} "
-        f"--journalbeat-hosts={TEST_ES_HOSTNAMES}"
+        f"--journalbeat-hosts={TEST_ES_HOSTNAMES} "
+        f"--working-dir={WORKING_DIR}"
     )
     testrun_returncode = run_command(command=run_test_driver_cmd, env=env_dict)
 
