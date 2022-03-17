@@ -1,6 +1,6 @@
 use crate::{routing::stream_handler::StreamHandler, scheduling::valid_set_rule::ValidSetRule};
 use ic_interfaces::certified_stream_store::CertifiedStreamStore;
-use ic_logger::{trace, ReplicaLogger};
+use ic_logger::{debug, trace, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{batch::BatchPayload, messages::SignedIngressContent};
 use std::sync::Arc;
@@ -44,7 +44,7 @@ impl<'a> Demux for DemuxImpl<'a> {
     fn process_payload(&self, state: ReplicatedState, payload: BatchPayload) -> ReplicatedState {
         trace!(self.log, "Processing Payload");
 
-        let (signed_ingress_msgs, certified_stream_slices) =
+        let (signed_ingress_msgs, certified_stream_slices, bitcoin_adapter_responses) =
             payload.into_messages().unwrap_or_else(|err| {
                 unreachable!(
                     "Failed to retrieve messages from validated batch payload: {:?}",
@@ -72,6 +72,18 @@ impl<'a> Demux for DemuxImpl<'a> {
 
         self.valid_set_rule
             .induct_messages(&mut state, ingress_msgs);
+
+        for response in bitcoin_adapter_responses.into_iter() {
+            state
+                .push_response_bitcoin_testnet(response)
+                .unwrap_or_else(|err| {
+                    debug!(
+                        self.log,
+                        "Error pushing the response from bitcoin adapter {}",
+                        err.to_string()
+                    )
+                });
+        }
 
         state
     }

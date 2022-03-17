@@ -783,8 +783,8 @@ impl BatchProcessor for FakeBatchProcessorImpl {
         metadata.batch_time = time;
         state.set_system_metadata(metadata);
 
-        // Get only ingress and ignore xnet messages
-        let (signed_ingress_msgs, _certified_stream_slices) =
+        // Get only ingress and ignore xnet and self-validating messages
+        let (signed_ingress_msgs, _certified_stream_slices, _get_successors_response) =
             batch.payload.into_messages().unwrap();
 
         // Treat all ingress messages as already executed.

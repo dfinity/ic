@@ -3771,6 +3771,7 @@ dependencies = [
  "criterion",
  "hex",
  "ic-artifact-pool",
+ "ic-btc-types-internal",
  "ic-config",
  "ic-consensus-message",
  "ic-constants",
