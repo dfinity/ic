@@ -319,7 +319,7 @@ fn is_subnet_membership_changing(
     let next_nodes = get_subnet_nodes(registry_client, context_registry_version, subnet_id)?
         .into_iter()
         .collect::<BTreeSet<_>>();
-    Ok(current_nodes.difference(&next_nodes).next().is_some())
+    Ok(current_nodes != next_nodes)
 }
 
 /// Creates a threshold ECDSA batch payload.
