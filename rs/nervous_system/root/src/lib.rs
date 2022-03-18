@@ -3,11 +3,9 @@ use dfn_core::api::{call, CanisterId};
 use ic_base_types::{CanisterInstallMode, PrincipalId};
 use ic_crypto_sha::Sha256;
 use ic_ic00_types::{InstallCodeArgs, IC_00};
-use ic_nervous_system_common::{AuthzChangeOp, MethodAuthzChange};
+use ic_nervous_system_common::MethodAuthzChange;
 
-use futures::future::join_all;
 use serde::Serialize;
-use std::collections::HashMap;
 
 pub const LOG_PREFIX: &str = "[Root Canister] ";
 
@@ -115,8 +113,7 @@ pub struct ChangeCanisterProposal {
     #[serde(serialize_with = "serialize_optional_nat")]
     pub query_allocation: Option<candid::Nat>,
 
-    /// A list of authz changes to enact, in addition to changing new canister.
-    /// DEPRECATED: Canisters no longer use dynamic authz.
+    /// Obsolete. Must be empty.
     pub authz_changes: Vec<MethodAuthzChange>,
 }
 
@@ -138,7 +135,6 @@ impl ChangeCanisterProposal {
             .field("compute_allocation", &self.compute_allocation)
             .field("memory_allocation", &self.memory_allocation)
             .field("query_allocation", &self.query_allocation)
-            .field("authz_changes", &self.authz_changes)
             .finish()
     }
 }
@@ -213,11 +209,7 @@ pub struct AddCanisterProposal {
 
     pub initial_cycles: u64,
 
-    /// A list of authz changes to enact, in addition to installing the new
-    /// canister. The expected use is to make other canisters in the nervous
-    /// system allow calls coming from the newly-added nervous system canister.
-    /// Authz changes to the newly added canisters are not expected to be here:
-    /// instead, they are expected to belong to the init payload, `arg`.
+    /// Obsolete. Must be empty.
     pub authz_changes: Vec<MethodAuthzChange>,
 }
 
@@ -238,7 +230,6 @@ impl AddCanisterProposal {
             .field("memory_allocation", &self.memory_allocation)
             .field("query_allocation", &self.query_allocation)
             .field("initial_cycles", &self.initial_cycles)
-            .field("authz_changes", &self.authz_changes)
             .finish()
     }
 }
@@ -270,8 +261,13 @@ pub struct StopOrStartCanisterProposal {
 }
 
 pub async fn change_canister(proposal: ChangeCanisterProposal) {
+    assert!(
+        proposal.authz_changes.is_empty(),
+        "authz_changes is obsolete and must be empty. proposal: {:?}",
+        proposal
+    );
+
     let canister_id = proposal.canister_id;
-    let authz_changes = proposal.authz_changes.clone();
     let stop_before_installing = proposal.stop_before_installing;
 
     if stop_before_installing {
@@ -296,78 +292,8 @@ pub async fn change_canister(proposal: ChangeCanisterProposal) {
         start_canister(canister_id).await;
     }
 
-    // Update authz of other canisters, if required.
-    update_authz(canister_id, authz_changes).await;
-
     // Check the result of the install_code
     res.unwrap();
-}
-
-pub async fn update_authz(
-    changed_canister: CanisterId,
-    methods_authz_changes: Vec<MethodAuthzChange>,
-) {
-    // Group changes by canister id and change principal_or_self if it was None
-    let mut grouped_changes: HashMap<CanisterId, Vec<MethodAuthzChange>> = HashMap::new();
-    for method_authz_change in methods_authz_changes {
-        let principal = method_authz_change.principal;
-        let method_name = method_authz_change.method_name;
-        let canister = method_authz_change.canister;
-        match method_authz_change.operation {
-            AuthzChangeOp::Authorize { add_self } => {
-                let change_vec = grouped_changes.entry(canister).or_insert_with(Vec::new);
-                let principal_to_add = if add_self {
-                    PrincipalId::from(changed_canister)
-                } else {
-                    principal.expect("Expected a principal to be added")
-                };
-
-                change_vec.push(MethodAuthzChange {
-                    canister,
-                    method_name,
-                    principal: Some(principal_to_add),
-                    operation: AuthzChangeOp::Authorize { add_self: false },
-                });
-            }
-            AuthzChangeOp::Deauthorize => {
-                let change_vec = grouped_changes.entry(canister).or_insert_with(Vec::new);
-                change_vec.push(MethodAuthzChange {
-                    canister,
-                    method_name,
-                    principal,
-                    operation: AuthzChangeOp::Deauthorize,
-                });
-            }
-        };
-    }
-
-    join_all(
-        grouped_changes
-            .into_iter()
-            .map(|(canister, changes)| async move {
-                match call(
-                    canister,
-                    "update_authz",
-                    dfn_candid::candid,
-                    (changes.clone(),),
-                )
-                .await
-                {
-                    Ok(()) => {
-                        println!(
-                            "{}Successfully updated authz for canister: {}. \
-                                Changes: {:?}",
-                            LOG_PREFIX, canister, changes
-                        );
-                    }
-                    Err((error_code, error)) => println!(
-                        "{}Error updating authz. Error code: {:?}. Error: {}",
-                        LOG_PREFIX, error_code, error
-                    ),
-                }
-            }),
-    )
-    .await;
 }
 
 /// Calls the "install_code" method of the management canister.

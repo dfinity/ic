@@ -5,8 +5,8 @@ use ic_base_types::CanisterInstallMode::Install;
 
 use ic_ic00_types::InstallCodeArgs;
 use ic_nervous_system_root::{
-    start_canister, stop_canister, update_authz, AddCanisterProposal, CanisterAction,
-    CanisterIdRecord, StopOrStartCanisterProposal,
+    start_canister, stop_canister, AddCanisterProposal, CanisterAction, CanisterIdRecord,
+    StopOrStartCanisterProposal,
 };
 use ic_nns_common::registry::{encode_or_panic, get_value, mutate_registry};
 use ic_protobuf::registry::nns::v1::{NnsCanisterRecord, NnsCanisterRecords};
@@ -15,8 +15,13 @@ use ic_registry_keys::make_nns_canister_records_key;
 use ic_registry_transport::pb::v1::{registry_mutation::Type, Precondition, RegistryMutation};
 
 pub async fn do_add_nns_canister(proposal: AddCanisterProposal) {
+    assert!(
+        proposal.authz_changes.is_empty(),
+        "authz_changes is obsolete and must be empty. proposal: {:?}",
+        proposal
+    );
+
     let key = make_nns_canister_records_key().into_bytes();
-    let authz_changes = proposal.authz_changes.clone();
     let name = proposal.name.clone();
 
     // We first need to claim the name of this new canister. Indeed, even though we
@@ -93,9 +98,6 @@ pub async fn do_add_nns_canister(proposal: AddCanisterProposal) {
     .unwrap();
     // TODO(NNS-81): Handle failure in the case we couldn't write the canister id
     // into the registry
-
-    // Update authz of other canisters, if required.
-    update_authz(id, authz_changes).await;
 }
 
 /// Tries to create and install the canister specified in the proposal. Does not
