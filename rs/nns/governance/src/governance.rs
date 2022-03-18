@@ -478,17 +478,21 @@ pub fn combine_aged_stakes(
     y_stake_e8s: u64,
     y_age_seconds: u64,
 ) -> (u64, u64) {
-    let total_age_seconds: u128 = (x_stake_e8s as u128 * x_age_seconds as u128
-        + y_stake_e8s as u128 * y_age_seconds as u128)
-        / (x_stake_e8s as u128 + y_stake_e8s as u128);
+    if x_stake_e8s == 0 && y_stake_e8s == 0 {
+        (0, 0)
+    } else {
+        let total_age_seconds: u128 = (x_stake_e8s as u128 * x_age_seconds as u128
+            + y_stake_e8s as u128 * y_age_seconds as u128)
+            / (x_stake_e8s as u128 + y_stake_e8s as u128);
 
-    // Note that age is adjusted in proportion to the stake, but due to the
-    // discrete nature of u64 numbers, some resolution is lost due to the
-    // division above. Only if x_age * x_stake is a multiple of y_stake does
-    // the age remain constant after this operation. However, in the end, the
-    // most that can be lost due to rounding from the actual age, is always
-    // less 1 second, so this is not a problem.
-    (x_stake_e8s + y_stake_e8s, total_age_seconds as u64)
+        // Note that age is adjusted in proportion to the stake, but due to the
+        // discrete nature of u64 numbers, some resolution is lost due to the
+        // division above. Only if x_age * x_stake is a multiple of y_stake does
+        // the age remain constant after this operation. However, in the end, the
+        // most that can be lost due to rounding from the actual age, is always
+        // less than 1 second, so this is not a problem.
+        (x_stake_e8s + y_stake_e8s, total_age_seconds as u64)
+    }
 }
 
 impl Neuron {
@@ -2830,7 +2834,12 @@ impl Governance {
     /// - Neither neuron can be the subject of a MergeNeuron proposal
     /// - Source neuron must exist
     /// - Target neuron must exist
-    /// - Stake of the source neuron of a merge must be greater than the fee
+    ///
+    /// Considerations:
+    /// - If the stake of the source neuron is bigger than the transaction fee
+    ///   it will be merged into the stake of the target neuron; if it is less
+    ///   than the transaction fee, the maturity of the source neuron will
+    ///   still be merged into the maturity of the target neuron.
     pub async fn merge_neurons(
         &mut self,
         id: &NeuronId,
@@ -2946,6 +2955,7 @@ impl Governance {
 
         // Before transferring stake from the source to the target, burn any
         // fees present in the source neuron.
+        let mut subtract_fees = false;
         if source_neuron_fees_e8s > transaction_fee_e8s {
             let _result = self
                 .ledger
@@ -2957,20 +2967,27 @@ impl Governance {
                     now,
                 )
                 .await?;
+            subtract_fees = true;
         }
 
         let source_neuron_mut = self
             .get_neuron_mut(source_id)
             .expect("Expected the source neuron to exist");
 
-        source_neuron_mut.cached_neuron_stake_e8s = source_neuron_mut
-            .cached_neuron_stake_e8s
-            .saturating_sub(source_neuron_fees_e8s);
-        source_neuron_mut.neuron_fees_e8s = source_neuron_mut
-            .neuron_fees_e8s
-            .saturating_sub(source_neuron_fees_e8s);
+        if subtract_fees {
+            source_neuron_mut.cached_neuron_stake_e8s = source_neuron_mut
+                .cached_neuron_stake_e8s
+                .saturating_sub(source_neuron_fees_e8s);
 
-        let source_age_timestamp_seconds = source_neuron_mut.aging_since_timestamp_seconds;
+            // It could be that, during the await above, the source_neuron
+            // makes a new proposal and thus the fees are increased and if we
+            // then just set the fees to 0 here, effectively the source_neuron
+            // prevented from paying the fees.
+            source_neuron_mut.neuron_fees_e8s = source_neuron_mut
+                .neuron_fees_e8s
+                .saturating_sub(source_neuron_fees_e8s);
+        }
+
         let source_dissolve_delay = source_neuron.dissolve_delay_seconds(now);
         let source_age_seconds = if source_neuron.is_dissolved(now) {
             // Do not credit age from dissolved neurons.
@@ -2982,65 +2999,66 @@ impl Governance {
         let source_stake_less_transaction_fee_e8s =
             source_stake_e8s.saturating_sub(transaction_fee_e8s);
 
-        if source_stake_less_transaction_fee_e8s == 0 {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidCommand,
-                "Stake of the source neuron of a merge must be greater than the fee",
-            ));
+        if source_stake_less_transaction_fee_e8s > 0 {
+            // We must zero out the source neuron's cached stake before
+            // submitting the call to transfer_funds. If we do not do this,
+            // there would be a window of opportunity -- from the moment the
+            // stake is transferred but before the cached stake is updated --
+            // when a proposal could be submitted and rejected on behalf of
+            // the source neuron (since cached stake is high enough), but that
+            // would be impossible to charge because the account had been
+            // emptied. To guard against this, we pre-emptively set the stake
+            // to zero, and set it back in case of transfer failure.
+            //
+            // Another important reason to set the cached stake to zero (net
+            // fees) is so that the source neuron cannot use the stake that is
+            // getting merged to vote or propose. Also, the source neuron
+            // should not be able to increase stake while locked because we do
+            // not allow the source to have pending proposals.
+            source_neuron_mut.cached_neuron_stake_e8s = source_neuron_mut
+                .cached_neuron_stake_e8s
+                .saturating_sub(source_stake_e8s);
+
+            // Reset source aging. In other words, if it was aging before, it
+            // is still aging now, although the timer is reset to the time of
+            // the merge -- but only if there is stake being transferred.
+            // Since all fees have been burned (if they were greater in value
+            // than the transaction fee) and since this neuron is not
+            // currently participating in any proposal, it means the cached
+            // stake is 0 and increasing the stake will not take advantage of
+            // this age. However, it is consistent with the use of
+            // aging_since_timestamp_seconds that we simply reset the age
+            // here, since we do not change the dissolve state in any other
+            // way.
+            let source_age_timestamp_seconds = source_neuron_mut.aging_since_timestamp_seconds;
+            if source_neuron_mut.aging_since_timestamp_seconds != u64::MAX {
+                source_neuron_mut.aging_since_timestamp_seconds = now;
+            }
+
+            let _block_height: u64 = self
+                .ledger
+                .transfer_funds(
+                    source_stake_less_transaction_fee_e8s,
+                    transaction_fee_e8s,
+                    Some(from_subaccount),
+                    neuron_subaccount(to_subaccount),
+                    now,
+                )
+                .await
+                .map_err(|err| {
+                    let source_neuron_mut = self
+                        .proto
+                        .neurons
+                        .get_mut(&source_id.id)
+                        .expect("Expected the source neuron to exist");
+                    source_neuron_mut.cached_neuron_stake_e8s += source_stake_e8s;
+                    source_neuron_mut.aging_since_timestamp_seconds = source_age_timestamp_seconds;
+                    err
+                })?;
         }
 
-        // We must zero out the source neuron's cached stake before submitting
-        // the call to transfer_funds. If we do not do this, there would be a
-        // window of opportunity -- from the moment the stake is transferred
-        // but before the cached stake is updated -- when a proposal could be
-        // submitted and rejected on behalf of the source neuron (since cached
-        // stake is high enough), but that would be impossible to charge
-        // because the account had been emptied. To guard against this, we
-        // pre-emptively set the stake to zero, and set it back in case of
-        // transfer failure.
-        //
-        // Another important reason to set the cached stake to zero (net fees)
-        // is so that the source neuron cannot use the stake that is getting
-        // merged to vote or propose. Also, the source neuron should not be
-        // able to increase stake while locked because we do not allow the
-        // source to have pending proposals.
-        source_neuron_mut.cached_neuron_stake_e8s = source_neuron_mut
-            .cached_neuron_stake_e8s
-            .saturating_sub(source_stake_e8s);
-
-        // Reset source aging. In other words, if it was aging before, it is
-        // still aging now, although the timer is reset to the time of the
-        // merge. Since all fees were burned and this neuron is not currently
-        // participating in any proposal, it means that the stake is 0 and
-        // increasing stake will not take advantage of this age. However, it
-        // is consistent with the use of aging_since_timestamp_seconds that we
-        // simply reset the age here, since we do not change the dissolve
-        // state in any other way.
-        if source_neuron_mut.aging_since_timestamp_seconds != u64::MAX {
-            source_neuron_mut.aging_since_timestamp_seconds = now;
-        }
-
-        let _block_height: u64 = self
-            .ledger
-            .transfer_funds(
-                source_stake_less_transaction_fee_e8s,
-                transaction_fee_e8s,
-                Some(from_subaccount),
-                neuron_subaccount(to_subaccount),
-                now,
-            )
-            .await
-            .map_err(|err| {
-                let source_neuron_mut = self
-                    .proto
-                    .neurons
-                    .get_mut(&source_id.id)
-                    .expect("Expected the source neuron to exist");
-                source_neuron_mut.cached_neuron_stake_e8s += source_stake_e8s;
-                source_neuron_mut.aging_since_timestamp_seconds = source_age_timestamp_seconds;
-                err
-            })?;
-
+        // Lookup the neuron again, since it may have changed since the
+        // (potential) call to the Ledger canister above.
         let source_neuron_mut = self
             .get_neuron_mut(source_id)
             .expect("Expected the source neuron to exist");
