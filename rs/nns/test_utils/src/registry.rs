@@ -532,12 +532,15 @@ pub fn prepare_add_node_payload() -> (AddNodePayload, NodePublicKeys, NodeId) {
     let ni_dkg_dealing_encryption_pk =
         encode_or_panic(&node_pks.dkg_dealing_encryption_pk.clone().unwrap());
     let transport_tls_cert = encode_or_panic(&node_pks.tls_certificate.clone().unwrap());
+    let idkg_dealing_encryption_pk =
+        encode_or_panic(&node_pks.idkg_dealing_encryption_pk.clone().unwrap());
 
     let payload = AddNodePayload {
         node_signing_pk,
         committee_signing_pk,
         ni_dkg_dealing_encryption_pk,
         transport_tls_cert,
+        idkg_dealing_encryption_pk: Some(idkg_dealing_encryption_pk),
         xnet_endpoint: "128.0.0.1:1234".to_string(),
         http_endpoint: "128.0.0.1:8123".to_string(),
         p2p_flow_endpoints: vec!["123,128.0.0.1:10000".to_string()],

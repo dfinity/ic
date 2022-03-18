@@ -15,8 +15,7 @@ use phantom_newtype::Id;
 #[cfg(all(test, not(target_arch = "wasm32")))]
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
-use std::fmt;
+use std::{collections::BTreeSet, fmt, str::FromStr};
 use strum_macros::EnumIter;
 
 /// An id of a key. These ids are used to refer to entries in the crypto secret
@@ -102,6 +101,22 @@ pub enum KeyPurpose {
     DkgDealingEncryption = 3,
     CommitteeSigning = 4,
     IDkgMEGaEncryption = 5,
+}
+
+// FromStr implementation for the the registry admin tool.
+impl FromStr for KeyPurpose {
+    type Err = String;
+
+    fn from_str(string: &str) -> Result<Self, <Self as FromStr>::Err> {
+        match string {
+            "node_signing" => Ok(KeyPurpose::NodeSigning),
+            "query_response_signing" => Ok(KeyPurpose::QueryResponseSigning),
+            "dkg_dealing_encryption" => Ok(KeyPurpose::DkgDealingEncryption),
+            "committee_signing" => Ok(KeyPurpose::CommitteeSigning),
+            "idkg_mega_encryption" => Ok(KeyPurpose::IDkgMEGaEncryption),
+            _ => Err(format!("Invalid key purpose: {:?}", string)),
+        }
+    }
 }
 
 /// An algorithm ID. This is used to specify the signature algorithm associated

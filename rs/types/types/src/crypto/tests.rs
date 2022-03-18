@@ -69,6 +69,35 @@ fn should_correctly_convert_usize_to_key_purpose() {
     assert_eq!(AlgorithmId::from(42), AlgorithmId::Placeholder);
 }
 
+#[cfg(test)]
+impl KeyPurpose {
+    fn as_str(&self) -> &'static str {
+        match self {
+            KeyPurpose::Placeholder => "",
+            KeyPurpose::NodeSigning => "node_signing",
+            KeyPurpose::QueryResponseSigning => "query_response_signing",
+            KeyPurpose::DkgDealingEncryption => "dkg_dealing_encryption",
+            KeyPurpose::CommitteeSigning => "committee_signing",
+            KeyPurpose::IDkgMEGaEncryption => "idkg_mega_encryption",
+        }
+    }
+}
+
+#[test]
+fn should_correctly_convert_between_enum_and_string() {
+    for i in 0..KeyPurpose::iter().count() {
+        if i == 0 {
+            continue;
+        }
+        let key_purpose = KeyPurpose::from(i);
+        let converted_key_purpose = key_purpose.as_str();
+        assert_eq!(
+            KeyPurpose::from_str(converted_key_purpose).unwrap(),
+            key_purpose
+        );
+    }
+}
+
 pub fn set_of(node_ids: &[NodeId]) -> BTreeSet<NodeId> {
     let mut dealers = BTreeSet::new();
     node_ids.iter().for_each(|node_id| {

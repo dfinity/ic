@@ -8,6 +8,7 @@ type AddNodeOperatorPayload = record {
 type AddNodePayload = record {
   prometheus_metrics_endpoint : text;
   http_endpoint : text;
+  idkg_dealing_encryption_pk : opt vec nat8;
   xnet_endpoint : text;
   committee_signing_pk : vec nat8;
   node_signing_pk : vec nat8;
