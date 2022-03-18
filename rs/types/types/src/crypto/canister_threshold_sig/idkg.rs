@@ -19,9 +19,6 @@ pub use conversions::*;
 #[cfg(test)]
 mod tests;
 
-#[cfg(test)]
-mod test_utils;
-
 /// Unique identifier for an IDkg transcript.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 pub struct IDkgTranscriptId {

@@ -1,6 +1,7 @@
 syntax = "proto3";
 package registry.subnet.v1;
 import "types/v1/types.proto";
+import "registry/crypto/v1/crypto.proto";
 
 // A subnet: A logical group of nodes that run consensus
 message SubnetRecord {
@@ -136,6 +137,69 @@ message InitialNiDkgTranscriptRecord {
   repeated bytes committee = 3;
   uint64 registry_version = 4;
   bytes internal_csp_transcript = 5;
+}
+
+message IDkgTranscriptId {
+  uint64 id = 1;
+  types.v1.SubnetId subnet_id = 2;
+}
+
+message VerifiedIDkgDealing {
+  uint32 dealer_index = 1;
+  bytes signature = 2;
+  repeated types.v1.NodeId signers = 3;
+  uint64 requested_height = 4;
+  IDkgDealingTuple dealing_tuple = 5;
+}
+
+message IDkgTranscript {
+  IDkgTranscriptId transcript_id = 1;
+  repeated types.v1.NodeId dealers = 2;
+  repeated types.v1.NodeId receivers = 3;
+  uint64 registry_version = 4;
+  repeated VerifiedIDkgDealing verified_dealings = 5;
+  bytes transcript_type = 6;  // CBOR serialized IDkgTranscriptType
+  crypto.v1.AlgorithmId algorithm_id = 7;
+  bytes raw_transcript = 8;   // serialised InternalRawTranscript
+}
+
+message DealerTuple {
+  types.v1.NodeId dealer_id = 1;
+  uint32 dealer_index = 2;
+}
+
+enum IDkgTranscriptOperation {
+  I_DKG_TRANSCRIPT_OPERATION_UNSPECIFIED = 0;
+  I_DKG_TRANSCRIPT_OPERATION_RANDOM = 1;
+  I_DKG_TRANSCRIPT_OPERATION_RESHARE_OF_MASKED = 2;
+  I_DKG_TRANSCRIPT_OPERATION_RESHARE_OF_UNMASKED = 3;
+  I_DKG_TRANSCRIPT_OPERATION_UNMASKED_TIMES_MASKED = 4;
+}
+
+message IDkgTranscriptParams {
+  IDkgTranscriptId transcript_id = 1;
+  repeated DealerTuple dealers = 2;
+  repeated types.v1.NodeId receivers = 3;
+  uint64 registry_version = 4;
+  crypto.v1.AlgorithmId algorithm_id = 5;
+  IDkgTranscriptOperation idkg_transcript_operation = 6;
+  repeated IDkgTranscript idkg_transcript_operation_args = 7; // 0, 1, or 2 IDkgTranscripts
+}
+
+message IDkgDealing {
+  IDkgTranscriptId transcript_id = 1;
+  bytes raw_dealing = 2;   // serialised InternalRawDealing
+}
+
+message IDkgDealingTuple {
+  types.v1.NodeId dealer = 1;
+  IDkgDealing dealing = 2;
+}
+
+message InitialIDkgDealings {
+    uint32 version = 1;
+    IDkgTranscriptParams params = 2;
+    repeated IDkgDealingTuple dealings = 3;
 }
 
 // Per subnet P2P configuration

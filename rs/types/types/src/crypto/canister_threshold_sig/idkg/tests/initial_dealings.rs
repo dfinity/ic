@@ -1,12 +1,13 @@
 use crate::crypto::canister_threshold_sig::error::InitialIDkgDealingsValidationError;
-use crate::crypto::canister_threshold_sig::idkg::test_utils::{
+use crate::crypto::canister_threshold_sig::idkg::tests::test_utils::{
     create_params_for_dealers, mock_masked_transcript_type, mock_transcript,
-    mock_unmasked_transcript_type, node_id, set_of_nodes, transcript_id_generator,
+    mock_unmasked_transcript_type, transcript_id_generator,
 };
 use crate::crypto::canister_threshold_sig::idkg::{
     IDkgDealing, IDkgTranscriptId, IDkgTranscriptOperation, InitialIDkgDealings,
 };
 use crate::NodeId;
+use ic_crypto_test_utils_canister_threshold_sigs::{node_id, set_of_nodes};
 use std::collections::BTreeMap;
 
 // TODO(CRP-1403): Add tests for successful creation of initial dealings.

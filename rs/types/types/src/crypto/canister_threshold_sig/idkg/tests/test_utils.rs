@@ -5,20 +5,9 @@ use crate::crypto::canister_threshold_sig::idkg::{
 };
 use crate::crypto::AlgorithmId;
 use crate::{NodeId, PrincipalId, RegistryVersion, SubnetId};
+use ic_crypto_test_utils_canister_threshold_sigs::node_id;
 use rand::Rng;
 use std::collections::{BTreeMap, BTreeSet};
-
-pub fn node_id(id: u64) -> NodeId {
-    NodeId::from(PrincipalId::new_node_test_id(id))
-}
-
-pub fn set_of_nodes(ids: &[u64]) -> BTreeSet<NodeId> {
-    let mut nodes = BTreeSet::new();
-    for id in ids.iter() {
-        nodes.insert(node_id(*id));
-    }
-    nodes
-}
 
 pub fn create_params_for_dealers(
     dealer_set: &BTreeSet<NodeId>,
