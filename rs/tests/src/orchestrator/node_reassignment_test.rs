@@ -30,7 +30,7 @@ use ic_fondue::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
-use slog::info;
+use slog::{debug, info};
 use url::Url;
 
 const DKG_INTERVAL: u64 = 14;
@@ -190,26 +190,36 @@ pub async fn can_read_msg_with_retries(
     url: &Url,
     canister_id: Principal,
     msg: &str,
-    mut retries: usize,
+    retries: usize,
 ) -> bool {
     let bytes = msg.as_bytes();
-    let agent = match create_agent(url.as_str()).await {
-        Ok(val) => val,
-        Err(e) => {
-            info!(log, "Could not create agent: {:?}", e);
-            return false;
-        }
-    };
-    let ucan = UniversalCanister::from_canister_id(&agent, canister_id);
-    // query stored data\
-    while retries > 0 && ucan.read_stable(0, msg.len() as u32).await != Ok(bytes.to_vec()) {
-        info!(
-            log,
-            "Node {:?}'s message is not expected message.",
-            url.as_str()
-        );
-        std::thread::sleep(std::time::Duration::from_secs(5));
-        retries -= 1;
+    for i in 0..retries + 1 {
+        debug!(log, "Try to create agent for node {:?}...", url.as_str());
+        match create_agent(url.as_str()).await {
+            Ok(agent) => {
+                debug!(log, "Try to get canister reference");
+                let ucan = UniversalCanister::from_canister_id(&agent, canister_id);
+                debug!(log, "Success, will try to read next");
+                if ucan.read_stable(0, msg.len() as u32).await == Ok(bytes.to_vec()) {
+                    return true;
+                } else {
+                    info!(
+                        log,
+                        "Could not read expected message, will retry {:?} times",
+                        retries - i
+                    );
+                }
+            }
+            Err(e) => {
+                debug!(
+                    log,
+                    "Could not create agent: {:?}, will retry {:?} times",
+                    e,
+                    retries - i
+                );
+            }
+        };
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
     }
-    ucan.read_stable(0, msg.len() as u32).await == Ok(bytes.to_vec())
+    false
 }
