@@ -52,6 +52,7 @@ pub enum InitialIDkgDealingsValidationError {
     MismatchingDealing,
     InvalidTranscriptOperation,
     UnsatisfiedCollectionThreshold { threshold: u32, dealings_count: u32 },
+    DeserializationError { error: String },
 }
 impl_display_using_debug!(InitialIDkgDealingsValidationError);
 

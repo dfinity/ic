@@ -18,6 +18,7 @@ use std::convert::TryFrom;
 use std::path::Path;
 use std::sync::Arc;
 
+pub mod idkg;
 pub mod ni_dkg;
 
 mod temp_crypto;
