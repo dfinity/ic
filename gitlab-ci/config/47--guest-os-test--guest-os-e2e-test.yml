@@ -219,8 +219,22 @@ guest-os-downgrade-from-new-version-to-mainnet-nns-subnet-query-workload:
 
 
 .run-farm-based-test: &run-farm-based-test |
-  IC_VERSION_ID=$("${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/find-build-id.sh)
+  # we get VERSION from artifacts-upload-to-s3
+  IC_VERSION_ID=$(cat VERSION)
   export IC_VERSION_ID
+  #XXX(marko): we need to change this
+  # binaries are needed for run-system-tests.py
+  "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
+      --git-rev="${IC_VERSION_ID}" --remote-path="release" \
+      --out="artifacts/release"
+  # canisters are needed for run-system-tests.py
+  "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
+      --git-rev="${IC_VERSION_ID}" --remote-path="canisters" \
+      --out="artifacts/canisters"
+  # capsule needs disk image as an input for caching
+  "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
+      --git-rev="${IC_VERSION_ID}" --remote-path="guest-os/disk-img" \
+      --out="ic-os/guestos/build-out/disk-img"
   BASE_DIR="${CI_PROJECT_DIR}/logs/$(date +%Y%m%d_%H%M%S)"
   mkdir -p "$BASE_DIR"
   # Logs produced during execution of the system tests are stored away in a structured way, i.e. one file per test.
@@ -241,8 +255,10 @@ guest-os-downgrade-from-new-version-to-mainnet-nns-subnet-query-workload:
   needs:
     - job: guest-os-diskimg
       artifacts: false
-    - guest-os-diskimg-dev
-    - guest-os-diskimg-dev-malicious
+    - job: guest-os-diskimg-dev
+      artifacts: false
+    - job: guest-os-diskimg-dev-malicious
+      artifacts: false
     - artifacts-upload-to-s3
   artifacts:
     when: always
@@ -250,21 +266,6 @@ guest-os-downgrade-from-new-version-to-mainnet-nns-subnet-query-workload:
       - "test-results.json"
       - "logs/"
   script:
-    - |
-      VERSION=$(cat VERSION)
-      export VERSION
-      # binaries
-      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
-          --git-rev="${VERSION}" --remote-path="release" \
-          --out="artifacts/release"
-      # canisters
-      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
-          --git-rev="${VERSION}" --remote-path="canisters" \
-          --out="artifacts/canisters"
-      # disk-img
-      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
-          --git-rev="${VERSION}" --remote-path="guest-os/disk-img" \
-          --out="ic-os/guestos/build-out/disk-img"
     - *run-farm-based-test
 
 system-tests-pre-master:
@@ -278,21 +279,6 @@ rosetta-pre-master:
     SUITE_NAME: "rosetta"
   script:
     - |
-      VERSION=$(cat VERSION)
-      export VERSION
-      # binaries
-      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
-          --git-rev="${VERSION}" --remote-path="release" \
-          --out="artifacts/release"
-      # canisters
-      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
-          --git-rev="${VERSION}" --remote-path="canisters" \
-          --out="artifacts/canisters"
-      # disk-img
-      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
-          --git-rev="${VERSION}" --remote-path="guest-os/disk-img" \
-          --out="ic-os/guestos/build-out/disk-img"
-    - |
       # Ensure that rosetta 3rd-party dependencies are available
       # shellcheck disable=SC1090
       . "${CI_PROJECT_DIR}/rs/tests/prepare-rosetta-deps.sh"
@@ -305,21 +291,6 @@ upgrade-compatibility-pre-master:
     SUITE_NAME: "upgrade_compatibility"
   script:
     - |
-      VERSION=$(cat VERSION)
-      export VERSION
-      # binaries
-      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
-          --git-rev="${VERSION}" --remote-path="release" \
-          --out="artifacts/release"
-      # canisters
-      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
-          --git-rev="${VERSION}" --remote-path="canisters" \
-          --out="artifacts/canisters"
-      # disk-img
-      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
-          --git-rev="${VERSION}" --remote-path="guest-os/disk-img" \
-          --out="ic-os/guestos/build-out/disk-img"
-    - |
       # Set the proper environment variables with versions
       MASTER_GIT_REVISION=$("${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh origin/master)
       export MASTER_GIT_REVISION
@@ -329,23 +300,16 @@ spec-compliance-pre-master:
   extends: .system-tests
   script:
     - |
-      VERSION=$(cat VERSION)
-      export VERSION
-      # binaries
-      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
-          --git-rev="${VERSION}" --remote-path="release" \
-          --out="artifacts/release"
-      # canisters
-      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
-          --git-rev="${VERSION}" --remote-path="canisters" \
-          --out="artifacts/canisters"
-      # disk-img
-      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
-          --git-rev="${VERSION}" --remote-path="guest-os/disk-img" \
-          --out="ic-os/guestos/build-out/disk-img"
-    - |
       IC_VERSION_ID=$(cat VERSION)
       export IC_VERSION_ID
+      # binaries are needed for run-system-tests.py
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
+          --git-rev="${IC_VERSION_ID}" --remote-path="release" \
+          --out="artifacts/release"
+      # canisters are needed for run-system-tests.py
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
+          --git-rev="${IC_VERSION_ID}" --remote-path="canisters" \
+          --out="artifacts/canisters"
       "$SHELL_WRAPPER" nix-shell -p "(import ./nix {}).ic-ref" --run "
         ${CI_PROJECT_DIR}/rs/tests/run-system-tests.py --suite=spec_compliance
       "
