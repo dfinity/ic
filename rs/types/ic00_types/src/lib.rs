@@ -486,7 +486,7 @@ impl Payload<'_> for CanisterHttpRequestArgs {}
 /// name: text;
 /// value: text;
 /// })`;
-#[derive(CandidType, Deserialize, Debug)]
+#[derive(CandidType, Deserialize, Debug, PartialEq)]
 pub struct CanisterHttpHeader {
     pub name: String,
     pub value: String,
@@ -501,7 +501,7 @@ impl Payload<'_> for CanisterHttpHeader {}
 /// headers: vec http_header;
 /// body: blob;
 /// })`;
-#[derive(CandidType, Deserialize, Debug)]
+#[derive(CandidType, Deserialize, Debug, PartialEq)]
 pub struct CanisterHttpResponsePayload {
     pub status: u64,
     pub headers: Vec<CanisterHttpHeader>,

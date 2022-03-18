@@ -1,5 +1,7 @@
 use crate::config;
+use candid::{Decode, Encode};
 use ic_execution_environment::{Hypervisor, QueryExecutionType};
+use ic_ic00_types::CanisterHttpResponsePayload;
 use ic_interfaces::execution_environment::{
     AvailableMemory, ExecutionParameters, HypervisorError, HypervisorError::ContractViolation,
     HypervisorResult, TrapCode,
@@ -4283,6 +4285,109 @@ fn sys_api_call_ic_trap_preserves_some_cycles() {
             num_instructions_left,
             MAX_NUM_INSTRUCTIONS - NumInstructions::new(15)
         );
+    });
+}
+
+// If method is not exported, `execute_anonymous_query` fails.
+#[test]
+fn canister_anonymous_query_method_not_exported() {
+    with_hypervisor(|hypervisor, tmp_path| {
+        let method = "transform";
+        let wasm = wabt::wat2wasm(
+            r#"(module
+                  (memory $memory 1)
+                  (export "memory" (memory $memory))
+            )"#,
+        )
+        .unwrap();
+
+        let canister_id = canister_test_id(42);
+        let execution_state = hypervisor
+            .create_execution_state(wasm, tmp_path, canister_id)
+            .unwrap();
+        let canister = canister_from_exec_state(execution_state, canister_id);
+        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
+
+        let (_, _, result) = hypervisor.execute_anonymous_query(
+            mock_time(),
+            method,
+            vec![].as_slice(),
+            canister,
+            None,
+            execution_parameters,
+        );
+        assert_eq!(
+            result,
+            Err(HypervisorError::MethodNotFound(WasmMethod::Query(
+                method.to_string()
+            )))
+        );
+    });
+}
+
+// Using `execute_anonymous_query` to execute transform function on a http response succeeds.
+#[test]
+fn canister_anonymous_query_transform_http_response() {
+    with_hypervisor(|hypervisor, tmp_path| {
+        let wasm = wabt::wat2wasm(
+            r#"(module
+                 (import "ic0" "msg_reply" (func $ic0_msg_reply))
+                 (import "ic0" "msg_arg_data_copy"
+                      (func $ic0_msg_arg_data_copy (param i32 i32 i32)))
+                 (import "ic0" "msg_arg_data_size"
+                      (func $ic0_msg_arg_data_size (result i32)))
+                 (import "ic0" "msg_reply_data_append"
+                      (func $ic0_msg_reply_data_append (param i32) (param i32)))
+                 (func $transform
+                        ;; Replies with the provided http_reponse argument without any modifcations.
+                        (call $ic0_msg_arg_data_copy
+                          (i32.const 0) ;; dst
+                          (i32.const 0) ;; offset
+                          (call $ic0_msg_arg_data_size) ;; size
+                        )
+                        (call $ic0_msg_reply_data_append
+                          (i32.const 0) ;; src
+                          (call $ic0_msg_arg_data_size) ;; size
+                        )
+                        (call $ic0_msg_reply)
+                    )
+
+                  (memory $memory 1)
+                  (export "memory" (memory $memory))
+                  (export "canister_query http_transform" (func $transform))
+            )"#,
+        )
+        .unwrap();
+
+        let method = "http_transform";
+        let canister_http_response = CanisterHttpResponsePayload {
+            status: 200,
+            headers: vec![],
+            body: vec![0, 1, 2],
+        };
+        let payload = Encode!(&canister_http_response).unwrap();
+
+        let canister_id = canister_test_id(42);
+        let execution_state = hypervisor
+            .create_execution_state(wasm, tmp_path, canister_id)
+            .unwrap();
+        let canister = canister_from_exec_state(execution_state, canister_id);
+        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
+
+        let (_, _, result) = hypervisor.execute_anonymous_query(
+            mock_time(),
+            method,
+            payload.as_slice(),
+            canister,
+            None,
+            execution_parameters,
+        );
+        let transformed_canister_http_response = Decode!(
+            result.unwrap().unwrap().bytes().as_slice(),
+            CanisterHttpResponsePayload
+        )
+        .unwrap();
+        assert_eq!(canister_http_response, transformed_canister_http_response)
     });
 }
 
