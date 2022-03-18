@@ -63,7 +63,7 @@ fn test_list_neurons_determinism() {
                 candid_one,
                 ListNeurons {
                     limit: 100,
-                    after_neuron: None,
+                    start_page_at: None,
                     of_principal: None,
                 },
                 &users[0],
@@ -75,6 +75,55 @@ fn test_list_neurons_determinism() {
         let actual = paginate_neurons(&sns_canisters.governance, &users[0], 1_usize).await;
 
         assert_eq!(expected, actual);
+
+        Ok(())
+    });
+}
+
+#[test]
+fn test_list_neurons_of_principal() {
+    local_test_on_sns_subnet(|runtime| async move {
+        let user1 = Sender::from_keypair(&TEST_USER1_KEYPAIR);
+        let user2 = Sender::from_keypair(&TEST_USER2_KEYPAIR);
+        let user3 = Sender::from_keypair(&TEST_USER3_KEYPAIR);
+
+        let account_identifier1 = AccountIdentifier::from(user1.get_principal_id());
+        let account_identifier2 = AccountIdentifier::from(user2.get_principal_id());
+
+        let sys_params = NervousSystemParameters {
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let sns_init_payload = SnsInitPayloadsBuilder::new()
+            .with_ledger_account(account_identifier1, alloc)
+            .with_ledger_account(account_identifier2, alloc)
+            .with_nervous_system_parameters(sys_params)
+            .build();
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        sns_canisters.stake_and_claim_neuron(&user1, None).await;
+        sns_canisters.stake_and_claim_neuron(&user2, None).await;
+
+        let all_neurons: Vec<Neuron> = sns_canisters.list_neurons_(&user1, 100, None).await;
+
+        assert_eq!(all_neurons.len(), 2);
+
+        let neurons_of_principal: Vec<Neuron> = sns_canisters
+            .list_neurons_(&user1, 100, Some(user1.get_principal_id()))
+            .await;
+
+        assert_eq!(neurons_of_principal.len(), 1);
+
+        let neurons_of_principal: Vec<Neuron> = sns_canisters
+            .list_neurons_(&user1, 100, Some(user3.get_principal_id()))
+            .await;
+
+        assert_eq!(neurons_of_principal.len(), 0);
 
         Ok(())
     });
@@ -426,7 +475,7 @@ async fn paginate_neurons(
                 candid_one,
                 ListNeurons {
                     limit: limit as u32,
-                    after_neuron: last_neuron_id.clone(),
+                    start_page_at: last_neuron_id.clone(),
                     of_principal: None,
                 },
                 user,

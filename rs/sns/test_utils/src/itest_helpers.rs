@@ -472,15 +472,24 @@ impl SnsCanisters<'_> {
     }
 
     pub async fn list_neurons(&self, user: &Sender) -> Vec<Neuron> {
+        self.list_neurons_(user, 100, None).await
+    }
+
+    pub async fn list_neurons_(
+        &self,
+        user: &Sender,
+        limit: u32,
+        of_principal: Option<PrincipalId>,
+    ) -> Vec<Neuron> {
         let list_neuron_response: ListNeuronsResponse = self
             .governance
             .query_from_sender(
                 "list_neurons",
                 candid_one,
                 ListNeurons {
-                    limit: 100,
-                    after_neuron: None,
-                    of_principal: None,
+                    limit,
+                    start_page_at: None,
+                    of_principal,
                 },
                 user,
             )

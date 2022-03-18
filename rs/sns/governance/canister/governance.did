@@ -113,7 +113,7 @@ type IncreaseDissolveDelay = record {
 type ListNeurons = record {
   of_principal : opt principal;
   limit : nat32;
-  after_neuron : opt NeuronId;
+  start_page_at : opt NeuronId;
 };
 type ListNeuronsResponse = record { neurons : vec Neuron };
 type ListProposals = record {

@@ -948,46 +948,59 @@ message GetProposalResponse {
   }
 }
 
-// List Proposals lists all proposals tracked in the Governance state.
-// Ballots will be cleared for clarity. To see ballots of a proposal,
-// use GetProposal with ProposalId. Listing over all proposals can
-// be accomplished using `before_proposal`.
+// An operation that lists the proposalData for all proposals tracked
+// in the Governance state in a paginated fashion. The ballots are cleared for
+// better readability. (To get a given proposal's ballots, use GetProposal).
+// Listing of all proposals can be accomplished using `limit` and `before_proposal`.
+// Proposals are stored using an increasing id where the most recent proposals
+// have the highest ids. ListProposals reverses the list and paginates backwards
+// using `before_proposal`, so the first element returned is the latest proposal.
 message ListProposals {
-  // Limit on the number of [ProposalData] to return. If no value is
-  // specified, or if a value greater than 100 is specified, 100
-  // will be used.
+  // The number of proposals for which the ProposalData is returned (in each page).
+  // If no value is specified or if a value greater than 100 is specified,
+  // 100 will be used.
   uint32 limit = 1;
 
-  // If specified, only return proposals that are strictly lower than
-  // the specified proposal according to the proposal ID. If not
-  // specified, start with the most recent proposal.
+  // The proposal ID specifying which proposals to return.
+  // This should be set to the last proposal of the previously returned page and
+  // will not be included in the current page.
+  // If this is specified, then only the proposals that have a proposal ID strictly
+  // lower than the specified one are returned. If this is not specified
+  // then the list of proposals starts with the most recent proposal's ID.
   ProposalId before_proposal = 2;
 
-  // Exclude proposals with a type in this list.
+  // A list of proposal types, specifying that proposals of the given
+  // types should be excluded in this list.
   repeated uint64 exclude_type = 3;
 
-  // Include proposals that have a reward status in this list (see
-  // [ProposalRewardStatus] for more information). If this list is
-  // empty, no restriction is applied. For example, many users listing
-  // proposals will only be interested in proposals for which they can
-  // receive voting rewards, i.e., with reward status
-  // PROPOSAL_REWARD_STATUS_ACCEPT_VOTES.
+  // A list of proposal reward statuses, specifying that only proposals that
+  // that have one of the define reward statuses should be included
+  // in the list.
+  // If this list is empty, no restriction is applied.
+  //
+  // Example: If users are only interested in proposals for which they can
+  // receive voting rewards they can use this to filter for proposals
+  // with reward status PROPOSAL_REWARD_STATUS_ACCEPT_VOTES.
   repeated ProposalRewardStatus include_reward_status = 4;
 
-  // Include proposals that have a status in this list (see
-  // [ProposalStatus] for more information). If this list is empty, no
-  // restriction is applied.
+
+  // A list of proposal decision statuses, specifying that only proposals that
+  // that have one of the define decision statuses should be included
+  // in the list.
+  // If this list is empty, no restriction is applied.
   repeated ProposalDecisionStatus include_status = 5;
 }
 
+// A response to the ListProposals command.
 message ListProposalsResponse {
+  // The returned list of proposals' ProposalData.
   repeated ProposalData proposals = 1;
 }
 
-// ListNeurons lists all Neurons tracked in the Governance state in a
-// paginated fashion. Ballots will be cleared for clarity. Listing
-// over all neurons can be accomplished using `limit` and `after_neuron`.
-// To list neurons controlled by the supplied PrincipalId, use `of_principal`.
+// An operation that lists all neurons tracked in the Governance state in a
+// paginated fashion.
+// Listing of all neurons can be accomplished using `limit` and `start_page_at`.
+// To only list neurons associated with a given principal, use `of_principal`.
 message ListNeurons {
   // Limit the number of Neurons returned in each page. If no value is
   // specified, or if a value greater than 100 is specified, 100
@@ -997,19 +1010,19 @@ message ListNeurons {
   // Used to indicate where the next page of Neurons should start. Should be
   // set to the last neuron of the previously returned page and will not be
   // included in the next page. If not set, ListNeurons will return a page of
-  // size limit starting at the 0th Neuron. Neurons are not kept in any specific
+  // size limit starting at the "0th" Neuron. Neurons are not kept in any specific
   // order, but their ordering is deterministic, so this can be used to return all
   // the neurons one page at a time.
-  NeuronId after_neuron = 2;
+  NeuronId start_page_at = 2;
 
-  // If set, only returns neurons in which the given principal has
-  // permissions.
+  // A principal ID, specifying that only neurons for which this principal has
+  // any permissions should be included in the list.
+  // If this is not specified, no restriction is applied.
   ic_base_types.pb.v1.PrincipalId of_principal = 3;
 }
 
-// A response to a `ListNeurons` request.
-//
-// The "requested list" is described in `ListNeurons`.
+// A response to the ListNeurons command.
 message ListNeuronsResponse {
+  // The returned list of neurons.
   repeated Neuron neurons = 1;
 }

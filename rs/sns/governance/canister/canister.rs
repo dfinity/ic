@@ -355,21 +355,26 @@ fn get_neuron_(get_neuron: GetNeuron) -> GetNeuronResponse {
     governance().get_neuron(&get_neuron)
 }
 
-/// Returns a list of neurons of size `limit` starting at `first_neuron`.
-/// Specifying `of_principal` will return Neurons of which the given
-/// PrincipalId has permissions. The list returned is not certified.
+/// Returns a list of neurons of size `limit` using `start_page_at` to
+/// indicate the start of the list. Specifying `of_principal` will return
+/// Neurons of which the given PrincipalId has permissions. The list
+/// returned is not certified. To paginate through the all neurons,
+/// `start_page_at` should be set to the last neuron of the previously
+/// returned page and will not be included in the next page. If not set
+/// i.e. in the first call to list_neurons, list_neurons will return a
+/// page of size limit starting at the "0th" Neuron. Neurons are not kept
+/// in any specific order, but their ordering is deterministic, so this
+/// can be used to return all the neurons one page at a time.
 #[export_name = "canister_query list_neurons"]
 fn list_neurons() {
     println!("{}list_neurons", log_prefix());
     over(candid_one, list_neurons_)
 }
 
-/// Returns a list of neurons of size `limit` starting at `first_neuron`.
-/// Specifying `of_principal` will return Neurons of which the given
-/// PrincipalId has permissions. The list returned is not certified.
+/// Internal method for calling list_neurons
 #[candid_method(query, rename = "list_neurons")]
 fn list_neurons_(list_neurons: ListNeurons) -> ListNeuronsResponse {
-    governance().list_neurons(&list_neurons, &caller())
+    governance().list_neurons(&list_neurons)
 }
 
 /// Returns the full proposal corresponding to the `proposal_id`.
@@ -385,18 +390,22 @@ fn get_proposal_(get_proposal: GetProposal) -> GetProposalResponse {
     governance().get_proposal(&get_proposal)
 }
 
-/// Returns a list of proposals of size `limit` that are earlier than
-/// `before_proposal`. Additional filter parameters can be set on the
-/// request. The list returned is not certified.
+/// Returns a list of proposals of size `limit` using `before_proposal` to
+/// indicate the start of the list. Additional filter parameters can be set on the
+/// request. The list returned is not certified. Proposals are stored in increasing
+/// order of ids, where the most recent proposals have the highest ids. ListProposals
+/// paginates in reverse, where the first proposals returned are the most recent.
+/// To paginate through the all proposals, `before_proposal` should be set to the
+/// last proposal of the previously returned page and will not be included in the
+/// next page. If not set i.e. in the first call to list_proposals, list_proposals
+/// will return a page of size limit starting at the Nth proposal.
 #[export_name = "canister_query list_proposals"]
 fn list_proposals() {
     println!("{}list_proposals", log_prefix());
     over(candid_one, list_proposals_)
 }
 
-/// Returns a list of proposals of size `limit` that are earlier than
-/// `before_proposal`. Additional filter parameters can be set on the
-/// request. The list returned is not certified.
+/// Internal method for calling list_proposals
 #[candid_method(query, rename = "list_proposals")]
 fn list_proposals_(list_proposals: ListProposals) -> ListProposalsResponse {
     governance().list_proposals(&list_proposals)

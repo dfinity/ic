@@ -1,3 +1,4 @@
+use canister_test::Canister;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use dfn_candid::{candid, candid_one};
@@ -9,8 +10,9 @@ use ic_sns_governance::pb::v1::governance_error::ErrorType;
 use ic_sns_governance::pb::v1::governance_error::ErrorType::PreconditionFailed;
 use ic_sns_governance::pb::v1::proposal::Action;
 use ic_sns_governance::pb::v1::{
-    GetProposal, GetProposalResponse, Motion, NervousSystemParameters, NeuronPermissionList,
-    NeuronPermissionType, Proposal, ProposalId, Vote,
+    GetProposal, GetProposalResponse, ListProposals, ListProposalsResponse, Motion,
+    NervousSystemParameters, NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
+    ProposalId, Vote,
 };
 use ic_sns_governance::types::ONE_YEAR_SECONDS;
 use ic_sns_test_utils::itest_helpers::{
@@ -432,4 +434,121 @@ fn test_non_existent_proposal_id_is_not_a_bad_input() {
             Ok(())
         }
     });
+}
+
+#[test]
+fn test_list_proposals_determinism() {
+    local_test_on_sns_subnet(|runtime| async move {
+        // Initialize the ledger with an account for a user.
+        let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
+        let alloc = Tokens::from_tokens(1000).unwrap();
+        let params = NervousSystemParameters {
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let sns_init_payload = SnsInitPayloadsBuilder::new()
+            .with_ledger_account(user.get_principal_id().into(), alloc)
+            .with_nervous_system_parameters(params)
+            .build();
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        sns_canisters
+            .stake_and_claim_neuron(&user, Some(ONE_YEAR_SECONDS as u32))
+            .await;
+
+        let neuron_id = sns_canisters
+            .stake_and_claim_neuron(&user, Some(ONE_YEAR_SECONDS as u32))
+            .await;
+
+        let subaccount = neuron_id
+            .subaccount()
+            .expect("Error creating the subaccount");
+
+        let mut proposals = vec![];
+        for i in 0..10 {
+            proposals.push(Proposal {
+                title: format!("Test Motion proposal-{}", i),
+                action: Some(Action::Motion(Motion {
+                    motion_text: format!("Motion-{}", i),
+                })),
+                ..Default::default()
+            });
+        }
+
+        for proposal in proposals {
+            sns_canisters
+                .make_proposal(&user, &subaccount, proposal)
+                .await
+                .unwrap();
+        }
+
+        let list_proposal_response: ListProposalsResponse = sns_canisters
+            .governance
+            .query_from_sender(
+                "list_proposals",
+                candid_one,
+                ListProposals {
+                    limit: 20,
+                    before_proposal: None,
+                    ..Default::default()
+                },
+                &user,
+            )
+            .await
+            .expect("Error calling the list_proposals api");
+
+        let expected = list_proposal_response.proposals;
+        let actual =
+            list_all_proposals_through_pagination(&sns_canisters.governance, &user, 1_usize).await;
+
+        assert_eq!(expected, actual);
+
+        Ok(())
+    });
+}
+
+async fn list_all_proposals_through_pagination(
+    governance_canister: &Canister<'_>,
+    user: &Sender,
+    limit: usize,
+) -> Vec<ProposalData> {
+    let mut all_proposals = vec![];
+    let mut last_proposal_id: Option<ProposalId> = None;
+
+    loop {
+        let list_proposals_response: ListProposalsResponse = governance_canister
+            .query_from_sender(
+                "list_proposals",
+                candid_one,
+                ListProposals {
+                    limit: limit as u32,
+                    before_proposal: last_proposal_id,
+                    ..Default::default()
+                },
+                user,
+            )
+            .await
+            .expect("Error calling the list_proposals api");
+
+        let len = list_proposals_response.proposals.len();
+        let is_last = len < limit;
+        assert!(len <= limit);
+
+        if !list_proposals_response.proposals.is_empty() {
+            last_proposal_id = Some(
+                *list_proposals_response.proposals[list_proposals_response.proposals.len() - 1]
+                    .id
+                    .as_ref()
+                    .unwrap(),
+            );
+            all_proposals.extend(list_proposals_response.proposals);
+        }
+
+        if is_last {
+            return all_proposals;
+        }
+    }
 }
