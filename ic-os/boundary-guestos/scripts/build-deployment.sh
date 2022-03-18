@@ -241,14 +241,14 @@ function generate_network_config() {
             if [ -z ${ipv4_address:-} ]; then
                 echo "ipv4_address is unset"
             else
-                echo "ip_address=${ipv4_address}" >>"${CONFIG_DIR}/$NODE_PREFIX/network.conf"
+                echo "ipv4_address=${ipv4_address}" >>"${CONFIG_DIR}/$NODE_PREFIX/network.conf"
             fi
 
             # Set ipv4 gateway
             if [ -z ${ipv4_gateway:-} ]; then
                 echo "ipv4_gateway is unset"
             else
-                echo "ip_gateway=${ipv4_gateway}" >>"${CONFIG_DIR}/$NODE_PREFIX/network.conf"
+                echo "ipv4_gateway=${ipv4_gateway}" >>"${CONFIG_DIR}/$NODE_PREFIX/network.conf"
             fi
 
             cat "${CONFIG_DIR}/$NODE_PREFIX/network.conf"
