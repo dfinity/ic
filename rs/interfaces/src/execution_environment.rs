@@ -310,9 +310,12 @@ pub trait IngressHistoryWriter: Send + Sync {
 
 /// A trait for handling `out_of_instructions()` calls from the Wasm module.
 pub trait OutOfInstructionsHandler {
-    /// Returns `Ok` if the execution should continue. Otherwise,
-    /// returns `Err` to abort the execution with a trap.
-    fn out_of_instructions(&self) -> Result<(), HypervisorError>;
+    /// Returns a new instruction limit if the execution should continue.
+    /// Otherwise, returns an error to trap the execution.
+    fn out_of_instructions(
+        &self,
+        num_instructions_left: NumInstructions,
+    ) -> HypervisorResult<NumInstructions>;
 }
 
 /// A trait for providing all necessary imports to a Wasm module.
@@ -631,9 +634,12 @@ pub trait SystemApi {
     /// This system call is not part of the public spec and used by the
     /// hypervisor, when execution runs out of instructions.
     ///
-    /// Returns `Ok` if the execution should continue. Otherwise,
-    /// returns `Err` to abort the execution with a trap.
-    fn out_of_instructions(&self) -> Result<(), HypervisorError>;
+    /// Returns a new instruction limit if the execution should continue.
+    /// Otherwise, returns an error to trap the execution.
+    fn out_of_instructions(
+        &self,
+        num_instructions_left: NumInstructions,
+    ) -> HypervisorResult<NumInstructions>;
 
     /// This system call is not part of the public spec. It's called after a
     /// native `memory.grow` has been called to check whether there's enough
