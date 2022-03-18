@@ -58,7 +58,7 @@ proptest = "0.9.4"
 tempfile = "3.1.0"
 tokio = "1.15.0"
 wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" }
-criterion = "0.3"
+criterion = { version = "0.3", features = ["html_reports"] }
 iai = "0.1"
 
 [build-dependencies]
