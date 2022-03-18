@@ -79,8 +79,9 @@ pub(crate) async fn get_public_key(
             }
             Err(err) => {
                 count += 1;
-                if count < 10 {
+                if count < 20 {
                     debug!(ctx.logger, "ecdsa_public_key returns {}, try again...", err);
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                 } else {
                     panic!("ecdsa_public_key failed after {} tries.", count);
                 }
