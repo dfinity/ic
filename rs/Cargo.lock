@@ -5450,6 +5450,7 @@ dependencies = [
  "prost",
  "registry-canister",
  "serde",
+ "tokio",
 ]
 
 [[package]]

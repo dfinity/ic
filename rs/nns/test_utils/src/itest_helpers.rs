@@ -14,6 +14,7 @@ use std::{
     convert::TryInto,
     future::Future,
     path::Path,
+    thread,
     time::{Duration, SystemTime},
 };
 
@@ -274,10 +275,13 @@ impl NnsCanisters<'_> {
         let identity = Canister::new(runtime, IDENTITY_CANISTER_ID);
         let nns_ui = Canister::new(runtime, NNS_UI_CANISTER_ID);
 
-        // Install canisters
+        // Install all the canisters
+        // These two need to finish first or the process hangs
         futures::join!(
             install_registry_canister(&mut registry, init_payloads.registry.clone()),
             install_governance_canister(&mut governance, init_payloads.governance.clone()),
+        );
+        futures::join!(
             install_ledger_canister(&mut ledger, init_payloads.ledger),
             install_root_canister(&mut root, init_payloads.root.clone()),
             install_cycles_minting_canister(
@@ -345,11 +349,32 @@ pub async fn install_rust_canister_with_memory_allocation(
     canister_init_payload: Option<Vec<u8>>,
     memory_allocation: u64, // in bytes
 ) {
-    let wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
-        relative_path_from_rs,
-        binary_name.as_ref(),
-        cargo_features,
-    );
+    // Some ugly code to allow copying AsRef<Path> and features (an array slice) into new thread
+    // neither of these implement Send or have a way to clone the whole structure's data
+    let path_string = relative_path_from_rs.as_ref().to_str().unwrap().to_owned();
+    let binary_name_ = binary_name.as_ref().to_string();
+    let features = cargo_features
+        .iter()
+        .map(|s| s.to_string())
+        .collect::<Box<[String]>>();
+
+    // Wrapping call to cargo_bin_* to avoid blocking current thread
+    let wasm: Wasm = tokio::runtime::Handle::current()
+        .spawn_blocking(move || {
+            println!(
+                "Compiling Wasm for {} in task on thread: {:?}",
+                binary_name_,
+                thread::current().id()
+            );
+            // Second half of moving data had to be done in-thread to avoid lifetime/ownership issues
+            let features = features.iter().map(|s| s.as_str()).collect::<Box<[&str]>>();
+            let path = Path::new(&path_string);
+            Project::cargo_bin_maybe_use_path_relative_to_rs(path, &binary_name_, &features)
+        })
+        .await
+        .unwrap();
+
+    println!("Done compiling the wasm for {}", binary_name.as_ref());
 
     wasm.install_with_retries_onto_canister(
         canister,

@@ -883,7 +883,8 @@ impl<'a> Install<'a> {
         eprintln!("Install args: {}", &install_args);
         match self.runtime {
             Runtime::Local(local_runtime) => local_runtime
-                .install_canister_helper(install_args)
+                .install_canister_helper_async(install_args)
+                .await
                 .map_err(|e| e.to_string())
                 .map(|_| {}),
             Runtime::Remote(c) => c.agent.install_canister(install_args).await,
