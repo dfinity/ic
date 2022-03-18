@@ -616,12 +616,12 @@ impl Governance {
     }
 
     /// Return a deterministically ordered list of size `limit` containing
-    /// Neurons starting after `after_neuron`.
-    fn list_neurons_ordered(&self, after_neuron: &Option<NeuronId>, limit: usize) -> Vec<Neuron> {
-        let neuron_range = if let Some(n) = after_neuron {
+    /// Neurons starting at but not including `start_page_at`.
+    fn list_neurons_ordered(&self, start_page_at: &Option<NeuronId>, limit: usize) -> Vec<Neuron> {
+        let neuron_range = if let Some(neuron_id) = start_page_at {
             self.proto
                 .neurons
-                .range((Excluded(n.to_string()), Unbounded))
+                .range((Excluded(neuron_id.to_string()), Unbounded))
         } else {
             self.proto.neurons.range((String::from("0"))..)
         };
@@ -652,7 +652,7 @@ impl Governance {
     }
 
     /// See `ListNeurons`.
-    pub fn list_neurons(&self, req: &ListNeurons, caller: &PrincipalId) -> ListNeuronsResponse {
+    pub fn list_neurons(&self, req: &ListNeurons) -> ListNeuronsResponse {
         let limit = if req.limit == 0 || req.limit > MAX_LIST_NEURONS_RESULTS {
             MAX_LIST_NEURONS_RESULTS
         } else {
@@ -660,8 +660,8 @@ impl Governance {
         } as usize;
 
         let limited_neurons = match req.of_principal {
-            Some(_) => self.list_neurons_by_principal(caller, limit),
-            None => self.list_neurons_ordered(&req.after_neuron, limit),
+            Some(principal) => self.list_neurons_by_principal(&principal, limit),
+            None => self.list_neurons_ordered(&req.start_page_at, limit),
         };
 
         ListNeuronsResponse {
