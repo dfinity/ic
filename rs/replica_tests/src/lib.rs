@@ -156,7 +156,7 @@ where
 /// function calls instead of http calls.
 pub struct LocalTestRuntime {
     pub query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
-    pub ingress_sender: Mutex<Option<IngressIngestionService>>,
+    pub ingress_sender: Arc<Mutex<Option<IngressIngestionService>>>,
     pub ingress_history_reader: Arc<dyn IngressHistoryReader>,
     pub state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     pub node_id: NodeId,
@@ -430,7 +430,7 @@ where
 
         let runtime = LocalTestRuntime {
             query_handler,
-            ingress_sender,
+            ingress_sender: Arc::new(ingress_sender),
             ingress_history_reader: Arc::new(ingress_history_reader),
             state_reader: state_manager,
             node_id,
@@ -614,6 +614,35 @@ impl LocalTestRuntime {
                 query_allocation,
             ),
         )
+    }
+
+    pub async fn install_canister_helper_async(
+        &self,
+        install_code_args: InstallCodeArgs,
+    ) -> Result<WasmResult, UserError> {
+        // Clone data to send to thread
+        let ingress_sender = Arc::clone(&self.ingress_sender);
+        let ingress_history_reader = Arc::clone(&self.ingress_history_reader);
+        let nonce = self.get_nonce();
+        let ingress_time_limit = self.ingress_time_limit;
+        // Wrapping the call to process_ingress to avoid blocking current thread
+        tokio::runtime::Handle::current()
+            .spawn_blocking(move || {
+                process_ingress(
+                    &ingress_sender,
+                    ingress_history_reader.as_ref(),
+                    SignedIngressBuilder::new()
+                        .expiry_time(current_time_and_expiry_time().1)
+                        .canister_id(IC_00)
+                        .method_name(Method::InstallCode)
+                        .method_payload(install_code_args.encode())
+                        .nonce(nonce)
+                        .build(),
+                    ingress_time_limit,
+                )
+            })
+            .await
+            .unwrap()
     }
 
     pub fn install_canister_helper(
