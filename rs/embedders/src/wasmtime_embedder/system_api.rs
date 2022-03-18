@@ -5,7 +5,7 @@ use ic_logger::{error, info, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{CanisterId, Cycles, NumBytes, NumInstructions};
 
-use wasmtime::{AsContextMut, Caller, Linker, Store, Trap, Val};
+use wasmtime::{AsContextMut, Caller, Global, Linker, Store, Trap, Val};
 
 use std::convert::TryFrom;
 
@@ -20,6 +20,73 @@ fn process_err<S: SystemApi>(
         .system_api
         .set_execution_error(e);
     t
+}
+
+/// Gets the global variable that stores the number of instructions from `caller`.
+fn get_num_instructions_global<S: SystemApi>(
+    caller: &mut Caller<'_, StoreData<S>>,
+    log: &ReplicaLogger,
+    canister_id: CanisterId,
+) -> Result<Global, Trap> {
+    match caller.data().num_instructions_global {
+        None => {
+            error!(
+                log,
+                "[EXC-BUG] Canister {}: instructions counter is set to None.", canister_id,
+            );
+            Err(process_err(
+                caller,
+                HypervisorError::InstructionLimitExceeded,
+            ))
+        }
+        Some(global) => Ok(global),
+    }
+}
+
+fn load_value<S: SystemApi>(
+    global: &Global,
+    mut caller: &mut Caller<'_, StoreData<S>>,
+    log: &ReplicaLogger,
+    canister_id: CanisterId,
+) -> Result<NumInstructions, Trap> {
+    match global.get(&mut caller) {
+        Val::I64(instructions) => Ok(NumInstructions::from(instructions.max(0) as u64)),
+        others => {
+            error!(
+                log,
+                "[EXC-BUG] Canister {}: expected value of type I64 instead got {:?}",
+                canister_id,
+                others,
+            );
+            Err(process_err(
+                caller,
+                HypervisorError::InstructionLimitExceeded,
+            ))
+        }
+    }
+}
+
+fn store_value<S: SystemApi>(
+    global: &Global,
+    num_instructions: NumInstructions,
+    mut caller: &mut Caller<'_, StoreData<S>>,
+    log: &ReplicaLogger,
+    canister_id: CanisterId,
+) -> Result<(), Trap> {
+    if let Err(err) = global.set(&mut caller, Val::I64(num_instructions.get() as i64)) {
+        error!(
+            log,
+            "[EXC-BUG] Canister {}: Setting instructions to {} failed with {}",
+            canister_id,
+            num_instructions,
+            err
+        );
+        return Err(process_err(
+            caller,
+            HypervisorError::InstructionLimitExceeded,
+        ));
+    }
+    Ok(())
 }
 
 /// Charges a canister (in instructions) for system API call overhead (exit,
@@ -38,78 +105,42 @@ fn process_err<S: SystemApi>(
 fn charge_for_system_api_call<S: SystemApi>(
     log: &ReplicaLogger,
     canister_id: CanisterId,
-    mut caller: &mut Caller<'_, StoreData<S>>,
+    caller: &mut Caller<'_, StoreData<S>>,
     system_api_charge: NumInstructions,
     num_bytes: u32,
 ) -> Result<(), Trap> {
-    let num_instructions_global = match caller.data().num_instructions_global {
-        None => {
-            error!(
-                log,
-                "[EXC-BUG] Canister {}: instructions counter is set to None.", canister_id,
-            );
-            return Err(process_err(
-                caller,
-                HypervisorError::InstructionLimitExceeded,
-            ));
-        }
-        Some(global) => global,
-    };
-
-    match num_instructions_global.get(&mut caller) {
-        Val::I64(current_instructions) => {
-            let fee = caller
-                .as_context_mut()
-                .data_mut()
-                .system_api
-                .get_num_instructions_from_bytes(NumBytes::from(num_bytes as u64))
-                .get() as i64
-                + system_api_charge.get() as i64;
-            if current_instructions < fee {
-                info!(
-                    log,
-                    "Canister {}: ran out of instructions.  Current {}, fee {}",
-                    canister_id,
-                    current_instructions,
-                    fee
-                );
-                return Err(process_err(
-                    caller,
-                    HypervisorError::InstructionLimitExceeded,
-                ));
-            }
-            let updated_instructions = current_instructions - fee;
-            if let Err(err) =
-                num_instructions_global.set(&mut caller, Val::I64(updated_instructions))
-            {
-                error!(
-                    log,
-                    "[EXC-BUG] Canister {}: Setting instructions from {} to {} failed with {}",
-                    canister_id,
-                    current_instructions,
-                    updated_instructions,
-                    err
-                );
-                return Err(process_err(
-                    caller,
-                    HypervisorError::InstructionLimitExceeded,
-                ));
-            }
-            Ok(())
-        }
-        others => {
-            error!(
-                log,
-                "[EXC-BUG] Canister {}: expected value of type I64 instead got {:?}",
-                canister_id,
-                others,
-            );
-            Err(process_err(
-                caller,
-                HypervisorError::InstructionLimitExceeded,
-            ))
-        }
+    let num_instructions_global = get_num_instructions_global(caller, log, canister_id)?;
+    let current_instructions =
+        load_value(&num_instructions_global, caller, log, canister_id)?.get() as i64;
+    let fee = caller
+        .as_context_mut()
+        .data_mut()
+        .system_api
+        .get_num_instructions_from_bytes(NumBytes::from(num_bytes as u64))
+        .get() as i64
+        + system_api_charge.get() as i64;
+    if current_instructions < fee {
+        info!(
+            log,
+            "Canister {}: ran out of instructions.  Current {}, fee {}",
+            canister_id,
+            current_instructions,
+            fee
+        );
+        return Err(process_err(
+            caller,
+            HypervisorError::InstructionLimitExceeded,
+        ));
     }
+    let updated_instructions = NumInstructions::from((current_instructions - fee) as u64);
+    store_value(
+        &num_instructions_global,
+        updated_instructions,
+        caller,
+        log,
+        canister_id,
+    )?;
+    Ok(())
 }
 
 pub(crate) fn syscalls<S: SystemApi>(
@@ -682,6 +713,7 @@ pub(crate) fn syscalls<S: SystemApi>(
 
     linker
         .func_wrap("ic0", "stable64_write", {
+            let log = log.clone();
             move |mut caller: Caller<'_, StoreData<S>>, offset: i64, src: i64, size: i64| {
                 charge_for_system_api_call(
                     &log,
@@ -805,8 +837,27 @@ pub(crate) fn syscalls<S: SystemApi>(
     linker
         .func_wrap("__", "out_of_instructions", {
             move |mut caller: Caller<'_, StoreData<S>>| -> Result<(), _> {
-                let result = with_system_api(&mut caller, |s| s.out_of_instructions());
-                result.map_err(|err| process_err(caller, err))
+                let num_instructions_global =
+                    get_num_instructions_global(&mut caller, &log, canister_id)?;
+                let num_instructions_left =
+                    load_value(&num_instructions_global, &mut caller, &log, canister_id)?;
+                let result = with_system_api(&mut caller, |s| {
+                    s.out_of_instructions(num_instructions_left)
+                });
+
+                match result {
+                    Ok(updated_instructions) => {
+                        store_value(
+                            &num_instructions_global,
+                            updated_instructions,
+                            &mut caller,
+                            &log,
+                            canister_id,
+                        )?;
+                        Ok(())
+                    }
+                    Err(err) => Err(process_err(caller, err)),
+                }
             }
         })
         .unwrap();

@@ -186,7 +186,10 @@ impl SystemApi for SystemApiEmpty {
     fn ic0_time(&self) -> HypervisorResult<Time> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
-    fn out_of_instructions(&self) -> Result<(), HypervisorError> {
+    fn out_of_instructions(
+        &self,
+        _num_instruction_left: NumInstructions,
+    ) -> Result<NumInstructions, HypervisorError> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
     fn update_available_memory(&mut self, _: i32, _: u32) -> HypervisorResult<i32> {
