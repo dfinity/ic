@@ -12,6 +12,7 @@ mod remove_nodes;
 mod remove_nodes_from_subnet;
 mod reroute_canister_range;
 mod update_node_operator_config;
+mod update_node_operator_config_directly;
 mod update_node_rewards_table;
 mod update_subnet;
 mod update_subnet_and_bless_replica_version;

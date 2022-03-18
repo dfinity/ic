@@ -40,6 +40,7 @@ use registry_canister::{
         do_remove_node_directly::RemoveNodeDirectlyPayload, do_remove_nodes::RemoveNodesPayload,
         do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
         do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
+        do_update_node_operator_config_directly::UpdateNodeOperatorConfigDirectlyPayload,
         do_update_subnet::UpdateSubnetPayload,
         do_update_subnet_replica::UpdateSubnetReplicaVersionPayload,
         do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
@@ -524,6 +525,28 @@ fn update_node_operator_config() {
 #[candid_method(update, rename = "update_node_operator_config")]
 fn update_node_operator_config_(payload: UpdateNodeOperatorConfigPayload) {
     registry_mut().do_update_node_operator_config(payload);
+    recertify_registry();
+}
+
+#[export_name = "canister_update update_node_operator_config_directly"]
+fn update_node_operator_config_directly() {
+    // This method can be called by anyone
+    println!(
+        "{}call: update_node_operator_config_directly from: {}",
+        LOG_PREFIX,
+        dfn_core::api::caller()
+    );
+    over(
+        candid_one,
+        |payload: UpdateNodeOperatorConfigDirectlyPayload| {
+            update_node_operator_config_directly_(payload)
+        },
+    );
+}
+
+#[candid_method(update, rename = "update_node_operator_config_directly")]
+fn update_node_operator_config_directly_(payload: UpdateNodeOperatorConfigDirectlyPayload) {
+    registry_mut().do_update_node_operator_config_directly(payload);
     recertify_registry();
 }
 

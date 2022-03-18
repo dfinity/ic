@@ -116,6 +116,10 @@ type SubnetFeatures = record {
   ecdsa_signatures : bool;
 };
 type SubnetType = variant { application; verified_application; system };
+type UpdateNodeOperatorConfigDirectlyPayload = record {
+  node_operator_id : opt principal;
+  node_provider_id : opt principal;
+};
 type UpdateNodeOperatorConfigPayload = record {
   node_operator_id : opt principal;
   node_provider_id : opt principal;
@@ -185,6 +189,9 @@ service : {
   reroute_canister_range : (RerouteCanisterRangePayload) -> (Result_2);
   set_firewall_config : (SetFirewallConfigPayload) -> ();
   update_node_operator_config : (UpdateNodeOperatorConfigPayload) -> ();
+  update_node_operator_config_directly : (
+      UpdateNodeOperatorConfigDirectlyPayload,
+    ) -> ();
   update_node_rewards_table : (UpdateNodeRewardsTableProposalPayload) -> ();
   update_subnet : (UpdateSubnetPayload) -> ();
   update_subnet_replica_version : (UpdateSubnetReplicaVersionPayload) -> ();
