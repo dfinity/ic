@@ -1,47 +1,42 @@
 use crate::{
-    blockchainmanager::{BlockchainManager, GetSuccessorsRequest, GetSuccessorsResponse},
-    connectionmanager::ConnectionManager,
-    stream::handle_stream,
-    transaction_manager::TransactionManager,
-    Config, HasHeight, ProcessEvent, ProcessEventError,
+    blockchainmanager::BlockchainManager, connectionmanager::ConnectionManager,
+    stream::handle_stream, transaction_manager::TransactionManager, AdapterState, Config,
+    HasHeight, ProcessEvent, ProcessEventError,
 };
 use ic_logger::ReplicaLogger;
-use std::{net::SocketAddr, time::Instant};
-
-enum AdapterState {
-    Idle,
-    ActiveSince(Instant),
-}
+use std::{net::SocketAddr, sync::Arc};
+use tokio::sync::Mutex;
 
 /// This struct is the overall wrapper around the functionality to communicate with the
 /// Bitcoin network and the IC.
 pub struct Adapter {
     /// The field stores headers and blocks of the blockchain.
-    blockchain_manager: BlockchainManager,
+    blockchain_manager: Arc<Mutex<BlockchainManager>>,
     /// This field is used to contain the ConnectionManager. The manager contains the logic to push messages
     /// to various connections and manage a connection's state.
     connection_manager: ConnectionManager,
     /// This field is used to relay transactions from the replica state to the BTC network.
-    transaction_manager: TransactionManager,
+    transaction_manager: Arc<Mutex<TransactionManager>>,
     /// This field contains the timestamp when the last RPC call was received from the adapter.
-    update_state: AdapterState,
-    /// This field contains the how long the adapter should wait to enter the [AdapterState::Idle](AdapterState::Idle) state.
-    idle_seconds: u64,
+    adapter_state: AdapterState,
 }
 
 impl Adapter {
     /// Constructs a new adapter.
-    pub fn new(config: &Config, logger: ReplicaLogger) -> Self {
-        let connection_manager = ConnectionManager::new(config, logger.clone());
-        let blockchain_manager = BlockchainManager::new(config, logger.clone());
-        let transaction_manager = TransactionManager::new(logger);
+    pub fn new(
+        config: &Config,
+        logger: ReplicaLogger,
+        blockchain_manager: Arc<Mutex<BlockchainManager>>,
+        transaction_manager: Arc<Mutex<TransactionManager>>,
+        adapter_state: AdapterState,
+    ) -> Self {
+        let connection_manager = ConnectionManager::new(config, logger);
 
         Self {
             blockchain_manager,
             connection_manager,
             transaction_manager,
-            update_state: AdapterState::Idle,
-            idle_seconds: config.idle_seconds,
+            adapter_state,
         }
     }
 
@@ -50,14 +45,9 @@ impl Adapter {
     }
 
     /// Function to called periodically for updating the adapter's state.
-    pub fn tick(&mut self) {
-        if let AdapterState::ActiveSince(last_received_at) = self.update_state {
-            if last_received_at.elapsed().as_secs() > self.idle_seconds {
-                self.make_idle();
-            }
-        }
-
-        if let AdapterState::Idle = self.update_state {
+    pub async fn tick(&mut self) {
+        if self.adapter_state.is_idle() {
+            self.make_idle().await;
             return;
         }
 
@@ -68,14 +58,15 @@ impl Adapter {
                 self.disconnect(event.address);
             }
 
-            if let Err(ProcessEventError::InvalidMessage) =
-                self.blockchain_manager.process_event(&event)
+            let blockchain_manager_process_event_result =
+                self.blockchain_manager.lock().await.process_event(&event);
+            if let Err(ProcessEventError::InvalidMessage) = blockchain_manager_process_event_result
             {
                 self.disconnect(event.address);
             }
-
-            if let Err(ProcessEventError::InvalidMessage) =
-                self.transaction_manager.process_event(&event)
+            let transaction_manager_process_event_result =
+                self.transaction_manager.lock().await.process_event(&event);
+            if let Err(ProcessEventError::InvalidMessage) = transaction_manager_process_event_result
             {
                 self.disconnect(event.address);
             }
@@ -83,27 +74,18 @@ impl Adapter {
 
         // After an event is dispatched, the managers `tick` method is called to process possible
         // outgoing messages.
-        self.connection_manager
-            .tick(self.blockchain_manager.get_height(), handle_stream);
-        self.blockchain_manager.tick(&mut self.connection_manager);
-        self.transaction_manager.tick(&mut self.connection_manager);
-    }
-
-    /// Gets successors from the configured  bitcoin network.
-    pub fn get_successors(&mut self, request: GetSuccessorsRequest) -> GetSuccessorsResponse {
-        self.received_rpc_call();
-        self.blockchain_manager.get_successors(request)
-    }
-
-    /// Sends transaction to the configured bitcoin network.
-    pub fn send_transaction(&mut self, raw_tx: Vec<u8>) {
-        self.received_rpc_call();
-        self.transaction_manager.send_transaction(&raw_tx)
-    }
-
-    /// Set the state to `Active` with the current timestamp.
-    fn received_rpc_call(&mut self) {
-        self.update_state = AdapterState::ActiveSince(Instant::now());
+        self.connection_manager.tick(
+            self.blockchain_manager.lock().await.get_height(),
+            handle_stream,
+        );
+        self.blockchain_manager
+            .lock()
+            .await
+            .tick(&mut self.connection_manager);
+        self.transaction_manager
+            .lock()
+            .await
+            .tick(&mut self.connection_manager);
     }
 
     /// When the adapter has not received a RPC call, this method is called.
@@ -111,10 +93,9 @@ impl Adapter {
     /// * Close all connections and empty out the address book
     /// * Clean up the block cache
     /// * Clean up transaction state
-    fn make_idle(&mut self) {
-        self.update_state = AdapterState::Idle;
+    async fn make_idle(&mut self) {
         self.connection_manager.make_idle();
-        self.blockchain_manager.make_idle();
-        self.transaction_manager.make_idle();
+        self.blockchain_manager.lock().await.make_idle();
+        self.transaction_manager.lock().await.make_idle();
     }
 }

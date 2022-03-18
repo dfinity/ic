@@ -3413,6 +3413,7 @@ dependencies = [
  "ic-config",
  "ic-logger",
  "ic-protobuf",
+ "parking_lot 0.11.1",
  "prost",
  "rand 0.8.4",
  "serde",

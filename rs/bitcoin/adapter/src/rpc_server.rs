@@ -1,7 +1,7 @@
 use crate::{
-    adapter::Adapter,
-    blockchainmanager::{GetSuccessorsRequest, GetSuccessorsResponse},
-    Config, IncomingSource,
+    blockchainmanager::{BlockchainManager, GetSuccessorsRequest, GetSuccessorsResponse},
+    transaction_manager::TransactionManager,
+    AdapterState, Config, IncomingSource,
 };
 
 use bitcoin::{hashes::Hash, Block, BlockHash, BlockHeader};
@@ -18,7 +18,9 @@ use tokio::sync::Mutex;
 use tonic::{transport::Server, Request, Response, Status};
 
 struct BtcAdapterImpl {
-    adapter: Arc<Mutex<Adapter>>,
+    adapter_state: AdapterState,
+    blockchain_manager: Arc<Mutex<BlockchainManager>>,
+    transaction_manager: Arc<Mutex<TransactionManager>>,
 }
 
 fn header_to_proto(header: &BlockHeader) -> v1::BlockHeader {
@@ -106,8 +108,9 @@ impl BtcAdapter for BtcAdapterImpl {
         &self,
         request: Request<v1::GetSuccessorsRequest>,
     ) -> Result<Response<v1::GetSuccessorsResponse>, Status> {
+        self.adapter_state.received_now();
         let request = request.into_inner().try_into()?;
-        let response = self.adapter.lock().await.get_successors(request);
+        let response = self.blockchain_manager.lock().await.get_successors(request);
         Ok(Response::new(response.into()))
     }
 
@@ -115,21 +118,33 @@ impl BtcAdapter for BtcAdapterImpl {
         &self,
         request: Request<v1::SendTransactionRequest>,
     ) -> Result<Response<v1::SendTransactionResponse>, Status> {
+        self.adapter_state.received_now();
         let transaction = request.into_inner().transaction;
-        self.adapter.lock().await.send_transaction(transaction);
+        self.transaction_manager
+            .lock()
+            .await
+            .send_transaction(&transaction);
         Ok(Response::new(v1::SendTransactionResponse {}))
     }
 }
 
 /// Spawns in a separate Tokio task the BTC adapter gRPC service.
-pub fn spawn_grpc_server(config: Config, adapter: Arc<Mutex<Adapter>>) {
+pub fn spawn_grpc_server(
+    config: Config,
+    adapter_state: AdapterState,
+    blockchain_manager: Arc<Mutex<BlockchainManager>>,
+    transaction_manager: Arc<Mutex<TransactionManager>>,
+) {
     // make sure we receive only one socket from systemd
     if config.incoming_source == IncomingSource::Systemd {
         ensure_single_systemd_socket();
     }
-
+    let btc_adapter_impl = BtcAdapterImpl {
+        adapter_state,
+        blockchain_manager,
+        transaction_manager,
+    };
     tokio::spawn(async move {
-        let btc_adapter_impl = BtcAdapterImpl { adapter };
         match config.incoming_source {
             IncomingSource::Path(uds_path) => {
                 Server::builder()
