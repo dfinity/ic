@@ -1,12 +1,18 @@
-use crate::invariants::common::{
-    get_node_records_from_snapshot, InvariantCheckError, RegistrySnapshot,
+use crate::invariants::{
+    common::{
+        get_all_ecdsa_signing_subnet_list_records, get_node_records_from_snapshot,
+        InvariantCheckError, RegistrySnapshot,
+    },
+    subnet::get_subnet_records_map,
 };
 
 use std::collections::{BTreeMap, HashMap};
+use std::convert::TryFrom;
 
 use prost::Message;
 
 use ic_base_types::NodeId;
+use ic_base_types::{PrincipalId, SubnetId};
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_nns_common::registry::decode_or_panic;
 use ic_protobuf::{
@@ -14,8 +20,8 @@ use ic_protobuf::{
     registry::crypto::v1::{PublicKey, X509PublicKeyCert},
 };
 use ic_registry_keys::{
-    maybe_parse_crypto_node_key, maybe_parse_crypto_tls_cert_key, CRYPTO_RECORD_KEY_PREFIX,
-    CRYPTO_TLS_CERT_KEY_PREFIX,
+    make_subnet_record_key, maybe_parse_crypto_node_key, maybe_parse_crypto_tls_cert_key,
+    CRYPTO_RECORD_KEY_PREFIX, CRYPTO_TLS_CERT_KEY_PREFIX,
 };
 use ic_types::crypto::KeyPurpose;
 
@@ -37,26 +43,31 @@ type AllTlsCertificates = BTreeMap<NodeId, X509PublicKeyCert>;
 //    public key
 //  * all the public keys and all the TLS certificates belonging to the all the
 //    nodes are unique
+//  * At most 1 subnet can be an ECDSA signing subnet for a given key_id (for now)
+//  * Subnets specified in ECDSA signing subnet lists exists and contain the equivalent key in their configs
 //
 // TODO(NNS1-202): should we also check that there are no "left-over" public
 // keys or TLS certificates in the registry, i.e. every key/certificate is
 // assigned to some existing node?
-#[allow(dead_code)]
-fn check_node_crypto_keys_invariants(
+pub(crate) fn check_node_crypto_keys_invariants(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
-    let nodes = get_node_records_from_snapshot(snapshot);
-    let mut pks = get_all_nodes_public_keys(snapshot);
-    let mut certs = get_all_tls_certs(snapshot);
-    let mut unique_pks: BTreeMap<Vec<u8>, NodeId> = BTreeMap::new();
-    let mut unique_certs: HashMap<Vec<u8>, NodeId> = HashMap::new();
+    // TODO(NNS1-202): re-enable these invariants
+    if false {
+        let nodes = get_node_records_from_snapshot(snapshot);
+        let mut pks = get_all_nodes_public_keys(snapshot);
+        let mut certs = get_all_tls_certs(snapshot);
+        let mut unique_pks: BTreeMap<Vec<u8>, NodeId> = BTreeMap::new();
+        let mut unique_certs: HashMap<Vec<u8>, NodeId> = HashMap::new();
 
-    for node_id in nodes.keys() {
-        let valid_node_pks = check_node_keys(node_id, &mut pks, &mut certs)?;
-        check_node_keys_are_unique(&valid_node_pks, &mut unique_pks)?;
-        check_tls_certs_are_unique(&valid_node_pks, &mut unique_certs)?;
+        for node_id in nodes.keys() {
+            let valid_node_pks = check_node_keys(node_id, &mut pks, &mut certs)?;
+            check_node_keys_are_unique(&valid_node_pks, &mut unique_pks)?;
+            check_tls_certs_are_unique(&valid_node_pks, &mut unique_certs)?;
+        }
     }
-    Ok(())
+
+    check_ecdsa_signing_subnet_lists(snapshot)
 }
 
 // Returns all nodes' public keys in the snapshot.
@@ -179,6 +190,61 @@ fn check_tls_certs_are_unique(
     }
 }
 
+fn check_ecdsa_signing_subnet_lists(
+    snapshot: &RegistrySnapshot,
+) -> Result<(), InvariantCheckError> {
+    let subnet_records_map = get_subnet_records_map(snapshot);
+
+    get_all_ecdsa_signing_subnet_list_records(snapshot)
+        .iter()
+        .try_for_each(|(key_id, ecdsa_signing_subnet_list)| {
+            if ecdsa_signing_subnet_list.subnets.len() > 1 {
+                return Err(InvariantCheckError {
+                    msg: format!(
+                        "key_id {} ended up with more than one ECDSA signing subnet",
+                        key_id
+                    ),
+                    source: None,
+                });
+            }
+
+            ecdsa_signing_subnet_list
+                .subnets
+                .iter()
+                .try_for_each(|subnet_id_bytes| {
+                    let subnet_id = SubnetId::from(
+                        PrincipalId::try_from(subnet_id_bytes.clone().as_slice()).unwrap(),
+                    );
+
+                    subnet_records_map
+                        .get(&make_subnet_record_key(subnet_id).into_bytes())
+                        .ok_or(InvariantCheckError {
+                            msg: format!(
+                                "A non-existent subnet {} was set as the holder of a key_id {}",
+                                subnet_id, key_id
+                            ),
+                            source: None,
+                        })?
+                        .ecdsa_config
+                        .as_ref()
+                        .ok_or(InvariantCheckError {
+                            msg: format!("The subnet {} does not have an ECDSA config", subnet_id),
+                            source: None,
+                        })?
+                        .key_ids
+                        .contains(key_id)
+                        .then(|| ())
+                        .ok_or(InvariantCheckError {
+                            msg: format!(
+                                "The subnet {} does not have the key with {} in its ecdsa configurations",
+                                subnet_id, key_id
+                            ),
+                            source: None,
+                        })
+                })
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -240,6 +306,8 @@ mod tests {
         );
     }
 
+    // TODO(NNS1-202): re-enable these tests
+    #[ignore]
     #[test]
     fn node_crypto_keys_invariants_valid_snapshot() {
         // Crypto keys for the test.
@@ -255,6 +323,8 @@ mod tests {
         assert!(check_node_crypto_keys_invariants(&snapshot).is_ok());
     }
 
+    // TODO(NNS1-202): re-enable these tests
+    #[ignore]
     #[test]
     fn node_crypto_keys_invariants_missing_committee_key() {
         // Crypto keys for the test.
@@ -284,6 +354,8 @@ mod tests {
         assert!(err.to_string().contains("key is missing"));
     }
 
+    // TODO(NNS1-202): re-enable these tests
+    #[ignore]
     #[test]
     fn node_crypto_keys_invariants_missing_node_signing_key() {
         // Crypto keys for the test.
@@ -313,6 +385,8 @@ mod tests {
         assert!(err.to_string().contains("key is missing"));
     }
 
+    // TODO(NNS1-202): re-enable these tests
+    #[ignore]
     #[test]
     fn node_crypto_keys_invariants_missing_idkg_dealing_encryption_key() {
         // Crypto keys for the test.
@@ -343,6 +417,8 @@ mod tests {
         assert!(result.is_ok());
     }
 
+    // TODO(NNS1-202): re-enable these tests
+    #[ignore]
     #[test]
     fn node_crypto_keys_invariants_missing_tls_cert() {
         // Crypto keys for the test.
@@ -372,6 +448,8 @@ mod tests {
         assert!(err.to_string().contains("missing"));
     }
 
+    // TODO(NNS1-202): re-enable these tests
+    #[ignore]
     #[test]
     fn node_crypto_keys_invariants_invalid_dkg_encryption_key() {
         // Crypto keys for the test.
@@ -407,6 +485,8 @@ mod tests {
             .contains("invalid DKG dealing encryption key"));
     }
 
+    // TODO(NNS1-202): re-enable these tests
+    #[ignore]
     #[test]
     fn node_crypto_keys_invariants_invalid_idkg_encryption_key() {
         // Crypto keys for the test.
@@ -442,6 +522,8 @@ mod tests {
             .contains("invalid I-DKG dealing encryption key: verification failed"));
     }
 
+    // TODO(NNS1-202): re-enable these tests
+    #[ignore]
     #[test]
     fn node_crypto_keys_invariants_duplicated_committee_key() {
         // Crypto keys for the test.
@@ -471,6 +553,8 @@ mod tests {
         assert!(err.to_string().contains("the same public key"));
     }
 
+    // TODO(NNS1-202): re-enable these tests
+    #[ignore]
     #[test]
     fn node_crypto_keys_invariants_duplicated_idkg_encryption_key() {
         // Crypto keys for the test.
@@ -500,6 +584,8 @@ mod tests {
         assert!(err.to_string().contains("the same public key"));
     }
 
+    // TODO(NNS1-202): re-enable these tests
+    #[ignore]
     #[test]
     fn node_crypto_keys_invariants_duplicated_tls_cert() {
         // Crypto keys for the test.
@@ -528,6 +614,8 @@ mod tests {
         assert!(err.to_string().contains("invalid TLS certificate"));
     }
 
+    // TODO(NNS1-202): re-enable these tests
+    #[ignore]
     #[test]
     fn node_crypto_keys_invariants_inconsistent_node_id() {
         // Crypto keys for the test.

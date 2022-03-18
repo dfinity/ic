@@ -2,14 +2,18 @@ use crate::{common::LOG_PREFIX, mutations::common::encode_or_panic, registry::Re
 
 use candid::{CandidType, Deserialize};
 use dfn_core::println;
+use ic_nns_common::registry::decode_or_panic;
 use serde::Serialize;
 
 use ic_base_types::SubnetId;
-use ic_protobuf::registry::subnet::v1::{EcdsaConfig, GossipAdvertConfig, SubnetRecord};
-use ic_registry_keys::make_subnet_record_key;
+use ic_protobuf::registry::{
+    crypto::v1::EcdsaSigningSubnetList,
+    subnet::v1::{EcdsaConfig, GossipAdvertConfig, SubnetRecord},
+};
+use ic_registry_keys::{make_ecdsa_signing_subnet_list_key, make_subnet_record_key};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
+use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
 use ic_types::p2p::build_default_gossip_config;
 
 /// Updates the subnet's configuration in the registry.
@@ -21,18 +25,89 @@ impl Registry {
         println!("{}do_update_subnet: {:?}", LOG_PREFIX, payload);
 
         let subnet_id = payload.subnet_id;
-
         let subnet_record = self.get_subnet_or_panic(subnet_id);
 
-        let new_subnet_record = merge_subnet_record(subnet_record, payload);
-        let mutations = vec![RegistryMutation {
+        let new_subnet_record = merge_subnet_record(subnet_record.clone(), payload.clone());
+        let subnet_record_mutation = RegistryMutation {
             mutation_type: registry_mutation::Type::Upsert as i32,
             key: make_subnet_record_key(subnet_id).as_bytes().to_vec(),
             value: encode_or_panic(&new_subnet_record),
-        }];
+        };
+
+        let mut mutations = vec![subnet_record_mutation];
+
+        if let Some(ecdsa_key_signing_enable) = payload.ecdsa_key_signing_enable {
+            for key_id in &ecdsa_key_signing_enable {
+                let ecdsa_signing_subnet_list_key_id = make_ecdsa_signing_subnet_list_key(key_id);
+                let mut ecdsa_signing_subnet_list_record =
+                    self.get_ecdsa_signing_subnet_list_or_panic(&ecdsa_signing_subnet_list_key_id);
+
+                let ecdsa_signing_subnet_list_contains_subnet_id = ecdsa_signing_subnet_list_record
+                    .subnets
+                    .contains(&subnet_id.get().to_vec());
+
+                // Proposals cannot both update a key a subnet is holding while enabling signing
+                // for that key
+                if let Some(ecdsa_config) = &payload.ecdsa_config {
+                    let current_keys = subnet_record
+                        .ecdsa_config
+                        .as_ref()
+                        .map(|ecdsa_config| ecdsa_config.key_ids.clone())
+                        .unwrap_or_default();
+                    let new_and_enabled_keys_exist = !ecdsa_config
+                        .key_ids
+                        .iter()
+                        .filter(|&x| !current_keys.contains(x))
+                        .any(|x| ecdsa_key_signing_enable.contains(x));
+
+                    if new_and_enabled_keys_exist && ecdsa_signing_subnet_list_contains_subnet_id {
+                        panic!("Proposal attempts to update Subnet {} to hold an ECDSA key at the same time as enabling signing for it; this is disallowed",
+                            subnet_id
+                        );
+                    }
+                };
+
+                if !ecdsa_signing_subnet_list_contains_subnet_id {
+                    ecdsa_signing_subnet_list_record
+                        .subnets
+                        .push(subnet_id.get().to_vec());
+
+                    let ecdsa_signing_subnet_list_mutation = RegistryMutation {
+                        mutation_type: registry_mutation::Type::Upsert as i32,
+                        key: ecdsa_signing_subnet_list_key_id.as_bytes().to_vec(),
+                        value: encode_or_panic(&ecdsa_signing_subnet_list_record),
+                    };
+
+                    mutations.push(ecdsa_signing_subnet_list_mutation);
+                }
+            }
+        }
 
         // Check invariants before applying mutations
         self.maybe_apply_mutation_internal(mutations);
+    }
+
+    fn get_ecdsa_signing_subnet_list_or_panic(
+        &self,
+        ecdsa_signing_subnet_list_key_id: &str,
+    ) -> EcdsaSigningSubnetList {
+        let RegistryValue {
+            value: ecdsa_signing_subnet_list_record_vec,
+            version: _,
+            deletion_marker: _,
+        } = self
+            .get(
+                ecdsa_signing_subnet_list_key_id.as_bytes(),
+                self.latest_version(),
+            )
+            .unwrap_or_else(|| {
+                panic!(
+                    "{}ECDSA Signing Subnet List record not found in the registry.",
+                    LOG_PREFIX
+                )
+            });
+
+        decode_or_panic::<EcdsaSigningSubnetList>(ecdsa_signing_subnet_list_record_vec.to_vec())
     }
 }
 
@@ -84,6 +159,7 @@ pub struct UpdateSubnetPayload {
     pub features: Option<SubnetFeatures>,
 
     pub ecdsa_config: Option<EcdsaConfig>,
+    pub ecdsa_key_signing_enable: Option<Vec<String>>,
 
     pub max_number_of_canisters: Option<u64>,
 
@@ -172,6 +248,7 @@ fn merge_subnet_record(
         max_instructions_per_install_code,
         features,
         ecdsa_config,
+        ecdsa_key_signing_enable: _,
         max_number_of_canisters,
         ssh_readonly_access,
         ssh_backup_access,
@@ -203,7 +280,7 @@ fn merge_subnet_record(
     let advert_config = advert_best_effort_percentage.map(|val| GossipAdvertConfig {
         best_effort_percentage: val,
     });
-    gossip_config.advert_config = advert_config;
+    maybe_set!(gossip_config, advert_config);
     subnet_record.gossip_config = Some(gossip_config);
 
     maybe_set!(subnet_record, start_as_nns);
@@ -293,6 +370,7 @@ mod tests {
                 quadruples_to_create_in_advance: 10,
                 key_ids: vec!["key_id_1".to_string()],
             }),
+            ecdsa_key_signing_enable: Some(vec!["key_id_2".to_string()]),
             max_number_of_canisters: Some(10),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
@@ -375,6 +453,7 @@ mod tests {
                 quadruples_to_create_in_advance: 10,
                 key_ids: vec!["key_id_1".to_string()],
             }),
+            ecdsa_key_signing_enable: Some(vec!["key_id_2".to_string()]),
             max_number_of_canisters: Some(10),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
@@ -501,6 +580,7 @@ mod tests {
             max_instructions_per_install_code: None,
             features: None,
             ecdsa_config: None,
+            ecdsa_key_signing_enable: None,
             max_number_of_canisters: Some(50),
             ssh_readonly_access: None,
             ssh_backup_access: None,
@@ -527,7 +607,9 @@ mod tests {
                     pfn_evaluation_period_ms: 100,
                     registry_poll_period_ms: 100,
                     retransmission_request_ms: 100,
-                    advert_config: None,
+                    advert_config: Some(GossipAdvertConfig {
+                        best_effort_percentage: 10,
+                    }),
                 }),
                 start_as_nns: false,
                 subnet_type: SubnetType::Application.into(),
@@ -681,6 +763,7 @@ mod tests {
             max_instructions_per_install_code: None,
             features: None,
             ecdsa_config: None,
+            ecdsa_key_signing_enable: None,
             max_number_of_canisters: None,
             ssh_readonly_access: None,
             ssh_backup_access: None,
@@ -747,6 +830,7 @@ mod tests {
             max_instructions_per_install_code: None,
             features: None,
             ecdsa_config: None,
+            ecdsa_key_signing_enable: None,
             max_number_of_canisters: None,
             ssh_readonly_access: None,
             ssh_backup_access: None,
@@ -862,6 +946,7 @@ mod tests {
             max_instructions_per_install_code: None,
             features: None,
             ecdsa_config: None,
+            ecdsa_key_signing_enable: None,
             max_number_of_canisters: None,
             ssh_readonly_access: None,
             ssh_backup_access: None,
