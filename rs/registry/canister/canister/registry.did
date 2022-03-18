@@ -149,6 +149,7 @@ type UpdateSubnetPayload = record {
   registry_poll_period_ms : opt nat32;
   max_chunk_wait_ms : opt nat32;
   receive_check_cache_size : opt nat32;
+  ecdsa_key_signing_enable : opt vec text;
   ssh_backup_access : opt vec text;
   max_chunk_size : opt nat32;
   initial_notary_delay_millis : opt nat64;

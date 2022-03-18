@@ -24,6 +24,12 @@ enum AlgorithmId {
   ALGORITHM_ID_MEGA_SECP_256K1 = 16;
 }
 
+// A list of subnets that can sign with this ECDSA key.
+// This allows replicas to route their signing requests to the right subnets.
+message ECDSASigningSubnetList {
+  repeated bytes subnets = 1;
+}
+
 // A public key. Described by its `AlgorithmId`, the key's value and proof data holding, e.g., a proof of possession (PoP).
 message PublicKey {
   uint32 version = 1;

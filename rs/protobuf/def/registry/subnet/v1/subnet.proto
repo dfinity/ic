@@ -122,9 +122,10 @@ message RegistryStoreUri {
 	uint64 registry_version = 3;
 }
 
-// A list of subnet ids of all subnets present in this instance of the IC.
+// Contains information pertaining to all subnets in the IC and their params.
 message SubnetListRecord {
   reserved 1;  // this is from subnet id being a uint64
+  // A list of subnet ids of all subnets present in this instance of the IC.
   repeated bytes subnets = 2;
 }
 

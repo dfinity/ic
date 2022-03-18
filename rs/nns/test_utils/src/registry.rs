@@ -21,8 +21,7 @@ use ic_protobuf::{
         node_operator::v1::NodeOperatorRecord,
         replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
         routing_table::v1::RoutingTable as RoutingTablePB,
-        subnet::v1::CatchUpPackageContents,
-        subnet::v1::{SubnetListRecord, SubnetRecord},
+        subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord},
     },
 };
 use ic_registry_keys::{

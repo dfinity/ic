@@ -25,6 +25,15 @@ pub const CRYPTO_RECORD_KEY_PREFIX: &str = "crypto_record_";
 pub const CRYPTO_TLS_CERT_KEY_PREFIX: &str = "crypto_tls_cert_";
 pub const CRYPTO_THRESHOLD_SIGNING_KEY_PREFIX: &str = "crypto_threshold_signing_public_key_";
 pub const DATA_CENTER_KEY_PREFIX: &str = "data_center_record_";
+pub const ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX: &str = "key_id_";
+
+pub fn make_ecdsa_signing_subnet_list_key<S: AsRef<str>>(key_id: S) -> String {
+    format!(
+        "{}{}",
+        ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX,
+        key_id.as_ref()
+    )
+}
 
 /// Returns the only key whose payload is the list of subnets.
 pub fn make_subnet_list_record_key() -> String {

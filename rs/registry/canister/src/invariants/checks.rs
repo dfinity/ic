@@ -1,8 +1,8 @@
 use crate::{
     common::LOG_PREFIX,
     invariants::{
-        common::RegistrySnapshot, endpoint::check_endpoint_invariants,
-        node_operator::check_node_operator_invariants,
+        common::RegistrySnapshot, crypto::check_node_crypto_keys_invariants,
+        endpoint::check_endpoint_invariants, node_operator::check_node_operator_invariants,
         replica_version::check_replica_version_invariants,
         routing_table::check_routing_table_invariants, subnet::check_subnet_invariants,
         unassigned_nodes_config::check_unassigned_nodes_config_invariants,
@@ -58,13 +58,11 @@ impl Registry {
         // Note that for now, once a node record has been added, it MUST not be
         // modified, as P2P and Transport rely on this data to stay the same
 
-        // if let Err(e) = check_node_crypto_keys_invariants(&snapshot) {
-        //     // TODO(NNS1-202): `expect` or `panic!` instead of `println!`
-        //    println!("{}check_node_crypto_keys_invariants: {}", LOG_PREFIX, e)
-        // }
-
         // Node Operator invariants
         let mut result = check_node_operator_invariants(&snapshot, false);
+
+        // Crypto invariants
+        result = result.and(check_node_crypto_keys_invariants(&snapshot));
 
         // Routing Table invariants
         result = result.and(check_routing_table_invariants(&snapshot));

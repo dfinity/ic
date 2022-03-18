@@ -127,7 +127,9 @@ pub(crate) fn check_subnet_invariants(
 }
 
 // Return all subnet records in the snapshot
-fn get_subnet_records_map(snapshot: &RegistrySnapshot) -> BTreeMap<Vec<u8>, SubnetRecord> {
+pub(crate) fn get_subnet_records_map(
+    snapshot: &RegistrySnapshot,
+) -> BTreeMap<Vec<u8>, SubnetRecord> {
     let mut subnets: BTreeMap<Vec<u8>, SubnetRecord> = BTreeMap::new();
     for (k, v) in snapshot {
         if k.starts_with(SUBNET_RECORD_KEY_PREFIX.as_bytes()) {
