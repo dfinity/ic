@@ -4,30 +4,12 @@
 #![allow(clippy::redundant_closure)]
 //! Types for working with the registry.
 
-use crate::crypto::KeyPurpose;
 use crate::RegistryVersion;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::result::Result;
-use std::str::FromStr;
 use thiserror::Error;
 
 pub mod connection_endpoint;
-
-// FromStr implementation for the the registry admin tool.
-impl FromStr for KeyPurpose {
-    type Err = String;
-
-    fn from_str(string: &str) -> Result<Self, <Self as FromStr>::Err> {
-        match string {
-            "node_signing" => Ok(KeyPurpose::NodeSigning),
-            "query_response_signing" => Ok(KeyPurpose::QueryResponseSigning),
-            "dkg_dealing_encryption" => Ok(KeyPurpose::DkgDealingEncryption),
-            "committee_signing" => Ok(KeyPurpose::CommitteeSigning),
-            _ => Err(format!("Invalid key purpose: {:?}", string)),
-        }
-    }
-}
 
 /// Errors returned when requesting a value from the registry.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]

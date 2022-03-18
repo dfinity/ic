@@ -115,7 +115,7 @@ impl Registry {
             encode_or_panic(valid_pks.tls_certificate()),
         );
 
-        // Finally, update the Node Operator record
+        // Update the Node Operator record
         let mut node_operator_record =
             decode_registry_value::<NodeOperatorRecord>(node_operator_record.to_vec());
         node_operator_record.node_allowance -= 1;
@@ -124,7 +124,7 @@ impl Registry {
             encode_or_panic(&node_operator_record),
         );
 
-        let mutations = vec![
+        let mut mutations = vec![
             add_node_entry,
             add_committee_signing_key,
             add_node_signing_key,
@@ -132,6 +132,16 @@ impl Registry {
             add_tls_certificate,
             update_node_operator_record,
         ];
+
+        // TODO(NNS1-1197): Refactor this when nodes are provisioned for threshold ECDSA subnets
+        if let Some(idkg_dealing_encryption_key) = valid_pks.idkg_dealing_encryption_key() {
+            mutations.push(insert(
+                make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption)
+                    .as_bytes()
+                    .to_vec(),
+                encode_or_panic(idkg_dealing_encryption_key),
+            ));
+        }
 
         // Check invariants before applying mutations
         self.maybe_apply_mutation_internal(mutations);
@@ -149,6 +159,8 @@ pub struct AddNodePayload {
     pub ni_dkg_dealing_encryption_pk: Vec<u8>,
     // Raw bytes of the protobuf, but these should be X509PublicKeyCert
     pub transport_tls_cert: Vec<u8>,
+    // Raw bytes of the protobuf, but these should be PublicKey
+    pub idkg_dealing_encryption_pk: Option<Vec<u8>>,
 
     pub xnet_endpoint: String,
     pub http_endpoint: String,
@@ -214,6 +226,12 @@ fn valid_keys_from_payload(
     if payload.transport_tls_cert.is_empty() {
         return Err(String::from("transport_tls_cert is empty"));
     };
+    // TODO(NNS1-1197): Refactor this when nodes are provisioned for threshold ECDSA subnets
+    if let Some(idkg_dealing_encryption_pk) = &payload.idkg_dealing_encryption_pk {
+        if idkg_dealing_encryption_pk.is_empty() {
+            return Err(String::from("idkg_dealing_encryption_pk is empty"));
+        };
+    }
 
     // 2. get the keys for verification -- for that, we need to create
     // NodePublicKeys first
@@ -235,6 +253,18 @@ fn valid_keys_from_payload(
                 e
             )
         })?;
+    // TODO(NNS1-1197): Uncomment when nodes are provisioned for threshold ECDSA subnets
+    let idkg_dealing_encryption_pk =
+        if let Some(idkg_de_pk_bytes) = &payload.idkg_dealing_encryption_pk {
+            Some(PublicKey::decode(&idkg_de_pk_bytes[..]).map_err(|e| {
+                format!(
+                    "idkg_dealing_encryption_pk is not in the expected format: {:?}",
+                    e
+                )
+            })?)
+        } else {
+            None
+        };
 
     // 3. get the node id from the node_signing_pk
     let node_id = crypto_basicsig_conversions::derive_node_id(&node_signing_pk).map_err(|e| {
@@ -246,12 +276,16 @@ fn valid_keys_from_payload(
 
     // 4. get the keys for verification -- for that, we need to create
     let node_pks = NodePublicKeys {
-        version: 0,
+        // TODO(NNS1-1197): Remove this match statement when nodes are provisioned for threshold ECDSA subnets
+        version: match idkg_dealing_encryption_pk {
+            Some(_) => 1,
+            None => 0,
+        },
         node_signing_pk: Some(node_signing_pk),
         committee_signing_pk: Some(committee_signing_pk),
         tls_certificate: Some(tls_certificate),
         dkg_dealing_encryption_pk: Some(dkg_dealing_encryption_pk),
-        idkg_dealing_encryption_pk: None,
+        idkg_dealing_encryption_pk,
     };
 
     // 5. validate the keys and the node_id
@@ -294,6 +328,7 @@ mod tests {
             committee_signing_pk: vec![],
             ni_dkg_dealing_encryption_pk: vec![],
             transport_tls_cert: vec![],
+            idkg_dealing_encryption_pk: Some(vec![]),
             xnet_endpoint: "127.0.0.1:1234".to_string(),
             http_endpoint: "127.0.0.1:8123".to_string(),
             p2p_flow_endpoints: vec!["123,127.0.0.1:10000".to_string()],
@@ -338,6 +373,22 @@ mod tests {
         payload.node_signing_pk = node_signing_pubkey;
         payload.committee_signing_pk = committee_signing_pubkey;
         payload.ni_dkg_dealing_encryption_pk = ni_dkg_dealing_encryption_pubkey;
+        assert!(valid_keys_from_payload(&payload).is_err());
+    }
+
+    #[test]
+    fn empty_idkg_key_is_detected() {
+        let mut payload = PAYLOAD.clone();
+        let node_pks = TEST_DATA.clone().node_pks;
+        let node_signing_pubkey = encode_or_panic(&node_pks.node_signing_pk.unwrap());
+        let committee_signing_pubkey = encode_or_panic(&node_pks.committee_signing_pk.unwrap());
+        let ni_dkg_dealing_encryption_pubkey =
+            encode_or_panic(&node_pks.dkg_dealing_encryption_pk.unwrap());
+        let tls_certificate = encode_or_panic(&node_pks.tls_certificate.unwrap());
+        payload.node_signing_pk = node_signing_pubkey;
+        payload.committee_signing_pk = committee_signing_pubkey;
+        payload.ni_dkg_dealing_encryption_pk = ni_dkg_dealing_encryption_pubkey;
+        payload.transport_tls_cert = tls_certificate;
         assert!(valid_keys_from_payload(&payload).is_err());
     }
 
