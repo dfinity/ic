@@ -3360,6 +3360,7 @@ dependencies = [
  "slog-async",
  "slog-envlogger",
  "slog-term",
+ "strum 0.23.0",
  "tempfile",
 ]
 

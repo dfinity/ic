@@ -20,7 +20,7 @@ pub enum EcdsaChangeAction {
 pub type EcdsaChangeSet = Vec<EcdsaChangeAction>;
 
 /// The validated/unvalidated parts of the artifact pool.
-pub trait EcdsaPoolSection {
+pub trait EcdsaPoolSection: Send + Sync {
     /// Checks if the artifact present in the pool.
     fn contains(&self, msg_id: &EcdsaMessageId) -> bool;
 
@@ -30,21 +30,34 @@ pub trait EcdsaPoolSection {
     /// Iterator for signed dealing objects.
     fn signed_dealings(
         &self,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, &EcdsaSignedDealing)> + '_>;
+    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaSignedDealing)> + '_>;
 
     /// Iterator for dealing support objects.
     fn dealing_support(
         &self,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, &EcdsaDealingSupport)> + '_>;
+    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaDealingSupport)> + '_>;
 
     /// Iterator for signature share objects.
-    fn signature_shares(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, &EcdsaSigShare)> + '_>;
+    fn signature_shares(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaSigShare)> + '_>;
 
     /// Iterator for complaint objects.
-    fn complaints(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, &EcdsaComplaint)> + '_>;
+    fn complaints(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaComplaint)> + '_>;
 
     /// Iterator for opening objects.
-    fn openings(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, &EcdsaOpening)> + '_>;
+    fn openings(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaOpening)> + '_>;
+}
+
+/// The mutable interface for validated/unvalidated parts of the artifact pool.
+pub trait MutableEcdsaPoolSection: Send + Sync {
+    /// Adds the message to the pool.
+    fn insert(&mut self, message: EcdsaMessage);
+
+    /// Looks up and removes the specified message from the pool. If found,
+    /// the removed message is returned.
+    fn remove(&mut self, id: &EcdsaMessageId) -> Option<EcdsaMessage>;
+
+    /// Get the immutable handle.
+    fn as_pool_section(&self) -> &dyn EcdsaPoolSection;
 }
 
 /// Artifact pool for the ECDSA messages (query interface)
