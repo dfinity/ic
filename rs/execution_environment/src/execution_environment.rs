@@ -1542,14 +1542,16 @@ impl ExecutionEnvironmentImpl {
                         subnet_available_memory,
                         execution_mode,
                     );
-                    self.hypervisor.execute_inspect_message(
-                        canister.clone(),
-                        sender.get(),
-                        method_name,
-                        payload.to_vec(),
-                        state.time(),
-                        execution_parameters,
-                    )
+                    self.hypervisor
+                        .execute_inspect_message(
+                            canister.clone(),
+                            sender.get(),
+                            method_name,
+                            payload.to_vec(),
+                            state.time(),
+                            execution_parameters,
+                        )
+                        .1
                 }
                 None => Err(not_found_error(
                     "Requested canister does not exist".to_string(),
