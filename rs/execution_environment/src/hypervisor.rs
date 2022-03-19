@@ -871,7 +871,7 @@ impl Hypervisor {
         method_payload: Vec<u8>,
         time: Time,
         execution_parameters: ExecutionParameters,
-    ) -> Result<(), CanonicalError> {
+    ) -> (NumInstructions, Result<(), CanonicalError>) {
         let method = WasmMethod::System(SystemMethod::CanisterInspectMessage);
         let memory_usage = canister.memory_usage(self.own_subnet_type);
         let (execution_state, system_state, _) = canister.into_parts();
@@ -879,9 +879,12 @@ impl Hypervisor {
         // Validate that the Wasm module is present.
         let execution_state = match execution_state {
             None => {
-                return Err(not_found_error(
-                    "Requested canister has no wasm module".to_string(),
-                ))
+                return (
+                    execution_parameters.instruction_limit,
+                    Err(not_found_error(
+                        "Requested canister has no wasm module".into(),
+                    )),
+                );
             }
             Some(execution_state) => execution_state,
         };
@@ -889,7 +892,7 @@ impl Hypervisor {
         // If the Wasm module does not export the method, then this execution
         // succeeds as a no-op.
         if !execution_state.exports_method(&method) {
-            return Ok(());
+            return (execution_parameters.instruction_limit, Ok(()));
         }
 
         let system_api = ApiType::inspect_message(sender, method_name, method_payload, time);
@@ -904,16 +907,19 @@ impl Hypervisor {
         );
         match output.wasm_result {
             Ok(maybe_wasm_result) => match maybe_wasm_result {
-                None => Ok(()),
+                None => (output.num_instructions_left, Ok(())),
                 Some(_result) => fatal!(
                     log,
                     "SystemApi should guarantee that the canister does not reply"
                 ),
             },
             Err(err) => match err {
-                HypervisorError::MessageRejected => Err(permission_denied_error(
-                    "Requested canister rejected the message".to_string(),
-                )),
+                HypervisorError::MessageRejected => (
+                    output.num_instructions_left,
+                    Err(permission_denied_error(
+                        "Requested canister rejected the message".to_string(),
+                    )),
+                ),
                 err => {
                     let canonical_error = match err {
                         HypervisorError::MethodNotFound(_) => not_found_error(
@@ -927,7 +933,7 @@ impl Hypervisor {
                                 .to_string(),
                         ),
                     };
-                    Err(canonical_error)
+                    (output.num_instructions_left, Err(canonical_error))
                 }
             },
         }
