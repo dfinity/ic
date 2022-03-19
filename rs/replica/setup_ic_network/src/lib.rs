@@ -34,12 +34,11 @@ use ic_interfaces::{
 use ic_interfaces_p2p::IngressIngestionService;
 use ic_logger::{info, replica_logger::ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-
-pub use ic_p2p::P2PThreadJoiner;
-use ic_p2p::{fetch_gossip_config, start_p2p, AdvertSubscriber};
+use ic_p2p::{fetch_gossip_config, start_p2p, AdvertSubscriber, P2PThreadJoiner};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::StateManagerImpl;
+use ic_transport::transport::create_transport;
 use ic_types::{
     artifact::{Advert, ArtifactKind, ArtifactTag, FileTreeSyncAttribute},
     consensus::catchup::CUPWithOriginalProtobuf,
@@ -144,16 +143,26 @@ pub fn create_networking_stack(
     )
     .unwrap();
 
+    let transport = transport.unwrap_or_else(|| {
+        create_transport(
+            node_id,
+            transport_config.clone(),
+            registry_client.get_latest_version(),
+            metrics_registry.clone(),
+            tls_handshake,
+            rt_handle.clone(),
+            log.clone(),
+        )
+    });
+
     start_p2p(
         metrics_registry,
         log,
-        rt_handle,
         node_id,
         subnet_id,
         transport_config,
         gossip_config,
         registry_client,
-        tls_handshake,
         transport,
         artifact_pools.consensus_pool_cache.clone(),
         artifact_manager,

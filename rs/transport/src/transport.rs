@@ -114,8 +114,7 @@ impl TransportImpl {
     }
 }
 
-/// Creates a new instance of
-/// [`TransportImpl`](../types/struct.TransportImpl.html).
+/// Returns the production implementation of the `Transport` interfaces.
 pub fn create_transport(
     node_id: NodeId,
     transport_config: TransportConfig,

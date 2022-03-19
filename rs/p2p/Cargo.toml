@@ -11,7 +11,6 @@ rand = "0.7.3"
 ic-artifact-manager = { path = "../artifact_manager" }
 ic-config = { path = "../config" }
 ic-crypto-hash = { path = "../crypto/hash" }
-ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-p2p = { path = "../interfaces/p2p" }
 ic-types = { path = "../types/types" }
@@ -20,7 +19,6 @@ ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
-ic-transport = { path = "../transport" }
 linked-hash-map = "0.5.3"
 lru = { version = "0.7.1", default-features = false }
 parking_lot = "0.11.1"
@@ -32,7 +30,6 @@ strum = "0.23.0"
 strum_macros = "0.23.0"
 threadpool = "1.8.1"
 tokio = { version = "1.15.0", features = ["full"] }
-tower-service = "0.3.1"
 tower = { version = "0.4.8", features = ["util"] }
 
 [dev-dependencies]

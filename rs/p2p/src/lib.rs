@@ -94,7 +94,6 @@
 //! <img src="../../../../../docs/assets/p2p.png" height="960"
 //! width="540"/> </div> <hr/>
 
-use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces::{
     artifact_manager::ArtifactManager, consensus_pool::ConsensusPoolCache,
     registry::RegistryClient, transport::Transport,
@@ -104,7 +103,6 @@ use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::GossipConfig;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
-use ic_transport::transport::create_transport;
 use ic_types::{
     malicious_flags::MaliciousFlags,
     transport::{FlowTag, TransportConfig},
@@ -127,9 +125,7 @@ mod gossip_protocol;
 mod malicious_gossip;
 mod metrics;
 
-pub use event_handler::{
-    AdvertSubscriber, IngressEventHandler, P2PTickerThreadJoiner as P2PThreadJoiner,
-};
+pub use event_handler::{AdvertSubscriber, P2PThreadJoiner};
 
 /// Custom P2P result type returning a P2P error in case of error.
 pub(crate) type P2PResult<T> = std::result::Result<T, P2PError>;
@@ -174,36 +170,23 @@ const MAX_INFLIGHT_INGRESS_MESSAGES: usize = 1;
 // throughput if we process messages one after the other.
 const MAX_INGRESS_MESSAGES_PER_SECOND: u64 = 100;
 
+/// Starts the P2P stack and returns the objects that interact with P2P.
 #[allow(clippy::too_many_arguments)]
 pub fn start_p2p(
     metrics_registry: MetricsRegistry,
     log: ReplicaLogger,
-    rt_handle: tokio::runtime::Handle,
     node_id: NodeId,
     subnet_id: SubnetId,
     transport_config: TransportConfig,
     gossip_config: GossipConfig,
     registry_client: Arc<dyn RegistryClient>,
-    tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
-    transport: Option<Arc<dyn Transport>>,
+    transport: Arc<dyn Transport>,
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     artifact_manager: Arc<dyn ArtifactManager>,
     ingress_throttler: event_handler::IngressThrottler,
     malicious_flags: MaliciousFlags,
     advert_subscriber: &AdvertSubscriber,
 ) -> (IngressIngestionService, P2PThreadJoiner) {
-    let transport = transport.unwrap_or_else(|| {
-        create_transport(
-            node_id,
-            transport_config.clone(),
-            registry_client.get_latest_version(),
-            metrics_registry.clone(),
-            tls_handshake,
-            rt_handle.clone(),
-            log.clone(),
-        )
-    });
-
     let event_handler = Arc::new(event_handler::AsyncTransportEventHandlerImpl::new(
         node_id,
         log.clone(),
@@ -236,8 +219,11 @@ pub fn start_p2p(
 
     let p2p_thread_joiner = P2PThreadJoiner::new(log, gossip.clone());
 
-    let ingress_event_handler =
-        BoxService::new(IngressEventHandler::new(ingress_throttler, gossip, node_id));
+    let ingress_event_handler = BoxService::new(event_handler::IngressEventHandler::new(
+        ingress_throttler,
+        gossip,
+        node_id,
+    ));
 
     let ingress_ingestion_service = BoxService::new(
         ServiceBuilder::new()
@@ -362,7 +348,7 @@ pub fn fetch_gossip_config(
 /// protocol results. Some results are also used for internal
 /// operation, i.e., they are not represented in the on-wire protocol.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum P2PErrorCode {
+enum P2PErrorCode {
     /// The requested entity artifact/chunk/server/client was not found
     NotFound = 1,
     /// An artifact (chunk) was received that already exists.
@@ -379,7 +365,7 @@ pub enum P2PErrorCode {
 
 /// Wrapper over a P2P error code.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct P2PError {
+struct P2PError {
     /// The P2P error code.
     p2p_error_code: P2PErrorCode,
 }

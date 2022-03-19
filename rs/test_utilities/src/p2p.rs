@@ -8,11 +8,11 @@ use ic_config::logger::{default_logtarget, Config as LoggerConfig, LogFormat};
 use ic_interfaces::registry::RegistryClient;
 use ic_logger::*;
 use ic_metrics::MetricsRegistry;
+use ic_p2p::P2PThreadJoiner;
 use ic_protobuf::registry::node::v1::{
     connection_endpoint::Protocol, ConnectionEndpoint, FlowEndpoint, NodeRecord,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_replica_setup_ic_network::P2PThreadJoiner;
 use ic_types::{
     replica_config::ReplicaConfig,
     transport::{TransportConfig, TransportFlowConfig},

@@ -13,9 +13,10 @@ use ic_interfaces::{
 use ic_interfaces_p2p::IngressIngestionService;
 use ic_logger::{info, ReplicaLogger};
 use ic_messaging::{MessageRoutingImpl, XNetEndpoint, XNetEndpointConfig, XNetPayloadBuilderImpl};
+use ic_p2p::P2PThreadJoiner;
 use ic_registry_subnet_type::SubnetType;
 use ic_replica_setup_ic_network::{
-    create_networking_stack, init_artifact_pools, P2PStateSyncClient, P2PThreadJoiner,
+    create_networking_stack, init_artifact_pools, P2PStateSyncClient,
 };
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::StateManagerImpl;
