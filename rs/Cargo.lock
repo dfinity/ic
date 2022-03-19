@@ -5472,7 +5472,6 @@ dependencies = [
  "ic-config",
  "ic-consensus-message",
  "ic-crypto-hash",
- "ic-crypto-tls-interfaces",
  "ic-cycles-account-manager",
  "ic-execution-environment",
  "ic-interfaces",
@@ -5487,7 +5486,6 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-replica-setup-ic-network",
  "ic-test-utilities",
- "ic-transport",
  "ic-types 0.8.0",
  "linked-hash-map",
  "lru",
@@ -5505,7 +5503,6 @@ dependencies = [
  "threadpool",
  "tokio",
  "tower",
- "tower-service",
 ]
 
 [[package]]
@@ -6070,7 +6067,6 @@ dependencies = [
  "slog-scope",
  "tokio",
  "tower",
- "tower-service",
  "wabt 0.10.0 (git+https://github.com/dfinity-lab/wabt-rs?tag=0.10.0-dfinity)",
 ]
 
@@ -6617,6 +6613,7 @@ dependencies = [
  "ic-interfaces-p2p",
  "ic-logger",
  "ic-metrics",
+ "ic-p2p",
  "ic-protobuf",
  "ic-registry-client",
  "ic-registry-client-fake",

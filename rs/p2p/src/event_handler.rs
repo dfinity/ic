@@ -111,7 +111,7 @@ use strum::IntoEnumIterator;
 use strum_macros::{EnumIter, IntoStaticStr};
 use threadpool::ThreadPool;
 use tokio::sync::{Semaphore, TryAcquireError};
-use tower_service::Service;
+use tower::Service;
 
 // Each message for each flow is being executed on the same code path. Unless those codepaths are
 // lock free (which is not the case because Gossip has locks) there is no point in having more
@@ -237,7 +237,7 @@ impl FlowWorker {
 
 /// The struct implements the async event handler traits for consumption by
 /// transport, ingress, artifact manager, and node addition/removal.
-pub struct AsyncTransportEventHandlerImpl {
+pub(crate) struct AsyncTransportEventHandlerImpl {
     /// The replica node ID.
     node_id: NodeId,
     /// The logger.
@@ -267,7 +267,7 @@ pub(crate) const MAX_RETRANSMISSION_BUFFER: usize = 1000;
 /// The channel configuration, containing the maximum number of messages for
 /// each flow type.
 #[derive(Default)]
-pub struct ChannelConfig {
+pub(crate) struct ChannelConfig {
     /// The map from flow type to the maximum number of buffered messages.
     map: BTreeMap<FlowType, usize>,
 }
@@ -295,7 +295,7 @@ impl From<GossipConfig> for ChannelConfig {
 }
 
 impl AsyncTransportEventHandlerImpl {
-    pub fn new(
+    pub(crate) fn new(
         node_id: NodeId,
         log: ReplicaLogger,
         metrics_registry: &MetricsRegistry,
@@ -337,7 +337,7 @@ impl AsyncTransportEventHandlerImpl {
 
     /// The method starts the event processing loop, dispatching events to the
     /// *Gossip* component.
-    pub fn start(&self, gossip_arc: GossipArc) {
+    pub(crate) fn start(&self, gossip_arc: GossipArc) {
         self.gossip.write().replace(gossip_arc);
     }
 }
@@ -424,8 +424,7 @@ impl AsyncTransportEventHandler for AsyncTransportEventHandlerImpl {
 /// access.
 pub type IngressThrottler = Arc<std::sync::RwLock<dyn IngressPoolThrottler + Send + Sync>>;
 
-/// Interface between the ingress handler and P2P.
-pub struct IngressEventHandler {
+pub(crate) struct IngressEventHandler {
     threadpool: ThreadPool,
     /// The ingress throttler.
     ingress_throttler: IngressThrottler,
@@ -437,7 +436,11 @@ pub struct IngressEventHandler {
 
 impl IngressEventHandler {
     /// The function creates an `IngressEventHandler` instance.
-    pub fn new(ingress_throttler: IngressThrottler, gossip: GossipArc, node_id: NodeId) -> Self {
+    pub(crate) fn new(
+        ingress_throttler: IngressThrottler,
+        gossip: GossipArc,
+        node_id: NodeId,
+    ) -> Self {
         let threadpool = threadpool::Builder::new()
             .num_threads(P2P_PER_FLOW_THREADS)
             .thread_name("P2P_Ingress_Thread".into())
@@ -482,14 +485,9 @@ impl Service<SignedIngress> for IngressEventHandler {
     }
 }
 
-/// The P2P struct, which encapsulates all relevant components including gossip
-/// and event handler control.
-#[allow(unused)]
-pub struct P2PTickerThreadJoiner {
-    /// The logger.
-    log: ReplicaLogger,
-    /// The *Gossip* struct with automatic reference counting.
-    gossip: GossipArc,
+/// The struct is a handle for running a P2P thread relevant for the protocol.
+/// Once dropped expect the protocol to be aborted.
+pub struct P2PThreadJoiner {
     /// The task handles.
     join_handle: Option<JoinHandle<()>>,
     /// Flag indicating if P2P has been terminated.
@@ -500,35 +498,31 @@ pub struct P2PTickerThreadJoiner {
 /// component.
 const P2P_TIMER_DURATION_MS: u64 = 100;
 
-impl P2PTickerThreadJoiner {
+impl P2PThreadJoiner {
     /// The method starts the P2P timer task in the background.
-    pub fn new(log: ReplicaLogger, gossip: GossipArc) -> Self {
-        let gossip_c = gossip.clone();
-        let log_c = log.clone();
+    pub(crate) fn new(log: ReplicaLogger, gossip: GossipArc) -> Self {
         let killed = Arc::new(AtomicBool::new(false));
         let killed_c = Arc::clone(&killed);
         let join_handle = std::thread::Builder::new()
             .name("P2P_OnTimer_Thread".into())
             .spawn(move || {
-                debug!(log_c, "P2P::p2p_timer(): started processing",);
+                debug!(log, "P2P::p2p_timer(): started processing",);
 
                 let timer_duration = Duration::from_millis(P2P_TIMER_DURATION_MS);
                 while !killed_c.load(SeqCst) {
                     std::thread::sleep(timer_duration);
-                    gossip_c.on_timer();
+                    gossip.on_timer();
                 }
             })
             .unwrap();
         Self {
-            log,
-            gossip,
             killed,
             join_handle: Some(join_handle),
         }
     }
 }
 
-impl Drop for P2PTickerThreadJoiner {
+impl Drop for P2PThreadJoiner {
     /// The method signals the tasks to exit and waits for them to complete.
     fn drop(&mut self) {
         self.killed.store(true, SeqCst);
@@ -536,6 +530,10 @@ impl Drop for P2PTickerThreadJoiner {
     }
 }
 
+/// The struct is used by `Consensus` to broadcast adverts. After creation a mutable
+/// references must be pass to `setup_p2p` in order to activate broadcasting.
+/// The `broadcast_advert` call blocks until AdvertSubscriber is activated by
+/// `setup_p2p`.
 #[derive(Clone)]
 pub struct AdvertSubscriber {
     log: ReplicaLogger,
@@ -575,7 +573,7 @@ impl AdvertSubscriber {
         }
     }
 
-    pub fn start(&self, gossip_arc: GossipArc) {
+    pub(crate) fn start(&self, gossip_arc: GossipArc) {
         self.gossip.write().replace(gossip_arc);
         let (lock, cvar) = &*self.started;
         *lock.lock().unwrap() = true;

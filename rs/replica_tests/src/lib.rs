@@ -51,8 +51,7 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-use tower::util::ServiceExt;
-use tower_service::Service;
+use tower::{util::ServiceExt, Service};
 
 const CYCLES_BALANCE: u64 = 1 << 50;
 
