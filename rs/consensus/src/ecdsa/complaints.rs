@@ -114,7 +114,7 @@ impl EcdsaComplaintHandlerImpl {
         let mut complaint_keys = BTreeSet::new();
         let mut duplicate_keys = BTreeSet::new();
         for (_, signed_complaint) in ecdsa_pool.unvalidated().complaints() {
-            let key = ComplaintKey::from(signed_complaint);
+            let key = ComplaintKey::from(&signed_complaint);
             if !complaint_keys.insert(key.clone()) {
                 duplicate_keys.insert(key.clone());
             }
@@ -124,7 +124,7 @@ impl EcdsaComplaintHandlerImpl {
         for (id, signed_complaint) in ecdsa_pool.unvalidated().complaints() {
             let complaint = signed_complaint.get();
             // Remove the duplicate entries
-            let key = ComplaintKey::from(signed_complaint);
+            let key = ComplaintKey::from(&signed_complaint);
             if duplicate_keys.contains(&key) {
                 self.metrics
                     .complaint_errors_inc("duplicate_complaints_in_batch");
@@ -157,7 +157,7 @@ impl EcdsaComplaintHandlerImpl {
                         ));
                     } else {
                         let mut changes =
-                            self.crypto_verify_complaint(&id, transcript, signed_complaint);
+                            self.crypto_verify_complaint(&id, transcript, &signed_complaint);
                         ret.append(&mut changes);
                     }
                 }
@@ -208,7 +208,7 @@ impl EcdsaComplaintHandlerImpl {
                 }
             })
             .map(|(signed_complaint, transcript)| {
-                self.crypto_create_opening(signed_complaint, transcript)
+                self.crypto_create_opening(&signed_complaint, transcript)
             })
             .flatten()
             .collect()
@@ -231,7 +231,7 @@ impl EcdsaComplaintHandlerImpl {
         let mut opening_keys = BTreeSet::new();
         let mut duplicate_keys = BTreeSet::new();
         for (_, signed_opening) in ecdsa_pool.unvalidated().openings() {
-            let key = OpeningKey::from(signed_opening);
+            let key = OpeningKey::from(&signed_opening);
             if !opening_keys.insert(key.clone()) {
                 duplicate_keys.insert(key.clone());
             }
@@ -242,7 +242,7 @@ impl EcdsaComplaintHandlerImpl {
             let opening = signed_opening.get();
 
             // Remove duplicate entries
-            let key = OpeningKey::from(signed_opening);
+            let key = OpeningKey::from(&signed_opening);
             if duplicate_keys.contains(&key) {
                 self.metrics
                     .complaint_errors_inc("duplicate_openings_in_batch");
@@ -273,12 +273,12 @@ impl EcdsaComplaintHandlerImpl {
                             format!("Duplicate opening: {}", signed_opening),
                         ));
                     } else if let Some(signed_complaint) =
-                        self.get_complaint_for_opening(ecdsa_pool, signed_opening)
+                        self.get_complaint_for_opening(ecdsa_pool, &signed_opening)
                     {
                         let mut changes = self.crypto_verify_opening(
                             &id,
                             transcript,
-                            signed_opening,
+                            &signed_opening,
                             &signed_complaint,
                         );
                         ret.append(&mut changes);
@@ -658,7 +658,7 @@ impl EcdsaComplaintHandlerImpl {
                     && complaint.idkg_complaint.transcript_id == opening.idkg_opening.transcript_id
                     && complaint.idkg_complaint.dealer_id == opening.idkg_opening.dealer_id
             })
-            .map(|(_, signed_complaint)| signed_complaint.clone())
+            .map(|(_, signed_complaint)| signed_complaint)
     }
 
     /// Checks if the node has issued an opening for the complaint
@@ -1022,8 +1022,7 @@ mod tests {
                 // Complaint for a transcript not currently active (dropped)
                 let mut complaint = create_complaint(id_2, NODE_2, NODE_3);
                 complaint.content.complainer_height = Height::from(20);
-                let key = complaint.key();
-                let msg_id_2 = EcdsaComplaint::key_to_outer_hash(&key);
+                let msg_id_2 = complaint.message_hash();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaComplaint(complaint),
                     peer_id: NODE_3,
@@ -1033,8 +1032,7 @@ mod tests {
                 // Complaint for a transcript currently active (accepted)
                 let mut complaint = create_complaint(id_3, NODE_2, NODE_3);
                 complaint.content.complainer_height = Height::from(30);
-                let key = complaint.key();
-                let msg_id_3 = EcdsaComplaint::key_to_outer_hash(&key);
+                let msg_id_3 = complaint.message_hash();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaComplaint(complaint),
                     peer_id: NODE_3,
@@ -1068,8 +1066,7 @@ mod tests {
                 // Complaint from NODE_3 for transcript id_1, dealer NODE_2
                 let mut complaint = create_complaint(id_1, NODE_2, NODE_3);
                 complaint.content.complainer_height = Height::from(30);
-                let key = complaint.key();
-                let msg_id = EcdsaComplaint::key_to_outer_hash(&key);
+                let msg_id = complaint.message_hash();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaComplaint(complaint.clone()),
                     peer_id: NODE_3,
@@ -1109,8 +1106,7 @@ mod tests {
                 // Complaint from NODE_3 for transcript id_1, dealer NODE_2
                 let mut complaint = create_complaint(id_1, NODE_2, NODE_3);
                 complaint.content.complainer_height = Height::from(30);
-                let key = complaint.key();
-                let msg_id_1 = EcdsaComplaint::key_to_outer_hash(&key);
+                let msg_id_1 = complaint.message_hash();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaComplaint(complaint),
                     peer_id: NODE_3,
@@ -1120,8 +1116,7 @@ mod tests {
                 // Complaint from NODE_3 for transcript id_1, dealer NODE_2
                 let mut complaint = create_complaint(id_1, NODE_2, NODE_3);
                 complaint.content.complainer_height = Height::from(10);
-                let key = complaint.key();
-                let msg_id_2 = EcdsaComplaint::key_to_outer_hash(&key);
+                let msg_id_2 = complaint.message_hash();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaComplaint(complaint),
                     peer_id: NODE_3,
@@ -1226,8 +1221,7 @@ mod tests {
                 // Opening for a transcript not currently active(dropped)
                 let mut opening = create_opening(id_2, NODE_2, NODE_3, NODE_4);
                 opening.content.complainer_height = Height::from(20);
-                let key = opening.key();
-                let msg_id_1 = EcdsaOpening::key_to_outer_hash(&key);
+                let msg_id_1 = opening.message_hash();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaOpening(opening),
                     peer_id: NODE_4,
@@ -1238,8 +1232,7 @@ mod tests {
                 // with a matching complaint (accepted)
                 let mut opening = create_opening(id_3, NODE_2, NODE_3, NODE_4);
                 opening.content.complainer_height = Height::from(30);
-                let key = opening.key();
-                let msg_id_2 = EcdsaOpening::key_to_outer_hash(&key);
+                let msg_id_2 = opening.message_hash();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaOpening(opening),
                     peer_id: NODE_4,
@@ -1291,8 +1284,7 @@ mod tests {
                 // Opening from NODE_4 for transcript id_1, dealer NODE_2, complainer NODE_3
                 let mut opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
                 opening.content.complainer_height = Height::from(20);
-                let key = opening.key();
-                let msg_id = EcdsaOpening::key_to_outer_hash(&key);
+                let msg_id = opening.message_hash();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaOpening(opening.clone()),
                     peer_id: NODE_4,
@@ -1331,8 +1323,7 @@ mod tests {
                 // Opening from NODE_4 for transcript id_1, dealer NODE_2, complainer NODE_3
                 let mut opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
                 opening.content.complainer_height = Height::from(20);
-                let key = opening.key();
-                let msg_id_1 = EcdsaOpening::key_to_outer_hash(&key);
+                let msg_id_1 = opening.message_hash();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaOpening(opening),
                     peer_id: NODE_4,
@@ -1342,8 +1333,7 @@ mod tests {
                 // Opening from NODE_4 for transcript id_1, dealer NODE_2, complainer NODE_3
                 let mut opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
                 opening.content.complainer_height = Height::from(30);
-                let key = opening.key();
-                let msg_id_2 = EcdsaOpening::key_to_outer_hash(&key);
+                let msg_id_2 = opening.message_hash();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaOpening(opening),
                     peer_id: NODE_4,
@@ -1388,8 +1378,7 @@ mod tests {
                 // Complaint 2: height <= current_height, non-active transcripts (purged)
                 let mut complaint = create_complaint(id_2, NODE_2, NODE_3);
                 complaint.content.complainer_height = Height::from(30);
-                let key = complaint.key();
-                let msg_id = EcdsaComplaint::key_to_outer_hash(&key);
+                let msg_id = complaint.message_hash();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaComplaint(complaint),
                     peer_id: NODE_3,
@@ -1441,8 +1430,7 @@ mod tests {
                 // Complaint 2: height <= current_height, non-active transcripts (purged)
                 let mut complaint = create_complaint(id_2, NODE_2, NODE_3);
                 complaint.content.complainer_height = Height::from(30);
-                let key = complaint.key();
-                let msg_id = EcdsaComplaint::key_to_outer_hash(&key);
+                let msg_id = complaint.message_hash();
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaComplaint(complaint),
                 )];
@@ -1494,8 +1482,7 @@ mod tests {
                 // Opening 2: height <= current_height, non-active transcripts (purged)
                 let mut opening = create_opening(id_2, NODE_2, NODE_3, NODE_4);
                 opening.content.complainer_height = Height::from(30);
-                let key = opening.key();
-                let msg_id = EcdsaOpening::key_to_outer_hash(&key);
+                let msg_id = opening.message_hash();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaOpening(opening),
                     peer_id: NODE_4,
@@ -1547,8 +1534,7 @@ mod tests {
                 // Opening 2: height <= current_height, non-active transcripts (purged)
                 let mut opening = create_opening(id_2, NODE_2, NODE_3, NODE_4);
                 opening.content.complainer_height = Height::from(30);
-                let key = opening.key();
-                let msg_id = EcdsaOpening::key_to_outer_hash(&key);
+                let msg_id = opening.message_hash();
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaOpening(opening),
                 )];
