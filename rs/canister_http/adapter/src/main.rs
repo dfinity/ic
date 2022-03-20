@@ -7,9 +7,9 @@ use clap::Clap;
 use ic_async_utils::{
     ensure_single_systemd_socket, incoming_from_first_systemd_socket, incoming_from_path,
 };
-use ic_canister_http_adapter::{get_canister_http_logger, CanisterHttp, Cli, IncomingSource};
+use ic_canister_http_adapter::{CanisterHttp, Cli, IncomingSource};
 use ic_canister_http_adapter_service::http_adapter_server::HttpAdapterServer;
-use ic_logger::{error, info};
+use ic_logger::{error, info, new_replica_logger_from_config};
 use serde_json::to_string_pretty;
 use tonic::transport::Server;
 
@@ -24,7 +24,7 @@ pub async fn main() {
         }
     };
 
-    let (logger, _async_log_guard) = get_canister_http_logger(&config.logger);
+    let (logger, _async_log_guard) = new_replica_logger_from_config(&config.logger);
 
     if config.incoming_source == IncomingSource::Systemd {
         // make sure we receive only one socket from systemd

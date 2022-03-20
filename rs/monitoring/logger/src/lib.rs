@@ -21,6 +21,15 @@ pub fn new_replica_logger(log: slog::Logger, config: &LoggerConfig) -> ReplicaLo
     ReplicaLogger::new(log_entry_logger)
 }
 
+pub fn new_replica_logger_from_config(logger_config: &LoggerConfig) -> (ReplicaLogger, AsyncGuard) {
+    let LoggerImpl {
+        root,
+        async_log_guard,
+    } = LoggerImpl::new(logger_config, "logger".into());
+    let logger = new_replica_logger(root, logger_config);
+    (logger, async_log_guard)
+}
+
 pub struct LoggerImpl {
     pub root: Logger,
     pub async_log_guard: AsyncGuard,

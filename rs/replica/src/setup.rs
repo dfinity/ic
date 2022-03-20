@@ -3,7 +3,7 @@ use ic_config::{crypto::CryptoConfig, Config, ConfigSource, SAMPLE_CONFIG};
 use ic_crypto::CryptoComponent;
 use ic_crypto_utils_threshold_sig::parse_threshold_sig_key;
 use ic_interfaces::registry::RegistryClient;
-use ic_logger::{fatal, info, new_replica_logger, warn, LoggerImpl, ReplicaLogger};
+use ic_logger::{fatal, info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_client::client::{create_data_provider, RegistryClientImpl};
@@ -12,7 +12,6 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::consensus::catchup::{CUPWithOriginalProtobuf, CatchUpPackage};
 use ic_types::{NodeId, RegistryVersion, ReplicaVersion, SubnetId};
-use slog_async::AsyncGuard;
 use std::convert::TryFrom;
 use std::env;
 use std::path::{Path, PathBuf};
@@ -179,17 +178,6 @@ pub fn get_config_source(replica_args: &Result<ReplicaArgs, clap::Error>) -> Con
             get_config_source_or_abort(&args)
         }
     }
-}
-
-/// Return a `ReplicaLogger` and its `AsyncGuard`
-///
-/// Note: Do not drop the `AsyncGuard`! If it is dropped, all async logs
-/// (typically logs below level `Error`) will not be logged.
-pub fn get_replica_logger(config: &Config) -> (ReplicaLogger, AsyncGuard) {
-    let base_logger = LoggerImpl::new(&config.logger, "replica".to_string());
-    let logger = new_replica_logger(base_logger.root.clone(), &config.logger);
-
-    (logger, base_logger.async_log_guard)
 }
 
 /// Create the consensus pool directory (if none exists)

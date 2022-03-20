@@ -7,7 +7,7 @@ use ic_crypto_sha::Sha256;
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces::crypto::IngressSigVerifier;
 use ic_interfaces::registry::{LocalStoreCertifiedTimeReader, RegistryClient};
-use ic_logger::info;
+use ic_logger::{info, new_replica_logger_from_config};
 use ic_metrics::MetricsRegistry;
 use ic_metrics_exporter::MetricsRuntimeImpl;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
@@ -141,7 +141,7 @@ async fn run() -> io::Result<()> {
     let config_source = setup::get_config_source(&replica_args);
     let config = Config::load_with_tmpdir(config_source, tmpdir.path().to_path_buf());
 
-    let (logger, _async_log_guard) = setup::get_replica_logger(&config);
+    let (logger, _async_log_guard) = new_replica_logger_from_config(&config.logger);
 
     let optional_nns_key_path = match &replica_args {
         Ok(ReplicaArgs {
