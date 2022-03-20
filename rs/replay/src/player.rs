@@ -20,7 +20,7 @@ use ic_interfaces::{
     registry::{RegistryClient, RegistryTransportRecord},
     state_manager::{PermanentStateHashError, StateHashError, StateManager, StateReader},
 };
-use ic_logger::{new_replica_logger, LoggerImpl, ReplicaLogger};
+use ic_logger::{new_replica_logger_from_config, ReplicaLogger};
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
@@ -93,8 +93,7 @@ impl Player {
         subnet_id: SubnetId,
         start_height: u64,
     ) -> Self {
-        let logger = LoggerImpl::new(&cfg.logger, "ic-replay".to_string());
-        let log = new_replica_logger(logger.root.clone(), &cfg.logger);
+        let (log, _async_log_guard) = new_replica_logger_from_config(&cfg.logger);
         let data_provided_config = cfg
             .registry_client
             .data_provider
@@ -176,8 +175,7 @@ impl Player {
     /// Create and return a `Player` from a replica configuration object for
     /// subnet recovery.
     pub async fn new(cfg: Config, subnet_id: SubnetId) -> Self {
-        let logger = LoggerImpl::new(&cfg.logger, "ic-replay".to_string());
-        let log = new_replica_logger(logger.root.clone(), &cfg.logger);
+        let (log, _async_log_guard) = new_replica_logger_from_config(&cfg.logger);
         let metrics_registry = MetricsRegistry::global();
         let registry = setup_registry(cfg.clone(), Some(&metrics_registry));
 

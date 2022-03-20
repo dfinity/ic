@@ -1,21 +1,14 @@
 use clap::Clap;
 use ic_btc_adapter::{
-    spawn_grpc_server, Adapter, AdapterState, BlockchainManager, Cli, Config, TransactionManager,
+    spawn_grpc_server, Adapter, AdapterState, BlockchainManager, Cli, TransactionManager,
 };
-use ic_logger::{info, new_replica_logger, LoggerImpl, ReplicaLogger};
+use ic_logger::{info, new_replica_logger_from_config};
 use serde_json::to_string_pretty;
-use slog_async::AsyncGuard;
 use std::sync::Arc;
 use tokio::{
     sync::Mutex,
     time::{sleep, Duration},
 };
-
-pub fn get_logger(config: &Config) -> (ReplicaLogger, AsyncGuard) {
-    let base_logger = LoggerImpl::new(&config.logger, "Logger".to_string());
-    let logger = new_replica_logger(base_logger.root.clone(), &config.logger);
-    (logger, base_logger.async_log_guard)
-}
 
 #[tokio::main]
 pub async fn main() {
@@ -26,7 +19,7 @@ pub async fn main() {
             panic!("An error occurred while getting the config: {}", err);
         }
     };
-    let (logger, _async_log_guard) = get_logger(&config);
+    let (logger, _async_log_guard) = new_replica_logger_from_config(&config.logger);
 
     info!(
         logger,

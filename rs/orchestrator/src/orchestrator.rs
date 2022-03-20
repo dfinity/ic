@@ -9,14 +9,11 @@ use crate::replica_process::ReplicaProcess;
 use crate::ssh_access_manager::SshAccessManager;
 use crate::upgrade::Upgrade;
 use crate::utils;
-use ic_config::{
-    metrics::{Config as MetricsConfig, Exporter},
-    Config,
-};
+use ic_config::metrics::{Config as MetricsConfig, Exporter};
 use ic_crypto::utils::get_node_keys_or_generate_if_missing;
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces::{crypto::KeyManager, registry::RegistryClient};
-use ic_logger::{error, info, new_replica_logger, warn, LoggerImpl, ReplicaLogger};
+use ic_logger::{error, info, new_replica_logger_from_config, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_metrics_exporter::MetricsRuntimeImpl;
 use ic_registry_replicator::RegistryReplicator;
@@ -70,7 +67,8 @@ impl Orchestrator {
         let config = args.get_ic_config();
         let (_node_pks, node_id) = get_node_keys_or_generate_if_missing(&config.crypto.crypto_root);
 
-        let (logger, _async_log_guard) = Self::get_logger(&config);
+        let (logger, _async_log_guard) =
+            new_replica_logger_from_config(&config.orchestrator_logger);
         let metrics_registry = MetricsRegistry::global();
         let current_orchestrator_hash = utils::get_orchestrator_binary_hash()
             .expect("Failed to determine sha256 of orchestrator binary");
@@ -288,16 +286,6 @@ impl Orchestrator {
             let _ = handle.await;
         }
         info!(self.logger, "Orchestrator shut down");
-    }
-
-    // Construct a `ReplicaLogger` and its `AsyncGuard`. If this `AsyncGuard`
-    // is dropped, all asynchronously logged messages will no longer be
-    // output.
-    fn get_logger(config: &Config) -> (ReplicaLogger, AsyncGuard) {
-        let base_logger = LoggerImpl::new(&config.orchestrator_logger, "orchestrator".into());
-        let logger = new_replica_logger(base_logger.root.clone(), &config.orchestrator_logger);
-
-        (logger, base_logger.async_log_guard)
     }
 
     // Construct a `OrchestratorMetrics` and its `MetricsRuntimeImpl`. If this

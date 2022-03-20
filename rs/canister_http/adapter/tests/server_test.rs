@@ -1,9 +1,10 @@
 use futures::TryFutureExt;
 use http::StatusCode;
-use ic_canister_http_adapter::{get_canister_http_logger, CanisterHttp, Config};
+use ic_canister_http_adapter::{CanisterHttp, Config};
 use ic_canister_http_adapter_service::{
     http_adapter_client::HttpAdapterClient, http_adapter_server::HttpAdapterServer,
 };
+use ic_logger::new_replica_logger_from_config;
 use ic_protobuf::canister_http::v1::{CanisterHttpRequest, HttpHeader};
 use std::convert::TryFrom;
 use tokio::net::UnixStream;
@@ -16,7 +17,7 @@ use uuid::Uuid;
 async fn test_https() {
     // setup unix domain socket and start gRPC server on one side of the UDS
     let config = Config::default();
-    let (logger, _async_log_guard) = get_canister_http_logger(&config.logger);
+    let (logger, _async_log_guard) = new_replica_logger_from_config(&config.logger);
     let canister_http = CanisterHttp::new(logger);
     let channel = setup_loop_channel_unix(canister_http).await;
 
@@ -39,7 +40,7 @@ async fn test_https() {
 #[tokio::test]
 async fn test_http() {
     let config = Config::default();
-    let (logger, _async_log_guard) = get_canister_http_logger(&config.logger);
+    let (logger, _async_log_guard) = new_replica_logger_from_config(&config.logger);
     let canister_http = CanisterHttp::new(logger);
     let channel = setup_loop_channel_unix(canister_http).await;
 
@@ -61,7 +62,7 @@ async fn test_http() {
 #[tokio::test]
 async fn test_no_http() {
     let config = Config::default();
-    let (logger, _async_log_guard) = get_canister_http_logger(&config.logger);
+    let (logger, _async_log_guard) = new_replica_logger_from_config(&config.logger);
     let canister_http = CanisterHttp::new(logger);
     let channel = setup_loop_channel_unix(canister_http).await;
 
