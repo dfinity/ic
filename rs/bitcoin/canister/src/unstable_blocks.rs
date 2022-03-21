@@ -60,12 +60,12 @@ pub fn push(blocks: &mut UnstableBlocks, block: Block) -> Result<(), BlockDoesNo
     blocktree::extend(&mut blocks.tree, block)
 }
 
-/// Returns the best guess on what the "current" blockchain is.
+/// Returns the best guess on what the main blockchain is.
 ///
-/// The most likely chain to be "current", we hypothesize, is the longest
+/// The most likely chain to be "main", we hypothesize, is the longest
 /// chain of blocks with an "uncontested" tip. As in, there exists no other
 /// block at the same height as the tip.
-pub fn get_current_chain(blocks: &UnstableBlocks) -> BlockChain {
+pub fn get_main_chain(blocks: &UnstableBlocks) -> BlockChain {
     // Get all the blockchains that extend the anchor.
     let blockchains: Vec<BlockChain> = blocktree::blockchains(&blocks.tree);
 
@@ -81,23 +81,23 @@ pub fn get_current_chain(blocks: &UnstableBlocks) -> BlockChain {
         .filter(|bc| bc.len() == longest_blockchain_len)
         .collect();
 
-    let mut current_chain = vec![];
+    let mut main_chain = vec![];
     for height_idx in 0..longest_blockchain_len {
         // If all the blocks on the same height are identical, then this block is part of the
-        // "current" chain.
+        // "main" chain.
         let block = longest_blockchains[0][height_idx];
         let block_hash = block.block_hash();
 
         for chain in longest_blockchains.iter().skip(1) {
             if chain[height_idx].block_hash() != block_hash {
-                return current_chain;
+                return main_chain;
             }
         }
 
-        current_chain.push(block);
+        main_chain.push(block);
     }
 
-    current_chain
+    main_chain
 }
 
 pub fn get_blocks(blocks: &UnstableBlocks) -> Vec<&Block> {
@@ -191,9 +191,9 @@ mod test {
     //
     // * -> 1 -> 2
     //
-    // Both blocks 1 and 2 are part of the current chain.
+    // Both blocks 1 and 2 are part of the main chain.
     #[test]
-    fn get_current_chain_single_blockchain() {
+    fn get_main_chain_single_blockchain() {
         let block_0 = BlockBuilder::genesis().build();
         let block_1 = BlockBuilder::with_prev_header(block_0.header).build();
         let block_2 = BlockBuilder::with_prev_header(block_1.header).build();
@@ -202,10 +202,7 @@ mod test {
 
         push(&mut forest, block_1.clone()).unwrap();
         push(&mut forest, block_2.clone()).unwrap();
-        assert_eq!(
-            get_current_chain(&forest),
-            vec![&block_0, &block_1, &block_2]
-        );
+        assert_eq!(get_main_chain(&forest), vec![&block_0, &block_1, &block_2]);
     }
 
     // Creating a forest that looks like this:
@@ -213,9 +210,9 @@ mod test {
     // * -> 1
     // * -> 2
     //
-    // Both blocks 1 and 2 contest with each other -> current chain is empty.
+    // Both blocks 1 and 2 contest with each other -> main chain is empty.
     #[test]
-    fn get_current_chain_two_contesting_trees() {
+    fn get_main_chain_two_contesting_trees() {
         let block_0 = BlockBuilder::genesis().build();
         let block_1 = BlockBuilder::with_prev_header(block_0.header).build();
         let block_2 = BlockBuilder::with_prev_header(block_0.header).build();
@@ -224,7 +221,7 @@ mod test {
 
         push(&mut forest, block_1).unwrap();
         push(&mut forest, block_2).unwrap();
-        assert_eq!(get_current_chain(&forest), vec![&block_0]);
+        assert_eq!(get_main_chain(&forest), vec![&block_0]);
     }
 
     // Creating the following forest:
@@ -232,9 +229,9 @@ mod test {
     // * -> 1
     // * -> 2 -> 3
     //
-    // "2 -> 3" is the longest blockchain and is should be considered "current".
+    // "2 -> 3" is the longest blockchain and is should be considered "main".
     #[test]
-    fn get_current_chain_longer_fork() {
+    fn get_main_chain_longer_fork() {
         let block_0 = BlockBuilder::genesis().build();
         let block_1 = BlockBuilder::with_prev_header(block_0.header).build();
         let block_2 = BlockBuilder::with_prev_header(block_0.header).build();
@@ -245,10 +242,7 @@ mod test {
         push(&mut forest, block_1).unwrap();
         push(&mut forest, block_2.clone()).unwrap();
         push(&mut forest, block_3.clone()).unwrap();
-        assert_eq!(
-            get_current_chain(&forest),
-            vec![&block_0, &block_2, &block_3]
-        );
+        assert_eq!(get_main_chain(&forest), vec![&block_0, &block_2, &block_3]);
     }
 
     // Creating the following forest:
@@ -259,7 +253,7 @@ mod test {
     // "1" should be returned in this case, as its the longest chain
     // without a contested tip.
     #[test]
-    fn get_current_chain_fork_at_first_block() {
+    fn get_main_chain_fork_at_first_block() {
         let block_0 = BlockBuilder::genesis().build();
         let block_1 = BlockBuilder::with_prev_header(block_0.header).build();
         let block_2 = BlockBuilder::with_prev_header(block_1.header).build();
@@ -274,7 +268,7 @@ mod test {
         push(&mut forest, block_3).unwrap();
         push(&mut forest, block_a).unwrap();
         push(&mut forest, block_b).unwrap();
-        assert_eq!(get_current_chain(&forest), vec![&block_0, &block_1]);
+        assert_eq!(get_main_chain(&forest), vec![&block_0, &block_1]);
     }
 
     // Creating the following forest:
@@ -287,9 +281,9 @@ mod test {
     //
     // Then add block `c` that extends block `b`, at that point
     // `1 -> a -> b -> c` becomes the only longest chain, and therefore
-    // the "current" chain.
+    // the "main" chain.
     #[test]
-    fn get_current_chain_multiple_forks() {
+    fn get_main_chain_multiple_forks() {
         let block_0 = BlockBuilder::genesis().build();
         let block_1 = BlockBuilder::with_prev_header(block_0.header).build();
         let block_2 = BlockBuilder::with_prev_header(block_1.header).build();
@@ -310,22 +304,22 @@ mod test {
         push(&mut forest, block_3).unwrap();
         push(&mut forest, block_a.clone()).unwrap();
         push(&mut forest, block_b.clone()).unwrap();
-        assert_eq!(get_current_chain(&forest), vec![&block_0]);
+        assert_eq!(get_main_chain(&forest), vec![&block_0]);
 
         // Now add block c to b.
         let block_c = BlockBuilder::with_prev_header(block_b.header).build();
         push(&mut forest, block_c.clone()).unwrap();
 
-        // Now the current chain should be "1 -> a -> b -> c"
+        // Now the main chain should be "1 -> a -> b -> c"
         assert_eq!(
-            get_current_chain(&forest),
+            get_main_chain(&forest),
             vec![&block_0, &block_1, &block_a, &block_b, &block_c]
         );
     }
 
     // Same as the above test, with a different insertion order.
     #[test]
-    fn get_current_chain_multiple_forks_2() {
+    fn get_main_chain_multiple_forks_2() {
         let block_0 = BlockBuilder::genesis().build();
         let block_1 = BlockBuilder::with_prev_header(block_0.header).build();
         let block_2 = BlockBuilder::with_prev_header(block_1.header).build();
@@ -346,14 +340,14 @@ mod test {
         push(&mut forest, block_x).unwrap();
         push(&mut forest, block_y).unwrap();
         push(&mut forest, block_z).unwrap();
-        assert_eq!(get_current_chain(&forest), vec![&block_0]);
+        assert_eq!(get_main_chain(&forest), vec![&block_0]);
     }
 
     #[test]
-    fn get_current_chain_anchor_only() {
+    fn get_main_chain_anchor_only() {
         let block_0 = BlockBuilder::genesis().build();
         let forest = UnstableBlocks::new(1, block_0.clone());
 
-        assert_eq!(get_current_chain(&forest), vec![&block_0]);
+        assert_eq!(get_main_chain(&forest), vec![&block_0]);
     }
 }

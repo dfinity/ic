@@ -1,6 +1,5 @@
 use bitcoin::{
-    blockdata::constants::genesis_block, util::psbt::serialize::Deserialize, Address, Network,
-    Transaction,
+    blockdata::constants::genesis_block, util::psbt::serialize::Deserialize, Network, Transaction,
 };
 use ic_btc_canister::{state::State, store};
 use ic_btc_types::{
@@ -9,7 +8,7 @@ use ic_btc_types::{
 };
 use ic_protobuf::bitcoin::v1::{GetSuccessorsRequest, GetSuccessorsResponse};
 use prost::Message;
-use std::{cell::RefCell, collections::VecDeque, str::FromStr};
+use std::{cell::RefCell, collections::VecDeque};
 
 thread_local! {
     // Initialize the canister to expect blocks from the Regtest network.
@@ -20,32 +19,18 @@ thread_local! {
 
 /// Retrieves the balance of the given Bitcoin address.
 pub fn get_balance(state: &State, request: GetBalanceRequest) -> Result<u64, GetBalanceError> {
-    if Address::from_str(&request.address).is_err() {
-        return Err(GetBalanceError::MalformedAddress);
-    }
-
     let min_confirmations = request.min_confirmations.unwrap_or(0);
 
-    Ok(store::get_balance(
-        state,
-        &request.address,
-        min_confirmations,
-    ))
+    store::get_balance(state, &request.address, min_confirmations)
 }
 
 pub fn get_utxos(
     state: &State,
     request: GetUtxosRequest,
 ) -> Result<GetUtxosResponse, GetUtxosError> {
-    if Address::from_str(&request.address).is_err() {
-        return Err(GetUtxosError::MalformedAddress);
-    }
-
     let min_confirmations = request.min_confirmations.unwrap_or(0);
 
-    let main_chain_height = store::main_chain_height(state);
-
-    let utxos: Vec<Utxo> = store::get_utxos(state, &request.address, min_confirmations)
+    let utxos: Vec<Utxo> = store::get_utxos(state, &request.address, min_confirmations)?
         .into_iter()
         .map(|(outpoint, txout, height)| Utxo {
             outpoint: OutPoint {
@@ -54,7 +39,7 @@ pub fn get_utxos(
             },
             value: txout.value,
             height,
-            confirmations: main_chain_height - height + 1,
+            confirmations: store::main_chain_height(state) - height + 1,
         })
         .collect();
 
@@ -316,7 +301,8 @@ mod test {
                 Ok(1000)
             );
 
-            // With >= 2 confirmations, both addresses should have an empty UTXO set.
+            // With >= 2 confirmations, we should get an error as that's higher than
+            // the chain's height.
             for i in 3..10 {
                 assert_eq!(
                     get_balance(
@@ -326,7 +312,7 @@ mod test {
                             min_confirmations: Some(i)
                         },
                     ),
-                    Ok(0)
+                    Err(GetBalanceError::MinConfirmationsTooLarge { given: i, max: 2 })
                 );
                 assert_eq!(
                     get_balance(
@@ -336,7 +322,7 @@ mod test {
                             min_confirmations: Some(i)
                         },
                     ),
-                    Ok(0)
+                    Err(GetBalanceError::MinConfirmationsTooLarge { given: i, max: 2 })
                 );
             }
         }
@@ -461,7 +447,8 @@ mod test {
                 })
             );
 
-            // With >= 2 confirmations, both addresses should have an empty UTXO set.
+            // With >= 2 confirmations, we should get an error as that's higher than
+            // the chain's height.
             for i in 3..10 {
                 assert_eq!(
                     get_utxos(
@@ -471,10 +458,7 @@ mod test {
                             min_confirmations: Some(i)
                         },
                     ),
-                    Ok(GetUtxosResponse {
-                        utxos: vec![],
-                        total_count: 0
-                    })
+                    Err(GetUtxosError::MinConfirmationsTooLarge { given: i, max: 2 })
                 );
                 assert_eq!(
                     get_utxos(
@@ -484,10 +468,7 @@ mod test {
                             min_confirmations: Some(i)
                         },
                     ),
-                    Ok(GetUtxosResponse {
-                        utxos: vec![],
-                        total_count: 0
-                    })
+                    Err(GetUtxosError::MinConfirmationsTooLarge { given: i, max: 2 })
                 );
             }
         }
