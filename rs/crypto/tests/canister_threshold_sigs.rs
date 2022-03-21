@@ -1,7 +1,7 @@
 use ic_base_types::PrincipalId;
 use ic_crypto::utils::TempCryptoComponent;
 use ic_crypto::{derive_tecdsa_public_key, get_tecdsa_master_public_key};
-use ic_crypto_internal_threshold_sig_ecdsa::{IDkgDealingInternal, MEGaCiphertext};
+use ic_crypto_internal_threshold_sig_ecdsa::{EccScalar, IDkgDealingInternal, MEGaCiphertext};
 use ic_crypto_test_utils_canister_threshold_sigs::{
     build_params_from_previous, create_and_verify_dealing, create_dealings,
     generate_key_transcript, generate_presig_quadruple, load_input_transcripts, load_transcript,
@@ -1339,6 +1339,122 @@ fn should_run_open_transcript() {
 }
 
 #[test]
+fn should_open_transcript_successfully() {
+    let (env, transcript, complaint, complainer_id) = environment_with_transcript_and_complaint();
+    let opener_id = random_receiver_id_excluding(&transcript.receivers, complainer_id);
+
+    let result = crypto_for(opener_id, &env.crypto_components).open_transcript(
+        &transcript,
+        complainer_id,
+        &complaint,
+    );
+    assert!(result.is_ok(), "Unexpected failure: {:?}", result);
+}
+
+#[test]
+fn should_fail_open_transcript_with_invalid_share() {
+    let (env, transcript, complaint, complainer_id) = environment_with_transcript_and_complaint();
+    let opener_id = complainer_id; // opener's share is invalid
+    let result = crypto_for(opener_id, &env.crypto_components).open_transcript(
+        &transcript,
+        complainer_id,
+        &complaint,
+    );
+    assert!(result.is_err());
+    assert!(matches!(
+        result,
+        Err(IDkgOpenTranscriptError::InternalError { .. })
+    ));
+    assert!(
+        format!("{:?}", result).contains("InconsistentCommitment"),
+        "result: {:?}",
+        result
+    );
+}
+
+#[test]
+fn should_fail_open_transcript_when_missing_a_dealing() {
+    let (env, mut transcript, complaint, complainer_id) =
+        environment_with_transcript_and_complaint();
+    // Remove the corrupted dealing from the transcript.
+    transcript.verified_dealings.remove(
+        &transcript
+            .index_for_dealer_id(complaint.dealer_id)
+            .expect("Missing dealer of corrupted dealing"),
+    );
+
+    let opener_id = random_receiver_id_excluding(&transcript.receivers, complainer_id);
+    let result = crypto_for(opener_id, &env.crypto_components).open_transcript(
+        &transcript,
+        complainer_id,
+        &complaint,
+    );
+    assert!(result.is_err());
+    assert!(matches!(
+        result,
+        Err(IDkgOpenTranscriptError::InternalError { .. })
+    ));
+    assert!(
+        format!("{:?}", result).contains("MissingDealing"),
+        "result: {:?}",
+        result
+    );
+}
+
+#[test]
+fn should_fail_open_transcript_with_an_invalid_complaint() {
+    let (env, transcript, mut complaint, complainer_id) =
+        environment_with_transcript_and_complaint();
+    // Set "wrong" dealer_id in the complaint
+    complaint.dealer_id = random_receiver_id_excluding(&transcript.receivers, complaint.dealer_id);
+    let opener_id = random_receiver_id_excluding(&transcript.receivers, complainer_id);
+    let result = crypto_for(opener_id, &env.crypto_components).open_transcript(
+        &transcript,
+        complainer_id,
+        &complaint,
+    );
+    assert!(result.is_err());
+    assert!(matches!(
+        result,
+        Err(IDkgOpenTranscriptError::InternalError { .. })
+    ));
+    assert!(
+        format!("{:?}", result).contains("InvalidComplaint"),
+        "result: {:?}",
+        result
+    );
+}
+
+#[test]
+fn should_fail_open_transcript_with_a_valid_complaint_but_wrong_transcript() {
+    let (env, transcript, complaint, complainer_id) = environment_with_transcript_and_complaint();
+
+    // Create another environment of the same size, and generate a trancript for it.
+    let env_2 = CanisterThresholdSigTestEnvironment::new(env.crypto_components.len());
+    let params_2 = env_2.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+    let transcript_2 =
+        run_idkg_and_create_and_verify_transcript(&params_2, &env_2.crypto_components);
+
+    // Try `open_transcript` but with a wrong transcript.
+    let opener_id = random_receiver_id_excluding(&transcript.receivers, complainer_id);
+    let result = crypto_for(opener_id, &env.crypto_components).open_transcript(
+        &transcript_2,
+        complainer_id,
+        &complaint,
+    );
+    assert!(result.is_err());
+    assert!(matches!(
+        result,
+        Err(IDkgOpenTranscriptError::InternalError { .. })
+    ));
+    assert!(
+        format!("{:?}", result).contains("InvalidArgumentMismatchingTranscriptIDs"),
+        "result: {:?}",
+        result
+    );
+}
+
+#[test]
 fn should_run_verify_opening() {
     let crypto_components = temp_crypto_components_for(&[NODE_1]);
     let transcript = fake_transcript();
@@ -1557,6 +1673,38 @@ fn corrupt_signed_dealing_for_all_receivers(signed_dealing: &mut IDkgMultiSigned
     signed_dealing.dealing.idkg_dealing.internal_dealing_raw = invalidated_internal_dealing_raw;
 }
 
+/// Corrupts the dealing by modifying the ciphertext intended for the specified receiver.
+fn corrupt_signed_dealing_for_one_receiver(
+    dealing_index_to_corrupt: NodeIndex,
+    dealings: &mut BTreeMap<NodeIndex, IDkgMultiSignedDealing>,
+    receiver_index: NodeIndex,
+) {
+    let mut signed_dealing = dealings
+        .get_mut(&dealing_index_to_corrupt)
+        .unwrap_or_else(|| panic!("Missing dealing at index {:?}", dealing_index_to_corrupt));
+    let invalidated_internal_dealing_raw = {
+        let mut internal_dealing = IDkgDealingInternal::deserialize(
+            &signed_dealing.dealing.idkg_dealing.internal_dealing_raw,
+        )
+        .expect("failed to deserialize internal dealing");
+        match internal_dealing.ciphertext {
+            MEGaCiphertext::Single(ref mut ctext) => {
+                let corrupted_ctext = corrupt_ecc_scalar(&ctext.ctexts[receiver_index as usize]);
+                ctext.ctexts[receiver_index as usize] = corrupted_ctext;
+            }
+            MEGaCiphertext::Pairs(ref mut ctext) => {
+                let (ctext_1, ctext_2) = ctext.ctexts[receiver_index as usize];
+                let corrupted_ctext_1 = corrupt_ecc_scalar(&ctext_1);
+                ctext.ctexts[receiver_index as usize] = (corrupted_ctext_1, ctext_2);
+            }
+        };
+        internal_dealing
+            .serialize()
+            .expect("failed to serialize internal dealing")
+    };
+    signed_dealing.dealing.idkg_dealing.internal_dealing_raw = invalidated_internal_dealing_raw;
+}
+
 fn check_dealer_indexes(params: &IDkgTranscriptParams, transcript: &IDkgTranscript) {
     // Transcript should have correct dealer indexes
     for &index in transcript.verified_dealings.keys() {
@@ -1569,4 +1717,52 @@ fn check_dealer_indexes(params: &IDkgTranscriptParams, transcript: &IDkgTranscri
             transcript.index_for_dealer_id(dealer_id)
         )
     }
+}
+
+fn corrupt_ecc_scalar(value: &EccScalar) -> EccScalar {
+    value
+        .add(&EccScalar::one(value.curve_type()))
+        .expect("Corruption for testing failed")
+}
+
+/// Sets up a testing environment for canister treshold signatures for a subnet size
+/// picked randomly in a range [2..10], runs IDKG to generate transcript, corrupts
+/// a random dealing for a random receiver, and generates the corresponding complaint.
+/// Returns the environment, the corrupted transcript, the complaint and the
+/// corresponding complainer id.
+fn environment_with_transcript_and_complaint() -> (
+    CanisterThresholdSigTestEnvironment,
+    IDkgTranscript,
+    IDkgComplaint,
+    NodeId,
+) {
+    let rng = &mut thread_rng();
+    let subnet_size = rng.gen_range(2, 10); // need min. 1 non-complaining node
+    let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
+
+    let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+    let mut transcript = run_idkg_and_create_and_verify_transcript(&params, &env.crypto_components);
+
+    let dealing_index_to_corrupt = transcript
+        .verified_dealings
+        .iter()
+        .map(|(index, _signed_dealing)| *index)
+        .choose(rng)
+        .expect("Failed to pick a dealing to corrupt.");
+    let complainer_id = random_receiver_id(&params);
+    let complainer_index = params
+        .receiver_index(complainer_id)
+        .expect(&*format!("Missing receiver {:?}", complainer_id));
+    corrupt_signed_dealing_for_one_receiver(
+        dealing_index_to_corrupt,
+        &mut transcript.verified_dealings,
+        complainer_index,
+    );
+    let result = crypto_for(complainer_id, &env.crypto_components).load_transcript(&transcript);
+    assert!(
+        matches!(result.as_ref(), Ok(complaints) if complaints.len() == 1),
+        "Expected 1 complaint"
+    );
+    let complaint = &result.expect("Missing complaint")[0];
+    (env, transcript, complaint.clone(), complainer_id)
 }
