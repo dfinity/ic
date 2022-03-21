@@ -2,9 +2,9 @@
   "name": "ic-agent-sw-cert-app",
   "private": true,
   "dependencies": {
-    "@dfinity/agent": "^0.10.2",
-    "@dfinity/candid": "^0.10.2",
-    "@dfinity/principal": "^0.10.2",
+    "@dfinity/agent": "^0.10.4",
+    "@dfinity/candid": "^0.10.4",
+    "@dfinity/principal": "^0.10.4",
     "@types/pako": "^1.0.1",
     "assert": "^2.0.0",
     "base64-arraybuffer": "^0.2.0",
@@ -54,7 +54,7 @@
     "deploy-prod": "./bin/deploy-prod",
     "deploy-dev": "./bin/deploy-dev",
     "develop": "webpack-dev-server",
-    "start": "NODE_OPTIONS=--openssl-legacy-provider npm run build; http-server dist --proxy https://ic0.app/",
+    "start": "NODE_OPTIONS=--openssl-legacy-provider npm run build-dev && http-server dist-dev --proxy https://ic0.app/",
     "lint": "./node_modules/.bin/eslint **/*.ts",
     "lint:fix": "./node_modules/.bin/eslint --fix **/*.ts",
     "publish:release": "",
@@ -67,8 +67,8 @@
     "format": "npm run prettier:format"
   },
   "engines": {
-    "node": "^12 || ^14 || ^16",
-    "npm": "^7.17"
+    "node": "^17",
+    "npm": "^8.5"
   },
   "author": "DFINITY Stiftung <sdk@dfinity.org>",
   "license": "Apache-2.0",
