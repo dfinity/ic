@@ -381,6 +381,11 @@ impl CyclesAccountManager {
         self.config.duration_between_allocation_charges
     }
 
+    /// Amount to charge for an ECDSA signature.
+    pub fn ecdsa_signature_fee(&self) -> Cycles {
+        self.config.ecdsa_signature_fee
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     //
     // Storage

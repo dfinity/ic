@@ -261,7 +261,11 @@ impl<'a> UniversalCanister<'a> {
                 // The universal canister API expects a `PrincipalId`.
                 PrincipalId::try_from(receiver.as_slice()).unwrap(),
                 method,
-                call_args().other_side(payload),
+                call_args().other_side(payload).on_reject(
+                    universal_canister_argument_builder()
+                        .reject_message()
+                        .reject(),
+                ),
                 cycles.into_parts(),
             )
             .build();

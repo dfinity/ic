@@ -9,7 +9,7 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
-use ic_types::CanisterId;
+use ic_types::{CanisterId, Cycles};
 use ic_types_test_utils::ids::subnet_test_id;
 use maplit::btreemap;
 
@@ -22,6 +22,7 @@ pub struct ExecutionEnvironmentBuilder {
     subnet_type: SubnetType,
     log: ReplicaLogger,
     sender_canister_id: Option<CanisterId>,
+    ecdsa_signature_fee: Option<Cycles>,
 }
 
 impl Default for ExecutionEnvironmentBuilder {
@@ -33,6 +34,7 @@ impl Default for ExecutionEnvironmentBuilder {
             subnet_type: SubnetType::Application,
             log: no_op_logger(),
             sender_canister_id: None,
+            ecdsa_signature_fee: None,
         }
     }
 }
@@ -83,6 +85,13 @@ impl ExecutionEnvironmentBuilder {
         }
     }
 
+    pub fn with_ecdsa_signature_fee(self, ecdsa_signing_fee: Cycles) -> Self {
+        Self {
+            ecdsa_signature_fee: Some(ecdsa_signing_fee),
+            ..self
+        }
+    }
+
     pub fn build(self) -> (ReplicatedState, ExecutionEnvironmentImpl) {
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
 
@@ -111,11 +120,13 @@ impl ExecutionEnvironmentBuilder {
 
         let metrics_registry = MetricsRegistry::new();
 
-        let cycles_account_manager = Arc::new(
-            CyclesAccountManagerBuilder::new()
-                .with_subnet_type(self.subnet_type)
-                .build(),
-        );
+        let mut cycles_account_manager_builder =
+            CyclesAccountManagerBuilder::new().with_subnet_type(self.subnet_type);
+        if let Some(ecdsa_signature_fee) = self.ecdsa_signature_fee {
+            cycles_account_manager_builder =
+                cycles_account_manager_builder.with_ecdsa_signature_fee(ecdsa_signature_fee);
+        }
+        let cycles_account_manager = Arc::new(cycles_account_manager_builder.build());
 
         let hypervisor = Hypervisor::new(
             Config::default(),

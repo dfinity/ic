@@ -386,6 +386,10 @@ fn get_test_suites() -> HashMap<String, Suite> {
                             "test_threshold_ecdsa_signature_from_other_subnet",
                             tecdsa_signature_test::test_threshold_ecdsa_signature_from_other_subnet,
                         ),
+                        t(
+                            "test_threshold_ecdsa_signature_fails_without_cycles",
+                            tecdsa_signature_test::test_threshold_ecdsa_signature_fails_without_cycles,
+                        ),
                     ]),
                 ),
             ],

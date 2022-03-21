@@ -355,7 +355,10 @@ pub fn generate_responses_to_sign_with_ecdsa_calls(
                 originator: context.request.sender,
                 respondent: CanisterId::ic_00(),
                 originator_reply_callback: *callback_id,
-                refund: Cycles::zero(),
+                // Execution is responsible for burning the appropriate cycles
+                // before pushing the new context, so any remaining cycles can
+                // be refunded to the canister.
+                refund: context.request.payment,
                 response_payload: messages::Payload::Data(
                     SignWithECDSAReply {
                         signature: response.signature,
