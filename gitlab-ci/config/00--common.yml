@@ -42,55 +42,76 @@ variables:
     elasticsearch-node-0.testnet.dfinity.systems:443,
     elasticsearch-node-1.testnet.dfinity.systems:443,
     elasticsearch-node-2.testnet.dfinity.systems:443
+  # # Once the verified runners are updated to have
+  # #   [runners.custom_build_dir]
+  # #      enabled = true
+  # # these variables should be enabled
+  # GIT_CLONE_PATH: "/builds/dfinity/ic"
+  # CI_BUILDS_DIR: "/builds/dfinity"
+  # CI_PROJECT_DIR: "/builds/dfinity/ic"
+  # CI_PROJECT_PATH: "dfinity/ic"
+  # CI_DEBUG_TRACE: "true"  # Make the GitLab CI runner execution verbose
   CI_PRE_CLONE_SCRIPT: |
-    # This script caches the git repo on the host.
-
+    # This script prepares the docker container for running the job
+    # The most important thing done here is pre-seeding the repo in the $CI_PROJECT_DIR so that
+    # the docker gitlab runner doesn't have to re-clone the repo for every job
+    # Example of the (official gitlab) CI_PRE_CLONE_SCRIPT:
+    # https://docs.gitlab.com/ee/development/pipelines.html#pre-clone-step
     # MacOS note: the gitlab runner will ignore this var on MacOS since config does not have
     # pre_clone_script set in the runner config
 
     echo -e "\e[0Ksection_start:$(date +%s):pre_clone_script[collapsed=true]\r\e[0KClick here to see the pre_clone_script"
     set -eExuo pipefail
 
-    GIT_CACHE_PATH="/cache/git-v2/@{CI_PROJECT_PATH}/@{CI_CONCURRENT_ID}"
-    mkdir -p "@{GIT_CACHE_PATH}"
+    # Fail the git clone/pull if too slow
+    export GIT_HTTP_LOW_SPEED_LIMIT=10000 GIT_HTTP_LOW_SPEED_TIME=10 GIT_SSH_COMMAND='timeout 300 ssh -T'
 
-    # Step 1. Seed the repo if it doesn't exit
-    if [ -z "@(ls -A @{GIT_CACHE_PATH})" ]; then
-      pushd "@{GIT_CACHE_PATH}"
-      echo "Cloning fresh git repository"
-      time git clone "@{CI_REPOSITORY_URL}" .
-      popd
-    fi
-
-    # Step 2. Fetch the commit sha into the cache.
-    pushd "@{GIT_CACHE_PATH}"
-    # CI_REPOSITORY_URL contains the CI_JOB_TOKEN.
-    # The cached one will have come from a previous job, and thus its token
-    # is invalid. So just update the token.
-    git remote set-url origin "@{CI_REPOSITORY_URL}"
-
-    # Fetch the target commit sha into the cache.
-    # If this fails, for example if the repo has become corrupted, then wipe
-    # the cache and perform a fresh clone.
-    if ! time git fetch origin "@{CI_COMMIT_SHA}"; then
-      echo "Git fetch into local cached failed. Making a clean git clone"
-      find "@{GIT_CACHE_PATH}" -mindepth 1 -delete
-      time git clone "@{CI_REPOSITORY_URL}" .
-    fi
-    popd
-
-    # Step 3. Clone a fresh working repo from the cache.
- 
-    # This directory should not exist unless something changed on GitLab,
-    # or someone has bind mounted it from the runner. To be safe just delete it.
-    rm -fr "@{CI_PROJECT_DIR}"
+    # WARNING: We use @ instead of $ because GitLab has some issues with variable expansion and sometimes eats $VAR
+    # WARNING: The @ signs will be replaced with $ before executing the script
+    rm -rf "@{CI_PROJECT_DIR}"
     mkdir -p "@{CI_PROJECT_DIR}"
+    chown 1000:1000 -R "@{CI_PROJECT_DIR}"
+    if [[ -d "/cache/git/@{CI_PROJECT_PATH}/@CI_CONCURRENT_ID" ]]; then
+      # Concurrent jobs are separated into different git repo cache folders
+      echo "Copying the git repo from /cache/git/@{CI_PROJECT_PATH}/@{CI_CONCURRENT_ID} to @{CI_PROJECT_DIR}"
+      /usr/bin/time cp -a "/cache/git/@{CI_PROJECT_PATH}/@CI_CONCURRENT_ID" "@{CI_PROJECT_DIR}"/.git
 
-    pushd "@{CI_PROJECT_DIR}"
-    time git clone "@{GIT_CACHE_PATH}" .
-    git checkout "@{CI_COMMIT_SHA}"
-    git remote set-url origin "@{CI_REPOSITORY_URL}"
-    popd
+      if [[ -n "@{GIT_CLONE_PATH:-}" && "@{GIT_CLONE_PATH:-}" != "@{CI_PROJECT_DIR}" ]]; then
+        # @GIT_CLONE_PATH is set to a value different from @{CI_PROJECT_DIR}
+        # In general the two should be the same so this code path should never be exercised
+        rm -rf "@GIT_CLONE_PATH"
+        mkdir -p "@GIT_CLONE_PATH"
+        chown 1000:1000 -R "@GIT_CLONE_PATH"
+        /usr/bin/time cp -a "/cache/git/@{CI_PROJECT_PATH}/@CI_CONCURRENT_ID" "@GIT_CLONE_PATH"/.git
+      fi
+
+      # Ensure the git repo is clean and up to date with the upstream
+      cd "@{CI_PROJECT_DIR}"
+      # Disable all background git operations
+      git config gc.auto 0
+      git config gc.autodetach false
+      # Ensure that there are not background git operations running and remove all lock files if they exist
+      if ! {
+        set -e
+        pkill git || true
+        find .git -name '*.lock' -delete
+        # Delete all branches for which a reference (sha) does not exist
+        set +x
+        git for-each-ref --format="%(refname)" | while read ref; do
+          git show-ref --quiet --verify @ref 2>/dev/null || git update-ref -d @ref
+        done
+        set -x
+        if ! git remote add origin "@{CI_REPOSITORY_URL}"; then
+          git remote set-url origin "@{CI_REPOSITORY_URL}"
+        fi
+        git fetch --prune --prune-tags
+        # Run a GC on the repo
+        git gc --prune=now --force
+        git reflog expire --expire=0 --all
+      }; then
+        rm -rf .git
+      fi
+    fi
 
 before_script:
   - |
@@ -116,10 +137,23 @@ before_script:
 
     export ROOT_PIPELINE_ID=${PARENT_PIPELINE_ID:-$CI_PIPELINE_ID}
 
-    if [ "${CI_DISPOSABLE_ENVIRONMENT:-false}" != "true" ]; then
+    if [ "${CI_DISPOSABLE_ENVIRONMENT:-false}" = "true" ]; then
+      # Linux + docker builds
+
+      sudo chown ubuntu:ubuntu -R "${CI_PROJECT_DIR}"
+      sudo find "${CI_PROJECT_DIR}" -type d -exec chmod 0755 '{}' \;
+      # Update the git repo cache at /cache/git/${CI_PROJECT_PATH}/$CI_CONCURRENT_ID
+      mkdir -p "/cache/git/${CI_PROJECT_PATH}/$CI_CONCURRENT_ID/"
+      /usr/bin/time rsync -a --force --delete "$CI_PROJECT_DIR"/.git/ "/cache/git/${CI_PROJECT_PATH}/$CI_CONCURRENT_ID/"
+    else
       # MacOS + shell builds
       export CARGO_TARGET_DIR="$CI_PROJECT_DIR/target"
     fi
+
+    cd "${CI_PROJECT_DIR}"
+    # Ensure file permissions in the repo are what git expects them to be
+    git config core.fileMode true
+    git reset --hard HEAD
 
     # Make sure Capsule writes to the correct Honeycomb dataset.
     CAPSULE_ID="$(echo "${CI_JOB_NAME}" | tr ' ' '-')"
