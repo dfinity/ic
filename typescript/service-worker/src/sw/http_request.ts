@@ -17,7 +17,7 @@ const hostnameCanisterIdMap: Record<string, [string, string]> = {
   'personhood.ic0.app': ['g3wsl-eqaaa-aaaan-aaaaa-cai', 'ic0.app'],
 };
 
-const shouldFetchRootKey: boolean = !!process.env.FORCE_FETCH_ROOT_KEY || false;
+const shouldFetchRootKey: boolean = ["1", "true"].includes(process.env.FORCE_FETCH_ROOT_KEY);
 
 const swLocation = new URL(self.location.toString());
 const [_swCanisterId, swDomains] = (() => {
