@@ -18,8 +18,9 @@ use crate::convert::{
 };
 use crate::ledger_client::LedgerAccess;
 use crate::request_types::{
-    AddHotKey, Disburse, MergeMaturity, NeuronInfo, PublicKeyOrPrincipal, Request, RequestType,
-    SetDissolveTimestamp, Spawn, Stake, StartDissolve, StopDissolve, TransactionOperationResults,
+    AddHotKey, Disburse, MergeMaturity, NeuronInfo, PublicKeyOrPrincipal, RemoveHotKey, Request,
+    RequestType, SetDissolveTimestamp, Spawn, Stake, StartDissolve, StopDissolve,
+    TransactionOperationResults,
 };
 use crate::store::HashedBlock;
 use crate::time::Seconds;
@@ -642,7 +643,7 @@ impl RosettaRequestHandler {
                 RequestType::AddHotKey { neuron_index } => {
                     let manage: ManageNeuron = candid::decode_one(arg.0.as_ref()).map_err(|e| {
                         ApiError::internal_error(format!(
-                            "Could not decode Stop Dissolve argument: {}",
+                            "Could not decode ManageNeuron argument: {}",
                             e
                         ))
                     })?;
@@ -666,7 +667,33 @@ impl RosettaRequestHandler {
                         ));
                     };
                 }
-
+                RequestType::RemoveHotKey { neuron_index } => {
+                    let manage: ManageNeuron = candid::decode_one(arg.0.as_ref()).map_err(|e| {
+                        ApiError::internal_error(format!(
+                            "Could not decode ManageNeuron argument: {}",
+                            e
+                        ))
+                    })?;
+                    if let Some(Command::Configure(manage_neuron::Configure {
+                        operation:
+                            Some(manage_neuron::configure::Operation::RemoveHotKey(
+                                manage_neuron::RemoveHotKey {
+                                    hot_key_to_remove: Some(pid),
+                                },
+                            )),
+                    })) = manage.command
+                    {
+                        requests.push(Request::RemoveHotKey(RemoveHotKey {
+                            account: from,
+                            neuron_index,
+                            key: PublicKeyOrPrincipal::Principal(pid),
+                        }));
+                    } else {
+                        return Err(ApiError::internal_error(
+                            "Incompatible manage_neuron command".to_string(),
+                        ));
+                    };
+                }
                 RequestType::Spawn { neuron_index } => {
                     let manage: ManageNeuron = candid::decode_one(arg.0.as_ref()).map_err(|e| {
                         ApiError::internal_error(format!(
@@ -1154,9 +1181,33 @@ impl RosettaRequestHandler {
                             },
                         )),
                     });
-
                     add_neuron_management_payload(
                         RequestType::AddHotKey { neuron_index },
+                        account,
+                        neuron_index,
+                        command,
+                        &mut payloads,
+                        &mut updates,
+                    )?;
+                }
+                Request::RemoveHotKey(RemoveHotKey {
+                    account,
+                    key,
+                    neuron_index,
+                }) => {
+                    let pid = match key {
+                        PublicKeyOrPrincipal::Principal(p) => p,
+                        PublicKeyOrPrincipal::PublicKey(pk) => principal_id_from_public_key(&pk)?,
+                    };
+                    let command = Command::Configure(manage_neuron::Configure {
+                        operation: Some(configure::Operation::RemoveHotKey(
+                            manage_neuron::RemoveHotKey {
+                                hot_key_to_remove: Some(pid),
+                            },
+                        )),
+                    });
+                    add_neuron_management_payload(
+                        RequestType::RemoveHotKey { neuron_index },
                         account,
                         neuron_index,
                         command,
@@ -1272,6 +1323,7 @@ impl RosettaRequestHandler {
                     | Request::StopDissolve(StopDissolve { account, .. })
                     | Request::Disburse(Disburse { account, .. })
                     | Request::AddHotKey(AddHotKey { account, .. })
+                    | Request::RemoveHotKey(RemoveHotKey { account, .. })
                     | Request::Spawn(Spawn { account, .. })
                     | Request::MergeMaturity(MergeMaturity { account, .. })
                     | Request::NeuronInfo(NeuronInfo { account, .. }) => Ok(account),

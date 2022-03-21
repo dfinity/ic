@@ -33,6 +33,7 @@ pub const SET_DISSOLVE_TIMESTAMP: &str = "SET_DISSOLVE_TIMESTAMP";
 pub const DISBURSE: &str = "DISBURSE";
 pub const DISSOLVE_TIME_UTC_SECONDS: &str = "dissolve_time_utc_seconds";
 pub const ADD_HOT_KEY: &str = "ADD_HOT_KEY";
+pub const REMOVE_HOTKEY: &str = "REMOVE_HOTKEY";
 pub const SPAWN: &str = "SPAWN";
 pub const MERGE_MATURITY: &str = "MERGE_MATURITY";
 pub const NEURON_INFO: &str = "NEURON_INFO";
@@ -64,6 +65,9 @@ pub enum RequestType {
     #[serde(rename = "ADD_HOT_KEY")]
     #[serde(alias = "AddHotKey")]
     AddHotKey { neuron_index: u64 },
+    #[serde(rename = "REMOVE_HOTKEY")]
+    #[serde(alias = "RemoveHotKey")]
+    RemoveHotKey { neuron_index: u64 },
     #[serde(rename = "SPAWN")]
     #[serde(alias = "Spawn")]
     Spawn { neuron_index: u64 },
@@ -88,6 +92,7 @@ impl RequestType {
             RequestType::StopDissolve { .. } => STOP_DISSOLVE,
             RequestType::Disburse { .. } => DISBURSE,
             RequestType::AddHotKey { .. } => ADD_HOT_KEY,
+            RequestType::RemoveHotKey { .. } => REMOVE_HOTKEY,
             RequestType::Spawn { .. } => SPAWN,
             RequestType::MergeMaturity { .. } => MERGE_MATURITY,
             RequestType::NeuronInfo { .. } => NEURON_INFO,
@@ -107,6 +112,7 @@ impl RequestType {
                 | RequestType::StopDissolve { .. }
                 | RequestType::Disburse { .. }
                 | RequestType::AddHotKey { .. }
+                | RequestType::RemoveHotKey { .. }
                 | RequestType::Spawn { .. }
                 | RequestType::MergeMaturity { .. }
                 | RequestType::NeuronInfo { .. }
@@ -412,6 +418,8 @@ pub enum Request {
     Disburse(Disburse),
     #[serde(rename = "ADD_HOT_KEY")]
     AddHotKey(AddHotKey),
+    #[serde(rename = "REMOVE_HOTKEY")]
+    RemoveHotKey(RemoveHotKey),
     #[serde(rename = "SPAWN")]
     Spawn(Spawn),
     #[serde(rename = "MERGE_MATURITY")]
@@ -447,6 +455,11 @@ impl Request {
             Request::AddHotKey(AddHotKey { neuron_index, .. }) => Ok(RequestType::AddHotKey {
                 neuron_index: *neuron_index,
             }),
+            Request::RemoveHotKey(RemoveHotKey { neuron_index, .. }) => {
+                Ok(RequestType::RemoveHotKey {
+                    neuron_index: *neuron_index,
+                })
+            }
             Request::Transfer(LedgerOperation::Transfer { .. }) => Ok(RequestType::Send),
             Request::Transfer(LedgerOperation::Burn { .. }) => Err(ApiError::invalid_request(
                 "Burn operations are not supported through rosetta",
@@ -491,6 +504,7 @@ impl Request {
                 Request::StopDissolve(o) => builder.stop_dissolve(o),
                 Request::Disburse(o) => builder.disburse(o, token_name),
                 Request::AddHotKey(o) => builder.add_hot_key(o),
+                Request::RemoveHotKey(o) => builder.remove_hotkey(o),
                 Request::Spawn(o) => builder.spawn(o),
                 Request::MergeMaturity(o) => builder.merge_maturity(o),
                 Request::NeuronInfo(o) => builder.neuron_info(o),
@@ -512,6 +526,7 @@ impl Request {
                 | Request::StopDissolve(_)
                 | Request::Disburse(_)
                 | Request::AddHotKey(_)
+                | Request::RemoveHotKey(_)
                 | Request::Spawn(_)
                 | Request::MergeMaturity(_)
                 | Request::NeuronInfo(_) // not neuron management but we need it signed.
@@ -642,6 +657,26 @@ impl TryFrom<&models::Request> for Request {
                     }))
                 } else {
                     Err(ApiError::invalid_request("Request is missing set hotkey."))
+                }
+            }
+            RequestType::RemoveHotKey { neuron_index } => {
+                if let Some(Command::Configure(Configure {
+                    operation:
+                        Some(configure::Operation::RemoveHotKey(manage_neuron::RemoveHotKey {
+                            hot_key_to_remove: Some(pid),
+                            ..
+                        })),
+                })) = manage_neuron()?
+                {
+                    Ok(Request::RemoveHotKey(RemoveHotKey {
+                        account,
+                        neuron_index: *neuron_index,
+                        key: PublicKeyOrPrincipal::Principal(pid),
+                    }))
+                } else {
+                    Err(ApiError::invalid_request(
+                        "Request is missing hotkey to remove.",
+                    ))
                 }
             }
             RequestType::Spawn { neuron_index } => {
@@ -815,6 +850,14 @@ pub struct Disburse {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 pub struct AddHotKey {
+    pub account: ledger_canister::AccountIdentifier,
+    #[serde(default)]
+    pub neuron_index: u64,
+    pub key: PublicKeyOrPrincipal,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+pub struct RemoveHotKey {
     pub account: ledger_canister::AccountIdentifier,
     #[serde(default)]
     pub neuron_index: u64,
@@ -1392,7 +1435,30 @@ impl TransactionBuilder {
             ),
         });
     }
-
+    pub fn remove_hotkey(&mut self, key: &RemoveHotKey) {
+        let RemoveHotKey {
+            account,
+            neuron_index,
+            key,
+        } = key;
+        let operation_identifier = self.allocate_op_id();
+        self.ops.push(Operation {
+            operation_identifier,
+            _type: OperationType::RemoveHotkey,
+            status: None,
+            account: Some(to_model_account_identifier(account)),
+            amount: None,
+            related_operations: None,
+            coin_change: None,
+            metadata: Some(
+                KeyMetadata {
+                    key: key.clone(),
+                    neuron_index: *neuron_index,
+                }
+                .into(),
+            ),
+        });
+    }
     pub fn spawn(&mut self, spawn: &Spawn) {
         let Spawn {
             account,

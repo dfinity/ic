@@ -1469,6 +1469,9 @@ pub enum OperationType {
     #[serde(rename = "ADD_HOTKEY")]
     #[strum(serialize = "ADD_HOTKEY")]
     AddHotkey,
+    #[serde(rename = "REMOVE_HOTKEY")]
+    #[strum(serialize = "REMOVE_HOTKEY")]
+    RemoveHotkey,
     #[serde(rename = "SPAWN")]
     #[strum(serialize = "SPAWN")]
     Spawn,

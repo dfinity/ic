@@ -5,10 +5,10 @@ use crate::models::{
 };
 use crate::request_types::{
     AddHotKey, Disburse, DisburseMetadata, KeyMetadata, MergeMaturity, MergeMaturityMetadata,
-    NeuronIdentifierMetadata, NeuronInfo, NeuronInfoMetadata, PublicKeyOrPrincipal, Request,
-    RequestResult, RequestResultMetadata, SetDissolveTimestamp, SetDissolveTimestampMetadata,
-    Spawn, SpawnMetadata, Stake, StartDissolve, Status, StopDissolve, TransactionOperationResults,
-    TransactionResults, STATUS_COMPLETED,
+    NeuronIdentifierMetadata, NeuronInfo, NeuronInfoMetadata, PublicKeyOrPrincipal, RemoveHotKey,
+    Request, RequestResult, RequestResultMetadata, SetDissolveTimestamp,
+    SetDissolveTimestampMetadata, Spawn, SpawnMetadata, Stake, StartDissolve, Status, StopDissolve,
+    TransactionOperationResults, TransactionResults, STATUS_COMPLETED,
 };
 use crate::store::HashedBlock;
 use crate::time::Seconds;
@@ -206,12 +206,10 @@ impl State {
         neuron_index: u64,
     ) -> Result<(), ApiError> {
         self.flush()?;
-
         self.actions.push(Request::StartDissolve(StartDissolve {
             account,
             neuron_index,
         }));
-
         Ok(())
     }
 
@@ -221,14 +219,13 @@ impl State {
         neuron_index: u64,
     ) -> Result<(), ApiError> {
         self.flush()?;
-
         self.actions.push(Request::StopDissolve(StopDissolve {
             account,
             neuron_index,
         }));
-
         Ok(())
     }
+
     fn add_hot_key(
         &mut self,
         account: ledger_canister::AccountIdentifier,
@@ -236,13 +233,26 @@ impl State {
         key: PublicKeyOrPrincipal,
     ) -> Result<(), ApiError> {
         self.flush()?;
-
         self.actions.push(Request::AddHotKey(AddHotKey {
             account,
             neuron_index,
             key,
         }));
+        Ok(())
+    }
 
+    fn remove_hotkey(
+        &mut self,
+        account: ledger_canister::AccountIdentifier,
+        neuron_index: u64,
+        key: PublicKeyOrPrincipal,
+    ) -> Result<(), ApiError> {
+        self.flush()?;
+        self.actions.push(Request::RemoveHotKey(RemoveHotKey {
+            account,
+            neuron_index,
+            key,
+        }));
         Ok(())
     }
 
@@ -254,14 +264,12 @@ impl State {
         recipient: Option<ledger_canister::AccountIdentifier>,
     ) -> Result<(), ApiError> {
         self.flush()?;
-
         self.actions.push(Request::Disburse(Disburse {
             account,
             amount,
             recipient,
             neuron_index,
         }));
-
         Ok(())
     }
 
@@ -425,6 +433,11 @@ pub fn from_operations(
                 let KeyMetadata { key, neuron_index } = o.metadata.clone().try_into()?;
                 validate_neuron_management_op()?;
                 state.add_hot_key(account, neuron_index, key)?;
+            }
+            OperationType::RemoveHotkey => {
+                let KeyMetadata { key, neuron_index } = o.metadata.clone().try_into()?;
+                validate_neuron_management_op()?;
+                state.remove_hotkey(account, neuron_index, key)?;
             }
             OperationType::Disburse => {
                 let DisburseMetadata {
