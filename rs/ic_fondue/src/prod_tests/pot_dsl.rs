@@ -1,15 +1,24 @@
 use std::fmt::Display;
 use std::panic::{catch_unwind, UnwindSafe};
 
+use serde::{Deserialize, Serialize};
+use slog::Logger;
+
 use crate::ic_manager::IcHandle;
-use crate::pot::FondueTestFn;
+use crate::pot::{Context, FondueTestFn};
 use crate::prod_tests::ic::InternetComputer;
 use crate::prod_tests::test_env::TestEnv;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use super::driver_setup::tee_logger;
+use super::test_setup::IcHandleConstructor;
+
 pub trait PotSetupFn: FnOnce(TestEnv) + UnwindSafe + Send + Sync + 'static {}
 impl<T: FnOnce(TestEnv) + UnwindSafe + Send + Sync + 'static> PotSetupFn for T {}
+
+pub trait SysTestFn: FnOnce(TestEnv, Logger) + UnwindSafe + Send + Sync + 'static {}
+impl<T: FnOnce(TestEnv, Logger) + UnwindSafe + Send + Sync + 'static> SysTestFn for T {}
 
 pub fn suite(name: &str, pots: Vec<Pot>) -> Suite {
     let name = name.to_string();
@@ -54,6 +63,25 @@ pub fn par(tests: Vec<Test>) -> TestSet {
 pub fn t<F>(name: &str, test: F) -> Test
 where
     F: FondueTestFn<IcHandle>,
+{
+    Test {
+        name: name.to_string(),
+        execution_mode: ExecutionMode::Run,
+        f: Box::new(|test_env: TestEnv, log: Logger| {
+            // Todo instantiate from test env
+            let rng = rand_core::SeedableRng::seed_from_u64(42);
+            let test_ctx = Context::new(rng, tee_logger(&test_env, log));
+            let ic_handle = test_env
+                .ic_handle()
+                .expect("Could not create ic handle from test env");
+            (test)(ic_handle, &test_ctx);
+        }),
+    }
+}
+
+pub fn sys_t<F>(name: &str, test: F) -> Test
+where
+    F: SysTestFn,
 {
     Test {
         name: name.to_string(),
@@ -124,7 +152,7 @@ pub enum TestSet {
 pub struct Test {
     pub name: String,
     pub execution_mode: ExecutionMode,
-    pub f: Box<dyn FondueTestFn<IcHandle>>,
+    pub f: Box<dyn SysTestFn>,
 }
 
 pub struct Suite {
@@ -139,7 +167,7 @@ pub enum ExecutionMode {
     Ignore,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct TestPath(Vec<String>);
 
 impl Display for TestPath {

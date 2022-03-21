@@ -66,7 +66,7 @@ impl IcHandleConstructor for TestEnv {
             public_api_endpoints,
             malicious_public_api_endpoints: vec![],
             ic_prep_working_dir: Some(IcPrepStateDir {
-                prep_dir: self.get_path(""),
+                prep_dir: self.base_dir(),
             }),
         })
     }

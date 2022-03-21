@@ -32,6 +32,7 @@ input = [
         "artifacts/release/ic-consensus-pool-util.gz",
         "artifacts/release/ic-crypto-csp.gz",
         "artifacts/release/ic-regedit.gz",
+        "artifacts/release/prod-test-driver.gz",
         # Canisters
         "artifacts/canisters/counter.wat.gz",
         "artifacts/canisters/cow_safety.wasm.gz",
