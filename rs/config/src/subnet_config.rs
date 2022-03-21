@@ -75,6 +75,12 @@ pub const MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS: f64 = 5.0;
 //    If you change this number please adjust other constants as well.
 const NUMBER_OF_EXECUTION_THREADS: usize = 4;
 
+/// Initial estimate of the an ECDSA signature fee is set to the maximum number
+/// of instructions in a round because it will take at least one round to
+/// generate the signature.
+/// TODO(EXC-1004): Change this value based on benchmarks.
+pub const ECDSA_SIGNATURE_FEE: Cycles = Cycles::new(7 * B as u128);
+
 /// The per subnet type configuration for the scheduler component
 #[derive(Clone)]
 pub struct SchedulerConfig {
@@ -255,6 +261,9 @@ pub struct CyclesAccountManagerConfig {
 
     /// How often to charge canisters for memory and compute allocations.
     pub duration_between_allocation_charges: Duration,
+
+    /// Amount to charge for an ECDSA signature.
+    pub ecdsa_signature_fee: Cycles,
 }
 
 impl CyclesAccountManagerConfig {
@@ -279,6 +288,7 @@ impl CyclesAccountManagerConfig {
             // 4 SDR per GiB per year => 4e12 Cycles per year
             gib_storage_per_second_fee: Cycles::new(127_000),
             duration_between_allocation_charges: Duration::from_secs(10),
+            ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
         }
     }
 
@@ -295,6 +305,12 @@ impl CyclesAccountManagerConfig {
             ingress_byte_reception_fee: Cycles::new(0),
             gib_storage_per_second_fee: Cycles::new(0),
             duration_between_allocation_charges: Duration::from_secs(10),
+            /// The ECDSA signature fee is the fee charged when creating a
+            /// signature on this subnet. The request likely came from a
+            /// different subnet which is not a system subnet. There is an
+            /// explicit exception for requests originating from the NNS when the
+            /// charging occurs.
+            ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
         }
     }
 }

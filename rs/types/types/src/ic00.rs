@@ -4,5 +4,5 @@ pub use ic_ic00_types::{
     CanisterStatusResultV2, ComputeInitialEcdsaDealingsArgs, CreateCanisterArgs, EmptyBlob,
     InstallCodeArgs, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs,
     ProvisionalTopUpCanisterArgs, SetControllerArgs, SetupInitialDKGArgs, SetupInitialDKGResponse,
-    UpdateSettingsArgs, IC_00,
+    SignWithECDSAArgs, UpdateSettingsArgs, IC_00,
 };

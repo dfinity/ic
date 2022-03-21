@@ -511,12 +511,13 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
 
             Ok(Ic00Method::SignWithECDSA) => match &msg {
                 RequestOrIngress::Request(request) => {
-                    let mut reject_message = String::new();
-                    if !state.metadata.own_subnet_features.ecdsa_signatures {
-                        reject_message = "This API is not enabled on this subnet".to_string();
+                    let reject_message = if !state.metadata.own_subnet_features.ecdsa_signatures {
+                        "This API is not enabled on this subnet".to_string()
                     } else if payload.is_empty() {
-                        reject_message = "An empty message cannot be signed".to_string();
-                    }
+                        "An empty message cannot be signed".to_string()
+                    } else {
+                        String::new()
+                    };
 
                     if !reject_message.is_empty() {
                         use ic_types::messages;
@@ -712,7 +713,8 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                 // responded to (which currently happens in the scheduler).
                 //
                 // This scenario also happens in the case of
-                // Ic00Method::SetupInitialDKG and Ic00Method::HttpRequest. The request is saved and the
+                // Ic00Method::SetupInitialDKG, Ic00Method::HttpRequest, and
+                // Ic00Method::SignWithECDSA. The request is saved and the
                 // response from consensus is handled separately.
                 (state, instructions_left)
             }
@@ -1923,7 +1925,7 @@ impl ExecutionEnvironmentImpl {
     #[allow(clippy::too_many_arguments)]
     fn sign_with_ecdsa(
         &self,
-        request: Request,
+        mut request: Request,
         message_hash: Vec<u8>,
         derivation_path: Vec<Vec<u8>>,
         key_id: &str,
@@ -1937,6 +1939,28 @@ impl ExecutionEnvironmentImpl {
             ));
         }
         verify_ecdsa_key_id(key_id)?;
+
+        // If the request isn't from the NNS, then we need to charge for it.
+        // Consensus will return any remaining cycles.
+        let source_subnet = state
+            .metadata
+            .network_topology
+            .routing_table
+            .route(request.sender.get());
+        if source_subnet != Some(state.metadata.network_topology.nns_subnet_id) {
+            let signature_fee = self.cycles_account_manager.ecdsa_signature_fee();
+            if request.payment < signature_fee {
+                return Err(UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    format!(
+                        "sign_with_ecdsa request sent with {} cycles, but {} cycles are required.",
+                        request.payment, signature_fee
+                    ),
+                ));
+            } else {
+                request.payment -= signature_fee;
+            }
+        }
 
         let mut pseudo_random_id = [0u8; 32];
         rng.fill_bytes(&mut pseudo_random_id);

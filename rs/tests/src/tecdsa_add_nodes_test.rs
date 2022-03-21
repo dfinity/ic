@@ -21,6 +21,7 @@ use crate::{
     tecdsa_signature_test::{get_public_key, get_signature, verify_signature},
     util::*,
 };
+use canister_test::Cycles;
 use ic_fondue::{
     ic_manager::IcHandle,
     prod_tests::ic::{InternetComputer, Subnet},
@@ -116,7 +117,9 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         let uni_can = UniversalCanister::from_canister_id(&agent, canister_id);
         let public_key_ = get_public_key(&uni_can, ctx).await;
         assert_eq!(public_key, public_key_);
-        let signature = get_signature(&message_hash, &uni_can, ctx).await;
+        let signature = get_signature(&message_hash, Cycles::zero(), &uni_can, ctx)
+            .await
+            .unwrap();
         verify_signature(&message_hash, &public_key, &signature);
     });
 }

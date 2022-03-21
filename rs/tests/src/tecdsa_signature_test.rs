@@ -17,6 +17,9 @@ end::catalog[] */
 use crate::util::*;
 use candid::Encode;
 use candid::Principal;
+use canister_test::Cycles;
+use ic_agent::AgentError;
+use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
 use ic_fondue::{
     ic_manager::IcHandle,
     prod_tests::ic::{InternetComputer, Subnet},
@@ -94,9 +97,10 @@ pub(crate) async fn get_public_key(
 
 pub(crate) async fn get_signature(
     message_hash: &[u8],
+    cycles: Cycles,
     uni_can: &UniversalCanister<'_>,
     ctx: &ic_fondue::pot::Context,
-) -> Signature {
+) -> Result<Signature, AgentError> {
     let signature_request = SignWithECDSAArgs {
         message_hash: message_hash.to_vec(),
         derivation_path: Vec::new(),
@@ -104,27 +108,21 @@ pub(crate) async fn get_signature(
     };
 
     // Ask for a signature.
-    let res = uni_can
-        .forward_to(
+    let reply = uni_can
+        .forward_with_cycles_to(
             &Principal::management_canister(),
             "sign_with_ecdsa",
             Encode!(&signature_request).unwrap(),
+            cycles,
         )
-        .await;
+        .await?;
 
-    let signature = match res {
-        Ok(reply) => {
-            SignWithECDSAReply::decode(&reply)
-                .expect("failed to decode SignWithECDSAReply")
-                .signature
-        }
-        Err(err) => {
-            panic!("sign_with_ecdsa returns error {:?}", err);
-        }
-    };
+    let signature = SignWithECDSAReply::decode(&reply)
+        .expect("failed to decode SignWithECDSAReply")
+        .signature;
     info!(ctx.logger, "sign_with_ecdsa returns {:?}", signature);
 
-    Signature::from_compact(&signature).expect("Response is not a valid signature")
+    Ok(Signature::from_compact(&signature).expect("Response is not a valid signature"))
 }
 
 pub(crate) fn verify_signature(message_hash: &[u8], public_key: &PublicKey, signature: &Signature) {
@@ -148,7 +146,10 @@ pub fn test_threshold_ecdsa_signature(handle: IcHandle, ctx: &ic_fondue::pot::Co
         let uni_can = UniversalCanister::new(&agent).await;
         let message_hash = [0xabu8; 32];
         let public_key = get_public_key(&uni_can, ctx).await;
-        let signature = get_signature(&message_hash, &uni_can, ctx).await;
+        // Send zero cycles because the NNS is excempt from paying for ECDSA signatures.
+        let signature = get_signature(&message_hash, Cycles::zero(), &uni_can, ctx)
+            .await
+            .unwrap();
         verify_signature(&message_hash, &public_key, &signature);
     });
 }
@@ -171,7 +172,47 @@ pub fn test_threshold_ecdsa_signature_from_other_subnet(
         let uni_can = UniversalCanister::new(&agent).await;
         let message_hash = [0xabu8; 32];
         let public_key = get_public_key(&uni_can, ctx).await;
-        let signature = get_signature(&message_hash, &uni_can, ctx).await;
+        let signature = get_signature(&message_hash, ECDSA_SIGNATURE_FEE, &uni_can, ctx)
+            .await
+            .unwrap();
         verify_signature(&message_hash, &public_key, &signature);
+    });
+}
+
+/// Tests whether a call to `sign_with_ecdsa` fails when not enough cycles are
+/// sent.
+pub fn test_threshold_ecdsa_signature_fails_without_cycles(
+    handle: IcHandle,
+    ctx: &ic_fondue::pot::Context,
+) {
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+    let mut rng = ctx.rng.clone();
+
+    rt.block_on(async move {
+        // The application subnet does not have ecdsa enabled.
+        let endpoint = get_random_application_node_endpoint(&handle, &mut rng);
+        endpoint.assert_ready(ctx).await;
+        let agent = assert_create_agent(endpoint.url.as_str()).await;
+        let uni_can = UniversalCanister::new(&agent).await;
+        let message_hash = [0xabu8; 32];
+        let error = get_signature(
+            &message_hash,
+            ECDSA_SIGNATURE_FEE - Cycles::from(1),
+            &uni_can,
+            ctx,
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(
+            error,
+            AgentError::ReplicaError {
+                reject_code: 4,
+                reject_message: format!(
+                    "sign_with_ecdsa request sent with {} cycles, but {} cycles are required.",
+                    ECDSA_SIGNATURE_FEE.get() - 1,
+                    ECDSA_SIGNATURE_FEE.get()
+                )
+            }
+        )
     });
 }

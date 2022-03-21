@@ -3382,3 +3382,123 @@ fn compute_initial_ecdsa_dealings_with_unknown_key() {
         )
     });
 }
+
+fn execute_ecdsa_signing(
+    sender: CanisterId,
+    ecdsa_signature_fee: Cycles,
+    payment: Cycles,
+    sender_is_nns: bool,
+    log: ReplicaLogger,
+) -> ReplicatedState {
+    let nns_subnet = subnet_test_id(2);
+    let sender_subnet = if sender_is_nns {
+        subnet_test_id(2)
+    } else {
+        subnet_test_id(1)
+    };
+    let (mut state, exec_env) = ExecutionEnvironmentBuilder::new()
+        .with_log(log)
+        .with_sender_subnet_id(sender_subnet)
+        .with_nns_subnet_id(nns_subnet)
+        .with_sender_canister(sender)
+        .with_ecdsa_signature_fee(ecdsa_signature_fee)
+        .build();
+
+    state.metadata.own_subnet_features.ecdsa_signatures = true;
+
+    let request_payload = ic00::SignWithECDSAArgs {
+        message_hash: [1; 32].to_vec(),
+        derivation_path: vec![],
+        key_id: "secp256k1".to_string(),
+    };
+    state
+        .subnet_queues_mut()
+        .push_input(
+            QUEUE_INDEX_NONE,
+            RequestOrResponse::Request(
+                RequestBuilder::new()
+                    .sender(sender)
+                    //.receiver(receiver)
+                    .method_name(Method::SignWithECDSA)
+                    .method_payload(Encode!(&request_payload).unwrap())
+                    .payment(payment)
+                    .build(),
+            ),
+            InputQueueType::RemoteSubnet,
+        )
+        .unwrap();
+
+    exec_env
+        .execute_subnet_message(
+            state.subnet_queues_mut().pop_input().unwrap(),
+            state,
+            MAX_NUM_INSTRUCTIONS,
+            &mut mock_random_number_generator(),
+            &None,
+            &ProvisionalWhitelist::Set(BTreeSet::new()),
+            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+            MAX_NUMBER_OF_CANISTERS,
+        )
+        .0
+}
+
+#[test]
+fn ecdsa_signature_fee_charged() {
+    with_test_replica_logger(|log| {
+        let fee = Cycles::from(1_000_000u64);
+        let payment = Cycles::from(2_000_000u64);
+        let sender = canister_test_id(1);
+        let mut state = execute_ecdsa_signing(sender, fee, payment, false, log);
+
+        assert_eq!(state.subnet_queues_mut().pop_canister_output(&sender), None);
+        let (_, context) = state
+            .metadata
+            .subnet_call_context_manager
+            .sign_with_ecdsa_contexts
+            .iter()
+            .next()
+            .unwrap();
+        assert_eq!(context.request.payment, payment - fee)
+    });
+}
+
+#[test]
+fn ecdsa_signature_rejected_without_fee() {
+    with_test_replica_logger(|log| {
+        let fee = Cycles::from(2_000_000u64);
+        let payment = fee - Cycles::from(1);
+        let sender = canister_test_id(1);
+        let mut state = execute_ecdsa_signing(sender, fee, payment, false, log);
+
+        let (_refund, response) = state
+            .subnet_queues_mut()
+            .pop_canister_output(&sender)
+            .unwrap();
+
+        assert_eq!(
+            get_reject_message(response),
+            "sign_with_ecdsa request sent with 1999999 cycles, but 2000000 cycles are required."
+                .to_string()
+        )
+    });
+}
+
+#[test]
+fn ecdsa_signature_fee_ignored_for_nns() {
+    with_test_replica_logger(|log| {
+        let fee = Cycles::from(1_000_000u64);
+        let payment = Cycles::zero();
+        let sender = canister_test_id(1);
+        let mut state = execute_ecdsa_signing(sender, fee, payment, true, log);
+
+        assert_eq!(state.subnet_queues_mut().pop_canister_output(&sender), None);
+        let (_, context) = state
+            .metadata
+            .subnet_call_context_manager
+            .sign_with_ecdsa_contexts
+            .iter()
+            .next()
+            .unwrap();
+        assert_eq!(context.request.payment, payment)
+    });
+}
