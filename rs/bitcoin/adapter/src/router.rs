@@ -10,6 +10,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::{
     sync::Mutex,
+    task::JoinHandle,
     time::{sleep, timeout},
 };
 
@@ -24,7 +25,7 @@ pub fn start_router(
     blockchain_manager: Arc<Mutex<BlockchainManager>>,
     transaction_manager: Arc<Mutex<TransactionManager>>,
     adapter_state: AdapterState,
-) {
+) -> JoinHandle<()> {
     let mut connection_manager = ConnectionManager::new(config, logger);
 
     tokio::task::spawn(async move {
@@ -76,5 +77,5 @@ pub fn start_router(
                 .await
                 .tick(&mut connection_manager);
         }
-    });
+    })
 }
