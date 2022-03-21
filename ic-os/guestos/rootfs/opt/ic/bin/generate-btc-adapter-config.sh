@@ -29,7 +29,14 @@ if [ "${OUT_FILE}" == "" ]; then
 fi
 
 echo '{
-    "network": "bitcoin"
+    "network": "testnet",
+    "dns_seeds": [
+        "testnet-seed.bitcoin.jonasschnelli.ch",
+        "seed.tbtc.petertodd.org",
+        "seed.testnet.bitcoin.sprovoost.nl",
+        "testnet-seed.bluematt.me"
+    ],
+    "ipv6_only": true
 }' >$OUT_FILE
 
 # umask for service is set to be restricted, but this file needs to be

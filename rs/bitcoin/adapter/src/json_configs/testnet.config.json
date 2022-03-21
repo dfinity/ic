@@ -8,5 +8,6 @@
     ],
     "incoming_source": {
         "Path": "/tmp/ic-btc-adapter.socket"
-    }
+    },
+    "ipv6_only": true
 }
