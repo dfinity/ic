@@ -4,7 +4,7 @@ use bitcoin::{
 use ic_btc_canister::{state::State, store};
 use ic_btc_types::{
     GetBalanceError, GetBalanceRequest, GetUtxosError, GetUtxosRequest, GetUtxosResponse, OutPoint,
-    SendTransactionError, SendTransactionRequest, Utxo,
+    SendTransactionError, SendTransactionRequest, Utxo, UtxosFilter,
 };
 use ic_protobuf::bitcoin::v1::{GetSuccessorsRequest, GetSuccessorsResponse};
 use prost::Message;
@@ -28,25 +28,21 @@ pub fn get_utxos(
     state: &State,
     request: GetUtxosRequest,
 ) -> Result<GetUtxosResponse, GetUtxosError> {
-    let min_confirmations = request.min_confirmations.unwrap_or(0);
-
-    let utxos: Vec<Utxo> = store::get_utxos(state, &request.address, min_confirmations)?
-        .into_iter()
-        .map(|(outpoint, txout, height)| Utxo {
-            outpoint: OutPoint {
-                txid: outpoint.txid.to_vec(),
-                vout: outpoint.vout,
-            },
-            value: txout.value,
-            height,
-            confirmations: store::main_chain_height(state) - height + 1,
-        })
-        .collect();
-
-    Ok(GetUtxosResponse {
-        total_count: utxos.len() as u32,
-        utxos,
-    })
+    match request.filter {
+        None => {
+            // No filter is specified. Return all UTXOs for the address.
+            store::get_utxos(state, &request.address, 0)
+        }
+        Some(UtxosFilter::MinConfirmations(min_confirmations)) => {
+            // Return UTXOs with the requested number of confirmations.
+            store::get_utxos(state, &request.address, min_confirmations)
+        }
+        Some(UtxosFilter::Pagination { .. }) => {
+            // It's safe to use `todo!` here as this code isn't yet hooked up the rest of the
+            // replica.
+            todo!("EXC-1009")
+        }
+    }
 }
 
 pub fn send_transaction(request: SendTransactionRequest) -> Result<(), SendTransactionError> {
@@ -163,7 +159,7 @@ mod test {
                     &state,
                     GetUtxosRequest {
                         address: address.to_string(),
-                        min_confirmations: None
+                        filter: None
                     },
                 ),
                 Ok(GetUtxosResponse {
@@ -174,7 +170,6 @@ mod test {
                         },
                         value: 1000,
                         height: 1,
-                        confirmations: 1
                     }],
                     total_count: 1
                 })
@@ -203,7 +198,7 @@ mod test {
                 &default_state(),
                 GetUtxosRequest {
                     address: String::from("not an address"),
-                    min_confirmations: None
+                    filter: None
                 },
             ),
             Err(GetUtxosError::MalformedAddress)
@@ -378,7 +373,7 @@ mod test {
                         &state,
                         GetUtxosRequest {
                             address: address_2.to_string(),
-                            min_confirmations: *min_confirmations
+                            filter: min_confirmations.map(UtxosFilter::MinConfirmations),
                         },
                     ),
                     Ok(GetUtxosResponse {
@@ -389,7 +384,6 @@ mod test {
                             },
                             value: 1000,
                             height: 2,
-                            confirmations: 1,
                         }],
                         total_count: 1
                     })
@@ -400,7 +394,7 @@ mod test {
                         &state,
                         GetUtxosRequest {
                             address: address_1.to_string(),
-                            min_confirmations: *min_confirmations
+                            filter: min_confirmations.map(UtxosFilter::MinConfirmations),
                         },
                     ),
                     Ok(GetUtxosResponse {
@@ -417,7 +411,7 @@ mod test {
                     &state,
                     GetUtxosRequest {
                         address: address_2.to_string(),
-                        min_confirmations: Some(2)
+                        filter: Some(UtxosFilter::MinConfirmations(2))
                     },
                 ),
                 Ok(GetUtxosResponse {
@@ -430,7 +424,7 @@ mod test {
                     &state,
                     GetUtxosRequest {
                         address: address_1.to_string(),
-                        min_confirmations: Some(2)
+                        filter: Some(UtxosFilter::MinConfirmations(2))
                     },
                 ),
                 Ok(GetUtxosResponse {
@@ -441,7 +435,6 @@ mod test {
                         },
                         value: 1000,
                         height: 1,
-                        confirmations: 2,
                     }],
                     total_count: 1
                 })
@@ -455,7 +448,7 @@ mod test {
                         &state,
                         GetUtxosRequest {
                             address: address_2.to_string(),
-                            min_confirmations: Some(i)
+                            filter: Some(UtxosFilter::MinConfirmations(i))
                         },
                     ),
                     Err(GetUtxosError::MinConfirmationsTooLarge { given: i, max: 2 })
@@ -465,7 +458,7 @@ mod test {
                         &state,
                         GetUtxosRequest {
                             address: address_1.to_string(),
-                            min_confirmations: Some(i)
+                            filter: Some(UtxosFilter::MinConfirmations(i))
                         },
                     ),
                     Err(GetUtxosError::MinConfirmationsTooLarge { given: i, max: 2 })

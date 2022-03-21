@@ -3,10 +3,9 @@ use crate::{
     state::{Height, State},
     unstable_blocks, utxoset,
 };
-use bitcoin::{Address, Block, OutPoint, TxOut, Txid};
-use ic_btc_types::{GetBalanceError, GetUtxosError, Satoshi};
+use bitcoin::{Address, Block, Txid};
+use ic_btc_types::{GetBalanceError, GetUtxosError, GetUtxosResponse, OutPoint, Satoshi, Utxo};
 use lazy_static::lazy_static;
-use std::collections::HashSet;
 use std::str::FromStr;
 
 lazy_static! {
@@ -22,16 +21,12 @@ pub fn get_balance(
     address: &str,
     min_confirmations: u32,
 ) -> Result<Satoshi, GetBalanceError> {
-    if Address::from_str(address).is_err() {
-        return Err(GetBalanceError::MalformedAddress);
-    }
-
     // NOTE: It is safe to sum up the balances here without the risk of overflow.
     // The maximum number of bitcoins is 2.1 * 10^7, which is 2.1* 10^15 satoshis.
     // That is well below the max value of a `u64`.
     let mut balance = 0;
-    for (_, output, _) in get_utxos(state, address, min_confirmations)? {
-        balance += output.value;
+    for utxo in get_utxos(state, address, min_confirmations)?.utxos {
+        balance += utxo.value;
     }
 
     Ok(balance)
@@ -43,7 +38,7 @@ pub fn get_utxos(
     state: &State,
     address: &str,
     min_confirmations: u32,
-) -> Result<HashSet<(OutPoint, TxOut, Height)>, GetUtxosError> {
+) -> Result<GetUtxosResponse, GetUtxosError> {
     if Address::from_str(address).is_err() {
         return Err(GetUtxosError::MalformedAddress);
     }
@@ -75,10 +70,23 @@ pub fn get_utxos(
     }
 
     // Filter out UTXOs added in unstable blocks that are not for the given address.
-    Ok(utxoset::get_utxos(&address_utxos, address)
-        .into_set()
+    let utxos: Vec<Utxo> = utxoset::get_utxos(&address_utxos, address)
+        .utxos
         .into_iter()
-        .collect())
+        .map(|(outpoint, (txout, height))| Utxo {
+            outpoint: OutPoint {
+                txid: outpoint.txid.to_vec(),
+                vout: outpoint.vout,
+            },
+            value: txout.value,
+            height,
+        })
+        .collect();
+
+    Ok(GetUtxosResponse {
+        total_count: utxos.len() as u32,
+        utxos,
+    })
 }
 
 /// Inserts a block into the state.
@@ -120,7 +128,6 @@ mod test {
     use bitcoin::secp256k1::Secp256k1;
     use bitcoin::{consensus::Decodable, Address, BlockHash, Network, PublicKey};
     use byteorder::{LittleEndian, ReadBytesExt};
-    use maplit::hashset;
     use std::fs::File;
     use std::str::FromStr;
     use std::{collections::HashMap, io::BufReader};
@@ -228,18 +235,16 @@ mod test {
 
         let mut state = State::new(2, Network::Bitcoin, block_0.clone());
 
-        let block_0_utxos = maplit::hashset! {
-            (
-                OutPoint {
-                    txid: coinbase_tx.txid(),
-                    vout: 0
+        let block_0_utxos = GetUtxosResponse {
+            utxos: vec![Utxo {
+                outpoint: OutPoint {
+                    txid: coinbase_tx.txid().to_vec(),
+                    vout: 0,
                 },
-                TxOut {
-                    value: 1000,
-                    script_pubkey: address_1.script_pubkey()
-                },
-                1
-            )
+                value: 1000,
+                height: 1,
+            }],
+            total_count: 1,
         };
 
         // Assert that the UTXOs of address 1 are present.
@@ -249,7 +254,7 @@ mod test {
         );
 
         // Extend block 0 with block 1 that spends the 1000 satoshis and gives them to address 2.
-        let tx = TransactionBuilder::with_input(OutPoint::new(coinbase_tx.txid(), 0))
+        let tx = TransactionBuilder::with_input(bitcoin::OutPoint::new(coinbase_tx.txid(), 0))
             .with_output(&address_2, 1000)
             .build();
         let block_1 = BlockBuilder::with_prev_header(block_0.header)
@@ -261,26 +266,30 @@ mod test {
         // address 2 should now have the UTXO while address 1 has no UTXOs.
         assert_eq!(
             get_utxos(&state, &address_2.to_string(), 0),
-            Ok(hashset! {
-                (
-                    OutPoint::new(tx.txid(), 0),
-                    TxOut {
-                        value: 1000,
-                        script_pubkey: address_2.script_pubkey(),
+            Ok(GetUtxosResponse {
+                utxos: vec![Utxo {
+                    outpoint: OutPoint {
+                        txid: tx.txid().to_vec(),
+                        vout: 0,
                     },
-                    2
-                )
+                    value: 1000,
+                    height: 2,
+                }],
+                total_count: 1,
             })
         );
 
         assert_eq!(
             get_utxos(&state, &address_1.to_string(), 0),
-            Ok(hashset! {})
+            Ok(GetUtxosResponse {
+                utxos: vec![],
+                total_count: 0
+            })
         );
 
         // Extend block 0 (again) with block 1 that spends the 1000 satoshis to address 3
         // This causes a fork.
-        let tx = TransactionBuilder::with_input(OutPoint::new(coinbase_tx.txid(), 0))
+        let tx = TransactionBuilder::with_input(bitcoin::OutPoint::new(coinbase_tx.txid(), 0))
             .with_output(&address_3, 1000)
             .build();
         let block_1_prime = BlockBuilder::with_prev_header(block_0.header)
@@ -292,11 +301,17 @@ mod test {
         // in the UTXOs. Only the UTXOs of block 0 are returned.
         assert_eq!(
             get_utxos(&state, &address_2.to_string(), 0),
-            Ok(hashset! {})
+            Ok(GetUtxosResponse {
+                utxos: vec![],
+                total_count: 0
+            })
         );
         assert_eq!(
             get_utxos(&state, &address_3.to_string(), 0),
-            Ok(hashset! {})
+            Ok(GetUtxosResponse {
+                utxos: vec![],
+                total_count: 0
+            })
         );
         assert_eq!(
             get_utxos(&state, &address_1.to_string(), 0),
@@ -306,7 +321,7 @@ mod test {
         // Now extend block 1' with another block that transfers the funds to address 4.
         // In this case, the fork of [block 1', block 2'] will be considered the "main"
         // chain, and will be part of the UTXOs.
-        let tx = TransactionBuilder::with_input(OutPoint::new(tx.txid(), 0))
+        let tx = TransactionBuilder::with_input(bitcoin::OutPoint::new(tx.txid(), 0))
             .with_output(&address_4, 1000)
             .build();
         let block_2_prime = BlockBuilder::with_prev_header(block_1_prime.header)
@@ -317,31 +332,38 @@ mod test {
         // Address 1 has no UTXOs since they were spent on the main chain.
         assert_eq!(
             get_utxos(&state, &address_1.to_string(), 0),
-            Ok(hashset! {})
+            Ok(GetUtxosResponse {
+                utxos: vec![],
+                total_count: 0
+            })
         );
         assert_eq!(
             get_utxos(&state, &address_2.to_string(), 0),
-            Ok(hashset! {})
+            Ok(GetUtxosResponse {
+                utxos: vec![],
+                total_count: 0
+            })
         );
         assert_eq!(
             get_utxos(&state, &address_3.to_string(), 0),
-            Ok(hashset! {})
+            Ok(GetUtxosResponse {
+                utxos: vec![],
+                total_count: 0
+            })
         );
         // The funds are now with address 4.
         assert_eq!(
             get_utxos(&state, &address_4.to_string(), 0),
-            Ok(hashset! {
-                (
-                    OutPoint {
-                        txid: tx.txid(),
-                        vout: 0
+            Ok(GetUtxosResponse {
+                utxos: vec![Utxo {
+                    outpoint: OutPoint {
+                        txid: tx.txid().to_vec(),
+                        vout: 0,
                     },
-                    TxOut {
-                        value: 1000,
-                        script_pubkey: address_4.script_pubkey()
-                    },
-                    3
-                )
+                    value: 1000,
+                    height: 3,
+                }],
+                total_count: 1,
             })
         );
     }
@@ -373,23 +395,20 @@ mod test {
         );
         assert_eq!(
             get_utxos(&state, "1PgZsaGjvssNCqHHisshLoCFeUjxPhutTh", 0),
-            Ok(maplit::hashset! {
-                (
-                    OutPoint {
+            Ok(GetUtxosResponse {
+                utxos: vec![Utxo {
+                    outpoint: OutPoint {
                         txid: Txid::from_str(
                             "1a592a31c79f817ed787b6acbeef29b0f0324179820949d7da6215f0f4870c42",
                         )
-                        .unwrap(),
+                        .unwrap()
+                        .to_vec(),
                         vout: 1,
                     },
-                    TxOut {
-                        value: 4000000,
-                        script_pubkey: Address::from_str("1PgZsaGjvssNCqHHisshLoCFeUjxPhutTh")
-                            .unwrap()
-                            .script_pubkey(),
-                    },
-                    75361
-                )
+                    value: 4000000,
+                    height: 75361,
+                }],
+                total_count: 1,
             })
         );
 
@@ -400,23 +419,20 @@ mod test {
         );
         assert_eq!(
             get_utxos(&state, "12tGGuawKdkw5NeDEzS3UANhCRa1XggBbK", 0),
-            Ok(maplit::hashset! {
-                (
-                    OutPoint {
+            Ok(GetUtxosResponse {
+                utxos: vec![Utxo {
+                    outpoint: OutPoint {
                         txid: Txid::from_str(
                             "3371b3978e7285d962fd54656aca6b3191135a1db838b5c689b8a44a7ede6a31",
                         )
-                        .unwrap(),
+                        .unwrap()
+                        .to_vec(),
                         vout: 0,
                     },
-                    TxOut {
-                        value: 500000000,
-                        script_pubkey: Address::from_str("12tGGuawKdkw5NeDEzS3UANhCRa1XggBbK")
-                            .unwrap()
-                            .script_pubkey(),
-                    },
-                    66184
-                )
+                    value: 500000000,
+                    height: 66184,
+                }],
+                total_count: 1,
             })
         );
     }
@@ -502,7 +518,10 @@ mod test {
             // Address 1 should have no UTXOs at zero confirmations.
             assert_eq!(
                 get_utxos(&state, &address_1.to_string(), 0),
-                Ok(maplit::hashset! {})
+                Ok(GetUtxosResponse {
+                    utxos: vec![],
+                    total_count: 0
+                })
             );
         }
     }
