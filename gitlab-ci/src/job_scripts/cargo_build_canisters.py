@@ -42,7 +42,17 @@ CANISTERS = [
 ]
 
 # message max size is 3MB on system subnets and 2MB on other subnets
-CANISTERS_MAX_SIZE_IN_BYTES = {"ledger-canister.wasm": 1_900_000, "ledger-canister_notify-method.wasm": 1_900_000}
+CANISTERS_MAX_SIZE_IN_BYTES = {
+    "ledger-canister.wasm": 1_900_000,
+    "ledger-canister_notify-method.wasm": 1_900_000,
+    "cycles-minting-canister.wasm": 2_500_000,
+    "genesis-token-canister.wasm": 2_500_000,
+    "governance-canister.wasm": 2_500_000,
+    "governance-mem-test-canister.wasm": 2_500_000,
+    "registry-canister.wasm": 3_500_000,
+    "root-canister.wasm": 1_500_000,
+    "sns-governance-canister.wasm": 1_500_000,
+}
 
 CANISTER_COPY_LIST = {"cow_safety.wasm": "rs/tests/src", "counter.wat": "rs/workload_generator/src"}
 
