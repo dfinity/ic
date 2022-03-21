@@ -801,7 +801,7 @@ impl LedgerClient {
                                                         candid::decode_one(bytes.as_ref())
                                                             .map_err(|err| {
                                                                 format!(
-                                                                    "Could not set dissolve timestamp: {}",
+                                                                    "Could not decode dissolve timestamp response: {}",
                                                                     err
                                                                 )
                                                             })?;
@@ -826,7 +826,7 @@ impl LedgerClient {
                                                             candid::decode_one(bytes.as_ref())
                                                                 .map_err(|err| {
                                                                     format!(
-                                                                    "Could not set dissolve: {}",
+                                                                    "Could not decode start/stop disburse response: {}",
                                                                     err
                                                                 )
                                                                 })?;
@@ -860,7 +860,7 @@ impl LedgerClient {
                                                             candid::decode_one(bytes.as_ref())
                                                                 .map_err(|err| {
                                                                     format!(
-                                                                        "Could not disburse : {}",
+                                                                        "Could not decode DISBURSE response : {}",
                                                                         err
                                                                     )
                                                                 })?;
@@ -883,7 +883,7 @@ impl LedgerClient {
                                                         candid::decode_one(bytes.as_ref())
                                                             .map_err(|err| {
                                                                 format!(
-                                                                    "Could not decode ADD_HOTKEY request: {}",
+                                                                    "Could not decode ADD_HOTKEY response: {}",
                                                                     err
                                                                 )
                                                             })?;
@@ -909,12 +909,37 @@ impl LedgerClient {
                                                             ),
                                                         }
                                                     }
+                                                    RequestType::RemoveHotKey { .. } => {
+                                                        let response: ManageNeuronResponse =
+                                                            candid::decode_one(bytes.as_ref())
+                                                                .map_err(|err| {
+                                                                    format!(
+                                                                        "Could not decode REMOVE_HOTKEY response: {}",
+                                                                        err
+                                                                    )
+                                                                })?;
+                                                        match &response.command {
+                                                            Some(manage_neuron_response::Command::Configure(_)) => {
+                                                                return Ok(Ok(None));
+                                                            }
+                                                            Some(manage_neuron_response::Command::Error(err)) => {
+                                                                    return Ok(Err(ApiError::TransactionRejected(
+                                                                        false,
+                                                                        format!("Could not remove hotkey: {}", err).into()
+                                                                    )));
+                                                            }
+                                                            _ => panic!(
+                                                                "unexpected remove hot key result: {:?}",
+                                                                response.command
+                                                            ),
+                                                        }
+                                                    }
                                                     RequestType::Spawn { .. } => {
                                                         let response: ManageNeuronResponse =
                                                         candid::decode_one(bytes.as_ref())
                                                             .map_err(|err| {
                                                                 format!(
-                                                                    "Could not decode SPAWN request: {}",
+                                                                    "Could not decode SPAWN response: {}",
                                                                     err
                                                                 )
                                                             })?;
@@ -939,7 +964,7 @@ impl LedgerClient {
                                                             candid::decode_one(bytes.as_ref())
                                                                 .map_err(|err| {
                                                                     format!(
-                                                                        "Could not decode MERGE_MATURITY request: {}",
+                                                                        "Could not decode MERGE_MATURITY response: {}",
                                                                         err
                                                                     )
                                                                 })?;
@@ -965,7 +990,7 @@ impl LedgerClient {
                                                             candid::decode_one(bytes.as_ref())
                                                                 .map_err(|err| {
                                                                     format!(
-                                                                        "Could not decode neuron response: {}",
+                                                                        "Could not decode NEURON_INFO response: {}",
                                                                         err
                                                                     )
                                                                 })?;
@@ -1051,7 +1076,7 @@ impl LedgerClient {
 
                 // We didn't get a response in 30 seconds. Let the client handle it.
                 return Err(format!(
-                    "Block submission took longer than {:?} to complete.",
+                    "Operation took longer than {:?} to complete.",
                     Self::TIMEOUT
                 ));
             }

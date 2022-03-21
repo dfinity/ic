@@ -41,8 +41,8 @@ use ic_rosetta_api::convert::{
 };
 use ic_rosetta_api::request_types::{
     AddHotKey, Disburse, MergeMaturity, NeuronInfo as NeuronInfoRequest, PublicKeyOrPrincipal,
-    Request, RequestResult, SetDissolveTimestamp, Spawn, Stake, StartDissolve, Status,
-    StopDissolve,
+    RemoveHotKey, Request, RequestResult, SetDissolveTimestamp, Spawn, Stake, StartDissolve,
+    Status, StopDissolve,
 };
 use ic_rosetta_test_utils::{
     acc_id, assert_canister_error, assert_ic_error, do_multiple_txn, do_multiple_txn_external,
@@ -195,7 +195,14 @@ pub fn test_everything(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
 
     neuron_tests.add(
         &mut ledger_balances,
-        "Test add hot key",
+        "Test add hotkey",
+        rand::random(),
+        |_| {},
+    );
+
+    neuron_tests.add(
+        &mut ledger_balances,
+        "Test remove hotkey",
         rand::random(),
         |_| {},
     );
@@ -553,11 +560,14 @@ pub fn test_everything(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         info!(&ctx.logger, "Test stop dissolving a dissolved neuron");
         test_stop_dissolve(&rosetta_api_serv, account_id, key_pair.clone(), neuron_subaccount_identifier).await.unwrap();
 
-        let NeuronInfo {account_id, key_pair, neuron_subaccount_identifier, ..} = neuron_tests.get_neuron_for_test("Test add hot key");
+        // Hotkey.
+        let NeuronInfo {account_id, key_pair, neuron_subaccount_identifier, ..} = neuron_tests.get_neuron_for_test("Test add hotkey");
         let key_pair = Arc::new(key_pair);
         test_add_hot_key(&rosetta_api_serv, account_id, key_pair.clone(), neuron_subaccount_identifier).await.unwrap();
-        test_start_dissolve(&rosetta_api_serv, account_id, key_pair, neuron_subaccount_identifier).await.unwrap();
+        let neuron_info= neuron_tests.get_neuron_for_test("Test remove hotkey");
+        test_remove_hotkey(&rosetta_api_serv, &ledger_for_governance, neuron_info).await;
 
+        test_start_dissolve(&rosetta_api_serv, account_id, key_pair, neuron_subaccount_identifier).await.unwrap();
         let NeuronInfo {account_id, key_pair, neuron_subaccount_identifier, ..} = neuron_tests.get_neuron_for_test("Test start dissolving neuron before delay has been set");
         // Note that this is an incorrect usage, but no error is returned.
         // Start and Stop operations never fail, even when they have no affect.
@@ -577,10 +587,9 @@ pub fn test_everything(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         let neuron_info= neuron_tests.get_neuron_for_test("Test merge neuron maturity invalid");
         test_merge_maturity_invalid(&rosetta_api_serv, neuron_info).await;
 
-        info!(&ctx.logger, "Test get neuron info");
+        // Neuron info.
         let neuron_info= neuron_tests.get_neuron_for_test("Test get neuron info");
         test_neuron_info(&rosetta_api_serv, &ledger_for_governance, neuron_info).await;
-        info!(&ctx.logger, "Test get neuron info with hotkey");
         let neuron_info= neuron_tests.get_neuron_for_test("Test get neuron info with hotkey");
         test_neuron_info_with_hotkey(&rosetta_api_serv, &ledger_for_governance, neuron_info).await;
 
@@ -1732,6 +1741,114 @@ async fn test_add_hot_key(
     })
     .unwrap_or_else(|e| panic!("{:?}", e));
     r
+}
+
+async fn test_remove_hotkey(
+    ros: &RosettaApiHandle,
+    _ledger: &Canister<'_>,
+    neuron_info: NeuronInfo,
+) {
+    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.into();
+    let account = neuron_info.account_id;
+    let neuron_index = neuron_info.neuron_subaccount_identifier;
+    let _neuron_controller = neuron_info.principal_id;
+
+    // Add hot key.
+    let (_hotkey_acc, hotkey_keypair, hotkey_pk, _) = make_user(6000);
+    do_multiple_txn(
+        ros,
+        &[RequestInfo {
+            request: Request::AddHotKey(AddHotKey {
+                account,
+                neuron_index,
+                key: PublicKeyOrPrincipal::PublicKey(hotkey_pk.clone()),
+            }),
+            sender_keypair: Arc::clone(&key_pair),
+        }],
+        false,
+        Some(one_day_from_now_nanos()),
+        None,
+    )
+    .await
+    .map(|(tx_id, results, _)| {
+        assert!(!tx_id.is_transfer());
+        assert!(matches!(
+            results.operations.first().unwrap(),
+            RequestResult {
+                _type: Request::AddHotKey(_),
+                status: Status::Completed,
+                ..
+            }
+        ));
+    })
+    .expect("Error while adding hotkey.");
+    let _hotkey_keypair: Arc<EdKeypair> = hotkey_keypair.into();
+    println!("Added hotkey for neuron management");
+
+    // Remove hot key (success)
+    do_multiple_txn(
+        ros,
+        &[RequestInfo {
+            request: Request::RemoveHotKey(RemoveHotKey {
+                account: neuron_info.account_id,
+                neuron_index,
+                key: PublicKeyOrPrincipal::PublicKey(hotkey_pk.clone()),
+            }),
+            sender_keypair: Arc::clone(&key_pair),
+        }],
+        false,
+        Some(one_day_from_now_nanos()),
+        None,
+    )
+    .await
+    .map(|(tx_id, results, _)| {
+        assert!(!tx_id.is_transfer());
+        assert!(matches!(
+            results.operations.first().unwrap(),
+            RequestResult {
+                _type: Request::RemoveHotKey(_),
+                status: Status::Completed,
+                ..
+            }
+        ));
+    })
+    .expect("Error while removing hotkey.");
+    println!("Removed hotkey successfully");
+
+    // Remove hot key again (error expected)
+    let res = do_multiple_txn(
+        ros,
+        &[RequestInfo {
+            request: Request::RemoveHotKey(RemoveHotKey {
+                account: neuron_info.account_id,
+                neuron_index,
+                key: PublicKeyOrPrincipal::PublicKey(hotkey_pk.clone()),
+            }),
+            sender_keypair: Arc::clone(&key_pair),
+        }],
+        false,
+        Some(one_day_from_now_nanos()),
+        None,
+    )
+    .await
+    .map(|(tx_id, results, _)| {
+        assert!(!tx_id.is_transfer());
+        assert!(matches!(
+            results.operations.first().unwrap(),
+            RequestResult {
+                _type: Request::RemoveHotKey(_),
+                status: Status::Failed(_),
+                ..
+            }
+        ));
+    });
+    assert!(
+        res.is_err(),
+        "Expecting an error while removing twice the hotkey."
+    );
+    let res = res.unwrap_err();
+    assert_eq!(res.code, 770);
+    assert_eq!(res.message, "Operation failed");
 }
 
 #[allow(clippy::too_many_arguments)]

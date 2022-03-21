@@ -68,6 +68,7 @@ impl TransactionIdentifier {
             | RequestType::SetDissolveTimestamp { .. }
             | RequestType::Disburse { .. }
             | RequestType::AddHotKey { .. }
+            | RequestType::RemoveHotKey { .. }
             | RequestType::Spawn { .. }
             | RequestType::MergeMaturity { .. }
             | RequestType::NeuronInfo { .. } => {

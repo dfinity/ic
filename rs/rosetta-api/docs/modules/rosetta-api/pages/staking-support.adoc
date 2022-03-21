@@ -351,6 +351,61 @@ The command has two forms: one form accepts an https://smartcontracts.org/docs/i
 }
 ----
 
+=== Removing hotkeys
+
+[cols="1,1"]
+|===
+| Since version
+| 1.2.0
+
+| Idempotent?
+| yes
+
+| Minimal access level
+| controller
+|===
+
+The `REMOVE_HOTKEY` operation remove a previously added hotkey from the neuron.
+
+.Preconditions
+* `account.address` is a ledger address of a neuron controller.
+* The hotkey is linked to the neuron.
+
+The command has two forms: one form accepts an https://smartcontracts.org/docs/interface-spec/index.html#principal[IC principal] as a hotkey, another form accepts a https://www.rosetta-api.org/docs/models/PublicKey.html[public key].
+
+==== Remove a principal as a hotkey
+
+[source,json]
+----
+{
+  "operation_identifier": { "index": 0 },
+  "type": "REMOVE_HOTKEY",
+  "account": { "address": "907ff6c714a545110b42982b72aa39c5b7742d610e234a9d40bf8cf624e7a70d" },
+  "metadata": {
+    "neuron_index": 0,
+    "principal": "sp3em-jkiyw-tospm-2huim-jor4p-et4s7-ay35f-q7tnm-hi4k2-pyicb-xae"
+  }
+}
+----
+
+==== Remove a public key as a hotkey
+
+[source,json]
+----
+{
+  "operation_identifier": { "index": 0 },
+  "type": "REMOVE_HOTKEY",
+  "account": { "address": "907ff6c714a545110b42982b72aa39c5b7742d610e234a9d40bf8cf624e7a70d" },
+  "metadata": {
+    "neuron_index": 0,
+    "public_key": {
+      "hex_bytes":  "1b400d60aaf34eaf6dcbab9bba46001a23497886cf11066f7846933d30e5ad3f",
+      "curve_type": "edwards25519"
+    }
+  }
+}
+----
+
 === Spawn neurons
 
 [cols="1,1"]
