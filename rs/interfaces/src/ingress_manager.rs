@@ -10,11 +10,12 @@ use ic_types::{
     batch::{IngressPayload, IngressPayloadError, ValidationContext},
     consensus::Payload,
     crypto::CryptoError,
+    ingress::IngressSets,
     messages::MessageId,
     time::{Time, UNIX_EPOCH},
     CanisterId, Height, NumBytes,
 };
-use std::{collections::HashSet, sync::Arc};
+use std::collections::HashSet;
 
 /// An generic interface that allows checking ingress existence.
 pub trait IngressSetQuery {
@@ -38,6 +39,16 @@ impl IngressSetQuery for HashSet<IngressMessageId> {
             .map(|ingress_id| ingress_id.expiry())
             .min()
             .unwrap_or(UNIX_EPOCH)
+    }
+}
+
+impl IngressSetQuery for IngressSets {
+    fn contains(&self, msg_id: &IngressMessageId) -> bool {
+        self.get_hash_sets().iter().any(|set| set.contains(msg_id))
+    }
+
+    fn get_expiry_lower_bound(&self) -> Time {
+        *self.get_min_block_time()
     }
 }
 
@@ -172,7 +183,8 @@ pub trait IngressSelector: Send + Sync {
     fn filter_past_payloads(
         &self,
         past_payloads: &[(Height, Time, Payload)],
-    ) -> Vec<Arc<HashSet<IngressMessageId>>>;
+        context: &ValidationContext,
+    ) -> IngressSets;
 
     /// Request purge of the given ingress messages from the pool when
     /// they have already been included in finalized blocks.

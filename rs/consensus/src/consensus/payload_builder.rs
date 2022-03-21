@@ -3,7 +3,7 @@
 use crate::consensus::metrics::PayloadBuilderMetrics;
 use ic_interfaces::{
     consensus::{PayloadPermanentError, PayloadTransientError, PayloadValidationError},
-    ingress_manager::{IngressSelector, IngressSetQuery},
+    ingress_manager::IngressSelector,
     ingress_pool::IngressPoolSelect,
     messaging::XNetPayloadBuilder,
     registry::RegistryClient,
@@ -15,13 +15,11 @@ use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
-    artifact::IngressMessageId,
     batch::{BatchPayload, ValidationContext},
     consensus::Payload,
     messages::MAX_XNET_PAYLOAD_IN_BYTES,
     CountBytes, Height, NumBytes, SubnetId, Time,
 };
-use std::collections::HashSet;
 use std::sync::Arc;
 
 use super::block_maker::SubnetRecords;
@@ -55,31 +53,6 @@ pub trait PayloadBuilder: Send + Sync {
         past_payloads: &[(Height, Time, Payload)],
         context: &ValidationContext,
     ) -> ValidationResult<PayloadValidationError>;
-}
-
-/// A list of hashsets that implements IngressSetQuery.
-struct IngressSets {
-    hash_sets: Vec<Arc<HashSet<IngressMessageId>>>,
-    min_block_time: Time,
-}
-
-impl IngressSets {
-    fn new(hash_sets: Vec<Arc<HashSet<IngressMessageId>>>, min_block_time: Time) -> Self {
-        IngressSets {
-            hash_sets,
-            min_block_time,
-        }
-    }
-}
-
-impl IngressSetQuery for IngressSets {
-    fn contains(&self, msg_id: &IngressMessageId) -> bool {
-        self.hash_sets.iter().any(|set| set.contains(msg_id))
-    }
-
-    fn get_expiry_lower_bound(&self) -> Time {
-        self.min_block_time
-    }
 }
 
 /// Implementation of PayloadBuilder.
@@ -129,14 +102,9 @@ impl PayloadBuilder for PayloadBuilderImpl {
         self.metrics
             .past_payloads_length
             .observe(past_payloads.len() as f64);
-
-        let min_block_time = match past_payloads.last() {
-            None => context.time,
-            Some((_, time, _)) => *time,
-        };
-
-        let past_ingress = self.ingress_selector.filter_past_payloads(past_payloads);
-        let ingress_query = IngressSets::new(past_ingress, min_block_time);
+        let past_ingress = self
+            .ingress_selector
+            .filter_past_payloads(past_payloads, context);
 
         // We enforce the block_payload limit in the following way:
         // On a block with even height, we fill up the block with xnet messages.
@@ -146,7 +114,7 @@ impl PayloadBuilder for PayloadBuilderImpl {
         let get_ingress_payload = |byte_limit| {
             self.ingress_selector.get_ingress_payload(
                 ingress_pool,
-                &ingress_query,
+                &past_ingress,
                 context,
                 byte_limit,
             )
@@ -207,13 +175,9 @@ impl PayloadBuilder for PayloadBuilderImpl {
             return Ok(());
         }
         let batch_payload = &payload.as_ref().as_data().batch;
-        let min_block_time = match past_payloads.last() {
-            None => context.time,
-            Some((_, time, _)) => *time,
-        };
-        let past_ingress = self.ingress_selector.filter_past_payloads(past_payloads);
-
-        let ingress_query = IngressSets::new(past_ingress, min_block_time);
+        let past_ingress = self
+            .ingress_selector
+            .filter_past_payloads(past_payloads, context);
 
         // Retrieve max_block_payload_size from subnet
         let max_block_payload_size = match self
@@ -241,7 +205,7 @@ impl PayloadBuilder for PayloadBuilderImpl {
         // If ingress valiation is not valid, return it early.
         self.ingress_selector.validate_ingress_payload(
             &batch_payload.ingress,
-            &ingress_query,
+            &past_ingress,
             context,
         )?;
 

@@ -20,15 +20,12 @@ use ic_types::{
     artifact::IngressMessageId,
     batch::{IngressPayload, ValidationContext},
     consensus::Payload,
-    ingress::IngressStatus,
+    ingress::{IngressSets, IngressStatus},
     messages::{MessageId, SignedIngress},
     CanisterId, CountBytes, Cycles, Height, NumBytes, Time,
 };
 use ic_validator::{validate_request, RequestValidationError};
-use std::{
-    collections::{BTreeMap, HashSet},
-    sync::Arc,
-};
+use std::{collections::BTreeMap, sync::Arc};
 
 impl<'a> IngressSelector for IngressManager {
     fn get_ingress_payload(
@@ -211,7 +208,8 @@ impl<'a> IngressSelector for IngressManager {
     fn filter_past_payloads(
         &self,
         past_payloads: &[(Height, Time, Payload)],
-    ) -> Vec<Arc<HashSet<IngressMessageId>>> {
+        context: &ValidationContext,
+    ) -> IngressSets {
         let mut ingress_payload_cache = self.ingress_payload_cache.write().unwrap();
 
         // Record the metrics
@@ -254,7 +252,13 @@ impl<'a> IngressSelector for IngressManager {
                 }
             }
         }
-        past_ingress
+
+        let min_block_time = match past_payloads.last() {
+            None => context.time,
+            Some((_, time, _)) => *time,
+        };
+
+        IngressSets::new(past_ingress, min_block_time)
     }
 
     fn request_purge_finalized_messages(&self, message_ids: Vec<IngressMessageId>) {

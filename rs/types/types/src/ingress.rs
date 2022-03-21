@@ -1,5 +1,6 @@
 //! Ingress types.
 
+use crate::artifact::IngressMessageId;
 use crate::messages::MAX_RESPONSE_COUNT_BYTES;
 use crate::{CanisterId, CountBytes, PrincipalId, Time, UserId};
 use ic_error_types::{ErrorCode, UserError};
@@ -9,6 +10,8 @@ use ic_protobuf::{
     types::v1 as pb_types,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+use std::sync::Arc;
 use std::{convert::TryFrom, fmt};
 
 /// The status of an ingress message.
@@ -107,6 +110,30 @@ impl CountBytes for IngressStatus {
                 }
                 IngressStatus::Unknown => 0,
             }
+    }
+}
+
+/// A list of hashsets that implements IngressSetQuery.
+#[derive(Debug, Clone)]
+pub struct IngressSets {
+    hash_sets: Vec<Arc<HashSet<IngressMessageId>>>,
+    min_block_time: Time,
+}
+
+impl IngressSets {
+    pub fn new(hash_sets: Vec<Arc<HashSet<IngressMessageId>>>, min_block_time: Time) -> Self {
+        IngressSets {
+            hash_sets,
+            min_block_time,
+        }
+    }
+
+    pub fn get_hash_sets(&self) -> &Vec<Arc<HashSet<IngressMessageId>>> {
+        &self.hash_sets
+    }
+
+    pub fn get_min_block_time(&self) -> &Time {
+        &self.min_block_time
     }
 }
 
