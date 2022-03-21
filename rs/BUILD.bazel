@@ -15,9 +15,18 @@ genrule(
     "ic-orchestrator",
     "ic-admin",
   ],
-  local = True,
+  tools = [
+    "@rules_rust//rust/toolchain:current_exec_cargo_files",
+    "@rules_rust//rust/toolchain:current_exec_rustc_files",
+    "@rules_rust//rust/toolchain:current_exec_rustfmt_files",
+  ],
   cmd_bash = """
-  cargo build --manifest-path rs/Cargo.toml --release \
+  export CARGO=$(location @rules_rust//rust/toolchain:current_exec_cargo_files)
+  export RUSTC=$(location @rules_rust//rust/toolchain:current_exec_rustc_files)
+  export RUSTFMT=$$(realpath $(location @rules_rust//rust/toolchain:current_exec_rustfmt_files))
+  export CARGO_TARGET_DIR=$(BINDIR)/cargo/target
+  export CARGO_HOME=$(BINDIR)/cargo/home
+  $$CARGO build --manifest-path rs/Cargo.toml --release \
     --bin replica \
     --bin orchestrator \
     --bin ic-admin
