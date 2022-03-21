@@ -41,5 +41,7 @@ pub async fn main() {
         blockchain_manager,
         transaction_manager,
         adapter_state,
-    );
+    )
+    .await
+    .unwrap();
 }
