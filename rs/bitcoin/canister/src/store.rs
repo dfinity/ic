@@ -3,7 +3,8 @@ use crate::{
     state::{Height, State},
     unstable_blocks, utxoset,
 };
-use bitcoin::{Block, OutPoint, TxOut, Txid};
+use bitcoin::{Address, Block, OutPoint, TxOut, Txid};
+use ic_btc_types::{GetBalanceError, GetUtxosError, Satoshi};
 use lazy_static::lazy_static;
 use std::collections::HashSet;
 use std::str::FromStr;
@@ -15,19 +16,25 @@ lazy_static! {
     ];
 }
 
-type Satoshi = u64;
-
 /// Returns the balance of a bitcoin address.
-pub fn get_balance(state: &State, address: &str, min_confirmations: u32) -> Satoshi {
+pub fn get_balance(
+    state: &State,
+    address: &str,
+    min_confirmations: u32,
+) -> Result<Satoshi, GetBalanceError> {
+    if Address::from_str(address).is_err() {
+        return Err(GetBalanceError::MalformedAddress);
+    }
+
     // NOTE: It is safe to sum up the balances here without the risk of overflow.
     // The maximum number of bitcoins is 2.1 * 10^7, which is 2.1* 10^15 satoshis.
     // That is well below the max value of a `u64`.
     let mut balance = 0;
-    for (_, output, _) in get_utxos(state, address, min_confirmations) {
+    for (_, output, _) in get_utxos(state, address, min_confirmations)? {
         balance += output.value;
     }
 
-    balance
+    Ok(balance)
 }
 
 /// Returns the set of UTXOs for a given bitcoin address.
@@ -36,14 +43,23 @@ pub fn get_utxos(
     state: &State,
     address: &str,
     min_confirmations: u32,
-) -> HashSet<(OutPoint, TxOut, Height)> {
+) -> Result<HashSet<(OutPoint, TxOut, Height)>, GetUtxosError> {
+    if Address::from_str(address).is_err() {
+        return Err(GetUtxosError::MalformedAddress);
+    }
+
+    let main_chain = unstable_blocks::get_main_chain(&state.unstable_blocks);
+    if main_chain.len() < min_confirmations as usize {
+        return Err(GetUtxosError::MinConfirmationsTooLarge {
+            given: min_confirmations,
+            max: main_chain.len() as u32,
+        });
+    }
+
     let mut address_utxos = utxoset::get_utxos(&state.utxos, address);
 
     // Apply unstable blocks to the UTXO set.
-    for (i, block) in unstable_blocks::get_current_chain(&state.unstable_blocks)
-        .iter()
-        .enumerate()
-    {
+    for (i, block) in main_chain.iter().enumerate() {
         let block_height = state.height + (i as u32) + 1;
         let confirmations = main_chain_height(state) - block_height + 1;
 
@@ -59,12 +75,10 @@ pub fn get_utxos(
     }
 
     // Filter out UTXOs added in unstable blocks that are not for the given address.
-    utxoset::get_utxos(&address_utxos, address)
+    Ok(utxoset::get_utxos(&address_utxos, address)
         .into_set()
         .into_iter()
-        // Filter out UTXOs that are below the `min_confirmations` threshold.
-        .filter(|(_, _, height)| main_chain_height(state) - height + 1 >= min_confirmations)
-        .collect()
+        .collect())
 }
 
 /// Inserts a block into the state.
@@ -87,7 +101,7 @@ pub fn insert_block(state: &mut State, block: Block) -> Result<(), BlockDoesNotE
 }
 
 pub fn main_chain_height(state: &State) -> Height {
-    unstable_blocks::get_current_chain(&state.unstable_blocks).len() as u32 + state.height
+    unstable_blocks::get_main_chain(&state.unstable_blocks).len() as u32 + state.height
 }
 
 pub fn get_unstable_blocks(state: &State) -> Vec<&Block> {
@@ -229,7 +243,10 @@ mod test {
         };
 
         // Assert that the UTXOs of address 1 are present.
-        assert_eq!(get_utxos(&state, &address_1.to_string(), 0), block_0_utxos);
+        assert_eq!(
+            get_utxos(&state, &address_1.to_string(), 0),
+            Ok(block_0_utxos.clone())
+        );
 
         // Extend block 0 with block 1 that spends the 1000 satoshis and gives them to address 2.
         let tx = TransactionBuilder::with_input(OutPoint::new(coinbase_tx.txid(), 0))
@@ -244,7 +261,7 @@ mod test {
         // address 2 should now have the UTXO while address 1 has no UTXOs.
         assert_eq!(
             get_utxos(&state, &address_2.to_string(), 0),
-            hashset! {
+            Ok(hashset! {
                 (
                     OutPoint::new(tx.txid(), 0),
                     TxOut {
@@ -253,10 +270,13 @@ mod test {
                     },
                     2
                 )
-            }
+            })
         );
 
-        assert_eq!(get_utxos(&state, &address_1.to_string(), 0), hashset! {});
+        assert_eq!(
+            get_utxos(&state, &address_1.to_string(), 0),
+            Ok(hashset! {})
+        );
 
         // Extend block 0 (again) with block 1 that spends the 1000 satoshis to address 3
         // This causes a fork.
@@ -270,12 +290,21 @@ mod test {
 
         // Because block 1 and block 1' contest with each other, neither of them are included
         // in the UTXOs. Only the UTXOs of block 0 are returned.
-        assert_eq!(get_utxos(&state, &address_2.to_string(), 0), hashset! {});
-        assert_eq!(get_utxos(&state, &address_3.to_string(), 0), hashset! {});
-        assert_eq!(get_utxos(&state, &address_1.to_string(), 0), block_0_utxos);
+        assert_eq!(
+            get_utxos(&state, &address_2.to_string(), 0),
+            Ok(hashset! {})
+        );
+        assert_eq!(
+            get_utxos(&state, &address_3.to_string(), 0),
+            Ok(hashset! {})
+        );
+        assert_eq!(
+            get_utxos(&state, &address_1.to_string(), 0),
+            Ok(block_0_utxos)
+        );
 
         // Now extend block 1' with another block that transfers the funds to address 4.
-        // In this case, the fork of [block 1', block 2'] will be considered the "current"
+        // In this case, the fork of [block 1', block 2'] will be considered the "main"
         // chain, and will be part of the UTXOs.
         let tx = TransactionBuilder::with_input(OutPoint::new(tx.txid(), 0))
             .with_output(&address_4, 1000)
@@ -285,14 +314,23 @@ mod test {
             .build();
         insert_block(&mut state, block_2_prime).unwrap();
 
-        // Address 1 has no UTXOs since they were spent on the current chain.
-        assert_eq!(get_utxos(&state, &address_1.to_string(), 0), hashset! {});
-        assert_eq!(get_utxos(&state, &address_2.to_string(), 0), hashset! {});
-        assert_eq!(get_utxos(&state, &address_3.to_string(), 0), hashset! {});
+        // Address 1 has no UTXOs since they were spent on the main chain.
+        assert_eq!(
+            get_utxos(&state, &address_1.to_string(), 0),
+            Ok(hashset! {})
+        );
+        assert_eq!(
+            get_utxos(&state, &address_2.to_string(), 0),
+            Ok(hashset! {})
+        );
+        assert_eq!(
+            get_utxos(&state, &address_3.to_string(), 0),
+            Ok(hashset! {})
+        );
         // The funds are now with address 4.
         assert_eq!(
             get_utxos(&state, &address_4.to_string(), 0),
-            hashset! {
+            Ok(hashset! {
                 (
                     OutPoint {
                         txid: tx.txid(),
@@ -304,7 +342,7 @@ mod test {
                     },
                     3
                 )
-            }
+            })
         );
     }
 
@@ -331,11 +369,11 @@ mod test {
         // https://blockexplorer.one/bitcoin/mainnet/address/1PgZsaGjvssNCqHHisshLoCFeUjxPhutTh
         assert_eq!(
             get_balance(&state, "1PgZsaGjvssNCqHHisshLoCFeUjxPhutTh", 0),
-            4000000
+            Ok(4000000)
         );
         assert_eq!(
             get_utxos(&state, "1PgZsaGjvssNCqHHisshLoCFeUjxPhutTh", 0),
-            maplit::hashset! {
+            Ok(maplit::hashset! {
                 (
                     OutPoint {
                         txid: Txid::from_str(
@@ -352,17 +390,17 @@ mod test {
                     },
                     75361
                 )
-            }
+            })
         );
 
         // https://blockexplorer.one/bitcoin/mainnet/address/12tGGuawKdkw5NeDEzS3UANhCRa1XggBbK
         assert_eq!(
             get_balance(&state, "12tGGuawKdkw5NeDEzS3UANhCRa1XggBbK", 0),
-            500000000
+            Ok(500000000)
         );
         assert_eq!(
             get_utxos(&state, "12tGGuawKdkw5NeDEzS3UANhCRa1XggBbK", 0),
-            maplit::hashset! {
+            Ok(maplit::hashset! {
                 (
                     OutPoint {
                         txid: Txid::from_str(
@@ -379,7 +417,7 @@ mod test {
                     },
                     66184
                 )
-            }
+            })
         );
     }
 
@@ -413,7 +451,10 @@ mod test {
 
             // Expect an empty UTXO set.
             assert_eq!(main_chain_height(&state), 1);
-            assert_eq!(get_utxos(&state, &address_1.to_string(), 2), HashSet::new());
+            assert_eq!(
+                get_utxos(&state, &address_1.to_string(), 2),
+                Err(GetUtxosError::MinConfirmationsTooLarge { given: 2, max: 1 })
+            );
         }
     }
 
@@ -461,7 +502,7 @@ mod test {
             // Address 1 should have no UTXOs at zero confirmations.
             assert_eq!(
                 get_utxos(&state, &address_1.to_string(), 0),
-                maplit::hashset! {}
+                Ok(maplit::hashset! {})
             );
         }
     }

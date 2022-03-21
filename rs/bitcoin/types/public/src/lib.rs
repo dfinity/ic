@@ -39,6 +39,7 @@ pub struct GetUtxosResponse {
 #[derive(CandidType, Debug, Deserialize, PartialEq)]
 pub enum GetUtxosError {
     MalformedAddress,
+    MinConfirmationsTooLarge { given: u32, max: u32 },
 }
 
 #[derive(CandidType, Debug, Deserialize, PartialEq)]
@@ -50,12 +51,16 @@ pub struct GetBalanceRequest {
 #[derive(CandidType, Debug, Deserialize, PartialEq)]
 pub enum GetBalanceError {
     MalformedAddress,
+    MinConfirmationsTooLarge { given: u32, max: u32 },
 }
 
 impl From<GetUtxosError> for GetBalanceError {
     fn from(err: GetUtxosError) -> Self {
         match err {
             GetUtxosError::MalformedAddress => Self::MalformedAddress,
+            GetUtxosError::MinConfirmationsTooLarge { given, max } => {
+                Self::MinConfirmationsTooLarge { given, max }
+            }
         }
     }
 }
