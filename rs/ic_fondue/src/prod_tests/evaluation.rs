@@ -2,11 +2,8 @@ use std::{panic::catch_unwind, time::Instant};
 
 use super::driver_setup::DriverContext;
 use super::pot_dsl::{ExecutionMode, Pot, Suite, Test, TestPath, TestSet};
-use crate::ic_manager::IcHandle;
-use crate::pot::Context;
-use crate::prod_tests::driver_setup::{tee_logger, FARM_GROUP_NAME, POT_TIMEOUT};
-use crate::prod_tests::test_env::TestEnv;
-use crate::prod_tests::test_setup::IcHandleConstructor;
+use crate::prod_tests::driver_setup::{FARM_GROUP_NAME, POT_TIMEOUT};
+use crate::prod_tests::test_env::{HasTestPath, TestEnv};
 use crate::result::*;
 use anyhow::{bail, Result};
 use crossbeam_channel::{bounded, Receiver, Sender};
@@ -129,8 +126,6 @@ fn evaluate_pot_with_group(
         .collect();
     let tests_num = tests.len();
 
-    let ic_handle = env.ic_handle()?;
-
     let (sender, receiver) = bounded(tests_num);
     let chunks = chunk(tests, no_threads);
     let mut join_handles = vec![];
@@ -139,13 +134,19 @@ fn evaluate_pot_with_group(
         let s = sender.clone();
         let join_handle = std::thread::spawn({
             let t_path = pot_path.clone();
+            let t_test_env = env.clone();
             let t_ctx = ctx.clone();
-            let t_ic_handle = ic_handle.clone();
             move || {
                 for t in chunk {
+                    // in the long run, these directories are retained (!). For
+                    // now, we just use the test env as a way to pass
+                    // information
+                    let tempdir = tempfile::tempdir().unwrap();
+                    let test_env = t_test_env
+                        .fork(tempdir.path())
+                        .expect("Could not create test env.");
                     let t_path = t_path.clone();
-                    let t_ic_handle = t_ic_handle.clone();
-                    evaluate_test(&t_ctx, t_ic_handle, s.clone(), t, t_path.clone());
+                    evaluate_test(&t_ctx, test_env, s.clone(), t, t_path.clone());
                 }
             }
         });
@@ -168,7 +169,7 @@ fn evaluate_pot_with_group(
 
 fn evaluate_test(
     ctx: &DriverContext,
-    ic_handle: IcHandle,
+    test_env: TestEnv,
     parent: Sender<TestResultNode>,
     t: Test,
     path: TestPath,
@@ -185,20 +186,23 @@ fn evaluate_test(
     }
 
     let path = path.join(&t.name);
-    let test_ctx = Context::new(ctx.rng.clone(), tee_logger(ctx, &path));
-    info!(test_ctx.logger, "Starting test: {}", path);
-    let t_res = catch_unwind(|| (t.f)(ic_handle, &test_ctx));
+    test_env
+        .write_test_path(&path)
+        .expect("Could not write test path");
+    info!(ctx.logger, "Starting test: {}", path);
+    let logger = ctx.logger();
+    let t_res = catch_unwind(|| (t.f)(test_env, logger));
     if let Err(panic_res) = t_res {
         if let Some(s) = panic_res.downcast_ref::<String>() {
-            warn!(test_ctx.logger, "{} FAILED: {}", path, s);
+            warn!(ctx.logger, "{} FAILED: {}", path, s);
         } else if let Some(s) = panic_res.downcast_ref::<&str>() {
-            warn!(test_ctx.logger, "{} FAILED: {}", path, s);
+            warn!(ctx.logger, "{} FAILED: {}", path, s);
         } else {
-            warn!(test_ctx.logger, "{} FAILED (): {:?}", path, panic_res);
+            warn!(ctx.logger, "{} FAILED (): {:?}", path, panic_res);
         }
         result.result = TestResult::Failed;
     } else {
-        info!(test_ctx.logger, "{} SUCCESS.", path);
+        info!(ctx.logger, "{} SUCCESS.", path);
         result.result = TestResult::Passed;
     }
 

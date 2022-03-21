@@ -16,7 +16,8 @@ use url::Url;
 
 use super::cli::{AuthorizedSshAccount, ValidatedCliArgs};
 use super::farm::Farm;
-use super::pot_dsl;
+use super::pot_dsl::{self};
+use super::test_env::HasBaseLogDir;
 
 const ASYNC_CHAN_SIZE: usize = 8192;
 const DEFAULT_FARM_BASE_URL: &str = "https://farm.dfinity.systems";
@@ -45,6 +46,9 @@ pub fn initialize_env(env: &TestEnv, cli_args: &ValidatedCliArgs) -> Result<()> 
     env.write_object(JOURNALBEAT_HOSTS, &cli_args.journalbeat_hosts)?;
     env.write_object(INITIAL_REPLICA_VERSION, &cli_args.initial_replica_version)?;
     env.write_object(LOG_DEBUG_OVERRIDES, &cli_args.log_debug_overrides)?;
+    if let Some(base_dir) = &cli_args.log_base_dir {
+        env.write_base_log_dir(base_dir)?;
+    }
     Ok(())
 }
 
@@ -108,11 +112,13 @@ pub fn mk_logger() -> Logger {
     slog::Logger::root(drain.fuse(), o!())
 }
 
-pub fn tee_logger(ctx: &DriverContext, test_path: &pot_dsl::TestPath) -> Logger {
-    if let Some(base_dir) = ctx.logs_base_dir.clone() {
-        let stdout_drain = slog::LevelFilter::new(ctx.logger.clone(), slog::Level::Warning);
+pub fn tee_logger(test_env: &TestEnv, logger: Logger) -> Logger {
+    use crate::prod_tests::test_env::HasTestPath;
+    if let Some(base_dir) = test_env.base_log_dir() {
+        let stdout_drain = slog::LevelFilter::new(logger.clone(), slog::Level::Warning);
+        let test_path = test_env.test_path();
         let file_drain = slog_term::FullFormat::new(slog_term::PlainSyncDecorator::new(
-            File::create(set_up_filepath(&base_dir, test_path))
+            File::create(set_up_filepath(&base_dir, &test_path))
                 .expect("could not create a log file"),
         ))
         .build()
@@ -124,7 +130,7 @@ pub fn tee_logger(ctx: &DriverContext, test_path: &pot_dsl::TestPath) -> Logger 
             .fuse();
         slog::Logger::root(slog::Duplicate(stdout_drain, file_drain).fuse(), o!())
     } else {
-        ctx.logger.clone()
+        logger
     }
 }
 
@@ -145,7 +151,7 @@ fn setup_ssh_key_dir(env: &TestEnv, key_pairs: &[AuthorizedSshAccount]) -> Resul
             [AUTHORIZED_SSH_ACCOUNTS_DIR, &key_pair_files.name]
                 .iter()
                 .collect::<PathBuf>(),
-            key_pair_files.public_key.as_slice(),
+            &key_pair_files.public_key,
         )?;
     }
     Ok(())
