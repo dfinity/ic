@@ -27,7 +27,8 @@ fn impl_proposal_metadata(ast: &syn::DeriveInput) -> TokenStream {
             }
 
             fn proposer_and_sender(&self, sender: Sender) -> (NeuronId, Sender) {
-                get_proposer_and_sender(self.proposer.clone(), sender, self.test_neuron_proposer)
+                let use_test_neuron = self.test_neuron_proposer || (self.dry_run && matches!(sender, Sender::Anonymous));
+                get_proposer_and_sender(self.proposer.clone(), sender, use_test_neuron)
             }
 
             fn is_dry_run(&self) -> bool {
