@@ -135,8 +135,10 @@ impl ConnectionManager {
 
     /// This function pulls events off of the connection manager's stream event
     /// receiver and returns it to the caller.
-    pub fn receive_stream_event(&mut self) -> Option<StreamEvent> {
-        self.stream_event_receiver.try_recv().ok()
+    pub async fn receive_stream_event(&mut self) -> StreamEvent {
+        // The channel is never closed and the ConnectionManager struct always has
+        // an active sender. So `recv()` should never return `None`.
+        self.stream_event_receiver.recv().await.unwrap()
     }
 
     /// This function contains the actions the must occur every time the connection

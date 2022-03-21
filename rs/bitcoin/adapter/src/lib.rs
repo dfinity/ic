@@ -11,9 +11,6 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-/// This module contains the main adapter code that controls the interactions of
-/// the other modules.
-mod adapter;
 /// This module contains the AddressManager struct. The struct stores addresses
 /// that will be used to create new connections. It also tracks addresses that
 /// are in current use to encourage use from non-utilized addresses.
@@ -36,6 +33,9 @@ mod connection;
 /// This module contains code that is used to manage multiple connections to
 /// BTC nodes.
 mod connectionmanager;
+/// The module is responsible for awaiting messages from bitcoin peers and dispaching them
+/// to the correct component.
+mod router;
 /// This module contains code that is used to handle interactions to connected
 /// BTC streams (SOCKS and TCP).
 mod rpc_server;
@@ -44,11 +44,11 @@ mod transaction_manager;
 
 mod cli;
 
-pub use adapter::Adapter;
 pub use blockchainmanager::BlockchainManager;
 pub use cli::Cli;
 use common::BlockHeight;
 pub use config::{Config, IncomingSource};
+pub use router::start_router;
 pub use rpc_server::spawn_grpc_server;
 use stream::StreamEvent;
 pub use transaction_manager::TransactionManager;

@@ -1,14 +1,11 @@
 use clap::Clap;
 use ic_btc_adapter::{
-    spawn_grpc_server, Adapter, AdapterState, BlockchainManager, Cli, TransactionManager,
+    spawn_grpc_server, start_router, AdapterState, BlockchainManager, Cli, TransactionManager,
 };
 use ic_logger::{info, new_replica_logger_from_config};
 use serde_json::to_string_pretty;
 use std::sync::Arc;
-use tokio::{
-    sync::Mutex,
-    time::{sleep, Duration},
-};
+use tokio::sync::Mutex;
 
 #[tokio::main]
 pub async fn main() {
@@ -38,15 +35,11 @@ pub async fn main() {
         transaction_manager.clone(),
     );
 
-    let mut adapter = Adapter::new(
+    start_router(
         &config,
         logger,
         blockchain_manager,
         transaction_manager,
         adapter_state,
     );
-    loop {
-        adapter.tick().await;
-        sleep(Duration::from_millis(100)).await;
-    }
 }
