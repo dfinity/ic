@@ -65,6 +65,7 @@
     crypto: {
         // The directory that should be used to persist crypto state.
         crypto_root: "/var/lib/ic/crypto",
+        csp_vault_type: "in_replica",
     },
 
     // ========================================

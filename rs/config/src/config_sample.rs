@@ -135,7 +135,14 @@ pub const SAMPLE_CONFIG: &str = r#"
     // ============================================
     crypto: {
         // The directory that should be used to persist node's cryptographic keys.
-        crypto_root: "/tmp/ic_crypto"
+        crypto_root: "/tmp/ic_crypto",
+        // The type of CspVault to be used.
+        // Alternatives:
+        // - EXAMPLE: csp_vault_type: "in_replica",
+        //   CspVault is an internal structure of the replica process.
+        // - EXAMPLE: csp_vault_type: { unix_socket: "/some/path/to/socket" },
+        //   CspVault is run as a separate process, which can be reached via a Unix socket.
+        csp_vault_type: { unix_socket: "/some/path/to/socket" },
     },
     // ========================================
     // Configuration of the message scheduling.

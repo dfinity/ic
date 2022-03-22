@@ -10,7 +10,7 @@ use crate::vault::api::{
 };
 use crate::vault::remote_csp_vault::TarpcCspVaultClient;
 use crate::TlsHandshakeCspVault;
-use futures::executor::block_on;
+use core::future::Future;
 use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::InternalError;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgCreateFsKeyError, CspDkgCreateReshareDealingError, CspDkgLoadPrivateKeyError,
@@ -44,7 +44,6 @@ use tokio::net::UnixStream;
 use tokio_util::codec::length_delimited::LengthDelimitedCodec;
 
 /// An implementation of `CspVault`-trait that talks to a remote CSP vault.
-/// TOOD(CRP-1236): reconsider naming conventions.
 #[allow(dead_code)]
 pub struct RemoteCspVault {
     tarpc_csp_client: TarpcCspVaultClient,
@@ -59,6 +58,18 @@ pub enum RemoteCspVaultError {
     },
 }
 
+///  Executes async task in sync context without starving other independently
+///  spawned tasks.
+///  Works for both tokio-threads and for 'naked' std::threads.
+///  TODO(CRP-1453): adapt this documentation once a final solution is ready.
+pub(crate) fn thread_universal_block_on<T: Future>(task: T) -> T::Output {
+    if let Ok(handle) = tokio::runtime::Handle::try_current() {
+        tokio::task::block_in_place(|| handle.block_on(task))
+    } else {
+        futures::executor::block_on(task)
+    }
+}
+
 #[allow(dead_code)]
 impl RemoteCspVault {
     /// Creates a new `RemoteCspVault`-object that communicates
@@ -66,14 +77,13 @@ impl RemoteCspVault {
     /// The socket must exist before this constructor is called,
     /// otherwise the constructor will fail.
     pub fn new(socket_path: &Path) -> Result<Self, RemoteCspVaultError> {
-        let codec_builder = LengthDelimitedCodec::builder();
-
-        let conn = block_on(UnixStream::connect(socket_path)).map_err(|e| {
+        let conn = thread_universal_block_on(UnixStream::connect(socket_path)).map_err(|e| {
             RemoteCspVaultError::TransportError {
                 server_address: socket_path.to_string_lossy().to_string(),
                 message: e.to_string(),
             }
         })?;
+        let codec_builder = LengthDelimitedCodec::builder();
         let transport = serde_transport::new(codec_builder.new_framed(conn), Bincode::default());
         let client = TarpcCspVaultClient::new(Default::default(), transport).spawn();
         Ok(RemoteCspVault {
@@ -82,7 +92,7 @@ impl RemoteCspVault {
     }
 }
 
-// Note: the implementation of the traits below does use `block_on` when calling
+// Note: the implementation of the traits below blocks when calling
 // the remote server, as the API used by `Csp` is synchronous, while the server
 // API is async.
 impl BasicSignatureCspVault for RemoteCspVault {
@@ -92,7 +102,7 @@ impl BasicSignatureCspVault for RemoteCspVault {
         message: &[u8],
         key_id: KeyId,
     ) -> Result<CspSignature, CspBasicSignatureError> {
-        block_on(self.tarpc_csp_client.sign(
+        thread_universal_block_on(self.tarpc_csp_client.sign(
             tarpc::context::current(),
             algorithm_id,
             message.to_vec(),
@@ -104,7 +114,7 @@ impl BasicSignatureCspVault for RemoteCspVault {
         &self,
         algorithm_id: AlgorithmId,
     ) -> Result<(KeyId, CspPublicKey), CspBasicSignatureKeygenError> {
-        block_on(
+        thread_universal_block_on(
             self.tarpc_csp_client
                 .gen_key_pair(tarpc::context::current(), algorithm_id),
         )?
@@ -118,7 +128,7 @@ impl MultiSignatureCspVault for RemoteCspVault {
         message: &[u8],
         key_id: KeyId,
     ) -> Result<CspSignature, CspMultiSignatureError> {
-        block_on(self.tarpc_csp_client.multi_sign(
+        thread_universal_block_on(self.tarpc_csp_client.multi_sign(
             tarpc::context::current(),
             algorithm_id,
             message.to_vec(),
@@ -130,7 +140,7 @@ impl MultiSignatureCspVault for RemoteCspVault {
         &self,
         algorithm_id: AlgorithmId,
     ) -> Result<(KeyId, CspPublicKey, CspPop), CspMultiSignatureKeygenError> {
-        block_on(
+        thread_universal_block_on(
             self.tarpc_csp_client
                 .gen_key_pair_with_pop(tarpc::context::current(), algorithm_id),
         )?
@@ -144,7 +154,7 @@ impl ThresholdSignatureCspVault for RemoteCspVault {
         threshold: NumberOfNodes,
         signatory_eligibility: &[bool],
     ) -> Result<(CspPublicCoefficients, Vec<Option<KeyId>>), CspThresholdSignatureKeygenError> {
-        block_on(self.tarpc_csp_client.threshold_keygen_for_test(
+        thread_universal_block_on(self.tarpc_csp_client.threshold_keygen_for_test(
             tarpc::context::current(),
             algorithm_id,
             threshold,
@@ -158,7 +168,7 @@ impl ThresholdSignatureCspVault for RemoteCspVault {
         message: &[u8],
         key_id: KeyId,
     ) -> Result<CspSignature, CspThresholdSignError> {
-        block_on(self.tarpc_csp_client.threshold_sign(
+        thread_universal_block_on(self.tarpc_csp_client.threshold_sign(
             tarpc::context::current(),
             algorithm_id,
             message.to_vec(),
@@ -169,7 +179,7 @@ impl ThresholdSignatureCspVault for RemoteCspVault {
 
 impl SecretKeyStoreCspVault for RemoteCspVault {
     fn sks_contains(&self, key_id: &KeyId) -> bool {
-        block_on(
+        thread_universal_block_on(
             self.tarpc_csp_client
                 .sks_contains(tarpc::context::current(), *key_id),
         )
@@ -196,7 +206,7 @@ impl NiDkgCspVault for RemoteCspVault {
         node_id: NodeId,
         algorithm_id: AlgorithmId,
     ) -> Result<(CspFsEncryptionPublicKey, CspFsEncryptionPop), CspDkgCreateFsKeyError> {
-        block_on(self.tarpc_csp_client.gen_forward_secure_key_pair(
+        thread_universal_block_on(self.tarpc_csp_client.gen_forward_secure_key_pair(
             tarpc::context::current(),
             node_id,
             algorithm_id,
@@ -214,7 +224,7 @@ impl NiDkgCspVault for RemoteCspVault {
         key_id: KeyId,
         epoch: Epoch,
     ) -> Result<(), CspDkgUpdateFsEpochError> {
-        block_on(self.tarpc_csp_client.update_forward_secure_epoch(
+        thread_universal_block_on(self.tarpc_csp_client.update_forward_secure_epoch(
             tarpc::context::current(),
             algorithm_id,
             key_id,
@@ -236,7 +246,7 @@ impl NiDkgCspVault for RemoteCspVault {
         receiver_keys: &BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
         maybe_resharing_secret: Option<KeyId>,
     ) -> Result<CspNiDkgDealing, CspDkgCreateReshareDealingError> {
-        block_on(self.tarpc_csp_client.create_dealing(
+        thread_universal_block_on(self.tarpc_csp_client.create_dealing(
             tarpc::context::current(),
             algorithm_id,
             dealer_index,
@@ -262,7 +272,7 @@ impl NiDkgCspVault for RemoteCspVault {
         fs_key_id: KeyId,
         receiver_index: NodeIndex,
     ) -> Result<(), CspDkgLoadPrivateKeyError> {
-        block_on(self.tarpc_csp_client.load_threshold_signing_key(
+        thread_universal_block_on(self.tarpc_csp_client.load_threshold_signing_key(
             tarpc::context::current(),
             algorithm_id,
             epoch,
@@ -278,7 +288,7 @@ impl NiDkgCspVault for RemoteCspVault {
     }
 
     fn retain_threshold_keys_if_present(&self, active_key_ids: BTreeSet<KeyId>) {
-        block_on(
+        thread_universal_block_on(
             self.tarpc_csp_client
                 .retain_threshold_keys_if_present(tarpc::context::current(), active_key_ids),
         )
@@ -292,7 +302,7 @@ impl TlsHandshakeCspVault for RemoteCspVault {
         node: NodeId,
         not_after: &str,
     ) -> Result<(KeyId, TlsPublicKeyCert), CspTlsKeygenError> {
-        block_on(self.tarpc_csp_client.gen_tls_key_pair(
+        thread_universal_block_on(self.tarpc_csp_client.gen_tls_key_pair(
             tarpc::context::current(),
             node,
             not_after.to_string(),
@@ -300,7 +310,7 @@ impl TlsHandshakeCspVault for RemoteCspVault {
     }
 
     fn tls_sign(&self, message: &[u8], key_id: &KeyId) -> Result<CspSignature, CspTlsSignError> {
-        block_on(self.tarpc_csp_client.tls_sign(
+        thread_universal_block_on(self.tarpc_csp_client.tls_sign(
             tarpc::context::current(),
             message.to_vec(),
             *key_id,
@@ -318,7 +328,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
         receiver_keys: &[MEGaPublicKey],
         transcript_operation: &IDkgTranscriptOperationInternal,
     ) -> Result<IDkgDealingInternal, IDkgCreateDealingError> {
-        block_on(self.tarpc_csp_client.idkg_create_dealing(
+        thread_universal_block_on(self.tarpc_csp_client.idkg_create_dealing(
             tarpc::context::current(),
             algorithm_id,
             context_data.to_vec(),
@@ -343,7 +353,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
         receiver_key_id: KeyId,
         context_data: &[u8],
     ) -> Result<(), IDkgVerifyDealingPrivateError> {
-        block_on(self.tarpc_csp_client.idkg_verify_dealing_private(
+        thread_universal_block_on(self.tarpc_csp_client.idkg_verify_dealing_private(
             tarpc::context::current(),
             algorithm_id,
             dealing.clone(),
@@ -367,7 +377,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
         key_id: &KeyId,
         transcript: &IDkgTranscriptInternal,
     ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError> {
-        block_on(self.tarpc_csp_client.idkg_load_transcript(
+        thread_universal_block_on(self.tarpc_csp_client.idkg_load_transcript(
             tarpc::context::current(),
             dealings.clone(),
             context_data.to_vec(),
@@ -391,7 +401,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
         key_id: &KeyId,
         transcript: &IDkgTranscriptInternal,
     ) -> Result<(), IDkgLoadTranscriptError> {
-        block_on(self.tarpc_csp_client.idkg_load_transcript_with_openings(
+        thread_universal_block_on(self.tarpc_csp_client.idkg_load_transcript_with_openings(
             tarpc::context::current(),
             dealings.clone(),
             openings.clone(),
@@ -411,7 +421,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
         &self,
         algorithm_id: AlgorithmId,
     ) -> Result<MEGaPublicKey, CspCreateMEGaKeyError> {
-        block_on(
+        thread_universal_block_on(
             self.tarpc_csp_client
                 .idkg_gen_mega_key_pair(tarpc::context::current(), algorithm_id),
         )
@@ -430,7 +440,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
         opener_index: NodeIndex,
         opener_key_id: &KeyId,
     ) -> Result<CommitmentOpening, IDkgOpenTranscriptError> {
-        block_on(self.tarpc_csp_client.idkg_open_dealing(
+        thread_universal_block_on(self.tarpc_csp_client.idkg_open_dealing(
             tarpc::context::current(),
             dealing,
             dealer_index,
@@ -459,7 +469,7 @@ impl ThresholdEcdsaSignerCspVault for RemoteCspVault {
         key_times_lambda: &IDkgTranscriptInternal,
         algorithm_id: AlgorithmId,
     ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError> {
-        block_on(self.tarpc_csp_client.ecdsa_sign_share(
+        thread_universal_block_on(self.tarpc_csp_client.ecdsa_sign_share(
             tarpc::context::current(),
             derivation_path.clone(),
             hashed_message.to_vec(),

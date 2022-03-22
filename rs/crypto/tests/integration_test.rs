@@ -5,6 +5,9 @@ use ic_crypto::utils::{
     get_node_keys_or_generate_if_missing, NodeKeysToGenerate, TempCryptoComponent,
 };
 use ic_crypto::CryptoComponent;
+use ic_crypto_internal_csp_test_utils::remote_csp_vault::{
+    get_temp_file_path, start_new_remote_csp_vault_server_for_test,
+};
 use ic_crypto_test_utils::tls::x509_certificates::generate_ed25519_cert;
 use ic_interfaces::crypto::KeyManager;
 use ic_logger::replica_logger::no_op_logger;
@@ -14,6 +17,7 @@ use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_test_utilities::crypto::temp_dir::temp_dir;
 use ic_test_utilities::types::ids::node_test_id;
 use ic_types::crypto::{AlgorithmId, CryptoError, KeyPurpose};
 use ic_types::RegistryVersion;
@@ -36,6 +40,37 @@ fn should_successfully_construct_crypto_component_with_default_config() {
             no_op_logger(),
         );
     })
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn should_successfully_construct_crypto_component_with_remote_csp_vault() {
+    let socket_path = start_new_remote_csp_vault_server_for_test();
+    let temp_dir = temp_dir(); // temp dir with correct permissions
+    let crypto_root = temp_dir.path().to_path_buf();
+    let config = CryptoConfig::new_with_unix_socket_vault(crypto_root, socket_path);
+    let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
+    CryptoComponent::new_with_fake_node_id(
+        &config,
+        Arc::new(registry_client),
+        node_test_id(42),
+        no_op_logger(),
+    );
+}
+
+#[test]
+#[should_panic(expected = "Could not connect to CspVault at socket")]
+fn should_not_construct_crypto_component_if_remote_csp_vault_is_missing() {
+    let socket_path = get_temp_file_path(); // no CSP vault server is running
+    let temp_dir = temp_dir(); // temp dir with correct permissions
+    let crypto_root = temp_dir.path().to_path_buf();
+    let config = CryptoConfig::new_with_unix_socket_vault(crypto_root, socket_path);
+    let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
+    CryptoComponent::new_with_fake_node_id(
+        &config,
+        Arc::new(registry_client),
+        node_test_id(42),
+        no_op_logger(),
+    );
 }
 
 #[test]

@@ -31,6 +31,9 @@ use tokio::net::UnixListener;
 mod tarpc_csp_vault_client;
 mod tarpc_csp_vault_server;
 
+pub use tarpc_csp_vault_client::RemoteCspVault;
+pub use tarpc_csp_vault_server::TarpcCspVaultServerImpl;
+
 #[cfg(test)]
 mod tests;
 
