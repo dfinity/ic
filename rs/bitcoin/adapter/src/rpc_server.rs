@@ -1,7 +1,6 @@
 use crate::{
     blockchainmanager::{BlockchainManager, GetSuccessorsRequest, GetSuccessorsResponse},
-    transaction_manager::TransactionManager,
-    AdapterState, Config, IncomingSource,
+    AdapterState, Config, IncomingSource, TransactionManagerRequest,
 };
 
 use bitcoin::{hashes::Hash, Block, BlockHash, BlockHeader};
@@ -14,13 +13,13 @@ use std::{
     convert::{TryFrom, TryInto},
     sync::Arc,
 };
-use tokio::sync::Mutex;
+use tokio::sync::{mpsc::UnboundedSender, Mutex};
 use tonic::{transport::Server, Request, Response, Status};
 
 struct BtcAdapterImpl {
     adapter_state: AdapterState,
     blockchain_manager: Arc<Mutex<BlockchainManager>>,
-    transaction_manager: Arc<Mutex<TransactionManager>>,
+    transaction_manager_tx: UnboundedSender<TransactionManagerRequest>,
 }
 
 fn header_to_proto(header: &BlockHeader) -> v1::BlockHeader {
@@ -120,10 +119,11 @@ impl BtcAdapter for BtcAdapterImpl {
     ) -> Result<Response<v1::SendTransactionResponse>, Status> {
         self.adapter_state.received_now();
         let transaction = request.into_inner().transaction;
-        self.transaction_manager
-            .lock()
-            .await
-            .send_transaction(&transaction);
+        self.transaction_manager_tx
+            .send(TransactionManagerRequest::SendTransaction(transaction))
+            .expect(
+                "Sending should not fail because we never close the receiving part of the channel.",
+            );
         Ok(Response::new(v1::SendTransactionResponse {}))
     }
 }
@@ -133,7 +133,7 @@ pub fn spawn_grpc_server(
     config: Config,
     adapter_state: AdapterState,
     blockchain_manager: Arc<Mutex<BlockchainManager>>,
-    transaction_manager: Arc<Mutex<TransactionManager>>,
+    transaction_manager_tx: UnboundedSender<TransactionManagerRequest>,
 ) {
     // make sure we receive only one socket from systemd
     if config.incoming_source == IncomingSource::Systemd {
@@ -142,7 +142,7 @@ pub fn spawn_grpc_server(
     let btc_adapter_impl = BtcAdapterImpl {
         adapter_state,
         blockchain_manager,
-        transaction_manager,
+        transaction_manager_tx,
     };
     tokio::spawn(async move {
         match config.incoming_source {
