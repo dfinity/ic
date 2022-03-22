@@ -8,7 +8,7 @@
 prod-generic-test:
   extends:
     - .ubuntu-nix-docker
-    - .rules-parent-pipeline-prs-only
+    - .rules-parent-pipeline
   # we modify stage in gen_gitlab_cargo_pipeline.py
   stage: prod-tests
   tags:

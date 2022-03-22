@@ -327,15 +327,21 @@ def _generate_tests_may_raise_exception(
     out: typing.TextIO,
     cargo_sample_size: int = 5,
 ):
-    """Generate a Gitlab YAML pipeline config (internal function). May raise exceptions."""
-    if git_changes.is_protected():
-        logging.info("on protected branch, test all crates")
-        generate_gitlab_yaml(workspace_crates, gitlab_ci_config, out, disable_caching=True)
-        return
-
     git_repo = git.Repo(rust_workspace, search_parent_directories=True)
     git_root = git_repo.git.rev_parse("--show-toplevel")
     prod_generic_test_job = get_prod_generic_test_job(git_root)
+
+    """Generate a Gitlab YAML pipeline config (internal function). May raise exceptions."""
+    if git_changes.is_protected():
+        logging.info("on protected branch, test all crates")
+        generate_gitlab_yaml(
+            workspace_crates,
+            gitlab_ci_config,
+            out,
+            prod_generic_test_job=prod_generic_test_job,
+            disable_caching=True,
+        )
+        return
 
     disable_caching = (
         re.search(r"(\b)nocache(\b)", os.getenv("CI_MERGE_REQUEST_TITLE", "")) is not None
@@ -359,11 +365,12 @@ def _generate_tests_may_raise_exception(
             generate_gitlab_yaml([], gitlab_ci_config, out, disable_caching=disable_caching)
             return
         if re.search(r"(\b)moreci(\b)", os.getenv("CI_MERGE_REQUEST_TITLE", "")):
-            logging.debug("moreci detected in merge request title, running reduced set")
+            logging.debug("moreci detected in merge request title, running full set")
             generate_gitlab_yaml(
                 workspace_crates,
                 gitlab_ci_config,
                 out,
+                prod_generic_test_job=prod_generic_test_job,
                 disable_caching=disable_caching,
             )
             return
@@ -558,10 +565,13 @@ def generate_tests(
                 channel="#precious-bots",
             )
         logging.info("crate dependency analysis failed, testing all crates")
+        git_root = git_repo.git.rev_parse("--show-toplevel")
+        prod_generic_test_job = get_prod_generic_test_job(git_root)
         generate_gitlab_yaml(
             workspace_crates,
             gitlab_ci_config,
             out,
+            prod_generic_test_job=prod_generic_test_job,
             disable_caching=True,
         )
 
