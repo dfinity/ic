@@ -646,7 +646,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                 let res = match ProvisionalCreateCanisterWithCyclesArgs::decode(payload) {
                     Err(err) => Err(err.into()),
                     Ok(args) => {
-                        let cycles_amount = args.to_u64();
+                        let cycles_amount = args.to_u128();
                         match CanisterSettings::try_from(args.settings) {
                             Ok(settings) => self
                                 .canister_manager
@@ -673,7 +673,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                     Ok(args) => self.add_cycles(
                         *msg.sender(),
                         args.get_canister_id(),
-                        args.to_u64(),
+                        args.to_u128(),
                         &mut state,
                         provisional_whitelist,
                     ),
@@ -1104,7 +1104,7 @@ impl ExecutionEnvironmentImpl {
         &self,
         sender: PrincipalId,
         canister_id: CanisterId,
-        cycles: Option<u64>,
+        cycles: Option<u128>,
         state: &mut ReplicatedState,
         provisional_whitelist: &ProvisionalWhitelist,
     ) -> Result<Vec<u8>, UserError> {

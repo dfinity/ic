@@ -322,21 +322,30 @@ impl SandboxSafeSystemState {
     }
 
     fn update_balance_change(&mut self, new_balance: Cycles) {
-        let new_change = i128::try_from(new_balance.get())
-            .unwrap()
-            .checked_sub(i128::try_from(self.initial_cycles_balance.get()).unwrap())
-            .unwrap();
+        let new_change;
+        if new_balance > self.initial_cycles_balance {
+            new_change =
+                i128::try_from(new_balance.get() - self.initial_cycles_balance.get()).unwrap();
+        } else {
+            new_change =
+                -i128::try_from(self.initial_cycles_balance.get() - new_balance.get()).unwrap();
+        }
         self.system_state_changes.cycles_balance_change = new_change;
     }
 
     /// Same as [`update_balance_change`], but asserts the balance has decreased
     /// and marks the difference as cycles consumed (i.e. burned and not
-    /// transfered).
+    /// transferred).
     fn update_balance_change_consuming(&mut self, new_balance: Cycles) {
-        let new_change = i128::try_from(new_balance.get())
-            .unwrap()
-            .checked_sub(i128::try_from(self.initial_cycles_balance.get()).unwrap())
-            .unwrap();
+        let new_change;
+        if new_balance > self.initial_cycles_balance {
+            new_change =
+                i128::try_from(new_balance.get() - self.initial_cycles_balance.get()).unwrap();
+        } else {
+            new_change =
+                -i128::try_from(self.initial_cycles_balance.get() - new_balance.get()).unwrap();
+        }
+
         // Assert that the balance has decreased.
         assert!(new_change <= self.system_state_changes.cycles_balance_change);
         let consumed =

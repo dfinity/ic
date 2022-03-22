@@ -1120,7 +1120,7 @@ pub fn canisters_are_deallocated_when_their_balance_falls(
             let agent = assert_create_agent(endpoint.url.as_str()).await;
             let mgr = ManagementCanister::create(&agent);
 
-            let initial_cycles: u64 = 10_000_000_000_000;
+            let initial_cycles = 10_000_000_000_000u64;
             let create_canister_cycles = 2_000_000_000_000;
             let transfer_cycles = 8_000_000_000_000;
 

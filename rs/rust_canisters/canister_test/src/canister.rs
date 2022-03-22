@@ -148,7 +148,7 @@ impl Wasm {
             memory_allocation: None,
             query_allocation: None,
             // By default, give the max amount of cycles to the created canister.
-            num_cycles: Some(std::u64::MAX),
+            num_cycles: Some(u128::MAX),
         }
     }
 
@@ -297,7 +297,7 @@ impl<'a> Runtime {
     /// authorized.
     pub async fn create_canister(
         &'a self,
-        num_cycles: Option<u64>,
+        num_cycles: Option<u128>,
     ) -> Result<Canister<'a>, String> {
         let canister_id_record: Result<CanisterIdRecord, String> = self
             .get_management_canister()
@@ -736,7 +736,7 @@ pub struct Install<'a> {
     pub compute_allocation: Option<u64>,
     pub memory_allocation: Option<u64>,
     pub query_allocation: Option<u64>,
-    pub num_cycles: Option<u64>,
+    pub num_cycles: Option<u128>,
 }
 
 impl<'a> Query<'a> {
@@ -908,7 +908,7 @@ impl<'a> Install<'a> {
         self
     }
 
-    pub fn with_cycles(mut self, num_cycles: Option<u64>) -> Install<'a> {
+    pub fn with_cycles(mut self, num_cycles: Option<u128>) -> Install<'a> {
         self.num_cycles = num_cycles;
         self
     }

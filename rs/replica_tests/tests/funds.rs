@@ -5,7 +5,6 @@ use ic_types::{
     ic00::{CanisterIdRecord, EmptyBlob, Method, Payload, IC_00},
     Cycles,
 };
-use std::convert::TryInto;
 
 const BALANCE_EPSILON: Cycles = Cycles::new(2_000_000u128);
 const CANISTER_CREATION_FEE: Cycles = Cycles::new(1_000_000_000_000);
@@ -15,12 +14,12 @@ const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
 fn can_refund_when_having_nested_calls() {
     utils::canister_test(|test| {
         let num_cycles = CANISTER_FREEZE_BALANCE_RESERVE + Cycles::new(5_000_000_000_000);
-        let num_cycles_u64: u64 = num_cycles.try_into().unwrap();
+        let num_cycles: u128 = num_cycles.get();
 
         // Create universal canisters A, B and C.
-        let canister_a_id = test.create_universal_canister_with_args(vec![], num_cycles_u64);
-        let canister_b_id = test.create_universal_canister_with_args(vec![], num_cycles_u64);
-        let canister_c_id = test.create_universal_canister_with_args(vec![], num_cycles_u64);
+        let canister_a_id = test.create_universal_canister_with_args(vec![], num_cycles);
+        let canister_b_id = test.create_universal_canister_with_args(vec![], num_cycles);
+        let canister_c_id = test.create_universal_canister_with_args(vec![], num_cycles);
 
         let a_cycles_balance_before = test.canister_state(&canister_a_id).system_state.balance();
         let b_cycles_balance_before = test.canister_state(&canister_b_id).system_state.balance();
@@ -45,9 +44,9 @@ fn can_refund_when_having_nested_calls() {
                     canister_c_id,
                     "update",
                     call_args(),
-                    Cycles::from(500_000_000).into_parts(),
+                    Cycles::new(500_000_000).into_parts(),
                 )),
-                Cycles::from(1_000_000_000).into_parts(),
+                Cycles::new(1_000_000_000).into_parts(),
             ),
         )
         .unwrap();

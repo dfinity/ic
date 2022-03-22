@@ -17,7 +17,7 @@ use ic_types::{
 };
 
 const WASM_PAGE_SIZE: usize = 65536;
-const CYCLES_BALANCE: u64 = 1 << 50;
+const CYCLES_BALANCE: u128 = 1 << 50;
 
 #[test]
 /// Tests a message can roundtrip through all layers

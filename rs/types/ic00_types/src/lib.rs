@@ -614,16 +614,16 @@ pub struct ProvisionalCreateCanisterWithCyclesArgs {
 }
 
 impl ProvisionalCreateCanisterWithCyclesArgs {
-    pub fn new(amount: Option<u64>) -> Self {
+    pub fn new(amount: Option<u128>) -> Self {
         Self {
             amount: amount.map(candid::Nat::from),
             settings: None,
         }
     }
 
-    pub fn to_u64(&self) -> Option<u64> {
+    pub fn to_u128(&self) -> Option<u128> {
         match &self.amount {
-            Some(amount) => amount.0.to_u64(),
+            Some(amount) => amount.0.to_u128(),
             None => None,
         }
     }
@@ -643,15 +643,15 @@ pub struct ProvisionalTopUpCanisterArgs {
 }
 
 impl ProvisionalTopUpCanisterArgs {
-    pub fn new(canister_id: CanisterId, amount: u64) -> Self {
+    pub fn new(canister_id: CanisterId, amount: u128) -> Self {
         Self {
             canister_id: canister_id.get(),
             amount: candid::Nat::from(amount),
         }
     }
 
-    pub fn to_u64(&self) -> Option<u64> {
-        self.amount.0.to_u64()
+    pub fn to_u128(&self) -> Option<u128> {
+        self.amount.0.to_u128()
     }
 
     pub fn get_canister_id(&self) -> CanisterId {
