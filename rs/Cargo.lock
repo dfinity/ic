@@ -4791,6 +4791,7 @@ dependencies = [
  "ic-registry-client-helpers",
  "ic-registry-common",
  "ic-registry-provisional-whitelist",
+ "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-registry-transport",
  "ic-replica",

@@ -1,5 +1,6 @@
 use anyhow::{bail, Result};
 use flate2::{write::GzEncoder, Compression};
+use std::convert::Into;
 use std::net::IpAddr;
 use std::{collections::BTreeMap, fs::File, io, net::SocketAddr, path::PathBuf, process::Command};
 
@@ -106,7 +107,7 @@ pub fn init_ic(
                 subnet.max_instructions_per_message,
                 subnet.max_instructions_per_round,
                 subnet.max_instructions_per_install_code,
-                subnet.features.clone(),
+                subnet.features.map(|f| f.into()),
                 subnet.max_number_of_canisters,
                 subnet.ssh_readonly_access.clone(),
                 subnet.ssh_backup_access.clone(),

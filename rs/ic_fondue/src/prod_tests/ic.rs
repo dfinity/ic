@@ -8,7 +8,7 @@ use crate::prod_tests::farm::Farm;
 use anyhow::Result;
 use ic_prep_lib::node::NodeSecretKeyStore;
 use ic_protobuf::registry::subnet::v1::GossipConfig;
-use ic_protobuf::registry::subnet::v1::SubnetFeatures;
+use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::p2p::build_default_gossip_config;
 use ic_types::{Height, NodeId, PrincipalId};
