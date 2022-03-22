@@ -76,5 +76,9 @@ sigsegv_handler_checksum = [
 ]
 
 [[bench]]
+name = "execute_callback"
+harness = false
+
+[[bench]]
 name = "execute_update"
 harness = false

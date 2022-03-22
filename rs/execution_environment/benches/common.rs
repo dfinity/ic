@@ -14,7 +14,7 @@ use ic_metrics::MetricsRegistry;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{CanisterState, NetworkTopology, SubnetTopology};
+use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology, SubnetTopology};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     get_test_replica_logger, mock_time,
@@ -22,7 +22,12 @@ use ic_test_utilities::{
     types::ids::{canister_test_id, subnet_test_id, user_test_id},
     types::messages::IngressBuilder,
 };
-use ic_types::{CanisterId, MemoryAllocation, NumBytes, NumInstructions, Time};
+use ic_types::{
+    messages::{CallbackId, Payload, RejectContext},
+    methods::{Callback, WasmClosure},
+    user_error::RejectCode,
+    CanisterId, Cycles, MemoryAllocation, NumBytes, NumInstructions, Time,
+};
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use std::convert::TryFrom;
@@ -46,9 +51,12 @@ lazy_static! {
 pub struct BenchmarkArgs(
     pub CanisterState,
     pub RequestOrIngress,
+    pub Payload,
     pub Time,
     pub Arc<NetworkTopology>,
     pub ExecutionParameters,
+    pub CallOrigin,
+    pub Callback,
 );
 
 /// Benchmark to run: name (id), WAT, expected number of instructions.
@@ -91,6 +99,24 @@ where
     canister_state.system_state.memory_allocation =
         MemoryAllocation::try_from(NumBytes::from(0)).unwrap();
 
+    // Create call context and callback
+    let call_origin =
+        CallOrigin::CanisterUpdate(canister_test_id(REMOTE_CANISTER_ID), CallbackId::new(0));
+    let call_context_id = canister_state
+        .system_state
+        .call_context_manager_mut()
+        .unwrap()
+        .new_call_context(call_origin.clone(), Cycles::new(10), mock_time());
+    let callback = Callback::new(
+        call_context_id,
+        Some(canister_test_id(LOCAL_CANISTER_ID)),
+        Some(canister_test_id(REMOTE_CANISTER_ID)),
+        Cycles::new(0),
+        WasmClosure::new(0, 1),
+        WasmClosure::new(0, 1),
+        None,
+    );
+
     // Create an Ingress message
     let ingress = RequestOrIngress::Ingress(
         IngressBuilder::new()
@@ -99,6 +125,12 @@ where
             .source(user_test_id(USER_ID))
             .build(),
     );
+
+    // Create a reject
+    let reject = Payload::Reject(RejectContext {
+        code: RejectCode::SysFatal,
+        message: "reject message".to_string(),
+    });
 
     // Create a routing table
     let routing_table = Arc::new(RoutingTable::try_from(btreemap! {
@@ -130,9 +162,12 @@ where
     BenchmarkArgs(
         canister_state,
         ingress,
+        reject,
         mock_time(),
         network_topology,
         execution_parameters,
+        call_origin,
+        callback,
     )
 }
 
