@@ -1,0 +1,7 @@
+[package]
+name = "ic-interfaces-canister-http-adapter-facade"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+

@@ -82,6 +82,7 @@ members = [
   "ingress_manager",
   "interfaces",
   "interfaces/bitcoin_adapter_client",
+  "interfaces/canister_http_adapter_facade",
   "interfaces/p2p",
   "log_analyzer",
   "memory_tracker",
