@@ -1,5 +1,6 @@
 pub mod api;
 pub mod basic_health_test;
+pub mod btc_integration;
 pub mod cli;
 pub mod consensus;
 pub mod cow_safety_test;

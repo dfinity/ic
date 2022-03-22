@@ -1,5 +1,6 @@
 use anyhow::{bail, Result};
 use flate2::{write::GzEncoder, Compression};
+use std::net::IpAddr;
 use std::{collections::BTreeMap, fs::File, io, net::SocketAddr, path::PathBuf, process::Command};
 
 use crate::ic_instance::{node_software_version::NodeSoftwareVersion, port_allocator::AddrType};
@@ -271,7 +272,7 @@ pub fn create_config_disk_image(
 }
 
 fn node_to_config(node: &Node) -> NodeConfiguration {
-    let ipv6_addr = node.ip_addr.expect("missing ip_addr");
+    let ipv6_addr = IpAddr::V6(node.ipv6.expect("missing ip_addr"));
     let public_api = SocketAddr::new(ipv6_addr, AddrType::PublicApi.into());
     let xnet_api = SocketAddr::new(ipv6_addr, AddrType::Xnet.into());
     let p2p_addr = SocketAddr::new(ipv6_addr, AddrType::P2P.into());

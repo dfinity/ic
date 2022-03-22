@@ -8,3 +8,4 @@ pub mod pot_dsl;
 pub mod resource;
 pub mod test_env;
 pub mod test_setup;
+pub mod universal_vm;

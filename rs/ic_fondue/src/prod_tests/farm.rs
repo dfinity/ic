@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    net::IpAddr,
+    net::Ipv6Addr,
     path::{Path, PathBuf},
     time::{Duration, Instant},
 };
@@ -53,14 +53,14 @@ impl Farm {
 
     /// creates a vm under the group `group_name` and returns the associated
     /// IpAddr
-    pub fn create_vm(&self, group_name: &str, vm: CreateVmRequest) -> FarmResult<IpAddr> {
+    pub fn create_vm(&self, group_name: &str, vm: CreateVmRequest) -> FarmResult<Ipv6Addr> {
         let path = format!("group/{}/vm/{}", group_name, &vm.name);
         let rb = Self::json(self.post(&path), &vm);
         let resp = self.retry_until_success(rb)?;
         let created_vm = resp.json::<VMCreateResponse>()?;
-        let ip = created_vm.ipv6.parse()?;
-        info!(self.logger, "VM({}) IP-Addr: {}", &vm.name, &ip);
-        Ok(ip)
+        let ipv6 = created_vm.ipv6.parse()?;
+        info!(self.logger, "VM({}) IPv6: {}", &vm.name, &ipv6);
+        Ok(ipv6)
     }
 
     /// uploads an image an returns the image id
@@ -225,7 +225,9 @@ pub struct CreateVmRequest {
     #[serde(rename = "memoryKiB")]
     pub memory_kibibytes: AmountOfMemoryKiB,
     #[serde(rename = "primaryImage")]
-    pub primary_image: PrimaryImage,
+    pub primary_image: ImageLocation,
+    #[serde(rename = "hasIPv4")]
+    pub has_ipv4: bool,
 }
 
 impl CreateVmRequest {
@@ -233,33 +235,28 @@ impl CreateVmRequest {
         name: String,
         vcpus: NrOfVCPUs,
         memory_kibibytes: AmountOfMemoryKiB,
-        primary_image: PrimaryImage,
+        primary_image: ImageLocation,
+        has_ipv4: bool,
     ) -> Self {
         Self {
             name,
             vcpus,
             memory_kibibytes,
             primary_image,
+            has_ipv4,
             _type: "production".to_string(),
         }
     }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
-pub struct PrimaryImage {
-    pub _tag: String,
-    pub url: Url,
-    pub sha256: String,
-}
-
-impl PrimaryImage {
-    pub fn new(url: Url, sha256: String) -> Self {
-        Self {
-            _tag: "icOsImageViaUrl".to_string(),
-            url,
-            sha256,
-        }
-    }
+#[serde(tag = "_tag")]
+#[serde(rename_all = "camelCase")]
+pub enum ImageLocation {
+    ImageViaId { id: String },
+    ImageViaUrl { url: Url, sha256: String },
+    IcOsImageViaId { id: String },
+    IcOsImageViaUrl { url: Url, sha256: String },
 }
 
 #[derive(Error, Debug)]

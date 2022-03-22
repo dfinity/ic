@@ -1,13 +1,15 @@
+use std::time::Duration;
 use std::{panic::catch_unwind, time::Instant};
 
-use super::driver_setup::DriverContext;
+use super::driver_setup::{DriverContext, FARM_BASE_URL};
+use super::farm::{Farm, GroupSpec};
 use super::pot_dsl::{ExecutionMode, Pot, Suite, Test, TestPath, TestSet};
 use crate::prod_tests::driver_setup::{FARM_GROUP_NAME, POT_TIMEOUT};
 use crate::prod_tests::test_env::{HasTestPath, TestEnv};
 use crate::result::*;
 use anyhow::{bail, Result};
 use crossbeam_channel::{bounded, Receiver, Sender};
-use slog::{error, info, warn};
+use slog::{error, info, warn, Logger};
 
 pub const N_THREADS_PER_SUITE: usize = 6;
 pub const N_THREADS_PER_POT: usize = 8;
@@ -89,12 +91,14 @@ fn evaluate_pot(ctx: &DriverContext, mut pot: Pot, path: TestPath) -> Result<Tes
     let group_name = format!("{}-{}", pot_path.url_string(), ctx.job_id)
         .replace(":", "_")
         .replace(".", "_");
-    info!(ctx.logger, "creating group '{}'", &group_name);
 
     let pot_working_dir = ctx.working_dir.join(&pot.name);
-    let pot_env = ctx.env.fork(pot_working_dir)?;
+    let pot_env = ctx.env.fork(ctx.logger.clone(), pot_working_dir)?;
+
     pot_env.write_object(FARM_GROUP_NAME, &group_name)?;
     pot_env.write_object(POT_TIMEOUT, &pot.pot_timeout.unwrap_or(ctx.pot_timeout))?;
+
+    create_group_for_pot(&pot_env, &pot, &ctx.logger)?;
 
     if let Err(e) = pot.setup.evaluate(&pot_env) {
         bail!("Could not evaluate pot config: {:?}", e)
@@ -105,6 +109,20 @@ fn evaluate_pot(ctx: &DriverContext, mut pot: Pot, path: TestPath) -> Result<Tes
         warn!(ctx.logger, "Could not delete group {}: {:?}", group_name, e);
     }
     res
+}
+
+fn create_group_for_pot(env: &TestEnv, pot: &Pot, logger: &Logger) -> Result<()> {
+    let pot_timeout: Duration = env.read_object(POT_TIMEOUT)?;
+    let group_name: String = env.read_object(FARM_GROUP_NAME)?;
+    let farm = Farm::new(env.read_object(FARM_BASE_URL)?, logger.clone());
+    info!(logger, "creating group '{}'", &group_name);
+    Ok(farm.create_group(
+        &group_name,
+        pot_timeout,
+        GroupSpec {
+            vm_allocation: pot.vm_allocation.clone(),
+        },
+    )?)
 }
 
 #[allow(clippy::mutex_atomic)]
@@ -143,7 +161,7 @@ fn evaluate_pot_with_group(
                     // information
                     let tempdir = tempfile::tempdir().unwrap();
                     let test_env = t_test_env
-                        .fork(tempdir.path())
+                        .fork(t_ctx.logger.clone(), tempdir.path())
                         .expect("Could not create test env.");
                     let t_path = t_path.clone();
                     evaluate_test(&t_ctx, test_env, s.clone(), t, t_path.clone());

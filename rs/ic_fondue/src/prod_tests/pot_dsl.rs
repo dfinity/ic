@@ -4,15 +4,15 @@ use std::panic::{catch_unwind, UnwindSafe};
 use serde::{Deserialize, Serialize};
 use slog::Logger;
 
+use super::driver_setup::tee_logger;
+use super::ic::VmAllocationStrategy;
+use super::test_setup::IcHandleConstructor;
 use crate::ic_manager::IcHandle;
 use crate::pot::{Context, FondueTestFn};
 use crate::prod_tests::ic::InternetComputer;
 use crate::prod_tests::test_env::TestEnv;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-
-use super::driver_setup::tee_logger;
-use super::test_setup::IcHandleConstructor;
 
 pub trait PotSetupFn: FnOnce(TestEnv) + UnwindSafe + Send + Sync + 'static {}
 impl<T: FnOnce(TestEnv) + UnwindSafe + Send + Sync + 'static> PotSetupFn for T {}
@@ -25,23 +25,8 @@ pub fn suite(name: &str, pots: Vec<Pot>) -> Suite {
     Suite { name, pots }
 }
 
-pub fn pot_with_time_limit(
-    name: &str,
-    mut ic: InternetComputer,
-    testset: TestSet,
-    time_limit: Duration,
-) -> Pot {
-    Pot::new(
-        name,
-        ExecutionMode::Run,
-        move |env| ic.setup_and_start(&env).expect("failed to start IC"),
-        testset,
-        Some(time_limit),
-    )
-}
-
 pub fn pot_with_setup<F: PotSetupFn>(name: &str, setup: F, testset: TestSet) -> Pot {
-    Pot::new(name, ExecutionMode::Run, setup, testset, None)
+    Pot::new(name, ExecutionMode::Run, setup, testset, None, None)
 }
 
 pub fn pot(name: &str, mut ic: InternetComputer, testset: TestSet) -> Pot {
@@ -96,6 +81,7 @@ pub struct Pot {
     pub setup: ConfigState,
     pub testset: TestSet,
     pub pot_timeout: Option<Duration>,
+    pub vm_allocation: Option<VmAllocationStrategy>,
 }
 
 // In order to evaluate this function in a catch_unwind(), we need to take
@@ -133,6 +119,7 @@ impl Pot {
         config: F,
         testset: TestSet,
         pot_timeout: Option<Duration>,
+        vm_allocation: Option<VmAllocationStrategy>,
     ) -> Self {
         Self {
             name: name.to_string(),
@@ -140,7 +127,18 @@ impl Pot {
             setup: ConfigState::Function(Box::new(config)),
             testset,
             pot_timeout,
+            vm_allocation,
         }
+    }
+
+    pub fn with_ttl(mut self, time_limit: Duration) -> Self {
+        self.pot_timeout = Some(time_limit);
+        self
+    }
+
+    pub fn with_vm_allocation(mut self, vm_allocation: VmAllocationStrategy) -> Self {
+        self.vm_allocation = Some(vm_allocation);
+        self
     }
 }
 
@@ -230,19 +228,23 @@ impl TestPath {
 
 #[cfg(test)]
 mod tests {
+    use slog::o;
+
     use super::*;
 
     #[test]
     fn config_can_be_lazily_evaluated() {
         let mut config_state = ConfigState::Function(Box::new(|_| {}));
-        config_state.evaluate(&TestEnv::new(PathBuf::new()));
+        let logger = Logger::root(slog::Discard, o!());
+        config_state.evaluate(&TestEnv::new(PathBuf::new(), logger));
     }
 
     #[test]
     fn failing_config_evaluation_can_be_caught() {
         let mut config_state = ConfigState::Function(Box::new(|_| panic!("magic error!")));
+        let logger = Logger::root(slog::Discard, o!());
         let e = config_state
-            .evaluate(&TestEnv::new(PathBuf::new()))
+            .evaluate(&TestEnv::new(PathBuf::new(), logger))
             .as_ref()
             .unwrap_err();
         if let Some(s) = e.downcast_ref::<&str>() {

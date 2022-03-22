@@ -1,9 +1,12 @@
 use ic_fondue::pot::execution::TestResult;
 use ic_fondue::prod_tests::cli::CliArgs;
-use ic_fondue::prod_tests::driver_setup::{create_driver_context_from_cli, initialize_env};
+use ic_fondue::prod_tests::driver_setup::{
+    create_driver_context_from_cli, initialize_env, mk_logger,
+};
 use ic_fondue::prod_tests::evaluation::evaluate;
 use ic_fondue::prod_tests::pot_dsl::*;
 use ic_fondue::prod_tests::test_env::TestEnv;
+use ic_tests::btc_integration::btc;
 use ic_tests::create_subnet::{self, create_subnet_test};
 use ic_tests::nns_fault_tolerance_test;
 use ic_tests::nns_follow_test::{self, test as follow_test};
@@ -65,7 +68,8 @@ fn main() -> anyhow::Result<()> {
 
     let system_env = validated_args.working_dir.join("system_env");
     fs::create_dir(&system_env)?;
-    let env = TestEnv::new(system_env);
+    let logger = mk_logger();
+    let env = TestEnv::new(system_env, logger);
     initialize_env(&env, &validated_args)?;
 
     let context = create_driver_context_from_cli(validated_args, env, get_hostname());
@@ -153,6 +157,13 @@ fn get_test_suites() -> HashMap<String, Suite> {
         suite(
             "pre_master",
             vec![
+                pot_with_setup(
+                    "btc_pot",
+                    btc::config,
+                    par(vec![
+                        sys_t("btc_test", btc::test),
+                    ]),
+                ),
                 pot(
                     "firewall_pot",
                     firewall::config(),
@@ -211,12 +222,11 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     node_restart_test::config(),
                     par(vec![t("node_restart_test", node_restart_test)]),
                 ),
-                pot_with_time_limit(
+                pot(
                     "cycles_minting_pot",
                     cycles_minting_test::config(),
                     par(vec![t("cycles_minting_test", cycles_minting_test::test)]),
-                    Duration::from_secs(60 * 15) // 15 minutes
-                ),
+                ).with_ttl(Duration::from_secs(60 * 15 /* 15 minutes */)),
                 pot(
                     "nns_voting_fuzzing_poc_pot",
                     nns_voting_fuzzing_poc_test::config(),
@@ -402,12 +412,12 @@ fn get_test_suites() -> HashMap<String, Suite> {
         "wasm_generator".to_string(),
         suite(
             "wasm_generator",
-            vec![pot_with_time_limit(
+            vec![pot(
                 "wasm_generator_pot",
                 wasm_generator_test::config(),
                 par(vec![t("wasm_generator_test", wasm_generator_test::test)]),
-                Duration::from_secs(7200),
-            )],
+            )
+            .with_ttl(Duration::from_secs(7200))],
         ),
     );
 
@@ -415,15 +425,15 @@ fn get_test_suites() -> HashMap<String, Suite> {
         "upgrade_compatibility".to_string(),
         suite(
             "upgrade_compatibility",
-            vec![pot_with_time_limit(
+            vec![pot(
                 "cup_fetching_across_upgrades",
                 cup_fetching_across_upgrades::config(),
                 par(vec![t(
                     "cup_fetching_across_upgrades",
                     cup_fetching_across_upgrades::test,
                 )]),
-                Duration::from_secs(1800),
-            )],
+            )
+            .with_ttl(Duration::from_secs(1800))],
         ),
     );
 

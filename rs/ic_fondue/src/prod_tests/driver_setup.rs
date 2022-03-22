@@ -73,9 +73,8 @@ pub fn create_driver_context_from_cli(
     let farm_url = cli_args
         .farm_base_url
         .unwrap_or_else(|| Url::parse(DEFAULT_FARM_BASE_URL).expect("should not fail!"));
-
+    let logger = env.logger();
     let rng = rand_core::SeedableRng::seed_from_u64(cli_args.rand_seed);
-    let logger = mk_logger();
     let farm = Farm::new(farm_url, logger.clone());
 
     // Setting the global env variables that point to the wasm files for NNS

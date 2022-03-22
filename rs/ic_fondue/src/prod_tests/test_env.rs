@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use ic_utils::fs::sync_path;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use slog::Logger;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 
@@ -10,12 +11,18 @@ use super::pot_dsl::TestPath;
 /// A TestEnv represents a directory storing all state related to a test.
 ///
 /// It has operations for reading and writing objects as JSON from paths relative to the directory.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct TestEnv(PathBuf);
+#[derive(Clone, Debug)]
+pub struct TestEnv {
+    base_path: PathBuf,
+    logger: Logger,
+}
 
 impl TestEnv {
-    pub fn new<P: AsRef<Path>>(path: P) -> TestEnv {
-        TestEnv(PathBuf::from(path.as_ref()))
+    pub fn new<P: AsRef<Path>>(path: P, logger: Logger) -> TestEnv {
+        Self {
+            base_path: PathBuf::from(path.as_ref()),
+            logger,
+        }
     }
 
     pub fn read_object<T: DeserializeOwned, P: AsRef<Path>>(&self, p: P) -> Result<T> {
@@ -37,20 +44,24 @@ impl TestEnv {
     }
 
     pub fn get_path<P: AsRef<Path>>(&self, p: P) -> PathBuf {
-        self.0.join(p)
+        self.base_path.join(p)
     }
 
-    pub fn base_dir(&self) -> PathBuf {
-        self.0.clone()
+    pub fn base_path(&self) -> PathBuf {
+        self.base_path.clone()
     }
 
-    pub fn fork<P: AsRef<Path>>(&self, dir: P) -> Result<TestEnv> {
+    pub fn logger(&self) -> Logger {
+        self.logger.clone()
+    }
+
+    pub fn fork<P: AsRef<Path>>(&self, logger: Logger, dir: P) -> Result<TestEnv> {
         let mut options = fs_extra::dir::CopyOptions::new();
         options.copy_inside = true;
         options.content_only = true;
-        fs_extra::dir::copy(self.base_dir(), &dir, &options)?;
+        fs_extra::dir::copy(self.base_path(), &dir, &options)?;
         sync_path(&dir)?;
-        Ok(TestEnv::new(dir))
+        Ok(TestEnv::new(dir, logger))
     }
 }
 
