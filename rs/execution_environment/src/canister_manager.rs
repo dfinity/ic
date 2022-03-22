@@ -1098,7 +1098,7 @@ impl CanisterManager {
     pub(crate) fn create_canister_with_cycles(
         &self,
         sender: PrincipalId,
-        cycles_amount: Option<u64>,
+        cycles_amount: Option<u128>,
         settings: CanisterSettings,
         state: &mut ReplicatedState,
         provisional_whitelist: &ProvisionalWhitelist,
@@ -1189,7 +1189,7 @@ impl CanisterManager {
     pub(crate) fn add_cycles(
         &self,
         sender: PrincipalId,
-        cycles_amount: Option<u64>,
+        cycles_amount: Option<u128>,
         canister: &mut CanisterState,
         provisional_whitelist: &ProvisionalWhitelist,
     ) -> Result<(), CanisterManagerError> {

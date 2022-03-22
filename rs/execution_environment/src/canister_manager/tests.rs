@@ -1054,7 +1054,7 @@ fn provisional_create_canister_has_no_creation_fee() {
         let canister_id = canister_manager
             .create_canister_with_cycles(
                 canister_test_id(1).get(),
-                Some(INITIAL_CYCLES.get() as u64),
+                Some(INITIAL_CYCLES.get()),
                 CanisterSettings::default(),
                 &mut state,
                 &ProvisionalWhitelist::All,

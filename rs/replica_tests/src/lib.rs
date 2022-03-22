@@ -53,7 +53,7 @@ use std::{
 };
 use tower::{util::ServiceExt, Service};
 
-const CYCLES_BALANCE: u64 = 1 << 50;
+const CYCLES_BALANCE: u128 = 1 << 120;
 
 /// Executes an ingress message and blocks till execution finishes.
 ///
@@ -479,7 +479,7 @@ impl LocalTestRuntime {
         self.create_canister_with_anonymous(self.get_nonce(), CYCLES_BALANCE)
     }
 
-    pub fn create_canister_with_cycles(&self, num_cycles: u64) -> Result<CanisterId, UserError> {
+    pub fn create_canister_with_cycles(&self, num_cycles: u128) -> Result<CanisterId, UserError> {
         self.create_canister_with_anonymous(self.get_nonce(), num_cycles)
     }
 
@@ -490,7 +490,7 @@ impl LocalTestRuntime {
     pub fn create_canister_with_anonymous(
         &self,
         nonce: u64,
-        num_cycles: u64,
+        num_cycles: u128,
     ) -> Result<CanisterId, UserError> {
         let res = process_ingress(
             &self.ingress_sender,
@@ -565,7 +565,7 @@ impl LocalTestRuntime {
     pub fn create_universal_canister_with_args<P: Into<Vec<u8>>>(
         &self,
         payload: P,
-        num_cycles: u64,
+        num_cycles: u128,
     ) -> CanisterId {
         let (canister_id, res) = self.create_and_install_canister_wasm(
             UNIVERSAL_CANISTER_WASM.to_vec(),
@@ -599,7 +599,7 @@ impl LocalTestRuntime {
         compute_allocation: Option<u64>,
         memory_allocation: Option<u64>,
         query_allocation: Option<u64>,
-        num_cycles: u64,
+        num_cycles: u128,
     ) -> (CanisterId, Result<WasmResult, UserError>) {
         let canister_id = self.create_canister_with_cycles(num_cycles).unwrap();
         (

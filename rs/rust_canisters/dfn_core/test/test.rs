@@ -25,11 +25,8 @@ fn balance128_test() {
 
         let res = canister.query_("balance128", bytes, vec![]).await?;
 
-        let balance = u64::MAX;
-        assert_eq!(
-            u128::from_le_bytes(res.try_into().unwrap()),
-            balance as u128
-        );
+        let balance = u128::MAX;
+        assert_eq!(u128::from_le_bytes(res.try_into().unwrap()), balance);
         Ok(())
     })
 }
