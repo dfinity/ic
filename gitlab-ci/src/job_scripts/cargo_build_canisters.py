@@ -54,6 +54,8 @@ CANISTERS_MAX_SIZE_IN_BYTES = {
     "sns-governance-canister.wasm": 1_500_000,
 }
 
+CANISTER_BUILD_PROFILE = "canister-release"
+
 CANISTER_COPY_LIST = {"cow_safety.wasm": "rs/tests/src", "counter.wat": "rs/workload_generator/src"}
 
 artifact_ext = getenv("ARTIFACT_EXT", "")
@@ -61,9 +63,11 @@ default_artifacts_dir = f"{ENV.top}/artifacts/canisters{artifact_ext}"
 
 
 def _optimize_wasm(artifacts_dir, bin):
-    src_filename = f"{ENV.cargo_target_dir}/wasm32-unknown-unknown/canister-release/{bin}.wasm"
+    src_filename = f"{ENV.cargo_target_dir}/wasm32-unknown-unknown/{CANISTER_BUILD_PROFILE}/{bin}.wasm"
+    out_filename = f"{artifacts_dir}/{bin}.wasm"
     if path.exists(src_filename):
-        sh("ic-cdk-optimizer", "-o", f"{artifacts_dir}/{bin}.wasm", src_filename)
+        sh("ic-cdk-optimizer", "-o", out_filename, src_filename)
+        return out_filename
     else:
         raise Exception(f"ERROR: target canister Wasm binary does not exist: {src_filename}")
 
@@ -76,15 +80,15 @@ def _build_with_features(bin_name, features, target_bin_name: Optional[str] = No
         "--target",
         "wasm32-unknown-unknown",
         "--profile",
-        "canister-release",
+        CANISTER_BUILD_PROFILE,
         "--bin",
         bin_name,
         "--features",
         features,
     )
     os.rename(
-        f"{ENV.cargo_target_dir}/wasm32-unknown-unknown/canister-release/{bin_name}.wasm",
-        f"{ENV.cargo_target_dir}/wasm32-unknown-unknown/canister-release/{target_bin_name}.wasm",
+        f"{ENV.cargo_target_dir}/wasm32-unknown-unknown/{CANISTER_BUILD_PROFILE}/{bin_name}.wasm",
+        f"{ENV.cargo_target_dir}/wasm32-unknown-unknown/{CANISTER_BUILD_PROFILE}/{target_bin_name}.wasm",
     )
 
 
@@ -127,11 +131,16 @@ def run(artifacts_dir=default_artifacts_dir):
             "--target",
             "wasm32-unknown-unknown",
             "--profile",
-            "canister-release",
+            CANISTER_BUILD_PROFILE,
             "--bin",
             "ledger-archive-node-canister",
         )
-        _optimize_wasm(artifacts_dir, "ledger-archive-node-canister")
+        # We need to build the ledger archive node canister _before_ we build the ledger
+        # canister because the latter needs to include the Wasm module of the former.
+        # The ledger canister expects the path to the ledger archive Wasm to be passed as
+        # a compile-time environment variable.
+        ledger_archive_path = _optimize_wasm(artifacts_dir, "ledger-archive-node-canister")
+        environ["LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH"] = ledger_archive_path
 
         _build_with_features("ledger-canister", "notify-method")
         _build_with_features("governance-canister", "test")
@@ -142,7 +151,7 @@ def run(artifacts_dir=default_artifacts_dir):
             "--target",
             "wasm32-unknown-unknown",
             "--profile",
-            "canister-release",
+            CANISTER_BUILD_PROFILE,
             *flatten([["--bin", b] for b in CANISTERS]),
         )
 
