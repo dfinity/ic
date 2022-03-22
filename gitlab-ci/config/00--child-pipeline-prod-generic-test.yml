@@ -42,5 +42,5 @@ prod-generic-test:
       # * run it for 120 seconds
       # * require at least 100 RPS
       # * use requests of size 1KB
-      capsule -i "testnet/**/*" -t "${GIT_REVISION}" -- \
+      capsule -i "gitlab-ci/**/*" -i "testnet/**/*" -t "${GIT_REVISION}" -- \
       testnet/tests/scripts/generic.sh "$CDPRNET" 120 100 1k artifacts/results
