@@ -50,13 +50,11 @@ async fn test_http() {
         "http://www.bing.com".to_string(),
     ));
 
+    // HTTP adapter enforces HTTPS. HTTP connection requests are rejected.
     let response = client.send_http_request(request).await;
-
-    assert!(response.is_ok());
-    assert_eq!(
-        response.unwrap().into_inner().status,
-        StatusCode::OK.as_u16() as u32
-    );
+    assert!(response.is_err());
+    let status = response.unwrap_err();
+    assert_eq!(status.code(), tonic::Code::Unavailable);
 }
 
 #[tokio::test]
