@@ -34,7 +34,7 @@ use ic_types::Height;
 use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
 use std::time::{Duration, Instant};
 
-const DKG_INTERVAL: u64 = 14;
+const DKG_INTERVAL: u64 = 29;
 const NODES_COUNT: usize = 4;
 const UNASSIGNED_NODES_COUNT: i32 = 3;
 
