@@ -77,7 +77,7 @@ pub trait HasBaseLogDir {
 
 impl HasBaseLogDir for TestEnv {
     fn base_log_dir(&self) -> Option<PathBuf> {
-        self.read_object("base_log_dir").ok()
+        self.read_object(BASE_LOG_DIR_PATH).ok()
     }
 
     fn write_base_log_dir<P: AsRef<Path>>(&self, p: P) -> Result<()> {
