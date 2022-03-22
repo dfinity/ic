@@ -1,10 +1,11 @@
 //! Shared types internal to transport crate
 
 use crate::metrics::{ControlPlaneMetrics, DataPlaneMetrics, SendQueueMetrics};
+use ic_config::transport::TransportConfig;
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces::transport::AsyncTransportEventHandler;
 use ic_logger::ReplicaLogger;
-use ic_types::transport::{FlowId, FlowTag, TransportConfig, TransportPayload};
+use ic_types::transport::{FlowId, FlowTag, TransportPayload};
 use ic_types::{NodeId, RegistryVersion};
 use phantom_newtype::{AmountOf, Id};
 

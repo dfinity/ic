@@ -6,6 +6,7 @@ use ic_config::{
     metrics::Config as MetricsConfig,
     registry_client::{Config as RegistryClientConfig, DataProviderConfig},
     state_manager::Config as StateManagerConfig,
+    transport::{TransportConfig, TransportFlowConfig},
     ConfigOptional as ReplicaConfig,
 };
 use ic_prep_lib::initialized_subnet::InitializedSubnet;
@@ -14,11 +15,7 @@ use ic_prep_lib::node::{InitializedNode, NodeConfiguration, NodeIndex};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_prep_lib::subnet_configuration::SubnetConfig;
 use ic_types::ReplicaVersion;
-use ic_types::{
-    malicious_behaviour::MaliciousBehaviour,
-    transport::{TransportConfig, TransportFlowConfig},
-    SubnetId,
-};
+use ic_types::{malicious_behaviour::MaliciousBehaviour, SubnetId};
 use ic_utils::command::find_file_on_path;
 use std::io::Write;
 use std::process::Command;

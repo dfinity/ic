@@ -32,6 +32,7 @@ use ic_config::{
     metrics::{Config as MetricsConfig, Exporter},
     registry_client::{Config as RegistryClientConfig, DataProviderConfig},
     state_manager::Config as StateManagerConfig,
+    transport::{TransportConfig, TransportFlowConfig},
     ConfigOptional as ReplicaConfig,
 };
 use ic_logger::LoggerImpl;
@@ -43,11 +44,7 @@ use ic_prep_lib::{
 use ic_protobuf::registry::subnet::v1::SubnetFeatures;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{
-    registry::connection_endpoint::ConnectionEndpoint,
-    transport::{TransportConfig, TransportFlowConfig},
-    Height,
-};
+use ic_types::{registry::connection_endpoint::ConnectionEndpoint, Height};
 use serde::{Deserialize, Serialize};
 use slog::info;
 use std::{

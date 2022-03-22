@@ -911,6 +911,7 @@ mod tests {
     use crate::transport::create_transport;
     use async_trait::async_trait;
     use crossbeam_channel::{bounded, Sender};
+    use ic_config::transport::{TransportConfig, TransportFlowConfig};
     use ic_crypto::utils::TempCryptoComponent;
     use ic_interfaces::transport::{AsyncTransportEventHandler, SendError};
     use ic_logger::warn;
@@ -925,9 +926,7 @@ mod tests {
     use ic_test_utilities::with_test_replica_logger;
     use ic_types::transport::TransportErrorCode;
     use ic_types::{
-        transport::{
-            FlowId, TransportConfig, TransportFlowConfig, TransportPayload, TransportStateChange,
-        },
+        transport::{FlowId, TransportPayload, TransportStateChange},
         NodeId, RegistryVersion,
     };
     use std::sync::Arc;

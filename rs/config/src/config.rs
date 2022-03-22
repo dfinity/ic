@@ -20,8 +20,9 @@ use crate::{
     registration::Config as RegistrationConfig,
     registry_client::Config as RegistryClientConfig,
     state_manager::Config as StateManagerConfig,
+    transport::TransportConfig,
 };
-use ic_types::{malicious_behaviour::MaliciousBehaviour, transport::TransportConfig};
+use ic_types::malicious_behaviour::MaliciousBehaviour;
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, path::PathBuf};
 

@@ -32,8 +32,10 @@ use std::time;
 
 mod utils;
 
-use ic_config::logger::Config as LoggerConfig;
-use ic_config::logger::LogTarget;
+use ic_config::{
+    logger::{Config as LoggerConfig, LogTarget},
+    transport::{TransportConfig, TransportFlowConfig},
+};
 use ic_interfaces::transport::{AsyncTransportEventHandler, SendError, Transport};
 use ic_logger::{error, info, warn, LoggerImpl, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -41,12 +43,8 @@ use ic_protobuf::registry::node::v1::{
     connection_endpoint::Protocol, ConnectionEndpoint, FlowEndpoint, NodeRecord,
 };
 use ic_transport::transport::create_transport;
-use ic_types::transport::TransportErrorCode;
 use ic_types::{
-    transport::{
-        FlowId, FlowTag, TransportConfig, TransportFlowConfig, TransportPayload,
-        TransportStateChange,
-    },
+    transport::{FlowId, FlowTag, TransportErrorCode, TransportPayload, TransportStateChange},
     NodeId, PrincipalId, RegistryVersion, SubnetId,
 };
 use std::path::PathBuf;
