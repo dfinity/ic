@@ -49,7 +49,7 @@ use tarpc::{context, serde_transport, server::Channel};
 use tokio::net::UnixListener;
 use tokio_util::codec::length_delimited::LengthDelimitedCodec;
 
-pub(crate) struct TarpcCspVaultServerImpl {
+pub struct TarpcCspVaultServerImpl {
     local_csp_vault: Arc<LocalCspVault<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore>>,
     listener: UnixListener,
 }

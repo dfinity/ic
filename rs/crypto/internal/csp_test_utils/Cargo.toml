@@ -19,3 +19,4 @@ proptest = "0.9.4"
 rand = "0.7.3"
 rand_chacha = "0.2.2"
 tempfile = "3.1.0"
+tokio = { version = "1.15.0", features = ["full"] }

@@ -335,7 +335,7 @@ where
         let init_subnet = init_ic.initialized_topology.values().next().unwrap();
         let init_node = init_subnet.initialized_nodes.values().next().unwrap();
         let crypto_root = init_node.crypto_path();
-        config.crypto = CryptoConfig { crypto_root };
+        config.crypto = CryptoConfig::new(crypto_root);
 
         // load the registry file written by ic-prep
         let data_provider =

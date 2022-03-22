@@ -14,11 +14,12 @@ pub mod secret_key_store;
 pub mod threshold;
 pub mod tls_stub;
 pub mod types;
-mod vault;
+pub mod vault;
 
 pub use crate::vault::api::TlsHandshakeCspVault;
 pub use crate::vault::local_csp_vault::LocalCspVault;
 pub use crate::vault::remote_csp_vault::run_csp_vault_server;
+use crate::vault::remote_csp_vault::RemoteCspVault;
 
 use crate::api::{
     CspIDkgProtocol, CspKeyGenerator, CspSecretKeyStoreChecker, CspSigner,
@@ -32,10 +33,10 @@ use crate::secret_key_store::volatile_store::VolatileSecretKeyStore;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::CspPublicKey;
 use crate::vault::api::CspVault;
-use ic_config::crypto::CryptoConfig;
+use ic_config::crypto::{CryptoConfig, CspVaultType};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
-use ic_logger::{new_logger, replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{info, new_logger, replica_logger::no_op_logger, ReplicaLogger};
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_types::crypto::KeyId;
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
@@ -43,6 +44,7 @@ use rand::rngs::OsRng;
 use rand::{CryptoRng, Rng};
 use secret_key_store::proto_store::ProtoSecretKeyStore;
 use std::convert::TryFrom;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -204,7 +206,24 @@ impl Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
         logger: Option<ReplicaLogger>,
         metrics: Arc<CryptoMetrics>,
     ) -> Self {
+        match &config.csp_vault_type {
+            CspVaultType::InReplica => Self::new_with_in_replica_vault(config, logger, metrics),
+            CspVaultType::UnixSocket(socket_path) => {
+                Self::new_with_unix_socket_vault(socket_path, config, logger, metrics)
+            }
+        }
+    }
+
+    fn new_with_in_replica_vault(
+        config: &CryptoConfig,
+        logger: Option<ReplicaLogger>,
+        metrics: Arc<CryptoMetrics>,
+    ) -> Self {
         let logger = logger.unwrap_or_else(no_op_logger);
+        info!(
+            logger,
+            "Proceeding with an in-replica csp_vault, CryptoConfig: {:?}", config
+        );
         let secret_key_store = ProtoSecretKeyStore::open(
             &config.crypto_root,
             SKS_DATA_FILENAME,
@@ -215,21 +234,48 @@ impl Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
             CANISTER_SKS_DATA_FILENAME,
             Some(new_logger!(&logger)),
         );
-        let node_public_keys = match read_node_public_keys(&config.crypto_root) {
-            Ok(node_pks) => node_pks,
-            Err(_) => Default::default(),
-        };
-        let public_key_data = PublicKeyData::new(node_public_keys);
+        let csp_vault = Arc::new(LocalCspVault::new(
+            secret_key_store,
+            canister_key_store,
+            Arc::clone(&metrics),
+            new_logger!(&logger),
+        ));
+        Self::csp_with(&config.crypto_root, logger, metrics, csp_vault)
+    }
 
+    fn new_with_unix_socket_vault(
+        socket_path: &Path,
+        config: &CryptoConfig,
+        logger: Option<ReplicaLogger>,
+        metrics: Arc<CryptoMetrics>,
+    ) -> Self {
+        let logger = logger.unwrap_or_else(no_op_logger);
+        info!(
+            logger,
+            "Proceeding with a remote csp_vault, CryptoConfig: {:?}", config
+        );
+        let csp_vault = Arc::new(RemoteCspVault::new(socket_path).unwrap_or_else(|e| {
+            panic!(
+                "Could not connect to CspVault at socket {:?}: {:?}",
+                socket_path, e
+            )
+        }));
+        Self::csp_with(&config.crypto_root, logger, metrics, csp_vault)
+    }
+
+    fn csp_with(
+        pk_path: &Path,
+        logger: ReplicaLogger,
+        metrics: Arc<CryptoMetrics>,
+        csp_vault: Arc<dyn CspVault>,
+    ) -> Self {
+        let node_public_keys = read_node_public_keys(pk_path).unwrap_or_default();
+        let public_key_data = PublicKeyData::new(node_public_keys);
+        let csprng = CspRwLock::new_for_rng(OsRng::default(), metrics);
         Csp {
-            csprng: CspRwLock::new_for_rng(OsRng::default(), Arc::clone(&metrics)),
+            csprng,
             public_key_data,
-            csp_vault: Arc::new(LocalCspVault::new(
-                secret_key_store,
-                canister_key_store,
-                metrics,
-                new_logger!(&logger),
-            )),
+            csp_vault,
             logger,
             _marker: std::marker::PhantomData,
         }
@@ -244,10 +290,7 @@ impl<R: 'static + Rng + CryptoRng + Send + Sync + Clone>
     /// Note: This MUST NOT be used in production as the secrecy of the random
     /// number generator, hence the keys, is not guaranteed.
     pub fn new_with_rng(csprng: R, config: &CryptoConfig) -> Self {
-        let node_public_keys = match read_node_public_keys(&config.crypto_root) {
-            Ok(node_pks) => node_pks,
-            Err(_) => Default::default(),
-        };
+        let node_public_keys = read_node_public_keys(&config.crypto_root).unwrap_or_default();
         let public_key_data = PublicKeyData::new(node_public_keys);
         Csp {
             csprng: CspRwLock::new_for_rng(csprng.clone(), Arc::new(CryptoMetrics::none())),

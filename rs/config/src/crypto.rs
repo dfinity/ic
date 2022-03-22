@@ -18,26 +18,55 @@ use proptest_derive::Arbitrary;
 use std::fs::Permissions;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(Arbitrary))]
+pub enum CspVaultType {
+    InReplica,
+    #[cfg_attr(
+        test,
+        proptest(
+            strategy = "any::<String>().prop_map(|x| CspVaultType::UnixSocket(PathBuf::from(x)))"
+        )
+    )]
+    UnixSocket(PathBuf),
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[cfg_attr(test, derive(Arbitrary))]
 /// #
 /// ```
 /// # use ic_config::crypto::CryptoConfig;
-/// let config = "{ crypto_root: '/tmp/ic_crypto' }";
+/// let config = "{ crypto_root: '/tmp/ic_crypto', csp_vault_type: 'in_replica' }";
 /// # let deserialized: CryptoConfig = json5::from_str(&config).unwrap();
 /// ```
 pub struct CryptoConfig {
-    /// Path to use for storing state on the file system
+    /// Path to use for storing state on the file system.
+    /// It is needed for either value of `csp_vault_type`, as the config
+    /// is used both for starting a replica, and for starting the `CspVault`-server.
     #[cfg_attr(
         test,
         proptest(strategy = "any::<String>().prop_map(|x| PathBuf::from(x))")
     )]
     pub crypto_root: PathBuf,
+    pub csp_vault_type: CspVaultType,
 }
 
 impl CryptoConfig {
-    /// Return a new CryptoConfig with the given crypto_root path.
+    /// Returns a new CryptoConfig with the given crypto_root path.
     pub fn new(crypto_root: PathBuf) -> Self {
-        Self { crypto_root }
+        Self {
+            crypto_root,
+            csp_vault_type: CspVaultType::InReplica,
+        }
+    }
+
+    /// Returns a new CryptoConfig with the given `crypto_root` path, with
+    /// CspVault at the specified `socket_path`.
+    pub fn new_with_unix_socket_vault(crypto_root: PathBuf, socket_path: PathBuf) -> Self {
+        Self {
+            crypto_root,
+            csp_vault_type: CspVaultType::UnixSocket(socket_path),
+        }
     }
 
     /// Creates a new CryptoConfig in a temporary directory for testing.
