@@ -4,7 +4,10 @@ use crate::{
     registry::{setup_registry_non_final, SubnetRecordBuilder},
     types::ids::node_test_id,
 };
-use ic_config::logger::{default_logtarget, Config as LoggerConfig, LogFormat};
+use ic_config::{
+    logger::{default_logtarget, Config as LoggerConfig, LogFormat},
+    transport::{TransportConfig, TransportFlowConfig},
+};
 use ic_interfaces::registry::RegistryClient;
 use ic_logger::*;
 use ic_metrics::MetricsRegistry;
@@ -13,11 +16,7 @@ use ic_protobuf::registry::node::v1::{
     connection_endpoint::Protocol, ConnectionEndpoint, FlowEndpoint, NodeRecord,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_types::{
-    replica_config::ReplicaConfig,
-    transport::{TransportConfig, TransportFlowConfig},
-    NodeId, RegistryVersion, SubnetId,
-};
+use ic_types::{replica_config::ReplicaConfig, NodeId, RegistryVersion, SubnetId};
 
 use ic_registry_keys::make_node_record_key;
 use std::collections::HashMap;

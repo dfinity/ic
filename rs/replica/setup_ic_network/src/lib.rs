@@ -9,7 +9,9 @@ use ic_artifact_pool::{
     dkg_pool::DkgPoolImpl, ecdsa_pool::EcdsaPoolImpl,
     ensure_persistent_pool_replica_version_compatibility, ingress_pool::IngressPoolImpl,
 };
-use ic_config::{artifact_pool::ArtifactPoolConfig, consensus::ConsensusConfig};
+use ic_config::{
+    artifact_pool::ArtifactPoolConfig, consensus::ConsensusConfig, transport::TransportConfig,
+};
 use ic_consensus::{
     certification,
     consensus::{ConsensusCrypto, Membership},
@@ -46,7 +48,6 @@ use ic_types::{
     filetree_sync::{FileTreeSyncArtifact, FileTreeSyncId},
     malicious_flags::MaliciousFlags,
     replica_config::ReplicaConfig,
-    transport::TransportConfig,
     NodeId, SubnetId,
 };
 use std::sync::{Arc, Mutex, RwLock};

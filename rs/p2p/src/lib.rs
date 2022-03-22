@@ -94,6 +94,7 @@
 //! <img src="../../../../../docs/assets/p2p.png" height="960"
 //! width="540"/> </div> <hr/>
 
+use ic_config::transport::TransportConfig;
 use ic_interfaces::{
     artifact_manager::ArtifactManager, consensus_pool::ConsensusPoolCache,
     registry::RegistryClient, transport::Transport,
@@ -103,11 +104,7 @@ use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::GossipConfig;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
-use ic_types::{
-    malicious_flags::MaliciousFlags,
-    transport::{FlowTag, TransportConfig},
-    NodeId, SubnetId,
-};
+use ic_types::{malicious_flags::MaliciousFlags, transport::FlowTag, NodeId, SubnetId};
 use serde::{Deserialize, Serialize};
 use std::{
     error,

@@ -6,6 +6,7 @@ use ic_config::{
     http_handler::Config as HttpConfig,
     message_routing::Config as MsgRoutingConfig,
     metrics::{Config as MetricsConfig, Exporter},
+    transport::TransportConfig,
     Config,
 };
 use ic_interfaces::crypto::KeyManager;
@@ -14,7 +15,6 @@ use ic_logger::{info, warn, ReplicaLogger};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_registry_common::local_store::LocalStore;
 use ic_sys::utility_command::UtilityCommand;
-use ic_types::transport::TransportConfig;
 use prost::Message;
 use rand::prelude::*;
 use registry_canister::mutations::do_add_node::AddNodePayload;
@@ -325,8 +325,8 @@ fn protobuf_to_vec<M: Message>(entry: M) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ic_config::transport::TransportFlowConfig;
     use ic_test_utilities::with_test_replica_logger;
-    use ic_types::transport::TransportFlowConfig;
 
     #[test]
     fn default_http_config_endpoint_succeeds() {

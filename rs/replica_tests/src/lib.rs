@@ -1,8 +1,8 @@
 use core::future::Future;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_canister_client::Sender;
-use ic_config::crypto::CryptoConfig;
 use ic_config::Config;
+use ic_config::{crypto::CryptoConfig, transport::TransportFlowConfig};
 use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_interfaces::registry::RegistryClient;
 use ic_interfaces::{
@@ -36,7 +36,6 @@ use ic_types::{
     messages::{CanisterInstallMode, SignedIngress, UserQuery},
     replica_config::NODE_INDEX_DEFAULT,
     time::current_time_and_expiry_time,
-    transport::TransportFlowConfig,
     user_error::UserError,
     CanisterId, Height, NodeId, RegistryVersion, Time,
 };

@@ -3753,7 +3753,6 @@ version = "0.8.0"
 dependencies = [
  "base64 0.11.0",
  "ic-base-types",
- "ic-protobuf",
  "ic-registry-subnet-type",
  "ic-types 0.8.0",
  "json5",

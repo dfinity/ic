@@ -1,3 +1,4 @@
+use ic_config::transport::TransportConfig;
 use ic_interfaces::registry::RegistryClient;
 use ic_logger::*;
 use ic_metrics::MetricsRegistry;
@@ -14,7 +15,7 @@ use ic_replica_setup_networking_stack::P2PThreadJoiner;
 use ic_test_utilities::types::ids::node_test_id;
 use ic_types::{
     replica_config::ReplicaConfig,
-    transport::{TransportConfig, TransportMessageType, TransportTomlConfig},
+    transport::{TransportMessageType, TransportTomlConfig},
     NodeId, RegistryVersion, SubnetId,
 };
 
