@@ -626,7 +626,10 @@ fn load_checkpoint(
     height: Height,
     metrics: &StateManagerMetrics,
     own_subnet_type: SubnetType,
+    thread_pool: Option<&Mutex<scoped_threadpool::Pool>>,
 ) -> Result<ReplicatedState, CheckpointError> {
+    let mut lock = thread_pool.map(|x| x.lock().unwrap());
+
     state_layout
         .checkpoint(height)
         .map_err(|e| e.into())
@@ -635,7 +638,7 @@ fn load_checkpoint(
                 .checkpoint_op_duration
                 .with_label_values(&["recover"])
                 .start_timer();
-            checkpoint::load_checkpoint(&layout, own_subnet_type, None)
+            checkpoint::load_checkpoint(&layout, own_subnet_type, lock.as_deref_mut())
         })
 }
 
@@ -649,6 +652,7 @@ fn load_checkpoint_as_tip(
     state_layout: &StateLayout,
     height: Height,
     own_subnet_type: SubnetType,
+    thread_pool: Option<&Mutex<scoped_threadpool::Pool>>,
 ) -> ReplicatedState {
     info!(log, "Recovering checkpoint @{} as tip", height);
 
@@ -667,8 +671,13 @@ fn load_checkpoint_as_tip(
         .checkpoint(height)
         .unwrap_or_else(|err| fatal!(log, "Failed to retrieve checkpoint {:?}", err));
 
-    let checkpointed_state = checkpoint::load_checkpoint(&checkpoint_layout, own_subnet_type, None)
-        .unwrap_or_else(|err| fatal!(log, "Failed to load checkpoint {:?}", err));
+    let mut lock = thread_pool.map(|x| x.lock().unwrap());
+
+    let checkpointed_state =
+        checkpoint::load_checkpoint(&checkpoint_layout, own_subnet_type, lock.as_deref_mut())
+            .unwrap_or_else(|err| fatal!(log, "Failed to load checkpoint {:?}", err));
+
+    drop(lock);
 
     // Ensure that the `PageMap`s of the tip use the clean read-only checkpoint
     // files similar to how this is done in `commit_and_certify()` after a full
@@ -1002,6 +1011,10 @@ impl StateManagerImpl {
         let latest_certified_height = AtomicU64::new(0);
         let last_checkpoint = checkpoint_heights.last();
 
+        let checkpoint_thread_pool = Arc::new(Mutex::new(scoped_threadpool::Pool::new(
+            NUMBER_OF_CHECKPOINT_THREADS,
+        )));
+
         let height_and_state = match last_checkpoint {
             Some(height) => {
                 // Set latest state height in metadata to be last checkpoint height
@@ -1009,7 +1022,13 @@ impl StateManagerImpl {
 
                 (
                     *height,
-                    load_checkpoint_as_tip(&log, &state_layout, *height, own_subnet_type),
+                    load_checkpoint_as_tip(
+                        &log,
+                        &state_layout,
+                        *height,
+                        own_subnet_type,
+                        Some(&checkpoint_thread_pool),
+                    ),
                 )
             }
             None => (
@@ -1028,15 +1047,21 @@ impl StateManagerImpl {
         };
 
         let maybe_last_snapshot = last_checkpoint.map(|height| {
-            let state = load_checkpoint(&state_layout, *height, &metrics, own_subnet_type)
-                .unwrap_or_else(|err| {
-                    fatal!(
-                        log,
-                        "Failed to load the latest checkpoint {} on start: {}",
-                        height,
-                        err
-                    )
-                });
+            let state = load_checkpoint(
+                &state_layout,
+                *height,
+                &metrics,
+                own_subnet_type,
+                Some(&checkpoint_thread_pool),
+            )
+            .unwrap_or_else(|err| {
+                fatal!(
+                    log,
+                    "Failed to load the latest checkpoint {} on start: {}",
+                    height,
+                    err
+                )
+            });
             Snapshot {
                 height: *height,
                 state: Arc::new(state),
@@ -1062,10 +1087,6 @@ impl StateManagerImpl {
             fetch_state: None,
             tip: Some(height_and_state),
         }));
-
-        let checkpoint_thread_pool = Arc::new(Mutex::new(scoped_threadpool::Pool::new(
-            NUMBER_OF_CHECKPOINT_THREADS,
-        )));
 
         let (compute_manifest_request_sender, compute_manifest_request_receiver) = unbounded();
 
@@ -1821,6 +1842,7 @@ impl StateManager for StateManagerImpl {
                     &self.state_layout,
                     *checkpoint_height,
                     self.own_subnet_type,
+                    Some(&self.checkpoint_thread_pool),
                 );
                 return (*checkpoint_height, new_tip);
             }
@@ -1899,7 +1921,7 @@ impl StateManager for StateManagerImpl {
 
                     match self.clone_checkpoint(checkpoint_height, height) {
                         Ok(_) => {
-                            let state = load_checkpoint(&self.state_layout, height, &self.metrics, self.own_subnet_type)
+                            let state = load_checkpoint(&self.state_layout, height, &self.metrics, self.own_subnet_type, Some(&self.checkpoint_thread_pool))
                                 .expect("failed to load checkpoint");
                             self.on_synced_checkpoint(state, height, manifest, root_hash);
                             return;
@@ -2435,6 +2457,7 @@ impl StateManager for StateManagerImpl {
                             &self.state_layout,
                             latest_snapshot.height,
                             self.own_subnet_type,
+                            Some(&self.checkpoint_thread_pool),
                         ),
                     )
                 }
@@ -2596,6 +2619,7 @@ impl StateReader for StateManagerImpl {
                 height,
                 &self.metrics,
                 self.own_subnet_type,
+                Some(&self.checkpoint_thread_pool),
             ) {
                 Ok(state) => Ok(Labeled::new(height, Arc::new(state))),
                 Err(CheckpointError::NotFound(_)) => Err(StateManagerError::StateRemoved(height)),
