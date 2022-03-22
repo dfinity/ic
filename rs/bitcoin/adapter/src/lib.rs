@@ -106,6 +106,14 @@ pub trait HasHeight {
     fn get_height(&self) -> BlockHeight;
 }
 
+/// The transaction manager is owned by a single thread which listens on a channel
+/// for TransactionManagerRequest messages and executes the corresponding method.
+#[derive(Debug)]
+pub enum TransactionManagerRequest {
+    /// Command for executing send_transaction
+    SendTransaction(Vec<u8>),
+}
+
 /// The type tracks when then adapter should become idle. The type is
 /// thread-safe.
 #[derive(Clone)]

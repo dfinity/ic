@@ -3,15 +3,15 @@
 use crate::{
     blockchainmanager::BlockchainManager, connectionmanager::ConnectionManager,
     stream::handle_stream, transaction_manager::TransactionManager, AdapterState, Config,
-    HasHeight, ProcessEvent, ProcessEventError,
+    HasHeight, ProcessEvent, ProcessEventError, TransactionManagerRequest,
 };
 use ic_logger::ReplicaLogger;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::{
-    sync::Mutex,
+    sync::{mpsc::UnboundedReceiver, Mutex},
     task::JoinHandle,
-    time::{sleep, timeout},
+    time::{interval, sleep},
 };
 
 /// The function starts a Tokio task that awaits messages from the ConnectionManager.
@@ -23,27 +23,30 @@ pub fn start_router(
     config: &Config,
     logger: ReplicaLogger,
     blockchain_manager: Arc<Mutex<BlockchainManager>>,
-    transaction_manager: Arc<Mutex<TransactionManager>>,
+    mut transaction_manager_rx: UnboundedReceiver<TransactionManagerRequest>,
     adapter_state: AdapterState,
 ) -> JoinHandle<()> {
+    let mut transaction_manager = TransactionManager::new(logger.clone());
     let mut connection_manager = ConnectionManager::new(config, logger);
 
     tokio::task::spawn(async move {
+        let mut tick_interval = interval(Duration::from_millis(100));
         loop {
-            let interval = Duration::from_millis(100);
+            let sleep_idle_interval = Duration::from_millis(100);
             if adapter_state.is_idle() {
                 connection_manager.make_idle();
                 blockchain_manager.lock().await.make_idle();
-                transaction_manager.lock().await.make_idle();
+                transaction_manager.make_idle();
                 // TODO: instead of sleeping here add some async synchonization.
-                sleep(interval).await;
+                sleep(sleep_idle_interval).await;
                 continue;
             }
 
-            // in case we waited too long start the loop from the beggining because we the adapter
-            // may be idle
-            if let Ok(event) = timeout(interval, connection_manager.receive_stream_event()).await {
-                if let Err(ProcessEventError::InvalidMessage) =
+            // We do a select over tokio::sync::mpsc::Receiver::recv, tokio::sync::mpsc::UnboundedReceiver::recv,
+            // tokio::time::Interval::tick which are all cancellation safe.
+            tokio::select! {
+                event = connection_manager.receive_stream_event() => {
+                    if let Err(ProcessEventError::InvalidMessage) =
                     connection_manager.process_event(&event)
                 {
                     connection_manager.discard(event.address);
@@ -57,25 +60,29 @@ pub fn start_router(
                     connection_manager.discard(event.address);
                 }
 
-                let transaction_manager_process_event_result =
-                    transaction_manager.lock().await.process_event(&event);
                 if let Err(ProcessEventError::InvalidMessage) =
-                    transaction_manager_process_event_result
+                    transaction_manager.process_event(&event)
                 {
                     connection_manager.discard(event.address);
                 }
-            }
-            // After an event is dispatched, the managers `tick` method is called to process possible
-            // outgoing messages.
-            connection_manager.tick(blockchain_manager.lock().await.get_height(), handle_stream);
-            blockchain_manager
-                .lock()
-                .await
-                .tick(&mut connection_manager);
-            transaction_manager
-                .lock()
-                .await
-                .tick(&mut connection_manager);
+
+                },
+                transaction_manager_request = transaction_manager_rx.recv() => {
+                    match transaction_manager_request.unwrap() {
+                        TransactionManagerRequest::SendTransaction(transaction) => transaction_manager.send_transaction(&transaction),
+                    }
+                },
+                _ = tick_interval.tick() => {
+                    // After an event is dispatched, the managers `tick` method is called to process possible
+                    // outgoing messages.
+                    connection_manager.tick(blockchain_manager.lock().await.get_height(), handle_stream);
+                    blockchain_manager
+                        .lock()
+                        .await
+                        .tick(&mut connection_manager);
+                    transaction_manager.tick(&mut connection_manager);
+                }
+            };
         }
     })
 }
