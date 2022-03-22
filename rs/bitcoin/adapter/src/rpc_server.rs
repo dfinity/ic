@@ -1,6 +1,6 @@
 use crate::{
-    blockchainmanager::{BlockchainManager, GetSuccessorsRequest, GetSuccessorsResponse},
-    AdapterState, Config, IncomingSource, TransactionManagerRequest,
+    blockchainmanager::{GetSuccessorsRequest, GetSuccessorsResponse},
+    AdapterState, Config, GetSuccessorsHandler, IncomingSource, TransactionManagerRequest,
 };
 
 use bitcoin::{hashes::Hash, Block, BlockHash, BlockHeader};
@@ -9,16 +9,13 @@ use ic_async_utils::{
 };
 use ic_btc_adapter_service::btc_adapter_server::{BtcAdapter, BtcAdapterServer};
 use ic_protobuf::bitcoin::v1;
-use std::{
-    convert::{TryFrom, TryInto},
-    sync::Arc,
-};
-use tokio::sync::{mpsc::UnboundedSender, Mutex};
+use std::convert::{TryFrom, TryInto};
+use tokio::sync::mpsc::UnboundedSender;
 use tonic::{transport::Server, Request, Response, Status};
 
 struct BtcAdapterImpl {
     adapter_state: AdapterState,
-    blockchain_manager: Arc<Mutex<BlockchainManager>>,
+    get_successors_handler: GetSuccessorsHandler,
     transaction_manager_tx: UnboundedSender<TransactionManagerRequest>,
 }
 
@@ -109,7 +106,7 @@ impl BtcAdapter for BtcAdapterImpl {
     ) -> Result<Response<v1::GetSuccessorsResponse>, Status> {
         self.adapter_state.received_now();
         let request = request.into_inner().try_into()?;
-        let response = self.blockchain_manager.lock().await.get_successors(request);
+        let response = self.get_successors_handler.get_successors(request).await;
         Ok(Response::new(response.into()))
     }
 
@@ -132,7 +129,7 @@ impl BtcAdapter for BtcAdapterImpl {
 pub fn spawn_grpc_server(
     config: Config,
     adapter_state: AdapterState,
-    blockchain_manager: Arc<Mutex<BlockchainManager>>,
+    get_successors_handler: GetSuccessorsHandler,
     transaction_manager_tx: UnboundedSender<TransactionManagerRequest>,
 ) {
     // make sure we receive only one socket from systemd
@@ -141,7 +138,7 @@ pub fn spawn_grpc_server(
     }
     let btc_adapter_impl = BtcAdapterImpl {
         adapter_state,
-        blockchain_manager,
+        get_successors_handler,
         transaction_manager_tx,
     };
     tokio::spawn(async move {
