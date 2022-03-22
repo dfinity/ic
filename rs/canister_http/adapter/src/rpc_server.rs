@@ -16,7 +16,8 @@ pub struct CanisterHttp {
 impl CanisterHttp {
     /// initalize new hyper clients
     pub fn new(logger: ReplicaLogger) -> CanisterHttp {
-        let https = HttpsConnector::new();
+        let mut https = HttpsConnector::new();
+        https.https_only(true);
         let https_client = Client::builder().build::<_, hyper::Body>(https);
         Self {
             https_client,
