@@ -52,11 +52,14 @@ pub fn get_utxos(
     }
 
     let mut address_utxos = utxoset::get_utxos(&state.utxos, address);
+    let main_chain_height = state.height + (main_chain.len() as u32) - 1;
+    let mut tip_block_hash = None;
+    let mut tip_block_height = None;
 
     // Apply unstable blocks to the UTXO set.
     for (i, block) in main_chain.iter().enumerate() {
-        let block_height = state.height + (i as u32) + 1;
-        let confirmations = main_chain_height(state) - block_height + 1;
+        let block_height = state.height + (i as u32);
+        let confirmations = main_chain_height - block_height + 1;
 
         if confirmations < min_confirmations {
             // The block has fewer confirmations than requested.
@@ -67,6 +70,9 @@ pub fn get_utxos(
         for tx in &block.txdata {
             utxoset::insert_tx(&mut address_utxos, tx, block_height);
         }
+
+        tip_block_hash = Some(block.block_hash());
+        tip_block_height = Some(block_height);
     }
 
     // Filter out UTXOs added in unstable blocks that are not for the given address.
@@ -86,6 +92,10 @@ pub fn get_utxos(
     Ok(GetUtxosResponse {
         total_count: utxos.len() as u32,
         utxos,
+        // TODO(EXC-1010): We are guaranteed that the tip block hash and height
+        // are always available. Refactor the code to avoid this panic.
+        tip_block_hash: tip_block_hash.expect("Tip block must exist").to_vec(),
+        tip_height: tip_block_height.expect("Tip height must exist"),
     })
 }
 
@@ -109,7 +119,7 @@ pub fn insert_block(state: &mut State, block: Block) -> Result<(), BlockDoesNotE
 }
 
 pub fn main_chain_height(state: &State) -> Height {
-    unstable_blocks::get_main_chain(&state.unstable_blocks).len() as u32 + state.height
+    unstable_blocks::get_main_chain(&state.unstable_blocks).len() as u32 + state.height - 1
 }
 
 pub fn get_unstable_blocks(state: &State) -> Vec<&Block> {
@@ -167,7 +177,7 @@ mod test {
                 .remove(&genesis_block(Network::Bitcoin).block_hash())
                 .unwrap(),
         );
-        for _ in 0..num_blocks - 1 {
+        for _ in 1..num_blocks {
             let next_block = blocks.remove(&chain[chain.len() - 1].block_hash()).unwrap();
             chain.push(next_block);
         }
@@ -242,9 +252,11 @@ mod test {
                     vout: 0,
                 },
                 value: 1000,
-                height: 1,
+                height: 0,
             }],
             total_count: 1,
+            tip_block_hash: block_0.block_hash().to_vec(),
+            tip_height: 0,
         };
 
         // Assert that the UTXOs of address 1 are present.
@@ -261,7 +273,7 @@ mod test {
             .with_transaction(tx.clone())
             .build();
 
-        insert_block(&mut state, block_1).unwrap();
+        insert_block(&mut state, block_1.clone()).unwrap();
 
         // address 2 should now have the UTXO while address 1 has no UTXOs.
         assert_eq!(
@@ -273,9 +285,11 @@ mod test {
                         vout: 0,
                     },
                     value: 1000,
-                    height: 2,
+                    height: 1,
                 }],
                 total_count: 1,
+                tip_block_hash: block_1.block_hash().to_vec(),
+                tip_height: 1,
             })
         );
 
@@ -283,7 +297,9 @@ mod test {
             get_utxos(&state, &address_1.to_string(), 0),
             Ok(GetUtxosResponse {
                 utxos: vec![],
-                total_count: 0
+                total_count: 0,
+                tip_block_hash: block_1.block_hash().to_vec(),
+                tip_height: 1,
             })
         );
 
@@ -303,14 +319,18 @@ mod test {
             get_utxos(&state, &address_2.to_string(), 0),
             Ok(GetUtxosResponse {
                 utxos: vec![],
-                total_count: 0
+                total_count: 0,
+                tip_block_hash: block_0.block_hash().to_vec(),
+                tip_height: 0,
             })
         );
         assert_eq!(
             get_utxos(&state, &address_3.to_string(), 0),
             Ok(GetUtxosResponse {
                 utxos: vec![],
-                total_count: 0
+                total_count: 0,
+                tip_block_hash: block_0.block_hash().to_vec(),
+                tip_height: 0,
             })
         );
         assert_eq!(
@@ -327,28 +347,34 @@ mod test {
         let block_2_prime = BlockBuilder::with_prev_header(block_1_prime.header)
             .with_transaction(tx.clone())
             .build();
-        insert_block(&mut state, block_2_prime).unwrap();
+        insert_block(&mut state, block_2_prime.clone()).unwrap();
 
         // Address 1 has no UTXOs since they were spent on the main chain.
         assert_eq!(
             get_utxos(&state, &address_1.to_string(), 0),
             Ok(GetUtxosResponse {
                 utxos: vec![],
-                total_count: 0
+                total_count: 0,
+                tip_block_hash: block_2_prime.block_hash().to_vec(),
+                tip_height: 2,
             })
         );
         assert_eq!(
             get_utxos(&state, &address_2.to_string(), 0),
             Ok(GetUtxosResponse {
                 utxos: vec![],
-                total_count: 0
+                total_count: 0,
+                tip_block_hash: block_2_prime.block_hash().to_vec(),
+                tip_height: 2,
             })
         );
         assert_eq!(
             get_utxos(&state, &address_3.to_string(), 0),
             Ok(GetUtxosResponse {
                 utxos: vec![],
-                total_count: 0
+                total_count: 0,
+                tip_block_hash: block_2_prime.block_hash().to_vec(),
+                tip_height: 2,
             })
         );
         // The funds are now with address 4.
@@ -361,9 +387,11 @@ mod test {
                         vout: 0,
                     },
                     value: 1000,
-                    height: 3,
+                    height: 2,
                 }],
                 total_count: 1,
+                tip_block_hash: block_2_prime.block_hash().to_vec(),
+                tip_height: 2,
             })
         );
     }
@@ -409,6 +437,14 @@ mod test {
                     height: 75361,
                 }],
                 total_count: 1,
+                // The tip should be the block hash at height 100,000
+                // https://bitcoinchain.com/block_explorer/block/100000/
+                tip_block_hash: BlockHash::from_str(
+                    "000000000003ba27aa200b1cecaad478d2b00432346c3f1f3986da1afd33e506"
+                )
+                .unwrap()
+                .to_vec(),
+                tip_height: 100_000,
             })
         );
 
@@ -433,6 +469,14 @@ mod test {
                     height: 66184,
                 }],
                 total_count: 1,
+                // The tip should be the block hash at height 100,000
+                // https://bitcoinchain.com/block_explorer/block/100000/
+                tip_block_hash: BlockHash::from_str(
+                    "000000000003ba27aa200b1cecaad478d2b00432346c3f1f3986da1afd33e506"
+                )
+                .unwrap()
+                .to_vec(),
+                tip_height: 100_000,
             })
         );
     }
@@ -455,18 +499,30 @@ mod test {
             };
 
             // Create a block where 1000 satoshis are given to the address_1.
-            let block_0 = BlockBuilder::genesis()
-                .with_transaction(
-                    TransactionBuilder::coinbase()
-                        .with_output(&address_1, 1000)
-                        .build(),
-                )
+            let tx = TransactionBuilder::coinbase()
+                .with_output(&address_1, 1000)
                 .build();
+            let block_0 = BlockBuilder::genesis().with_transaction(tx.clone()).build();
 
-            let state = State::new(1, *network, block_0);
+            let state = State::new(1, *network, block_0.clone());
 
             // Expect an empty UTXO set.
-            assert_eq!(main_chain_height(&state), 1);
+            assert_eq!(
+                get_utxos(&state, &address_1.to_string(), 1),
+                Ok(GetUtxosResponse {
+                    utxos: vec![Utxo {
+                        outpoint: OutPoint {
+                            txid: tx.txid().to_vec(),
+                            vout: 0
+                        },
+                        value: 1000,
+                        height: 0,
+                    }],
+                    total_count: 1,
+                    tip_block_hash: block_0.block_hash().to_vec(),
+                    tip_height: 0
+                })
+            );
             assert_eq!(
                 get_utxos(&state, &address_1.to_string(), 2),
                 Err(GetUtxosError::MinConfirmationsTooLarge { given: 2, max: 1 })
@@ -513,14 +569,16 @@ mod test {
                 .build();
 
             let mut state = State::new(2, *network, block_0);
-            insert_block(&mut state, block_1).unwrap();
+            insert_block(&mut state, block_1.clone()).unwrap();
 
             // Address 1 should have no UTXOs at zero confirmations.
             assert_eq!(
                 get_utxos(&state, &address_1.to_string(), 0),
                 Ok(GetUtxosResponse {
                     utxos: vec![],
-                    total_count: 0
+                    total_count: 0,
+                    tip_block_hash: block_1.block_hash().to_vec(),
+                    tip_height: 1
                 })
             );
         }

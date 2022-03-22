@@ -44,6 +44,8 @@ pub struct GetUtxosRequest {
 pub struct GetUtxosResponse {
     pub utxos: Vec<Utxo>,
     pub total_count: u32,
+    pub tip_block_hash: BlockHash,
+    pub tip_height: u32,
 }
 
 /// Errors when processing a `get_utxos` request.

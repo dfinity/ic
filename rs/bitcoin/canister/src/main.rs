@@ -152,7 +152,7 @@ mod test {
                 .build();
 
             // Set the state.
-            let state = State::new(0, *network, genesis_block);
+            let state = State::new(0, *network, genesis_block.clone());
 
             assert_eq!(
                 get_utxos(
@@ -169,9 +169,11 @@ mod test {
                             vout: 0
                         },
                         value: 1000,
-                        height: 1,
+                        height: 0,
                     }],
-                    total_count: 1
+                    total_count: 1,
+                    tip_block_hash: genesis_block.block_hash().to_vec(),
+                    tip_height: 0
                 })
             );
         }
@@ -362,8 +364,8 @@ mod test {
                 .build();
 
             // Set the state.
-            let mut state = State::new(2, *network, block_0);
-            store::insert_block(&mut state, block_1).unwrap();
+            let mut state = State::new(2, *network, block_0.clone());
+            store::insert_block(&mut state, block_1.clone()).unwrap();
 
             // With up to one confirmation, expect address 2 to have one UTXO, and
             // address 1 to have no UTXOs.
@@ -383,9 +385,11 @@ mod test {
                                 vout: 0,
                             },
                             value: 1000,
-                            height: 2,
+                            height: 1,
                         }],
-                        total_count: 1
+                        total_count: 1,
+                        tip_block_hash: block_1.block_hash().to_vec(),
+                        tip_height: 1
                     })
                 );
 
@@ -399,7 +403,9 @@ mod test {
                     ),
                     Ok(GetUtxosResponse {
                         utxos: vec![],
-                        total_count: 0
+                        total_count: 0,
+                        tip_block_hash: block_1.block_hash().to_vec(),
+                        tip_height: 1
                     })
                 );
             }
@@ -416,7 +422,9 @@ mod test {
                 ),
                 Ok(GetUtxosResponse {
                     utxos: vec![],
-                    total_count: 0
+                    total_count: 0,
+                    tip_block_hash: block_0.block_hash().to_vec(),
+                    tip_height: 0
                 })
             );
             assert_eq!(
@@ -434,9 +442,11 @@ mod test {
                             vout: 0,
                         },
                         value: 1000,
-                        height: 1,
+                        height: 0,
                     }],
-                    total_count: 1
+                    total_count: 1,
+                    tip_block_hash: block_0.block_hash().to_vec(),
+                    tip_height: 0
                 })
             );
 
