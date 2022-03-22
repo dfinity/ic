@@ -4,7 +4,7 @@
 //! and publish transactions. Moreover, it interacts with the Bitcoin system
 //! component to provide blocks and collect outgoing transactions.
 
-use bitcoin::network::message::NetworkMessage;
+use bitcoin::{network::message::NetworkMessage, BlockHash, BlockHeader};
 use parking_lot::RwLock;
 use std::{
     net::SocketAddr,
@@ -43,11 +43,13 @@ mod stream;
 mod transaction_manager;
 
 mod cli;
+mod get_successors_handler;
 
 pub use blockchainmanager::BlockchainManager;
 pub use cli::Cli;
 use common::BlockHeight;
 pub use config::{Config, IncomingSource};
+pub use get_successors_handler::GetSuccessorsHandler;
 pub use router::start_router;
 pub use rpc_server::spawn_grpc_server;
 use stream::StreamEvent;
@@ -104,6 +106,15 @@ pub trait ProcessEvent {
 pub trait HasHeight {
     /// This function returns the active tip's height.
     fn get_height(&self) -> BlockHeight;
+}
+
+/// Commands sent back to the router in order perform actions on the blockchain state.
+#[derive(Debug)]
+pub enum BlockchainManagerRequest {
+    /// Inform the adapter to enqueue the next block headers into the syncing queue.
+    EnqueueNewBlocksToDownload(Vec<BlockHeader>),
+    /// Inform the adapter to prune the following block hashes from the cache.
+    PruneOldBlocks(Vec<BlockHash>),
 }
 
 /// The transaction manager is owned by a single thread which listens on a channel

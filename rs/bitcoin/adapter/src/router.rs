@@ -2,14 +2,15 @@
 //! to the correct component.
 use crate::{
     blockchainmanager::BlockchainManager, connectionmanager::ConnectionManager,
-    stream::handle_stream, transaction_manager::TransactionManager, AdapterState, Config,
-    HasHeight, ProcessEvent, ProcessEventError, TransactionManagerRequest,
+    stream::handle_stream, transaction_manager::TransactionManager, AdapterState,
+    BlockchainManagerRequest, Config, HasHeight, ProcessEvent, ProcessEventError,
+    TransactionManagerRequest,
 };
 use ic_logger::ReplicaLogger;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::{
-    sync::{mpsc::UnboundedReceiver, Mutex},
+    sync::{mpsc::Receiver, mpsc::UnboundedReceiver, Mutex},
     task::JoinHandle,
     time::{interval, sleep},
 };
@@ -25,6 +26,7 @@ pub fn start_router(
     blockchain_manager: Arc<Mutex<BlockchainManager>>,
     mut transaction_manager_rx: UnboundedReceiver<TransactionManagerRequest>,
     adapter_state: AdapterState,
+    mut blockchain_manager_rx: Receiver<BlockchainManagerRequest>,
 ) -> JoinHandle<()> {
     let mut transaction_manager = TransactionManager::new(logger.clone());
     let mut connection_manager = ConnectionManager::new(config, logger);
@@ -47,26 +49,36 @@ pub fn start_router(
             tokio::select! {
                 event = connection_manager.receive_stream_event() => {
                     if let Err(ProcessEventError::InvalidMessage) =
-                    connection_manager.process_event(&event)
-                {
-                    connection_manager.discard(event.address);
-                }
+                        connection_manager.process_event(&event)
+                    {
+                        connection_manager.discard(event.address);
+                    }
 
-                let blockchain_manager_process_event_result =
-                    blockchain_manager.lock().await.process_event(&event);
-                if let Err(ProcessEventError::InvalidMessage) =
-                    blockchain_manager_process_event_result
-                {
-                    connection_manager.discard(event.address);
-                }
+                    let blockchain_manager_process_event_result =
+                        blockchain_manager.lock().await.process_event(&event);
+                    if let Err(ProcessEventError::InvalidMessage) =
+                        blockchain_manager_process_event_result
+                    {
+                        connection_manager.discard(event.address);
+                    }
 
-                if let Err(ProcessEventError::InvalidMessage) =
-                    transaction_manager.process_event(&event)
-                {
-                    connection_manager.discard(event.address);
-                }
-
+                    if let Err(ProcessEventError::InvalidMessage) =
+                        transaction_manager.process_event(&event)
+                    {
+                        connection_manager.discard(event.address);
+                    }
                 },
+                result = blockchain_manager_rx.recv() => {
+                    let command = result.expect("Receiving should not fail because the sender part of the channel is never closed.");
+                    match command {
+                        BlockchainManagerRequest::EnqueueNewBlocksToDownload(next_headers) => {
+                            blockchain_manager.lock().await.enqueue_new_blocks_to_download(next_headers);
+                        }
+                        BlockchainManagerRequest::PruneOldBlocks(processed_block_hashes) => {
+                            blockchain_manager.lock().await.prune_old_blocks(&processed_block_hashes);
+                        }
+                    };
+                }
                 transaction_manager_request = transaction_manager_rx.recv() => {
                     match transaction_manager_request.unwrap() {
                         TransactionManagerRequest::SendTransaction(transaction) => transaction_manager.send_transaction(&transaction),
