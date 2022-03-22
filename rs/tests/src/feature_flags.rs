@@ -10,7 +10,7 @@ use ic_fondue::{
     prod_tests::ic::{InternetComputer, Subnet},
 };
 use ic_ic00_types::SignWithECDSAArgs;
-use ic_protobuf::registry::subnet::v1::SubnetFeatures;
+use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 
 /// Tests whether a call to `sign_with_ecdsa` is rejected when called on a

@@ -26,7 +26,7 @@ use ic_fondue::{
     ic_manager::{IcControl, IcEndpoint, IcHandle},
     prod_tests::ic::{InternetComputer, Subnet},
 };
-use ic_protobuf::registry::subnet::v1::SubnetFeatures;
+use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 

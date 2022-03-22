@@ -27,6 +27,7 @@ ic-registry-client = { path = "../registry/client"}
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-common = { path = "../registry/common" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
+ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-registry-transport = { path = "../registry/transport" }
 ic-replica = { path = "../replica" }

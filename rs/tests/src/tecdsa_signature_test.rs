@@ -27,7 +27,7 @@ use ic_fondue::{
 use ic_ic00_types::{
     ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, Payload, SignWithECDSAArgs, SignWithECDSAReply,
 };
-use ic_protobuf::registry::subnet::v1::SubnetFeatures;
+use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use secp256k1::{Message, PublicKey, Secp256k1, Signature};

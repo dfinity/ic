@@ -10,7 +10,7 @@ use ic_fondue::{
     prod_tests::ic::{InternetComputer, Subnet},
     prod_tests::universal_vm::UniversalVm,
 };
-use ic_protobuf::registry::subnet::v1::SubnetFeatures;
+use ic_registry_subnet_features::{BitcoinFeature, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use slog::{info, Logger};
 use std::fs::{self, File};
@@ -44,7 +44,7 @@ docker run -v bitcoind-data:/bitcoin/.bitcoin --name=bitcoind-node -d \
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_features(SubnetFeatures {
-                    bitcoin_testnet_feature: Some(42), // FIXME!
+                    bitcoin_testnet_feature: Some(BitcoinFeature::Enabled),
                     ..SubnetFeatures::default()
                 })
                 .add_nodes(4),
