@@ -1,13 +1,17 @@
 use crate::prod_tests::ic::{AmountOfMemoryKiB, InternetComputer, Node, NrOfVCPUs};
+use crate::prod_tests::universal_vm::UniversalVm;
 use anyhow;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::net::IpAddr;
+use std::net::Ipv6Addr;
 use url::Url;
 
-use super::farm::{CreateVmRequest, PrimaryImage};
+use super::farm::CreateVmRequest;
 use crate::prod_tests::driver_setup::{BASE_IMG_SHA256, BASE_IMG_URL};
 use crate::prod_tests::farm::Farm;
 use crate::prod_tests::farm::FarmResult;
+use crate::prod_tests::farm::ImageLocation;
+use crate::prod_tests::farm::ImageLocation::{IcOsImageViaUrl, ImageViaUrl};
 use crate::prod_tests::test_env::TestEnv;
 
 const DEFAULT_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(4);
@@ -25,15 +29,42 @@ pub struct ResourceRequest {
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct DiskImage {
-    url: Url,
-    sha256: String,
+    pub image_type: ImageType,
+    pub url: Url,
+    pub sha256: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ImageType {
+    IcOsImage,
+    RawImage,
+}
+
+impl From<DiskImage> for ImageLocation {
+    fn from(src: DiskImage) -> ImageLocation {
+        match src.image_type {
+            ImageType::IcOsImage => IcOsImageViaUrl {
+                url: src.url.clone(),
+                sha256: src.sha256,
+            },
+            ImageType::RawImage => ImageViaUrl {
+                url: src.url.clone(),
+                sha256: src.sha256,
+            },
+        }
+    }
 }
 
 impl ResourceRequest {
-    pub fn new(primary_image_url: Url, primary_image_sha256: String) -> Self {
+    pub fn new(
+        image_type: ImageType,
+        primary_image_url: Url,
+        primary_image_sha256: String,
+    ) -> Self {
         Self {
             group_name: Default::default(),
             primary_image: DiskImage {
+                image_type,
                 url: primary_image_url,
                 sha256: primary_image_sha256,
             },
@@ -57,6 +88,7 @@ pub struct VmSpec {
     pub vcpus: NrOfVCPUs,
     pub memory_kibibytes: AmountOfMemoryKiB,
     pub boot_image: BootImage,
+    pub has_ipv4: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -84,11 +116,11 @@ impl ResourceGroup {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct AllocatedVm {
     pub name: String,
     pub group_name: String,
-    pub ip_addr: IpAddr,
+    pub ipv6: Ipv6Addr,
 }
 
 /// This translates the configuration structure from InternetComputer to a
@@ -100,7 +132,7 @@ pub fn get_resource_request(
 ) -> anyhow::Result<ResourceRequest> {
     let url = test_env.read_object(BASE_IMG_URL)?;
     let primary_image_sha256 = test_env.read_object(BASE_IMG_SHA256)?;
-    let mut res_req = ResourceRequest::new(url, primary_image_sha256);
+    let mut res_req = ResourceRequest::new(ImageType::IcOsImage, url, primary_image_sha256);
     res_req.group_name = group_name.to_string();
     for s in &config.subnets {
         for n in &s.nodes {
@@ -110,6 +142,37 @@ pub fn get_resource_request(
     for n in &config.unassigned_nodes {
         res_req.add_vm_request(vm_spec_from_node(n));
     }
+    Ok(res_req)
+}
+
+const DEFAULT_UNIVERSAL_VM_IMG_SHA256: &str =
+    "755933937e273b4ab0ceb570661437c6b1760dd3d95bbb838be42fb5bc15b6aa";
+
+pub fn get_resource_request_for_universal_vm(
+    universal_vm: &UniversalVm,
+    group_name: &str,
+) -> anyhow::Result<ResourceRequest> {
+    let primary_image = universal_vm.primary_image.clone().unwrap_or(DiskImage {
+        image_type: ImageType::RawImage,
+        url: Url::parse(&format!("https://download.dfinity.systems/farm/universal-vm/{DEFAULT_UNIVERSAL_VM_IMG_SHA256}/x86_64-linux/universal-vm.img.zst")).expect("should not fail!"),
+        sha256: String::from(DEFAULT_UNIVERSAL_VM_IMG_SHA256),
+    });
+    let mut res_req = ResourceRequest::new(
+        primary_image.image_type.clone(),
+        primary_image.url.clone(),
+        primary_image.sha256,
+    );
+    res_req.group_name = group_name.to_string();
+    let vm_resources = universal_vm.vm_resources;
+    res_req.add_vm_request(VmSpec {
+        name: universal_vm.name.clone(),
+        vcpus: vm_resources.vcpus.unwrap_or(DEFAULT_VCPUS_PER_VM),
+        memory_kibibytes: vm_resources
+            .memory_kibibytes
+            .unwrap_or(DEFAULT_MEMORY_KIB_PER_VM),
+        boot_image: BootImage::GroupDefault,
+        has_ipv4: universal_vm.has_ipv4,
+    });
     Ok(res_req)
 }
 
@@ -123,21 +186,17 @@ pub fn allocate_resources(farm: &Farm, req: &ResourceRequest) -> FarmResult<Reso
             vm_config.vcpus,
             vm_config.memory_kibibytes,
             match &vm_config.boot_image {
-                BootImage::GroupDefault => PrimaryImage::new(
-                    req.primary_image.url.clone(),
-                    req.primary_image.sha256.clone(),
-                ),
-                BootImage::Image(DiskImage { url, sha256 }) => {
-                    PrimaryImage::new(url.clone(), sha256.clone())
-                }
+                BootImage::GroupDefault => From::from(req.primary_image.clone()),
+                BootImage::Image(disk_image) => From::from(disk_image.clone()),
             },
+            vm_config.has_ipv4,
         );
 
-        let ip_addr = farm.create_vm(group_name, create_vm_request)?;
+        let ipv6 = farm.create_vm(group_name, create_vm_request)?;
         res_group.add_vm(AllocatedVm {
             name,
             group_name: group_name.clone(),
-            ip_addr,
+            ipv6,
         });
     }
     Ok(res_group)
@@ -152,5 +211,6 @@ fn vm_spec_from_node(n: &Node) -> VmSpec {
             .memory_kibibytes
             .unwrap_or(DEFAULT_MEMORY_KIB_PER_VM),
         boot_image: BootImage::GroupDefault,
+        has_ipv4: false,
     }
 }

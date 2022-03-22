@@ -1,19 +1,25 @@
+use crate::ic_manager::handle::READY_RESPONSE_TIMEOUT;
 use crate::ic_manager::{FarmInfo, IcEndpoint, IcHandle, IcSubnet, RuntimeDescriptor};
 use crate::prod_tests::cli::AuthorizedSshAccount;
 use crate::prod_tests::driver_setup::{AUTHORIZED_SSH_ACCOUNTS, FARM_BASE_URL, FARM_GROUP_NAME};
 use crate::prod_tests::test_env::TestEnv;
-use anyhow::Result;
+use anyhow::{bail, Result};
 use ic_interfaces::registry::{RegistryClient, RegistryClientResult};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_protobuf::registry::{node::v1 as pb_node, subnet::v1 as pb_subnet};
 use ic_registry_client::local_registry::LocalRegistry;
 use ic_registry_client_helpers::node::NodeRegistry;
 use ic_registry_subnet_type::SubnetType;
+use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use ic_types::{NodeId, RegistryVersion, SubnetId};
+use slog::{info, warn};
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
 use std::{convert::TryFrom, net::IpAddr, str::FromStr, sync::Arc};
 use url::Url;
+
+const RETRY_TIMEOUT: Duration = Duration::from_secs(120);
+const RETRY_BACKOFF: Duration = Duration::from_secs(5);
 
 pub trait IcHandleConstructor {
     fn ic_handle(&self) -> Result<IcHandle>;
@@ -66,7 +72,7 @@ impl IcHandleConstructor for TestEnv {
             public_api_endpoints,
             malicious_public_api_endpoints: vec![],
             ic_prep_working_dir: Some(IcPrepStateDir {
-                prep_dir: self.base_dir(),
+                prep_dir: self.base_path(),
             }),
         })
     }
@@ -87,6 +93,7 @@ impl DefaultIC for TestEnv {
         TopologySnapshot {
             local_registry,
             registry_version,
+            env: self.clone(),
         }
     }
 }
@@ -99,6 +106,7 @@ const REGISTRY_QUERY_TIMEOUT: Duration = Duration::from_secs(5);
 pub struct TopologySnapshot {
     registry_version: RegistryVersion,
     local_registry: Arc<LocalRegistry>,
+    env: TestEnv,
 }
 
 impl TopologySnapshot {
@@ -114,6 +122,7 @@ impl TopologySnapshot {
                     subnet_id,
                     registry_version,
                     local_registry: self.local_registry.clone(),
+                    env: self.env.clone(),
                 })
                 .collect::<Vec<_>>()
                 .into_iter(),
@@ -146,6 +155,7 @@ impl TopologySnapshot {
                     node_id,
                     registry_version,
                     local_registry: self.local_registry.clone(),
+                    env: self.env.clone(),
                 })
                 .collect::<Vec<_>>()
                 .into_iter(),
@@ -158,6 +168,7 @@ pub struct SubnetSnapshot {
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
     local_registry: Arc<LocalRegistry>,
+    env: TestEnv,
 }
 
 impl SubnetSnapshot {
@@ -181,6 +192,7 @@ pub struct IcNodeSnapshot {
     node_id: NodeId,
     registry_version: RegistryVersion,
     local_registry: Arc<LocalRegistry>,
+    env: TestEnv,
 }
 
 impl IcNodeSnapshot {
@@ -218,12 +230,97 @@ impl HasMetricsUrl for IcNodeSnapshot {
 /// implements this trait.
 pub trait HasPublicApiUrl {
     fn get_public_url(&self) -> Url;
+
+    fn status(&self) -> Result<HttpStatusResponse>;
+
+    /// The status-endpoint reports `healthy`.
+    fn status_is_healthy(&self) -> Result<bool>;
+
+    /// Waits until the is_healthy() returns true
+    fn await_status_is_healthy(&self) -> Result<()>;
 }
 
 impl HasPublicApiUrl for IcNodeSnapshot {
     fn get_public_url(&self) -> Url {
         let node_record = self.raw_node_record();
         IcNodeSnapshot::http_endpoint_to_url(&node_record.http.unwrap())
+    }
+
+    fn status(&self) -> Result<HttpStatusResponse> {
+        let response = reqwest::blocking::Client::builder()
+            .timeout(READY_RESPONSE_TIMEOUT)
+            .build()
+            .expect("cannot build a reqwest client")
+            .get(
+                self.get_public_url()
+                    .join("api/v2/status")
+                    .expect("failed to join URLs"),
+            )
+            .send()?;
+
+        let cbor_response = serde_cbor::from_slice(
+            &response
+                .bytes()
+                .expect("failed to convert a response to bytes")
+                .to_vec(),
+        )
+        .expect("response is not encoded as cbor");
+        Ok(
+            serde_cbor::value::from_value::<HttpStatusResponse>(cbor_response)
+                .expect("failed to deserialize a response to HttpStatusResponse"),
+        )
+    }
+
+    fn status_is_healthy(&self) -> Result<bool> {
+        match self.status() {
+            Ok(s) if s.replica_health_status.is_some() => {
+                Ok(Some(ReplicaHealthStatus::Healthy) == s.replica_health_status)
+            }
+            Ok(_) => {
+                warn!(
+                    self.env.logger(),
+                    "Health status not set in status response!"
+                );
+                Ok(false)
+            }
+            Err(e) => {
+                warn!(self.env.logger(), "Could not fetch status response: {}", e);
+                Err(e)
+            }
+        }
+    }
+
+    fn await_status_is_healthy(&self) -> Result<()> {
+        retry(self.env.logger(), RETRY_TIMEOUT, RETRY_BACKOFF, || {
+            self.status_is_healthy()
+                .and_then(|s| if !s { bail!("Not ready!") } else { Ok(()) })
+        })
+    }
+}
+
+fn retry<F, R>(log: slog::Logger, timeout: Duration, backoff: Duration, f: F) -> Result<R>
+where
+    F: Fn() -> Result<R>,
+{
+    let mut attempt = 1;
+    let start = Instant::now();
+    info!(
+        log,
+        "Retrying for a maximum of {:?} with a linear backoff of {:?}", timeout, backoff
+    );
+    loop {
+        match f() {
+            Ok(v) => break Ok(v),
+            Err(e) => {
+                if start.elapsed() > timeout {
+                    let err_msg = e.to_string();
+                    break Err(e.context(format!("Timed out! Last error: {}", err_msg)));
+                }
+                info!(log, "Attempt {} failed. Error: {:?}", attempt, e);
+                std::thread::sleep(backoff);
+                attempt += 1;
+            }
+        }
     }
 }
 
@@ -252,6 +349,7 @@ impl IcNodeContainer for SubnetSnapshot {
                     node_id,
                     registry_version,
                     local_registry: self.local_registry.clone(),
+                    env: self.env.clone(),
                 })
                 .collect::<Vec<_>>()
                 .into_iter(),

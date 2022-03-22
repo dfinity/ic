@@ -2,9 +2,9 @@ use super::bootstrap::{init_ic, setup_and_start_vms};
 use super::resource::{allocate_resources, get_resource_request, ResourceGroup};
 use super::test_env::TestEnv;
 use crate::ic_instance::node_software_version::NodeSoftwareVersion;
-use crate::prod_tests::driver_setup::{mk_logger, POT_TIMEOUT};
+use crate::prod_tests::driver_setup::mk_logger;
 use crate::prod_tests::driver_setup::{FARM_BASE_URL, FARM_GROUP_NAME};
-use crate::prod_tests::farm::{Farm, GroupSpec};
+use crate::prod_tests::farm::Farm;
 use anyhow::Result;
 use ic_prep_lib::node::NodeSecretKeyStore;
 use ic_protobuf::registry::subnet::v1::GossipConfig;
@@ -16,7 +16,7 @@ use phantom_newtype::AmountOf;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use std::net::IpAddr;
+use std::net::Ipv6Addr;
 use std::path::Path;
 use std::time::Duration;
 
@@ -114,15 +114,6 @@ impl InternetComputer {
         let logger = mk_logger();
         let farm = Farm::new(env.read_object(FARM_BASE_URL)?, logger.clone());
         let group_name: String = env.read_object(FARM_GROUP_NAME)?;
-        let pot_timeout: Duration = env.read_object(POT_TIMEOUT)?;
-
-        farm.create_group(
-            &group_name,
-            pot_timeout,
-            GroupSpec {
-                vm_allocation: self.vm_allocation.clone(),
-            },
-        )?;
         let res_request = get_resource_request(self, env, &group_name)?;
         let res_group = allocate_resources(&farm, &res_request)?;
         self.propagate_ip_addrs(&res_group);
@@ -147,22 +138,22 @@ impl InternetComputer {
 
     fn propagate_ip_addrs(&mut self, res_group: &ResourceGroup) {
         for n in self.unassigned_nodes.iter_mut() {
-            n.ip_addr = Some(
+            n.ipv6 = Some(
                 res_group
                     .vms
                     .get(&n.id().to_string())
                     .unwrap_or_else(|| panic!("no VM found for [node_id = {:?}]", n.id()))
-                    .ip_addr,
+                    .ipv6,
             );
         }
         for s in self.subnets.iter_mut() {
             for n in s.nodes.iter_mut() {
-                n.ip_addr = Some(
+                n.ipv6 = Some(
                     res_group
                         .vms
                         .get(n.id().to_string().as_str())
                         .unwrap_or_else(|| panic!("no VM found for [node_id = {:?}]", n.id()))
-                        .ip_addr,
+                        .ipv6,
                 );
             }
         }
@@ -391,7 +382,7 @@ pub struct VmResources {
 pub struct Node {
     pub vm_resources: VmResources,
     pub secret_key_store: Option<NodeSecretKeyStore>,
-    pub ip_addr: Option<IpAddr>,
+    pub ipv6: Option<Ipv6Addr>,
 }
 
 impl Node {

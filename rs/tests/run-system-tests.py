@@ -91,6 +91,7 @@ def create_env_variables(is_local_run: bool, artifact_dir: str, ci_project_dir: 
     env = os.environ.copy()
     env["TMPDIR"] = tmp_dir
     env["PATH"] = f"{artifact_dir}:" + env["PATH"]
+    env["PATH"] = f"{ci_project_dir}/rs/tests:" + env["PATH"]
     env["PATH"] = f"{ci_project_dir}/ic-os/guestos/scripts:" + env["PATH"]
     if not is_local_run:
         env["XNET_TEST_CANISTER_WASM_PATH"] = f"{artifact_dir}/xnet-test-canister.wasm"
