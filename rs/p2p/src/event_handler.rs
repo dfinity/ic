@@ -73,10 +73,8 @@ use crate::{
     metrics::FlowWorkerMetrics,
 };
 use async_trait::async_trait;
-use ic_interfaces::{
-    ingress_pool::IngressPoolThrottler,
-    transport::{AsyncTransportEventHandler, SendError},
-};
+use ic_interfaces::ingress_pool::IngressPoolThrottler;
+use ic_interfaces_transport::{AsyncTransportEventHandler, SendError};
 use ic_logger::{debug, info, replica_logger::ReplicaLogger, trace};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy, registry::subnet::v1::GossipConfig};

@@ -96,10 +96,10 @@
 
 use ic_config::transport::TransportConfig;
 use ic_interfaces::{
-    artifact_manager::ArtifactManager, consensus_pool::ConsensusPoolCache,
-    registry::RegistryClient, transport::Transport,
+    artifact_manager::ArtifactManager, consensus_pool::ConsensusPoolCache, registry::RegistryClient,
 };
 use ic_interfaces_p2p::IngressIngestionService;
+use ic_interfaces_transport::Transport;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::GossipConfig;

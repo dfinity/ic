@@ -23,7 +23,7 @@ use crate::types::{
     TRANSPORT_FLAGS_IS_HEARTBEAT, TRANSPORT_FLAGS_SENDER_ERROR, TRANSPORT_HEADER_SIZE,
 };
 use ic_crypto_tls_interfaces::{TlsReadHalf, TlsWriteHalf};
-use ic_interfaces::transport::AsyncTransportEventHandler;
+use ic_interfaces_transport::AsyncTransportEventHandler;
 use ic_logger::warn;
 use ic_types::transport::{FlowId, TransportErrorCode, TransportPayload, TransportStateChange};
 

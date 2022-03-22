@@ -64,8 +64,8 @@
 //! In theory, the above locking rules prevent "circular waits" and thus
 //! guarantee deadlock avoidance.
 
-use ic_interfaces::registry::RegistryClient;
-use ic_interfaces::{artifact_manager::ArtifactManager, transport::Transport};
+use ic_interfaces::{artifact_manager::ArtifactManager, registry::RegistryClient};
+use ic_interfaces_transport::Transport;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::p2p::v1 as pb;
 use ic_protobuf::proxy::ProtoProxy;

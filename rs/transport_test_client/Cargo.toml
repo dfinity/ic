@@ -14,6 +14,7 @@ ic-config = { path = "../config" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
 ic-interfaces = { path = "../interfaces" }
+ic-interfaces-transport = { path = "../interfaces/transport" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
