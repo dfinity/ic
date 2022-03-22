@@ -4997,6 +4997,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-interfaces-canister-http-adapter-facade"
+version = "0.8.0"
+
+[[package]]
 name = "ic-interfaces-p2p"
 version = "0.8.0"
 dependencies = [
