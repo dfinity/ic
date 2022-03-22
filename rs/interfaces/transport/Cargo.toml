@@ -1,0 +1,9 @@
+[package]
+name = "ic-interfaces-transport"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+async-trait = "0.1.36"
+ic-protobuf = { path = "../../protobuf" }
+ic-types = { path = "../../types/types" }

@@ -1,4 +1,4 @@
-use ic_interfaces::transport::{AsyncTransportEventHandler, Transport};
+use ic_interfaces_transport::{AsyncTransportEventHandler, Transport};
 use ic_logger::{info, ReplicaLogger};
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_types::transport::{FlowId, FlowTag, TransportErrorCode, TransportPayload};

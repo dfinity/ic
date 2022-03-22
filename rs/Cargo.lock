@@ -5008,6 +5008,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-interfaces-transport"
+version = "0.8.0"
+dependencies = [
+ "async-trait",
+ "ic-protobuf",
+ "ic-types 0.8.0",
+]
+
+[[package]]
 name = "ic-logger"
 version = "0.8.0"
 dependencies = [
@@ -5477,6 +5486,7 @@ dependencies = [
  "ic-execution-environment",
  "ic-interfaces",
  "ic-interfaces-p2p",
+ "ic-interfaces-transport",
  "ic-logger",
  "ic-metrics",
  "ic-protobuf",
@@ -6012,6 +6022,7 @@ dependencies = [
  "ic-ingress-manager",
  "ic-interfaces",
  "ic-interfaces-p2p",
+ "ic-interfaces-transport",
  "ic-logger",
  "ic-metrics",
  "ic-p2p",
@@ -6612,6 +6623,7 @@ dependencies = [
  "ic-interfaces",
  "ic-interfaces-bitcoin-adapter-client",
  "ic-interfaces-p2p",
+ "ic-interfaces-transport",
  "ic-logger",
  "ic-metrics",
  "ic-p2p",
@@ -6671,7 +6683,7 @@ dependencies = [
  "ic-config",
  "ic-crypto",
  "ic-crypto-tls-interfaces",
- "ic-interfaces",
+ "ic-interfaces-transport",
  "ic-logger",
  "ic-metrics",
  "ic-protobuf",
@@ -6706,6 +6718,7 @@ dependencies = [
  "ic-crypto",
  "ic-crypto-tls-interfaces",
  "ic-interfaces",
+ "ic-interfaces-transport",
  "ic-logger",
  "ic-metrics",
  "ic-protobuf",

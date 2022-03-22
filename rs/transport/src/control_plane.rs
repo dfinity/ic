@@ -15,7 +15,7 @@ use crate::types::{
 use crate::utils::{get_flow_ips, get_flow_label, SendQueueImpl};
 use futures::future::{AbortHandle, Abortable, Aborted};
 use ic_crypto_tls_interfaces::{AllowedClients, AuthenticatedPeer, TlsReadHalf, TlsWriteHalf};
-use ic_interfaces::transport::AsyncTransportEventHandler;
+use ic_interfaces_transport::AsyncTransportEventHandler;
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_types::{
@@ -913,7 +913,7 @@ mod tests {
     use crossbeam_channel::{bounded, Sender};
     use ic_config::transport::{TransportConfig, TransportFlowConfig};
     use ic_crypto::utils::TempCryptoComponent;
-    use ic_interfaces::transport::{AsyncTransportEventHandler, SendError};
+    use ic_interfaces_transport::{AsyncTransportEventHandler, SendError};
     use ic_logger::warn;
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::registry::node::v1::{

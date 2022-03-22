@@ -36,7 +36,7 @@ use ic_config::{
     logger::{Config as LoggerConfig, LogTarget},
     transport::{TransportConfig, TransportFlowConfig},
 };
-use ic_interfaces::transport::{AsyncTransportEventHandler, SendError, Transport};
+use ic_interfaces_transport::{AsyncTransportEventHandler, SendError, Transport};
 use ic_logger::{error, info, warn, LoggerImpl, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::node::v1::{

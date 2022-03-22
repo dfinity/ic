@@ -20,20 +20,19 @@ use ic_consensus::{
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_ingress_manager::IngressManager;
-use ic_interfaces::registry::LocalStoreCertifiedTimeReader;
 use ic_interfaces::{
     artifact_manager::{ArtifactClient, ArtifactManager, ArtifactProcessor},
     consensus_pool::ConsensusPoolCache,
     crypto::{Crypto, IngressSigVerifier},
     execution_environment::IngressHistoryReader,
     messaging::{MessageRouting, XNetPayloadBuilder},
-    registry::RegistryClient,
+    registry::{LocalStoreCertifiedTimeReader, RegistryClient},
     self_validating_payload::SelfValidatingPayloadBuilder,
     state_manager::StateManager,
     time_source::SysTimeSource,
-    transport::Transport,
 };
 use ic_interfaces_p2p::IngressIngestionService;
+use ic_interfaces_transport::Transport;
 use ic_logger::{info, replica_logger::ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_p2p::{fetch_gossip_config, start_p2p, AdvertSubscriber, P2PThreadJoiner};

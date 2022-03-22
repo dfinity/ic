@@ -1,5 +1,5 @@
 use async_trait::*;
-use ic_interfaces::transport::{AsyncTransportEventHandler, SendError, Transport};
+use ic_interfaces_transport::{AsyncTransportEventHandler, SendError, Transport};
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_types::{
     transport::{FlowId, FlowTag, TransportErrorCode, TransportPayload, TransportStateChange},

@@ -13,6 +13,7 @@ ic-config = { path = "../config" }
 ic-crypto-hash = { path = "../crypto/hash" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-p2p = { path = "../interfaces/p2p" }
+ic-interfaces-transport = { path = "../interfaces/transport" }
 ic-types = { path = "../types/types" }
 ic-protobuf = { path = "../protobuf" }
 ic-logger = { path = "../monitoring/logger" }

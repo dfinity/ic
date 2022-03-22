@@ -61,7 +61,7 @@ use crate::{
 use ic_artifact_manager::artifact::IngressArtifact;
 use ic_interfaces::artifact_manager::ArtifactManager;
 use ic_interfaces::registry::RegistryClient;
-use ic_interfaces::transport::Transport;
+use ic_interfaces_transport::Transport;
 use ic_logger::{info, replica_logger::ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::p2p::v1 as pb;

@@ -23,7 +23,6 @@ pub mod replica_config;
 pub mod self_validating_payload;
 pub mod state_manager;
 pub mod time_source;
-pub mod transport;
 pub mod validation;
 
 // Note [Associated Types in Interfaces]
