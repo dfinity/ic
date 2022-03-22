@@ -27,7 +27,7 @@ prod-generic-test:
     - artifacts/results
   timeout: 30m
   retry:
-    max: 2
+    max: 1
     when:
       - always
   variables:
