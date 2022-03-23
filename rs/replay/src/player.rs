@@ -153,7 +153,7 @@ impl Player {
             subnet_id,
             initial_cup,
             artifact_pool_config,
-            MetricsRegistry::global(),
+            MetricsRegistry::new(),
             log.clone(),
         );
 
@@ -176,7 +176,7 @@ impl Player {
     /// subnet recovery.
     pub async fn new(cfg: Config, subnet_id: SubnetId) -> Self {
         let (log, _async_log_guard) = new_replica_logger_from_config(&cfg.logger);
-        let metrics_registry = MetricsRegistry::global();
+        let metrics_registry = MetricsRegistry::new();
         let registry = setup_registry(cfg.clone(), Some(&metrics_registry));
 
         let mut replica_version = Default::default();
@@ -187,7 +187,7 @@ impl Player {
             artifact_pool_config.persistent_pool_read_only = true;
             let consensus_pool = ConsensusPoolImpl::from_uncached(
                 UncachedConsensusPoolImpl::new(artifact_pool_config, log.clone()),
-                MetricsRegistry::global(),
+                MetricsRegistry::new(),
             );
             // Use the replica version from the finalized tip in the pool.
             replica_version = PoolReader::new(&consensus_pool)
@@ -240,7 +240,7 @@ impl Player {
             None
         };
 
-        let metrics_registry = MetricsRegistry::global();
+        let metrics_registry = MetricsRegistry::new();
         let subnet_config = SubnetConfigs::default().own_subnet_config(subnet_type);
 
         let cycles_account_manager = Arc::new(CyclesAccountManager::new(

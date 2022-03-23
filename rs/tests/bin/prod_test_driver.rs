@@ -16,7 +16,7 @@ use ic_tests::node_graceful_leaving_test::{self, test as node_graceful_leaving_t
 use ic_tests::node_removal_from_registry_test::{self, test as node_removal_from_registry_test};
 use ic_tests::node_restart_test::{self, test as node_restart_test};
 use ic_tests::orchestrator::{
-    cup_fetching_across_upgrades,
+    cup_fetching_across_upgrades, nns_backup,
     node_reassignment_test::{self, test as node_reassignment_test},
     ssh_access_to_nodes, unassigned_node_upgrade_test, upgrade_reject,
 };
@@ -402,6 +402,11 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         ),
                     ]),
                 ),
+                pot(
+                    "nns_backup_pot",
+                    nns_backup::config(),
+                    par(vec![t("nns_backup_test", nns_backup::test)]),
+                ).with_ttl(Duration::from_secs(7200)),
             ],
         ),
     );
