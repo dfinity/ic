@@ -33,7 +33,9 @@ use crate::{
             update_subnet_replica_version, UpdateImageType,
         },
     },
-    util::{block_on, get_random_nns_node_endpoint},
+    util::{
+        assert_endpoints_reachability, block_on, get_random_nns_node_endpoint, EndpointsStatus,
+    },
 };
 use ic_fondue::{
     ic_manager::{IcControl, IcHandle},
@@ -60,9 +62,12 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
 
     ctx.install_nns_canisters(&handle, true);
 
-    let nns_node = get_random_nns_node_endpoint(&handle, &mut rng);
-    block_on(nns_node.assert_ready(ctx));
+    block_on(async {
+        let all_nodes: Vec<_> = handle.as_permutation(&mut rng).collect();
+        assert_endpoints_reachability(&all_nodes, EndpointsStatus::AllReachable).await
+    });
 
+    let nns_node = get_random_nns_node_endpoint(&handle, &mut rng);
     let node_ip: IpAddr = nns_node.ip_address().unwrap();
     let subnet_id = nns_node.subnet_id().unwrap();
     let replica_version = get_assigned_replica_version(nns_node).unwrap();
