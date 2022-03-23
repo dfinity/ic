@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use super::{system_api, StoreData, NUM_INSTRUCTION_GLOBAL_NAME};
 use crate::wasm_utils::instrumentation::{instrument, InstructionCostTable};
+use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::{
     AvailableMemory, ExecutionMode, ExecutionParameters, SubnetAvailableMemory,
 };
@@ -80,7 +81,7 @@ fn test_wasmtime_system_api() {
     let module = Module::new(&engine, output_instrumentation.binary.as_slice())
         .expect("failed to instantiate module");
 
-    let linker = system_api::syscalls(no_op_logger(), canister_id, &store);
+    let linker = system_api::syscalls(no_op_logger(), canister_id, &store, FlagStatus::Enabled);
     let instance = linker
         .instantiate(&mut store, &module)
         .expect("failed to instantiate instance");

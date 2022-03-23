@@ -21,12 +21,14 @@ pub(crate) const QUERY_EXECUTION_THREADS: usize = 2;
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct FeatureFlags {
     pub api_cycles_u128_flag: FlagStatus,
+    pub rate_limiting_of_debug_prints: FlagStatus,
 }
 
 impl Default for FeatureFlags {
     fn default() -> Self {
         Self {
             api_cycles_u128_flag: FlagStatus::Enabled,
+            rate_limiting_of_debug_prints: FlagStatus::Enabled,
         }
     }
 }

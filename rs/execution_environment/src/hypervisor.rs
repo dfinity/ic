@@ -1106,6 +1106,8 @@ impl Hypervisor {
     ) -> Self {
         let mut embedder_config = EmbeddersConfig::new();
         embedder_config.query_execution_threads = config.query_execution_threads;
+        embedder_config.feature_flags.rate_limiting_of_debug_prints =
+            config.rate_limiting_of_debug_prints;
 
         let sandbox_executor = match config.canister_sandboxing_flag {
             FlagStatus::Enabled => Some(Arc::new(

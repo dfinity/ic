@@ -2258,6 +2258,8 @@ fn can_record_metrics_single_scheduler_thread() {
             cycles_account_manager,
             &metrics_registry,
             log,
+            FlagStatus::Enabled,
+            FlagStatus::Enabled,
         );
 
         let measurement_scope = MeasurementScope::root(&scheduler.metrics.round_inner_iteration);
@@ -2569,6 +2571,93 @@ fn heap_delta_rate_limiting_metrics_recorded() {
         ingress_history_writer,
         exec_env,
     );
+}
+
+#[test]
+fn heap_delta_rate_limiting_disabled() {
+    let heap_delta_per_message = 1024;
+    // Two canisters each get one message.
+    let scheduler_test_fixture = SchedulerTestFixture {
+        scheduler_config: SchedulerConfig {
+            scheduler_cores: 1,
+            instruction_overhead_per_message: NumInstructions::from(0),
+            ..SchedulerConfig::application_subnet()
+        },
+        metrics_registry: MetricsRegistry::new(),
+        canister_num: 2,
+        message_num_per_canister: 1,
+    };
+    let exec_env = Arc::new(default_exec_env_mock(
+        &scheduler_test_fixture,
+        2,
+        NumInstructions::from(10),
+        NumBytes::new(heap_delta_per_message),
+    ));
+
+    let ingress_history_writer = Arc::new(default_ingress_history_writer_mock(2));
+    with_test_replica_logger(|log| {
+        let cycles_account_manager = Arc::new(
+            CyclesAccountManagerBuilder::new()
+                .with_max_num_instructions(MAX_INSTRUCTIONS_PER_MESSAGE)
+                .build(),
+        );
+        let scheduler = SchedulerImpl::new(
+            scheduler_test_fixture.scheduler_config.clone(),
+            subnet_test_id(1),
+            ingress_history_writer,
+            exec_env,
+            cycles_account_manager,
+            &scheduler_test_fixture.metrics_registry,
+            log,
+            FlagStatus::Disabled,
+            FlagStatus::Enabled,
+        );
+        let state = get_initial_state(
+            scheduler_test_fixture.canister_num,
+            scheduler_test_fixture.message_num_per_canister,
+        );
+
+        scheduler.execute_round(
+            state,
+            Randomness::from([0; 32]),
+            None,
+            ExecutionRound::from(2),
+            ProvisionalWhitelist::Set(BTreeSet::new()),
+            MAX_NUMBER_OF_CANISTERS,
+        );
+
+        let registry = &scheduler_test_fixture.metrics_registry;
+        assert_eq!(
+            fetch_histogram_stats(registry, "scheduler_canister_heap_delta_debits")
+                .unwrap()
+                .count as u64,
+            2
+        );
+        assert_eq!(
+            fetch_histogram_stats(registry, "scheduler_canister_heap_delta_debits")
+                .unwrap()
+                .sum as u64,
+            0
+        );
+        assert_eq!(
+            fetch_histogram_stats(
+                registry,
+                "scheduler_heap_delta_rate_limited_canisters_per_round"
+            )
+            .unwrap()
+            .count as u64,
+            1
+        );
+        assert_eq!(
+            fetch_histogram_stats(
+                registry,
+                "scheduler_heap_delta_rate_limited_canisters_per_round"
+            )
+            .unwrap()
+            .sum as u64,
+            0
+        );
+    });
 }
 
 #[test]
@@ -4161,6 +4250,8 @@ fn scheduler_test(
             cycles_account_manager,
             &test_fixture.metrics_registry,
             log,
+            FlagStatus::Enabled,
+            FlagStatus::Enabled,
         );
         run_test(scheduler);
     });

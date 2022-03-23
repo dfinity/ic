@@ -81,6 +81,18 @@ pub struct Config {
 
     /// The number of threads to use for query execution.
     pub query_execution_threads: usize,
+
+    /// If this flag is enabled, then the output of the `debug_print` system-api
+    /// call will be skipped based on heuristics.
+    pub rate_limiting_of_debug_prints: FlagStatus,
+
+    /// If this flag is enabled, then message execution of canisters will be
+    /// rate limited based on the amount of modified memory.
+    pub rate_limiting_of_heap_delta: FlagStatus,
+
+    /// If this flag is enabled, then message execution of canisters will be
+    /// rate limited based on the number of executed instructions per round.
+    pub rate_limiting_of_instructions: FlagStatus,
 }
 
 impl Default for Config {
@@ -101,6 +113,9 @@ impl Default for Config {
             max_controllers: 10,
             canister_sandboxing_flag: FlagStatus::Enabled,
             query_execution_threads: QUERY_EXECUTION_THREADS,
+            rate_limiting_of_debug_prints: FlagStatus::Enabled,
+            rate_limiting_of_heap_delta: FlagStatus::Enabled,
+            rate_limiting_of_instructions: FlagStatus::Disabled,
         }
     }
 }

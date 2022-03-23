@@ -5,7 +5,7 @@ use crate::{
     IngressHistoryWriterImpl, InternalHttpQueryHandler,
 };
 use ic_base_types::NumSeconds;
-use ic_config::execution_environment::Config;
+use ic_config::{execution_environment::Config, flag_status::FlagStatus};
 use ic_interfaces::execution_environment::{
     AvailableMemory, ExecutionMode, ExecutionParameters, QueryHandler,
 };
@@ -47,6 +47,7 @@ where
             subnet_type,
             1000,
             1,
+            FlagStatus::Enabled,
         )
     }
 

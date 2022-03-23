@@ -949,6 +949,7 @@ impl ExecutionEnvironmentImpl {
             own_subnet_type,
             config.max_controllers,
             num_cores,
+            config.rate_limiting_of_instructions,
         );
         let canister_manager = CanisterManager::new(
             Arc::clone(&hypervisor),

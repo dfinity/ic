@@ -1,5 +1,6 @@
 use crate::wasmtime_embedder::{system_api_charges, StoreData};
 
+use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult, SystemApi};
 use ic_logger::{error, info, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
@@ -147,6 +148,7 @@ pub(crate) fn syscalls<S: SystemApi>(
     log: ReplicaLogger,
     canister_id: CanisterId,
     store: &Store<StoreData<S>>,
+    rate_limiting_of_debug_prints: FlagStatus,
 ) -> Linker<StoreData<S>> {
     fn with_system_api<S, T>(caller: &mut Caller<'_, StoreData<S>>, f: impl Fn(&mut S) -> T) -> T {
         f(&mut caller.as_context_mut().data_mut().system_api)
@@ -449,10 +451,16 @@ pub(crate) fn syscalls<S: SystemApi>(
                     system_api_charges::DEBUG_PRINT,
                     length as u32,
                 )?;
-                match caller.data().system_api.subnet_type() {
-                    // Debug print is a no-op on non-system subnets
-                    SubnetType::Application | SubnetType::VerifiedApplication => Ok(()),
-                    SubnetType::System => {
+                match (
+                    caller.data().system_api.subnet_type(),
+                    rate_limiting_of_debug_prints,
+                ) {
+                    // Debug print is a no-op on non-system subnets with rate limiting.
+                    (SubnetType::Application, FlagStatus::Enabled) => Ok(()),
+                    (SubnetType::VerifiedApplication, FlagStatus::Enabled) => Ok(()),
+                    // If rate limiting is disabled or the subnet is a system subnet, then
+                    // debug print produces output.
+                    (_, FlagStatus::Disabled) | (SubnetType::System, FlagStatus::Enabled) => {
                         with_memory_and_system_api(caller, |system_api, memory| {
                             system_api.ic0_debug_print(offset as u32, length as u32, memory)
                         })

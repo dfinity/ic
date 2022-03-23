@@ -153,6 +153,8 @@ pub fn setup_execution(
         Arc::clone(&cycles_account_manager),
         metrics_registry,
         logger,
+        config.rate_limiting_of_heap_delta,
+        config.rate_limiting_of_instructions,
     ));
 
     (
