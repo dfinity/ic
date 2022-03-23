@@ -17,6 +17,9 @@ use proptest::prelude::{any, Strategy};
 use proptest_derive::Arbitrary;
 use std::fs::Permissions;
 
+// This path is not used in practice. The code should panic if it is.
+pub const CRYPTO_ROOT_DEFAULT_PATH: &str = "/This/must/not/be/a/real/path";
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(test, derive(Arbitrary))]
@@ -31,7 +34,14 @@ pub enum CspVaultType {
     UnixSocket(PathBuf),
 }
 
+impl Default for CspVaultType {
+    fn default() -> Self {
+        CspVaultType::InReplica
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(default)]
 #[cfg_attr(test, derive(Arbitrary))]
 /// #
 /// ```
@@ -49,6 +59,15 @@ pub struct CryptoConfig {
     )]
     pub crypto_root: PathBuf,
     pub csp_vault_type: CspVaultType,
+}
+
+impl Default for CryptoConfig {
+    fn default() -> Self {
+        Self {
+            crypto_root: PathBuf::from(CRYPTO_ROOT_DEFAULT_PATH),
+            csp_vault_type: CspVaultType::InReplica,
+        }
+    }
 }
 
 impl CryptoConfig {
