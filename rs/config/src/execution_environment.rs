@@ -115,7 +115,7 @@ impl Default for Config {
             query_execution_threads: QUERY_EXECUTION_THREADS,
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
             rate_limiting_of_heap_delta: FlagStatus::Enabled,
-            rate_limiting_of_instructions: FlagStatus::Disabled,
+            rate_limiting_of_instructions: FlagStatus::Enabled,
         }
     }
 }
