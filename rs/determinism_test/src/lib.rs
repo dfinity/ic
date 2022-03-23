@@ -87,6 +87,9 @@ fn wait_for_ingress_message(
                 WasmResult::Reply(bytes) => return bytes,
             },
             IngressStatus::Failed { error, .. } => panic!("{:?}", error),
+            IngressStatus::Done { .. } => {
+                panic!("The call has completed but the reply/reject data has been pruned.")
+            }
             IngressStatus::Received { .. }
             | IngressStatus::Processing { .. }
             | IngressStatus::Unknown => sleep(Duration::from_millis(5)),
@@ -203,6 +206,9 @@ fn install_canister(
                 break;
             }
             IngressStatus::Failed { error, .. } => panic!("{:?}", error),
+            IngressStatus::Done { .. } => {
+                panic!("The call has completed but the reply/reject data has been pruned.")
+            }
             IngressStatus::Received { .. }
             | IngressStatus::Processing { .. }
             | IngressStatus::Unknown => sleep(Duration::from_millis(5)),

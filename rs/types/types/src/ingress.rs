@@ -1,7 +1,6 @@
 //! Ingress types.
 
 use crate::artifact::IngressMessageId;
-use crate::messages::MAX_RESPONSE_COUNT_BYTES;
 use crate::{CanisterId, CountBytes, PrincipalId, Time, UserId};
 use ic_error_types::{ErrorCode, UserError};
 use ic_protobuf::{
@@ -48,6 +47,12 @@ pub enum IngressStatus {
         user_id: UserId,
         time: Time,
     },
+    /// The call has completed but the reply/reject data has been pruned.
+    Done {
+        receiver: PrincipalId,
+        user_id: UserId,
+        time: Time,
+    },
     /// The system has no knowledge of this message.  It may have
     /// expired or it failed to induct.
     Unknown,
@@ -60,6 +65,7 @@ impl IngressStatus {
             IngressStatus::Completed { user_id, .. } => Some(*user_id),
             IngressStatus::Failed { user_id, .. } => Some(*user_id),
             IngressStatus::Processing { user_id, .. } => Some(*user_id),
+            IngressStatus::Done { user_id, .. } => Some(*user_id),
             IngressStatus::Unknown => None,
         }
     }
@@ -70,6 +76,7 @@ impl IngressStatus {
             IngressStatus::Completed { receiver, .. } => Some(*receiver),
             IngressStatus::Failed { receiver, .. } => Some(*receiver),
             IngressStatus::Processing { receiver, .. } => Some(*receiver),
+            IngressStatus::Done { receiver, .. } => Some(*receiver),
             IngressStatus::Unknown => None,
         }
         .map(|receiver| {
@@ -92,23 +99,22 @@ impl IngressStatus {
             } => "rejected",
             IngressStatus::Failed { .. } => "rejected",
             IngressStatus::Processing { .. } => "processing",
+            IngressStatus::Done { .. } => "done",
             IngressStatus::Unknown => "unknown",
         }
     }
 }
 
 impl CountBytes for IngressStatus {
-    /// For "terminal" statuses the actual size is returned, whereas `MAX_RESPONSE_COUNT_BYTES` is
-    /// returned for statuses that can still go to `Completed` or `Failed`.
     fn count_bytes(&self) -> usize {
         std::mem::size_of::<IngressStatus>()
             + match self {
                 IngressStatus::Completed { result, .. } => result.count_bytes(),
                 IngressStatus::Failed { error, .. } => error.description().as_bytes().len(),
-                IngressStatus::Received { .. } | IngressStatus::Processing { .. } => {
-                    MAX_RESPONSE_COUNT_BYTES
-                }
-                IngressStatus::Unknown => 0,
+                IngressStatus::Received { .. }
+                | IngressStatus::Processing { .. }
+                | IngressStatus::Done { .. }
+                | IngressStatus::Unknown => 0,
             }
     }
 }
@@ -258,6 +264,17 @@ impl From<&IngressStatus> for pb_ingress::IngressStatus {
                     time_nanos: time.as_nanos_since_unix_epoch(),
                 })),
             },
+            IngressStatus::Done {
+                receiver,
+                user_id,
+                time,
+            } => Self {
+                status: Some(Status::Done(pb_ingress::IngressStatusDone {
+                    receiver: Some(pb_types::PrincipalId::from(*receiver)),
+                    user_id: Some(crate::user_id_into_protobuf(*user_id)),
+                    time_nanos: time.as_nanos_since_unix_epoch(),
+                })),
+            },
             IngressStatus::Unknown => Self {
                 status: Some(Status::Unknown(pb_ingress::IngressStatusUnknown {})),
             },
@@ -319,6 +336,14 @@ impl TryFrom<pb_ingress::IngressStatus> for IngressStatus {
                     user_id: crate::user_id_try_from_protobuf(try_from_option_field(
                         p.user_id,
                         "IngressStatus::Processing::user_id",
+                    )?)?,
+                },
+                Status::Done(p) => IngressStatus::Done {
+                    receiver: try_from_option_field(p.receiver, "IngressStatus::Done::receiver")?,
+                    time: Time::from_nanos_since_unix_epoch(p.time_nanos),
+                    user_id: crate::user_id_try_from_protobuf(try_from_option_field(
+                        p.user_id,
+                        "IngressStatus::Done::user_id",
                     )?)?,
                 },
                 Status::Unknown(_) => IngressStatus::Unknown,

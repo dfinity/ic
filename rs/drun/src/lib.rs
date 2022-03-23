@@ -32,6 +32,7 @@ use ic_test_utilities::{
     mock_time,
     registry::{add_subnet_record, insert_initial_dkg_transcript, SubnetRecordBuilder},
 };
+use ic_types::user_error::ErrorCode;
 use ic_types::{
     batch::{Batch, BatchPayload, IngressPayload, SelfValidatingPayload, XNetPayload},
     ingress::{IngressStatus, WasmResult},
@@ -349,6 +350,12 @@ fn execute_ingress_message(
         match ingress_result {
             IngressStatus::Completed { result, .. } => return Ok(result),
             IngressStatus::Failed { error, .. } => return Err(error),
+            IngressStatus::Done { .. } => {
+                return Err(UserError::new(
+                    ErrorCode::SubnetOversubscribed,
+                    "The call has completed but the reply/reject data has been pruned.",
+                ))
+            }
             IngressStatus::Received { .. }
             | IngressStatus::Processing { .. }
             | IngressStatus::Unknown => (),

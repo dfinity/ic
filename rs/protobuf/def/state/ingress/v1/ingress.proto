@@ -34,6 +34,12 @@ message IngressStatusFailed {
     types.v1.PrincipalId receiver = 5;
 }
 
+message IngressStatusDone {
+    types.v1.UserId user_id = 1;
+    uint64 time_nanos = 2;
+    types.v1.PrincipalId receiver = 3;
+}
+
 message PruningEntry {
     uint64 time_nanos = 1;
     repeated bytes messages = 2;
@@ -46,6 +52,7 @@ message IngressStatus {
         IngressStatusReceived received = 3;
         IngressStatusCompleted completed = 4;
         IngressStatusFailed failed = 5;
+        IngressStatusDone done = 6;
     };
 }
 

@@ -21,7 +21,7 @@ use ic_types::{
     ic00::Payload,
     ingress::{IngressStatus, WasmResult},
     messages::{CanisterInstallMode, SignedIngress},
-    user_error::UserError,
+    user_error::{ErrorCode, UserError},
     Randomness, RegistryVersion,
 };
 use ic_types::{messages::MessageId, replica_config::ReplicaConfig, CanisterId};
@@ -157,6 +157,12 @@ fn execute_ingress_message(
         match ingress_result {
             IngressStatus::Completed { result, .. } => return Ok(result),
             IngressStatus::Failed { error, .. } => return Err(error),
+            IngressStatus::Done { .. } => {
+                return Err(UserError::new(
+                    ErrorCode::SubnetOversubscribed,
+                    "The call has completed but the reply/reject data has been pruned.",
+                ))
+            }
             IngressStatus::Received { .. }
             | IngressStatus::Processing { .. }
             | IngressStatus::Unknown => (),
