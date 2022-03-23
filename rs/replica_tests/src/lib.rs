@@ -26,7 +26,7 @@ use ic_test_utilities::{
     types::ids::user_anonymous_id, types::messages::SignedIngressBuilder,
     universal_canister::UNIVERSAL_CANISTER_WASM, with_test_replica_logger,
 };
-use ic_types::user_error::RejectCode;
+use ic_types::user_error::{ErrorCode, RejectCode};
 use ic_types::{
     ic00::{
         CanisterIdRecord, InstallCodeArgs, Method, Payload,
@@ -96,6 +96,12 @@ fn process_ingress(
             IngressStatus::Failed { error, .. } => {
                 // Don't forget! Signal the runtime to stop.
                 return Err(error);
+            }
+            IngressStatus::Done { .. } => {
+                return Err(UserError::new(
+                    ErrorCode::SubnetOversubscribed,
+                    "The call has completed but the reply/reject data has been pruned.",
+                ));
             }
             IngressStatus::Received { .. }
             | IngressStatus::Processing { .. }

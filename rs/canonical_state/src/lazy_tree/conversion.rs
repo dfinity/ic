@@ -318,6 +318,7 @@ fn status_to_tree<'a>(status: &'a IngressStatus) -> LazyTree<'a> {
             .with_tree("reject_message", string(error.description())),
         IngressStatus::Processing { .. }
         | IngressStatus::Received { .. }
+        | IngressStatus::Done { .. }
         | IngressStatus::Unknown => t,
     };
 
