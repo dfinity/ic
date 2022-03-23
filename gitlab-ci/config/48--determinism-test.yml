@@ -3,6 +3,7 @@ build-determinism-binaries:
     - .ubuntu-nix-docker-pinned-dc
     - .rules-parent-pipeline
   stage: build-determinism-test
+  allow_failure: true
   needs:
     - cargo-build-release-linux-native
     - docker-build-ic-bin
@@ -41,6 +42,7 @@ build-determinism-canisters:
     - .ubuntu-nix-docker-pinned-dc
     - .rules-parent-pipeline
   stage: build-determinism-test
+  allow_failure: true
   needs:
     - cargo-build-canisters
     - docker-build-ic-bin
@@ -49,13 +51,10 @@ build-determinism-canisters:
       set -eux
       echo "cargo-build-canisters:"
       cd artifacts/canisters
-      # we ignore panics for now
-      rm -f panics.wasm.gz
       sha256sum -- *.gz | tee SHAS
       cd -
       echo "docker-build-ic:"
       cd artifacts/docker-build-ic/canisters
-      rm -f panics.wasm.gz
       sha256sum -- *.gz | tee SHAS
       cd -
       if [ "${CI_COMMIT_REF_PROTECTED:-}" != "true" ]; then
