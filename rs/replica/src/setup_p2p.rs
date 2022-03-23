@@ -1,3 +1,5 @@
+use crate::setup_bitcoin_client::setup_bitcoin_client;
+use ic_btc_consensus::BitcoinPayloadBuilder;
 use ic_config::{artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig, Config};
 use ic_consensus::certification::VerifierImpl;
 use ic_crypto::CryptoComponent;
@@ -8,7 +10,6 @@ use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
     execution_environment::{IngressFilterService, QueryExecutionService, QueryHandler},
     registry::{LocalStoreCertifiedTimeReader, RegistryClient},
-    self_validating_payload::NoOpSelfValidatingPayloadBuilder,
 };
 use ic_interfaces_p2p::IngressIngestionService;
 use ic_logger::{info, ReplicaLogger};
@@ -221,7 +222,17 @@ pub fn construct_ic_stack(
     );
     let xnet_payload_builder = Arc::new(xnet_payload_builder);
 
-    let self_validating_payload_builder = NoOpSelfValidatingPayloadBuilder {};
+    let btc_client = setup_bitcoin_client(
+        replica_logger.clone(),
+        rt_handle.clone(),
+        config.adapters_config.bitcoin_uds_path,
+    );
+    let self_validating_payload_builder = BitcoinPayloadBuilder::new(
+        state_manager.clone(),
+        &metrics_registry,
+        btc_client,
+        replica_logger.clone(),
+    );
     let self_validating_payload_builder = Arc::new(self_validating_payload_builder);
 
     let (ingress_ingestion_service, p2p_runner) = create_networking_stack(
