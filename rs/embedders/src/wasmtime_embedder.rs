@@ -106,7 +106,7 @@ fn trap_code_to_hypervisor_error(trap_code: wasmtime::TrapCode) -> HypervisorErr
 
 pub struct WasmtimeEmbedder {
     log: ReplicaLogger,
-    max_wasm_stack_size: usize,
+    config: EmbeddersConfig,
     // Each time a new memory is created it is added to this map.  Each time a
     // `SigsegvMemoryTracker` is created it will look up the corresponding memory in the map
     // and remove it. So memories will only be in this map for the time between module
@@ -116,14 +116,9 @@ pub struct WasmtimeEmbedder {
 
 impl WasmtimeEmbedder {
     pub fn new(config: EmbeddersConfig, log: ReplicaLogger) -> Self {
-        let EmbeddersConfig {
-            max_wasm_stack_size,
-            ..
-        } = config;
-
         WasmtimeEmbedder {
             log,
-            max_wasm_stack_size,
+            config,
             created_memories: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -145,7 +140,7 @@ impl WasmtimeEmbedder {
             .static_memory_maximum_size(
                 wasmtime_environ::WASM_PAGE_SIZE as u64 * wasmtime_environ::WASM32_MAX_PAGES as u64,
             )
-            .max_wasm_stack(self.max_wasm_stack_size)
+            .max_wasm_stack(self.config.max_wasm_stack_size)
             .map_err(|_| HypervisorError::WasmEngineError(WasmEngineError::FailedToSetWasmStack))?;
 
         let engine = wasmtime::Engine::new(&config).map_err(|_| {
@@ -184,7 +179,12 @@ impl WasmtimeEmbedder {
             },
         );
 
-        let linker = system_api::syscalls(self.log.clone(), canister_id, &store);
+        let linker = system_api::syscalls(
+            self.log.clone(),
+            canister_id,
+            &store,
+            self.config.feature_flags.rate_limiting_of_debug_prints,
+        );
 
         let instance = match linker.instantiate(&mut store, module) {
             Ok(instance) => instance,

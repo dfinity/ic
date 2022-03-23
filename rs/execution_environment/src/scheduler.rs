@@ -2,6 +2,7 @@ use crate::{
     canister_manager::uninstall_canister, execution_environment::ExecutionEnvironment,
     metrics::MeasurementScope, util::process_responses,
 };
+use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto::prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_cycles_account_manager::CyclesAccountManager;
@@ -90,6 +91,8 @@ pub(crate) struct SchedulerImpl {
     metrics: Arc<SchedulerMetrics>,
     log: ReplicaLogger,
     thread_pool: RefCell<scoped_threadpool::Pool>,
+    rate_limiting_of_heap_delta: FlagStatus,
+    rate_limiting_of_instructions: FlagStatus,
 }
 
 /// Indicates whether the heartbeat method of a canister should be run on not and
@@ -253,6 +256,7 @@ fn filter_canisters(
     canisters: &BTreeMap<CanisterId, CanisterState>,
     heartbeat_handling: HeartbeatHandling,
     heap_delta_rate_limit: NumBytes,
+    rate_limiting_of_heap_delta: FlagStatus,
 ) -> (Vec<CanisterId>, BTreeSet<CanisterId>) {
     let mut rate_limited_ids = BTreeSet::new();
 
@@ -261,7 +265,8 @@ fn filter_canisters(
         .iter()
         .filter(|canister_id| {
             let canister = canisters.get(canister_id).unwrap();
-            let is_under_limit = canister.scheduler_state.heap_delta_debit < heap_delta_rate_limit;
+            let is_under_limit = canister.scheduler_state.heap_delta_debit < heap_delta_rate_limit
+                || rate_limiting_of_heap_delta == FlagStatus::Disabled;
             if !is_under_limit {
                 rate_limited_ids.insert(**canister_id);
             }
@@ -310,6 +315,8 @@ impl SchedulerImpl {
         cycles_account_manager: Arc<CyclesAccountManager>,
         metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
+        rate_limiting_of_heap_delta: FlagStatus,
+        rate_limiting_of_instructions: FlagStatus,
     ) -> Self {
         let scheduler_cores = config.scheduler_cores as u32;
         Self {
@@ -321,6 +328,8 @@ impl SchedulerImpl {
             cycles_account_manager,
             metrics: Arc::new(SchedulerMetrics::new(metrics_registry)),
             log,
+            rate_limiting_of_heap_delta,
+            rate_limiting_of_instructions,
         }
     }
 
@@ -374,6 +383,7 @@ impl SchedulerImpl {
                 &canisters,
                 heartbeat_handling,
                 self.config.heap_delta_rate_limit,
+                self.rate_limiting_of_heap_delta,
             );
             round_filtered_canisters
                 .add_canisters(&active_canister_ids, &rate_limited_canister_ids);
@@ -554,6 +564,7 @@ impl SchedulerImpl {
                 let metrics = Arc::clone(&self.metrics);
                 let logger = new_logger!(self.log; messaging.round => round_id.get());
                 let canister_execution_limits = canister_execution_limits.clone();
+                let rate_limiting_of_heap_delta = self.rate_limiting_of_heap_delta;
                 scope.execute(move || {
                     *result = execute_canisters_on_thread(
                         canisters,
@@ -566,6 +577,7 @@ impl SchedulerImpl {
                         network_topology,
                         heartbeat_handling,
                         logger,
+                        rate_limiting_of_heap_delta,
                     );
                 });
             }
@@ -1075,16 +1087,25 @@ impl Scheduler for SchedulerImpl {
                 self.metrics
                     .canister_heap_delta_debits
                     .observe(heap_delta_debit as f64);
-                canister.scheduler_state.heap_delta_debit = NumBytes::from(
-                    heap_delta_debit.saturating_sub(self.config.heap_delta_rate_limit.get()),
-                );
+                canister.scheduler_state.heap_delta_debit = match self.rate_limiting_of_heap_delta {
+                    FlagStatus::Enabled => NumBytes::from(
+                        heap_delta_debit.saturating_sub(self.config.heap_delta_rate_limit.get()),
+                    ),
+                    FlagStatus::Disabled => NumBytes::from(0),
+                };
+
                 let install_code_debit = canister.scheduler_state.install_code_debit.get();
                 self.metrics
                     .canister_install_code_debits
                     .observe(install_code_debit as f64);
-                canister.scheduler_state.install_code_debit = NumInstructions::from(
-                    install_code_debit.saturating_sub(self.config.install_code_rate_limit.get()),
-                );
+                canister.scheduler_state.install_code_debit =
+                    match self.rate_limiting_of_instructions {
+                        FlagStatus::Enabled => NumInstructions::from(
+                            install_code_debit
+                                .saturating_sub(self.config.install_code_rate_limit.get()),
+                        ),
+                        FlagStatus::Disabled => NumInstructions::from(0),
+                    };
                 total_canister_memory_usage += canister.memory_usage(own_subnet_type);
             }
 
@@ -1182,6 +1203,7 @@ fn execute_canisters_on_thread(
     network_topology: Arc<NetworkTopology>,
     heartbeat_handling: HeartbeatHandling,
     logger: ReplicaLogger,
+    rate_limiting_of_heap_delta: FlagStatus,
 ) -> ExecutionThreadResult {
     // Since this function runs on a helper thread, we cannot use a nested scope
     // here. Instead, we propagate metrics to the outer scope manually via
@@ -1260,7 +1282,9 @@ fn execute_canisters_on_thread(
                 total_instructions_executed += instructions_consumed;
                 total_messages_executed.inc_assign();
                 total_heap_delta += heap_delta;
-                canister.scheduler_state.heap_delta_debit += heap_delta;
+                if rate_limiting_of_heap_delta == FlagStatus::Enabled {
+                    canister.scheduler_state.heap_delta_debit += heap_delta;
+                }
                 drop(timer);
             }
         }
@@ -1309,7 +1333,9 @@ fn execute_canisters_on_thread(
                 instructions_consumed + canister_execution_limits.instruction_overhead_per_message;
             total_messages_executed.inc_assign();
             total_heap_delta += result.heap_delta;
-            canister.scheduler_state.heap_delta_debit += result.heap_delta;
+            if rate_limiting_of_heap_delta == FlagStatus::Enabled {
+                canister.scheduler_state.heap_delta_debit += result.heap_delta;
+            }
             let msg_execution_duration = timer.stop_and_record();
             if msg_execution_duration
                 > canister_execution_limits.max_message_duration_before_warn_in_seconds

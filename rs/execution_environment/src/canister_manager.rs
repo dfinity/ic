@@ -6,6 +6,7 @@ use crate::{
 };
 use candid::Decode;
 use ic_base_types::NumSeconds;
+use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_ic00_types::{
     CanisterIdRecord, CanisterStatusResultV2, InstallCodeArgs, Method as Ic00Method,
@@ -67,6 +68,7 @@ pub(crate) struct CanisterMgrConfig {
     pub(crate) own_subnet_id: SubnetId,
     pub(crate) own_subnet_type: SubnetType,
     pub(crate) max_controllers: usize,
+    pub(crate) rate_limiting_of_instructions: FlagStatus,
 }
 
 impl CanisterMgrConfig {
@@ -79,6 +81,7 @@ impl CanisterMgrConfig {
         own_subnet_type: SubnetType,
         max_controllers: usize,
         num_cores: usize,
+        rate_limiting_of_instructions: FlagStatus,
     ) -> Self {
         Self {
             subnet_memory_capacity,
@@ -88,6 +91,7 @@ impl CanisterMgrConfig {
             own_subnet_type,
             max_controllers,
             compute_capacity: 100 * num_cores as u64,
+            rate_limiting_of_instructions,
         }
     }
 }
@@ -456,7 +460,9 @@ impl CanisterManager {
             CanisterInstallMode::Reinstall | CanisterInstallMode::Upgrade => {}
         }
 
-        if old_canister.scheduler_state.install_code_debit.get() > 0 {
+        if old_canister.scheduler_state.install_code_debit.get() > 0
+            && self.config.rate_limiting_of_instructions == FlagStatus::Enabled
+        {
             return (
                 execution_parameters.instruction_limit,
                 Err(CanisterManagerError::InstallCodeRateLimited(
@@ -519,7 +525,9 @@ impl CanisterManager {
                 let new_wasm_hash = self.get_wasm_hash(&new_canister);
                 self.cycles_account_manager
                     .refund_execution_cycles(&mut new_canister.system_state, instructions_left);
-                new_canister.scheduler_state.install_code_debit += instructions_consumed;
+                if self.config.rate_limiting_of_instructions == FlagStatus::Enabled {
+                    new_canister.scheduler_state.install_code_debit += instructions_consumed;
+                }
                 state.put_canister_state(new_canister);
                 // We managed to create a new canister and will be dropping the
                 // older one. So we get rid of the previous heap to make sure it
