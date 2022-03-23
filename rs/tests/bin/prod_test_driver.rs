@@ -25,6 +25,7 @@ use ic_tests::rosetta_test;
 use ic_tests::security::nns_voting_fuzzing_poc_test;
 use ic_tests::spec_compliance;
 use ic_tests::token_balance_test::{self, test as token_balance_test};
+use ic_tests::xnet_slo_test;
 use ic_tests::{
     basic_health_test::{self, basic_health_test},
     execution, message_routing,
@@ -322,6 +323,19 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     ]),
                 ),
             ],
+        ),
+    );
+
+    m.insert(
+        "nightly".to_string(),
+        suite(
+            "nightly",
+            vec![pot(
+                "xnet_slo_pot",
+                xnet_slo_test::config_nightly(),
+                par(vec![t("xnet_slo_test", xnet_slo_test::test_nightly)]),
+            )
+            .with_ttl(Duration::from_secs(30 * 60))],
         ),
     );
 

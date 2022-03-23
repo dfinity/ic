@@ -194,19 +194,6 @@ icos-boundary-update-workload-nightly:
 
       $SHELL_WRAPPER timeout 148m ./testnet/tests/scripts/subnet_update_workload.sh "$TESTNET" 3600 100 1k normal icos_boundary_nodes "$CI_JOB_STAGE/$CI_JOB_NAME"
 
-# Install xnet-test-canister instance on 3 subnets and have them exchange messages with each other for 10min
-xnet-slo-nightly:
-  extends: .prod-nightly-test-group-4
-  script:
-    - |
-      set -eExou pipefail
-      if [[ -z "$TESTNET4" ]]; then echo "Please set the TESTNET4 environment variable for proper resource_group locking"; exit 1; fi
-      git fetch
-      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
-      export GIT_REVISION
-
-      $SHELL_WRAPPER timeout 45m ./testnet/tests/scripts/xnet_slo_test.sh "$TESTNET" 3 600 10 1024 normal "$CI_JOB_STAGE/$CI_JOB_NAME"
-
 # Install xnet-test-canister instance onto single node subnets, have them message each other for 10 minutes
 xnet-slo-nightly-many-single-node-subnets:
   extends: .prod-nightly-test-group-5
@@ -675,6 +662,16 @@ system-tests-hourly:
   variables:
     SUITE_NAME: "hourly"
     cd_target_env: "HOURLY"
+  script:
+    - *run-farm-based-test
+
+system-tests-nightly:
+  extends: 
+    - .system-tests
+    - .with-monitoring
+  variables:
+    SUITE_NAME: "nightly"
+    cd_target_env: "NIGHTLY"
   script:
     - *run-farm-based-test
 
