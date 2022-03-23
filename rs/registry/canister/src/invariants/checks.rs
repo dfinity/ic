@@ -167,7 +167,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "No version 1 found in the Registry changelog")]
     fn registry_version_invariants_panics_on_no_version_1() {
         let mut registry = Registry::new();
         registry
@@ -184,7 +184,10 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(
+        expected = "Found a non-sequential version in the Registry changelog, \
+                     between versions 2 and 4"
+    )]
     fn registry_version_invariants_panics_on_missing_versions() {
         let mut registry = Registry::new();
         registry

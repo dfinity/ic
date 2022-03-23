@@ -3,7 +3,7 @@ use prost::Message;
 use candid::{candid_method, Decode};
 use dfn_candid::{candid, candid_one};
 use dfn_core::{
-    api::{arg_data, data_certificate, reply, set_certified_data},
+    api::{arg_data, data_certificate, reply},
     over, over_async, over_may_reject, stable,
 };
 use ic_base_types::NodeId;
@@ -49,6 +49,7 @@ use registry_canister::{
     pb::v1::{NodeProvidersMonthlyXdrRewards, RegistryCanisterStableStorage},
     proto_on_wire::protobuf,
     registry::{EncodedVersion, Registry},
+    registry_lifecycle,
 };
 
 #[cfg(target_arch = "wasm32")]
@@ -142,7 +143,7 @@ fn canister_init() {
 #[export_name = "canister_pre_upgrade"]
 fn canister_pre_upgrade() {
     println!("{}canister_pre_upgrade", LOG_PREFIX);
-    let registry = registry_mut();
+    let registry = registry();
     let mut serialized = Vec::new();
     let ss = RegistryCanisterStableStorage {
         registry: Some(registry.serializable_form()),
@@ -157,32 +158,11 @@ fn canister_pre_upgrade() {
 fn canister_post_upgrade() {
     dfn_core::printer::hook();
     println!("{}canister_post_upgrade", LOG_PREFIX);
-    // Purposefully fail the upgrade if we can't find authz information.
-    // Best to have a broken canister, which we can reinstall, than a
-    // canister without authz information.
-    let ss = RegistryCanisterStableStorage::decode(stable::get().as_slice())
-        .expect("Error decoding from stable.");
+    // call stable_storage APIs and get registry instance in canister context
     let registry = registry_mut();
-    registry.from_serializable_form(ss.registry.expect("Error decoding from stable"));
-
-    registry.check_global_state_invariants(&[]);
-    registry.check_changelog_version_invariants();
-
-    recertify_registry();
-
-    // ANYTHING BELOW THIS LINE SHOULD NOT MUTATE STATE
-
-    if ss.pre_upgrade_version.is_some() {
-        let pre_upgrade_version = ss.pre_upgrade_version.unwrap();
-        assert_eq!(
-            pre_upgrade_version,
-            registry.latest_version(),
-            "The serialized last version watermark doesn't match what's found in the records. \
-                     Watermark: {:?}, Last version: {:?}",
-            pre_upgrade_version,
-            registry.latest_version()
-        );
-    }
+    let stable_storage = stable::get();
+    // delegate real work to more testable function
+    registry_lifecycle::canister_post_upgrade(registry, stable_storage.as_slice());
 }
 
 expose_build_metadata! {}
@@ -716,13 +696,7 @@ fn remove_node_directly_(payload: RemoveNodeDirectlyPayload) {
 }
 
 fn recertify_registry() {
-    use ic_certified_map::{fork_hash, labeled_hash};
-
-    let root_hash = fork_hash(
-        &current_version_tree(registry().latest_version()).reconstruct(),
-        &labeled_hash(b"delta", &registry().changelog().root_hash()),
-    );
-    set_certified_data(&root_hash);
+    registry_canister::certification::recertify_registry(registry());
 }
 
 fn certified_response(tree: HashTree<'_>) -> CertifiedResponse {
