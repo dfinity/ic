@@ -126,7 +126,6 @@ impl Config {
     /// omitted, its value is taken from the given 'default'.
     pub fn load_with_default(source: &ConfigSource, default: Config) -> Result<Self, ConfigError> {
         let cfg = source.load::<ConfigOptional>()?;
-
         let logger = cfg.logger.unwrap_or(default.logger);
         let orchestrator_logger = cfg.orchestrator_logger.unwrap_or_else(|| logger.clone());
 
@@ -174,5 +173,47 @@ impl Config {
 impl ConfigValidate for ConfigOptional {
     fn validate(self) -> Result<Self, String> {
         Ok(self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config_sample::SAMPLE_CONFIG;
+    use tempfile::tempdir as tempdir_deleted_at_end_of_scope;
+
+    #[test]
+    fn load_with_default_works_on_old_configs() {
+        let csp_vault_type_entry = "csp_vault_type: { unix_socket: \"/some/path/to/socket\" },";
+        let sample_config_without_csp_vault_type = SAMPLE_CONFIG.replace(csp_vault_type_entry, "");
+        let result = json5::from_str::<Config>(&sample_config_without_csp_vault_type);
+        assert!(
+            result.is_ok(),
+            "JSON5 parsing failed with error: {:?}",
+            result
+        );
+
+        let temp_dir = tempdir_deleted_at_end_of_scope().expect("Failed creating a temp file.");
+        let old_config_file = temp_dir.path().join("old_ic.json5");
+        std::fs::write(&old_config_file, &sample_config_without_csp_vault_type)
+            .expect("Failed writing test config to a file.");
+        let source = ConfigSource::File(old_config_file);
+        let default_config = Config::new(temp_dir.path().to_path_buf());
+        let result = Config::load_with_default(&source, default_config);
+        assert!(
+            result.is_ok(),
+            "load_with_default failed with error: {:?}",
+            result
+        );
+        // Check that `crypto_root` is from `SAMPLE_CONFIG`, not from `CryptoConfig::default()`.
+        assert_eq!(
+            result
+                .expect("Expected Config")
+                .crypto
+                .crypto_root
+                .to_str()
+                .expect("Expected path string"),
+            "/tmp/ic_crypto"
+        );
     }
 }
