@@ -7,3 +7,4 @@ pub mod mutations;
 pub mod pb;
 pub mod proto_on_wire;
 pub mod registry;
+pub mod registry_lifecycle;
