@@ -1,6 +1,14 @@
 {
-  "name": "ic-agent-sw-cert-app",
-  "private": true,
+  "name": "@dfinity/service-worker",
+  "description": "Service worker to check certification when loading assets from the Internet Computer.",
+  "version": "1.0.0",
+  "license": "Apache-2.0",
+  "files": [
+    "dist-dev",
+    "dist-prod",
+    "README.md",
+    "LICENSE"
+  ],
   "dependencies": {
     "@dfinity/agent": "^0.10.4",
     "@dfinity/candid": "^0.10.4",
@@ -38,15 +46,15 @@
     "webpack-cli": "^4.9.2"
   },
   "scripts": {
-    "clean": "rm -fr dist dist-dev dist-prod",
+    "clean": "rm -fr dist dist-dev dist-prod coverage",
     "build": "rm -fr dist dist-prod && NODE_OPTIONS=--openssl-legacy-provider webpack && mv dist dist-prod",
     "build-dev": "rm -fr dist dist-dev && NODE_OPTIONS=--openssl-legacy-provider FORCE_FETCH_ROOT_KEY=1 webpack --mode development && mv dist dist-dev",
     "start": "NODE_OPTIONS=--openssl-legacy-provider npm run build-dev && http-server dist-dev --proxy https://ic0.app/",
     "lint": "./node_modules/.bin/eslint **/*.ts",
     "lint:fix": "./node_modules/.bin/eslint --fix **/*.ts",
-    "publish:release": "",
     "test:coverage": "jest --verbose --collectCoverage",
     "test": "jest",
+    "prepare": "npm run build && npm run build-dev",
     "prettier:check": "npx -p prettier -p pretty-quick pretty-quick --check",
     "prettier:format": "npx -p prettier -p pretty-quick pretty-quick",
     "format:check": "npm run prettier:check",
@@ -57,7 +65,21 @@
     "node": "^17",
     "npm": "^8.5"
   },
-  "author": "DFINITY Stiftung <sdk@dfinity.org>",
-  "license": "Apache-2.0",
-  "version": "0.10.0"
+  "keywords": [
+    "internet computer",
+    "internet-computer",
+    "ic",
+    "dfinity",
+    "dfx",
+    "canister",
+    "candid",
+    "motoko",
+    "javascript",
+    "typescript",
+    "blockchain",
+    "crypto",
+    "dapp",
+    "service worker",
+    "service-worker"
+  ]
 }
