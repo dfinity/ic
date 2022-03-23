@@ -163,7 +163,7 @@ impl<'a> QueryContext<'a> {
     ) -> Result<WasmResult, UserError> {
         let canister_id = query.receiver;
         debug!(self.log, "Executing query for {}", canister_id);
-        let old_canister = self.get_canister_from_state(&canister_id)?;
+        let old_canister = self.state.get_active_canister(&canister_id)?;
         let call_origin = CallOrigin::Query(query.source);
         // EXC-500: Contain the usage of inter-canister query calls to the subnets
         // that currently use it until we decide on the future of this feature and
@@ -198,7 +198,7 @@ impl<'a> QueryContext<'a> {
             if let Err(HypervisorError::ContractViolation(..)) = result {
                 let measurement_scope =
                     MeasurementScope::nested(&metrics.query_retry_call, measurement_scope);
-                let old_canister = self.get_canister_from_state(&canister_id)?;
+                let old_canister = self.state.get_active_canister(&canister_id)?;
                 let (new_canister, new_result) = self.execute_query(
                     old_canister,
                     call_origin,
@@ -300,7 +300,7 @@ impl<'a> QueryContext<'a> {
     ) -> CallContextId {
         let canister_id = canister.canister_id();
         // The `unwrap()` here is safe as we ensured that the canister has a call
-        // context manager in `get_canister_from_state()`.
+        // context manager in `get_active_canister()`.
         let manager = canister
             .system_state
             .call_context_manager_mut()
@@ -502,32 +502,6 @@ impl<'a> QueryContext<'a> {
         (canister, call_context_id, call_origin, execution_result)
     }
 
-    // Loads a fresh version of the canister from the state and ensures that it
-    // has a call context manager i.e. it is not stopped.
-    fn get_canister_from_state(
-        &self,
-        canister_id: &CanisterId,
-    ) -> Result<CanisterState, UserError> {
-        let canister = self.state.canister_state(canister_id).ok_or_else(|| {
-            UserError::new(
-                ErrorCode::CanisterNotFound,
-                format!("Canister {} not found", canister_id),
-            )
-        })?;
-
-        if canister.system_state.call_context_manager().is_none() {
-            Err(UserError::new(
-                ErrorCode::CanisterStopped,
-                format!(
-                    "Canister {} is stopped and therefore does not have a CallContextManager",
-                    canister.canister_id()
-                ),
-            ))
-        } else {
-            Ok(canister.clone())
-        }
-    }
-
     // Executes a query sent from one canister to another. If a loop in the call
     // graph is detected, then an error is returned.
     fn handle_request(
@@ -551,7 +525,7 @@ impl<'a> QueryContext<'a> {
             error!(self.log, "[EXC-BUG] The canister that we want to execute a request on should not already be loaded.");
         }
 
-        let canister = match self.get_canister_from_state(&request.receiver) {
+        let canister = match self.state.get_active_canister(&request.receiver) {
             Ok(canister) => canister,
             Err(err) => {
                 let payload = Payload::Reject(RejectContext::from(err));

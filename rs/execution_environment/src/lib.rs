@@ -5,12 +5,14 @@ mod execution_environment_metrics;
 mod history;
 mod hypervisor;
 mod ingress_filter;
+mod internal_query_handler;
 mod metrics;
 mod query_handler;
 mod scheduler;
 mod types;
 mod util;
 
+use crate::internal_query_handler::AnonymousQueryHandler;
 pub use execution_environment::{ExecutionEnvironment, ExecutionEnvironmentImpl};
 pub use history::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
 pub use hypervisor::{Hypervisor, HypervisorMetrics};
@@ -140,9 +142,18 @@ pub fn setup_execution(
     let ingress_filter = IngressFilter::new_service(
         MAX_BUFFERED_QUERIES,
         config.query_execution_threads * CONCURRENT_QUERIES_PER_THREAD,
+        Arc::clone(&threadpool),
+        Arc::clone(&state_reader),
+        Arc::clone(&exec_env),
+    );
+
+    let _anonymous_query_handler = AnonymousQueryHandler::new_service(
+        MAX_BUFFERED_QUERIES,
+        config.query_execution_threads * CONCURRENT_QUERIES_PER_THREAD,
         threadpool,
         Arc::clone(&state_reader),
         Arc::clone(&exec_env),
+        scheduler_config.max_instructions_per_message,
     );
 
     let scheduler = Box::new(SchedulerImpl::new(

@@ -1,3 +1,4 @@
+use crate::messages::Blob;
 use crate::{
     messages::{
         message_id::hash_of_map, HasCanisterId, HttpRequestError, HttpUserQuery, MessageId,
@@ -6,6 +7,7 @@ use crate::{
     CanisterId, PrincipalId, UserId,
 };
 use maplit::btreemap;
+use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
 /// Represents a Query that is sent by an end user to a canister.
@@ -68,6 +70,33 @@ impl HasCanisterId for UserQuery {
     fn canister_id(&self) -> CanisterId {
         self.receiver
     }
+}
+
+/// Represents a Query that is sent by the IC.
+#[derive(Clone, PartialEq, Debug)]
+pub struct InternalQuery {
+    pub receiver: CanisterId,
+    pub method_name: String,
+    pub method_payload: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[serde(tag = "status")]
+pub enum InternalQueryResponse {
+    Replied {
+        reply: InternalQueryResponseReply,
+    },
+    Rejected {
+        reject_code: u64,
+        reject_message: String,
+    },
+}
+
+/// The body of the `InternalQueryResponse`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct InternalQueryResponseReply {
+    pub arg: Blob,
 }
 
 #[cfg(test)]

@@ -12,7 +12,8 @@ use ic_types::{
     crypto::canister_threshold_sig::MasterEcdsaPublicKey,
     ingress::{IngressStatus, WasmResult},
     messages::{
-        CertificateDelegation, HttpQueryResponse, MessageId, SignedIngressContent, UserQuery,
+        CertificateDelegation, HttpQueryResponse, InternalQuery, InternalQueryResponse, MessageId,
+        SignedIngressContent, UserQuery,
     },
     user_error::UserError,
     ComputeAllocation, Cycles, ExecutionRound, Height, NumInstructions, Randomness, Time,
@@ -214,6 +215,15 @@ pub struct ExecuteMessageResult<CanisterState> {
 }
 
 pub type HypervisorResult<T> = Result<T, HypervisorError>;
+
+/// Interface for the component to execute internal queries triggered by IC.
+// Since this service will be shared across many connections we must
+// make it cloneable by introducing a bounded buffer infront of it.
+// https://docs.rs/tower/0.4.10/tower/buffer/index.html
+// The buffer also dampens usage by reducing the risk of
+// spiky traffic when users retry in case failed requests.
+pub type AnonymousQueryService =
+    Buffer<BoxService<InternalQuery, InternalQueryResponse, Infallible>, InternalQuery>;
 
 /// Interface for the component to filter out ingress messages that
 /// the canister is not willing to accept.
