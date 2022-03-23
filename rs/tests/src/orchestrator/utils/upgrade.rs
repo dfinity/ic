@@ -155,6 +155,12 @@ pub(crate) async fn bless_replica_version(
         true => ReplicaVersion::try_from(format!("{}-test", target_version)).unwrap(),
         false => ReplicaVersion::try_from(target_version).unwrap(),
     };
+
+    info!(
+        logger,
+        "Blessing replica version {} with sha256 {}", replica_version, sha256
+    );
+
     let proposal_id = submit_bless_replica_version_proposal(
         &governance_canister,
         proposal_sender.clone(),

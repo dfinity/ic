@@ -53,6 +53,7 @@ ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist"
 ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-registry-transport = { path = "../registry/transport" }
+ic-replay = { path = "../replay" }
 ic-rosetta-api = { path = "../rosetta-api" }
 ic-rosetta-test-utils = { path = "../rosetta-api/test_utils" }
 ic-test-identity = { path = "../test_utilities/identity" }
@@ -89,6 +90,7 @@ serde_bytes = "0.11"
 serde_cbor = "0.11.1"
 serde_json = "1.0"
 serde_millis =  "0.1"
+shh = "1.0.1"
 slog = { version = "2.5.2", features = ["max_level_trace", "release_max_level_trace"] }
 ssh2 = { git = "https://github.com/dfinity-lab/ssh2-rs", branch = "master" }
 structopt = "0.3"
