@@ -40,7 +40,7 @@ maximum-capacity-system-baseline-query:
       $SHELL_WRAPPER pipenv --python 3
       $SHELL_WRAPPER pipenv install -r requirements.txt
 
-      $SHELL_WRAPPER pipenv run max_capacity_system_baseline.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --skip_generate_report=False --is_ci_job=True --send_perf_metrics=True --branch="$CURRENT_BRANCH"
+      $SHELL_WRAPPER pipenv run ./max_capacity_system_baseline.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --skip_generate_report=False --is_ci_job=True --send_perf_metrics=True --branch="$CURRENT_BRANCH"
 
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
@@ -66,7 +66,7 @@ maximum-capacity-system-baseline-update:
       $SHELL_WRAPPER pipenv --python 3
       $SHELL_WRAPPER pipenv install -r requirements.txt
       
-      $SHELL_WRAPPER pipenv run max_capacity_system_baseline.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --use_updates=True --skip_generate_report=False --is_ci_job=True --send_perf_metrics=True  --branch="$CURRENT_BRANCH"
+      $SHELL_WRAPPER pipenv run ./max_capacity_system_baseline.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --use_updates=True --skip_generate_report=False --is_ci_job=True --send_perf_metrics=True  --branch="$CURRENT_BRANCH"
 
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
@@ -92,7 +92,7 @@ maximum-capacity-large-memory-query:
       $SHELL_WRAPPER pipenv --python 3
       $SHELL_WRAPPER pipenv install -r requirements.txt
 
-      $SHELL_WRAPPER pipenv run max_capacity_large_memory.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --skip_generate_report=False --is_ci_job=True --send_perf_metrics=True --target_query_load=160 --branch="$CURRENT_BRANCH"
+      $SHELL_WRAPPER pipenv run ./max_capacity_large_memory.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --skip_generate_report=False --is_ci_job=True --send_perf_metrics=True --target_query_load=160 --branch="$CURRENT_BRANCH"
 
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
@@ -118,7 +118,7 @@ maximum-capacity-large-memory-update:
       $SHELL_WRAPPER pipenv --python 3
       $SHELL_WRAPPER pipenv install -r requirements.txt
 
-      $SHELL_WRAPPER pipenv run max_capacity_large_memory.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --skip_generate_report=False --use_updates=True --is_ci_job=True --send_perf_metrics=True  --target_update_load=25 --branch="$CURRENT_BRANCH"
+      $SHELL_WRAPPER pipenv run ./max_capacity_large_memory.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --skip_generate_report=False --use_updates=True --is_ci_job=True --send_perf_metrics=True  --target_update_load=25 --branch="$CURRENT_BRANCH"
 
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
@@ -145,7 +145,7 @@ benchmark-xnet:
       $SHELL_WRAPPER pipenv --python 3
       $SHELL_WRAPPER pipenv install -r requirements.txt
 
-      $SHELL_WRAPPER pipenv run run_xnet_experiment.py --testnet $TESTNET --skip_generate_report=False --hosts_ini_filename=hosts_single_node_subnets.ini  --branch="$CURRENT_BRANCH"
+      $SHELL_WRAPPER pipenv run ./run_xnet_experiment.py --testnet $TESTNET --skip_generate_report=False --hosts_ini_filename=hosts_single_node_subnets.ini  --branch="$CURRENT_BRANCH"
 
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
@@ -172,7 +172,7 @@ large-subnet-gossip-experiment:
       $SHELL_WRAPPER pipenv --python 3
       $SHELL_WRAPPER pipenv install -r requirements.txt
 
-      $SHELL_WRAPPER pipenv run max_capacity_gossip.py --testnet $TESTNET --wg_testnet $TESTNET --wg_subnet 2 --skip_generate_report=False --use_updates=True --update_allowable_t_median=10000 --send_perf_metrics=True --hosts_ini_filename=hosts_large_unassigned.ini --branch="$CURRENT_BRANCH"
+      $SHELL_WRAPPER pipenv run ./max_capacity_gossip.py --testnet $TESTNET --wg_testnet $TESTNET --wg_subnet 2 --skip_generate_report=False --use_updates=True --update_allowable_t_median=10000 --send_perf_metrics=True --hosts_ini_filename=hosts_large_unassigned.ini --branch="$CURRENT_BRANCH"
 
       cd -
 
