@@ -14,6 +14,10 @@ RUN mkdir -p /boot/{efi,grub}
 COPY /etc /etc
 COPY /opt /opt
 
+# Update POSIX permissions in /etc/
+RUN find /etc -type d -exec chmod 0755 {} \+ && \
+    find /etc -type f -not -path "/etc/hostname" -not -path "/etc/hosts" -not -path "/etc/resolv.conf" -exec chmod 0644 {} \+
+
 # Regenerate initramfs (config changed after copying in /etc)
 RUN RESUME=none SOURCE_DATE_EPOCH=0 update-initramfs -c -k all
 
@@ -78,3 +82,8 @@ RUN adduser --system --disabled-password --home /var/lib/admin --shell /bin/bash
 # RUN rm /etc/ssh/ssh*key*
 # RUN sed -e "s/.*PermitRootLogin.*/PermitRootLogin yes/" -i /etc/ssh/sshd_config
 
+RUN chmod 0440 /etc/sudoers
+
+# Compile locale specification
+RUN apt-get -y update && apt-get -y --no-install-recommends install locales
+RUN localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8
