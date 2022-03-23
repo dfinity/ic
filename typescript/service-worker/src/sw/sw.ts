@@ -23,7 +23,7 @@ self.addEventListener('fetch', (event: FetchEvent) => {
     const response = handleRequest(event.request);
     event.respondWith(response);
   } catch (e) {
-    let error_message = String(e);
+    const error_message = String(e);
     console.error(error_message);
     if (DEBUG) {
       return event.respondWith(
