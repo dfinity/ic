@@ -27,7 +27,7 @@ pub use inter_canister::{
     CallContextId, CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response,
 };
 pub use message_id::{MessageId, MessageIdError, EXPECTED_MESSAGE_ID_LENGTH};
-pub use query::UserQuery;
+pub use query::{InternalQuery, InternalQueryResponse, InternalQueryResponseReply, UserQuery};
 pub use read_state::ReadState;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;

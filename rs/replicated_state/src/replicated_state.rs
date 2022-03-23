@@ -442,6 +442,32 @@ impl ReplicatedState {
         self.canister_states.values_mut()
     }
 
+    // Loads a fresh version of the canister from the state and ensures that it
+    // has a call context manager i.e. it is not stopped.
+    pub fn get_active_canister(
+        &self,
+        canister_id: &CanisterId,
+    ) -> Result<CanisterState, UserError> {
+        let canister = self.canister_state(canister_id).ok_or_else(|| {
+            UserError::new(
+                ErrorCode::CanisterNotFound,
+                format!("Canister {} not found", canister_id),
+            )
+        })?;
+
+        if canister.system_state.call_context_manager().is_none() {
+            Err(UserError::new(
+                ErrorCode::CanisterStopped,
+                format!(
+                    "Canister {} is stopped and therefore does not have a CallContextManager",
+                    canister.canister_id()
+                ),
+            ))
+        } else {
+            Ok(canister.clone())
+        }
+    }
+
     pub fn system_metadata(&self) -> &SystemMetadata {
         &self.metadata
     }

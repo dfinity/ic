@@ -35,6 +35,7 @@ use ic_replicated_state::{
     },
     CallContextAction, CallOrigin, CanisterState, NetworkTopology, ReplicatedState,
 };
+use ic_types::messages::InternalQuery;
 use ic_types::{
     canister_http::CanisterHttpRequestContext,
     canonical_error::{not_found_error, permission_denied_error, CanonicalError},
@@ -1560,6 +1561,46 @@ impl ExecutionEnvironmentImpl {
                     "Requested canister does not exist".to_string(),
                 )),
             }
+        }
+    }
+
+    pub(crate) fn execute_anonymous_query(
+        &self,
+        internal_query: InternalQuery,
+        state: Arc<ReplicatedState>,
+        max_instructions_per_message: NumInstructions,
+    ) -> Result<WasmResult, UserError> {
+        let canister_id = internal_query.receiver;
+        let canister = state.get_active_canister(&canister_id)?;
+        let subnet_available_memory = subnet_memory_capacity(&self.config);
+        let execution_parameters = self.execution_parameters(
+            &canister,
+            max_instructions_per_message,
+            subnet_available_memory,
+            ExecutionMode::NonReplicated,
+        );
+
+        let result = self
+            .hypervisor
+            .execute_anonymous_query(
+                state.time(),
+                &internal_query.method_name,
+                &internal_query.method_payload,
+                canister,
+                None,
+                execution_parameters,
+            )
+            .2;
+
+        match result {
+            Ok(maybe_wasm_result) => match maybe_wasm_result {
+                Some(wasm_result) => Ok(wasm_result),
+                None => Err(UserError::new(
+                    ErrorCode::CanisterDidNotReply,
+                    format!("Canister {} did not reply to the call", canister_id),
+                )),
+            },
+            Err(err) => Err(err.into_user_error(&canister_id)),
         }
     }
 
