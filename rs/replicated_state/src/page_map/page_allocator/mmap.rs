@@ -517,13 +517,21 @@ impl MmapBasedPageAllocatorCore {
     // Ensures that that last chunk of the file up to the given length is
     // memory-mapped to allow deserialization of pages.
     fn grow_for_deserialization(&mut self, file_len: FileOffset) {
-        assert!(
-            file_len >= self.file_len,
-            "The page allocator file was truncated: new file_len = {}, old file_len = {}",
-            file_len,
-            self.file_len
-        );
         if file_len == self.file_len {
+            return;
+        }
+        if file_len < self.file_len {
+            // This may happen if another thread already called `grow_for_deserialization`
+            // while this thread was waiting for the lock. In that case the actual file
+            // length is the same or is larger than the saved file length.
+            let actual_file_len = unsafe { get_file_length(self.file_descriptor) };
+            assert!(
+                actual_file_len >= self.file_len,
+                "The page allocator file was truncated: actual file_len = {}, new file_len = {}, old file_len = {}",
+                actual_file_len,
+                file_len,
+                self.file_len
+            );
             return;
         }
         let mmap_size = (file_len - self.file_len) as usize;
