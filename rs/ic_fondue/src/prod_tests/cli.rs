@@ -22,13 +22,16 @@ pub struct CliArgs {
         about = "If set, specifies where to write demultiplexed test-specific logs."
     )]
     log_base_dir: Option<PathBuf>,
+
     #[structopt(
         long = "log-level",
         about = "One of TRACE, DEBUG, INFO, WARN, or ERROR. (Default: Info)"
     )]
     log_level: Option<String>,
+
     #[structopt(long = "rand-seed", about = "A 64-bit wide random seed.")]
     rand_seed: Option<u64>,
+
     #[structopt(
         long = "job-id",
         about = r#"
@@ -39,6 +42,7 @@ If not provided, a default of the form `$HOSTNAME-<timestamp>` is used, where
 `<timestamp>` is the time at which the test driver was started."#
     )]
     job_id: Option<String>,
+
     #[structopt(
         long = "initial-replica-version",
         about = r#"
@@ -47,32 +51,49 @@ image that the IC is bootstrapped with. If not provided, the default version is
 used."#
     )]
     initial_replica_version: String,
+
     #[structopt(
-        long = "base-img-sha256",
-        about = r#"
-The sha256 hash sum of the base image."#
+        long = "ic-os-img-sha256",
+        about = r#"The sha256 hash sum of the IC-OS image."#
     )]
-    base_img_sha256: String,
+    ic_os_img_sha256: String,
+
     #[structopt(
-        long = "base-img-url",
-        about = r#"The URL of the disk image belonging to the initial replica
+        long = "ic-os-img-url",
+        about = r#"The URL of the IC-OS disk image used by default for all IC nodes
         version."#,
-    parse(try_from_str = url::Url::parse)
+        parse(try_from_str = url::Url::parse)
     )]
-    base_img_url: Url,
+    ic_os_img_url: Url,
+
+    #[structopt(
+        long = "boundary-node-img-sha256",
+        about = r#"The SHA-256 hash of the Boundary Node disk image"#
+    )]
+    boundary_node_img_sha256: String,
+
+    #[structopt(
+        long = "boundary-node-img-url",
+        about = r#"The URL of the Boundary Node disk image"#,
+        parse(try_from_str = url::Url::parse)
+    )]
+    boundary_node_img_url: Url,
+
     #[structopt(
         long = "farm-base-url",
         about = r#"The base URL of the Farm-service to be used for resource
         management. (default: https://farm.dfinity.systems)"#,
-    parse(try_from_str = url::Url::parse)
+        parse(try_from_str = url::Url::parse)
     )]
     farm_base_url: Option<Url>,
+
     #[structopt(
         long = "result-file",
         parse(from_os_str),
         help = "If set, specifies where to write results of executed tests."
     )]
     pub result_file: Option<PathBuf>,
+
     #[structopt(
         long = "nns-canister-path",
         parse(from_os_str),
@@ -80,8 +101,10 @@ The sha256 hash sum of the base image."#
         Required for tests that install NNS canisters."#
     )]
     pub nns_canister_path: Option<PathBuf>,
+
     #[structopt(long = "suite", help = r#"Mandatory name of a test suite to run."#)]
     pub suite: String,
+
     #[structopt(
         long = "include-pattern",
         help = r#"If set, only tests matching this regex will be excercised
@@ -89,18 +112,21 @@ The sha256 hash sum of the base image."#
         `ignore-pattern` and `skip-pattern` are not effective."#
     )]
     pub include_pattern: Option<String>,
+
     #[structopt(
         long = "ignore-pattern",
         help = r#"If set, all tests matching this regex will be ignored,
         i.e. completely omitted by the framework."#
     )]
     pub ignore_pattern: Option<String>,
+
     #[structopt(
         long = "skip-pattern",
         help = r#"If set, all tests matching this regex will be skipped,
         i.e. included in a summary, but not exercised."#
     )]
     pub skip_pattern: Option<String>,
+
     #[structopt(
         long = "authorized-ssh-accounts",
         parse(from_os_str),
@@ -108,18 +134,21 @@ The sha256 hash sum of the base image."#
         (file/file.pub) that are installed on the IC-OS by default."#
     )]
     pub authorized_ssh_accounts: Option<PathBuf>,
+
     #[structopt(
         long = "journalbeat-hosts",
         help = r#"A comma-separated list of hostname/port-pairs that journalbeat
         should use as target hosts. (e.g. "host1.target.com:443,host2.target.com:443")"#
     )]
     pub journalbeat_hosts: Option<String>,
+
     #[structopt(
         long = "log-debug-overrides",
         help = r#"A string containing debug overrides in terms of ic.json5.template 
         (e.g. "ic_consensus::consensus::batch_delivery,ic_artifact_manager::processors")"#
     )]
     pub log_debug_overrides: Option<String>,
+
     #[structopt(
     long = "pot-timeout",
     default_value = "600s",
@@ -127,6 +156,7 @@ The sha256 hash sum of the base image."#
     help = r#"Amount of time to wait before releasing resources allocated for a pot."#
     )]
     pub pot_timeout: Duration,
+
     #[structopt(
         long = "working-dir",
         about = "Path to a working directory of the test driver."
@@ -159,8 +189,8 @@ impl CliArgs {
             None
         };
 
-        if !is_sha256_hex(&self.base_img_sha256) {
-            bail!("Invalid base image hash: {:?}", self.base_img_sha256)
+        if !is_sha256_hex(&self.ic_os_img_sha256) {
+            bail!("Invalid base image hash: {:?}", self.ic_os_img_sha256)
         }
 
         let include_pattern = parse_pattern(self.include_pattern)?;
@@ -182,8 +212,10 @@ impl CliArgs {
             rand_seed: self.rand_seed.unwrap_or(RND_SEED_DEFAULT),
             job_id: self.job_id,
             initial_replica_version,
-            base_img_sha256: self.base_img_sha256,
-            base_img_url: self.base_img_url,
+            ic_os_img_sha256: self.ic_os_img_sha256,
+            ic_os_img_url: self.ic_os_img_url,
+            boundary_node_img_sha256: self.boundary_node_img_sha256,
+            boundary_node_img_url: self.boundary_node_img_url,
             farm_base_url: self.farm_base_url,
             result_file: self.result_file,
             nns_canister_path,
@@ -215,8 +247,10 @@ pub struct ValidatedCliArgs {
     pub rand_seed: u64,
     pub job_id: Option<String>,
     pub initial_replica_version: ReplicaVersion,
-    pub base_img_sha256: String,
-    pub base_img_url: Url,
+    pub ic_os_img_sha256: String,
+    pub ic_os_img_url: Url,
+    pub boundary_node_img_sha256: String,
+    pub boundary_node_img_url: Url,
     pub farm_base_url: Option<Url>,
     pub result_file: Option<PathBuf>,
     pub nns_canister_path: Option<PathBuf>,

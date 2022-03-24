@@ -7,7 +7,7 @@ use std::net::Ipv6Addr;
 use url::Url;
 
 use super::farm::CreateVmRequest;
-use crate::prod_tests::driver_setup::{BASE_IMG_SHA256, BASE_IMG_URL};
+use crate::prod_tests::driver_setup::{IC_OS_IMG_SHA256, IC_OS_IMG_URL};
 use crate::prod_tests::farm::Farm;
 use crate::prod_tests::farm::FarmResult;
 use crate::prod_tests::farm::ImageLocation;
@@ -130,8 +130,8 @@ pub fn get_resource_request(
     test_env: &TestEnv,
     group_name: &str,
 ) -> anyhow::Result<ResourceRequest> {
-    let url = test_env.read_object(BASE_IMG_URL)?;
-    let primary_image_sha256 = test_env.read_object(BASE_IMG_SHA256)?;
+    let url = test_env.read_object(IC_OS_IMG_URL)?;
+    let primary_image_sha256 = test_env.read_object(IC_OS_IMG_SHA256)?;
     let mut res_req = ResourceRequest::new(ImageType::IcOsImage, url, primary_image_sha256);
     res_req.group_name = group_name.to_string();
     for s in &config.subnets {
@@ -192,11 +192,11 @@ pub fn allocate_resources(farm: &Farm, req: &ResourceRequest) -> FarmResult<Reso
             vm_config.has_ipv4,
         );
 
-        let ipv6 = farm.create_vm(group_name, create_vm_request)?;
+        let created_vm = farm.create_vm(group_name, create_vm_request)?;
         res_group.add_vm(AllocatedVm {
             name,
             group_name: group_name.clone(),
-            ipv6,
+            ipv6: created_vm.ipv6,
         });
     }
     Ok(res_group)

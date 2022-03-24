@@ -90,9 +90,9 @@ def remove_folders(folders: List[str]) -> None:
 def create_env_variables(is_local_run: bool, artifact_dir: str, ci_project_dir: str, tmp_dir: str) -> Dict:
     env = os.environ.copy()
     env["TMPDIR"] = tmp_dir
+    env["IC_ROOT"] = ci_project_dir
     env["PATH"] = f"{artifact_dir}:" + env["PATH"]
     env["PATH"] = f"{ci_project_dir}/rs/tests:" + env["PATH"]
-    env["PATH"] = f"{ci_project_dir}/ic-os/guestos/scripts:" + env["PATH"]
     if not is_local_run:
         env["XNET_TEST_CANISTER_WASM_PATH"] = f"{artifact_dir}/xnet-test-canister.wasm"
     slack_notify = f"{ci_project_dir}/gitlab-ci/src/notify_slack"
@@ -103,13 +103,12 @@ def create_env_variables(is_local_run: bool, artifact_dir: str, ci_project_dir: 
     return env
 
 
-def get_dev_image_sha(ic_version_id) -> Tuple[str, str]:
-    dev_img_base_url = f"https://download.dfinity.systems/ic/{ic_version_id}/guest-os/disk-img-dev/"
-    dev_img_url = f"{dev_img_base_url}disk-img.tar.gz"
-    dev_img_sha256_url = f"{dev_img_base_url}SHA256SUMS"
-    result = requests.get(f"{dev_img_sha256_url}")
-    dev_img_sha256 = result.text.split(" ")[0]
-    return dev_img_sha256, dev_img_url
+def get_ic_os_image_sha(img_base_url) -> Tuple[str, str]:
+    img_url = f"{img_base_url}disk-img.tar.gz"
+    img_sha256_url = f"{img_base_url}SHA256SUMS"
+    result = requests.get(f"{img_sha256_url}")
+    img_sha256 = result.text.split(" ")[0]
+    return img_sha256, img_url
 
 
 def run_command(command: str, env: Optional[Dict] = None) -> int:
@@ -188,7 +187,12 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
         )
     TEST_ES_HOSTNAMES = replace_symbols(text=TEST_ES_HOSTNAMES, symbols_to_replace=["`", "'", " "], replace_with="")
 
-    DEV_IMG_SHA256, DEV_IMG_URL = get_dev_image_sha(IC_VERSION_ID)
+    IC_OS_DEV_IMG_SHA256, IC_OS_DEV_IMG_URL = get_ic_os_image_sha(
+        f"https://download.dfinity.systems/ic/{IC_VERSION_ID}/guest-os/disk-img-dev/"
+    )
+    BOUNDARY_NODE_IMG_SHA256, BOUNDARY_NODE_IMG_URL = get_ic_os_image_sha(
+        f"https://download.dfinity.systems/ic/{IC_VERSION_ID}/boundary-os/disk-img/"
+    )
 
     if SSH_KEY_DIR is None:
         logging.info("SSH_KEY_DIR variable is not set, generating keys.")
@@ -235,14 +239,17 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
     folders_to_remove.append(test_driver_tmp_dir)
 
     env_dict = create_env_variables(
-        is_local_run=is_local_run, artifact_dir=ARTIFACT_DIR, ci_project_dir=CI_PROJECT_DIR, tmp_dir=test_driver_tmp_dir
+        is_local_run=is_local_run,
+        artifact_dir=ARTIFACT_DIR,
+        ci_project_dir=CI_PROJECT_DIR,
+        tmp_dir=test_driver_tmp_dir,
     )
 
     # Print all input environmental variables.
     logging.debug(
         f"CI_PROJECT_DIR={CI_PROJECT_DIR}, TEST_ES_HOSTNAMES={TEST_ES_HOSTNAMES}, SHELL_WRAPPER={SHELL_WRAPPER}, "
-        f"SSH_KEY_DIR={SSH_KEY_DIR}, IC_VERSION_ID={IC_VERSION_ID}, JOB_ID={JOB_ID}, DEV_IMG_URL={DEV_IMG_URL}, "
-        f"DEV_IMG_SHA256={DEV_IMG_SHA256}, CI_PARENT_PIPELINE_SOURCE={CI_PARENT_PIPELINE_SOURCE}"
+        f"SSH_KEY_DIR={SSH_KEY_DIR}, IC_VERSION_ID={IC_VERSION_ID}, JOB_ID={JOB_ID}, DEV_IMG_URL={IC_OS_DEV_IMG_URL}, "
+        f"DEV_IMG_SHA256={IC_OS_DEV_IMG_SHA256}, CI_PARENT_PIPELINE_SOURCE={CI_PARENT_PIPELINE_SOURCE}"
     )
 
     if use_locally_prebuilt_artifacts:
@@ -263,7 +270,7 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
             source_dir=release_path, dest_dir=ARTIFACT_DIR, delete_source_dir=True, is_set_executable=True
         )
     else:
-        logging.info(f"Downloading dependencies built from commit: {RED}{IC_VERSION_ID}{NC}")
+        logging.info(f"Downloading dependencies built from commit: {GREEN}{IC_VERSION_ID}{NC}")
         RCLONE_ARGS = f"--git-rev {IC_VERSION_ID} --out={ARTIFACT_DIR} --unpack --mark-executable"
         clone_artifacts_canisters_cmd = (
             f"{CI_PROJECT_DIR}/gitlab-ci/src/artifacts/rclone_download.py --remote-path=canisters {RCLONE_ARGS}"
@@ -281,13 +288,24 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
     logging.debug("ARTIFACTS_DIR content:")
     os.system(f"ls -R {ARTIFACT_DIR}")
 
-    run_test_driver_cmd = (
-        f"{SHELL_WRAPPER} {RUN_CMD} {ADDITIONAL_ARGS} {runner_args} --job-id={JOB_ID} "
-        f"--initial-replica-version={IC_VERSION_ID} --base-img-url={DEV_IMG_URL} "
-        f"--base-img-sha256={DEV_IMG_SHA256} --nns-canister-path={ARTIFACT_DIR} "
-        f"--authorized-ssh-accounts={SSH_KEY_DIR} --result-file={RESULT_FILE} "
-        f"--journalbeat-hosts={TEST_ES_HOSTNAMES} "
-        f"--working-dir={WORKING_DIR}"
+    run_test_driver_cmd = " ".join(
+        [
+            SHELL_WRAPPER,
+            RUN_CMD,
+            ADDITIONAL_ARGS,
+            runner_args,
+            f"--job-id={JOB_ID}",
+            f"--initial-replica-version={IC_VERSION_ID}",
+            f"--ic-os-img-url={IC_OS_DEV_IMG_URL}",
+            f"--ic-os-img-sha256={IC_OS_DEV_IMG_SHA256}",
+            f"--boundary-node-img-url={BOUNDARY_NODE_IMG_URL}",
+            f"--boundary-node-img-sha256={BOUNDARY_NODE_IMG_SHA256}",
+            f"--nns-canister-path={ARTIFACT_DIR}",
+            f"--authorized-ssh-accounts={SSH_KEY_DIR}",
+            f"--result-file={RESULT_FILE}",
+            f"--journalbeat-hosts={TEST_ES_HOSTNAMES}",
+            f"--working-dir={WORKING_DIR}",
+        ]
     )
     testrun_returncode = run_command(command=run_test_driver_cmd, env=env_dict)
 
