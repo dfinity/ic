@@ -181,8 +181,8 @@ impl CatchUpPackageProvider {
         let cup_file_path = self.get_cup_path();
         info!(
             self.logger,
-            "Persisting CUP to file: {:?}, replica version={}, height={}",
-            &cup_file_path,
+            "Persisting CUP to file: {}, replica version={}, height={}",
+            &cup_file_path.display(),
             cup.cup.content.registry_version(),
             cup.cup.height()
         );
@@ -237,10 +237,7 @@ impl CatchUpPackageProvider {
             ))?;
 
         if Some(latest_cup.cup.content.height()) > local_cup_height {
-            match self.persist_cup(&latest_cup) {
-                Ok(path) => info!(self.logger, "New CUP persisted to {}", path.display()),
-                Err(err) => warn!(self.logger, "Failed to persist CUP: {:?}", err),
-            }
+            self.persist_cup(&latest_cup)?;
         }
 
         Ok(latest_cup)
