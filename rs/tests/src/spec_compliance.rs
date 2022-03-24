@@ -34,8 +34,6 @@ const EXCLUDED: &[&str] = &[
     "$0 ~ /deleted call contexts do not prevent stopping/",
     "$0 ~ /metadata.absent/",
     "$0 ~ /zero-length metadata name/",
-    // TODO(VER-1507): investigate why this test always fails
-    "$0 ~ /legacy API traps when a result is too big/",
 ];
 
 pub fn ic_with_system_subnet() -> InternetComputer {
