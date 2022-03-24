@@ -164,6 +164,7 @@ members = [
   "sns/integration_tests",
   "sns/root",
   "sns/test_utils",
+  "stable-structures",
   "starter",
   "state_manager",
   "state_machine_tests",
