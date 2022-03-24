@@ -330,12 +330,23 @@ fn get_test_suites() -> HashMap<String, Suite> {
         "nightly".to_string(),
         suite(
             "nightly",
-            vec![pot(
-                "xnet_slo_pot",
-                xnet_slo_test::config_nightly(),
-                par(vec![t("xnet_slo_test", xnet_slo_test::test_nightly)]),
-            )
-            .with_ttl(Duration::from_secs(30 * 60))],
+            vec![
+                pot(
+                    "xnet_slo_pot",
+                    xnet_slo_test::config_nightly(),
+                    par(vec![t("xnet_slo_test", xnet_slo_test::test_nightly)]),
+                )
+                .with_ttl(Duration::from_secs(30 * 60)),
+                pot(
+                    "xnet_slo_many_single_node_subnets_pot",
+                    xnet_slo_test::config_nightly_many_single_node_subnets(),
+                    par(vec![t(
+                        "xnet_slo_test",
+                        xnet_slo_test::test_nightly_many_single_node_subnets,
+                    )]),
+                )
+                .with_ttl(Duration::from_secs(50 * 60)),
+            ],
         ),
     );
 
