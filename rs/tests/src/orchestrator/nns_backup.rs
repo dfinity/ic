@@ -48,11 +48,10 @@ use std::io::{Read, Write};
 use std::net::IpAddr;
 
 const DKG_INTERVAL: u64 = 19;
-const SUBNET_SIZE: usize = 4;
 
 pub fn config() -> InternetComputer {
     InternetComputer::new().add_subnet(
-        Subnet::fast(SubnetType::System, SUBNET_SIZE)
+        Subnet::fast_single_node(SubnetType::System)
             .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
     )
 }
