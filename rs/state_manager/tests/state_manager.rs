@@ -12,7 +12,7 @@ use ic_replicated_state::{
     page_map::PageIndex, testing::ReplicatedStateTesting, NumWasmPages, PageMap, ReplicatedState,
     Stream,
 };
-use ic_state_manager::StateManagerImpl;
+use ic_state_manager::{DirtyPageMap, PageMapType, StateManagerImpl};
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::{
     consensus::fake::FakeVerifier,
@@ -1917,8 +1917,6 @@ fn can_short_circuit_state_sync() {
 fn can_get_dirty_pages() {
     use ic_replicated_state::page_map::PageIndex;
     use ic_state_manager::get_dirty_pages;
-    use maplit::btreemap;
-    use std::collections::BTreeMap;
 
     fn update_state(state: &mut ReplicatedState, canister_id: CanisterId) {
         let canister_state = state.canister_state_mut(&canister_id).unwrap();
@@ -1949,30 +1947,49 @@ fn can_get_dirty_pages() {
         let dirty_pages = get_dirty_pages(&state);
         // dirty_pages should be empty because there is no base checkpoint for the page
         // deltas.
-        assert_eq!(dirty_pages.wasm_memory, BTreeMap::new());
-        assert_eq!(dirty_pages.stable_memory, BTreeMap::new());
+        assert!(dirty_pages.is_empty());
 
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
 
         let (_height, mut state) = state_manager.take_tip();
         update_state(&mut state, canister_test_id(90));
-        let dirty_pages = get_dirty_pages(&state);
-        assert_eq!(
-            dirty_pages.wasm_memory,
-            btreemap! {
-                canister_test_id(80) => (height(1), vec![]),
-                canister_test_id(90) => (height(1), vec![PageIndex::new(1), PageIndex::new(300)]),
-                canister_test_id(100) => (height(1), vec![]),
-            }
-        );
-        assert_eq!(
-            dirty_pages.stable_memory,
-            btreemap! {
-                canister_test_id(80) => (height(1), vec![]),
-                canister_test_id(90) => (height(1), vec![PageIndex::new(1), PageIndex::new(300)]),
-                canister_test_id(100) => (height(1), vec![]),
-            }
-        );
+        let mut dirty_pages = get_dirty_pages(&state);
+        let mut expected_dirty_pages = vec![
+            DirtyPageMap {
+                height: height(1),
+                page_type: PageMapType::WasmMemory(canister_test_id(80)),
+                page_delta_indices: vec![],
+            },
+            DirtyPageMap {
+                height: height(1),
+                page_type: PageMapType::StableMemory(canister_test_id(80)),
+                page_delta_indices: vec![],
+            },
+            DirtyPageMap {
+                height: height(1),
+                page_type: PageMapType::WasmMemory(canister_test_id(90)),
+                page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
+            },
+            DirtyPageMap {
+                height: height(1),
+                page_type: PageMapType::StableMemory(canister_test_id(90)),
+                page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
+            },
+            DirtyPageMap {
+                height: height(1),
+                page_type: PageMapType::WasmMemory(canister_test_id(100)),
+                page_delta_indices: vec![],
+            },
+            DirtyPageMap {
+                height: height(1),
+                page_type: PageMapType::StableMemory(canister_test_id(100)),
+                page_delta_indices: vec![],
+            },
+        ];
+
+        dirty_pages.sort();
+        expected_dirty_pages.sort();
+        assert_eq!(dirty_pages, expected_dirty_pages);
 
         state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
 
@@ -1981,23 +1998,39 @@ fn can_get_dirty_pages() {
         // It could happen during canister upgrade.
         drop_page_map(&mut state, canister_test_id(100));
         update_state(&mut state, canister_test_id(100));
-        let dirty_pages = get_dirty_pages(&state);
-        assert_eq!(
-            dirty_pages.wasm_memory,
-            btreemap! {
-                canister_test_id(80) => (height(2), vec![]),
-                canister_test_id(90) => (height(2), vec![]),
-            }
-        );
-        // stable memory wasn't dropped
-        assert_eq!(
-            dirty_pages.stable_memory,
-            btreemap! {
-                    canister_test_id(80) => (height(2), vec![]),
-                    canister_test_id(90) => (height(2), vec![]),
-            canister_test_id(100) => (height(2), vec![PageIndex::new(1), PageIndex::new(300)]),
-                }
-        );
+        let mut dirty_pages = get_dirty_pages(&state);
+        // wasm memory was dropped, but stable memory wasn't
+        let mut expected_dirty_pages = vec![
+            DirtyPageMap {
+                height: height(2),
+                page_type: PageMapType::WasmMemory(canister_test_id(80)),
+                page_delta_indices: vec![],
+            },
+            DirtyPageMap {
+                height: height(2),
+                page_type: PageMapType::StableMemory(canister_test_id(80)),
+                page_delta_indices: vec![],
+            },
+            DirtyPageMap {
+                height: height(2),
+                page_type: PageMapType::WasmMemory(canister_test_id(90)),
+                page_delta_indices: vec![],
+            },
+            DirtyPageMap {
+                height: height(2),
+                page_type: PageMapType::StableMemory(canister_test_id(90)),
+                page_delta_indices: vec![],
+            },
+            DirtyPageMap {
+                height: height(2),
+                page_type: PageMapType::StableMemory(canister_test_id(100)),
+                page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
+            },
+        ];
+
+        dirty_pages.sort();
+        expected_dirty_pages.sort();
+        assert_eq!(dirty_pages, expected_dirty_pages);
 
         assert_error_counters(metrics);
     })

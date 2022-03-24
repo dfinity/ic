@@ -32,10 +32,10 @@ use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_protobuf::{messaging::xnet::v1, state::v1 as pb};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::execution_state::SandboxMemory, page_map::PersistenceError, PageIndex,
+    canister_state::execution_state::SandboxMemory, page_map::PersistenceError, PageIndex, PageMap,
     ReplicatedState,
 };
-use ic_state_layout::{error::LayoutError, StateLayout};
+use ic_state_layout::{error::LayoutError, AccessPolicy, CheckpointLayout, StateLayout};
 use ic_types::{
     artifact::StateSyncArtifactId,
     chunkable::Chunkable,
@@ -752,45 +752,98 @@ fn report_last_diverged_checkpoint(
     }
 }
 
-type DirtyPagesMap = BTreeMap<CanisterId, (Height, Vec<PageIndex>)>;
-
-#[derive(Default)]
-pub struct DirtyPages {
-    pub wasm_memory: DirtyPagesMap,
-    pub stable_memory: DirtyPagesMap,
+/// An enum describing all possible PageMaps in ReplicatedState
+/// When adding additional PageMaps, add an appropriate entry here
+/// to enable all relevant state manager features, e.g. incremental
+/// manifest computations
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum PageMapType {
+    WasmMemory(CanisterId),
+    StableMemory(CanisterId),
 }
 
-/// Get dirty pages of canister heap and stable memory backed by a checkpoint
-/// file.
-pub fn get_dirty_pages(state: &ReplicatedState) -> DirtyPages {
-    let mut dirty_pages: DirtyPages = Default::default();
-    for canister in state.canisters_iter() {
-        if let Some(execution_state) = &canister.execution_state {
-            // When `base_height` is None, the page map is not backed by a checkpoint
-            // and we don't know what changed since the checkpoint.
-            if let Some(height) = execution_state.wasm_memory.page_map.base_height {
-                let page_delta_indices = execution_state
-                    .wasm_memory
-                    .page_map
-                    .get_page_delta_indices();
-                dirty_pages.wasm_memory.insert(
-                    canister.system_state.canister_id,
-                    (height, page_delta_indices),
-                );
-            }
-            if let Some(height) = execution_state.stable_memory.page_map.base_height {
-                let page_delta_indices = execution_state
-                    .stable_memory
-                    .page_map
-                    .get_page_delta_indices();
-                dirty_pages.stable_memory.insert(
-                    canister.system_state.canister_id,
-                    (height, page_delta_indices),
-                );
+impl PageMapType {
+    /// List all PageMaps contained in `state`
+    fn list_all(state: &ReplicatedState) -> Vec<PageMapType> {
+        let mut result = vec![];
+        for (id, canister) in &state.canister_states {
+            if canister.execution_state.is_some() {
+                result.push(Self::WasmMemory(id.to_owned()));
+                result.push(Self::StableMemory(id.to_owned()));
             }
         }
+
+        result
     }
-    dirty_pages
+
+    /// Maps a PageMapType to its location in a checkpoint according to `layout`
+    fn path<Access>(&self, layout: &CheckpointLayout<Access>) -> Result<PathBuf, LayoutError>
+    where
+        Access: AccessPolicy,
+    {
+        match &self {
+            PageMapType::WasmMemory(id) => Ok(layout.canister(id)?.vmemory_0()),
+            PageMapType::StableMemory(id) => Ok(layout.canister(id)?.stable_memory_blob()),
+        }
+    }
+
+    /// Maps a PageMapType to the the `&PageMap` in `state`
+    fn get<'a>(&self, state: &'a ReplicatedState) -> Option<&'a PageMap> {
+        match &self {
+            PageMapType::WasmMemory(id) => state.canister_state(id).and_then(|can| {
+                can.execution_state
+                    .as_ref()
+                    .map(|ex| &ex.wasm_memory.page_map)
+            }),
+            PageMapType::StableMemory(id) => state.canister_state(id).and_then(|can| {
+                can.execution_state
+                    .as_ref()
+                    .map(|ex| &ex.stable_memory.page_map)
+            }),
+        }
+    }
+
+    /// Maps a PageMapType to the the `&mut PageMap` in `state`
+    fn get_mut<'a>(&self, state: &'a mut ReplicatedState) -> Option<&'a mut PageMap> {
+        match &self {
+            PageMapType::WasmMemory(id) => state.canister_state_mut(id).and_then(|can| {
+                can.execution_state
+                    .as_mut()
+                    .map(|ex| &mut ex.wasm_memory.page_map)
+            }),
+            PageMapType::StableMemory(id) => state.canister_state_mut(id).and_then(|can| {
+                can.execution_state
+                    .as_mut()
+                    .map(|ex| &mut ex.stable_memory.page_map)
+            }),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct DirtyPageMap {
+    pub height: Height,
+    pub page_type: PageMapType,
+    pub page_delta_indices: Vec<PageIndex>,
+}
+
+pub type DirtyPages = Vec<DirtyPageMap>;
+
+/// Get dirty pages of all PageMaps backed by a checkpoint
+/// file.
+pub fn get_dirty_pages(state: &ReplicatedState) -> DirtyPages {
+    PageMapType::list_all(state)
+        .into_iter()
+        .filter_map(|entry| {
+            let page_map = entry.get(state)?;
+            let height = page_map.base_height?;
+            Some(DirtyPageMap {
+                height,
+                page_type: entry,
+                page_delta_indices: page_map.get_page_delta_indices(),
+            })
+        })
+        .collect()
 }
 
 /// Strips away the deltas from all page maps of the replicated state.
@@ -798,12 +851,16 @@ pub fn get_dirty_pages(state: &ReplicatedState) -> DirtyPages {
 /// don't want those deltas to be persisted to TIP as we apply deltas
 /// incrementally after every round.
 fn strip_page_map_deltas(state: &mut ReplicatedState) {
+    PageMapType::list_all(state).into_iter().for_each(|entry| {
+        if let Some(page_map) = entry.get_mut(state) {
+            page_map.strip_all_deltas();
+        }
+    });
+
+    // Reset the sandbox state to force full synchronization on the next execution
+    // since the page deltas are out of sync now.
     for canister in state.canisters_iter_mut() {
         if let Some(execution_state) = &mut canister.execution_state {
-            execution_state.wasm_memory.page_map.strip_all_deltas();
-            execution_state.stable_memory.page_map.strip_all_deltas();
-            // Reset the sandbox state to force full synchronization on the next execution
-            // since the page deltas are out of sync now.
             execution_state.wasm_memory.sandbox_memory = SandboxMemory::new();
             execution_state.stable_memory.sandbox_memory = SandboxMemory::new();
         }
@@ -817,6 +874,20 @@ fn strip_page_map_deltas(state: &mut ReplicatedState) {
 /// 2) The page deltas must be empty in both states.
 /// 3) The memory sizes must match.
 fn switch_to_checkpoint(tip: &mut ReplicatedState, src: &ReplicatedState) {
+    let maps = PageMapType::list_all(src);
+    assert_eq!(maps, PageMapType::list_all(tip));
+
+    for map_type in maps {
+        let src_page_map_opt = map_type.get(src);
+        let tip_page_map_opt = map_type.get_mut(tip);
+
+        assert_eq!(src_page_map_opt.is_some(), tip_page_map_opt.is_some(),);
+
+        if let (Some(src_page_map), Some(tip_page_map)) = (src_page_map_opt, tip_page_map_opt) {
+            tip_page_map.switch_to_checkpoint(src_page_map);
+        }
+    }
+
     for (tip_canister, src_canister) in tip.canisters_iter_mut().zip(src.canisters_iter()) {
         assert_eq!(
             tip_canister.system_state.canister_id,
@@ -832,15 +903,6 @@ fn switch_to_checkpoint(tip: &mut ReplicatedState, src: &ReplicatedState) {
             &mut tip_canister.execution_state,
             &src_canister.execution_state,
         ) {
-            tip_state
-                .wasm_memory
-                .page_map
-                .switch_to_checkpoint(&src_state.wasm_memory.page_map);
-            tip_state
-                .stable_memory
-                .page_map
-                .switch_to_checkpoint(&src_state.stable_memory.page_map);
-
             debug_assert_eq!(
                 tip_state.wasm_binary.binary.as_slice(),
                 src_state.wasm_binary.binary.as_slice()
@@ -1599,50 +1661,26 @@ impl StateManagerImpl {
             .tip(height)
             .unwrap_or_else(|err| fatal!(self.log, "Failed to access @TIP: {}", err));
 
-        for canister in tip_state.canisters_iter_mut() {
-            let canister_id = canister.canister_id();
+        for entry in PageMapType::list_all(tip_state) {
+            if let Some(page_map) = entry.get_mut(tip_state) {
+                let path = &entry.path(&tip_layout).unwrap_or_else(|err| {
+                    fatal!(
+                        self.log,
+                        "Failed to access layout @TIP {}: {}",
+                        tip_layout.raw_path().display(),
+                        err
+                    )
+                });
 
-            let canister_layout = tip_layout.canister(&canister_id).unwrap_or_else(|err| {
-                fatal!(
-                    self.log,
-                    "Failed to access canister {} layout @TIP {}: {}",
-                    canister_id,
-                    tip_layout.raw_path().display(),
-                    err
-                )
-            });
-            if let Some(execution_state) = &mut canister.execution_state {
-                let memory_path = &canister_layout.vmemory_0();
-                execution_state
-                    .wasm_memory
-                    .page_map
-                    .persist_round_delta(memory_path)
-                    .unwrap_or_else(|err| {
-                        fatal!(
-                            self.log,
-                            "Failed to persist page delta of canister {} to file {}: {}",
-                            canister_id,
-                            memory_path.display(),
-                            err
-                        )
-                    });
-                execution_state.wasm_memory.page_map.strip_round_delta();
-
-                let stable_memory_path = &canister_layout.stable_memory_blob();
-                execution_state
-                    .stable_memory
-                    .page_map
-                    .persist_round_delta(stable_memory_path)
-                    .unwrap_or_else(|err| {
-                        fatal!(
-                            self.log,
-                            "Failed to persist stable page delta of canister {} to file {}: {}",
-                            canister_id,
-                            stable_memory_path.display(),
-                            err
-                        )
-                    });
-                execution_state.stable_memory.page_map.strip_round_delta();
+                page_map.persist_round_delta(path).unwrap_or_else(|err| {
+                    fatal!(
+                        self.log,
+                        "Failed to persist page delta to file {}: {}",
+                        path.display(),
+                        err
+                    )
+                });
+                page_map.strip_round_delta();
             }
         }
     }
