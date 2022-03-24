@@ -4257,10 +4257,13 @@ fn sys_api_call_ic_trap_preserves_some_cycles() {
                 refund: Cycles::from(0),
             }
         );
-        // Check that ic0.trap call wasn't expensive
+        // Check that ic0.trap call wasn't expensive:
+        // call trap -- 21 instructions
+        // constants -- 2 instructions
+        // trap data -- 12 instructions
         assert_eq!(
             num_instructions_left,
-            MAX_NUM_INSTRUCTIONS - NumInstructions::new(15)
+            MAX_NUM_INSTRUCTIONS - NumInstructions::new(35)
         );
 
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
@@ -4280,10 +4283,13 @@ fn sys_api_call_ic_trap_preserves_some_cycles() {
             res,
             Err(HypervisorError::CalledTrap("Trap called!".to_string()))
         );
-        // Check that ic0.trap call wasn't expensive
+        // Check that ic0.trap call wasn't expensive:
+        // call trap -- 21 instructions
+        // constants -- 2 instructions
+        // trap data -- 12 instructions
         assert_eq!(
             num_instructions_left,
-            MAX_NUM_INSTRUCTIONS - NumInstructions::new(15)
+            MAX_NUM_INSTRUCTIONS - NumInstructions::new(35)
         );
     });
 }

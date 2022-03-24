@@ -390,12 +390,12 @@ mod tests {
 
             let _result = inst.run(FuncRef::Method(WasmMethod::Update("func_trap".into())));
 
-            // The amount of instructions consumed: 2 constants, trap()
+            // The amount of instructions consumed: 2 constants, trap() (21 instructions)
             // plus equivalent of `num_bytes` in instructions.
             let instructions_consumed = max_num_instructions - inst.get_num_instructions();
             assert_eq!(
                 instructions_consumed.get(),
-                3 + (num_bytes / BYTES_PER_INSTRUCTION) as u64
+                23 + (num_bytes / BYTES_PER_INSTRUCTION) as u64
             )
         });
     }
@@ -459,7 +459,8 @@ mod tests {
             // `stable_read()` System API call overhead.
             assert_eq!(
                 instructions_consumed_without_data.get(),
-                7 + ic_embedders::wasmtime_embedder::system_api_charges::STABLE_READ.get() as u64
+                7 + ic_embedders::wasmtime_embedder::system_api_complexity::STABLE_READ.get()
+                    as u64
             );
         })
     }

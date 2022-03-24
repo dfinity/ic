@@ -26,12 +26,12 @@ lazy_static! {
         common::Benchmark(
             "ic0_msg_reject_msg_copy()/1B",
             Module::Callback.from_ic0("msg_reject_msg_copy", Params3(0, 0, 1), Result::No),
-            14_000_004,
+            34_000_004,
         ),
         common::Benchmark(
             "ic0_msg_reject_msg_copy()/10B",
             Module::Callback.from_ic0("msg_reject_msg_copy", Params3(0, 0, 10), Result::No), // 10B max
-            23_000_004,
+            43_000_004,
         ),
         common::Benchmark(
             "ic0_msg_cycles_refunded()",

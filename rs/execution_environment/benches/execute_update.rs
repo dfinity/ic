@@ -95,7 +95,7 @@ lazy_static! {
                 Params2(0, 0),
                 Result::No,
             )),
-            3,
+            23,
         ),
         common::Benchmark(
             "ic0_canister_self_size()",
@@ -177,7 +177,7 @@ lazy_static! {
                     ),
                 ),
             )),
-            121_000_004,
+            141_000_004,
         ),
         common::Benchmark(
             "ic0_call_new()",
@@ -187,12 +187,12 @@ lazy_static! {
         common::Benchmark(
             "call_new+ic0_call_data_append()/1B",
             Module::CallNewLoop.from_ic0("call_data_append", Params2(0, 1), Result::No), // 2MiB max
-            22_000_004,
+            42_000_004,
         ),
         common::Benchmark(
             "call_new+ic0_call_data_append()/8K",
             Module::CallNewLoop.from_ic0("call_data_append", Params2(0, 8192), Result::No), // 2MiB max
-            8_213_000_004,
+            8_233_000_004,
         ),
         common::Benchmark(
             "call_new+ic0_call_on_cleanup()",
