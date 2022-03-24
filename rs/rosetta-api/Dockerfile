@@ -1,16 +1,8 @@
 FROM ubuntu:20.04
 
-ARG DEBIAN_FRONTEND=noninteractive
-
 ARG RELEASE
 
 LABEL RELEASE=${RELEASE}
-
-WORKDIR /root
-
-COPY ic-rosetta-api /usr/local/bin/ic-rosetta-api
-
-COPY log_config.yml /root
 
 RUN \
   apt update && \
@@ -21,6 +13,17 @@ RUN \
   rm -rf \
     /tmp/* \
     /var/lib/apt/lists/* \
-    /var/tmp/*
+    /var/tmp/* && \
+  useradd -m rosetta && \
+  mkdir /data && \
+  chown rosetta:rosetta /data
+
+COPY ic-rosetta-api /usr/local/bin/ic-rosetta-api
+
+COPY --chown=rosetta:rosetta log_config.yml /home/rosetta
+
+USER rosetta
+
+WORKDIR /home/rosetta
 
 ENTRYPOINT ["/usr/local/bin/ic-rosetta-api", "--store-location", "/data"]
