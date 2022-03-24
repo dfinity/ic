@@ -20,7 +20,7 @@ use ic_logger::{debug, error, trace, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_replicated_state::ReplicatedState;
-use ic_types::{consensus::dkg, replica_config::ReplicaConfig, time::current_time, ReplicaVersion};
+use ic_types::{consensus::dkg, replica_config::ReplicaConfig, time::current_time};
 use std::{
     sync::{Arc, RwLock},
     time::Duration,
@@ -215,12 +215,6 @@ impl BlockMaker {
             );
             None
         })?;
-        let replica_version = lookup_replica_version(
-            self.registry_client.as_ref(),
-            self.replica_config.subnet_id,
-            &self.log,
-            registry_version,
-        )?;
 
         // Get the subnet records that are relevant to making a block
         let stable_registry_version = self.get_stable_registry_version(&parent)?;
@@ -268,7 +262,6 @@ impl BlockMaker {
             height,
             certified_height,
             rank,
-            replica_version,
             registry_version,
             &subnet_records,
         )
@@ -288,7 +281,6 @@ impl BlockMaker {
         height: Height,
         certified_height: Height,
         rank: Rank,
-        replica_version: ReplicaVersion,
         registry_version: RegistryVersion,
         subnet_records: &SubnetRecords,
     ) -> Option<BlockProposal> {
@@ -340,14 +332,19 @@ impl BlockMaker {
                         certified_height,
                         &context,
                         &parent,
-                        &replica_version,
                         subnet_records,
                     ) {
                         None => return None,
                         Some(payload) => payload,
                     };
-                    if replica_version != ReplicaVersion::default() {
-                        // Use empty DKG dealings if the (agreed) replica_version is not supported.
+                    if is_upgrade_pending(
+                        height,
+                        self.registry_client.as_ref(),
+                        &self.replica_config,
+                        &self.log,
+                        pool,
+                    )? {
+                        // Use empty DKG dealings if a replica upgrade is pending.
                         let new_dealings = dkg::Dealings::new_empty(dealings.start_height);
                         self.metrics.report_byte_estimate_metrics(
                             batch_payload.xnet.count_bytes(),
@@ -407,24 +404,30 @@ impl BlockMaker {
         certified_height: Height,
         context: &ValidationContext,
         parent: &Block,
-        replica_version: &ReplicaVersion,
         subnet_records: &SubnetRecords,
     ) -> Option<BatchPayload> {
         // Use empty payload if the (agreed) replica_version is not supported.
-        if *replica_version != ReplicaVersion::default() {
-            // if latest finalized CUP block has a version that is different,
-            // we should stop making blocks.
-            let finalized_replica_version = pool
-                .get_replica_version_from_highest_catch_up_package(
-                    self.registry_client.as_ref(),
-                    &self.replica_config,
-                    &self.log,
-                )?;
-            if finalized_replica_version != ReplicaVersion::default() {
-                debug!(
-                    self.log,
-                    "Skip making blocks after the upgrade catch-up package has finalized."
-                );
+        let upgrade_pending = is_upgrade_pending(
+            parent.height.increment(),
+            self.registry_client.as_ref(),
+            &self.replica_config,
+            &self.log,
+            pool,
+        );
+        if upgrade_pending.is_none() {
+            error!(self.log, "Failed to check if upgrade is pending!");
+        }
+        if upgrade_pending? {
+            let upgrade_finalized = is_upgrade_finalized(
+                self.registry_client.as_ref(),
+                &self.replica_config,
+                &self.log,
+                pool,
+            );
+            if upgrade_finalized.is_none() {
+                error!(self.log, "Failed to check if upgrade is finalized!");
+            }
+            if upgrade_finalized.unwrap_or(false) {
                 None
             } else {
                 Some(BatchPayload::default())
@@ -619,12 +622,6 @@ impl BlockMaker {
         // Note that we will skip blockmaking if registry versions or replica_versions
         // are missing or temporarily not retrievable.
         let registry_version = pool.registry_version(height)?;
-        let replica_version = lookup_replica_version(
-            self.registry_client.as_ref(),
-            self.replica_config.subnet_id,
-            &self.log,
-            registry_version,
-        )?;
 
         // Get the subnet records that are relevant to making a block
         let stable_registry_version = self.get_stable_registry_version(&parent)?;
@@ -639,7 +636,6 @@ impl BlockMaker {
             height,
             certified_height,
             rank,
-            replica_version,
             registry_version,
             &subnet_records,
         )
@@ -1002,7 +998,6 @@ mod tests {
             let proposal = block_maker.on_state_change(&PoolReader::new(&pool), &ingress_pool);
             assert!(proposal.is_some());
             let cup_proposal = proposal.unwrap();
-            let cup_height = cup_proposal.height();
             let block = cup_proposal.content.as_ref();
             assert!(block.payload.is_summary());
             assert_eq!(block.context.registry_version, RegistryVersion::from(10));
@@ -1024,13 +1019,6 @@ mod tests {
                 PoolReader::new(&pool).registry_version(proposal.height()),
                 Some(RegistryVersion::from(10))
             );
-
-            // 4. finalize and try making another block, should not be able to.
-            pool.finalize(&cup_proposal);
-            let catch_up_package = pool.make_catch_up_package(cup_height);
-            pool.insert_validated(catch_up_package);
-            let proposal = block_maker.on_state_change(&PoolReader::new(&pool), &ingress_pool);
-            assert!(proposal.is_none());
         })
     }
 
