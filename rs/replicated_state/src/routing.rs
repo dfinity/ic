@@ -20,6 +20,7 @@ pub fn find_canisters_not_in_routing_table(
     //   - N is the number of canisters.
     //   - R is the number or ranges assigned to the subnet.
 
+    use std::iter::once;
     use std::ops::Bound::{Excluded, Unbounded};
 
     let routing_table = &state.metadata.network_topology.routing_table;
@@ -34,35 +35,37 @@ pub fn find_canisters_not_in_routing_table(
         return state.canister_states.keys().cloned().collect();
     }
 
-    let mut canister_ids = Vec::new();
+    // Compute the inversion of id ranges that belong to the subnet.
+    //
+    // For that we build lists of left and right bounds (adjusted to include the
+    // unbounded intervals to the left and to the right of the assigned
+    // intervals) and zip these two lists together.
+    //
+    // Example:
+    //
+    // Input range:     [[1, 10], [20, 40]] (all bounds inclusive)
+    //
+    // Left bounds:     | Unbounded   | Excluded(10) | Excluded(40) |
+    // Right bounds:    | Excluded(1) | Excluded(20) | Unbounded    |
+    //
+    // Zip column-wise: [(-inf, 1), (10, 20), (40, inf)]
+    let lbounds = once(Unbounded).chain(id_ranges.iter().map(|l| Excluded(l.end)));
+    let rbounds = id_ranges
+        .iter()
+        .map(|r| Excluded(r.start))
+        .chain(once(Unbounded));
 
-    // Mark for deletion all the canisters to the left of the first range.
-    if let Some(first_range) = id_ranges.first() {
-        for (canister_id, _) in state
-            .canister_states
-            .range((Unbounded, Excluded(first_range.start)))
-        {
-            canister_ids.push(*canister_id);
-        }
-    }
-    // Mark for deletion all the canisters that slip between two successive ranges.
-    for (left, right) in id_ranges.iter().zip(id_ranges.iter().skip(1)) {
-        for (canister_id, _) in state
-            .canister_states
-            .range((Excluded(left.end), Excluded(right.start)))
-        {
-            canister_ids.push(*canister_id);
-        }
-    }
-    // Mark for deletion all canisters to the right of the last range.
-    if let Some(last_range) = id_ranges.last() {
-        for (canister_id, _) in state
-            .canister_states
-            .range((Excluded(last_range.end), Unbounded))
-        {
-            canister_ids.push(*canister_id);
-        }
-    }
+    // Mark for deletion all the canisters that fall into inverted intervals.
+    #[allow(clippy::let_and_return)]
+    let canister_ids = lbounds
+        .zip(rbounds)
+        .flat_map(|bounds| {
+            state
+                .canister_states
+                .range(bounds)
+                .map(|(canister_id, _)| *canister_id)
+        })
+        .collect();
 
     // Post-condition: the "clever" algorithm behaves like the naive one.
     #[cfg(debug_assertions)]
