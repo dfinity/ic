@@ -48,9 +48,6 @@ const BLOCK_CACHE_THRESHOLD_BYTES: usize = 10 * ONE_MB;
 /// Max limit of how many headers should be returned in the `GetSuccessorsResponse`.
 const MAX_NEXT_BLOCK_HEADERS_LENGTH: usize = 100;
 
-/// Max limit of how many block hashes should be stored in the block sync queue.
-const MAX_BLOCK_SYNC_QUEUE_SIZE: usize = 200;
-
 /// Max height for sending multiple blocks when connecting the Bitcoin mainnet.
 const MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT: BlockHeight = 700_000;
 
@@ -736,25 +733,16 @@ impl BlockchainManager {
     /// Add block hashes to the sync queue that are not already being synced, planned to be synced,
     /// or in the block cache.
     pub fn enqueue_new_blocks_to_download(&mut self, next_headers: Vec<BlockHeader>) {
-        let active_sent_hashes: HashSet<_> = self.getdata_request_info.keys().copied().collect();
         let mut already_queued_hashes: HashSet<_> = self.block_sync_queue.iter().copied().collect();
-        let mut queue: VecDeque<BlockHash> = next_headers.iter().map(|h| h.block_hash()).collect();
-        while let Some(node) = queue.pop_front() {
-            if !already_queued_hashes.contains(&node)
-                && !active_sent_hashes.contains(&node)
-                && self.blockchain.get_block(&node).is_none()
+        for header in next_headers {
+            let hash = header.block_hash();
+            if self.blockchain.get_block(&hash).is_none()
+                && !already_queued_hashes.contains(&hash)
+                && !self.getdata_request_info.contains_key(&hash)
             {
-                already_queued_hashes.insert(node);
-                self.block_sync_queue.push_back(node);
+                already_queued_hashes.insert(hash);
+                self.block_sync_queue.push_back(hash);
             }
-
-            // Stop adding block hashes when the block sync queue is full.
-            if self.block_sync_queue.len() >= MAX_BLOCK_SYNC_QUEUE_SIZE {
-                break;
-            }
-
-            let children = self.blockchain.get_children(&node);
-            queue.extend(children);
         }
     }
 
@@ -1623,6 +1611,91 @@ pub mod test {
             are_multiple_blocks_allowed(Network::Regtest, u32::MAX),
             "Multiple blocks are allowed at {}",
             u32::MAX
+        );
+    }
+
+    #[test]
+    fn test_enqueue_new_blocks_to_download() {
+        let config = Config::default();
+        let mut blockchain_manager = BlockchainManager::new(&config, no_op_logger());
+        let next_headers = generate_headers(
+            blockchain_manager.blockchain.genesis().header.block_hash(),
+            blockchain_manager.blockchain.genesis().header.time,
+            5,
+            &[],
+        );
+        let next_hashes = next_headers
+            .iter()
+            .map(|h| h.block_hash())
+            .collect::<Vec<_>>();
+
+        blockchain_manager.enqueue_new_blocks_to_download(next_headers);
+
+        assert_eq!(blockchain_manager.block_sync_queue.len(), 5);
+
+        let enqueued_blocks = blockchain_manager
+            .block_sync_queue
+            .iter()
+            .copied()
+            .collect::<Vec<_>>();
+        assert_eq!(
+            enqueued_blocks, next_hashes,
+            "{:#?} != {:#?}",
+            enqueued_blocks, next_hashes
+        );
+    }
+
+    #[test]
+    fn test_enqueue_new_blocks_to_download_no_duplicates() {
+        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let mut blockchain_manager = BlockchainManager::new(&config, no_op_logger());
+        let next_headers = generate_headers(
+            blockchain_manager.blockchain.genesis().header.block_hash(),
+            blockchain_manager.blockchain.genesis().header.time,
+            5,
+            &[],
+        );
+        let next_hashes = next_headers
+            .iter()
+            .take(3)
+            .map(|h| h.block_hash())
+            .collect::<Vec<_>>();
+        // Extract last hash from the next_hashes and add it to the getdata_request_info
+        // hashmap.
+        blockchain_manager.getdata_request_info.insert(
+            next_headers[4].block_hash(),
+            GetDataRequestInfo {
+                socket: SocketAddr::from_str("127.0.0.1:8333").expect("should be valid addr"),
+                sent_at: SystemTime::now(),
+                _on_timeout: OnTimeout::Ignore,
+            },
+        );
+
+        // Create and add a block to the cache, remove the hash
+        let block = Block {
+            header: next_headers[3],
+            txdata: vec![],
+        };
+        let (headers_added, maybe_err) = blockchain_manager.blockchain.add_headers(&next_headers);
+        assert_eq!(headers_added.len(), next_headers.len(), "{:#?}", maybe_err);
+        blockchain_manager
+            .blockchain
+            .add_block(block)
+            .expect("unable to add block");
+
+        blockchain_manager.enqueue_new_blocks_to_download(next_headers);
+
+        assert_eq!(blockchain_manager.block_sync_queue.len(), 3);
+
+        let enqueued_blocks = blockchain_manager
+            .block_sync_queue
+            .iter()
+            .copied()
+            .collect::<Vec<_>>();
+        assert_eq!(
+            enqueued_blocks, next_hashes,
+            "{:#?} != {:#?}",
+            enqueued_blocks, next_hashes
         );
     }
 }
