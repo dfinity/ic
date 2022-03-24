@@ -15,6 +15,7 @@ use ic_sns_governance::pb::v1::{
     ListNeurons, ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, Motion,
     NervousSystemParameters, Neuron, NeuronId, Proposal, ProposalData, ProposalId, Vote,
 };
+use ic_sns_root::pb::v1::SnsRootCanister;
 use ledger_canister as ledger;
 use ledger_canister::{
     AccountBalanceArgs, AccountIdentifier, LedgerCanisterInitPayload, Memo, SendArgs, Subaccount,
@@ -147,7 +148,7 @@ impl SnsCanisters<'_> {
             move || (SystemTime::now().duration_since(s).unwrap()).as_secs_f32()
         };
 
-        let root = runtime
+        let mut root = runtime
             .create_canister_max_cycles_with_retries()
             .await
             .expect("Couldn't create Root canister");
@@ -166,7 +167,10 @@ impl SnsCanisters<'_> {
         let governance_canister_id = governance.canister_id();
         let ledger_canister_id = ledger.canister_id();
 
+        // Governance canister_init args.
         init_payloads.governance.ledger_canister_id = Some(ledger_canister_id.into());
+
+        // Ledger canister_init args.
         init_payloads.ledger.minting_account = governance_canister_id.into();
         init_payloads.ledger.send_whitelist =
             hashset! { governance_canister_id, ledger_canister_id };
@@ -182,6 +186,11 @@ impl SnsCanisters<'_> {
             .initial_values
             .get(&governance_canister_id.get().into())
             .is_none());
+
+        // Root canister_init args.
+        let root_canister_init_args = SnsRootCanister {
+            governance_canister_id: Some(governance_canister_id.into()),
+        };
 
         // Set initial neurons
         for n in init_payloads.governance.neurons.values() {
@@ -201,6 +210,7 @@ impl SnsCanisters<'_> {
         futures::join!(
             install_governance_canister(&mut governance, init_payloads.governance.clone()),
             install_ledger_canister(&mut ledger, init_payloads.ledger),
+            install_root_canister(&mut root, root_canister_init_args),
         );
 
         eprintln!("SNS canisters installed after {:.1} s", since_start_secs());
@@ -645,11 +655,34 @@ pub async fn install_ledger_canister<'runtime, 'a>(
 }
 
 /// Creates and installs the ledger canister.
-pub async fn set_up_ledger_canister<'runtime, 'a>(
-    runtime: &'runtime Runtime,
+pub async fn set_up_ledger_canister(
+    runtime: &'_ Runtime,
     args: LedgerCanisterInitPayload,
-) -> Canister<'runtime> {
+) -> Canister<'_> {
     let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
     install_ledger_canister(&mut canister, args).await;
+    canister
+}
+
+/// Builds the root canister wasm binary, serializes canister_init args for it, and installs it.
+pub async fn install_root_canister(canister: &mut Canister<'_>, args: SnsRootCanister) {
+    let mut serialized = Vec::new();
+    args.encode(&mut serialized)
+        .expect("Unable to serialize SnsRootCanister");
+    install_rust_canister_with_memory_allocation(
+        canister,
+        "sns/root",
+        "sns-root-canister",
+        &[],
+        Some(serialized),
+        SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES,
+    )
+    .await
+}
+
+/// Creates and installs the root canister.
+pub async fn set_up_root_canister(runtime: &'_ Runtime, args: SnsRootCanister) -> Canister<'_> {
+    let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
+    install_root_canister(&mut canister, args).await;
     canister
 }
