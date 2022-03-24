@@ -686,52 +686,24 @@ fn dirty_pages_to_dirty_chunks(
         CheckpointLayout::new(PathBuf::from(checkpoint_root_path), Height::from(0))?;
 
     let mut dirty_chunks: BTreeMap<PathBuf, BitVec> = Default::default();
-    for (canister_id, (height, page_indices)) in
-        manifest_delta.dirty_memory_pages.wasm_memory.iter()
-    {
-        if *height != manifest_delta.base_height {
+    for dirty_page in &manifest_delta.dirty_memory_pages {
+        if dirty_page.height != manifest_delta.base_height {
             continue;
         }
 
-        if let Ok(canister_layout) = checkpoint_layout.canister(canister_id) {
-            let vmemory_0 = canister_layout.vmemory_0();
-            let vmemory_relative_path = vmemory_0
+        if let Ok(path) = dirty_page.page_type.path(&checkpoint_layout) {
+            let relative_path = path
                 .strip_prefix(checkpoint_root_path)
                 .expect("failed to strip path prefix");
 
             if let Some(chunks_bitmap) = dirty_chunks_of_file(
-                vmemory_relative_path,
-                page_indices,
+                relative_path,
+                &dirty_page.page_delta_indices,
                 files,
                 max_chunk_size,
                 &manifest_delta.base_manifest,
             ) {
-                dirty_chunks.insert(vmemory_relative_path.to_path_buf(), chunks_bitmap);
-            }
-        }
-    }
-
-    for (canister_id, (height, page_indices)) in
-        manifest_delta.dirty_memory_pages.stable_memory.iter()
-    {
-        if *height != manifest_delta.base_height {
-            continue;
-        }
-
-        if let Ok(canister_layout) = checkpoint_layout.canister(canister_id) {
-            let stable_memory_blob = canister_layout.stable_memory_blob();
-            let stable_memory_relative_path = stable_memory_blob
-                .strip_prefix(checkpoint_root_path)
-                .expect("failed to strip path prefix");
-
-            if let Some(chunks_bitmap) = dirty_chunks_of_file(
-                stable_memory_relative_path,
-                page_indices,
-                files,
-                max_chunk_size,
-                &manifest_delta.base_manifest,
-            ) {
-                dirty_chunks.insert(stable_memory_relative_path.to_path_buf(), chunks_bitmap);
+                dirty_chunks.insert(relative_path.to_path_buf(), chunks_bitmap);
             }
         }
     }
