@@ -1,3 +1,5 @@
+mod btreemap;
+mod types;
 pub mod vec_mem;
 
 const WASM_PAGE_SIZE: u64 = 65536;
