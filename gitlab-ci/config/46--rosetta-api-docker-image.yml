@@ -10,7 +10,7 @@ rosetta-api-docker-image:
       set -exuo pipefail
 
       gunzip artifacts/release/ic-rosetta-api.gz
-      chmod u+x artifacts/release/ic-rosetta-api
+      chmod +x artifacts/release/ic-rosetta-api
 
       pushd "$(mktemp -d)"
       cp \
