@@ -52,6 +52,12 @@ const NODES_PER_SUBNET_A: usize = 1;
 const RUNTIME_SEC_A: u64 = 600;
 const RATE_A: usize = 10;
 
+// Constants for xnet nightly with many-single-node-subnets
+const SUBNETS_B: usize = 27;
+const NODES_PER_SUBNET_B: usize = 1;
+const RUNTIME_SEC_B: u64 = 600;
+const RATE_B: usize = 10;
+
 #[derive(Debug)]
 pub struct Config {
     subnets: usize,
@@ -100,6 +106,10 @@ pub fn config_nightly() -> InternetComputer {
     config(SUBNETS_A, NODES_PER_SUBNET_A)
 }
 
+pub fn config_nightly_many_single_node_subnets() -> InternetComputer {
+    config(SUBNETS_B, NODES_PER_SUBNET_B)
+}
+
 pub fn test_nightly(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let subnet_connections = SUBNETS_A - 1;
     let dynamic_config =
@@ -109,6 +119,26 @@ pub fn test_nightly(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         subnet_connections,
         nodes_per_subnet: NODES_PER_SUBNET_A,
         runtime: Duration::from_secs(RUNTIME_SEC_A),
+        payload_size_bytes: PAYLOAD_SIZE_BYTES,
+        send_rate_threshold: SEND_RATE_THRESHOLD,
+        error_percentage_threshold: ERROR_PERCENTAGE_THRESHOLD,
+        targeted_latency_seconds: TARGETED_LATENCY_SECONDS,
+        subnet_to_subnet_rate: dynamic_config.subnet_to_subnet_rate,
+        canisters_per_subnet: dynamic_config.canisters_per_subnet,
+        canister_to_subnet_rate: dynamic_config.canister_to_subnet_rate,
+    };
+    test(handle, ctx, config)
+}
+
+pub fn test_nightly_many_single_node_subnets(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+    let subnet_connections = SUBNETS_B - 1;
+    let dynamic_config =
+        compute_dynamic_config(RATE_B, subnet_connections, MAX_CANISTER_TO_CANISTER_RATE);
+    let config = Config {
+        subnets: SUBNETS_B,
+        subnet_connections,
+        nodes_per_subnet: NODES_PER_SUBNET_B,
+        runtime: Duration::from_secs(RUNTIME_SEC_B),
         payload_size_bytes: PAYLOAD_SIZE_BYTES,
         send_rate_threshold: SEND_RATE_THRESHOLD,
         error_percentage_threshold: ERROR_PERCENTAGE_THRESHOLD,

@@ -76,7 +76,6 @@ ci_jobs_required:
   # prod tests
   - generic-hourly
   - subnet-update-workload-nightly
-  - xnet-slo-nightly-many-single-node-subnets
   - network-reliability-test
   - rejoin-nightly
   - nns-registry-changes-test
