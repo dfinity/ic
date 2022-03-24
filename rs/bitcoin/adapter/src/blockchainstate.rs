@@ -33,7 +33,7 @@ pub struct CachedHeader {
 
 /// The result when `BlockchainState::add_header(...)` is called.
 #[derive(Debug)]
-pub enum AddHeaderResult {
+enum AddHeaderResult {
     /// This variant is used when the input header is added to the header_cache.
     HeaderAdded(CachedHeader),
     /// This variant is used when the input header already exists in the header_cache.

@@ -2,8 +2,7 @@ use crate::{
     blockchainstate::{AddHeaderError, BlockchainState},
     common::{BlockHeight, MINIMUM_VERSION_NUMBER},
     config::Config,
-    stream::{StreamEvent, StreamEventKind},
-    Channel, Command, HasHeight, ProcessEventError,
+    Channel, Command, HasHeight, ProcessBitcoinNetworkMessageError,
 };
 use bitcoin::{
     network::{
@@ -578,33 +577,29 @@ impl BlockchainManager {
     /// This function is called by the adapter when a new event takes place.
     /// The event could be receiving "getheaders", "getdata", "inv" messages from bitcion peers.
     /// The event could be change in connection status with a bitcoin peer.
-    pub fn process_event(&mut self, event: &StreamEvent) -> Result<(), ProcessEventError> {
-        if let StreamEventKind::Message(message) = &event.kind {
-            match message {
-                NetworkMessage::Inv(inventory) => {
-                    if self
-                        .received_inv_message(&event.address, inventory)
-                        .is_err()
-                    {
-                        return Err(ProcessEventError::InvalidMessage);
-                    }
+    pub fn process_bitcoin_network_message(
+        &mut self,
+        addr: SocketAddr,
+        message: &NetworkMessage,
+    ) -> Result<(), ProcessBitcoinNetworkMessageError> {
+        match message {
+            NetworkMessage::Inv(inventory) => {
+                if self.received_inv_message(&addr, inventory).is_err() {
+                    return Err(ProcessBitcoinNetworkMessageError::InvalidMessage);
                 }
-                NetworkMessage::Headers(headers) => {
-                    if self
-                        .received_headers_message(&event.address, headers)
-                        .is_err()
-                    {
-                        return Err(ProcessEventError::InvalidMessage);
-                    }
+            }
+            NetworkMessage::Headers(headers) => {
+                if self.received_headers_message(&addr, headers).is_err() {
+                    return Err(ProcessBitcoinNetworkMessageError::InvalidMessage);
                 }
-                NetworkMessage::Block(block) => {
-                    if self.received_block_message(&event.address, block).is_err() {
-                        return Err(ProcessEventError::InvalidMessage);
-                    }
+            }
+            NetworkMessage::Block(block) => {
+                if self.received_block_message(&addr, block).is_err() {
+                    return Err(ProcessBitcoinNetworkMessageError::InvalidMessage);
                 }
-                _ => {}
-            };
-        }
+            }
+            _ => {}
+        };
         Ok(())
     }
 
@@ -922,12 +917,11 @@ pub mod test {
                         );
                     }
 
-                    let event = StreamEvent {
-                        address: *socket,
-                        kind: StreamEventKind::Message(NetworkMessage::Headers(chain.clone())),
-                    };
+                    let message = NetworkMessage::Headers(chain.clone());
 
-                    assert!(blockchain_manager.process_event(&event).is_ok());
+                    assert!(blockchain_manager
+                        .process_bitcoin_network_message(*socket, &message)
+                        .is_ok());
                     let peer = blockchain_manager.peer_info.get(socket).unwrap();
                     assert_eq!(peer.height, 16, "Height of peer {} is not correct", socket);
                     assert_eq!(
@@ -970,11 +964,12 @@ pub mod test {
         runtime.block_on(async {
             blockchain_manager.add_peer(&sockets[0]);
             blockchain_manager.outgoing_command_queue.remove(0);
-            let event = StreamEvent {
-                address: sockets[0],
-                kind: StreamEventKind::Message(NetworkMessage::Headers(chain.clone())),
-            };
-            assert!(blockchain_manager.process_event(&event).is_ok());
+            assert!(blockchain_manager
+                .process_bitcoin_network_message(
+                    sockets[0],
+                    &NetworkMessage::Headers(chain.clone())
+                )
+                .is_ok());
 
             assert_eq!(
                 blockchain_manager.blockchain.get_active_chain_tip().height,
@@ -994,11 +989,9 @@ pub mod test {
                     .map(|hash| Inventory::Block(*hash))
                     .collect(),
             );
-            let event = StreamEvent {
-                address: sockets[0],
-                kind: StreamEventKind::Message(message),
-            };
-            assert!(blockchain_manager.process_event(&event).is_ok());
+            assert!(blockchain_manager
+                .process_bitcoin_network_message(sockets[0], &message)
+                .is_ok());
             blockchain_manager.add_peer(&sockets[0]);
             if let Some(command) = blockchain_manager.outgoing_command_queue.first() {
                 assert_eq!(
