@@ -12,7 +12,13 @@ if [ $USER != ubuntu ]; then
     DOCKER_IMG_VERSION="$USER-$SET_UID-$DOCKER_IMG_VERSION"
 fi
 
-"$REPO_ROOT"/gitlab-ci/docker/docker-build-local-image.sh
+if [ -e /.dockerenv ]; then
+    export DOCKER_BUILD_ARGS='--no-cache'
+    "$REPO_ROOT"/gitlab-ci/docker/docker-build-local-image.sh
+    unset DOCKER_BUILD_ARGS
+else
+    "$REPO_ROOT"/gitlab-ci/docker/docker-build-local-image.sh
+fi
 
 cd "$REPO_ROOT"
 docker image build -t ic-build-src:$TAG -f- . <<EOF
