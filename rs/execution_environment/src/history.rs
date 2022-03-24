@@ -1,7 +1,7 @@
-use ic_interfaces::{
-    execution_environment::{IngressHistoryError, IngressHistoryReader, IngressHistoryWriter},
-    state_manager::StateReader,
+use ic_interfaces::execution_environment::{
+    IngressHistoryError, IngressHistoryReader, IngressHistoryWriter,
 };
+use ic_interfaces_state_manager::{StateManagerError, StateReader};
 use ic_logger::{fatal, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry, Timer};
 use ic_replicated_state::ReplicatedState;
@@ -46,7 +46,15 @@ impl IngressHistoryReader for IngressHistoryReaderImpl {
         &self,
         height: Height,
     ) -> Result<Box<dyn Fn(&MessageId) -> IngressStatus>, IngressHistoryError> {
-        let labeled_state = self.state_reader.get_state_at(height)?;
+        let labeled_state = self
+            .state_reader
+            .get_state_at(height)
+            .map_err(|e| match e {
+                StateManagerError::StateRemoved(h) => IngressHistoryError::StateRemoved(h),
+                StateManagerError::StateNotCommittedYet(h) => {
+                    IngressHistoryError::StateNotAvailableYet(h)
+                }
+            })?;
         let history = labeled_state.take().get_ingress_history();
         Ok(Box::new(move |message_id| {
             history

@@ -2,7 +2,7 @@
 
 use super::*;
 use ic_base_types::PrincipalId;
-use ic_interfaces::state_manager::CertificationScope;
+use ic_interfaces_state_manager::CertificationScope;
 use ic_protobuf::registry::{
     node::v1::{connection_endpoint::Protocol, ConnectionEndpoint, NodeRecord},
     subnet::v1::SubnetListRecord,

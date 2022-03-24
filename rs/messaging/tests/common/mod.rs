@@ -2,9 +2,8 @@
 #![allow(dead_code)]
 
 use ic_config::state_manager::Config;
-use ic_interfaces::{
-    certification::Verifier, certified_stream_store::CertifiedStreamStore, state_manager::*,
-};
+use ic_interfaces::{certification::Verifier, certified_stream_store::CertifiedStreamStore};
+use ic_interfaces_state_manager::*;
 use ic_logger::ReplicaLogger;
 use ic_messaging::certified_slice_pool::{
     UnpackedStreamSlice, METRIC_POOL_SIZE_BYTES, METRIC_TAKE_COUNT, METRIC_TAKE_GCED_MESSAGES,

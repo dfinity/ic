@@ -28,7 +28,7 @@ fn mock_state_manager(
 ) -> MockStateManager {
     let mut state_manager = MockStateManager::new();
     state_manager.expect_get_state_at().return_const(Ok(
-        ic_interfaces::state_manager::Labeled::new(
+        ic_interfaces_state_manager::Labeled::new(
             CERTIFIED_HEIGHT,
             Arc::new(
                 ReplicatedStateBuilder::default()

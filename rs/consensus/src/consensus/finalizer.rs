@@ -24,8 +24,8 @@ use ic_interfaces::{
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, MessageRoutingError},
     registry::RegistryClient,
-    state_manager::StateManager,
 };
+use ic_interfaces_state_manager::StateManager;
 use ic_logger::{debug, trace, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
@@ -351,7 +351,7 @@ mod tests {
     use super::*;
     use crate::consensus::batch_delivery::generate_responses_to_setup_initial_dkg_calls;
     use crate::consensus::mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
-    use ic_interfaces::state_manager::Labeled;
+    use ic_interfaces_state_manager::Labeled;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_registry_subnet_type::SubnetType;
@@ -647,7 +647,7 @@ mod tests {
         .collect::<BTreeMap<_, _>>();
 
         // Run the function
-        use ic_interfaces::state_manager::StateReader;
+        use ic_interfaces_state_manager::StateReader;
         let state = state_manager.get_state_at(Height::from(1)).unwrap();
         let setup_initial_dkg_contexts = &state
             .get_ref()

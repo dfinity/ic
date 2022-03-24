@@ -1,7 +1,6 @@
 //! The execution environment public interface.
 mod errors;
 
-use crate::state_manager::StateManagerError;
 pub use errors::{CanisterHeartbeatError, CanisterOutOfCyclesError, HypervisorError, TrapCode};
 use ic_base_types::NumBytes;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -274,15 +273,6 @@ pub trait QueryHandler: Send + Sync {
 pub enum IngressHistoryError {
     StateRemoved(Height),
     StateNotAvailableYet(Height),
-}
-
-impl From<StateManagerError> for IngressHistoryError {
-    fn from(source: StateManagerError) -> Self {
-        match source {
-            StateManagerError::StateRemoved(height) => Self::StateRemoved(height),
-            StateManagerError::StateNotCommittedYet(height) => Self::StateNotAvailableYet(height),
-        }
-    }
 }
 
 /// Interface for reading the history of ingress messages.

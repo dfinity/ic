@@ -3463,6 +3463,7 @@ dependencies = [
  "ic-btc-types-internal",
  "ic-interfaces",
  "ic-interfaces-bitcoin-adapter-client",
+ "ic-interfaces-state-manager",
  "ic-logger",
  "ic-metrics",
  "ic-protobuf",
@@ -3784,6 +3785,7 @@ dependencies = [
  "ic-ic00-types",
  "ic-ingress-manager",
  "ic-interfaces",
+ "ic-interfaces-state-manager",
  "ic-logger",
  "ic-messaging",
  "ic-metrics",
@@ -4599,6 +4601,7 @@ dependencies = [
  "ic-execution-environment",
  "ic-ic00-types",
  "ic-interfaces",
+ "ic-interfaces-state-manager",
  "ic-messaging",
  "ic-metrics",
  "ic-metrics-exporter",
@@ -4630,6 +4633,7 @@ dependencies = [
  "ic-cycles-account-manager",
  "ic-execution-environment",
  "ic-interfaces",
+ "ic-interfaces-state-manager",
  "ic-messaging",
  "ic-metrics",
  "ic-metrics-exporter",
@@ -4726,6 +4730,7 @@ dependencies = [
  "ic-embedders",
  "ic-ic00-types",
  "ic-interfaces",
+ "ic-interfaces-state-manager",
  "ic-logger",
  "ic-metrics",
  "ic-nns-constants",
@@ -4846,6 +4851,7 @@ dependencies = [
  "ic-crypto-tree-hash",
  "ic-interfaces",
  "ic-interfaces-p2p",
+ "ic-interfaces-state-manager",
  "ic-logger",
  "ic-metrics",
  "ic-pprof",
@@ -4945,6 +4951,7 @@ dependencies = [
  "ic-crypto",
  "ic-cycles-account-manager",
  "ic-interfaces",
+ "ic-interfaces-state-manager",
  "ic-logger",
  "ic-metrics",
  "ic-protobuf",
@@ -5010,6 +5017,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-interfaces-state-manager"
+version = "0.8.0"
+dependencies = [
+ "ic-crypto-tree-hash",
+ "ic-types 0.8.0",
+ "phantom_newtype",
+ "thiserror",
+]
+
+[[package]]
 name = "ic-interfaces-transport"
 version = "0.8.0"
 dependencies = [
@@ -5053,6 +5070,7 @@ dependencies = [
  "ic-cycles-account-manager",
  "ic-ic00-types",
  "ic-interfaces",
+ "ic-interfaces-state-manager",
  "ic-logger",
  "ic-metrics",
  "ic-protobuf",
@@ -5912,6 +5930,7 @@ dependencies = [
  "ic-execution-environment",
  "ic-http-handler",
  "ic-interfaces",
+ "ic-interfaces-state-manager",
  "ic-logger",
  "ic-messaging",
  "ic-metrics",
@@ -6024,6 +6043,7 @@ dependencies = [
  "ic-ingress-manager",
  "ic-interfaces",
  "ic-interfaces-p2p",
+ "ic-interfaces-state-manager",
  "ic-interfaces-transport",
  "ic-logger",
  "ic-metrics",
@@ -6054,6 +6074,7 @@ dependencies = [
  "ic-execution-environment",
  "ic-interfaces",
  "ic-interfaces-p2p",
+ "ic-interfaces-state-manager",
  "ic-logger",
  "ic-metrics",
  "ic-prep",
@@ -6436,6 +6457,7 @@ dependencies = [
  "ic-error-types",
  "ic-execution-environment",
  "ic-interfaces",
+ "ic-interfaces-state-manager",
  "ic-logger",
  "ic-messaging",
  "ic-metrics",
@@ -6477,6 +6499,7 @@ dependencies = [
  "ic-crypto-sha",
  "ic-crypto-tree-hash",
  "ic-interfaces",
+ "ic-interfaces-state-manager",
  "ic-logger",
  "ic-metrics",
  "ic-protobuf",
@@ -6576,6 +6599,7 @@ dependencies = [
  "ic-consensus-message",
  "ic-crypto",
  "ic-interfaces",
+ "ic-interfaces-state-manager",
  "ic-logger",
  "ic-metrics",
  "ic-replicated-state",
@@ -6625,6 +6649,7 @@ dependencies = [
  "ic-interfaces",
  "ic-interfaces-bitcoin-adapter-client",
  "ic-interfaces-p2p",
+ "ic-interfaces-state-manager",
  "ic-interfaces-transport",
  "ic-logger",
  "ic-metrics",

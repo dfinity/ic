@@ -1,12 +1,13 @@
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
 use ic_config::state_manager::Config;
+use ic_interfaces::certified_stream_store::CertifiedStreamStore;
 use ic_interfaces::{
     certification::{CertificationPermanentError, Verifier, VerifierError},
     certified_stream_store::DecodeStreamError,
     validation::ValidationResult,
 };
-use ic_interfaces::{certified_stream_store::CertifiedStreamStore, state_manager::*};
+use ic_interfaces_state_manager::*;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::execution_state::WasmBinary;

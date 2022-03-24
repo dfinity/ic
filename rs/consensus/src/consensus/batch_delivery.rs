@@ -14,8 +14,8 @@ use ic_crypto::utils::ni_dkg::initial_ni_dkg_transcript_record_from_transcript;
 use ic_interfaces::{
     messaging::{MessageRouting, MessageRoutingError},
     registry::RegistryClient,
-    state_manager::StateManager,
 };
+use ic_interfaces_state_manager::StateManager;
 use ic_logger::{debug, info, trace, warn, ReplicaLogger};
 use ic_protobuf::log::consensus_log_entry::v1::ConsensusLogEntry;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;

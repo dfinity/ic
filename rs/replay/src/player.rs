@@ -18,7 +18,9 @@ use ic_interfaces::{
     execution_environment::{IngressHistoryReader, QueryHandler},
     messaging::{MessageRouting, MessageRoutingError},
     registry::{RegistryClient, RegistryTransportRecord},
-    state_manager::{PermanentStateHashError, StateHashError, StateManager, StateReader},
+};
+use ic_interfaces_state_manager::{
+    PermanentStateHashError, StateHashError, StateManager, StateReader,
 };
 use ic_logger::{new_replica_logger_from_config, ReplicaLogger};
 use ic_messaging::MessageRoutingImpl;

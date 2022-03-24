@@ -20,9 +20,9 @@ use ic_constants::MAX_INGRESS_TTL;
 use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
     artifact_pool::UnvalidatedArtifact, ingress_manager::IngressHandler,
-    ingress_pool::MutableIngressPool, registry::RegistryClient, state_manager::Labeled,
-    time_source::TimeSource,
+    ingress_pool::MutableIngressPool, registry::RegistryClient, time_source::TimeSource,
 };
+use ic_interfaces_state_manager::Labeled;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_client::client::RegistryClientImpl;
@@ -205,7 +205,7 @@ where
             ));
             let mut state_manager = MockStateManager::new();
             state_manager.expect_get_state_at().return_const(Ok(
-                ic_interfaces::state_manager::Labeled::new(
+                ic_interfaces_state_manager::Labeled::new(
                     Height::new(0),
                     Arc::new(ReplicatedStateBuilder::default().build()),
                 ),

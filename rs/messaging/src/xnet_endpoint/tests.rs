@@ -1,6 +1,6 @@
 use super::*;
 use bytes::Bytes;
-use ic_interfaces::state_manager::{CertificationScope, StateManager};
+use ic_interfaces_state_manager::{CertificationScope, StateManager};
 use ic_protobuf::{messaging::xnet::v1 as pb, proxy::ProtoProxy};
 use ic_replicated_state::{testing::ReplicatedStateTesting, ReplicatedState, Stream};
 use ic_test_utilities::{

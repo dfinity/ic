@@ -4,12 +4,10 @@ use ic_canister_client::Sender;
 use ic_config::Config;
 use ic_config::{crypto::CryptoConfig, transport::TransportFlowConfig};
 use ic_execution_environment::IngressHistoryReaderImpl;
+use ic_interfaces::execution_environment::{IngressHistoryReader, QueryHandler};
 use ic_interfaces::registry::RegistryClient;
-use ic_interfaces::{
-    execution_environment::{IngressHistoryReader, QueryHandler},
-    state_manager::StateReader,
-};
 use ic_interfaces_p2p::IngressIngestionService;
+use ic_interfaces_state_manager::StateReader;
 use ic_metrics::MetricsRegistry;
 use ic_prep_lib::internet_computer::{IcConfig, TopologyConfig};
 use ic_prep_lib::node::{NodeConfiguration, NodeIndex, NodeSecretKeyStore};

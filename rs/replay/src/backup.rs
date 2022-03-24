@@ -7,10 +7,10 @@ use ic_interfaces::{
     consensus_pool::{ChangeAction, MutableConsensusPool},
     crypto::{MultiSigVerifier, ThresholdSigVerifierByPublicKey},
     registry::RegistryClient,
-    state_manager::{StateHashError, StateManager},
     time_source::SysTimeSource,
     validation::ValidationResult,
 };
+use ic_interfaces_state_manager::{StateHashError, StateManager};
 use ic_logger::replica_logger::no_op_logger;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;

@@ -157,8 +157,8 @@ mod tests {
     use crate::tests::setup_with_params;
     use ic_interfaces::artifact_pool::UnvalidatedArtifact;
     use ic_interfaces::ingress_pool::{ChangeAction, MutableIngressPool};
-    use ic_interfaces::state_manager::StateManager;
     use ic_interfaces::time_source::TimeSource;
+    use ic_interfaces_state_manager::StateManager;
     use ic_test_utilities::{
         consensus::MockConsensusCache,
         history::MockIngressHistory,

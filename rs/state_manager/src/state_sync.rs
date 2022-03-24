@@ -6,9 +6,9 @@ use ic_crypto_hash::crypto_hash;
 use ic_interfaces::{
     artifact_manager::{ArtifactAcceptance, ArtifactClient, ArtifactProcessor, ProcessingResult},
     artifact_pool::{ArtifactPoolError, UnvalidatedArtifact},
-    state_manager::{StateManager, CERT_CERTIFIED},
     time_source::TimeSource,
 };
+use ic_interfaces_state_manager::{StateManager, CERT_CERTIFIED};
 use ic_logger::{info, warn};
 use ic_types::{
     artifact::{
@@ -159,7 +159,7 @@ impl ArtifactClient<StateSyncArtifact> for StateManagerImpl {
     ) -> Option<
         Box<dyn Fn(&StateSyncArtifactId, &StateSyncAttribute) -> Priority + Send + Sync + 'static>,
     > {
-        use ic_interfaces::state_manager::StateReader;
+        use ic_interfaces_state_manager::StateReader;
 
         let latest_height = self.latest_state_height();
         let fetch_state = self.states.read().fetch_state.clone();

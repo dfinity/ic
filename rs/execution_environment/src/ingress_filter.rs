@@ -1,8 +1,6 @@
 use crate::ExecutionEnvironmentImpl;
-use ic_interfaces::{
-    execution_environment::{ExecutionMode, IngressFilterService},
-    state_manager::StateReader,
-};
+use ic_interfaces::execution_environment::{ExecutionMode, IngressFilterService};
+use ic_interfaces_state_manager::StateReader;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{canonical_error::CanonicalError, messages::SignedIngressContent};

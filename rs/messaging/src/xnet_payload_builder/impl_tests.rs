@@ -3,7 +3,8 @@
 use super::test_fixtures::*;
 use super::*;
 use assert_matches::assert_matches;
-use ic_interfaces::{certified_stream_store::DecodeStreamError, state_manager::StateReader};
+use ic_interfaces::certified_stream_store::DecodeStreamError;
+use ic_interfaces_state_manager::StateReader;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::testing::ReplicatedStateTesting;
 use ic_test_utilities::{

@@ -31,8 +31,8 @@ use crate::consensus::{
     utils::{find_lowest_ranked_proposals, get_adjusted_notary_delay},
     ConsensusCrypto,
 };
-use ic_interfaces::state_manager::StateManager;
 use ic_interfaces::time_source::TimeSource;
+use ic_interfaces_state_manager::StateManager;
 use ic_logger::{error, trace, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;

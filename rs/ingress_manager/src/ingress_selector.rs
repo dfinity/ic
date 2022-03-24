@@ -9,10 +9,12 @@ use ic_interfaces::{
     execution_environment::IngressHistoryReader,
     ingress_manager::{
         IngressPayloadValidationError, IngressPermanentError, IngressSelector, IngressSetQuery,
+        IngressTransientError,
     },
     ingress_pool::{IngressPoolSelect, SelectResult},
     validation::{ValidationError, ValidationResult},
 };
+use ic_interfaces_state_manager::StateManagerError;
 use ic_logger::{error, warn};
 use ic_registry_client_helpers::subnet::IngressMessageSettings;
 use ic_replicated_state::ReplicatedState;
@@ -166,11 +168,16 @@ impl<'a> IngressSelector for IngressManager {
             Err(err) => {
                 warn!(
                     self.log,
-                    "StateManager doesn't have state for height {}: {:?}", certified_height, err
+                    "StateManager doesn't have state for height {}: {:?}", certified_height, err,
                 );
-                return Err(ValidationError::Permanent(
-                    IngressPermanentError::StateManagerError(err),
-                ));
+                return Err(match err {
+                    StateManagerError::StateRemoved(h) => {
+                        ValidationError::Permanent(IngressPermanentError::StateRemoved(h))
+                    }
+                    StateManagerError::StateNotCommittedYet(h) => {
+                        ValidationError::Transient(IngressTransientError::StateNotCommittedYet(h))
+                    }
+                });
             }
         };
 

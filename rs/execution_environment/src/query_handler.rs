@@ -13,10 +13,8 @@ use crate::{
 };
 use ic_config::execution_environment::Config;
 use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, LabeledTree::SubTree};
-use ic_interfaces::{
-    execution_environment::{QueryExecutionService, QueryHandler},
-    state_manager::StateReader,
-};
+use ic_interfaces::execution_environment::{QueryExecutionService, QueryHandler};
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;

@@ -1,7 +1,7 @@
 use hyper::{Body, HeaderMap, Response, StatusCode};
 use ic_crypto_tree_hash::Path;
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label};
-use ic_interfaces::state_manager::StateReader;
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::{info, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{

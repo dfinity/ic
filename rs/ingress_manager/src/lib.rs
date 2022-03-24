@@ -9,8 +9,8 @@ use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache, crypto::IngressSigVerifier,
     execution_environment::IngressHistoryReader, registry::RegistryClient,
-    state_manager::StateManager,
 };
+use ic_interfaces_state_manager::StateManager;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_registry_client_helpers::subnet::{IngressMessageSettings, SubnetRegistry};
@@ -235,7 +235,7 @@ mod tests {
 
         let mut state_manager = MockStateManager::new();
         state_manager.expect_get_state_at().return_const(Ok(
-            ic_interfaces::state_manager::Labeled::new(
+            ic_interfaces_state_manager::Labeled::new(
                 Height::new(0),
                 Arc::new(state.unwrap_or_else(|| ReplicatedStateBuilder::default().build())),
             ),

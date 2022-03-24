@@ -41,9 +41,9 @@ use ic_interfaces::{
     crypto::IngressSigVerifier,
     execution_environment::{IngressFilterService, QueryExecutionService},
     registry::RegistryClient,
-    state_manager::StateReader,
 };
 use ic_interfaces_p2p::IngressIngestionService;
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::{debug, error, fatal, info, warn, ReplicaLogger};
 use ic_metrics::{histogram_vec_timer::HistogramVecTimer, MetricsRegistry};
 use ic_registry_subnet_type::SubnetType;

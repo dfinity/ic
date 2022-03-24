@@ -20,11 +20,11 @@ use ic_crypto_tree_hash::{recompute_digest, Digest, LabeledTree, MixedHashTree, 
 use ic_interfaces::{
     certification::Verifier,
     certified_stream_store::{CertifiedStreamStore, DecodeStreamError, EncodeStreamError},
-    state_manager::{
-        CertificationMask, CertificationScope, Labeled, PermanentStateHashError::*, StateHashError,
-        StateManager, StateManagerError, StateManagerResult, StateReader,
-        TransientStateHashError::*, CERT_CERTIFIED, CERT_UNCERTIFIED,
-    },
+};
+use ic_interfaces_state_manager::{
+    CertificationMask, CertificationScope, Labeled, PermanentStateHashError::*, StateHashError,
+    StateManager, StateManagerError, StateManagerResult, StateReader, TransientStateHashError::*,
+    CERT_CERTIFIED, CERT_UNCERTIFIED,
 };
 use ic_logger::{debug, error, fatal, info, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
@@ -2340,7 +2340,7 @@ impl StateManager for StateManagerImpl {
         drop(states);
         #[cfg(debug_assertions)]
         {
-            use ic_interfaces::state_manager::CERT_ANY;
+            use ic_interfaces_state_manager::CERT_ANY;
             let checkpoint_heights = self
                 .state_layout
                 .checkpoint_heights()

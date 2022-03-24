@@ -14,8 +14,9 @@ use crate::{
 };
 use ic_interfaces::{
     dkg::DkgPool, ecdsa::EcdsaPool, ingress_pool::IngressPoolSelect, registry::RegistryClient,
-    state_manager::StateManager, time_source::TimeSource,
+    time_source::TimeSource,
 };
+use ic_interfaces_state_manager::StateManager;
 use ic_logger::{debug, error, trace, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
@@ -924,7 +925,7 @@ mod tests {
             state_manager
                 .get_mut()
                 .expect_get_state_at()
-                .return_const(Ok(ic_interfaces::state_manager::Labeled::new(
+                .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
                     Height::new(0),
                     Arc::new(ic_test_utilities::state::get_initial_state(0, 0)),
                 )));

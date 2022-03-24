@@ -10,9 +10,9 @@ use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
     dkg::{ChangeAction, ChangeSet, Dkg, DkgGossip, DkgPool},
     registry::RegistryClient,
-    state_manager::{StateManager, StateManagerError},
     validation::{ValidationError, ValidationResult},
 };
+use ic_interfaces_state_manager::{StateManager, StateManagerError};
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::buckets::{decimal_buckets, linear_buckets};
 use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
@@ -2068,9 +2068,12 @@ mod tests {
         }
 
         let mut mock = state_manager.get_mut();
-        let expectation = mock.expect_get_state_at().return_const(Ok(
-            ic_interfaces::state_manager::Labeled::new(Height::new(0), Arc::new(state)),
-        ));
+        let expectation =
+            mock.expect_get_state_at()
+                .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
+                    Height::new(0),
+                    Arc::new(state),
+                )));
         if let Some(times) = times {
             expectation.times(times);
         }

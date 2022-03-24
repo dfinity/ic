@@ -152,7 +152,7 @@ pub fn dependencies_with_subnet_params(
     state_manager
         .get_mut()
         .expect_get_state_at()
-        .return_const(Ok(ic_interfaces::state_manager::Labeled::new(
+        .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
             Height::new(0),
             Arc::new(ic_test_utilities::state::get_initial_state(0, 0)),
         )));

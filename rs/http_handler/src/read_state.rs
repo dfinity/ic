@@ -7,9 +7,8 @@ use crate::{
 };
 use hyper::{Body, Response};
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path};
-use ic_interfaces::{
-    crypto::IngressSigVerifier, registry::RegistryClient, state_manager::StateReader,
-};
+use ic_interfaces::{crypto::IngressSigVerifier, registry::RegistryClient};
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::{trace, ReplicaLogger};
 use ic_replicated_state::{canister_state::execution_state::CustomSectionType, ReplicatedState};
 use ic_types::{

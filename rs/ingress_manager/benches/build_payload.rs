@@ -70,7 +70,7 @@ where
     let consensus_pool_cache = Arc::new(MockConsensusCache::new());
     let mut state_manager = MockStateManager::new();
     state_manager.expect_get_state_at().return_const(Ok(
-        ic_interfaces::state_manager::Labeled::new(
+        ic_interfaces_state_manager::Labeled::new(
             Height::new(0),
             Arc::new(ReplicatedStateBuilder::default().build()),
         ),

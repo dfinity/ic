@@ -24,9 +24,9 @@ use ic_interfaces::{
         XNetTransientValidationError,
     },
     registry::RegistryClient,
-    state_manager::{StateManager, StateManagerError},
     validation::ValidationError,
 };
+use ic_interfaces_state_manager::{StateManager, StateManagerError};
 use ic_logger::{info, log, warn, ReplicaLogger};
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero},

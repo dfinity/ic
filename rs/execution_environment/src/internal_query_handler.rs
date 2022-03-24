@@ -1,5 +1,6 @@
 use crate::ExecutionEnvironmentImpl;
-use ic_interfaces::{execution_environment::AnonymousQueryService, state_manager::StateReader};
+use ic_interfaces::execution_environment::AnonymousQueryService;
+use ic_interfaces_state_manager::StateReader;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     ingress::WasmResult,

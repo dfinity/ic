@@ -2,8 +2,9 @@
 use crate::consensus::{membership::Membership, pool_reader::PoolReader, prelude::*};
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache, crypto::CryptoHashable, registry::RegistryClient,
-    state_manager::StateManager, time_source::TimeSource,
+    time_source::TimeSource,
 };
+use ic_interfaces_state_manager::StateManager;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_helpers::subnet::{NotarizationDelaySettings, SubnetRegistry};

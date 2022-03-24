@@ -12,6 +12,7 @@ ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-cycles-account-manager = { path = "../../cycles_account_manager" }
 ic-ingress-manager = { path = "../../ingress_manager" }
 ic-interfaces = { path = "../../interfaces" }
+ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
 ic-interfaces-p2p = { path = "../../interfaces/p2p" }
 ic-interfaces-transport = { path = "../../interfaces/transport" }
 ic-logger = { path = "../../monitoring/logger" }

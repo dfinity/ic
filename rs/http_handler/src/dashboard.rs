@@ -5,7 +5,7 @@ use crate::common::{make_response, CONTENT_TYPE_HTML};
 use askama::Template;
 use hyper::{Body, Response, StatusCode};
 use ic_config::http_handler::Config;
-use ic_interfaces::state_manager::StateReader;
+use ic_interfaces_state_manager::StateReader;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{canonical_error::internal_error, Height, ReplicaVersion};

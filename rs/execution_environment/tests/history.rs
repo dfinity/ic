@@ -1,8 +1,6 @@
 use ic_execution_environment::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
-use ic_interfaces::{
-    execution_environment::{IngressHistoryReader, IngressHistoryWriter},
-    state_manager::Labeled,
-};
+use ic_interfaces::execution_environment::{IngressHistoryReader, IngressHistoryWriter};
+use ic_interfaces_state_manager::Labeled;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;

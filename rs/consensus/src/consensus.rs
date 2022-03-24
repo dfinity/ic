@@ -58,9 +58,9 @@ use ic_interfaces::{
     messaging::{MessageRouting, XNetPayloadBuilder},
     registry::{self, LocalStoreCertifiedTimeReader, RegistryClient},
     self_validating_payload::SelfValidatingPayloadBuilder,
-    state_manager::StateManager,
     time_source::TimeSource,
 };
+use ic_interfaces_state_manager::StateManager;
 use ic_logger::{debug, error, info, trace, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
