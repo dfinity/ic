@@ -196,7 +196,7 @@ impl SchedulerConfig {
     }
 
     pub fn verified_application_subnet() -> Self {
-        let max_instructions_per_install_code = NumInstructions::from(400 * B);
+        let max_instructions_per_install_code = NumInstructions::from(800 * B);
         Self {
             scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
