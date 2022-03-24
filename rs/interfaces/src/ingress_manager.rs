@@ -2,7 +2,6 @@
 use crate::{
     execution_environment::{CanisterOutOfCyclesError, IngressHistoryError},
     ingress_pool::{ChangeSet, IngressPool, IngressPoolSelect},
-    state_manager::StateManagerError,
     validation::{ValidationError, ValidationResult},
 };
 use ic_types::{
@@ -56,7 +55,6 @@ impl IngressSetQuery for IngressSets {
 #[derive(Debug)]
 pub enum IngressPermanentError {
     CryptoError(CryptoError),
-    StateManagerError(StateManagerError),
     IngressValidationError(MessageId, String),
     IngressBucketError(MessageId),
     IngressHistoryError(IngressHistoryError),
@@ -69,13 +67,14 @@ pub enum IngressPermanentError {
     InsufficientCycles(CanisterOutOfCyclesError),
     CanisterNotFound(CanisterId),
     InvalidManagementMessage,
+    StateRemoved(Height),
 }
 
 /// Transient errors returned by the Ingress Selector.
 #[derive(Debug)]
 pub enum IngressTransientError {
     CryptoError(CryptoError),
-    StateManagerError(StateManagerError),
+    StateNotCommittedYet(Height),
 }
 
 pub type IngressPayloadValidationError =

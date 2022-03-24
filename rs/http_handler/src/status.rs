@@ -2,7 +2,7 @@
 use crate::common;
 use hyper::{Body, Response};
 use ic_config::http_handler::Config;
-use ic_interfaces::state_manager::StateReader;
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::{trace, warn, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{

@@ -8,6 +8,7 @@ ic-crypto = { path = "../crypto" }
 ic-constants = { path = "../constants" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-interfaces = { path = "../interfaces" }
+ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-registry-client-helpers = { path = "../registry/helpers" }

@@ -23,9 +23,9 @@ use ic_interfaces::{
     dkg::DkgPool,
     messaging::MessageRouting,
     registry::RegistryClient,
-    state_manager::{StateHashError, StateManager},
     validation::{ValidationError, ValidationResult},
 };
+use ic_interfaces_state_manager::{StateHashError, StateManager};
 use ic_logger::{trace, warn, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -2018,7 +2018,7 @@ pub mod test {
             state_manager
                 .get_mut()
                 .expect_get_state_at()
-                .return_const(Ok(ic_interfaces::state_manager::Labeled::new(
+                .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
                     Height::new(0),
                     Arc::new(ic_test_utilities::state::get_initial_state(0, 0)),
                 )));

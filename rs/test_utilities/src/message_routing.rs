@@ -6,7 +6,7 @@
 use ic_interfaces::messaging::{
     MessageRouting, MessageRoutingError, XNetPayloadBuilder, XNetPayloadValidationError,
 };
-use ic_interfaces::state_manager::{CertificationScope, StateManager};
+use ic_interfaces_state_manager::{CertificationScope, StateManager};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::{Batch, ValidationContext, XNetPayload},

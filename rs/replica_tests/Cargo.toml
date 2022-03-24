@@ -17,6 +17,7 @@ ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-interfaces = { path = "../interfaces" }
+ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-interfaces-p2p = { path = "../interfaces/p2p" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }

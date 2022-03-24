@@ -1,10 +1,10 @@
 use crate::metrics::BitcoinPayloadBuilderMetrics;
 use ic_btc_types_internal::{BitcoinAdapterResponse, BitcoinAdapterResponseWrapper};
-use ic_interfaces::{
-    self_validating_payload::{SelfValidatingPayloadBuilder, SelfValidatingPayloadValidationError},
-    state_manager::{StateManager, StateManagerError},
+use ic_interfaces::self_validating_payload::{
+    SelfValidatingPayloadBuilder, SelfValidatingPayloadValidationError,
 };
 use ic_interfaces_bitcoin_adapter_client::{BitcoinAdapterClient, Options};
+use ic_interfaces_state_manager::{StateManager, StateManagerError};
 use ic_logger::{log, ReplicaLogger};
 use ic_metrics::{MetricsRegistry, Timer};
 use ic_registry_subnet_features::BitcoinFeature;

@@ -16,9 +16,8 @@
 //! 3. Replicated states below the certified height recorded in the block
 //! in the latest CatchUpPackage can be purged.
 use crate::consensus::{metrics::PurgerMetrics, pool_reader::PoolReader, prelude::*};
-use ic_interfaces::{
-    consensus_pool::HeightRange, messaging::MessageRouting, state_manager::StateManager,
-};
+use ic_interfaces::{consensus_pool::HeightRange, messaging::MessageRouting};
+use ic_interfaces_state_manager::StateManager;
 use ic_logger::{trace, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;

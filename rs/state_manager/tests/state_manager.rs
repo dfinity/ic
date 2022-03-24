@@ -4,8 +4,8 @@ use ic_interfaces::{
     artifact_manager::{ArtifactClient, ArtifactProcessor},
     certification::Verifier,
     certified_stream_store::{CertifiedStreamStore, EncodeStreamError},
-    state_manager::*,
 };
+use ic_interfaces_state_manager::*;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{

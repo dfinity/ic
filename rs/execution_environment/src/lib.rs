@@ -18,13 +18,11 @@ pub use history::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
 pub use hypervisor::{Hypervisor, HypervisorMetrics};
 use ic_config::{execution_environment::Config, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_interfaces::{
-    execution_environment::{
-        IngressFilterService, IngressHistoryReader, IngressHistoryWriter, QueryExecutionService,
-        QueryHandler, Scheduler,
-    },
-    state_manager::StateReader,
+use ic_interfaces::execution_environment::{
+    IngressFilterService, IngressHistoryReader, IngressHistoryWriter, QueryExecutionService,
+    QueryHandler, Scheduler,
 };
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;

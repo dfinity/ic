@@ -6,8 +6,8 @@ use ic_interfaces::registry::RegistryClient;
 use ic_interfaces::{
     execution_environment::{IngressHistoryReader, QueryHandler},
     messaging::MessageRouting,
-    state_manager::{CertificationScope, StateHashError, StateManager, StateReader},
 };
+use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager, StateReader};
 use ic_logger::ReplicaLogger;
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;

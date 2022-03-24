@@ -24,10 +24,10 @@ use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
     consensus::PayloadValidationError,
     consensus_pool::{ChangeAction, ChangeSet, ConsensusPool, MutableConsensusPool},
-    state_manager::{CertificationScope, StateManager},
     time_source::TimeSource,
     validation::ValidationResult,
 };
+use ic_interfaces_state_manager::{CertificationScope, StateManager};
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
@@ -119,7 +119,7 @@ where
         ));
         let mut state_manager = MockStateManager::new();
         state_manager.expect_get_state_at().return_const(Ok(
-            ic_interfaces::state_manager::Labeled::new(
+            ic_interfaces_state_manager::Labeled::new(
                 Height::new(0),
                 Arc::new(ReplicatedStateBuilder::default().build()),
             ),

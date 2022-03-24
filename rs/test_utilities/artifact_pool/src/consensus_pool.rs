@@ -3,7 +3,6 @@ use ic_artifact_pool::dkg_pool::DkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus::consensus::pool_reader::PoolReader;
 use ic_consensus_message::ConsensusMessageHashable;
-use ic_interfaces::state_manager::StateManager;
 use ic_interfaces::{
     consensus_pool::{
         ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusPool, ConsensusPoolCache,
@@ -15,6 +14,7 @@ use ic_interfaces::{
     registry::RegistryClient,
     time_source::TimeSource,
 };
+use ic_interfaces_state_manager::StateManager;
 use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::ReplicatedState;
 use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};

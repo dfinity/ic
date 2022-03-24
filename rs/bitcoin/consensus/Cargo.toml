@@ -7,6 +7,7 @@ edition = "2018"
 ic-btc-types-internal = { path = "../types/internal" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-bitcoin-adapter-client = { path = "../../interfaces/bitcoin_adapter_client" }
+ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-replicated-state = { path = "../../replicated_state" }

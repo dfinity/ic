@@ -1,10 +1,8 @@
 use super::test_fixtures::*;
 use super::*;
 use assert_matches::assert_matches;
-use ic_interfaces::{
-    messaging::{InvalidXNetPayload, XNetTransientValidationError},
-    state_manager::StateManagerError,
-};
+use ic_interfaces::messaging::{InvalidXNetPayload, XNetTransientValidationError};
+use ic_interfaces_state_manager::StateManagerError;
 use ic_test_utilities::{
     certified_stream_store::MockCertifiedStreamStore,
     crypto::fake_tls_handshake::FakeTlsHandshake,

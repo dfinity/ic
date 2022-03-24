@@ -4,7 +4,8 @@ use crate::framework::ConsensusDriver;
 use ic_artifact_pool::{consensus_pool, dkg_pool, ecdsa_pool};
 use ic_consensus::consensus::dkg_key_manager::DkgKeyManager;
 use ic_consensus::{certification::CertifierImpl, consensus::ConsensusImpl, dkg};
-use ic_interfaces::{state_manager::Labeled, time_source::TimeSource};
+use ic_interfaces::time_source::TimeSource;
+use ic_interfaces_state_manager::Labeled;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_test_utilities::{

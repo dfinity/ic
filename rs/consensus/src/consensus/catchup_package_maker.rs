@@ -17,7 +17,7 @@ use crate::consensus::{
     utils::active_high_threshold_transcript, ConsensusCrypto,
 };
 use ic_interfaces::messaging::MessageRouting;
-use ic_interfaces::state_manager::{
+use ic_interfaces_state_manager::{
     PermanentStateHashError::*, StateHashError, StateManager, TransientStateHashError::*,
 };
 use ic_logger::{debug, error, trace, ReplicaLogger};

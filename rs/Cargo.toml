@@ -83,6 +83,7 @@ members = [
   "interfaces",
   "interfaces/bitcoin_adapter_client",
   "interfaces/canister_http_adapter_facade",
+  "interfaces/state_manager",
   "interfaces/p2p",
   "interfaces/transport",
   "log_analyzer",

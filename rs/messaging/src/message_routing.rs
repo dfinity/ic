@@ -4,14 +4,13 @@ use crate::{
 };
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_interfaces::state_manager::{CertificationScope, StateManagerError};
 use ic_interfaces::{
     certified_stream_store::CertifiedStreamStore,
     execution_environment::{IngressHistoryWriter, Scheduler},
     messaging::{MessageRouting, MessageRoutingError},
     registry::RegistryClient,
-    state_manager::StateManager,
 };
+use ic_interfaces_state_manager::{CertificationScope, StateManager, StateManagerError};
 use ic_logger::{debug, fatal, info, warn, ReplicaLogger};
 use ic_metrics::buckets::{add_bucket, decimal_buckets};
 use ic_metrics::{MetricsRegistry, Timer};

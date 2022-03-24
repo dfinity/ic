@@ -7,9 +7,9 @@ use ic_interfaces::{
         VerifierError,
     },
     consensus_pool::ConsensusPoolCache,
-    state_manager::StateManager,
     validation::ValidationError,
 };
+use ic_interfaces_state_manager::StateManager;
 use ic_logger::{debug, error, trace, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_replicated_state::ReplicatedState;
