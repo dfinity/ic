@@ -8,6 +8,7 @@ use ic_logger::{error, warn, ReplicaLogger};
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_helpers::subnet::{NotarizationDelaySettings, SubnetRegistry};
 use ic_replicated_state::ReplicatedState;
+use ic_types::replica_config::ReplicaConfig;
 use ic_types::{
     consensus::Rank,
     crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
@@ -380,6 +381,50 @@ pub fn lookup_replica_version(
             None
         }
     }
+}
+
+/// Determine whether a replica upgrade is pending given the running replica
+/// version and the block height.
+pub fn is_upgrade_pending(
+    height: Height,
+    registry_client: &dyn RegistryClient,
+    replica_config: &ReplicaConfig,
+    log: &ReplicaLogger,
+    pool: &PoolReader<'_>,
+) -> Option<bool> {
+    let registry_version = pool.registry_version(height)?;
+    let replica_version = lookup_replica_version(
+        registry_client,
+        replica_config.subnet_id,
+        log,
+        registry_version,
+    )?;
+
+    Some(replica_version != ReplicaVersion::default())
+}
+
+/// Determine whether a replica upgrade is finalized, meaning the blockchain
+/// advanced enough such that we can wait for a CUP and the upgrade will
+/// execute. Note that it is important that we wait until the finalized
+/// certified_height exceeds the CUP height since this is the condition for CUP
+/// making.
+pub fn is_upgrade_finalized(
+    registry_client: &dyn RegistryClient,
+    replica_config: &ReplicaConfig,
+    log: &ReplicaLogger,
+    pool: &PoolReader<'_>,
+) -> Option<bool> {
+    let finalized_tip = pool.get_finalized_tip();
+    let finalized_certified_height = finalized_tip.context.certified_height;
+    let registry_version = pool.registry_version(finalized_certified_height)?;
+    let replica_version = lookup_replica_version(
+        registry_client,
+        replica_config.subnet_id,
+        log,
+        registry_version,
+    )?;
+
+    Some(replica_version != ReplicaVersion::default())
 }
 
 // Data we usually pull from the latest relevant DKG summary block.
