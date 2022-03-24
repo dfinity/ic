@@ -32,6 +32,7 @@ CANISTERS = [
     "registry-canister",
     "root-canister",
     "sns-governance-canister",
+    "sns-root-canister",
     "stable",
     "statesync-test-canister",
     "test-notified",
@@ -52,6 +53,7 @@ CANISTERS_MAX_SIZE_IN_BYTES = {
     "registry-canister.wasm": 3_500_000,
     "root-canister.wasm": 1_500_000,
     "sns-governance-canister.wasm": 1_500_000,
+    "sns-root-canister.wasm": 1_500_000,
 }
 
 CANISTER_BUILD_PROFILE = "canister-release"

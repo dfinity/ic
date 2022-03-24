@@ -20,3 +20,6 @@ mod proposals;
 
 #[cfg(test)]
 mod nervous_system_parameters;
+
+#[cfg(test)]
+mod root;

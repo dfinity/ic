@@ -15,6 +15,7 @@ ic-config = { path = "../../config" }
 ic-crypto-sha = { path = "../../crypto/sha" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-sns-governance = { path = "../governance" }
+ic-sns-root = { path = "../root" }
 ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
 ledger-canister = {path = "../../rosetta-api/ledger_canister"}
