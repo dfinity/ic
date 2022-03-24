@@ -1,42 +1,30 @@
-docker-build-ic-bin:
+docker-build-ic:
   extends:
     - .ubuntu-nix-docker-pinned-dc
     - .rules-parent-pipeline
   needs: []
-  stage: cargo-build
+  stage: test
   artifacts:
     paths:
       - artifacts
   script:
     - |
       set -euo pipefail
-      gitlab-ci/tools/docker-build-ic -a=b,c
 
-docker-build-ic-img:
-  extends:
-    - .ubuntu-nix-docker-pinned-dc
-    - .rules-parent-pipeline
-  needs:
-    - artifacts-upload-to-s3
-  stage: guest-os-build
-  script:
-    - |
-      set -euo pipefail
-      echo "Pipeline source: ${CI_PIPELINE_SOURCE}"
-      VERSION=$(cat VERSION)
-      export VERSION
+      # this builds all the artifacts (binaries, canisters & icos)
+      # docker build image is also build (not using docker build cache)
+      gitlab-ci/tools/docker-build-ic
 
-      # release
-      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
-          --git-rev="${VERSION}" --remote-path="release" \
-          --out="artifacts/release"
-      # canisters
-      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
-          --git-rev="${VERSION}" --remote-path="canisters" \
-          --out="artifacts/canisters"
+      # print sha256sum
+      cd artifacts/docker-build-ic
+      echo "! SHA256 of binaries !"
+      find ./release -type f -exec sha256sum {} \;
+      echo "! SHA256 of canisters !"
+      find ./canisters -type f -exec sha256sum {} \;
+      echo "!!! SHA256 of ICOS !!!"
+      find ./icos -type f -exec sha256sum {} \;
 
-      capsule -v -t "${VERSION}" -- \
-      gitlab-ci/tools/docker-build-ic -a=i
-      # we only collect artifacts/docker-build-ic/icos
-      rm -rf artifacts/docker-build-ic/{canisters,release}
-      rm -rf artifacts/{canisters,release}
+      # avoid exceeding gitlab's artifacts size limit
+      rm -rf icos
+
+      # artifacts (canisters & binaries) are used for build determinism tests

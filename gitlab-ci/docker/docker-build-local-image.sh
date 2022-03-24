@@ -51,8 +51,11 @@ fi
 
 cd "$REPO_ROOT/gitlab-ci/docker"
 
+# We can pass '--no-cache' from env
+build_args=("${DOCKER_BUILD_ARGS:---rm=true}")
+
 # Build the dependencies image
-DOCKER_BUILDKIT=1 docker build \
+DOCKER_BUILDKIT=1 docker build "${build_args[@]}" \
     --tag ic-build-src:"$DOCKER_IMG_VERSION" \
     --tag dfinity/ic-build-src:"$DOCKER_IMG_VERSION" \
     --tag dfinity/ic-build-src:"$LATEST" \
@@ -60,7 +63,7 @@ DOCKER_BUILDKIT=1 docker build \
     -f Dockerfile.src .
 
 # Build the container image
-DOCKER_BUILDKIT=1 docker build \
+DOCKER_BUILDKIT=1 docker build "${build_args[@]}" \
     --tag ic-build:"$DOCKER_IMG_VERSION" \
     --tag dfinity/ic-build:"$DOCKER_IMG_VERSION" \
     --tag dfinity/ic-build:"$LATEST" \
@@ -72,7 +75,7 @@ DOCKER_BUILDKIT=1 docker build \
 
 # Build the container image with support for nix
 if [ "$BUILD_NIX" == "true" ]; then
-    DOCKER_BUILDKIT=1 docker build \
+    DOCKER_BUILDKIT=1 docker build "${build_args[@]}" \
         --tag ic-build-nix:"$DOCKER_IMG_VERSION" \
         --tag dfinity/ic-build-nix:"$DOCKER_IMG_VERSION" \
         --tag dfinity/ic-build-nix:"$LATEST" \
