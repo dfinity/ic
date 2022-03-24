@@ -1,6 +1,7 @@
 use anyhow::{bail, Result};
 use flate2::{write::GzEncoder, Compression};
 use std::convert::Into;
+use std::env;
 use std::net::IpAddr;
 use std::{collections::BTreeMap, fs::File, io, net::SocketAddr, path::PathBuf, process::Command};
 
@@ -208,7 +209,11 @@ pub fn create_config_disk_image(
     group_name: &str,
 ) -> anyhow::Result<()> {
     let img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
-    let mut cmd = Command::new("build-bootstrap-config-image.sh");
+    let ci_project_dir: PathBuf = PathBuf::from(env::var("IC_ROOT").expect(
+        "Expected the IC_ROOT environment variable to be set to the root of the IC repository!",
+    ));
+    let mut cmd =
+        Command::new(ci_project_dir.join("ic-os/guestos/scripts/build-bootstrap-config-image.sh"));
 
     let authorized_ssh_accounts_dir: PathBuf = test_env.get_path(AUTHORIZED_SSH_ACCOUNTS_DIR);
     let journalbeat_hosts: Vec<String> = test_env.read_object(JOURNALBEAT_HOSTS)?;

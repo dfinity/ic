@@ -96,6 +96,11 @@ in
         pkgs.dosfstools
         pkgs.mtools
         pkgs.zstd
+
+        # For formatting Python files. 
+        # This is also handled by pre-commit but this allows running black inside your editor 
+        # (like VS Code) while saving .py files.
+        pkgs.black
       ]
       ++ pkgs.lib.optionals pkgs.stdenv.isLinux [
         # provides the `taskset` command, which we use to fix core affinity in the shell

@@ -53,14 +53,14 @@ impl Farm {
 
     /// creates a vm under the group `group_name` and returns the associated
     /// IpAddr
-    pub fn create_vm(&self, group_name: &str, vm: CreateVmRequest) -> FarmResult<Ipv6Addr> {
+    pub fn create_vm(&self, group_name: &str, vm: CreateVmRequest) -> FarmResult<VMCreateResponse> {
         let path = format!("group/{}/vm/{}", group_name, &vm.name);
         let rb = Self::json(self.post(&path), &vm);
         let resp = self.retry_until_success(rb)?;
         let created_vm = resp.json::<VMCreateResponse>()?;
-        let ipv6 = created_vm.ipv6.parse()?;
+        let ipv6 = created_vm.ipv6;
         info!(self.logger, "VM({}) IPv6: {}", &vm.name, &ipv6);
-        Ok(ipv6)
+        Ok(created_vm)
     }
 
     /// uploads an image an returns the image id
@@ -279,7 +279,8 @@ pub enum FarmError {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct VMCreateResponse {
-    ipv6: String,
+    pub ipv6: Ipv6Addr,
+    pub hostname: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

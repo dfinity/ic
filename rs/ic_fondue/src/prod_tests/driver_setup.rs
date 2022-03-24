@@ -24,8 +24,10 @@ const DEFAULT_FARM_BASE_URL: &str = "https://farm.dfinity.systems";
 
 pub const FARM_GROUP_NAME: &str = "farm/group_name";
 pub const FARM_BASE_URL: &str = "farm/base_url";
-pub const BASE_IMG_URL: &str = "base_img_url";
-pub const BASE_IMG_SHA256: &str = "base_img_sha256";
+pub const IC_OS_IMG_URL: &str = "ic_os_img_url";
+pub const IC_OS_IMG_SHA256: &str = "ic_os_img_sha256";
+pub const BOUNDARY_NODE_IMG_URL: &str = "boundary_node_img_url";
+pub const BOUNDARY_NODE_IMG_SHA256: &str = "boundary_node_img_sha256";
 pub const INITIAL_REPLICA_VERSION: &str = "initial_replica_version";
 pub const JOURNALBEAT_HOSTS: &str = "journalbeat_hosts";
 pub const LOG_DEBUG_OVERRIDES: &str = "log_debug_overrides";
@@ -41,8 +43,10 @@ pub fn initialize_env(env: &TestEnv, cli_args: &ValidatedCliArgs) -> Result<()> 
     env.write_object(FARM_BASE_URL, &farm_base_url)?;
     env.write_object(AUTHORIZED_SSH_ACCOUNTS, &cli_args.authorized_ssh_accounts)?;
     setup_ssh_key_dir(env, &cli_args.authorized_ssh_accounts)?;
-    env.write_object(BASE_IMG_URL, &cli_args.base_img_url)?;
-    env.write_object(BASE_IMG_SHA256, &cli_args.base_img_sha256)?;
+    env.write_object(IC_OS_IMG_URL, &cli_args.ic_os_img_url)?;
+    env.write_object(IC_OS_IMG_SHA256, &cli_args.ic_os_img_sha256)?;
+    env.write_object(BOUNDARY_NODE_IMG_URL, &cli_args.boundary_node_img_url)?;
+    env.write_object(BOUNDARY_NODE_IMG_SHA256, &cli_args.boundary_node_img_sha256)?;
     env.write_object(JOURNALBEAT_HOSTS, &cli_args.journalbeat_hosts)?;
     env.write_object(INITIAL_REPLICA_VERSION, &cli_args.initial_replica_version)?;
     env.write_object(LOG_DEBUG_OVERRIDES, &cli_args.log_debug_overrides)?;

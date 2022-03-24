@@ -6,6 +6,7 @@ use ic_fondue::prod_tests::driver_setup::{
 use ic_fondue::prod_tests::evaluation::evaluate;
 use ic_fondue::prod_tests::pot_dsl::*;
 use ic_fondue::prod_tests::test_env::TestEnv;
+use ic_tests::boundary_nodes_integration::boundary_nodes;
 use ic_tests::btc_integration::btc;
 use ic_tests::create_subnet::{self, create_subnet_test};
 use ic_tests::nns_fault_tolerance_test;
@@ -163,6 +164,13 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     btc::config,
                     par(vec![
                         sys_t("btc_test", btc::test),
+                    ]),
+                ),
+                pot_with_setup(
+                    "boundary_nodes_pot",
+                    boundary_nodes::config,
+                    par(vec![
+                        sys_t("boundary_nodes_test", boundary_nodes::test),
                     ]),
                 ),
                 pot(
