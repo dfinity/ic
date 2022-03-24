@@ -1,7 +1,7 @@
 pub mod host_memory;
 mod signal_stack;
 mod system_api;
-pub mod system_api_charges;
+pub mod system_api_complexity;
 
 use std::{
     collections::HashMap,

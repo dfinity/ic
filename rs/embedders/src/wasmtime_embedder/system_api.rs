@@ -1,4 +1,4 @@
-use crate::wasmtime_embedder::{system_api_charges, StoreData};
+use crate::wasmtime_embedder::{system_api_complexity, StoreData};
 
 use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult, SystemApi};
@@ -240,7 +240,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &log,
                     canister_id,
                     &mut caller,
-                    system_api_charges::MSG_ARG_DATA_COPY,
+                    system_api_complexity::MSG_ARG_DATA_COPY,
                     size as u32,
                 )?;
                 with_memory_and_system_api(caller, |system_api, mem| {
@@ -272,7 +272,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &log,
                     canister_id,
                     &mut caller,
-                    system_api_charges::MSG_METHOD_NAME_COPY,
+                    system_api_complexity::MSG_METHOD_NAME_COPY,
                     size as u32,
                 )?;
                 with_memory_and_system_api(caller, |system_api, memory| {
@@ -304,7 +304,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &log,
                     canister_id,
                     &mut caller,
-                    system_api_charges::MSG_REPLY_DATA_APPEND,
+                    system_api_complexity::MSG_REPLY_DATA_APPEND,
                     size as u32,
                 )?;
                 with_memory_and_system_api(caller, |system_api, memory| {
@@ -340,7 +340,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &log,
                     canister_id,
                     &mut caller,
-                    system_api_charges::MSG_REJECT,
+                    system_api_complexity::MSG_REJECT,
                     size as u32,
                 )?;
                 with_memory_and_system_api(caller, |system_api, memory| {
@@ -372,7 +372,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &log,
                     canister_id,
                     &mut caller,
-                    system_api_charges::MSG_REJECT_MSG_COPY,
+                    system_api_complexity::MSG_REJECT_MSG_COPY,
                     size as u32,
                 )?;
                 with_memory_and_system_api(caller, |system_api, memory| {
@@ -448,7 +448,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &log,
                     canister_id,
                     &mut caller,
-                    system_api_charges::DEBUG_PRINT,
+                    system_api_complexity::DEBUG_PRINT,
                     length as u32,
                 )?;
                 match (
@@ -478,7 +478,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &log,
                     canister_id,
                     &mut caller,
-                    system_api_charges::TRAP,
+                    system_api_complexity::TRAP,
                     length as u32,
                 )?;
                 with_memory_and_system_api(caller, |system_api, memory| {
@@ -506,7 +506,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &log,
                     canister_id,
                     &mut caller,
-                    system_api_charges::CALL_SIMPLE,
+                    system_api_complexity::CALL_SIMPLE,
                     len as u32,
                 )?;
                 with_memory_and_system_api(caller, |system_api, memory| {
@@ -564,7 +564,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &log,
                     canister_id,
                     &mut caller,
-                    system_api_charges::CALL_DATA_APPEND,
+                    system_api_complexity::CALL_DATA_APPEND,
                     size as u32,
                 )?;
                 with_memory_and_system_api(caller, |system_api, memory| {
@@ -648,7 +648,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &log,
                     canister_id,
                     &mut caller,
-                    system_api_charges::STABLE_READ,
+                    system_api_complexity::STABLE_READ,
                     size as u32,
                 )?;
                 with_memory_and_system_api(caller, |system_api, memory| {
@@ -666,7 +666,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &log,
                     canister_id,
                     &mut caller,
-                    system_api_charges::STABLE_WRITE,
+                    system_api_complexity::STABLE_WRITE,
                     size as u32,
                 )?;
                 with_memory_and_system_api(caller, |system_api, memory| {
@@ -709,7 +709,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &log,
                     canister_id,
                     &mut caller,
-                    system_api_charges::STABLE64_READ,
+                    system_api_complexity::STABLE64_READ,
                     size as u32,
                 )?;
                 with_memory_and_system_api(caller, |system_api, memory| {
@@ -727,7 +727,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &log,
                     canister_id,
                     &mut caller,
-                    system_api_charges::STABLE64_WRITE,
+                    system_api_complexity::STABLE64_WRITE,
                     size as u32,
                 )?;
                 with_memory_and_system_api(caller, |system_api, memory| {
