@@ -1,10 +1,12 @@
 //! The module is responsible for awaiting messages from bitcoin peers and dispaching them
 //! to the correct component.
 use crate::{
-    blockchainmanager::BlockchainManager, connectionmanager::ConnectionManager,
-    stream::handle_stream, transaction_manager::TransactionManager, AdapterState,
-    BlockchainManagerRequest, Config, HasHeight, ProcessEvent, ProcessEventError,
-    TransactionManagerRequest,
+    blockchainmanager::BlockchainManager,
+    connectionmanager::ConnectionManager,
+    stream::{handle_stream, StreamEventKind},
+    transaction_manager::TransactionManager,
+    AdapterState, BlockchainManagerRequest, Config, HasHeight, ProcessBitcoinNetworkMessage,
+    ProcessBitcoinNetworkMessageError, ProcessEvent, TransactionManagerRequest,
 };
 use ic_logger::ReplicaLogger;
 use std::sync::Arc;
@@ -48,24 +50,22 @@ pub fn start_router(
             // tokio::time::Interval::tick which are all cancellation safe.
             tokio::select! {
                 event = connection_manager.receive_stream_event() => {
-                    if let Err(ProcessEventError::InvalidMessage) =
+                    if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) =
                         connection_manager.process_event(&event)
                     {
                         connection_manager.discard(event.address);
                     }
 
-                    let blockchain_manager_process_event_result =
-                        blockchain_manager.lock().await.process_event(&event);
-                    if let Err(ProcessEventError::InvalidMessage) =
-                        blockchain_manager_process_event_result
-                    {
-                        connection_manager.discard(event.address);
-                    }
 
-                    if let Err(ProcessEventError::InvalidMessage) =
-                        transaction_manager.process_event(&event)
-                    {
-                        connection_manager.discard(event.address);
+                    if let StreamEventKind::Message(message) = event.kind {
+                        let blockchain_manager_process_bitcoin_network_message_result =
+                            blockchain_manager.lock().await.process_bitcoin_network_message(event.address, &message);
+                        if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) = blockchain_manager_process_bitcoin_network_message_result {
+                            connection_manager.discard(event.address);
+                        }
+                        if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) = transaction_manager.process_bitcoin_network_message(event.address, &message) {
+                            connection_manager.discard(event.address);
+                        }
                     }
                 },
                 result = blockchain_manager_rx.recv() => {

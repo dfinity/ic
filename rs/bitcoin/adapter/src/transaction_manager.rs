@@ -9,8 +9,8 @@ use bitcoin::{
 };
 use ic_logger::{debug, ReplicaLogger};
 
-use crate::{stream::StreamEvent, stream::StreamEventKind, Channel, Command};
-use crate::{ProcessEvent, ProcessEventError};
+use crate::{Channel, Command};
+use crate::{ProcessBitcoinNetworkMessage, ProcessBitcoinNetworkMessageError};
 
 /// How often the cached transactions' IDs are broadcasted to peers.
 const TX_ADVERTISE_INTERVAL: u64 = 2 * 60; // 2 minutes
@@ -157,11 +157,15 @@ impl TransactionManager {
     }
 }
 
-impl ProcessEvent for TransactionManager {
+impl ProcessBitcoinNetworkMessage for TransactionManager {
     /// This method is used to process an event from the connected BTC nodes.
-    fn process_event(&mut self, event: &StreamEvent) -> Result<(), ProcessEventError> {
-        if let StreamEventKind::Message(NetworkMessage::GetData(inventory)) = &event.kind {
-            self.process_getdata_message(&event.address, inventory);
+    fn process_bitcoin_network_message(
+        &mut self,
+        addr: SocketAddr,
+        message: &NetworkMessage,
+    ) -> Result<(), ProcessBitcoinNetworkMessageError> {
+        if let NetworkMessage::GetData(inventory) = message {
+            self.process_getdata_message(&addr, inventory);
         }
         Ok(())
     }
@@ -305,14 +309,14 @@ mod test {
         assert!(channel.received_commands.len() == 1);
     }
 
-    /// This function tests the `TransactionManager::process_event(...)` method.
+    /// This function tests the `TransactionManager::process_bitcoin_network_message(...)` method.
     /// Test Steps:
     /// 1. Receive a transaction.
     /// 2. Process a [StreamEvent](StreamEvent) containing a `getdata` network message.
     /// 3. Process the outgoing commands.
     /// 4. Check the TestChannel for received outgoing commands.
     #[test]
-    fn test_process_event() {
+    fn test_process_bitcoin_network_message() {
         let mut channel = TestChannel::new();
         let mut manager = make_transaction_manager();
         let transaction = get_transaction();
@@ -322,12 +326,10 @@ mod test {
         manager.send_transaction(&raw_tx);
         assert_eq!(manager.transactions.len(), 1);
         manager
-            .process_event(&StreamEvent {
+            .process_bitcoin_network_message(
                 address,
-                kind: StreamEventKind::Message(NetworkMessage::GetData(vec![
-                    Inventory::Transaction(txid),
-                ])),
-            })
+                &NetworkMessage::GetData(vec![Inventory::Transaction(txid)]),
+            )
             .ok();
         manager.process_outgoing_commands(&mut channel);
         assert_eq!(channel.received_commands.len(), 1);
@@ -354,12 +356,10 @@ mod test {
         let address = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
         manager.send_transaction(&raw_tx);
         manager
-            .process_event(&StreamEvent {
+            .process_bitcoin_network_message(
                 address,
-                kind: StreamEventKind::Message(NetworkMessage::GetData(vec![
-                    Inventory::Transaction(txid),
-                ])),
-            })
+                &NetworkMessage::GetData(vec![Inventory::Transaction(txid)]),
+            )
             .ok();
         manager.tick(&mut channel);
         assert_eq!(channel.received_commands.len(), 2);

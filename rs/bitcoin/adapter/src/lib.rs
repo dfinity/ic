@@ -69,7 +69,7 @@ pub struct Command {
 /// This enum is used to represent errors that could occur while dispatching an
 /// event.
 #[derive(Debug)]
-pub enum ProcessEventError {
+pub enum ProcessBitcoinNetworkMessageError {
     /// This variant is used to represent when an invalid message has been
     /// received from a Bitcoin node.
     InvalidMessage,
@@ -98,7 +98,23 @@ pub trait Channel {
 pub trait ProcessEvent {
     /// This method is used to route an event in a component's internals and
     /// perform state updates.
-    fn process_event(&mut self, event: &StreamEvent) -> Result<(), ProcessEventError>;
+    fn process_event(
+        &mut self,
+        event: &StreamEvent,
+    ) -> Result<(), ProcessBitcoinNetworkMessageError>;
+}
+
+/// This trait provides an interface for processing messages comming from
+/// bitcoin peers.
+/// [StreamEvent](crate::stream::StreamEvent).
+pub trait ProcessBitcoinNetworkMessage {
+    /// This method is used to route an event in a component's internals and
+    /// perform state updates.
+    fn process_bitcoin_network_message(
+        &mut self,
+        addr: SocketAddr,
+        message: &NetworkMessage,
+    ) -> Result<(), ProcessBitcoinNetworkMessageError>;
 }
 
 /// This trait provides an interface to anything that may need to get the
