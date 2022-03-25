@@ -412,6 +412,22 @@ fn main() {
         .join(" "),
     );
     config.type_attribute(
+        "ic_sns_governance.pb.v1.ManageNeuron.AddNeuronPermissions",
+        [
+            "#[derive(candid::CandidType, candid::Deserialize)]",
+            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
+        ]
+        .join(" "),
+    );
+    config.type_attribute(
+        "ic_sns_governance.pb.v1.ManageNeuron.RemoveNeuronPermissions",
+        [
+            "#[derive(candid::CandidType, candid::Deserialize)]",
+            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
+        ]
+        .join(" "),
+    );
+    config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuron.command",
         [
             "#[derive(candid::CandidType, candid::Deserialize)]",
@@ -502,6 +518,22 @@ fn main() {
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuronResponse.ClaimOrRefreshResponse",
+        [
+            "#[derive(candid::CandidType, candid::Deserialize)]",
+            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
+        ]
+        .join(" "),
+    );
+    config.type_attribute(
+        "ic_sns_governance.pb.v1.ManageNeuronResponse.AddNeuronPermissionsResponse",
+        [
+            "#[derive(candid::CandidType, candid::Deserialize)]",
+            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
+        ]
+        .join(" "),
+    );
+    config.type_attribute(
+        "ic_sns_governance.pb.v1.ManageNeuronResponse.RemoveNeuronPermissionsResponse",
         [
             "#[derive(candid::CandidType, candid::Deserialize)]",
             "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",

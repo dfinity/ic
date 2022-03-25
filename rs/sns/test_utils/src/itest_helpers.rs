@@ -13,7 +13,8 @@ use ic_sns_governance::pb::v1::{
     },
     GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse, Governance, GovernanceError,
     ListNeurons, ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, Motion,
-    NervousSystemParameters, Neuron, NeuronId, Proposal, ProposalData, ProposalId, Vote,
+    NervousSystemParameters, Neuron, NeuronId, NeuronPermissionList, Proposal, ProposalData,
+    ProposalId, Vote,
 };
 use ic_sns_root::pb::v1::SnsRootCanister;
 use ledger_canister as ledger;
@@ -33,6 +34,7 @@ use dfn_protobuf::protobuf;
 use ic_canister_client::Sender;
 use ic_crypto_sha::Sha256;
 use ic_sns_governance::governance::TimeWarp;
+use ic_sns_governance::pb::v1::manage_neuron::{AddNeuronPermissions, RemoveNeuronPermissions};
 use ic_sns_governance::pb::v1::proposal::Action;
 use ic_types::{CanisterId, PrincipalId};
 use maplit::hashset;
@@ -567,6 +569,70 @@ impl SnsCanisters<'_> {
         }
 
         Ok(())
+    }
+
+    pub async fn add_neuron_permissions(
+        &self,
+        caller: &Sender,
+        subaccount: &Subaccount,
+        principal_to_add: Option<PrincipalId>,
+        permissions: Vec<i32>,
+    ) {
+        let add_neuron_permissions = AddNeuronPermissions {
+            principal_id: principal_to_add,
+            permissions_to_add: Some(NeuronPermissionList { permissions }),
+        };
+
+        let manage_neuron_response: ManageNeuronResponse = self
+            .governance
+            .update_from_sender(
+                "manage_neuron",
+                candid_one,
+                ManageNeuron {
+                    subaccount: subaccount.to_vec(),
+                    command: Some(Command::AddNeuronPermissions(add_neuron_permissions)),
+                },
+                caller,
+            )
+            .await
+            .expect("Error calling manage_neuron");
+
+        match manage_neuron_response.command.unwrap() {
+            CommandResponse::AddNeuronPermission(_) => (),
+            response => panic!("Unexpected response from manage_neuron: {:?}", response),
+        };
+    }
+
+    pub async fn remove_neuron_permissions(
+        &self,
+        caller: &Sender,
+        subaccount: &Subaccount,
+        principal_to_remove: &PrincipalId,
+        permissions: Vec<i32>,
+    ) {
+        let remove_neuron_permissions = RemoveNeuronPermissions {
+            principal_id: Some(*principal_to_remove),
+            permissions_to_remove: Some(NeuronPermissionList { permissions }),
+        };
+
+        let manage_neuron_response: ManageNeuronResponse = self
+            .governance
+            .update_from_sender(
+                "manage_neuron",
+                candid_one,
+                ManageNeuron {
+                    subaccount: subaccount.to_vec(),
+                    command: Some(Command::RemoveNeuronPermissions(remove_neuron_permissions)),
+                },
+                caller,
+            )
+            .await
+            .expect("Error calling manage_neuron");
+
+        match manage_neuron_response.command.unwrap() {
+            CommandResponse::RemoveNeuronPermission(_) => (),
+            response => panic!("Unexpected response from manage_neuron: {:?}", response),
+        };
     }
 }
 

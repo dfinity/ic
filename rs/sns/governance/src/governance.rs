@@ -34,8 +34,8 @@ use strum::IntoEnumIterator;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 
-use crate::neuron::{NeuronState, MAX_LIST_NEURONS_RESULTS};
-use crate::pb::v1::manage_neuron::Command::DisburseMaturity;
+use crate::neuron::{NeuronState, RemovePermissionsStatus, MAX_LIST_NEURONS_RESULTS};
+use crate::pb::v1::manage_neuron::{AddNeuronPermissions, RemoveNeuronPermissions};
 use crate::pb::v1::manage_neuron_response::{DisburseMaturityResponse, MergeMaturityResponse};
 use crate::pb::v1::proposal::Action;
 use crate::pb::v1::WaitForQuietState;
@@ -2335,6 +2335,165 @@ impl Governance {
         }
     }
 
+    /// Adds a `NeuronPermission` to an already existing Neuron for the given PrincipalId.
+    ///
+    /// If the PrincipalId doesn't have existing permissions, a new entry will be added for it
+    /// with the provided permissions. If a principalId already has permissions for this neuron,
+    /// the new permissions will be added to the existing permissions.
+    ///
+    /// Preconditions:
+    /// - the caller has the permission to change a neuron's access control
+    ///   (permission `ManagePrincipals`)
+    /// - the permissions provided in the request are a subset of
+    ///   `NervousSystemParameters::neuron_grantable_permissions`. To see what the current
+    ///   parameters are for an SNS see `get_nervous_system_parameters`.
+    /// - adding the new permissions for the principal does not exceed the limit of principals
+    ///   that a neuron can have in its access control list
+    ///   (set in `NervousSystemParameters::max_number_of_principals_per_neuron`).
+    fn add_neuron_permissions(
+        &mut self,
+        neuron_id: &NeuronId,
+        caller: &PrincipalId,
+        add_neuron_permissions: &AddNeuronPermissions,
+    ) -> Result<(), GovernanceError> {
+        let neuron = self.get_neuron_result(neuron_id)?;
+
+        neuron.check_authorized(caller, NeuronPermissionType::ManagePrincipals)?;
+
+        let permissions_to_add = add_neuron_permissions
+            .permissions_to_add
+            .as_ref()
+            .ok_or_else(|| {
+                GovernanceError::new_with_message(
+                    ErrorType::InvalidCommand,
+                    "AddNeuronPermissions command must provide permissions to add",
+                )
+            })?;
+
+        // A simple check to prevent DOS attack with large number of permission changes.
+        if permissions_to_add.permissions.len() > NeuronPermissionType::all().len() {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                "AddNeuronPermissions command provided more permissions than exist in the system",
+            ));
+        }
+
+        self.nervous_system_parameters()
+            .check_permissions_are_grantable(permissions_to_add)?;
+
+        let principal_id = add_neuron_permissions.principal_id.ok_or_else(|| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                "AddNeuronPermissions command must provide a PrincipalId to add permissions to",
+            )
+        })?;
+
+        let existing_permissions = neuron
+            .permissions
+            .iter()
+            .find(|permission| permission.principal == Some(principal_id));
+
+        let max_number_of_principals_per_neuron = self
+            .nervous_system_parameters()
+            .max_number_of_principals_per_neuron
+            .expect("NervousSystemParameters.max_number_of_principals_per_neuron must be present");
+
+        // If the PrincipalId does not already exist in the neuron, make sure it can be added
+        if existing_permissions.is_none()
+            && neuron.permissions.len() == max_number_of_principals_per_neuron as usize
+        {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                format!(
+                    "Cannot add permission to neuron. Max \
+                    number of principals reached {}",
+                    max_number_of_principals_per_neuron
+                ),
+            ));
+        }
+
+        // Re-borrow the neuron mutably to update now that the preconditions have been met
+        self.get_neuron_result_mut(neuron_id)?
+            .add_permissions_for_principal(principal_id, permissions_to_add.permissions.clone());
+
+        GovernanceProto::add_neuron_to_principal_in_principal_to_neuron_ids_index(
+            &mut self.principal_to_neuron_ids_index,
+            neuron_id,
+            &principal_id,
+        );
+
+        Ok(())
+    }
+
+    /// Removes a set of permissions for a PrincipalId on an existing Neuron.
+    ///
+    /// If all the permissions are removed from the Neuron i.e. by removing all permissions for
+    /// all PrincipalIds, the Neuron is not deleted but will no longer be able to modify the
+    /// neuron state, such as disbursing the neuron. This is a dangerous operation as it is
+    /// possible to remove all permissions for a neuron and no longer be able to modify its
+    /// state, i.e. disbursing the neuron back into the governance token.
+    ///
+    /// Preconditions:
+    /// - the caller has the permission to change a neuron's access control
+    ///   (permission `ManagePrincipals`)
+    /// - the PrincipalId exists within the neuron's permissions
+    /// - the PrincipalId's NeuronPermission contains the permission_types that are to be removed
+    fn remove_neuron_permissions(
+        &mut self,
+        neuron_id: &NeuronId,
+        caller: &PrincipalId,
+        remove_neuron_permissions: &RemoveNeuronPermissions,
+    ) -> Result<(), GovernanceError> {
+        let neuron = self.get_neuron_result(neuron_id)?;
+
+        neuron.check_authorized(caller, NeuronPermissionType::ManagePrincipals)?;
+
+        let permissions_to_remove = remove_neuron_permissions
+            .permissions_to_remove
+            .as_ref()
+            .ok_or_else(|| {
+                GovernanceError::new_with_message(
+                    ErrorType::InvalidCommand,
+                    "RemoveNeuronPermissions command must provide permissions to remove",
+                )
+            })?;
+
+        // A simple check to prevent DOS attack with large number of permission changes.
+        if permissions_to_remove.permissions.len() > NeuronPermissionType::all().len() {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                "RemoveNeuronPermissions command provided more permissions than exist in the system",
+            ));
+        }
+
+        let principal_id = remove_neuron_permissions
+            .principal_id
+            .ok_or_else(|| {
+                GovernanceError::new_with_message(
+                    ErrorType::InvalidCommand,
+                    "RemoveNeuronPermissions command must provide a PrincipalId to remove permissions from",
+                )
+            })?;
+
+        // Re-borrow the neuron mutably to update now that the preconditions have been met
+        let principal_id_was_removed = self
+            .get_neuron_result_mut(neuron_id)?
+            .remove_permissions_for_principal(
+                principal_id,
+                permissions_to_remove.permissions.clone(),
+            )?;
+
+        if principal_id_was_removed == RemovePermissionsStatus::AllPermissionTypesRemoved {
+            GovernanceProto::remove_neuron_from_principal_in_principal_to_neuron_ids_index(
+                &mut self.principal_to_neuron_ids_index,
+                neuron_id,
+                &principal_id,
+            )
+        }
+
+        Ok(())
+    }
+
     pub async fn manage_neuron(
         &mut self,
         mgmt: &ManageNeuron,
@@ -2392,7 +2551,7 @@ impl Governance {
                 .merge_maturity(&id, caller, m)
                 .await
                 .map(ManageNeuronResponse::merge_maturity_response),
-            Some(DisburseMaturity(d)) => self
+            Some(manage_neuron::Command::DisburseMaturity(d)) => self
                 .disburse_maturity(&id, caller, d)
                 .await
                 .map(ManageNeuronResponse::disburse_maturity_response),
@@ -2409,6 +2568,12 @@ impl Governance {
             Some(manage_neuron::Command::RegisterVote(v)) => self
                 .register_vote(&id, caller, v)
                 .map(|_| ManageNeuronResponse::register_vote_response()),
+            Some(manage_neuron::Command::AddNeuronPermissions(p)) => self
+                .add_neuron_permissions(&id, caller, p)
+                .map(|_| ManageNeuronResponse::add_neuron_permissions_response()),
+            Some(manage_neuron::Command::RemoveNeuronPermissions(r)) => self
+                .remove_neuron_permissions(&id, caller, r)
+                .map(|_| ManageNeuronResponse::remove_neuron_permissions_response()),
             Some(manage_neuron::Command::ClaimOrRefresh(_)) => {
                 panic!("This should have already returned")
             }
