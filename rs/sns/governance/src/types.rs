@@ -5,7 +5,7 @@ use crate::pb::v1::proposal::Action;
 use crate::pb::v1::{
     manage_neuron_response, DefaultFollowees, ExecuteNervousSystemFunction, GovernanceError,
     ManageNeuronResponse, NervousSystemParameters, NeuronId, NeuronPermissionList,
-    NeuronPermissionType, ProposalId, RewardEvent, Tally, Vote,
+    NeuronPermissionType, ProposalId, RewardEvent, Vote,
 };
 use ic_base_types::CanisterId;
 use ic_nervous_system_common::NervousSystemError;
@@ -548,17 +548,6 @@ impl From<&Action> for u64 {
             Action::UpgradeSnsControlledCanister(_) => 3,
             Action::ExecuteNervousSystemFunction(_) => 4,
         }
-    }
-}
-
-impl Tally {
-    /// Returns true if this tally corresponds to an adopted proposal.
-    ///
-    /// A proposal is adopted if and only if the voting power for `yes`
-    /// is strictly greater than 1/2 of the total voting power -- counting
-    /// neurons that are eligible to vote, but did not.
-    pub(crate) fn is_absolute_majority_for_yes(&self) -> bool {
-        self.yes > self.total - self.yes
     }
 }
 

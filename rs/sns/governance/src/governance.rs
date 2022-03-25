@@ -1314,15 +1314,13 @@ impl Governance {
         let now = self.env.now();
         let filter_all = |data: &ProposalData| -> bool {
             let action = data.action;
-            let voting_period_seconds = self.voting_period_seconds()();
             // Filter out proposals by topic.
             if exclude_type.contains(&action) {
                 return false;
             }
             // Filter out proposals by reward status.
             if !(include_reward_status.is_empty()
-                || include_reward_status
-                    .contains(&(data.reward_status(now, voting_period_seconds) as i32)))
+                || include_reward_status.contains(&(data.reward_status(now) as i32)))
             {
                 return false;
             }
@@ -1366,11 +1364,7 @@ impl Governance {
         self.proto
             .proposals
             .iter()
-            .filter(move |(_, data)| {
-                let voting_period_seconds = self.voting_period_seconds()();
-                data.reward_status(now, voting_period_seconds)
-                    == ProposalRewardStatus::ReadyToSettle
-            })
+            .filter(move |(_, data)| data.reward_status(now) == ProposalRewardStatus::ReadyToSettle)
             .map(|(k, _)| ProposalId { id: *k })
     }
 
@@ -1402,7 +1396,7 @@ impl Governance {
             // for voting rewards, but shall not make it into the
             // tally.
             p.recompute_tally(now_seconds, voting_period_seconds);
-            if p.can_make_decision(now_seconds, voting_period_seconds) {
+            if p.can_make_decision(now_seconds) {
                 // This marks the proposal as no longer open.
                 p.decided_timestamp_seconds = now_seconds;
                 if p.is_accepted() {
@@ -2460,7 +2454,6 @@ impl Governance {
         };
         // Only keep the latest 'max_proposals' per type.
         for (proposal_type, props) in proposals_by_type {
-            let voting_period_seconds = self.voting_period_seconds()();
             println!(
                 "{}GC - proposal_type {:#?} max {} current {}",
                 log_prefix(),
@@ -2472,7 +2465,7 @@ impl Governance {
                 for prop_id in props.iter().take(props.len() - max_proposals) {
                     // Check that this proposal can be purged.
                     if let Some(prop) = self.proto.proposals.get(prop_id) {
-                        if prop.can_be_purged(now_seconds, voting_period_seconds) {
+                        if prop.can_be_purged(now_seconds) {
                             self.proto.proposals.remove(prop_id);
                         }
                     }
