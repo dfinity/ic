@@ -2,14 +2,16 @@ use crate::pb::v1::governance_error::ErrorType;
 use crate::pb::v1::neuron::DissolveState;
 use crate::pb::v1::proposal::Action;
 use crate::pb::v1::{
-    manage_neuron, Ballot, Empty, GovernanceError, Neuron, NeuronId, NeuronPermissionType, Vote,
+    manage_neuron, Ballot, Empty, GovernanceError, Neuron, NeuronId, NeuronPermission,
+    NeuronPermissionType, Vote,
 };
 use ic_base_types::PrincipalId;
 use ledger_canister::Subaccount;
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::fmt::{Display, Formatter};
+use std::iter::FromIterator;
 use std::str::FromStr;
 
 /// The maximum number results returned by the method `list_neurons`.
@@ -27,6 +29,16 @@ pub enum NeuronState {
     /// In this state, the neuron's `when_dissolved_timestamp` is in the past
     /// and the neuron can be disbursed.
     Dissolved,
+}
+/// Indicates the status of a invocation of `remove_permission`.
+#[derive(Debug, PartialEq)]
+pub enum RemovePermissionsStatus {
+    /// This status indicates all PermissionTypes were removed and therefore
+    /// the PrincipalId was as well.
+    AllPermissionTypesRemoved,
+    /// This status indicates only some PermissionTypes were removed
+    /// and therefore the PrincipalId was not.
+    SomePermissionTypesRemoved,
 }
 
 impl Neuron {
@@ -80,7 +92,7 @@ impl Neuron {
         let found_neuron_permission = self
             .permissions
             .iter()
-            .find(|neuron_permission| neuron_permission.principal.unwrap() == *principal);
+            .find(|neuron_permission| neuron_permission.principal == Some(*principal));
 
         if let Some(p) = found_neuron_permission {
             return p.permission_type.contains(&(permission as i32));
@@ -466,6 +478,105 @@ impl Neuron {
                 "Neuron must have a NeuronId",
             ))
         }
+    }
+
+    /// Update an existing `NeuronPermission`, or insert a new one for a single PrincipalId.
+    pub fn add_permissions_for_principal(
+        &mut self,
+        principal_id: PrincipalId,
+        permissions_to_add: Vec<i32>,
+    ) {
+        // Initialize the structure (a set for deduplication of user input) with the new permissions
+        // for eventual union with the existing permissions if they exist
+        let mut new_permission_type: HashSet<i32> = HashSet::from_iter(permissions_to_add);
+
+        // Try to find the existing NeuronPermission for the given PrincipalId
+        let existing_permission = self
+            .permissions
+            .iter_mut()
+            .find(|p| p.principal == Some(principal_id));
+
+        // If the NeuronPermission exists, update the HashSet with the existing permissions to
+        // deduplicate with the permissions from the user input
+        if let Some(p) = existing_permission {
+            for permission in &p.permission_type {
+                new_permission_type.insert(*permission);
+            }
+
+            // Replace the current Vector with a Vector built from the HashSet
+            p.permission_type = Vec::from_iter(new_permission_type);
+        // If the NeuronPermission doesn't exist, create a new one with the deduplicated user input
+        } else {
+            self.permissions.push(NeuronPermission {
+                principal: Some(principal_id),
+                permission_type: Vec::from_iter(new_permission_type),
+            })
+        }
+    }
+
+    /// Removes the given permissions for the given PrincipalId. Returns a enum indicating
+    /// if a NeuronPermission is removed due to all of its PermissionTypes being removed.
+    pub fn remove_permissions_for_principal(
+        &mut self,
+        principal_id: PrincipalId,
+        permission_types_to_remove: Vec<i32>,
+    ) -> Result<RemovePermissionsStatus, GovernanceError> {
+        // Get the position as it will reduce search time in the future.
+        let existing_permission_position = self
+            .permissions
+            .iter()
+            .position(|p| p.principal == Some(principal_id))
+            .ok_or_else(|| {
+                GovernanceError::new_with_message(
+                    ErrorType::ErrorAccessControlList,
+                    format!(
+                        "PrincipalId {} does not have any permissions in Neuron {}",
+                        principal_id,
+                        self.id.as_ref().expect("Neuron must have a NeuronId")
+                    ),
+                )
+            })?;
+
+        let mut existing_permission = self
+            .permissions
+            .get_mut(existing_permission_position)
+            .expect("Expected permission to exist");
+
+        // Initialize a structure to efficiently remove provided permission_types from
+        // existing permission_types.
+        let mut remaining_permission_types: HashSet<i32> =
+            HashSet::from_iter(existing_permission.permission_type.iter().cloned());
+
+        // Initialize a structure to track if permission_types were present in the existing NeuronPermission
+        let mut missing_permissions = HashSet::new();
+        for permission_type in &permission_types_to_remove {
+            let permission_type_is_present = remaining_permission_types.remove(permission_type);
+            if !permission_type_is_present {
+                missing_permissions.insert(NeuronPermissionType::from_i32(*permission_type));
+            }
+        }
+
+        if !missing_permissions.is_empty() {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::ErrorAccessControlList,
+                format!(
+                    "PrincipalId {} was missing permissions {:?} when removing {:?}",
+                    principal_id, missing_permissions, permission_types_to_remove
+                ),
+            ));
+        }
+
+        // If there are no remaining permissions after removing the requested permissions, remove
+        // the NeuronPermission entry from the neuron.
+        if remaining_permission_types.is_empty() {
+            self.permissions.swap_remove(existing_permission_position);
+            return Ok(RemovePermissionsStatus::AllPermissionTypesRemoved);
+        // If not, update the existing permission with what is left in the remaining permissions.
+        } else {
+            existing_permission.permission_type = Vec::from_iter(remaining_permission_types);
+        }
+
+        Ok(RemovePermissionsStatus::SomePermissionTypesRemoved)
     }
 }
 

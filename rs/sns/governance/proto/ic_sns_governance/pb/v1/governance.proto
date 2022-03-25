@@ -623,6 +623,9 @@ message NervousSystemParameters {
   // If this set changes via a ManageNervousSystemParameters proposal, previous
   // neurons' permissions will be unchanged and only newly granted permissions will be affected.
   optional NeuronPermissionList neuron_grantable_permissions = 16;
+
+  // The maximum number of principals that can have permissions for a neuron
+  optional uint64 max_number_of_principals_per_neuron = 17;
 }
 
 // The set of default followees that every newly created neuron will follow per action.
@@ -703,6 +706,8 @@ message Governance {
       ManageNeuron.MergeMaturity merge_maturity = 4;
       ManageNeuron.DisburseMaturity disburse_maturity = 5;
       ManageNeuron.ClaimOrRefresh claim_or_refresh_neuron = 6;
+      ManageNeuron.AddNeuronPermissions add_neuron_permissions = 7;
+      ManageNeuron.RemoveNeuronPermissions remove_neuron_permissions = 8;
     }
   }
 
@@ -990,6 +995,31 @@ message ManageNeuron {
     }
   }
 
+  // Add a set of permissions to the Neuron for the given PrincipalId. These
+  // permissions must be a subset of `NervousSystemParameters::neuron_grantable_permissions`.
+  // If the PrincipalId doesn't have existing permissions, a new entry will be added for it
+  // with the provided permissions. If a principalId already has permissions for the neuron,
+  // the new permissions will be added to the existing permissions.
+  message AddNeuronPermissions {
+    // The PrincipalId that the permissions will be granted to.
+    ic_base_types.pb.v1.PrincipalId principal_id = 1;
+
+    // The set of permissions that will be granted to the PrincipalId.
+    NeuronPermissionList permissions_to_add = 2;
+  }
+
+  // Remove a set of permissions from the Neuron for the given PrincipalId. If a PrincipalId has all of
+  // its permissions removed, it will be removed from the neuron's permissions list. This is a dangerous
+  // operation as its possible to remove all permissions for a neuron and no longer be able to modify
+  // it's state, i.e. disbursing the neuron back into the governance token.
+  message RemoveNeuronPermissions {
+    // The PrincipalId that the permissions will be revoked from.
+    ic_base_types.pb.v1.PrincipalId principal_id = 1;
+
+    // The set of permissions that will be revoked from the PrincipalId.
+    NeuronPermissionList permissions_to_remove = 2;
+  }
+
   oneof command {
     Configure configure = 2;
     Disburse disburse = 3;
@@ -1002,6 +1032,8 @@ message ManageNeuron {
     ClaimOrRefresh claim_or_refresh = 8;
     MergeMaturity merge_maturity = 9;
     DisburseMaturity disburse_maturity = 10;
+    AddNeuronPermissions add_neuron_permissions = 11;
+    RemoveNeuronPermissions remove_neuron_permissions = 12;
   }
 }
 
@@ -1063,6 +1095,12 @@ message ManageNeuronResponse {
     NeuronId refreshed_neuron_id = 1;
   }
 
+  // The response to the ManageNeuron command 'add_neuron_permissions'.
+  message AddNeuronPermissionsResponse {}
+
+  // The response to the ManageNeuron command 'remove_neuron_permissions'.
+  message RemoveNeuronPermissionsResponse {}
+
   oneof command {
     GovernanceError error = 1;
     ConfigureResponse configure = 2;
@@ -1074,6 +1112,8 @@ message ManageNeuronResponse {
     ClaimOrRefreshResponse claim_or_refresh = 8;
     MergeMaturityResponse merge_maturity = 9;
     DisburseMaturityResponse disburse_maturity = 10;
+    AddNeuronPermissionsResponse add_neuron_permission = 11;
+    RemoveNeuronPermissionsResponse remove_neuron_permission = 12;
   }
 }
 

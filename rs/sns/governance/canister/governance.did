@@ -6,6 +6,10 @@ type Action = variant {
   Unspecified : record {};
   Motion : Motion;
 };
+type AddNeuronPermissions = record {
+  permissions_to_add : opt NeuronPermissionList;
+  principal_id : opt principal;
+};
 type Amount = record { e8s : nat64 };
 type Ballot = record {
   vote : int32;
@@ -26,6 +30,8 @@ type Command = variant {
   Configure : Configure;
   RegisterVote : RegisterVote;
   MakeProposal : Proposal;
+  RemoveNeuronPermissions : RemoveNeuronPermissions;
+  AddNeuronPermissions : AddNeuronPermissions;
   MergeMaturity : MergeMaturity;
   Disburse : Disburse;
 };
@@ -38,13 +44,17 @@ type Command_1 = variant {
   Configure : record {};
   RegisterVote : record {};
   MakeProposal : GetProposal;
+  RemoveNeuronPermission : record {};
   MergeMaturity : MergeMaturityResponse;
   Disburse : DisburseResponse;
+  AddNeuronPermission : record {};
 };
 type Command_2 = variant {
   Split : Split;
   DisburseMaturity : DisburseMaturity;
   ClaimOrRefreshNeuron : ClaimOrRefresh;
+  RemoveNeuronPermissions : RemoveNeuronPermissions;
+  AddNeuronPermissions : AddNeuronPermissions;
   MergeMaturity : MergeMaturity;
   Disburse : Disburse;
 };
@@ -146,6 +156,7 @@ type NervousSystemParameters = record {
   max_number_of_proposals_with_ballots : opt nat64;
   reward_distribution_period_seconds : opt nat64;
   neuron_grantable_permissions : opt NeuronPermissionList;
+  max_number_of_principals_per_neuron : opt nat64;
   max_followees_per_action : opt nat64;
 };
 type Neuron = record {
@@ -199,6 +210,10 @@ type ProposalData = record {
 };
 type ProposalId = record { id : nat64 };
 type RegisterVote = record { vote : int32; proposal : opt ProposalId };
+type RemoveNeuronPermissions = record {
+  permissions_to_remove : opt NeuronPermissionList;
+  principal_id : opt principal;
+};
 type Result = variant { Error : GovernanceError; Neuron : Neuron };
 type Result_1 = variant { Error : GovernanceError; Proposal : ProposalData };
 type RewardEvent = record {

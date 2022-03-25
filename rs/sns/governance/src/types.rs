@@ -10,6 +10,7 @@ use crate::pb::v1::{
 use ic_base_types::CanisterId;
 use ic_nervous_system_common::NervousSystemError;
 use ledger_canister::{DEFAULT_TRANSFER_FEE, TOKEN_SUBDIVIDABLE_BY};
+use std::collections::HashSet;
 use std::fmt;
 
 pub const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
@@ -51,6 +52,10 @@ impl NervousSystemParameters {
     /// corresponding Governance canister or the SNS subnet.
     pub const MAX_FOLLOWEES_PER_ACTION_CEILING: u64 = 15;
 
+    /// Exceeding this value for `max_number_of_principals_per_neuron` may cause
+    /// degradation in the corresponding Governance canister or the SNS subnet.
+    pub const MAX_NUMBER_OF_PRINCIPALS_PER_NEURON_CEILING: u64 = 15;
+
     pub fn with_default_values() -> Self {
         Self {
             reject_cost_e8s: Some(E8S_PER_TOKEN),          // 1 Token
@@ -68,6 +73,7 @@ impl NervousSystemParameters {
             max_number_of_proposals_with_ballots: Some(700),
             neuron_claimer_permissions: Some(Self::default_neuron_claimer_permissions()),
             neuron_grantable_permissions: Some(NeuronPermissionList::default()),
+            max_number_of_principals_per_neuron: Some(5),
         }
     }
 
@@ -116,6 +122,9 @@ impl NervousSystemParameters {
             .neuron_grantable_permissions
             .clone()
             .or_else(|| base.neuron_grantable_permissions.clone());
+        new_params.max_number_of_principals_per_neuron = self
+            .max_number_of_principals_per_neuron
+            .or(base.max_number_of_principals_per_neuron);
 
         new_params
     }
@@ -137,6 +146,7 @@ impl NervousSystemParameters {
         self.validate_max_number_of_proposals_with_ballots()?;
         self.validate_neuron_claimer_permissions()?;
         self.validate_neuron_grantable_permissions()?;
+        self.validate_max_number_of_principals_per_neuron()?;
 
         Ok(())
     }
@@ -339,6 +349,67 @@ impl NervousSystemParameters {
     fn validate_neuron_grantable_permissions(&self) -> Result<(), String> {
         Ok(())
     }
+
+    fn validate_max_number_of_principals_per_neuron(&self) -> Result<(), String> {
+        let max_number_of_principals_per_neuron =
+            self.max_number_of_principals_per_neuron.ok_or_else(|| {
+                "NervousSystemParameters.max_number_of_principals_per_neuron must be set"
+                    .to_string()
+            })?;
+
+        if max_number_of_principals_per_neuron == 0 {
+            Err(
+                "NervousSystemParameters.max_number_of_principals_per_neuron must be greater than 0"
+                    .to_string(),
+            )
+        } else if max_number_of_principals_per_neuron
+            > Self::MAX_NUMBER_OF_PRINCIPALS_PER_NEURON_CEILING
+        {
+            Err(format!(
+                "NervousSystemParameters.max_number_of_principals_per_neuron must be at most {}",
+                Self::MAX_NUMBER_OF_PRINCIPALS_PER_NEURON_CEILING
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Given a NeuronPermissionList, check whether the provided list can be
+    /// granted given the `NervousSystemParameters::neuron_grantable_permissions`.
+    /// Format a useful error if not.
+    pub fn check_permissions_are_grantable(
+        &self,
+        neuron_permission_list: &NeuronPermissionList,
+    ) -> Result<(), GovernanceError> {
+        let mut illegal_permissions = HashSet::new();
+
+        let grantable_permissions: HashSet<&i32> = self
+            .neuron_grantable_permissions
+            .as_ref()
+            .expect("NervousSystemParameters.neuron_grantable_permissions must be present")
+            .permissions
+            .iter()
+            .collect();
+
+        for permission in &neuron_permission_list.permissions {
+            if !grantable_permissions.contains(&permission) {
+                illegal_permissions.insert(NeuronPermissionType::from_i32(*permission));
+            }
+        }
+
+        if !illegal_permissions.is_empty() {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::ErrorAccessControlList,
+                format!(
+                    "Cannot grant permissions as one or more permissions is not \
+                    allowed to be granted. Illegal Permissions: {:?}",
+                    illegal_permissions
+                ),
+            ));
+        }
+
+        Ok(())
+    }
 }
 
 impl GovernanceError {
@@ -510,6 +581,22 @@ impl ManageNeuronResponse {
                 manage_neuron_response::ClaimOrRefreshResponse {
                     refreshed_neuron_id,
                 },
+            )),
+        }
+    }
+
+    pub fn add_neuron_permissions_response() -> Self {
+        ManageNeuronResponse {
+            command: Some(manage_neuron_response::Command::AddNeuronPermission(
+                manage_neuron_response::AddNeuronPermissionsResponse {},
+            )),
+        }
+    }
+
+    pub fn remove_neuron_permissions_response() -> Self {
+        ManageNeuronResponse {
+            command: Some(manage_neuron_response::Command::RemoveNeuronPermission(
+                manage_neuron_response::RemoveNeuronPermissionsResponse {},
             )),
         }
     }
@@ -782,6 +869,14 @@ mod tests {
                 neuron_claimer_permissions: Some(NeuronPermissionList {
                     permissions: vec![NeuronPermissionType::Vote as i32],
                 }),
+                ..NervousSystemParameters::with_default_values()
+            },
+            NervousSystemParameters {
+                max_number_of_principals_per_neuron: Some(0),
+                ..NervousSystemParameters::with_default_values()
+            },
+            NervousSystemParameters {
+                max_number_of_principals_per_neuron: Some(1000),
                 ..NervousSystemParameters::with_default_values()
             },
         ];

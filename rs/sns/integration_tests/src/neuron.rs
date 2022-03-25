@@ -10,9 +10,11 @@ use ic_sns_governance::pb::v1::governance_error::ErrorType;
 use ic_sns_governance::pb::v1::manage_neuron::{
     claim_or_refresh::{By, MemoAndController},
     configure::Operation,
-    ClaimOrRefresh, Configure, IncreaseDissolveDelay,
+    AddNeuronPermissions, ClaimOrRefresh, Configure, IncreaseDissolveDelay,
 };
-use ic_sns_governance::pb::v1::manage_neuron::{Command, DisburseMaturity};
+use ic_sns_governance::pb::v1::manage_neuron::{
+    Command, DisburseMaturity, RemoveNeuronPermissions,
+};
 use ic_sns_governance::pb::v1::manage_neuron_response::Command as CommandResponse;
 use ic_sns_governance::pb::v1::proposal::Action;
 use ic_sns_governance::pb::v1::{
@@ -27,6 +29,8 @@ use ic_sns_test_utils::itest_helpers::{
 use ic_types::PrincipalId;
 use ledger_canister::{AccountIdentifier, Tokens};
 use ledger_canister::{Memo, SendArgs, Subaccount, DEFAULT_TRANSFER_FEE};
+use std::collections::HashSet;
+use std::iter::FromIterator;
 
 // This tests the determinism of list_neurons, now that the subaccount is used for
 // the unique identifier of the Neuron.
@@ -635,4 +639,779 @@ fn test_one_user_cannot_claim_other_users_neuron() {
 
         Ok(())
     });
+}
+
+#[test]
+fn test_neuron_add_all_permissions_to_self() {
+    local_test_on_sns_subnet(|runtime| async move {
+        let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
+        let account_identifier = AccountIdentifier::from(user.get_principal_id());
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let system_params = NervousSystemParameters {
+            // Just grant ManagePrincipals to the claimer
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: vec![NeuronPermissionType::ManagePrincipals as i32],
+            }),
+            // Be able to grant all permissions
+            neuron_grantable_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let sns_init_payload = SnsInitPayloadsBuilder::new()
+            .with_ledger_account(account_identifier, alloc)
+            .with_nervous_system_parameters(system_params)
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        let neuron_id = sns_canisters.stake_and_claim_neuron(&user, None).await;
+        let neuron = sns_canisters.get_neuron(&neuron_id).await;
+        let subaccount = neuron.subaccount().expect("Error creating the subaccount");
+
+        // Assert that the default claimer permissions are as expected before adding more
+        assert_eq!(neuron.permissions.len(), 1);
+        assert_eq!(
+            neuron.permissions[0].principal.unwrap(),
+            user.get_principal_id()
+        );
+        assert_eq!(neuron.permissions[0].permission_type.len(), 1);
+        assert_eq!(
+            neuron.permissions[0].permission_type[0],
+            NeuronPermissionType::ManagePrincipals as i32
+        );
+
+        // Grant the claimer all permissions
+        sns_canisters
+            .add_neuron_permissions(
+                &user,
+                &subaccount,
+                Some(user.get_principal_id()),
+                NeuronPermissionType::all(),
+            )
+            .await;
+
+        let neuron = sns_canisters.get_neuron(&neuron_id).await;
+        assert_eq!(neuron.permissions.len(), 1);
+
+        let mut neuron_permission =
+            get_neuron_permission_from_neuron(&neuron, &user.get_principal_id());
+        // There is no guarantee to order so sort is required for comparison
+        neuron_permission.permission_type.sort_unstable();
+        assert_eq!(
+            neuron_permission.permission_type,
+            NeuronPermissionType::all()
+        );
+
+        Ok(())
+    });
+}
+
+#[test]
+fn test_neuron_add_multiple_permissions_and_principals() {
+    local_test_on_sns_subnet(|runtime| async move {
+        let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
+        let additional_user = Sender::from_keypair(&TEST_USER2_KEYPAIR);
+        let account_identifier = AccountIdentifier::from(user.get_principal_id());
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let system_params = NervousSystemParameters {
+            // Just grant ManagePrincipals to the claimer
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: vec![NeuronPermissionType::ManagePrincipals as i32],
+            }),
+            // Be able to grant all permissions
+            neuron_grantable_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let sns_init_payload = SnsInitPayloadsBuilder::new()
+            .with_ledger_account(account_identifier, alloc)
+            .with_nervous_system_parameters(system_params)
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        let neuron_id = sns_canisters.stake_and_claim_neuron(&user, None).await;
+        let neuron = sns_canisters.get_neuron(&neuron_id).await;
+        let subaccount = neuron.subaccount().expect("Error creating the subaccount");
+
+        assert_eq!(neuron.permissions.len(), 1);
+
+        sns_canisters
+            .add_neuron_permissions(
+                &user,
+                &subaccount,
+                Some(additional_user.get_principal_id()),
+                vec![NeuronPermissionType::Vote as i32],
+            )
+            .await;
+
+        // Assert that a new PrincipalId was added and has the intended Permission
+        let neuron = sns_canisters.get_neuron(&neuron_id).await;
+        assert_eq!(neuron.permissions.len(), 2);
+        let neuron_permission =
+            get_neuron_permission_from_neuron(&neuron, &additional_user.get_principal_id());
+        assert_eq!(
+            neuron_permission.permission_type,
+            vec![NeuronPermissionType::Vote as i32]
+        );
+
+        sns_canisters
+            .add_neuron_permissions(
+                &user,
+                &subaccount,
+                Some(additional_user.get_principal_id()),
+                vec![
+                    // Intentionally testing that these are deduplicated
+                    NeuronPermissionType::MergeMaturity as i32,
+                    NeuronPermissionType::MergeMaturity as i32,
+                ],
+            )
+            .await;
+
+        // Assert that no new PrincipalId was added and the correct permissions have been updated
+        let neuron = sns_canisters.get_neuron(&neuron_id).await;
+        assert_eq!(neuron.permissions.len(), 2);
+        let mut neuron_permission =
+            get_neuron_permission_from_neuron(&neuron, &additional_user.get_principal_id());
+
+        // .sort() emits () and needs to be called outside of the assert!
+        let mut expected = vec![
+            NeuronPermissionType::Vote as i32,
+            NeuronPermissionType::MergeMaturity as i32,
+        ];
+        expected.sort_unstable();
+        neuron_permission.permission_type.sort_unstable();
+
+        assert_eq!(neuron_permission.permission_type, expected);
+
+        Ok(())
+    });
+}
+
+#[test]
+fn test_neuron_add_non_grantable_permission_fails() {
+    local_test_on_sns_subnet(|runtime| async move {
+        let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
+        let account_identifier = AccountIdentifier::from(user.get_principal_id());
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let system_params = NervousSystemParameters {
+            // Just grant ManagePrincipals to the claimer
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: vec![NeuronPermissionType::ManagePrincipals as i32],
+            }),
+            // Be able to grant no permissions
+            neuron_grantable_permissions: Some(NeuronPermissionList {
+                permissions: vec![],
+            }),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let sns_init_payload = SnsInitPayloadsBuilder::new()
+            .with_ledger_account(account_identifier, alloc)
+            .with_nervous_system_parameters(system_params)
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        let neuron_id = sns_canisters.stake_and_claim_neuron(&user, None).await;
+        let neuron = sns_canisters.get_neuron(&neuron_id).await;
+        let subaccount = neuron.subaccount().expect("Error creating the subaccount");
+
+        let add_neuron_permission = AddNeuronPermissions {
+            principal_id: Some(user.get_principal_id()),
+            permissions_to_add: Some(NeuronPermissionList {
+                permissions: vec![NeuronPermissionType::Vote as i32],
+            }),
+        };
+
+        let manage_neuron_response: ManageNeuronResponse = sns_canisters
+            .governance
+            .update_from_sender(
+                "manage_neuron",
+                candid_one,
+                ManageNeuron {
+                    subaccount: subaccount.to_vec(),
+                    command: Some(Command::AddNeuronPermissions(add_neuron_permission)),
+                },
+                &user,
+            )
+            .await
+            .expect("Error calling manage_neuron");
+
+        let error = match manage_neuron_response.command.unwrap() {
+            CommandResponse::RemoveNeuronPermission(_) => {
+                panic!("RemoveNeuronPermissions should have errored")
+            }
+            CommandResponse::Error(error) => error,
+            response => panic!("Unexpected response from manage_neuron: {:?}", response),
+        };
+
+        assert_eq!(error.error_type, ErrorType::ErrorAccessControlList as i32);
+
+        Ok(())
+    });
+}
+
+#[test]
+fn test_exceeding_max_principals_for_neuron_fails() {
+    local_test_on_sns_subnet(|runtime| async move {
+        let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
+        let additional_user = Sender::from_keypair(&TEST_USER2_KEYPAIR);
+        let account_identifier = AccountIdentifier::from(user.get_principal_id());
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let system_params = NervousSystemParameters {
+            // Just grant ManagePrincipals to the claimer
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: vec![NeuronPermissionType::ManagePrincipals as i32],
+            }),
+            // Be able to grant all permissions
+            neuron_grantable_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            max_number_of_principals_per_neuron: Some(1_u64),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let sns_init_payload = SnsInitPayloadsBuilder::new()
+            .with_ledger_account(account_identifier, alloc)
+            .with_nervous_system_parameters(system_params)
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        let neuron_id = sns_canisters.stake_and_claim_neuron(&user, None).await;
+        let neuron = sns_canisters.get_neuron(&neuron_id).await;
+        let subaccount = neuron.subaccount().expect("Error creating the subaccount");
+
+        let add_neuron_permission = AddNeuronPermissions {
+            principal_id: Some(additional_user.get_principal_id()),
+            permissions_to_add: Some(NeuronPermissionList {
+                permissions: vec![NeuronPermissionType::Vote as i32],
+            }),
+        };
+
+        let manage_neuron_response: ManageNeuronResponse = sns_canisters
+            .governance
+            .update_from_sender(
+                "manage_neuron",
+                candid_one,
+                ManageNeuron {
+                    subaccount: subaccount.to_vec(),
+                    command: Some(Command::AddNeuronPermissions(add_neuron_permission)),
+                },
+                &user,
+            )
+            .await
+            .expect("Error calling manage_neuron");
+
+        let error = match manage_neuron_response.command.unwrap() {
+            CommandResponse::RemoveNeuronPermission(_) => {
+                panic!("RemoveNeuronPermissions should have errored")
+            }
+            CommandResponse::Error(error) => error,
+            response => panic!("Unexpected response from manage_neuron: {:?}", response),
+        };
+
+        assert_eq!(error.error_type, ErrorType::PreconditionFailed as i32);
+
+        Ok(())
+    });
+}
+
+#[test]
+fn test_add_neuron_permission_missing_principal_id_fails() {
+    local_test_on_sns_subnet(|runtime| async move {
+        let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
+        let account_identifier = AccountIdentifier::from(user.get_principal_id());
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let system_params = NervousSystemParameters {
+            // Just grant ManagePrincipals to the claimer
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: vec![NeuronPermissionType::ManagePrincipals as i32],
+            }),
+            neuron_grantable_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let sns_init_payload = SnsInitPayloadsBuilder::new()
+            .with_ledger_account(account_identifier, alloc)
+            .with_nervous_system_parameters(system_params)
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        let neuron_id = sns_canisters.stake_and_claim_neuron(&user, None).await;
+        let neuron = sns_canisters.get_neuron(&neuron_id).await;
+        let subaccount = neuron.subaccount().expect("Error creating the subaccount");
+        // The neuron should have a single NeuronPermission after claiming
+        assert_eq!(neuron.permissions.len(), 1);
+
+        // Adding a new permission without specifying a PrincipalId should fail
+        let add_neuron_permissions = AddNeuronPermissions {
+            principal_id: None,
+            permissions_to_add: Some(NeuronPermissionList {
+                permissions: vec![NeuronPermissionType::Vote as i32],
+            }),
+        };
+
+        let manage_neuron_response: ManageNeuronResponse = sns_canisters
+            .governance
+            .update_from_sender(
+                "manage_neuron",
+                candid_one,
+                ManageNeuron {
+                    subaccount: subaccount.to_vec(),
+                    command: Some(Command::AddNeuronPermissions(add_neuron_permissions)),
+                },
+                &user,
+            )
+            .await
+            .expect("Error calling manage_neuron");
+
+        let error = match manage_neuron_response.command.unwrap() {
+            CommandResponse::AddNeuronPermission(_) => {
+                panic!("AddNeuronPermission should have errored")
+            }
+            CommandResponse::Error(error) => error,
+            response => panic!("Unexpected response from manage_neuron: {:?}", response),
+        };
+
+        assert_eq!(error.error_type, ErrorType::InvalidCommand as i32);
+
+        Ok(())
+    });
+}
+
+#[test]
+fn test_neuron_remove_all_permissions_of_self() {
+    local_test_on_sns_subnet(|runtime| async move {
+        let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
+        let account_identifier = AccountIdentifier::from(user.get_principal_id());
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let system_params = NervousSystemParameters {
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let sns_init_payload = SnsInitPayloadsBuilder::new()
+            .with_ledger_account(account_identifier, alloc)
+            .with_nervous_system_parameters(system_params)
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        let neuron_id = sns_canisters.stake_and_claim_neuron(&user, None).await;
+        let neuron = sns_canisters.get_neuron(&neuron_id).await;
+        let subaccount = neuron.subaccount().expect("Error creating the subaccount");
+
+        // Assert that the Claimer has been granted all permissions
+        assert_eq!(neuron.permissions.len(), 1);
+        let mut neuron_permission =
+            get_neuron_permission_from_neuron(&neuron, &user.get_principal_id());
+        // .sort() emits () and needs to be called outside of the assert!
+        neuron_permission.permission_type.sort_unstable();
+        assert_eq!(
+            neuron_permission.permission_type,
+            NeuronPermissionType::all(),
+        );
+
+        sns_canisters
+            .remove_neuron_permissions(
+                &user,
+                &subaccount,
+                &user.get_principal_id(),
+                NeuronPermissionType::all(),
+            )
+            .await;
+
+        let neuron = sns_canisters.get_neuron(&neuron_id).await;
+        assert_eq!(neuron.permissions.len(), 0);
+
+        Ok(())
+    });
+}
+
+#[test]
+fn test_neuron_remove_some_permissions() {
+    local_test_on_sns_subnet(|runtime| async move {
+        let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
+        let account_identifier = AccountIdentifier::from(user.get_principal_id());
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let system_params = NervousSystemParameters {
+            // Just grant ManagePrincipals to the claimer
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let sns_init_payload = SnsInitPayloadsBuilder::new()
+            .with_ledger_account(account_identifier, alloc)
+            .with_nervous_system_parameters(system_params)
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        let neuron_id = sns_canisters.stake_and_claim_neuron(&user, None).await;
+        let neuron = sns_canisters.get_neuron(&neuron_id).await;
+        let subaccount = neuron.subaccount().expect("Error creating the subaccount");
+
+        // Assert that the Claimer has been granted all permissions
+        assert_eq!(neuron.permissions.len(), 1);
+        let mut neuron_permission =
+            get_neuron_permission_from_neuron(&neuron, &user.get_principal_id());
+        // .sort() emits () and needs to be called outside of the assert!
+        neuron_permission.permission_type.sort_unstable();
+        assert_eq!(
+            neuron_permission.permission_type,
+            NeuronPermissionType::all(),
+        );
+
+        sns_canisters
+            .remove_neuron_permissions(
+                &user,
+                &subaccount,
+                &user.get_principal_id(),
+                vec![
+                    NeuronPermissionType::Vote as i32,
+                    NeuronPermissionType::MergeMaturity as i32,
+                ],
+            )
+            .await;
+
+        let neuron = sns_canisters.get_neuron(&neuron_id).await;
+        assert_eq!(neuron.permissions.len(), 1);
+
+        let neuron_permission =
+            get_neuron_permission_from_neuron(&neuron, &user.get_principal_id());
+        let permissions = neuron_permission.permission_type;
+        assert_eq!(permissions.len(), NeuronPermissionType::all().len() - 2);
+
+        let permission_set: HashSet<i32> = HashSet::from_iter(permissions);
+        assert!(!permission_set.contains(&(NeuronPermissionType::Vote as i32)));
+        assert!(!permission_set.contains(&(NeuronPermissionType::MergeMaturity as i32)));
+
+        Ok(())
+    });
+}
+
+#[test]
+fn test_neuron_remove_permissions_of_wrong_principal() {
+    local_test_on_sns_subnet(|runtime| async move {
+        let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
+        let additional_user = Sender::from_keypair(&TEST_USER2_KEYPAIR);
+        let account_identifier = AccountIdentifier::from(user.get_principal_id());
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let system_params = NervousSystemParameters {
+            // Just grant ManagePrincipals to the claimer
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let sns_init_payload = SnsInitPayloadsBuilder::new()
+            .with_ledger_account(account_identifier, alloc)
+            .with_nervous_system_parameters(system_params)
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        let neuron_id = sns_canisters.stake_and_claim_neuron(&user, None).await;
+        let neuron = sns_canisters.get_neuron(&neuron_id).await;
+        let subaccount = neuron.subaccount().expect("Error creating the subaccount");
+
+        assert_eq!(neuron.permissions.len(), 1);
+        assert_eq!(
+            neuron.permissions[0].principal.unwrap(),
+            user.get_principal_id()
+        );
+
+        // Remove permissions on a user that does not have any permissions
+        let remove_neuron_permissions = RemoveNeuronPermissions {
+            principal_id: Some(additional_user.get_principal_id()),
+            permissions_to_remove: Some(NeuronPermissionList {
+                permissions: vec![NeuronPermissionType::Vote as i32],
+            }),
+        };
+
+        let manage_neuron_response: ManageNeuronResponse = sns_canisters
+            .governance
+            .update_from_sender(
+                "manage_neuron",
+                candid_one,
+                ManageNeuron {
+                    subaccount: subaccount.to_vec(),
+                    command: Some(Command::RemoveNeuronPermissions(remove_neuron_permissions)),
+                },
+                &user,
+            )
+            .await
+            .expect("Error calling manage_neuron");
+
+        let error = match manage_neuron_response.command.unwrap() {
+            CommandResponse::RemoveNeuronPermission(_) => {
+                panic!("RemoveNeuronPermissions should have errored")
+            }
+            CommandResponse::Error(error) => error,
+            response => panic!("Unexpected response from manage_neuron: {:?}", response),
+        };
+
+        assert_eq!(error.error_type, ErrorType::ErrorAccessControlList as i32);
+
+        Ok(())
+    });
+}
+
+#[test]
+fn test_neuron_remove_permissions_of_different_principal() {
+    local_test_on_sns_subnet(|runtime| async move {
+        let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
+        let additional_user = Sender::from_keypair(&TEST_USER2_KEYPAIR);
+        let account_identifier = AccountIdentifier::from(user.get_principal_id());
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let system_params = NervousSystemParameters {
+            // Just grant ManagePrincipals to the claimer
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: vec![NeuronPermissionType::ManagePrincipals as i32],
+            }),
+            // Be able to grant all permissions
+            neuron_grantable_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let sns_init_payload = SnsInitPayloadsBuilder::new()
+            .with_ledger_account(account_identifier, alloc)
+            .with_nervous_system_parameters(system_params)
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        let neuron_id = sns_canisters.stake_and_claim_neuron(&user, None).await;
+        let neuron = sns_canisters.get_neuron(&neuron_id).await;
+        let subaccount = neuron.subaccount().expect("Error creating the subaccount");
+
+        // Add all the permissions for the additional user to eventually be removed
+        sns_canisters
+            .add_neuron_permissions(
+                &user,
+                &subaccount,
+                Some(additional_user.get_principal_id()),
+                NeuronPermissionType::all(),
+            )
+            .await;
+
+        // Assert that a new PrincipalId was added
+        let neuron = sns_canisters.get_neuron(&neuron_id).await;
+        assert_eq!(neuron.permissions.len(), 2);
+
+        // Remove a single permission of a different PrincipalId
+        sns_canisters
+            .remove_neuron_permissions(
+                &user,
+                &subaccount,
+                &additional_user.get_principal_id(),
+                vec![NeuronPermissionType::MergeMaturity as i32],
+            )
+            .await;
+
+        // Assert that no new PrincipalId was removed and the correct permissions have been removed
+        let neuron = sns_canisters.get_neuron(&neuron_id).await;
+        assert_eq!(neuron.permissions.len(), 2);
+        let neuron_permission =
+            get_neuron_permission_from_neuron(&neuron, &additional_user.get_principal_id());
+        let permissions = neuron_permission.permission_type;
+        assert_eq!(permissions.len(), NeuronPermissionType::all().len() - 1);
+
+        let permission_set: HashSet<i32> = HashSet::from_iter(permissions);
+        assert!(!permission_set.contains(&(NeuronPermissionType::MergeMaturity as i32)));
+
+        // Remove the rest of the permissions a user has
+        sns_canisters
+            .remove_neuron_permissions(
+                &user,
+                &subaccount,
+                &additional_user.get_principal_id(),
+                Vec::from_iter(permission_set),
+            )
+            .await;
+
+        // Assert the additional_user was removed from the neuron
+        let neuron = sns_canisters.get_neuron(&neuron_id).await;
+        assert_eq!(neuron.permissions.len(), 1);
+        assert_ne!(
+            neuron.permissions[0].principal.unwrap(),
+            additional_user.get_principal_id()
+        );
+
+        Ok(())
+    });
+}
+
+#[test]
+fn test_remove_neuron_permission_missing_principal_id_fails() {
+    local_test_on_sns_subnet(|runtime| async move {
+        let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
+        let account_identifier = AccountIdentifier::from(user.get_principal_id());
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let system_params = NervousSystemParameters {
+            // Just grant ManagePrincipals to the claimer
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: vec![NeuronPermissionType::ManagePrincipals as i32],
+            }),
+            neuron_grantable_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let sns_init_payload = SnsInitPayloadsBuilder::new()
+            .with_ledger_account(account_identifier, alloc)
+            .with_nervous_system_parameters(system_params)
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        let neuron_id = sns_canisters.stake_and_claim_neuron(&user, None).await;
+        let neuron = sns_canisters.get_neuron(&neuron_id).await;
+        let subaccount = neuron.subaccount().expect("Error creating the subaccount");
+
+        let remove_neuron_permission = RemoveNeuronPermissions {
+            principal_id: None,
+            permissions_to_remove: Some(NeuronPermissionList {
+                permissions: vec![NeuronPermissionType::Vote as i32],
+            }),
+        };
+
+        let manage_neuron_response: ManageNeuronResponse = sns_canisters
+            .governance
+            .update_from_sender(
+                "manage_neuron",
+                candid_one,
+                ManageNeuron {
+                    subaccount: subaccount.to_vec(),
+                    command: Some(Command::RemoveNeuronPermissions(remove_neuron_permission)),
+                },
+                &user,
+            )
+            .await
+            .expect("Error calling manage_neuron");
+
+        let error = match manage_neuron_response.command.unwrap() {
+            CommandResponse::RemoveNeuronPermission(_) => {
+                panic!("RemoveNeuronPermissions should have errored")
+            }
+            CommandResponse::Error(error) => error,
+            response => panic!("Unexpected response from manage_neuron: {:?}", response),
+        };
+
+        assert_eq!(error.error_type, ErrorType::InvalidCommand as i32);
+
+        Ok(())
+    });
+}
+
+#[test]
+fn test_remove_neuron_permission_when_neuron_missing_permission_type_fails() {
+    local_test_on_sns_subnet(|runtime| async move {
+        let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
+        let account_identifier = AccountIdentifier::from(user.get_principal_id());
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let system_params = NervousSystemParameters {
+            // Initialize a neuron with only two permissions, Vote and ManagePrincipals
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: vec![
+                    NeuronPermissionType::ManagePrincipals as i32,
+                    NeuronPermissionType::Vote as i32,
+                ],
+            }),
+            neuron_grantable_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let sns_init_payload = SnsInitPayloadsBuilder::new()
+            .with_ledger_account(account_identifier, alloc)
+            .with_nervous_system_parameters(system_params)
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        let neuron_id = sns_canisters.stake_and_claim_neuron(&user, None).await;
+        let neuron = sns_canisters.get_neuron(&neuron_id).await;
+        let subaccount = neuron.subaccount().expect("Error creating the subaccount");
+
+        // Create a RemoveNeuronPermissions request that will remove a NeuronPermissionType that
+        // The user does not have
+        let remove_neuron_permission = RemoveNeuronPermissions {
+            principal_id: user.get_principal_id().into(),
+            permissions_to_remove: Some(NeuronPermissionList {
+                permissions: vec![
+                    NeuronPermissionType::Vote as i32,
+                    NeuronPermissionType::MergeMaturity as i32,
+                ],
+            }),
+        };
+
+        let manage_neuron_response: ManageNeuronResponse = sns_canisters
+            .governance
+            .update_from_sender(
+                "manage_neuron",
+                candid_one,
+                ManageNeuron {
+                    subaccount: subaccount.to_vec(),
+                    command: Some(Command::RemoveNeuronPermissions(remove_neuron_permission)),
+                },
+                &user,
+            )
+            .await
+            .expect("Error calling manage_neuron");
+
+        let error = match manage_neuron_response.command.unwrap() {
+            CommandResponse::RemoveNeuronPermission(_) => {
+                panic!("RemoveNeuronPermissions should have errored")
+            }
+            CommandResponse::Error(error) => error,
+            response => panic!("Unexpected response from manage_neuron: {:?}", response),
+        };
+
+        assert_eq!(error.error_type, ErrorType::ErrorAccessControlList as i32);
+
+        Ok(())
+    });
+}
+
+// Returns a copy of the found NeuronPermission
+fn get_neuron_permission_from_neuron(
+    neuron: &Neuron,
+    principal_id: &PrincipalId,
+) -> NeuronPermission {
+    neuron
+        .permissions
+        .iter()
+        .find(|permission| permission.principal.unwrap() == *principal_id)
+        .expect("PrincipalId not present in NeuronPermissions")
+        .clone()
 }
