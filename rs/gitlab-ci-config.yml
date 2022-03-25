@@ -92,8 +92,8 @@ ci_jobs_required:
   - rejoin-test-slo
   - maximum-capacity-rejoin-script
   - maximum-capacity-xnet-script
-  - maximum-capacity-large-subnet-update
-  - maximum-capacity-large-subnet-query
+  - maximum-capacity-system-baseline-update
+  - maximum-capacity-system-baseline-query
   # finalize stage
   - notify-gitlab-success
   - notify-gitlab-failure
