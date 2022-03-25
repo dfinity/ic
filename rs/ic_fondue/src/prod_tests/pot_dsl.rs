@@ -53,15 +53,19 @@ where
         name: name.to_string(),
         execution_mode: ExecutionMode::Run,
         f: Box::new(|test_env: TestEnv, log: Logger| {
-            // Todo instantiate from test env
-            let rng = rand_core::SeedableRng::seed_from_u64(42);
-            let test_ctx = Context::new(rng, tee_logger(&test_env, log));
-            let ic_handle = test_env
-                .ic_handle()
-                .expect("Could not create ic handle from test env");
+            let (ic_handle, test_ctx) = get_ic_handle_and_ctx(test_env, log);
             (test)(ic_handle, &test_ctx);
         }),
     }
+}
+
+pub fn get_ic_handle_and_ctx(test_env: TestEnv, log: Logger) -> (IcHandle, Context) {
+    let rng = rand_core::SeedableRng::seed_from_u64(42);
+    let test_ctx = Context::new(rng, tee_logger(&test_env, log));
+    let ic_handle = test_env
+        .ic_handle()
+        .expect("Could not create ic handle from test env");
+    (ic_handle, test_ctx)
 }
 
 pub fn sys_t<F>(name: &str, test: F) -> Test
