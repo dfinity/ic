@@ -24,6 +24,8 @@ pub enum Module {
     Callback,
     /// WAT module with an inspect message handler.
     InspectMessage,
+    /// WAT module with a query test function.
+    QueryTest,
 }
 
 impl Module {
@@ -34,9 +36,11 @@ impl Module {
         P: RenderParams,
     {
         let loop_iterations = match self {
-            Module::Test | Module::StableTest | Module::Callback | Module::InspectMessage => {
-                LoopIterations::Mi
-            }
+            Module::Test
+            | Module::StableTest
+            | Module::Callback
+            | Module::InspectMessage
+            | Module::QueryTest => LoopIterations::Mi,
             // The call new module has a built-in loop with a `ic0_call_new()`
             Module::CallNewLoop => LoopIterations::One,
         };
@@ -149,6 +153,23 @@ impl Module {
             (memory $mem 1)
             (table funcref (elem $test))
             (func $test (param $env i32)
+                (local $i i32) (local $s i32)
+                {BODY}
+            )
+        )
+            "#,
+                    IMPORTS = imports,
+                    BODY = body
+                )
+            }
+            Module::QueryTest => {
+                format!(
+                    // Note: the indents below are to match with other WAT sections
+                    r#"
+        (module
+            {IMPORTS}
+            (memory $mem 1)
+            (func $test (export "canister_query test")
                 (local $i i32) (local $s i32)
                 {BODY}
             )
