@@ -126,6 +126,36 @@ maximum-capacity-large-memory-update:
       $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
 
 
+# SCENARIO TEST maximum_capacity_rejoin_script: have 30GiB state in old checkpoint and start from 20GiB of fetched state size and increase by 5GiB each time
+# Repeatedly run rejoin tests for at most 20 times until state sync reaches its limit
+maximum-capacity-rejoin-script:
+  extends: .benchmark-test
+  script:
+    - |
+      set -eExou pipefail
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER ./testnet/tests/scripts/maximum_capacity_rejoin.sh "$TESTNET" 30 20 5 20 normal "$CI_JOB_STAGE/$CI_JOB_NAME"
+  timeout: 10 hours
+
+
+# SCENARIO TEST maximum_capacity_xnet_script: start from initial rate at 210 and increase by 100 each time
+# 10min @ {increased_rate} XNet requests * 1 KB / round
+# Repeatedly run xnet tests for at most 10 times until the xnet sending rate reaches its limit
+maximum-capacity-xnet-script:
+  extends: .benchmark-test
+  script:
+    - |
+      set -eExou pipefail
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+      export GIT_REVISION
+
+      $SHELL_WRAPPER ./testnet/tests/scripts/maximum_capacity_xnet_slo.sh "$TESTNET" 2 210 100 10 1024 normal "$CI_JOB_STAGE/$CI_JOB_NAME"
+  timeout: 6 hours
+
 # BENCHMARK SUITE xnet_experiment
 benchmark-xnet:
   extends: .benchmark-test
