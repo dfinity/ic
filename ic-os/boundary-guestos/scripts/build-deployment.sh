@@ -26,6 +26,7 @@ Arguments:
   -i=, --input=                         JSON formatted input file (Default: ./subnet.json)
   -o=, --output=                        removable media output directory (Default: ./build-out/)
   -s=, --ssh=                           specify directory holding SSH authorized_key files (Default: ../../testnet/config/ssh_authorized_keys)
+  -c=, --certdir=                       specify directory holding TLS certificates for hosted domain (Default: None i.e. snakeoil/self certified certificate will be used)
   -n=, --nns_urls=                      specify a file that lists on each line a nns url of the form http://[ip]:port this file will override nns urls derived from input json file
        --git-revision=                  git revision for which to prepare the media
   -x,  --debug                enable verbose console output
@@ -42,6 +43,10 @@ Arguments:
             ;;
         -s=* | --ssh=*)
             SSH="${argument#*=}"
+            shift
+            ;;
+        -c=* | --certdir=*)
+            CERT_DIR="${argument#*=}"
             shift
             ;;
         -n=* | --nns_url=*)
@@ -63,6 +68,7 @@ done
 INPUT="${INPUT:=${BASE_DIR}/subnet.json}"
 OUTPUT="${OUTPUT:=${BASE_DIR}/build-out}"
 SSH="${SSH:=${BASE_DIR}/../../testnet/config/ssh_authorized_keys}"
+CERT_DIR="${CERT_DIR:=""}"
 GIT_REVISION="${GIT_REVISION:=}"
 
 if [[ -z "$GIT_REVISION" ]]; then
@@ -276,6 +282,18 @@ function copy_ssh_keys() {
     done
 }
 
+function copy_certs() {
+    if [[ -f ${CERT_DIR}/fullchain.pem ]] && [[ -f ${CERT_DIR}/privkey.pem ]] && [[ -f ${CERT_DIR}/chain.pem ]]; then
+        echo "Using certificates ${CERT_DIR}/fullchain.pem ${CERT_DIR}/privkey.pem ${CERT_DIR}/chain.pem"
+        mkdir -p ${CONFIG_DIR}/$NODE_PREFIX/certs
+        cp ${CERT_DIR}/fullchain.pem ${CONFIG_DIR}/$NODE_PREFIX/certs
+        cp ${CERT_DIR}/privkey.pem ${CONFIG_DIR}/$NODE_PREFIX/certs
+        cp ${CERT_DIR}/chain.pem ${CONFIG_DIR}/$NODE_PREFIX/certs
+    else
+        echo "Not copying certificates"
+    fi
+}
+
 function build_tarball() {
     for n in $NODES; do
         declare -n NODE=$n
@@ -325,6 +343,7 @@ function main() {
     generate_journalbeat_config
     generate_network_config
     copy_ssh_keys
+    copy_certs
     build_tarball
     build_removable_media
     # remove_temporary_directories

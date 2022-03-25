@@ -24,11 +24,11 @@ To build a full system image, run:
  scripts/build-disk-image.sh -o /tmp/disk.img
 ----
 
-A password for testing can be specified:
+A password for testing can be specified (-p) and a version string can be added (-v):
 
 [source,shell]
 ----
-  scripts/build-disk-image.sh -o /tmp/disk.img -p password
+  scripts/build-disk-image.sh -o /tmp/disk.img -v 1979 -p password
 ----
 
 If you want to include IC binaries (see above) that you have been locally building, append `-x`.
