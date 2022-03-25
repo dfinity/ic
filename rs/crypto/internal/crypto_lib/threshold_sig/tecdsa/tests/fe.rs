@@ -20,7 +20,7 @@ fn test_one_minus_one_is_zero() -> Result<(), ThresholdEcdsaError> {
         let one = EccFieldElement::one(curve_type);
         let neg_one = one.negate()?;
         let zero = one.add(&neg_one).unwrap();
-        assert!(zero.is_zero());
+        assert!(bool::from(zero.is_zero()));
     }
     Ok(())
 }
@@ -49,13 +49,13 @@ fn test_x_minus_x_is_zero() -> Result<(), ThresholdEcdsaError> {
             let val = random_field_element(curve_type);
             let neg_val = val.negate()?;
             let maybe_zero = val.add(&neg_val)?;
-            assert!(maybe_zero.is_zero());
+            assert!(bool::from(maybe_zero.is_zero()));
 
             let maybe_zero = neg_val.add(&val)?;
-            assert!(maybe_zero.is_zero());
+            assert!(bool::from(maybe_zero.is_zero()));
 
             let maybe_zero = val.sub(&val)?;
-            assert!(maybe_zero.is_zero());
+            assert!(bool::from(maybe_zero.is_zero()));
         }
     }
     Ok(())
@@ -79,10 +79,10 @@ fn test_ct_assign_is_conditional() -> Result<(), ThresholdEcdsaError> {
         let fe2 = random_field_element(curve_type);
 
         let mut dest = fe1;
-        dest.ct_assign(&fe2, false)?;
+        dest.ct_assign(&fe2, subtle::Choice::from(0u8))?;
         assert_eq!(dest, fe1);
 
-        dest.ct_assign(&fe2, true)?;
+        dest.ct_assign(&fe2, subtle::Choice::from(1u8))?;
         assert_eq!(dest, fe2);
     }
     Ok(())
@@ -117,8 +117,8 @@ fn test_inverse_is_correct() -> Result<(), ThresholdEcdsaError> {
             case fe^-1 is also zero
              */
 
-            if fe_inv.is_zero() {
-                assert!(fe.is_zero());
+            if bool::from(fe_inv.is_zero()) {
+                assert!(bool::from(fe.is_zero()));
             } else {
                 let fe_t_inv = fe.mul(&fe_inv)?;
                 assert_eq!(fe_t_inv, one);
@@ -133,7 +133,7 @@ fn test_inverse_is_correct() -> Result<(), ThresholdEcdsaError> {
 fn test_inverse_of_zero_is_zero() -> Result<(), ThresholdEcdsaError> {
     for curve_type in EccCurveType::all() {
         let zero = EccFieldElement::zero(curve_type);
-        assert!(zero.invert().is_zero());
+        assert!(bool::from(zero.invert().is_zero()));
     }
 
     Ok(())
@@ -154,7 +154,7 @@ fn test_sqrt_is_consistent_with_math() -> Result<(), ThresholdEcdsaError> {
     for curve_type in EccCurveType::all() {
         for _trial in 0..100 {
             let fe = random_field_element(curve_type);
-            let fe_sqrt = fe.sqrt();
+            let (valid, fe_sqrt) = fe.sqrt();
 
             /*
              * For primes == 3 (mod 4) exactly one of x and -x has a square
@@ -164,9 +164,11 @@ fn test_sqrt_is_consistent_with_math() -> Result<(), ThresholdEcdsaError> {
              * This test would have to be ammended if support is later added
              * for a prime field == 1 (mod 4)
              */
-            if fe_sqrt.is_zero() {
+            if !bool::from(valid) {
                 let fe_neg = fe.negate()?;
-                assert!(!fe_neg.sqrt().is_zero());
+
+                let (valid, _fe_neg_sqrt) = fe_neg.sqrt();
+                assert!(bool::from(valid));
             } else {
                 // sqrt*sqrt should equal the original element
                 assert_eq!(fe_sqrt.mul(&fe_sqrt)?, fe);
@@ -197,9 +199,9 @@ fn test_ab_values_are_correct() -> Result<(), ThresholdEcdsaError> {
 
             let x3_ax_b = x3.add(&ax)?.add(&b)?;
 
-            let y = x3_ax_b.sqrt();
+            let (valid_y, y) = x3_ax_b.sqrt();
 
-            if y.is_zero() {
+            if !bool::from(valid_y) {
                 // turned out we picked an x that is not valid - retry
                 continue;
             }
@@ -228,7 +230,7 @@ fn test_sswu_z_values_are_correct() -> Result<(), ThresholdEcdsaError> {
 
         let mut cnt = 0;
 
-        while !z.is_zero() {
+        while !bool::from(z.is_zero()) {
             z = z.add(&one).expect("Add failed");
             cnt += 1;
         }
@@ -248,7 +250,7 @@ fn test_sswu_c2_values_are_correct() -> Result<(), ThresholdEcdsaError> {
         let z = EccFieldElement::sswu_z(curve_type);
         let c2 = EccFieldElement::sswu_c2(curve_type);
         let neg_z = z.negate()?;
-        let sqrt_neg_z = neg_z.sqrt();
+        let (_, sqrt_neg_z) = neg_z.sqrt();
         assert_eq!(c2, sqrt_neg_z);
     }
 

@@ -171,7 +171,7 @@ impl EccFieldElement {
     }
 
     /// Return true if and only if self is equal to zero
-    pub fn is_zero(&self) -> bool {
+    pub fn is_zero(&self) -> subtle::Choice {
         match self {
             Self::K256(x) => x.is_zero(),
             Self::P256(x) => x.is_zero(),
@@ -230,11 +230,22 @@ impl EccFieldElement {
         self.mul(self)
     }
 
+    /// Const time equality
+    ///
+    /// Same as == except returns subtle::Choice instead of a bool
+    pub fn ct_eq(&self, other: &Self) -> ThresholdEcdsaResult<subtle::Choice> {
+        match (self, other) {
+            (Self::K256(x), Self::K256(y)) => Ok(x.ct_eq(y)),
+            (Self::P256(x), Self::P256(y)) => Ok(x.ct_eq(y)),
+            (_, _) => Err(ThresholdEcdsaError::CurveMismatch),
+        }
+    }
+
     /// Conditional assignment
     ///
     /// If assign is true then set self to other. Otherwise self is left
     /// unmodified.
-    pub fn ct_assign(&mut self, other: &Self, assign: bool) -> ThresholdEcdsaResult<()> {
+    pub fn ct_assign(&mut self, other: &Self, assign: subtle::Choice) -> ThresholdEcdsaResult<()> {
         match (self, other) {
             (Self::K256(x), Self::K256(y)) => {
                 x.ct_assign(y, assign);
@@ -268,10 +279,18 @@ impl EccFieldElement {
     /// Return the modular square root of self
     ///
     /// Returns zero if self is zero or if no square root exists
-    pub fn sqrt(&self) -> Self {
+    ///
+    /// The validity of the result is decided by the returned Choice
+    pub fn sqrt(&self) -> (subtle::Choice, Self) {
         match self {
-            Self::K256(x) => Self::K256(x.sqrt()),
-            Self::P256(x) => Self::P256(x.sqrt()),
+            Self::K256(x) => {
+                let (valid, s) = x.sqrt();
+                (valid, Self::K256(s))
+            }
+            Self::P256(x) => {
+                let (valid, s) = x.sqrt();
+                (valid, Self::P256(s))
+            }
         }
     }
 

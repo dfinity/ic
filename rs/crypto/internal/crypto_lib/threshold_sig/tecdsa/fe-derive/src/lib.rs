@@ -203,7 +203,7 @@ fn define_fe_struct(config: &FieldElementConfig) -> proc_macro2::TokenStream {
 
         impl PartialEq for #ident {
             fn eq(&self, other: &Self) -> bool {
-                self.ct_eq(other)
+                bool::from(self.ct_eq(other))
             }
         }
         impl Eq for #ident {}
@@ -259,27 +259,29 @@ fn define_fe_struct(config: &FieldElementConfig) -> proc_macro2::TokenStream {
                 Self::from_limbs(Self::MONTY_R1)
             }
 
-            fn ct_eq(&self, other: &Self) -> bool {
-                let mut cmp = 0;
+            fn ct_eq(&self, other: &Self) -> subtle::Choice {
+                use subtle::ConstantTimeEq;
+
+                let mut cmp = subtle::Choice::from(1u8);
 
                 for i in 0..#limbs {
-                    cmp |= self.limbs[i] ^ other.limbs[i];
+                    cmp &= self.limbs[i].ct_eq(&other.limbs[i]);
                 }
 
-                cmp == 0
+                cmp
             }
 
             /// Return true if and only if self is equal to zero
-            pub fn is_zero(&self) -> bool {
+            pub fn is_zero(&self) -> subtle::Choice {
                 self.ct_eq(&Self::zero())
             }
 
             /// If assign is true then set self to other
-            pub fn ct_assign(&mut self, other: &Self, assign: bool) {
-                let mask = 0u64.wrapping_sub(assign as u64);
+            pub fn ct_assign(&mut self, other: &Self, assign: subtle::Choice) {
+                use subtle::ConditionallySelectable;
 
                 for i in 0..#limbs {
-                    self.limbs[i] = (self.limbs[i] & !mask) ^ (other.limbs[i] & mask);
+                    self.limbs[i] = u64::conditional_select(&self.limbs[i], &other.limbs[i], assign);
                 }
             }
 
@@ -497,16 +499,21 @@ fn p_3_mod_4_extras(config: &FieldElementConfig) -> proc_macro2::TokenStream {
             }
 
             /// Return the square root of self mod p, or zero if no square root exists.
-            pub fn sqrt(&self) -> Self {
+            ///
+            /// The validity of the result is determined by the returned Choice
+            pub fn sqrt(&self) -> (subtle::Choice, Self) {
                 // For p == 3 (mod 4) square root can be computed using x^(p+1)/4
-                let sqrt = self.pow_vartime(&Self::MODULUS_PLUS_1_OVER_4);
+                // though will be nonsense for non quadratic roots.
+                let mut sqrt = self.pow_vartime(&Self::MODULUS_PLUS_1_OVER_4);
 
-                // Check that the result is valid before returning
-                if sqrt.square().ct_eq(self) {
-                    return sqrt;
-                }
+                let sqrt2 = sqrt.square();
 
-                Self::zero()
+                let is_correct_sqrt = sqrt2.ct_eq(self);
+
+                // zero the result if invalid
+                sqrt.ct_assign(&Self::zero(), !is_correct_sqrt);
+
+                (is_correct_sqrt, sqrt)
             }
         }
     }
