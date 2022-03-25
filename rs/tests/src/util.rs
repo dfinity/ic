@@ -8,7 +8,7 @@ use ic_canister_client::{Agent as DeprecatedAgent, Sender};
 use ic_fondue::ic_manager::{IcEndpoint, IcHandle};
 use ic_ic00_types::{CanisterStatusResult, EmptyBlob};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
-use slog::info;
+use slog::{debug, info};
 
 use dfn_protobuf::{protobuf, ProtoBuf};
 use ic_agent::export::Principal;
@@ -244,6 +244,34 @@ impl<'a> UniversalCanister<'a> {
         self.read_stable(offset, len).await.unwrap_or_else(|err| {
             panic!("could not read message of len {} from stable: {}", len, err)
         })
+    }
+
+    /// Tries to read `len` bytes of the stable memory, starting from `offset`.
+    /// Panics if the read could not be performed after `max_retries`.
+    pub async fn try_read_stable_with_retries(
+        &self,
+        log: &slog::Logger,
+        offset: u32,
+        len: u32,
+        max_retries: u64,
+        retry_wait_sec: u64,
+    ) -> Vec<u8> {
+        for i in 0..max_retries + 1 {
+            debug!(log, "Reading from stable memory, attempt {}.", i + 1);
+            let result = self.read_stable(offset, len).await;
+            match result {
+                Ok(message) => return message,
+                Err(err) => {
+                    debug!(log, "Couldn't read from stable memory, err={}", err);
+                    debug!(log, "Retrying in {} secs...", retry_wait_sec);
+                    tokio::time::sleep(std::time::Duration::from_secs(retry_wait_sec)).await;
+                }
+            }
+        }
+        panic!(
+            "Could not read message from stable memory after {} retries.",
+            max_retries
+        );
     }
 
     /// Forwards a message to the `receiver` that calls
