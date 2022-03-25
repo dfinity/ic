@@ -133,19 +133,24 @@ pub fn basic_health_test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     // execute these within the context of the Tokio runtime, even though
     // there is no concurrency from this point forward.
     for ((n, (from, to)), expect) in nodes.iter().zip(canister_info).zip(expected_memory_values) {
+        let log = ctx.log.clone();
         n.with_default_agent(move |agent| async move {
             // Note: `from` is the canister id of the univeral canister that was
             // installed on `from`.
+            info!(log, "Initializing universal canister...");
             let ucan = UniversalCanister::from_canister_id(&agent, from);
 
             // Send a cross-subnet update message.
+            info!(log, "Sending update message to the universal canister...");
             ucan.forward_to(&to, "update", UniversalCanister::stable_writer(0, XNET_MSG))
                 .await
                 .expect("failed to send update message");
 
+            info!(log, "Assert correct read message from canister...");
             // Verify the originating canister now has the expected content.
             assert_eq!(
-                ucan.try_read_stable(0, expect.len() as u32).await,
+                ucan.try_read_stable_with_retries(&log, 0, expect.len() as u32, 10, 10)
+                    .await,
                 expect.to_vec()
             );
         });
