@@ -146,7 +146,7 @@ pub fn get_resource_request(
 }
 
 const DEFAULT_UNIVERSAL_VM_IMG_SHA256: &str =
-    "755933937e273b4ab0ceb570661437c6b1760dd3d95bbb838be42fb5bc15b6aa";
+    "d9e52eb68c6028682aee247723e2a6d90ad34651a6c074dace55d657362f5ca5";
 
 pub fn get_resource_request_for_universal_vm(
     universal_vm: &UniversalVm,

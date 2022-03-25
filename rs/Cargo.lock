@@ -4827,6 +4827,7 @@ dependencies = [
  "slog",
  "slog-async",
  "slog-term",
+ "ssh2",
  "structopt",
  "tempfile",
  "thiserror",
