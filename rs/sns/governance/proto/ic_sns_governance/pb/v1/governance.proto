@@ -5,27 +5,28 @@ package ic_sns_governance.pb.v1;
 import "ic_base_types/pb/v1/types.proto";
 import "ic_ledger/pb/v1/types.proto";
 
-// The different types of permissions that keys can have with regard
-// to Neurons.
+// The different types of neuron permissions, i.e., privileges to modify a neuron,
+// that principals can have.
 enum NeuronPermissionType {
   // Unused, here for PB lint purposes.
   NEURON_PERMISSION_TYPE_UNSPECIFIED = 0;
 
-  // The principal has permission to start/stop/increase the dissolve delay of the neuron.
+  // The principal has permission to configure the neuron's dissolve state. This includes
+  // start dissolving, stop dissolving, and increasing the dissolve delay for the neuron.
   NEURON_PERMISSION_TYPE_CONFIGURE_DISSOLVE_STATE = 1;
 
-  // The principal has permission to add more principals to control the
-  // neuron. See `NervousSystemParameters::neuron_claimer_permissions` and
-  // `NervousSystemParameters::neuron_grantable_permissions` for more
-  // details on what permissions can be granted by a principal.
+  // The principal has permission to add additional principals to modify the neuron.
+  // The nervous system parameter `NervousSystemParameters::neuron_grantable_permissions`
+  // determines the maximum set of privileges that a principal can grant to another principal in
+  // the given SNS.
   NEURON_PERMISSION_TYPE_MANAGE_PRINCIPALS = 2;
 
   // The principal has permission to submit proposals on behalf of the neuron.
-  // This is potentially a balance changing operation.
+  // Submitting proposals can change a neuron's stake and thus this
+  // is potentially a balance changing operation.
   NEURON_PERMISSION_TYPE_SUBMIT_PROPOSAL = 3;
 
-  // The principal has permission to vote and follow on behalf of the neuron.
-  // This is not a balance changing operation.
+  // The principal has permission to vote and follow other neurons on behalf of the neuron.
   NEURON_PERMISSION_TYPE_VOTE = 4;
 
   // The principal has permission to disburse the neuron.
@@ -45,15 +46,15 @@ enum NeuronPermissionType {
 
 // A principal with a particular set of permissions over a neuron.
 message NeuronPermission {
-  // The principal that has the permission.
+  // The principal that has the permissions.
   ic_base_types.pb.v1.PrincipalId principal = 1;
 
   // The list of permissions that this principal has.
   repeated NeuronPermissionType permission_type = 2;
 }
 
-// A container for the id of the neuron, which is the
-// subaccount the staking transfer was sent to.
+// The id of a specific neuron, which equals the neuron's subaccount on the ledger canister
+// (the account that holds the neuron's staked tokens).
 message NeuronId {
   bytes id = 1;
 }
@@ -63,61 +64,61 @@ message ProposalId {
   uint64 id = 1;
 }
 
-// This structure represents a neuron "at rest" in the governance system.
+// A neuron in the governance system.
 message Neuron {
   // The unique id of this neuron.
   NeuronId id = 1;
 
-  // The principal or list of principals that can control the various
-  // aspects of the Neuron.
+  // The principal or list of principals with a particular set of permissions over a neuron.
   repeated NeuronPermission permissions = 2;
 
-  // A cached record of staked governance tokens, measured in
+  // The cached record of the neuron's staked governance tokens, measured in
   // fractions of 10E-8 of a governance token.
   //
-  // There is a minimum cached state that can be set by each SNS. A neuron
-  // that is created must have at least that stake and a neuron that is spawn
-  // can only increase its dissolve delay if it has at least that stake.
+  // There is a minimum cached state, NervousSystemParameters::neuron_minimum_stake_e8s,
+  // that can be set by each SNS. Neurons that are created by claiming a neuron, spawning a neuron,
+  // or splitting a neuron must have at least that stake (in the case of splitting both the parent neuron
+  // and the new neuron must have at least that stake).
   uint64 cached_neuron_stake_e8s = 3;
 
-  // TODO change the proposal fees burn/minting algorithm to store this
-  // on the proposal at the time of submission.
+  // TODO NNS1-1052 - Update if this ticket is done and fees are burned / minted instead of tracked in this attribute.
   //
   // The amount of governance tokens that this neuron has forfeited
   // due to making proposals that were subsequently rejected.
-  // Must be smaller than 'neuron_stake_e8s'. When a neuron is
+  // Must be smaller than 'cached_neuron_stake_e8s'. When a neuron is
   // disbursed, these governance tokens will be burned.
   uint64 neuron_fees_e8s = 4;
 
-  // When the Neuron was created.
+  // The timestamp, in seconds from the Unix epoch, when the neuron was created.
   uint64 created_timestamp_seconds = 5;
 
-  // The timestamp, in seconds from the Unix epoch, corresponding to
-  // the time this neuron has entered the non-dissolving state. This
-  // is either the creation time or the last time at which the neuron
-  // has stopped dissolving.
+  // The timestamp, in seconds from the Unix epoch, when this neuron has entered
+  // the non-dissolving state. This is either the creation time or the last time at
+  // which the neuron has stopped dissolving.
   //
   // This value is meaningless when the neuron is dissolving, since a
   // dissolving neurons always has age zero. The canonical value of
   // this field for a dissolving neuron is `u64::MAX`.
   uint64 aging_since_timestamp_seconds = 6;
 
-  // At any time, at most only one of `when_dissolved` and
-  // `dissolve_delay` are specified.
+  // The neuron's dissolve state, specifying whether the neuron is dissolving,
+  // non-dissolving, or dissolved.
   //
-  // `NotDissolving`. This is represented by `dissolve_delay` being
+  // At any time, at most only one of `when_dissolved_timestamp_seconds` and
+  // `dissolve_delay_seconds` are specified.
+  //
+  // `NotDissolving`. This is represented by `dissolve_delay_seconds` being
   // set to a non zero value.
   //
-  // `Dissolving`. This is represented by `when_dissolved` being
+  // `Dissolving`. This is represented by `when_dissolved_timestamp_seconds` being
   // set, and this value is in the future.
   //
   // `Dissolved`. All other states represent the dissolved
-  // state. That is, (a) `when_dissolved` is set and in the past,
-  // (b) `dissolve_delay` is set to zero, (c) neither value is set.
+  // state. That is, (a) `when_dissolved_timestamp_seconds` is set and in the past,
+  // (b) `when_dissolved_timestamp_seconds` is set to zero, (c) neither value is set.
   oneof dissolve_state {
     // When the dissolve timer is running, this stores the timestamp,
-    // in seconds from the Unix epoch, at which the neuron becomes
-    // dissolved.
+    // in seconds from the Unix epoch, at which the neuron is dissolved.
     //
     // At any time while the neuron is dissolving, the neuron owner
     // may pause dissolving, in which case `dissolve_delay_seconds`
@@ -126,7 +127,7 @@ message Neuron {
     uint64 when_dissolved_timestamp_seconds = 7;
 
     // When the dissolve timer is stopped, this stores how much time,
-    // in seconds, the dissolve timer will be started with.
+    // in seconds, the dissolve timer will be started with if the neuron is set back to 'Dissolving'.
     //
     // At any time while in this state, the neuron owner may (re)start
     // dissolving, in which case `when_dissolved_timestamp_seconds`
@@ -135,146 +136,142 @@ message Neuron {
     uint64 dissolve_delay_seconds = 8;
   }
 
-  // Protobuf representing a list of followees of a neuron for a
-  // specific action.
-  message Followees { repeated NeuronId followees = 1; }
+  // A list of a neuron's followees for a specific action.
+  message Followees {repeated NeuronId followees = 1;}
 
-  // Map proposal action to followees. The key is represented by an integer as
-  // Protobuf does not support enum keys in maps.
+  // The neuron's followees, specified as a map of proposal actions to followees.
+  // The map's keys are represented by integers as Protobuf does not support enum keys in maps.
   map<uint64, Followees> followees = 11;
 
-  // The accumulated maturity of the neuron, in "e8s equivalent".
+  // The accumulated maturity of the neuron, measured in "e8s equivalent", i.e., in equivalent of
+  // 10E-8 of a governance token.
   //
-  // The unit is "e8s equivalent" to insist that, while this quantity is on
-  // the same scale as the governance tokens, maturity is not directly convertible to
+  // The unit is "equivalent" to insist that, while this quantity is on the
+  // same scale as the governance token, maturity is not directly convertible to
   // governance tokens: conversion requires a minting event.
   uint64 maturity_e8s_equivalent = 12;
 }
 
-// The types of votes the Neuron can issue.
+// The types of votes a neuron can issue.
 enum Vote {
   // This exists because proto3 defaults to the 0 value on enums.
   // This is not a valid choice, i.e., a vote with this choice will
   // not be counted.
   VOTE_UNSPECIFIED = 0;
 
-  // Vote for the proposal to be adopted.
+  // A vote for a proposal to be adopted.
   VOTE_YES = 1;
 
-  // Vote for the proposal to be rejected.
+  // A vote for a proposal to be rejected.
   VOTE_NO = 2;
 }
 
-// A NervousSystem function that can be executed by governance.
-// Each SNS function has a target canister and a target method, to which
-// the proposal will be sent, if accepted.
-// Optionally a validator_canister and a validator_method can be specified
-// to validate that the payload of the proposal is sane, prior to putting
+// A NervousSystem function that can be executed by governance as a result of an adopted proposal.
+// Each NervousSystem function has an id and a target canister and target method, that define
+// the method that will be called if the proposal is adopted.
+// Optionally, a validator_canister and a validator_method can be specified that define a method
+// that is called to validate that the proposal's payload is well-formed, prior to putting
 // it up for a vote.
-// Also optionally a rendering_canister and a rendering_method can be
-// specified to return a pretty-printed version of the contents of the proposal,
-// so that voters can inspect it.
+// TODO NNS1-1133 - Remove if there is no rendering canister/method?
+// Also optionally a rendering_canister and a rendering_method can be specified that define a method
+// that is called to return a pretty-printed version of the proposal's contents so that voters can inspect it.
 //
-// Note that target, validator and rendering methods can all coexist in
-// the same or separate canisters.
+// Note that the target, validator and rendering methods can all coexist in
+// the same canister or be on different canisters.
 message NervousSystemFunction {
   // The unique id of this function.
-  //
-  // Mandatory field.
   //
   // Ids 0-999 are reserved for core governance proposals and can't
   // be used by generic NervousSystemFunction's.
   uint64 id = 1;
 
-  // The id of the canister that will execute this proposal.
-  //
-  // Mandatory field.
+  // The id of the target canister that will be called to execute the proposal.
   ic_base_types.pb.v1.PrincipalId target_canister = 2;
 
-  // The name of the method that will execute the proposal.
+  // The name of the method that will be called to execute the proposal.
   // The signature of the method must be equivalent to the following:
   // <method_name>(proposal_data: ProposalData) -> Result<(), String>.
-  //
-  // Mandatory field.
   optional string target_method = 3;
 
-  // The id of the canister that will validate this proposal before
+  // The id of the canister that will be called to validate the proposal before
   // it is put up for a vote.
-  //
-  // Optional field.
   ic_base_types.pb.v1.PrincipalId validator_canister = 4;
 
-  // The name of the method to be called to validate this proposal
+  // The name of the method that will be called to validate the proposal
   // before it is put up for a vote.
   // The signature of the method must be equivalent to the following:
   // <method_name>(proposal_data: ProposalData) -> Result<(), String>
-  //
-  // Optional field.
   optional string validator_method = 5;
 }
 
-// Payload of a proposal that calls a function on another canister.
-// The canister and function to call is derived from the
-// `function_id`.
+// A proposal action defining a generic proposal, i.e., a proposal
+// that is not build into the standard SNS and calls a canister outside
+// the SNS for execution.
+// The canister and method to call are derived from the `function_id`.
 message ExecuteNervousSystemFunction {
   // This enum value determines what canister to call and what
   // function to call on that canister.
   uint64 function_id = 1;
 
-  // The payload of the SNS function.
+  // The payload of the nervous system function's payload.
   bytes payload = 2;
 }
 
-// If adopted, a motion should guide the future strategy of the
-// service's ecosystem.
+// A proposal action that should guide the future strategy of the SNS's
+// ecosystem but does not have immediate effect in the sense that a method is executed.
 message Motion {
-  // The text of the motion. Maximum 100kib.
+  // The text of the motion, which can at most be 100kib.
   string motion_text = 1;
 }
 
-// Upgrades a canister that is controlled by the SNS governance canister.
+// A proposal action that upgrades a canister that is controlled by the
+// SNS governance canister.
 message UpgradeGovernanceControlledCanister {
+  // The id of the canister that is upgraded.
   ic_base_types.pb.v1.PrincipalId canister_id = 1;
+  // The new wasm module that the canister is upgraded to.
   bytes new_canister_wasm = 2;
 }
 
-// A proposal is the immutable input of a proposal submission. This contains
-// all the information from the original proposal submission.
-//
-// Submitting a proposal implicitly votes yes.
+// A proposal is the immutable input of a proposal submission.
 message Proposal {
-  // Text with the title of the proposal.
-  // Can have a max of 256 bytes.
+  // The proposal's title as a text, which can be at most 256 bytes.
   string title = 1;
 
-  // Text providing a short description of the proposal, composed
+  // The description of the proposal which is a short text, composed
   // using a maximum of 15000 bytes of characters.
   string summary = 2;
 
-  // The Web address of additional content required to evaluate the
+  // The web address of additional content required to evaluate the
   // proposal, specified using HTTPS. The URL string must not be longer than
   // 2000 bytes.
   string url = 3;
 
-  // This section describes the action that the proposal proposes to
-  // take.
+  // The action that the proposal proposes to take on adoption.
   oneof action {
     // The `Unspecified` action is used as a fallback when
     // following. That is, if no followees are specified for a given
     // action, the followees for this action are used instead.
     Empty unspecified = 4;
 
-    // See [Motion]
+    // A motion that should guide the future strategy of the SNS's ecosystem
+    // but does not have immediate effect in the sense that a method is executed.
     Motion motion = 5;
 
-    // Propose a change to some parameters of the nervous system
+    // Change the nervous system's parameters.
+    // Note that a change of a parameter will only affect future actions where
+    // this parameter is relevant.
+    // For example, NervousSystemParameters::neuron_minimum_stake_e8s specifies the
+    // minimum amount of stake a neuron must have, which is checked at the time when
+    // the neuron is created. If this NervousSystemParameter is decreased, all neurons
+    // created after this change will have at least the new minimum stake. However,
+    // neurons created before this change may have less stake.
     NervousSystemParameters manage_nervous_system_parameters = 6;
 
     // Upgrade a canister that is controlled by the SNS governance canister.
     UpgradeGovernanceControlledCanister upgrade_sns_controlled_canister = 7;
 
-    // An update affecting something outside of the Governance
-    // canister.
+    // Execute a method outside the SNS canisters.
     ExecuteNervousSystemFunction execute_nervous_system_function = 8;
   }
 }
@@ -296,31 +293,28 @@ message GovernanceError {
     ERROR_TYPE_INVALID_COMMAND = 4;
 
     // The neuron is dissolving or dissolved and the operation requires it to
-    // be not dissolving (that is, having a non-zero dissolve delay that is
-    // accumulating age).
+    // be non-dissolving.
     ERROR_TYPE_REQUIRES_NOT_DISSOLVING = 5;
 
-    // The neuron is not dissolving or dissolved and the operation requires
-    // it to be dissolving (that is, having a non-zero dissolve delay with
-    // zero age that is not accumulating).
+    // The neuron is non-dissolving or dissolved and the operation requires
+    // it to be dissolving.
     ERROR_TYPE_REQUIRES_DISSOLVING = 6;
 
-    // The neuron is not dissolving and not dissolved and the operation
-    // requires it to be dissolved (that is, having a dissolve delay of zero
-    // and an age of zero).
+    // The neuron is non-dissolving or dissolving and the operation
+    // requires it to be dissolved.
     ERROR_TYPE_REQUIRES_DISSOLVED = 7;
 
     // TODO NNS1-1013 Need to update the error cases and use this error
     // type with the implemented method
     //
-    // Failed to adding or remove a NeuronPermissionType
+    // An attempt to add or remove a NeuronPermissionType failed.
     ERROR_ACCESS_CONTROL_LIST = 8;
 
     // Some canister side resource is exhausted, so this operation cannot be
     // performed.
     ERROR_TYPE_RESOURCE_EXHAUSTED = 9;
 
-    // Some precondition for executing this method was not met.
+    // Some precondition for executing this method is not met.
     ERROR_TYPE_PRECONDITION_FAILED = 10;
 
     // Executing this method failed for some reason external to the
@@ -331,10 +325,10 @@ message GovernanceError {
     // changed.
     ERROR_TYPE_NEURON_LOCKED = 12;
 
-    // There wasn't enough funds to perform the operation.
+    // There aren't sufficient funds to perform the operation.
     ERROR_TYPE_INSUFFICIENT_FUNDS = 13;
 
-    // The principal provided was invalid.
+    // The principal provided is invalid.
     ERROR_TYPE_INVALID_PRINCIPAL = 14;
 
     // The proposal is invalid.
@@ -348,37 +342,40 @@ message GovernanceError {
   string error_message = 2;
 }
 
-// A ballot can be filled out automatically using the follow mechanism (aka
-// delegation aka liquid democracy).
+// A ballot recording a neuron's vote and voting power.
+// A ballot's vote can be set by a direct vote from the neuron or can be set
+// automatically caused by a neuron following other neurons.
 //
-// Note that as of Feb, 2022, we disallow changing a ballot once it has been
-// filled out, even if the ballot was marked automatically via the follow
-// mechanism. This could be changed later though.
+// Once a ballot's vote is set it cannot be changed.
 message Ballot {
+  // The ballot's vote.
   Vote vote = 1;
+
+  // The voting power associated with the ballot. The voting power of a ballot
+  // associated with a neuron and a proposal is set at the proposal's creation
+  // time to the neuron's voting power at that time.
   uint64 voting_power = 2;
 
-  // Time when the vote field was populated with a decision (YES or NO, not
-  // UNDECIDED). Only meaningful when a decision has been made. As per our
-  // convention, seconds since the UNIX epoch.
+  // The time when the ballot's vote was populated with a decision (YES or NO, not
+  // UNDECIDED) in seconds since the UNIX epoch. This is only meaningful once a
+  // decision has been made and set to zero when the proposal associated with the
+  // ballot is created.
   uint64 cast_timestamp_seconds = 3;
 }
 
 // TODO this ends up being awfully verbose in code. Refactor for smaller enum::value naming
-// The proposal status, with respect to decision making and execution.
-// See also ProposalRewardStatus.
+// A proposal's status, with respect to decision making and execution.
 enum ProposalDecisionStatus {
   PROPOSAL_STATUS_UNSPECIFIED = 0;
 
-  // A decision (adopt/reject) has yet to be made.
+  // The proposal is open for voting and a decision (adopt/reject) has yet to be made.
   PROPOSAL_STATUS_OPEN = 1;
 
   // The proposal has been rejected.
   PROPOSAL_STATUS_REJECTED = 2;
 
-  // The proposal has been adopted (sometimes also called
-  // "accepted"). At this time, either execution as not yet started,
-  // or it has but the outcome is not yet known.
+  // The proposal has been adopted but either execution has not yet started
+  // or it has started but its outcome is not yet known.
   PROPOSAL_STATUS_ADOPTED = 3;
 
   // The proposal was adopted and successfully executed.
@@ -388,49 +385,57 @@ enum ProposalDecisionStatus {
   PROPOSAL_STATUS_FAILED = 5;
 }
 
-// The proposal status, with respect to reward distribution.
-// See also ProposalDecisionStatus.
+// A proposal's status, with respect to reward distribution.
 enum ProposalRewardStatus {
   PROPOSAL_REWARD_STATUS_UNSPECIFIED = 0;
 
-  // The proposal still accept votes, for the purpose of
-  // vote rewards. This implies nothing on the
-  // ProposalDecisionStatus.
+  // The proposal still accepts votes, for the purpose of
+  // voting rewards. This implies nothing on the
+  // ProposalDecisionStatus, i.e., a proposal can be decided
+  // due to an absolute majority being in favor or against it,
+  // but other neuron holders can still cast their vote to get rewards.
   PROPOSAL_REWARD_STATUS_ACCEPT_VOTES = 1;
 
   // The proposal no longer accepts votes. It is due to settle
-  // at the next reward event.
+  // rewards at the next reward event.
   PROPOSAL_REWARD_STATUS_READY_TO_SETTLE = 2;
 
-  // The proposal has been taken into account in a reward event.
+  // The proposal has been taken into account in a reward event, i.e.,
+  // the associated rewards have been settled.
   PROPOSAL_REWARD_STATUS_SETTLED = 3;
 }
 
-// A tally of votes.
+// A tally of votes associated with a proposal.
 message Tally {
-  // When was this tally made
+  // The time when this tally was made, in seconds from the Unix epoch.
   uint64 timestamp_seconds = 1;
 
-  // Yeses, in voting power unit.
+  // The number of yes votes, in voting power unit.
   uint64 yes = 2;
 
-  // Noes, in voting power unit.
+  // The number of no votes, in voting power unit.
   uint64 no = 3;
 
-  // Total voting power unit of eligible neurons that can vote.
-  // Should always be greater than or equal to yes + no.
+  // The total voting power unit of eligible neurons that can vote
+  // on the proposal that this tally is associated with (i.e., the sum
+  // of the voting power of yes, no, and undecided votes).
+  // This should always be greater than or equal to yes + no.
   uint64 total = 4;
 }
 
-// Stores data relevant to the "wait for quiet" implementation.
+// The wait-for-quiet state associated with a proposal, storing the
+// data relevant to the "wait-for-quiet" implementation.
 message WaitForQuietState {
+  // The current deadline of the proposal associated with this
+  // WaitForQuietState, in seconds from the Unix epoch.
   uint64 current_deadline_timestamp_seconds = 1;
 }
 
-// A ProposalData contains everything related to a proposal: the proposal
-// itself (immutable), as well as mutable data such as ballots.
+// The ProposalData that contains everything related to a proposal:
+// the proposal itself (immutable), as well as mutable data such as ballots.
 message ProposalData {
-  // The action of the proposal.
+  // TODO: update comments when clear
+  // The proposal's action.
   // Types 0-999 are reserved for current (and future) core governance
   // proposals that are not generic NervousSystemFunctions.
   //
@@ -448,50 +453,55 @@ message ProposalData {
   // This is stored here temporarily. It is also stored on the map
   // that contains proposals.
   //
-  // Immutable: The unique id for this proposal.
+  // The unique id for this proposal.
   ProposalId id = 2;
 
-  // Immutable: The ID of the neuron that made this proposal.
+  // The ID of the neuron that made this proposal.
   NeuronId proposer = 3;
 
-  // Immutable: The amount of governance token in e8s to be
+  // The amount of governance tokens in e8s to be
   // charged to the proposer if the proposal is rejected.
   uint64 reject_cost_e8s = 4;
 
-  // Immutable: The proposal originally submitted.
+  // The proposal originally submitted.
   Proposal proposal = 5;
 
-  // Immutable: The timestamp, in seconds from the Unix epoch,
+  // The timestamp, in seconds from the Unix epoch,
   // when this proposal was made.
   uint64 proposal_creation_timestamp_seconds = 6;
 
-  // Map NeuronId to the neuron's vote and voting power. Only
-  // present for as long as the proposal is not yet settled with
+  // The ballots associated with a proposal, given as a map which
+  // maps the neurons' NeuronId to the neurons' ballots. This is
+  // only present as long as the proposal is not settled with
   // respect to rewards.
   map<string, Ballot> ballots = 7;
 
-  // Latest tally. Recomputed for open proposals, when proposals are
-  // processed. If the proposal is decided (not open), then the tally
-  // will never change again. (But the ballots may still change as
-  // neurons may vote after the proposal has been decided.)
+  // The latest tally. The tally is computed only for open proposals when
+  // they are processed. Once a proposal is decided, i.e.,
+  // ProposalDecisionStatus isn't open anymore, the tally never changes
+  // again. (But the ballots may still change as neurons may vote after
+  // the proposal has been decided.)
   Tally latest_tally = 8;
 
-  // If specified: the timestamp when this proposal was adopted or
-  // rejected. If not specified, this proposal is still 'open'.
+  // The timestamp, in seconds since the Unix epoch, when this proposal
+  // was adopted or rejected. If not specified, the proposal is still 'open'.
   uint64 decided_timestamp_seconds = 9;
 
-  // When an adopted proposal has been executed, this is set to
-  // current timestamp.
+  // The timestamp, in seconds since the Unix epoch, when the (previously
+  // adopted) proposal has been executed. If not specified (i.e., still has
+  // the default value zero), the proposal has not (yet) been executed
+  // successfully.
   uint64 executed_timestamp_seconds = 10;
 
-  // When an adopted proposal has failed to be executed, this is set
-  // to the current timestamp.
+  // The timestamp, in seconds since the Unix epoch, when the (previously
+  // adopted) proposal has failed to be executed. If not specified (i.e.,
+  // still has the default value zero), the proposal has not (yet) failed
+  // to execute.
   uint64 failed_timestamp_seconds = 11;
 
-  // When an adopted proposal has failed to executed, this is set to the
-  // reason for the failure.
+  // The reason why the (previously adopted) proposal has failed to execute.
+  // If not specified, the proposal has not (yet) failed to execute.
   GovernanceError failure_reason = 12;
-
 
   // The reward event round at which rewards for votes on this proposal
   // were distributed.
@@ -502,56 +512,88 @@ message ProposalData {
   // This field matches field day_after_genesis in RewardEvent.
   uint64 reward_event_round = 13;
 
-  // Wait-for-quiet state that needs to be saved in stable memory.
+  // The proposal's wait-for-quiet state. This needs to be saved in stable memory.
   WaitForQuietState wait_for_quiet_state = 14;
 }
 
-// NervousSystemParameters contains the parameters for several operations related
-// to the running of the network.
+// The nervous system's parameters, which are parameters that can be changed, via proposals,
+// by each nervous system community.
+// For some of the values there are specified minimum values (floor) or maximum values
+// (ceiling). The motivation for this is a) to prevent that the nervous system accidentally
+// chooses parameters that result in an un-upgradable (and thus stuck) governance canister
+// and b) to prevent the canister from growing too big (which could harm the other canisters
+// on the subnet).
+//
+// Required invariant: the canister code assumes that all system parameters are always set.
 message NervousSystemParameters {
   // The number of e8s (10E-8 of a token) that a rejected
-  // proposal will cost.
+  // proposal costs the proposer.
   optional uint64 reject_cost_e8s = 1;
 
-  // The minimum number of e8s that can be staked in a neuron.
+  // The minimum number of e8s (10E-8 of a token) that can be staked in a neuron.
+  //
+  // To ensure that staking and disbursing of the neuron work, the chosen value
+  // must be larger than the transaction_fee_e8s.
   optional uint64 neuron_minimum_stake_e8s = 2;
 
-  // The transaction fee that must be paid for each ledger transaction.
+  // The transaction fee that must be paid for ledger transactions (except
+  // minting and burning governance tokens).
   optional uint64 transaction_fee_e8s = 3;
 
-  // The maximum number of proposals to keep, per type. When the
-  // total number of proposals for a given type is greater than this
-  // number, the oldest proposals that have reached a "final" state
-  // may be deleted.
+  // The maximum number of proposals to keep, per action. When the
+  // total number of proposals for a given action is greater than this
+  // number, the oldest proposals that have reached final decision state
+  // (rejected, executed, or failed) and final rewards status state
+  // (settled) may be deleted.
   //
-  // If unspecified or zero, all proposals are kept.
+  // The number must be larger than zero and at most be as large as the
+  // defined ceiling MAX_PROPOSALS_TO_KEEP_PER_ACTION_CEILING.
   optional uint32 max_proposals_to_keep_per_action = 4;
 
-  // The initial voting period of a proposal. A proposal's
-  // voting period may change during a proposal's lifecycle
-  // due to the wait-for-quiet algorithm.
+  // The initial voting period of a newly created proposal.
+  // A proposal's voting period may then be further increased during
+  // a proposal's lifecycle due to the wait-for-quiet algorithm.
+  //
+  // The voting period must be between (inclusive) the defined floor
+  // INITIAL_VOTING_PERIOD_FLOOR and ceiling
+  // INITIAL_VOTING_PERIOD_CEILING.
   optional uint64 initial_voting_period = 5;
 
-  // A mapping of proposal action to the followees that every neuron has as default.
+  // The set of default followees that every newly created neuron will follow
+  // per action. This is specified as a mapping of proposal actions to followees.
+  //
   // If unset, neurons will have no followees by default.
+  // The set of followees for each action can be at most of size
+  // max_followees_per_action.
   DefaultFollowees default_followees = 6;
 
-  // The max number of neurons allowed. When maximum is reached, no new
+  // The maximum number of allowed neurons. When this maximum is reached, no new
   // neurons will be created until some are removed.
+  //
+  // This number must be larger than zero and at most as large as the defined
+  // ceiling MAX_NUMBER_OF_NEURONS_CEILING.
   optional uint64 max_number_of_neurons = 7;
 
-  // The minimum dissolve delay a neuron must have to vote.
+  // The minimum dissolve delay a neuron must have to be eligible to vote.
+  //
+  // The chosen value must be smaller than max_dissolve_delay_seconds.
   optional uint64 neuron_minimum_dissolve_delay_to_vote_seconds = 8;
 
   // The maximum number of followees each neuron can establish for each action.
+  //
+  // This number can be at most as large as the defined ceiling
+  // MAX_FOLLOWEES_PER_ACTION_CEILING.
   optional uint64 max_followees_per_action = 9;
 
-  // The maximum dissolve delay allowed for a neuron.
+  // The maximum dissolve delay that a neuron can have. That is, the maximum
+  // that a neuron's dissolve delay can be increased to. The maximum is also enforced
+  // when saturating the dissolve delay bonus in the voting power computation.
   optional uint64 max_dissolve_delay_seconds = 10;
 
   // The age of a neuron that saturates the age bonus for the voting power computation.
   optional uint64 max_neuron_age_for_age_bonus = 12;
 
+  // TODO: update after SNS rewards are enabled.
   // The desired period for reward distribution events.
   //
   // No two consecutive reward events will happen with less then this duration in
@@ -562,30 +604,39 @@ message NervousSystemParameters {
   // this desired period by a few seconds.
   optional uint64 reward_distribution_period_seconds = 13;
 
-  // The max number of unsettled proposals -- that is proposals for which ballots
-  // are still stored.
+  // The max number of proposals for which ballots are still stored, i.e.,
+  // unsettled proposals. If this number of proposals is reached, new proposals
+  // can only be added in exceptional cases (for few proposals it is defined
+  // that they are allowed even if resoures are low to guarantee that the relevant
+  // canisters can be upgraded).
+  //
+  // This number must be larger than zero and at most as large as the defined
+  // ceiling MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS_CEILING.
   optional uint64 max_number_of_proposals_with_ballots = 14;
 
-  // The default set of permissions granted to the principal claiming a neuron.
+  // The default set of neuron permissions granted to the principal claiming a neuron.
   optional NeuronPermissionList neuron_claimer_permissions = 15;
 
-  // The superset of permissions a principal with permission `NeuronPermissionType::ManagePrincipals`
-  // can grant to other principals controlling a neuron. If this set changes via a
-  // ManageNervousSystemParameters proposal, previous neuron's permissions will be unchanged and only
-  // newly granted permissions will be affected.
+  // The superset of neuron permissions a principal with permission
+  // `NeuronPermissionType::ManagePrincipals` for a given neuron can grant to another
+  // principal for this same neuron.
+  // If this set changes via a ManageNervousSystemParameters proposal, previous
+  // neurons' permissions will be unchanged and only newly granted permissions will be affected.
   optional NeuronPermissionList neuron_grantable_permissions = 16;
 }
 
-// A mapping of proposal action to a set of default followees for that action
+// The set of default followees that every newly created neuron will follow per action.
+// This is specified as a mapping of proposal actions to followees for that action.
 message DefaultFollowees {
   map<uint64, Neuron.Followees> followees = 1;
 }
 
-// A wrapper for a list of permissions so it can be optionally provided.
+// A wrapper for a list of neuron permissions.
 message NeuronPermissionList {
   repeated NeuronPermissionType permissions = 1;
 }
 
+// TODO: update when rewards are introduced
 // A reward event is an event at which neuron maturity is increased
 message RewardEvent {
   // This reward event corresponds to a time interval that ends at the end of
@@ -620,23 +671,27 @@ message RewardEvent {
   uint64 distributed_e8s_equivalent = 4;
 }
 
-// This represents the whole governance system. It contains all
+// The representation of the whole governance system, containting all
 // information about the governance system that must be kept
-// across upgrades of the governance system.
+// across upgrades of the governance system, i.e. kept in stable memory.
 message Governance {
-  // The current set of neurons registered in governance.
+  // The current set of neurons registered in governance as a map from
+  // neuron IDs to neurons.
   map<string, Neuron> neurons = 1;
 
-  // The current set of proposals registered in governance.
+  // The current set of proposals registered in governance as a map
+  // from proposal IDs to the proposals' data.
   map<uint64, ProposalData> proposals = 2;
 
-  // The parameters that define the nervous system.
+  // The nervous system parameters that define and can be set by
+  // each nervous system.
   NervousSystemParameters parameters = 8;
 
-  // The last reward event. Should never be missing.
+  // TODO IC-1168: update when rewards are introduced
+  //  The latest reward event.
   RewardEvent latest_reward_event = 9;
 
-  // The possible commands that require a neuron lock.
+  // The commands that require a neuron lock.
   message NeuronInFlightCommand {
     // The timestamp at which the command was issued, for debugging
     // purposes.
@@ -651,11 +706,12 @@ message Governance {
     }
   }
 
-  // Set of in-flight neuron ledger commands.
+  // The in-flight neuron ledger commands as a map from neuron IDs
+  // to commands.
   //
-  // Whenever we issue a ledger transfer (for disburse, split etc)
-  // we store it in this map, keyed by the id of the neuron being changed
-  // and remove the entry when it completes.
+  // Whenever we change a neuron in a way that must not interleave
+  // with another neuron change, we store the neuron and the issued
+  // command in this map and remove it when the command is complete.
   //
   // An entry being present in this map acts like a "lock" on the neuron
   // and thus prevents concurrent changes that might happen due to the
@@ -673,42 +729,90 @@ message Governance {
   // added on upgrade, if necessary.
   map<string, NeuronInFlightCommand> in_flight_commands = 10;
 
-  // The timestamp, in seconds since the unix epoch, at which
-  // `canister_init` was run for the governance canister,
-  // considered genesis for the governance system.
+  // The timestamp that is considered genesis for the governance
+  // system, in seconds since the Unix epoch. That is, the time
+  // at which `canister_init` was run for the governance canister.
   uint64 genesis_timestamp_seconds = 11;
 
-  // Stores metrics that are too costly to compute each time metrics are
-  // requested
+  // Metrics that are too costly to compute each time when they are
+  // requested.
   message GovernanceCachedMetrics {
+
     reserved 16;
+
+    // The timestamp when these metrics were computed, as seconds since
+    // Unix epoch.
     uint64 timestamp_seconds = 1;
+
+    // The total supply of governance tokens in the ledger canister.
     uint64 total_supply_governance_tokens = 2;
+
+    // The number of dissolving neurons (i.e., in NeuronState::Dissolving).
     uint64 dissolving_neurons_count = 3;
+
+    // The number of staked governance tokens in dissolving neurons
+    // (i.e., in NeuronState::Dissolving) grouped by the neurons' dissolve delay
+    // rounded to years.
+    // This is given as a map from dissolve delays (rounded to years)
+    // to the sum of staked tokens in the dissolving neurons that have this
+    // dissolve delay.
     map<uint64, double> dissolving_neurons_e8s_buckets = 4;
+
+    // The number of dissolving neurons (i.e., in NeuronState::Dissolving)
+    // grouped by their dissolve delay rounded to years.
+    // This is given as a map from dissolve delays (rounded to years) to
+    // the number of dissolving neurons that have this dissolve delay.
     map<uint64, uint64> dissolving_neurons_count_buckets = 5;
+
+    // The number of non-dissolving neurons (i.e., in NeuronState::NotDissolving).
     uint64 not_dissolving_neurons_count = 6;
+
+    // The number of staked governance tokens in non-dissolving neurons
+    // (i.e., in NeuronState::NotDissolving) grouped by the neurons' dissolve delay
+    // rounded to years.
+    // This is given as a map from dissolve delays (rounded to years)
+    // to the sum of staked tokens in the non-dissolving neurons that have this
+    // dissolve delay.
     map<uint64, double> not_dissolving_neurons_e8s_buckets = 7;
+
+    // The number of non-dissolving neurons (i.e., in NeuronState::NotDissolving)
+    // grouped by their dissolve delay rounded to years.
+    // This is given as a map from dissolve delays (rounded to years) to
+    // the number of non-dissolving neurons that have this dissolve delay.
     map<uint64, uint64> not_dissolving_neurons_count_buckets = 8;
+
+    // The number of dissolved neurons (i.e., in NeuronState::Dissolved).
     uint64 dissolved_neurons_count = 9;
+
+    // The number of staked governance tokens in dissolved neurons
+    // (i.e., in NeuronState::Dissolved).
     uint64 dissolved_neurons_e8s = 10;
+
+    // The number of neurons that are garbage collectable, i.e., that
+    // have a cached stake smaller than the ledger transaction fee.
     uint64 garbage_collectable_neurons_count = 11;
+
+    // The number of neurons that have an invalid stake, i.e., that
+    // have a cached stake that is larger than zero but smaller than the
+    // minimum neuron stake defined in the nervous system parameters.
     uint64 neurons_with_invalid_stake_count = 12;
+
+    // The total amount of governance tokens that are staked in neurons,
+    // measured in fractions of 10E-8 of a governance token.
     uint64 total_staked_e8s = 13;
+
+    // TODO: rather than taking six months, it would be more interesting to take the respective SNS's eligibility boarder here.
+    // The number of neurons with a dissolve delay of less than six months.
     uint64 neurons_with_less_than_6_months_dissolve_delay_count = 14;
+
+    // The number of governance tokens in neurons with a dissolve delay of
+    // less than six months.
     uint64 neurons_with_less_than_6_months_dissolve_delay_e8s = 15;
   }
 
   GovernanceCachedMetrics metrics = 13;
 
-  // Permissions given to the principal that creates a new neuron.
-  repeated NeuronPermissionType first_principal_neuron_permissions = 14;
-
-  // Permissions allowed to be given by the principal that created
-  // the neuron to other principals.
-  repeated NeuronPermissionType other_principal_neuron_permissions = 15;
-
-  // The canister ID of the Ledger
+  // The canister ID of the ledger canister
   ic_base_types.pb.v1.PrincipalId ledger_canister_id = 16;
 }
 
@@ -716,24 +820,32 @@ message Governance {
 // enums.
 message Empty {}
 
-// All operations that modify the state of an existing neuron are
-// represented by instances of `ManageNeuron`.
+// An operation that modifies a neuron.
 message ManageNeuron {
-  // The subaccount the staking transfer was sent to
+  // The modified neuron's subaccount which also serves as the neuron's ID.
   bytes subaccount = 1;
 
-  // The dissolve delay of a neuron can be increased up to a maximum
-  // defined in the nervous system parameters/
+  // The operation that increases a neuron's dissolve delay. It can be
+  // increased up to a maximum defined in the nervous system parameters.
   message IncreaseDissolveDelay {
+    // The additional dissolve delay that should be added to the neuron's
+    // current dissolve delay.
     uint32 additional_dissolve_delay_seconds = 1;
   }
 
+  // The operation that starts dissolving a neuron, i.e., changes a neuron's
+  // state such that it is dissolving.
   message StartDissolving {}
+
+  // The operation that stops dissolving a neuron, i.e., changes a neuron's
+  // state such that it is non-dissolving.
   message StopDissolving {}
 
   // An (idempotent) alternative to IncreaseDissolveDelay where the dissolve delay
-  // is passed as an absolute timestamp in seconds since the unix epoch.
+  // is passed as an absolute timestamp in seconds since the Unix epoch.
   message SetDissolveTimestamp {
+    // The time when the neuron (newly) should become dissolved, in seconds
+    // since the Unix epoch.
     uint64 dissolve_timestamp_seconds = 1;
   }
 
@@ -749,41 +861,49 @@ message ManageNeuron {
     }
   }
 
-  // TODO update comment based on final implementation of disburse
-  // Disburse this neuron's stake: transfer the staked governance tokens to the
-  // specified account.
+  // The operation that disburses a given number of tokens or all of a
+  // neuron's tokens (if no argument is provided) to a given ledger account.
+  // Thereby, the neuron's accumulated fees are burned and (if relevant in
+  // the given nervous system) the token equivalent of the neuron's accumulated
+  // maturity are minted and also transferred to the specified account.
   message Disburse {
     message Amount {
       uint64 e8s = 1;
     }
 
-    // The (optional) amount to transfer. If not specified the cached
+    // The (optional) amount to disburse out of the neuron. If not specified the cached
     // stake is used.
     Amount amount = 1;
 
-    // The principal to which to transfer the stake.
+    // The ledger account to which the disbursed tokens are transferred.
     ic_ledger.pb.v1.AccountIdentifier to_account = 2;
   }
 
-  // TODO update comment based on final implementation of split
-  // Split this neuron into two neurons.
-  //
-  // The child neuron retains the parent neuron's properties.
+  // The operation that splits a neuron (called 'parent neuron'), or rather a neuron's stake,
+  // into two neurons.
+  // Specifically, the parent neuron's stake is decreased by the specified amount of
+  // governance tokens and a new 'child neuron' is created with a stake that equals
+  // this amount minus the transaction fee. The child neuron inherits from the parent neuron
+  // the permissions (i.e., principals that can change the neuron), the age, the followees, and
+  // the dissolve state. The parent neuron's fees and maturity (if applicable in the given
+  // nervous system) remain in the parent neuron and the child neuron's fees and maturity
+  // are initialized to be zero.
   message Split {
-    // The amount to split to the child neuron.
+    // The amount of governance tokens (in measured in fractions of 10E-8 of
+    // a governance token) to be split to the child neuron.
     uint64 amount_e8s = 1;
 
-    // The memo(nonce) provided when generating the subaccount of the new
-    // Neuron's NeuronId and it's resulting ledger transaction.
+    // The nonce that is used to compute the child neuron's
+    // subaccount which also serves as the child neuron's ID. This nonce
+    // is also used as the memo field in the ledger transfer that transfers
+    // the stake from the parent to the child neuron.
     uint64 memo = 2;
   }
 
-  // Merge the maturity of a neuron into the current stake.
-  // The caller can choose a percentage of the current maturity to merge into
-  // the existing stake. The resulting amount to merge must be greater than
-  // or equal to the transaction fee.
+  // The operation that merges a given percentage of a neuron's maturity (if applicable
+  // to the nervous system) to the neuron's stake.
   message MergeMaturity {
-    // The percentage to merge, from 1 to 100
+    // The percentage of maturity to merge, from 1 to 100.
     uint32 percentage_to_merge = 1;
   }
 
@@ -800,59 +920,72 @@ message ManageNeuron {
     ic_ledger.pb.v1.AccountIdentifier to_account = 2;
   }
 
-  // Add a rule that automatically triggers a vote for a neuron for
-  // proposals of a certain type, by specifying a group
-  // of followee neurons whose majority vote is followed. The
-  // configuration of such follow rules can be used to a) distribute
-  // control over voting power amongst multiple entities, b) have a
-  // neuron vote automatically when its owner lacks time to evaluate
-  // newly submitted proposals, c) have a neuron vote automatically
-  // when its owner lacks the expertise to evaluate newly submitted
-  // proposals, and d) for other purposes. A follow rule specifies a
-  // set of followees. Once a majority of the followees votes to adopt
+  // The operation that adds a new follow relation to a neuron, specifying
+  // that it follows a set of followee neurons for a given proposal action.
+  // If the neuron already has a defined follow relation for this proposal
+  // action, then the current list is replaced with the new list (not added).
+  // If the provided followee list is empty, the follow relation for this
+  // proposal action is removed.
+  //
+  // A follow relation has the effect that the governance canister will
+  // automatically cast a vote for the following neuron for proposals of
+  // the given action if a majority of the specified followees vote in the
+  // same way.
+  // In more detail, once a majority of the followees vote to adopt
   // or reject a proposal belonging to the specified action, the neuron
   // votes the same way. If it becomes impossible for a majority of
   // the followees to adopt (for example, because they are split 50-50
-  // between adopt and reject), then the neuron votes to reject. If a
-  // rule is specified where the proposal action is UNSPECIFIED, then it
-  // becomes a catch-all follow rule, which will be used to vote
+  // between adopt and reject), then the neuron votes to reject.
+  // If a rule is specified where the proposal action is UNSPECIFIED,
+  // then it becomes a catch-all follow rule, which will be used to vote
   // automatically on proposals with actions for which no
   // specific rule has been specified.
-  //
-  // If the list 'followees' is empty, this removes following for a
-  // specific action.
   message Follow {
+    // The proposal action defining for which proposals this
+    // follow relation is relevant.
     uint64 action_type = 1;
+
+    // The list of followee neurons, specified by their neuron ID.
     repeated NeuronId followees = 2;
   }
 
-  // Have the neuron vote to either adopt or reject a proposal with a specified
-  // id.
+  // The operation that registers a given vote from the neuron for a given
+  // proposal (a directly cast vote as opposed to a vote that is cast as
+  // a result of a follow relation).
   message RegisterVote {
+    // The ID of the proposal that the vote is cast for.
     ProposalId proposal = 1;
+
+    // The vote that is cast to adopt or reject the proposal.
     Vote vote = 2;
   }
 
-  // Claim a new neuron or refresh the stake of an existing neuron.
+  // The operation that claims a new neuron (if it does not exist yet) or
+  // refreshes the stake of the neuron (if it already exists).
   message ClaimOrRefresh {
+    // (see MemoAndController below)
     message MemoAndController {
-      // The memo(nonce) used when generating the subaccount where the
-      // governance token was staked to.
+      // The memo(nonce) that is used to compute the neuron's subaccount
+      // (where the tokens were staked to).
       uint64 memo = 1;
 
+      // The principal for which the neuron should be claimed.
       ic_base_types.pb.v1.PrincipalId controller = 2;
     }
 
     oneof by {
-      // Claim or refresh a neuron, by providing the memo used in the
-      // staking transfer and 'controller' as the principal id used to
-      // calculate the subaccount to which the transfer was made. If
-      // 'controller' is omitted, the principal id of the caller is
-      // used.
+      // The memo and principal used to define the neuron to be claimed
+      // or refreshed. Specifically, the memo (nonce) and the given principal
+      // (called 'controller' or 'claimer') are used to compute the ledger
+      // subaccount to which the staked tokens to be used for claiming or
+      // refreshing a neuron were transferred to.
+      // If 'controller' is omitted, the id of the principal who calls this
+      // operation will be used.
       MemoAndController memo_and_controller = 2;
 
-      // This just serves as a tag to indicate that the neuron should be
-      // refreshed by it's id. This does not work to claim new neurons.
+      // The neuron ID of a neuron that should be refreshed. This just serves
+      // as an alternative way to specify a neuron to be refreshed, but cannot
+      // be used to claim new neurons.
       Empty neuron_id = 3;
     }
   }
@@ -861,6 +994,8 @@ message ManageNeuron {
     Configure configure = 2;
     Disburse disburse = 3;
     Follow follow = 4;
+    // Making a proposal is defined by a proposal, which contains the proposer neuron.
+    // Making a proposal will implicitly cast a yes vote for the proposing neuron.
     Proposal make_proposal = 5;
     RegisterVote register_vote = 6;
     Split split = 7;
@@ -870,22 +1005,31 @@ message ManageNeuron {
   }
 }
 
-// The response of the ManageNeuron command
-//
-// There is a dedicated response type for each `ManageNeuron.command` field
+// The response of a ManageNeuron command.
+// There is a dedicated response type for each `ManageNeuron.command` field.
 message ManageNeuronResponse {
+  // The response to the ManageNeuron command 'configure'.
   message ConfigureResponse {}
 
+  // The response to the ManageNeuron command 'disburse'.
   message DisburseResponse {
-    // The block height at which the disburse transfer happened
+    // The block height of the ledger where the tokens were disbursed to the
+    // given account.
     uint64 transfer_block_height = 1;
   }
 
+  // The response to the ManageNeuron command 'merge_maturity'.
   message MergeMaturityResponse {
+    // The maturity that was merged in fractions of
+    // 10E-8 of a governance token.
     uint64 merged_maturity_e8s = 1;
+
+    // The resulting cached stake of the modified neuron
+    // in fractions of 10E-8 of a governance token.
     uint64 new_stake_e8s = 2;
   }
 
+  // The response to the DisburseMaturity command 'disburse_maturity'.
   message DisburseMaturityResponse {
     // The block height at which the disburse maturity transfer happened.
     uint64 transfer_block_height = 1;
@@ -894,21 +1038,28 @@ message ManageNeuronResponse {
     uint64 amount_disbursed_e8s = 2;
   }
 
+  // The response to the ManageNeuron command 'follow'.
   message FollowResponse {}
 
+  // The response to the ManageNeuron command 'make_proposal'.
   message MakeProposalResponse {
-    // The ID of the created proposal
+    // The ID of the created proposal.
     ProposalId proposal_id = 1;
   }
 
+  // The response to the ManageNeuron command 'register_vote'.
   message RegisterVoteResponse {}
 
+  // The response to the ManageNeuron command 'split'.
   message SplitResponse {
-    // The ID of the Neuron created from splitting another Neuron
+    // The ID of the 'child neuron' that was newly created.
     NeuronId created_neuron_id = 1;
   }
 
+  // The response to the ManageNeuron command 'claim_or_refresh'.
   message ClaimOrRefreshResponse {
+    // The neuron ID of the neuron that was newly claimed or
+    // refreshed.
     NeuronId refreshed_neuron_id = 1;
   }
 
@@ -926,22 +1077,30 @@ message ManageNeuronResponse {
   }
 }
 
+// An operation that attempts to get a neuron by a given neuron ID.
 message GetNeuron {
   NeuronId neuron_id = 1;
 }
 
+// A response to the GetNeuron command.
 message GetNeuronResponse {
+  // The response to a GetNeuron command is either an error or
+  // the requested neuron.
   oneof result {
     GovernanceError error = 1;
     Neuron neuron = 2;
   }
 }
 
+// An operation that attempts to get a proposal by a given proposal ID.
 message GetProposal {
   ProposalId proposal_id = 1;
 }
 
+// A response to the GetProposal command.
 message GetProposalResponse {
+  // The response to a GetProposal command is either an error or
+  // the proposal data corresponding to the requested proposal.
   oneof result {
     GovernanceError error = 1;
     ProposalData proposal = 2;
