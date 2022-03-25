@@ -59,14 +59,10 @@ impl ProposalData {
         }
     }
 
-    pub fn reward_status(
-        &self,
-        now_seconds: u64,
-        voting_period_seconds: u64,
-    ) -> ProposalRewardStatus {
+    pub fn reward_status(&self, now_seconds: u64) -> ProposalRewardStatus {
         match self.reward_event_round {
             0 => {
-                if self.accepts_vote(now_seconds, voting_period_seconds) {
+                if self.accepts_vote(now_seconds) {
                     ProposalRewardStatus::AcceptVotes
                 } else {
                     ProposalRewardStatus::ReadyToSettle
@@ -76,13 +72,11 @@ impl ProposalData {
         }
     }
 
-    pub fn get_deadline_timestamp_seconds(&self, voting_period_seconds: u64) -> u64 {
-        if let Some(wait_for_quiet_state) = &self.wait_for_quiet_state {
-            wait_for_quiet_state.current_deadline_timestamp_seconds
-        } else {
-            self.proposal_creation_timestamp_seconds
-                .saturating_add(voting_period_seconds)
-        }
+    pub fn get_deadline_timestamp_seconds(&self) -> u64 {
+        self.wait_for_quiet_state
+            .as_ref()
+            .expect("Proposal must have a wait_for_quiet_state.")
+            .current_deadline_timestamp_seconds
     }
 
     /// Returns true if votes are still accepted for this proposal and
@@ -93,16 +87,16 @@ impl ProposalData {
     /// affect the decision on the proposal, but they affect the
     /// voting rewards of the voting neuron.
     ///
-    /// This, this method can return true even if the proposal is
+    /// This method can return true even if the proposal is
     /// already decided.
-    pub fn accepts_vote(&self, now_seconds: u64, voting_period_seconds: u64) -> bool {
+    pub fn accepts_vote(&self, now_seconds: u64) -> bool {
         // Naive version of the wait-for-quiet mechanics. For now just tests
         // that the proposal duration is smaller than the threshold, which
         // we're just currently setting as seconds.
         //
         // Wait for quiet is meant to be able to decide proposals without
         // quorum. The tally must have been done above already.
-        now_seconds < self.get_deadline_timestamp_seconds(voting_period_seconds)
+        now_seconds < self.get_deadline_timestamp_seconds()
     }
 
     pub fn evaluate_wait_for_quiet(
@@ -112,10 +106,10 @@ impl ProposalData {
         old_tally: &Tally,
         new_tally: &Tally,
     ) {
-        let wait_for_quiet_state = match self.wait_for_quiet_state.as_mut() {
-            Some(wait_for_quiet_state) => wait_for_quiet_state,
-            None => return,
-        };
+        let wait_for_quiet_state = self
+            .wait_for_quiet_state
+            .as_mut()
+            .expect("Proposal must have a wait_for_quiet_state.");
 
         // Dont evaluate wait for quiet if there is already a decision, or the
         // deadline has been met. The deciding amount for yes and no are
@@ -248,12 +242,8 @@ impl ProposalData {
     /// result is only meaningful if the deadline has passed.
     pub fn is_accepted(&self) -> bool {
         if let Some(tally) = self.latest_tally.as_ref() {
-            if self.wait_for_quiet_state.is_none() {
-                tally.is_absolute_majority_for_yes()
-            } else {
-                (tally.yes as f64 >= tally.total as f64 * MIN_NUMBER_VOTES_FOR_PROPOSAL_RATIO)
-                    && tally.yes > tally.no
-            }
+            (tally.yes as f64 >= tally.total as f64 * MIN_NUMBER_VOTES_FOR_PROPOSAL_RATIO)
+                && tally.yes > tally.no
         } else {
             false
         }
@@ -262,7 +252,7 @@ impl ProposalData {
     /// Returns true if a decision may be made right now to adopt or
     /// reject this proposal. The proposal must be tallied prior to
     /// calling this method.
-    pub(crate) fn can_make_decision(&self, now_seconds: u64, voting_period_seconds: u64) -> bool {
+    pub(crate) fn can_make_decision(&self, now_seconds: u64) -> bool {
         if let Some(tally) = &self.latest_tally {
             // A proposal is adopted if strictly more than half of the
             // votes are 'yes' and rejected if at least half of the votes
@@ -271,7 +261,7 @@ impl ProposalData {
             // equivalent to (2 * yes > total) || (2 * no >= total).
             let majority =
                 (tally.yes > tally.total - tally.yes) || (tally.no >= tally.total - tally.no);
-            let expired = !self.accepts_vote(now_seconds, voting_period_seconds);
+            let expired = !self.accepts_vote(now_seconds);
             let decision_reason = match (majority, expired) {
                 (true, true) => Some("majority and expiration"),
                 (true, false) => Some("majority"),
@@ -296,11 +286,8 @@ impl ProposalData {
 
     /// Return true if this proposal can be purged from storage, e.g.,
     /// if it is allowed to be garbage collected.
-    pub(crate) fn can_be_purged(&self, now_seconds: u64, voting_period_seconds: u64) -> bool {
-        self.status().is_final()
-            && self
-                .reward_status(now_seconds, voting_period_seconds)
-                .is_final()
+    pub(crate) fn can_be_purged(&self, now_seconds: u64) -> bool {
+        self.status().is_final() && self.reward_status(now_seconds).is_final()
     }
 }
 
