@@ -16,6 +16,7 @@ ExecStart=/etc/nginx/ic_networks/{{ ic }}/icx-proxy --address {{ icx_address }} 
 Restart=always
 RestartSec=10
 KillSignal=SIGINT
+Environment=RUST_BACKTRACE=1
 StartLimitBurst=5
 StartLimitInterval=0
 
