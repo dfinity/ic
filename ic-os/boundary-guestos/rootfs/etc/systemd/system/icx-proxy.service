@@ -6,6 +6,7 @@ After=syslog.target
 User=root
 Group=root
 WorkingDirectory=/etc/nginx/ic
+Environment=RUST_BACKTRACE=1
 ExecStartPre=/bin/sh -c "systemctl set-environment HOST_NAME=$(hostname)"
 ExecStart=/usr/bin/icx-proxy --address 127.0.0.1:9500 --replica https://${HOST_NAME}:8000/ --dns-alias personhood.ic0.app:g3wsl-eqaaa-aaaan-aaaaa-cai --dns-alias personhood.raw.ic0.app:g3wsl-eqaaa-aaaan-aaaaa-cai --dns-alias identity.ic0.app:rdmx6-jaaaa-aaaaa-aaadq-cai --dns-alias identity.raw.ic0.app:rdmx6-jaaaa-aaaaa-aaadq-cai --dns-alias identity.mainnet.dfinity.network:rdmx6-jaaaa-aaaaa-aaadq-cai --dns-alias nns.ic0.app:qoctq-giaaa-aaaaa-aaaea-cai --dns-alias nns.raw.ic0.app:qoctq-giaaa-aaaaa-aaaea-cai --dns-alias nns.mainnet.dfinity.network:qoctq-giaaa-aaaaa-aaaea-cai --dns-alias dscvr.ic0.app:h5aet-waaaa-aaaab-qaamq-cai --dns-alias dscvr.raw.ic0.app:h5aet-waaaa-aaaab-qaamq-cai
 

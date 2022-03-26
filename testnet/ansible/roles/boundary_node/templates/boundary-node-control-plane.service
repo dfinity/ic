@@ -10,6 +10,7 @@ ExecStart=/etc/nginx/ic_networks/{{ ic }}/boundary-node-control-plane --nns_urls
 Restart=always
 RestartSec=10
 KillSignal=SIGINT
+Environment=RUST_BACKTRACE=1
 StartLimitBurst=5
 StartLimitInterval=0
 
