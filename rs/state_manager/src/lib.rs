@@ -612,9 +612,6 @@ pub struct StateManagerImpl {
     // requested quite often and this causes high contention on the lock.
     latest_state_height: AtomicU64,
     latest_certified_height: AtomicU64,
-    // The last height passed to remove_states_below()
-    // Deprecated. Only used to allow safe downgrades.
-    requested_to_remove_states_below: Arc<AtomicU64>,
     state_sync_refs: StateSyncRefs,
     checkpoint_thread_pool: Arc<Mutex<scoped_threadpool::Pool>>,
     _state_hasher_handle: JoinOnDrop<()>,
@@ -942,7 +939,6 @@ fn persist_metadata_or_die(
     log: &ReplicaLogger,
     metrics: &StateManagerMetrics,
     state_layout: &StateLayout,
-    requested_to_remove_states_below: &AtomicU64,
     metadata: &StatesMetadata,
 ) {
     use std::io::Write;
@@ -958,11 +954,6 @@ fn persist_metadata_or_die(
         for (h, m) in metadata.iter() {
             pb_meta.by_height.insert(h.get(), m.into());
         }
-
-        // Even though we no longer read the persisted height on
-        // startup, we still persist the value to allow safe
-        // downgrades to earlier replica versions.
-        pb_meta.oldest_required_state = requested_to_remove_states_below.load(Ordering::Relaxed);
 
         let mut buf = vec![];
         pb_meta.encode(&mut buf).unwrap_or_else(|e| {
@@ -1152,10 +1143,6 @@ impl StateManagerImpl {
 
         let (compute_manifest_request_sender, compute_manifest_request_receiver) = unbounded();
 
-        let requested_to_remove_states_below = Arc::new(AtomicU64::new(
-            starting_height.unwrap_or(Self::INITIAL_STATE_HEIGHT).get(),
-        ));
-
         let _state_hasher_handle = JoinOnDrop::new(
             std::thread::Builder::new()
                 .name("StateHasher".to_string())
@@ -1165,8 +1152,6 @@ impl StateManagerImpl {
                     let metrics = metrics.clone();
                     let checkpoint_thread_pool = Arc::clone(&checkpoint_thread_pool);
                     let state_layout = state_layout.clone();
-                    let requested_to_remove_states_below =
-                        Arc::clone(&requested_to_remove_states_below);
                     move || {
                         while let Ok(req) = compute_manifest_request_receiver.recv() {
                             // NB. we should lock the pool for the duration of only a single
@@ -1179,7 +1164,6 @@ impl StateManagerImpl {
                                 &log,
                                 &states,
                                 &state_layout,
-                                &requested_to_remove_states_below,
                                 req,
                                 &malicious_flags,
                             );
@@ -1225,7 +1209,6 @@ impl StateManagerImpl {
             deallocation_sender,
             latest_state_height,
             latest_certified_height,
-            requested_to_remove_states_below,
             state_sync_refs: StateSyncRefs::new(log),
             checkpoint_thread_pool,
             _state_hasher_handle,
@@ -1334,13 +1317,7 @@ impl StateManagerImpl {
     }
 
     fn persist_metadata_or_die(&self, metadata: &StatesMetadata) {
-        persist_metadata_or_die(
-            &self.log,
-            &self.metrics,
-            &self.state_layout,
-            &self.requested_to_remove_states_below,
-            metadata,
-        );
+        persist_metadata_or_die(&self.log, &self.metrics, &self.state_layout, metadata);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1350,7 +1327,6 @@ impl StateManagerImpl {
         log: &ReplicaLogger,
         states: &parking_lot::RwLock<SharedState>,
         state_layout: &StateLayout,
-        requested_to_remove_states_below: &AtomicU64,
         req: ComputeManifestRequest,
         #[allow(unused_variables)] malicious_flags: &MaliciousFlags,
     ) {
@@ -1436,13 +1412,7 @@ impl StateManagerImpl {
             metadata.manifest = Some(manifest);
         }
 
-        persist_metadata_or_die(
-            log,
-            metrics,
-            state_layout,
-            requested_to_remove_states_below,
-            &states.states_metadata,
-        );
+        persist_metadata_or_die(log, metrics, state_layout, &states.states_metadata);
     }
 
     fn latest_certified_state(
@@ -2224,9 +2194,6 @@ impl StateManager for StateManagerImpl {
             });
 
         let mut states = self.states.write();
-
-        self.requested_to_remove_states_below
-            .store(requested_height.get(), Ordering::Relaxed);
 
         // Send object to deallocation thread if it has capacity.
         let deallocate = |x| {
