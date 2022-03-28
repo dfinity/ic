@@ -4,7 +4,7 @@ use ic_config::{
     subnet_config::SubnetConfigs,
 };
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_execution_environment::setup_execution;
+use ic_execution_environment::ExecutionServices;
 use ic_interfaces::{execution_environment::IngressHistoryReader, messaging::MessageRouting};
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_messaging::MessageRoutingImpl;
@@ -202,16 +202,18 @@ fn criterion_calls(criterion: &mut Criterion) {
         ic_types::malicious_flags::MaliciousFlags::default(),
     ));
 
-    let (_, ingress_history_writer, ingress_hist_reader, _, _, scheduler) = setup_execution(
-        bench_replica.log.clone(),
-        &bench_replica.metrics_registry,
-        bench_replica.replica_config.subnet_id,
-        subnet_type,
-        subnet_config.scheduler_config,
-        ExecutionConfig::default(),
-        Arc::clone(&cycles_account_manager),
-        Arc::clone(&state_manager) as Arc<_>,
-    );
+    let (_, ingress_history_writer, ingress_history_reader, _, _, _, scheduler) =
+        ExecutionServices::setup_execution(
+            bench_replica.log.clone(),
+            &bench_replica.metrics_registry,
+            bench_replica.replica_config.subnet_id,
+            subnet_type,
+            subnet_config.scheduler_config,
+            ExecutionConfig::default(),
+            Arc::clone(&cycles_account_manager),
+            Arc::clone(&state_manager) as Arc<_>,
+        )
+        .into_parts();
 
     let mut group = criterion.benchmark_group("user calls");
 
@@ -233,7 +235,7 @@ fn criterion_calls(criterion: &mut Criterion) {
         signed_ingress: SignedIngress,
     }
 
-    bench_replica.install(&message_routing, ingress_hist_reader.as_ref());
+    bench_replica.install(&message_routing, ingress_history_reader.as_ref());
 
     group.bench_function("single-node update", |bench| {
         bench.iter_with_setup(
@@ -259,7 +261,7 @@ fn criterion_calls(criterion: &mut Criterion) {
             },
             |data| {
                 bench_replica.ingress_directly(
-                    ingress_hist_reader.as_ref(),
+                    ingress_history_reader.as_ref(),
                     &message_routing,
                     data.message_id,
                     data.signed_ingress,

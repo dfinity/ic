@@ -4,7 +4,7 @@ use crate::message::{msg_stream_from_file, Message};
 use hex::encode;
 use ic_config::{subnet_config::SubnetConfigs, Config};
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_execution_environment::setup_execution;
+use ic_execution_environment::ExecutionServices;
 use ic_interfaces::{execution_environment::IngressHistoryReader, messaging::MessageRouting};
 use ic_interfaces_state_manager::StateReader;
 use ic_messaging::MessageRoutingImpl;
@@ -198,8 +198,8 @@ pub fn run_drun(uo: DrunOptions) -> Result<(), String> {
         None,
         ic_types::malicious_flags::MaliciousFlags::default(),
     ));
-    let (_, ingress_history_writer, ingress_hist_reader, query_handler, _, scheduler) =
-        setup_execution(
+    let (_, ingress_history_writer, ingress_hist_reader, query_handler, _, _, scheduler) =
+        ExecutionServices::setup_execution(
             log.clone().into(),
             &metrics_registry,
             replica_config.subnet_id,
@@ -208,7 +208,9 @@ pub fn run_drun(uo: DrunOptions) -> Result<(), String> {
             cfg.hypervisor.clone(),
             Arc::clone(&cycles_account_manager),
             Arc::clone(&state_manager) as Arc<_>,
-        );
+        )
+        .into_parts();
+
     let _metrics_runtime = MetricsRuntimeImpl::new_insecure(
         tokio::runtime::Handle::current(),
         cfg.metrics,

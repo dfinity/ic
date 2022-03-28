@@ -11,7 +11,7 @@ use ic_consensus::consensus::{
     batch_delivery::deliver_batches, pool_reader::PoolReader, utils::crypto_hashable_to_seed,
 };
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_execution_environment::setup_execution;
+use ic_execution_environment::ExecutionServices;
 use ic_interfaces::{
     certification::CertificationPool,
     certification::Verifier,
@@ -261,22 +261,21 @@ impl Player {
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
         ));
-        let (_, ingress_history_writer, ingress_history_reader, http_query_handler, _, scheduler) =
-            setup_execution(
-                log.clone(),
-                &metrics_registry,
-                subnet_id,
-                subnet_type,
-                subnet_config.scheduler_config,
-                cfg.hypervisor.clone(),
-                Arc::clone(&cycles_account_manager),
-                Arc::clone(&state_manager) as Arc<_>,
-            );
+        let execution_service = ExecutionServices::setup_execution(
+            log.clone(),
+            &metrics_registry,
+            subnet_id,
+            subnet_type,
+            subnet_config.scheduler_config,
+            cfg.hypervisor.clone(),
+            Arc::clone(&cycles_account_manager),
+            Arc::clone(&state_manager) as Arc<_>,
+        );
         let message_routing = MessageRoutingImpl::new(
             state_manager.clone(),
             state_manager.clone(),
-            ingress_history_writer.clone(),
-            scheduler,
+            execution_service.ingress_history_writer.clone(),
+            execution_service.scheduler,
             cfg.hypervisor,
             cycles_account_manager,
             subnet_id,
@@ -288,7 +287,7 @@ impl Player {
             Some(CertificationPoolImpl::new(
                 ArtifactPoolConfig::from(cfg.artifact_pool.clone()),
                 log.clone(),
-                metrics_registry.clone(),
+                metrics_registry,
             ))
         } else {
             None
@@ -298,8 +297,8 @@ impl Player {
             state_manager,
             message_routing,
             consensus_pool,
-            http_query_handler,
-            ingress_history_reader,
+            http_query_handler: execution_service.sync_query_handler,
+            ingress_history_reader: execution_service.ingress_history_reader,
             certification_pool,
             registry,
             local_store_path,

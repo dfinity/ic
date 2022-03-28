@@ -1,6 +1,6 @@
 use ic_config::execution_environment::Config;
 use ic_config::subnet_config::SubnetConfigs;
-use ic_execution_environment::setup_execution;
+use ic_execution_environment::ExecutionServices;
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
@@ -40,7 +40,7 @@ async fn query_non_existent() {
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let state_manager = Arc::new(FakeStateManager::new());
 
-        let (_, _, _, query_handler, _, _) = setup_execution(
+        let execution_services = ExecutionServices::setup_execution(
             log,
             &metrics_registry,
             subnet_id,
@@ -52,7 +52,7 @@ async fn query_non_existent() {
         );
 
         let receiver = CanisterId::from(1234);
-        match query_handler.query(
+        match execution_services.sync_query_handler.query(
             UserQuery {
                 source: user_test_id(2),
                 receiver,

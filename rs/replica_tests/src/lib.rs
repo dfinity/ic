@@ -387,6 +387,7 @@ where
             state_manager,
             query_handler,
             _,
+            _,
             _p2p_thread_joiner,
             ingress_ingestion_service,
             _,
