@@ -383,12 +383,13 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             .await
             .unwrap();
         assert_eq!(
-            tst.get_balance(user1.acc_for_topup(&new_canister_id)).await,
+            tst.get_balance(user1.acc_for_top_up(&new_canister_id))
+                .await,
             Tokens::ZERO,
             "All funds from cmc subaccount should have disappeared"
         );
 
-        let bh = user1.pay_for_topup(topup2, None, &new_canister_id).await;
+        let bh = user1.pay_for_top_up(topup2, None, &new_canister_id).await;
         user1
             .notify_top_up_cmc(bh, None, &new_canister_id)
             .await
@@ -399,7 +400,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             .await
             .unwrap_err();
 
-        let bh = user1.pay_for_topup(topup3, None, &new_canister_id).await;
+        let bh = user1.pay_for_top_up(topup3, None, &new_canister_id).await;
 
         user1
             .notify_top_up_ledger(bh, None, &new_canister_id)
@@ -412,16 +413,13 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             .unwrap_err();
 
         assert_eq!(
-            tst.get_balance(user1.acc_for_topup(&new_canister_id)).await,
+            tst.get_balance(user1.acc_for_top_up(&new_canister_id))
+                .await,
             Tokens::ZERO,
             "All funds from cmc subaccount should have disappeared after topups"
         );
 
-        //notification by a different user should fail (to be decided)
-        user2
-            .notify_top_up_cmc(bh, None, &new_canister_id)
-            .await
-            .unwrap_err();
+        //notification by a different user should fail on ledger path
         user2
             .notify_top_up_ledger(bh, None, &new_canister_id)
             .await
@@ -946,7 +944,7 @@ impl UserHandle {
         target_canister_id: &CanisterId,
     ) -> TopUpCanisterResult {
         let block = self
-            .pay_for_topup(amount, sender_subaccount, target_canister_id)
+            .pay_for_top_up(amount, sender_subaccount, target_canister_id)
             .await;
         self.notify_top_up_ledger(block, sender_subaccount, target_canister_id)
             .await
@@ -959,13 +957,13 @@ impl UserHandle {
         target_canister_id: &CanisterId,
     ) -> TopUpCanisterResult {
         let block_idx = self
-            .pay_for_topup(amount, sender_subaccount, target_canister_id)
+            .pay_for_top_up(amount, sender_subaccount, target_canister_id)
             .await;
         self.notify_top_up_cmc(block_idx, sender_subaccount, target_canister_id)
             .await
     }
 
-    fn acc_for_topup(&self, target_canister_id: &CanisterId) -> AccountIdentifier {
+    fn acc_for_top_up(&self, target_canister_id: &CanisterId) -> AccountIdentifier {
         AccountIdentifier::new(self.cmc_id.into(), Some(target_canister_id.into()))
     }
 
@@ -983,7 +981,7 @@ impl UserHandle {
             .unwrap()
     }
 
-    pub async fn pay_for_topup(
+    pub async fn pay_for_top_up(
         &self,
         amount: Tokens,
         sender_subaccount: Option<Subaccount>,

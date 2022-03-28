@@ -1,0 +1,69 @@
+type Cycles = nat;
+type BlockIndex = nat64;
+
+// The argument of the [notify_top_up] method.
+type NotifyTopUpArg = record {
+  // Index of the block on the ICP ledger that contains the payment.
+  block_index : BlockIndex;
+
+  // The canister to top up.
+  canister_id : principal;
+};
+
+// The argument of the [notify_create_canister] method.
+type NotifyCreateCanisterArg = record {
+  // Index of the block on the ICP ledger that contains the payment.
+  block_index : BlockIndex;
+
+  // The controller of canister to create.
+  controller : principal;
+};
+
+type NotifyError = variant {
+  // The payment processing failed and the payment was returned the caller.
+  // This is a non-retriable error.
+  Refunded : record {
+    // The reason for the refund.
+    reason : text;
+    // The index of the block containing the refund.
+    block_index : opt BlockIndex;
+  };
+
+  // The same payment is already being processed by a concurrent request.
+  // This is a retriable error.
+  Processing;
+
+  // The payment was too old to be processed.
+  // The value of the variant is the oldest block index that can still be processed.
+  // This a non-retriable error.
+  TransactionTooOld : BlockIndex;
+
+  // The transaction does not satisfy the cycle minting canister payment protocol.
+  // The text contains the description of the problem.
+  // This is a non-retriable error.
+  InvalidTransaction : text;
+
+  // Other error.
+  Other : record { error_code : nat64; error_message : text };
+};
+
+type NotifyTopUpResult = variant {
+  // The amount of cycles sent to the specified canister.
+  Ok : Cycles;
+  Err : NotifyError;
+};
+
+type NotifyCreateCanisterResult = variant {
+  // The principal of the newly created canister.
+  Ok : principal;
+  Err : NotifyError;
+};
+
+service : {
+  // Propmts the cycles minting canister to process a payment by converting ICP
+  // into cycles and sending the cycles the specified canister.
+  notify_top_up : (NotifyTopUpArg) -> (NotifyTopUpResult);
+
+  // Prompts the cycles minting canister to process a payment for canister creation.
+  notify_create_canister : (NotifyCreateCanisterArg) -> (NotifyCreateCanisterResult);
+}

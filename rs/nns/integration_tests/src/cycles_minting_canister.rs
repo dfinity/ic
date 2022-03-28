@@ -1,7 +1,5 @@
 use canister_test::Canister;
-use cycles_minting_canister::{
-    IcpXdrConversionRateCertifiedResponse, MEMO_CREATE_CANISTER, MEMO_TOP_UP_CANISTER,
-};
+use cycles_minting_canister::{IcpXdrConversionRateCertifiedResponse, MEMO_TOP_UP_CANISTER};
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_canister_client::Sender;
@@ -80,88 +78,6 @@ async fn set_icp_xdr_conversion_rate(
         response.data.xdr_permyriad_per_icp,
         payload.xdr_permyriad_per_icp
     );
-}
-
-/// Attempt to transfer ICP to create a "cycles wallet" (a minimal canister) and
-/// top-up an existing canister with cycles, but assert that both of these
-/// actions fail due to missing the ICP-to-XDR conversion rate, and assert any
-/// sent ICP is refunded (minus transaction fees).
-#[test]
-fn test_cmc_refunds_on_failure_to_get_exchange_rate() {
-    local_test_on_nns_subnet(|runtime| async move {
-        let account = AccountIdentifier::new(*TEST_USER1_PRINCIPAL, None);
-        let icpts = Tokens::new(100, 0).unwrap();
-
-        // The CMC subaccount to send ICP to. As we expect the CMC notify calls to fail,
-        // it doesn't really matter what value this is, so we use Governance for
-        // convenience.
-        let subaccount: Subaccount = GOVERNANCE_CANISTER_ID.get_ref().into();
-
-        let nns_init_payload = NnsInitPayloadsBuilder::new()
-            .with_initial_invariant_compliant_mutations()
-            .with_test_neurons()
-            .with_ledger_account(account, icpts)
-            .build();
-
-        let nns_canisters = NnsCanisters::set_up(&runtime, nns_init_payload).await;
-
-        let total_cycles_minted_initial: u64 = nns_canisters
-            .cycles_minting
-            .query_("total_cycles_minted", protobuf, ())
-            .await
-            .unwrap();
-
-        let cycles_response = send_cycles(
-            icpts,
-            &nns_canisters.ledger,
-            MEMO_CREATE_CANISTER,
-            &subaccount,
-        )
-        .await;
-
-        match cycles_response {
-            CyclesResponse::Refunded(_, _) => (),
-            _ => panic!("Failed to be refunded"),
-        }
-
-        let expected_balance_after_refund = Tokens::from_e8s(9999970000);
-
-        let cycles_response = send_cycles(
-            expected_balance_after_refund,
-            &nns_canisters.ledger,
-            MEMO_TOP_UP_CANISTER,
-            &subaccount,
-        )
-        .await;
-
-        match cycles_response {
-            CyclesResponse::Refunded(_, _) => (),
-            _ => panic!("Failed to be refunded"),
-        }
-
-        let final_balance: Tokens = nns_canisters
-            .ledger
-            .query_from_sender(
-                "account_balance_pb",
-                protobuf,
-                AccountBalanceArgs { account },
-                &Sender::from_keypair(&TEST_USER1_KEYPAIR),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(final_balance.get_e8s(), 9999940000);
-
-        let total_cycles_minted_final: u64 = nns_canisters
-            .cycles_minting
-            .query_("total_cycles_minted", protobuf, ())
-            .await
-            .unwrap();
-
-        assert_eq!(total_cycles_minted_initial, total_cycles_minted_final);
-
-        Ok(())
-    });
 }
 
 /// Test that we can top-up the Governance canister with cycles when the CMC has
