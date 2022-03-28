@@ -1,7 +1,7 @@
 use ic_config::subnet_config::SubnetConfig;
 use ic_config::subnet_config::SubnetConfigs;
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_execution_environment::setup_execution;
+use ic_execution_environment::ExecutionServices;
 use ic_interfaces::registry::RegistryClient;
 use ic_interfaces::{
     execution_environment::{IngressHistoryReader, QueryHandler},
@@ -206,23 +206,22 @@ impl StateMachine {
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
         ));
-        let (_, ingress_history_writer, ingress_history_reader, query_handler, _, scheduler) =
-            setup_execution(
-                replica_logger.clone(),
-                &metrics_registry,
-                subnet_id,
-                subnet_type,
-                subnet_config.scheduler_config,
-                hypervisor_config.clone(),
-                Arc::clone(&cycles_account_manager),
-                Arc::clone(&state_manager) as Arc<_>,
-            );
+        let execution_services = ExecutionServices::setup_execution(
+            replica_logger.clone(),
+            &metrics_registry,
+            subnet_id,
+            subnet_type,
+            subnet_config.scheduler_config,
+            hypervisor_config.clone(),
+            Arc::clone(&cycles_account_manager),
+            Arc::clone(&state_manager) as Arc<_>,
+        );
 
         let message_routing = MessageRoutingImpl::new(
             Arc::clone(&state_manager) as _,
             Arc::clone(&state_manager) as _,
-            Arc::clone(&ingress_history_writer) as _,
-            scheduler,
+            Arc::clone(&execution_services.ingress_history_writer) as _,
+            execution_services.scheduler,
             hypervisor_config,
             cycles_account_manager,
             subnet_id,
@@ -235,9 +234,9 @@ impl StateMachine {
             registry_data_provider,
             registry_client,
             state_manager,
-            ingress_history_reader,
+            ingress_history_reader: execution_services.ingress_history_reader,
             message_routing,
-            query_handler,
+            query_handler: execution_services.sync_query_handler,
             state_dir,
             nonce: std::cell::Cell::new(nonce),
             time: std::cell::Cell::new(time),

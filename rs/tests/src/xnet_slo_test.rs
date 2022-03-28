@@ -27,6 +27,7 @@ use canister_test::{Canister, Project, Runtime, Wasm};
 use dfn_candid::candid;
 use ic_fondue::{
     ic_manager::IcHandle,
+    pot::FondueTestFn,
     prod_tests::ic::{InternetComputer, Subnet},
 };
 use ic_registry_subnet_type::SubnetType;
@@ -46,22 +47,9 @@ const SEND_RATE_THRESHOLD: f64 = 0.3;
 const ERROR_PERCENTAGE_THRESHOLD: f64 = 5.0;
 const TARGETED_LATENCY_SECONDS: u64 = 20;
 
-// Constants for xnet nightly test.
-const SUBNETS_A: usize = 2;
-const NODES_PER_SUBNET_A: usize = 1;
-const RUNTIME_SEC_A: u64 = 600;
-const RATE_A: usize = 10;
-
-// Constants for xnet nightly with many-single-node-subnets
-const SUBNETS_B: usize = 27;
-const NODES_PER_SUBNET_B: usize = 1;
-const RUNTIME_SEC_B: u64 = 600;
-const RATE_B: usize = 10;
-
 #[derive(Debug)]
 pub struct Config {
     subnets: usize,
-    subnet_connections: usize,
     nodes_per_subnet: usize,
     runtime: Duration,
     payload_size_bytes: u64,
@@ -73,88 +61,65 @@ pub struct Config {
     canister_to_subnet_rate: usize,
 }
 
-#[derive(Debug)]
-pub struct DynamicConfig {
-    subnet_to_subnet_rate: usize,
-    canisters_per_subnet: usize,
-    canister_to_subnet_rate: usize,
-}
+impl Config {
+    fn new(subnets: usize, nodes_per_subnet: usize, runtime: Duration, rate: usize) -> Config {
+        // Subnet-to-subnet request rate: ceil(rate / subnet_connections).
+        let subnet_to_subnet_rate = (rate - 1) / (subnets - 1) + 1;
+        // Minimum number of subnet-to-subnet queues needed to stay under
+        // `max_canister_to_canister_rate`.
+        let subnet_to_subnet_queues =
+            (subnet_to_subnet_rate - 1) / MAX_CANISTER_TO_CANISTER_RATE + 1;
+        // Minimum number of canisters required to send `subnet_to_subnet_rate` requests
+        // per round.
+        let canisters_per_subnet = (subnet_to_subnet_queues as f64).sqrt().ceil() as usize;
+        // A canister's outbound request rate to a given subnet.
+        let canister_to_subnet_rate = (subnet_to_subnet_rate - 1) / canisters_per_subnet + 1;
 
-pub fn compute_dynamic_config(
-    rate: usize,
-    subnet_connections: usize,
-    max_canister_to_canister_rate: usize,
-) -> DynamicConfig {
-    // Subnet-to-subnet request rate: ceil(rate / subnet_connections).
-    let subnet_to_subnet_rate = (rate - 1) / subnet_connections + 1;
-    // Minimum number of subnet-to-subnet queues needed to stay under
-    // `max_canister_to_canister_rate`.
-    let subnet_to_subnet_queues = (subnet_to_subnet_rate - 1) / max_canister_to_canister_rate + 1;
-    // Minimum number of canisters required to send `subnet_to_subnet_rate` requests
-    // per round.
-    let canisters_per_subnet = (subnet_to_subnet_queues as f64).sqrt().ceil() as usize;
-    // A canister's outbound request rate to a given subnet.
-    let canister_to_subnet_rate = (subnet_to_subnet_rate - 1) / canisters_per_subnet + 1;
-    DynamicConfig {
-        subnet_to_subnet_rate,
-        canisters_per_subnet,
-        canister_to_subnet_rate,
+        Config {
+            subnets,
+            nodes_per_subnet,
+            runtime,
+            payload_size_bytes: PAYLOAD_SIZE_BYTES,
+            send_rate_threshold: SEND_RATE_THRESHOLD,
+            error_percentage_threshold: ERROR_PERCENTAGE_THRESHOLD,
+            targeted_latency_seconds: TARGETED_LATENCY_SECONDS,
+            subnet_to_subnet_rate,
+            canisters_per_subnet,
+            canister_to_subnet_rate,
+        }
+    }
+
+    /// Builds the IC instance.
+    pub fn build(&self) -> InternetComputer {
+        (0..self.subnets).fold(InternetComputer::new(), |ic, _idx| {
+            ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(self.nodes_per_subnet))
+        })
+    }
+
+    /// Returns a test function based on this configuration.
+    pub fn test(self) -> impl FondueTestFn<IcHandle> {
+        move |handle: IcHandle, ctx: &ic_fondue::pot::Context| test(handle, ctx, self)
     }
 }
 
-pub fn config_nightly() -> InternetComputer {
-    config(SUBNETS_A, NODES_PER_SUBNET_A)
+pub fn config_nightly_3_subnets() -> Config {
+    Config::new(3, 4, Duration::from_secs(600), 10)
 }
 
-pub fn config_nightly_many_single_node_subnets() -> InternetComputer {
-    config(SUBNETS_B, NODES_PER_SUBNET_B)
+pub fn config_nightly_29_subnets() -> Config {
+    Config::new(29, 1, Duration::from_secs(600), 10)
 }
 
-pub fn test_nightly(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    let subnet_connections = SUBNETS_A - 1;
-    let dynamic_config =
-        compute_dynamic_config(RATE_A, subnet_connections, MAX_CANISTER_TO_CANISTER_RATE);
-    let config = Config {
-        subnets: SUBNETS_A,
-        subnet_connections,
-        nodes_per_subnet: NODES_PER_SUBNET_A,
-        runtime: Duration::from_secs(RUNTIME_SEC_A),
-        payload_size_bytes: PAYLOAD_SIZE_BYTES,
-        send_rate_threshold: SEND_RATE_THRESHOLD,
-        error_percentage_threshold: ERROR_PERCENTAGE_THRESHOLD,
-        targeted_latency_seconds: TARGETED_LATENCY_SECONDS,
-        subnet_to_subnet_rate: dynamic_config.subnet_to_subnet_rate,
-        canisters_per_subnet: dynamic_config.canisters_per_subnet,
-        canister_to_subnet_rate: dynamic_config.canister_to_subnet_rate,
-    };
-    test(handle, ctx, config)
+pub fn config_prod_slo_3_subnets() -> Config {
+    Config::new(3, 4, Duration::from_secs(1200), 10)
 }
 
-pub fn test_nightly_many_single_node_subnets(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    let subnet_connections = SUBNETS_B - 1;
-    let dynamic_config =
-        compute_dynamic_config(RATE_B, subnet_connections, MAX_CANISTER_TO_CANISTER_RATE);
-    let config = Config {
-        subnets: SUBNETS_B,
-        subnet_connections,
-        nodes_per_subnet: NODES_PER_SUBNET_B,
-        runtime: Duration::from_secs(RUNTIME_SEC_B),
-        payload_size_bytes: PAYLOAD_SIZE_BYTES,
-        send_rate_threshold: SEND_RATE_THRESHOLD,
-        error_percentage_threshold: ERROR_PERCENTAGE_THRESHOLD,
-        targeted_latency_seconds: TARGETED_LATENCY_SECONDS,
-        subnet_to_subnet_rate: dynamic_config.subnet_to_subnet_rate,
-        canisters_per_subnet: dynamic_config.canisters_per_subnet,
-        canister_to_subnet_rate: dynamic_config.canister_to_subnet_rate,
-    };
-    test(handle, ctx, config)
+pub fn config_prod_slo_29_subnets() -> Config {
+    Config::new(29, 1, Duration::from_secs(1200), 10)
 }
 
-// Generic config
-pub fn config(subnets: usize, nodes_per_subnet: usize) -> InternetComputer {
-    (0..subnets).fold(InternetComputer::new(), |ic, _idx| {
-        ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(nodes_per_subnet))
-    })
+pub fn config_hotfix_slo_3_subnets() -> Config {
+    Config::new(3, 4, Duration::from_secs(120), 10)
 }
 
 // Generic test
@@ -218,7 +183,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context, config: Config) {
         config.canister_to_subnet_rate as u64,
     );
     let msgs_per_round =
-        config.canister_to_subnet_rate * config.canisters_per_subnet * config.subnet_connections;
+        config.canister_to_subnet_rate * config.canisters_per_subnet * (config.subnets - 1);
     info!(
         ctx.logger,
         "Starting chatter: {} messages/round * {} bytes = {} bytes/round",
@@ -306,7 +271,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context, config: Config) {
         );
 
         let send_rate = attempted_calls as f64
-            / (config.subnet_connections) as f64
+            / (config.subnets - 1) as f64
             / config.runtime.as_secs() as f64
             / config.canisters_per_subnet as f64
             / config.canister_to_subnet_rate as f64;

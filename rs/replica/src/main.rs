@@ -284,6 +284,7 @@ async fn run() -> io::Result<()> {
         state_manager,
         _,
         async_query_handler,
+        _,
         _p2p_thread_joiner,
         ingress_ingestion_service,
         consensus_pool_cache,

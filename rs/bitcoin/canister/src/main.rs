@@ -3,8 +3,8 @@ use bitcoin::{
 };
 use ic_btc_canister::{state::State, store};
 use ic_btc_types::{
-    GetBalanceError, GetBalanceRequest, GetUtxosError, GetUtxosRequest, GetUtxosResponse, OutPoint,
-    SendTransactionError, SendTransactionRequest, Utxo, UtxosFilter,
+    GetBalanceError, GetBalanceRequest, GetUtxosError, GetUtxosRequest, GetUtxosResponse,
+    SendTransactionError, SendTransactionRequest, UtxosFilter,
 };
 use ic_protobuf::bitcoin::v1::{GetSuccessorsRequest, GetSuccessorsResponse};
 use prost::Message;
@@ -120,6 +120,7 @@ mod test {
     use bitcoin::secp256k1::Secp256k1;
     use bitcoin::{Address, PublicKey};
     use ic_btc_canister::test_builder::{BlockBuilder, TransactionBuilder};
+    use ic_btc_types::{OutPoint, Utxo};
 
     // A default state to use for tests.
     fn default_state() -> State {

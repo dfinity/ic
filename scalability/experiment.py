@@ -412,7 +412,7 @@ class Experiment:
 
         this_canister_id = None
 
-        print("Installing canister .. ")
+        print(f"Installing canister .. {canister} on {target}")
         self.canister = canister if canister is not None else "counter"
         cmd = [self.workload_generator_path, f"http://[{target}]:8080", "-n", "1", "-r", "1"]
         if canister is not None:
@@ -425,7 +425,6 @@ class Experiment:
             )
             wg_output = p.stdout.decode("utf-8").strip()
             for line in wg_output.split("\n"):
-                print("Output: ", line)
                 canister_id = re.findall(r"Successfully created canister at URL [^ ]*. ID: [^ ]*", line)
                 if len(canister_id):
                     cid = canister_id[0].split()[7]
@@ -440,7 +439,8 @@ class Experiment:
                     )
             wg_err_output = p.stderr.decode("utf-8").strip()
             for line in wg_err_output.split("\n"):
-                print("Output (stderr):", line)
+                if "The response of a canister query call contained status 'rejected'" not in line:
+                    print("Output (stderr):", line)
         except Exception as e:
             print(f"Failed to install canister, return code: {e.returncode}")
             print(f"Command was: {cmd}")

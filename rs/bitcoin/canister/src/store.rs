@@ -4,7 +4,7 @@ use crate::{
     unstable_blocks, utxoset,
 };
 use bitcoin::{Address, Block, Txid};
-use ic_btc_types::{GetBalanceError, GetUtxosError, GetUtxosResponse, OutPoint, Satoshi, Utxo};
+use ic_btc_types::{GetBalanceError, GetUtxosError, GetUtxosResponse, Satoshi, Utxo};
 use lazy_static::lazy_static;
 use std::str::FromStr;
 
@@ -68,26 +68,14 @@ pub fn get_utxos(
         }
 
         for tx in &block.txdata {
-            utxoset::insert_tx(&mut address_utxos, tx, block_height);
+            address_utxos.insert_tx(tx, block_height);
         }
 
         tip_block_hash = Some(block.block_hash());
         tip_block_height = Some(block_height);
     }
 
-    // Filter out UTXOs added in unstable blocks that are not for the given address.
-    let utxos: Vec<Utxo> = utxoset::get_utxos(&address_utxos, address)
-        .utxos
-        .into_iter()
-        .map(|(outpoint, (txout, height))| Utxo {
-            outpoint: OutPoint {
-                txid: outpoint.txid.to_vec(),
-                vout: outpoint.vout,
-            },
-            value: txout.value,
-            height,
-        })
-        .collect();
+    let utxos: Vec<Utxo> = address_utxos.into_vec();
 
     Ok(GetUtxosResponse {
         total_count: utxos.len() as u32,
@@ -138,6 +126,7 @@ mod test {
     use bitcoin::secp256k1::Secp256k1;
     use bitcoin::{consensus::Decodable, Address, BlockHash, Network, PublicKey};
     use byteorder::{LittleEndian, ReadBytesExt};
+    use ic_btc_types::OutPoint;
     use std::fs::File;
     use std::str::FromStr;
     use std::{collections::HashMap, io::BufReader};
@@ -184,8 +173,13 @@ mod test {
 
         println!("Built chain with length: {}", chain.len());
 
+        let mut i = 0;
         for block in chain.into_iter() {
             insert_block(state, block).unwrap();
+            i += 1;
+            if i % 1000 == 0 {
+                println!("processed block: {}", i);
+            }
         }
     }
 
@@ -398,7 +392,7 @@ mod test {
 
     #[test]
     fn process_100k_blocks() {
-        let mut state = State::new(0, Network::Bitcoin, genesis_block(Network::Bitcoin));
+        let mut state = State::new(10, Network::Bitcoin, genesis_block(Network::Bitcoin));
 
         process_chain(&mut state, 100_000);
 
@@ -421,6 +415,7 @@ mod test {
             get_balance(&state, "1PgZsaGjvssNCqHHisshLoCFeUjxPhutTh", 0),
             Ok(4000000)
         );
+
         assert_eq!(
             get_utxos(&state, "1PgZsaGjvssNCqHHisshLoCFeUjxPhutTh", 0),
             Ok(GetUtxosResponse {
@@ -478,6 +473,80 @@ mod test {
                 .to_vec(),
                 tip_height: 100_000,
             })
+        );
+
+        // This address spent its BTC at height 99,996. At 0 confirmations
+        // (height 100,000) it should have no BTC.
+        assert_eq!(
+            get_balance(&state, "1K791w8Y1CXwyG3zAf9EzpoZvpYH8Z2Rro", 0),
+            Ok(0)
+        );
+
+        // At 10 confirmations it should have its BTC.
+        assert_eq!(
+            get_balance(&state, "1K791w8Y1CXwyG3zAf9EzpoZvpYH8Z2Rro", 10),
+            Ok(48_0000_0000)
+        );
+
+        // At 6 confirmations it should have its BTC.
+        assert_eq!(
+            get_balance(&state, "1K791w8Y1CXwyG3zAf9EzpoZvpYH8Z2Rro", 6),
+            Ok(48_0000_0000)
+        );
+
+        assert_eq!(
+            get_utxos(&state, "1K791w8Y1CXwyG3zAf9EzpoZvpYH8Z2Rro", 6),
+            Ok(GetUtxosResponse {
+                utxos: vec![Utxo {
+                    outpoint: OutPoint {
+                        txid: Txid::from_str(
+                            "2bdd8506980479fb57d848ddbbb29831b4d468f9dc5d572ccdea69edec677ed6",
+                        )
+                        .unwrap()
+                        .to_vec(),
+                        vout: 1,
+                    },
+                    value: 48_0000_0000,
+                    height: 96778,
+                }],
+                total_count: 1,
+                // The tip should be the block hash at height 99,995
+                // https://blockchair.com/bitcoin/block/99995
+                tip_block_hash: BlockHash::from_str(
+                    "00000000000471d4db69f006cefc583aee6dec243d63c6a09cd5c02e0ef52523",
+                )
+                .unwrap()
+                .to_vec(),
+                tip_height: 99_995,
+            })
+        );
+
+        // At 5 confirmations the BTC is spent.
+        assert_eq!(
+            get_balance(&state, "1K791w8Y1CXwyG3zAf9EzpoZvpYH8Z2Rro", 5),
+            Ok(0)
+        );
+
+        // The BTC is spent to the following two addresses.
+        assert_eq!(
+            get_balance(&state, "1NhzJ8bsdmGK39vSJtdQw3R2HyNtUmGxcr", 5),
+            Ok(3_4500_0000)
+        );
+
+        assert_eq!(
+            get_balance(&state, "13U77vKQcTjpZ7gww4K8Nreq2ffGBQKxmr", 5),
+            Ok(44_5500_0000)
+        );
+
+        // And these addresses should have a balance of zero before that height.
+        assert_eq!(
+            get_balance(&state, "1NhzJ8bsdmGK39vSJtdQw3R2HyNtUmGxcr", 6),
+            Ok(0)
+        );
+
+        assert_eq!(
+            get_balance(&state, "13U77vKQcTjpZ7gww4K8Nreq2ffGBQKxmr", 6),
+            Ok(0)
         );
     }
 
