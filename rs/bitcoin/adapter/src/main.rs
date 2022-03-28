@@ -1,7 +1,7 @@
 use clap::Clap;
 use ic_btc_adapter::{
-    spawn_grpc_server, start_router, AdapterState, BlockchainManager, BlockchainManagerRequest,
-    Cli, GetSuccessorsHandler,
+    spawn_grpc_server, start_router, AdapterState, BlockchainManagerRequest, BlockchainState, Cli,
+    GetSuccessorsHandler,
 };
 use ic_logger::{info, new_replica_logger_from_config};
 use serde_json::to_string_pretty;
@@ -32,9 +32,13 @@ pub async fn main() {
     let (blockchain_manager_tx, blockchain_manager_rx) = channel::<BlockchainManagerRequest>(10);
 
     let adapter_state = AdapterState::new(config.idle_seconds);
-    let blockchain_manager = Arc::new(Mutex::new(BlockchainManager::new(&config, logger.clone())));
-    let get_successors_handler =
-        GetSuccessorsHandler::new(blockchain_manager.clone(), blockchain_manager_tx);
+    let blockchain_state = Arc::new(Mutex::new(BlockchainState::new(&config)));
+    let get_successors_handler = GetSuccessorsHandler::new(
+        &config,
+        blockchain_state.clone(),
+        blockchain_manager_tx,
+        logger.clone(),
+    );
 
     // TODO: we should NOT have an unbounded channel for buffering TransactionManagerRequests.
     let (transaction_manager_tx, transaction_manager_rx) = unbounded_channel();
@@ -49,7 +53,7 @@ pub async fn main() {
     start_router(
         &config,
         logger,
-        blockchain_manager,
+        blockchain_state,
         transaction_manager_rx,
         adapter_state,
         blockchain_manager_rx,

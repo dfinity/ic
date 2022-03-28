@@ -46,6 +46,7 @@ mod cli;
 mod get_successors_handler;
 
 pub use blockchainmanager::BlockchainManager;
+pub use blockchainstate::BlockchainState;
 pub use cli::Cli;
 use common::BlockHeight;
 pub use config::{Config, IncomingSource};

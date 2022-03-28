@@ -3,9 +3,9 @@
 use crate::{
     blockchainmanager::BlockchainManager, common::DEFAULT_CHANNEL_BUFFER_SIZE,
     connectionmanager::ConnectionManager, stream::handle_stream,
-    transaction_manager::TransactionManager, AdapterState, BlockchainManagerRequest, Config,
-    HasHeight, ProcessBitcoinNetworkMessage, ProcessBitcoinNetworkMessageError, ProcessEvent,
-    TransactionManagerRequest,
+    transaction_manager::TransactionManager, AdapterState, BlockchainManagerRequest,
+    BlockchainState, Config, ProcessBitcoinNetworkMessage, ProcessBitcoinNetworkMessageError,
+    ProcessEvent, TransactionManagerRequest,
 };
 use bitcoin::network::message::NetworkMessage;
 use ic_logger::ReplicaLogger;
@@ -30,7 +30,7 @@ use tokio::{
 pub fn start_router(
     config: &Config,
     logger: ReplicaLogger,
-    blockchain_manager: Arc<Mutex<BlockchainManager>>,
+    blockchain_state: Arc<Mutex<BlockchainState>>,
     mut transaction_manager_rx: UnboundedReceiver<TransactionManagerRequest>,
     adapter_state: AdapterState,
     mut blockchain_manager_rx: Receiver<BlockchainManagerRequest>,
@@ -38,6 +38,7 @@ pub fn start_router(
     let (network_message_sender, mut network_message_receiver) =
         channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
+    let mut blockchain_manager = BlockchainManager::new(config, blockchain_state, logger.clone());
     let mut transaction_manager = TransactionManager::new(logger.clone());
     let mut connection_manager = ConnectionManager::new(config, logger, network_message_sender);
 
@@ -47,7 +48,7 @@ pub fn start_router(
             let sleep_idle_interval = Duration::from_millis(100);
             if adapter_state.is_idle() {
                 connection_manager.make_idle();
-                blockchain_manager.lock().await.make_idle();
+                blockchain_manager.make_idle().await;
                 transaction_manager.make_idle();
                 // TODO: instead of sleeping here add some async synchonization.
                 sleep(sleep_idle_interval).await;
@@ -71,9 +72,7 @@ pub fn start_router(
                         connection_manager.discard(address);
                     }
 
-                    let blockchain_manager_process_bitcoin_network_message_result =
-                        blockchain_manager.lock().await.process_bitcoin_network_message(address, &message);
-                    if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) = blockchain_manager_process_bitcoin_network_message_result {
+                    if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) = blockchain_manager.process_bitcoin_network_message(address, &message).await {
                         connection_manager.discard(address);
                     }
                     if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) = transaction_manager.process_bitcoin_network_message(address, &message) {
@@ -84,10 +83,10 @@ pub fn start_router(
                     let command = result.expect("Receiving should not fail because the sender part of the channel is never closed.");
                     match command {
                         BlockchainManagerRequest::EnqueueNewBlocksToDownload(next_headers) => {
-                            blockchain_manager.lock().await.enqueue_new_blocks_to_download(next_headers);
+                            blockchain_manager.enqueue_new_blocks_to_download(next_headers).await;
                         }
                         BlockchainManagerRequest::PruneOldBlocks(processed_block_hashes) => {
-                            blockchain_manager.lock().await.prune_old_blocks(&processed_block_hashes);
+                            blockchain_manager.prune_old_blocks(&processed_block_hashes).await;
                         }
                     };
                 }
@@ -99,11 +98,9 @@ pub fn start_router(
                 _ = tick_interval.tick() => {
                     // After an event is dispatched, the managers `tick` method is called to process possible
                     // outgoing messages.
-                    connection_manager.tick(blockchain_manager.lock().await.get_height(), handle_stream);
+                    connection_manager.tick(blockchain_manager.get_height().await, handle_stream);
                     blockchain_manager
-                        .lock()
-                        .await
-                        .tick(&mut connection_manager);
+                        .tick(&mut connection_manager).await;
                     transaction_manager.tick(&mut connection_manager);
                 }
             };
