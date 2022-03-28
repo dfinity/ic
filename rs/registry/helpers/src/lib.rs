@@ -6,6 +6,7 @@
 pub mod crypto;
 pub mod firewall;
 pub mod node;
+pub mod node_operator;
 pub mod provisional_whitelist;
 pub mod routing_table;
 pub mod subnet;

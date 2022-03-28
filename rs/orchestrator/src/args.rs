@@ -49,6 +49,10 @@ pub struct OrchestratorArgs {
     /// Print the replica's current node ID.
     #[structopt(long)]
     pub node_id: bool,
+
+    /// Print the DC ID where the current replica is located.
+    #[structopt(long)]
+    pub dc_id: bool,
 }
 
 impl OrchestratorArgs {
