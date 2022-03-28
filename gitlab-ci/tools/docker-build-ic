@@ -8,8 +8,6 @@ set -exuo pipefail
 REPO_ROOT=$(git rev-parse --show-toplevel)
 TAG=$(openssl rand -hex 4)
 DOCKER_IMG_VERSION=$(cat "$REPO_ROOT/gitlab-ci/docker/TAG")
-USER="$(whoami)"
-SET_UID="$(id -u $USER)"
 
 cd "$REPO_ROOT"
 docker image build --pull -t ic-build-src:$TAG -f- . <<EOF
