@@ -146,8 +146,7 @@ class Experiment2(workload_experiment.WorkloadExperiment):
                 run = False
 
             else:
-
-                if failure_rate < FLAGS.max_failure_rate and t_median < FLAGS.max_t_median:
+                if failure_rate < FLAGS.allowable_failure_rate and t_median < FLAGS.allowable_t_median:
                     if num_success / self.last_duration > rps_max:
                         rps_max = num_success / self.last_duration
                         rps_max_in = load_total
