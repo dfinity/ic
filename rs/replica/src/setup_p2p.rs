@@ -4,7 +4,8 @@ use ic_config::{artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig, 
 use ic_consensus::certification::VerifierImpl;
 use ic_crypto::CryptoComponent;
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_execution_environment::setup_execution;
+use ic_execution_environment::ExecutionServices;
+use ic_interfaces::execution_environment::AnonymousQueryService;
 use ic_interfaces::{
     certified_stream_store::CertifiedStreamStore,
     consensus_pool::ConsensusPoolCache,
@@ -45,6 +46,7 @@ pub fn construct_ic_stack(
     Arc<StateManagerImpl>,
     Arc<dyn QueryHandler<State = ReplicatedState>>,
     QueryExecutionService,
+    AnonymousQueryService,
     P2PThreadJoiner,
     IngressIngestionService,
     Arc<dyn ConsensusPoolCache>,
@@ -146,14 +148,7 @@ pub fn construct_ic_stack(
         Some(artifact_pools.consensus_pool_cache.starting_height()),
         config.malicious_behaviour.malicious_flags.clone(),
     ));
-    let (
-        ingress_filter,
-        ingress_history_writer,
-        ingress_history_reader,
-        sync_query_handler,
-        async_query_handler,
-        scheduler,
-    ) = setup_execution(
+    let execution_services = ExecutionServices::setup_execution(
         replica_logger.clone(),
         &metrics_registry,
         subnet_id,
@@ -175,7 +170,7 @@ pub fn construct_ic_stack(
         MessageRoutingImpl::new_fake(
             subnet_id,
             Arc::clone(&state_manager) as Arc<_>,
-            ingress_history_writer,
+            execution_services.ingress_history_writer,
             &metrics_registry,
             replica_logger.clone(),
         )
@@ -183,8 +178,8 @@ pub fn construct_ic_stack(
         MessageRoutingImpl::new(
             Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&certified_stream_store) as Arc<_>,
-            ingress_history_writer,
-            scheduler,
+            execution_services.ingress_history_writer,
+            execution_services.scheduler,
             config.hypervisor,
             Arc::clone(&cycles_account_manager),
             subnet_id,
@@ -257,7 +252,7 @@ pub fn construct_ic_stack(
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&crypto) as Arc<_>,
         registry,
-        ingress_history_reader,
+        execution_services.ingress_history_reader,
         &artifact_pools,
         cycles_account_manager,
         local_store_time_reader,
@@ -266,12 +261,13 @@ pub fn construct_ic_stack(
     Ok((
         crypto,
         state_manager,
-        sync_query_handler,
-        async_query_handler,
+        execution_services.sync_query_handler,
+        execution_services.async_query_handler,
+        execution_services.anonymous_query_handler,
         p2p_runner,
         ingress_ingestion_service,
         artifact_pools.consensus_pool_cache,
-        ingress_filter,
+        execution_services.ingress_filter,
         xnet_endpoint,
     ))
 }

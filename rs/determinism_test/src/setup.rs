@@ -3,7 +3,7 @@ use ic_config::{
     Config,
 };
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_execution_environment::setup_execution;
+use ic_execution_environment::ExecutionServices;
 use ic_interfaces::execution_environment::IngressHistoryReader;
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
@@ -131,7 +131,7 @@ pub(crate) fn setup() -> (
         ic_types::malicious_flags::MaliciousFlags::default(),
     ));
 
-    let (_, ingress_history_writer, ingress_history_reader, _, _, scheduler) = setup_execution(
+    let execution_services = ExecutionServices::setup_execution(
         log.clone().into(),
         &metrics_registry,
         replica_config.subnet_id,
@@ -151,8 +151,8 @@ pub(crate) fn setup() -> (
     let message_routing = MessageRoutingImpl::new(
         Arc::clone(&state_manager) as _,
         Arc::clone(&state_manager) as _,
-        Arc::clone(&ingress_history_writer) as _,
-        scheduler,
+        Arc::clone(&execution_services.ingress_history_writer) as _,
+        execution_services.scheduler,
         config.hypervisor.clone(),
         cycles_account_manager,
         replica_config.subnet_id,
@@ -164,7 +164,7 @@ pub(crate) fn setup() -> (
     (
         message_routing,
         state_manager,
-        ingress_history_reader,
+        execution_services.ingress_history_reader,
         config,
         subnet_config,
     )
