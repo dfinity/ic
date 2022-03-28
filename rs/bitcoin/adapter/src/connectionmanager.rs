@@ -27,7 +27,8 @@ use crate::{
     common::*,
     connection::{Connection, ConnectionConfig, ConnectionState, PingState},
     stream::{StreamConfig, StreamEvent, StreamEventKind},
-    Channel, ChannelError, Command, Config, ProcessBitcoinNetworkMessageError, ProcessEvent,
+    Channel, ChannelError, Command, Config, ProcessBitcoinNetworkMessage,
+    ProcessBitcoinNetworkMessageError, ProcessEvent,
 };
 
 /// How the adapter identifies itself to other Bitcoin nodes.
@@ -96,13 +97,18 @@ pub struct ConnectionManager {
     stream_event_receiver: Receiver<StreamEvent>,
     /// This field is used to allow new streams to send events back to the connection manager.
     stream_event_sender: Sender<StreamEvent>,
+    network_message_sender: Sender<(SocketAddr, NetworkMessage)>,
     /// This field is used for the version nonce generation.
     rng: StdRng,
 }
 
 impl ConnectionManager {
     /// This function is used to create a new connection manager with a provided config.
-    pub fn new(config: &Config, logger: ReplicaLogger) -> Self {
+    pub fn new(
+        config: &Config,
+        logger: ReplicaLogger,
+        network_message_sender: Sender<(SocketAddr, NetworkMessage)>,
+    ) -> Self {
         let address_book = AddressBook::new(config, logger.clone());
         let (stream_event_sender, stream_event_receiver) =
             channel::<StreamEvent>(DEFAULT_CHANNEL_BUFFER_SIZE);
@@ -121,6 +127,7 @@ impl ConnectionManager {
             rng: StdRng::from_entropy(),
             socks_proxy: config.socks_proxy,
             stream_event_sender,
+            network_message_sender,
             stream_event_receiver,
         }
     }
@@ -295,6 +302,7 @@ impl ConnectionManager {
         let socks_proxy = self.socks_proxy;
         let (writer, network_message_receiver) = unbounded_channel();
         let stream_event_sender = self.stream_event_sender.clone();
+        let network_message_sender = self.network_message_sender.clone();
 
         let stream_config = StreamConfig {
             address,
@@ -303,6 +311,7 @@ impl ConnectionManager {
             network_message_receiver,
             socks_proxy,
             stream_event_sender,
+            network_message_sender,
         };
         let join_handle = handle(stream_config);
         let conn = Connection::new(ConnectionConfig {
@@ -620,21 +629,28 @@ impl ProcessEvent for ConnectionManager {
                 self.discard(event.address);
                 Ok(())
             }
-            StreamEventKind::Message(message) => match message {
-                NetworkMessage::Version(version_message) => {
-                    self.process_version_message(&event.address, version_message)
-                }
-                NetworkMessage::Verack => self.process_verack_message(&event.address),
-                NetworkMessage::Addr(addresses) => {
-                    self.process_addr_message(&event.address, addresses)
-                }
-                NetworkMessage::Ping(nonce) => self.process_ping_message(&event.address, *nonce),
-                NetworkMessage::Pong(nonce) => self.process_pong_message(&event.address, *nonce),
-                NetworkMessage::Unknown { command, payload } => {
-                    self.process_unknown_message(&event.address, command, payload)
-                }
-                _ => Ok(()),
-            },
+        }
+    }
+}
+
+impl ProcessBitcoinNetworkMessage for ConnectionManager {
+    fn process_bitcoin_network_message(
+        &mut self,
+        address: SocketAddr,
+        message: &NetworkMessage,
+    ) -> Result<(), ProcessBitcoinNetworkMessageError> {
+        match message {
+            NetworkMessage::Version(version_message) => {
+                self.process_version_message(&address, version_message)
+            }
+            NetworkMessage::Verack => self.process_verack_message(&address),
+            NetworkMessage::Addr(addresses) => self.process_addr_message(&address, addresses),
+            NetworkMessage::Ping(nonce) => self.process_ping_message(&address, *nonce),
+            NetworkMessage::Pong(nonce) => self.process_pong_message(&address, *nonce),
+            NetworkMessage::Unknown { command, payload } => {
+                self.process_unknown_message(&address, command, payload)
+            }
+            _ => Ok(()),
         }
     }
 }
@@ -679,8 +695,10 @@ mod test {
             60000,
         );
         version_message.version = MINIMUM_VERSION_NUMBER - 1;
+        let (network_message_sender, _network_message_receiver) =
+            channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
-        let manager = ConnectionManager::new(&config, no_op_logger());
+        let manager = ConnectionManager::new(&config, no_op_logger(), network_message_sender);
         assert!(!manager.validate_received_version(&version_message));
     }
 
@@ -704,7 +722,10 @@ mod test {
         let config = ConfigBuilder::new()
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
-        let mut manager = ConnectionManager::new(&config, no_op_logger());
+        let (network_message_sender, _network_message_receiver) =
+            channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
+
+        let mut manager = ConnectionManager::new(&config, no_op_logger(), network_message_sender);
         manager.current_height = 100_000;
 
         assert!(!manager.validate_received_version(&version_message));
@@ -730,7 +751,10 @@ mod test {
         let config = ConfigBuilder::new()
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
-        let manager = ConnectionManager::new(&config, no_op_logger());
+        let (network_message_sender, _network_message_receiver) =
+            channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
+
+        let manager = ConnectionManager::new(&config, no_op_logger(), network_message_sender);
 
         assert!(!manager.validate_received_version(&version_message));
     }
@@ -741,6 +765,7 @@ mod test {
                 address,
                 mut network_message_receiver,
                 stream_event_sender,
+                network_message_sender,
                 ..
             } = config;
 
@@ -773,40 +798,30 @@ mod test {
                 let message = maybe_message.unwrap();
                 match message {
                     NetworkMessage::Version(_) => {
-                        stream_event_sender
-                            .send(StreamEvent {
-                                address,
-                                kind: StreamEventKind::Message(NetworkMessage::Verack),
-                            })
+                        network_message_sender
+                            .send((address, NetworkMessage::Verack))
                             .await
                             .ok();
-                        stream_event_sender
-                            .send(StreamEvent {
+                        network_message_sender
+                            .send((
                                 address,
-                                kind: StreamEventKind::Message(NetworkMessage::Version(
-                                    VersionMessage::new(
-                                        services,
-                                        since_epoch as i64,
-                                        Address::new(&adapter_address, services),
-                                        Address::new(&address, services),
-                                        0,
-                                        String::from("user-agent"),
-                                        1,
-                                    ),
+                                NetworkMessage::Version(VersionMessage::new(
+                                    services,
+                                    since_epoch as i64,
+                                    Address::new(&adapter_address, services),
+                                    Address::new(&address, services),
+                                    0,
+                                    String::from("user-agent"),
+                                    1,
                                 )),
-                            })
+                            ))
                             .await
                             .ok();
                     }
                     NetworkMessage::Verack => {}
                     NetworkMessage::GetAddr => {
-                        stream_event_sender
-                            .send(StreamEvent {
-                                address,
-                                kind: StreamEventKind::Message(NetworkMessage::Addr(
-                                    addresses.clone(),
-                                )),
-                            })
+                        network_message_sender
+                            .send((address, NetworkMessage::Addr(addresses.clone())))
                             .await
                             .ok();
                     }
@@ -817,15 +832,15 @@ mod test {
     }
 
     /// This test is used to walk through the initial address discovery process.
-    #[test]
-    fn test_initial_address_discovery_lifecycle() {
-        let runtime = tokio::runtime::Runtime::new().expect("runtime err");
-
+    #[tokio::test]
+    async fn test_initial_address_discovery_lifecycle() {
         let config = ConfigBuilder::new()
             .with_network(Network::Signet)
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
-        let mut manager = ConnectionManager::new(&config, no_op_logger());
+        let (network_message_sender, mut network_message_receiver) =
+            channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
+        let mut manager = ConnectionManager::new(&config, no_op_logger(), network_message_sender);
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
         assert!(manager.initial_address_discovery);
         assert_eq!(manager.current_height, 0);
@@ -833,26 +848,28 @@ mod test {
             manager.get_max_number_of_connections(),
             MAX_CONNECTIONS_DURING_ADDRESS_DISCOVERY
         );
-
-        runtime.block_on(async {
-            manager.tick(BLOCK_HEIGHT_FOR_TESTS, simple_handle);
-            for i in 0..4u8 {
-                let event = manager
-                    .stream_event_receiver
-                    .recv()
-                    .await
-                    .expect("connected event should have arrived");
-                manager.process_event(&event).ok();
-                if i == 3 {
-                    // Skipping last tick as this will start a new connection cycle.
-                    // At this point, we should be able to see if the seed connection
-                    // has been disconnected.
-                    continue;
+        manager.tick(BLOCK_HEIGHT_FOR_TESTS, simple_handle);
+        for i in 0..4u8 {
+            tokio::select! {
+                event = manager
+                .stream_event_receiver
+                .recv() => {
+                    let event = event.expect("connected event should have arrived");
+                    manager.process_event(&event).ok();
                 }
-                manager.tick(BLOCK_HEIGHT_FOR_TESTS, simple_handle);
+                msg = network_message_receiver.recv() => {
+                    let (address, message) = msg.as_ref().expect("");
+                    manager.process_bitcoin_network_message(*address, message).ok();
+                },
             }
-        });
-
+            if i == 3 {
+                // Skipping last tick as this will start a new connection cycle.
+                // At this point, we should be able to see if the seed connection
+                // has been disconnected.
+                continue;
+            }
+            manager.tick(BLOCK_HEIGHT_FOR_TESTS, simple_handle);
+        }
         assert_eq!(manager.current_height, 1);
         assert_eq!(
             manager.address_book.size(),
@@ -880,7 +897,10 @@ mod test {
         let config = ConfigBuilder::new()
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
-        let mut manager = ConnectionManager::new(&config, no_op_logger());
+        let (network_message_sender, _network_message_receiver) =
+            channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
+
+        let mut manager = ConnectionManager::new(&config, no_op_logger(), network_message_sender);
         let timestamp = SystemTime::now() - Duration::from_secs(60);
         let (writer, _) = unbounded_channel();
         runtime.block_on(async {
@@ -917,7 +937,9 @@ mod test {
         let config = ConfigBuilder::new()
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
-        let mut manager = ConnectionManager::new(&config, no_op_logger());
+        let (network_message_sender, _network_message_receiver) =
+            channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
+        let mut manager = ConnectionManager::new(&config, no_op_logger(), network_message_sender);
         let timestamp1 = SystemTime::now() - Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
         let timestamp2 = SystemTime::now() + Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
         let (writer, _) = unbounded_channel();
@@ -978,7 +1000,10 @@ mod test {
         let config = ConfigBuilder::new()
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
-        let mut manager = ConnectionManager::new(&config, no_op_logger());
+        let (network_message_sender, _network_message_receiver) =
+            channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
+
+        let mut manager = ConnectionManager::new(&config, no_op_logger(), network_message_sender);
         let timestamp1 = SystemTime::now() - Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
         let timestamp2 = SystemTime::now() + Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
         let (writer, _) = unbounded_channel();
