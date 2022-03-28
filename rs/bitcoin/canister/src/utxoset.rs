@@ -1,3 +1,4 @@
+use crate::address_utxoset::AddressUtxoSet;
 use crate::state::UtxoSet;
 use bitcoin::{Address, OutPoint, Transaction, TxOut, Txid};
 use std::str::FromStr;
@@ -12,19 +13,8 @@ lazy_static::lazy_static! {
 }
 
 /// Returns the `UtxoSet` of a given bitcoin address.
-pub fn get_utxos(utxo_set: &UtxoSet, address: &str) -> UtxoSet {
-    // Since we're returning a partial UTXO, we need not be strict.
-    let mut utxos = UtxoSet::new(false, utxo_set.network);
-    for outpoint in utxo_set
-        .address_to_outpoints
-        .get(address)
-        .unwrap_or(&vec![])
-    {
-        let (tx_out, height) = utxo_set.utxos.get(outpoint).expect("outpoint must exist");
-        insert_utxo(&mut utxos, *outpoint, tx_out.clone(), *height);
-    }
-
-    utxos
+pub fn get_utxos<'a>(utxo_set: &'a UtxoSet, address: &'a str) -> AddressUtxoSet<'a> {
+    AddressUtxoSet::new(address.to_string(), utxo_set)
 }
 
 /// Inserts a transaction into the given UTXO set at the given height.
@@ -166,7 +156,17 @@ mod test {
             };
 
             assert_eq!(utxo.clone().into_set(), expected);
-            assert_eq!(get_utxos(&utxo, &address.to_string()).into_set(), expected);
+            assert_eq!(
+                get_utxos(&utxo, &address.to_string()).into_vec(),
+                vec![ic_btc_types::Utxo {
+                    outpoint: ic_btc_types::OutPoint {
+                        txid: coinbase_tx.txid().to_vec(),
+                        vout: 0,
+                    },
+                    value: 1000,
+                    height: 0,
+                }]
+            );
         }
     }
 
@@ -225,22 +225,18 @@ mod test {
                 .with_output(&address_1, 1000)
                 .build();
             insert_tx(&mut utxo, &coinbase_tx, 0);
-            let expected = maplit::hashset! {
-                (
-                    OutPoint {
-                        txid: coinbase_tx.txid(),
-                        vout: 0
-                    },
-                    TxOut {
-                        value: 1000,
-                        script_pubkey: address_1.script_pubkey()
-                    },
-                    0
-                )
-            };
+
+            let expected = vec![ic_btc_types::Utxo {
+                outpoint: ic_btc_types::OutPoint {
+                    txid: coinbase_tx.txid().to_vec(),
+                    vout: 0,
+                },
+                value: 1000,
+                height: 0,
+            }];
 
             assert_eq!(
-                get_utxos(&utxo, &address_1.to_string()).into_set(),
+                get_utxos(&utxo, &address_1.to_string()).into_vec(),
                 expected
             );
             assert_eq!(
@@ -259,25 +255,17 @@ mod test {
                 .build();
             insert_tx(&mut utxo, &tx, 1);
 
+            assert_eq!(get_utxos(&utxo, &address_1.to_string()).into_vec(), vec![]);
             assert_eq!(
-                get_utxos(&utxo, &address_1.to_string()).into_set(),
-                maplit::hashset! {}
-            );
-            assert_eq!(
-                get_utxos(&utxo, &address_2.to_string()).into_set(),
-                maplit::hashset! {
-                    (
-                        OutPoint {
-                            txid: tx.txid(),
-                            vout: 0
-                        },
-                        TxOut {
-                            value: 1000,
-                            script_pubkey: address_2.script_pubkey()
-                        },
-                        1
-                    )
-                }
+                get_utxos(&utxo, &address_2.to_string()).into_vec(),
+                vec![ic_btc_types::Utxo {
+                    outpoint: ic_btc_types::OutPoint {
+                        txid: tx.txid().to_vec(),
+                        vout: 0
+                    },
+                    value: 1000,
+                    height: 1
+                }]
             );
             assert_eq!(
                 utxo.address_to_outpoints,
