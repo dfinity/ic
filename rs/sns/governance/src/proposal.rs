@@ -239,7 +239,7 @@ impl ProposalData {
     }
 
     /// Returns true if a proposal meets the conditions to be accepted. The
-    /// result is only meaningful if the deadline has passed.
+    /// result is only meaningful if the proposal can be decided, i.e., either there is a majority or the deadline has passed.
     pub fn is_accepted(&self) -> bool {
         if let Some(tally) = self.latest_tally.as_ref() {
             (tally.yes as f64 >= tally.total as f64 * MIN_NUMBER_VOTES_FOR_PROPOSAL_RATIO)
