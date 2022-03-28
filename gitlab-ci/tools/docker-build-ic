@@ -9,8 +9,11 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 TAG=$(openssl rand -hex 4)
 DOCKER_IMG_VERSION=$(cat "$REPO_ROOT/gitlab-ci/docker/TAG")
 
+docker login -u gitlab-ci-token -p "$GITLAB_API_TOKEN" registry.gitlab.com
+docker pull docker pull registry.gitlab.com/dfinity-lab/core/docker/ic-build:2022-03-15-b422db6df-41631b4cf376e088dffeed3094e014aa9d785981
+
 cd "$REPO_ROOT"
-docker image build --pull -t ic-build-src:$TAG -f- . <<EOF
+docker image build -t ic-build-src:$TAG -f- . <<EOF
 FROM dfinity/ic-build:$DOCKER_IMG_VERSION
 COPY --chown=ubuntu:ubuntu . /ic
 RUN sudo mkdir /ic/artifacts && sudo chown -R ubuntu:ubuntu /ic/artifacts
