@@ -1,18 +1,23 @@
 //! The module is responsible for awaiting messages from bitcoin peers and dispaching them
 //! to the correct component.
 use crate::{
-    blockchainmanager::BlockchainManager,
-    connectionmanager::ConnectionManager,
-    stream::{handle_stream, StreamEventKind},
-    transaction_manager::TransactionManager,
-    AdapterState, BlockchainManagerRequest, Config, HasHeight, ProcessBitcoinNetworkMessage,
-    ProcessBitcoinNetworkMessageError, ProcessEvent, TransactionManagerRequest,
+    blockchainmanager::BlockchainManager, common::DEFAULT_CHANNEL_BUFFER_SIZE,
+    connectionmanager::ConnectionManager, stream::handle_stream,
+    transaction_manager::TransactionManager, AdapterState, BlockchainManagerRequest, Config,
+    HasHeight, ProcessBitcoinNetworkMessage, ProcessBitcoinNetworkMessageError, ProcessEvent,
+    TransactionManagerRequest,
 };
+use bitcoin::network::message::NetworkMessage;
 use ic_logger::ReplicaLogger;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::{
-    sync::{mpsc::Receiver, mpsc::UnboundedReceiver, Mutex},
+    sync::{
+        mpsc::UnboundedReceiver,
+        mpsc::{channel, Receiver},
+        Mutex,
+    },
     task::JoinHandle,
     time::{interval, sleep},
 };
@@ -30,8 +35,11 @@ pub fn start_router(
     adapter_state: AdapterState,
     mut blockchain_manager_rx: Receiver<BlockchainManagerRequest>,
 ) -> JoinHandle<()> {
+    let (network_message_sender, mut network_message_receiver) =
+        channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
+
     let mut transaction_manager = TransactionManager::new(logger.clone());
-    let mut connection_manager = ConnectionManager::new(config, logger);
+    let mut connection_manager = ConnectionManager::new(config, logger, network_message_sender);
 
     tokio::task::spawn(async move {
         let mut tick_interval = interval(Duration::from_millis(100));
@@ -55,17 +63,21 @@ pub fn start_router(
                     {
                         connection_manager.discard(event.address);
                     }
+                },
+                network_message = network_message_receiver.recv() => {
+                    let (address, message) = network_message.unwrap();
+                    if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) =
+                        connection_manager.process_bitcoin_network_message(address, &message) {
+                        connection_manager.discard(address);
+                    }
 
-
-                    if let StreamEventKind::Message(message) = event.kind {
-                        let blockchain_manager_process_bitcoin_network_message_result =
-                            blockchain_manager.lock().await.process_bitcoin_network_message(event.address, &message);
-                        if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) = blockchain_manager_process_bitcoin_network_message_result {
-                            connection_manager.discard(event.address);
-                        }
-                        if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) = transaction_manager.process_bitcoin_network_message(event.address, &message) {
-                            connection_manager.discard(event.address);
-                        }
+                    let blockchain_manager_process_bitcoin_network_message_result =
+                        blockchain_manager.lock().await.process_bitcoin_network_message(address, &message);
+                    if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) = blockchain_manager_process_bitcoin_network_message_result {
+                        connection_manager.discard(address);
+                    }
+                    if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) = transaction_manager.process_bitcoin_network_message(address, &message) {
+                        connection_manager.discard(address);
                     }
                 },
                 result = blockchain_manager_rx.recv() => {
