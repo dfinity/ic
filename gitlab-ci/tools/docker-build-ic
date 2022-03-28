@@ -10,7 +10,7 @@ TAG=$(openssl rand -hex 4)
 DOCKER_IMG_VERSION=$(cat "$REPO_ROOT/gitlab-ci/docker/TAG")
 
 docker login -u gitlab-ci-token -p "$GITLAB_API_TOKEN" registry.gitlab.com
-docker pull docker pull registry.gitlab.com/dfinity-lab/core/docker/ic-build:2022-03-15-b422db6df-41631b4cf376e088dffeed3094e014aa9d785981
+docker pull registry.gitlab.com/dfinity-lab/core/docker/ic-build:2022-03-15-b422db6df-41631b4cf376e088dffeed3094e014aa9d785981
 
 cd "$REPO_ROOT"
 docker image build -t ic-build-src:$TAG -f- . <<EOF
