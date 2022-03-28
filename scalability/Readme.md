@@ -125,3 +125,14 @@ In order to add a new experiment:
  - Add a template file for your experiment to add more details to the generated report in `templates/experiment_foobar.html.hb`. Have a look at existing ones for inspiration.  
   
 Consider other experiments `run_experiment_*.py` for inspiration. Notable `run_system_baseline_experiment.py` for an example of a workload experiment as well as `run_xnet_experiment.py` for one that doesn't.
+
+## Debugging
+
+For debugging purposes, it is normally useful to instruct python to pop up a debugger on any exception.
+
+```
+pipenv run python3 -m pdb -c continue ./run_XXX_experiment.py
+```
+
+This way, if an exception occurs, the debugger will be opened and the program state can be displayed at the point at
+which the exception has happened.

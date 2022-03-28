@@ -19,18 +19,32 @@ class Prometheus(metrics.Metric):
         """Benchmark iteration is ended."""
         if FLAGS.no_prometheus:
             return
+
+        finalization_rate = None
+        http_request_duration = None
+        http_request_rate = None
+
         print("Getting Prometheus metrics .. ")
-        r = get_finalization_rate(exp.testnet, [exp.get_machine_to_instrument()], exp.t_iter_start, exp.t_iter_end)
-        finalization_rate = extract_value(r)[0]
+        try:
+            r = get_finalization_rate(exp.testnet, [exp.get_machine_to_instrument()], exp.t_iter_start, exp.t_iter_end)
+            finalization_rate = extract_value(r)[0]
+        except Exception:
+            print(colored("Failed to fetch finalization rate from Prometheus, continuing", "red"))
 
-        http_request_duration = get_http_request_duration(
-            exp.testnet, [exp.get_machine_to_instrument()], exp.t_iter_start, exp.t_iter_end, exp.request_type
-        )
+        try:
+            http_request_duration = get_http_request_duration(
+                exp.testnet, [exp.get_machine_to_instrument()], exp.t_iter_start, exp.t_iter_end, exp.request_type
+            )
+        except Exception:
+            print(colored("Failed to fetch http request duration rate from Prometheus, continuing", "red"))
 
-        r = get_http_request_rate(
-            exp.testnet, [exp.get_machine_to_instrument()], exp.t_iter_start, exp.t_iter_end, exp.request_type
-        )
-        http_request_rate = extract_values(r)
+        try:
+            r = get_http_request_rate(
+                exp.testnet, [exp.get_machine_to_instrument()], exp.t_iter_start, exp.t_iter_end, exp.request_type
+            )
+            http_request_rate = extract_values(r)
+        except Exception:
+            print(colored("Failed to fetch http request rate from Prometheus, continuing", "red"))
 
         # Dump Prometheus information.
         with open(os.path.join(exp.iter_outdir, "prometheus.json"), "w") as metrics_file:
