@@ -5,9 +5,9 @@ use ic_crypto_internal_threshold_sig_ecdsa::{EccScalar, IDkgDealingInternal, MEG
 use ic_crypto_test_utils_canister_threshold_sigs::{
     build_params_from_previous, create_and_verify_dealing, create_dealings,
     generate_key_transcript, generate_presig_quadruple, load_input_transcripts, load_transcript,
-    multisign_dealings, random_dealer_id, random_node_id_excluding, random_receiver_for_inputs,
-    random_receiver_id, random_receiver_id_excluding, run_idkg_and_create_and_verify_transcript,
-    CanisterThresholdSigTestEnvironment,
+    multisign_dealings, node_id, random_dealer_id, random_node_id_excluding,
+    random_receiver_for_inputs, random_receiver_id, random_receiver_id_excluding,
+    run_idkg_and_create_and_verify_transcript, CanisterThresholdSigTestEnvironment,
 };
 use ic_interfaces::crypto::{
     IDkgProtocol, MultiSigVerifier, MultiSigner, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
@@ -23,9 +23,9 @@ use ic_types::crypto::canister_threshold_sig::error::{
     ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgComplaint, IDkgDealing, IDkgMaskedTranscriptOrigin, IDkgMultiSignedDealing, IDkgOpening,
-    IDkgReceivers, IDkgTranscript, IDkgTranscriptOperation, IDkgTranscriptParams,
-    IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
+    IDkgComplaint, IDkgDealing, IDkgMaskedTranscriptOrigin, IDkgMultiSignedDealing, IDkgReceivers,
+    IDkgTranscript, IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType,
+    IDkgUnmaskedTranscriptOrigin,
 };
 use ic_types::crypto::canister_threshold_sig::{
     ExtendedDerivationPath, PreSignatureQuadruple, ThresholdEcdsaCombinedSignature,
@@ -1325,20 +1325,6 @@ fn should_run_verify_dealing_public() {
 }
 
 #[test]
-fn should_run_open_transcript() {
-    let crypto_components = temp_crypto_components_for(&[NODE_1]);
-    let complaint = fake_complaint();
-    let transcript = fake_transcript();
-    let result =
-        crypto_for(NODE_1, &crypto_components).open_transcript(&transcript, NODE_1, &complaint);
-    // TODO(CRP-1366): `open_transcript(...) calls real verify_transcript() on the given
-    // fake transcript, so the call fails, but the test passes, as `open_transcript()` is called.
-    // This is however suboptimal, so should be fixed when adding more tests.
-    let err = result.unwrap_err();
-    assert!(matches!(err, IDkgOpenTranscriptError::InternalError { .. }));
-}
-
-#[test]
 fn should_open_transcript_successfully() {
     let (env, transcript, complaint, complainer_id) = environment_with_transcript_and_complaint();
     let opener_id = random_receiver_id_excluding(&transcript.receivers, complainer_id);
@@ -1455,31 +1441,203 @@ fn should_fail_open_transcript_with_a_valid_complaint_but_wrong_transcript() {
 }
 
 #[test]
-fn should_run_verify_opening() {
-    let crypto_components = temp_crypto_components_for(&[NODE_1]);
-    let transcript = fake_transcript();
-    let opening = fake_opening();
-    let complaint = fake_complaint();
-    let result = crypto_for(NODE_1, &crypto_components).verify_opening(
-        &transcript,
-        NODE_1,
-        &opening,
-        &complaint,
-    );
-    // TODO(CRP-1367): `verify_opening(...) calls real verify_opening() on the given
-    // fake transcript and fake opening, so the call fails, but the test passes, as `open_transcript()`
-    // is called.  This is however suboptimal, so should be fixed when adding more tests.
-    let err = result.unwrap_err();
-    assert!(matches!(
-        err,
-        IDkgVerifyOpeningError::MissingDealingInTranscript { .. }
-    ));
-}
-
-#[test]
 fn should_run_retain_active_transcripts() {
     let crypto_components = temp_crypto_components_for(&[NODE_1]);
     crypto_for(NODE_1, &crypto_components).retain_active_transcripts(&[]);
+}
+
+#[test]
+fn should_verify_opening_successfully() {
+    let (env, transcript, complaint, complainer_id) = environment_with_transcript_and_complaint();
+    let opener_id = random_receiver_id_excluding(&transcript.receivers, complainer_id);
+
+    let opening = crypto_for(opener_id, &env.crypto_components)
+        .open_transcript(&transcript, complainer_id, &complaint)
+        .expect("Unexpected failure of open_transcript");
+    let verifier_id =
+        random_receiver_id(&env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1));
+    let result = crypto_for(verifier_id, &env.crypto_components).verify_opening(
+        &transcript,
+        opener_id,
+        &opening,
+        &complaint,
+    );
+    assert!(result.is_ok(), "Failure of verify_opening(): {:?}", result);
+}
+
+#[test]
+fn should_fail_verify_opening_with_inconsistent_transcript_id_in_opening() {
+    let (env, transcript, complaint, complainer_id) = environment_with_transcript_and_complaint();
+    let opener_id = random_receiver_id_excluding(&transcript.receivers, complainer_id);
+
+    let mut opening = crypto_for(opener_id, &env.crypto_components)
+        .open_transcript(&transcript, complainer_id, &complaint)
+        .expect("Unexpected failure of open_transcript");
+    let wrong_transcript_id = dummy_idkg_transcript_id_for_tests(1);
+    assert_ne!(
+        opening.transcript_id, wrong_transcript_id,
+        "Unexpected collision with a random transcript_id"
+    );
+    opening.transcript_id = wrong_transcript_id;
+    let verifier_id =
+        random_receiver_id(&env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1));
+    let result = crypto_for(verifier_id, &env.crypto_components).verify_opening(
+        &transcript,
+        opener_id,
+        &opening,
+        &complaint,
+    );
+    assert!(
+        matches!(result, Err(IDkgVerifyOpeningError::TranscriptIdMismatch)),
+        "{:?}",
+        result
+    );
+}
+
+#[test]
+fn should_fail_verify_opening_with_inconsistent_transcript_id_in_complaint() {
+    let (env, transcript, mut complaint, complainer_id) =
+        environment_with_transcript_and_complaint();
+    let opener_id = random_receiver_id_excluding(&transcript.receivers, complainer_id);
+
+    let opening = crypto_for(opener_id, &env.crypto_components)
+        .open_transcript(&transcript, complainer_id, &complaint)
+        .expect("Unexpected failure of open_transcript");
+    let wrong_transcript_id = dummy_idkg_transcript_id_for_tests(1);
+    assert_ne!(
+        complaint.transcript_id, wrong_transcript_id,
+        "Unexpected collision with a random transcript_id"
+    );
+    complaint.transcript_id = wrong_transcript_id;
+    let verifier_id =
+        random_receiver_id(&env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1));
+    let result = crypto_for(verifier_id, &env.crypto_components).verify_opening(
+        &transcript,
+        opener_id,
+        &opening,
+        &complaint,
+    );
+    assert!(
+        matches!(result, Err(IDkgVerifyOpeningError::TranscriptIdMismatch)),
+        "{:?}",
+        result
+    );
+}
+
+#[test]
+fn should_fail_verify_opening_with_inconsistent_dealer_id() {
+    let (env, transcript, complaint, complainer_id) = environment_with_transcript_and_complaint();
+    let opener_id = random_receiver_id_excluding(&transcript.receivers, complainer_id);
+
+    let mut opening = crypto_for(opener_id, &env.crypto_components)
+        .open_transcript(&transcript, complainer_id, &complaint)
+        .expect("Unexpected failure of open_transcript");
+    opening.dealer_id = random_receiver_id_excluding(&transcript.receivers, opening.dealer_id);
+    let verifier_id =
+        random_receiver_id(&env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1));
+    let result = crypto_for(verifier_id, &env.crypto_components).verify_opening(
+        &transcript,
+        opener_id,
+        &opening,
+        &complaint,
+    );
+    assert!(
+        matches!(result, Err(IDkgVerifyOpeningError::DealerIdMismatch)),
+        "{:?}",
+        result
+    );
+}
+
+#[test]
+fn should_fail_verify_opening_when_opener_is_not_a_receiver() {
+    let (env, transcript, complaint, complainer_id) = environment_with_transcript_and_complaint();
+    let opener_id = random_receiver_id_excluding(&transcript.receivers, complainer_id);
+
+    let opening = crypto_for(opener_id, &env.crypto_components)
+        .open_transcript(&transcript, complainer_id, &complaint)
+        .expect("Unexpected failure of open_transcript");
+    let verifier_id =
+        random_receiver_id(&env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1));
+    let wrong_opener_id = node_id(123456789);
+    assert!(
+        !transcript.receivers.get().contains(&wrong_opener_id),
+        "Wrong opener_id unexpectedly in receivers"
+    );
+    let result = crypto_for(verifier_id, &env.crypto_components).verify_opening(
+        &transcript,
+        wrong_opener_id,
+        &opening,
+        &complaint,
+    );
+    assert!(
+        matches!(
+            result,
+            Err(IDkgVerifyOpeningError::MissingOpenerInReceivers { .. })
+        ),
+        "{:?}",
+        result
+    );
+}
+
+#[test]
+fn should_fail_verify_opening_with_corrupted_opening() {
+    let (env, transcript, complaint, complainer_id) = environment_with_transcript_and_complaint();
+    let opener_id = random_receiver_id_excluding(&transcript.receivers, complainer_id);
+
+    let mut opening = crypto_for(opener_id, &env.crypto_components)
+        .open_transcript(&transcript, complainer_id, &complaint)
+        .expect("Unexpected failure of open_transcript");
+    opening
+        .internal_opening_raw
+        .truncate(opening.internal_opening_raw.len() - 1);
+    let verifier_id =
+        random_receiver_id(&env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1));
+    let result = crypto_for(verifier_id, &env.crypto_components).verify_opening(
+        &transcript,
+        opener_id,
+        &opening,
+        &complaint,
+    );
+    assert!(
+        matches!(result, Err(IDkgVerifyOpeningError::InternalError { .. })),
+        "{:?}",
+        result
+    );
+}
+
+#[test]
+fn should_fail_verify_opening_when_dealing_is_missing() {
+    let (env, mut transcript, complaint, complainer_id) =
+        environment_with_transcript_and_complaint();
+    let opener_id = random_receiver_id_excluding(&transcript.receivers, complainer_id);
+
+    let opening = crypto_for(opener_id, &env.crypto_components)
+        .open_transcript(&transcript, complainer_id, &complaint)
+        .expect("Unexpected failure of open_transcript");
+    let verifier_id =
+        random_receiver_id(&env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1));
+    let dealings = transcript.verified_dealings.clone();
+    let (dealer_index, _signed_dealing) = dealings
+        .iter()
+        .find(|(_index, signed_dealing)| {
+            signed_dealing.dealing.idkg_dealing.dealer_id == complaint.dealer_id
+        })
+        .expect("Inconsistent transcript");
+    transcript.verified_dealings.remove(dealer_index);
+    let result = crypto_for(verifier_id, &env.crypto_components).verify_opening(
+        &transcript,
+        opener_id,
+        &opening,
+        &complaint,
+    );
+    assert!(
+        matches!(
+            result,
+            Err(IDkgVerifyOpeningError::MissingDealingInTranscript { .. })
+        ),
+        "{:?}",
+        result
+    );
 }
 
 fn fake_params_for(node_id: NodeId) -> IDkgTranscriptParams {
@@ -1495,37 +1653,6 @@ fn fake_params_for(node_id: NodeId) -> IDkgTranscriptParams {
         IDkgTranscriptOperation::Random,
     )
     .expect("failed to generate fake parameters")
-}
-
-fn fake_transcript() -> IDkgTranscript {
-    let mut nodes = BTreeSet::new();
-    nodes.insert(NODE_1);
-
-    IDkgTranscript {
-        transcript_id: dummy_idkg_transcript_id_for_tests(1),
-        receivers: IDkgReceivers::new(nodes).unwrap(),
-        registry_version: RegistryVersion::from(1),
-        verified_dealings: BTreeMap::new(),
-        transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
-        algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-        internal_transcript_raw: vec![],
-    }
-}
-
-fn fake_complaint() -> IDkgComplaint {
-    IDkgComplaint {
-        transcript_id: dummy_idkg_transcript_id_for_tests(1),
-        dealer_id: NODE_1,
-        internal_complaint_raw: vec![],
-    }
-}
-
-fn fake_opening() -> IDkgOpening {
-    IDkgOpening {
-        transcript_id: dummy_idkg_transcript_id_for_tests(1),
-        dealer_id: NODE_1,
-        internal_opening_raw: vec![],
-    }
 }
 
 fn fake_key_and_presig_quadruple(
