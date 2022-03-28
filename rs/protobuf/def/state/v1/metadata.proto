@@ -12,6 +12,5 @@ message StatesMetadata {
     // Checkpoint metadata indexed by height.
     map<uint64, StateMetadata> by_height = 1;
 
-    // The largest height passed to `StateManager::remove_states_below()`.
-    uint64 oldest_required_state = 2;
+    reserved 2;
 }
