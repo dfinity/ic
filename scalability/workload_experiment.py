@@ -68,9 +68,14 @@ class WorkloadExperiment(experiment.Experiment):
         )
         if self.num_workload_gen > len(workload_generator_machines):
             raise Exception(
-                "Not enough machines in testnet {}'s subnet {} to run {} workload generators".format(
-                    self.wg_testnet, FLAGS.wg_subnet, self.num_workload_gen
-                )
+                colored(
+                    (
+                        f"Not enough machines in testnet {self.wg_testnet}'s subnet {FLAGS.wg_subnet} "
+                        f"to run {self.num_workload_gen} workload generators. "
+                        "Try --num_workload_generators=X to override how many workload generators to use"
+                    )
+                ),
+                "red",
             )
 
         self.machines = workload_generator_machines[: self.num_workload_gen]

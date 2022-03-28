@@ -132,6 +132,41 @@ def main(argv):
         + base_arguments_load_test
     )
 
+    print("📂 Maximum capacity system baseline (query)")
+    run(
+        [
+            "python3",
+            "max_capacity_system_baseline.py",
+            "--iter_duration",
+            "20",
+            "--query_initial_rps",
+            "20",
+            "--max_query_load",
+            "20",
+            "--num_workload_generators",
+            "1",
+        ]
+        + base_arguments_load_test
+    )
+
+    print("📂 Maximum capacity system baseline (update)")
+    run(
+        [
+            "python3",
+            "max_capacity_system_baseline.py",
+            "--iter_duration",
+            "20",
+            "--update_initial_rps",
+            "20",
+            "--max_update_load",
+            "20",
+            "--num_workload_generators",
+            "1",
+            "--use_updates=True",
+        ]
+        + base_arguments_load_test
+    )
+
     print("📂 Large payload max capacity with updates")
     run(
         [
@@ -172,6 +207,36 @@ def main(argv):
             "--target_update_load",
             "5",
             "--use_updates=True",
+        ]
+        + base_arguments_load_test
+    )
+
+    print("📂 Maximum capacity large memory (query)")
+    run(
+        [
+            "python3",
+            "max_capacity_large_memory.py",
+            "--iter_duration",
+            "20",
+            "--query_initial_rps",
+            "20",
+            "--max_query_load",
+            "20",
+        ]
+        + base_arguments_load_test
+    )
+
+    print("📂 Maximum capacity large memory (update)")
+    run(
+        [
+            "python3",
+            "max_capacity_large_memory.py",
+            "--iter_duration",
+            "20",
+            "--query_initial_rps",
+            "20",
+            "--max_query_load",
+            "20",
         ]
         + base_arguments_load_test
     )
