@@ -396,33 +396,6 @@ subnet-query-workload-slo-300-1kb:
 
       $SHELL_WRAPPER ./testnet/tests/scripts/subnet_query_workload.sh "$TESTNET" 1800 1000 1k replica_nodes "$CI_JOB_STAGE/$CI_JOB_NAME"
 
-# SCENARIO TEST xnet_slo_test: 20min @ 10 XNet requests * 1 KB / round
-# Install 1 xnet-test-canister instance onto each of 2 subnets, have them message each other for 20 minutes
-xnet-slo-test-slo:
-  extends: .prod-slo-test
-  script:
-    - |
-      set -eExou pipefail
-      git fetch
-      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
-      export GIT_REVISION
-
-      $SHELL_WRAPPER ./testnet/tests/scripts/xnet_slo_test.sh "$TESTNET" 2 1200 10 1024 normal "$CI_JOB_STAGE/$CI_JOB_NAME"
-
-# SCENARIO TEST xnet_slo_test: 20min @ 10 XNet requests * 1 KB / round
-# Install 1 xnet-test-canister instance onto each of 29 single-node subnets, have them message each other for 20 minutes
-xnet-slo-test-slo-29-subnets:
-  extends: .prod-slo-test
-  script:
-    - |
-      set -eExou pipefail
-      git fetch
-      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
-      export GIT_REVISION
-
-      $SHELL_WRAPPER ./testnet/tests/scripts/xnet_slo_test.sh "$TESTNET" 29 1200 10 1024 single_node "$CI_JOB_STAGE/$CI_JOB_NAME"
-  timeout: 3 hours
-
 # SCENARIO TEST rejoin: 15min runtime, 8 canisters installed
 # Kill one node for the majority of time during the 15min runtime, restart it and check if it contributes to IC later
 rejoin-test-slo:
@@ -593,6 +566,16 @@ system-tests-nightly:
   variables:
     SUITE_NAME: "nightly"
     cd_target_env: "NIGHTLY"
+  script:
+    - *run-farm-based-test
+
+system-tests-prod-slo:
+  extends: 
+    - .system-tests
+    - .with-monitoring
+  variables:
+    SUITE_NAME: "prod_slo"
+    cd_target_env: "SLO"
   script:
     - *run-farm-based-test
 
