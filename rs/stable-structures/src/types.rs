@@ -16,6 +16,11 @@ impl Address {
     pub fn get(&self) -> u64 {
         self.0
     }
+
+    pub fn size() -> Bytes {
+        assert_eq!(core::mem::size_of::<Address>(), 8);
+        Bytes::from(8u64)
+    }
 }
 
 impl Add<Bytes> for Address {
@@ -44,14 +49,14 @@ impl AddAssign<Bytes> for Address {
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Bytes(u64);
 
-impl From<u64> for Bytes {
-    fn from(bytes: u64) -> Self {
-        Self(bytes)
+impl<I: Into<u64>> From<I> for Bytes {
+    fn from(bytes: I) -> Self {
+        Self(bytes.into())
     }
 }
 
-// We don't implement the `From<usize>` trait as it's
-// not needed and will conflict with the `From<u64>` trait.
+// `From<usize>` is unimplemented as it would conflict
+// with the `From` trait above.
 #[allow(clippy::from_over_into)]
 impl Into<usize> for Bytes {
     fn into(self) -> usize {
@@ -80,5 +85,17 @@ impl Mul<u64> for Bytes {
 
     fn mul(self, num: u64) -> Self {
         Self(self.0 * num)
+    }
+}
+
+impl AddAssign<Bytes> for Bytes {
+    fn add_assign(&mut self, other: Bytes) {
+        *self = Self(self.0 + other.0);
+    }
+}
+
+impl Bytes {
+    pub const fn new(val: u64) -> Self {
+        Self(val)
     }
 }

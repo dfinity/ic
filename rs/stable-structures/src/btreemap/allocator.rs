@@ -1,6 +1,7 @@
 use crate::{
+    read_struct,
     types::{Address, Bytes, NULL},
-    Memory, WASM_PAGE_SIZE,
+    write_struct, Memory,
 };
 
 const ALLOCATOR_LAYOUT_VERSION: u8 = 1;
@@ -95,16 +96,7 @@ impl<M: Memory> Allocator<M> {
 
     /// Load an allocator from memory at the given `addr`.
     pub fn load(memory: M, addr: Address) -> Self {
-        let mut header: AllocatorHeader = unsafe { core::mem::zeroed() };
-        let header_slice = unsafe {
-            core::slice::from_raw_parts_mut(
-                &mut header as *mut _ as *mut u8,
-                AllocatorHeader::size().into(),
-            )
-        };
-
-        memory.read(addr.get(), header_slice);
-
+        let header: AllocatorHeader = read_struct(addr, &memory);
         assert_eq!(&header.magic, ALLOCATOR_MAGIC, "Bad magic.");
         assert_eq!(
             header.version, ALLOCATOR_LAYOUT_VERSION,
@@ -211,10 +203,10 @@ impl<M: Memory> Allocator<M> {
         self.save();
     }
 
-    /// Save the allocator to memory.
+    /// Saves the allocator to memory.
     pub fn save(&self) {
         let header = AllocatorHeader {
-            magic: *ALLOCATOR_MAGIC, //b"BTA",
+            magic: *ALLOCATOR_MAGIC,
             version: ALLOCATOR_LAYOUT_VERSION,
             _alignment: [0; 4],
             num_allocated_chunks: self.num_allocated_chunks,
@@ -223,14 +215,11 @@ impl<M: Memory> Allocator<M> {
             _buffer: [0; 16],
         };
 
-        let header_slice = unsafe {
-            core::slice::from_raw_parts(
-                &header as *const _ as *const u8,
-                core::mem::size_of::<AllocatorHeader>(),
-            )
-        };
+        write_struct(&header, self.header_addr, &self.memory);
+    }
 
-        write(&self.memory, self.header_addr.get(), header_slice)
+    pub fn num_allocated_chunks(&self) -> u64 {
+        self.num_allocated_chunks
     }
 
     // The full size of a chunk, which is the size of the header + the `allocation_size` that's
@@ -264,24 +253,11 @@ impl ChunkHeader {
     }
 
     fn save<M: Memory>(&self, address: Address, memory: &M) {
-        let chunk_slice = unsafe {
-            core::slice::from_raw_parts(self as *const _ as *const u8, Self::size().into())
-        };
-
-        write(memory, address.get(), chunk_slice);
+        write_struct(self, address, memory);
     }
 
-    fn load(address: Address, memory: &impl Memory) -> Self {
-        let mut header: ChunkHeader = unsafe { core::mem::zeroed() };
-        let header_slice = unsafe {
-            core::slice::from_raw_parts_mut(
-                &mut header as *mut _ as *mut u8,
-                core::mem::size_of::<ChunkHeader>(),
-            )
-        };
-
-        memory.read(address.get(), header_slice);
-
+    fn load<M: Memory>(address: Address, memory: &M) -> Self {
+        let header: ChunkHeader = read_struct(address, memory);
         assert_eq!(&header.magic, CHUNK_MAGIC, "Bad magic.");
         assert_eq!(header.version, CHUNK_LAYOUT_VERSION, "Unsupported version.");
 
@@ -291,31 +267,6 @@ impl ChunkHeader {
     fn size() -> Bytes {
         Bytes::from(core::mem::size_of::<Self>() as u64)
     }
-}
-
-fn write<M: Memory>(memory: &M, offset: u64, bytes: &[u8]) {
-    let last_byte = offset
-        .checked_add(bytes.len() as u64)
-        .expect("Address space overflow");
-    let size_pages = memory.size();
-    let size_bytes = size_pages
-        .checked_mul(WASM_PAGE_SIZE)
-        .expect("Address space overflow");
-    if size_bytes < last_byte {
-        let diff_bytes = last_byte - size_bytes;
-        let diff_pages = diff_bytes
-            .checked_add(WASM_PAGE_SIZE - 1)
-            .expect("Address space overflow")
-            / WASM_PAGE_SIZE;
-        assert!(
-            memory.grow(diff_pages) != -1,
-            "Failed to grow memory from {} pages to {} pages (delta = {} pages).",
-            size_pages,
-            size_pages + diff_pages,
-            diff_pages
-        );
-    }
-    memory.write(offset, bytes);
 }
 
 #[cfg(test)]
@@ -333,7 +284,7 @@ mod test {
     fn new_and_load() {
         let mem = make_memory();
         let allocator_addr = Address::from(0);
-        let allocation_size = Bytes::from(16);
+        let allocation_size = Bytes::from(16u64);
 
         // Create a new allocator.
         Allocator::new(mem.clone(), allocator_addr, allocation_size);
@@ -355,7 +306,7 @@ mod test {
     #[test]
     fn allocate() {
         let mem = make_memory();
-        let allocation_size = Bytes::from(16);
+        let allocation_size = Bytes::from(16u64);
 
         let mut allocator = Allocator::new(mem, Address::from(0), allocation_size);
 
@@ -410,7 +361,7 @@ mod test {
     #[test]
     fn allocate_then_deallocate() {
         let mem = make_memory();
-        let allocation_size = Bytes::from(16);
+        let allocation_size = Bytes::from(16u64);
         let allocator_addr = Address::from(0);
 
         let mut allocator = Allocator::new(mem.clone(), allocator_addr, allocation_size);
@@ -440,7 +391,7 @@ mod test {
     #[test]
     fn allocate_deallocate_2() {
         let mem = make_memory();
-        let allocation_size = Bytes::from(16);
+        let allocation_size = Bytes::from(16u64);
 
         let mut allocator = Allocator::new(mem, Address::from(0), allocation_size);
 
@@ -460,7 +411,7 @@ mod test {
     #[should_panic]
     fn deallocate_free_chunk() {
         let mem = make_memory();
-        let allocation_size = 16;
+        let allocation_size: u64 = 16;
 
         let mut allocator = Allocator::new(mem, Address::from(0), Bytes::from(allocation_size));
 

@@ -1,6 +1,7 @@
-mod btreemap;
+pub mod btreemap;
 mod types;
 pub mod vec_mem;
+use types::Address;
 
 const WASM_PAGE_SIZE: u64 = 65536;
 
@@ -23,12 +24,70 @@ pub trait Memory {
     fn write(&self, offset: u64, src: &[u8]);
 }
 
-/// A helper function that reads a single 32bit integer encoded as
-/// little-endian from the specified memory at the specified offset.
-fn _read_u32<M: Memory>(m: &M, offset: u64) -> u32 {
+// A helper function that reads a single 32bit integer encoded as
+// little-endian from the specified memory at the specified offset.
+fn read_u32<M: Memory>(m: &M, addr: Address) -> u32 {
     let mut buf: [u8; 4] = [0; 4];
-    m.read(offset, &mut buf);
+    m.read(addr.get(), &mut buf);
     u32::from_le_bytes(buf)
+}
+
+// A helper function that reads a single 64bit integer encoded as
+// little-endian from the specified memory at the specified offset.
+fn read_u64<M: Memory>(m: &M, addr: Address) -> u64 {
+    let mut buf: [u8; 8] = [0; 8];
+    m.read(addr.get(), &mut buf);
+    u64::from_le_bytes(buf)
+}
+
+// Writes a single 32-bit integer encoded as little-endian.
+fn write_u32<M: Memory>(m: &M, addr: Address, val: u32) {
+    write(m, addr.get(), &val.to_le_bytes());
+}
+
+// A helper function for writing into memory.
+fn write<M: Memory>(memory: &M, offset: u64, bytes: &[u8]) {
+    let last_byte = offset
+        .checked_add(bytes.len() as u64)
+        .expect("Address space overflow");
+    let size_pages = memory.size();
+    let size_bytes = size_pages
+        .checked_mul(WASM_PAGE_SIZE)
+        .expect("Address space overflow");
+    if size_bytes < last_byte {
+        let diff_bytes = last_byte - size_bytes;
+        let diff_pages = diff_bytes
+            .checked_add(WASM_PAGE_SIZE - 1)
+            .expect("Address space overflow")
+            / WASM_PAGE_SIZE;
+        assert!(
+            memory.grow(diff_pages) != -1,
+            "Failed to grow memory from {} pages to {} pages (delta = {} pages).",
+            size_pages,
+            size_pages + diff_pages,
+            diff_pages
+        );
+    }
+    memory.write(offset, bytes);
+}
+
+// Reads a struct from memory.
+fn read_struct<T, M: Memory>(addr: Address, memory: &M) -> T {
+    let mut t: T = unsafe { core::mem::zeroed() };
+    let t_slice = unsafe {
+        core::slice::from_raw_parts_mut(&mut t as *mut _ as *mut u8, core::mem::size_of::<T>())
+    };
+    memory.read(addr.get(), t_slice);
+    t
+}
+
+// Writes a struct to memory.
+fn write_struct<T, M: Memory>(t: &T, addr: Address, memory: &M) {
+    let slice = unsafe {
+        core::slice::from_raw_parts(t as *const _ as *const u8, core::mem::size_of::<T>())
+    };
+
+    write(memory, addr.get(), slice)
 }
 
 /// RestrictedMemory creates a limited view of another memory.  This
