@@ -18,6 +18,85 @@ pub struct CyclesCanisterInitPayload {
     pub minting_account_id: Option<AccountIdentifier>,
 }
 
+/// Argument taken by top up notification endpoint
+#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+pub struct NotifyTopUp {
+    pub block_index: BlockHeight,
+    pub canister_id: CanisterId,
+}
+
+/// Argument taken by create canister notification endpoint
+#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+pub struct NotifyCreateCanister {
+    pub block_index: BlockHeight,
+    pub controller: PrincipalId,
+}
+
+/// Error for notify endpoints
+#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+pub enum NotifyError {
+    Refunded {
+        reason: String,
+        block_index: Option<BlockHeight>,
+    },
+    InvalidTransaction(String),
+    TransactionTooOld(BlockHeight),
+    Processing,
+    Other {
+        error_code: u64,
+        error_message: String,
+    },
+}
+
+pub enum NotifyErrorCode {
+    /// An internal error in the cycles minting canister (e.g., inconsistent state).
+    /// That should never happen.
+    Internal = 1,
+    /// The cycles minting canister failed to fetch block from ledger.
+    FailedToFetchBlock = 2,
+    /// The cycles minting canister failed to execute the refund transaction.
+    RefundFailed = 3,
+}
+
+impl NotifyError {
+    /// Returns false if this error is permanent and should not be retried.
+    pub fn is_retriable(&self) -> bool {
+        !matches!(self, Self::Refunded { .. })
+    }
+}
+
+impl std::fmt::Display for NotifyError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Refunded {
+                reason,
+                block_index: Some(b),
+            } => write!(f, "The payment was refunded in block {}: {}", b, reason),
+            Self::Refunded {
+                reason,
+                block_index: None,
+            } => write!(f, "The payment was refunded: {}", reason),
+            Self::InvalidTransaction(err) => write!(f, "Failed to verify transaction: {}", err),
+            Self::TransactionTooOld(bh) => write!(
+                f,
+                "The payment is too old, you cannot notify blocks older than block {}",
+                bh
+            ),
+            Self::Processing => {
+                write!(f, "Another notification of this transaction is in progress")
+            }
+            Self::Other {
+                error_code,
+                error_message,
+            } => write!(
+                f,
+                "Notification failed with code {}: {}",
+                error_code, error_message
+            ),
+        }
+    }
+}
+
 pub const MEMO_CREATE_CANISTER: Memo = Memo(0x41455243); // == 'CREA'
 pub const MEMO_TOP_UP_CANISTER: Memo = Memo(0x50555054); // == 'TPUP'
 

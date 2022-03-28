@@ -1,14 +1,14 @@
-use std::collections::BTreeMap;
+use std::collections::{btree_map::Entry, BTreeMap};
 use std::convert::TryInto;
 use std::sync::RwLock;
 use std::time::{Duration, UNIX_EPOCH};
 
-use candid::{CandidType, Encode};
+use candid::{candid_method, CandidType, Encode};
 use cycles_minting_canister::*;
 use dfn_candid::{candid_one, CandidOne};
 use dfn_core::{
-    api::{caller, set_certified_data},
-    over, over_init, stable, BytesS,
+    api::{call_with_cleanup, caller, set_certified_data},
+    over, over_async, over_init, stable, BytesS,
 };
 use dfn_protobuf::protobuf;
 use ic_crypto_tree_hash::{
@@ -19,8 +19,8 @@ use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_types::ic00::{CanisterIdRecord, CanisterSettingsArgs, CreateCanisterArgs, Method, IC_00};
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use ledger_canister::{
-    AccountIdentifier, BlockHeight, CyclesResponse, Memo, SendArgs, Subaccount, Tokens,
-    TransactionNotification, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, Block, BlockHeight, BlockRes, CyclesResponse, Memo, Operation, SendArgs,
+    Subaccount, Tokens, TransactionNotification, DEFAULT_TRANSFER_FEE,
 };
 use on_wire::{FromWire, IntoWire, NewType};
 
@@ -39,6 +39,21 @@ mod limiter;
 const NUM_DAYS_FOR_ICP_XDR_AVERAGE: usize = 30;
 pub const LABEL_ICP_XDR_CONVERSION_RATE: &[u8] = b"ICP_XDR_CONVERSION_RATE";
 pub const LABEL_AVERAGE_ICP_XDR_CONVERSION_RATE: &[u8] = b"AVERAGE_ICP_XDR_CONVERSION_RATE";
+
+/// The maximum number of notification statuses to store.
+const MAX_NOTIFY_HISTORY: usize = 1_000_000;
+/// The maximum number of old notification statuses we purge in one go.
+const MAX_NOTIFY_PURGE: usize = 100_000;
+
+#[derive(Serialize, Deserialize, Clone, Debug, CandidType, Eq, PartialEq)]
+enum NotificationStatus {
+    /// We are waiting for a reply from ledger to complete the notification processing.
+    Processing,
+    /// The cached result of a completed canister top up.
+    NotifiedTopUp(Result<Cycles, NotifyError>),
+    /// The cached result of a completed canister creation.
+    NotifiedCreateCanister(Result<CanisterId, NotifyError>),
+}
 
 #[derive(Serialize, Deserialize, Clone, CandidType, Eq, PartialEq, Debug)]
 struct State {
@@ -75,6 +90,9 @@ struct State {
     limiter: limiter::Limiter,
 
     total_cycles_minted: Cycles,
+
+    blocks_notified: Option<BTreeMap<BlockHeight, NotificationStatus>>,
+    last_purged_notification: Option<BlockHeight>,
 }
 
 impl State {
@@ -98,6 +116,8 @@ impl State {
             cycles_limit: 50_000_000_000_000_000u128.into(), // == 50 Pcycles/hour
             limiter: limiter::Limiter::new(resolution, max_age),
             total_cycles_minted: 0.into(),
+            blocks_notified: Some(BTreeMap::new()),
+            last_purged_notification: Some(0),
         }
     }
 
@@ -108,6 +128,32 @@ impl State {
     fn decode(bytes: &[u8]) -> Result<Self, String> {
         candid::decode_one(bytes)
             .map_err(|err| format!("Decoding cycles minting canister state failed: {}", err))
+    }
+
+    // Keep the size of blocks_notified map not larger than max_history.
+    // Purges at most MAX_NOTIFY_PURGE entries.
+    fn purge_old_notifications(&mut self, max_history: usize) {
+        let mut last_purged = 0;
+        let mut cnt = 0;
+        // Remove elements from the beginning of self.blocks_notified until either
+        // it is small enough, or MAX_NOTIFY_PURGE entries have been removed.
+        while self.blocks_notified.as_ref().unwrap().len() > max_history && cnt < MAX_NOTIFY_PURGE {
+            // pop_first is nightly only
+            let block_height = *self
+                .blocks_notified
+                .as_ref()
+                .unwrap()
+                .iter()
+                .next()
+                .unwrap()
+                .0;
+            self.blocks_notified.as_mut().unwrap().remove(&block_height);
+            last_purged = block_height;
+            cnt += 1;
+        }
+        // make sure this grows monotonically (a delayed callback might have added older status)
+        last_purged = last_purged.max(self.last_purged_notification.unwrap());
+        self.last_purged_notification = Some(last_purged);
     }
 }
 
@@ -462,6 +508,244 @@ fn transaction_notification_() {
     over_async_may_reject(candid_one, transaction_notification)
 }
 
+#[export_name = "canister_update notify_top_up"]
+fn notify_top_up_() {
+    over_async(candid_one, notify_top_up)
+}
+
+#[export_name = "canister_update notify_create_canister"]
+fn notify_create_canister_() {
+    over_async(candid_one, notify_create_canister)
+}
+
+fn is_transient_error<T>(result: &Result<T, NotifyError>) -> bool {
+    if let Err(e) = result {
+        return e.is_retriable();
+    }
+    false
+}
+
+/// Notify about top up
+///
+/// # Arguments
+///
+/// * `block_height` -  The height of the block you would like to send a
+///   notification about.
+/// * `canister_id` - Canister to be topped up.
+#[candid_method(update, rename = "notify_top_up")]
+#[allow(unreachable_code)]
+#[allow(unused_variables)]
+async fn notify_top_up(
+    NotifyTopUp {
+        block_index,
+        canister_id,
+    }: NotifyTopUp,
+) -> Result<Cycles, NotifyError> {
+    panic!("Endpoint not enabled");
+    let cmc_id = dfn_core::api::id();
+    let sub = Subaccount::from(&canister_id);
+    let expected_to = AccountIdentifier::new(cmc_id.get(), Some(sub));
+
+    let (amount, from) = fetch_transaction(block_index, expected_to, MEMO_TOP_UP_CANISTER).await?;
+    {
+        let state: &mut State = &mut STATE.write().unwrap();
+        state.purge_old_notifications(MAX_NOTIFY_HISTORY);
+
+        if block_index <= state.last_purged_notification.unwrap() {
+            return Err(NotifyError::TransactionTooOld(
+                state.last_purged_notification.unwrap() + 1,
+            ));
+        }
+
+        match state.blocks_notified.as_mut().unwrap().entry(block_index) {
+            Entry::Occupied(entry) => match entry.get() {
+                NotificationStatus::Processing => return Err(NotifyError::Processing),
+                NotificationStatus::NotifiedTopUp(result) => return result.clone(),
+                NotificationStatus::NotifiedCreateCanister(_) => {
+                    return Err(NotifyError::InvalidTransaction(
+                        "The same payment is already processed as create canister request".into(),
+                    ));
+                }
+            },
+            Entry::Vacant(entry) => {
+                entry.insert(NotificationStatus::Processing);
+            }
+        }
+    }
+
+    let result = process_top_up(canister_id, from, amount).await;
+
+    let notified: &mut Option<BTreeMap<_, _>> = &mut STATE.write().unwrap().blocks_notified;
+    notified.as_mut().unwrap().insert(
+        block_index,
+        NotificationStatus::NotifiedTopUp(result.clone()),
+    );
+    if is_transient_error(&result) {
+        notified.as_mut().unwrap().remove(&block_index);
+    }
+    result
+}
+
+/// Notify about create canister transaction
+///
+/// # Arguments
+///
+/// * `block_height` -  The height of the block you would like to send a
+///   notification about.
+/// * `controller` - PrincipalId of the canister controller.
+#[candid_method(update, rename = "notify_create_canister")]
+#[allow(unreachable_code)]
+#[allow(unused_variables)]
+async fn notify_create_canister(
+    NotifyCreateCanister {
+        block_index,
+        controller,
+    }: NotifyCreateCanister,
+) -> Result<CanisterId, NotifyError> {
+    panic!("Endpoint not enabled");
+    let cmc_id = dfn_core::api::id();
+    let sub = Subaccount::from(&controller);
+    let expected_to = AccountIdentifier::new(cmc_id.get(), Some(sub));
+
+    let (amount, from) = fetch_transaction(block_index, expected_to, MEMO_CREATE_CANISTER).await?;
+
+    {
+        let state: &mut State = &mut STATE.write().unwrap();
+        state.purge_old_notifications(MAX_NOTIFY_HISTORY);
+
+        if block_index <= state.last_purged_notification.unwrap() {
+            return Err(NotifyError::TransactionTooOld(
+                state.last_purged_notification.unwrap() + 1,
+            ));
+        }
+
+        match state.blocks_notified.as_mut().unwrap().entry(block_index) {
+            Entry::Occupied(entry) => match entry.get() {
+                NotificationStatus::Processing => return Err(NotifyError::Processing),
+                NotificationStatus::NotifiedCreateCanister(resp) => return resp.clone(),
+                NotificationStatus::NotifiedTopUp(_) => {
+                    return Err(NotifyError::InvalidTransaction(
+                        "The same payment is already processed as a top up request.".into(),
+                    ))
+                }
+            },
+            Entry::Vacant(entry) => {
+                entry.insert(NotificationStatus::Processing);
+            }
+        }
+    }
+
+    let result = process_create_canister(controller, from, amount).await;
+
+    let notified: &mut Option<BTreeMap<_, _>> = &mut STATE.write().unwrap().blocks_notified;
+    notified.as_mut().unwrap().insert(
+        block_index,
+        NotificationStatus::NotifiedCreateCanister(result.clone()),
+    );
+    if is_transient_error(&result) {
+        notified.as_mut().unwrap().remove(&block_index);
+    }
+
+    result
+}
+
+async fn query_block(
+    block_index: BlockHeight,
+    ledger_id: CanisterId,
+) -> Result<Block, NotifyError> {
+    fn failed_to_fetch_block(error_message: String) -> NotifyError {
+        NotifyError::Other {
+            error_code: NotifyErrorCode::FailedToFetchBlock as u64,
+            error_message,
+        }
+    }
+    let BlockRes(b) = call_with_cleanup(ledger_id, "block_pb", protobuf, block_index)
+        .await
+        .map_err(|e| failed_to_fetch_block(format!("Failed to fetch block: {}", e.1)))?;
+
+    match b {
+        None => {
+            return Err(NotifyError::InvalidTransaction(format!(
+                "Block {} not found",
+                block_index
+            )))
+        }
+        Some(Ok(block)) => block,
+        Some(Err(canister_id)) => {
+            let BlockRes(b) = call_with_cleanup(canister_id, "get_block_pb", protobuf, block_index)
+                .await
+                .map_err(|e| {
+                    failed_to_fetch_block(format!(
+                        "Failed to fetch block from {}: {}",
+                        canister_id, e.1
+                    ))
+                })?;
+            b.ok_or_else(|| {
+                failed_to_fetch_block(format!(
+                    "Block {} not found in archive {}",
+                    block_index, canister_id
+                ))
+            })?
+            .map_err(|redirect_canister_id| {
+                failed_to_fetch_block(format!(
+                    "Unexpected response from archive (redirected to {})",
+                    redirect_canister_id
+                ))
+            })?
+        }
+    }
+    .decode()
+    .map_err(|e| failed_to_fetch_block(format!("Failed to decode block: {}", e)))
+}
+
+fn memo_to_intent_str(memo: Memo) -> String {
+    match memo {
+        MEMO_CREATE_CANISTER => "CreateCanister".into(),
+        MEMO_TOP_UP_CANISTER => "TopUp".into(),
+        _ => "unrecognized".into(),
+    }
+}
+
+async fn fetch_transaction(
+    block_height: BlockHeight,
+    expected_to: AccountIdentifier,
+    expected_memo: Memo,
+) -> Result<(Tokens, AccountIdentifier), NotifyError> {
+    let ledger_id = STATE.read().unwrap().ledger_canister_id;
+
+    let block = query_block(block_height, ledger_id).await?;
+
+    let (from, to, amount) = match block.transaction().operation {
+        Operation::Transfer {
+            from, to, amount, ..
+        } => (from, to, amount),
+        _ => {
+            return Err(NotifyError::InvalidTransaction(
+                "Notification transaction must be of type Transfer".into(),
+            ))
+        }
+    };
+    if to != expected_to {
+        return Err(NotifyError::InvalidTransaction(format!(
+            "Destination account in the block ({}) different than in the notification ({})",
+            to, expected_to
+        )));
+    }
+    let memo = block.transaction().memo;
+    if memo != expected_memo {
+        return Err(NotifyError::InvalidTransaction(format!(
+            "Intent in the block ({} == {}) different than in the notification ({} == {})",
+            memo.0,
+            memo_to_intent_str(memo),
+            expected_memo.0,
+            memo_to_intent_str(expected_memo),
+        )));
+    }
+
+    Ok((amount, from))
+}
+
+/// Processes a legacy notification from the Ledger canister.
 async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesResponse, String> {
     let caller = caller();
 
@@ -479,101 +763,205 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
         ));
     }
 
-    // Cloning is required here because of the asynchronous function call in the
-    // 'else' branch below.
-    let conversion_rate_option = STATE.read().unwrap().icp_xdr_conversion_rate.clone();
-
-    // Get the conversion rate from the registry if no value is set locally. If
-    // retrieval from the Registry fails then refund the transaction and log.
-    let xdr_permyriad_per_icp = if let Some(rate) = conversion_rate_option {
-        rate.xdr_permyriad_per_icp
-    } else {
-        print(format!(
-            "[cycles] No conversion rate found in CMC, transaction {:?} by {} refunded",
-            tn, caller
-        ));
-        let refund_block = refund(&tn, Tokens::ZERO).await?;
-        return Ok(CyclesResponse::Refunded(
-            "No conversion rate found in CMC or Registry, amount refunded".to_string(),
-            refund_block,
-        ));
-    };
-
-    let cycles = TokensToCycles {
-        xdr_permyriad_per_icp,
-        cycles_per_xdr: STATE.read().unwrap().cycles_per_xdr,
+    // We need this check if MAX_NOTIFY_HISTORY is smaller than max number of transactions
+    // the ledger can process within 24h
+    if tn.block_height <= STATE.read().unwrap().last_purged_notification.unwrap() {
+        return Err(NotifyError::TransactionTooOld(
+            STATE.read().unwrap().last_purged_notification.unwrap() + 1,
+        )
+        .to_string());
     }
-    .to_cycles(tn.amount);
 
-    if tn.memo == MEMO_CREATE_CANISTER {
+    let block_height = tn.block_height;
+    match STATE
+        .write()
+        .unwrap()
+        .blocks_notified
+        .as_mut()
+        .unwrap()
+        .entry(block_height)
+    {
+        Entry::Occupied(entry) => match entry.get() {
+            NotificationStatus::Processing => {
+                return Err("Another notification is in progress".into())
+            }
+            NotificationStatus::NotifiedTopUp(resp) => {
+                return Err(format!("Already notified: {:?}", resp))
+            }
+            NotificationStatus::NotifiedCreateCanister(resp) => {
+                return Err(format!("Already notified: {:?}", resp))
+            }
+        },
+        Entry::Vacant(entry) => {
+            entry.insert(NotificationStatus::Processing);
+        }
+    }
+
+    let from = AccountIdentifier::new(tn.from, tn.from_subaccount);
+
+    let (cycles_response, notification_status) = if tn.memo == MEMO_CREATE_CANISTER {
         let controller = (&tn
             .to_subaccount
             .ok_or_else(|| "Reserving requires a principal.".to_string())?)
             .try_into()
             .map_err(|err| format!("Cannot parse subaccount: {}", err))?;
-
-        print(format!(
-            "Creating canister with controller {} in block {} with {} cycles.",
-            controller, tn.block_height, cycles,
-        ));
-
-        // Create the canister. If this fails, refund. Either way,
-        // return a TransactionNotificationResult so that the
-        // notification cannot be retried.
-        let res = create_canister(controller, cycles).await;
-
-        let refund_block = burn_or_refund(res.is_ok(), CREATE_CANISTER_REFUND_FEE, &tn).await?;
-
-        Ok(match res {
-            Ok(cid) => CyclesResponse::CanisterCreated(cid),
-            Err(err) => CyclesResponse::Refunded(err, refund_block),
-        })
+        match process_create_canister(controller, from, tn.amount).await {
+            Ok(canister_id) => (
+                Ok(CyclesResponse::CanisterCreated(canister_id)),
+                Some(NotificationStatus::NotifiedCreateCanister(Ok(canister_id))),
+            ),
+            Err(NotifyError::Refunded {
+                reason,
+                block_index,
+            }) => (
+                Ok(CyclesResponse::Refunded(reason.clone(), block_index)),
+                Some(NotificationStatus::NotifiedCreateCanister(Err(
+                    NotifyError::Refunded {
+                        reason,
+                        block_index,
+                    },
+                ))),
+            ),
+            Err(e) => (Err(e), None),
+        }
     } else if tn.memo == MEMO_TOP_UP_CANISTER {
         let canister_id = (&tn
             .to_subaccount
             .ok_or_else(|| "Topping up requires a subaccount.".to_string())?)
             .try_into()
             .map_err(|err| format!("Cannot parse subaccount: {}", err))?;
-
-        print(format!(
-            "Topping up canister {} by {} cycles.",
-            canister_id, cycles
-        ));
-
-        let res = deposit_cycles(canister_id, cycles).await;
-
-        let refund_block = burn_or_refund(res.is_ok(), TOP_UP_CANISTER_REFUND_FEE, &tn).await?;
-
-        Ok(match res {
-            Ok(()) => CyclesResponse::ToppedUp(()),
-            Err(err) => CyclesResponse::Refunded(err, refund_block),
-        })
+        match process_top_up(canister_id, from, tn.amount).await {
+            Ok(cycles) => (
+                Ok(CyclesResponse::ToppedUp(())),
+                Some(NotificationStatus::NotifiedTopUp(Ok(cycles))),
+            ),
+            Err(NotifyError::Refunded {
+                reason,
+                block_index,
+            }) => (
+                Ok(CyclesResponse::Refunded(reason.clone(), block_index)),
+                Some(NotificationStatus::NotifiedTopUp(Err(
+                    NotifyError::Refunded {
+                        reason,
+                        block_index,
+                    },
+                ))),
+            ),
+            Err(e) => (Err(e), None),
+        }
     } else {
-        Err(format!(
-            "Don't know what to do with transaction with memo {}.",
+        let err = NotifyError::InvalidTransaction(format!(
+            "Do not know what to do with transaction with memo {}.",
             tn.memo.0
-        ))
+        ));
+        (Err(err), None)
+    };
+
+    let notified: &mut Option<BTreeMap<_, _>> = &mut STATE.write().unwrap().blocks_notified;
+
+    if let Some(status) = notification_status {
+        notified.as_mut().unwrap().insert(block_height, status);
+    }
+    if is_transient_error(&cycles_response) {
+        notified.as_mut().unwrap().remove(&block_height);
+    }
+
+    cycles_response.map_err(|e| e.to_string())
+}
+
+// If conversion fails, log and return an error
+fn tokens_to_cycles(amount: Tokens) -> Result<Cycles, NotifyError> {
+    let state = STATE.read().unwrap();
+    let xdr_permyriad_per_icp = state
+        .icp_xdr_conversion_rate
+        .as_ref()
+        .map(|rate| rate.xdr_permyriad_per_icp);
+    match xdr_permyriad_per_icp {
+        Some(xdr_permyriad_per_icp) => Ok(TokensToCycles {
+            xdr_permyriad_per_icp,
+            cycles_per_xdr: state.cycles_per_xdr,
+        }
+        .to_cycles(amount)),
+        None => {
+            let error_message = "No conversion rate found in CMC, notification aborted".to_string();
+            print(&error_message);
+            Err(NotifyError::Other {
+                error_code: NotifyErrorCode::Internal as u64,
+                error_message,
+            })
+        }
     }
 }
 
-async fn burn_or_refund(
-    is_ok: bool,
-    extra_fee: Tokens,
-    tn: &TransactionNotification,
-) -> Result<Option<BlockHeight>, String> {
-    if is_ok {
-        burn_and_log(&tn.from, tn.to_subaccount, tn.amount).await;
-        Ok(None)
-    } else {
-        refund(tn, extra_fee).await
+async fn process_create_canister(
+    controller: PrincipalId,
+    from: AccountIdentifier,
+    amount: Tokens,
+) -> Result<CanisterId, NotifyError> {
+    let cycles = tokens_to_cycles(amount)?;
+
+    let sub = Subaccount::from(&controller);
+
+    print(format!(
+        "Creating canister with controller {} with {} cycles.",
+        controller, cycles,
+    ));
+
+    // Create the canister. If this fails, refund. Either way,
+    // return a result so that the notification cannot be retried.
+    // If refund fails, we allow to retry.
+    match create_canister(controller, cycles).await {
+        Ok(canister_id) => {
+            burn_and_log(sub, amount).await;
+            Ok(canister_id)
+        }
+        Err(err) => {
+            let refund_block = refund(sub, from, amount, CREATE_CANISTER_REFUND_FEE).await?;
+            Err(NotifyError::Refunded {
+                reason: err,
+                block_index: refund_block,
+            })
+        }
+    }
+}
+
+async fn process_top_up(
+    canister_id: CanisterId,
+    from: AccountIdentifier,
+    amount: Tokens,
+) -> Result<Cycles, NotifyError> {
+    let cycles = tokens_to_cycles(amount)?;
+
+    let sub = Subaccount::from(&canister_id);
+
+    print(format!(
+        "Topping up canister {} by {} cycles.",
+        canister_id, cycles
+    ));
+
+    match deposit_cycles(canister_id, cycles).await {
+        Ok(()) => {
+            burn_and_log(sub, amount).await;
+            Ok(cycles)
+        }
+        Err(err) => {
+            let refund_block = refund(sub, from, amount, TOP_UP_CANISTER_REFUND_FEE).await?;
+            Err(NotifyError::Refunded {
+                reason: err.to_string(),
+                block_index: refund_block,
+            })
+        }
     }
 }
 
 /// Attempt to burn the funds.
 /// Burning doesn't return errors - we don't want to reject the transaction
 /// notification because then it could be retried.
-async fn burn_and_log(from: &PrincipalId, sub: Option<Subaccount>, amount: Tokens) {
-    let msg = format!("Burning of {} ICPTs from {}", amount, from);
+async fn burn_and_log(from_subaccount: Subaccount, amount: Tokens) {
+    let msg = format!(
+        "Burning of {} ICPTs from subaccount {}",
+        amount, from_subaccount
+    );
     let minting_account_id = STATE.read().unwrap().minting_account_id;
     if minting_account_id.is_none() {
         print(format!("{} failed: minting_account_id not set", msg));
@@ -591,13 +979,12 @@ async fn burn_and_log(from: &PrincipalId, sub: Option<Subaccount>, amount: Token
         memo: Memo::default(),
         amount,
         fee: Tokens::ZERO,
-        from_subaccount: sub,
+        from_subaccount: Some(from_subaccount),
         to: minting_account_id,
         created_at_time: None,
     };
-
     let res: Result<BlockHeight, (Option<i32>, String)> =
-        dfn_core::api::call_with_cleanup(ledger_canister_id, "send_pb", protobuf, send_args).await;
+        call_with_cleanup(ledger_canister_id, "send_pb", protobuf, send_args).await;
 
     match res {
         Ok(block) => print(format!("{} done in block {}.", msg, block)),
@@ -613,48 +1000,49 @@ async fn burn_and_log(from: &PrincipalId, sub: Option<Subaccount>, amount: Token
 /// action (which is burned). Returns the index of the block in which
 /// the refund was done.
 async fn refund(
-    tn: &TransactionNotification,
+    from_subaccount: Subaccount,
+    to: AccountIdentifier,
+    amount: Tokens,
     extra_fee: Tokens,
-) -> Result<Option<BlockHeight>, String> {
+) -> Result<Option<BlockHeight>, NotifyError> {
     let ledger_canister_id = STATE.read().unwrap().ledger_canister_id;
     let mut refund_block_index = None;
 
-    let mut burned = tn.amount;
+    let mut burned = amount;
     let mut refunded = Tokens::ZERO;
-    if let Ok(to_refund) = (tn.amount - DEFAULT_TRANSFER_FEE).and_then(|x| x - extra_fee) {
+    if let Ok(to_refund) = (amount - DEFAULT_TRANSFER_FEE).and_then(|x| x - extra_fee) {
         if to_refund > Tokens::ZERO {
             burned = extra_fee;
             refunded = to_refund;
         }
     }
 
-    if refunded != Tokens::ZERO {
+    if refunded > Tokens::ZERO {
         let send_args = SendArgs {
             memo: Memo::default(),
             amount: refunded,
             fee: DEFAULT_TRANSFER_FEE,
-            from_subaccount: tn.to_subaccount,
-            to: AccountIdentifier::new(tn.from, tn.from_subaccount),
+            from_subaccount: Some(from_subaccount),
+            to,
             created_at_time: None,
         };
-        let msg = format!("Refund to {}", send_args.to);
-
-        let res: Result<BlockHeight, (Option<i32>, String)> =
-            dfn_core::api::call_with_cleanup(ledger_canister_id, "send_pb", protobuf, send_args)
-                .await;
-
-        let block = res.map_err(|(code, err)| {
+        let send_res: Result<BlockHeight, (Option<i32>, String)> =
+            call_with_cleanup(ledger_canister_id, "send_pb", protobuf, send_args).await;
+        let block = send_res.map_err(|(code, err)| {
             let code = code.unwrap_or_default();
-            format!(" {} failed with code {}: {:?}", msg, code, err)
+            NotifyError::Other {
+                error_code: NotifyErrorCode::RefundFailed as u64,
+                error_message: format!("Refund to {} failed with code {}: {}", to, code, err),
+            }
         })?;
 
-        print(format!("{} done in block {}.", msg, block));
+        print(format!("Refund to {} done in block {}.", to, block));
 
         refund_block_index = Some(block);
     }
 
-    if burned != Tokens::ZERO {
-        burn_and_log(&tn.from, tn.to_subaccount, burned).await;
+    if burned > Tokens::ZERO {
+        burn_and_log(from_subaccount, burned).await;
     }
 
     Ok(refund_block_index)
@@ -837,7 +1225,15 @@ fn post_upgrade() {
             bytes.len(),
         ));
 
+        // Upgrade STATE by populating new fields. From now on, these fields will always be Some
         *STATE.write().unwrap() = State::decode(&bytes).unwrap();
+        if STATE.read().unwrap().blocks_notified.is_none() {
+            STATE.write().unwrap().blocks_notified = Some(BTreeMap::new());
+        }
+        if STATE.read().unwrap().last_purged_notification.is_none() {
+            // put a right number here manually on the next upgrade
+            STATE.write().unwrap().last_purged_notification = Some(0);
+        }
     })
 }
 
@@ -859,12 +1255,82 @@ mod tests {
         );
         state.default_subnets = vec![SubnetId::from(PrincipalId::new_subnet_test_id(123))];
         state.total_cycles_minted = 1234.into();
+        state.last_purged_notification = Some(33);
+        let mut blocks_notified = BTreeMap::new();
+        for i in 50..60 {
+            blocks_notified.insert(
+                i,
+                NotificationStatus::NotifiedTopUp(Ok(Cycles::new(i as u128))),
+            );
+        }
+        blocks_notified.insert(
+            60,
+            NotificationStatus::NotifiedCreateCanister(Ok(CanisterId::new(
+                PrincipalId::new_user_test_id(4),
+            )
+            .unwrap())),
+        );
+        state.blocks_notified = Some(blocks_notified);
 
         let bytes = state.encode();
 
         let state2 = State::decode(&bytes).unwrap();
 
         assert_eq!(state, state2);
+    }
+
+    #[test]
+    fn test_purge_notifications() {
+        fn block_index_to_cycles(block_index: BlockHeight) -> Cycles {
+            Cycles::new(block_index as u128)
+        }
+        let mut state = State::default();
+        state.last_purged_notification = Some(0);
+        let initial_number_of_notifications = 100;
+        let mut blocks_notified = BTreeMap::new();
+        for i in 0..initial_number_of_notifications {
+            blocks_notified.insert(
+                i,
+                NotificationStatus::NotifiedTopUp(Ok(block_index_to_cycles(i))),
+            );
+        }
+        state.blocks_notified = Some(blocks_notified);
+
+        let target_history_len = 30;
+        state.purge_old_notifications(target_history_len);
+        let most_recent_transaction_index = initial_number_of_notifications - 1;
+        let expected_oldest_transaction_index =
+            initial_number_of_notifications - target_history_len as u64;
+        let expected_last_purged = expected_oldest_transaction_index - 1;
+        assert_eq!(state.last_purged_notification, Some(expected_last_purged));
+        assert_eq!(
+            state
+                .blocks_notified
+                .as_ref()
+                .unwrap()
+                .get(&expected_last_purged),
+            None
+        );
+        assert_eq!(
+            state
+                .blocks_notified
+                .as_ref()
+                .unwrap()
+                .get(&expected_oldest_transaction_index),
+            Some(&NotificationStatus::NotifiedTopUp(Ok(
+                block_index_to_cycles(expected_oldest_transaction_index)
+            )))
+        );
+        assert_eq!(
+            state
+                .blocks_notified
+                .as_ref()
+                .unwrap()
+                .get(&most_recent_transaction_index),
+            Some(&NotificationStatus::NotifiedTopUp(Ok(
+                block_index_to_cycles(most_recent_transaction_index)
+            )))
+        );
     }
 
     #[test]
@@ -985,5 +1451,23 @@ mod tests {
             compute_average_icp_xdr_rate_at_time(&recent_rates, timestamp).unwrap();
         // Assert that the rates are identical.
         assert_eq!(average_rate, computed_average_rate);
+    }
+
+    #[test]
+    fn test_candid_interface_compatibility() {
+        use candid::utils::{service_compatible, CandidSource};
+        use std::path::PathBuf;
+
+        candid::export_service!();
+        let new_interface = __export_service();
+
+        let old_interface =
+            PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("cmc.did");
+
+        service_compatible(
+            CandidSource::Text(&new_interface),
+            CandidSource::File(old_interface.as_path()),
+        )
+        .expect("The CMC canister interface is not compatible with the cmc.did file");
     }
 }
