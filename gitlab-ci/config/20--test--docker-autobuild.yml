@@ -29,6 +29,17 @@ docker-autobuild-protected:
         echo -e "\e[0Ksection_end:$(date +%s):docker_build_script\r\e[0K"
       fi 
 
+      # we push to dockerhub as well
+      TAG=$(cat ./gitlab-ci/docker/TAG)
+      docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
+      EXISTS=$(curl -s https://hub.docker.com/v2/repositories/dfinity/ic-build/tags | jq -r "[.results? | .[]? | .name == \"$TAG\"] | any")
+      if [ $EXISTS != true ]; then
+        docker push dfinity/ic-build:"$TAG"
+        docker push dfinity/ic-build:latest
+        docker push dfinity/ic-build-nix:"$TAG"
+        docker push dfinity/ic-build-nix:latest
+      fi
+
       echo -e "\e[0Ksection_start:$(date +%s):sys_info[collapsed=true]\r\e[0KClick here to see system info"
       echo "SYS-INFO UPTIME"
       uptime

@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# Supported only on Linux
+# UID must match?
+
 set -exuo pipefail
 
 REPO_ROOT=$(git rev-parse --show-toplevel)
@@ -8,24 +11,11 @@ DOCKER_IMG_VERSION=$(cat "$REPO_ROOT/gitlab-ci/docker/TAG")
 USER="$(whoami)"
 SET_UID="$(id -u $USER)"
 
-if [ $USER != ubuntu ]; then
-    DOCKER_IMG_VERSION="$USER-$SET_UID-$DOCKER_IMG_VERSION"
-fi
-
-if [ -e /.dockerenv ]; then
-    export DOCKER_BUILD_ARGS='--no-cache'
-    "$REPO_ROOT"/gitlab-ci/docker/docker-build-local-image.sh
-    unset DOCKER_BUILD_ARGS
-else
-    "$REPO_ROOT"/gitlab-ci/docker/docker-build-local-image.sh
-fi
-
 cd "$REPO_ROOT"
-docker image build -t ic-build-src:$TAG -f- . <<EOF
+docker image build --pull -t ic-build-src:$TAG -f- . <<EOF
 FROM dfinity/ic-build:$DOCKER_IMG_VERSION
-USER $SET_UID
-COPY --chown=${USER:-ubuntu}:${USER:-ubuntu} . /ic
-RUN sudo mkdir /ic/artifacts && sudo chown -R ${SET_UID}:${SET_UID} /ic/artifacts
+COPY --chown=ubuntu:ubuntu . /ic
+RUN sudo mkdir /ic/artifacts && sudo chown -R ubuntu:ubuntu /ic/artifacts
 EOF
 
 export IMAGE=ic-build-src:$TAG
