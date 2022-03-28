@@ -73,7 +73,7 @@ fn genesis(merkle_root: TxMerkleNode) -> BlockHeader {
 }
 
 pub struct TransactionBuilder {
-    input: Option<OutPoint>,
+    input: OutPoint,
     output_value: Option<u64>,
     output_address: Option<Address>,
 }
@@ -81,7 +81,7 @@ pub struct TransactionBuilder {
 impl TransactionBuilder {
     pub fn coinbase() -> Self {
         Self {
-            input: None,
+            input: OutPoint::null(),
             output_value: None,
             output_address: None,
         }
@@ -89,7 +89,7 @@ impl TransactionBuilder {
 
     pub fn with_input(input: OutPoint) -> Self {
         Self {
-            input: Some(input),
+            input,
             output_value: None,
             output_address: None,
         }
@@ -102,15 +102,12 @@ impl TransactionBuilder {
     }
 
     pub fn build(self) -> Transaction {
-        let input = match self.input {
-            None => vec![],
-            Some(input) => vec![TxIn {
-                previous_output: input,
-                script_sig: Script::new(),
-                sequence: 0xffffffff,
-                witness: vec![],
-            }],
-        };
+        let input = vec![TxIn {
+            previous_output: self.input,
+            script_sig: Script::new(),
+            sequence: 0xffffffff,
+            witness: vec![],
+        }];
 
         // Use default of 50 BTC
         let output_value = self.output_value.unwrap_or(50_0000_0000);

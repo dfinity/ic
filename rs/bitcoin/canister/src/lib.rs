@@ -1,3 +1,4 @@
+mod address_utxoset;
 pub mod block;
 mod blocktree;
 pub mod state;
