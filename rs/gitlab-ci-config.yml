@@ -87,8 +87,6 @@ ci_jobs_required:
   - subnet-update-workload-slo-5-100kb
   - network-reliability-test-slo
   - subnet-query-workload-slo-300-1kb
-  - xnet-slo-test-slo
-  - xnet-slo-test-slo-29-subnets
   - rejoin-test-slo
   - maximum-capacity-rejoin-script
   - maximum-capacity-xnet-script
