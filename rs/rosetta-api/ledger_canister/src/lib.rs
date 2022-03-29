@@ -968,7 +968,7 @@ impl Ledger {
             transaction_hash,
         }) = self.transactions_by_height.front()
         {
-            if *block_timestamp + self.transaction_window > now {
+            if *block_timestamp + self.transaction_window + ic_constants::PERMITTED_DRIFT >= now {
                 // Stop at a sufficiently recent block.
                 break;
             }
@@ -1700,9 +1700,83 @@ mod tests {
             state
                 .add_payment_with_timestamp(
                     Memo::default(),
-                    transfer,
+                    transfer.clone(),
                     Some(t),
                     state.blockchain.last_timestamp + Duration::from_secs(1),
+                )
+                .unwrap_err()
+        );
+
+        // Corner case 1 -- attempts which are transaction_window apart from each other
+        let t = state.blockchain.last_timestamp + Duration::from_secs(100);
+
+        assert_eq!(
+            state
+                .add_payment_with_timestamp(Memo::default(), transfer.clone(), Some(t), t)
+                .unwrap()
+                .0,
+            5
+        );
+
+        assert_eq!(
+            PaymentError::TransferError(TransferError::TxDuplicate { duplicate_of: 5 }),
+            state
+                .add_payment_with_timestamp(
+                    Memo::default(),
+                    transfer.clone(),
+                    Some(t),
+                    t + state.transaction_window,
+                )
+                .unwrap_err()
+        );
+
+        // Corner case 2 -- attempts which are transaction_window + drift apart from
+        // each other
+        let t = state.blockchain.last_timestamp + Duration::from_secs(200);
+        let drift = ic_constants::PERMITTED_DRIFT;
+
+        assert_eq!(
+            PaymentError::TransferError(TransferError::TxCreatedInFuture),
+            state
+                .add_payment_with_timestamp(
+                    Memo::default(),
+                    transfer.clone(),
+                    Some(t),
+                    t - (drift + Duration::from_nanos(1)),
+                )
+                .unwrap_err()
+        );
+
+        assert_eq!(
+            state
+                .add_payment_with_timestamp(Memo::default(), transfer.clone(), Some(t), t - drift)
+                .unwrap()
+                .0,
+            6
+        );
+
+        assert_eq!(
+            PaymentError::TransferError(TransferError::TxDuplicate { duplicate_of: 6 }),
+            state
+                .add_payment_with_timestamp(
+                    Memo::default(),
+                    transfer.clone(),
+                    Some(t),
+                    t + state.transaction_window,
+                )
+                .unwrap_err()
+        );
+
+        assert_eq!(
+            PaymentError::TransferError(TransferError::TxTooOld {
+                allowed_window_nanos: state.transaction_window.as_nanos() as u64,
+            }),
+            state
+                .add_payment_with_timestamp(
+                    Memo::default(),
+                    transfer,
+                    Some(t),
+                    t + state.transaction_window + Duration::from_nanos(1),
                 )
                 .unwrap_err()
         );
@@ -1804,7 +1878,7 @@ mod tests {
             "A purge before the end of the window doesn't remove the notification"
         );
 
-        let later = genesis + Duration::from_secs(10);
+        let later = genesis + Duration::from_secs(10) + ic_constants::PERMITTED_DRIFT;
         ledger.purge_old_transactions(later);
 
         let res3 = ledger.blocks_notified.get(1);
