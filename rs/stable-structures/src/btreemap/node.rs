@@ -175,6 +175,49 @@ impl Node {
         }
     }
 
+    /// Returns the entry with the max key in the subtree.
+    pub fn get_max<M: Memory>(&self, memory: &M) -> (Key, Value) {
+        match self.node_type {
+            NodeType::Leaf => self
+                .entries
+                .last()
+                .expect("A node can never be empty")
+                .clone(),
+            NodeType::Internal => {
+                let last_child = Self::load(
+                    *self
+                        .children
+                        .last()
+                        .expect("An internal node must have children."),
+                    memory,
+                    self.max_key_size,
+                    self.max_value_size,
+                );
+                last_child.get_max(memory)
+            }
+        }
+    }
+
+    /// Returns the entry with min key in the subtree.
+    pub fn get_min(&self, memory: &impl Memory) -> (Key, Value) {
+        match self.node_type {
+            NodeType::Leaf => {
+                // NOTE: a node can never be empty, so this access is safe.
+                self.entries[0].clone()
+            }
+            NodeType::Internal => {
+                let first_child = Self::load(
+                    // NOTE: an internal node must have children, so this access is safe.
+                    self.children[0],
+                    memory,
+                    self.max_key_size,
+                    self.max_value_size,
+                );
+                first_child.get_min(memory)
+            }
+        }
+    }
+
     /// Returns true if the node cannot store anymore entries, false otherwise.
     pub fn is_full(&self) -> bool {
         self.entries.len() >= CAPACITY as usize
