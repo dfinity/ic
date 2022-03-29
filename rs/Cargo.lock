@@ -5008,6 +5008,9 @@ dependencies = [
 [[package]]
 name = "ic-interfaces-canister-http-adapter-facade"
 version = "0.8.0"
+dependencies = [
+ "ic-types 0.8.0",
+]
 
 [[package]]
 name = "ic-interfaces-p2p"

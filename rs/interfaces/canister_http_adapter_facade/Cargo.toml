@@ -4,4 +4,4 @@ version = "0.8.0"
 edition = "2018"
 
 [dependencies]
-
+ic-types = { path = "../../types/types" }
