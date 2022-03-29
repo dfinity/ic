@@ -14,7 +14,7 @@ prod-hourly-pipeline:
 
 prod-nightly-pipeline:
   extends: .rules-rollout-pipeline-auto
-  stage: prod-tests-01
+  stage: prod-tests
   needs: ["cargo-pipeline"]
   variables:
     CD_ENV: "NIGHTLY"
@@ -23,6 +23,22 @@ prod-nightly-pipeline:
     TESTNET3: "cdrc02"
     TESTNET4: "cdrc03"
     TESTNET5: "cdrc04"
+    DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
+    PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
+  trigger:
+    include:
+      - local: gitlab-ci/config/00--prod-test-child-pipeline.yml
+    strategy: depend
+
+prod-hotfix-pipeline:
+  extends: .rules-prod-hotfix-pipeline
+  stage: prod-tests
+  needs: ["cargo-pipeline"]
+  variables:
+    CD_ENV: "HOTFIX"
+    TESTNET1: "cdhotfix01"
+    TESTNET2: "cdhotfix02"
+    TESTNET3: "cdhotfix03"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
   trigger:
@@ -59,6 +75,24 @@ prod-nightly-triggered:
     TESTNET3: "cdrc02"
     TESTNET4: "cdrc03"
     TESTNET5: "cdrc04"
+    DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
+    PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
+  trigger:
+    include:
+      - local: gitlab-ci/config/00--prod-test-child-pipeline.yml
+    strategy: depend
+
+prod-hotfix-triggered:
+  # Support running a nightly test in a "triggered" pipeline
+  # https://docs.gitlab.com/ee/api/pipeline_triggers.html
+  extends: .rules-rollout-pipeline-run-on-trigger
+  needs: []
+  stage: prod-tests
+  variables:
+    CD_ENV: "HOTFIX"
+    TESTNET1: "cdhotfix01"
+    TESTNET2: "cdhotfix02"
+    TESTNET3: "cdhotfix03"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
   trigger:
