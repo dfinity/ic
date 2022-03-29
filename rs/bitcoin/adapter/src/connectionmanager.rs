@@ -427,7 +427,10 @@ impl ConnectionManager {
         message: &VersionMessage,
     ) -> Result<(), ProcessBitcoinNetworkMessageError> {
         info!(self.logger, "Received version from {}", address);
-        if !self.validate_received_version(message) {
+        let conn = self
+            .get_connection(address)
+            .map_err(|_| ProcessBitcoinNetworkMessageError::InvalidMessage)?;
+        if !conn.is_seed() && !self.validate_received_version(message) {
             warn!(self.logger, "Received an invalid version from {}", address);
             return Err(ProcessBitcoinNetworkMessageError::InvalidMessage);
         }
@@ -1034,5 +1037,88 @@ mod test {
             manager.make_idle();
             assert!(manager.connections.is_empty());
         });
+    }
+
+    #[tokio::test]
+    async fn test_process_version_discovered_address_does_not_bypass_services_check() {
+        let socket_1 = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
+        let socket_2 = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
+        // This will cause the validation to fail as discovered addresses should have the NETWORK flag.
+        let services = ServiceFlags::WITNESS;
+        let receiver = Address::new(&socket_1, services);
+        let sender = Address::new(&socket_2, ServiceFlags::NONE);
+        let version_message = VersionMessage::new(
+            services,
+            0,
+            receiver,
+            sender,
+            1,
+            String::from("test"),
+            60_000,
+        );
+
+        let config = ConfigBuilder::new()
+            .with_dns_seeds(vec![String::from("127.0.0.1")])
+            .build();
+        let (network_message_sender, _network_message_receiver) =
+            channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
+
+        let mut manager = ConnectionManager::new(&config, no_op_logger(), network_message_sender);
+        let (writer, _) = unbounded_channel();
+        let conn = Connection::new_with_state(
+            ConnectionConfig {
+                address_entry: AddressEntry::Discovered(socket_2),
+                handle: tokio::task::spawn(async {}),
+                writer,
+            },
+            ConnectionState::Connected {
+                timestamp: SystemTime::now(),
+            },
+        );
+        manager.connections.insert(socket_2, conn);
+
+        let result = manager.process_version_message(&socket_2, &version_message);
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_process_version_seed_address_bypasses_services_check() {
+        let socket_1 = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
+        let socket_2 = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
+        let services = ServiceFlags::WITNESS;
+        let receiver = Address::new(&socket_1, services);
+        let sender = Address::new(&socket_2, ServiceFlags::NONE);
+        let version_message = VersionMessage::new(
+            services,
+            0,
+            receiver,
+            sender,
+            1,
+            String::from("test"),
+            60_000,
+        );
+
+        let config = ConfigBuilder::new()
+            .with_dns_seeds(vec![String::from("127.0.0.1")])
+            .build();
+        let (network_message_sender, _network_message_receiver) =
+            channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
+
+        let mut manager = ConnectionManager::new(&config, no_op_logger(), network_message_sender);
+        let (writer, _) = unbounded_channel();
+        let conn = Connection::new_with_state(
+            ConnectionConfig {
+                address_entry: AddressEntry::Seed(socket_2),
+                handle: tokio::task::spawn(async {}),
+                writer,
+            },
+            ConnectionState::Connected {
+                timestamp: SystemTime::now(),
+            },
+        );
+        manager.connections.insert(socket_2, conn);
+
+        let result = manager.process_version_message(&socket_2, &version_message);
+        assert!(result.is_ok());
     }
 }

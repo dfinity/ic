@@ -141,6 +141,13 @@ impl Connection {
         &self.address_entry
     }
 
+    /// This function used to determine if a connection is a seed address. This is
+    /// used to determine if the the service field needs to be validated when looking
+    /// at the version.
+    pub fn is_seed(&self) -> bool {
+        matches!(self.address_entry, AddressEntry::Seed(_))
+    }
+
     /// This function is used to get the current state of the connection.
     pub fn state(&self) -> &ConnectionState {
         &self.state
