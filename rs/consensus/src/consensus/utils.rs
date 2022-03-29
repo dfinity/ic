@@ -300,7 +300,7 @@ pub fn aggregate<
         .into_iter()
         .filter_map(|(content_ref, shares)| {
             let selector = selector(&content_ref).or_else(|| {
-                error!(
+                warn!(
                     log,
                     "aggregate: cannot find selector for content {:?}", content_ref
                 );
