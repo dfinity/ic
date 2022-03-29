@@ -23,13 +23,11 @@ use ic_registry_transport::pb::v1::{
 use ic_test_utilities::crypto::temp_dir::temp_dir;
 use ic_types::p2p::build_default_gossip_config;
 use ic_types::NodeId;
-use registry_canister::{
-    init::RegistryCanisterInitPayloadBuilder,
-    mutations::{
-        do_add_node::{connection_endpoint_from_string, flow_endpoint_from_string},
-        do_remove_node_directly::RemoveNodeDirectlyPayload,
-    },
+use registry_canister::init::RegistryCanisterInitPayloadBuilder;
+use registry_canister::mutations::node_management::do_add_node::{
+    connection_endpoint_from_string, flow_endpoint_from_string,
 };
+use registry_canister::mutations::node_management::do_remove_node_directly::RemoveNodeDirectlyPayload;
 
 const TEST_NODE_ALLOWANCE: u64 = 5;
 

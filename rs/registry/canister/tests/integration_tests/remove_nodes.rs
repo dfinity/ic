@@ -25,9 +25,8 @@ use ic_registry_keys::{
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
 use ic_test_utilities::types::ids::{node_test_id, user_test_id};
 use ic_types::NodeId;
-use registry_canister::{
-    init::RegistryCanisterInitPayloadBuilder, mutations::do_remove_nodes::RemoveNodesPayload,
-};
+use registry_canister::init::RegistryCanisterInitPayloadBuilder;
+use registry_canister::mutations::node_management::do_remove_nodes::RemoveNodesPayload;
 
 const NUM_NODES: u8 = 4;
 const NO_ID: u64 = 990;

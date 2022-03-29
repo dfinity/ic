@@ -19,9 +19,8 @@ use ic_nns_test_utils::{
 };
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_registry_keys::make_node_record_key;
-use registry_canister::mutations::{
-    do_add_node_operator::AddNodeOperatorPayload, do_remove_nodes::RemoveNodesPayload,
-};
+use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
+use registry_canister::mutations::node_management::do_remove_nodes::RemoveNodesPayload;
 use std::collections::BTreeMap;
 
 /// Test that nodes can be added and removed from the Registry correctly via

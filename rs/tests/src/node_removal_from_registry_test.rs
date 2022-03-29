@@ -37,7 +37,7 @@ use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::pb::v1::NnsFunction;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
-use registry_canister::mutations::do_remove_nodes::RemoveNodesPayload;
+use registry_canister::mutations::node_management::do_remove_nodes::RemoveNodesPayload;
 
 pub fn config() -> InternetComputer {
     InternetComputer::new()
@@ -104,7 +104,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             &governance_canister,
             proposal_id,
             format!(
-                "Node Id {} not found in the registry, aborting node removal.",
+                "Aborting node removal: Node Id {} not found in the registry",
                 unassigned_node_endpoint.node_id
             ),
         )

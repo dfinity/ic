@@ -93,10 +93,11 @@ use prost::Message;
 use registry_canister::mutations::common::decode_registry_value;
 use registry_canister::mutations::do_set_firewall_config::SetFirewallConfigPayload;
 use registry_canister::mutations::do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload;
+use registry_canister::mutations::node_management::do_remove_nodes::RemoveNodesPayload;
 use registry_canister::mutations::{
     do_add_node_operator::AddNodeOperatorPayload, do_add_nodes_to_subnet::AddNodesToSubnetPayload,
     do_bless_replica_version::BlessReplicaVersionPayload, do_create_subnet::CreateSubnetPayload,
-    do_recover_subnet::RecoverSubnetPayload, do_remove_nodes::RemoveNodesPayload,
+    do_recover_subnet::RecoverSubnetPayload,
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
     do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
     do_update_subnet::UpdateSubnetPayload,
