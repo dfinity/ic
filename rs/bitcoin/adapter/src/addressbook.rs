@@ -304,16 +304,12 @@ impl AddressBook {
     }
 }
 
-/// This function is used to validate service flags . To determine if the address
-/// is valid, we check the service flags that have been presented with the
-/// address.
+/// To determine if the address is valid, we check the service flags that have
+/// been presented with the address. The services must be one of the following:
 ///
 /// * Network: This node can be asked for full blocks instead of just headers.
-/// * Network Limited: BIP-0159: The node is running in pruned mode storing
-/// only the most recent 288 blocks. These nodes can still relay blocks from
-/// full nodes.
 pub fn validate_services(services: &ServiceFlags) -> bool {
-    services.has(ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED)
+    services.has(ServiceFlags::NETWORK)
 }
 
 /// This is a simple utility function for creating a string that is a valid string
@@ -367,13 +363,25 @@ mod test {
     }
 
     /// This function tests the `AddressManager::validate_address(...)` function to ensure
-    /// that the service flags for an address are network and network limited.
+    /// that the service flags for an address are NETWORK or NETWORK_LIMITED.
     #[test]
     fn test_address_manager_validate_services() {
         let services = ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED;
         assert!(validate_services(&services));
 
         let services = ServiceFlags::NETWORK;
+        assert!(validate_services(&services));
+
+        let services = ServiceFlags::NETWORK_LIMITED;
+        assert!(!validate_services(&services));
+
+        let services = ServiceFlags::NETWORK | ServiceFlags::BLOOM;
+        assert!(validate_services(&services));
+
+        let services = ServiceFlags::NETWORK_LIMITED | ServiceFlags::WITNESS;
+        assert!(!validate_services(&services));
+
+        let services = ServiceFlags::WITNESS;
         assert!(!validate_services(&services));
     }
 
@@ -388,13 +396,10 @@ mod test {
 
         let seed = book.pop_seed().expect("there should be 1 seed");
         let socket_1 = SocketAddr::from_str("127.0.0.1:8444").expect("bad address format");
-        let address_1 = Address::new(
-            &socket_1,
-            ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED,
-        );
+        let address_1 = Address::new(&socket_1, ServiceFlags::NETWORK);
 
         let socket_2 = SocketAddr::from_str("127.0.0.1:8555").expect("bad address format");
-        let address_2 = Address::new(&socket_2, ServiceFlags::NETWORK_LIMITED);
+        let address_2 = Address::new(&socket_2, ServiceFlags::WITNESS);
         let addresses = vec![(0, address_1), (0, address_2)];
         assert_eq!(book.known_addresses.len(), 0);
         book.add_many(seed.addr(), &addresses)
@@ -416,17 +421,11 @@ mod test {
 
         let seed = book.pop_seed().expect("there should be 1 seed");
         let socket_1 = SocketAddr::from_str("127.0.0.1:8444").expect("bad address format");
-        let address_1 = Address::new(
-            &socket_1,
-            ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED,
-        );
+        let address_1 = Address::new(&socket_1, ServiceFlags::NETWORK);
 
         let socket_2 = SocketAddr::from_str("[2401:3f00:1000:23:5000:7bff:fe3d:b81d]:8444")
             .expect("bad address format");
-        let address_2 = Address::new(
-            &socket_2,
-            ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED,
-        );
+        let address_2 = Address::new(&socket_2, ServiceFlags::NETWORK);
         let addresses = vec![(0, address_1), (0, address_2)];
         assert_eq!(book.known_addresses.len(), 0);
         book.add_many(seed.addr(), &addresses)
@@ -446,10 +445,7 @@ mod test {
         let mut book = AddressBook::new(&config, no_op_logger());
         let seed = book.pop_seed().expect("there should be 1 seed");
         let socket = SocketAddr::from_str("127.0.0.1:8444").expect("bad address format");
-        let address = Address::new(
-            &socket,
-            ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED,
-        );
+        let address = Address::new(&socket, ServiceFlags::NETWORK);
 
         let addresses = vec![(0, address)];
         book.add_many(seed.addr(), &addresses)
