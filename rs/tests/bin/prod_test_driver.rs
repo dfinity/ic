@@ -9,6 +9,7 @@ use ic_fondue::prod_tests::test_env::TestEnv;
 use ic_tests::boundary_nodes_integration::boundary_nodes;
 use ic_tests::btc_integration::btc;
 use ic_tests::create_subnet::{self, create_subnet_test};
+use ic_tests::http_from_canister::basic_http;
 use ic_tests::nns_fault_tolerance_test;
 use ic_tests::nns_follow_test::{self, test as follow_test};
 use ic_tests::nns_voting_test::{self, test as voting_test};
@@ -164,6 +165,13 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     btc::config,
                     par(vec![
                         sys_t("btc_test", btc::test),
+                    ]),
+                ),
+                pot_with_setup(
+                    "http_pot",
+                    basic_http::config,
+                    par(vec![
+                        sys_t("basic_http", basic_http::test),
                     ]),
                 ),
                 pot_with_setup(
