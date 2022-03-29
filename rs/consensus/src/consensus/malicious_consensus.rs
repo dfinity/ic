@@ -9,8 +9,6 @@ use crate::consensus::{
 #[cfg(feature = "malicious_code")]
 use ic_interfaces::consensus_pool::{ChangeAction, ChangeSet};
 #[cfg(feature = "malicious_code")]
-use ic_interfaces::ingress_pool::IngressPoolSelect;
-#[cfg(feature = "malicious_code")]
 use ic_logger::ReplicaLogger;
 #[cfg(feature = "malicious_code")]
 use ic_types::consensus::ConsensusMessage::{BlockProposal, FinalizationShare};
@@ -21,7 +19,6 @@ use ic_types::malicious_flags::MaliciousFlags;
 #[allow(clippy::too_many_arguments)]
 pub fn maliciously_alter_changeset(
     pool: &PoolReader,
-    ingress_pool: &dyn IngressPoolSelect,
     honest_changeset: ChangeSet,
     malicious_flags: &MaliciousFlags,
     block_maker: &BlockMaker,
@@ -48,7 +45,6 @@ pub fn maliciously_alter_changeset(
         changeset.append(&mut add_all_to_validated(
             block_maker.maliciously_propose_blocks(
                 pool,
-                ingress_pool,
                 malicious_flags.maliciously_propose_empty_blocks,
                 malicious_flags.maliciously_propose_equivocating_blocks,
             ),

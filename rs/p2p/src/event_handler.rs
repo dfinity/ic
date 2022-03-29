@@ -74,7 +74,10 @@ use crate::{
 };
 use async_trait::async_trait;
 use ic_interfaces::ingress_pool::IngressPoolThrottler;
-use ic_interfaces_transport::{AsyncTransportEventHandler, SendError};
+use ic_interfaces_transport::{
+    AsyncTransportEventHandler, FlowId, SendError, TransportError, TransportErrorCode,
+    TransportNotification, TransportPayload, TransportStateChange,
+};
 use ic_logger::{debug, info, replica_logger::ReplicaLogger, trace};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy, registry::subnet::v1::GossipConfig};
@@ -83,10 +86,6 @@ use ic_types::{
     canonical_error::{unavailable_error, CanonicalError},
     messages::SignedIngress,
     p2p::GossipAdvert,
-    transport::{
-        FlowId, TransportError, TransportErrorCode, TransportNotification, TransportPayload,
-        TransportStateChange,
-    },
     NodeId,
 };
 use parking_lot::RwLock;
@@ -616,10 +615,10 @@ pub mod tests {
         gossip_protocol::{GossipAdvertSendRequest, GossipRetransmissionRequest},
     };
     use ic_interfaces::ingress_pool::IngressPoolThrottler;
+    use ic_interfaces_transport::FlowTag;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::{p2p::p2p_test_setup_logger, types::ids::node_test_id};
     use ic_types::artifact::AdvertClass;
-    use ic_types::transport::FlowTag;
     use tokio::time::{sleep, Duration};
 
     struct TestThrottle();

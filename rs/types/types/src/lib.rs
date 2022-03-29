@@ -77,7 +77,6 @@ pub mod replica_version;
 pub mod signature;
 pub mod state_sync;
 pub mod time;
-pub mod transport;
 pub mod user_error;
 pub mod xnet;
 

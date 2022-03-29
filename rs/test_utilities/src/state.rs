@@ -27,7 +27,7 @@ use ic_types::messages::CallbackId;
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::{
     messages::{Ingress, Request, RequestOrResponse},
-    xnet::{QueueId, StreamIndex, StreamIndexedQueue},
+    xnet::{QueueId, StreamHeader, StreamIndex, StreamIndexedQueue},
     CanisterId, CanisterStatusType, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation,
     NumBytes, PrincipalId, QueueIndex, SubnetId, Time,
 };
@@ -830,6 +830,54 @@ prop_compose! {
             (((stream.messages().len() - msg_count) * from_percent / 100) as u64).into();
 
         (stream, from, msg_count)
+    }
+}
+
+prop_compose! {
+    pub fn arb_reject_signals(sig_end: u64, sig_min_size: usize, sig_max_size: usize)(
+        sigs in prop::collection::btree_set(arbitrary::stream_index(sig_end), sig_min_size..=std::cmp::min(sig_end as usize, sig_max_size)),
+    ) -> VecDeque<StreamIndex> {
+        let mut reject_signals = VecDeque::with_capacity(sigs.len());
+        for s in sigs {
+            reject_signals.push_back(s);
+        }
+        reject_signals
+    }
+}
+
+prop_compose! {
+    pub fn arb_stream_with_signals(min_size: usize, max_size: usize, sig_end: u64, sig_min_size: usize, sig_max_size: usize)(
+        msg_start in 0..10000u64,
+        reqs in prop::collection::vec(arbitrary::request(), min_size..=max_size),
+        sigs in arb_reject_signals(sig_end, sig_min_size, sig_max_size),
+    ) -> Stream {
+        let mut messages = StreamIndexedQueue::with_begin(StreamIndex::from(msg_start));
+        for r in reqs {
+            messages.push(r.into())
+        }
+
+        let signals_end = StreamIndex::from(sig_end);
+
+        Stream::with_signals(messages, signals_end, sigs)
+    }
+}
+
+prop_compose! {
+    pub fn arb_stream_header(sig_end: u64, sig_min_size: usize, sig_max_size: usize)(
+        msg_start in 0..10000u64,
+        msg_len in 0..10000u64,
+        reject_signals in arb_reject_signals(sig_end, sig_min_size, sig_max_size),
+    ) -> StreamHeader {
+        let begin = StreamIndex::from(msg_start);
+        let end = StreamIndex::from(msg_start + msg_len);
+        let signals_end = StreamIndex::from(sig_end);
+
+        StreamHeader {
+            begin,
+            end,
+            signals_end,
+            reject_signals,
+        }
     }
 }
 

@@ -26,6 +26,19 @@ pub enum NodeType {
     Internal,
 }
 
+/// A node of a B-Tree.
+///
+/// The node is stored in stable memory with the following layout:
+///
+///    |  NodeHeader  |  Entries (keys and values) |  Children  |
+///
+/// Each node contains up to `CAPACITY` entries, each entry contains:
+///     - size of key (4 bytes)
+///     - key (`max_key_size` bytes)
+///     - size of value (4 bytes)
+///     - value (`max_value_size` bytes)
+///
+/// Each node can contain up to `CAPACITY + 1` children, each child is 8 bytes.
 #[derive(Debug, PartialEq)]
 pub struct Node {
     pub address: Address,
@@ -172,8 +185,25 @@ impl Node {
         core::mem::swap(&mut self.entries[idx], &mut entry);
         entry
     }
+
+    /// Returns the size of a node in bytes.
+    ///
+    /// See the documentation of [`Node`] for the memory layout.
+    pub fn size(max_key_size: u32, max_value_size: u32) -> Bytes {
+        let max_key_size = Bytes::from(max_key_size);
+        let max_value_size = Bytes::from(max_value_size);
+
+        let node_header_size = NodeHeader::size();
+        let entry_size = U32_SIZE + max_key_size + max_value_size + U32_SIZE;
+        let child_size = Address::size();
+
+        node_header_size
+            + Bytes::from(CAPACITY) * entry_size
+            + Bytes::from(CAPACITY + 1) * child_size
+    }
 }
 
+// A transient data structure for reading/writing metadata into/from stable memory.
 #[repr(packed)]
 struct NodeHeader {
     magic: [u8; 3],
@@ -186,29 +216,4 @@ impl NodeHeader {
     fn size() -> Bytes {
         Bytes::from(core::mem::size_of::<Self>() as u64)
     }
-}
-
-/// Returns the size of a node in bytes.
-///
-/// The following is the layout of a node in memory:
-///
-///  1) Node Header
-///
-///  2) Each node can contain up to `CAPACITY` entries, each entry contains:
-///     - size of key (4 bytes)
-///     - key (`max_key_size` bytes)
-///     - size of value (4 bytes)
-///     - value (`max_value_size` bytes)
-///
-///  3) Each node can contain up to `CAPACITY + 1` children, each child contains:
-///     - child (8 bytes)
-pub fn get_node_size(max_key_size: u32, max_value_size: u32) -> Bytes {
-    let max_key_size = Bytes::from(max_key_size);
-    let max_value_size = Bytes::from(max_value_size);
-
-    let node_header_size = NodeHeader::size();
-    let entry_size = U32_SIZE + max_key_size + max_value_size + U32_SIZE;
-    let child_size = Address::size();
-
-    node_header_size + Bytes::from(CAPACITY) * entry_size + Bytes::from(CAPACITY + 1) * child_size
 }

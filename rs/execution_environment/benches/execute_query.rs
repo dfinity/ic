@@ -40,25 +40,21 @@ pub fn bench_execute_query(c: &mut Criterion) {
         &BENCHMARKS,
         |hypervisor,
          expected_instructions,
-         common::BenchmarkArgs(
-            cloned_canister_state,
-            _cloned_ingress,
-            _cloned_reject,
-            cloned_time,
-            _cloned_network_topology,
-            cloned_execution_parameters,
-            _cloned_call_origin,
-            _cloned_callback,
-        )| {
+         common::BenchmarkArgs {
+             canister_state,
+             time,
+             execution_parameters,
+             ..
+         }| {
             let (_state, instructions_left, result) = hypervisor.execute_query(
                 QueryExecutionType::Replicated,
                 "test",
                 &Vec::new(),
                 sender,
-                cloned_canister_state,
+                canister_state,
                 Some(vec![0; 256]),
-                cloned_time,
-                cloned_execution_parameters,
+                time,
+                execution_parameters,
             );
             assert_eq!(result, Ok(None), "Error executing a query method");
             assert_eq!(

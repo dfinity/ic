@@ -12,6 +12,11 @@ async fn main() {
         return;
     }
 
+    if args.dc_id {
+        Orchestrator::dc_id(args);
+        return;
+    }
+
     let mut orchestrator = Orchestrator::new(args)
         .await
         .expect("Failed to start orchestrator");

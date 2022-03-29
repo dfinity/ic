@@ -356,22 +356,20 @@ pub fn bench_execute_update(c: &mut Criterion) {
         &BENCHMARKS,
         |hypervisor,
          expected_instructions,
-         common::BenchmarkArgs(
-            cloned_canister_state,
-            cloned_ingress,
-            _cloned_reject,
-            cloned_time,
-            cloned_network_topology,
-            cloned_execution_parameters,
-            _cloned_call_origin,
-            _cloned_callback,
-        )| {
+         common::BenchmarkArgs {
+             canister_state,
+             ingress,
+             time,
+             network_topology,
+             execution_parameters,
+             ..
+         }| {
             let (_state, instructions, action, _bytes) = hypervisor.execute_update(
-                cloned_canister_state,
-                cloned_ingress,
-                cloned_time,
-                cloned_network_topology,
-                cloned_execution_parameters,
+                canister_state,
+                ingress,
+                time,
+                network_topology,
+                execution_parameters,
             );
             match action {
                 CallContextAction::NoResponse { .. }

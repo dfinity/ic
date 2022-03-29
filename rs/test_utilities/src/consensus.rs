@@ -10,7 +10,6 @@ use ic_crypto::crypto_hash;
 use ic_interfaces::{
     consensus::*,
     consensus_pool::{ChangeAction, ChangeSet, ConsensusPool, ConsensusPoolCache},
-    ingress_pool::IngressPoolSelect,
     registry::RegistryClient,
     validation::*,
 };
@@ -79,7 +78,6 @@ mock! {
         fn on_state_change<'a>(
             &'a self,
             consensus_pool: &'a (dyn ConsensusPool + 'a),
-            ingress_pool: &'a (dyn IngressPoolSelect + 'a),
         ) -> ChangeSet;
     }
 }

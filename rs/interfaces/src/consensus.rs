@@ -4,7 +4,6 @@ use crate::{
     ingress_manager::{
         IngressPayloadValidationError, IngressPermanentError, IngressTransientError,
     },
-    ingress_pool::IngressPoolSelect,
     messaging::{InvalidXNetPayload, XNetPayloadValidationError, XNetTransientValidationError},
     self_validating_payload::{
         InvalidSelfValidatingPayload, SelfValidatingPayloadValidationError,
@@ -34,11 +33,7 @@ pub trait Consensus: Send {
     /// 2. Because [ConsensusPool] is passed as an read-only reference, the
     /// caller is free to run other readers concurrently should it choose to.
     /// But this is a minor point.
-    fn on_state_change(
-        &self,
-        consensus_pool: &dyn ConsensusPool,
-        ingress_pool: &dyn IngressPoolSelect,
-    ) -> ChangeSet;
+    fn on_state_change(&self, consensus_pool: &dyn ConsensusPool) -> ChangeSet;
 }
 
 /// Consensus to gossip interface.

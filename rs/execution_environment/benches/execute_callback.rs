@@ -53,25 +53,25 @@ pub fn bench_execute_callback(c: &mut Criterion) {
         &BENCHMARKS,
         |hypervisor,
          expected_instructions,
-         common::BenchmarkArgs(
-            cloned_canister_state,
-            _cloned_ingress,
-            cloned_reject,
-            cloned_time,
-            cloned_network_topology,
-            cloned_execution_parameters,
-            cloned_call_origin,
-            cloned_callback,
-        )| {
+         common::BenchmarkArgs {
+             canister_state,
+             reject,
+             time,
+             network_topology,
+             execution_parameters,
+             call_origin,
+             callback,
+             ..
+         }| {
             let (_state, instructions, _bytes, result) = hypervisor.execute_callback(
-                cloned_canister_state,
-                &cloned_call_origin,
-                cloned_callback,
-                cloned_reject,
+                canister_state,
+                &call_origin,
+                callback,
+                reject,
                 Cycles::new(0),
-                cloned_time,
-                cloned_network_topology,
-                cloned_execution_parameters,
+                time,
+                network_topology,
+                execution_parameters,
             );
             assert_eq!(result, Ok(None), "Error executing a callback");
             assert_eq!(

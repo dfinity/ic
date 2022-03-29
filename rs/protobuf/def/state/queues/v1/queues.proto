@@ -22,6 +22,7 @@ message Stream {
     reserved 3, 4;
     reserved "signals_begin", "signals";
     uint64 signals_end = 5;
+    repeated uint64 reject_signals = 6;
 }
 
 message StreamEntry {

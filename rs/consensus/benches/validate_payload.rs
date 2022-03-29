@@ -11,7 +11,7 @@
 //!   the message validates successfully
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
+use ic_artifact_pool::{consensus_pool::ConsensusPoolImpl, ingress_pool::IngressPoolImpl};
 use ic_config::state_manager::Config as StateManagerConfig;
 use ic_consensus::consensus::{
     payload_builder::{PayloadBuilder, PayloadBuilderImpl},
@@ -55,7 +55,7 @@ use ic_types::{
     signature::*,
     Height, PrincipalId, RegistryVersion, Time, UserId,
 };
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 type SignedCertificationContent =
@@ -107,7 +107,7 @@ where
         let mut consensus_pool = ConsensusPoolImpl::new_from_cup_without_bytes(
             subnet_test_id(0),
             make_genesis(summary),
-            pool_config,
+            pool_config.clone(),
             ic_metrics::MetricsRegistry::new(),
             no_op_logger(),
         );
@@ -125,6 +125,12 @@ where
             ),
         ));
 
+        let ingress_pool = Arc::new(RwLock::new(IngressPoolImpl::new(
+            pool_config,
+            metrics_registry.clone(),
+            no_op_logger(),
+        )));
+
         let registry_client = setup_registry(
             subnet_id,
             vec![(1, SubnetRecordBuilder::from(&committee).build())],
@@ -133,6 +139,7 @@ where
         let ingress_manager = Arc::new(IngressManager::new(
             Arc::new(MockConsensusCache::new()),
             Box::new(ingress_hist_reader),
+            ingress_pool,
             registry_client.clone(),
             ingress_signature_crypto,
             metrics_registry.clone(),

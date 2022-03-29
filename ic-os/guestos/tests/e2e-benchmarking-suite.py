@@ -93,6 +93,8 @@ def main(argv):
             "20",
             "--tests_first_subnet_index",
             "0",
+            "--max_iterations",
+            "1",
         ]
         + base_arguments
     )

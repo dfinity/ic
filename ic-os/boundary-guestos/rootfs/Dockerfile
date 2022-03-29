@@ -1,3 +1,8 @@
+
+# Service worker verion and sha256
+ARG sw_version=1.0.0
+ARG sw_sha256=1e4d288888c493318970fa0134090a8b2539963c2f6e67a4d04b3a0546f3788e
+
 # First build stage: download software, build and verify it (such that it
 # does not change under our noses).
 FROM ubuntu:20.04 AS download
@@ -45,6 +50,14 @@ RUN cd /tmp/ && \
    curl -L -O https://github.com/dfinity/icx-proxy/releases/download/39bc74c/icx-proxy.deb && \
    echo "56c819a65c05df78748225b92df69e6655e9b45f  ./icx-proxy.deb" > icx-proxy.sha256 && \
    shasum -c icx-proxy.sha256
+
+# Download and check service worker
+ARG sw_version
+ARG sw_sha256
+RUN cd /tmp/ && \
+   curl -L -O https://registry.npmjs.org/@dfinity/service-worker/-/service-worker-${sw_version}.tgz && \
+   echo "${sw_sha256}  ./service-worker-${sw_version}.tgz" > sw.sha256 && \
+   shasum -c sw.sha256
 
 # Second build stage: construct the actual target image (root filesystem of the
 # boundary node VM).
@@ -173,7 +186,7 @@ RUN addgroup node_exporter && \
     adduser --system --disabled-password --shell /usr/sbin/nologin -c "Node Exporter" node_exporter && \
     adduser node_exporter node_exporter
 
-# Install journalbeat
+# Install journalbeat/
 COPY --from=download /tmp/journalbeat-oss-7.5.1-linux-x86_64.tar.gz /tmp/journalbeat-oss-7.5.1-linux-x86_64.tar.gz
 RUN cd /tmp/ && \
     mkdir -p /etc/journalbeat \
@@ -226,6 +239,16 @@ COPY --from=download /tmp/icx-proxy.deb /tmp/icx-proxy.deb
 RUN dpkg -i /tmp/icx-proxy.deb &&\
     rm /tmp/icx-proxy.deb
 
+# Install ic service worker porduction version from: https://registry.npmjs.org/@dfinity/service-worker/-/
+ARG sw_version
+COPY --from=download /tmp/service-worker-${sw_version}.tgz /tmp/service-worker-${sw_version}.tgz
+RUN cd /tmp && tar xfvz service-worker-${sw_version}.tgz &&\
+    mkdir -p /var/www/html/service_worker &&\
+    cp -rf /tmp/package/dist-prod/* /var/www/html/service_worker/ &&\
+    rm -rf /tmp/package /tmp/service-worker-${sw_version}.tgz
+RUN chown www-data:www-data /var/www/html && \
+    chmod 0755 /var/www/html/*
+
 # Clear all files that may lead to indeterministic build.
 RUN apt-get clean && \
     rm -rf \
@@ -249,11 +272,6 @@ COPY boot /boot
 # Update POSIX permissions in /boot/
 RUN chmod 0644 /boot/extra_boot_args /boot/version.txt
 
-# Install service_worker files
-RUN mkdir -p /var/www/html
-COPY var/www/html /var/www/html
-RUN chown www-data:www-data /var/www/html && \
-    chmod 0755 /var/www/html/*
 
 # CERTIFICATES
 # Default image has

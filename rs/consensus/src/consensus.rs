@@ -54,7 +54,6 @@ use ic_interfaces::{
     dkg::DkgPool,
     ecdsa::EcdsaPool,
     ingress_manager::IngressSelector,
-    ingress_pool::IngressPoolSelect,
     messaging::{MessageRouting, XNetPayloadBuilder},
     registry::{self, LocalStoreCertifiedTimeReader, RegistryClient},
     self_validating_payload::SelfValidatingPayloadBuilder,
@@ -388,11 +387,7 @@ impl Consensus for ConsensusImpl {
     /// finalizing anything, due to the above decision of having to return
     /// early. The order of the rest subcomponents decides whom is given
     /// a priority, but it should not affect liveness or correctness.
-    fn on_state_change(
-        &self,
-        pool: &dyn ConsensusPool,
-        ingress_pool: &dyn IngressPoolSelect,
-    ) -> ChangeSet {
+    fn on_state_change(&self, pool: &dyn ConsensusPool) -> ChangeSet {
         let pool_reader = PoolReader::new(pool);
         trace!(self.log, "on_state_change");
 
@@ -471,7 +466,7 @@ impl Consensus for ConsensusImpl {
         };
         let make_block = || {
             self.call_with_metrics(ConsensusSubcomponent::BlockMaker, || {
-                add_to_validated(self.block_maker.on_state_change(&pool_reader, ingress_pool))
+                add_to_validated(self.block_maker.on_state_change(&pool_reader))
             })
         };
         let validate = || {
@@ -536,7 +531,6 @@ impl Consensus for ConsensusImpl {
         if self.malicious_flags.is_consensus_malicious() {
             crate::consensus::malicious_consensus::maliciously_alter_changeset(
                 &pool_reader,
-                ingress_pool,
                 changeset,
                 &self.malicious_flags,
                 &self.block_maker,
@@ -681,7 +675,6 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::registry::subnet::v1::SubnetRecord;
     use ic_registry_subnet_type::SubnetType;
-    use ic_test_artifact_pool::ingress_pool::TestIngressPool;
     use ic_test_utilities::{
         ingress_selector::FakeIngressSelector,
         message_routing::FakeMessageRouting,
@@ -773,7 +766,6 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let committee: Vec<_> = (0..4).map(node_test_id).collect();
             let interval_length = 99;
-            let ingress_pool = TestIngressPool::new(pool_config.clone());
 
             // ensure that a consensus implementation with a subnet record with is_halted =
             // false returns changes
@@ -785,9 +777,7 @@ mod tests {
                 pool_config.clone(),
             );
 
-            assert!(!consensus_impl
-                .on_state_change(pool.borrow(), &ingress_pool)
-                .is_empty());
+            assert!(!consensus_impl.on_state_change(pool.borrow()).is_empty());
 
             // ensure that an consensus_impl with a subnet record with is_halted =
             // true returns no changes
@@ -798,9 +788,7 @@ mod tests {
                     .build(),
                 pool_config,
             );
-            assert!(consensus_impl
-                .on_state_change(pool.borrow(), &ingress_pool)
-                .is_empty());
+            assert!(consensus_impl.on_state_change(pool.borrow()).is_empty());
         })
     }
 
@@ -809,7 +797,6 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let committee: Vec<_> = (0..4).map(node_test_id).collect();
             let interval_length = 99;
-            let ingress_pool = TestIngressPool::new(pool_config.clone());
 
             // ensure that an consensus_impl with a subnet record with is_halted = false
             // returns changes
@@ -831,35 +818,27 @@ mod tests {
             registry_time_source
                 .set_time(consensus_impl.time_source.get_relative_time())
                 .unwrap();
-            assert!(!consensus_impl
-                .on_state_change(pool.borrow(), &ingress_pool)
-                .is_empty());
+            assert!(!consensus_impl.on_state_change(pool.borrow()).is_empty());
 
             // advance the consensus time such that it's `HALT_AFTER_REGISTRY_UNREACHABLE`
             // ahead of the registry time. Consensus should not be halted yet.
             let new_time =
                 consensus_time_source.get_relative_time() + HALT_AFTER_REGISTRY_UNREACHABLE;
             consensus_time_source.set_time(new_time).unwrap();
-            assert!(!consensus_impl
-                .on_state_change(pool.borrow(), &ingress_pool)
-                .is_empty());
+            assert!(!consensus_impl.on_state_change(pool.borrow()).is_empty());
 
             // advance the consensus time another second, such that it's more than
             // `HALT_AFTER_REGISTRY_UNREACHABLE` ahead of the registry time. Consensus
             // should now be stalled.
             let new_time = consensus_time_source.get_relative_time() + Duration::from_secs(1);
             consensus_time_source.set_time(new_time).unwrap();
-            assert!(consensus_impl
-                .on_state_change(pool.borrow(), &ingress_pool)
-                .is_empty());
+            assert!(consensus_impl.on_state_change(pool.borrow()).is_empty());
 
             // if we advance the registry time such that it's <=
             // `HALT_AFTER_REGISTRY_UNREACHABLE` behind the consensus time,
             // consensus should no longer be halted.
             registry_time_source.set_time(new_time).unwrap();
-            assert!(!consensus_impl
-                .on_state_change(pool.borrow(), &ingress_pool)
-                .is_empty());
+            assert!(!consensus_impl.on_state_change(pool.borrow()).is_empty());
         })
     }
 
@@ -868,7 +847,6 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let committee: Vec<_> = (0..4).map(node_test_id).collect();
             let interval_length = 99;
-            let ingress_pool = TestIngressPool::new(pool_config.clone());
 
             // ensure that an consensus_impl with a subnet record with is_halted = false
             // returns changes
@@ -898,9 +876,7 @@ mod tests {
                 + HALT_AFTER_REGISTRY_UNREACHABLE
                 + Duration::from_secs(1);
             consensus_time_source.set_time(new_time).unwrap();
-            assert!(!consensus_impl
-                .on_state_change(pool.borrow(), &ingress_pool)
-                .is_empty());
+            assert!(!consensus_impl.on_state_change(pool.borrow()).is_empty());
         })
     }
 }

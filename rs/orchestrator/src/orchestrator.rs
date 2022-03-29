@@ -16,8 +16,10 @@ use ic_interfaces::{crypto::KeyManager, registry::RegistryClient};
 use ic_logger::{error, info, new_replica_logger_from_config, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_metrics_exporter::MetricsRuntimeImpl;
+use ic_registry_client_helpers::node::NodeRegistry;
+use ic_registry_client_helpers::node_operator::NodeOperatorRegistry;
 use ic_registry_replicator::RegistryReplicator;
-use ic_types::{ReplicaVersion, SubnetId};
+use ic_types::{PrincipalId, ReplicaVersion, SubnetId};
 use slog_async::AsyncGuard;
 use std::env;
 use std::net::SocketAddr;
@@ -274,6 +276,47 @@ impl Orchestrator {
         let (_node_pks, node_id) = get_node_keys_or_generate_if_missing(&config.crypto.crypto_root);
 
         println!("{}", node_id);
+    }
+
+    /// Print the DC ID where the current replica is located.
+    pub fn dc_id(args: OrchestratorArgs) {
+        let config = args.get_ic_config();
+        let (_node_pks, node_id) = get_node_keys_or_generate_if_missing(&config.crypto.crypto_root);
+
+        let (logger, _async_log_guard) =
+            new_replica_logger_from_config(&config.orchestrator_logger);
+
+        let registry_replicator = Arc::new(RegistryReplicator::new_from_config(
+            logger.clone(),
+            Some(node_id),
+            &config,
+        ));
+        let registry_client = registry_replicator.get_registry_client();
+        let registry = Arc::new(RegistryHelper::new(
+            node_id,
+            registry_client.clone(),
+            logger,
+        ));
+
+        let registry_version = registry.get_latest_version();
+        let node_record = registry_client
+            .get_transport_info(node_id, registry_version)
+            .ok()
+            .flatten();
+        let node_operator_id =
+            node_record.and_then(|v| PrincipalId::try_from(v.node_operator_id).ok());
+
+        let node_operator_record = node_operator_id.and_then(|id| {
+            registry_client
+                .get_node_operator_record(id, registry_version)
+                .ok()
+                .flatten()
+        });
+        let dc_id = node_operator_record.map(|v| v.dc_id);
+
+        if let Some(dc_id) = dc_id {
+            println!("{}", dc_id);
+        }
     }
 
     /// Shuts down the orchestrator: stops async tasks and the replica process

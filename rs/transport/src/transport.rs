@@ -68,14 +68,15 @@
 
 use crate::metrics::{ControlPlaneMetrics, DataPlaneMetrics, SendQueueMetrics};
 use crate::types::TransportImpl;
+use ic_base_types::{NodeId, RegistryVersion};
 use ic_config::transport::TransportConfig;
 use ic_crypto_tls_interfaces::TlsHandshake;
-use ic_interfaces_transport::{AsyncTransportEventHandler, Transport};
+use ic_interfaces_transport::{
+    AsyncTransportEventHandler, FlowTag, Transport, TransportErrorCode, TransportPayload,
+};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::node::v1::NodeRecord;
-use ic_types::transport::{FlowTag, TransportErrorCode, TransportPayload};
-use ic_types::{NodeId, RegistryVersion};
 use std::collections::BTreeSet;
 use std::net::IpAddr;
 use std::str::FromStr;

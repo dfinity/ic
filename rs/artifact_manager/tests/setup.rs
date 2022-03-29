@@ -1,5 +1,5 @@
 use ic_artifact_manager::{manager, processors};
-use ic_artifact_pool::{consensus_pool::ConsensusPoolImpl, ingress_pool::IngressPoolImpl};
+use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_interfaces::artifact_manager::*;
 use ic_interfaces::time_source::SysTimeSource;
@@ -18,7 +18,7 @@ fn setup_manager(artifact_pool_config: ArtifactPoolConfig) -> Arc<dyn ArtifactMa
 
     let mut artifact_manager_maker = manager::ArtifactManagerMaker::new(time_source.clone());
 
-    let (ingress_pool, consensus_pool) = init_artifact_pools(
+    let consensus_pool = init_artifact_pools(
         artifact_pool_config,
         metrics_registry.clone(),
         replica_logger.clone(),
@@ -35,7 +35,6 @@ fn setup_manager(artifact_pool_config: ArtifactPoolConfig) -> Arc<dyn ArtifactMa
         },
         Arc::clone(&time_source) as Arc<_>,
         Arc::clone(&consensus_pool),
-        Arc::clone(&ingress_pool),
         replica_logger,
         metrics_registry,
     );
@@ -47,22 +46,16 @@ fn init_artifact_pools(
     config: ArtifactPoolConfig,
     registry: MetricsRegistry,
     log: ReplicaLogger,
-) -> (Arc<RwLock<IngressPoolImpl>>, Arc<RwLock<ConsensusPoolImpl>>) {
+) -> Arc<RwLock<ConsensusPoolImpl>> {
     let cup = make_genesis(ic_types::consensus::dkg::Summary::fake());
-    (
-        Arc::new(RwLock::new(IngressPoolImpl::new(
-            config.clone(),
-            registry.clone(),
-            log.clone(),
-        ))),
-        Arc::new(RwLock::new(ConsensusPoolImpl::new(
-            subnet_test_id(0),
-            ic_types::consensus::catchup::CUPWithOriginalProtobuf::from_cup(cup),
-            config,
-            registry,
-            log,
-        ))),
-    )
+
+    Arc::new(RwLock::new(ConsensusPoolImpl::new(
+        subnet_test_id(0),
+        ic_types::consensus::catchup::CUPWithOriginalProtobuf::from_cup(cup),
+        config,
+        registry,
+        log,
+    )))
 }
 
 /// Run an artifact manager test, which is a function that takes an

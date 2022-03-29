@@ -45,19 +45,18 @@ lazy_static! {
         AvailableMemory::new(i64::MAX, i64::MAX).into();
 }
 
-/// All the pieces needed to execute a benchmark.
-/// Clippy complains if the tuple is used directly.
+/// Pieces needed to execute a benchmark.
 #[derive(Clone)]
-pub struct BenchmarkArgs(
-    pub CanisterState,
-    pub RequestOrIngress,
-    pub Payload,
-    pub Time,
-    pub Arc<NetworkTopology>,
-    pub ExecutionParameters,
-    pub CallOrigin,
-    pub Callback,
-);
+pub struct BenchmarkArgs {
+    pub canister_state: CanisterState,
+    pub ingress: RequestOrIngress,
+    pub reject: Payload,
+    pub time: Time,
+    pub network_topology: Arc<NetworkTopology>,
+    pub execution_parameters: ExecutionParameters,
+    pub call_origin: CallOrigin,
+    pub callback: Callback,
+}
 
 /// Benchmark to run: name (id), WAT, expected number of instructions.
 pub struct Benchmark(pub &'static str, pub String, pub u64);
@@ -159,16 +158,16 @@ where
         execution_mode: ExecutionMode::Replicated,
     };
 
-    BenchmarkArgs(
+    BenchmarkArgs {
         canister_state,
         ingress,
         reject,
-        mock_time(),
+        time: mock_time(),
         network_topology,
         execution_parameters,
         call_origin,
         callback,
-    )
+    }
 }
 
 /// Run benchmark for a given WAT snippet.
