@@ -61,7 +61,9 @@ use crate::{
 use ic_artifact_manager::artifact::IngressArtifact;
 use ic_interfaces::artifact_manager::ArtifactManager;
 use ic_interfaces::registry::RegistryClient;
-use ic_interfaces_transport::Transport;
+use ic_interfaces_transport::{
+    FlowTag, Transport, TransportError, TransportNotification, TransportStateChange,
+};
 use ic_logger::{info, replica_logger::ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::p2p::v1 as pb;
@@ -76,7 +78,6 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::SignedIngress,
     p2p::GossipAdvert,
-    transport::{FlowTag, TransportError, TransportNotification, TransportStateChange},
     NodeId, SubnetId,
 };
 

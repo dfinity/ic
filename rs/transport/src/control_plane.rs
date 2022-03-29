@@ -14,14 +14,11 @@ use crate::types::{
 };
 use crate::utils::{get_flow_ips, get_flow_label, SendQueueImpl};
 use futures::future::{AbortHandle, Abortable, Aborted};
+use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::{AllowedClients, AuthenticatedPeer, TlsReadHalf, TlsWriteHalf};
-use ic_interfaces_transport::AsyncTransportEventHandler;
+use ic_interfaces_transport::{AsyncTransportEventHandler, FlowId, FlowTag, TransportErrorCode};
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_protobuf::registry::node::v1::NodeRecord;
-use ic_types::{
-    transport::{FlowId, FlowTag, TransportErrorCode},
-    NodeId, RegistryVersion,
-};
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
@@ -911,9 +908,13 @@ mod tests {
     use crate::transport::create_transport;
     use async_trait::async_trait;
     use crossbeam_channel::{bounded, Sender};
+    use ic_base_types::{NodeId, RegistryVersion};
     use ic_config::transport::{TransportConfig, TransportFlowConfig};
     use ic_crypto::utils::TempCryptoComponent;
-    use ic_interfaces_transport::{AsyncTransportEventHandler, SendError};
+    use ic_interfaces_transport::{
+        AsyncTransportEventHandler, FlowId, SendError, TransportErrorCode, TransportPayload,
+        TransportStateChange,
+    };
     use ic_logger::warn;
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::registry::node::v1::{
@@ -924,11 +925,6 @@ mod tests {
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_utilities::types::ids::{NODE_1, NODE_2};
     use ic_test_utilities::with_test_replica_logger;
-    use ic_types::transport::TransportErrorCode;
-    use ic_types::{
-        transport::{FlowId, TransportPayload, TransportStateChange},
-        NodeId, RegistryVersion,
-    };
     use std::sync::Arc;
 
     const NODE_ID_1: NodeId = NODE_1;

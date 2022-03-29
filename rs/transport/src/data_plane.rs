@@ -17,15 +17,19 @@
 //! The data plane module implements data plane functionality for
 //! [`TransportImpl`](../types/struct.TransportImpl.html).
 
-use crate::metrics::DataPlaneMetrics;
-use crate::types::{
-    Connected, ConnectionRole, ConnectionState, SendQueueReader, TransportHeader, TransportImpl,
-    TRANSPORT_FLAGS_IS_HEARTBEAT, TRANSPORT_FLAGS_SENDER_ERROR, TRANSPORT_HEADER_SIZE,
+use crate::{
+    metrics::DataPlaneMetrics,
+    types::{
+        Connected, ConnectionRole, ConnectionState, SendQueueReader, TransportHeader,
+        TransportImpl, TRANSPORT_FLAGS_IS_HEARTBEAT, TRANSPORT_FLAGS_SENDER_ERROR,
+        TRANSPORT_HEADER_SIZE,
+    },
 };
 use ic_crypto_tls_interfaces::{TlsReadHalf, TlsWriteHalf};
-use ic_interfaces_transport::AsyncTransportEventHandler;
+use ic_interfaces_transport::{
+    AsyncTransportEventHandler, FlowId, TransportErrorCode, TransportPayload, TransportStateChange,
+};
 use ic_logger::warn;
-use ic_types::transport::{FlowId, TransportErrorCode, TransportPayload, TransportStateChange};
 
 use futures::future::{AbortHandle, Abortable, Aborted};
 use std::convert::TryInto;

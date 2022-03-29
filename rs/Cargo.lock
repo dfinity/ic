@@ -5032,8 +5032,11 @@ name = "ic-interfaces-transport"
 version = "0.8.0"
 dependencies = [
  "async-trait",
+ "ic-base-types",
  "ic-protobuf",
- "ic-types 0.8.0",
+ "phantom_newtype",
+ "serde",
+ "serde_bytes",
 ]
 
 [[package]]
@@ -6711,6 +6714,7 @@ dependencies = [
  "bytes",
  "crossbeam-channel 0.5.1",
  "futures",
+ "ic-base-types",
  "ic-config",
  "ic-crypto",
  "ic-crypto-tls-interfaces",
@@ -6722,7 +6726,6 @@ dependencies = [
  "ic-registry-keys",
  "ic-registry-proto-data-provider",
  "ic-test-utilities",
- "ic-types 0.8.0",
  "lazy_static",
  "nix 0.23.0",
  "openssl",

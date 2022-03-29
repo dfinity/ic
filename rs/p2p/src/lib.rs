@@ -99,12 +99,12 @@ use ic_interfaces::{
     artifact_manager::ArtifactManager, consensus_pool::ConsensusPoolCache, registry::RegistryClient,
 };
 use ic_interfaces_p2p::IngressIngestionService;
-use ic_interfaces_transport::Transport;
+use ic_interfaces_transport::{FlowTag, Transport};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::GossipConfig;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
-use ic_types::{malicious_flags::MaliciousFlags, transport::FlowTag, NodeId, SubnetId};
+use ic_types::{malicious_flags::MaliciousFlags, NodeId, SubnetId};
 use serde::{Deserialize, Serialize};
 use std::{
     error,
@@ -131,7 +131,7 @@ pub(crate) mod utils {
     //! The utils module provides a mapping from a gossip message to the
     //! corresponding flow tag.
     use crate::gossip_protocol::GossipMessage;
-    use ic_types::transport::FlowTag;
+    use ic_interfaces_transport::FlowTag;
 
     /// The FlowMapper struct holds a vector of flow tags.
     pub(crate) struct FlowMapper {
