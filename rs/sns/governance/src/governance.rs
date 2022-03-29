@@ -2606,7 +2606,7 @@ impl Governance {
         let max_proposals = self
             .nervous_system_parameters()
             .max_proposals_to_keep_per_action
-            .expect("NervousSystemParameters must have max_proposals_to_keep_per_type")
+            .expect("NervousSystemParameters must have max_proposals_to_keep_per_action")
             as usize;
 
         // This data structure contains proposals grouped by type.
