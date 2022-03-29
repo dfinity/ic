@@ -91,10 +91,11 @@ async fn validate_signals() {
         let xnet_payload_builder = get_xnet_payload_builder_for_test(state_manager, log);
 
         // Shortcut for `xnet_payload_builder.validate_signals(SUBNET_1, _, _, _)`.
-        let validate = |signals_end, expected, state| {
+        let validate_signals = |signals_end, expected, state| {
             xnet_payload_builder.validate_signals(
                 SUBNET_1,
                 StreamIndex::new(signals_end),
+                &Default::default(),
                 StreamIndex::new(expected),
                 state,
             )
@@ -108,9 +109,9 @@ async fn validate_signals() {
         );
 
         // With no stream present, only default signals are valid.
-        assert_eq!(Valid, validate(0, 0, &empty_state));
+        assert_eq!(Valid, validate_signals(0, 0, &empty_state));
         // Signal for non-existent message.
-        assert_eq!(Invalid, validate(1, 0, &empty_state));
+        assert_eq!(Invalid, validate_signals(1, 0, &empty_state));
 
         // State with `messages.end() == 7` for `SUBNET_1`.
         let mut state = ReplicatedState::new_rooted_at(
@@ -127,16 +128,16 @@ async fn validate_signals() {
         });
 
         // No longer valid: `signals_end < expected`.
-        assert_eq!(Invalid, validate(4, 5, &state));
+        assert_eq!(Invalid, validate_signals(4, 5, &state));
 
         // All combinations with `expected <= signals_end <= stream.messages.end()` are
         // valid.
-        assert_eq!(Valid, validate(5, 5, &state));
-        assert_eq!(Valid, validate(6, 5, &state));
-        assert_eq!(Valid, validate(7, 5, &state));
+        assert_eq!(Valid, validate_signals(5, 5, &state));
+        assert_eq!(Valid, validate_signals(6, 5, &state));
+        assert_eq!(Valid, validate_signals(7, 5, &state));
 
         // Signal for nonexistent message (8).
-        assert_eq!(Invalid, validate(8, 5, &state));
+        assert_eq!(Invalid, validate_signals(8, 5, &state));
     });
 }
 
@@ -164,7 +165,13 @@ async fn validate_signals_expected_before_messages_begin() {
         let signals_end = StreamIndex::new(4);
 
         let expected = StreamIndex::new(2);
-        xnet_payload_builder.validate_signals(SUBNET_1, signals_end, expected, &state);
+        xnet_payload_builder.validate_signals(
+            SUBNET_1,
+            signals_end,
+            &Default::default(),
+            expected,
+            &state,
+        );
     });
 }
 
@@ -185,7 +192,83 @@ async fn validate_signals_expected_after_messages_begin() {
         let signals_end = StreamIndex::new(0);
 
         let expected = StreamIndex::new(2);
-        xnet_payload_builder.validate_signals(SUBNET_1, signals_end, expected, &state);
+        xnet_payload_builder.validate_signals(
+            SUBNET_1,
+            signals_end,
+            &Default::default(),
+            expected,
+            &state,
+        );
+    });
+}
+
+#[tokio::test]
+async fn validate_signals_invalid_reject_signals() {
+    use SignalsValidationResult::*;
+
+    with_test_replica_logger(|log| {
+        let state_manager = FakeStateManager::new();
+        let xnet_payload_builder = get_xnet_payload_builder_for_test(state_manager, log);
+
+        // Shortcut for `xnet_payload_builder.validate_signals(SUBNET_1, _, _, _)`.
+        let validate_signals = |signals_end, reject_signals: Vec<u64>, expected, state| {
+            let reject_signals: VecDeque<StreamIndex> = reject_signals
+                .iter()
+                .map(|x| StreamIndex::new(*x))
+                .collect();
+            xnet_payload_builder.validate_signals(
+                SUBNET_1,
+                StreamIndex::new(signals_end),
+                &reject_signals,
+                StreamIndex::new(expected),
+                state,
+            )
+        };
+
+        // State with `messages.end() == 77` for `SUBNET_1`.
+        let mut state = ReplicatedState::new_rooted_at(
+            subnet_test_id(1),
+            SubnetType::Application,
+            "NOT_USED".into(),
+        );
+        state.with_streams(btreemap! {
+            SUBNET_1 => generate_stream(&StreamConfig {
+                message_begin: 4,
+                message_end: 77,
+                signal_end: 107,
+            }),
+        });
+
+        // Out-of-order signals are invalid.
+        assert_eq!(
+            Invalid,
+            validate_signals(
+                70, // Signals end of incoming stream slice
+                vec![10, 20, 50, 40],
+                5, // Expected signal index
+                &state
+            )
+        );
+
+        // Signals larger than or equal to `signals_end` are invalid.
+        assert_eq!(
+            Invalid,
+            validate_signals(
+                70, // Signals end of incoming stream slice
+                vec![10, 20, 40, 80],
+                5, // Expected signal index
+                &state
+            )
+        );
+        assert_eq!(
+            Invalid,
+            validate_signals(
+                80, // Signals end of incoming stream slice
+                vec![10, 20, 40, 80],
+                5, // Expected signal index
+                &state
+            )
+        );
     });
 }
 

@@ -47,7 +47,7 @@ use prometheus::{Histogram, HistogramVec, IntCounterVec, IntGauge};
 pub use proximity::{GenRangeFn, ProximityMap};
 use rand::{thread_rng, Rng};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, VecDeque},
     convert::TryFrom,
     net::SocketAddr,
     sync::{Arc, Mutex},
@@ -402,21 +402,24 @@ impl XNetPayloadBuilderImpl {
         Ok(expected_indices)
     }
 
-    /// Validates the `signals_end` of the incoming `StreamSlice` from
+    /// Validates the signals of the incoming `StreamSlice` from
     /// `subnet_id` with respect to `expected` (the expected signal index);
     /// and to `messages_end()` of the outgoing `Stream` to `subnet_id`.
     ///
     /// In particular:
     ///
     ///  1. `signals_end` must be monotonically increasing, i.e. `expected <=
-    /// signals_end`; and
+    /// signals_end`;
     ///
     ///  2. signals must only refer to past and current messages, i.e.
-    /// `signals_end <= stream.messages_end()`.
+    /// `signals_end <= stream.messages_end()`; and
+    ///
+    ///  3. `concat(reject_signals, [signals_end])` must be strictly increasing.
     fn validate_signals(
         &self,
         subnet_id: SubnetId,
         signals_end: StreamIndex,
+        reject_signals: &VecDeque<StreamIndex>,
         expected: StreamIndex,
         state: &ReplicatedState,
     ) -> SignalsValidationResult {
@@ -437,9 +440,7 @@ impl XNetPayloadBuilderImpl {
             self_messages_end
         );
 
-        if expected <= signals_end && signals_end <= self_messages_end {
-            SignalsValidationResult::Valid
-        } else {
+        if expected > signals_end || signals_end > self_messages_end {
             warn!(
                 self.log,
                 "Invalid stream from {}: expected ({}) <= signals_end ({}) <= self.messages_end() ({})",
@@ -448,8 +449,27 @@ impl XNetPayloadBuilderImpl {
                 signals_end,
                 self_messages_end
             );
-            SignalsValidationResult::Invalid
+            return SignalsValidationResult::Invalid;
         }
+
+        if !reject_signals.is_empty() {
+            let mut next = signals_end;
+            for index in reject_signals.iter().rev() {
+                if index >= &next {
+                    warn!(
+                        self.log,
+                        "Invalid signals in stream from {}: reject_signals {:?}, signals_end {}",
+                        subnet_id,
+                        reject_signals,
+                        signals_end
+                    );
+                    return SignalsValidationResult::Invalid;
+                }
+                next = *index;
+            }
+        }
+
+        SignalsValidationResult::Valid
     }
 
     /// Validates the `certified_slice` received from `subnet_id`:
@@ -586,6 +606,7 @@ impl XNetPayloadBuilderImpl {
         match self.validate_signals(
             subnet_id,
             slice.header().signals_end,
+            &slice.header().reject_signals,
             expected.signal_index,
             state,
         ) {

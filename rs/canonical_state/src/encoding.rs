@@ -17,7 +17,7 @@ use serde::Serialize;
 use std::collections::BTreeSet;
 use std::convert::TryInto;
 
-pub(crate) mod types;
+pub mod types;
 
 #[cfg(test)]
 mod tests {

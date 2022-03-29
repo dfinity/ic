@@ -69,7 +69,7 @@ mod tests {
     use ic_types::{CanisterId, Cycles, ExecutionRound};
     use ic_wasm_types::CanisterModule;
     use maplit::btreemap;
-    use std::collections::BTreeSet;
+    use std::collections::{BTreeSet, VecDeque};
     use std::convert::TryFrom;
     use std::sync::Arc;
     use std::time::Duration;
@@ -408,6 +408,7 @@ mod tests {
             begin: StreamIndex::from(4),
             end: StreamIndex::from(4),
             signals_end: StreamIndex::new(11),
+            reject_signals: VecDeque::new(),
         };
 
         let stream = Stream::new(

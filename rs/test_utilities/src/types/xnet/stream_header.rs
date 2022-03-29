@@ -1,4 +1,5 @@
 use ic_types::xnet::{StreamHeader, StreamIndex};
+use std::collections::VecDeque;
 
 /// Builder for StreamHeader objects.  Allows for creation of a default struct
 /// and subsequent population of fields with specified values.
@@ -11,6 +12,7 @@ impl Default for StreamHeaderBuilder {
             begin: StreamIndex::from(0),
             end: StreamIndex::from(0),
             signals_end: StreamIndex::from(0),
+            reject_signals: VecDeque::default(),
         })
     }
 }

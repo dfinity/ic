@@ -29,7 +29,7 @@ use ic_types::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     convert::{From, TryFrom, TryInto},
     mem::size_of,
     sync::Arc,
@@ -453,6 +453,11 @@ impl SystemMetadata {
 /// Stream is the state of bi-directional communication session with a remote
 /// subnet.  It contains outgoing messages having that subnet as their
 /// destination and signals for inducted messages received from that subnet.
+///
+/// Conceptually we use a gap-free queue containing one signal for each inducted
+/// message; but because most signals are `Accept` we represent that queue as a
+/// combination of `signals_end` (pointing just beyond the last signal) plus a
+/// collection of `reject_signals`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Stream {
     /// Indexed queue of outgoing messages.
@@ -466,6 +471,9 @@ pub struct Stream {
     /// represented by its end index (pointing just beyond the last signal).
     signals_end: StreamIndex,
 
+    /// Stream indices of rejected messages, in ascending order.
+    reject_signals: VecDeque<StreamIndex>,
+
     /// Estimated stream byte size.
     size_bytes: usize,
 }
@@ -474,10 +482,12 @@ impl Default for Stream {
     fn default() -> Self {
         let messages = Default::default();
         let signals_end = Default::default();
+        let reject_signals = VecDeque::default();
         let size_bytes = Self::size_bytes(&messages);
         Self {
             messages,
             signals_end,
+            reject_signals,
             size_bytes,
         }
     }
@@ -485,6 +495,7 @@ impl Default for Stream {
 
 impl From<&Stream> for pb_queues::Stream {
     fn from(item: &Stream) -> Self {
+        let reject_signals = item.reject_signals.iter().map(|i| i.get()).collect();
         Self {
             messages_begin: item.messages.begin().get(),
             messages: item
@@ -493,6 +504,7 @@ impl From<&Stream> for pb_queues::Stream {
                 .map(|(_, req_or_resp)| req_or_resp.into())
                 .collect(),
             signals_end: item.signals_end.get(),
+            reject_signals,
         }
     }
 }
@@ -507,9 +519,16 @@ impl TryFrom<pb_queues::Stream> for Stream {
         }
         let size_bytes = Self::size_bytes(&messages);
 
+        let reject_signals = item
+            .reject_signals
+            .iter()
+            .map(|i| StreamIndex::new(*i))
+            .collect();
+
         Ok(Self {
             messages,
             signals_end: item.signals_end.into(),
+            reject_signals,
             size_bytes,
         })
     }
@@ -522,6 +541,22 @@ impl Stream {
         Self {
             messages,
             signals_end,
+            reject_signals: VecDeque::new(),
+            size_bytes,
+        }
+    }
+
+    /// Creates a new `Stream` with the given `messages` and `signals_end`.
+    pub fn with_signals(
+        messages: StreamIndexedQueue<RequestOrResponse>,
+        signals_end: StreamIndex,
+        reject_signals: VecDeque<StreamIndex>,
+    ) -> Self {
+        let size_bytes = Self::size_bytes(&messages);
+        Self {
+            messages,
+            signals_end,
+            reject_signals,
             size_bytes,
         }
     }
@@ -539,6 +574,7 @@ impl Stream {
             begin: self.messages.begin(),
             end: self.messages.end(),
             signals_end: self.signals_end,
+            reject_signals: self.reject_signals.clone(),
         }
     }
 
@@ -564,8 +600,13 @@ impl Stream {
         debug_assert_eq!(Self::size_bytes(&self.messages), self.size_bytes);
     }
 
-    /// Garbage collects messages before `new_begin`.
-    pub fn discard_before(&mut self, new_begin: StreamIndex) {
+    /// Garbage collects messages before `new_begin`, collecting and returning all
+    /// messages for which a reject signal was received.
+    pub fn discard_messages_before(
+        &mut self,
+        new_begin: StreamIndex,
+        reject_signals: &VecDeque<StreamIndex>,
+    ) -> Vec<RequestOrResponse> {
         assert!(
             new_begin >= self.messages.begin(),
             "Begin index ({}) has already advanced past requested begin index ({})",
@@ -579,10 +620,49 @@ impl Stream {
             self.messages.end()
         );
 
+        // Skip any reject signals before `self.messages.begin()`.
+        //
+        // This may happen legitimately if the remote subnet has not yet GC-ed a signal
+        // because it has not yet seen our `messages.begin()` advance past it.
+        let messages_begin = self.messages.begin();
+        let mut reject_signals = reject_signals
+            .iter()
+            .skip_while(|&reject_signal| reject_signal < &messages_begin);
+        let mut next_reject_signal = reject_signals.next().unwrap_or(&new_begin);
+
+        // Garbage collect all messages up to `new_begin`.
+        let mut rejected_messages = Vec::new();
         while self.messages.begin() < new_begin {
-            self.size_bytes -= self.messages.pop().unwrap().1.count_bytes();
+            let (index, msg) = self.messages.pop().unwrap();
+
+            // Deduct every discarded message from the stream's byte size.
+            self.size_bytes -= msg.count_bytes();
             debug_assert_eq!(Self::size_bytes(&self.messages), self.size_bytes);
+
+            // If we received a reject signal for this message, collect it in
+            // `rejected_messages`.
+            if next_reject_signal == &index {
+                rejected_messages.push(msg);
+                next_reject_signal = reject_signals.next().unwrap_or(&new_begin);
+            }
         }
+        rejected_messages
+    }
+
+    /// Garbage collects signals before `new_signals_begin`.
+    pub fn discard_signals_before(&mut self, new_signals_begin: StreamIndex) {
+        while let Some(signal_index) = self.reject_signals.front() {
+            if *signal_index < new_signals_begin {
+                self.reject_signals.pop_front();
+            } else {
+                break;
+            }
+        }
+    }
+
+    /// Returns a reference to the reject signals.
+    pub fn reject_signals(&self) -> &VecDeque<StreamIndex> {
+        &self.reject_signals
     }
 
     /// Returns the index just beyond the last sent signal.
@@ -593,6 +673,20 @@ impl Stream {
     /// Increments the index of the last sent signal.
     pub fn increment_signals_end(&mut self) {
         self.signals_end.inc_assign()
+    }
+
+    /// Appends the given reject signal to the tail of the reject signals.
+    pub fn push_reject_signal(&mut self, index: StreamIndex) {
+        assert_eq!(index, self.signals_end);
+        if let Some(&last_signal) = self.reject_signals.back() {
+            assert!(
+                last_signal < index,
+                "The signal to be pushed ({}) should be larger than the last signal ({})",
+                index,
+                last_signal
+            );
+        }
+        self.reject_signals.push_back(index)
     }
 
     /// Calculates the byte size of a `Stream` holding the given messages.
@@ -615,6 +709,7 @@ impl From<Stream> for StreamSlice {
                 begin: val.messages.begin(),
                 end: val.messages.end(),
                 signals_end: val.signals_end,
+                reject_signals: val.reject_signals,
             },
             val.messages,
         )
@@ -747,6 +842,11 @@ impl<'a> StreamHandle<'a> {
         }
     }
 
+    /// Returns a reference to the message queue.
+    pub fn messages(&self) -> &StreamIndexedQueue<RequestOrResponse> {
+        self.stream.messages()
+    }
+
     /// Returns the stream's begin index.
     pub fn messages_begin(&self) -> StreamIndex {
         self.stream.messages_begin()
@@ -755,6 +855,11 @@ impl<'a> StreamHandle<'a> {
     /// Returns the stream's end index.
     pub fn messages_end(&self) -> StreamIndex {
         self.stream.messages_end()
+    }
+
+    /// Returns a reference to the reject signals.
+    pub fn reject_signals(&self) -> &VecDeque<StreamIndex> {
+        self.stream.reject_signals()
     }
 
     /// Returns the index just beyond the last sent signal.
@@ -778,8 +883,18 @@ impl<'a> StreamHandle<'a> {
         self.stream.increment_signals_end();
     }
 
-    /// Garbage collects messages before `new_begin`.
-    pub fn discard_before(&mut self, new_begin: StreamIndex) {
+    /// Appends the given reject signal to the tail of the reject signals.
+    pub fn push_reject_signal(&mut self, index: StreamIndex) {
+        self.stream.push_reject_signal(index)
+    }
+
+    /// Garbage collects messages before `new_begin`, collecting and returning all
+    /// messages for which a reject signal was received.
+    pub fn discard_messages_before(
+        &mut self,
+        new_begin: StreamIndex,
+        reject_signals: &VecDeque<StreamIndex>,
+    ) -> Vec<RequestOrResponse> {
         // Update stats for each discarded message.
         for (index, msg) in self.stream.messages().iter() {
             if index >= new_begin {
@@ -798,7 +913,13 @@ impl<'a> StreamHandle<'a> {
             }
         }
 
-        self.stream.discard_before(new_begin);
+        self.stream
+            .discard_messages_before(new_begin, reject_signals)
+    }
+
+    /// Garbage collects signals before `new_signals_begin`.
+    pub fn discard_signals_before(&mut self, new_signals_begin: StreamIndex) {
+        self.stream.discard_signals_before(new_signals_begin);
     }
 }
 
