@@ -62,6 +62,15 @@ RUN curl --fail https://sh.rustup.rs -sSf \
     rustup target add wasm32-unknown-unknown && \
     chown -R ${USER}.${USER} ${RUSTUP_HOME} ${CARGO_HOME}
 
+ARG nvm_version=v0.39.1
+ARG node_version=17
+ENV NVM_DIR=/opt/nvm
+RUN mkdir $NVM_DIR && \
+    curl --fail https://raw.githubusercontent.com/nvm-sh/nvm/${nvm_version}/install.sh -sSf | bash && \
+    bash $NVM_DIR/nvm.sh && \
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" && \
+    nvm install ${node_version}
+
 # CARGO_HOME is also where the crates.io registry and git checkouts are cached.
 # We bind mount this on the CI runners, so the image needs to be able to function properly
 # even if this directory is empty.
