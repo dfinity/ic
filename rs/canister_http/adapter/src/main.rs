@@ -4,6 +4,8 @@
 /// systemd service ic-os/guestos/rootfs/etc/systemd/system/ic-canister-http-adapter.service
 /// systemd socket ic-os/guestos/rootfs/etc/systemd/system/ic-canister-http-adapter.socket
 use clap::Parser;
+use hyper::Client;
+use hyper_tls::HttpsConnector;
 use ic_async_utils::{
     ensure_single_systemd_socket, incoming_from_first_systemd_socket, incoming_from_path,
 };
@@ -37,7 +39,12 @@ pub async fn main() {
         to_string_pretty(&config).unwrap()
     );
 
-    let canister_http = CanisterHttp::new(logger.clone());
+    // HTTPS connector
+    let mut https = HttpsConnector::new();
+    https.https_only(true);
+    let https_client = Client::builder().build::<_, hyper::Body>(https);
+
+    let canister_http = CanisterHttp::new(https_client, logger.clone());
     match config.incoming_source {
         IncomingSource::Path(uds_path) => Server::builder()
             .add_service(HttpAdapterServer::new(canister_http))
