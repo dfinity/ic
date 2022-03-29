@@ -4,6 +4,7 @@ use ic_types::RegistryVersion;
 use ic_types::{
     messages::{CallbackId, Request},
     time::UNIX_EPOCH,
+    xnet::StreamIndex,
     CanisterId, Cycles, Height, IDkgId, NodeId, SubnetId, Time, UserId,
 };
 use proptest::prelude::*;
@@ -130,5 +131,14 @@ prop_compose! {
             method_name,
             method_payload,
         }
+    }
+}
+
+prop_compose! {
+    /// Returns an arbitrary [`StreamIndex`] in the `[0, max)` range.
+    pub fn stream_index(max: u64) (
+      index in 0..max,
+    ) -> StreamIndex {
+        StreamIndex::from(index)
     }
 }

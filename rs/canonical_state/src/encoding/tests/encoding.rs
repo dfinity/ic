@@ -3,9 +3,9 @@ use crate::{encoding::*, max_supported_certification_version};
 
 #[test]
 fn roundtrip_encoding_stream_header() {
-    let header = stream_header();
-
     for certification_version in 0..=max_supported_certification_version() {
+        let header = stream_header(certification_version);
+
         assert_eq!(
             header,
             decode_stream_header(&encode_stream_header(&header, certification_version)).unwrap()

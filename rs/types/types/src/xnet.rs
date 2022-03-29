@@ -156,18 +156,21 @@ impl<T> Default for StreamIndexedQueue<T> {
 ///
 /// The idea behind this digest is that a subnet can obtain just the header and
 /// decide how many messages it wants to pull.
+///
+/// Conceptually we use a gap-free queue containing one signal for each
+/// inducted message; but because most signals are `Accept`we represent that
+/// queue as a combination of `signals_end` (pointing just beyond the last
+/// signal) and a collection of `reject_signals`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct StreamHeader {
     pub begin: StreamIndex,
     pub end: StreamIndex,
 
-    /// Index of the next expected reverse stream message.
-    ///
-    /// Conceptually we use a gap-free queue containing one signal for each
-    /// inducted message; but because these signals are all "Accept" (as we
-    /// generate responses when rejecting messages), that queue can be safely
-    /// represented by its end index (pointing just beyond the last signal).
+    /// Index of the next expected message.
     pub signals_end: StreamIndex,
+
+    /// Stream indices of rejected messages, in ascending order.
+    pub reject_signals: VecDeque<StreamIndex>,
 }
 
 /// A continuous slice of messages pulled from a remote subnet.  The slice also
@@ -281,6 +284,10 @@ pub mod testing {
                     q.push(message);
                     self.messages = Some(q);
                 }
+            }
+            let messages_end = self.messages.as_ref().unwrap().end();
+            if self.header.end < messages_end {
+                self.header.end = messages_end;
             }
         }
 

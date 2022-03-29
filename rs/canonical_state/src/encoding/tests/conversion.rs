@@ -9,15 +9,33 @@ use std::convert::{TryFrom, TryInto};
 
 #[test]
 fn roundtrip_conversion_stream_header() {
-    let header = stream_header();
-
     for certification_version in 0..=max_supported_certification_version() {
+        let header = stream_header(certification_version);
+
         assert_eq!(
             header,
             types::StreamHeader::from((&header, certification_version))
                 .try_into()
                 .unwrap()
         );
+    }
+}
+
+/// Decoding a slice with wildly invalid signals should return an error but not panic.
+#[test]
+fn convert_stream_header_with_invalid_signals() {
+    let header_with_invalid_signals = types::StreamHeader {
+        begin: 23,
+        end: 25,
+        signals_end: 256,
+        reject_signal_deltas: vec![300, 50, 6],
+    };
+    match ic_types::xnet::StreamHeader::try_from(header_with_invalid_signals) {
+        Ok(ctx) => panic!("Expected Err(_), got Ok({:?})", ctx),
+        Err(ProxyDecodeError::Other(message)) => {
+            assert_eq!("StreamHeader: reject signals are invalid, got `signals_end` 256, `reject_signal_deltas` [300, 50, 6]", message)
+        }
+        Err(err) => panic!("Expected Err(ProxyDecodeError::Other), got Err({:?})", err),
     }
 }
 

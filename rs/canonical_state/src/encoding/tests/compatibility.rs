@@ -25,7 +25,7 @@ use ic_types::{
 };
 use serde::{Deserialize, Serialize};
 use serde_cbor::value::Value;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 
 /// Added subnet to canister ID ranges routing tables.
 const CERTIFICATION_VERSION_3: u32 = 3;
@@ -44,6 +44,7 @@ const CERTIFICATION_VERSION_4: u32 = 4;
 ///     begin: 23.into(),
 ///     end: 25.into(),
 ///     signals_end: 256.into(),
+///     reject_signals: VecDeque::new(),
 /// }
 /// ```
 ///
@@ -65,6 +66,7 @@ fn canonical_encoding_stream_header() {
             begin: 23.into(),
             end: 25.into(),
             signals_end: 256.into(),
+            reject_signals: VecDeque::new(),
         };
 
         assert_eq!(

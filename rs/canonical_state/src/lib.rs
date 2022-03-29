@@ -138,6 +138,9 @@
 //!      fields that are not yet populated.
 //!   5. Added support for canister metadata custom sections.
 //!   6. Encoding of canister metadata custom sections.
+//!   7. Support for decoding of `StreamHeader::reject_signals`.
+//!   8. Encoding of `StreamHeader::reject_signals`.
+//!   9. Producing non-empty `StreamHeader::reject_signals`.
 
 pub mod encoding;
 pub mod hash_tree;
@@ -159,7 +162,7 @@ pub use visitor::{Control, Visitor};
 
 /// The Canonical State certification version that should be used for newly
 /// computed states.
-pub const CURRENT_CERTIFICATION_VERSION: u32 = 6;
+pub const CURRENT_CERTIFICATION_VERSION: u32 = 7;
 
 /// Maximum supported certification version. Always at least
 /// `CURRENT_CERTIFICATION_VERSION + 1`, since any given canonical state change

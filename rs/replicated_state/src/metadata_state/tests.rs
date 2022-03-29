@@ -5,12 +5,12 @@ use ic_constants::MAX_INGRESS_TTL;
 use ic_test_utilities::{
     mock_time,
     types::{
-        ids::{canister_test_id, message_test_id, user_test_id, SUBNET_1},
-        messages::RequestBuilder,
-    },
-    types::{
-        ids::{subnet_test_id, SUBNET_0, SUBNET_2},
-        messages::ResponseBuilder,
+        ids::{
+            canister_test_id, message_test_id, subnet_test_id, user_test_id, SUBNET_0, SUBNET_1,
+            SUBNET_2,
+        },
+        messages::{RequestBuilder, ResponseBuilder},
+        xnet::{StreamHeaderBuilder, StreamSliceBuilder},
     },
 };
 use ic_types::{
@@ -18,8 +18,14 @@ use ic_types::{
     ingress::WasmResult,
     messages::{CallbackId, Payload},
 };
+use lazy_static::lazy_static;
 use maplit::btreemap;
 use std::str::FromStr;
+
+lazy_static! {
+    static ref LOCAL_CANISTER: CanisterId = CanisterId::from(0x34);
+    static ref REMOTE_CANISTER: CanisterId = CanisterId::from(0x134);
+}
 
 #[test]
 fn can_prune_old_ingress_history_entries() {
@@ -162,13 +168,19 @@ fn streams_stats() {
     assert_eq!(streams.responses_size_bytes(), &expected_responses_size);
 
     // Discard `req_a1` and `rep_a1` from the stream for `SUBNET_1`.
-    streams.get_mut(&SUBNET_1).unwrap().discard_before(2.into());
+    streams
+        .get_mut(&SUBNET_1)
+        .unwrap()
+        .discard_messages_before(2.into(), &Default::default());
     // No more responses from `local_a` in `streams`.
     expected_responses_size.remove(&local_a);
     assert_eq!(streams.responses_size_bytes(), &expected_responses_size);
 
     // Discard `rep_b2` from the stream for `SUBNET_2`.
-    streams.get_mut(&SUBNET_2).unwrap().discard_before(1.into());
+    streams
+        .get_mut(&SUBNET_2)
+        .unwrap()
+        .discard_messages_before(1.into(), &Default::default());
     // `rep_b2` is gone.
     *expected_responses_size.get_mut(&local_b).unwrap() -= rep_b2_size;
     assert_eq!(streams.responses_size_bytes(), &expected_responses_size);
@@ -324,4 +336,102 @@ fn network_topology_ecdsa_subnets() {
     };
 
     assert_eq!(network_topology.ecdsa_subnets(), vec![subnet_test_id(1)]);
+}
+
+#[derive(Clone)]
+struct SignalConfig {
+    end: u64,
+}
+
+#[derive(Clone)]
+struct MessageConfig {
+    begin: u64,
+    count: u64,
+}
+
+fn generate_stream(msg_config: MessageConfig, signal_config: SignalConfig) -> Stream {
+    let stream_header_builder = StreamHeaderBuilder::new()
+        .begin(StreamIndex::from(msg_config.begin))
+        .end(StreamIndex::from(msg_config.begin + msg_config.count))
+        .signals_end(StreamIndex::from(signal_config.end));
+
+    let msg_begin = StreamIndex::from(msg_config.begin);
+
+    let slice = StreamSliceBuilder::new()
+        .header(stream_header_builder.build())
+        .generate_messages(
+            msg_begin,
+            msg_config.count,
+            *LOCAL_CANISTER,
+            *REMOTE_CANISTER,
+        )
+        .build();
+
+    Stream::new(
+        slice
+            .messages()
+            .cloned()
+            .unwrap_or_else(|| StreamIndexedQueue::with_begin(msg_begin)),
+        slice.header().signals_end,
+    )
+}
+
+#[test]
+fn stream_discard_messages_before() {
+    let mut stream = generate_stream(
+        MessageConfig {
+            begin: 30,
+            count: 20,
+        },
+        SignalConfig { end: 43 },
+    );
+
+    let expected_stream = generate_stream(
+        MessageConfig {
+            begin: 40,
+            count: 10,
+        },
+        SignalConfig { end: 43 },
+    );
+
+    let expected_rejected_messages = vec![
+        stream.messages().get(32.into()).unwrap().clone(),
+        stream.messages().get(35.into()).unwrap().clone(),
+    ];
+
+    let slice_signals_end = 40.into();
+    let slice_reject_signals: VecDeque<StreamIndex> =
+        vec![28.into(), 29.into(), 32.into(), 35.into()].into();
+
+    // Note that the `generate_stream` testing fixture only generates requests
+    // while in the normal case reject signals are not expected to be generated for requests.
+    // It does not matter here for the purpose of testing `discard_messages_before`.
+    let rejected_messages =
+        stream.discard_messages_before(slice_signals_end, &slice_reject_signals);
+
+    assert_eq!(rejected_messages, expected_rejected_messages);
+    assert_eq!(expected_stream, stream);
+}
+
+#[test]
+fn stream_discard_signals_before() {
+    let mut stream = generate_stream(
+        MessageConfig {
+            begin: 30,
+            count: 5,
+        },
+        SignalConfig { end: 153 },
+    );
+
+    stream.reject_signals = vec![138.into(), 139.into(), 142.into(), 145.into()].into();
+
+    let new_signals_begin = 140.into();
+    stream.discard_signals_before(new_signals_begin);
+    let expected_reject_signals: VecDeque<StreamIndex> = vec![142.into(), 145.into()].into();
+    assert_eq!(stream.reject_signals, expected_reject_signals);
+
+    let new_signals_begin = 145.into();
+    stream.discard_signals_before(new_signals_begin);
+    let expected_reject_signals: VecDeque<StreamIndex> = vec![145.into()].into();
+    assert_eq!(stream.reject_signals, expected_reject_signals);
 }
