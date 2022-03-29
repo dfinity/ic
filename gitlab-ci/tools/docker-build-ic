@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 
-# Supported only on Linux
-# UID must match?
+if [ "$(uname)" != "Linux" ]; then
+    echo "This script is only supported on Linux."
+    exit 1
+fi
 
 set -exuo pipefail
 
