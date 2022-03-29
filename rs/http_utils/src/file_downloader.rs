@@ -124,10 +124,9 @@ impl FileDownloader {
             .parse::<Uri>()
             .map_err(|e| FileDownloadError::bad_url(url, e))?;
 
-        let response = self
-            .http_client
-            .get(url.clone())
+        let response = tokio::time::timeout(self.timeout, self.http_client.get(url.clone()))
             .await
+            .map_err(|_| FileDownloadError::TimeoutError)?
             .map_err(FileDownloadError::from)?;
 
         if response.status().is_success() {
