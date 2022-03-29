@@ -38,7 +38,7 @@ pub fn start_router(
     let (network_message_sender, mut network_message_receiver) =
         channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
-    let mut blockchain_manager = BlockchainManager::new(config, blockchain_state, logger.clone());
+    let mut blockchain_manager = BlockchainManager::new(blockchain_state, logger.clone());
     let mut transaction_manager = TransactionManager::new(logger.clone());
     let mut connection_manager = ConnectionManager::new(config, logger, network_message_sender);
 
