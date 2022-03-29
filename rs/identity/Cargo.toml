@@ -6,7 +6,7 @@ description = "A tool to generate necessary crypto keys for IC admins and users.
 
 [dependencies]
 anyhow = "1.0.31"
-clap = "3.0.0-beta.2"
+clap = { version = "3.1.6", features = ["derive"] }
 ed25519-dalek = "1.0.1"
 rand = "0.7.3"
 ic-crypto-utils-basic-sig = { path = "../crypto/utils/basic_sig" }

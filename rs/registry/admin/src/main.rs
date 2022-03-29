@@ -6,7 +6,7 @@ mod types;
 extern crate chrono;
 use async_trait::async_trait;
 use candid::{CandidType, Decode, Encode};
-use clap::Clap;
+use clap::Parser;
 use cycles_minting_canister::SetAuthorizedSubnetworkListArgs;
 use ed25519_dalek::Keypair;
 use ic_canister_client::{Agent, Sender};
@@ -121,7 +121,7 @@ use types::{ProvisionalWhitelistRecord, Registry, RegistryRecord, RegistryValue,
 use url::Url;
 
 /// Common command-line options for `ic-admin`.
-#[derive(Clap)]
+#[derive(Parser)]
 #[clap(version = "1.0")]
 struct Opts {
     #[clap(short = 'r', long, alias = "registry-url")]
@@ -144,21 +144,21 @@ struct Opts {
     /// The slot related to the HSM key that shall be used.
     #[clap(
         long = "slot",
-        about = "Only required if use-hsm is set. Ignored otherwise."
+        help = "Only required if use-hsm is set. Ignored otherwise."
     )]
     hsm_slot: Option<String>,
 
     /// The id of the key on the HSM that shall be used.
     #[clap(
         long = "key-id",
-        about = "Only required if use-hsm is set. Ignored otherwise."
+        help = "Only required if use-hsm is set. Ignored otherwise."
     )]
     key_id: Option<String>,
 
     /// The PIN used to unlock the HSM.
     #[clap(
         long = "pin",
-        about = "Only required if use-hsm is set. Ignored otherwise."
+        help = "Only required if use-hsm is set. Ignored otherwise."
     )]
     pin: Option<String>,
 }
@@ -207,7 +207,7 @@ impl ProposeToCreateSubnetCmd {
 }
 
 /// List of sub-commands accepted by `ic-admin`.
-#[derive(Clap)]
+#[derive(Parser)]
 #[allow(clippy::large_enum_variant)]
 enum SubCommand {
     /// Get the last version of a node's public key from the registry.
@@ -324,7 +324,7 @@ enum SubCommand {
 }
 
 /// Indicates whether a value should be added or removed.
-#[derive(Clap)]
+#[derive(Parser)]
 enum AddOrRemove {
     /// Whether the value should be added
     Add,
@@ -345,7 +345,7 @@ impl FromStr for AddOrRemove {
 }
 
 /// Sub-command to fetch the public key of an IC node from the registry.
-#[derive(Clap)]
+#[derive(Parser)]
 struct GetPublicKeyCmd {
     /// The node id to which the key belongs.
     node_id: PrincipalId,
@@ -354,7 +354,7 @@ struct GetPublicKeyCmd {
 }
 
 /// Sub-command to fetch the tls certificate of an IC node from the registry.
-#[derive(Clap)]
+#[derive(Parser)]
 struct GetTlsCertificateCmd {
     /// The node id to which the TLS certificate belongs.
     node_id: PrincipalId,
@@ -442,7 +442,7 @@ fn shortened_pids_string(pids: &[PrincipalId]) -> String {
 
 /// Sub-command to submit a proposal to remove nodes from a subnet.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Clap)]
+#[derive(ProposalMetadata, Parser)]
 struct ProposeToRemoveNodesFromSubnetCmd {
     #[clap(name = "NODE_ID", required = true)]
     /// The node IDs of the nodes that will leave the subnet.
@@ -473,21 +473,21 @@ impl ProposalTitleAndPayload<RemoveNodesFromSubnetPayload> for ProposeToRemoveNo
 }
 
 /// Sub-command to fetch a `NodeRecord` from the registry.
-#[derive(Clap)]
+#[derive(Parser)]
 struct GetNodeCmd {
     /// The id of the node to get.
     node_id: PrincipalId,
 }
 
 /// Sub-command to convert a numeric `NodeId` to a `PrincipalId`.
-#[derive(Clap)]
+#[derive(Parser)]
 struct ConvertNumericNodeIdtoPrincipalIdCmd {
     /// The integer Id of the node to convert to actual node id.
     node_id: u64,
 }
 
 /// Sub-command to fetch a `SubnetRecord` from the registry.
-#[derive(Clap)]
+#[derive(Parser)]
 struct GetSubnetCmd {
     /// The subnet to get.
     subnet: SubnetDescriptor,
@@ -495,7 +495,7 @@ struct GetSubnetCmd {
 
 /// Sub-command to fetch the most recent `NodeRecord`s since a specific version,
 /// from the registry.
-#[derive(Clap)]
+#[derive(Parser)]
 struct GetNodeListSinceCmd {
     /// Returns the most recent node records added since this given version,
     /// exclusive.
@@ -503,7 +503,7 @@ struct GetNodeListSinceCmd {
 }
 
 /// Sub-command to fetch a replica version from the registry.
-#[derive(Clap)]
+#[derive(Parser)]
 struct GetReplicaVersionCmd {
     /// The Replica version to query
     replica_version_id: String,
@@ -512,7 +512,7 @@ struct GetReplicaVersionCmd {
 /// Sub-command to submit a proposal to upgrade the replicas running a specific
 /// subnet to the given (blessed) version.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Clap)]
+#[derive(ProposalMetadata, Parser)]
 struct ProposeToUpdateSubnetReplicaVersionCmd {
     /// The subnet to update.
     subnet: SubnetDescriptor,
@@ -522,7 +522,7 @@ struct ProposeToUpdateSubnetReplicaVersionCmd {
 
 /// Sub-command to submit a proposal to remove node operators.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Clap)]
+#[derive(ProposalMetadata, Parser)]
 struct ProposeToRemoveNodeOperatorsCmd {
     /// List of principal ids of node operators to remove
     node_operators_to_remove: Vec<PrincipalId>,
@@ -592,7 +592,7 @@ impl ProposalTitleAndPayload<UpdateSubnetReplicaVersionPayload>
 /// privileges or the replica version for the set of all unassigned nodes. There
 /// is no easy way to set a privilege to an empty list.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Clap)]
+#[derive(ProposalMetadata, Parser)]
 struct ProposeToUpdateUnassignedNodesConfigCmd {
     /// The list of public keys whose owners have "readonly" SSH access to all
     /// unassigned nodes.
@@ -625,7 +625,7 @@ impl ProposalTitleAndPayload<UpdateUnassignedNodesConfigPayload>
 
 /// Sub-command to submit a proposal to start a canister.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Clap)]
+#[derive(ProposalMetadata, Parser)]
 struct StartCanisterCmd {
     #[clap(long)]
     pub canister_id: CanisterId,
@@ -650,7 +650,7 @@ impl ProposalTitleAndPayload<StopOrStartCanisterProposal> for StartCanisterCmd {
 
 /// Sub-command to submit a proposal to start a canister.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Clap)]
+#[derive(ProposalMetadata, Parser)]
 struct StopCanisterCmd {
     #[clap(long)]
     pub canister_id: CanisterId,
@@ -676,7 +676,7 @@ impl ProposalTitleAndPayload<StopOrStartCanisterProposal> for StopCanisterCmd {
 /// Sub-command to submit a proposal to bless a new replica version, by commit
 /// hash.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Clap)]
+#[derive(ProposalMetadata, Parser)]
 struct ProposeToBlessReplicaVersionCmd {
     /// The hash of the commit to propose
     pub commit_hash: String,
@@ -728,7 +728,7 @@ impl ProposalTitleAndPayload<BlessReplicaVersionPayload> for ProposeToBlessRepli
 /// Sub-command to submit a proposal to bless a new replica version, with full
 /// detais.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Clap)]
+#[derive(ProposalMetadata, Parser)]
 struct ProposeToBlessReplicaVersionFlexibleCmd {
     /// Version ID. This can be anything, it has no semantics. The reason it is
     /// part of the payload is that it will be needed in the subsequent step
@@ -778,7 +778,7 @@ impl ProposalTitleAndPayload<BlessReplicaVersionPayload>
 
 /// Sub-command to submit a proposal to create a new subnet.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Clap)]
+#[derive(ProposalMetadata, Parser)]
 struct ProposeToCreateSubnetCmd {
     #[clap(long)]
     #[allow(dead_code)]
@@ -983,7 +983,7 @@ impl ProposalTitleAndPayload<CreateSubnetPayload> for ProposeToCreateSubnetCmd {
 
 /// Sub-command to submit a prposals to add a nodes to an existing subnet.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Clap)]
+#[derive(ProposalMetadata, Parser)]
 struct ProposeToAddNodesToSubnetCmd {
     #[clap(long)]
     #[allow(dead_code)]
@@ -1029,7 +1029,7 @@ impl ProposalTitleAndPayload<AddNodesToSubnetPayload> for ProposeToAddNodesToSub
 
 /// Sub-command to submit a proposal to update the recovery CUP of a subnet.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Clap)]
+#[derive(ProposalMetadata, Parser)]
 struct ProposeToUpdateRecoveryCupCmd {
     #[clap(long, required = true, alias = "subnet-index")]
     /// The targetted subnet.
@@ -1109,7 +1109,7 @@ impl ProposalTitleAndPayload<RecoverSubnetPayload> for ProposeToUpdateRecoveryCu
 
 /// Sub-command to submit a proposal to update a subnet.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Clap)]
+#[derive(ProposalMetadata, Parser)]
 struct ProposeToUpdateSubnetCmd {
     /// The subnet that should be updated.
     #[clap(long, required = true, alias = "subnet-id")]
@@ -1328,7 +1328,7 @@ impl ProposalTitleAndPayload<UpdateSubnetPayload> for ProposeToUpdateSubnetCmd {
 
 /// Sub-command to submit a proposal to upgrade an NNS canister.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Clap)]
+#[derive(ProposalMetadata, Parser)]
 struct ProposeToChangeNnsCanisterCmd {
     #[clap(long)]
     /// Whether to skip stopping the canister before installing. Generally,
@@ -1447,7 +1447,7 @@ impl ProposalTitleAndPayload<ChangeCanisterProposal> for ProposeToChangeNnsCanis
 
 /// Sub-command to submit a proposal to uninstall the code of a canister.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Clap)]
+#[derive(ProposalMetadata, Parser)]
 struct ProposeToUninstallCodeCmd {
     #[clap(long, required = true)]
     /// The ID of the canister to uninstall.
@@ -1473,7 +1473,7 @@ impl ProposalTitleAndPayload<CanisterIdRecord> for ProposeToUninstallCodeCmd {
 
 /// Sub-command to submit a proposal to add a new NNS canister.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Clap)]
+#[derive(ProposalMetadata, Parser)]
 struct ProposeToAddNnsCanisterCmd {
     #[clap(long, required = true)]
     /// A unique name for the canister.
@@ -1548,7 +1548,7 @@ impl ProposalTitleAndPayload<AddCanisterProposal> for ProposeToAddNnsCanisterCmd
 
 /// Sub-command to submit a proposal to clear the provisional whitelist.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Clap)]
+#[derive(ProposalMetadata, Parser)]
 struct ProposeToClearProvisionalWhitelistCmd {}
 
 #[async_trait]
@@ -1565,7 +1565,7 @@ impl ProposalTitleAndPayload<()> for ProposeToClearProvisionalWhitelistCmd {
 
 /// Sub-command to submit a proposal set the list of authorized subnets.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Clap)]
+#[derive(ProposalMetadata, Parser)]
 struct ProposeToSetAuthorizedSubnetworksCmd {
     /// The principal to be authorized to create canisters using ICPTs.
     /// If who is `None`, then the proposal will set the default list of subnets
@@ -1624,7 +1624,7 @@ impl ProposalTitleAndPayload<SetAuthorizedSubnetworkListArgs>
 }
 
 /// Sub-command to get the public key of a subnet from the registry.
-#[derive(Clap)]
+#[derive(Parser)]
 struct SubnetPublicKeyCmd {
     /// The subnet.
     subnet: SubnetDescriptor,
@@ -1634,7 +1634,7 @@ struct SubnetPublicKeyCmd {
 }
 
 /// Sub-command to get the recovery cup of a subnet from the registry.
-#[derive(Clap)]
+#[derive(Parser)]
 struct GetRecoveryCupCmd {
     /// The subnet
     subnet: SubnetDescriptor,
@@ -1649,7 +1649,7 @@ struct GetRecoveryCupCmd {
 
 /// Sub-command to submit a proposal to add or remove a node provider.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Clap)]
+#[derive(ProposalMetadata, Parser)]
 struct ProposeToAddOrRemoveNodeProviderCmd {
     /// The principal id of the node provider.
     #[clap(long, required = true)]
@@ -1661,7 +1661,7 @@ struct ProposeToAddOrRemoveNodeProviderCmd {
 
 /// Sub-command to submit a proposal to add a new node operator.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Clap)]
+#[derive(ProposalMetadata, Parser)]
 struct ProposeToAddNodeOperatorCmd {
     #[clap(long, required = true)]
     /// The principal id of the node operator
@@ -1720,7 +1720,7 @@ impl ProposalTitleAndPayload<AddNodeOperatorPayload> for ProposeToAddNodeOperato
 /// Sub-command to submit a proposal to update the configuration of a node
 /// operator.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Clap)]
+#[derive(ProposalMetadata, Parser)]
 struct ProposeToUpdateNodeOperatorConfigCmd {
     #[clap(long, required = true)]
     /// The principal id of the node operator
@@ -1797,14 +1797,14 @@ fn parse_rewardable_nodes(json: &str) -> BTreeMap<String, u32> {
     map
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 struct GetDataCenterCmd {
     pub dc_id: String,
 }
 
 /// Sub-command to submit a proposal to add or remove a data center.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Clap)]
+#[derive(ProposalMetadata, Parser)]
 struct ProposeToAddOrRemoveDataCentersCmd {
     /// The JSON-formatted Data Center records to add to the Registry.
     ///
@@ -1912,7 +1912,7 @@ impl ProposalTitleAndPayload<AddOrRemoveDataCentersProposalPayload>
 
 /// Sub-command to submit a proposal to update the node rewards table.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Clap)]
+#[derive(ProposalMetadata, Parser)]
 struct ProposeToUpdateNodeRewardsTableCmd {
     /// A JSON-encoded map from region to a map from node type to the
     /// xdr_permyriad_per_node_per_month for that node type in that region
@@ -1956,7 +1956,7 @@ impl ProposalTitleAndPayload<UpdateNodeRewardsTableProposalPayload>
 }
 
 /// Sub-command to fetch a `NodeOperatorRecord` from the registry.
-#[derive(Clap)]
+#[derive(Parser)]
 struct GetNodeOperatorCmd {
     #[clap(long, required = true)]
     /// The principal id of the node operator
@@ -1964,7 +1964,7 @@ struct GetNodeOperatorCmd {
 }
 
 /// Sub-command to update the registry local store.
-#[derive(Clap)]
+#[derive(Parser)]
 struct UpdateRegistryLocalStoreCmd {
     /// The path of the directory of registry local store.
     local_store_path: PathBuf,
@@ -1976,7 +1976,7 @@ struct UpdateRegistryLocalStoreCmd {
 
 /// Sub-command to submit a proposal to update the firewall configuration.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Clap)]
+#[derive(ProposalMetadata, Parser)]
 struct ProposeToSetFirewallConfigCmd {
     /// File with the firewall configuration content
     pub firewall_config_file: PathBuf,
@@ -2024,7 +2024,7 @@ impl ProposalTitleAndPayload<SetFirewallConfigPayload> for ProposeToSetFirewallC
 
 /// Sub-command to submit a proposal to remove nodes.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Clap)]
+#[derive(ProposalMetadata, Parser)]
 struct ProposeToRemoveNodesCmd {
     /// The IDs of the nodes to remove.
     #[clap(name = "NODE_ID", required = true)]
@@ -2053,7 +2053,7 @@ impl ProposalTitleAndPayload<RemoveNodesPayload> for ProposeToRemoveNodesCmd {
 }
 
 /// Sub-command to submit a root proposal to upgrade the governance canister.
-#[derive(Clap)]
+#[derive(Parser)]
 struct SubmitRootProposalToUpgradeGovernanceCanisterCmd {
     /// If set, the proposal will be submitted using a known test user key.
     #[clap(long)]
@@ -2073,7 +2073,7 @@ struct SubmitRootProposalToUpgradeGovernanceCanisterCmd {
 }
 
 /// Sub-command to vote on a root proposal to upgrade the governance canister.
-#[derive(Clap)]
+#[derive(Parser)]
 struct VoteOnRootProposalToUpgradeGovernanceCanisterCmd {
     /// If set, the proposal will be voted on using a known test user key.
     #[clap(long)]
@@ -2143,7 +2143,7 @@ impl SubnetDescriptor {
 
 /// Sub-command to propose a change in the routing table.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Clap)]
+#[derive(ProposalMetadata, Parser)]
 struct ProposeToRerouteCanisterRangeCmd {
     /// The first canister in the range to reroute.
     #[clap(long, required = true)]
