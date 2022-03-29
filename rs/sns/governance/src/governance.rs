@@ -1852,7 +1852,7 @@ impl Governance {
             let mut all_followers = BTreeSet::new();
             for (k, v) in induction_votes.iter() {
                 // The new/induction votes cannot be unspecified.
-                assert!(*v != Vote::Unspecified);
+                assert_ne!(*v, Vote::Unspecified);
                 if let Some(k_ballot) = ballots.get_mut(k) {
                     // Neuron with ID k is eligible to vote.
                     if k_ballot.vote == (Vote::Unspecified as i32) {

@@ -1,4 +1,4 @@
-use canister_test::{local_test_with_config_e, Canister, Project, Runtime};
+use canister_test::{local_test_with_config_e, Canister, Project, Runtime, Wasm};
 use dfn_candid::{candid_one, CandidOne};
 use ic_config::subnet_config::SubnetConfig;
 use ic_config::Config;
@@ -9,7 +9,8 @@ use ic_sns_governance::pb::v1::{
     manage_neuron::{
         claim_or_refresh::{By, MemoAndController},
         configure::Operation,
-        ClaimOrRefresh, Command, Configure, IncreaseDissolveDelay, RegisterVote,
+        AddNeuronPermissions, ClaimOrRefresh, Command, Configure, Follow, IncreaseDissolveDelay,
+        RegisterVote, RemoveNeuronPermissions,
     },
     GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse, Governance, GovernanceError,
     ListNeurons, ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, Motion,
@@ -27,6 +28,7 @@ use prost::Message;
 use std::collections::HashMap;
 use std::future::Future;
 use std::path::Path;
+use std::thread;
 use std::time::{Duration, SystemTime};
 
 use crate::{NUM_SNS_CANISTERS, SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES};
@@ -34,10 +36,14 @@ use dfn_protobuf::protobuf;
 use ic_canister_client::Sender;
 use ic_crypto_sha::Sha256;
 use ic_sns_governance::governance::TimeWarp;
-use ic_sns_governance::pb::v1::manage_neuron::{AddNeuronPermissions, RemoveNeuronPermissions};
 use ic_sns_governance::pb::v1::proposal::Action;
 use ic_types::{CanisterId, PrincipalId};
 use maplit::hashset;
+
+/// Constant nonce to use when generating the subaccount. Using a constant nonce
+/// allows the testing environment to calculate what a given subaccount will
+/// be before it's created.
+pub const NONCE: u64 = 12345_u64;
 
 /// All the SNS canisters
 #[derive(Clone)]
@@ -58,6 +64,40 @@ pub struct SnsInitPayloads {
 pub struct SnsInitPayloadsBuilder {
     pub governance: GovernanceCanisterInitPayloadBuilder,
     pub ledger: LedgerCanisterInitPayload,
+}
+
+/// Packages commonly used test data into a single struct.
+#[derive(Clone)]
+pub struct UserInfo {
+    pub subaccount: Subaccount,
+    pub neuron_id: NeuronId,
+    pub sender: Sender,
+}
+
+impl UserInfo {
+    /// The subaccount and NeuronId can be calculated ahead of time given a Sender.
+    /// Note: Even though this methods calculates the NeuronId, the Neuron will still
+    /// need to be staked and claimed for it to exist in the SNS.
+    pub fn new(sender: Sender) -> Self {
+        let subaccount = Subaccount({
+            let mut state = Sha256::new();
+            state.write(&[0x0c]);
+            state.write(b"neuron-stake");
+            state.write(sender.get_principal_id().as_slice());
+            state.write(&NONCE.to_be_bytes());
+            state.finish()
+        });
+
+        let neuron_id = NeuronId {
+            id: subaccount.to_vec(),
+        };
+
+        UserInfo {
+            subaccount,
+            neuron_id,
+            sender,
+        }
+    }
 }
 
 #[allow(clippy::new_without_default)]
@@ -320,33 +360,45 @@ impl SnsCanisters<'_> {
 
     /// Stake a neuron in the given SNS.
     ///
-    /// Assumes `user` has an account on the Ledger containing at least 100 tokens.
+    /// Assumes `sender` has an account on the Ledger containing at least 100 tokens.
     pub async fn stake_and_claim_neuron(
         &self,
-        user: &Sender,
+        sender: &Sender,
         dissolve_delay: Option<u32>,
+    ) -> NeuronId {
+        self.stake_and_claim_neuron_with_tokens(sender, dissolve_delay, 100)
+            .await
+    }
+
+    /// Stake a neuron in the given SNS.
+    ///
+    /// Assumes `sender` has an account on the Ledger containing at least `token_amount` tokens.
+    pub async fn stake_and_claim_neuron_with_tokens(
+        &self,
+        sender: &Sender,
+        dissolve_delay: Option<u32>,
+        token_amount: u64,
     ) -> NeuronId {
         // Stake a neuron by transferring to a subaccount of the neurons
         // canister and claiming the neuron on the governance canister..
-        let nonce = 12345u64;
         let to_subaccount = Subaccount({
             let mut state = Sha256::new();
             state.write(&[0x0c]);
             state.write(b"neuron-stake");
-            state.write(user.get_principal_id().as_slice());
-            state.write(&nonce.to_be_bytes());
+            state.write(sender.get_principal_id().as_slice());
+            state.write(&NONCE.to_be_bytes());
             state.finish()
         });
 
         // Stake the neuron.
-        let stake = Tokens::from_tokens(100).unwrap();
+        let stake = Tokens::from_tokens(token_amount).unwrap();
         let _block_height: u64 = self
             .ledger
             .update_from_sender(
                 "send_pb",
                 protobuf,
                 SendArgs {
-                    memo: Memo(nonce),
+                    memo: Memo(NONCE),
                     amount: stake,
                     fee: DEFAULT_TRANSFER_FEE,
                     from_subaccount: None,
@@ -356,7 +408,7 @@ impl SnsCanisters<'_> {
                     ),
                     created_at_time: None,
                 },
-                user,
+                sender,
             )
             .await
             .expect("Couldn't send funds.");
@@ -371,78 +423,86 @@ impl SnsCanisters<'_> {
                     subaccount: to_subaccount.to_vec(),
                     command: Some(Command::ClaimOrRefresh(ClaimOrRefresh {
                         by: Some(By::MemoAndController(MemoAndController {
-                            memo: nonce,
+                            memo: NONCE,
                             controller: None,
                         })),
                     })),
                 },
-                user,
+                sender,
             )
             .await
-            .expect("Error calling the manage_neuron api.");
+            .expect("Error calling the manage_neuron API.");
 
         let neuron_id = match claim_response.command.unwrap() {
             CommandResponse::ClaimOrRefresh(response) => {
                 println!(
                     "User {} successfully claimed neuron",
-                    user.get_principal_id()
+                    sender.get_principal_id()
                 );
 
                 response.refreshed_neuron_id.unwrap()
             }
             CommandResponse::Error(error) => panic!(
                 "Unexpected error when claiming neuron for user {}: {}",
-                user.get_principal_id(),
+                sender.get_principal_id(),
                 error
             ),
             _ => panic!(
                 "Unexpected command response when claiming neuron for user {}.",
-                user.get_principal_id()
+                sender.get_principal_id()
             ),
         };
 
         // Increase dissolve delay
         if let Some(dissolve_delay) = dissolve_delay {
-            let increase_response: ManageNeuronResponse = self
-                .governance
-                .update_from_sender(
-                    "manage_neuron",
-                    candid_one,
-                    ManageNeuron {
-                        subaccount: to_subaccount.to_vec(),
-                        command: Some(Command::Configure(Configure {
-                            operation: Some(Operation::IncreaseDissolveDelay(
-                                IncreaseDissolveDelay {
-                                    additional_dissolve_delay_seconds: dissolve_delay,
-                                },
-                            )),
-                        })),
-                    },
-                    user,
-                )
-                .await
-                .expect("Error calling the manage_neuron api.");
-
-            match increase_response.command.unwrap() {
-                CommandResponse::Configure(_) => (),
-                CommandResponse::Error(error) => panic!(
-                    "Unexpected error when increasing dissolve delay for user {}: {}",
-                    user.get_principal_id(),
-                    error
-                ),
-                _ => panic!(
-                    "Unexpected command response when increasing dissolve delay for user {}.",
-                    user.get_principal_id()
-                ),
-            };
+            self.increase_dissolve_delay(sender, &to_subaccount, dissolve_delay)
+                .await;
         }
 
         neuron_id
     }
 
+    pub async fn increase_dissolve_delay(
+        &self,
+        sender: &Sender,
+        subaccount: &Subaccount,
+        dissolve_delay: u32,
+    ) {
+        let increase_response: ManageNeuronResponse = self
+            .governance
+            .update_from_sender(
+                "manage_neuron",
+                candid_one,
+                ManageNeuron {
+                    subaccount: subaccount.to_vec(),
+                    command: Some(Command::Configure(Configure {
+                        operation: Some(Operation::IncreaseDissolveDelay(IncreaseDissolveDelay {
+                            additional_dissolve_delay_seconds: dissolve_delay,
+                        })),
+                    })),
+                },
+                sender,
+            )
+            .await
+            .expect("Error calling the manage_neuron API.");
+
+        match increase_response.command.unwrap() {
+            CommandResponse::Configure(_) => (),
+            CommandResponse::Error(error) => panic!(
+                "Unexpected error when increasing dissolve delay for user {}: {}",
+                sender.get_principal_id(),
+                error
+            ),
+            _ => panic!(
+                "Unexpected command response when increasing dissolve delay for user {}.",
+                sender.get_principal_id()
+            ),
+        };
+    }
+
     pub async fn vote(
         &self,
-        user: &Sender,
+        sender: &Sender,
         subaccount: &Subaccount,
         proposal_id: ProposalId,
         accept: bool,
@@ -461,35 +521,62 @@ impl SnsCanisters<'_> {
                         vote,
                     })),
                 },
-                user,
+                sender,
             )
             .await
-            .expect("Vote request failed");
+            .expect("Error calling the manage_neuron API.");
 
         response
     }
 
-    pub async fn get_user_account_balance(&self, user: &Sender) -> Tokens {
+    pub async fn follow(
+        &self,
+        sender: &Sender,
+        subaccount: &Subaccount,
+        followees: Vec<NeuronId>,
+        action_type: u64,
+    ) -> ManageNeuronResponse {
+        let response: ManageNeuronResponse = self
+            .governance
+            .update_from_sender(
+                "manage_neuron",
+                candid_one,
+                ManageNeuron {
+                    subaccount: subaccount.to_vec(),
+                    command: Some(Command::Follow(Follow {
+                        action_type,
+                        followees,
+                    })),
+                },
+                sender,
+            )
+            .await
+            .expect("Error calling the manage_neuron API.");
+
+        response
+    }
+
+    pub async fn get_user_account_balance(&self, sender: &Sender) -> Tokens {
         // The balance now should have been deducted the stake.
         self.ledger
             .query_(
                 "account_balance_pb",
                 protobuf,
                 AccountBalanceArgs {
-                    account: user.get_principal_id().into(),
+                    account: sender.get_principal_id().into(),
                 },
             )
             .await
             .expect("Error calling the Ledger's get_account_balancer")
     }
 
-    pub async fn list_neurons(&self, user: &Sender) -> Vec<Neuron> {
-        self.list_neurons_(user, 100, None).await
+    pub async fn list_neurons(&self, sender: &Sender) -> Vec<Neuron> {
+        self.list_neurons_(sender, 100, None).await
     }
 
     pub async fn list_neurons_(
         &self,
-        user: &Sender,
+        sender: &Sender,
         limit: u32,
         of_principal: Option<PrincipalId>,
     ) -> Vec<Neuron> {
@@ -503,7 +590,7 @@ impl SnsCanisters<'_> {
                     start_page_at: None,
                     of_principal,
                 },
-                user,
+                sender,
             )
             .await
             .expect("Error calling the list_neurons API");
@@ -523,8 +610,8 @@ impl SnsCanisters<'_> {
     /// submitting proposals that automatically pass via majority voting. It will
     /// also advance time using TimeWarp which is only available in non-production
     /// builds of the SNS.
-    pub async fn earn_maturity(&self, neuron_id: &NeuronId, user: &Sender) -> Result<(), String> {
-        if self.list_neurons(user).await.len() != 1 {
+    pub async fn earn_maturity(&self, neuron_id: &NeuronId, sender: &Sender) -> Result<(), String> {
+        if self.list_neurons(sender).await.len() != 1 {
             panic!("earn_maturity cannot be invoked with more than one neuron in the SNS");
         }
 
@@ -544,7 +631,7 @@ impl SnsCanisters<'_> {
         // Submit a motion proposal. It should then be executed because the
         // submitter has a majority stake and submitting also votes automatically.
         let proposal_id = self
-            .make_proposal(user, &subaccount, proposal)
+            .make_proposal(sender, &subaccount, proposal)
             .await
             .unwrap();
 
@@ -556,9 +643,7 @@ impl SnsCanisters<'_> {
 
         // Advance time to have the proposal be eligible for rewards
         let delta_s = (initial_voting_period + 1) as i64;
-        self.governance
-            .update_("set_time_warp", candid_one, TimeWarp { delta_s })
-            .await?;
+        self.set_time_warp(delta_s).await?;
 
         let mut proposal = self.get_proposal(proposal_id).await;
 
@@ -571,9 +656,15 @@ impl SnsCanisters<'_> {
         Ok(())
     }
 
+    pub async fn set_time_warp(&self, delta_s: i64) -> Result<(), String> {
+        self.governance
+            .update_("set_time_warp", candid_one, TimeWarp { delta_s })
+            .await
+    }
+
     pub async fn add_neuron_permissions(
         &self,
-        caller: &Sender,
+        sender: &Sender,
         subaccount: &Subaccount,
         principal_to_add: Option<PrincipalId>,
         permissions: Vec<i32>,
@@ -592,7 +683,7 @@ impl SnsCanisters<'_> {
                     subaccount: subaccount.to_vec(),
                     command: Some(Command::AddNeuronPermissions(add_neuron_permissions)),
                 },
-                caller,
+                sender,
             )
             .await
             .expect("Error calling manage_neuron");
@@ -605,7 +696,7 @@ impl SnsCanisters<'_> {
 
     pub async fn remove_neuron_permissions(
         &self,
-        caller: &Sender,
+        sender: &Sender,
         subaccount: &Subaccount,
         principal_to_remove: &PrincipalId,
         permissions: Vec<i32>,
@@ -624,7 +715,7 @@ impl SnsCanisters<'_> {
                     subaccount: subaccount.to_vec(),
                     command: Some(Command::RemoveNeuronPermissions(remove_neuron_permissions)),
                 },
-                caller,
+                sender,
             )
             .await
             .expect("Error calling manage_neuron");
@@ -633,6 +724,23 @@ impl SnsCanisters<'_> {
             CommandResponse::RemoveNeuronPermission(_) => (),
             response => panic!("Unexpected response from manage_neuron: {:?}", response),
         };
+    }
+
+    pub async fn manage_nervous_system_parameters(
+        &self,
+        sender: &Sender,
+        subaccount: &Subaccount,
+        nervous_system_parameters: NervousSystemParameters,
+    ) -> Result<ProposalId, GovernanceError> {
+        let proposal = Proposal {
+            title: "ManageNervousSystemParameters proposal".into(),
+            action: Some(Action::ManageNervousSystemParameters(
+                nervous_system_parameters,
+            )),
+            ..Default::default()
+        };
+
+        self.make_proposal(sender, subaccount, proposal).await
     }
 }
 
@@ -645,11 +753,32 @@ pub async fn install_rust_canister_with_memory_allocation(
     canister_init_payload: Option<Vec<u8>>,
     memory_allocation: u64, // in bytes
 ) {
-    let wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
-        relative_path_from_rs,
-        binary_name.as_ref(),
-        cargo_features,
-    );
+    // Some ugly code to allow copying AsRef<Path> and features (an array slice) into new thread
+    // neither of these implement Send or have a way to clone the whole structure's data
+    let path_string = relative_path_from_rs.as_ref().to_str().unwrap().to_owned();
+    let binary_name_ = binary_name.as_ref().to_string();
+    let features = cargo_features
+        .iter()
+        .map(|s| s.to_string())
+        .collect::<Box<[String]>>();
+
+    // Wrapping call to cargo_bin_* to avoid blocking current thread
+    let wasm: Wasm = tokio::runtime::Handle::current()
+        .spawn_blocking(move || {
+            println!(
+                "Compiling Wasm for {} in task on thread: {:?}",
+                binary_name_,
+                thread::current().id()
+            );
+            // Second half of moving data had to be done in-thread to avoid lifetime/ownership issues
+            let features = features.iter().map(|s| s.as_str()).collect::<Box<[&str]>>();
+            let path = Path::new(&path_string);
+            Project::cargo_bin_maybe_use_path_relative_to_rs(path, &binary_name_, &features)
+        })
+        .await
+        .unwrap();
+
+    println!("Done compiling the wasm for {}", binary_name.as_ref());
 
     wasm.install_with_retries_onto_canister(
         canister,
