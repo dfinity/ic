@@ -351,6 +351,11 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
 
 
 if __name__ == "__main__":
+    # Check that for local runs script is launched from the nix-shell.
+    is_local_run = os.getenv("CI_JOB_ID", default=None) is None
+    in_nix_shell = "IN_NIX_SHELL" in os.environ
+    if is_local_run and not in_nix_shell:
+        exit_with_log("This script must be run from the nix-shell.")
     runner_args = " ".join(sys.argv[1:])
     logging.debug(f"Input arguments are: {runner_args}")
     if any([i in runner_args for i in ["-h", "--help"]]):
