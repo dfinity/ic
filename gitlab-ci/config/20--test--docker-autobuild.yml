@@ -37,8 +37,6 @@ docker-autobuild-protected:
 
         SHA1ICBUILD=$(./gitlab-ci/src/docker_image_check/docker_sha.py Dockerfile)
         SHA1ICBUILDNIX=$(./gitlab-ci/src/docker_image_check/docker_sha.py Dockerfile.withnix)
-        docker tag dfinity/ic-build:"$TAG" dfinity/ic-build:latest
-        docker tag dfinity/ic-build-nix:"$TAG" dfinity/ic-build-nix:latest
         docker tag dfinity/ic-build:"$TAG" registry.gitlab.com/dfinity-lab/core/docker/ic-build:"$TAG"-"$SHA1ICBUILD"
         docker tag dfinity/ic-build-nix:"$TAG" registry.gitlab.com/dfinity-lab/core/docker/ic-build-nix:"$TAG"-"$SHA1ICBUILDNIX"
       else
@@ -60,9 +58,7 @@ docker-autobuild-protected:
       if [ "$EXISTS" != "true" ] && [ "${PUSHED:-}" != "true" ]; then
         docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
         docker push dfinity/ic-build:"$TAG"
-        docker push dfinity/ic-build:latest
         docker push dfinity/ic-build-nix:"$TAG"
-        docker push dfinity/ic-build-nix:latest
       fi
 
       echo -e "\e[0Ksection_start:$(date +%s):sys_info[collapsed=true]\r\e[0KClick here to see system info"
