@@ -1,7 +1,6 @@
 use crate::util::FakeQueue;
 use ic_interfaces::{
     ingress_manager::{IngressPayloadValidationError, IngressSelector, IngressSetQuery},
-    ingress_pool::IngressPoolSelect,
     validation::ValidationResult,
 };
 use ic_types::{
@@ -21,7 +20,6 @@ pub type FakeIngressSelector = FakeQueue<Vec<SignedIngress>>;
 impl IngressSelector for FakeIngressSelector {
     fn get_ingress_payload(
         &self,
-        _ingress_pool: &dyn IngressPoolSelect,
         _past_payloads: &dyn IngressSetQuery,
         _context: &ValidationContext,
         _byte_limit: NumBytes,

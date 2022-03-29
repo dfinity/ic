@@ -13,8 +13,7 @@ use crate::{
     ecdsa,
 };
 use ic_interfaces::{
-    dkg::DkgPool, ecdsa::EcdsaPool, ingress_pool::IngressPoolSelect, registry::RegistryClient,
-    time_source::TimeSource,
+    dkg::DkgPool, ecdsa::EcdsaPool, registry::RegistryClient, time_source::TimeSource,
 };
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::{debug, error, trace, warn, ReplicaLogger};
@@ -125,11 +124,7 @@ impl BlockMaker {
     }
 
     /// If a block should be proposed, propose it.
-    pub fn on_state_change(
-        &self,
-        pool: &PoolReader<'_>,
-        ingress_pool: &dyn IngressPoolSelect,
-    ) -> Option<BlockProposal> {
+    pub fn on_state_change(&self, pool: &PoolReader<'_>) -> Option<BlockProposal> {
         trace!(self.log, "on_state_change");
         let my_node_id = self.replica_config.node_id;
         let (beacon, parent) = get_dependencies(pool)?;
@@ -151,18 +146,17 @@ impl BlockMaker {
                         self.time_source.as_ref(),
                     )
                 {
-                    self.propose_block(pool, ingress_pool, rank, parent)
-                        .map(|proposal| {
-                            debug!(
-                                self.log,
-                                "Make proposal {:?} {:?} {:?}",
-                                proposal.content.get_hash(),
-                                proposal.as_ref().payload.get_hash(),
-                                proposal.as_ref().payload.as_ref()
-                            );
-                            self.log_block(proposal.as_ref());
-                            proposal
-                        })
+                    self.propose_block(pool, rank, parent).map(|proposal| {
+                        debug!(
+                            self.log,
+                            "Make proposal {:?} {:?} {:?}",
+                            proposal.content.get_hash(),
+                            proposal.as_ref().payload.get_hash(),
+                            proposal.as_ref().payload.as_ref()
+                        );
+                        self.log_block(proposal.as_ref());
+                        proposal
+                    })
                 } else {
                     None
                 }
@@ -199,7 +193,6 @@ impl BlockMaker {
     fn propose_block(
         &self,
         pool: &PoolReader<'_>,
-        ingress_pool: &dyn IngressPoolSelect,
         rank: Rank,
         parent: Block,
     ) -> Option<BlockProposal> {
@@ -256,7 +249,6 @@ impl BlockMaker {
 
         self.construct_block_proposal(
             pool,
-            ingress_pool,
             context,
             parent,
             parent_hash,
@@ -275,7 +267,6 @@ impl BlockMaker {
     fn construct_block_proposal(
         &self,
         pool: &PoolReader<'_>,
-        ingress_pool: &dyn IngressPoolSelect,
         context: ValidationContext,
         parent: Block,
         parent_hash: CryptoHashOf<Block>,
@@ -328,7 +319,6 @@ impl BlockMaker {
                 dkg::Payload::Dealings(dealings) => {
                     let batch_payload = match self.build_batch_payload(
                         pool,
-                        ingress_pool,
                         height,
                         certified_height,
                         &context,
@@ -400,7 +390,6 @@ impl BlockMaker {
     fn build_batch_payload(
         &self,
         pool: &PoolReader<'_>,
-        ingress_pool: &dyn IngressPoolSelect,
         height: Height,
         certified_height: Height,
         context: &ValidationContext,
@@ -436,13 +425,9 @@ impl BlockMaker {
         } else {
             let past_payloads =
                 pool.get_payloads_from_height(certified_height.increment(), parent.clone());
-            let payload = self.payload_builder.get_payload(
-                height,
-                ingress_pool,
-                &past_payloads,
-                context,
-                subnet_records,
-            );
+            let payload =
+                self.payload_builder
+                    .get_payload(height, &past_payloads, context, subnet_records);
 
             self.metrics
                 .get_payload_calls
@@ -508,7 +493,6 @@ impl BlockMaker {
     pub(crate) fn maliciously_propose_blocks(
         &self,
         pool: &PoolReader<'_>,
-        ingress_pool: &dyn IngressPoolSelect,
         maliciously_propose_empty_blocks: bool,
         maliciously_equivocation_blockmaker: bool,
     ) -> Vec<BlockProposal> {
@@ -548,8 +532,8 @@ impl BlockMaker {
             if !already_proposed(pool, height, my_node_id) {
                 // If maliciously_propose_empty_blocks is set, propose only empty blocks.
                 let maybe_proposal = match maliciously_propose_empty_blocks {
-                    true => self.maliciously_propose_empty_block(pool, ingress_pool, rank, parent),
-                    false => self.propose_block(pool, ingress_pool, rank, parent),
+                    true => self.maliciously_propose_empty_block(pool, rank, parent),
+                    false => self.propose_block(pool, rank, parent),
                 };
 
                 if let Some(proposal) = maybe_proposal {
@@ -611,7 +595,6 @@ impl BlockMaker {
     fn maliciously_propose_empty_block(
         &self,
         pool: &PoolReader<'_>,
-        ingress_pool: &dyn IngressPoolSelect,
         rank: Rank,
         parent: Block,
     ) -> Option<BlockProposal> {
@@ -630,7 +613,6 @@ impl BlockMaker {
 
         self.construct_block_proposal(
             pool,
-            ingress_pool,
             context,
             parent,
             parent_hash,
@@ -673,7 +655,6 @@ mod tests {
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_test_artifact_pool::ingress_pool::TestIngressPool;
     use ic_test_utilities::{
         registry::{add_subnet_record, SubnetRecordBuilder},
         types::ids::{node_test_id, subnet_test_id},
@@ -705,7 +686,7 @@ mod tests {
                 ecdsa_pool,
                 ..
             } = dependencies_with_subnet_params(
-                pool_config.clone(),
+                pool_config,
                 subnet_id,
                 vec![
                     (
@@ -746,12 +727,11 @@ mod tests {
                 MetricsRegistry::new(),
                 no_op_logger(),
             );
-            let ingress_pool = TestIngressPool::new(pool_config);
 
             // Check first block is created immediately because rank 1 has to wait.
             let run_block_maker = || {
                 let reader = PoolReader::new(&pool);
-                block_maker.on_state_change(&reader, &ingress_pool)
+                block_maker.on_state_change(&reader)
             };
             assert!(run_block_maker().is_none());
 
@@ -791,7 +771,7 @@ mod tests {
 
             payload_builder
                 .expect_get_payload()
-                .withf(move |_, _, payloads, context, _| {
+                .withf(move |_, payloads, context, _| {
                     matches_expected_payloads(payloads) && context == &expected_context
                 })
                 .return_const(BatchPayload::default());
@@ -826,7 +806,7 @@ mod tests {
             );
             let run_block_maker = || {
                 let reader = PoolReader::new(&pool);
-                block_maker.on_state_change(&reader, &ingress_pool)
+                block_maker.on_state_change(&reader)
             };
 
             // kick start another round
@@ -859,7 +839,7 @@ mod tests {
 
             let run_block_maker = || {
                 let reader = PoolReader::new(&pool);
-                block_maker.on_state_change(&reader, &ingress_pool)
+                block_maker.on_state_change(&reader)
             };
 
             // check that the block maker does not create a block, as a lower ranked block
@@ -884,7 +864,7 @@ mod tests {
                 state_manager,
                 ..
             } = dependencies_with_subnet_params(
-                pool_config.clone(),
+                pool_config,
                 subnet_test_id(0),
                 vec![
                     (
@@ -902,7 +882,6 @@ mod tests {
                     ),
                 ],
             );
-            let ingress_pool = TestIngressPool::new(pool_config);
             let dkg_pool = Arc::new(RwLock::new(ic_artifact_pool::dkg_pool::DkgPoolImpl::new(
                 MetricsRegistry::new(),
             )));
@@ -956,7 +935,7 @@ mod tests {
             // Skip the first DKG interval
             pool.advance_round_normal_operation_n(dkg_interval_length);
 
-            let proposal = block_maker.on_state_change(&PoolReader::new(&pool), &ingress_pool);
+            let proposal = block_maker.on_state_change(&PoolReader::new(&pool));
             assert!(proposal.is_some());
             let mut proposal = proposal.unwrap();
             let block = proposal.content.as_mut();
@@ -996,7 +975,7 @@ mod tests {
             );
 
             // Check CUP block is made.
-            let proposal = block_maker.on_state_change(&PoolReader::new(&pool), &ingress_pool);
+            let proposal = block_maker.on_state_change(&PoolReader::new(&pool));
             assert!(proposal.is_some());
             let cup_proposal = proposal.unwrap();
             let block = cup_proposal.content.as_ref();
@@ -1009,7 +988,7 @@ mod tests {
             pool.notarize(&cup_proposal);
 
             // 3. Make one more block, payload builder should not have been called.
-            let proposal = block_maker.on_state_change(&PoolReader::new(&pool), &ingress_pool);
+            let proposal = block_maker.on_state_change(&PoolReader::new(&pool));
             assert!(proposal.is_some());
             let proposal = proposal.unwrap();
             let block = proposal.content.as_ref();

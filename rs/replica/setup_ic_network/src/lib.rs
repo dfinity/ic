@@ -247,6 +247,7 @@ fn setup_artifact_manager(
     let ingress_manager = IngressManager::new(
         artifact_pools.consensus_pool_cache.clone(),
         ingress_history_reader,
+        artifact_pools.ingress_pool.clone(),
         Arc::clone(&registry_client),
         Arc::clone(&ingress_sig_crypto) as Arc<_>,
         metrics_registry.clone(),
@@ -296,7 +297,6 @@ fn setup_artifact_manager(
             },
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&artifact_pools.consensus_pool),
-            Arc::clone(&artifact_pools.ingress_pool),
             replica_logger.clone(),
             metrics_registry.clone(),
         );

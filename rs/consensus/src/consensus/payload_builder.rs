@@ -4,7 +4,6 @@ use crate::consensus::metrics::PayloadBuilderMetrics;
 use ic_interfaces::{
     consensus::{PayloadPermanentError, PayloadTransientError, PayloadValidationError},
     ingress_manager::IngressSelector,
-    ingress_pool::IngressPoolSelect,
     messaging::XNetPayloadBuilder,
     registry::RegistryClient,
     self_validating_payload::SelfValidatingPayloadBuilder,
@@ -35,7 +34,6 @@ pub trait PayloadBuilder: Send + Sync {
     fn get_payload(
         &self,
         height: Height,
-        ingress_pool: &dyn IngressPoolSelect,
         past_payloads: &[(Height, Time, Payload)],
         context: &ValidationContext,
         subnet_records: &SubnetRecords,
@@ -93,7 +91,6 @@ impl PayloadBuilder for PayloadBuilderImpl {
     fn get_payload(
         &self,
         height: Height,
-        ingress_pool: &dyn IngressPoolSelect,
         past_payloads: &[(Height, Time, Payload)],
         context: &ValidationContext,
         subnet_records: &SubnetRecords,
@@ -112,12 +109,8 @@ impl PayloadBuilder for PayloadBuilderImpl {
         // On odd blocks, we prioritize ingress over xnet.
         let max_block_payload_size = self.get_max_block_payload_size_bytes(&subnet_records.stable);
         let get_ingress_payload = |byte_limit| {
-            self.ingress_selector.get_ingress_payload(
-                ingress_pool,
-                &past_ingress,
-                context,
-                byte_limit,
-            )
+            self.ingress_selector
+                .get_ingress_payload(&past_ingress, context, byte_limit)
         };
         let get_xnet_payload = |byte_limit| {
             self.xnet_payload_builder.get_xnet_payload(
@@ -276,7 +269,6 @@ mod test {
         BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, GetSuccessorsResponse,
     };
     use ic_logger::replica_logger::no_op_logger;
-    use ic_test_artifact_pool::ingress_pool::TestIngressPool;
     use ic_test_utilities::{
         consensus::fake::Fake,
         ingress_selector::FakeIngressSelector,
@@ -370,14 +362,13 @@ mod test {
         provided_responses_from_adapter: Vec<BitcoinAdapterResponse>,
     ) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let Dependencies { registry, .. } = dependencies(pool_config.clone(), 1);
+            let Dependencies { registry, .. } = dependencies(pool_config, 1);
             let payload_builder = make_test_payload_impl(
                 registry,
                 vec![provided_ingress_messages.clone()],
                 vec![provided_certified_streams.clone()],
                 provided_responses_from_adapter.clone(),
             );
-            let ingress_pool = TestIngressPool::new(pool_config);
 
             let prev_payloads = Vec::new();
             let context = ValidationContext {
@@ -392,13 +383,7 @@ mod test {
             };
 
             let (ingress_msgs, stream_msgs, responses_from_adapter) = payload_builder
-                .get_payload(
-                    Height::from(1),
-                    &ingress_pool,
-                    &prev_payloads,
-                    &context,
-                    &subnet_records,
-                )
+                .get_payload(Height::from(1), &prev_payloads, &context, &subnet_records)
                 .into_messages()
                 .unwrap();
 
@@ -469,11 +454,10 @@ mod test {
             };
 
             let Dependencies { registry, .. } = dependencies_with_subnet_params(
-                pool_config.clone(),
+                pool_config,
                 subnet_test_id(0),
                 vec![(1, subnet_record)],
             );
-            let ingress_pool = TestIngressPool::new(pool_config);
             let context = ValidationContext {
                 certified_height: Height::from(0),
                 registry_version: RegistryVersion::from(1),
@@ -509,13 +493,8 @@ mod test {
                 make_test_payload_impl(registry, ingress, certified_streams, vec![]);
 
             // Build first payload and then validate it
-            let payload0 = payload_builder.get_payload(
-                Height::from(0),
-                &ingress_pool,
-                &[],
-                &context,
-                &subnet_records,
-            );
+            let payload0 =
+                payload_builder.get_payload(Height::from(0), &[], &context, &subnet_records);
             let wrapped_payload0 = batch_payload_to_payload(0, payload0);
             payload_builder
                 .validate_payload(&wrapped_payload0, &[], &context)
@@ -525,7 +504,6 @@ mod test {
             let past_payload0 = [(Height::from(0), mock_time(), wrapped_payload0)];
             let payload1 = payload_builder.get_payload(
                 Height::from(1),
-                &ingress_pool,
                 &past_payload0,
                 &context,
                 &subnet_records,
@@ -540,7 +518,6 @@ mod test {
             let past_payload1 = [(Height::from(1), mock_time(), wrapped_payload1)];
             let payload2 = payload_builder.get_payload(
                 Height::from(2),
-                &ingress_pool,
                 &past_payload1,
                 &context,
                 &subnet_records,

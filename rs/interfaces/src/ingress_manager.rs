@@ -1,7 +1,7 @@
 //! The ingress manager public interface.
 use crate::{
     execution_environment::{CanisterOutOfCyclesError, IngressHistoryError},
-    ingress_pool::{ChangeSet, IngressPool, IngressPoolSelect},
+    ingress_pool::{ChangeSet, IngressPool},
     validation::{ValidationError, ValidationResult},
 };
 use ic_types::{
@@ -131,8 +131,6 @@ pub trait IngressSelector: Send + Sync {
     /// to Consensus.
     ///
     /// #Input
-    /// [IngressPool] passed as a read-only reference. It's the trait object to
-    /// read validated messages from the IngressPool.
     /// [past_ingress] allows querying if an ingress message exists in past
     /// blocks. It is used for deduplication purpose.
     /// [ValidationContext] contains registry_version that allows to validate
@@ -147,7 +145,6 @@ pub trait IngressSelector: Send + Sync {
     /// [IngressPayload] which is a collection of valid ingress messages
     fn get_ingress_payload(
         &self,
-        ingress_pool: &dyn IngressPoolSelect,
         past_ingress: &dyn IngressSetQuery,
         context: &ValidationContext,
         byte_limit: NumBytes,
