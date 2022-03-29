@@ -2,9 +2,9 @@
 
 use crate::metrics::SendQueueMetrics;
 use crate::types::{DequeuedMessage, QueueSize, SendQueue, SendQueueReader};
+use ic_base_types::NodeId;
+use ic_interfaces_transport::{FlowTag, TransportErrorCode, TransportPayload};
 use ic_protobuf::registry::node::v1::NodeRecord;
-use ic_types::transport::{FlowTag, TransportErrorCode, TransportPayload};
-use ic_types::NodeId;
 
 use async_trait::async_trait;
 use std::collections::HashMap;

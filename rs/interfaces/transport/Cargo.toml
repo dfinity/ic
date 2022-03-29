@@ -5,5 +5,9 @@ edition = "2018"
 
 [dependencies]
 async-trait = "0.1.36"
+ic-base-types = { path = "../../types/base_types" }
 ic-protobuf = { path = "../../protobuf" }
-ic-types = { path = "../../types/types" }
+phantom_newtype = { path = "../../phantom_newtype" }
+serde = { version = "1.0.99", features = ["derive"] }
+serde_bytes = "0.11"
+

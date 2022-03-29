@@ -17,7 +17,7 @@ ic-interfaces-transport = { path = "../interfaces/transport" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
-ic-types = { path = "../types/types" }
+ic-base-types = { path = "../types/base_types" }
 ic-registry-keys = { path = "../registry/keys" }
 lazy_static = "1.4.0"
 nix = "0.23.0"

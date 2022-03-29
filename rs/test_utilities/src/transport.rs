@@ -1,10 +1,10 @@
 use async_trait::*;
-use ic_interfaces_transport::{AsyncTransportEventHandler, SendError, Transport};
-use ic_protobuf::registry::node::v1::NodeRecord;
-use ic_types::{
-    transport::{FlowId, FlowTag, TransportErrorCode, TransportPayload, TransportStateChange},
-    NodeId, RegistryVersion,
+use ic_base_types::{NodeId, RegistryVersion};
+use ic_interfaces_transport::{
+    AsyncTransportEventHandler, FlowId, FlowTag, SendError, Transport, TransportErrorCode,
+    TransportPayload, TransportStateChange,
 };
+use ic_protobuf::registry::node::v1::NodeRecord;
 use mockall::*;
 use std::sync::Arc;
 

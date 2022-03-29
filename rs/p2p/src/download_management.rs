@@ -64,19 +64,7 @@
 //! In theory, the above locking rules prevent "circular waits" and thus
 //! guarantee deadlock avoidance.
 
-use ic_interfaces::{artifact_manager::ArtifactManager, registry::RegistryClient};
-use ic_interfaces_transport::Transport;
-use ic_metrics::MetricsRegistry;
-use ic_protobuf::p2p::v1 as pb;
-use ic_protobuf::proxy::ProtoProxy;
-use ic_types::{
-    artifact::{Artifact, ArtifactId},
-    chunkable::{ArtifactErrorCode, ChunkId},
-    crypto::CryptoHash,
-    p2p::GossipAdvert,
-    transport::{FlowTag, TransportPayload},
-    NodeId, SubnetId,
-};
+extern crate lru;
 
 use crate::{
     artifact_download_list::{ArtifactDownloadList, ArtifactDownloadListImpl},
@@ -92,30 +80,38 @@ use crate::{
     utils::FlowMapper,
     P2PError, P2PErrorCode, P2PResult,
 };
-
-extern crate lru;
-use ic_protobuf::registry::subnet::v1::GossipConfig;
+use ic_interfaces::{
+    artifact_pool::ArtifactPoolError::ArtifactReplicaVersionError,
+    consensus_pool::ConsensusPoolCache,
+    {
+        artifact_manager::{ArtifactManager, OnArtifactError::ArtifactPoolError},
+        registry::RegistryClient,
+    },
+};
+use ic_interfaces_transport::{FlowTag, Transport, TransportErrorCode, TransportPayload};
+use ic_logger::{info, trace, warn, ReplicaLogger};
+use ic_metrics::MetricsRegistry;
+use ic_protobuf::{
+    p2p::v1 as pb, proxy::ProtoProxy, registry::node::v1::NodeRecord,
+    registry::subnet::v1::GossipConfig,
+};
 use ic_registry_client_helpers::subnet::SubnetTransportRegistry;
+use ic_types::{
+    artifact::{Artifact, ArtifactId},
+    chunkable::{ArtifactErrorCode, ChunkId},
+    crypto::CryptoHash,
+    p2p::GossipAdvert,
+    NodeId, RegistryVersion, SubnetId,
+};
 use lru::LruCache;
-
+use rand::{seq::SliceRandom, thread_rng};
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap, HashSet},
     error::Error,
+    ops::DerefMut,
     sync::{Arc, Mutex, RwLock},
     time::{Instant, SystemTime},
 };
-
-use ic_interfaces::artifact_manager::OnArtifactError::ArtifactPoolError;
-use ic_interfaces::artifact_pool::ArtifactPoolError::ArtifactReplicaVersionError;
-use ic_interfaces::consensus_pool::ConsensusPoolCache;
-use ic_logger::replica_logger::ReplicaLogger;
-use ic_logger::{info, trace, warn};
-use ic_protobuf::registry::node::v1::NodeRecord;
-use ic_types::{transport::TransportErrorCode, RegistryVersion};
-use rand::{seq::SliceRandom, thread_rng};
-use std::collections::BTreeMap;
-use std::collections::HashSet;
-use std::ops::DerefMut;
 
 /// The download manager maintains data structures on adverts and download state
 /// per peer.
