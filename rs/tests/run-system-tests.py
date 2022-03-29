@@ -121,6 +121,13 @@ def generate_default_job_id() -> str:
     return f"{getpass.getuser()}-{socket.gethostname()}-{int(time.time())}"
 
 
+def build_test_driver(shell_wrapper: str) -> int:
+    test_driver_build_cmd = " ".join([shell_wrapper, "cargo build --bin prod-test-driver"])
+    logging.info("Building prod-test-driver binary...")
+    status_code = run_command(command=test_driver_build_cmd)
+    return status_code
+
+
 def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_folder: bool) -> int:
     # From this path the script was started.
     base_path = os.getcwd()
@@ -154,6 +161,12 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
     is_honeycomb_push = not is_local_run
     is_slack_notify = not is_local_run and CI_PIPELINE_SOURCE == "schedule"
     # End set variables.
+
+    # Firstly, build the prod-test-driver binary.
+    if is_local_run:
+        return_code = build_test_driver(SHELL_WRAPPER)
+        if return_code != 0:
+            exit_with_log("Failed to build prod-test-driver bin.")
 
     WORKING_DIR = tempfile.mkdtemp()
 
