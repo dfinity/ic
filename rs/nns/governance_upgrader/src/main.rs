@@ -2,7 +2,7 @@
 //!
 //! DEPRECATED: After the ongoing switch to using `ic-replay` to modify the
 //! mainnet state in testnets this will be no longer needed.
-use clap::Clap;
+use clap::Parser;
 use ic_agent::{
     agent::http_transport::ReqwestHttpReplicaV2Transport, export::Principal, Agent, AgentError,
 };
@@ -20,7 +20,7 @@ use std::{
 use url::Url;
 
 /// Command line options for the `governance_upgrader` utility.
-#[derive(Clap)]
+#[derive(Parser)]
 #[clap(version = "1.0")]
 struct Opts {
     #[clap(long)]
