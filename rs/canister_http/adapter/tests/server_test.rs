@@ -1,10 +1,15 @@
 use futures::TryFutureExt;
 use http::StatusCode;
+use hyper::{
+    client::{connect::Connect, HttpConnector},
+    Client,
+};
+use hyper_tls::HttpsConnector;
 use ic_canister_http_adapter::{CanisterHttp, Config};
 use ic_canister_http_adapter_service::{
     http_adapter_client::HttpAdapterClient, http_adapter_server::HttpAdapterServer,
 };
-use ic_logger::new_replica_logger_from_config;
+use ic_logger::{new_replica_logger_from_config, ReplicaLogger};
 use ic_protobuf::canister_http::v1::{CanisterHttpRequest, HttpHeader};
 use std::convert::TryFrom;
 use tokio::net::UnixStream;
@@ -18,7 +23,8 @@ async fn test_https() {
     // setup unix domain socket and start gRPC server on one side of the UDS
     let config = Config::default();
     let (logger, _async_log_guard) = new_replica_logger_from_config(&config.logger);
-    let canister_http = CanisterHttp::new(logger);
+
+    let canister_http = setup_grpc_server_with_https_client(logger.clone());
     let channel = setup_loop_channel_unix(canister_http).await;
 
     // create gRPC client that communicated with gRPC server through UDS channel
@@ -41,9 +47,9 @@ async fn test_https() {
 async fn test_http() {
     let config = Config::default();
     let (logger, _async_log_guard) = new_replica_logger_from_config(&config.logger);
-    let canister_http = CanisterHttp::new(logger);
-    let channel = setup_loop_channel_unix(canister_http).await;
 
+    let canister_http = setup_grpc_server_with_https_client(logger.clone());
+    let channel = setup_loop_channel_unix(canister_http).await;
     let mut client = HttpAdapterClient::new(channel);
 
     let request = tonic::Request::new(build_http_canister_request(
@@ -61,9 +67,9 @@ async fn test_http() {
 async fn test_no_http() {
     let config = Config::default();
     let (logger, _async_log_guard) = new_replica_logger_from_config(&config.logger);
-    let canister_http = CanisterHttp::new(logger);
-    let channel = setup_loop_channel_unix(canister_http).await;
 
+    let canister_http = setup_grpc_server_with_https_client(logger.clone());
+    let channel = setup_loop_channel_unix(canister_http).await;
     let mut client = HttpAdapterClient::new(channel);
 
     let request = tonic::Request::new(build_http_canister_request("www.google.com".to_string()));
@@ -86,7 +92,18 @@ fn build_http_canister_request(url: String) -> CanisterHttpRequest {
     }
 }
 
-async fn setup_loop_channel_unix(canister_http: CanisterHttp) -> Channel {
+fn setup_grpc_server_with_https_client(
+    logger: ReplicaLogger,
+) -> CanisterHttp<HttpsConnector<HttpConnector>> {
+    let mut https = HttpsConnector::new();
+    https.https_only(true);
+    let https_client = Client::builder().build::<_, hyper::Body>(https);
+    CanisterHttp::new(https_client, logger)
+}
+
+async fn setup_loop_channel_unix<C: Clone + Connect + Send + Sync + 'static>(
+    canister_http: CanisterHttp<C>,
+) -> Channel {
     let uuid = Uuid::new_v4();
     let path = "/tmp/canister-http-test-".to_string() + &uuid.to_string();
 
