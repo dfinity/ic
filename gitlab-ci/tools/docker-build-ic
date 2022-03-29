@@ -11,8 +11,18 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 TAG=$(openssl rand -hex 4)
 DOCKER_IMG_VERSION=$(cat "$REPO_ROOT/gitlab-ci/docker/TAG")
 
+if ! docker pull dfinity/ic-build:"$DOCKER_IMG_VERSION"; then
+    # dfinity/ic-build:<tag> is not yet in dockerhub
+    # handle the case when Dockerfile is updated in a MR
+    echo "Image 'dfinity/ic-build:$DOCKER_IMG_VERSION' not in DockerHub"
+    echo "Building 'dfinity/ic-build:$DOCKER_IMG_VERSION' image on localhost"
+    export DOCKER_BUILD_ARGS='--no-cache'
+    "$REPO_ROOT"/gitlab-ci/docker/docker-build-local-image.sh
+    unset DOCKER_BUILD_ARGS
+fi
+
 cd "$REPO_ROOT"
-docker image build --pull -t ic-build-bd:$TAG -f- . <<EOF
+docker image build -t ic-build-bd:$TAG -f- . <<EOF
 FROM dfinity/ic-build:$DOCKER_IMG_VERSION
 COPY --chown=ubuntu:ubuntu . /ic
 RUN sudo mkdir /ic/artifacts && sudo chown -R ubuntu:ubuntu /ic/artifacts
