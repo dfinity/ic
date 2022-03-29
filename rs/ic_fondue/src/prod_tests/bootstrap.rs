@@ -11,7 +11,7 @@ use crate::prod_tests::driver_setup::{
 };
 use crate::prod_tests::farm::FarmResult;
 use crate::prod_tests::ic::{InternetComputer, Node};
-use crate::prod_tests::test_env::TestEnv;
+use crate::prod_tests::test_env::{HasIcPrepDir, TestEnv};
 use ic_base_types::NodeId;
 
 use ic_prep_lib::{
@@ -44,7 +44,8 @@ pub fn init_ic(
     logger: &Logger,
 ) -> Result<InitializedIc> {
     let mut next_node_index = 0u64;
-    let working_dir = test_env.get_path("");
+    let ic_name = ic.name();
+    let working_dir = test_env.create_prep_dir(&ic_name)?;
 
     // In production, this dummy hash is not actually checked and exists
     // only as a placeholder: Updating individual binaries (replica/orchestrator)
@@ -124,7 +125,7 @@ pub fn init_ic(
 
     let whitelist = ProvisionalWhitelist::All;
     let ic_config = IcConfig::new(
-        working_dir.as_path(),
+        working_dir.path(),
         ic_topology,
         Some(initial_replica.replica_version),
         // To maintain backwards compatibility, pass true here.
@@ -149,6 +150,7 @@ use crate::prod_tests::farm::Farm;
 
 pub fn setup_and_start_vms(
     initialized_ic: &InitializedIc,
+    ic_name: &str,
     env: &TestEnv,
     farm: &Farm,
     group_name: &str,
@@ -169,8 +171,9 @@ pub fn setup_and_start_vms(
         let vm_name = node.node_id.to_string();
         let t_farm = farm.clone();
         let t_env = env.clone();
+        let ic_name = ic_name.to_string();
         join_handles.push(thread::spawn(move || {
-            create_config_disk_image(&node, &t_env, &group_name)?;
+            create_config_disk_image(&ic_name, &node, &t_env, &group_name)?;
             let image_id = upload_config_disk_image(&node, &t_farm, &group_name)?;
             t_farm.attach_disk_image(&group_name, &vm_name, "usb-storage", image_id)?;
             t_farm.start_vm(&group_name, &vm_name)?;
@@ -204,6 +207,7 @@ pub fn upload_config_disk_image(
 /// side-effectful function that creates the config disk images in the node
 /// directories.
 pub fn create_config_disk_image(
+    ic_name: &str,
     node: &InitializedNode,
     test_env: &TestEnv,
     group_name: &str,
@@ -218,10 +222,14 @@ pub fn create_config_disk_image(
     let authorized_ssh_accounts_dir: PathBuf = test_env.get_path(AUTHORIZED_SSH_ACCOUNTS_DIR);
     let journalbeat_hosts: Vec<String> = test_env.read_object(JOURNALBEAT_HOSTS)?;
     let log_debug_overrides: Vec<String> = test_env.read_object(LOG_DEBUG_OVERRIDES)?;
+    let local_store_path = test_env
+        .prep_dir(ic_name)
+        .expect("no no name IC")
+        .registry_local_store_path();
 
     cmd.arg(img_path.clone())
         .arg("--ic_registry_local_store")
-        .arg(test_env.get_path("ic_registry_local_store"))
+        .arg(local_store_path)
         .arg("--ic_crypto")
         .arg(node.crypto_path())
         .arg("--accounts_ssh_authorized_keys")
