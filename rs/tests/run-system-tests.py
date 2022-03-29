@@ -168,8 +168,6 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
         if return_code != 0:
             exit_with_log("Failed to build prod-test-driver bin.")
 
-    WORKING_DIR = tempfile.mkdtemp()
-
     if not is_local_run and use_locally_prebuilt_artifacts:
         exit_with_log("One can't use locally prebuilt artifacts on the CI.")
 
@@ -249,7 +247,9 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
     # For an easy deletion of all artifact folders produced by the `prod-test-driver` process,
     # we create a dedicated tmp directory for this process and set TMPDIR env variable.
     test_driver_tmp_dir = tempfile.mkdtemp(prefix="tmp_test_driver_")
-    folders_to_remove.append(test_driver_tmp_dir)
+    # Similarly for an easy deletion of TestEnv folders/files, we create a tmp folder.
+    working_tmp_dir = tempfile.mkdtemp(prefix="tmp_working_")
+    folders_to_remove.extend([test_driver_tmp_dir, working_tmp_dir])
 
     env_dict = create_env_variables(
         is_local_run=is_local_run,
@@ -317,7 +317,7 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
             f"--authorized-ssh-accounts={SSH_KEY_DIR}",
             f"--result-file={RESULT_FILE}",
             f"--journalbeat-hosts={TEST_ES_HOSTNAMES}",
-            f"--working-dir={WORKING_DIR}",
+            f"--working-dir={working_tmp_dir}",
         ]
     )
     testrun_returncode = run_command(command=run_test_driver_cmd, env=env_dict)
