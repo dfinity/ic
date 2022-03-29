@@ -36,7 +36,7 @@ DOCKER_RUN_ARGS=(
 )
 
 # if i'm not withing docker already, bind mount the source
-if [ ! -e /.dockerenv ] && [[ "$IMAGE" != "ic-build-src:"* ]]; then
+if [ ! -e /.dockerenv ] && [[ "$IMAGE" != "ic-build-bd:"* ]]; then
     mkdir -p "${REPO_ROOT}/rs/target"
     # Important: The mount points inside the docker container must match
     # the corresponding environment variables [e.g. defined in the Dockerfile]

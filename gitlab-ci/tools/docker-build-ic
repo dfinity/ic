@@ -10,13 +10,13 @@ TAG=$(openssl rand -hex 4)
 DOCKER_IMG_VERSION=$(cat "$REPO_ROOT/gitlab-ci/docker/TAG")
 
 cd "$REPO_ROOT"
-docker image build --pull -t ic-build-src:$TAG -f- . <<EOF
+docker image build --pull -t ic-build-bd:$TAG -f- . <<EOF
 FROM dfinity/ic-build:$DOCKER_IMG_VERSION
 COPY --chown=ubuntu:ubuntu . /ic
 RUN sudo mkdir /ic/artifacts && sudo chown -R ubuntu:ubuntu /ic/artifacts
 EOF
 
-export IMAGE=ic-build-src:$TAG
+export IMAGE=ic-build-bd:$TAG
 "$REPO_ROOT"/gitlab-ci/tools/docker-run /ic/gitlab-ci/tools/build-ic "${1:--a=b,c,i}"
 
 if docker volume inspect "ic-artifacts${CI_JOB_ID:-}" 2>/dev/null; then
