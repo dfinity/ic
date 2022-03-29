@@ -18,9 +18,10 @@ docker-autobuild-protected:
       # image used in this revision
       cd gitlab-ci/config
       CI_IMAGE=$(grep registry.gitlab.com 00--common.yml | awk '{ print $2 }' | tr -d '"')
-      CI_IMAGE_NAME=$(echo "$IMAGE" | cut -d':' -f1)
-      CI_IMAGE_TAG=$(echo "$IMAGE" | cut -d':' -f2)
+      CI_IMAGE_NAME=$(echo "$CI_IMAGE" | cut -d':' -f1)
+      CI_IMAGE_TAG=$(echo "$CI_IMAGE" | cut -d':' -f2)
       cd -
+      # short tag
       TAG=$(cat ./gitlab-ci/docker/TAG)
 
       # check if we have it in dockerhub
@@ -52,7 +53,7 @@ docker-autobuild-protected:
         docker push dfinity/ic-build:latest
         docker push dfinity/ic-build-nix:"$TAG"
         docker push dfinity/ic-build-nix:latest
-        PUSHED = true
+        PUSHED=true
       fi 
 
       # case where pushing docker image on 1st try fails
