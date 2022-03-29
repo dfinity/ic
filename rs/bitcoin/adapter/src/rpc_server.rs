@@ -1,5 +1,5 @@
 use crate::{
-    blockchainmanager::{GetSuccessorsRequest, GetSuccessorsResponse},
+    get_successors_handler::{GetSuccessorsRequest, GetSuccessorsResponse},
     AdapterState, Config, GetSuccessorsHandler, IncomingSource, TransactionManagerRequest,
 };
 
