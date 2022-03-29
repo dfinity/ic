@@ -29,6 +29,9 @@ pub struct StableBTreeMap<M: Memory> {
     // An allocator used for managing memory and allocating nodes.
     allocator: Allocator<M>,
 
+    // The number of elements in the map.
+    length: u64,
+
     memory: M,
 }
 
@@ -39,6 +42,7 @@ struct BTreeHeader {
     max_key_size: u32,
     max_value_size: u32,
     root_addr: Address,
+    length: u64,
     // Additional space reserved to add new fields without breaking backward-compatibility.
     _buffer: [u8; 24],
 }
@@ -77,6 +81,7 @@ impl<M: Memory + Clone> StableBTreeMap<M> {
             ),
             max_key_size,
             max_value_size,
+            length: 0,
         };
 
         btree.save();
@@ -97,6 +102,7 @@ impl<M: Memory + Clone> StableBTreeMap<M> {
             allocator: Allocator::load(memory, allocator_addr),
             max_key_size: header.max_key_size,
             max_value_size: header.max_value_size,
+            length: header.length,
         }
     }
 
@@ -171,10 +177,10 @@ impl<M: Memory + Clone> StableBTreeMap<M> {
             Ok(idx) => {
                 // The key is already in the node.
                 // Overwrite it and return the previous value.
-                let (_, old_value) = node.swap_entry(idx, (key, value));
+                let (_, previous_value) = node.swap_entry(idx, (key, value));
 
                 node.save(&self.memory);
-                Some(old_value)
+                Some(previous_value)
             }
             Err(idx) => {
                 // The key isn't in the node. `idx` is where that key should be inserted.
@@ -185,6 +191,12 @@ impl<M: Memory + Clone> StableBTreeMap<M> {
                         // Insert the entry at the proper location.
                         node.entries.insert(idx, (key, value));
                         node.save(&self.memory);
+
+                        // Update the length.
+                        self.length += 1;
+                        self.save();
+
+                        // No previous value to return.
                         None
                     }
                     NodeType::Internal => {
@@ -290,6 +302,21 @@ impl<M: Memory + Clone> StableBTreeMap<M> {
         }
     }
 
+    /// Returns `true` if the key exists in the map, `false` otherwise.
+    pub fn contains_key(&self, key: &Key) -> bool {
+        self.get(key).is_some()
+    }
+
+    /// Returns `true` if the map contains no elements.
+    pub fn is_empty(&self) -> bool {
+        self.length == 0
+    }
+
+    /// Returns the number of elements in the map.
+    pub fn len(&self) -> u64 {
+        self.length
+    }
+
     /// Removes a key from the map, returning the previous value at the key if it exists.
     pub fn remove(&mut self, key: &Key) -> Option<Value> {
         if self.root_addr == NULL {
@@ -319,6 +346,7 @@ impl<M: Memory + Clone> StableBTreeMap<M> {
                         // Case 1: The node is a leaf node and the key exists in it.
                         // This is the simplest case. The key is removed from the leaf.
                         let value = node.entries.remove(idx).1;
+                        self.length -= 1;
 
                         if node.entries.is_empty() {
                             assert_eq!(
@@ -329,11 +357,11 @@ impl<M: Memory + Clone> StableBTreeMap<M> {
                             // Deallocate the empty node.
                             self.allocator.deallocate(node.address);
                             self.root_addr = NULL;
-                            self.save();
                         } else {
                             node.save(&self.memory);
                         }
 
+                        self.save();
                         Some(value)
                     }
                     _ => None, // Key not found.
@@ -717,6 +745,7 @@ impl<M: Memory + Clone> StableBTreeMap<M> {
             root_addr: self.root_addr,
             max_key_size: self.max_key_size,
             max_value_size: self.max_value_size,
+            length: self.length,
             _buffer: [0; 24],
         };
 
@@ -1433,15 +1462,69 @@ mod test {
         let mem = make_memory();
         let mut btree = StableBTreeMap::new(mem.clone(), 5, 5);
 
-        assert_eq!(btree.insert(vec![1, 2, 3], vec![4, 5, 6]), Ok(None));
+        // The btree is initially empty.
+        assert_eq!(btree.len(), 0);
+        assert!(btree.is_empty());
 
+        // Add an entry into the btree.
+        assert_eq!(btree.insert(vec![1, 2, 3], vec![4, 5, 6]), Ok(None));
+        assert_eq!(btree.len(), 1);
+        assert!(!btree.is_empty());
+
+        // Reload the btree. The element should still be there, and `len()`
+        // should still be `1`.
         let btree = StableBTreeMap::load(mem.clone());
         assert_eq!(btree.get(&vec![1, 2, 3]), Some(vec![4, 5, 6]));
+        assert_eq!(btree.len(), 1);
+        assert!(!btree.is_empty());
 
+        // Remove an element. Length should be zero.
         let mut btree = StableBTreeMap::load(mem.clone());
         assert_eq!(btree.remove(&vec![1, 2, 3]), Some(vec![4, 5, 6]));
+        assert_eq!(btree.len(), 0);
+        assert!(btree.is_empty());
 
+        // Reload. Btree should still be empty.
         let btree = StableBTreeMap::load(mem);
         assert_eq!(btree.get(&vec![1, 2, 3]), None);
+        assert_eq!(btree.len(), 0);
+        assert!(btree.is_empty());
+    }
+
+    #[test]
+    fn len() {
+        let mem = make_memory();
+        let mut btree = StableBTreeMap::new(mem, 5, 5);
+
+        for i in 0..1000u32 {
+            assert_eq!(btree.insert(i.to_le_bytes().to_vec(), vec![]), Ok(None));
+        }
+
+        assert_eq!(btree.len(), 1000);
+        assert!(!btree.is_empty());
+
+        for i in 0..1000u32 {
+            assert_eq!(btree.remove(&i.to_le_bytes().to_vec()), Some(vec![]));
+        }
+
+        assert_eq!(btree.len(), 0);
+        assert!(btree.is_empty());
+    }
+
+    #[test]
+    fn contains_key() {
+        let mem = make_memory();
+        let mut btree = StableBTreeMap::new(mem, 5, 5);
+
+        // Insert even numbers from 0 to 1000.
+        for i in (0..1000u32).step_by(2) {
+            assert_eq!(btree.insert(i.to_le_bytes().to_vec(), vec![]), Ok(None));
+        }
+
+        // Contains key should return true on all the even numbers and false on all the odd
+        // numbers.
+        for i in 0..1000u32 {
+            assert_eq!(btree.contains_key(&i.to_le_bytes().to_vec()), i % 2 == 0);
+        }
     }
 }
