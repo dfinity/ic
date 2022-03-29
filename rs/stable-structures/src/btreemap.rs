@@ -6,7 +6,7 @@ use crate::{
     write_struct, Memory,
 };
 use allocator::Allocator;
-use node::{get_node_size, Key, Node, NodeType, Value, B};
+use node::{Key, Node, NodeType, Value, B};
 
 const LAYOUT_VERSION: u8 = 1;
 const MAGIC: &[u8; 3] = b"BTR";
@@ -73,7 +73,7 @@ impl<M: Memory + Clone> StableBTreeMap<M> {
             allocator: Allocator::new(
                 memory,
                 allocator_addr,
-                get_node_size(max_key_size, max_value_size),
+                Node::size(max_key_size, max_value_size),
             ),
             max_key_size,
             max_value_size,
@@ -98,20 +98,6 @@ impl<M: Memory + Clone> StableBTreeMap<M> {
             max_key_size: header.max_key_size,
             max_value_size: header.max_value_size,
         }
-    }
-
-    /// Saves the map to memory.
-    pub fn save(&self) {
-        let header = BTreeHeader {
-            magic: *MAGIC,
-            version: LAYOUT_VERSION,
-            root_addr: self.root_addr,
-            max_key_size: self.max_key_size,
-            max_value_size: self.max_value_size,
-            _buffer: [0; 24],
-        };
-
-        write_struct(&header, Address::from(0), &self.memory);
     }
 
     /// Inserts a key-value pair into the map.
@@ -175,7 +161,7 @@ impl<M: Memory + Clone> StableBTreeMap<M> {
         Ok(self.insert_nonfull(root, key, value))
     }
 
-    // Inserts an entry into a `node that is *not full*.
+    // Inserts an entry into a node that is *not full*.
     fn insert_nonfull(&mut self, mut node: Node, key: Key, value: Value) -> Option<Value> {
         // We're guaranteed by the caller that the provided node is not full.
         assert!(!node.is_full());
@@ -267,7 +253,10 @@ impl<M: Memory + Clone> StableBTreeMap<M> {
         node.children.insert(full_child_idx + 1, sibling.address);
 
         // Move the median entry into the node.
-        let (median_key, median_value) = full_child.entries.pop().unwrap();
+        let (median_key, median_value) = full_child
+            .entries
+            .pop()
+            .expect("A full child cannot be empty");
         node.entries
             .insert(full_child_idx, (median_key, median_value));
 
@@ -320,6 +309,20 @@ impl<M: Memory + Clone> StableBTreeMap<M> {
             self.max_value_size,
         )
     }
+
+    // Saves the map to memory.
+    fn save(&self) {
+        let header = BTreeHeader {
+            magic: *MAGIC,
+            version: LAYOUT_VERSION,
+            root_addr: self.root_addr,
+            max_key_size: self.max_key_size,
+            max_value_size: self.max_value_size,
+            _buffer: [0; 24],
+        };
+
+        write_struct(&header, Address::from(0), &self.memory);
+    }
 }
 
 /// An error returned when inserting entries into the map.
@@ -327,6 +330,27 @@ impl<M: Memory + Clone> StableBTreeMap<M> {
 pub enum InsertError {
     KeyTooLarge { given: usize, max: usize },
     ValueTooLarge { given: usize, max: usize },
+}
+
+impl std::fmt::Display for InsertError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::KeyTooLarge { given, max } => {
+                write!(
+                    f,
+                    "InsertError::KeyTooLarge Expected key to be <= {} bytes but received key with {} bytes.",
+                    max, given
+                )
+            }
+            Self::ValueTooLarge { given, max } => {
+                write!(
+                    f,
+                    "InsertError::ValueTooLarge Expected value to be <= {} bytes but received value with {} bytes.",
+                    max, given
+                )
+            }
+        }
+    }
 }
 
 #[cfg(test)]
