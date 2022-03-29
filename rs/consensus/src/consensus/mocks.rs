@@ -2,10 +2,7 @@
 use crate::consensus::{membership::Membership, payload_builder::PayloadBuilder};
 use ic_artifact_pool::{dkg_pool::DkgPoolImpl, ecdsa_pool::EcdsaPoolImpl};
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_interfaces::{
-    consensus::PayloadValidationError, ingress_pool::IngressPoolSelect,
-    validation::ValidationResult,
-};
+use ic_interfaces::{consensus::PayloadValidationError, validation::ValidationResult};
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::ROOT_SUBNET_ID_KEY;
@@ -37,7 +34,6 @@ mock! {
         fn get_payload<'a>(
             &self,
             height: Height,
-            ingress_pool: &'a (dyn IngressPoolSelect + 'a),
             past_payloads: &[(Height, Time, Payload)],
             context: &ValidationContext,
             subnet_records: &SubnetRecords,

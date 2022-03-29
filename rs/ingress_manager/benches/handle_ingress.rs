@@ -23,7 +23,7 @@ use ic_interfaces::{
     ingress_pool::MutableIngressPool, registry::RegistryClient, time_source::TimeSource,
 };
 use ic_interfaces_state_manager::Labeled;
-use ic_logger::ReplicaLogger;
+use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_keys::make_subnet_record_key;
@@ -210,14 +210,23 @@ where
                     Arc::new(ReplicatedStateBuilder::default().build()),
                 ),
             ));
+
+            let metrics_registry = MetricsRegistry::new();
+            let ingress_pool = Arc::new(RwLock::new(IngressPoolImpl::new(
+                pool_config.clone(),
+                metrics_registry.clone(),
+                no_op_logger(),
+            )));
+
             let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
             let runtime = tokio::runtime::Runtime::new().unwrap();
             let mut ingress_manager = IngressManager::new(
                 Arc::new(consensus_pool_cache),
                 Box::new(ingress_hist_reader),
+                ingress_pool,
                 setup_registry(subnet_id, runtime.handle().clone()),
                 ingress_signature_crypto,
-                MetricsRegistry::new(),
+                metrics_registry,
                 subnet_id,
                 log.clone(),
                 Arc::new(state_manager),

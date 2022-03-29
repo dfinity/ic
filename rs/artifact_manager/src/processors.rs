@@ -12,10 +12,7 @@ use ic_interfaces::{
     dkg::{ChangeAction as DkgChangeAction, Dkg, DkgGossip, MutableDkgPool},
     ecdsa::{Ecdsa, EcdsaChangeAction, EcdsaGossip, MutableEcdsaPool},
     ingress_manager::IngressHandler,
-    ingress_pool::{
-        ChangeAction as IngressAction, IngressPoolObject, IngressPoolSelect, MutableIngressPool,
-        SelectResult,
-    },
+    ingress_pool::{ChangeAction as IngressAction, MutableIngressPool},
     time_source::{SysTimeSource, TimeSource},
 };
 use ic_logger::{debug, warn, ReplicaLogger};
@@ -26,7 +23,7 @@ use ic_types::{
     consensus::{certification::CertificationMessage, dkg, ConsensusMessage},
     malicious_flags::MaliciousFlags,
     messages::SignedIngress,
-    NodeId, Time,
+    NodeId,
 };
 use prometheus::{histogram_opts, labels, Histogram, IntCounter};
 use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
@@ -248,11 +245,9 @@ impl<Artifact: ArtifactKind + 'static> Drop for ArtifactProcessorManager<Artifac
 const ARTIFACT_MANAGER_TIMER_DURATION_MSEC: u64 = 200;
 
 /// *Consensus* `OnStateChange` client.
-pub struct ConsensusProcessor<PoolConsensus, PoolIngress> {
+pub struct ConsensusProcessor<PoolConsensus> {
     /// The *Consensus* pool.
     consensus_pool: Arc<RwLock<PoolConsensus>>,
-    /// The ingress pool.
-    ingress_pool: Arc<RwLock<PoolIngress>>,
     /// The *Consensus* client.
     client: Box<dyn Consensus>,
     /// The invalidated artifacts counter.
@@ -261,10 +256,8 @@ pub struct ConsensusProcessor<PoolConsensus, PoolIngress> {
     log: ReplicaLogger,
 }
 
-impl<
-        PoolConsensus: MutableConsensusPool + Send + Sync + 'static,
-        PoolIngress: IngressPoolSelect + Send + Sync + 'static,
-    > ConsensusProcessor<PoolConsensus, PoolIngress>
+impl<PoolConsensus: MutableConsensusPool + Send + Sync + 'static>
+    ConsensusProcessor<PoolConsensus>
 {
     #[allow(clippy::too_many_arguments)]
     pub fn build<
@@ -277,7 +270,6 @@ impl<
         setup: F,
         time_source: Arc<SysTimeSource>,
         consensus_pool: Arc<RwLock<PoolConsensus>>,
-        ingress_pool: Arc<RwLock<PoolIngress>>,
         log: ReplicaLogger,
         metrics_registry: MetricsRegistry,
     ) -> (
@@ -287,7 +279,6 @@ impl<
         let (consensus, consensus_gossip) = setup();
         let client = Self {
             consensus_pool: consensus_pool.clone(),
-            ingress_pool,
             client: Box::new(consensus),
             invalidated_artifacts: metrics_registry.int_counter(
                 "consensus_invalidated_artifacts",
@@ -314,10 +305,8 @@ impl<
     }
 }
 
-impl<
-        PoolConsensus: MutableConsensusPool + Send + Sync + 'static,
-        PoolIngress: IngressPoolSelect + Send + Sync + 'static,
-    > ArtifactProcessor<ConsensusArtifact> for ConsensusProcessor<PoolConsensus, PoolIngress>
+impl<PoolConsensus: MutableConsensusPool + Send + Sync + 'static>
+    ArtifactProcessor<ConsensusArtifact> for ConsensusProcessor<PoolConsensus>
 {
     /// The method processes changes in the *Consensus* pool and ingress pool.
     fn process_changes(
@@ -340,9 +329,7 @@ impl<
         let mut adverts = Vec::new();
         let change_set = {
             let consensus_pool = self.consensus_pool.read().unwrap();
-            let ingress_pool = Arc::clone(&self.ingress_pool) as Arc<_>;
-            let ingress_pool = IngressPoolSelectWrapper::new(&ingress_pool);
-            self.client.on_state_change(&*consensus_pool, &ingress_pool)
+            self.client.on_state_change(&*consensus_pool)
         };
         let changed = if !change_set.is_empty() {
             ProcessingResult::StateChanged
@@ -407,31 +394,6 @@ impl<
             .apply_changes(time_source, change_set);
 
         (adverts, changed)
-    }
-}
-
-/// A wrapper for the ingress pool that delays locking until the member function
-/// of `IngressPoolSelect` is actually called.
-struct IngressPoolSelectWrapper {
-    pool: std::sync::Arc<std::sync::RwLock<dyn IngressPoolSelect>>,
-}
-
-impl IngressPoolSelectWrapper {
-    /// The constructor creates a `IngressPoolSelectWrapper` instance.
-    pub fn new(pool: &std::sync::Arc<std::sync::RwLock<dyn IngressPoolSelect>>) -> Self {
-        IngressPoolSelectWrapper { pool: pool.clone() }
-    }
-}
-
-/// `IngressPoolSelectWrapper` implements the `IngressPoolSelect` trait.
-impl IngressPoolSelect for IngressPoolSelectWrapper {
-    fn select_validated<'a>(
-        &self,
-        range: std::ops::RangeInclusive<Time>,
-        f: Box<dyn FnMut(&IngressPoolObject) -> SelectResult<SignedIngress> + 'a>,
-    ) -> Vec<SignedIngress> {
-        let pool = self.pool.read().unwrap();
-        pool.select_validated(range, f)
     }
 }
 

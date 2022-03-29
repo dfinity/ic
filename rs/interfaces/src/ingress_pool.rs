@@ -137,7 +137,7 @@ pub enum SelectResult<T> {
 }
 
 /// A query interface that selects qualifying artifacts from the validated pool.
-pub trait IngressPoolSelect {
+pub trait IngressPoolSelect: Send + Sync {
     /// Select qualifying objects from the validated pool.
     fn select_validated<'a>(
         &self,
