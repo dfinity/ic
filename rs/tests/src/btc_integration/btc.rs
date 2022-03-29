@@ -70,7 +70,7 @@ pub fn test(env: TestEnv, logger: Logger) {
         logger,
         "Executing the uname -a command on the universal VM via SSH..."
     );
-    let sess = env.ssh_session(UNIVERSAL_VM_NAME).unwrap();
+    let sess = env.universal_vm_ssh_session(UNIVERSAL_VM_NAME).unwrap();
     let mut channel = sess.channel_session().unwrap();
     channel.exec("uname -a").unwrap();
     let mut s = String::new();

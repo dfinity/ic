@@ -9,6 +9,7 @@ pub mod create_subnet;
 pub mod cycles_minting_test;
 pub mod execution;
 pub mod feature_flags;
+pub mod http_from_canister;
 pub mod malicious_input_test;
 pub mod message_routing;
 pub mod networking;

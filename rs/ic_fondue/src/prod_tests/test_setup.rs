@@ -18,8 +18,8 @@ use std::time::{Duration, Instant};
 use std::{convert::TryFrom, net::IpAddr, str::FromStr, sync::Arc};
 use url::Url;
 
-const RETRY_TIMEOUT: Duration = Duration::from_secs(120);
-const RETRY_BACKOFF: Duration = Duration::from_secs(5);
+pub const RETRY_TIMEOUT: Duration = Duration::from_secs(120);
+pub const RETRY_BACKOFF: Duration = Duration::from_secs(5);
 
 pub trait IcHandleConstructor {
     fn ic_handle(&self) -> Result<IcHandle>;
@@ -298,7 +298,7 @@ impl HasPublicApiUrl for IcNodeSnapshot {
     }
 }
 
-fn retry<F, R>(log: slog::Logger, timeout: Duration, backoff: Duration, f: F) -> Result<R>
+pub fn retry<F, R>(log: slog::Logger, timeout: Duration, backoff: Duration, f: F) -> Result<R>
 where
     F: Fn() -> Result<R>,
 {
