@@ -42,6 +42,7 @@ function write_grubenv() {
     truncate --size=1024 "${TMP_FILE}"
     cat "${TMP_FILE}" >"${GRUBENV_FILE}"
     rm "${TMP_FILE}"
+    sync "${GRUBENV_FILE}"
 }
 
 # Convert A -> B and B -> A
