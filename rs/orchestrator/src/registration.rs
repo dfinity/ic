@@ -17,7 +17,7 @@ use ic_registry_common::local_store::LocalStore;
 use ic_sys::utility_command::UtilityCommand;
 use prost::Message;
 use rand::prelude::*;
-use registry_canister::mutations::do_add_node::AddNodePayload;
+use registry_canister::mutations::node_management::do_add_node::AddNodePayload;
 use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};

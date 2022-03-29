@@ -32,18 +32,21 @@ use registry_canister::{
     common::LOG_PREFIX,
     init::RegistryCanisterInitPayload,
     mutations::{
-        do_add_node::AddNodePayload, do_add_node_operator::AddNodeOperatorPayload,
+        do_add_node_operator::AddNodeOperatorPayload,
         do_add_nodes_to_subnet::AddNodesToSubnetPayload,
         do_bless_replica_version::BlessReplicaVersionPayload,
-        do_create_subnet::CreateSubnetPayload, do_delete_subnet::DeleteSubnetPayload,
+        do_create_subnet::CreateSubnetPayload,
+        do_delete_subnet::DeleteSubnetPayload,
         do_recover_subnet::RecoverSubnetPayload,
-        do_remove_node_directly::RemoveNodeDirectlyPayload, do_remove_nodes::RemoveNodesPayload,
         do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
         do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
         do_update_node_operator_config_directly::UpdateNodeOperatorConfigDirectlyPayload,
         do_update_subnet::UpdateSubnetPayload,
         do_update_subnet_replica::UpdateSubnetReplicaVersionPayload,
         do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
+        node_management::{
+            do_remove_node_directly::RemoveNodeDirectlyPayload, do_remove_nodes::RemoveNodesPayload,
+        },
         reroute_canister_range::RerouteCanisterRangePayload,
     },
     pb::v1::{NodeProvidersMonthlyXdrRewards, RegistryCanisterStableStorage},
@@ -57,6 +60,7 @@ use dfn_core::println;
 
 use ic_protobuf::registry::node_operator::v1::RemoveNodeOperatorsPayload;
 use registry_canister::mutations::do_set_firewall_config::SetFirewallConfigPayload;
+use registry_canister::mutations::node_management::do_add_node::AddNodePayload;
 
 // Makes expose_build_metadata! available.
 #[macro_use]
