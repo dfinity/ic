@@ -101,7 +101,12 @@ fn evaluate_pot(ctx: &DriverContext, mut pot: Pot, path: TestPath) -> Result<Tes
     create_group_for_pot(&pot_env, &pot, &ctx.logger)?;
 
     if let Err(e) = pot.setup.evaluate(&pot_env) {
-        bail!("Could not evaluate pot config: {:?}", e)
+        if let Some(s) = e.downcast_ref::<String>() {
+            bail!("Could not evaluate pot config: {}", s);
+        } else if let Some(s) = e.downcast_ref::<&str>() {
+            bail!("Could not evaluate pot config: {}", s);
+        }
+        bail!("Could not evaluate pot config: {:?}", e);
     };
 
     let res = evaluate_pot_with_group(ctx, pot, pot_path, &pot_env, &group_name);

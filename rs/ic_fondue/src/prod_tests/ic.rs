@@ -32,6 +32,7 @@ pub struct InternetComputer {
     pub node_provider: Option<PrincipalId>,
     pub unassigned_nodes: Vec<Node>,
     pub ssh_readonly_access_to_unassigned_nodes: Vec<String>,
+    name: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -107,6 +108,21 @@ impl InternetComputer {
         self
     }
 
+    /// Give this particular internet computer instance a name. The name must be
+    /// unique across internet computer instances created within a system
+    /// environment.
+    ///
+    /// By default, an IC instance has no name. Thus, not calling this method is
+    /// equivalent to `.with_name("")`.
+    pub fn with_name<S: ToString>(mut self, name: S) -> Self {
+        self.name = name.to_string();
+        self
+    }
+
+    pub fn name(&self) -> String {
+        self.name.clone()
+    }
+
     pub fn setup_and_start(&mut self, env: &TestEnv) -> Result<()> {
         let tempdir = tempfile::tempdir()?;
         self.create_secret_key_stores(tempdir.path())?;
@@ -118,7 +134,7 @@ impl InternetComputer {
         let res_group = allocate_resources(&farm, &res_request)?;
         self.propagate_ip_addrs(&res_group);
         let init_ic = init_ic(self, env, &logger)?;
-        setup_and_start_vms(&init_ic, env, &farm, &group_name)?;
+        setup_and_start_vms(&init_ic, &self.name, env, &farm, &group_name)?;
         Ok(())
     }
 
@@ -245,8 +261,8 @@ impl Subnet {
         Self::fast(subnet_type, 1)
     }
 
-    /// A (many-node) that's optimized to be "slow" so that its nodes
-    /// can be run on a single machine without issues.
+    /// A (many-node) subnet that's optimized to be "slow" so that its nodes can
+    /// be run on a single machine without issues.
     ///
     /// Running many replicas on one machine means that those replicas will
     /// compete for the resources on that machine. The consensus delays

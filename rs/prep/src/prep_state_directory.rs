@@ -39,6 +39,10 @@ impl IcPrepStateDir {
     fn join(&self, part: &str) -> PathBuf {
         self.prep_dir.join(part)
     }
+
+    pub fn path(&self) -> PathBuf {
+        self.prep_dir.clone()
+    }
 }
 
 fn parse_threshold_sig_key<P: AsRef<Path> + fmt::Debug>(pem_file: P) -> Result<Vec<u8>> {
