@@ -1,0 +1,41 @@
+boundary-node-service-worker:
+  extends:
+    - .ubuntu-nix-docker
+    - .rules-protected-branch
+  needs: [] # don't wait on other jobs
+  stage: test
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - typescript/service-worker/**/*
+  script:
+    - |
+      set -eExuo pipefail
+      # shellcheck disable=SC1090
+      source "$NVM_DIR/nvm.sh"
+      nvm use 17
+      node --version
+      npm --version
+
+      (
+        cd typescript/service-worker
+        npm ci
+        npm run lint
+        npm run format:check
+        npm test
+        npm pack
+        mkdir artifacts
+        mv dfinity-service-worker-*.tgz artifacts
+        cd artifacts
+        sha256sum dfinity-service-worker-*.tgz > SHA256SUMS
+      )
+
+      ROOT_PIPELINE_ID=${PARENT_PIPELINE_ID:-$CI_PIPELINE_ID}
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/find-build-id.sh)
+      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+        gitlab-ci/src/artifacts/rclone_upload.py --version="${GIT_REVISION}" "typescript/service-worker/artifacts" service-worker
+  artifacts:
+    reports:
+      junit: typescript/service-worker/junit.xml
+    paths:
+      - typescript/service-worker/artifacts
