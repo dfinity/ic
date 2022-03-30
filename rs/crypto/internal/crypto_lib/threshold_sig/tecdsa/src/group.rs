@@ -685,18 +685,3 @@ impl<'de> Deserialize<'de> for EccPoint {
             .map_err(|e| serde::de::Error::custom(format!("{:?}", e)))
     }
 }
-
-pub(crate) fn contains_duplicates(scalars: &[EccScalar]) -> bool {
-    let mut set = std::collections::HashSet::new();
-
-    // This function is only used in cases where we need to exclude duplicates
-    // and will immediately return an error, so an early exit (leaking if there
-    // are duplicates or not) does not have implications wrt side channels.
-    for scalar in scalars {
-        if !set.insert(scalar.serialize()) {
-            return true;
-        }
-    }
-
-    false
-}

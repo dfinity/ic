@@ -124,11 +124,11 @@ fn combine_commitments_via_interpolation(
     let mut indexes = Vec::with_capacity(verified_dealings.len());
 
     for (index, dealing) in verified_dealings {
-        indexes.push(EccScalar::from_node_index(curve, *index));
+        indexes.push(*index);
         commitments.push(dealing.commitment.clone());
     }
 
-    let coefficients = LagrangeCoefficients::at_zero(&indexes)?;
+    let coefficients = LagrangeCoefficients::at_zero(curve, &indexes)?;
     let mut combined = Vec::with_capacity(reconstruction_threshold);
 
     for i in 0..reconstruction_threshold {
@@ -291,7 +291,7 @@ fn reconstruct_share_from_openings(
 
             for (receiver_index, opening) in openings {
                 if let CommitmentOpening::Simple(value) = opening {
-                    x_values.push(EccScalar::from_node_index(curve, *receiver_index));
+                    x_values.push(*receiver_index);
                     values.push(*value);
                 } else {
                     return Err(ThresholdEcdsaError::InconsistentCommitments);
@@ -313,7 +313,7 @@ fn reconstruct_share_from_openings(
 
             for (receiver_index, opening) in openings {
                 if let CommitmentOpening::Pedersen(value, mask) = opening {
-                    x_values.push(EccScalar::from_node_index(curve, *receiver_index));
+                    x_values.push(*receiver_index);
                     values.push(*value);
                     masks.push(*mask);
                 } else {
@@ -377,8 +377,7 @@ impl CommitmentOpening {
                 )?
             };
 
-            let dealer_index = EccScalar::from_node_index(curve, *dealer_index);
-            openings.push((dealer_index, opening));
+            openings.push((*dealer_index, opening));
         }
 
         Self::combine_openings(&openings, transcript_commitment, receiver_index, curve)
@@ -417,15 +416,14 @@ impl CommitmentOpening {
                 public_key,
             )?;
 
-            let dealer_index = EccScalar::from_node_index(curve, *dealer_index);
-            openings.push((dealer_index, opening));
+            openings.push((*dealer_index, opening));
         }
 
         Self::combine_openings(&openings, transcript_commitment, receiver_index, curve)
     }
 
     fn combine_openings(
-        openings: &[(EccScalar, CommitmentOpening)],
+        openings: &[(NodeIndex, CommitmentOpening)],
         transcript_commitment: &CombinedCommitment,
         receiver_index: NodeIndex,
         curve: EccCurveType,
@@ -468,7 +466,7 @@ impl CommitmentOpening {
                 }
 
                 // Recombine secret by interpolation
-                let coefficients = LagrangeCoefficients::at_zero(&x_values)?;
+                let coefficients = LagrangeCoefficients::at_zero(curve, &x_values)?;
                 let combined_value = coefficients.interpolate_scalar(&values)?;
                 let combined_mask = coefficients.interpolate_scalar(&masks)?;
 
@@ -494,7 +492,7 @@ impl CommitmentOpening {
                 }
 
                 // Recombine secret by interpolation
-                let coefficients = LagrangeCoefficients::at_zero(&x_values)?;
+                let coefficients = LagrangeCoefficients::at_zero(curve, &x_values)?;
                 let combined_value = coefficients.interpolate_scalar(&values)?;
 
                 // Check reconstructed opening matches the commitment
