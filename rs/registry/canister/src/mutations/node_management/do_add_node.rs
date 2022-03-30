@@ -241,7 +241,7 @@ fn valid_keys_from_payload(
                 e
             )
         })?;
-    // TODO(NNS1-1197): Uncomment when nodes are provisioned for threshold ECDSA subnets
+    // TODO(NNS1-1197): Refactor when nodes are provisioned for threshold ECDSA subnets
     let idkg_dealing_encryption_pk =
         if let Some(idkg_de_pk_bytes) = &payload.idkg_dealing_encryption_pk {
             Some(PublicKey::decode(&idkg_de_pk_bytes[..]).map_err(|e| {

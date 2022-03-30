@@ -459,6 +459,48 @@ mod tls_certificate_validation {
     }
 }
 
+mod idkg_dealing_encryption_public_key_validation {
+    use super::*;
+
+    #[test]
+    fn should_succeed_on_valid_idkg_dealing_encryption_key() {
+        let idkg_de_key = valid_node_keys()
+            .idkg_dealing_encryption_pk
+            .expect("missing iDKG dealing encryption key");
+
+        let result = ValidIDkgDealingEncryptionPublicKey::try_from(idkg_de_key.clone());
+
+        assert!(matches!(result, Ok(key) if key.get() == &idkg_de_key));
+    }
+
+    #[test]
+    fn should_fail_if_idkg_dealing_encryption_key_algorithm_unsupported() {
+        let mut idkg_de_key = valid_node_keys()
+            .idkg_dealing_encryption_pk
+            .expect("missing iDKG dealing encryption key");
+        idkg_de_key.algorithm = AlgorithmIdProto::Unspecified as i32;
+
+        let result = ValidIDkgDealingEncryptionPublicKey::try_from(idkg_de_key);
+
+        assert!(matches!(result, Err(KeyValidationError { error })
+            if error == "invalid I-DKG dealing encryption key: unsupported algorithm: Some(Unspecified)"
+        ));
+    }
+
+    #[test]
+    fn should_fail_if_idkg_dealing_encryption_key_is_invalid() {
+        let mut idkg_de_key = valid_node_keys()
+            .idkg_dealing_encryption_pk
+            .expect("missing iDKG dealing encryption key");
+        idkg_de_key.key_value = b"invalid key".to_vec();
+
+        let result = ValidIDkgDealingEncryptionPublicKey::try_from(idkg_de_key);
+
+        assert!(matches!(result, Err(KeyValidationError { error })
+        if error == "invalid I-DKG dealing encryption key: verification failed: InvalidPublicKey"));
+    }
+}
+
 fn invalidate_valid_ed25519_pubkey(
     valid_pubkey: BasicSigEd25519PublicKeyBytes,
 ) -> BasicSigEd25519PublicKeyBytes {
