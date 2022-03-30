@@ -1314,7 +1314,7 @@ impl Governance {
         let now = self.env.now();
         let filter_all = |data: &ProposalData| -> bool {
             let action = data.action;
-            // Filter out proposals by topic.
+            // Filter out proposals by action.
             if exclude_type.contains(&action) {
                 return false;
             }

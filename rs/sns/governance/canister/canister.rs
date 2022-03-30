@@ -49,7 +49,7 @@ const STABLE_MEM_BUFFER_SIZE: u32 = 100 * 1024 * 1024; // 100MiB
 
 static mut GOVERNANCE: Option<Governance> = None;
 
-/// Returns an immutable reference to the global state.
+/// Returns an immutable reference to the governance's global state.
 ///
 /// This should only be called once the global state has been initialized, which
 /// happens in `canister_init` or `canister_post_upgrade`.
@@ -57,7 +57,7 @@ fn governance() -> &'static Governance {
     unsafe { GOVERNANCE.as_ref().expect("Canister not initialized!") }
 }
 
-/// Returns a mutable reference to the global state.
+/// Returns a mutable reference to the governance's global state.
 ///
 /// This should only be called once the global state has been initialized, which
 /// happens in `canister_init` or `canister_post_upgrade`.
@@ -73,15 +73,16 @@ struct CanisterEnv {
 impl CanisterEnv {
     fn new() -> Self {
         CanisterEnv {
-            // Seed the PRNG with the current time.
+            // Seed the pseudo-random number generator (PRNG) with the current time.
             //
-            // This is safe since all replicas are guaranteed to see the same result of time()
-            // and it isn't easily predictable from the outside.
+            // All replicas are guaranteed to see the same result of now() and the resulting
+            // number isn't easily predictable from the outside.
             //
-            // Using raw_rand from the ic00 api is an asynchronous call so can't really be
-            // used to generate random numbers for most cases. It could be used to seed
-            // the PRNG, but that wouldn't help much since after inception the pseudo-random
-            // numbers could be predicted.
+            // Why we don't use raw_rand from the ic00 api instead: this is an asynchronous
+            // call so can't really be used to generate random numbers for most cases.
+            // It could be used to seed the PRNG, but that wouldn't add any security regarding
+            // upredictability since the pseudo-random numbers could still be predicted after
+            // inception.
             rng: {
                 let now_nanos = now()
                     .duration_since(SystemTime::UNIX_EPOCH)
@@ -111,16 +112,25 @@ impl Environment for CanisterEnv {
         self.time_warp = new_time_warp;
     }
 
+    // Returns a random u64.
     fn random_u64(&mut self) -> u64 {
         self.rng.next_u64()
     }
 
+    // Returns a random byte array.
     fn random_byte_array(&mut self) -> [u8; 32] {
         let mut bytes = [0u8; 32];
         self.rng.fill_bytes(&mut bytes);
         bytes
     }
 
+    // Calls an external method (i.e., on a canister outside the nervous system) to execute a
+    // proposal as a result of the proposal being adopted.
+    //
+    // The _proposal_id specifies the ID of the proposal to be executed and _update specifies what
+    // function (and on which canister) should be called and with what payload this function should
+    // be called.
+    // The method returns either a success or error.
     fn execute_sns_external_proposal(
         &self,
         _proposal_id: u64,
@@ -130,11 +140,14 @@ impl Environment for CanisterEnv {
             // No update action specified.
             GovernanceError::new(ErrorType::PreconditionFailed))?;
         let payload = &_update.payload;
+        // If there is a reply, set the proposal's execution status accordingly.
         let reply = move || governance_mut().set_proposal_execution_status(_proposal_id, Ok(()));
+        // If the message was rejected, set the proposal's execution status to failed with the
+        // error using the reject_message on a best-effort basis (see below).
         let reject = move || {
-            // There's no guarantee that the reject response is a string of character, and
-            // it can potentially be large. Propagating error information
-            // here is on a best-effort basis.
+            // There's no guarantee that the reject response is a string of characters and it can
+            // potentially be large. Propagating error information is thus done on a best-effort
+            // basis.
             let mut msg = reject_message();
             const MAX_REJECT_MSG_SIZE: usize = 10000;
             if msg.len() > MAX_REJECT_MSG_SIZE {
@@ -180,19 +193,19 @@ impl Environment for CanisterEnv {
         }
     }
 
+    /// Returns how much the heap can still grow.
     #[cfg(not(target_arch = "wasm32"))]
     fn heap_growth_potential(&self) -> HeapGrowthPotential {
         unimplemented!("CanisterEnv can only be used with wasm32 environment.");
     }
 
-    /// Return this canister's ID
+    /// Return the canister's ID.
     fn canister_id(&self) -> CanisterId {
         id()
     }
 }
 
-/// Initializes the canister by decoding the init
-/// arguments and initializing internal state.
+/// Initializes the canister by decoding the init arguments and initializing internal state.
 #[export_name = "canister_init"]
 fn canister_init() {
     dfn_core::printer::hook();
@@ -213,6 +226,8 @@ fn canister_init() {
     .expect("Couldn't initialize canister.");
 }
 
+/// In contrast to canister_init(), this method does not do deserialization.
+/// In addition to canister_init, this method is called by canister_post_upgrade.
 #[candid_method(init)]
 fn canister_init_(init_payload: GovernanceProto) {
     init_payload
@@ -255,7 +270,10 @@ fn canister_init_(init_payload: GovernanceProto) {
         .expect("Error initializing the governance canister.");
 }
 
-/// Executes logic before executing the upgrade
+/// Executes some logic before executing an upgrade, including serializing and writing the
+/// governance's state to stable memory so that it is preserved during the upgrade and can
+/// be deserialised again in canister_post_upgrade. That is, the stable memory allows
+/// saving the state and restoring it after the upgrade.
 #[export_name = "canister_pre_upgrade"]
 fn canister_pre_upgrade() {
     println!("{}Executing pre upgrade", log_prefix());
@@ -270,7 +288,8 @@ fn canister_pre_upgrade() {
     writer.flush(); // or `drop(writer)`
 }
 
-/// Executes logic after executing the upgrade
+/// Executes some logic after executing an upgrade, including deserialising what has been written
+/// to stable memory in canister_pre_upgrade and initialising the governance's state with it.
 #[export_name = "canister_post_upgrade"]
 fn canister_post_upgrade() {
     dfn_core::printer::hook();
@@ -297,23 +316,25 @@ fn canister_post_upgrade() {
 
 #[cfg(feature = "test")]
 #[export_name = "canister_update set_time_warp"]
+/// Test only feature. When used, a delta is applied to the canister's system timestamp.
 fn set_time_warp() {
     over(candid_one, set_time_warp_);
 }
 
+/// Test only feature. Internal method for calling set_time_warp.
 #[cfg(feature = "test")]
 fn set_time_warp_(new_time_warp: TimeWarp) {
     governance_mut().env.set_time_warp(new_time_warp);
 }
 
-/// Returns Governance's NervousSystemParameters
+/// Returns the governance's NervousSystemParameters
 #[export_name = "canister_query get_nervous_system_parameters"]
 fn get_nervous_system_parameters() {
     println!("{}get_nervous_system_parameters", log_prefix());
     over(candid_one, get_nervous_system_parameters_)
 }
 
-/// Returns Governance's NervousSystemParameters
+/// Internal method for calling get_nervous_system_parameters.
 #[candid_method(query, rename = "get_nervous_system_parameters")]
 fn get_nervous_system_parameters_(_: ()) -> NervousSystemParameters {
     governance()
@@ -323,18 +344,24 @@ fn get_nervous_system_parameters_(_: ()) -> NervousSystemParameters {
         .expect("NervousSystemParameters are not set")
 }
 
-/// Performs the action of a neuron, such as voting,
-/// disbursing, merging maturity, or changing dissolve state
-/// if the caller is authorized.
+/// Performs a command on a neuron if the caller is authorised to do so.
+/// The possible neuron commands are (for details, see the SNS's governance.proto):
+/// - configuring the neuron (increasing or setting its dissolve delay or changing the
+/// dissolve state),
+/// - disbursing the neuron's stake to a ledger account
+/// - following a set of neurons for proposals of a certain action
+/// - make a proposal in the name of the neuron
+/// - register a vote for the neuron
+/// - split the neuron
+/// - claim or refresh the neuron
+/// - merge the neuron's maturity into the neuron's stake
 #[export_name = "canister_update manage_neuron"]
 fn manage_neuron() {
     println!("{}manage_neuron", log_prefix());
     over_async(candid_one, manage_neuron_)
 }
 
-/// Performs the action of a neuron, such as voting,
-/// disbursing, merging maturity, or changing dissolve state
-/// if the caller is authorized.
+/// Internal method for calling manage_neuron.
 #[candid_method(update, rename = "manage_neuron")]
 async fn manage_neuron_(manage_neuron: ManageNeuron) -> ManageNeuronResponse {
     governance_mut()
@@ -342,14 +369,14 @@ async fn manage_neuron_(manage_neuron: ManageNeuron) -> ManageNeuronResponse {
         .await
 }
 
-/// Returns the full neuron corresponding to the `neuron_id`.
+/// Returns the full neuron corresponding to the neuron with ID `neuron_id`.
 #[export_name = "canister_query get_neuron"]
 fn get_neuron() {
     println!("{}get_neuron", log_prefix());
     over(candid_one, get_neuron_)
 }
 
-/// Returns the full neuron corresponding to the `neuron_id`.
+/// Internal method for calling get_neuron.
 #[candid_method(query, rename = "get_neuron")]
 fn get_neuron_(get_neuron: GetNeuron) -> GetNeuronResponse {
     governance().get_neuron(&get_neuron)
@@ -357,21 +384,24 @@ fn get_neuron_(get_neuron: GetNeuron) -> GetNeuronResponse {
 
 /// Returns a list of neurons of size `limit` using `start_page_at` to
 /// indicate the start of the list. Specifying `of_principal` will return
-/// Neurons of which the given PrincipalId has permissions. The list
-/// returned is not certified. To paginate through the all neurons,
-/// `start_page_at` should be set to the last neuron of the previously
-/// returned page and will not be included in the next page. If not set
-/// i.e. in the first call to list_neurons, list_neurons will return a
-/// page of size limit starting at the "0th" Neuron. Neurons are not kept
-/// in any specific order, but their ordering is deterministic, so this
-/// can be used to return all the neurons one page at a time.
+/// Neurons of which the given PrincipalId has permissions.
+///
+/// To paginate through the all neurons, `start_page_at` should be set to
+/// the last neuron of the previously returned page and will not be included
+/// in the next page. If not set, i.e. in the first call to list_neurons,
+/// list_neurons will return a page of size `limit` starting at the neuron
+/// with the smallest ID. Neurons are not kept in any specific order, but their
+/// ordering is deterministic, so this can be used to return all the neurons one
+/// page at a time.
+///
+/// If this method is called as a query call, the returned list is not certified.
 #[export_name = "canister_query list_neurons"]
 fn list_neurons() {
     println!("{}list_neurons", log_prefix());
     over(candid_one, list_neurons_)
 }
 
-/// Internal method for calling list_neurons
+/// Internal method for calling list_neurons.
 #[candid_method(query, rename = "list_neurons")]
 fn list_neurons_(list_neurons: ListNeurons) -> ListNeuronsResponse {
     governance().list_neurons(&list_neurons)
@@ -384,7 +414,7 @@ fn get_proposal() {
     over(candid_one, get_proposal_)
 }
 
-/// Returns the full proposal corresponding to the `proposal_id`.
+/// Internal method for calling get_proposal.
 #[candid_method(query, rename = "get_proposal")]
 fn get_proposal_(get_proposal: GetProposal) -> GetProposalResponse {
     governance().get_proposal(&get_proposal)
@@ -392,26 +422,29 @@ fn get_proposal_(get_proposal: GetProposal) -> GetProposalResponse {
 
 /// Returns a list of proposals of size `limit` using `before_proposal` to
 /// indicate the start of the list. Additional filter parameters can be set on the
-/// request. The list returned is not certified. Proposals are stored in increasing
-/// order of ids, where the most recent proposals have the highest ids. ListProposals
-/// paginates in reverse, where the first proposals returned are the most recent.
-/// To paginate through the all proposals, `before_proposal` should be set to the
-/// last proposal of the previously returned page and will not be included in the
-/// next page. If not set i.e. in the first call to list_proposals, list_proposals
-/// will return a page of size limit starting at the Nth proposal.
+/// request.
+///
+/// Proposals are stored in increasing order of ids, where the most recent proposals
+/// have the highest ids. ListProposals paginates in reverse, where the first proposals
+/// returned are the most recent. To paginate through the all proposals, `before_proposal`
+/// should be set to the last proposal of the previously returned page and will not be
+/// included in the next page. If not set i.e. in the first call to list_proposals,
+/// list_proposals will return a page of size `limit` starting at the most recent proposal.
+///
+/// If this method is called as a query call, the returned list is not certified.
 #[export_name = "canister_query list_proposals"]
 fn list_proposals() {
     println!("{}list_proposals", log_prefix());
     over(candid_one, list_proposals_)
 }
 
-/// Internal method for calling list_proposals
+/// Internal method for calling list_proposals.
 #[candid_method(query, rename = "list_proposals")]
 fn list_proposals_(list_proposals: ListProposals) -> ListProposalsResponse {
     governance().list_proposals(&list_proposals)
 }
 
-/// Provides information about the last reward event.
+/// Returns the latest reward event.
 #[export_name = "canister_query get_latest_reward_event"]
 fn get_latest_reward_event() {
     over(candid, |()| -> RewardEvent {
@@ -425,16 +458,16 @@ fn get_latest_reward_event() {
     });
 }
 
-/// Heartbeat of the canister.
+/// The canister's heartbeat.
 #[export_name = "canister_heartbeat"]
 fn canister_heartbeat() {
     let future = governance_mut().run_periodic_tasks();
 
-    // canister_heartbeat must be synchronous, so we cannot .await the future
+    // The canister_heartbeat must be synchronous, so we cannot .await the future.
     dfn_core::api::futures::spawn(future);
 }
 
-/// Encode metrics
+/// Encode the metrics in a format that can be understood by Prometheus.
 fn encode_metrics(_w: &mut metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     Ok(())
 }
@@ -445,27 +478,26 @@ fn http_request() {
     ledger_canister::http_request::serve_metrics(encode_metrics);
 }
 
-// This makes this Candid service self-describing, so that for example Candid
-// UI, but also other tools, can seamlessly integrate with it.
-// The concrete interface (__get_candid_interface_tmp_hack) is provisional, but
-// works.
-//
-// We include the .did file as committed, which means it is included verbatim in
-// the .wasm; using `candid::export_service` here would involve unnecessary
-// runtime computation
-
+/// This makes this Candid service self-describing, so that for example Candid
+/// UI, but also other tools, can seamlessly integrate with it.
+/// The concrete interface (__get_candid_interface_tmp_hack) is provisional, but
+/// works.
+///
+/// We include the .did file as committed, which means it is included verbatim in
+/// the .wasm; using `candid::export_service` here would involve unnecessary
+/// runtime computation.
 #[export_name = "canister_query __get_candid_interface_tmp_hack"]
 fn expose_candid() {
     over(candid, |_: ()| include_str!("governance.did").to_string())
 }
 
-// When run on native this prints the candid service definition of this
-// canister, from the methods annotated with `candid_method` above.
-//
-// Note that `cargo test` calls `main`, and `export_service` (which defines
-// `__export_service` in the current scope) needs to be called exactly once. So
-// in addition to `not(target_arch = "wasm32")` we have a `not(test)` guard here
-// to avoid calling `export_service`, which we need to call in the test below.
+/// When run on native, this prints the candid service definition of this
+/// canister, from the methods annotated with `candid_method` above.
+///
+/// Note that `cargo test` calls `main`, and `export_service` (which defines
+/// `__export_service` in the current scope) needs to be called exactly once. So
+/// in addition to `not(target_arch = "wasm32")` we have a `not(test)` guard here
+/// to avoid calling `export_service`, which we need to call in the test below.
 #[cfg(not(any(target_arch = "wasm32", test)))]
 fn main() {
     // The line below generates did types and service definition from the
@@ -478,6 +510,7 @@ fn main() {
 #[cfg(any(target_arch = "wasm32", test))]
 fn main() {}
 
+/// A test that fails if the API was updated but the candid definition was not.
 #[test]
 fn check_governance_candid_file() {
     let governance_did =
@@ -496,6 +529,7 @@ fn check_governance_candid_file() {
     }
 }
 
+/// A test that checks that set_time_warp advances time correctly.
 #[test]
 fn test_set_time_warp() {
     let mut environment = CanisterEnv::new();
