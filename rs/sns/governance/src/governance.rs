@@ -1852,7 +1852,7 @@ impl Governance {
             let mut all_followers = BTreeSet::new();
             for (k, v) in induction_votes.iter() {
                 // The new/induction votes cannot be unspecified.
-                assert!(*v != Vote::Unspecified);
+                assert_ne!(*v, Vote::Unspecified);
                 if let Some(k_ballot) = ballots.get_mut(k) {
                     // Neuron with ID k is eligible to vote.
                     if k_ballot.vote == (Vote::Unspecified as i32) {
@@ -2606,7 +2606,7 @@ impl Governance {
         let max_proposals = self
             .nervous_system_parameters()
             .max_proposals_to_keep_per_action
-            .expect("NervousSystemParameters must have max_proposals_to_keep_per_type")
+            .expect("NervousSystemParameters must have max_proposals_to_keep_per_action")
             as usize;
 
         // This data structure contains proposals grouped by type.

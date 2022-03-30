@@ -47,9 +47,9 @@ use ic_test_utilities::{
 use ic_types::p2p::build_default_gossip_config;
 use ic_types::{crypto::KeyPurpose, NodeId, ReplicaVersion};
 use on_wire::bytes;
-use registry_canister::mutations::{
-    common::decode_registry_value,
-    do_add_node::{connection_endpoint_from_string, flow_endpoint_from_string, AddNodePayload},
+use registry_canister::mutations::common::decode_registry_value;
+use registry_canister::mutations::node_management::do_add_node::{
+    connection_endpoint_from_string, flow_endpoint_from_string, AddNodePayload,
 };
 
 /// ID used in multiple tests.

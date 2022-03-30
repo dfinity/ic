@@ -1,5 +1,6 @@
 use super::resource::AllocatedVm;
 use super::test_env::TestEnv;
+use super::test_setup::{retry, RETRY_BACKOFF, RETRY_TIMEOUT};
 use crate::prod_tests::driver_setup::mk_logger;
 use crate::prod_tests::driver_setup::{FARM_BASE_URL, FARM_GROUP_NAME};
 use crate::prod_tests::farm::Farm;
@@ -11,8 +12,8 @@ use anyhow::{bail, Result};
 use slog::info;
 use ssh2::Session;
 use std::fs::{self, File};
-use std::io::Write;
-use std::net::TcpStream;
+use std::io::{Read, Write};
+use std::net::{Ipv4Addr, TcpStream};
 use std::os::unix::prelude::PermissionsExt;
 use std::path::PathBuf;
 use std::process::Command;
@@ -111,27 +112,74 @@ impl UniversalVm {
 }
 
 pub trait UniversalVms {
-    fn universal_vm(&self, name: &str) -> Result<AllocatedVm>;
+    fn universal_vm(&self, universal_vm_name: &str) -> Result<AllocatedVm>;
 
-    fn universal_vm_path(&self, name: &str) -> PathBuf;
+    fn universal_vm_path(&self, universal_vm_name: &str) -> PathBuf;
+
+    fn universal_vm_ssh_session(&self, universal_vm_name: &str) -> Result<Session>;
+
+    fn await_universal_vm_ssh_session(&self, universal_vm_name: &str) -> Result<Session>;
+
+    fn await_universal_vm_ipv4(&self, universal_vm_name: &str) -> Result<Ipv4Addr>;
 
     fn single_activate_script_config_dir(
         &self,
         universal_vm_name: &str,
         activate_script: &str,
     ) -> Result<PathBuf>;
-
-    fn ssh_session(&self, universal_vm_name: &str) -> Result<Session>;
 }
 
 impl UniversalVms for TestEnv {
-    fn universal_vm(&self, name: &str) -> Result<AllocatedVm> {
-        let p: PathBuf = [UNIVERSAL_VMS_DIR, name].iter().collect();
+    fn universal_vm(&self, universal_vm_name: &str) -> Result<AllocatedVm> {
+        let p: PathBuf = [UNIVERSAL_VMS_DIR, universal_vm_name].iter().collect();
         self.read_object(p.join("vm.json"))
     }
-    fn universal_vm_path(&self, name: &str) -> PathBuf {
-        let p: PathBuf = [UNIVERSAL_VMS_DIR, name].iter().collect();
+    fn universal_vm_path(&self, universal_vm_name: &str) -> PathBuf {
+        let p: PathBuf = [UNIVERSAL_VMS_DIR, universal_vm_name].iter().collect();
         self.get_path(p)
+    }
+
+    fn universal_vm_ssh_session(&self, universal_vm_name: &str) -> Result<Session> {
+        let vm = self.universal_vm(universal_vm_name)?;
+        let tcp = TcpStream::connect((vm.ipv6, 22))?;
+        let mut sess = Session::new().unwrap();
+        sess.set_tcp_stream(tcp);
+        sess.handshake().unwrap();
+
+        let universal_vm_path = self.universal_vm_path(universal_vm_name);
+        let test_priv_key_path = universal_vm_path.join(TEST_USER.to_owned() + ".key");
+        sess.userauth_pubkey_file(TEST_USER, None, test_priv_key_path.as_path(), None)?;
+
+        Ok(sess)
+    }
+
+    fn await_universal_vm_ssh_session(&self, universal_vm_name: &str) -> Result<Session> {
+        retry(self.logger(), RETRY_TIMEOUT, RETRY_BACKOFF, || {
+            self.universal_vm_ssh_session(universal_vm_name)
+        })
+    }
+
+    fn await_universal_vm_ipv4(&self, universal_vm_name: &str) -> Result<Ipv4Addr> {
+        let sess = self.await_universal_vm_ssh_session(universal_vm_name)?;
+        let mut channel = sess.channel_session()?;
+        channel.exec("bash").unwrap();
+
+        let get_ipv4_script = r#"set -e -o pipefail
+until ipv4=$(ip -j address show dev enp2s0 \
+            | jq -r -e \
+            '.[0].addr_info | map(select(.scope == "global")) | .[0].local'); \
+do
+  sleep 1
+done
+echo "$ipv4"
+"#;
+        channel.write_all(get_ipv4_script.as_bytes())?;
+        channel.flush()?;
+        channel.send_eof()?;
+        let mut out = String::new();
+        channel.read_to_string(&mut out)?;
+        let ipv4 = out.trim().parse::<Ipv4Addr>()?;
+        Ok(ipv4)
     }
 
     fn single_activate_script_config_dir(
@@ -157,20 +205,6 @@ impl UniversalVms for TestEnv {
         std::fs::set_permissions(activate_path, permissions)?;
         activate_file.sync_all()?;
         Ok(config_dir)
-    }
-
-    fn ssh_session(&self, universal_vm_name: &str) -> Result<Session> {
-        let vm = self.universal_vm(universal_vm_name)?;
-        let tcp = TcpStream::connect((vm.ipv6, 22))?;
-        let mut sess = Session::new().unwrap();
-        sess.set_tcp_stream(tcp);
-        sess.handshake().unwrap();
-
-        let universal_vm_path = self.universal_vm_path(universal_vm_name);
-        let test_priv_key_path = universal_vm_path.join(TEST_USER.to_owned() + ".key");
-        sess.userauth_pubkey_file(TEST_USER, None, test_priv_key_path.as_path(), None)?;
-
-        Ok(sess)
     }
 }
 

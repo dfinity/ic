@@ -1,33 +1,25 @@
 use http::Uri;
-use hyper::client::HttpConnector;
+use hyper::client::connect::Connect;
 use hyper::{body, Body, Client, Method};
-use hyper_tls::HttpsConnector;
 use ic_canister_http_adapter_service::http_adapter_server::HttpAdapter;
 use ic_logger::{debug, ReplicaLogger};
 use ic_protobuf::canister_http::v1::{CanisterHttpRequest, CanisterHttpResponse, HttpHeader};
 use tonic::{Request, Response, Status};
 
 /// implements RPC
-pub struct CanisterHttp {
-    https_client: Client<HttpsConnector<HttpConnector>>,
+pub struct CanisterHttp<C: Clone + Connect + Send + Sync + 'static> {
+    client: Client<C>,
     logger: ReplicaLogger,
 }
 
-impl CanisterHttp {
-    /// initalize new hyper clients
-    pub fn new(logger: ReplicaLogger) -> CanisterHttp {
-        let mut https = HttpsConnector::new();
-        https.https_only(true);
-        let https_client = Client::builder().build::<_, hyper::Body>(https);
-        Self {
-            https_client,
-            logger,
-        }
+impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttp<C> {
+    pub fn new(client: Client<C>, logger: ReplicaLogger) -> Self {
+        Self { client, logger }
     }
 }
 
 #[tonic::async_trait]
-impl HttpAdapter for CanisterHttp {
+impl<C: Clone + Connect + Send + Sync + 'static> HttpAdapter for CanisterHttp<C> {
     async fn send_http_request(
         &self,
         request: Request<CanisterHttpRequest>,
@@ -49,7 +41,7 @@ impl HttpAdapter for CanisterHttp {
                 Status::new(tonic::Code::InvalidArgument, "Failed to build http request")
             })?;
 
-        let http_resp = self.https_client.request(http_req).await.map_err(|err| {
+        let http_resp = self.client.request(http_req).await.map_err(|err| {
             debug!(self.logger, "Failed to connect: {}", err);
             Status::new(tonic::Code::Unavailable, "Failed to connect")
         })?;

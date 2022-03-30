@@ -126,18 +126,33 @@
     - if: '$CI_MERGE_REQUEST_TITLE =~ /\[rc\]/'
       when: manual
       allow_failure: true
+    - if: '$CI_PIPELINE_SOURCE == "trigger"'
+      when: manual
+      allow_failure: true
 
-#  If on the RC branch, whether "[hotfix]" is in the commit message or not,
+#  If on the RC branch, whether "hotfix" is in the commit message or not,
 #  always perfrom automatic execution of the prod hotfix tests. This means that, hotfix
 #  tests are not only exercised on hotfix pipelines, but are also exercised on nightly
 #  release qualification pipelines to ensure the hotfix tests are always working.
-.rules-prod-hotfix-tests:
+.rules-prod-hotfix-pipeline:
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "trigger"'
+      when: manual
+      allow_failure: true  # the pipeline continues running even if the manual job is not run
     - if: '$CI_COMMIT_BRANCH =~ /^rc--/'
       when: always
-    - if: '$CI_MERGE_REQUEST_TITLE =~ /\[rc\]/'
+    - if: '$CI_MERGE_REQUEST_TITLE =~ /\[rc\]/ || $CI_MERGE_REQUEST_TITLE =~ /hotfix/i'
+      when: always
+
+.rules-prod-hotfix-tests:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "trigger"'
       when: manual
-      allow_failure: true
+      allow_failure: true  # the pipeline continues running even if the manual job is not run
+    - if: '$CD_ENV == $cd_target_env && $CI_COMMIT_BRANCH =~ /^rc--/'
+      when: always
+    - if: '$CD_ENV == $cd_target_env && ( $CI_MERGE_REQUEST_TITLE =~ /\[rc\]/ || $CI_MERGE_REQUEST_TITLE =~ /hotfix/i )'
+      when: always
 
 .rules-rollout-pipeline-run-on-trigger:
   rules:
@@ -165,7 +180,7 @@
 
 .rules-prod-tests:
   rules:
-    - if: '$CD_ENV == $cd_target_env && $CI_COMMIT_BRANCH =~ /^rc--/ && $CI_COMMIT_MESSAGE =~ /\[hotfix\]/'
+    - if: '$CD_ENV == $cd_target_env && $CI_COMMIT_BRANCH =~ /^rc--/ && $CI_COMMIT_MESSAGE =~ /hotfix/i'
       when: manual
       allow_failure: true
     - if: '$CD_ENV == $cd_target_env && $CI_MERGE_REQUEST_TITLE =~ /\[rc\]/'

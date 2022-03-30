@@ -146,7 +146,10 @@ pub async fn get_subnet_type(
             Ok(subnet_record) => {
                 break match subnet_record {
                     Some(record) => match SubnetType::try_from(record.subnet_type) {
-                        Ok(subnet_type) => subnet_type,
+                        Ok(subnet_type) => {
+                            info!(logger, "Registry subnet record {:?}", record);
+                            subnet_type
+                        }
                         Err(e) => fatal!(logger, "Could not parse SubnetType: {}", e),
                     },
                     // This can only happen if the registry is corrupted, so better to crash.

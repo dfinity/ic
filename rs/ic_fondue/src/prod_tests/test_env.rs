@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_utils::fs::sync_path;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -37,7 +38,7 @@ impl TestEnv {
             fs::create_dir_all(parent_dir)?;
         }
         ic_utils::fs::write_atomically(&path, |buf| {
-            serde_json::to_writer(buf, &t)
+            serde_json::to_writer(buf, t)
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
         })
         .with_context(|| format!("{:?}: Could not write json object.", path))
@@ -108,3 +109,55 @@ impl HasTestPath for TestEnv {
 
 const TEST_PATH: &str = "test_path.json";
 const BASE_LOG_DIR_PATH: &str = "base_log_dir.path.json";
+/// Access the ic-prep working dir of an Internet Computer instance.
+pub trait HasIcPrepDir {
+    /// Create the path for the ic-prep working directory for the internet
+    /// computer with the given name.
+    ///
+    /// # Errors
+    ///
+    /// If the path already exists, an error is returned.
+    ///
+    /// # Limitations
+    ///
+    /// Concurrently calling this method might lead to race conditions.
+    fn create_prep_dir(&self, name: &str) -> std::io::Result<IcPrepStateDir>;
+
+    /// Return the path to the ic-prep working directory of the internet
+    /// computer with a given name.
+    ///
+    /// Return `None` if the underlying path does not exist or is not a
+    /// directory.
+    fn prep_dir(&self, name: &str) -> Option<IcPrepStateDir>;
+}
+
+impl HasIcPrepDir for TestEnv {
+    fn create_prep_dir(&self, name: &str) -> std::io::Result<IcPrepStateDir> {
+        if self.prep_dir(name).is_some() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                format!("prep-directory for '{}' already exists", name),
+            ));
+        }
+        let p = ic_prep_path(self.base_path(), name);
+        std::fs::create_dir_all(&p)?;
+        Ok(IcPrepStateDir::new(p))
+    }
+
+    fn prep_dir(&self, name: &str) -> Option<IcPrepStateDir> {
+        let p = ic_prep_path(self.base_path(), name);
+        if !p.is_dir() {
+            return None;
+        }
+        Some(IcPrepStateDir::new(p))
+    }
+}
+
+fn ic_prep_path(base_path: PathBuf, name: &str) -> PathBuf {
+    let dir_name = if name.is_empty() {
+        "ic_prep".to_string()
+    } else {
+        format!("ic_prep_{}", name)
+    };
+    base_path.join(dir_name)
+}

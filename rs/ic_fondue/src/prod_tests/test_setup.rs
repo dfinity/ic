@@ -2,10 +2,9 @@ use crate::ic_manager::handle::READY_RESPONSE_TIMEOUT;
 use crate::ic_manager::{FarmInfo, IcEndpoint, IcHandle, IcSubnet, RuntimeDescriptor};
 use crate::prod_tests::cli::AuthorizedSshAccount;
 use crate::prod_tests::driver_setup::{AUTHORIZED_SSH_ACCOUNTS, FARM_BASE_URL, FARM_GROUP_NAME};
-use crate::prod_tests::test_env::TestEnv;
+use crate::prod_tests::test_env::{HasIcPrepDir, TestEnv};
 use anyhow::{bail, Result};
 use ic_interfaces::registry::{RegistryClient, RegistryClientResult};
-use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_protobuf::registry::{node::v1 as pb_node, subnet::v1 as pb_subnet};
 use ic_registry_client::local_registry::LocalRegistry;
 use ic_registry_client_helpers::node::NodeRegistry;
@@ -14,12 +13,13 @@ use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use ic_types::{NodeId, RegistryVersion, SubnetId};
 use slog::{info, warn};
 use std::collections::HashSet;
+use std::path::Path;
 use std::time::{Duration, Instant};
 use std::{convert::TryFrom, net::IpAddr, str::FromStr, sync::Arc};
 use url::Url;
 
-const RETRY_TIMEOUT: Duration = Duration::from_secs(120);
-const RETRY_BACKOFF: Duration = Duration::from_secs(5);
+pub const RETRY_TIMEOUT: Duration = Duration::from_secs(120);
+pub const RETRY_BACKOFF: Duration = Duration::from_secs(5);
 
 pub trait IcHandleConstructor {
     fn ic_handle(&self) -> Result<IcHandle>;
@@ -68,33 +68,52 @@ impl IcHandleConstructor for TestEnv {
                 is_root_subnet: s.map_or(false, |s| s.subnet_id == root_subnet_id),
             });
         }
+
+        let prep_dir = match self.prep_dir("") {
+            Some(p) => p,
+            None => bail!("No prep dir specified for no-name IC"),
+        };
         Ok(IcHandle {
             public_api_endpoints,
             malicious_public_api_endpoints: vec![],
-            ic_prep_working_dir: Some(IcPrepStateDir {
-                prep_dir: self.base_path(),
-            }),
+            ic_prep_working_dir: Some(prep_dir),
         })
     }
 }
 
 pub trait DefaultIC {
     fn topology_snapshot(&self) -> TopologySnapshot;
+    fn topology_snapshot_by_name(&self, name: &str) -> TopologySnapshot;
 }
 
 impl DefaultIC for TestEnv {
     fn topology_snapshot(&self) -> TopologySnapshot {
-        let local_store_path = self.get_path("ic_registry_local_store");
-        let local_registry = Arc::new(
-            LocalRegistry::new(local_store_path, REGISTRY_QUERY_TIMEOUT)
-                .expect("Could not create local registry"),
-        );
-        let registry_version = local_registry.get_latest_version();
-        TopologySnapshot {
-            local_registry,
-            registry_version,
-            env: self.clone(),
-        }
+        let local_store_path = self
+            .prep_dir("")
+            .expect("No no name Internet Computer")
+            .registry_local_store_path();
+        create_topology_snapshot(local_store_path, self.clone())
+    }
+
+    fn topology_snapshot_by_name(&self, name: &str) -> TopologySnapshot {
+        let local_store_path = self
+            .prep_dir(name)
+            .unwrap_or_else(|| panic!("No snapshot for internet computer: {:?}", name))
+            .registry_local_store_path();
+        create_topology_snapshot(local_store_path, self.clone())
+    }
+}
+
+fn create_topology_snapshot<P: AsRef<Path>>(local_store_path: P, env: TestEnv) -> TopologySnapshot {
+    let local_registry = Arc::new(
+        LocalRegistry::new(local_store_path, REGISTRY_QUERY_TIMEOUT)
+            .expect("Could not create local registry"),
+    );
+    let registry_version = local_registry.get_latest_version();
+    TopologySnapshot {
+        local_registry,
+        registry_version,
+        env,
     }
 }
 
@@ -298,7 +317,7 @@ impl HasPublicApiUrl for IcNodeSnapshot {
     }
 }
 
-fn retry<F, R>(log: slog::Logger, timeout: Duration, backoff: Duration, f: F) -> Result<R>
+pub fn retry<F, R>(log: slog::Logger, timeout: Duration, backoff: Duration, f: F) -> Result<R>
 where
     F: Fn() -> Result<R>,
 {

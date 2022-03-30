@@ -1,8 +1,4 @@
-use crate::{
-    common::LOG_PREFIX,
-    mutations::common::{decode_registry_value, encode_or_panic},
-    registry::Registry,
-};
+use crate::{common::LOG_PREFIX, mutations::common::encode_or_panic, registry::Registry};
 
 use std::net::SocketAddr;
 
@@ -18,16 +14,16 @@ use ic_protobuf::{
     registry::{
         crypto::v1::{PublicKey, X509PublicKeyCert},
         node::v1::{connection_endpoint::Protocol, ConnectionEndpoint, FlowEndpoint, NodeRecord},
-        node_operator::v1::NodeOperatorRecord,
     },
 };
 use ic_registry_keys::{
     make_crypto_node_key, make_crypto_tls_cert_key, make_node_operator_record_key,
     make_node_record_key,
 };
-use ic_registry_transport::{insert, pb::v1::RegistryValue, update};
+use ic_registry_transport::{insert, update};
 use ic_types::crypto::KeyPurpose;
 
+use crate::mutations::node_management::common::get_node_operator_record;
 use prost::Message;
 
 impl Registry {
@@ -42,22 +38,13 @@ impl Registry {
         // 1. get the caller ID and check if it is in the registry
         let caller = dfn_core::api::caller();
 
-        let node_operator_key = make_node_operator_record_key(caller);
-        let RegistryValue {
-            value: node_operator_record,
-            version: _,
-            deletion_marker: _,
-        } = self
-            .get(node_operator_key.as_bytes(), self.latest_version())
-            .map_or(Err(format!(
-                "{}do_add_node: Node Operator Id {:} not found in the registry, aborting node addition.",
-                LOG_PREFIX, caller)), Ok)?;
+        let node_operator_record = get_node_operator_record(self, caller)
+            .map_err(|err| format!("{}do_add_node: Aborting node addition: {}", LOG_PREFIX, err))
+            .unwrap();
 
         // 2. check if adding one more node will get us over the cap for the Node
         // Operator
-        if decode_registry_value::<NodeOperatorRecord>(node_operator_record.clone()).node_allowance
-            == 0
-        {
+        if node_operator_record.node_allowance == 0 {
             return Err("Node allowance for this Node Operator is exhausted".to_string());
         }
 
@@ -116,9 +103,10 @@ impl Registry {
         );
 
         // Update the Node Operator record
-        let mut node_operator_record =
-            decode_registry_value::<NodeOperatorRecord>(node_operator_record.to_vec());
+        let mut node_operator_record = node_operator_record;
         node_operator_record.node_allowance -= 1;
+
+        let node_operator_key = make_node_operator_record_key(caller);
         let update_node_operator_record = update(
             node_operator_key.as_bytes().to_vec(),
             encode_or_panic(&node_operator_record),

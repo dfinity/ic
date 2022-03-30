@@ -35,14 +35,13 @@ use ic_types::p2p::{
 };
 use ic_types::{crypto::KeyPurpose, NodeId};
 use registry_canister::{
-    init::RegistryCanisterInitPayloadBuilder,
-    mutations::{
-        do_add_node::{connection_endpoint_from_string, flow_endpoint_from_string},
-        do_create_subnet::CreateSubnetPayload,
-    },
+    init::RegistryCanisterInitPayloadBuilder, mutations::do_create_subnet::CreateSubnetPayload,
 };
 
 use assert_matches::assert_matches;
+use registry_canister::mutations::node_management::do_add_node::{
+    connection_endpoint_from_string, flow_endpoint_from_string,
+};
 
 /// Prepare a mutate request to add the desired of nodes, and returned the IDs
 /// of the nodes to be added.

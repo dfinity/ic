@@ -6,9 +6,11 @@ use ic_fondue::prod_tests::driver_setup::{
 use ic_fondue::prod_tests::evaluation::evaluate;
 use ic_fondue::prod_tests::pot_dsl::*;
 use ic_fondue::prod_tests::test_env::TestEnv;
+use ic_tests::api;
 use ic_tests::boundary_nodes_integration::boundary_nodes;
 use ic_tests::btc_integration::btc;
 use ic_tests::create_subnet::{self, create_subnet_test};
+use ic_tests::http_from_canister::basic_http;
 use ic_tests::nns_fault_tolerance_test;
 use ic_tests::nns_follow_test::{self, test as follow_test};
 use ic_tests::nns_voting_test::{self, test as voting_test};
@@ -160,10 +162,24 @@ fn get_test_suites() -> HashMap<String, Suite> {
             "pre_master",
             vec![
                 pot_with_setup(
+                    "api_test",
+                    api::api_test::two_ics,
+                    par(vec![
+                        sys_t("api_test", api::api_test::ics_have_correct_subnet_count)
+                    ]),
+                ),
+                pot_with_setup(
                     "btc_pot",
                     btc::config,
                     par(vec![
                         sys_t("btc_test", btc::test),
+                    ]),
+                ),
+                pot_with_setup(
+                    "http_pot",
+                    basic_http::config,
+                    par(vec![
+                        sys_t("basic_http", basic_http::test),
                     ]),
                 ),
                 pot_with_setup(
@@ -537,7 +553,8 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "rosetta_test_everything",
                     rosetta_test::test_everything,
                 )]),
-            )],
+            )
+            .with_ttl(Duration::from_secs(60 * 12))], // 12 minutes
         ),
     );
 
