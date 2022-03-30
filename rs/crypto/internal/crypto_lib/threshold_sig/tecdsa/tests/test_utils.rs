@@ -305,15 +305,14 @@ impl ProtocolRound {
 
                 for (idx, opening) in openings.iter().enumerate() {
                     if let CommitmentOpening::Simple(value) = opening {
-                        let index = EccScalar::from_node_index(curve_type, idx as NodeIndex);
-                        indexes.push(index);
+                        indexes.push(idx as NodeIndex);
                         g_openings.push(*value);
                     } else {
                         panic!("Unexpected opening type");
                     }
                 }
 
-                let coefficients = LagrangeCoefficients::at_zero(&indexes)?;
+                let coefficients = LagrangeCoefficients::at_zero(curve_type, &indexes)?;
                 let dlog = coefficients.interpolate_scalar(&g_openings)?;
                 let pt = EccPoint::mul_by_g(&dlog)?;
                 assert_eq!(pt, constant_term);
@@ -326,8 +325,7 @@ impl ProtocolRound {
 
                 for (idx, opening) in openings.iter().enumerate() {
                     if let CommitmentOpening::Pedersen(value, mask) = opening {
-                        let index = EccScalar::from_node_index(curve_type, idx as NodeIndex);
-                        indexes.push(index);
+                        indexes.push(idx as NodeIndex);
                         g_openings.push(*value);
                         h_openings.push(*mask);
                     } else {
@@ -335,7 +333,7 @@ impl ProtocolRound {
                     }
                 }
 
-                let coefficients = LagrangeCoefficients::at_zero(&indexes)?;
+                let coefficients = LagrangeCoefficients::at_zero(curve_type, &indexes)?;
                 let dlog_g = coefficients.interpolate_scalar(&g_openings)?;
                 let dlog_h = coefficients.interpolate_scalar(&h_openings)?;
                 let pt = EccPoint::pedersen(&dlog_g, &dlog_h)?;

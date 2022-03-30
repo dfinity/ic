@@ -678,6 +678,22 @@ impl LagrangeCoefficients {
         Ok(result)
     }
 
+    /// Check for duplicate dealer indexes
+    ///
+    /// Since these are public we don't need to worry about the lack of constant
+    /// time behavior from HashSet
+    fn check_for_duplicates(node_index: &[NodeIndex]) -> ThresholdEcdsaResult<()> {
+        let mut set = std::collections::HashSet::new();
+
+        for i in node_index {
+            if !set.insert(i) {
+                return Err(ThresholdEcdsaError::InterpolationError);
+            }
+        }
+
+        Ok(())
+    }
+
     /// Computes Lagrange polynomials evaluated at zero
     ///
     /// Namely it computes the following values:
@@ -685,13 +701,11 @@ impl LagrangeCoefficients {
     ///    * numerator_i = (x_0) * (x_1) * ... * (x_(i-1)) *(x_(i+1)) * ... *(x_n)
     ///    * denominator_i = (x_0 - x_i) * (x_1 - x_i) * ... * (x_(i-1) - x_i) *
     ///      (x_(i+1) - x_i) * ... * (x_n - x_i)
-    pub fn at_zero(samples: &[EccScalar]) -> Result<Self, ThresholdEcdsaError> {
-        if samples.is_empty() {
-            return Err(ThresholdEcdsaError::InterpolationError);
-        }
-
-        let zero = EccScalar::zero(samples[0].curve_type());
-        Self::at_value(&zero, samples)
+    pub fn at_zero(
+        curve_type: EccCurveType,
+        samples: &[NodeIndex],
+    ) -> Result<Self, ThresholdEcdsaError> {
+        Self::at_value(&EccScalar::zero(curve_type), samples)
     }
 
     /// Computes Lagrange polynomials evaluated at a given value.
@@ -701,46 +715,43 @@ impl LagrangeCoefficients {
     ///    * numerator_i = (x_0-value) * (x_1-value) * ... * (x_(i-1)-value) *(x_(i+1)-value) * ... *(x_n-value)
     ///    * denominator_i = (x_0 - x_i) * (x_1 - x_i) * ... * (x_(i-1) - x_i) *
     ///      (x_(i+1) - x_i) * ... * (x_n - x_i)
-    pub fn at_value(value: &EccScalar, samples: &[EccScalar]) -> Result<Self, ThresholdEcdsaError> {
+    pub fn at_value(value: &EccScalar, samples: &[NodeIndex]) -> Result<Self, ThresholdEcdsaError> {
         // This is not strictly required but for our usage it simplifies matters
         if samples.is_empty() {
             return Err(ThresholdEcdsaError::InterpolationError);
         }
 
-        let curve = value.curve_type();
-
-        for sample in samples {
-            if sample.curve_type() != curve {
-                return Err(ThresholdEcdsaError::CurveMismatch);
-            }
-        }
+        let curve_type = value.curve_type();
 
         if samples.len() == 1 {
-            return Self::new(vec![EccScalar::one(curve)]);
+            return Self::new(vec![EccScalar::one(curve_type)]);
         }
 
-        if contains_duplicates(samples) {
-            return Err(ThresholdEcdsaError::InterpolationError);
-        }
+        Self::check_for_duplicates(samples)?;
+
+        let samples: Vec<EccScalar> = samples
+            .iter()
+            .map(|s| EccScalar::from_node_index(curve_type, *s))
+            .collect();
 
         let mut numerator = Vec::with_capacity(samples.len());
-        let mut tmp = EccScalar::one(curve);
+        let mut tmp = EccScalar::one(curve_type);
         numerator.push(tmp);
         for x in samples.iter().take(samples.len() - 1) {
             tmp = tmp.mul(&x.sub(value)?)?;
             numerator.push(tmp);
         }
 
-        tmp = EccScalar::one(curve);
+        tmp = EccScalar::one(curve_type);
         for (i, x) in samples[1..].iter().enumerate().rev() {
             tmp = tmp.mul(&x.sub(value)?)?;
             numerator[i] = numerator[i].mul(&tmp)?;
         }
 
-        for (lagrange_i, x_i) in numerator.iter_mut().zip(samples) {
+        for (lagrange_i, x_i) in numerator.iter_mut().zip(&samples) {
             // Compute the value at 0 of the i-th Lagrange polynomial that is `0` at the
             // other data points but `1` at `x_i`.
-            let mut denom = EccScalar::one(curve);
+            let mut denom = EccScalar::one(curve_type);
             for x_j in samples.iter().filter(|x_j| *x_j != x_i) {
                 let diff = x_j.sub(x_i)?;
                 denom = denom.mul(&diff)?;
