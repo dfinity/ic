@@ -8,7 +8,7 @@ use std::{
 
 use super::{
     driver_setup::{
-        mk_logger, AUTHORIZED_SSH_ACCOUNTS_DIR, BOUNDARY_NODE_IMG_SHA256, BOUNDARY_NODE_IMG_URL,
+        AUTHORIZED_SSH_ACCOUNTS_DIR, BOUNDARY_NODE_IMG_SHA256, BOUNDARY_NODE_IMG_URL,
         FARM_BASE_URL, FARM_GROUP_NAME, JOURNALBEAT_HOSTS,
     },
     farm::{CreateVmRequest, Farm, ImageLocation, VMCreateResponse},
@@ -39,6 +39,7 @@ pub struct BoundaryNode {
     pub has_ipv4: bool,
     pub boot_image: Option<DiskImage>,
     pub nns_node_urls: Vec<Url>,
+    pub nns_public_key: Option<PathBuf>,
 }
 
 impl BoundaryNode {
@@ -49,6 +50,7 @@ impl BoundaryNode {
             has_ipv4: true,
             boot_image: Default::default(),
             nns_node_urls: Default::default(),
+            nns_public_key: Default::default(),
         }
     }
 
@@ -57,9 +59,14 @@ impl BoundaryNode {
         self
     }
 
+    pub fn with_nns_public_key(mut self, nns_public_key: PathBuf) -> Self {
+        self.nns_public_key = Some(nns_public_key);
+        self
+    }
+
     pub fn start(&self, env: &TestEnv) -> Result<()> {
         let group_name: String = env.read_object(FARM_GROUP_NAME)?;
-        let logger = mk_logger();
+        let logger = env.logger();
         let farm = Farm::new(env.read_object(FARM_BASE_URL)?, logger.clone());
 
         let create_vm_req = CreateVmRequest::new(
@@ -148,6 +155,10 @@ pub fn create_and_upload_config_disk_image(
                 .collect();
             urls.join(" ")
         });
+    }
+
+    if let Some(nns_public_key) = boundary_node.nns_public_key.clone() {
+        cmd.arg("--nns_public_key").arg(nns_public_key);
     }
 
     if !journalbeat_hosts.is_empty() {

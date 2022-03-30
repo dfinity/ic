@@ -4,7 +4,8 @@ end::catalog[] */
 
 use ic_fondue::prod_tests::boundary_node::{BoundaryNode, BoundaryNodeVm};
 use ic_fondue::prod_tests::ic::{InternetComputer, Subnet};
-use ic_fondue::prod_tests::test_env::TestEnv;
+use ic_fondue::prod_tests::pot_dsl::get_ic_handle_and_ctx;
+use ic_fondue::prod_tests::test_env::{HasIcPrepDir, TestEnv};
 use ic_fondue::prod_tests::test_setup::{DefaultIC, HasPublicApiUrl, IcNodeContainer};
 
 use ic_registry_subnet_type::SubnetType;
@@ -18,8 +19,18 @@ pub fn config(env: TestEnv) {
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
+    let (handle, _ctx) = get_ic_handle_and_ctx(env.clone(), env.logger());
+
+    let nns_urls = handle
+        .public_api_endpoints
+        .iter()
+        .filter(|ep| ep.is_root_subnet)
+        .map(|ep| ep.url.clone())
+        .collect();
+
     BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
-        .with_nns_urls(vec![/* TODO: fill with the NNS URLs of the IC created above */])
+        .with_nns_urls(nns_urls)
+        .with_nns_public_key(env.prep_dir("").unwrap().root_public_key_path())
         .start(&env)
         .expect("failed to setup universal VM");
 }
