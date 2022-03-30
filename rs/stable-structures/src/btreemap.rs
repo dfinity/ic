@@ -1,4 +1,5 @@
 mod allocator;
+mod iter;
 mod node;
 use crate::{
     read_struct,
@@ -6,6 +7,7 @@ use crate::{
     write_struct, Memory,
 };
 use allocator::Allocator;
+use iter::Iter;
 use node::{Key, Node, NodeType, Value, B};
 
 const LAYOUT_VERSION: u8 = 1;
@@ -673,6 +675,11 @@ impl<M: Memory + Clone> StableBTreeMap<M> {
                 }
             }
         }
+    }
+
+    /// Gets an iterator over the entries of the map, sorted by key.
+    pub fn iter(&self) -> Iter<M> {
+        Iter::new(self)
     }
 
     // Merges one node (`source`) into another (`into`), along with a median entry.
