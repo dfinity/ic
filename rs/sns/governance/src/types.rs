@@ -659,7 +659,7 @@ pub trait Environment: Send + Sync {
     /// Returns the current time, in seconds since the epoch.
     fn now(&self) -> u64;
 
-    // An optional feature that is currently only used by CanisterEnv.
+    /// An optional feature that is currently only used by CanisterEnv.
     fn set_time_warp(&mut self, _new_time_warp: TimeWarp) {
         panic!("Not implemented.");
     }
