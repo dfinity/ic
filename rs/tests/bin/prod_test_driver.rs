@@ -553,7 +553,8 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "rosetta_test_everything",
                     rosetta_test::test_everything,
                 )]),
-            )],
+            )
+            .with_ttl(Duration::from_secs(60 * 12))], // 12 minutes
         ),
     );
 
