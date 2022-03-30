@@ -457,7 +457,9 @@ fn post_upgrade() {
         *ledger = ciborium::de::from_reader(stable::StableReader::new())
             .expect("Decoding stable memory failed");
 
-        ledger.maximum_number_of_accounts = 28_000_000;
+        ledger.token_symbol = "ICP".to_string();
+        ledger.token_name = "Internet Computer".to_string();
+
         set_certified_data(
             &ledger
                 .blockchain
