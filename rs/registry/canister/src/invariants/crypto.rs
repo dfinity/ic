@@ -7,12 +7,10 @@ use crate::invariants::{
 };
 
 use std::collections::{BTreeMap, HashMap};
-use std::convert::TryFrom;
 
 use prost::Message;
 
-use ic_base_types::NodeId;
-use ic_base_types::{PrincipalId, SubnetId};
+use ic_base_types::{subnet_id_try_from_protobuf, NodeId};
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_nns_common::registry::decode_or_panic;
 use ic_protobuf::{
@@ -212,9 +210,7 @@ fn check_ecdsa_signing_subnet_lists(
                 .subnets
                 .iter()
                 .try_for_each(|subnet_id_bytes| {
-                    let subnet_id = SubnetId::from(
-                        PrincipalId::try_from(subnet_id_bytes.clone().as_slice()).unwrap(),
-                    );
+                    let subnet_id = subnet_id_try_from_protobuf(subnet_id_bytes.clone()).unwrap();
 
                     subnet_records_map
                         .get(&make_subnet_record_key(subnet_id).into_bytes())

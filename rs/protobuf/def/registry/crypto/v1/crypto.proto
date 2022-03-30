@@ -1,6 +1,7 @@
 // Protobuf definitions describing all value types stored in the registry.
 syntax = "proto3";
 package registry.crypto.v1;
+import "types/v1/types.proto";
 import "google/protobuf/wrappers.proto";
 
 // An algorithm ID. This is used to specify the signature algorithm associated with a public key.
@@ -27,7 +28,8 @@ enum AlgorithmId {
 // A list of subnets that can sign with this ECDSA key.
 // This allows replicas to route their signing requests to the right subnets.
 message ECDSASigningSubnetList {
-  repeated bytes subnets = 1;
+  reserved 1;
+  repeated types.v1.SubnetId subnets = 2;
 }
 
 // A public key. Described by its `AlgorithmId`, the key's value and proof data holding, e.g., a proof of possession (PoP).
