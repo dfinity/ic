@@ -10,6 +10,7 @@
 //! concise encoding. This is safe to do given the use of canonical types
 //! covered by compatibility tests.
 
+use crate::CertificationVersion;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_replicated_state::metadata_state::SystemMetadata;
 use ic_types::{messages::RequestOrResponse, xnet::StreamHeader, PrincipalId};
@@ -65,7 +66,10 @@ where
 }
 
 /// Encodes a `RequestOrResponse` into canonical CBOR representation.
-pub fn encode_message(msg: &RequestOrResponse, certification_version: u32) -> Vec<u8> {
+pub fn encode_message(
+    msg: &RequestOrResponse,
+    certification_version: CertificationVersion,
+) -> Vec<u8> {
     types::RequestOrResponse::proxy_encode((msg, certification_version)).unwrap()
 }
 
@@ -75,7 +79,10 @@ pub fn decode_message(bytes: &[u8]) -> Result<RequestOrResponse, ProxyDecodeErro
 }
 
 /// Encodes a `StreamHeader` into canonical CBOR representation.
-pub fn encode_stream_header(header: &StreamHeader, certification_version: u32) -> Vec<u8> {
+pub fn encode_stream_header(
+    header: &StreamHeader,
+    certification_version: CertificationVersion,
+) -> Vec<u8> {
     types::StreamHeader::proxy_encode((header, certification_version)).unwrap()
 }
 
