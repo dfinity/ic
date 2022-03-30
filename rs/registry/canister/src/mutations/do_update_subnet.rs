@@ -5,7 +5,7 @@ use dfn_core::println;
 use ic_nns_common::registry::decode_or_panic;
 use serde::Serialize;
 
-use ic_base_types::SubnetId;
+use ic_base_types::{subnet_id_into_protobuf, SubnetId};
 use ic_protobuf::registry::{
     crypto::v1::EcdsaSigningSubnetList,
     subnet::v1::{EcdsaConfig, GossipAdvertConfig, SubnetRecord},
@@ -44,7 +44,7 @@ impl Registry {
 
                 let ecdsa_signing_subnet_list_contains_subnet_id = ecdsa_signing_subnet_list_record
                     .subnets
-                    .contains(&subnet_id.get().to_vec());
+                    .contains(&subnet_id_into_protobuf(subnet_id));
 
                 // Proposals cannot both update a key a subnet is holding while enabling signing
                 // for that key
@@ -70,7 +70,7 @@ impl Registry {
                 if !ecdsa_signing_subnet_list_contains_subnet_id {
                     ecdsa_signing_subnet_list_record
                         .subnets
-                        .push(subnet_id.get().to_vec());
+                        .push(subnet_id_into_protobuf(subnet_id));
 
                     let ecdsa_signing_subnet_list_mutation = RegistryMutation {
                         mutation_type: registry_mutation::Type::Upsert as i32,
