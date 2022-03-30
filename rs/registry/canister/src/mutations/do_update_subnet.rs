@@ -39,33 +39,26 @@ impl Registry {
         if let Some(ecdsa_key_signing_enable) = payload.ecdsa_key_signing_enable {
             for key_id in &ecdsa_key_signing_enable {
                 let ecdsa_signing_subnet_list_key_id = make_ecdsa_signing_subnet_list_key(key_id);
-                let mut ecdsa_signing_subnet_list_record =
-                    self.get_ecdsa_signing_subnet_list_or_panic(&ecdsa_signing_subnet_list_key_id);
+                let mut ecdsa_signing_subnet_list_record = self
+                    .get_ecdsa_signing_subnet_list_or_default(&ecdsa_signing_subnet_list_key_id);
 
                 let ecdsa_signing_subnet_list_contains_subnet_id = ecdsa_signing_subnet_list_record
                     .subnets
                     .contains(&subnet_id_into_protobuf(subnet_id));
 
-                // Proposals cannot both update a key a subnet is holding while enabling signing
-                // for that key
-                if let Some(ecdsa_config) = &payload.ecdsa_config {
-                    let current_keys = subnet_record
-                        .ecdsa_config
-                        .as_ref()
-                        .map(|ecdsa_config| ecdsa_config.key_ids.clone())
-                        .unwrap_or_default();
-                    let new_and_enabled_keys_exist = !ecdsa_config
-                        .key_ids
-                        .iter()
-                        .filter(|&x| !current_keys.contains(x))
-                        .any(|x| ecdsa_key_signing_enable.contains(x));
+                // Proposals cannote enable signing for a key unless the key was
+                // previously held by the subnet.
+                let current_keys = subnet_record
+                    .ecdsa_config
+                    .as_ref()
+                    .map(|ecdsa_config| ecdsa_config.key_ids.clone())
+                    .unwrap_or_default();
 
-                    if new_and_enabled_keys_exist && ecdsa_signing_subnet_list_contains_subnet_id {
-                        panic!("Proposal attempts to update Subnet {} to hold an ECDSA key at the same time as enabling signing for it; this is disallowed",
-                            subnet_id
-                        );
-                    }
-                };
+                if !current_keys.contains(key_id) && !ecdsa_signing_subnet_list_contains_subnet_id {
+                    panic!("Proposal attempts to enable signing for ECDSA key {} on Subnet {},  but the subnet does not hold the given key. A proposal to add that key to the subnet must first be separately submitted.",
+                        key_id, subnet_id
+                    );
+                }
 
                 if !ecdsa_signing_subnet_list_contains_subnet_id {
                     ecdsa_signing_subnet_list_record
@@ -87,27 +80,23 @@ impl Registry {
         self.maybe_apply_mutation_internal(mutations);
     }
 
-    fn get_ecdsa_signing_subnet_list_or_panic(
+    fn get_ecdsa_signing_subnet_list_or_default(
         &self,
         ecdsa_signing_subnet_list_key_id: &str,
     ) -> EcdsaSigningSubnetList {
-        let RegistryValue {
-            value: ecdsa_signing_subnet_list_record_vec,
-            version: _,
-            deletion_marker: _,
-        } = self
-            .get(
-                ecdsa_signing_subnet_list_key_id.as_bytes(),
-                self.latest_version(),
-            )
-            .unwrap_or_else(|| {
-                panic!(
-                    "{}ECDSA Signing Subnet List record not found in the registry.",
-                    LOG_PREFIX
-                )
-            });
-
-        decode_or_panic::<EcdsaSigningSubnetList>(ecdsa_signing_subnet_list_record_vec.to_vec())
+        match self.get(
+            ecdsa_signing_subnet_list_key_id.as_bytes(),
+            self.latest_version(),
+        ) {
+            Some(RegistryValue {
+                value: ecdsa_signing_subnet_list_record_vec,
+                version: _,
+                deletion_marker: _,
+            }) => decode_or_panic::<EcdsaSigningSubnetList>(
+                ecdsa_signing_subnet_list_record_vec.to_vec(),
+            ),
+            None => EcdsaSigningSubnetList { subnets: vec![] },
+        }
     }
 }
 
