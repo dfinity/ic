@@ -300,7 +300,7 @@ impl CanisterQueues {
                 None => return Err((StateError::QueueFull { capacity: 0 }, msg)),
             },
         };
-        let iq_stats_delta = InputQueuesStats::stats_delta(&msg);
+        let iq_stats_delta = InputQueuesStats::stats_delta(QueueOp::Push, &msg);
         let mu_stats_delta = MemoryUsageStats::stats_delta(QueueOp::Push, &msg);
 
         input_queue.push(index, msg)?;
@@ -342,7 +342,7 @@ impl CanisterQueues {
                 input_schedule.push_back(sender);
             }
 
-            self.input_queues_stats -= InputQueuesStats::stats_delta(&msg);
+            self.input_queues_stats -= InputQueuesStats::stats_delta(QueueOp::Pop, &msg);
             self.memory_usage_stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, &msg);
             debug_assert!(self.stats_ok());
 
@@ -439,6 +439,7 @@ impl CanisterQueues {
             .push_request(msg)
             .expect("cannot fail due to checks above");
 
+        self.input_queues_stats.reserved_slots += 1;
         self.memory_usage_stats += mu_stats_delta;
         debug_assert!(self.stats_ok());
 
@@ -546,15 +547,9 @@ impl CanisterQueues {
         self.input_queues_stats.message_count
     }
 
-    /// Number of reservations and responses in input queues.
-    ///
-    /// Time complexity: O(num_input_queues).
-    pub fn count_input_queues_reservations(&self) -> usize {
-        let mut number_of_reservations = 0;
-        for input_queue in self.input_queues.values() {
-            number_of_reservations += input_queue.reserved_slots()
-        }
-        number_of_reservations
+    /// Returns the number of reservations across all input queues.
+    pub fn input_queues_reservation_count(&self) -> usize {
+        self.input_queues_stats.reserved_slots as usize
     }
 
     /// Returns the total byte size of canister input queues (queues +
@@ -657,6 +652,7 @@ impl CanisterQueues {
         for q in input_queues.values() {
             stats.message_count += q.num_messages();
             stats.response_count += q.calculate_stat_sum(response_count);
+            stats.reserved_slots += q.reserved_slots() as isize;
             stats.size_bytes += q.calculate_size_bytes();
         }
         stats
@@ -834,6 +830,10 @@ pub struct InputQueuesStats {
     /// Count of responses in input queues.
     response_count: usize,
 
+    /// Count of reservations in input queue. Signed type because `stats_delta()`
+    /// sometimes returns `-1`.
+    reserved_slots: isize,
+
     /// Byte size of input queues (queues + messages).
     size_bytes: usize,
 }
@@ -841,14 +841,20 @@ pub struct InputQueuesStats {
 impl InputQueuesStats {
     /// Calculates the change in input queue stats caused by pushing (+) or
     /// popping (-) the given message.
-    fn stats_delta(msg: &RequestOrResponse) -> InputQueuesStats {
+    fn stats_delta(op: QueueOp, msg: &RequestOrResponse) -> InputQueuesStats {
         let response_count = match msg {
             RequestOrResponse::Response(_) => 1,
             RequestOrResponse::Request(_) => 0,
         };
+        // Consume one reservation iff pushing a response.
+        let reserved_slots = match (op, msg) {
+            (QueueOp::Push, RequestOrResponse::Response(_)) => -1,
+            _ => 0,
+        };
         InputQueuesStats {
             message_count: 1,
             response_count,
+            reserved_slots,
             size_bytes: msg.count_bytes(),
         }
     }
@@ -858,6 +864,7 @@ impl AddAssign<InputQueuesStats> for InputQueuesStats {
     fn add_assign(&mut self, rhs: InputQueuesStats) {
         self.message_count += rhs.message_count;
         self.response_count += rhs.response_count;
+        self.reserved_slots += rhs.reserved_slots;
         self.size_bytes += rhs.size_bytes;
     }
 }
@@ -866,6 +873,7 @@ impl SubAssign<InputQueuesStats> for InputQueuesStats {
     fn sub_assign(&mut self, rhs: InputQueuesStats) {
         self.message_count -= rhs.message_count;
         self.response_count -= rhs.response_count;
+        self.reserved_slots -= rhs.reserved_slots;
         self.size_bytes -= rhs.size_bytes;
     }
 }

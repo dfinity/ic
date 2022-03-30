@@ -519,6 +519,7 @@ fn test_stats() {
         expected_iq_stats += InputQueuesStats {
             message_count: 1,
             response_count: 0,
+            reserved_slots: 0,
             size_bytes: iq_size + msg_size[i],
         };
         assert_eq!(expected_iq_stats, queues.input_queues_stats);
@@ -537,6 +538,7 @@ fn test_stats() {
     expected_iq_stats -= InputQueuesStats {
         message_count: 1,
         response_count: 0,
+        reserved_slots: 0,
         size_bytes: msg_size[0],
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
@@ -571,6 +573,7 @@ fn test_stats() {
     msg_size[4] = msg.count_bytes();
     queues.push_output_request(msg).unwrap();
     // One more reserved slot, no reserved response bytes, oversized request.
+    expected_iq_stats.reserved_slots += 1;
     expected_mu_stats.reserved_slots += 1;
     expected_mu_stats.oversized_requests_extra_bytes += msg_size[4] - MAX_RESPONSE_COUNT_BYTES;
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
@@ -629,6 +632,7 @@ fn test_stats() {
     expected_iq_stats += InputQueuesStats {
         message_count: 1,
         response_count: 1,
+        reserved_slots: -1,
         size_bytes: msg_size[5],
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
@@ -652,6 +656,7 @@ fn test_stats() {
     expected_iq_stats -= InputQueuesStats {
         message_count: 1,
         response_count: 0,
+        reserved_slots: 0,
         size_bytes: msg_size[1],
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
@@ -667,6 +672,7 @@ fn test_stats() {
     expected_iq_stats -= InputQueuesStats {
         message_count: 1,
         response_count: 0,
+        reserved_slots: 0,
         size_bytes: msg_size[2],
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
@@ -682,6 +688,7 @@ fn test_stats() {
     expected_iq_stats -= InputQueuesStats {
         message_count: 1,
         response_count: 1,
+        reserved_slots: 0,
         size_bytes: msg_size[5],
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
@@ -715,8 +722,9 @@ fn test_stats_induct_message_to_self() {
     let request_size = request.count_bytes();
     queues.push_output_request(request).expect("could not push");
 
-    // New input queue was created.
+    // New input queue was created, with one reservation.
     expected_iq_stats.size_bytes += iq_size;
+    expected_iq_stats.reserved_slots += 1;
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // Pushed a request: one more reserved slot, no reserved response bytes.
     expected_mu_stats.reserved_slots += 1;
@@ -729,6 +737,7 @@ fn test_stats_induct_message_to_self() {
     expected_iq_stats += InputQueuesStats {
         message_count: 1,
         response_count: 0,
+        reserved_slots: 0,
         size_bytes: request_size,
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
@@ -743,6 +752,7 @@ fn test_stats_induct_message_to_self() {
     expected_iq_stats -= InputQueuesStats {
         message_count: 1,
         response_count: 0,
+        reserved_slots: 0,
         size_bytes: request_size,
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
@@ -770,10 +780,11 @@ fn test_stats_induct_message_to_self() {
     // Induct the response.
     assert!(queues.induct_message_to_self(this).is_ok());
 
-    // Response is now in the input queue.
+    // Response is now in the input queue, reservation is consumed.
     expected_iq_stats += InputQueuesStats {
         message_count: 1,
         response_count: 1,
+        reserved_slots: -1,
         size_bytes: response_size,
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
@@ -788,6 +799,7 @@ fn test_stats_induct_message_to_self() {
     expected_iq_stats -= InputQueuesStats {
         message_count: 1,
         response_count: 1,
+        reserved_slots: 0,
         size_bytes: response_size,
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);

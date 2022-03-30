@@ -9,6 +9,10 @@
     "README.md",
     "LICENSE"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dfinity/ic.git"
+  },
   "dependencies": {
     "@dfinity/agent": "^0.10.4",
     "@dfinity/candid": "^0.10.4",
