@@ -156,8 +156,7 @@ fn resolve_execution_mode(
 
 fn get_test_suites() -> HashMap<String, Suite> {
     let mut m = HashMap::new();
-    m.insert(
-        "pre_master".to_string(),
+    m.add_suite(
         suite(
             "pre_master",
             vec![
@@ -351,11 +350,25 @@ fn get_test_suites() -> HashMap<String, Suite> {
     );
 
     let xnet_slo_3_subnets = xnet_slo_test::config_hotfix_slo_3_subnets();
-    m.insert(
-        "hotfix".to_string(),
-        suite(
-            "hotfix",
-            vec![pot(
+    m.add_suite(suite(
+        "hotfix",
+        vec![pot(
+            "xnet_slo_3_subnets_pot",
+            xnet_slo_3_subnets.build(),
+            par(vec![t(
+                "xnet_slo_3_subnets_test",
+                xnet_slo_3_subnets.test(),
+            )]),
+        )
+        .with_ttl(Duration::from_secs(10 * 60))],
+    ));
+
+    let xnet_slo_3_subnets = xnet_slo_test::config_prod_slo_3_subnets();
+    let xnet_slo_29_subnets = xnet_slo_test::config_prod_slo_29_subnets();
+    m.add_suite(suite(
+        "prod_slo",
+        vec![
+            pot(
                 "xnet_slo_3_subnets_pot",
                 xnet_slo_3_subnets.build(),
                 par(vec![t(
@@ -363,222 +376,200 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     xnet_slo_3_subnets.test(),
                 )]),
             )
-            .with_ttl(Duration::from_secs(10 * 60))],
-        ),
-    );
-
-    let xnet_slo_3_subnets = xnet_slo_test::config_prod_slo_3_subnets();
-    let xnet_slo_29_subnets = xnet_slo_test::config_prod_slo_29_subnets();
-    m.insert(
-        "prod_slo".to_string(),
-        suite(
-            "prod_slo",
-            vec![
-                pot(
-                    "xnet_slo_3_subnets_pot",
-                    xnet_slo_3_subnets.build(),
-                    par(vec![t(
-                        "xnet_slo_3_subnets_test",
-                        xnet_slo_3_subnets.test(),
-                    )]),
-                )
-                .with_ttl(Duration::from_secs(30 * 60)),
-                pot(
-                    "xnet_slo_29_subnets_pot",
-                    xnet_slo_29_subnets.build(),
-                    par(vec![t(
-                        "xnet_slo_29_subnets_test",
-                        xnet_slo_29_subnets.test(),
-                    )]),
-                )
-                .with_ttl(Duration::from_secs(50 * 60)),
-            ],
-        ),
-    );
+            .with_ttl(Duration::from_secs(30 * 60)),
+            pot(
+                "xnet_slo_29_subnets_pot",
+                xnet_slo_29_subnets.build(),
+                par(vec![t(
+                    "xnet_slo_29_subnets_test",
+                    xnet_slo_29_subnets.test(),
+                )]),
+            )
+            .with_ttl(Duration::from_secs(50 * 60)),
+        ],
+    ));
 
     let xnet_nightly_3_subnets = xnet_slo_test::config_nightly_3_subnets();
     let xnet_nightly_29_subnets = xnet_slo_test::config_nightly_29_subnets();
-    m.insert(
-        "nightly".to_string(),
-        suite(
-            "nightly",
-            vec![
-                pot(
-                    "xnet_slo_3_subnets_pot",
-                    xnet_nightly_3_subnets.build(),
-                    par(vec![t(
-                        "xnet_slo_3_subnets_test",
-                        xnet_nightly_3_subnets.test(),
-                    )]),
-                )
-                .with_ttl(Duration::from_secs(30 * 60)),
-                pot(
-                    "xnet_slo_29_subnets_pot",
-                    xnet_nightly_29_subnets.build(),
-                    par(vec![t(
-                        "xnet_slo_29_subnets_test",
-                        xnet_nightly_29_subnets.test(),
-                    )]),
-                )
-                .with_ttl(Duration::from_secs(50 * 60)),
-            ],
-        ),
-    );
+    m.add_suite(suite(
+        "nightly",
+        vec![
+            pot(
+                "xnet_slo_3_subnets_pot",
+                xnet_nightly_3_subnets.build(),
+                par(vec![t(
+                    "xnet_slo_3_subnets_test",
+                    xnet_nightly_3_subnets.test(),
+                )]),
+            )
+            .with_ttl(Duration::from_secs(30 * 60)),
+            pot(
+                "xnet_slo_29_subnets_pot",
+                xnet_nightly_29_subnets.build(),
+                par(vec![t(
+                    "xnet_slo_29_subnets_test",
+                    xnet_nightly_29_subnets.test(),
+                )]),
+            )
+            .with_ttl(Duration::from_secs(50 * 60)),
+        ],
+    ));
 
-    m.insert(
-        "hourly".to_string(),
-        suite(
-            "hourly",
-            vec![
-                pot_with_setup(
-                    "basic_health_pot_single_host",
-                    basic_health_test::config_single_host,
-                    par(vec![t("basic_health_test", basic_health_test)]),
-                ),
-                pot(
-                    "basic_health_pot_multiple_hosts",
-                    basic_health_test::config_multiple_hosts(),
-                    par(vec![t("basic_health_test", basic_health_test)]),
-                ),
-                pot(
-                    "node_reassignment_pot",
-                    node_reassignment_test::config(),
-                    par(vec![t("node_reassignment_test", node_reassignment_test)]),
-                ),
-                pot(
-                    "nns_fault_tolerance_pot",
-                    nns_fault_tolerance_test::config(),
-                    par(vec![t(
-                        "nns_fault_tolerance_test",
-                        nns_fault_tolerance_test::test,
-                    )]),
-                ),
-                pot(
-                    "create_subnet",
-                    create_subnet::config(),
-                    par(vec![t("create_subnet", create_subnet_test)]),
-                ),
-                pot(
-                    "upgrade_reject_pot",
-                    upgrade_reject::config(),
-                    par(vec![t("upgrade_reject_test", upgrade_reject::test)]),
-                ),
-                pot(
-                    "tecdsa_add_nodes_pot",
-                    tecdsa_add_nodes_test::config(),
-                    par(vec![t(
-                        "test_tecdsa_add_nodes",
-                        tecdsa_add_nodes_test::test,
-                    )]),
-                ),
-                pot(
-                    "tecdsa_remove_nodes_pot",
-                    tecdsa_remove_nodes_test::config(),
-                    par(vec![t(
-                        "test_tecdsa_remove_nodes",
-                        tecdsa_remove_nodes_test::test,
-                    )]),
-                ),
-                pot(
-                    "rejoin",
-                    rejoin_test::config(),
-                    par(vec![t("rejoin", rejoin_test)]),
-                ),
-                pot(
-                    "tecdsa_signature_test_pot",
-                    tecdsa_signature_test::enable_ecdsa_signatures_feature(),
-                    par(vec![
-                        t(
-                            "test_threshold_ecdsa_signature",
-                            tecdsa_signature_test::test_threshold_ecdsa_signature,
-                        ),
-                        t(
-                            "test_threshold_ecdsa_signature_from_other_subnet",
-                            tecdsa_signature_test::test_threshold_ecdsa_signature_from_other_subnet,
-                        ),
-                        t(
-                            "test_threshold_ecdsa_signature_fails_without_cycles",
-                            tecdsa_signature_test::test_threshold_ecdsa_signature_fails_without_cycles,
-                        ),
-                    ]),
-                ),
-                pot(
-                    "nns_backup_pot",
-                    nns_backup::config(),
-                    par(vec![t("nns_backup_test", nns_backup::test)]),
-                ).with_ttl(Duration::from_secs(7200)),
-            ],
-        ),
-    );
+    m.add_suite(suite(
+        "hourly",
+        vec![
+            pot_with_setup(
+                "basic_health_pot_single_host",
+                basic_health_test::config_single_host,
+                par(vec![t("basic_health_test", basic_health_test)]),
+            ),
+            pot(
+                "basic_health_pot_multiple_hosts",
+                basic_health_test::config_multiple_hosts(),
+                par(vec![t("basic_health_test", basic_health_test)]),
+            ),
+            pot(
+                "node_reassignment_pot",
+                node_reassignment_test::config(),
+                par(vec![t("node_reassignment_test", node_reassignment_test)]),
+            ),
+            pot(
+                "nns_fault_tolerance_pot",
+                nns_fault_tolerance_test::config(),
+                par(vec![t(
+                    "nns_fault_tolerance_test",
+                    nns_fault_tolerance_test::test,
+                )]),
+            ),
+            pot(
+                "create_subnet",
+                create_subnet::config(),
+                par(vec![t("create_subnet", create_subnet_test)]),
+            ),
+            pot(
+                "upgrade_reject_pot",
+                upgrade_reject::config(),
+                par(vec![t("upgrade_reject_test", upgrade_reject::test)]),
+            ),
+            pot(
+                "tecdsa_add_nodes_pot",
+                tecdsa_add_nodes_test::config(),
+                par(vec![t(
+                    "test_tecdsa_add_nodes",
+                    tecdsa_add_nodes_test::test,
+                )]),
+            ),
+            pot(
+                "tecdsa_remove_nodes_pot",
+                tecdsa_remove_nodes_test::config(),
+                par(vec![t(
+                    "test_tecdsa_remove_nodes",
+                    tecdsa_remove_nodes_test::test,
+                )]),
+            ),
+            pot(
+                "rejoin",
+                rejoin_test::config(),
+                par(vec![t("rejoin", rejoin_test)]),
+            ),
+            pot(
+                "tecdsa_signature_test_pot",
+                tecdsa_signature_test::enable_ecdsa_signatures_feature(),
+                par(vec![
+                    t(
+                        "test_threshold_ecdsa_signature",
+                        tecdsa_signature_test::test_threshold_ecdsa_signature,
+                    ),
+                    t(
+                        "test_threshold_ecdsa_signature_from_other_subnet",
+                        tecdsa_signature_test::test_threshold_ecdsa_signature_from_other_subnet,
+                    ),
+                    t(
+                        "test_threshold_ecdsa_signature_fails_without_cycles",
+                        tecdsa_signature_test::test_threshold_ecdsa_signature_fails_without_cycles,
+                    ),
+                ]),
+            ),
+            pot(
+                "nns_backup_pot",
+                nns_backup::config(),
+                par(vec![t("nns_backup_test", nns_backup::test)]),
+            )
+            .with_ttl(Duration::from_secs(7200)),
+        ],
+    ));
 
     // The tests in this suite require canisters to be build prior to
     // running the tests which is why we separate it out.
-    m.insert(
-        "wasm_generator".to_string(),
-        suite(
-            "wasm_generator",
-            vec![pot(
-                "wasm_generator_pot",
-                wasm_generator_test::config(),
-                par(vec![t("wasm_generator_test", wasm_generator_test::test)]),
-            )
-            .with_ttl(Duration::from_secs(7200))],
-        ),
-    );
+    m.add_suite(suite(
+        "wasm_generator",
+        vec![pot(
+            "wasm_generator_pot",
+            wasm_generator_test::config(),
+            par(vec![t("wasm_generator_test", wasm_generator_test::test)]),
+        )
+        .with_ttl(Duration::from_secs(7200))],
+    ));
 
-    m.insert(
-        "upgrade_compatibility".to_string(),
-        suite(
-            "upgrade_compatibility",
-            vec![pot(
+    m.add_suite(suite(
+        "upgrade_compatibility",
+        vec![pot(
+            "cup_fetching_across_upgrades",
+            cup_fetching_across_upgrades::config(),
+            par(vec![t(
                 "cup_fetching_across_upgrades",
-                cup_fetching_across_upgrades::config(),
-                par(vec![t(
-                    "cup_fetching_across_upgrades",
-                    cup_fetching_across_upgrades::test,
-                )]),
-            )
-            .with_ttl(Duration::from_secs(1800))],
-        ),
-    );
+                cup_fetching_across_upgrades::test,
+            )]),
+        )
+        .with_ttl(Duration::from_secs(1800))],
+    ));
 
-    m.insert(
-        "rosetta".to_string(),
-        suite(
-            "rosetta",
-            vec![pot(
-                "rosetta_pot",
-                rosetta_test::config(),
-                par(vec![t(
-                    "rosetta_test_everything",
-                    rosetta_test::test_everything,
-                )]),
-            )
-            .with_ttl(Duration::from_secs(60 * 12))], // 12 minutes
-        ),
-    );
+    m.add_suite(suite(
+        "rosetta",
+        vec![pot(
+            "rosetta_pot",
+            rosetta_test::config(),
+            par(vec![t(
+                "rosetta_test_everything",
+                rosetta_test::test_everything,
+            )]),
+        )
+        .with_ttl(Duration::from_secs(60 * 12))], // 12 minutes
+    ));
 
-    m.insert(
-        "spec_compliance".to_string(),
-        suite(
-            "spec_compliance",
-            vec![
-                pot(
-                    "spec_compliance_with_system_subnet",
-                    spec_compliance::ic_with_system_subnet(),
-                    seq(vec![t(
-                        "with_system_subnet",
-                        spec_compliance::test_system_subnet,
-                    )]),
-                ),
-                pot(
-                    "spec_compliance_with_app_subnet",
-                    spec_compliance::ic_with_app_subnet(),
-                    seq(vec![t("with_app_subnet", spec_compliance::test_app_subnet)]),
-                ),
-            ],
-        ),
-    );
+    m.add_suite(suite(
+        "spec_compliance",
+        vec![
+            pot(
+                "spec_compliance_with_system_subnet",
+                spec_compliance::ic_with_system_subnet(),
+                seq(vec![t(
+                    "with_system_subnet",
+                    spec_compliance::test_system_subnet,
+                )]),
+            ),
+            pot(
+                "spec_compliance_with_app_subnet",
+                spec_compliance::ic_with_app_subnet(),
+                seq(vec![t("with_app_subnet", spec_compliance::test_app_subnet)]),
+            ),
+        ],
+    ));
 
     m
+}
+
+trait TestCatalog {
+    fn add_suite(&mut self, suite: Suite);
+}
+
+impl TestCatalog for HashMap<String, Suite> {
+    fn add_suite(&mut self, suite: Suite) {
+        use std::collections::hash_map::Entry;
+        if let Entry::Vacant(e) = self.entry(suite.name.clone()) {
+            e.insert(suite);
+        } else {
+            panic!("Redefinition of suite {:?}", suite.name)
+        }
+    }
 }
