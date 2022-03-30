@@ -991,9 +991,12 @@ impl StateManagerImpl {
         );
         let state_layout = StateLayout::new(log.clone(), config.state_root());
 
+        let starting_time = Instant::now();
         let mut states_metadata =
             Self::load_metadata(&log, state_layout.states_metadata().as_path());
+        info!(log, "Loading metadata took {:?}", starting_time.elapsed());
 
+        let starting_time = Instant::now();
         let mut checkpoint_heights = state_layout
             .checkpoint_heights()
             .unwrap_or_else(|err| fatal!(&log, "Failed to retrieve checkpoint heights: {:?}", err));
@@ -1036,13 +1039,27 @@ impl StateManagerImpl {
                 states_metadata.remove(&h);
             }
         }
+        info!(
+            log,
+            "Determining starting height took {:?}",
+            starting_time.elapsed()
+        );
 
+        let starting_time = Instant::now();
         state_layout
             .cleanup_tip()
             .unwrap_or_else(|err| fatal!(&log, "Failed to cleanup old tip {:?}", err));
+        info!(log, "Cleaning up tip took {:?}", starting_time.elapsed());
 
+        let starting_time = Instant::now();
         cleanup_diverged_states(&log, &state_layout);
+        info!(
+            log,
+            "Cleaning up diverged states took {:?}",
+            starting_time.elapsed()
+        );
 
+        let starting_time = Instant::now();
         let (certifications_metadata, compute_manifest_requests) = Self::populate_missing_metadata(
             &log,
             &metrics,
@@ -1050,11 +1067,17 @@ impl StateManagerImpl {
             &mut states_metadata,
             own_subnet_type,
         );
+        info!(
+            log,
+            "Populating missing metadata took {:?}",
+            starting_time.elapsed()
+        );
 
         let latest_state_height = AtomicU64::new(0);
         let latest_certified_height = AtomicU64::new(0);
         let last_checkpoint = checkpoint_heights.last();
 
+        let starting_time = Instant::now();
         let height_and_state = match last_checkpoint {
             Some(height) => {
                 // Set latest state height in metadata to be last checkpoint height
@@ -1074,6 +1097,7 @@ impl StateManagerImpl {
                 ),
             ),
         };
+        info!(log, "Loading checkpoint took {:?}", starting_time.elapsed());
 
         let initial_snapshot = Snapshot {
             height: Self::INITIAL_STATE_HEIGHT,

@@ -279,6 +279,7 @@ async fn run() -> io::Result<()> {
             None
         };
 
+    info!(logger, "Constructing IC stack");
     let (
         crypto,
         state_manager,
@@ -304,6 +305,7 @@ async fn run() -> io::Result<()> {
         cup_with_proto,
         registry_certified_time_reader,
     )?;
+    info!(logger, "Constructed IC stack");
 
     let malicious_behaviour = &config.malicious_behaviour;
 
