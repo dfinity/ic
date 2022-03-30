@@ -1,19 +1,20 @@
 use assert_matches::assert_matches;
 use candid::Encode;
 use dfn_candid::candid;
-use ic_base_types::{PrincipalId, SubnetId};
+use ic_base_types::{subnet_id_try_from_protobuf, PrincipalId, SubnetId};
 use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::{
     itest_helpers::{
         forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
-        set_up_universal_canister,
+        set_up_universal_canister, try_call_via_universal_canister,
     },
     registry::{get_value, invariant_compliant_mutation_as_atomic_req},
 };
-use ic_protobuf::registry::subnet::v1::{
-    EcdsaConfig, GossipAdvertConfig, GossipConfig, SubnetRecord,
+use ic_protobuf::registry::{
+    crypto::v1::EcdsaSigningSubnetList,
+    subnet::v1::{EcdsaConfig, GossipAdvertConfig, GossipConfig, SubnetRecord},
 };
-use ic_registry_keys::make_subnet_record_key;
+use ic_registry_keys::{make_ecdsa_signing_subnet_list_key, make_subnet_record_key};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
 use ic_types::p2p::{
@@ -380,6 +381,8 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
 
 #[test]
 fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
+    const REJECT_MSG: &str = "Canister rejected with message: IC0503: Canister rwlgt-iiaaa-aaaaa-aaaaa-cai trapped explicitly: Panicked at 'Proposal attempts to enable signing for ECDSA key key_id_1 on Subnet bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae,  but the subnet does not hold the given key. A proposal to add that key to the subnet must first be separately submitted.'";
+
     local_test_on_nns_subnet(|runtime| async move {
         let subnet_id = SubnetId::from(
             PrincipalId::from_str(
@@ -441,52 +444,23 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
 
         // update payload message
         let mut payload = UpdateSubnetPayload {
-            subnet_id,
-            max_ingress_bytes_per_message: None,
-            max_ingress_messages_per_block: None,
-            max_block_payload_size: None,
-            unit_delay_millis: None,
-            initial_notary_delay_millis: None,
-            dkg_interval_length: None,
-            dkg_dealings_per_block: None,
-            max_artifact_streams_per_peer: None,
-            max_chunk_wait_ms: None,
-            max_duplicity: None,
-            max_chunk_size: None,
-            receive_check_cache_size: None,
-            pfn_evaluation_period_ms: None,
-            registry_poll_period_ms: None,
-            retransmission_request_ms: None,
-            advert_best_effort_percentage: None,
-            set_gossip_config_to_default: false,
-            start_as_nns: None,
-            subnet_type: None,
-            is_halted: None,
-            max_instructions_per_message: None,
-            max_instructions_per_round: None,
-            max_instructions_per_install_code: None,
-            features: None,
-            max_number_of_canisters: None,
-            ssh_readonly_access: None,
-            ssh_backup_access: None,
-            // These are the fields being tested
-            // These should fail to change the record
             ecdsa_config: Some(EcdsaConfig {
                 quadruples_to_create_in_advance: 10,
                 key_ids: vec!["key_id_1".to_string()],
             }),
             ecdsa_key_signing_enable: Some(vec!["key_id_1".to_string()]),
+            ..empty_update_subnet_payload(subnet_id)
         };
 
-        assert!(
-            !forward_call_via_universal_canister(
-                &fake_governance_canister,
-                &registry,
-                "update_subnet",
-                Encode!(&payload).unwrap()
-            )
-            .await
-        );
+        assert!(try_call_via_universal_canister(
+            &fake_governance_canister,
+            &registry,
+            "update_subnet",
+            Encode!(&payload).unwrap()
+        )
+        .await
+        .unwrap_err()
+        .starts_with(REJECT_MSG));
 
         let new_subnet_record =
             get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
@@ -497,49 +471,20 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
 
         // Change one field at a time in this payload
         payload = UpdateSubnetPayload {
-            subnet_id,
-            max_ingress_bytes_per_message: None,
-            max_ingress_messages_per_block: None,
-            max_block_payload_size: None,
-            unit_delay_millis: None,
-            initial_notary_delay_millis: None,
-            dkg_interval_length: None,
-            dkg_dealings_per_block: None,
-            max_artifact_streams_per_peer: None,
-            max_chunk_wait_ms: None,
-            max_duplicity: None,
-            max_chunk_size: None,
-            receive_check_cache_size: None,
-            pfn_evaluation_period_ms: None,
-            registry_poll_period_ms: None,
-            retransmission_request_ms: None,
-            advert_best_effort_percentage: None,
-            set_gossip_config_to_default: false,
-            start_as_nns: None,
-            subnet_type: None,
-            is_halted: None,
-            max_instructions_per_message: None,
-            max_instructions_per_round: None,
-            max_instructions_per_install_code: None,
-            features: None,
-            max_number_of_canisters: None,
-            ssh_readonly_access: None,
-            ssh_backup_access: None,
-            // These are the fields being tested
-            // These should again fail to change the record
             ecdsa_config: None,
             ecdsa_key_signing_enable: Some(vec!["key_id_1".to_string()]),
+            ..empty_update_subnet_payload(subnet_id)
         };
 
-        assert!(
-            !forward_call_via_universal_canister(
-                &fake_governance_canister,
-                &registry,
-                "update_subnet",
-                Encode!(&payload).unwrap()
-            )
-            .await
-        );
+        assert!(try_call_via_universal_canister(
+            &fake_governance_canister,
+            &registry,
+            "update_subnet",
+            Encode!(&payload).unwrap()
+        )
+        .await
+        .unwrap_err()
+        .starts_with(REJECT_MSG));
 
         let new_subnet_record =
             get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
@@ -550,50 +495,22 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
 
         // Trying again, this time in the correct order
         payload = UpdateSubnetPayload {
-            subnet_id,
-            max_ingress_bytes_per_message: None,
-            max_ingress_messages_per_block: None,
-            max_block_payload_size: None,
-            unit_delay_millis: None,
-            initial_notary_delay_millis: None,
-            dkg_interval_length: None,
-            dkg_dealings_per_block: None,
-            max_artifact_streams_per_peer: None,
-            max_chunk_wait_ms: None,
-            max_duplicity: None,
-            max_chunk_size: None,
-            receive_check_cache_size: None,
-            pfn_evaluation_period_ms: None,
-            registry_poll_period_ms: None,
-            retransmission_request_ms: None,
-            advert_best_effort_percentage: None,
-            set_gossip_config_to_default: false,
-            start_as_nns: None,
-            subnet_type: None,
-            is_halted: None,
-            max_instructions_per_message: None,
-            max_instructions_per_round: None,
-            max_instructions_per_install_code: None,
-            features: None,
-            max_number_of_canisters: None,
-            ssh_readonly_access: None,
-            ssh_backup_access: None,
             ecdsa_config: Some(EcdsaConfig {
                 quadruples_to_create_in_advance: 10,
                 key_ids: vec!["key_id_1".to_string()],
             }),
             ecdsa_key_signing_enable: None,
+            ..empty_update_subnet_payload(subnet_id)
         };
 
-        assert!(
-            forward_call_via_universal_canister(
-                &fake_governance_canister,
-                &registry,
-                "update_subnet",
-                Encode!(&payload).unwrap()
-            )
-            .await
-        );
+        assert!(try_call_via_universal_canister(
+            &fake_governance_canister,
+            &registry,
+            "update_subnet",
+            Encode!(&payload).unwrap()
+        )
+        .await
+        .is_ok());
 
         let new_subnet_record =
             get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
@@ -611,6 +528,74 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
             }
         );
 
+        // This update should enable signing on our subnet for the given key.
+        payload = UpdateSubnetPayload {
+            ecdsa_config: Some(EcdsaConfig {
+                quadruples_to_create_in_advance: 10,
+                key_ids: vec!["key_id_1".to_string()],
+            }),
+            ecdsa_key_signing_enable: Some(vec!["key_id_1".to_string()]),
+            ..empty_update_subnet_payload(subnet_id)
+        };
+
+        assert!(try_call_via_universal_canister(
+            &fake_governance_canister,
+            &registry,
+            "update_subnet",
+            Encode!(&payload).unwrap()
+        )
+        .await
+        .is_ok());
+
+        let new_signing_subnet_list: Vec<_> = get_value::<EcdsaSigningSubnetList>(
+            &registry,
+            make_ecdsa_signing_subnet_list_key("key_id_1").as_bytes(),
+        )
+        .await
+        .subnets
+        .into_iter()
+        .map(|subnet_bytes| subnet_id_try_from_protobuf(subnet_bytes).unwrap())
+        .collect();
+
+        // The subnet is now responsible for signing with the key.
+        assert_eq!(new_signing_subnet_list, vec![subnet_id]);
+
         Ok(())
     });
+}
+
+/// Returns an update to the given subnet that doesn't change any fields.
+fn empty_update_subnet_payload(subnet_id: SubnetId) -> UpdateSubnetPayload {
+    UpdateSubnetPayload {
+        subnet_id,
+        max_ingress_bytes_per_message: None,
+        max_ingress_messages_per_block: None,
+        max_block_payload_size: None,
+        unit_delay_millis: None,
+        initial_notary_delay_millis: None,
+        dkg_interval_length: None,
+        dkg_dealings_per_block: None,
+        max_artifact_streams_per_peer: None,
+        max_chunk_wait_ms: None,
+        max_duplicity: None,
+        max_chunk_size: None,
+        receive_check_cache_size: None,
+        pfn_evaluation_period_ms: None,
+        registry_poll_period_ms: None,
+        retransmission_request_ms: None,
+        advert_best_effort_percentage: None,
+        set_gossip_config_to_default: false,
+        start_as_nns: None,
+        subnet_type: None,
+        is_halted: None,
+        max_instructions_per_message: None,
+        max_instructions_per_round: None,
+        max_instructions_per_install_code: None,
+        features: None,
+        max_number_of_canisters: None,
+        ssh_readonly_access: None,
+        ssh_backup_access: None,
+        ecdsa_config: None,
+        ecdsa_key_signing_enable: None,
+    }
 }
