@@ -72,6 +72,22 @@ pub struct ValidNodePublicKeys {
     tls_certificate: X509PublicKeyCert,
 }
 
+/// Validated iDKG dealing encryption public key of a node.
+///
+/// Instances have successfully passed the validity check and are immutable,
+/// i.e., the contained public key material is guaranteed to be valid.
+///
+/// Use `try_from` to create an instance from an unvalidated public key.
+///
+/// Note: this struct will only exist temporarily while not all nodes have an
+/// iDKG dealing encryption key yet. Once all nodes have such a key,
+/// individually validating iDKG dealing encryption keys will become obsolete
+/// and this struct will be removed.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ValidIDkgDealingEncryptionPublicKey {
+    idkg_dealing_encryption_pubkey: PublicKey,
+}
+
 impl ValidNodePublicKeys {
     /// Determines if the given node public key material is valid.
     ///
@@ -161,6 +177,26 @@ impl ValidNodePublicKeys {
     /// Returns the validated TLS certificate.
     pub fn tls_certificate(&self) -> &X509PublicKeyCert {
         &self.tls_certificate
+    }
+}
+
+impl ValidIDkgDealingEncryptionPublicKey {
+    /// Determines if the given iDKG dealing encryption public key is valid.
+    ///
+    /// Returns a `ValidIDkgDealingEncryptionPublicKey` iff the `key` is valid.
+    /// After successful validation, callers should only work with the returned
+    /// instance in their API so as to avoid confusion about whether the key
+    /// is validated or not.
+    pub fn try_from(key: PublicKey) -> Result<Self, KeyValidationError> {
+        validate_idkg_dealing_encryption_key(&Some(key.clone()))?;
+        Ok(Self {
+            idkg_dealing_encryption_pubkey: key,
+        })
+    }
+
+    /// Returns the validated I-DKG dealing encryption key.
+    pub fn get(&self) -> &PublicKey {
+        &self.idkg_dealing_encryption_pubkey
     }
 }
 

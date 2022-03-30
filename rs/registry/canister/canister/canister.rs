@@ -39,6 +39,7 @@ use registry_canister::{
         do_delete_subnet::DeleteSubnetPayload,
         do_recover_subnet::RecoverSubnetPayload,
         do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
+        do_update_node_directly::UpdateNodeDirectlyPayload,
         do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
         do_update_node_operator_config_directly::UpdateNodeOperatorConfigDirectlyPayload,
         do_update_subnet::UpdateSubnetPayload,
@@ -676,6 +677,24 @@ fn add_node() {
 #[candid_method(update, rename = "add_node")]
 fn add_node_(payload: AddNodePayload) -> Result<NodeId, String> {
     let result = registry_mut().do_add_node(payload);
+    recertify_registry();
+    result
+}
+
+#[export_name = "canister_update update_node_directly"]
+fn update_node_directly() {
+    // This method can be called by anyone
+    println!(
+        "{}call: update_node_directly from: {}",
+        LOG_PREFIX,
+        dfn_core::api::caller()
+    );
+    over_may_reject(candid_one, update_node_directly_);
+}
+
+#[candid_method(update, rename = "update_node_directly")]
+fn update_node_directly_(payload: UpdateNodeDirectlyPayload) -> Result<(), String> {
+    let result = registry_mut().do_update_node_directly(payload);
     recertify_registry();
     result
 }
