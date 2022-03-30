@@ -52,9 +52,9 @@ pub trait MutableEcdsaPoolSection: Send + Sync {
     /// Adds the message to the pool.
     fn insert(&mut self, message: EcdsaMessage);
 
-    /// Looks up and removes the specified message from the pool. If found,
-    /// the removed message is returned.
-    fn remove(&mut self, id: &EcdsaMessageId) -> Option<EcdsaMessage>;
+    /// Looks up and removes the specified message from the pool.
+    /// Returns true if the message was found.
+    fn remove(&mut self, id: &EcdsaMessageId) -> bool;
 
     /// Get the immutable handle.
     fn as_pool_section(&self) -> &dyn EcdsaPoolSection;

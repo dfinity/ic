@@ -864,7 +864,7 @@ mod tests {
                 state_manager,
                 ..
             } = dependencies_with_subnet_params(
-                pool_config,
+                pool_config.clone(),
                 subnet_test_id(0),
                 vec![
                     (
@@ -887,6 +887,7 @@ mod tests {
             )));
             let ecdsa_pool = Arc::new(RwLock::new(
                 ic_artifact_pool::ecdsa_pool::EcdsaPoolImpl::new(
+                    pool_config,
                     no_op_logger(),
                     MetricsRegistry::new(),
                 ),

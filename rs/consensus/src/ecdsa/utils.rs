@@ -424,7 +424,7 @@ pub(crate) mod test_utils {
             registry: _,
             crypto,
             ..
-        } = dependencies(pool_config, 1);
+        } = dependencies(pool_config.clone(), 1);
 
         let pre_signer = EcdsaPreSignerImpl::new(
             NODE_1,
@@ -434,7 +434,7 @@ pub(crate) mod test_utils {
             logger.clone(),
             MaliciousBehaviour::new(false).malicious_flags,
         );
-        let ecdsa_pool = EcdsaPoolImpl::new(logger, metrics_registry);
+        let ecdsa_pool = EcdsaPoolImpl::new(pool_config, logger, metrics_registry);
 
         (ecdsa_pool, pre_signer)
     }
@@ -452,7 +452,7 @@ pub(crate) mod test_utils {
             registry: _,
             crypto,
             ..
-        } = dependencies(pool_config, 1);
+        } = dependencies(pool_config.clone(), 1);
 
         let signer = EcdsaSignerImpl::new(
             NODE_1,
@@ -461,7 +461,7 @@ pub(crate) mod test_utils {
             metrics_registry.clone(),
             logger.clone(),
         );
-        let ecdsa_pool = EcdsaPoolImpl::new(logger, metrics_registry);
+        let ecdsa_pool = EcdsaPoolImpl::new(pool_config, logger, metrics_registry);
 
         (ecdsa_pool, signer)
     }
@@ -479,7 +479,7 @@ pub(crate) mod test_utils {
             registry: _,
             crypto,
             ..
-        } = dependencies(pool_config, 1);
+        } = dependencies(pool_config.clone(), 1);
 
         let complaint_handler = EcdsaComplaintHandlerImpl::new(
             NODE_1,
@@ -488,7 +488,7 @@ pub(crate) mod test_utils {
             metrics_registry.clone(),
             logger.clone(),
         );
-        let ecdsa_pool = EcdsaPoolImpl::new(logger, metrics_registry);
+        let ecdsa_pool = EcdsaPoolImpl::new(pool_config, logger, metrics_registry);
 
         (ecdsa_pool, complaint_handler)
     }

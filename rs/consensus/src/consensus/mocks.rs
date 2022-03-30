@@ -91,6 +91,7 @@ pub fn dependencies_with_subnet_records_with_raw_state_manager(
         ic_metrics::MetricsRegistry::new(),
     )));
     let ecdsa_pool = Arc::new(RwLock::new(EcdsaPoolImpl::new(
+        pool_config.clone(),
         ic_logger::replica_logger::no_op_logger(),
         ic_metrics::MetricsRegistry::new(),
     )));

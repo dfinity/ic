@@ -164,12 +164,13 @@ impl ConsensusDependencies {
         let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new_from_cup_without_bytes(
             replica_config.subnet_id,
             cup,
-            pool_config,
+            pool_config.clone(),
             metrics_registry.clone(),
             no_op_logger(),
         )));
         let dkg_pool = dkg_pool::DkgPoolImpl::new(metrics_registry.clone());
-        let ecdsa_pool = ecdsa_pool::EcdsaPoolImpl::new(no_op_logger(), metrics_registry.clone());
+        let ecdsa_pool =
+            ecdsa_pool::EcdsaPoolImpl::new(pool_config, no_op_logger(), metrics_registry.clone());
         let xnet_payload_builder = FakeXNetPayloadBuilder::new();
         ConsensusDependencies {
             registry_client: Arc::clone(&registry_client),
