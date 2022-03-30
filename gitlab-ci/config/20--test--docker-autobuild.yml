@@ -30,17 +30,9 @@ docker-autobuild-protected:
       if (docker images | grep "$CI_IMAGE_NAME" | grep -q "$CI_IMAGE_TAG"); then
         # we have docker image present
         echo "Image '$CI_IMAGE_NAME:$CI_IMAGE_TAG' already present!"
-      elif [ "$EXISTS" == "true" ]; then
-        # we don't have docker image but it's present on dockerhub
-        docker pull dfinity/ic-build-nix:"$TAG"
-        docker pull dfinity/ic-build:"$TAG"
-
-        SHA1ICBUILD=$(./gitlab-ci/src/docker_image_check/docker_sha.py Dockerfile)
-        SHA1ICBUILDNIX=$(./gitlab-ci/src/docker_image_check/docker_sha.py Dockerfile.withnix)
-        docker tag dfinity/ic-build:"$TAG" registry.gitlab.com/dfinity-lab/core/docker/ic-build:"$TAG"-"$SHA1ICBUILD"
-        docker tag dfinity/ic-build-nix:"$TAG" registry.gitlab.com/dfinity-lab/core/docker/ic-build-nix:"$TAG"-"$SHA1ICBUILDNIX"
       else
-        # no image on dockerhub, neither on protected runner - first time we build it on protected runner
+        # no image on this protected runner
+        # build it and push it to dockerhub
         echo -e "\e[0Ksection_start:$(date +%s):docker_build_script[collapsed=true]\r\e[0KClick here to see the docker_build_script"
         ./gitlab-ci/docker/docker-build-local-image.sh --nix
         echo -e "\e[0Ksection_end:$(date +%s):docker_build_script\r\e[0K"
@@ -54,7 +46,7 @@ docker-autobuild-protected:
         PUSHED=true
       fi 
 
-      # case where pushing docker image on 1st try fails
+      # case where pushing docker image on 1st try failed
       if [ "$EXISTS" != "true" ] && [ "${PUSHED:-}" != "true" ]; then
         docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
         docker push dfinity/ic-build:"$TAG"
