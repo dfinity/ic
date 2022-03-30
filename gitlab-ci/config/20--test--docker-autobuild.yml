@@ -15,19 +15,43 @@ docker-autobuild-protected:
 
       nix-collect-garbage -d
 
+      # image used in this revision
       cd gitlab-ci/config
-      IMAGE=$(grep registry.gitlab.com 00--common.yml | awk '{ print $2 }' | tr -d '"')
-      IMAGE_NAME=$(echo "$IMAGE" | cut -d':' -f1)
-      IMAGE_TAG=$(echo "$IMAGE" | cut -d':' -f2)
+      CI_IMAGE=$(grep registry.gitlab.com 00--common.yml | awk '{ print $2 }' | tr -d '"')
+      CI_IMAGE_NAME=$(echo "$CI_IMAGE" | cut -d':' -f1)
+      CI_IMAGE_TAG=$(echo "$CI_IMAGE" | cut -d':' -f2)
       cd -
+      # short tag
+      TAG=$(cat ./gitlab-ci/docker/TAG)
 
-      if (docker images | grep "$IMAGE_NAME" | grep -q "$IMAGE_TAG"); then
-        echo "Image $IMAGE_NAME already present!"
+      # check if we have it in dockerhub
+      EXISTS=$(curl -s https://hub.docker.com/v2/repositories/dfinity/ic-build/tags | jq -r "[.results? | .[]? | .name == \"$TAG\"] | any")
+
+      if (docker images | grep "$CI_IMAGE_NAME" | grep -q "$CI_IMAGE_TAG"); then
+        # we have docker image present
+        echo "Image '$CI_IMAGE_NAME:$CI_IMAGE_TAG' already present!"
       else
+        # no image on this protected runner
+        # build it and push it to dockerhub
         echo -e "\e[0Ksection_start:$(date +%s):docker_build_script[collapsed=true]\r\e[0KClick here to see the docker_build_script"
         ./gitlab-ci/docker/docker-build-local-image.sh --nix
         echo -e "\e[0Ksection_end:$(date +%s):docker_build_script\r\e[0K"
+
+        # push new image to dockerhub
+        docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
+        docker push dfinity/ic-build:"$TAG"
+        docker push dfinity/ic-build:latest
+        docker push dfinity/ic-build-nix:"$TAG"
+        docker push dfinity/ic-build-nix:latest
+        PUSHED=true
       fi 
+
+      # case where pushing docker image on 1st try failed
+      if [ "$EXISTS" != "true" ] && [ "${PUSHED:-}" != "true" ]; then
+        docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
+        docker push dfinity/ic-build:"$TAG"
+        docker push dfinity/ic-build-nix:"$TAG"
+      fi
 
       echo -e "\e[0Ksection_start:$(date +%s):sys_info[collapsed=true]\r\e[0KClick here to see system info"
       echo "SYS-INFO UPTIME"
