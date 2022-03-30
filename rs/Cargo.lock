@@ -6324,6 +6324,7 @@ dependencies = [
  "ic-config",
  "ic-crypto-sha",
  "ic-nervous-system-common",
+ "ic-nervous-system-root",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
@@ -6370,6 +6371,7 @@ dependencies = [
  "ic-types 0.8.0",
  "ledger-canister",
  "on_wire",
+ "tokio",
 ]
 
 [[package]]

@@ -18,14 +18,13 @@ use crate::pb::v1::{
         claim_or_refresh::{By, MemoAndController},
         ClaimOrRefresh,
     },
-    neuron::DissolveState,
-    neuron::Followees,
+    neuron::{DissolveState, Followees},
     proposal, Ballot, DefaultFollowees, Empty, GetNeuron, GetNeuronResponse, GetProposal,
     GetProposalResponse, Governance as GovernanceProto, GovernanceError, ListNeurons,
     ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron, ManageNeuronResponse,
     NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
     NeuronPermissionType, Proposal, ProposalData, ProposalDecisionStatus, ProposalId,
-    ProposalRewardStatus, RewardEvent, Tally, Vote,
+    ProposalRewardStatus, RewardEvent, Tally, UpgradeSnsControlledCanister, Vote,
 };
 use ic_base_types::PrincipalId;
 use ledger_canister::{AccountIdentifier, Subaccount};
@@ -45,9 +44,13 @@ use crate::proposal::{
     PROPOSAL_URL_CHAR_MAX,
 };
 use crate::types::{Environment, HeapGrowthPotential, LedgerUpdateLock};
-use dfn_core::api::{id, spawn};
-use ic_nervous_system_common::ledger;
-use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
+use candid::Encode;
+use dfn_core::api::{id, spawn, CanisterId};
+use ic_nervous_system_common::{
+    ledger::{self, Ledger},
+    NervousSystemError,
+};
+use ic_nervous_system_root::ChangeCanisterProposal;
 use ledger_canister::Tokens;
 
 // When `list_proposals` is called, for each proposal if a payload exceeds
@@ -250,26 +253,101 @@ impl GovernanceProto {
         index
     }
 
-    // Returns whether the proposed default following is valid by making
-    // sure that the referred to neurons exist.
-    fn validate_default_followees(
-        &self,
-        neurons: &BTreeMap<String, Neuron>,
-        proposed_followees: &HashMap<u64, Followees>,
-    ) -> Result<(), GovernanceError> {
-        for followees in proposed_followees.values() {
-            for followee in &followees.followees {
-                if !neurons.contains_key(&followee.to_string()) {
-                    return Err(GovernanceError::new_with_message(
-                        ErrorType::NotFound,
-                        "One or more of the neurons proposed to become\
-                         the new default followees don't exist.",
-                    ));
-                }
+    pub fn root_canister_id_or_panic(&self) -> CanisterId {
+        CanisterId::new(self.root_canister_id.expect("No root_canister_id.")).unwrap()
+    }
+
+    pub fn ledger_canister_id_or_panic(&self) -> CanisterId {
+        CanisterId::new(self.ledger_canister_id.expect("No ledger_canister_id.")).unwrap()
+    }
+}
+
+pub struct ValidGovernanceProto(GovernanceProto);
+
+impl ValidGovernanceProto {
+    /// Convert GovernanceProto into Self.
+    ///
+    /// If base is not valid, then Err is returned with an explanation.
+    pub fn new(base: GovernanceProto) -> Result<Self, String> {
+        Self::validate_required_field("root_canister_id", &base.root_canister_id)?;
+        Self::validate_required_field("ledger_canister_id", &base.ledger_canister_id)?;
+
+        let parameters = Self::validate_required_field("parameters", &base.parameters)?;
+        parameters.validate()?;
+
+        validate_default_followees(&base)?;
+
+        Ok(Self(base))
+    }
+
+    pub fn summary(&self) -> String {
+        let inner = &self.0;
+
+        format!(
+            "genesis_timestamp_seconds: {}, neuron count: {} parameters: {:?}",
+            inner.genesis_timestamp_seconds,
+            inner.neurons.len(),
+            inner.parameters,
+        )
+    }
+
+    /// Unwrap self. c.f. Box::into_inner.
+    fn into_inner(self) -> GovernanceProto {
+        self.0
+    }
+
+    pub fn ledger_canister_id(&self) -> CanisterId {
+        self.0.ledger_canister_id_or_panic()
+    }
+
+    /// Convert field_value into a Result.
+    ///
+    /// If field_value is None, returns Err with an inner value describing what's
+    /// wrong with the field value (i.e. that it is None). This description
+    /// mentions the name of the field in GovernanceProto.
+    pub fn validate_required_field<'a, Inner>(
+        field_name: &str,
+        field_value: &'a Option<Inner>,
+    ) -> Result<&'a Inner, String> {
+        field_value
+            .as_ref()
+            .ok_or_else(|| format!("GovernanceProto {} field must be populated.", field_name))
+    }
+}
+
+/// Require that the neurons identified in base.parameters.default_followeees
+/// exist (i.e. be in base.neurons). default_followees can be None.
+///
+/// Assume that base.parameters is Some.
+///
+/// The String in returned Err explains why base is invalid.
+pub fn validate_default_followees(base: &GovernanceProto) -> Result<(), String> {
+    let action_id_to_followee = match &base
+        .parameters
+        .as_ref()
+        .expect("GovernanceProto.parameters is not populated.")
+        .default_followees
+    {
+        None => return Ok(()),
+        Some(default_followees) => &default_followees.followees,
+    };
+
+    let neuron_id_to_neuron = &base.neurons;
+
+    // Iterate over neurons in default_followees.
+    for followees in action_id_to_followee.values() {
+        for followee in &followees.followees {
+            // followee must be a known neuron.
+            if !neuron_id_to_neuron.contains_key(&followee.to_string()) {
+                return Err(format!(
+                    "Unknown neuron listed as a default followee: {} neuron_id_to_neurons: {:?}",
+                    followee, neuron_id_to_neuron,
+                ));
             }
         }
-        Ok(())
     }
+
+    Ok(())
 }
 
 /// The `Governance` canister implements the full public interface of the
@@ -324,10 +402,12 @@ pub fn neuron_account_id(subaccount: Subaccount) -> AccountIdentifier {
 
 impl Governance {
     pub fn new(
-        mut proto: GovernanceProto,
+        proto: ValidGovernanceProto,
         env: Box<dyn Environment>,
         ledger: Box<dyn Ledger>,
     ) -> Self {
+        let mut proto = proto.into_inner();
+
         if proto.genesis_timestamp_seconds == 0 {
             proto.genesis_timestamp_seconds = env.now();
         }
@@ -357,31 +437,6 @@ impl Governance {
         gov.initialize_indices();
 
         gov
-    }
-
-    /// Validates that the underlying protobuf is well formed.
-    pub fn validate(&self) -> Result<(), GovernanceError> {
-        if self.proto.parameters.is_none() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::NotFound,
-                "NervousSystemParameters was not found",
-            ));
-        }
-
-        let default_followee = &self
-            .proto
-            .parameters
-            .as_ref()
-            .expect("Governance must have NervousSystemParameters.")
-            .default_followees
-            .clone()
-            .unwrap_or_else(|| DefaultFollowees::default())
-            .followees;
-
-        self.proto
-            .validate_default_followees(&self.proto.neurons, default_followee)?;
-
-        Ok(())
     }
 
     /// Initializes the indices.
@@ -1458,7 +1513,13 @@ impl Governance {
     }
 
     /// Starts execution of the given proposal in the background.
-    fn start_proposal_execution(&mut self, pid: u64, action: &proposal::Action) {
+    ///
+    /// # Arguments
+    /// * `proposal_id` - proposal ID.
+    /// * `action` - What to do (basically, function and parameters to be applied). One of the
+    ///   possibilities listed under oneof action in message Proposal (defined in
+    ///   governance.proto).
+    fn start_proposal_execution(&mut self, proposal_id: u64, action: &proposal::Action) {
         // `perform_action` is an async method of &mut self.
         //
         // Starting it and letting it run in the background requires knowing that
@@ -1473,29 +1534,38 @@ impl Governance {
         // - in prod, "self" in a reference to the GOVERNANCE static variable, which is
         //   initialized only once (in canister_init or canister_post_upgrade)
         let governance: &'static mut Governance = unsafe { std::mem::transmute(self) };
-        spawn(governance.perform_action(pid, action.clone()));
+        spawn(governance.perform_action(proposal_id, action.clone()));
     }
 
     async fn perform_action(&mut self, pid: u64, action: proposal::Action) {
-        match action {
+        let result = match action {
             // A motion is not executed, just recorded for posterity.
-            proposal::Action::Motion(_) => {
-                self.set_proposal_execution_status(pid, Ok(()));
-            }
+            proposal::Action::Motion(_) => Ok(()),
+
             proposal::Action::ManageNervousSystemParameters(params) => {
-                let result = self.perform_manage_nervous_system_parameters_action(params);
-                self.set_proposal_execution_status(pid, result);
+                self.perform_manage_nervous_system_parameters_action(params)
             }
-            proposal::Action::UpgradeSnsControlledCanister(_) => {
-                // TODO
+            proposal::Action::UpgradeSnsControlledCanister(params) => {
+                let result = self.perform_upgrade_sns_controlled_canister(pid, params);
+
+                if result.is_ok() {
+                    // We return early because the final result is not ready
+                    // yet. Rather, perform_upgrade_sns_controlled_canister
+                    // ensures that set_proposal_execution_status gets called
+                    // later.
+                    return;
+                }
+
+                result
             }
             proposal::Action::ExecuteNervousSystemFunction(_) => {
-                // TODO
+                todo!();
             }
             proposal::Action::Unspecified(_) => {
-                // throw an error
+                unimplemented!();
             }
-        }
+        };
+        self.set_proposal_execution_status(pid, result);
     }
 
     /// Execute a ManageNervousSystemParameters proposal by updating Governance's NervousSystemParameters
@@ -1527,6 +1597,48 @@ impl Governance {
                 ),
             )),
         }
+    }
+
+    fn perform_upgrade_sns_controlled_canister(
+        &mut self,
+        proposal_id: u64,
+        upgrade: UpgradeSnsControlledCanister,
+    ) -> Result<(), GovernanceError> {
+        // Serialize upgrade.
+        let payload = {
+            // Hard-coding this to true is safer in that it gives the canister a
+            // chance to receive responses to requests that it has initiated.
+            // Without this, responses could arrive to the upgraded canister,
+            // which it probably doesn't know how to handle.  For more details,
+            // check out the comments above the (definition of the)
+            // stop_before_installing field in CanisterInstallMode.
+            let stop_before_installing = true;
+
+            // The other values of this type (Install and Reinstall) are never
+            // appropriate for us.
+            let mode = ic_base_types::CanisterInstallMode::Upgrade;
+
+            let change_canister_arg = ChangeCanisterProposal::new(
+                stop_before_installing,
+                mode,
+                CanisterId::new(
+                    upgrade
+                        .canister_id
+                        .expect("UpgradeSnsControlledCanister must have canister_id."),
+                )
+                .unwrap(),
+            )
+            .with_wasm(upgrade.new_canister_wasm);
+
+            candid::Encode!(&change_canister_arg).unwrap()
+        };
+
+        self.env.call_canister(
+            proposal_id,
+            self.proto.root_canister_id_or_panic(),
+            "change_canister",
+            payload,
+        )
     }
 
     fn nervous_system_parameters(&self) -> &NervousSystemParameters {
@@ -2901,6 +3013,81 @@ impl TimeWarp {
             timestamp_s - ((-self.delta_s) as u64)
         }
     }
+}
+
+#[cfg(test)]
+fn basic_governance_proto() -> GovernanceProto {
+    // Test subject.
+    let result = GovernanceProto {
+        root_canister_id: Some(PrincipalId::try_from(vec![42_u8]).unwrap()),
+        ledger_canister_id: Some(PrincipalId::try_from(vec![99_u8]).unwrap()),
+        parameters: Some(NervousSystemParameters::with_default_values()),
+        ..Default::default()
+    };
+
+    ValidGovernanceProto::new(result)
+        .expect("We have not tried to corrupt the test subject yet but it is already invalid???")
+        .into_inner()
+}
+
+#[test]
+fn test_governance_proto_must_have_root_canister_ids() {
+    let mut proto = basic_governance_proto();
+    proto.root_canister_id = None;
+    assert!(ValidGovernanceProto::new(proto).is_err());
+}
+
+#[test]
+fn test_governance_proto_must_have_ledger_canister_ids() {
+    let mut proto = basic_governance_proto();
+    proto.ledger_canister_id = None;
+    assert!(ValidGovernanceProto::new(proto).is_err());
+}
+
+#[test]
+fn test_governance_proto_must_have_parameters() {
+    let mut proto = basic_governance_proto();
+    proto.parameters = None;
+    assert!(ValidGovernanceProto::new(proto).is_err());
+}
+
+#[test]
+fn test_governance_proto_default_followees_must_exist() {
+    let mut proto = basic_governance_proto();
+
+    let neuron_id = NeuronId { id: "A".into() };
+
+    // Populate default_followees with a neuron that does not exist yet.
+    let mut action_id_to_followees = HashMap::new();
+    action_id_to_followees.insert(
+        1, // action ID.
+        Followees {
+            followees: vec![neuron_id.clone()],
+        },
+    );
+    proto.parameters.as_mut().unwrap().default_followees = Some(DefaultFollowees {
+        followees: action_id_to_followees,
+    });
+
+    // assert that proto is not valid, due to referring to an unknown neuron.
+    assert!(ValidGovernanceProto::new(proto.clone()).is_err());
+
+    // Create the neuron so that proto is now valid.
+    proto.neurons.insert(
+        neuron_id.to_string(),
+        Neuron {
+            id: Some(neuron_id),
+            ..Default::default()
+        },
+    );
+
+    // Assert that proto has become valid.
+    ValidGovernanceProto::new(proto.clone()).unwrap_or_else(|e| {
+        panic!(
+            "Still invalid even after adding the required neuron: {:?}: {}",
+            proto, e
+        )
+    });
 }
 
 #[test]

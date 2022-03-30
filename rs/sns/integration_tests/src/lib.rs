@@ -13,13 +13,16 @@
 mod ledger;
 
 #[cfg(test)]
+mod nervous_system_parameters;
+
+#[cfg(test)]
 mod neuron;
 
 #[cfg(test)]
 mod proposals;
 
 #[cfg(test)]
-mod nervous_system_parameters;
+mod root;
 
 #[cfg(test)]
-mod root;
+mod upgrade_canister;

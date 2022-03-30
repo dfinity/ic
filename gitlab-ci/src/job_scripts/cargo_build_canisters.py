@@ -53,6 +53,7 @@ CANISTERS_MAX_SIZE_IN_BYTES = {
     "registry-canister.wasm": 3_500_000,
     "root-canister.wasm": 1_500_000,
     "sns-governance-canister.wasm": 1_500_000,
+    "sns-governance-canister_test.wasm": 1_500_000,
     "sns-root-canister.wasm": 1_500_000,
 }
 
@@ -146,6 +147,7 @@ def run(artifacts_dir=default_artifacts_dir):
 
         _build_with_features("ledger-canister", "notify-method")
         _build_with_features("governance-canister", "test")
+        _build_with_features("sns-governance-canister", "test")
 
         sh(
             "cargo",
@@ -163,7 +165,11 @@ def run(artifacts_dir=default_artifacts_dir):
 
     logging.info("Building of Wasm canisters finished")
 
-    for canister in ["ledger-canister_notify-method", "governance-canister_test"] + CANISTERS:
+    for canister in [
+        "ledger-canister_notify-method",
+        "governance-canister_test",
+        "sns-governance-canister_test",
+    ] + CANISTERS:
         _optimize_wasm(artifacts_dir, canister)
 
     for can, filepath in CANISTER_COPY_LIST.items():

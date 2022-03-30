@@ -115,7 +115,7 @@ fn main() {
         .join(" "),
     );
     config.type_attribute(
-        "ic_sns_governance.pb.v1.UpgradeGovernanceControlledCanister",
+        "ic_sns_governance.pb.v1.UpgradeSnsControlledCanister",
         [
             "#[derive(candid::CandidType, candid::Deserialize)]",
             "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",

@@ -226,7 +226,7 @@ message Motion {
 
 // A proposal action that upgrades a canister that is controlled by the
 // SNS governance canister.
-message UpgradeGovernanceControlledCanister {
+message UpgradeSnsControlledCanister {
   // The id of the canister that is upgraded.
   ic_base_types.pb.v1.PrincipalId canister_id = 1;
   // The new wasm module that the canister is upgraded to.
@@ -269,7 +269,7 @@ message Proposal {
     NervousSystemParameters manage_nervous_system_parameters = 6;
 
     // Upgrade a canister that is controlled by the SNS governance canister.
-    UpgradeGovernanceControlledCanister upgrade_sns_controlled_canister = 7;
+    UpgradeSnsControlledCanister upgrade_sns_controlled_canister = 7;
 
     // Execute a method outside the SNS canisters.
     ExecuteNervousSystemFunction execute_nervous_system_function = 8;
@@ -817,8 +817,11 @@ message Governance {
 
   GovernanceCachedMetrics metrics = 13;
 
-  // The canister ID of the ledger canister
+  // The canister ID of the ledger canister.
   ic_base_types.pb.v1.PrincipalId ledger_canister_id = 16;
+
+  // The canister ID of the root canister.
+  ic_base_types.pb.v1.PrincipalId root_canister_id = 17;
 }
 
 // Empty message to use in oneof fields that represent empty
