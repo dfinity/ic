@@ -1,34 +1,34 @@
 #!/usr/bin/env bash
 
+if [ "$(uname)" != "Linux" ]; then
+    echo "This script is only supported on Linux."
+    exit 1
+fi
+
 set -exuo pipefail
 
 REPO_ROOT=$(git rev-parse --show-toplevel)
 TAG=$(openssl rand -hex 4)
 DOCKER_IMG_VERSION=$(cat "$REPO_ROOT/gitlab-ci/docker/TAG")
-USER="$(whoami)"
-SET_UID="$(id -u $USER)"
 
-if [ $USER != ubuntu ]; then
-    DOCKER_IMG_VERSION="$USER-$SET_UID-$DOCKER_IMG_VERSION"
-fi
-
-if [ -e /.dockerenv ]; then
+if ! docker pull dfinity/ic-build:"$DOCKER_IMG_VERSION"; then
+    # dfinity/ic-build:<tag> is not yet in dockerhub
+    # handle the case when Dockerfile is updated in a MR
+    echo "Image 'dfinity/ic-build:$DOCKER_IMG_VERSION' not in DockerHub"
+    echo "Building 'dfinity/ic-build:$DOCKER_IMG_VERSION' image on localhost"
     export DOCKER_BUILD_ARGS='--no-cache'
     "$REPO_ROOT"/gitlab-ci/docker/docker-build-local-image.sh
     unset DOCKER_BUILD_ARGS
-else
-    "$REPO_ROOT"/gitlab-ci/docker/docker-build-local-image.sh
 fi
 
 cd "$REPO_ROOT"
-docker image build -t ic-build-src:$TAG -f- . <<EOF
+docker image build -t ic-build-bd:$TAG -f- . <<EOF
 FROM dfinity/ic-build:$DOCKER_IMG_VERSION
-USER $SET_UID
-COPY --chown=${USER:-ubuntu}:${USER:-ubuntu} . /ic
-RUN sudo mkdir /ic/artifacts && sudo chown -R ${SET_UID}:${SET_UID} /ic/artifacts
+COPY --chown=ubuntu:ubuntu . /ic
+RUN sudo mkdir /ic/artifacts && sudo chown -R ubuntu:ubuntu /ic/artifacts
 EOF
 
-export IMAGE=ic-build-src:$TAG
+export IMAGE=ic-build-bd:$TAG
 "$REPO_ROOT"/gitlab-ci/tools/docker-run /ic/gitlab-ci/tools/build-ic "${1:--a=b,c,i}"
 
 if docker volume inspect "ic-artifacts${CI_JOB_ID:-}" 2>/dev/null; then
