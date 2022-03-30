@@ -19,7 +19,7 @@ use crate::crypto::{
         IDkgComplaint, IDkgDealing, IDkgOpening, IDkgTranscript, IDkgTranscriptId,
     },
     canister_threshold_sig::{ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigShare},
-    CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator,
+    CryptoHash, CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator,
 };
 use crate::{Height, NodeId, RegistryVersion};
 
@@ -279,7 +279,9 @@ pub enum EcdsaMessageHash {
     EcdsaOpening(CryptoHashOf<EcdsaOpening>),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash, EnumIter)]
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash, EnumIter,
+)]
 pub enum EcdsaMessageType {
     Dealing,
     DealingSupport,
@@ -308,6 +310,29 @@ impl From<&EcdsaMessageHash> for EcdsaMessageType {
             EcdsaMessageHash::EcdsaSigShare(_) => EcdsaMessageType::SigShare,
             EcdsaMessageHash::EcdsaComplaint(_) => EcdsaMessageType::Complaint,
             EcdsaMessageHash::EcdsaOpening(_) => EcdsaMessageType::Opening,
+        }
+    }
+}
+
+impl From<(EcdsaMessageType, Vec<u8>)> for EcdsaMessageHash {
+    fn from((message_type, bytes): (EcdsaMessageType, Vec<u8>)) -> EcdsaMessageHash {
+        let crypto_hash = CryptoHash(bytes);
+        match message_type {
+            EcdsaMessageType::Dealing => {
+                EcdsaMessageHash::EcdsaSignedDealing(CryptoHashOf::from(crypto_hash))
+            }
+            EcdsaMessageType::DealingSupport => {
+                EcdsaMessageHash::EcdsaDealingSupport(CryptoHashOf::from(crypto_hash))
+            }
+            EcdsaMessageType::SigShare => {
+                EcdsaMessageHash::EcdsaSigShare(CryptoHashOf::from(crypto_hash))
+            }
+            EcdsaMessageType::Complaint => {
+                EcdsaMessageHash::EcdsaComplaint(CryptoHashOf::from(crypto_hash))
+            }
+            EcdsaMessageType::Opening => {
+                EcdsaMessageHash::EcdsaOpening(CryptoHashOf::from(crypto_hash))
+            }
         }
     }
 }

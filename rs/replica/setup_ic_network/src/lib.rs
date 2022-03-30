@@ -433,12 +433,12 @@ pub fn init_artifact_pools(
     )));
     let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
     let certification_pool = Arc::new(RwLock::new(CertificationPoolImpl::new(
-        config,
+        config.clone(),
         log.clone(),
         registry.clone(),
     )));
     let dkg_pool = Arc::new(RwLock::new(DkgPoolImpl::new(registry.clone())));
-    let ecdsa_pool = Arc::new(RwLock::new(EcdsaPoolImpl::new(log, registry)));
+    let ecdsa_pool = Arc::new(RwLock::new(EcdsaPoolImpl::new(config, log, registry)));
     ArtifactPools {
         ingress_pool,
         consensus_pool,

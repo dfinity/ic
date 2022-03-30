@@ -85,6 +85,7 @@ fn consensus_produces_expected_batches() {
             metrics_registry.clone(),
         )));
         let ecdsa_pool = Arc::new(RwLock::new(ecdsa_pool::EcdsaPoolImpl::new(
+            pool_config.clone(),
             no_op_logger(),
             metrics_registry.clone(),
         )));
