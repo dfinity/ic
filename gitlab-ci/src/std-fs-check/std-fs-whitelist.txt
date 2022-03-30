@@ -89,7 +89,7 @@ state_tool/src/commands/import_state.rs:use std::fs;
 sys/src/utility_command.rs:use std::os::unix::fs::PermissionsExt;
 test_utilities/src/p2p.rs:use std::{fs, fs::File, sync::Arc, thread::sleep, time::Duration};
 transport_test_client/src/utils.rs:use std::fs;
-utils/src/fs.rs:use std::{fs, io, io::Error, io::ErrorKind::AlreadyExists, path::Path, path::PathBuf};
+utils/src/fs.rs:use std::{fs, io, io::Error, path::Path, path::PathBuf};
 workload_generator/src/canister.rs:use std::{fs::File, io::Read, path::Path, time::Duration};
 workload_generator/src/engine.rs:    collections::HashMap,
 workload_generator/src/engine.rs:    convert::TryFrom,
