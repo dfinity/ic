@@ -1,5 +1,8 @@
 use std::ffi::{OsStr, OsString};
-use std::{fs, io, io::Error, io::ErrorKind::AlreadyExists, path::Path, path::PathBuf};
+use std::{fs, io, io::Error, path::Path, path::PathBuf};
+
+#[cfg(target_family = "unix")] // Otherwise, clippy complains about lack of use.
+use std::io::ErrorKind::AlreadyExists;
 
 #[cfg(target_os = "linux")]
 use thiserror::Error;
@@ -36,6 +39,7 @@ where
     action: Option<F>,
 }
 
+#[cfg(target_family = "unix")] // Otherwise, clippy complains about lack of use.
 impl<F> OnScopeExit<F>
 where
     F: FnOnce(),
