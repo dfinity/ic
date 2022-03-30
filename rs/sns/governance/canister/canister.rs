@@ -13,7 +13,6 @@ use ic_nns_governance::stable_mem_utils::{BufferedStableMemReader, BufferedStabl
 use rand::rngs::StdRng;
 use rand_core::{RngCore, SeedableRng};
 use std::boxed::Box;
-use std::convert::TryFrom;
 use std::time::SystemTime;
 
 use prost::Message;
@@ -28,12 +27,11 @@ use dfn_core::{
 
 use ic_base_types::CanisterId;
 use ic_nervous_system_common::ledger::LedgerCanister;
-use ic_sns_governance::governance::{log_prefix, Governance, TimeWarp};
-use ic_sns_governance::pb::v1::proposal::Action;
+use ic_sns_governance::governance::{log_prefix, Governance, TimeWarp, ValidGovernanceProto};
 use ic_sns_governance::pb::v1::{
-    governance_error::ErrorType, ExecuteNervousSystemFunction, GetNeuron, GetNeuronResponse,
-    GetProposal, GetProposalResponse, Governance as GovernanceProto, GovernanceError, ListNeurons,
-    ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron, ManageNeuronResponse,
+    governance_error::ErrorType, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
+    Governance as GovernanceProto, GovernanceError, ListNeurons, ListNeuronsResponse,
+    ListProposals, ListProposalsResponse, ManageNeuron, ManageNeuronResponse,
     NervousSystemParameters, RewardEvent,
 };
 use ic_sns_governance::types::{Environment, HeapGrowthPotential};
@@ -127,24 +125,20 @@ impl Environment for CanisterEnv {
     // Calls an external method (i.e., on a canister outside the nervous system) to execute a
     // proposal as a result of the proposal being adopted.
     //
-    // The _proposal_id specifies the ID of the proposal to be executed and _update specifies what
-    // function (and on which canister) should be called and with what payload this function should
-    // be called.
     // The method returns either a success or error.
-    fn execute_sns_external_proposal(
+    fn call_canister(
         &self,
-        _proposal_id: u64,
-        _update: &ExecuteNervousSystemFunction,
+        proposal_id: u64,
+        canister_id: CanisterId,
+        method_name: &str,
+        arg: Vec<u8>,
     ) -> Result<(), GovernanceError> {
-        let mt = Action::from_u64(_update.function_id).ok_or_else(||
-            // No update action specified.
-            GovernanceError::new(ErrorType::PreconditionFailed))?;
-        let payload = &_update.payload;
         // If there is a reply, set the proposal's execution status accordingly.
-        let reply = move || governance_mut().set_proposal_execution_status(_proposal_id, Ok(()));
+        let on_reply = move || governance_mut().set_proposal_execution_status(proposal_id, Ok(()));
+
         // If the message was rejected, set the proposal's execution status to failed with the
         // error using the reject_message on a best-effort basis (see below).
-        let reject = move || {
+        let on_reject = move || {
             // There's no guarantee that the reject response is a string of characters and it can
             // potentially be large. Propagating error information is thus done on a best-effort
             // basis.
@@ -162,7 +156,7 @@ impl Environment for CanisterEnv {
                     .collect();
             }
             governance_mut().set_proposal_execution_status(
-                _proposal_id,
+                proposal_id,
                 Err(GovernanceError::new_with_message(
                     ErrorType::External,
                     format!(
@@ -173,10 +167,12 @@ impl Environment for CanisterEnv {
             );
         };
 
-        let (canister_id, method) = mt.canister_and_function()?;
-        let err = call_with_callbacks(canister_id, method, payload, reply, reject);
+        let err = call_with_callbacks(canister_id, method_name, &arg, on_reply, on_reject);
         if err != 0 {
-            Err(GovernanceError::new(ErrorType::PreconditionFailed))
+            Err(GovernanceError::new_with_message(
+                ErrorType::External,
+                format!("call_with_callbacks failed: {:?}", err),
+            ))
         } else {
             Ok(())
         }
@@ -223,35 +219,25 @@ fn canister_init() {
             Ok(())
         }
     }
-    .expect("Couldn't initialize canister.");
+    .expect("Failed to initialize canister: Unable to deserialize arg as GovernanceProto.");
 }
 
 /// In contrast to canister_init(), this method does not do deserialization.
 /// In addition to canister_init, this method is called by canister_post_upgrade.
 #[candid_method(init)]
 fn canister_init_(init_payload: GovernanceProto) {
-    init_payload
-        .parameters
-        .as_ref()
-        .expect("NervousSystemParameters must be set")
-        .validate()
-        .expect("NervousSystemParameters are not valid");
-
-    println!(
-        "{}canister_init: Initializing with: \
-              {:?}, genesis_timestamp_seconds: {}, neuron count: {}",
-        log_prefix(),
-        init_payload.parameters,
-        init_payload.genesis_timestamp_seconds,
-        init_payload.neurons.len()
+    let init_payload = ValidGovernanceProto::new(init_payload).expect(
+        "Cannot start canister, because the deserialized \
+         GovernanceProto is invalid in some way",
     );
 
-    let ledger_canister_id = CanisterId::try_from(
-        init_payload
-            .ledger_canister_id
-            .expect("Governance must be initialized with a Ledger canister ID"),
-    )
-    .expect("Failed to parse ledger_canister_id as a CanisterId");
+    println!(
+        "{}canister_init_: Initializing with: {}",
+        log_prefix(),
+        init_payload.summary(),
+    );
+
+    let ledger_canister_id = init_payload.ledger_canister_id();
 
     unsafe {
         assert!(
@@ -265,9 +251,6 @@ fn canister_init_(init_payload: GovernanceProto) {
             Box::new(LedgerCanister::new(ledger_canister_id)),
         ));
     }
-    governance()
-        .validate()
-        .expect("Error initializing the governance canister.");
 }
 
 /// Executes some logic before executing an upgrade, including serializing and writing the
@@ -489,6 +472,13 @@ fn http_request() {
 #[export_name = "canister_query __get_candid_interface_tmp_hack"]
 fn expose_candid() {
     over(candid, |_: ()| include_str!("governance.did").to_string())
+}
+
+// Only for integration test(s).
+#[cfg(feature = "do-nothing")]
+#[export_name = "canister_query do_nothing"]
+fn do_nothing() {
+    over(candid_one, |()| ());
 }
 
 /// When run on native, this prints the candid service definition of this

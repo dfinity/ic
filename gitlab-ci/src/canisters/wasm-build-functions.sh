@@ -26,6 +26,7 @@ wasm_canister_list=(
     registry-canister
     root-canister
     sns-governance-canister
+    sns-governance-canister_test
     sns-root-canister
     stable
     statesync-test-canister

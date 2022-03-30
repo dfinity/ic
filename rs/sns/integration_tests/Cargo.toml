@@ -11,6 +11,7 @@ dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_json = { path = "../../rust_canisters/dfn_json" }
 ledger-canister = { path = "../../rosetta-api/ledger_canister" }
+tokio = { version = "1.17.0", features = ["time"] }
 
 # Dependencies required to compile the tests.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

@@ -2,7 +2,7 @@ type AccountIdentifier = record { hash : vec nat8 };
 type Action = variant {
   ManageNervousSystemParameters : NervousSystemParameters;
   ExecuteNervousSystemFunction : ExecuteNervousSystemFunction;
-  UpgradeSnsControlledCanister : UpgradeGovernanceControlledCanister;
+  UpgradeSnsControlledCanister : UpgradeSnsControlledCanister;
   Unspecified : record {};
   Motion : Motion;
 };
@@ -88,6 +88,7 @@ type GetNeuronResponse = record { result : opt Result };
 type GetProposal = record { proposal_id : opt ProposalId };
 type GetProposalResponse = record { result : opt Result_1 };
 type Governance = record {
+  root_canister_id : opt principal;
   metrics : opt GovernanceCachedMetrics;
   parameters : opt NervousSystemParameters;
   latest_reward_event : opt RewardEvent;
@@ -231,7 +232,7 @@ type Tally = record {
   total : nat64;
   timestamp_seconds : nat64;
 };
-type UpgradeGovernanceControlledCanister = record {
+type UpgradeSnsControlledCanister = record {
   new_canister_wasm : vec nat8;
   canister_id : opt principal;
 };

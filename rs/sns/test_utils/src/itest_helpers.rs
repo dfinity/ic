@@ -211,6 +211,7 @@ impl SnsCanisters<'_> {
 
         // Governance canister_init args.
         init_payloads.governance.ledger_canister_id = Some(ledger_canister_id.into());
+        init_payloads.governance.root_canister_id = Some(root_canister_id.into());
 
         // Ledger canister_init args.
         init_payloads.ledger.minting_account = governance_canister_id.into();

@@ -3,13 +3,14 @@ use crate::pb::v1::governance_error::ErrorType;
 use crate::pb::v1::manage_neuron_response::{DisburseMaturityResponse, MergeMaturityResponse};
 use crate::pb::v1::proposal::Action;
 use crate::pb::v1::{
-    manage_neuron_response, DefaultFollowees, ExecuteNervousSystemFunction, GovernanceError,
-    ManageNeuronResponse, NervousSystemParameters, NeuronId, NeuronPermissionList,
-    NeuronPermissionType, ProposalId, RewardEvent, Vote,
+    manage_neuron_response, DefaultFollowees, GovernanceError, ManageNeuronResponse,
+    NervousSystemParameters, NeuronId, NeuronPermissionList, NeuronPermissionType, ProposalId,
+    RewardEvent, Vote,
 };
 use ic_base_types::CanisterId;
 use ic_nervous_system_common::NervousSystemError;
 use ledger_canister::{DEFAULT_TRANSFER_FEE, TOKEN_SUBDIVIDABLE_BY};
+
 use std::collections::HashSet;
 use std::fmt;
 
@@ -606,22 +607,19 @@ impl Action {
     /// Returns whether proposals with such an action should be allowed to
     /// be submitted when the heap growth potential is low.
     pub(crate) fn allowed_when_resources_are_low(&self) -> bool {
-        // TODO match id's that we want to allow
-        false
+        match self {
+            Action::UpgradeSnsControlledCanister(_) => true,
+            // This line is just to avoid triggering clippy::match-like-matches-macro.
+            // Once we have more cases, it can be deleted (along with this comment).
+            Action::Motion(_) => false,
+            _ => false,
+        }
     }
 
     /// Returns whether a provided action is a valid [Action].
     /// This is to prevent memory attacks due to keying on
     /// u64
     pub fn is_valid_action(_action: &u64) -> bool {
-        todo!()
-    }
-
-    pub fn from_u64(_action: u64) -> Option<Action> {
-        todo!()
-    }
-
-    pub fn canister_and_function(&self) -> Result<(CanisterId, &str), GovernanceError> {
         todo!()
     }
 }
@@ -677,10 +675,12 @@ pub trait Environment: Send + Sync {
     /// Executes a `ExecuteNervousSystemFunction`. The standard implementation
     /// is expected to call out to another canister and eventually report
     /// the result back
-    fn execute_sns_external_proposal(
+    fn call_canister(
         &self,
         proposal_id: u64,
-        update: &ExecuteNervousSystemFunction,
+        canister_id: CanisterId,
+        method_name: &str,
+        arg: Vec<u8>,
     ) -> Result<(), GovernanceError>;
 
     /// Returns rough information as to how much the heap can grow.
@@ -711,10 +711,13 @@ impl Environment for EmptyEnvironment {
         unimplemented!()
     }
 
-    fn execute_sns_external_proposal(
+    #[allow(unused_variables)]
+    fn call_canister(
         &self,
-        _proposal_id: u64,
-        _update: &ExecuteNervousSystemFunction,
+        proposal_id: u64,
+        canister_id: CanisterId,
+        method_name: &str,
+        arg: Vec<u8>,
     ) -> Result<(), GovernanceError> {
         unimplemented!()
     }
