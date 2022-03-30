@@ -10,6 +10,7 @@
 //! Newtypes, such as various IDs are replaced by the wrapped type.
 //! `CanisterIds` are represented as byte vectors.
 
+use crate::CertificationVersion;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::xnet::StreamIndex;
 use serde::{Deserialize, Serialize};
@@ -127,13 +128,15 @@ pub struct SystemMetadata {
     pub prev_state_hash: Option<Vec<u8>>,
 }
 
-impl From<(&ic_types::xnet::StreamHeader, u32)> for StreamHeader {
-    fn from((header, certification_version): (&ic_types::xnet::StreamHeader, u32)) -> Self {
+impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeader {
+    fn from(
+        (header, certification_version): (&ic_types::xnet::StreamHeader, CertificationVersion),
+    ) -> Self {
         // Replicas with certification version < 9 do not produce reject signals. This
         // includes replicas with certification version 8, but they may "inherit" reject
         // signals from a replica with certification version 9 after a downgrade.
         assert!(
-            header.reject_signals.is_empty() || certification_version >= 8,
+            header.reject_signals.is_empty() || certification_version >= CertificationVersion::V8,
             "Replicas with certification version < 9 should not be producing reject signals"
         );
 
@@ -181,9 +184,12 @@ impl TryFrom<StreamHeader> for ic_types::xnet::StreamHeader {
     }
 }
 
-impl From<(&ic_types::messages::RequestOrResponse, u32)> for RequestOrResponse {
+impl From<(&ic_types::messages::RequestOrResponse, CertificationVersion)> for RequestOrResponse {
     fn from(
-        (message, certification_version): (&ic_types::messages::RequestOrResponse, u32),
+        (message, certification_version): (
+            &ic_types::messages::RequestOrResponse,
+            CertificationVersion,
+        ),
     ) -> Self {
         use ic_types::messages::RequestOrResponse::*;
         match message {
@@ -220,8 +226,10 @@ impl TryFrom<RequestOrResponse> for ic_types::messages::RequestOrResponse {
     }
 }
 
-impl From<(&ic_types::messages::Request, u32)> for Request {
-    fn from((request, certification_version): (&ic_types::messages::Request, u32)) -> Self {
+impl From<(&ic_types::messages::Request, CertificationVersion)> for Request {
+    fn from(
+        (request, certification_version): (&ic_types::messages::Request, CertificationVersion),
+    ) -> Self {
         let funds = Funds {
             cycles: (&request.payment, certification_version).into(),
             icp: 0,
@@ -259,8 +267,10 @@ impl TryFrom<Request> for ic_types::messages::Request {
     }
 }
 
-impl From<(&ic_types::messages::Response, u32)> for Response {
-    fn from((response, certification_version): (&ic_types::messages::Response, u32)) -> Self {
+impl From<(&ic_types::messages::Response, CertificationVersion)> for Response {
+    fn from(
+        (response, certification_version): (&ic_types::messages::Response, CertificationVersion),
+    ) -> Self {
         let funds = Funds {
             cycles: (&response.refund, certification_version).into(),
             icp: 0,
@@ -296,8 +306,10 @@ impl TryFrom<Response> for ic_types::messages::Response {
     }
 }
 
-impl From<(&ic_types::funds::Cycles, u32)> for Cycles {
-    fn from((cycles, _certification_version): (&ic_types::funds::Cycles, u32)) -> Self {
+impl From<(&ic_types::funds::Cycles, CertificationVersion)> for Cycles {
+    fn from(
+        (cycles, _certification_version): (&ic_types::funds::Cycles, CertificationVersion),
+    ) -> Self {
         let (high, low) = cycles.into_parts();
         Self {
             low,
@@ -321,8 +333,10 @@ impl TryFrom<Cycles> for ic_types::funds::Cycles {
     }
 }
 
-impl From<(&ic_types::funds::Funds, u32)> for Funds {
-    fn from((funds, certification_version): (&ic_types::funds::Funds, u32)) -> Self {
+impl From<(&ic_types::funds::Funds, CertificationVersion)> for Funds {
+    fn from(
+        (funds, certification_version): (&ic_types::funds::Funds, CertificationVersion),
+    ) -> Self {
         Self {
             cycles: (&funds.cycles(), certification_version).into(),
             icp: 0,
@@ -338,8 +352,10 @@ impl TryFrom<Funds> for ic_types::funds::Funds {
     }
 }
 
-impl From<(&ic_types::messages::Payload, u32)> for Payload {
-    fn from((payload, certification_version): (&ic_types::messages::Payload, u32)) -> Self {
+impl From<(&ic_types::messages::Payload, CertificationVersion)> for Payload {
+    fn from(
+        (payload, certification_version): (&ic_types::messages::Payload, CertificationVersion),
+    ) -> Self {
         use ic_types::messages::Payload::*;
         match payload {
             Data(data) => Self {
@@ -375,8 +391,13 @@ impl TryFrom<Payload> for ic_types::messages::Payload {
     }
 }
 
-impl From<(&ic_types::messages::RejectContext, u32)> for RejectContext {
-    fn from((context, _certification_version): (&ic_types::messages::RejectContext, u32)) -> Self {
+impl From<(&ic_types::messages::RejectContext, CertificationVersion)> for RejectContext {
+    fn from(
+        (context, _certification_version): (
+            &ic_types::messages::RejectContext,
+            CertificationVersion,
+        ),
+    ) -> Self {
         Self {
             code: context.code as u8,
             message: context.message.clone(),

@@ -16,6 +16,8 @@ phantom_newtype = { path = "../phantom_newtype" }
 serde = "1.0.99"
 serde_bytes = "0.11"
 serde_cbor = "0.11.1"
+strum = "0.23.0"
+strum_macros = "0.23.0"
 
 [dev-dependencies]
 assert_matches = "1.3.0"

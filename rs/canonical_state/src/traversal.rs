@@ -46,6 +46,7 @@ mod tests {
         encoding::{encode_stream_header, types::SystemMetadata, CborProxyEncoder},
         subtree_visitor::{Pattern, SubtreeVisitor},
         test_visitors::{NoopVisitor, TraceEntry as E, TracingVisitor},
+        CertificationVersion,
     };
     use ic_base_types::NumSeconds;
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
@@ -448,7 +449,7 @@ mod tests {
                 edge("header"),
                 E::VisitBlob(encode_stream_header(
                     &header,
-                    state.metadata.certification_version
+                    CertificationVersion::try_from(state.metadata.certification_version).unwrap(),
                 )),
                 edge("messages"),
                 E::StartSubtree,
