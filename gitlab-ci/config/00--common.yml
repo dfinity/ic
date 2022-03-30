@@ -23,6 +23,7 @@ stages:             # Files from the given stage should be prefixed with:
   - benchmark-tests
   - benchmark-nightly-tests
   - push-branches       # 75--
+  - npm-release         # 80--
   - finalize            # 100--
 
 default:

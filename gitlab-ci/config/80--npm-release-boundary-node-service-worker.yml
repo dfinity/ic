@@ -1,0 +1,52 @@
+release-boundary-node-service-worker:
+  extends:
+    - .ubuntu-nix-docker
+  stage: npm-release
+  needs: [] # don't wait on other jobs
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^service-worker_v([0-9\.]+)$/ && $CI_COMMIT_BRANCH == "master"'
+  script:
+    - |
+      set -eExuo pipefail
+      # shellcheck disable=SC1090
+      source "$NVM_DIR/nvm.sh"
+      nvm use 17
+      node --version
+      npm --version
+      
+      # download previously built artifact (during merge commit pipeline)
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/find-build-id.sh)
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
+        --git-rev="${GIT_REVISION}" --remote-path="service-worker" \
+        --out="typescript/service-worker/artifacts"
+      
+      (
+        cd typescript/service-worker
+        if [[ $CI_COMMIT_TAG =~ ^service-worker_v([0-9\.]+)$ ]]; then
+          TAG_VERSION="${BASH_REMATCH[1]}"
+        else
+          echo "could not parse version from commit tag $CI_COMMIT_TAG"
+          echo "check CI configuration, this job should not be run for malformed tags!"
+          exit 1
+        fi
+      
+        # verify the source version matches the tag
+        PACKAGE_JSON_VERSION=$(< package.json jq '.version' -r)
+        if [  "$PACKAGE_JSON_VERSION" != "$TAG_VERSION" ]; then
+          echo "package.json version $PACKAGE_JSON_VERSION does not match tag version $TAG_VERSION"
+          exit 1
+        fi
+      
+        mkdir "package-content"
+        tar -xf "artifacts/dfinity-service-worker-$TAG_VERSION.tgz" -C package-content
+      
+        # verify the prebuilt package version matches the tag
+        PREBUILT_VERSION=$(< package-content/package.json jq '.version' -r)
+        if [  "$PREBUILT_VERSION" != "$TAG_VERSION" ]; then
+          echo "version $PREBUILT_VERSION contained in the prebuilt artifact does not match tag version $TAG_VERSION!"
+          exit 1
+        fi
+      
+        printf '%s\n' "//registry.npmjs.org/:_authToken=\${SW_NODE_AUTH_TOKEN}" "registry=https://registry.npmjs.org/" "always-auth=true" >> .npmrc
+        npm publish "artifacts/dfinity-service-worker-$PACKAGE_JSON_VERSION.tgz" --access public
+      )

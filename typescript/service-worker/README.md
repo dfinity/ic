@@ -1,6 +1,6 @@
-# IC Service Worker
+# DFINITY Service Worker
 
-Service worker which transforms browser asset request to canister calls and verifies the asset certification.
+Service worker which transforms browser asset request to the IC to canister calls and verifies the asset certification.
 
 ## Build
 
@@ -33,3 +33,11 @@ For example:
 * Internet Identity: http://localhost:8080/?canisterId=rdmx6-jaaaa-aaaaa-aaadq-cai
 * DSCVR: http://localhost:8080/?canisterId=h5aet-waaaa-aaaab-qaamq-cai
 
+## Release
+1. Create MR that updates `version` in `package.json`
+2. Test the built artifact using testnet boundary node VMs
+   1. TODO https://dfinity.atlassian.net/browse/L2-442
+3. Merge MR to master
+4. Tag the commit on `master` with `service-worker_v${version}`
+5. Verify that the desired version has been pushed to NPM: https://www.npmjs.com/package/@dfinity/service-worker
+6. Create an MR for the boundary nodes team that updates the `sw_version` and `sw_sha256` in `ic-os/boundary-guestos/rootfs/Dockerfile`
