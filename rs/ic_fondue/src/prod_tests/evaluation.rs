@@ -95,6 +95,9 @@ fn evaluate_pot(ctx: &DriverContext, mut pot: Pot, path: TestPath) -> Result<Tes
     let pot_working_dir = ctx.working_dir.join(&pot.name);
     let pot_env = ctx.env.fork(ctx.logger.clone(), pot_working_dir)?;
 
+    pot_env
+        .write_test_path(&pot_path)
+        .expect("Could not write the pot test path");
     pot_env.write_object(FARM_GROUP_NAME, &group_name)?;
     pot_env.write_object(POT_TIMEOUT, &pot.pot_timeout.unwrap_or(ctx.pot_timeout))?;
 

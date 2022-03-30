@@ -1,7 +1,6 @@
 use super::resource::AllocatedVm;
 use super::test_env::TestEnv;
 use super::test_setup::{retry, RETRY_BACKOFF, RETRY_TIMEOUT};
-use crate::prod_tests::driver_setup::mk_logger;
 use crate::prod_tests::driver_setup::{FARM_BASE_URL, FARM_GROUP_NAME};
 use crate::prod_tests::farm::Farm;
 use crate::prod_tests::ic::VmResources;
@@ -69,7 +68,7 @@ impl UniversalVm {
 
     pub fn start(&self, env: &TestEnv) -> Result<()> {
         let group_name: String = env.read_object(FARM_GROUP_NAME)?;
-        let logger = mk_logger();
+        let logger = env.logger();
         let farm = Farm::new(env.read_object(FARM_BASE_URL)?, logger.clone());
         let res_request = get_resource_request_for_universal_vm(self, &group_name)?;
         let resource_group = allocate_resources(&farm, &res_request)?;
