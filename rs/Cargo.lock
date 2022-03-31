@@ -3686,6 +3686,7 @@ dependencies = [
  "ic-types 0.8.0",
  "ic-utils 0.8.0",
  "ic-wasm-types",
+ "lazy_static",
  "leb128",
  "maplit",
  "phantom_newtype",
@@ -3693,6 +3694,8 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
+ "strum 0.23.0",
+ "strum_macros 0.23.1",
  "tempfile",
 ]
 
