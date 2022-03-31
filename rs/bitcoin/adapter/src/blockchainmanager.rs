@@ -15,7 +15,7 @@ use std::{
     collections::{HashMap, HashSet, VecDeque},
     net::SocketAddr,
     sync::Arc,
-    time::{Duration, SystemTime},
+    time::{Instant, SystemTime},
 };
 use thiserror::Error;
 use tokio::sync::Mutex;
@@ -116,7 +116,7 @@ pub struct GetDataRequestInfo {
     /// This field stores the socket address of the Bitcoin node to which the request was sent.
     socket: SocketAddr,
     /// This field contains the time at which the getdata request was sent.  
-    sent_at: SystemTime,
+    sent_at: Instant,
     /// This field contains the action to take if the request is expired.
     _on_timeout: OnTimeout,
 }
@@ -377,15 +377,11 @@ impl BlockchainManager {
         }
 
         let block_hash = block.block_hash();
-
-        let maybe_request_info = self.getdata_request_info.get(&block_hash);
-        let time_taken = match maybe_request_info {
-            Some(request_info) => request_info
-                .sent_at
-                .elapsed()
-                .unwrap_or_else(|_| Duration::new(0, 0)),
-            None => Duration::new(0, 0),
-        };
+        let time_taken = self
+            .getdata_request_info
+            .get(&block_hash)
+            .map(|i| i.sent_at.elapsed())
+            .unwrap_or_default();
 
         info!(
             self.logger,
@@ -450,13 +446,16 @@ impl BlockchainManager {
     }
 
     fn filter_expired_getdata_requests(&mut self) {
-        let now = SystemTime::now();
-        let timeout_period = Duration::new(GETDATA_REQUEST_TIMEOUT_SECS, 0);
-        self.getdata_request_info
-            .retain(|_, request| request.sent_at + timeout_period > now);
+        self.getdata_request_info.retain(|_, request| {
+            request.sent_at.elapsed().as_secs() <= GETDATA_REQUEST_TIMEOUT_SECS
+        });
     }
 
     async fn sync_blocks(&mut self) {
+        // Removing expired getdata requests so they may be enqueued again.
+        self.filter_expired_getdata_requests();
+
+        // If nothing to be synced, then there is nothing to do at this point.
         if self.block_sync_queue.is_empty() {
             return;
         }
@@ -476,9 +475,6 @@ impl BlockchainManager {
             "Syncing blocks. Blocks to be synced : {:?}",
             self.block_sync_queue.len()
         );
-
-        // Removing expired getdata requests from `self.getdata_request_info`
-        self.filter_expired_getdata_requests();
 
         // Count the number of requests per peer.
         let mut requests_per_peer: HashMap<SocketAddr, u32> =
@@ -539,7 +535,7 @@ impl BlockchainManager {
                     inv,
                     GetDataRequestInfo {
                         socket: peer.socket,
-                        sent_at: SystemTime::now(),
+                        sent_at: Instant::now(),
                         _on_timeout: OnTimeout::Ignore,
                     },
                 );
@@ -653,6 +649,7 @@ pub mod test {
     use ic_logger::replica_logger::no_op_logger;
     use std::net::SocketAddr;
     use std::str::FromStr;
+    use std::time::Duration;
 
     /// Tests `BlockchainManager::send_getheaders(...)` to ensure the manager's outgoing command
     /// queue
@@ -994,6 +991,33 @@ pub mod test {
         assert!(blockchain_manager.getdata_request_info.is_empty());
     }
 
+    /// This function tests to ensure that the BlockchainManager clears out timed out `getdata` requests
+    /// when calling `sync_blocks`.
+    #[tokio::test]
+    async fn test_ensure_sync_blocks_clears_timed_out_getdata_requests() {
+        let config = ConfigBuilder::new().build();
+        let blockchain_state = BlockchainState::new(&config);
+        let test_state = TestState::setup();
+        let mut blockchain_manager =
+            BlockchainManager::new(Arc::new(Mutex::new(blockchain_state)), no_op_logger());
+
+        let addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
+        // Ensure that the request info will be timed out.
+        let sent_at = Instant::now() - Duration::from_secs(GETDATA_REQUEST_TIMEOUT_SECS + 1);
+        blockchain_manager.getdata_request_info.insert(
+            test_state.block_1.block_hash(),
+            GetDataRequestInfo {
+                socket: addr,
+                sent_at,
+                _on_timeout: OnTimeout::Ignore,
+            },
+        );
+
+        blockchain_manager.sync_blocks().await;
+
+        assert!(blockchain_manager.getdata_request_info.is_empty());
+    }
+
     /// Tests the `BlockchainManager::idle(...)` function to ensure it clears the state from the
     /// BlockchainManager.
     #[tokio::test]
@@ -1102,7 +1126,7 @@ pub mod test {
             next_headers[4].block_hash(),
             GetDataRequestInfo {
                 socket: SocketAddr::from_str("127.0.0.1:8333").expect("should be valid addr"),
-                sent_at: SystemTime::now(),
+                sent_at: Instant::now(),
                 _on_timeout: OnTimeout::Ignore,
             },
         );
