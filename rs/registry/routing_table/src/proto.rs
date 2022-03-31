@@ -50,7 +50,7 @@ impl TryFrom<pb::CanisterIdRanges> for CanisterIdRanges {
             .into_iter()
             .map(CanisterIdRange::try_from)
             .collect::<Result<Vec<CanisterIdRange>, Self::Error>>()?;
-        Ok(Self(ranges))
+        Ok(ranges.try_into()?)
     }
 }
 
@@ -92,7 +92,7 @@ impl TryFrom<pb::RoutingTable> for RoutingTable {
                 });
             }
         }
-        Ok(Self(map))
+        Ok(map.try_into()?)
     }
 }
 
