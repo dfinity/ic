@@ -28,7 +28,7 @@ class Test_Prometheus(unittest.TestCase):
 
         sys.path.insert(1, ".")
 
-        import prometheus
+        import common.prometheus as prometheus
 
         t_start, t_end = self.get_range(duration_secs=200)
         http_request_duration = prometheus.get_http_request_duration(

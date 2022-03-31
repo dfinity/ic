@@ -29,14 +29,15 @@ Suggested success criteria (Updates):
 Maximum number of queries not be below xxx queries per second with less than 20% failure and a maximum latency of 10000ms
 """
 import os
+import sys
 import time
 
-import experiment
 import gflags
-import workload_experiment
-from elasticsearch import ElasticSearch
 from termcolor import colored
-from verify_perf import VerifyPerf
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import common.misc as misc  # noqa
+import common.workload_experiment as workload_experiment  # noqa
 
 FLAGS = gflags.FLAGS
 gflags.DEFINE_integer("load", 50, "Load in requests per second to issue")
@@ -44,7 +45,7 @@ gflags.DEFINE_integer("num_workload_generators", 2, "Number of workload generato
 gflags.DEFINE_integer("iter_duration", 300, "Duration in seconds for which to execute workload in each round.")
 
 
-class Experiment1(workload_experiment.WorkloadExperiment):
+class BaselineExperiment(workload_experiment.WorkloadExperiment):
     """Logic for experiment 1."""
 
     def __init__(self):
@@ -173,25 +174,23 @@ class Experiment1(workload_experiment.WorkloadExperiment):
             self.write_summary_file(
                 "run_system_baseline_experiment",
                 {
+                    "is_update": FLAGS.use_updates,
                     "total_requests": total_requests,
                     "rps": rps,
                     "rps_max": rps_max,
                     "rps_max_in": rps_max_in,
                     "rps_max_iter": rps_max_iter,
                     "num_succ_per_iteration": num_succ_per_iteration,
-                    "success_rate": "{:.2f}".format((num_success / total_requests) * 100),
-                    "failure_rate": "{:.2f}".format(failure_rate * 100),
+                    "success_rate": (num_success / total_requests) * 100,
+                    "failure_rate": failure_rate * 100,
                     "failure_rate_color": "green" if failure_rate < 0.01 else "red",
-                    "t_median": "{:.2f}".format(t_median),
-                    "t_average": "{:.2f}".format(t_average),
-                    "t_max": "{:.2f}".format(t_max),
-                    "t_min": "{:.2f}".format(t_min),
+                    "t_median": t_median,
+                    "t_average": t_average,
+                    "t_max": t_max,
+                    "t_min": t_min,
                     "duration": duration,
                     "target_duration": iter_duration,
-                    "allowable_failure_rate": FLAGS.allowable_failure_rate
-                    if "allowable_failure_rate" in FLAGS
-                    else "N/A",
-                    "allowable_t_median": "N/A" if allowable_t_median == 0 else allowable_t_median,
+                    "target_load": load_total,
                 },
                 rps,
                 "requests / s",
@@ -206,36 +205,6 @@ class Experiment1(workload_experiment.WorkloadExperiment):
 
 
 if __name__ == "__main__":
-    experiment.parse_command_line_args()
-
-    experiment_name = os.path.basename(__file__).replace(".py", "")
-    start_time = int(time.time())
-    exp = Experiment1()
-    verifier = VerifyPerf(f"{exp.out_dir}/verification_results.txt")
-
-    (
-        failure_rate,
-        t_median,
-        t_average,
-        t_max,
-        t_min,
-        total_requests,
-        num_success,
-        num_failure,
-        rps,
-    ) = exp.run_iterations([FLAGS.load])
-
-    verifier.verify("failure rate", FLAGS.use_updates, failure_rate, 0)
-    verifier.verify("median latency", FLAGS.use_updates, t_median, FLAGS.median_latency_threshold)
-    verifier.verify("throughput", FLAGS.use_updates, rps, FLAGS.load)
-
-    ElasticSearch.send_perf(
-        experiment_name,
-        verifier.is_success(),
-        "Update",
-        exp.git_hash,
-        FLAGS.branch,
-        FLAGS.is_ci_job,
-        (failure_rate, 0, t_median, FLAGS.median_latency_threshold, rps, FLAGS.load),
-    )
-    verifier.conclude()
+    misc.parse_command_line_args()
+    exp = BaselineExperiment()
+    exp.run_iterations([FLAGS.load])

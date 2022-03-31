@@ -15,6 +15,9 @@ class Mainnet:
 
     def __init__(self):
         """Initialize."""
+        if FLAGS.testnet == "mercury" and FLAGS.target_subnet_id is None:
+            raise Exception("--target_subnet_id has to be set when running against mainnet")
+
         # Testnets you have booked and the number of subnetworks each (including NNS)
         self.testnets = {
             "large01": 5,

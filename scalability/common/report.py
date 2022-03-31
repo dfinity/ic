@@ -1,6 +1,6 @@
 import json
 
-from misc import mean_or_minus_one
+from common.misc import mean_or_minus_one
 from termcolor import colored
 
 

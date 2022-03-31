@@ -2,7 +2,7 @@ import threading
 import time
 
 import gflags
-import ssh
+from common import ssh
 
 FLAGS = gflags.FLAGS
 gflags.DEFINE_integer("num_failing_machines", 1, "Number of failing machines.")

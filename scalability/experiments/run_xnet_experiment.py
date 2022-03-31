@@ -7,16 +7,20 @@ This is using the Xnet test driver to benchmark Xnet performance.
 import json
 import math
 import os
+import sys
 import time
 
-import experiment
 import gflags
-import misc
-import prometheus
 from ic.candid import encode
 from ic.candid import Types
 from ic.principal import Principal
 from termcolor import colored
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import common.base_experiment as base_experiment  # noqa
+import common.misc as misc  # noqa
+import common.prometheus as prometheus  # noqa
+
 
 FLAGS = gflags.FLAGS
 
@@ -45,7 +49,7 @@ CANISTER = "xnet-test-canister.wasm"
 
 
 # Suggested subnet for experimenting: large02, large04 w/ four subnets
-class ExperimentXnet(experiment.Experiment):
+class XnetExperiment(base_experiment.BaseExperiment):
     """Logic for Xnet experiment."""
 
     def __init__(self):
@@ -141,13 +145,13 @@ class ExperimentXnet(experiment.Experiment):
         for canister_id, metrics in metrics.items():
             host = self.get_host_for_canister(canister_id)
             if host not in aggregated_metrics:
-                aggregated_metrics[host] = ExperimentXnet.Metrics()
+                aggregated_metrics[host] = XnetExperiment.Metrics()
             aggregated_metrics[host].aggregate(metrics)
         return aggregated_metrics
 
     def run_accepted(self, metrics: dict, config: dict):
         """Are the given metrics acceptable according to the specificatioon."""
-        print("Checking if accepted: ", metrics, config)
+        # print("Checking if accepted: ", metrics, config)
         runtime = config["duration"]
         canister_to_subnet_rate = config["canister_to_subnet_rate"]
 
@@ -267,7 +271,7 @@ class ExperimentXnet(experiment.Experiment):
             rate_per_canister = int(math.ceil(config["canister_to_subnet_rate"] / len(canisters)))
             xnet_topology = self.get_xnet_topology_as_u8()
             print(f"Using Xnet topology is: {xnet_topology}")
-            ExperimentXnet.start(
+            XnetExperiment.start(
                 [hostname for _ in canisters], canisters, xnet_topology, rate_per_canister, config["payload_size"]
             )
 
@@ -278,14 +282,14 @@ class ExperimentXnet(experiment.Experiment):
         # Stop benchmark
         # --------------------------------------------------
         for hostname, canisters in self.canisters_per_host.items():
-            ExperimentXnet.stop([hostname for _ in canisters], canisters)
+            XnetExperiment.stop([hostname for _ in canisters], canisters)
 
         # Get metrics
         # --------------------------------------------------
         results = {}
         for hostname, canisters in self.canisters_per_host.items():
-            results.update(ExperimentXnet.metrics([hostname for _ in canisters], canisters))
-        print(results)
+            results.update(XnetExperiment.metrics([hostname for _ in canisters], canisters))
+        # print(results)
 
         # Get Prometheus metrics
         # --------------------------------------------------
@@ -316,9 +320,9 @@ class ExperimentXnet(experiment.Experiment):
 
 
 if __name__ == "__main__":
-    experiment.parse_command_line_args()
+    misc.parse_command_line_args()
 
-    exp = ExperimentXnet()
+    exp = XnetExperiment()
     exp.init()
 
     exp.start_experiment()
@@ -349,7 +353,10 @@ if __name__ == "__main__":
             max_capacity = total_rate
 
     exp.write_summary_file(
-        "run_xnet_experiment", {"rps": [FLAGS.payload_size]}, [FLAGS.payload_size], "payload size [bytes]"
+        "run_xnet_experiment",
+        {"rps": [FLAGS.payload_size]},
+        [FLAGS.payload_size],
+        "payload size [bytes]",
     )
 
     exp.end_experiment()

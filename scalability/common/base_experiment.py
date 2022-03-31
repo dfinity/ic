@@ -1,4 +1,17 @@
-import argparse
+"""
+Base implementation for experiment.
+
+This class provides common functionality to a benchmark run:
+- Getting IC topology, revision, URLs
+- Instrumenting nodes
+- Collecting metrics
+
+This class issues API:
+
+
+WorkloadExperiment inherits BaseExperiment to follow similar workflow of initiation -> start iteration
+-> inspect iteration -> ... -> finish
+"""
 import json
 import os
 import re
@@ -7,13 +20,12 @@ import sys
 import time
 from typing import List
 
-import ansible
-import flamegraphs
-import generate_report
 import gflags
-import machine_failure
-import prometheus
-import ssh
+from common import ansible
+from common import flamegraphs
+from common import machine_failure
+from common import prometheus
+from common import ssh
 from termcolor import colored
 
 
@@ -22,8 +34,6 @@ NNS_SUBNET_INDEX = 0  # Subnet index of the NNS subnetwork
 FLAGS = gflags.FLAGS
 gflags.DEFINE_string("testnet", None, 'Testnet to use. Use "mercury" to run against mainnet.')
 gflags.MarkFlagAsRequired("testnet")
-gflags.DEFINE_boolean("skip_generate_report", False, "Skip generating report after experiment is finished")
-gflags.DEFINE_string("experiment_dir", "./", "The directory for output of current experiment run.")
 gflags.DEFINE_string("canister_id", "", "Use given canister ID instead of installing a new canister")
 gflags.DEFINE_string("artifacts_path", "../artifacts/release", "Path to the artifacts directory")
 gflags.DEFINE_string("workload_generator_path", "", "Path to the workload generator to be used")
@@ -37,55 +47,17 @@ gflags.DEFINE_string(
 
 gflags.DEFINE_boolean("simulate_machine_failures", False, "Simulate machine failures while testing.")
 gflags.DEFINE_string("nns_url", "", "Use the following NNS URL instead of getting it from the testnet configuration")
-gflags.DEFINE_boolean("is_ci_job", False, "This is a test run exercised by CI. Deafult to false.")
 gflags.DEFINE_string(
     "artifacts_git_revision", "HEAD", "GIT revision to use for the artifacts (e.g. workload generator)"
 )
-gflags.DEFINE_string(
-    "branch",
-    "N/A",
-    'Git branch to measure performance. E.g. "origin/rc--2022-01-01_18-31" or "origin/feature-branch-name".',
-)
 
 
-def parse_command_line_args():
-    # Start: Provide command line args support #
-    # Get a dictionary of gflags from all imported files.
-    flags = gflags.FLAGS.__dict__["__flags"]
-
-    parser = argparse.ArgumentParser(description=colored("Experiment parameters.", "blue"))
-    # Create a set of command line options, based on the imported gflags.
-    for key, value in flags.items():
-        if key == "help":
-            continue
-        # gflags with default=None are required arguments. (SK: that's not true, optional flags with None as default values are not required)
-        if value.default is None:
-            parser.add_argument(f"--{key}", required=True, help=colored(f"Required field. {value.help}", "red"))
-        else:
-            parser.add_argument(
-                f"--{key}", required=False, default=value.default, help=f"{value.help}; default={value.default}"
-            )
-    # Now useful help message can be queried via: `python script_name.py -h`
-    parser.parse_args()
-    # Initialize gflags from the command line args.
-    FLAGS(sys.argv)
-    # Print all gflags for the experiment.
-    print(colored("The following values will be used in the experiment.", "red"))
-    for key, value in flags.items():
-        print(colored(f"Parameter {key} = {value.value}", "blue"))
-
-    if FLAGS.testnet == "mercury" and FLAGS.target_subnet_id is None:
-        raise Exception("--target_subnet_id has to be set when running against mainnet")
-
-    # End: Provide command line args support #
-
-
-class Experiment:
+class BaseExperiment:
     """Wrapper class around experiments."""
 
     def __init__(self, request_type="query"):
         """Init."""
-        self.load_artifacts()
+        self.__load_artifacts()
 
         self.testnet = FLAGS.testnet
         self.canister_ids = []
@@ -97,7 +69,7 @@ class Experiment:
 
         self.request_type = request_type
 
-    def get_ic_version(self, m):
+    def __get_ic_version(self, m):
         """Retrieve the IC version from the given machine m."""
         sys.path.insert(1, "../ic-os/guestos/tests")
         import ictools
@@ -106,22 +78,21 @@ class Experiment:
 
     def init(self):
         """Initialize experiment."""
-        self.git_hash = self.get_ic_version(self.get_machine_to_instrument())
+        self.git_hash = self.__get_ic_version(self.get_machine_to_instrument())
         print(f"Running against an IC with git hash: {self.git_hash}")
 
         self.out_dir_timestamp = int(time.time())
-        self.out_dir = "{}/{}/{}/".format(
-            FLAGS.experiment_dir,
+        self.out_dir = "results/{}/{}/".format(
             self.git_hash if len(FLAGS.top_level_out_dir) < 1 else FLAGS.top_level_out_dir,
             self.out_dir_timestamp if len(FLAGS.second_level_out_dir) < 1 else FLAGS.second_level_out_dir,
         )
         os.makedirs(self.out_dir, 0o755)
         print(f"📂 Storing output in {self.out_dir}")
 
-        self.store_ic_info()
-        self.store_hardware_info()
+        self.__store_ic_info()
+        self.__store_hardware_info()
 
-    def load_artifacts(self):
+    def __load_artifacts(self):
         """
         Load artifacts.
 
@@ -157,9 +128,9 @@ class Experiment:
 
         print(f"Artifacts hash is {self.artifacts_hash}")
         print(f"Found artifacts at {self.artifacts_path}")
-        self.set_workload_generator_path()
+        self.__set_workload_generator_path()
 
-    def set_workload_generator_path(self):
+    def __set_workload_generator_path(self):
         """Set path to the workload generator that should be used for this experiment run."""
         if len(FLAGS.workload_generator_path) > 0:
             self.workload_generator_path = FLAGS.workload_generator_path
@@ -169,7 +140,7 @@ class Experiment:
 
     def get_machine_to_instrument(self) -> str:
         """Return the machine to instrument."""
-        topology = self.get_topology()
+        topology = self.__get_topology()
         for subnet, info in topology["topology"]["subnets"].items():
             subnet_type = info["records"][0]["value"]["subnet_type"]
             members = info["records"][0]["value"]["membership"]
@@ -178,7 +149,7 @@ class Experiment:
 
     def get_subnet_to_instrument(self) -> str:
         """Return the subnet to instrument."""
-        topology = self.get_topology()
+        topology = self.__get_topology()
         for subnet, info in topology["topology"]["subnets"].items():
             subnet_type = info["records"][0]["value"]["subnet_type"]
             if subnet_type == "application":
@@ -195,7 +166,7 @@ class Experiment:
         """Run a single iteration of the experiment."""
         raise Exception("Needs to be implemented by each experiment")
 
-    def init_metrics(self):
+    def __init_metrics(self):
         """Initialize metrics to collect for experiment."""
         self.metrics = [
             flamegraphs.Flamegraph("flamegraph", self.get_machine_to_instrument(), not FLAGS.no_instrument),
@@ -206,7 +177,7 @@ class Experiment:
 
     def init_experiment(self):
         """Initialize what's necessary to run experiments."""
-        self.init_metrics()
+        self.__init_metrics()
 
     def start_iteration(self):
         """Start a new iteration of the experiment."""
@@ -249,50 +220,45 @@ class Experiment:
 
     def end_experiment(self):
         """End the experiment."""
-        if not FLAGS.skip_generate_report:
-            print(
-                "Experiment finished. Generating report like: python3 generate_report.py {} {}".format(
-                    self.git_hash, self.out_dir_timestamp
-                )
-            )
-            generate_report.generate_report(self.out_dir, self.git_hash, self.out_dir_timestamp)
-        else:
-            print("Experiment finished. Skipping generating report.")
+        print(
+            f"Experiment finished. Generating report like: python3 common/generate_report.py --base_dir='results/' --git_revision='{self.git_hash}' --timestamp='{self.out_dir_timestamp}'"
+        )
 
-    def get_ic_admin_path(self):
+    def _get_ic_admin_path(self):
         """Return path to ic-admin."""
         return os.path.join(self.artifacts_path, "ic-admin")
 
-    def get_topology(self):
+    def __get_topology(self):
         """Get the current topology from the registry."""
         res = subprocess.check_output(
-            [self.get_ic_admin_path(), "--nns-url", self.get_nns_url(), "get-topology"], encoding="utf-8"
+            [self._get_ic_admin_path(), "--nns-url", self._get_nns_url(), "get-topology"], encoding="utf-8"
         )
         return json.loads(res)
 
-    def get_node_info(self, nodeid):
+    def __get_node_info(self, nodeid):
         """Get info for the given node from the registry."""
         return subprocess.check_output(
-            [self.get_ic_admin_path(), "--nns-url", self.get_nns_url(), "get-node", nodeid], encoding="utf-8"
+            [self._get_ic_admin_path(), "--nns-url", self._get_nns_url(), "get-node", nodeid], encoding="utf-8"
         )
 
-    def get_subnet_info(self, subnet_idx):
+    def _get_subnet_info(self, subnet_idx):
         """Get info for the given subnet from the registry."""
         return subprocess.check_output(
-            [self.get_ic_admin_path(), "--nns-url", self.get_nns_url(), "get-subnet", str(subnet_idx)], encoding="utf-8"
+            [self._get_ic_admin_path(), "--nns-url", self._get_nns_url(), "get-subnet", str(subnet_idx)],
+            encoding="utf-8",
         )
 
-    def store_ic_info(self):
+    def __store_ic_info(self):
         """Store subnet info for the subnet that we are targeting in the experiment output directory."""
-        jsondata = self.get_subnet_info(self.get_subnet_to_instrument())
+        jsondata = self._get_subnet_info(self.get_subnet_to_instrument())
         with open(os.path.join(self.out_dir, "subnet_info.json"), "w") as subnet_file:
             subnet_file.write(jsondata)
 
-        jsondata = self.get_topology()
+        jsondata = self.__get_topology()
         with open(os.path.join(self.out_dir, "topology.json"), "w") as subnet_file:
             subnet_file.write(json.dumps(jsondata, indent=2))
 
-    def store_hardware_info(self):
+    def __store_hardware_info(self):
         """Store info for the target machine in the experiment output directory."""
         if FLAGS.no_instrument:
             return
@@ -307,27 +273,27 @@ class Experiment:
 
     def get_node_ip_address(self, nodeid):
         """Get HTTP endpoint for the given node."""
-        nodeinfo = self.get_node_info(nodeid)
+        nodeinfo = self.__get_node_info(nodeid)
         ip = re.findall(r'ip_addr: "([a-f0-9:A-F]+)"', nodeinfo)
         return ip[0]
 
     def get_unassigned_nodes(self):
         """Return a list of unassigned node IDs in the given subnetwork."""
-        topo = self.get_topology()
+        topo = self.__get_topology()
         return [j["node_id"] for j in topo["topology"]["unassigned_nodes"]]
 
     def get_subnets(self):
         """Get the currently running subnetworks."""
-        topo = self.get_topology()
+        topo = self.__get_topology()
         return [k for (k, _) in topo["topology"]["subnets"].items()]
 
     def get_subnet_members(self, subnet_index):
         """Get members of subnet with the given subnet index (not subnet ID)."""
-        topo = self.get_topology()
+        topo = self.__get_topology()
         subnet_info = [info for (_, info) in topo["topology"]["subnets"].items()]
         return subnet_info[subnet_index]["records"][0]["value"]["membership"]
 
-    def get_nns_url(self):
+    def _get_nns_url(self):
         """
         Get the testnets NNS url.
 
@@ -349,9 +315,9 @@ class Experiment:
         processes = []
         for node_id in node_ids:
             cmd = [
-                self.get_ic_admin_path(),
+                self._get_ic_admin_path(),
                 "--nns-url",
-                self.get_nns_url(),
+                self._get_nns_url(),
                 "propose-to-add-nodes-to-subnet",
                 "--test-neuron-proposer",
                 "--subnet-id",
@@ -378,7 +344,7 @@ class Experiment:
             for node_id in node_ids:
                 node_added &= node_id in self.get_subnet_members(subnet_index)
 
-    def turn_off_replica(self, machines):
+    def _turn_off_replica(self, machines):
         """Turn of replicas on the given machines."""
         for m in machines:
             print(f"💣 Stopping machine {m}")
@@ -452,7 +418,7 @@ class Experiment:
 
     def get_hostnames(self, for_subnet_idx=0):
         """Return hostnames of all machines in the given testnet and subnet from the registry."""
-        topology = self.get_topology()
+        topology = self.__get_topology()
         for curr_subnet_idx, (subnet, info) in enumerate(topology["topology"]["subnets"].items()):
             subnet_type = info["records"][0]["value"]["subnet_type"]
             members = info["records"][0]["value"]["membership"]
@@ -460,7 +426,7 @@ class Experiment:
             if for_subnet_idx == curr_subnet_idx:
                 return sorted([self.get_node_ip_address(member) for member in members])
 
-    def build_summary_file(self):
+    def __build_summary_file(self):
         """Build dictionary to be used to build the summary file."""
         return {}
 
@@ -473,7 +439,7 @@ class Experiment:
         The idea is that we write one after each iteration, so that we can
         generate reports from intermediate versions.
         """
-        d = self.build_summary_file()
+        d = self.__build_summary_file()
         d.update(
             {
                 "xlabels": xlabels,

@@ -28,6 +28,8 @@ maximum-capacity-system-baseline-query:
     when: always
     paths:
       - scalability/
+  variables:
+    TESTNET: "cdmax"
   script:
     - |
       set -eExou pipefail
@@ -40,7 +42,11 @@ maximum-capacity-system-baseline-query:
       $SHELL_WRAPPER pipenv --python 3
       $SHELL_WRAPPER pipenv install -r requirements.txt
 
-      $SHELL_WRAPPER pipenv run ./max_capacity_system_baseline.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --skip_generate_report=False --is_ci_job=True --send_perf_metrics=True --branch="$CURRENT_BRANCH"
+      $SHELL_WRAPPER pipenv run experiments/max_capacity_system_baseline.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET
+
+      TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
+      $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
+      $SHELL_WRAPPER pipenv run python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --is_max_capacity_run="True" --branch="$CURRENT_BRANCH" --is_max_capacity_run="True" --gitlab_job_id="$CI_JOB_ID"
 
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
@@ -66,7 +72,11 @@ maximum-capacity-system-baseline-update:
       $SHELL_WRAPPER pipenv --python 3
       $SHELL_WRAPPER pipenv install -r requirements.txt
       
-      $SHELL_WRAPPER pipenv run ./max_capacity_system_baseline.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --use_updates=True --skip_generate_report=False --is_ci_job=True --send_perf_metrics=True  --branch="$CURRENT_BRANCH"
+      $SHELL_WRAPPER pipenv run experiments/max_capacity_system_baseline.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --use_updates=True
+
+      TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
+      $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
+      $SHELL_WRAPPER pipenv run python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --is_max_capacity_run="True" --branch="$CURRENT_BRANCH" --is_max_capacity_run="True" --gitlab_job_id="$CI_JOB_ID"
 
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
@@ -80,6 +90,8 @@ maximum-capacity-large-memory-query:
     when: always
     paths:
       - scalability/
+  variables:
+    TESTNET: "cdmax"
   script:
     - |
       set -eExou pipefail
@@ -92,7 +104,11 @@ maximum-capacity-large-memory-query:
       $SHELL_WRAPPER pipenv --python 3
       $SHELL_WRAPPER pipenv install -r requirements.txt
 
-      $SHELL_WRAPPER pipenv run ./max_capacity_large_memory.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --skip_generate_report=False --is_ci_job=True --send_perf_metrics=True --target_query_load=160 --branch="$CURRENT_BRANCH"
+      $SHELL_WRAPPER pipenv run experiments/max_capacity_large_memory.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --target_query_load=160
+
+      TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
+      $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
+      $SHELL_WRAPPER pipenv run python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --is_max_capacity_run="True" --branch="$CURRENT_BRANCH" --is_max_capacity_run="True" --gitlab_job_id="$CI_JOB_ID"
 
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
@@ -118,7 +134,11 @@ maximum-capacity-large-memory-update:
       $SHELL_WRAPPER pipenv --python 3
       $SHELL_WRAPPER pipenv install -r requirements.txt
 
-      $SHELL_WRAPPER pipenv run ./max_capacity_large_memory.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --skip_generate_report=False --use_updates=True --is_ci_job=True --send_perf_metrics=True  --target_update_load=25 --branch="$CURRENT_BRANCH"
+      $SHELL_WRAPPER pipenv run experiments/max_capacity_large_memory.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --use_updates=True --target_update_load=25
+
+      TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
+      $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
+      $SHELL_WRAPPER pipenv run python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --is_max_capacity_run="True" --branch="$CURRENT_BRANCH" --is_max_capacity_run="True" --gitlab_job_id="$CI_JOB_ID"
 
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
@@ -175,12 +195,17 @@ benchmark-xnet:
       $SHELL_WRAPPER pipenv --python 3
       $SHELL_WRAPPER pipenv install -r requirements.txt
 
-      $SHELL_WRAPPER pipenv run ./run_xnet_experiment.py --testnet $TESTNET --skip_generate_report=False --hosts_ini_filename=hosts_single_node_subnets.ini  --branch="$CURRENT_BRANCH"
+      $SHELL_WRAPPER pipenv run experiments/run_xnet_experiment.py --testnet $TESTNET --hosts_ini_filename=hosts_single_node_subnets.ini
+
+      TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
+      $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
+      $SHELL_WRAPPER pipenv run python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --is_max_capacity_run="True" --branch="$CURRENT_BRANCH" --is_max_capacity_run="True" --gitlab_job_id="$CI_JOB_ID"
 
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
 
       $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
+  timeout: 6 hours
 
 # BENCHMARK SUITE gossip experiment
 large-subnet-gossip-experiment:
@@ -202,17 +227,21 @@ large-subnet-gossip-experiment:
       $SHELL_WRAPPER pipenv --python 3
       $SHELL_WRAPPER pipenv install -r requirements.txt
 
-      $SHELL_WRAPPER pipenv run ./max_capacity_gossip.py --testnet $TESTNET --wg_testnet $TESTNET --wg_subnet 2 --skip_generate_report=False --use_updates=True --update_allowable_t_median=10000 --send_perf_metrics=True --hosts_ini_filename=hosts_large_unassigned.ini --branch="$CURRENT_BRANCH"
+      $SHELL_WRAPPER pipenv run experiments/max_capacity_gossip.py --testnet $TESTNET --wg_testnet $TESTNET --wg_subnet 2 --use_updates=True --update_allowable_t_median=10000 --hosts_ini_filename=hosts_large_unassigned.ini
+      
+      TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
+      $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
+      $SHELL_WRAPPER pipenv run python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --is_max_capacity_run="True" --branch="$CURRENT_BRANCH" --is_max_capacity_run="True" --gitlab_job_id="$CI_JOB_ID"
 
       cd -
 
       $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
 
-.benchmark-nightly-test:
+.benchmark-spot-test:
   extends:
     - .ubuntu-nix-docker
-    - .rules-benchmark-nightly-tests
-  stage: benchmark-nightly-tests
+    - .rules-benchmark-spot-tests
+  stage: benchmark-spot-tests
   resource_group: $TESTNET
   dependencies: []  # don't copy artifacts from other jobs by default
   variables:
@@ -236,7 +265,7 @@ large-subnet-gossip-experiment:
 
 # Checks system performance with query calls
 system-baseline-query-performance-test-nightly:
-   extends: .benchmark-nightly-test
+   extends: .benchmark-spot-test
    artifacts:
     when: always
     paths:
@@ -257,11 +286,16 @@ system-baseline-query-performance-test-nightly:
       $SHELL_WRAPPER pipenv --python 3
       $SHELL_WRAPPER pipenv install -r requirements.txt
 
-      $SHELL_WRAPPER timeout 1h pipenv run ./run_system_baseline_experiment.py --testnet "$TESTNET" --wg_subnet 2 --wg_testnet $TESTNET --iter_duration 300 --skip_generate_report=False --load=600 --branch="$CURRENT_BRANCH" --is_ci_job=True --use_updates=False --median_latency_threshold=200 --send_perf_metrics=True --verifies_perf=True
+      $SHELL_WRAPPER timeout 1h pipenv run experiments/run_system_baseline_experiment.py --testnet "$TESTNET" --wg_subnet 2 --wg_testnet $TESTNET --iter_duration 300 --load=600  --use_updates=False
+
+      TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
+      $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
+      $SHELL_WRAPPER pipenv run python3 common/verify_perf.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --median_latency_threshold=200
+      $SHELL_WRAPPER pipenv run python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --branch="$CURRENT_BRANCH" --is_max_capacity_run="False" --gitlab_job_id="$CI_JOB_ID"
 
 # Checks system performance with update calls
 system-baseline-update-performance-test-nightly:
-   extends: .benchmark-nightly-test
+   extends: .benchmark-spot-test
    artifacts:
     when: always
     paths:
@@ -282,12 +316,17 @@ system-baseline-update-performance-test-nightly:
       $SHELL_WRAPPER pipenv --python 3
       $SHELL_WRAPPER pipenv install -r requirements.txt
 
-      $SHELL_WRAPPER timeout 1h pipenv run ./run_system_baseline_experiment.py --testnet "$TESTNET" --wg_subnet 2 --wg_testnet $TESTNET --iter_duration 300 --skip_generate_report=False --load=60 --branch="$CURRENT_BRANCH" --is_ci_job=True --use_updates=True --median_latency_threshold=2300 --send_perf_metrics=True --verifies_perf=True
+      $SHELL_WRAPPER timeout 1h pipenv run experiments/run_system_baseline_experiment.py --testnet "$TESTNET" --wg_subnet 2 --wg_testnet $TESTNET --iter_duration 300 --load=60  --use_updates=True
+
+      TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
+      $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
+      $SHELL_WRAPPER pipenv run python3 common/verify_perf.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --median_latency_threshold=2300
+      $SHELL_WRAPPER pipenv run python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --branch="$CURRENT_BRANCH" --is_max_capacity_run="False" --gitlab_job_id="$CI_JOB_ID"
 
 
 # Check system performance during heavy memory updates
 heavy-memory-update-performance-test-nightly:
-   extends: .benchmark-nightly-test
+   extends: .benchmark-spot-test
    artifacts:
     when: always
     paths:
@@ -307,5 +346,10 @@ heavy-memory-update-performance-test-nightly:
       $SHELL_WRAPPER pipenv --python 3
       $SHELL_WRAPPER pipenv install -r requirements.txt
       
-      $SHELL_WRAPPER timeout 1h pipenv run ./run_large_memory_experiment.py --testnet "$TESTNET" --wg_testnet "$TESTNET" --wg_subnet 2 --iter_duration 300 --skip_generate_report=False --target_update_load=15 --is_ci_job=True --use_updates=True --median_latency_threshold=3300 --send_perf_metrics=True --branch="$CURRENT_BRANCH" --verifies_perf=True
+      $SHELL_WRAPPER timeout 1h pipenv run experiments/run_large_memory_experiment.py --testnet "$TESTNET" --wg_testnet "$TESTNET" --wg_subnet 2 --iter_duration 300 --target_update_load=15 --use_updates=True
+
+      TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
+      $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
+      $SHELL_WRAPPER pipenv run python3 common/verify_perf.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --median_latency_threshold=3300
+      $SHELL_WRAPPER pipenv run python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --branch="$CURRENT_BRANCH" --is_max_capacity_run="False" --gitlab_job_id="$CI_JOB_ID"
 

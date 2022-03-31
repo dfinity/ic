@@ -1,15 +1,45 @@
-from __future__ import division
-
+import argparse
 import os
 import subprocess
 import sys
 import traceback
 from statistics import mean
 
+import gflags
 from ic.agent import Agent
 from ic.client import Client
 from ic.identity import Identity
 from termcolor import colored
+
+FLAGS = gflags.FLAGS
+
+
+def parse_command_line_args():
+    # Start: Provide command line args support #
+    # Get a dictionary of gflags from all imported files.
+    flags = gflags.FLAGS.__dict__["__flags"]
+
+    parser = argparse.ArgumentParser(description=colored("Experiment parameters.", "blue"))
+    # Create a set of command line options, based on the imported gflags.
+    for key, value in flags.items():
+        if key == "help":
+            continue
+        # gflags with default=None are required arguments. (SK: that's not true, optional flags with None as default values are not required)
+        if value.default is None:
+            parser.add_argument(f"--{key}", required=True, help=colored(f"Required field. {value.help}", "red"))
+        else:
+            parser.add_argument(
+                f"--{key}", required=False, default=value.default, help=f"{value.help}; default={value.default}"
+            )
+    # Now useful help message can be queried via: `python script_name.py -h`
+    parser.parse_args()
+    # Initialize gflags from the command line args.
+    FLAGS(sys.argv)
+    # Print all gflags for the experiment.
+    print(colored("The following values will be used in the experiment.", "red"))
+    for key, value in flags.items():
+        print(colored(f"Parameter {key} = {value.value}", "blue"))
+    # End: Provide command line args support #
 
 
 def try_deploy_ic(testnet: str, revision: str, out_dir: str) -> None:

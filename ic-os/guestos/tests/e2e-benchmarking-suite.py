@@ -88,7 +88,7 @@ def main(argv):
     run(
         [
             "python3",
-            "run_xnet_experiment.py",
+            "experiments/run_xnet_experiment.py",
             "--iter_duration",
             "20",
             "--tests_first_subnet_index",
@@ -107,7 +107,7 @@ def main(argv):
     run(
         [
             "python3",
-            "run_system_baseline_experiment.py",
+            "experiments/run_system_baseline_experiment.py",
             "--iter_duration",
             "10",
             "--load",
@@ -122,7 +122,7 @@ def main(argv):
     run(
         [
             "python3",
-            "run_system_baseline_experiment.py",
+            "experiments/run_system_baseline_experiment.py",
             "--iter_duration",
             "10",
             "--load",
@@ -138,7 +138,7 @@ def main(argv):
     run(
         [
             "python3",
-            "max_capacity_system_baseline.py",
+            "experiments/max_capacity_system_baseline.py",
             "--iter_duration",
             "20",
             "--query_initial_rps",
@@ -155,7 +155,7 @@ def main(argv):
     run(
         [
             "python3",
-            "max_capacity_system_baseline.py",
+            "experiments/max_capacity_system_baseline.py",
             "--iter_duration",
             "20",
             "--update_initial_rps",
@@ -173,7 +173,7 @@ def main(argv):
     run(
         [
             "python3",
-            "max_capacity_large_payload.py",
+            "experiments/max_capacity_large_payload.py",
             "--iter_duration",
             "10",
             "--max_block_payload_size",
@@ -191,10 +191,9 @@ def main(argv):
     run(
         [
             "python3",
-            "run_gossip_experiment.py",
+            "experiments/run_gossip_experiment.py",
             "--duration",
             "10",
-            "--skip_generate_report=True",
         ]
         + base_arguments_load_test
     )
@@ -203,7 +202,7 @@ def main(argv):
     run(
         [
             "python3",
-            "run_large_memory_experiment.py",
+            "experiments/run_large_memory_experiment.py",
             "--iter_duration",
             "10",
             "--target_update_load",
@@ -217,7 +216,7 @@ def main(argv):
     run(
         [
             "python3",
-            "max_capacity_large_memory.py",
+            "experiments/max_capacity_large_memory.py",
             "--iter_duration",
             "20",
             "--query_initial_rps",
@@ -232,7 +231,7 @@ def main(argv):
     run(
         [
             "python3",
-            "max_capacity_large_memory.py",
+            "experiments/max_capacity_large_memory.py",
             "--iter_duration",
             "20",
             "--query_initial_rps",

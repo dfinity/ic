@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 import os
+import sys
 
-import experiment
 import gflags
-import run_gossip_experiment
-from elasticsearch import ElasticSearch
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from common import misc  # noqa
+import run_gossip_experiment  # noqa
 
 FLAGS = gflags.FLAGS
 
@@ -38,29 +40,6 @@ gflags.DEFINE_integer(
 )
 
 if __name__ == "__main__":
-    experiment.parse_command_line_args()
-    experiment_name = os.path.basename(__file__).replace(".py", "")
-
+    misc.parse_command_line_args()
     exp = run_gossip_experiment.GossipExperiment()
-    (
-        failure_rate,
-        t_median,
-        t_average,
-        t_max,
-        t_min,
-        total_requests,
-        num_success,
-        num_failure,
-        max_subnet_size,
-    ) = exp.run_iterations()
-
-    ElasticSearch.send_max_capacity(
-        experiment_name,
-        "Update" if FLAGS.use_updates else "Query",
-        exp.git_hash,
-        exp.git_hash,
-        FLAGS.is_ci_job,
-        max_subnet_size,
-        exp.out_dir,
-        exp.t_experiment_start,
-    )
+    exp.run_iterations()
