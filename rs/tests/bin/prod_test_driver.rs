@@ -6,7 +6,7 @@ use ic_fondue::prod_tests::driver_setup::{
 use ic_fondue::prod_tests::evaluation::evaluate;
 use ic_fondue::prod_tests::pot_dsl::*;
 use ic_fondue::prod_tests::test_env::TestEnv;
-use ic_tests::api;
+use ic_tests::api_test;
 use ic_tests::boundary_nodes_integration::boundary_nodes;
 use ic_tests::btc_integration::btc;
 use ic_tests::create_subnet::{self, create_subnet_test};
@@ -162,10 +162,10 @@ fn get_test_suites() -> HashMap<String, Suite> {
             vec![
                 pot_with_setup(
                     "api_test",
-                    api::api_test::two_ics,
+                    api_test::two_ics,
                     par(vec![
-                        sys_t("ics_have_correct_subnet_count", api::api_test::ics_have_correct_subnet_count),
-                        sys_t("upload_file_to_farm", api::api_test::upload_file_to_farm)
+                        sys_t("ics_have_correct_subnet_count", api_test::ics_have_correct_subnet_count),
+                        sys_t("upload_file_to_farm", api_test::upload_file_to_farm)
                     ]),
                 ),
                 pot_with_setup(
@@ -422,12 +422,12 @@ fn get_test_suites() -> HashMap<String, Suite> {
             pot_with_setup(
                 "basic_health_pot_single_host",
                 basic_health_test::config_single_host,
-                par(vec![t("basic_health_test", basic_health_test)]),
+                par(vec![sys_t("basic_health_test", basic_health_test)]),
             ),
             pot(
                 "basic_health_pot_multiple_hosts",
                 basic_health_test::config_multiple_hosts(),
-                par(vec![t("basic_health_test", basic_health_test)]),
+                par(vec![sys_t("basic_health_test", basic_health_test)]),
             ),
             pot(
                 "node_reassignment_pot",

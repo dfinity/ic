@@ -21,7 +21,6 @@ use ic_fondue::{
 use ic_registry_subnet_type::SubnetType;
 use slog::Logger;
 
-use ic_tests::basic_health_test;
 use ic_tests::cow_safety_test;
 use ic_tests::execution;
 use ic_tests::feature_flags;
@@ -45,15 +44,12 @@ use std::time::Instant;
 
 /// Defines the test suite of system tests. If you want to add more tests in
 /// here, just add another entry to the vector with the corresponding pot.
-/// The [basic_health_pot] have a tutorial nature to them and are good
-/// places to look for simple test examples.
 fn all_pots() -> Vec<ic_fondue::pot::Pot> {
     // HAVE YOU READ THE README AT THE TOP?
     vec![
         canister_lifecycle_memory_capacity_pot(),
         canister_lifecycle_memory_size_pot(),
         max_number_of_canisters_pot(),
-        basic_health_pot(),
         consensus_liveness_with_equivocation_pot(),
         consensus_safety_pot(),
         cow_safety_pot(),
@@ -66,23 +62,6 @@ fn all_pots() -> Vec<ic_fondue::pot::Pot> {
         system_api_security_pot(),
         tecdsa_complaint_test_pot(),
     ]
-}
-
-/// If its your first time looking at or writing tests, the basic_health_test is
-/// the ideal place to start. Because this test does /not/ change its
-/// environment--e.g., adding or removing replicas--it is declared as a
-/// composable test and consists in a setup phase. The setup is responsible for
-/// installing a number of passive health monitoring devices in the network.
-/// After the setup runs, the actual test is ran.
-fn basic_health_pot() -> pot::Pot {
-    composable!(
-        "basic_health_pot",
-        basic_health_test::legacy_config(),
-        steps! {
-            basic_health_test::basic_health_test,
-            feature_flags::ecdsa_signatures_disabled_by_default
-        }
-    )
 }
 
 fn cow_safety_pot() -> pot::Pot {

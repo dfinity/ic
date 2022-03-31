@@ -6,7 +6,7 @@ use ic_fondue::prod_tests::boundary_node::{BoundaryNode, BoundaryNodeVm};
 use ic_fondue::prod_tests::ic::{InternetComputer, Subnet};
 use ic_fondue::prod_tests::pot_dsl::get_ic_handle_and_ctx;
 use ic_fondue::prod_tests::test_env::{HasIcPrepDir, TestEnv};
-use ic_fondue::prod_tests::test_setup::{DefaultIC, HasPublicApiUrl, IcNodeContainer};
+use ic_fondue::prod_tests::test_env_api::{DefaultIC, HasPublicApiUrl, IcNodeContainer};
 
 use ic_registry_subnet_type::SubnetType;
 use slog::{info, Logger};
