@@ -1,6 +1,6 @@
 //! The main function of ic-replay processes command line arguments.
 
-use clap::Parser;
+use clap::Clap;
 use ic_canister_sandbox_backend_lib::{
     canister_sandbox_main, RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_SANDBOX_LAUNCHER_FLAG,
 };

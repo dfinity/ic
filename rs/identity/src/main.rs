@@ -9,19 +9,19 @@
 //! ```
 
 use anyhow::Result;
-use clap::Parser;
+use clap::Clap;
 use std::fs;
 use std::path::PathBuf;
 
 use ic_identity::generate_key;
 
-#[derive(Parser)]
+#[derive(Clap)]
 #[clap(version = "0.1.0", author = "DFINITY team <team@dfinity.org>")]
 struct Opts {
     #[clap(
         short = 'd',
         long,
-        help = "The path of the directory in which the keys will be stored.",
+        about = "The path of the directory in which the keys will be stored.",
         default_value = "."
     )]
     out_dir: PathBuf,
@@ -29,7 +29,7 @@ struct Opts {
     #[clap(
         short = 'n',
         long,
-        help = "The name of the key.",
+        about = "The name of the key.",
         default_value = "identity"
     )]
     name: String,

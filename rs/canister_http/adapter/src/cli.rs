@@ -3,7 +3,7 @@
 #![allow(clippy::expect_used)]
 
 use crate::config::Config;
-use clap::Parser;
+use clap::{AppSettings, Clap};
 use slog::Level;
 use std::{fs::File, io, path::PathBuf};
 use thiserror::Error;
@@ -17,8 +17,9 @@ pub enum CliError {
 }
 
 /// This struct is use to provide a command line interface to the adapter.
-#[derive(Parser)]
+#[derive(Clap)]
 #[clap(version = "0.0.0", author = "DFINITY team <team@dfinity.org>")]
+#[clap(setting = AppSettings::ColoredHelp)]
 pub struct Cli {
     /// This field contains the path to the config file.
     pub config: PathBuf,

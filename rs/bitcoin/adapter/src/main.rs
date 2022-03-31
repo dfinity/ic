@@ -1,4 +1,4 @@
-use clap::Parser;
+use clap::Clap;
 use ic_btc_adapter::{
     spawn_grpc_server, start_router, AdapterState, BlockchainManagerRequest, BlockchainState, Cli,
     GetSuccessorsHandler,

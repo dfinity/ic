@@ -8,7 +8,7 @@ name = "governance_upgrader"
 
 [dependencies]
 bytes = "1.0.1"
-clap = { version = "3.1.6", features = ["derive"] }
+clap = "3.0.0-beta.2"
 garcon = "0.2"
 ic-nns-init = { path="../../nns/init" }
 ic-base-types = { path="../../types/base_types" }
