@@ -1,5 +1,5 @@
 use crate::address_utxoset::AddressUtxoSet;
-use crate::state::UtxoSet;
+use crate::{state::UtxoSet, utxos::UtxosTrait};
 use bitcoin::{Address, OutPoint, Transaction, TxOut, Txid};
 use std::str::FromStr;
 
@@ -123,7 +123,6 @@ mod test {
     use bitcoin::secp256k1::rand::rngs::OsRng;
     use bitcoin::secp256k1::Secp256k1;
     use bitcoin::{Address, Network, PublicKey, TxOut};
-    use std::collections::HashMap;
 
     #[test]
     fn coinbase_tx() {
@@ -141,21 +140,7 @@ mod test {
             let mut utxo = UtxoSet::new(true, *network);
             insert_tx(&mut utxo, &coinbase_tx, 0);
 
-            let expected = maplit::hashset! {
-                (
-                    OutPoint {
-                        txid: coinbase_tx.txid(),
-                        vout: 0
-                    },
-                    TxOut {
-                        value: 1000,
-                        script_pubkey: address.script_pubkey()
-                    },
-                    0
-                )
-            };
-
-            assert_eq!(utxo.clone().into_set(), expected);
+            assert_eq!(utxo.utxos.len(), 1);
             assert_eq!(
                 get_utxos(&utxo, &address.to_string()).into_vec(),
                 vec![ic_btc_types::Utxo {
@@ -180,8 +165,7 @@ mod test {
             coinbase_empty_tx.output.clear();
             insert_tx(&mut utxo, &coinbase_empty_tx, 0);
 
-            assert_eq!(utxo.utxos, HashMap::default());
-
+            assert!(utxo.utxos.is_empty());
             assert_eq!(utxo.address_to_outpoints, maplit::btreemap! {});
         }
     }
@@ -203,8 +187,7 @@ mod test {
             };
             insert_tx(&mut utxo, &coinbase_op_return_tx, 0);
 
-            assert_eq!(utxo.utxos, HashMap::default());
-
+            assert!(utxo.utxos.is_empty());
             assert_eq!(utxo.address_to_outpoints, maplit::btreemap! {});
         }
     }

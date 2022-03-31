@@ -7,7 +7,7 @@ use crate::{
     write_struct, Memory,
 };
 use allocator::Allocator;
-use iter::Iter;
+pub use iter::Iter;
 use node::{Key, Node, NodeType, Value, B};
 
 const LAYOUT_VERSION: u8 = 1;

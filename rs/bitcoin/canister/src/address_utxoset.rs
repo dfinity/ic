@@ -1,4 +1,4 @@
-use crate::state::UtxoSet;
+use crate::{state::UtxoSet, utxos::UtxosTrait};
 use bitcoin::{Address, OutPoint, Transaction, TxOut};
 use ic_btc_types::Utxo;
 use std::collections::{BTreeMap, HashSet};
@@ -63,7 +63,7 @@ impl<'a> AddressUtxoSet<'a> {
             // Remove it.
             let old_value = self
                 .removed_utxos
-                .insert(input.previous_output, (txout.clone(), *height));
+                .insert(input.previous_output, (txout.clone(), height));
             assert_eq!(old_value, None, "Cannot remove an output twice");
         }
     }
@@ -104,8 +104,7 @@ impl<'a> AddressUtxoSet<'a> {
                     .full_utxo_set
                     .utxos
                     .get(outpoint)
-                    .expect("outpoint must exist")
-                    .clone();
+                    .expect("outpoint must exist");
 
                 (*outpoint, txout, height)
             })

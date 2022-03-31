@@ -120,6 +120,7 @@ mod test {
     use crate::{
         proto,
         test_builder::{BlockBuilder, TransactionBuilder},
+        utxos::UtxosTrait,
     };
     use bitcoin::blockdata::constants::genesis_block;
     use bitcoin::secp256k1::rand::rngs::OsRng;
@@ -202,7 +203,21 @@ mod test {
         let state_proto = proto::State::decode(&*state_proto.encode_to_vec()).unwrap();
         let new_state = State::from_proto(state_proto);
 
-        assert_eq!(new_state, state);
+        assert_eq!(new_state.height, state.height);
+        assert_eq!(new_state.unstable_blocks, state.unstable_blocks);
+        assert_eq!(new_state.utxos.network, state.utxos.network);
+        assert_eq!(new_state.utxos.strict, state.utxos.strict);
+        assert_eq!(
+            new_state.utxos.utxos.large_utxos,
+            state.utxos.utxos.large_utxos
+        );
+
+        for (new_entry, old_entry) in new_state.utxos.utxos.iter().zip(state.utxos.utxos.iter()) {
+            assert_eq!(new_entry, old_entry);
+        }
+
+        // TODO(EXC-1041): Properly encode/decode `address_to_outpoints` once it's
+        // using a stable structure.
     }
 
     #[test]
@@ -397,7 +412,7 @@ mod test {
         process_chain(&mut state, 100_000);
 
         let mut total_supply = 0;
-        for (_, v, _) in state.utxos.clone().into_set() {
+        for (_, (v, _)) in state.utxos.utxos.iter() {
             total_supply += v.value;
         }
 
