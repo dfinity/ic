@@ -390,28 +390,8 @@ impl SnsCanisters<'_> {
             state.finish()
         });
 
-        // Stake the neuron.
-        let stake = Tokens::from_tokens(token_amount).unwrap();
-        let _block_height: u64 = self
-            .ledger
-            .update_from_sender(
-                "send_pb",
-                protobuf,
-                SendArgs {
-                    memo: Memo(NONCE),
-                    amount: stake,
-                    fee: DEFAULT_TRANSFER_FEE,
-                    from_subaccount: None,
-                    to: AccountIdentifier::new(
-                        PrincipalId::from(self.governance.canister_id()),
-                        Some(to_subaccount),
-                    ),
-                    created_at_time: None,
-                },
-                sender,
-            )
-            .await
-            .expect("Couldn't send funds.");
+        self.stake_neuron_account(sender, &to_subaccount, token_amount)
+            .await;
 
         // Claim the neuron on the governance canister.
         let claim_response: ManageNeuronResponse = self
@@ -460,6 +440,38 @@ impl SnsCanisters<'_> {
         }
 
         neuron_id
+    }
+
+    pub async fn stake_neuron_account(
+        &self,
+        sender: &Sender,
+        to_subaccount: &Subaccount,
+        token_amount: u64,
+    ) -> u64 {
+        // Stake the neuron.
+        let stake = Tokens::from_tokens(token_amount).unwrap();
+        let block_height: u64 = self
+            .ledger
+            .update_from_sender(
+                "send_pb",
+                protobuf,
+                SendArgs {
+                    memo: Memo(NONCE),
+                    amount: stake,
+                    fee: DEFAULT_TRANSFER_FEE,
+                    from_subaccount: None,
+                    to: AccountIdentifier::new(
+                        PrincipalId::from(self.governance.canister_id()),
+                        Some(*to_subaccount),
+                    ),
+                    created_at_time: None,
+                },
+                sender,
+            )
+            .await
+            .expect("Couldn't send funds.");
+
+        block_height
     }
 
     pub async fn increase_dissolve_delay(

@@ -18,16 +18,16 @@ use ic_sns_governance::pb::v1::manage_neuron::{
 use ic_sns_governance::pb::v1::manage_neuron_response::Command as CommandResponse;
 use ic_sns_governance::pb::v1::proposal::Action;
 use ic_sns_governance::pb::v1::{
-    ListNeurons, ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, Motion,
+    Empty, ListNeurons, ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, Motion,
     NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
     NeuronPermissionType, Proposal,
 };
 use ic_sns_governance::types::ONE_YEAR_SECONDS;
 use ic_sns_test_utils::itest_helpers::{
-    local_test_on_sns_subnet, SnsCanisters, SnsInitPayloadsBuilder,
+    local_test_on_sns_subnet, SnsCanisters, SnsInitPayloadsBuilder, UserInfo, NONCE,
 };
 use ic_types::PrincipalId;
-use ledger_canister::{AccountIdentifier, Tokens};
+use ledger_canister::{AccountIdentifier, Tokens, TOKEN_SUBDIVIDABLE_BY};
 use ledger_canister::{Memo, SendArgs, Subaccount, DEFAULT_TRANSFER_FEE};
 use std::collections::HashSet;
 use std::iter::FromIterator;
@@ -137,17 +137,16 @@ fn test_list_neurons_of_principal() {
 fn test_claim_neuron_with_default_permissions() {
     local_test_on_sns_subnet(|runtime| async move {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
-        let account_identifier = AccountIdentifier::from(user.get_principal_id());
         let alloc = Tokens::from_tokens(1000).unwrap();
 
         let sns_init_payload = SnsInitPayloadsBuilder::new()
-            .with_ledger_account(account_identifier, alloc)
+            .with_ledger_account(user.get_principal_id().into(), alloc)
             .build();
 
         let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
 
-        let nid = sns_canisters.stake_and_claim_neuron(&user, None).await;
-        let neuron = sns_canisters.get_neuron(&nid).await;
+        let neuron_id = sns_canisters.stake_and_claim_neuron(&user, None).await;
+        let neuron = sns_canisters.get_neuron(&neuron_id).await;
 
         let expected = vec![NeuronPermission::new(
             &user.get_principal_id(),
@@ -158,6 +157,325 @@ fn test_claim_neuron_with_default_permissions() {
         )];
 
         assert_eq!(neuron.permissions, expected);
+        Ok(())
+    });
+}
+
+#[test]
+fn test_claim_neuron() {
+    local_test_on_sns_subnet(|runtime| async move {
+        // Set up an SNS with a ledger account for a single user
+        let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let sys_params = NervousSystemParameters {
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let sns_init_payload = SnsInitPayloadsBuilder::new()
+            .with_ledger_account(user.get_principal_id().into(), alloc)
+            .with_nervous_system_parameters(sys_params.clone())
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        // Calculate the user's subaccount (used in the staking transfer).
+        let subaccount = Subaccount({
+            let mut state = Sha256::new();
+            state.write(&[0x0c]);
+            state.write(b"neuron-stake");
+            state.write(user.get_principal_id().as_slice());
+            state.write(&NONCE.to_be_bytes());
+            state.finish()
+        });
+
+        // Try claiming the Neuron (via memo and controller) before making the staking
+        // transfer (funding the neuron). This should fail.
+        let manage_neuron_command = ManageNeuron {
+            subaccount: subaccount.to_vec(),
+            command: Some(Command::ClaimOrRefresh(ClaimOrRefresh {
+                by: Some(By::MemoAndController(MemoAndController {
+                    memo: NONCE,
+                    controller: None,
+                })),
+            })),
+        };
+
+        let response: ManageNeuronResponse = sns_canisters
+            .governance
+            .update_from_sender(
+                "manage_neuron",
+                candid_one,
+                manage_neuron_command.clone(),
+                &user,
+            )
+            .await
+            .expect("Error calling the manage_neuron api.");
+
+        // assert that the error_type is InsufficientFunds.
+        let error = match response.command.unwrap() {
+            CommandResponse::Error(error) => error,
+            CommandResponse::ClaimOrRefresh(_) => {
+                panic!(
+                    "User should not have been able to claim the neuron due to insufficient funds"
+                )
+            }
+            _ => panic!("Unexpected command response when claiming neuron"),
+        };
+        assert_eq!(error.error_type, ErrorType::InsufficientFunds as i32);
+
+        // Now stake 1 governance token using the calculated subaccount
+        sns_canisters
+            .stake_neuron_account(&user, &subaccount, 1)
+            .await;
+
+        // Retry the same ClaimOrRefresh request. Now that the staking transfer
+        // has been made, it should succeed this time (unlike the previous attempt),
+        // and it should result in a new neuron.
+        let response: ManageNeuronResponse = sns_canisters
+            .governance
+            .update_from_sender(
+                "manage_neuron",
+                candid_one,
+                manage_neuron_command.clone(),
+                &user,
+            )
+            .await
+            .expect("Error calling the manage_neuron api.");
+
+        let claim_or_refresh_response = match response.command.unwrap() {
+            CommandResponse::ClaimOrRefresh(response) => response,
+            _ => panic!("Unexpected command response when claiming neuron."),
+        };
+
+        let neuron_id = claim_or_refresh_response.refreshed_neuron_id.unwrap();
+        let neuron = sns_canisters.get_neuron(&neuron_id).await;
+        // The neuron's cached_neuron_stake_e8s should equal the 1 token (e8s) that was staked.
+        assert_eq!(neuron.cached_neuron_stake_e8s, TOKEN_SUBDIVIDABLE_BY);
+
+        Ok(())
+    });
+}
+
+#[test]
+fn test_claim_neuron_fails_when_max_number_of_neurons_is_reached() {
+    local_test_on_sns_subnet(|runtime| async move {
+        // Set up an SNS with a ledger account for two users
+        let user1 = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
+        let user2 = UserInfo::new(Sender::from_keypair(&TEST_USER2_KEYPAIR));
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let sys_params = NervousSystemParameters {
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            max_number_of_neurons: Some(1),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let sns_init_payload = SnsInitPayloadsBuilder::new()
+            .with_ledger_account(user1.sender.get_principal_id().into(), alloc)
+            .with_ledger_account(user2.sender.get_principal_id().into(), alloc)
+            .with_nervous_system_parameters(sys_params.clone())
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        // Successfully STAKE and CLAIM user1's neuron, reaching the configured maximum number of
+        // neurons allowed in the system
+        sns_canisters
+            .stake_and_claim_neuron(&user1.sender, Some(ONE_YEAR_SECONDS as u32))
+            .await;
+
+        // Only STAKE for user2.
+        sns_canisters
+            .stake_neuron_account(&user2.sender, &user2.subaccount, 1)
+            .await;
+
+        let manage_neuron_command = ManageNeuron {
+            subaccount: user2.subaccount.to_vec(),
+            command: Some(Command::ClaimOrRefresh(ClaimOrRefresh {
+                by: Some(By::MemoAndController(MemoAndController {
+                    memo: NONCE,
+                    controller: None,
+                })),
+            })),
+        };
+
+        // Try claiming the Neuron for user2 (via memo and controller). This should fail due to
+        // the max_number_of_neurons being reached.
+        let response: ManageNeuronResponse = sns_canisters
+            .governance
+            .update_from_sender(
+                "manage_neuron",
+                candid_one,
+                manage_neuron_command.clone(),
+                &user2.sender,
+            )
+            .await
+            .expect("Error calling the manage_neuron api.");
+
+        // assert that the error_type is PreconditionFailed.
+        let error = match response.command.unwrap() {
+            CommandResponse::Error(error) => error,
+            CommandResponse::ClaimOrRefresh(_) => {
+                panic!("User should not have been able to claim a neuron due to reaching max_number_of_neurons")
+            }
+            _ => panic!("Unexpected command response when claiming neuron."),
+        };
+        assert_eq!(error.error_type, ErrorType::PreconditionFailed as i32);
+
+        // Update the NervousSystemParameters (with user1) to increase max_number_of_neurons by 1
+        let update_to_nervous_system_params = NervousSystemParameters {
+            max_number_of_neurons: Some(sys_params.max_number_of_neurons.unwrap() + 1),
+            ..Default::default()
+        };
+        sns_canisters
+            .manage_nervous_system_parameters(
+                &user1.sender,
+                &user1.subaccount,
+                update_to_nervous_system_params,
+            )
+            .await
+            .expect("Expected updating NervousSystemParameters to succeed");
+
+        // Try to claim the neuron (via memo and controller). Now that the max_number_of_neurons
+        // has increased, this should result in a new neuron.
+        let response: ManageNeuronResponse = sns_canisters
+            .governance
+            .update_from_sender(
+                "manage_neuron",
+                candid_one,
+                manage_neuron_command.clone(),
+                &user2.sender,
+            )
+            .await
+            .expect("Error calling the manage_neuron api.");
+
+        let claim_or_refresh_response = match response.command.unwrap() {
+            CommandResponse::ClaimOrRefresh(response) => response,
+            _ => panic!("Unexpected command response when claiming neuron."),
+        };
+
+        let neuron_id = claim_or_refresh_response.refreshed_neuron_id.unwrap();
+        let neuron = sns_canisters.get_neuron(&neuron_id).await;
+        // The neuron's cached_neuron_stake_e8s should equal the 1 token (e8s) that was staked.
+        assert_eq!(neuron.cached_neuron_stake_e8s, TOKEN_SUBDIVIDABLE_BY);
+
+        Ok(())
+    });
+}
+
+#[test]
+fn test_refresh_neuron() {
+    local_test_on_sns_subnet(|runtime| async move {
+        // Set up an SNS with a ledger account for a single user
+        let user = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let params = NervousSystemParameters {
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let sns_init_payload = SnsInitPayloadsBuilder::new()
+            .with_ledger_account(user.sender.get_principal_id().into(), alloc)
+            .with_nervous_system_parameters(params.clone())
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        // STAKE and CLAIM 1 token for the user to measure the neuron's pre-refresh stake
+        sns_canisters
+            .stake_and_claim_neuron_with_tokens(&user.sender, Some(ONE_YEAR_SECONDS as u32), 1)
+            .await;
+
+        let neuron = sns_canisters.get_neuron(&user.neuron_id).await;
+
+        let cached_neuron_stake_e8s_before_refresh = neuron.cached_neuron_stake_e8s;
+
+        // STAKE another token to subaccount of the already existing neuron. The ledger account
+        // should then be greater than the neuron's cached stake.
+        sns_canisters
+            .stake_neuron_account(&user.sender, &user.subaccount, 1)
+            .await;
+
+        // Refresh the neuron via memo and controller by using the By::MemoAndController method
+        let response: ManageNeuronResponse = sns_canisters
+            .governance
+            .update_from_sender(
+                "manage_neuron",
+                candid_one,
+                ManageNeuron {
+                    subaccount: user.subaccount.to_vec(),
+                    command: Some(Command::ClaimOrRefresh(ClaimOrRefresh {
+                        by: Some(By::MemoAndController(MemoAndController {
+                            memo: NONCE,
+                            controller: Some(user.sender.get_principal_id()),
+                        })),
+                    })),
+                },
+                &user.sender,
+            )
+            .await
+            .expect("Error calling the manage_neuron api.");
+
+        let claim_or_refresh_response = match response.command.unwrap() {
+            CommandResponse::ClaimOrRefresh(response) => response,
+            _ => panic!("Unexpected command response when claiming neuron."),
+        };
+
+        let neuron_id = claim_or_refresh_response.refreshed_neuron_id.unwrap();
+        let neuron = sns_canisters.get_neuron(&neuron_id).await;
+        // Make sure the previously recorded cached state has increased by
+        // 1 token (unit is e8s hence TOKEN_SUBDIVIDABLE_BY)
+        assert_eq!(
+            cached_neuron_stake_e8s_before_refresh + TOKEN_SUBDIVIDABLE_BY,
+            neuron.cached_neuron_stake_e8s
+        );
+
+        // STAKE another token to subaccount of the already existing neuron. The ledger account
+        // should then be greater than the neuron's cached stake.
+        sns_canisters
+            .stake_neuron_account(&user.sender, &user.subaccount, 1)
+            .await;
+
+        // Refresh the neuron via NeuronId by using the By::NeuronId method
+        let response: ManageNeuronResponse = sns_canisters
+            .governance
+            .update_from_sender(
+                "manage_neuron",
+                candid_one,
+                ManageNeuron {
+                    subaccount: user.subaccount.to_vec(),
+                    command: Some(Command::ClaimOrRefresh(ClaimOrRefresh {
+                        by: Some(By::NeuronId(Empty {})),
+                    })),
+                },
+                &user.sender,
+            )
+            .await
+            .expect("Error calling the manage_neuron api.");
+
+        let claim_or_refresh_response = match response.command.unwrap() {
+            CommandResponse::ClaimOrRefresh(response) => response,
+            _ => panic!("Unexpected command response when claiming neuron."),
+        };
+
+        let neuron_id = claim_or_refresh_response.refreshed_neuron_id.unwrap();
+        let neuron = sns_canisters.get_neuron(&neuron_id).await;
+        // Make sure the previously recorded cached state has increased by
+        // 2 tokens (unit is e8s hence TOKEN_SUBDIVIDABLE_BY)
+        assert_eq!(
+            cached_neuron_stake_e8s_before_refresh + (2 * TOKEN_SUBDIVIDABLE_BY),
+            neuron.cached_neuron_stake_e8s
+        );
+
         Ok(())
     });
 }
