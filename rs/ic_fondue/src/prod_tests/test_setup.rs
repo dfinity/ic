@@ -2,6 +2,7 @@ use crate::ic_manager::handle::READY_RESPONSE_TIMEOUT;
 use crate::ic_manager::{FarmInfo, IcEndpoint, IcHandle, IcSubnet, RuntimeDescriptor};
 use crate::prod_tests::cli::AuthorizedSshAccount;
 use crate::prod_tests::driver_setup::{AUTHORIZED_SSH_ACCOUNTS, FARM_BASE_URL, FARM_GROUP_NAME};
+use crate::prod_tests::farm::Farm;
 use crate::prod_tests::test_env::{HasIcPrepDir, TestEnv};
 use anyhow::{bail, Result};
 use ic_interfaces::registry::{RegistryClient, RegistryClientResult};
@@ -13,7 +14,7 @@ use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use ic_types::{NodeId, RegistryVersion, SubnetId};
 use slog::{info, warn};
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use std::{convert::TryFrom, net::IpAddr, str::FromStr, sync::Arc};
 use url::Url;
@@ -385,4 +386,65 @@ impl<T> RegistryResultHelper<T> for RegistryClientResult<T> {
 
 trait RegistryResultHelper<T> {
     fn unwrap_result(self) -> T;
+}
+
+pub trait HasHttpFileStore {
+    fn get_file_manager(&self) -> Box<dyn HttpFileStore>;
+}
+
+impl HasHttpFileStore for TestEnv {
+    fn get_file_manager(&self) -> Box<dyn HttpFileStore> {
+        let base_url: Url = self
+            .read_object(FARM_BASE_URL)
+            .expect("could not fetch farm_base_url");
+        let farm = Farm::new(base_url, self.logger());
+        Box::new(FarmFileStore { farm })
+    }
+}
+
+pub trait HttpFileStore {
+    fn upload(&self, path: PathBuf) -> anyhow::Result<Box<dyn HttpFileHandle>>;
+}
+
+pub trait HttpFileHandle {
+    fn download(&self, sink: Box<dyn std::io::Write>) -> anyhow::Result<()>;
+    fn url(&self) -> Url;
+}
+
+pub struct FarmFileHandle {
+    farm: Farm,
+    url: Url,
+}
+
+impl HttpFileHandle for FarmFileHandle {
+    fn download(&self, sink: Box<dyn std::io::Write>) -> anyhow::Result<()> {
+        self.farm.download_file(self.url.clone(), sink)?;
+        Ok(())
+    }
+    fn url(&self) -> Url {
+        self.url.clone()
+    }
+}
+
+pub struct FarmFileStore {
+    farm: Farm,
+}
+
+impl HttpFileStore for FarmFileStore {
+    fn upload(&self, path: PathBuf) -> anyhow::Result<Box<dyn HttpFileHandle>> {
+        let name = path
+            .file_name()
+            .expect("cannot fetch file_name")
+            .to_str()
+            .expect("cannot convert file_name to str");
+        let id = self.farm.upload_file(&path, name)?;
+        Ok(Box::new(FarmFileHandle {
+            farm: self.farm.clone(),
+            url: self
+                .farm
+                .base_url
+                .join(&format!("file/{}", id))
+                .expect("cannot join urls"),
+        }))
+    }
 }

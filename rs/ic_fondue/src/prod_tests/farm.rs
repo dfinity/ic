@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     net::Ipv6Addr,
-    path::{Path, PathBuf},
+    path::Path,
     time::{Duration, Instant},
 };
 
@@ -10,6 +10,7 @@ use anyhow::Result;
 use reqwest::blocking::{multipart, Client, RequestBuilder};
 use serde::{Deserialize, Serialize};
 use slog::{error, info, warn, Logger};
+use std::io::Write;
 use thiserror::Error;
 use url::Url;
 
@@ -64,29 +65,22 @@ impl Farm {
     }
 
     /// uploads an image an returns the image id
-    pub fn upload_image<P: AsRef<Path>>(
-        &self,
-        group_name: &str,
-        path: P,
-        filename: String,
-    ) -> FarmResult<String> {
-        let url_path = format!("group/{}/image", group_name);
-        let target_file = PathBuf::from(path.as_ref());
+    pub fn upload_file<P: AsRef<Path>>(&self, path: P, filename: &str) -> FarmResult<String> {
         let form = multipart::Form::new()
-            .file(filename.clone(), target_file)
+            .file(filename.to_string(), path)
             .expect("could not create multipart for image");
-        let rb = self.post(&url_path).multipart(form);
+        let rb = self.post("file").multipart(form);
         let resp = rb.send()?;
-        let mut image_ids = resp.json::<ImageUploadResponse>()?.image_ids;
-        if image_ids.len() != 1 || !image_ids.contains_key(&filename) {
+        let mut file_ids = resp.json::<ImageUploadResponse>()?.image_ids;
+        if file_ids.len() != 1 || !file_ids.contains_key(filename) {
             return Err(FarmError::InvalidResponse {
                 message: format!(
-                    "Response has invalid length or does not contain image id for '{}'",
+                    "Response has invalid length or does not contain file id for '{}'",
                     filename
                 ),
             });
         }
-        Ok(image_ids.remove(&filename).unwrap())
+        Ok(file_ids.remove(filename).unwrap())
     }
 
     pub fn attach_disk_image(
@@ -158,6 +152,12 @@ impl Farm {
         self.client.delete(url)
     }
 
+    pub fn download_file(&self, url: Url, mut sink: Box<dyn std::io::Write>) -> FarmResult<()> {
+        let resp = self.client.get(url).send()?;
+        sink.write_all(resp.bytes().expect("failed to get bytes").as_ref())?;
+        Ok(())
+    }
+
     fn json<T: Serialize + ?Sized>(rb: RequestBuilder, json: &T) -> RequestBuilder {
         rb.header("Accept", "application/json")
             .header("Content-Type", "application/json")
@@ -184,7 +184,7 @@ impl Farm {
                 Ok(r) => {
                     if r.status().is_success() {
                         return Ok(r);
-                    }
+                    };
                     if r.status().is_server_error() {
                         error!(self.logger, "unexpected response from Farm: {:?}", r.text());
                     } else {
@@ -275,6 +275,9 @@ pub enum FarmError {
 
     #[error("Retried too many times: {message}")]
     TooManyRetries { message: String },
+
+    #[error(transparent)]
+    IoError(#[from] std::io::Error),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
