@@ -195,7 +195,7 @@ pub fn create_and_upload_config_disk_image(
     std::io::stdout().write_all(&output.stdout)?;
     std::io::stderr().write_all(&output.stderr)?;
 
-    let image_id = farm.upload_image(group_name, compressed_img_path, mk_compressed_img_path())?;
+    let image_id = farm.upload_file(compressed_img_path, &mk_compressed_img_path())?;
     info!(farm.logger, "Uploaded image: {}", image_id);
 
     Ok(image_id)

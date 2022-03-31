@@ -98,8 +98,7 @@ impl UniversalVm {
                 bail!("could not spawn config image creation process");
             }
 
-            let image_id =
-                farm.upload_image(&group_name, config_img, String::from(CONF_IMG_FNAME))?;
+            let image_id = farm.upload_file(config_img, CONF_IMG_FNAME)?;
             info!(logger, "Uploaded image: {}", image_id);
 
             farm.attach_disk_image(&group_name, &self.name, "usb-storage", image_id)?;

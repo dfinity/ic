@@ -178,7 +178,7 @@ pub fn setup_and_start_vms(
         let ic_name = ic_name.to_string();
         join_handles.push(thread::spawn(move || {
             create_config_disk_image(&ic_name, &node, &t_env, &group_name)?;
-            let image_id = upload_config_disk_image(&node, &t_farm, &group_name)?;
+            let image_id = upload_config_disk_image(&node, &t_farm)?;
             t_farm.attach_disk_image(&group_name, &vm_name, "usb-storage", image_id)?;
             t_farm.start_vm(&group_name, &vm_name)?;
             Ok(())
@@ -196,14 +196,10 @@ pub fn setup_and_start_vms(
     result
 }
 
-pub fn upload_config_disk_image(
-    node: &InitializedNode,
-    farm: &Farm,
-    group_name: &str,
-) -> FarmResult<String> {
+pub fn upload_config_disk_image(node: &InitializedNode, farm: &Farm) -> FarmResult<String> {
     let compressed_img_path = mk_compressed_img_path();
     let target_file = PathBuf::from(&node.node_path).join(compressed_img_path.clone());
-    let image_id = farm.upload_image(group_name, target_file, compressed_img_path)?;
+    let image_id = farm.upload_file(target_file, &compressed_img_path)?;
     info!(farm.logger, "Uploaded image: {}", image_id);
     Ok(image_id)
 }

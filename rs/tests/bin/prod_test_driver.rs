@@ -164,7 +164,8 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "api_test",
                     api::api_test::two_ics,
                     par(vec![
-                        sys_t("api_test", api::api_test::ics_have_correct_subnet_count)
+                        sys_t("ics_have_correct_subnet_count", api::api_test::ics_have_correct_subnet_count),
+                        sys_t("upload_file_to_farm", api::api_test::upload_file_to_farm)
                     ]),
                 ),
                 pot_with_setup(
