@@ -18,11 +18,11 @@ use std::time::SystemTime;
 use prost::Message;
 
 use candid::candid_method;
-use dfn_candid::{candid, candid_one};
+use dfn_candid::{candid, candid_one, CandidOne};
 use dfn_core::api::{call_with_callbacks, reject_message};
 use dfn_core::{
-    api::{arg_data, caller, id, now},
-    over, over_async, println,
+    api::{caller, id, now},
+    over, over_async, over_init, println,
 };
 
 use ic_base_types::CanisterId;
@@ -201,25 +201,9 @@ impl Environment for CanisterEnv {
     }
 }
 
-/// Initializes the canister by decoding the init arguments and initializing internal state.
 #[export_name = "canister_init"]
 fn canister_init() {
-    dfn_core::printer::hook();
-
-    match GovernanceProto::decode(&arg_data()[..]) {
-        Err(err) => {
-            println!(
-                "Error deserializing canister state in initialization: {}.",
-                err
-            );
-            Err(err)
-        }
-        Ok(proto) => {
-            canister_init_(proto);
-            Ok(())
-        }
-    }
-    .expect("Failed to initialize canister: Unable to deserialize arg as GovernanceProto.");
+    over_init(|CandidOne(arg)| canister_init_(arg))
 }
 
 /// In contrast to canister_init(), this method does not do deserialization.

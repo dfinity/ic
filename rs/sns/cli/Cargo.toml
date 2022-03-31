@@ -1,0 +1,31 @@
+[package]
+name = "ic-sns-cli"
+version = "0.1.0"
+edition = "2018"
+
+[[bin]]
+name = "sns"
+path = "src/main.rs"
+
+[dependencies]
+candid = "0.7.4"
+dfn_core = { path = "../../rust_canisters/dfn_core" }
+dfn_candid = { path = "../../rust_canisters/dfn_candid" }
+dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
+ic-base-types = { path = "../../types/base_types" }
+ic-nervous-system-common = {path = "../../nervous_system/common"}
+ic-protobuf = { path = "../../protobuf" }
+ic-sns-test-utils = { path = "../test_utils" }
+ic-sns-governance = { path = "../governance" }
+ic-sns-root = { path = "../root" }
+ledger-canister = { path = "../../rosetta-api/ledger_canister" }
+on_wire = { path = "../../rust_canisters/on_wire" }
+prost = "0.9.0"
+serde = { version = "1.0", features = ["derive"] }
+rand = "0.7.3"
+rand_core = "0.5.1"
+bytes = "1.0.1"
+structopt = "0.3.20"
+hex = "0.4.3"
+url = "2.2.0"
+
