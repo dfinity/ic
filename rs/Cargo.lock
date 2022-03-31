@@ -4713,7 +4713,6 @@ dependencies = [
 name = "ic-error-types"
 version = "0.8.0"
 dependencies = [
- "candid",
  "ic-protobuf",
  "serde",
  "strum 0.23.0",

@@ -579,7 +579,12 @@ impl SetupInitialDKGResponse {
     }
 
     pub fn decode(blob: &[u8]) -> Result<Self, UserError> {
-        let serde_encoded_transcript_records = Decode!(blob, Vec<u8>)?;
+        let serde_encoded_transcript_records = Decode!(blob, Vec<u8>).map_err(|err| {
+            UserError::new(
+                ErrorCode::CanisterContractViolation,
+                format!("Error decoding candid: {}", err),
+            )
+        })?;
         match serde_cbor::from_slice::<(
             InitialNiDkgTranscriptRecord,
             InitialNiDkgTranscriptRecord,
