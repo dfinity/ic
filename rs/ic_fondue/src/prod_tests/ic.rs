@@ -33,6 +33,7 @@ pub struct InternetComputer {
     pub unassigned_nodes: Vec<Node>,
     pub ssh_readonly_access_to_unassigned_nodes: Vec<String>,
     name: String,
+    pub no_idkg_key: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -79,6 +80,11 @@ impl InternetComputer {
 
     pub fn with_initial_replica(mut self, initial_replica: NodeSoftwareVersion) -> Self {
         self.initial_version = Some(initial_replica);
+        self
+    }
+
+    pub fn without_idkg_key(mut self) -> Self {
+        self.no_idkg_key = true;
         self
     }
 

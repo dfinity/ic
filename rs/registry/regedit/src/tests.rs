@@ -137,6 +137,7 @@ pub fn run_ic_prep() -> (TempDir, IcPrepStateDir) {
             p2p_start_flow_tag: 0,
             prometheus_metrics: vec![],
             node_operator_principal_id: None,
+            no_idkg_key: false,
             secret_key_store: None,
         },
     );

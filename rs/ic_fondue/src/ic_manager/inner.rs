@@ -291,6 +291,7 @@ impl IcManager {
                             .into()],
                         // this value will be overridden by IcConfig::with_node_operator()
                         node_operator_principal_id: None,
+                        no_idkg_key: false,
                         secret_key_store: None,
                     },
                 );
