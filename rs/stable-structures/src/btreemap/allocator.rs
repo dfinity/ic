@@ -218,6 +218,7 @@ impl<M: Memory> Allocator<M> {
         write_struct(&header, self.header_addr, &self.memory);
     }
 
+    #[cfg(test)]
     pub fn num_allocated_chunks(&self) -> u64 {
         self.num_allocated_chunks
     }

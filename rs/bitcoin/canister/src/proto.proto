@@ -18,7 +18,14 @@ message State {
 }
 
 message UtxoSet {
-  repeated Utxo utxos = 1;
+  repeated Utxo large_utxos = 1;
+
+  // Small and medium UTXOs are stored in stable structures, for now
+  // stable structures are using vectors as memory.
+  // TODO(EXC-1039): Remove these fields once we're using page maps.
+  bytes small_utxos = 4;
+  bytes medium_utxos = 5;
+
   bool strict = 2;
   Network network = 3;
 }

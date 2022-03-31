@@ -3453,6 +3453,7 @@ dependencies = [
  "prost",
  "prost-build",
  "serde",
+ "stable-structures",
  "tempfile",
 ]
 

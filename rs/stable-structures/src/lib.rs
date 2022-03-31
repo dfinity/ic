@@ -1,7 +1,9 @@
 pub mod btreemap;
+pub use btreemap::StableBTreeMap;
 mod types;
 pub mod vec_mem;
 use types::Address;
+pub use vec_mem::VectorMemory;
 
 const WASM_PAGE_SIZE: u64 = 65536;
 

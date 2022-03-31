@@ -14,6 +14,7 @@ ic-btc-types = { path = "../types/public" }
 lazy_static = "1.4.0"
 prost = "0.9"
 serde = "1.0.132"
+stable-structures = { path = "../../stable-structures" }
 
 [build-dependencies]
 prost-build = "0.9.0"

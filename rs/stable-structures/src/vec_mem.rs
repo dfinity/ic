@@ -5,6 +5,9 @@ use std::rc::Rc;
 
 const MAX_PAGES: u64 = i64::MAX as u64 / WASM_PAGE_SIZE;
 
+/// A `Memory` that is based on a vector.
+pub type VectorMemory = Rc<RefCell<Vec<u8>>>;
+
 impl Memory for RefCell<Vec<u8>> {
     fn size(&self) -> u64 {
         self.borrow().len() as u64 / WASM_PAGE_SIZE
