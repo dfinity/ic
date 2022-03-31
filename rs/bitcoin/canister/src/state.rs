@@ -3,7 +3,7 @@ use bitcoin::{hashes::Hash, Block, Network, OutPoint, Script, TxOut, Txid};
 use core::cell::RefCell;
 use ic_protobuf::bitcoin::v1;
 use stable_structures::{StableBTreeMap, VectorMemory};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
 pub type Height = u32;
@@ -170,7 +170,7 @@ pub struct UtxoSet {
     pub utxos: Utxos,
     pub network: Network,
     // An index for fast retrievals of an address's UTXOs.
-    pub address_to_outpoints: BTreeMap<String, Vec<OutPoint>>,
+    pub address_to_outpoints: BTreeSet<(String, OutPoint)>,
     // If true, a transaction's inputs must all be present in the UTXO for it to be accepted.
     pub strict: bool,
 }
@@ -179,7 +179,7 @@ impl UtxoSet {
     pub fn new(strict: bool, network: Network) -> Self {
         Self {
             utxos: Utxos::default(),
-            address_to_outpoints: BTreeMap::default(),
+            address_to_outpoints: BTreeSet::default(),
             strict,
             network,
         }
@@ -252,7 +252,7 @@ impl UtxoSet {
 
         Self {
             utxos,
-            address_to_outpoints: BTreeMap::default(),
+            address_to_outpoints: BTreeSet::default(),
             strict: utxos_proto.strict,
             network: match utxos_proto.network {
                 0 => Network::Bitcoin,

@@ -93,13 +93,16 @@ impl<'a> AddressUtxoSet<'a> {
 
     pub fn into_vec(self) -> Vec<Utxo> {
         // Retrieve all the UTXOs of the address from the underlying UTXO set.
+        // NOTE: We're iterating over all the entries in `address_to_outpoints`, which
+        // is very inefficient in practice. Once `address_to_outpoints` is migrated to
+        // a stable structure, we'll use a `range` method here to fetch only the needed
+        // outpoints efficiently.
         let mut set: HashSet<_> = self
             .full_utxo_set
             .address_to_outpoints
-            .get(&self.address)
-            .unwrap_or(&vec![])
             .iter()
-            .map(|outpoint| {
+            .filter(|(address, _)| address == &self.address)
+            .map(|(_, outpoint)| {
                 let (txout, height) = self
                     .full_utxo_set
                     .utxos
