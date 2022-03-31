@@ -1,7 +1,10 @@
 //! This module tests the system tests API itself.
 
-use ic_fondue::prod_tests::test_setup::HasHttpFileStore;
-use ic_fondue::prod_tests::{ic::InternetComputer, test_env::TestEnv, test_setup::DefaultIC};
+use ic_fondue::prod_tests::{
+    ic::InternetComputer,
+    test_env::TestEnv,
+    test_env_api::{DefaultIC, HasHttpFileStore},
+};
 use ic_registry_subnet_type::SubnetType;
 use slog::Logger;
 use std::fs::File;
@@ -32,7 +35,7 @@ pub fn upload_file_to_farm(test_env: TestEnv, _: Logger) {
     test_env
         .write_object("uploaded", &String::from("magic"))
         .expect("failed to write to env");
-    let fm = test_env.get_file_manager();
+    let fm = test_env.http_file_store();
     let fh = fm
         .upload(test_env.get_path("uploaded"))
         .expect("failed to upload file to farm");

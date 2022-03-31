@@ -31,15 +31,12 @@ Coverage::
 
 end::catalog[] */
 
-use crate::{api::system_test_context::*, util::*}; // to use the universal canister
+use crate::util::*; // to use the universal canister
+use ic_fondue::prod_tests::ic::{InternetComputer, Subnet};
+use ic_fondue::prod_tests::test_env_api::*;
 use ic_fondue::prod_tests::{ic::VmAllocationStrategy, test_env::TestEnv};
-use ic_fondue::{
-    ic_instance::{LegacyInternetComputer, Subnet as LegacySubnet}, // which is declared through these types
-    ic_manager::IcHandle,                                          // we run the test on the IC
-    prod_tests::ic::{InternetComputer, Subnet},
-};
 use ic_registry_subnet_type::SubnetType;
-use slog::info;
+use slog::{info, Logger};
 
 pub fn config_single_host(env: TestEnv) {
     InternetComputer::new()
@@ -56,40 +53,25 @@ pub fn config_multiple_hosts() -> InternetComputer {
         .with_allocation_strategy(VmAllocationStrategy::DistributeAcrossDcs)
 }
 
-pub fn legacy_config() -> LegacyInternetComputer {
-    LegacyInternetComputer::new()
-        .add_subnet(LegacySubnet::new(SubnetType::System).add_nodes(4))
-        .add_subnet(LegacySubnet::new(SubnetType::System).add_nodes(4))
-}
-
 const MSG: &[u8] = b"this beautiful prose should be persisted for future generations";
 
 /// Here we define the test workflow, which should implement the Runbook given
 /// in the test catalog entry at the top of this file.
-///
-/// This particular test does not change the IC environment -- such as by
-/// adding or dropping nodes -- hence, it receives a [IcHandle] instead of a
-/// `IcManager`. This distinction makes it easier to safely run tests against
-/// the same setup. In addition to a handle, the test also receives a
-/// [ic_fondue::pot::Context] which contains a number of auxiliary tools such as
-/// a logger, and a PRNG.
-pub fn basic_health_test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    // The system test context can be created from the IcHandle and the fondue-Context.
-    let ctx = SystemTestContext::from_ic_handle(handle, ctx);
+pub fn basic_health_test(env: TestEnv, log: Logger) {
     // Assemble a list that contains one node per subnet.
-    let nodes: Vec<_> = ctx
+    let nodes: Vec<_> = env
         .topology_snapshot()
         .subnets()
         .map(|s| s.nodes().next().unwrap())
         .collect();
 
-    info!(ctx.log, "Waiting for the nodes to become healthy ...");
+    info!(log, "Waiting for the nodes to become healthy ...");
     nodes
         .iter()
         .try_for_each(|n| n.await_status_is_healthy())
         .unwrap();
 
-    info!(ctx.log, "Installing universal canisters on subnets (via all nodes), reading and storing messages ...");
+    info!(log, "Installing universal canisters on subnets (via all nodes), reading and storing messages ...");
     let ucan_ids: Vec<_> = nodes
         .iter()
         .map(|node| {
@@ -125,7 +107,7 @@ pub fn basic_health_test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     // We expect to find these contents in stable memory.
     let expected_memory_values = vec![MSG, XNET_MSG].into_iter().map(|s| s.to_vec());
 
-    info!(ctx.log, "Sending xnet messages ...");
+    info!(log, "Sending xnet messages ...");
     // Again we execute functions to call each of the canisters on the
     // subnets, making sure that the memory contents we expect to see are
     // indeed set to the updated value. We want until all have succeeded.
@@ -133,7 +115,7 @@ pub fn basic_health_test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     // execute these within the context of the Tokio runtime, even though
     // there is no concurrency from this point forward.
     for ((n, (from, to)), expect) in nodes.iter().zip(canister_info).zip(expected_memory_values) {
-        let log = ctx.log.clone();
+        let log = log.clone();
         n.with_default_agent(move |agent| async move {
             // Note: `from` is the canister id of the univeral canister that was
             // installed on `from`.
@@ -156,7 +138,7 @@ pub fn basic_health_test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         });
     }
 
-    info!(ctx.log, "Assert that message has been stored ...");
+    info!(log, "Assert that message has been stored ...");
     // Finally we query each of the canisters to ensure that the canister
     // memories have been updated as expected.
     for (node, ucan_id) in nodes.iter().zip(ucan_ids) {

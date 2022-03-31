@@ -30,7 +30,7 @@ use crate::util::{self /* runtime_from_url */};
 use crate::util::UniversalCanister;
 use ic_fondue::prod_tests::pot_dsl::get_ic_handle_and_ctx;
 use ic_fondue::prod_tests::test_env::TestEnv;
-use ic_fondue::prod_tests::test_setup::{DefaultIC, HasPublicApiUrl, IcNodeContainer};
+use ic_fondue::prod_tests::test_env_api::{DefaultIC, HasPublicApiUrl, IcNodeContainer};
 use ic_fondue::prod_tests::universal_vm::UniversalVms;
 use ic_fondue::{
     prod_tests::ic::{InternetComputer, Subnet},

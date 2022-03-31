@@ -1,4 +1,4 @@
-pub mod api;
+pub mod api_test;
 pub mod basic_health_test;
 pub mod boundary_nodes_integration;
 pub mod btc_integration;
