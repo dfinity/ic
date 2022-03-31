@@ -56,6 +56,16 @@ impl From<WellFormedError> for ProxyDecodeError {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CanisterIdRanges(Vec<CanisterIdRange>);
 
+impl TryFrom<Vec<CanisterIdRange>> for CanisterIdRanges {
+    type Error = WellFormedError;
+
+    fn try_from(ranges: Vec<CanisterIdRange>) -> Result<Self, WellFormedError> {
+        let r = Self(ranges);
+        r.well_formed()?;
+        Ok(r)
+    }
+}
+
 impl CanisterIdRanges {
     /// Returns Ok if this collection of canister ID ranges is well-formed
     /// (non-empty, sorted and disjoint).
@@ -292,7 +302,7 @@ impl RoutingTable {
     /// Optimizes the internal structure of the routing table by merging
     /// neighboring ranges with the same destination.
     ///
-    /// Complexity: O(N * log N)
+    /// Complexity: O(N)
     pub fn optimize(&mut self) {
         let mut entries: Vec<(CanisterIdRange, SubnetId)> = Vec::with_capacity(self.0.len());
         for (range, subnet) in std::mem::take(&mut self.0).into_iter() {
@@ -328,7 +338,7 @@ impl RoutingTable {
 
     /// Returns Ok if the routing table is well-formed (ranges are non-empty and
     /// disjoint).
-    pub fn well_formed(&self) -> Result<(), WellFormedError> {
+    fn well_formed(&self) -> Result<(), WellFormedError> {
         use WellFormedError::*;
 
         // Used to track the end of the previous end used to check that the
