@@ -133,7 +133,7 @@ impl TryFrom<v1::BitcoinAdapterRequest> for BitcoinAdapterRequest {
         })
     }
 }
-
+//--------------------------- BLOCK HEADER ------------------------------------
 #[derive(Clone, Debug, Default, Hash, Serialize, Deserialize, PartialEq, Eq)]
 pub struct BlockHeader {
     pub version: i32,
@@ -184,6 +184,7 @@ impl From<v1::BlockHeader> for BlockHeader {
     }
 }
 
+//--------------------------- BLOCK -------------------------------------------
 #[derive(Clone, Debug, Default, Hash, Serialize, Deserialize, Eq, PartialEq)]
 pub struct Block {
     pub header: BlockHeader,
@@ -193,6 +194,83 @@ pub struct Block {
 impl Block {
     pub fn count_bytes(&self) -> usize {
         self.header.count_bytes() + self.txdata.iter().map(|tx| tx.count_bytes()).sum::<usize>()
+    }
+}
+
+impl From<&Block> for v1::Block {
+    fn from(block: &Block) -> v1::Block {
+        v1::Block {
+            header: Some(v1::BlockHeader::from(&block.header)),
+            txdata: block
+                .txdata
+                .iter()
+                .map(|x| v1::Transaction {
+                    version: x.version,
+                    lock_time: x.lock_time,
+                    input: x.input.iter().map(v1::TxIn::from).collect(),
+                    output: x
+                        .output
+                        .iter()
+                        .map(|x| v1::TxOut {
+                            value: x.value,
+                            script_pubkey: x.script_pubkey.clone(),
+                        })
+                        .collect(),
+                })
+                .collect(),
+        }
+    }
+}
+
+fn validate_hash(bytes: Vec<u8>) -> Result<Vec<u8>, ProxyDecodeError> {
+    if bytes.len() != HASH_LEN {
+        Err(ProxyDecodeError::InvalidDigestLength {
+            expected: HASH_LEN,
+            actual: bytes.len(),
+        })
+    } else {
+        Ok(bytes)
+    }
+}
+
+impl TryFrom<v1::Block> for Block {
+    type Error = ProxyDecodeError;
+
+    fn try_from(block: v1::Block) -> Result<Block, ProxyDecodeError> {
+        let header = match block.header {
+            Some(header) => BlockHeader {
+                version: header.version,
+                prev_blockhash: validate_hash(header.prev_blockhash)?,
+                merkle_root: validate_hash(header.merkle_root)?,
+                time: header.time,
+                bits: header.bits,
+                nonce: header.nonce,
+            },
+            None => return Err(ProxyDecodeError::MissingField("Bitcoin::BlockHeader")),
+        };
+
+        let mut txdata: Vec<Transaction> = vec![];
+        for tx in block.txdata.into_iter() {
+            let mut input = vec![];
+            for txin in tx.input.into_iter() {
+                input.push(TxIn::try_from(txin)?);
+            }
+            txdata.push(Transaction {
+                version: tx.version,
+                lock_time: tx.lock_time,
+                input,
+                output: tx
+                    .output
+                    .into_iter()
+                    .map(|x| TxOut {
+                        value: x.value,
+                        script_pubkey: x.script_pubkey,
+                    })
+                    .collect(),
+            });
+        }
+
+        Ok(Block { header, txdata })
     }
 }
 
@@ -229,6 +307,7 @@ impl OutPoint {
         size_of_val(&self.txid) + size_of_val(&self.vout)
     }
 }
+//--------------------------- TxIn --------------------------------------------
 
 #[derive(Clone, Debug, Default, Hash, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TxIn {
@@ -248,10 +327,49 @@ impl TxIn {
     }
 }
 
+impl From<&TxIn> for v1::TxIn {
+    fn from(txin: &TxIn) -> v1::TxIn {
+        v1::TxIn {
+            previous_output: Some(v1::OutPoint {
+                txid: txin.previous_output.txid.to_vec(),
+                vout: txin.previous_output.vout,
+            }),
+            script_sig: txin.script_sig.to_vec(),
+            sequence: txin.sequence,
+            witness: txin.witness.iter().map(|v| v.to_vec()).collect(),
+        }
+    }
+}
+
+impl TryFrom<v1::TxIn> for TxIn {
+    type Error = ProxyDecodeError;
+    fn try_from(txin: v1::TxIn) -> Result<TxIn, ProxyDecodeError> {
+        let previous_output = match txin.previous_output {
+            Some(previous_output) => previous_output,
+            None => return Err(ProxyDecodeError::MissingField("Bitcoin::OutPoint")),
+        };
+        Ok(TxIn {
+            previous_output: OutPoint {
+                txid: Txid::try_from(&previous_output.txid[..])
+                    .map_err(|e| ProxyDecodeError::Other(e.to_string()))?,
+                vout: previous_output.vout,
+            },
+            script_sig: txin.script_sig,
+            sequence: txin.sequence,
+            witness: txin
+                .witness
+                .into_iter()
+                .map(serde_bytes::ByteBuf::from)
+                .collect(),
+        })
+    }
+}
+
 #[derive(Clone, Debug, Default, Hash, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TxOut {
     pub value: u64,
-    pub script_pubkey: serde_bytes::ByteBuf,
+    #[serde(with = "serde_bytes")]
+    pub script_pubkey: Vec<u8>,
 }
 
 impl TxOut {
@@ -407,127 +525,5 @@ impl BitcoinAdapterResponse {
     /// Returns the size of this `BitcoinAdapterResponse` in bytes.
     pub fn count_bytes(&self) -> usize {
         self.response.count_bytes() + std::mem::size_of::<u64>()
-    }
-}
-
-impl From<&TxIn> for v1::TxIn {
-    fn from(txin: &TxIn) -> v1::TxIn {
-        v1::TxIn {
-            previous_output: Some(v1::OutPoint {
-                txid: txin.previous_output.txid.to_vec(),
-                vout: txin.previous_output.vout,
-            }),
-            script_sig: txin.script_sig.to_vec(),
-            sequence: txin.sequence,
-            witness: txin.witness.iter().map(|v| v.to_vec()).collect(),
-        }
-    }
-}
-
-impl TryFrom<v1::TxIn> for TxIn {
-    type Error = ProxyDecodeError;
-    fn try_from(txin: v1::TxIn) -> Result<TxIn, ProxyDecodeError> {
-        let previous_output = match txin.previous_output {
-            Some(previous_output) => previous_output,
-            None => return Err(ProxyDecodeError::MissingField("Bitcoin::OutPoint")),
-        };
-        Ok(TxIn {
-            previous_output: OutPoint {
-                txid: Txid::try_from(&previous_output.txid[..])
-                    .map_err(|e| ProxyDecodeError::Other(e.to_string()))?,
-                vout: previous_output.vout,
-            },
-            script_sig: txin.script_sig,
-            sequence: txin.sequence,
-            witness: txin
-                .witness
-                .into_iter()
-                .map(serde_bytes::ByteBuf::from)
-                .collect(),
-        })
-    }
-}
-
-impl From<&Block> for v1::Block {
-    fn from(block: &Block) -> v1::Block {
-        v1::Block {
-            header: Some(v1::BlockHeader {
-                version: block.header.version,
-                prev_blockhash: block.header.prev_blockhash.to_vec(),
-                merkle_root: block.header.merkle_root.to_vec(),
-                time: block.header.time,
-                bits: block.header.bits,
-                nonce: block.header.nonce,
-            }),
-            txdata: block
-                .txdata
-                .iter()
-                .map(|x| v1::Transaction {
-                    version: x.version,
-                    lock_time: x.lock_time,
-                    input: x.input.iter().map(v1::TxIn::from).collect(),
-                    output: x
-                        .output
-                        .iter()
-                        .map(|x| v1::TxOut {
-                            value: x.value,
-                            script_pubkey: x.script_pubkey.clone().into_vec(),
-                        })
-                        .collect(),
-                })
-                .collect(),
-        }
-    }
-}
-
-fn validate_hash(bytes: Vec<u8>) -> Result<Vec<u8>, ProxyDecodeError> {
-    if bytes.len() != HASH_LEN {
-        Err(ProxyDecodeError::InvalidDigestLength {
-            expected: HASH_LEN,
-            actual: bytes.len(),
-        })
-    } else {
-        Ok(bytes)
-    }
-}
-
-impl TryFrom<v1::Block> for Block {
-    type Error = ProxyDecodeError;
-
-    fn try_from(block: v1::Block) -> Result<Block, ProxyDecodeError> {
-        let header = match block.header {
-            Some(header) => BlockHeader {
-                version: header.version,
-                prev_blockhash: validate_hash(header.prev_blockhash)?,
-                merkle_root: validate_hash(header.merkle_root)?,
-                time: header.time,
-                bits: header.bits,
-                nonce: header.nonce,
-            },
-            None => return Err(ProxyDecodeError::MissingField("Bitcoin::BlockHeader")),
-        };
-
-        let mut txdata: Vec<Transaction> = vec![];
-        for tx in block.txdata.into_iter() {
-            let mut input = vec![];
-            for txin in tx.input.into_iter() {
-                input.push(TxIn::try_from(txin)?);
-            }
-            txdata.push(Transaction {
-                version: tx.version,
-                lock_time: tx.lock_time,
-                input,
-                output: tx
-                    .output
-                    .into_iter()
-                    .map(|x| TxOut {
-                        value: x.value,
-                        script_pubkey: serde_bytes::ByteBuf::from(x.script_pubkey),
-                    })
-                    .collect(),
-            });
-        }
-
-        Ok(Block { header, txdata })
     }
 }
