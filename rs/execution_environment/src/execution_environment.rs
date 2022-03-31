@@ -149,6 +149,13 @@ pub struct ExecutionEnvironmentImpl {
     own_subnet_type: SubnetType,
 }
 
+fn candid_error_to_user_error(error: candid::Error) -> UserError {
+    UserError::new(
+        ErrorCode::CanisterContractViolation,
+        format!("Error decoding candid: {}", error),
+    )
+}
+
 impl ExecutionEnvironment for ExecutionEnvironmentImpl {
     fn subnet_available_memory(&self, state: &ReplicatedState) -> AvailableMemory {
         AvailableMemory::new(
@@ -241,7 +248,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
 
             Ok(Ic00Method::InstallCode) => {
                 let (res, instructions_left) = match InstallCodeArgs::decode(payload) {
-                    Err(err) => (Err(err.into()), instructions_limit),
+                    Err(err) => (Err(candid_error_to_user_error(err)), instructions_limit),
                     Ok(args) => match InstallCodeContext::try_from((*msg.sender(), args)) {
                         Err(err) => (Err(err.into()), instructions_limit),
                         Ok(install_context) => {
@@ -309,7 +316,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
 
             Ok(Ic00Method::UninstallCode) => {
                 let res = match CanisterIdRecord::decode(payload) {
-                    Err(err) => Err(err.into()),
+                    Err(err) => Err(candid_error_to_user_error(err)),
                     Ok(args) => self
                         .canister_manager
                         .uninstall_code(args.get_canister_id(), *msg.sender(), &mut state)
@@ -321,7 +328,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
 
             Ok(Ic00Method::UpdateSettings) => {
                 let res = match UpdateSettingsArgs::decode(payload) {
-                    Err(err) => Err(err.into()),
+                    Err(err) => Err(candid_error_to_user_error(err)),
                     Ok(args) => {
                         // Start logging execution time for `update_settings`.
                         let timer = Timer::start();
@@ -351,7 +358,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
 
             Ok(Ic00Method::SetController) => {
                 let res = match SetControllerArgs::decode(payload) {
-                    Err(err) => Err(err.into()),
+                    Err(err) => Err(candid_error_to_user_error(err)),
                     Ok(args) => self
                         .canister_manager
                         .set_controller(
@@ -368,7 +375,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
 
             Ok(Ic00Method::CanisterStatus) => {
                 let res = match CanisterIdRecord::decode(payload) {
-                    Err(err) => Err(err.into()),
+                    Err(err) => Err(candid_error_to_user_error(err)),
                     Ok(args) => {
                         self.get_canister_status(*msg.sender(), args.get_canister_id(), &mut state)
                     }
@@ -378,7 +385,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
 
             Ok(Ic00Method::StartCanister) => {
                 let res = match CanisterIdRecord::decode(payload) {
-                    Err(err) => Err(err.into()),
+                    Err(err) => Err(candid_error_to_user_error(err)),
                     Ok(args) => {
                         self.start_canister(args.get_canister_id(), *msg.sender(), &mut state)
                     }
@@ -388,7 +395,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
 
             Ok(Ic00Method::StopCanister) => match CanisterIdRecord::decode(payload) {
                 Err(err) => (
-                    Some((Err(err.into()), msg.take_cycles())),
+                    Some((Err(candid_error_to_user_error(err)), msg.take_cycles())),
                     instructions_limit,
                 ),
                 Ok(args) => (
@@ -399,7 +406,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
 
             Ok(Ic00Method::DeleteCanister) => {
                 let res = match CanisterIdRecord::decode(payload) {
-                    Err(err) => Err(err.into()),
+                    Err(err) => Err(candid_error_to_user_error(err)),
                     Ok(args) => {
                         // Start logging execution time for `delete_canister`.
                         let timer = Timer::start();
@@ -426,7 +433,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
 
             Ok(Ic00Method::RawRand) => {
                 let res = match EmptyBlob::decode(payload) {
-                    Err(err) => Err(err.into()),
+                    Err(err) => Err(candid_error_to_user_error(err)),
                     Ok(()) => {
                         let mut buffer = vec![0u8; 32];
                         rng.fill_bytes(&mut buffer);
@@ -438,7 +445,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
 
             Ok(Ic00Method::DepositCycles) => match CanisterIdRecord::decode(payload) {
                 Err(err) => (
-                    Some((Err(err.into()), msg.take_cycles())),
+                    Some((Err(candid_error_to_user_error(err)), msg.take_cycles())),
                     instructions_limit,
                 ),
                 Ok(args) => (
@@ -450,7 +457,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                 RequestOrIngress::Request(request) => {
                     match CanisterHttpRequestArgs::decode(payload) {
                         Err(err) => (
-                            Some((Err(err.into()), msg.take_cycles())),
+                            Some((Err(candid_error_to_user_error(err)), msg.take_cycles())),
                             instructions_limit,
                         ),
                         Ok(args) => {
@@ -484,7 +491,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
             Ok(Ic00Method::SetupInitialDKG) => match &msg {
                 RequestOrIngress::Request(request) => match SetupInitialDKGArgs::decode(payload) {
                     Err(err) => (
-                        Some((Err(err.into()), msg.take_cycles())),
+                        Some((Err(candid_error_to_user_error(err)), msg.take_cycles())),
                         instructions_limit,
                     ),
                     Ok(args) => {
@@ -536,7 +543,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                     }
 
                     let res = match SignWithECDSAArgs::decode(payload) {
-                        Err(err) => Some((Err(err.into()), msg.take_cycles())),
+                        Err(err) => Some((Err(candid_error_to_user_error(err)), msg.take_cycles())),
                         Ok(args) => self
                             .sign_with_ecdsa(
                                 request.clone(),
@@ -572,7 +579,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                         }
                         else {
                             match ECDSAPublicKeyArgs::decode(payload) {
-                                Err(err) => Some(Err(err.into())),
+                                Err(err) => Some(Err(candid_error_to_user_error(err))),
                                 Ok(args) => match ecdsa_subnet_public_key {
                                     None => Some(Err(UserError::new(ErrorCode::CanisterRejectedMessage,
                                               "Subnet ECDSA public key is not yet available.".to_string()))),
@@ -619,7 +626,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                         }
                         else {
                             match ComputeInitialEcdsaDealingsArgs::decode(payload) {
-                                Err(err) => Some(err.into()),
+                                Err(err) => Some(candid_error_to_user_error(err)),
                                 Ok(args) => {
                                     self.compute_initial_ecdsa_dealings(
                                         &mut state,
@@ -645,7 +652,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
 
             Ok(Ic00Method::ProvisionalCreateCanisterWithCycles) => {
                 let res = match ProvisionalCreateCanisterWithCyclesArgs::decode(payload) {
-                    Err(err) => Err(err.into()),
+                    Err(err) => Err(candid_error_to_user_error(err)),
                     Ok(args) => {
                         let cycles_amount = args.to_u128();
                         match CanisterSettings::try_from(args.settings) {
@@ -670,7 +677,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
 
             Ok(Ic00Method::ProvisionalTopUpCanister) => {
                 let res = match ProvisionalTopUpCanisterArgs::decode(payload) {
-                    Err(err) => Err(err.into()),
+                    Err(err) => Err(candid_error_to_user_error(err)),
                     Ok(args) => self.add_cycles(
                         *msg.sender(),
                         args.get_canister_id(),

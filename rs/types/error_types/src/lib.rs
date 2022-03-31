@@ -1,6 +1,5 @@
 //! A crate that groups user-facing and internal error types and codes produced
 //! by the Internet Computer.
-use candid::Error;
 use ic_protobuf::proxy::ProxyDecodeError;
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, fmt};
@@ -145,15 +144,6 @@ pub enum ErrorCode {
     CanisterWasmEngineError = 521,
     CanisterInstructionLimitExceeded = 522,
     CanisterInstallCodeRateLimited = 523,
-}
-
-impl From<candid::Error> for UserError {
-    fn from(err: Error) -> Self {
-        UserError::new(
-            ErrorCode::CanisterContractViolation,
-            format!("Error decoding candid: {}", err),
-        )
-    }
 }
 
 impl TryFrom<u64> for ErrorCode {
