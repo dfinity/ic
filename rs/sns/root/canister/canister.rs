@@ -1,10 +1,8 @@
 use std::cell::RefCell;
 
-use dfn_candid::candid;
-use dfn_core::{
-    api::{arg_data, PrincipalId},
-    over, over_async,
-};
+use candid::candid_method;
+use dfn_candid::{candid, CandidOne};
+use dfn_core::{api::PrincipalId, over, over_async, over_init};
 
 #[macro_use]
 extern crate ic_nervous_system_common;
@@ -17,10 +15,6 @@ use ic_sns_root::pb::v1::SnsRootCanister;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 
-// This trait is needed to make the ProstGeneratedMessageStruct::decode method
-// available.
-use prost::Message;
-
 thread_local! {
     static STATE: RefCell<SnsRootCanister> = RefCell::new(Default::default());
 }
@@ -29,16 +23,19 @@ fn main() {}
 
 #[export_name = "canister_init"]
 fn canister_init() {
+    over_init(|CandidOne(arg)| canister_init_(arg))
+}
+
+#[candid_method(init)]
+fn canister_init_(init_payload: SnsRootCanister) {
     dfn_core::printer::hook();
     println!("{}canister_init: Begin...", LOG_PREFIX);
 
-    let new_state =
-        SnsRootCanister::decode(&arg_data()[..]).expect("Failed to deserialize SnsRootCanister");
-    assert_state_is_valid(&new_state);
+    assert_state_is_valid(&init_payload);
 
     STATE.with(move |state| {
         let mut state = state.borrow_mut();
-        *state = new_state;
+        *state = init_payload;
     });
 
     println!("{}canister_init: Done!", LOG_PREFIX);

@@ -6304,6 +6304,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-sns-cli"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "candid",
+ "dfn_candid",
+ "dfn_core",
+ "dfn_protobuf",
+ "hex",
+ "ic-base-types",
+ "ic-nervous-system-common",
+ "ic-protobuf",
+ "ic-sns-governance",
+ "ic-sns-root",
+ "ic-sns-test-utils",
+ "ledger-canister",
+ "on_wire",
+ "prost",
+ "rand 0.7.3",
+ "rand_core 0.5.1",
+ "serde",
+ "structopt",
+ "url",
+]
+
+[[package]]
 name = "ic-sns-governance"
 version = "0.8.0"
 dependencies = [

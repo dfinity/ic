@@ -1,0 +1,31 @@
+{
+  "canisters": {
+    "sns_governance": {
+      "build": [
+        "cargo build --manifest-path ../../Cargo.toml --target wasm32-unknown-unknown --bin sns-governance-canister --release",
+        "ic-cdk-optimizer ../../target/wasm32-unknown-unknown/release/sns-governance-canister.wasm -o ../../target/wasm32-unknown-unknown/release/sns-governance-canister-opt.wasm"
+      ],
+      "candid": "../governance/canister/governance.did",
+      "wasm": "../../target/wasm32-unknown-unknown/release/sns-governance-canister-opt.wasm",
+      "type": "custom"
+    },
+    "sns_ledger": {
+      "build": [
+        "cargo build --manifest-path ../../Cargo.toml --target wasm32-unknown-unknown --release --bin ledger-canister",
+        "ic-cdk-optimizer ../../target/wasm32-unknown-unknown/release/ledger-canister.wasm -o ../../target/wasm32-unknown-unknown/release/ledger-canister-opt.wasm"
+      ],
+      "candid": "../../rosetta-api/ledger_canister/ledger.did",
+      "wasm": "../../target/wasm32-unknown-unknown/release/ledger-canister-opt.wasm",
+      "type": "custom"
+    },
+    "sns_root": {
+      "build": [
+        "cargo build --manifest-path ../../Cargo.toml --target wasm32-unknown-unknown --release --bin sns-root-canister",
+        "ic-cdk-optimizer ../../target/wasm32-unknown-unknown/release/sns-root-canister.wasm -o ../../target/wasm32-unknown-unknown/release/sns-root-canister-opt.wasm"
+      ],
+      "candid": "../root/canister/root.did",
+      "wasm": "../../target/wasm32-unknown-unknown/release/sns-root-canister-opt.wasm",
+      "type": "custom"
+    }
+  }
+}

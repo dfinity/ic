@@ -24,7 +24,6 @@ use ledger_canister::{
     Tokens, DEFAULT_TRANSFER_FEE,
 };
 use on_wire::IntoWire;
-use prost::Message;
 use std::collections::HashMap;
 use std::future::Future;
 use std::path::Path;
@@ -809,16 +808,12 @@ where
 /// Compiles the governance canister, builds it's initial payload and installs
 /// it
 pub async fn install_governance_canister(canister: &mut Canister<'_>, init_payload: Governance) {
-    let mut serialized = Vec::new();
-    init_payload
-        .encode(&mut serialized)
-        .expect("Couldn't serialize init payload.");
     install_rust_canister_with_memory_allocation(
         canister,
         "sns/governance",
         "sns-governance-canister",
         &[],
-        Some(serialized),
+        Some(CandidOne(init_payload).into_bytes().unwrap()),
         SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES,
     )
     .await;
@@ -862,15 +857,12 @@ pub async fn set_up_ledger_canister(
 
 /// Builds the root canister wasm binary, serializes canister_init args for it, and installs it.
 pub async fn install_root_canister(canister: &mut Canister<'_>, args: SnsRootCanister) {
-    let mut serialized = Vec::new();
-    args.encode(&mut serialized)
-        .expect("Unable to serialize SnsRootCanister");
     install_rust_canister_with_memory_allocation(
         canister,
         "sns/root",
         "sns-root-canister",
         &[],
-        Some(serialized),
+        Some(CandidOne(args).into_bytes().unwrap()),
         SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES,
     )
     .await
