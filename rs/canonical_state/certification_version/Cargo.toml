@@ -1,0 +1,8 @@
+[package]
+name = "ic-certification-version"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+strum = "0.23.0"
+strum_macros = "0.23.0"
