@@ -329,6 +329,7 @@ fn parse_nodes_deprecated(src: &str) -> Result<Node> {
             prometheus_metrics: vec![ConnectionEndpoint::from(metrics_addr)],
             p2p_addr: ConnectionEndpoint::try_from(p2p_addr)?,
             node_operator_principal_id: None,
+            no_idkg_key: false,
             secret_key_store: None,
         },
     })
@@ -422,6 +423,7 @@ impl TryFrom<NodeFlag> for Node {
                 p2p_num_flows: 0,
                 p2p_start_flow_tag: 0,
                 node_operator_principal_id: None,
+                no_idkg_key: false,
                 secret_key_store: None,
             },
         })
@@ -745,6 +747,7 @@ mod test_flag_nodes_parser_deprecated {
                 p2p_num_flows: 0,
                 p2p_start_flow_tag: 0,
                 node_operator_principal_id: None,
+                no_idkg_key: false,
                 secret_key_store: None,
             },
         };
@@ -769,6 +772,7 @@ mod test_flag_nodes_parser_deprecated {
                 p2p_num_flows: 0,
                 p2p_start_flow_tag: 0,
                 node_operator_principal_id: None,
+                no_idkg_key: false,
                 secret_key_store: None,
             },
         };
@@ -801,6 +805,7 @@ mod test_flag_node_parser {
                 p2p_num_flows: 0,
                 p2p_start_flow_tag: 0,
                 node_operator_principal_id: None,
+                no_idkg_key: false,
                 secret_key_store: None,
             },
         };

@@ -129,6 +129,7 @@ mod tests {
                 p2p_num_flows: 1,
                 p2p_start_flow_tag: 0,
                 node_operator_principal_id: None,
+                no_idkg_key: false,
                 secret_key_store: None,
             },
         );
