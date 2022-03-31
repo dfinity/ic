@@ -30,14 +30,15 @@ Maximum number of updates not be below xxx updates per second with less than 20%
 import codecs
 import json
 import os
+import sys
 import time
 from statistics import mean
 
-import experiment
 import gflags
-import workload_experiment
-from elasticsearch import ElasticSearch
-from verify_perf import VerifyPerf
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from common import misc  # noqa
+from common import workload_experiment  # noqa
 
 CANISTER = "memory-test-canister.wasm"
 
@@ -48,7 +49,7 @@ gflags.DEFINE_integer("payload_size", 5000000, "Payload size to pass to memory t
 gflags.DEFINE_integer("iter_duration", 60, "Duration in seconds for which to execute workload in each round.")
 
 
-class Experiment2(workload_experiment.WorkloadExperiment):
+class LargeMemoryExperiment(workload_experiment.WorkloadExperiment):
     """Logic for experiment 2."""
 
     def __init__(self):
@@ -163,11 +164,20 @@ class Experiment2(workload_experiment.WorkloadExperiment):
             self.write_summary_file(
                 "run_large_memory_experiment",
                 {
+                    "is_update": FLAGS.use_updates,
                     "rps": rps,
                     "rps_max": rps_max,
                     "rps_max_in": rps_max_in,
                     "num_succ_per_iteration": num_succ_per_iteration,
                     "target_duration": FLAGS.iter_duration,
+                    "success_rate": (num_success / total_requests) * 100,
+                    "failure_rate": failure_rate * 100,
+                    "failure_rate_color": "green" if failure_rate < 0.01 else "red",
+                    "t_median": t_median,
+                    "t_average": t_average,
+                    "t_max": t_max,
+                    "t_min": t_min,
+                    "target_load": load_total,
                 },
                 rps,
                 "requests / s",
@@ -182,45 +192,7 @@ class Experiment2(workload_experiment.WorkloadExperiment):
 
 
 if __name__ == "__main__":
-    experiment.parse_command_line_args()
-
-    exp = Experiment2()
-
-    experiment_name = os.path.basename(__file__).replace(".py", "")
+    misc.parse_command_line_args()
+    exp = LargeMemoryExperiment()
     datapoints = [FLAGS.target_update_load]
-    verifier = VerifyPerf(f"{exp.out_dir}/verification_results.txt")
-
-    (
-        failure_rate,
-        t_median,
-        t_average,
-        t_max,
-        t_min,
-        total_requests,
-        num_success,
-        num_failure,
-        rps,
-    ) = exp.run_iterations(datapoints)
-
-    # Verify results
-    verifier.verify("failure rate", FLAGS.use_updates, failure_rate, 0)
-    verifier.verify("median latency", FLAGS.use_updates, t_median, FLAGS.median_latency_threshold)
-    verifier.verify("throughput", FLAGS.use_updates, rps, FLAGS.target_update_load)
-
-    ElasticSearch.send_perf(
-        experiment_name,
-        verifier.is_success(),
-        "Update",
-        exp.git_hash,
-        FLAGS.branch,
-        FLAGS.is_ci_job,
-        (
-            failure_rate,
-            0,
-            t_median,
-            FLAGS.median_latency_threshold,
-            rps,
-            FLAGS.target_update_load,
-        ),
-    )
-    verifier.conclude()
+    exp.run_iterations(datapoints)

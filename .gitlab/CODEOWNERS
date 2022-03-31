@@ -17,6 +17,7 @@
 # IC-OS project
 /ic-os/                   @dfinity-lab/teams/node-team
 /ic-os/boundary-guestos/  @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/node-team
+/ic-os/guestos/tests/e2e-benchmarking-suite.py   @dfinity-lab/teams/node-team @dfinity-lab/teams/networking-team
 
 # idx responsible for GitLab CI configs
 # and the pre-commit config.
@@ -191,10 +192,10 @@
 
 # Scalability suite is currently owned by both node-team and networking team
 # Most individual benchmarks are owned by individual teams
-/scalability                         @dfinity-lab/teams/node-team @dfinity-lab/teams/networking-team
-/scalability/max_capacity_large_memory.py                         @dfinity-lab/teams/execution-owners
-/scalability/run_large_memory_experiment.py                                  @dfinity-lab/teams/execution-owners
-/scalability/run_gossip_experiment.py                                  @dfinity-lab/teams/networking-team
+/scalability                            @dfinity-lab/teams/node-team @dfinity-lab/teams/networking-team
+/scalability/experiments/max_capacity_large_memory.py               @dfinity-lab/teams/execution-owners
+/scalability/experiments/run_large_memory_experiment.py             @dfinity-lab/teams/execution-owners
+/scalability/experiments/run_gossip_experiment.py                   @dfinity-lab/teams/networking-team
 
 # Capsule.toml belongs to IDX throughout the repo.
 Capsule.toml              @dfinity-lab/teams/idx

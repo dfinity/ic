@@ -4,8 +4,8 @@ import traceback
 from typing import List
 
 import gflags
-import metrics
 import requests
+from common import metrics
 from termcolor import colored
 
 FLAGS = gflags.FLAGS

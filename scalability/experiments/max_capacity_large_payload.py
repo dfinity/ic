@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 import os
+import sys
 import time
 
-import experiment
 import gflags
-import misc
-import run_system_baseline_experiment
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from common import misc  # noqa
+import run_system_baseline_experiment  # noqa
 
 FLAGS = gflags.FLAGS
 
@@ -40,10 +42,10 @@ gflags.DEFINE_integer(
 )
 
 if __name__ == "__main__":
-    experiment.parse_command_line_args()
+    misc.parse_command_line_args()
     experiment_name = os.path.basename(__file__).replace(".py", "")
 
-    exp = run_system_baseline_experiment.Experiment1()
+    exp = run_system_baseline_experiment.BaselineExperiment()
     exp.start_experiment()
 
     failure_rate = 0.0

@@ -89,3 +89,7 @@ ic-os.img
 
 # Boundary node control plane binary
 boundary-node-control-plane
+
+# Scalability test results
+scalability/results/
+*Pipfile*

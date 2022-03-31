@@ -23,18 +23,23 @@ Suggested success criteria:
 xxx canisters can be installed in a maximum of yyy seconds
 """
 import math
+import os
+import sys
 import time
 
-import experiment
 import gflags
-import prometheus
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import common.base_experiment as base_experiment  # noqa
+import common.misc as misc  # noqa
+import common.prometheus as prometheus  # noqa
 
 # Number of canisters to install in each iteration
 FLAGS = gflags.FLAGS
 gflags.DEFINE_integer("batchsize", 20, "Number of concurrent canisters installs to execute")
 
 
-class Experiment3(experiment.Experiment):
+class ManyCanistersExperiment(base_experiment.BaseExperiment):
     """Logic for experiment 3."""
 
     def __init__(self):
@@ -88,9 +93,9 @@ class Experiment3(experiment.Experiment):
 
 
 if __name__ == "__main__":
-    experiment.parse_command_line_args()
+    misc.parse_command_line_args()
 
-    exp = Experiment3()
+    exp = ManyCanistersExperiment()
 
     exp.start_experiment()
     exp.run_experiment({})

@@ -5,10 +5,33 @@ import sys
 import traceback
 from collections import Counter
 
-import ansible
+import gflags
 import pybars
-import report
 from termcolor import colored
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from common import misc  # noqa
+from common import ansible  # noqa
+from common import report  # noqa
+
+FLAGS = gflags.FLAGS
+gflags.DEFINE_string(
+    "base_dir",
+    "./",
+    "The base directory where output artifacts are generated into. The base_dir should contain sub folder named with git_revision.",
+)
+gflags.DEFINE_string(
+    "git_revision",
+    None,
+    "Hash of the git revision which the benchmark run was exercised on. Output folder with this git_revision in name will be used to generate report.",
+)
+gflags.MarkFlagAsRequired("git_revision")
+gflags.DEFINE_string(
+    "timestamp",
+    None,
+    "The timestamp the benchmark run was marked with. Output folder with this timestamp in name will be used to generate report.",
+)
+gflags.MarkFlagAsRequired("timestamp")
 
 
 def add_plot(name: str, xlabel: str, ylabel: str, x: [str], plots: [([str], str)]):
@@ -362,19 +385,6 @@ def generate_report(base, githash, timestamp):
 
 
 if __name__ == "__main__":
-
-    import gflags
-
-    gflags.FLAGS(sys.argv)
-
-    if len(sys.argv) > 2:
-        git_commit = sys.argv[1]
-        timestamp = sys.argv[2]
-    else:
-        elements = sys.argv[1].split("/")
-        git_commit = elements[0]
-        timestamp = elements[1]
-        print(f"Using {git_commit} and {timestamp} to generate report")
-
-    base = sys.argv[3] if len(sys.argv) > 3 else os.path.join(git_commit, timestamp)
-    generate_report(base, git_commit, timestamp)
+    misc.parse_command_line_args()
+    base = f"{FLAGS.base_dir}/{FLAGS.git_revision}/{FLAGS.timestamp}"
+    generate_report(base, FLAGS.git_revision, FLAGS.timestamp)

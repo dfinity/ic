@@ -1,8 +1,8 @@
 import os
 
 import gflags
-import metrics
-import ssh
+from common import metrics
+from common import ssh
 
 FLAGS = gflags.FLAGS
 gflags.DEFINE_boolean("no_flamegraphs", False, "Set true to disable generating flamegraphs.")
@@ -74,8 +74,8 @@ class Flamegraph(metrics.Metric):
                 f"sudo rm -rf {TARGET_DIR}; "
                 f"sudo mkdir {TARGET_DIR}; "
                 f"sudo chmod 0777 {TARGET_DIR}; "
-                f"cp -f flamegraph {TARGET_DIR}; cd {TARGET_DIR}; "
-                f"sudo ./flamegraph -p $(pidof replica) --root --no-inline -o {TARGET_DIR}/flamegraph.svg"
+                f"cp -f common/flamegraph {TARGET_DIR}; cd {TARGET_DIR}; "
+                f"sudo flamegraph -p $(pidof replica) --root --no-inline -o {TARGET_DIR}/flamegraph.svg"
             ),
             os.path.join(outdir, "flamegraph-{}.stdout.log".format(self.target)),
             os.path.join(outdir, "flamegraph-{}.stderr.log".format(self.target)),
@@ -110,13 +110,13 @@ if __name__ == "__main__":
     import time
     import threading
 
-    import experiment
+    import common.base_experiment as base_experiment
     import gflags
     import sys
 
     gflags.FLAGS(sys.argv)
 
-    exp = experiment.Experiment()
+    exp = base_experiment.BaseExperiment()
     exp.start_iteration()
 
     def thread():

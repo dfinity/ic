@@ -1,8 +1,7 @@
 import unittest
 from unittest import TestCase
 
-import gflags
-from verify_perf import VerifyPerf
+from common.verify_perf import VerifyPerf
 
 
 class TestVerify(TestCase):
@@ -10,7 +9,6 @@ class TestVerify(TestCase):
 
     def setUp(self) -> None:
         self.verifier = VerifyPerf()
-        gflags.FLAGS.verifies_perf = True
 
     def test_verify__with_zero_threshold(self):
         """Test passes when expected rate, actual rate and threshold are all zero."""

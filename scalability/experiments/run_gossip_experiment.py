@@ -22,8 +22,9 @@ import time
 from statistics import mean
 
 import gflags
-import workload_experiment
-from elasticsearch import ElasticSearch
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from common.workload_experiment import WorkloadExperiment  # noqa
 
 FLAGS = gflags.FLAGS
 gflags.DEFINE_integer("duration", 60, "Duration to run the workload in seconds.")
@@ -32,7 +33,7 @@ gflags.DEFINE_integer("max_nodes", 50, "Add machines until given number of nodes
 gflags.DEFINE_integer("subnet_to_grow", 1, "Index of the subnet to grow.")
 
 
-class GossipExperiment(workload_experiment.WorkloadExperiment):
+class GossipExperiment(WorkloadExperiment):
     """Implementation for testing gossip capacity with varied size of subnets."""
 
     def __init__(self):
@@ -199,8 +200,6 @@ if __name__ == "__main__":
 
     FLAGS(sys.argv)
 
-    experiment_name = os.path.basename(__file__).replace(".py", "")
-
     exp = GossipExperiment()
     print(exp.get_subnet_members(1))
 
@@ -214,7 +213,5 @@ if __name__ == "__main__":
         exp.write_summary_file(
             "run_gossip_experiment", {}, num_nodes_installed, "#nodes", rtype="update" if exp.use_updates else "query"
         )
-
-    ElasticSearch.send_perf(experiment_name, True, exp.use_updates, "N/A", "N/A", True, {})
 
     exp.end_experiment()

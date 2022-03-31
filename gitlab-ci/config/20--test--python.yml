@@ -25,8 +25,8 @@ python-tests:
       $SHELL_WRAPPER nix-shell ./outsource/shell.nix --run "python3 outsource/test.py"
       $SHELL_WRAPPER nix-shell ./outsource/shell.nix --run "mypy outsource/*.py"
     - |
-      echo "Running scalability/tests"
+      echo "Running scalability/common/tests"
       set -euo pipefail
       cd "${CI_PROJECT_DIR}/scalability"
       $SHELL_WRAPPER pip3 install --user -r requirements.txt
-      for test_file in tests/*.py; do { $SHELL_WRAPPER python3 -m unittest "$test_file"; } done
+      for test_file in common/tests/*.py; do { $SHELL_WRAPPER python3 -m unittest "$test_file"; } done
