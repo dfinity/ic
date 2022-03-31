@@ -37,6 +37,7 @@ use crate::{
         assert_endpoints_reachability, block_on, get_random_nns_node_endpoint, EndpointsStatus,
     },
 };
+use core::time;
 use ic_fondue::{
     ic_manager::{IcControl, IcHandle},
     prod_tests::ic::{InternetComputer, Subnet},
@@ -46,6 +47,7 @@ use ic_types::{Height, ReplicaVersion};
 use std::convert::TryFrom;
 use std::io::{Read, Write};
 use std::net::IpAddr;
+use std::thread;
 
 const DKG_INTERVAL: u64 = 19;
 
@@ -126,22 +128,29 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         panic!("State computation diverged pre-upgrade.");
     }
 
-    // The replay above would last a bit, let's pull some more artefacts afterwards
-    // and replay with the new version.
-    backup.rsync_spool();
-    let mut shh = shh::stdout().unwrap();
-    backup.replay(&test_version);
+    for _ in 0..20 {
+        // Let's pull some more artefacts and replay with the new version.
+        backup.rsync_spool();
+        let mut shh = shh::stdout().unwrap();
+        backup.replay(&test_version);
 
-    // Ensure we were able to find at least one CUP.
-    let mut buffer = String::new();
-    shh.read_to_string(&mut buffer).unwrap();
-    // Drop shh here to enable writing to stdout again.
-    drop(shh);
-    std::io::stdout().write_all(buffer.as_bytes()).unwrap();
-    if !buffer.contains("Found a CUP") {
-        panic!("No CUP is produced post-upgrade");
+        let mut buffer = String::new();
+        shh.read_to_string(&mut buffer).unwrap();
+        // Drop shh here to enable writing to stdout again.
+        drop(shh);
+        std::io::stdout().write_all(buffer.as_bytes()).unwrap();
+
+        if buffer.contains("does not correspond") {
+            panic!("State computation diverged post-upgrade.");
+        }
+
+        // Continue until we were able to find at least one CUP.
+        if buffer.contains("Found a CUP") {
+            return;
+        }
+        thread::sleep(time::Duration::from_secs(10));
     }
-    if buffer.contains("does not correspond") {
-        panic!("State computation diverged post-upgrade.");
-    }
+
+    // Panic if we couldn't find a CUP
+    panic!("No CUP is produced post-upgrade");
 }
