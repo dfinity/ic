@@ -26,42 +26,9 @@ RUN cd /tmp/ && \
     echo "68f3802c2dd3980667e4ba65ea2e1fb03f4a4ba026cca375f15a0390ff850949  node_exporter-1.3.1.linux-amd64.tar.gz" > node_exporter.sha256 && \
     shasum -c node_exporter.sha256
 
-# Download and verify QEMU
-RUN cd /tmp/ && \
-    curl -L -O https://download.qemu.org/qemu-6.2.0.tar.xz && \
-    echo "68e15d8e45ac56326e0b9a4afa8b49a3dfe8aba3488221d098c84698bca65b45  qemu-6.2.0.tar.xz" > qemu.sha256 && \
-    shasum -c qemu.sha256
-
 # Second build stage:
-# - Compile downloaded archives from first build stage
-FROM ubuntu:20.04 AS build
-
-ENV TZ=UTC
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommends install \
-    ca-certificates \
-    build-essential \
-    libglib2.0-dev \
-    libpixman-1-dev \
-    libusb-1.0-0-dev \
-    ninja-build \
-    pkg-config \
-    python3
-
-# Configure and compile QEMU
-COPY --from=download /tmp/qemu-6.2.0.tar.xz /tmp/qemu-6.2.0.tar.xz
-RUN cd /tmp/ && \
-    tar xJf qemu-6.2.0.tar.xz && \
-    cd /tmp/qemu-6.2.0 && \
-    ./configure --target-list=x86_64-softmmu --enable-kvm --enable-libusb && \
-    echo "Compiling qemu..." && \
-    make -j 2 >/dev/null 2>&1 && \
-    DESTDIR="/out" ninja -C build install
-
-# Third build stage:
 # - Construct the actual target image (IC-OS root filesystem)
 # - Copy downloaded archives from first build stage into the target image
-# - Copy compilation from second build stage into the target image
 #
 # Update below image when new dfinity/hostos-base image gets produced (see deploy-host-os-baseimg CI job on master/rc).
 FROM dfinity/hostos-base@sha256:69f5b6ef6f501fe035af89958daf5d7d544cbd56d03c895e8288f744df2800ae
@@ -222,10 +189,6 @@ RUN cd /tmp/ && \
     chmod 0644 /etc/default/node_exporter \
                /etc/node_exporter/web.yml && \
     rm /tmp/node_exporter-1.3.1.linux-amd64.tar.gz
-
-# Install QEMU
-COPY --from=build /out/usr/local/bin/qemu-system-x86_64 /usr/local/bin/
-COPY --from=build /out/usr/local/share/qemu /usr/local/share/qemu
 
 # Compile locale specification
 RUN localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8
