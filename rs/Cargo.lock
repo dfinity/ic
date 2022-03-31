@@ -3677,6 +3677,7 @@ dependencies = [
  "assert_matches",
  "hex",
  "ic-base-types",
+ "ic-certification-version",
  "ic-crypto-tree-hash",
  "ic-protobuf",
  "ic-registry-routing-table",
@@ -3695,8 +3696,6 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
- "strum 0.23.0",
- "strum_macros 0.23.1",
  "tempfile",
 ]
 
@@ -3709,6 +3708,14 @@ dependencies = [
  "candid",
  "cfg-if 0.1.10",
  "serde",
+]
+
+[[package]]
+name = "ic-certification-version"
+version = "0.8.0"
+dependencies = [
+ "strum 0.23.0",
+ "strum_macros 0.23.1",
 ]
 
 [[package]]
