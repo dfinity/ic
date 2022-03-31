@@ -3,7 +3,7 @@ use std::{convert::TryFrom, path::PathBuf, time::Duration};
 use bitcoin::{
     blockdata::constants::genesis_block, hashes::Hash, BlockHash, BlockHeader, TxMerkleNode,
 };
-use clap::Parser;
+use clap::Clap;
 use ic_btc_adapter_service::btc_adapter_client::BtcAdapterClient;
 use ic_protobuf::bitcoin::v1;
 use tokio::{
