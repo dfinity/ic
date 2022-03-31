@@ -26,6 +26,9 @@ ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
 ic-sys = {path = "../sys"}
 hex = "0.4.2"
+lazy_static = "1.4.0"
 maplit = "1.0.2"
 proptest = "0.9.4"
+strum = "0.23.0"
+strum_macros = "0.23.0"
 tempfile = "3.1.0"

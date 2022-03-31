@@ -25,7 +25,6 @@ use ic_types::{
     xnet::StreamHeader,
     CryptoHashOfPartialState, Cycles, Funds,
 };
-use serde::{Deserialize, Serialize};
 use serde_cbor::value::Value;
 use std::collections::{BTreeMap, VecDeque};
 
@@ -68,6 +67,51 @@ fn canonical_encoding_stream_header() {
         assert_eq!(
             "A3 00 17 01 18 19 02 19 01 00",
             as_hex(&encode_stream_header(&header, certification_version,))
+        );
+    }
+}
+
+/// Canonical CBOR encoding (with certification versions 8 and up) of:
+///
+/// ```no_run
+/// StreamHeader {
+///     begin: 23.into(),
+///     end: 25.into(),
+///     signals_end: 256.into(),
+///     reject_signals: vec![249.into(), 250.into(), 252.into()].into(),
+/// }
+/// ```
+///
+/// Expected:
+///
+/// ```text
+/// A4         # map(4)
+///    00      # field_index(StreamHeader::begin)
+///    17      # unsigned(23)
+///    01      # field_index(StreamHeader::end)
+///    18 19   # unsigned(25)
+///    02      # field_index(StreamHeader::signals_end)
+///    19 0100 # unsigned(256)
+///    03      # field_index(StreamHeader::reject_signals)
+///    83      # array(3)
+///       01   # unsigned(1)
+///       02   # unsigned(2)
+///       04   # unsigned(4)
+/// ```
+#[test]
+fn canonical_encoding_stream_header_v8_plus() {
+    for certification_version in all_supported_versions().filter(|v| v >= &CertificationVersion::V8)
+    {
+        let header = StreamHeader {
+            begin: 23.into(),
+            end: 25.into(),
+            signals_end: 256.into(),
+            reject_signals: vec![249.into(), 250.into(), 252.into()].into(),
+        };
+
+        assert_eq!(
+            "A4 00 17 01 18 19 02 19 01 00 03 83 01 02 04",
+            as_hex(&encode_stream_header(&header, certification_version))
         );
     }
 }
@@ -451,70 +495,6 @@ fn invalid_message_empty() {
     }
 }
 
-// Copy of `types::Request` before adding `cycles_payment`.
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct RequestV3 {
-    #[serde(with = "serde_bytes")]
-    pub receiver: types::Bytes,
-    #[serde(with = "serde_bytes")]
-    pub sender: types::Bytes,
-    pub sender_reply_callback: u64,
-    pub payment: types::Funds,
-    pub method_name: String,
-    #[serde(with = "serde_bytes")]
-    pub method_payload: types::Bytes,
-}
-
-impl From<(&ic_types::messages::Request, CertificationVersion)> for RequestV3 {
-    fn from(
-        (request, certification_version): (&ic_types::messages::Request, CertificationVersion),
-    ) -> Self {
-        let funds = types::Funds {
-            cycles: (&request.payment, certification_version).into(),
-            icp: 0,
-        };
-        Self {
-            receiver: request.receiver.get().to_vec(),
-            sender: request.sender.get().to_vec(),
-            sender_reply_callback: request.sender_reply_callback.get(),
-            payment: funds,
-            method_name: request.method_name.clone(),
-            method_payload: request.method_payload.clone(),
-        }
-    }
-}
-
-// Copy of `types::RequestOrResponse` with V3 types.
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct RequestOrResponseV3 {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub request: Option<RequestV3>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub response: Option<ResponseV3>,
-}
-
-impl From<(&ic_types::messages::RequestOrResponse, CertificationVersion)> for RequestOrResponseV3 {
-    fn from(
-        (message, certification_version): (
-            &ic_types::messages::RequestOrResponse,
-            CertificationVersion,
-        ),
-    ) -> Self {
-        match message {
-            RequestOrResponse::Request(req) => RequestOrResponseV3 {
-                request: Some(RequestV3::from((req, certification_version))),
-                response: None,
-            },
-            RequestOrResponse::Response(resp) => RequestOrResponseV3 {
-                request: None,
-                response: Some(ResponseV3::from((resp, certification_version))),
-            },
-        }
-    }
-}
-
 //
 // `Request` decoding
 //
@@ -530,52 +510,17 @@ fn valid_request() {
 }
 
 #[test]
-fn encoding_request_for_certification_3_and_4_is_the_same() {
-    let request = RequestOrResponse::Request(
-        RequestBuilder::new()
-            .receiver(canister_test_id(1))
-            .sender(canister_test_id(2))
-            .sender_reply_callback(CallbackId::from(3))
-            .payment(Cycles::new(10))
-            .method_name("test".to_string())
-            .method_payload(vec![6])
-            .build(),
-    );
-
-    let v3_encoded_request_with_v3_type =
-        RequestOrResponseV3::proxy_encode((&request, CertificationVersion::V3)).unwrap();
-    let v3_encoded_request = encode_message(&request, CertificationVersion::V3);
-    let v4_encoded_request = encode_message(&request, CertificationVersion::V4);
-
-    assert_eq!(v3_encoded_request_with_v3_type, v3_encoded_request);
-    assert_eq!(v3_encoded_request, v4_encoded_request);
-}
-
-#[test]
 fn invalid_request_extra_field() {
     for certification_version in all_supported_versions() {
-        if certification_version <= CertificationVersion::V3 {
-            let bytes =
-                RequestV3::encode_with_extra_field((&request(), certification_version)).unwrap();
+        let bytes =
+            types::Request::encode_with_extra_field((&request(), certification_version)).unwrap();
 
-            let res: Result<RequestV3, ProxyDecodeError> = RequestV3::proxy_decode(&bytes);
-            assert_matches!(
-                res,
-                Err(ProxyDecodeError::CborDecodeError(err))
-                    if err.to_string().contains("expected field index 0 <= i < 6")
-            );
-        } else {
-            let bytes =
-                types::Request::encode_with_extra_field((&request(), certification_version))
-                    .unwrap();
-
-            let res: Result<Request, ProxyDecodeError> = types::Request::proxy_decode(&bytes);
-            assert_matches!(
-                res,
-                Err(ProxyDecodeError::CborDecodeError(err))
-                    if err.to_string().contains("expected field index 0 <= i < 7")
-            );
-        }
+        let res: Result<Request, ProxyDecodeError> = types::Request::proxy_decode(&bytes);
+        assert_matches!(
+            res,
+            Err(ProxyDecodeError::CborDecodeError(err))
+                if err.to_string().contains("expected field index 0 <= i < 7")
+        );
     }
 }
 
@@ -645,37 +590,6 @@ fn invalid_request_missing_method_payload() {
     }
 }
 
-// Copy of `types::Response` before adding `cycles_refund`.
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ResponseV3 {
-    #[serde(with = "serde_bytes")]
-    pub originator: types::Bytes,
-    #[serde(with = "serde_bytes")]
-    pub respondent: types::Bytes,
-    pub originator_reply_callback: u64,
-    pub refund: types::Funds,
-    pub response_payload: types::Payload,
-}
-
-impl From<(&ic_types::messages::Response, CertificationVersion)> for ResponseV3 {
-    fn from(
-        (response, certification_version): (&ic_types::messages::Response, CertificationVersion),
-    ) -> Self {
-        let funds = types::Funds {
-            cycles: (&response.refund, certification_version).into(),
-            icp: 0,
-        };
-        Self {
-            originator: response.originator.get().to_vec(),
-            respondent: response.respondent.get().to_vec(),
-            originator_reply_callback: response.originator_reply_callback.get(),
-            refund: funds,
-            response_payload: (&response.response_payload, certification_version).into(),
-        }
-    }
-}
-
 //
 // `Response` decoding
 //
@@ -691,51 +605,17 @@ fn valid_response() {
 }
 
 #[test]
-fn encoding_response_for_certification_3_and_4_is_the_same() {
-    let response = RequestOrResponse::Response(
-        ResponseBuilder::new()
-            .originator(canister_test_id(5))
-            .respondent(canister_test_id(4))
-            .originator_reply_callback(CallbackId::from(3))
-            .refund(Cycles::new(10))
-            .response_payload(Payload::Data(vec![1]))
-            .build(),
-    );
-
-    let v3_encoded_response_with_v3_type =
-        RequestOrResponseV3::proxy_encode((&response, CertificationVersion::V3)).unwrap();
-    let v3_encoded_response = encode_message(&response, CertificationVersion::V3);
-    let v4_encoded_response = encode_message(&response, CertificationVersion::V4);
-
-    assert_eq!(v3_encoded_response_with_v3_type, v3_encoded_response);
-    assert_eq!(v3_encoded_response, v4_encoded_response);
-}
-
-#[test]
 fn invalid_response_extra_field() {
     for certification_version in all_supported_versions() {
-        if certification_version <= CertificationVersion::V3 {
-            let bytes =
-                ResponseV3::encode_with_extra_field((&response(), certification_version)).unwrap();
+        let bytes =
+            types::Response::encode_with_extra_field((&response(), certification_version)).unwrap();
 
-            let res: Result<ResponseV3, ProxyDecodeError> = ResponseV3::proxy_decode(&bytes);
-            assert_matches!(
-                res,
-                Err(ProxyDecodeError::CborDecodeError(err))
-                    if err.to_string().contains("expected field index 0 <= i < 5")
-            );
-        } else {
-            let bytes =
-                types::Response::encode_with_extra_field((&response(), certification_version))
-                    .unwrap();
-
-            let res: Result<Response, ProxyDecodeError> = types::Response::proxy_decode(&bytes);
-            assert_matches!(
-                res,
-                Err(ProxyDecodeError::CborDecodeError(err))
-                    if err.to_string().contains("expected field index 0 <= i < 6")
-            );
-        }
+        let res: Result<Response, ProxyDecodeError> = types::Response::proxy_decode(&bytes);
+        assert_matches!(
+            res,
+            Err(ProxyDecodeError::CborDecodeError(err))
+                if err.to_string().contains("expected field index 0 <= i < 6")
+        );
     }
 }
 
