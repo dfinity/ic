@@ -21,13 +21,11 @@ Coverage::
 
 end::catalog[] */
 
+use crate::driver::ic::{InternetComputer, Subnet};
 use crate::nns::{add_nodes_to_subnet, remove_nodes_via_endpoint, NnsExt};
 use crate::util::*;
 use ic_agent::export::Principal;
-use ic_fondue::{
-    ic_manager::IcHandle,
-    prod_tests::ic::{InternetComputer, Subnet},
-};
+use ic_fondue::ic_manager::IcHandle;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use slog::{debug, info};

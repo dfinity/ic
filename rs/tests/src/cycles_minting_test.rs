@@ -7,6 +7,7 @@ use crate::util::{
     runtime_from_url,
 };
 
+use crate::driver::ic::InternetComputer;
 use canister_test::{Canister, Project, Wasm};
 use cycles_minting_canister::{
     create_canister_txn, top_up_canister_txn, CreateCanisterResult,
@@ -20,7 +21,7 @@ use ic_certified_vars::verify_certificate;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_crypto::threshold_sig_public_key_from_der;
 use ic_crypto_tree_hash::MixedHashTree;
-use ic_fondue::{ic_manager::IcHandle, prod_tests::ic::InternetComputer};
+use ic_fondue::ic_manager::IcHandle;
 use ic_nns_common::types::{NeuronId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, ROOT_CANISTER_ID,

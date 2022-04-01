@@ -22,12 +22,10 @@ use std::collections::HashSet;
 use std::iter::FromIterator;
 use std::time::Duration;
 
+use crate::driver::ic::{InternetComputer, Subnet};
 use ic_base_types::NodeId;
+use ic_fondue::ic_manager::IcHandle;
 use ic_fondue::ic_manager::IcSubnet;
-use ic_fondue::{
-    ic_manager::IcHandle,                       // we run the test on the IC
-    prod_tests::ic::{InternetComputer, Subnet}, // which is declared through these types
-};
 use slog::info;
 
 use ic_registry_common::registry::RegistryCanister;

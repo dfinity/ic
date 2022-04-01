@@ -16,11 +16,12 @@ Success::
 
 end::catalog[] */
 
+use crate::driver::ic::{InternetComputer, Subnet};
+use crate::driver::vm_control::IcControl;
 use crate::util::{assert_all_ready, assert_create_agent, block_on, UniversalCanister};
 use ic_fondue::{
-    ic_manager::{IcControl, IcEndpoint, IcHandle},
+    ic_manager::{IcEndpoint, IcHandle},
     iterator::PermOf,
-    prod_tests::ic::{InternetComputer, Subnet},
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;

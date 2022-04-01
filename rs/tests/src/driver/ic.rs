@@ -1,11 +1,11 @@
 use super::bootstrap::{init_ic, setup_and_start_vms};
 use super::resource::{allocate_resources, get_resource_request, ResourceGroup};
 use super::test_env::TestEnv;
-use crate::ic_instance::node_software_version::NodeSoftwareVersion;
-use crate::prod_tests::driver_setup::mk_logger;
-use crate::prod_tests::driver_setup::{FARM_BASE_URL, FARM_GROUP_NAME};
-use crate::prod_tests::farm::Farm;
+use crate::driver::driver_setup::mk_logger;
+use crate::driver::driver_setup::{FARM_BASE_URL, FARM_GROUP_NAME};
+use crate::driver::farm::Farm;
 use anyhow::Result;
+use ic_fondue::ic_instance::node_software_version::NodeSoftwareVersion;
 use ic_prep_lib::node::NodeSecretKeyStore;
 use ic_protobuf::registry::subnet::v1::GossipConfig;
 use ic_registry_subnet_features::SubnetFeatures;

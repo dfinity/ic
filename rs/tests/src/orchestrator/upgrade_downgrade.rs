@@ -21,11 +21,14 @@ use crate::orchestrator::utils::upgrade::{
 use crate::util::{
     assert_endpoints_reachability, block_on, get_random_nns_node_endpoint, EndpointsStatus,
 };
+use crate::{
+    driver::ic::{InternetComputer, Subnet},
+    driver::vm_control::IcControl,
+};
 use ic_fondue::{
+    ic_manager::IcEndpoint,
     ic_manager::IcHandle, // we run the test on the IC
-    ic_manager::{IcControl, IcEndpoint},
     pot::Context,
-    prod_tests::ic::{InternetComputer, Subnet}, // which is declared through these types
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;

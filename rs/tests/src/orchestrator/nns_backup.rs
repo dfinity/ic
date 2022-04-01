@@ -20,6 +20,7 @@ Success::
 
 end::catalog[] */
 
+use crate::driver::ic::{InternetComputer, Subnet};
 use crate::{
     nns::NnsExt,
     orchestrator::utils::{
@@ -38,10 +39,7 @@ use crate::{
     },
 };
 use core::time;
-use ic_fondue::{
-    ic_manager::{IcControl, IcHandle},
-    prod_tests::ic::{InternetComputer, Subnet},
-};
+use ic_fondue::ic_manager::IcHandle;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, ReplicaVersion};
 use std::convert::TryFrom;

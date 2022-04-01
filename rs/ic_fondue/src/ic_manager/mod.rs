@@ -21,7 +21,7 @@ pub mod handle;
 pub mod process_pool;
 use crate::mio::InputSource;
 use crossbeam_channel::unbounded;
-pub use handle::{FarmInfo, IcControl, IcEndpoint, IcHandle, IcSubnet, RuntimeDescriptor};
+pub use handle::{FarmInfo, IcEndpoint, IcHandle, IcSubnet, RuntimeDescriptor};
 pub use inner::*;
 use std::collections::BTreeSet;
 use std::fs::{create_dir_all, File};

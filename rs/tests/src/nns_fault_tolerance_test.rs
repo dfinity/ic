@@ -1,13 +1,13 @@
-use ic_fondue::{
-    ic_manager::IcHandle,
-    prod_tests::ic::{InternetComputer, Subnet},
-};
+use ic_fondue::ic_manager::IcHandle;
 
 use crate::nns::NnsExt;
 use crate::util;
 
+use crate::{
+    driver::ic::{InternetComputer, Subnet},
+    driver::vm_control::IcControl,
+};
 use canister_test::Canister;
-use ic_fondue::ic_manager::IcControl;
 use ic_nns_constants::{LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::CanisterId;

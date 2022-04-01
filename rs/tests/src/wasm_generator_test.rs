@@ -1,12 +1,10 @@
+use crate::driver::ic::{InternetComputer, Subnet};
 use crate::util;
 use candid::Encode;
 use ic_agent::export::Principal;
 use ic_agent::Agent;
+use ic_fondue::ic_manager::IcHandle;
 use ic_fondue::{self};
-use ic_fondue::{
-    ic_manager::IcHandle,
-    prod_tests::ic::{InternetComputer, Subnet},
-};
 use ic_registry_subnet_type::SubnetType;
 use ic_utils::interfaces::ManagementCanister;
 use std::env;

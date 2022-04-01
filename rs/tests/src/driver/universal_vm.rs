@@ -1,12 +1,10 @@
+use super::driver_setup::{FARM_BASE_URL, FARM_GROUP_NAME};
+use super::farm::Farm;
+use super::ic::VmResources;
 use super::resource::AllocatedVm;
+use super::resource::{allocate_resources, get_resource_request_for_universal_vm, DiskImage};
 use super::test_env::TestEnv;
 use super::test_env_api::{retry, RETRY_BACKOFF, RETRY_TIMEOUT};
-use crate::prod_tests::driver_setup::{FARM_BASE_URL, FARM_GROUP_NAME};
-use crate::prod_tests::farm::Farm;
-use crate::prod_tests::ic::VmResources;
-use crate::prod_tests::resource::{
-    allocate_resources, get_resource_request_for_universal_vm, DiskImage,
-};
 use anyhow::{bail, Result};
 use slog::info;
 use ssh2::Session;

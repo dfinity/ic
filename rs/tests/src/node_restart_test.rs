@@ -16,11 +16,12 @@ Coverage::
 
 end::catalog[] */
 
-use ic_fondue::{self};
-use ic_fondue::{
-    ic_manager::{IcControl, IcHandle},
-    prod_tests::ic::{InternetComputer, Subnet},
+use crate::{
+    driver::ic::{InternetComputer, Subnet},
+    driver::vm_control::IcControl,
 };
+use ic_fondue::ic_manager::IcHandle;
+use ic_fondue::{self};
 use ic_registry_subnet_type::SubnetType;
 
 use crate::util;

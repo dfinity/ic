@@ -18,15 +18,16 @@ Success::
 end::catalog[] */
 
 use crate::{
+    driver::ic::{InternetComputer, Subnet},
+    driver::vm_control::IcControl,
+};
+use crate::{
     nns::NnsExt,
     util::{
         assert_endpoints_reachability, assert_subnet_can_make_progress, block_on, EndpointsStatus,
     },
 };
-use ic_fondue::{
-    ic_manager::{IcControl, IcEndpoint, IcHandle},
-    prod_tests::ic::{InternetComputer, Subnet},
-};
+use ic_fondue::ic_manager::{IcEndpoint, IcHandle};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 

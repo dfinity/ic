@@ -19,7 +19,6 @@ humantime = "2.0"
 ic-agent = "=0.11.1"
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
-ic-constants = { path = "../constants" }
 ic-crypto-sha = { path = "../crypto/sha" }
 ic-interfaces = { path = "../interfaces" }
 ic-nns-init = { path = "../nns/init" }

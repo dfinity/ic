@@ -1,18 +1,18 @@
-use crate::prod_tests::ic::{AmountOfMemoryKiB, InternetComputer, Node, NrOfVCPUs};
-use crate::prod_tests::universal_vm::UniversalVm;
+use crate::driver::ic::{AmountOfMemoryKiB, InternetComputer, Node, NrOfVCPUs};
+use crate::driver::universal_vm::UniversalVm;
 use anyhow;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::net::Ipv6Addr;
 use url::Url;
 
+use super::driver_setup::{IC_OS_IMG_SHA256, IC_OS_IMG_URL};
 use super::farm::CreateVmRequest;
-use crate::prod_tests::driver_setup::{IC_OS_IMG_SHA256, IC_OS_IMG_URL};
-use crate::prod_tests::farm::Farm;
-use crate::prod_tests::farm::FarmResult;
-use crate::prod_tests::farm::ImageLocation;
-use crate::prod_tests::farm::ImageLocation::{IcOsImageViaUrl, ImageViaUrl};
-use crate::prod_tests::test_env::TestEnv;
+use super::farm::Farm;
+use super::farm::FarmResult;
+use super::farm::ImageLocation;
+use super::farm::ImageLocation::{IcOsImageViaUrl, ImageViaUrl};
+use super::test_env::TestEnv;
 
 const DEFAULT_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(4);
 const DEFAULT_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(25165824); // 24GiB

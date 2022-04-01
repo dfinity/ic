@@ -16,16 +16,15 @@ Success::
 
 end::catalog[] */
 
+use crate::driver::ic::{InternetComputer, Subnet};
+use crate::driver::vm_control::IcControl;
 use crate::{
     nns::NnsExt,
     tecdsa_signature_test::{get_public_key, get_signature, verify_signature},
     util::*,
 };
 use canister_test::Cycles;
-use ic_fondue::{
-    ic_manager::{IcControl, IcEndpoint, IcHandle},
-    prod_tests::ic::{InternetComputer, Subnet},
-};
+use ic_fondue::ic_manager::{IcEndpoint, IcHandle};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;

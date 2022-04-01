@@ -21,6 +21,7 @@ Success::
 
 end::catalog[] */
 
+use crate::driver::ic::{InternetComputer, Subnet};
 use crate::nns::{
     submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed, NnsExt,
 };
@@ -29,10 +30,7 @@ use crate::{
     util::{self, block_on},
 };
 use ic_base_types::PrincipalId;
-use ic_fondue::{
-    ic_manager::IcHandle,
-    prod_tests::ic::{InternetComputer, Subnet},
-};
+use ic_fondue::ic_manager::IcHandle;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::pb::v1::NnsFunction;
 use ic_registry_subnet_type::SubnetType;

@@ -14,16 +14,14 @@ Success:: An agent can complete the signing process and result signature verifie
 
 end::catalog[] */
 
+use crate::driver::ic::{InternetComputer, Subnet};
 use crate::util::*;
 use candid::Encode;
 use candid::Principal;
 use canister_test::Cycles;
 use ic_agent::AgentError;
 use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
-use ic_fondue::{
-    ic_manager::IcHandle,
-    prod_tests::ic::{InternetComputer, Subnet},
-};
+use ic_fondue::ic_manager::IcHandle;
 use ic_ic00_types::{
     ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, Payload, SignWithECDSAArgs, SignWithECDSAReply,
 };
