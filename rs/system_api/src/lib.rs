@@ -2695,6 +2695,8 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn ic0_trap(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()> {
+        const MAX_ERROR_MESSAGE_SIZE: u32 = 16 * 1024;
+        let size = size.min(MAX_ERROR_MESSAGE_SIZE);
         let result = {
             let msg = valid_subslice("trap", src, size, heap)
                 .map(|bytes| String::from_utf8_lossy(bytes).to_string())
