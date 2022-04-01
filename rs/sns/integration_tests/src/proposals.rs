@@ -22,7 +22,7 @@ use ic_sns_governance::proposal::{
     PROPOSAL_MOTION_TEXT_BYTES_MAX, PROPOSAL_SUMMARY_BYTES_MAX, PROPOSAL_TITLE_BYTES_MAX,
     PROPOSAL_URL_CHAR_MAX,
 };
-use ic_sns_governance::types::{ONE_MONTH_SECONDS, ONE_YEAR_SECONDS};
+use ic_sns_governance::types::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS};
 use ic_sns_test_utils::itest_helpers::{
     local_test_on_sns_subnet, SnsCanisters, SnsInitPayloadsBuilder, UserInfo,
 };
@@ -1543,4 +1543,101 @@ fn assert_voting_error(
     };
 
     assert_eq!(error.error_type, error_type_to_match as i32);
+}
+
+#[test]
+fn test_proposal_garbage_collection() {
+    local_test_on_sns_subnet(|runtime| async move {
+        // Initialize the ledger with an account for a user who will make proposals
+        let user = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        // Create NervousSystemParameters with max_proposals_to_keep_per_action set to 1 so
+        // garbage_collection will remove additional proposals.
+        let params = NervousSystemParameters {
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            max_proposals_to_keep_per_action: Some(1),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let sns_init_payload = SnsInitPayloadsBuilder::new()
+            .with_ledger_account(user.sender.get_principal_id().into(), alloc)
+            .with_nervous_system_parameters(params.clone())
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        // Stake and claim a neuron for the user
+        sns_canisters
+            .stake_and_claim_neuron_with_tokens(&user.sender, Some(ONE_YEAR_SECONDS as u32), 100)
+            .await;
+
+        // Create a vector of proposals that can be submitted and then garbage collected
+        let proposals: Vec<Proposal> = (0..10)
+            .map(|i| Proposal {
+                title: format!("Motion-{}", i),
+                action: Some(Action::Motion(Motion {
+                    motion_text: format!("Motion-{}", i),
+                })),
+                ..Default::default()
+            })
+            .collect();
+
+        // Submit the generated proposals and track their proposal_ids for assertions later
+        let mut proposal_ids = vec![];
+        for proposal in &proposals {
+            let proposal_id = sns_canisters
+                .make_proposal(&user.sender, &user.subaccount, proposal.clone())
+                .await
+                .expect("Expected make_proposal to succeed");
+            proposal_ids.push(proposal_id);
+        }
+
+        let proposal_count = list_all_proposals_through_pagination(
+            &sns_canisters.governance,
+            &user.sender,
+            100_usize,
+        )
+        .await
+        .len();
+
+        // Since none of the proposal's voting periods have passed, all proposals should
+        // still exist in the SNS
+        assert_eq!(proposal_count, proposal_ids.len());
+
+        // Advance time initial_voting_period + 1 days:
+        // - initial_voting_period so a proposal can be settled
+        // - Additional 1 day since garbage collection happens every 24 hours
+        let delta_s = (params.initial_voting_period.unwrap() as i64) + (ONE_DAY_SECONDS as i64);
+        sns_canisters
+            .set_time_warp(delta_s)
+            .await
+            .expect("Expected set_time_warp to succeed");
+
+        // Proposals should have been garbage_collected. Get all the proposals kept in the current
+        // SNS
+        let proposals_after_gc = list_all_proposals_through_pagination(
+            &sns_canisters.governance,
+            &user.sender,
+            100_usize,
+        )
+        .await;
+
+        // After GC, if no other proposals are open, number of proposals should be equal to
+        // max_proposals_to_keep_per_action (which is > 0)
+        assert_eq!(
+            proposals_after_gc.len(),
+            params.max_proposals_to_keep_per_action.unwrap() as usize
+        );
+        assert!(proposals_after_gc.len() < proposals.len());
+        // Assert that only the latest proposal is kept in the SNS
+        assert_eq!(
+            proposals_after_gc[0].id.as_ref().unwrap(),
+            proposal_ids.last().unwrap()
+        );
+
+        Ok(())
+    });
 }

@@ -186,6 +186,9 @@ impl NervousSystemParameters {
                 "NervousSystemParameters.max_proposals_to_keep_per_action must be set".to_string()
             })?;
 
+        // For ProposalId assignment to work, max_proposals_to_keep_per_action must always be
+        // greater than 0. If not, garbage collection may remove the latest ProposalId, which is
+        // needed when generating the next ProposalId.
         if max_proposals_to_keep_per_action == 0 {
             Err(
                 "NervousSystemParameters.max_proposals_to_keep_per_action must be greater than 0"
@@ -642,7 +645,7 @@ impl fmt::Display for RewardEvent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "RewardEvent {{ day_after_genesis: {} distributed_e8s_equivalent: {}\
+            "RewardEvent {{ periods_since_genesis: {} distributed_e8s_equivalent: {}\
                    actual_timestamp_seconds: {} settled_proposals: <vec of size {}> }})",
             self.periods_since_genesis,
             self.distributed_e8s_equivalent,

@@ -545,7 +545,9 @@ fn test_neuron_action_is_not_authorized() {
     });
 }
 
+// TODO NNS1-925 - Re-enable tests when "Generic Voting Rewards" allow for maturity.
 #[test]
+#[ignore]
 fn test_disburse_maturity() {
     local_test_on_sns_subnet(|runtime| async move {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
@@ -624,7 +626,9 @@ fn test_disburse_maturity() {
     });
 }
 
+// TODO NNS1-925 - Re-enable tests when "Generic Voting Rewards" allow for maturity.
 #[test]
+#[ignore]
 fn test_disburse_maturity_to_different_account() {
     local_test_on_sns_subnet(|runtime| async move {
         let maturity_owner = Sender::from_keypair(&TEST_USER1_KEYPAIR);
