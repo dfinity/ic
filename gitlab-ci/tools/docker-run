@@ -16,7 +16,9 @@ REPO_ROOT="$(
     git rev-parse --show-toplevel
 )"
 
-"$REPO_ROOT"/gitlab-ci/docker/docker-build-local-image.sh
+if [ -z "${IMAGE:-}" ]; then
+    "$REPO_ROOT"/gitlab-ci/docker/docker-build-local-image.sh
+fi
 
 source "$REPO_ROOT/gitlab-ci/docker/docker-run-include"
 
