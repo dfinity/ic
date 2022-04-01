@@ -1,39 +1,14 @@
 package(
-  default_visibility = ["//visibility:public"]
+    default_visibility = ["//visibility:public"],
 )
 
 filegroup(
-  name = "all_sources",
-  srcs = glob(["**"], exclude = ["target", "*.swp"]),
+    name = "all_sources",
+    srcs = glob(
+        ["**"],
+        exclude = [
+            "target",
+            "*.swp",
+        ],
+    ),
 )
-
-genrule(
-  name = "binaries",
-  srcs = [":all_sources"],
-  outs = [
-    "ic-replica",
-    "ic-orchestrator",
-    "ic-admin",
-  ],
-  tools = [
-    "@rules_rust//rust/toolchain:current_exec_cargo_files",
-    "@rules_rust//rust/toolchain:current_exec_rustc_files",
-    "@rules_rust//rust/toolchain:current_exec_rustfmt_files",
-  ],
-  cmd_bash = """
-  export CARGO=$(location @rules_rust//rust/toolchain:current_exec_cargo_files)
-  export RUSTC=$(location @rules_rust//rust/toolchain:current_exec_rustc_files)
-  export RUSTFMT=$$(realpath $(location @rules_rust//rust/toolchain:current_exec_rustfmt_files))
-  export CARGO_TARGET_DIR=$(BINDIR)/cargo/target
-  export CARGO_HOME=$(BINDIR)/cargo/home
-  $$CARGO build --manifest-path rs/Cargo.toml --release \
-    --bin replica \
-    --bin orchestrator \
-    --bin ic-admin
-  cp $$CARGO_TARGET_DIR/release/replica "$(location ic-replica)"
-  cp $$CARGO_TARGET_DIR/release/orchestrator "$(location ic-orchestrator)"
-  cp $$CARGO_TARGET_DIR/release/ic-admin "$(location ic-admin)"
-  """,
-)
-
-
