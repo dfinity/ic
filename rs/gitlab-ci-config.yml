@@ -78,7 +78,6 @@ ci_jobs_required:
   - subnet-update-workload-nightly
   - network-reliability-test
   - rejoin-nightly
-  - nns-registry-changes-test
   - maximum-capacity-subnet-update-nightly
   - maximum-capacity-subnet-query-nightly
   - maximum-capacity-xnet-slo-nightly
