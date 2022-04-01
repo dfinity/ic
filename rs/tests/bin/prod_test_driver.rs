@@ -19,9 +19,9 @@ use ic_tests::node_graceful_leaving_test::{self, test as node_graceful_leaving_t
 use ic_tests::node_removal_from_registry_test::{self, test as node_removal_from_registry_test};
 use ic_tests::node_restart_test::{self, test as node_restart_test};
 use ic_tests::orchestrator::{
-    cup_fetching_across_upgrades, nns_backup,
+    nns_backup,
     node_reassignment_test::{self, test as node_reassignment_test},
-    ssh_access_to_nodes, unassigned_node_upgrade_test, upgrade_reject,
+    ssh_access_to_nodes, unassigned_node_upgrade_test, upgrade_downgrade, upgrade_reject,
 };
 use ic_tests::rejoin_test::{self, test as rejoin_test};
 use ic_tests::rosetta_test;
@@ -514,15 +514,26 @@ fn get_test_suites() -> HashMap<String, Suite> {
 
     m.add_suite(suite(
         "upgrade_compatibility",
-        vec![pot(
-            "cup_fetching_across_upgrades",
-            cup_fetching_across_upgrades::config(),
-            par(vec![t(
-                "cup_fetching_across_upgrades",
-                cup_fetching_across_upgrades::test,
-            )]),
-        )
-        .with_ttl(Duration::from_secs(1800))],
+        vec![
+            pot(
+                "upgrade_downgrade_app_subnet",
+                upgrade_downgrade::config(),
+                par(vec![t(
+                    "upgrade_downgrade_app_subnet",
+                    upgrade_downgrade::upgrade_downgrade_app_subnet,
+                )]),
+            )
+            .with_ttl(Duration::from_secs(1800)),
+            pot(
+                "upgrade_downgrade_nns_subnet",
+                upgrade_downgrade::config(),
+                par(vec![t(
+                    "upgrade_downgrade_nns_subnet",
+                    upgrade_downgrade::upgrade_downgrade_nns_subnet,
+                )]),
+            )
+            .with_ttl(Duration::from_secs(1800)),
+        ],
     ));
 
     m.add_suite(suite(

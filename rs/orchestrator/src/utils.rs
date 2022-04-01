@@ -1,6 +1,4 @@
-use crate::error::{OrchestratorError, OrchestratorResult};
-
-use ic_crypto_sha::Sha256;
+use crate::error::OrchestratorError;
 use ic_logger::{info, ReplicaLogger};
 use std::env;
 use std::fs;
@@ -78,26 +76,6 @@ pub(crate) fn get_oldest_entry(dir: &Path) -> Option<PathBuf> {
     }
 
     oldest.map(|pair| pair.1)
-}
-
-/// Determine sha256 hash of the currently running orchestrator binary
-pub(crate) fn get_orchestrator_binary_hash() -> OrchestratorResult<String> {
-    let binary_path = env::current_exe()
-        .map_err(|e| OrchestratorError::IoError("env::current_exe() failed".into(), e))?;
-
-    compute_sha256_hex(&binary_path)
-}
-
-/// Compute the SHA256 of a file and return a hex-encoded string of the hash
-pub(crate) fn compute_sha256_hex(path: &Path) -> OrchestratorResult<String> {
-    let mut binary_file =
-        fs::File::open(path).map_err(|e| OrchestratorError::file_open_error(path, e))?;
-
-    let mut hasher = Sha256::new();
-    std::io::copy(&mut binary_file, &mut hasher)
-        .map_err(|e| OrchestratorError::compute_hash_error(path, e))?;
-
-    Ok(hex::encode(hasher.finish()))
 }
 
 #[cfg(test)]
