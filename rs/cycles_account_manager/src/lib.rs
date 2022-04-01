@@ -489,10 +489,14 @@ impl CyclesAccountManager {
     pub fn response_cycles_refund(&self, system_state: &mut SystemState, response: &mut Response) {
         // We originally charged for the maximum number of bytes possible so
         // figure out how many extra bytes we charged for.
-        let extra_bytes = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES - response.response_payload.size_of();
-        let cycles_to_refund =
-            self.config.xnet_byte_transmission_fee * Cycles::from(extra_bytes.get());
-        self.refund_cycles(system_state, cycles_to_refund);
+        let some_extra_bytes = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES
+            .get()
+            .checked_sub(response.response_payload.size_of().get());
+        if let Some(extra_bytes) = some_extra_bytes {
+            let cycles_to_refund =
+                self.config.xnet_byte_transmission_fee * Cycles::from(extra_bytes);
+            self.refund_cycles(system_state, cycles_to_refund);
+        }
     }
 
     ////////////////////////////////////////////////////////////////////////////
