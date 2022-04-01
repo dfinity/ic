@@ -1,10 +1,9 @@
 release-boundary-node-service-worker:
   extends:
     - .ubuntu-nix-docker
+    - .rules-service-worker-release
   stage: npm-release
   needs: [] # don't wait on other jobs
-  rules:
-    - if: '$CI_COMMIT_TAG =~ /^service-worker_v([0-9\.]+)$/ && $CI_COMMIT_BRANCH == "master"'
   script:
     - |
       set -eExuo pipefail

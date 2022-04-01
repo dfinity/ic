@@ -2,6 +2,7 @@ boundary-node-service-worker:
   extends:
     - .ubuntu-nix-docker
     - .rules-protected-branch
+    - .rules-service-worker-release
   needs: [] # don't wait on other jobs
   stage: test
   rules:
