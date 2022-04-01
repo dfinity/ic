@@ -1073,7 +1073,7 @@ impl Governance {
         if merge_maturity.percentage_to_merge > 100 || merge_maturity.percentage_to_merge == 0 {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
-                "The percentage of maturity to merge must be a value between 0 (exclusive) and 1 (inclusive)."));
+                "The percentage of maturity to merge must be a value between 1 and 100 (inclusive)."));
         }
 
         let transaction_fee_e8s = self.transaction_fee();
@@ -2714,35 +2714,47 @@ impl Governance {
             log_prefix(),
             self.latest_gc_timestamp_seconds
         );
-        let max_proposals = self
+        let max_proposals_to_keep_per_action = self
             .nervous_system_parameters()
             .max_proposals_to_keep_per_action
             .expect("NervousSystemParameters must have max_proposals_to_keep_per_action")
             as usize;
 
-        // This data structure contains proposals grouped by type.
-        let proposals_by_type = {
+        // This data structure contains proposals grouped by action.
+        //
+        // Proposals are stored in order based on ProposalId, where ProposalIds are assigned in
+        // order of creation in the governance canister (i.e. chronologically). The following
+        // data structure maintains the same chronological order for proposals in each action's vector.
+        let action_to_proposals: HashMap<u64, Vec<u64>> = {
             let mut tmp: HashMap<u64, Vec<u64>> = HashMap::new();
-            for (id, prop) in self.proto.proposals.iter() {
-                tmp.entry(prop.action).or_insert_with(Vec::new).push(*id);
+            for (proposal_id, proposal) in self.proto.proposals.iter() {
+                tmp.entry(proposal.action)
+                    .or_insert_with(Vec::new)
+                    .push(*proposal_id);
             }
             tmp
         };
-        // Only keep the latest 'max_proposals' per type.
-        for (proposal_type, props) in proposals_by_type {
+        // Only keep the latest 'max_proposals_to_keep_per_action'. This is a soft maximum
+        // as garbage collection cannot purge un-finalized proposals, and only a subset of proposals
+        // at the head of the list are examined.
+        // TODO NNS1-1259: Improve "best-effort" garbage collection of proposals
+        for (proposal_action, proposals_of_action) in action_to_proposals {
             println!(
                 "{}GC - proposal_type {:#?} max {} current {}",
                 log_prefix(),
-                proposal_type,
-                max_proposals,
-                props.len()
+                proposal_action,
+                max_proposals_to_keep_per_action,
+                proposals_of_action.len()
             );
-            if props.len() > max_proposals {
-                for prop_id in props.iter().take(props.len() - max_proposals) {
+            if proposals_of_action.len() > max_proposals_to_keep_per_action {
+                for proposal_id in proposals_of_action
+                    .iter()
+                    .take(proposals_of_action.len() - max_proposals_to_keep_per_action)
+                {
                     // Check that this proposal can be purged.
-                    if let Some(prop) = self.proto.proposals.get(prop_id) {
-                        if prop.can_be_purged(now_seconds) {
-                            self.proto.proposals.remove(prop_id);
+                    if let Some(proposal) = self.proto.proposals.get(proposal_id) {
+                        if proposal.can_be_purged(now_seconds) {
+                            self.proto.proposals.remove(proposal_id);
                         }
                     }
                 }
@@ -2766,9 +2778,7 @@ impl Governance {
                 Ok(supply) => {
                     // Distribute rewards if enough time has passed since the last reward
                     // event.
-                    if self.should_distribute_rewards() {
-                        self.distribute_rewards(supply);
-                    }
+                    self.distribute_rewards(supply);
                 }
                 Err(e) => println!(
                     "{}Error when getting total governance token supply: {}",
@@ -2801,6 +2811,9 @@ impl Governance {
     /// can no longer accept votes for the purpose of rewards and that have
     /// not yet been considered in a reward event.
     /// * Associate those proposals to the new reward event
+    ///
+    /// TODO NNS1-925 - Generic Voting Rewards. Re-enable modifying the neuron to distribute the
+    ///                 reward. All other effects of distributing rewards are still in place.
     fn distribute_rewards(&mut self, supply: Tokens) {
         println!("{}distribute_rewards. Supply: {:?}", log_prefix(), supply);
 
@@ -2822,8 +2835,8 @@ impl Governance {
         if periods_since_genesis > 1 + self.latest_reward_event().periods_since_genesis {
             println!(
                 "{}Some reward distribution should have happened, but were missed.\
-                      It is now {} full days since genesis, and the last distribution \
-                      nominally happened at {} full days since genesis.",
+                      It is now {} periods since genesis, and the last distribution \
+                      nominally happened at {} periods since genesis.",
                 log_prefix(),
                 periods_since_genesis,
                 self.latest_reward_event().periods_since_genesis
@@ -2834,63 +2847,70 @@ impl Governance {
             .map(crate::reward::rewards_pool_to_distribute_in_supply_fraction_for_one_day)
             .sum();
 
-        let distributed_e8s_equivalent_float = (supply.get_e8s() as f64) * fraction;
+        let _distributed_e8s_equivalent_float = (supply.get_e8s() as f64) * fraction;
         // We should not convert right away to integer! The
         // "distributed_e8s_equivalent" recorded in the RewardEvent proto
         // should match exactly the sum of the distributed integer e8
         // equivalents. Due to rounding, we actually need to recompute this sum,
         // even though it will be very close to distributed_e8s_equivalent_float.
-        let mut actually_distributed_e8s_equivalent = 0_u64;
+        let actually_distributed_e8s_equivalent = 0_u64;
 
         let considered_proposals: Vec<ProposalId> =
             self.ready_to_be_settled_proposal_ids().collect();
 
-        // Construct map voters -> total _used_ voting rights for considered proposals
-        let (voters_to_used_voting_right, total_voting_rights) =
-            {
-                let mut voters_to_used_voting_right: HashMap<NeuronId, f64> = HashMap::new();
-                let mut total_voting_rights = 0f64;
+        // Construct a map of voter ids (NeuronIds) to total voting power _exercised_
+        // for considered proposals.
+        // TODO NNS1-925 - We keep the below calculation as it will be needed when enabling
+        //                 generic voting reward.
+        let (voters_to_used_voting_right, _total_voting_rights) = {
+            let mut voters_to_used_voting_right: HashMap<NeuronId, f64> = HashMap::new();
+            let mut total_voting_rights = 0f64;
 
-                for pid in considered_proposals.iter() {
-                    if let Some(proposal) = self.get_proposal_data(*pid) {
-                        for (voter, ballot) in proposal.ballots.iter() {
-                            if !Vote::from(ballot.vote).eligible_for_rewards() {
-                                continue;
+            for proposal_id in considered_proposals.iter() {
+                if let Some(proposal_data) = self.get_proposal_data(*proposal_id) {
+                    for (voter, ballot) in proposal_data.ballots.iter() {
+                        if !Vote::from(ballot.vote).eligible_for_rewards() {
+                            continue;
+                        }
+                        match NeuronId::from_str(voter) {
+                            Ok(nid) => {
+                                let voting_power = ballot.voting_power as f64;
+                                *voters_to_used_voting_right.entry(nid).or_insert(0f64) +=
+                                    voting_power;
+                                total_voting_rights += voting_power;
                             }
-                            match NeuronId::from_str(voter) {
-                                Ok(nid) => {
-                                    let voting_power = ballot.voting_power as f64;
-                                    *voters_to_used_voting_right.entry(nid).or_insert(0f64) +=
-                                        voting_power;
-                                    total_voting_rights += voting_power;
-                                }
-                                Err(e) => {
-                                    println!(
+                            Err(e) => {
+                                println!(
                                     "{} Could not use voter {} to calculate total_voting_rights \
-                                    since it's NeuronId was invalid. Underlying error: {:?}.",
-                                    log_prefix(), voter, e
+                                        since it's NeuronId was invalid. Underlying error: {:?}.",
+                                    log_prefix(),
+                                    voter,
+                                    e
                                 )
-                                }
                             }
                         }
                     }
                 }
-                (voters_to_used_voting_right, total_voting_rights)
-            };
+            }
+            (voters_to_used_voting_right, total_voting_rights)
+        };
 
         for (neuron_id, used_voting_rights) in voters_to_used_voting_right {
             match self.get_neuron_result_mut(&neuron_id) {
-                Ok(mut neuron) => {
+                Ok(mut _neuron) => {
                     // Note that "as" rounds toward zero; this is the desired
                     // behavior here. Also note that `total_voting_rights` has
                     // to be positive because (1) voters_to_used_voting_right
                     // is non-empty (otherwise we wouldn't be here in the
                     // first place) and (2) the voting power of all ballots is
                     // positive (non-zero).
-                    let reward = (used_voting_rights * distributed_e8s_equivalent_float
-                        / total_voting_rights) as u64;
-                    neuron.maturity_e8s_equivalent += reward;
-                    actually_distributed_e8s_equivalent += reward;
+
+                    // TODO NNS1-925 - Generic Voting Rewards. Uncomment the following lines to
+                    //                 re-enable rewards for a neuron
+                    // let reward = (used_voting_rights * _distributed_e8s_equivalent_float
+                    //     / _total_voting_rights) as u64;
+                    // neuron.maturity_e8s_equivalent += reward;
+                    // actually_distributed_e8s_equivalent += reward;
                 }
                 Err(e) => println!(
                     "{}Cannot find neuron {}, despite having voted with power {} \
