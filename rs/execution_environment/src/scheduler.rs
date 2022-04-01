@@ -25,7 +25,7 @@ use ic_types::{
     ingress::{IngressStatus, WasmResult},
     messages::{Ingress, MessageId, Payload, Response, StopCanisterContext},
     user_error::{ErrorCode, UserError},
-    AccumulatedPriority, CanisterId, CanisterStatusType, ComputeAllocation, ExecutionRound,
+    AccumulatedPriority, CanisterId, CanisterStatusType, ComputeAllocation, Cycles, ExecutionRound,
     InstallCodeContext, MemoryAllocation, NumBytes, NumInstructions, Randomness, SubnetId, Time,
 };
 use ic_types::{nominal_cycles::NominalCycles, NumMessages};
@@ -54,6 +54,7 @@ lazy_static! {
 
 /// How often heartbeat errors should be logged to avoid overloading the logs.
 const LOG_ONE_HEARTBEAT_OUT_OF: u64 = 100;
+const MAX_BALANCE: Cycles = Cycles::new(1 << 60);
 
 #[cfg(test)]
 pub(crate) mod tests;
@@ -1225,6 +1226,11 @@ fn execute_canisters_on_thread(
             > canister_execution_limits.total_instruction_limit
             || total_heap_delta >= canister_execution_limits.max_heap_delta_per_iteration
         {
+            canisters.push(canister);
+            continue;
+        }
+
+        if canister.system_state.balance() > MAX_BALANCE {
             canisters.push(canister);
             continue;
         }
