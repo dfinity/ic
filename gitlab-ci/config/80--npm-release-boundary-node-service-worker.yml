@@ -35,12 +35,12 @@ release-boundary-node-service-worker:
           echo "package.json version $PACKAGE_JSON_VERSION does not match tag version $TAG_VERSION"
           exit 1
         fi
-      
-        mkdir "package-content"
-        tar -xf "artifacts/dfinity-service-worker-$TAG_VERSION.tgz" -C package-content
+
+        # extracts to folder package
+        tar -xf "artifacts/dfinity-service-worker-$TAG_VERSION.tgz"
       
         # verify the prebuilt package version matches the tag
-        PREBUILT_VERSION=$(< package-content/package.json jq '.version' -r)
+        PREBUILT_VERSION=$(< package/package.json jq '.version' -r)
         if [  "$PREBUILT_VERSION" != "$TAG_VERSION" ]; then
           echo "version $PREBUILT_VERSION contained in the prebuilt artifact does not match tag version $TAG_VERSION!"
           exit 1
