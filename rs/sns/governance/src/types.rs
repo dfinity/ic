@@ -697,43 +697,6 @@ pub trait Environment: Send + Sync {
     fn canister_id(&self) -> CanisterId;
 }
 
-pub struct EmptyEnvironment {}
-
-/// Not Implemented
-/// For use in defaults
-impl Environment for EmptyEnvironment {
-    fn now(&self) -> u64 {
-        unimplemented!()
-    }
-
-    fn random_u64(&mut self) -> u64 {
-        unimplemented!()
-    }
-
-    fn random_byte_array(&mut self) -> [u8; 32] {
-        unimplemented!()
-    }
-
-    #[allow(unused_variables)]
-    fn call_canister(
-        &self,
-        proposal_id: u64,
-        canister_id: CanisterId,
-        method_name: &str,
-        arg: Vec<u8>,
-    ) -> Result<(), GovernanceError> {
-        unimplemented!()
-    }
-
-    fn heap_growth_potential(&self) -> HeapGrowthPotential {
-        unimplemented!()
-    }
-
-    fn canister_id(&self) -> CanisterId {
-        unimplemented!()
-    }
-}
-
 /// Rough buckets for how much the heap can still grow.
 pub enum HeapGrowthPotential {
     /// The heap can grow without issue.
