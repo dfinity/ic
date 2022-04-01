@@ -148,12 +148,8 @@ if __name__ == "__main__":
     with open(f"{dir}/experiment.json", "r") as experiment_file:
         j = json.loads(experiment_file.read())
         experiment_name = str(j["command_line"][0]).replace("experiments/", "").replace(".py", "")
-        failure_rate = j["experiment_details"]["failure_rate"]
-        t_median = j["experiment_details"]["t_median"]
         throughput = j["experiment_details"]["rps_max"]
-        target_load = j["experiment_details"]["target_load"]
         is_update = j["experiment_details"]["is_update"]
-        median_latency_threshold = j["experiment_details"]["median_latency_threshold"]
 
     if FLAGS.is_max_capacity_run:
         NotifyDashboard.notify_max_run(
@@ -165,10 +161,15 @@ if __name__ == "__main__":
         )
     else:
         is_success = j["is_success"]
+        median_latency_threshold = j["experiment_details"]["median_latency_threshold"]
+        target_load = j["experiment_details"]["target_load"]
+        t_median = j["experiment_details"]["t_median"]
+        failure_rate = j["experiment_details"]["failure_rate"]
+
         NotifyDashboard.notify_spot_run(
             experiment_name,
             is_success,
-            "Update",
+            "Update" if is_update else "Query",
             FLAGS.git_revision,
             (
                 failure_rate,
