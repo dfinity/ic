@@ -1,0 +1,35 @@
+load("//bazel:defs.bzl", "cargo_build", "optimized_canister")
+
+cargo_build(
+    name = "binaries",
+    srcs = ["//rs:all_sources"],
+    binaries = [
+        "replica",
+        "orchestrator",
+        "ic-admin",
+    ],
+    cargo_flags = [
+        "--manifest-path",
+        "rs/Cargo.toml",
+    ],
+    profile = "release",
+)
+
+cargo_build(
+    name = "ledger_archive_wasm",
+    srcs = ["//rs:all_sources"],
+    binaries = [
+        "ledger-archive-node-canister",
+    ],
+    cargo_flags = [
+        "--manifest-path",
+        "rs/Cargo.toml",
+    ],
+    profile = "canister-release",
+    target = "wasm32-unknown-unknown",
+)
+
+optimized_canister(
+    name = "ledger_archive",
+    wasm = ":ledger_archive_wasm",
+)
