@@ -151,7 +151,7 @@ impl Neuron {
     ) -> Vote {
         // Compute the list of followees for this action. If no
         // following is specified for the action, use the followees
-        // from the 'Unspecified' topic.
+        // from the 'Unspecified' action.
         let unspecified_key = u64::from(&Action::Unspecified(Empty {}));
         if let Some(followees) = self
             .followees
