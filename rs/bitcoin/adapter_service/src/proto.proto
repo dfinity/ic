@@ -2,9 +2,32 @@ syntax = "proto3";
 
 package btc_adapter;
 
-import "bitcoin/v1/bitcoin.proto";
+message GetSuccessorsRpcRequest {
+  // Used by the adapter to filter out previously sent blocks from its
+  // `GetSuccessorsResponse`. 
+  repeated bytes processed_block_hashes = 1;
+  // This field is used by the adapter to start a breadth-first search its
+  // known headers to determine which blocks to respond with in 
+  // `GetSuccessorsResponse::blocks` field.
+  bytes anchor = 2;
+}
+
+message GetSuccessorsRpcResponse {
+  // The blocks that the adapter has knowledge of based on the anchor and
+  // processed block hashes provided in the `GetSuccessorsRequest`.
+  repeated bytes blocks = 1;
+  // The next block headers that used to notify the Bitcoin virtual canister
+  // that more blocks are available.
+  repeated bytes next = 2;
+}
+
+message SendTransactionRpcRequest {
+  bytes transaction = 1;
+}
+
+message SendTransactionRpcResponse {};
 
 service BtcAdapter {
-    rpc GetSuccessors(bitcoin.v1.GetSuccessorsRequest) returns (bitcoin.v1.GetSuccessorsResponse);
-    rpc SendTransaction(bitcoin.v1.SendTransactionRequest) returns (bitcoin.v1.SendTransactionResponse);
+    rpc GetSuccessors(GetSuccessorsRpcRequest) returns (GetSuccessorsRpcResponse);
+    rpc SendTransaction(SendTransactionRpcRequest) returns (SendTransactionRpcResponse);
 }

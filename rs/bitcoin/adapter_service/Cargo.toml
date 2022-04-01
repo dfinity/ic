@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-ic-protobuf = { path = "../../protobuf" }
 prost = "0.9"
 tonic = "0.6.2"
 

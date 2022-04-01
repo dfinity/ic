@@ -13,7 +13,7 @@ use ic_types::{
     batch::{SelfValidatingPayload, ValidationContext},
     Height, NumBytes,
 };
-use std::{convert::TryFrom, sync::Arc};
+use std::sync::Arc;
 use thiserror::Error;
 
 const ADAPTER_REQUEST_STATUS_FAILURE: &str = "failed";
@@ -109,52 +109,37 @@ impl BitcoinPayloadBuilder {
                     let timer = Timer::start();
                     let result = self
                         .bitcoin_adapter_client
-                        .send_request((&request.request).into(), Options::default());
+                        .send_request(request.request.clone(), Options::default());
                     match result {
-                        Ok(r) => match BitcoinAdapterResponseWrapper::try_from(r) {
-                            Ok(response_wrapper) => {
-                                self.metrics.observe_adapter_request_duration(
-                                    ADAPTER_REQUEST_STATUS_SUCCESS,
-                                    request.request.to_request_type_label(),
-                                    timer,
-                                );
-                                if let BitcoinAdapterResponseWrapper::GetSuccessorsResponse(r) =
-                                    &response_wrapper
-                                {
-                                    self.metrics
-                                        .observe_blocks_per_get_successors_response(r.blocks.len());
-                                }
-                                let response = BitcoinAdapterResponse {
-                                    response: response_wrapper,
-                                    callback_id: *callback_id,
-                                };
-                                let response_size = response.count_bytes() as u64;
-                                self.metrics.observe_adapter_response_size(response_size);
-                                // Ensure we don't exceed the byte limit by
-                                // adding a new response but also ensure we
-                                // allow at least one response to be included.
-                                if !responses.is_empty()
-                                    && response_size + current_payload_size > byte_limit.get()
-                                {
-                                    break;
-                                }
-                                current_payload_size += response_size;
-                                responses.push(response);
+                        Ok(response_wrapper) => {
+                            self.metrics.observe_adapter_request_duration(
+                                ADAPTER_REQUEST_STATUS_SUCCESS,
+                                request.request.to_request_type_label(),
+                                timer,
+                            );
+                            if let BitcoinAdapterResponseWrapper::GetSuccessorsResponse(r) =
+                                &response_wrapper
+                            {
+                                self.metrics
+                                    .observe_blocks_per_get_successors_response(r.blocks.len());
                             }
-                            Err(err) => {
-                                self.metrics.observe_adapter_request_duration(
-                                    ADAPTER_REQUEST_STATUS_FAILURE,
-                                    request.request.to_request_type_label(),
-                                    timer,
-                                );
-                                log!(
-                                    self.log,
-                                    slog::Level::Error,
-                                    "Failed to parse response with callback id {} from the adapter: {}",
-                                    callback_id, err
-                                );
+                            let response = BitcoinAdapterResponse {
+                                response: response_wrapper,
+                                callback_id: *callback_id,
+                            };
+                            let response_size = response.count_bytes() as u64;
+                            self.metrics.observe_adapter_response_size(response_size);
+                            // Ensure we don't exceed the byte limit by
+                            // adding a new response but also ensure we
+                            // allow at least one response to be included.
+                            if !responses.is_empty()
+                                && response_size + current_payload_size > byte_limit.get()
+                            {
+                                break;
                             }
-                        },
+                            current_payload_size += response_size;
+                            responses.push(response);
+                        }
                         Err(err) => {
                             self.metrics.observe_adapter_request_duration(
                                 ADAPTER_REQUEST_STATUS_FAILURE,

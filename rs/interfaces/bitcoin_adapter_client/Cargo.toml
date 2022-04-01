@@ -4,6 +4,6 @@ version = "0.8.0"
 edition = "2018"
 
 [dependencies]
-ic-protobuf = { path = "../../protobuf" }
+ic-btc-types-internal = { path = "../../bitcoin/types/internal" }
 tonic = "0.6.2"
 

@@ -1,3 +1,9 @@
+//! The Rust types in this crate are used by consensus as part of the
+//! BatchPayload and by execution as part of the ReplicatedState. The rust
+//! types need to be serializable only because of the BatchPayload.
+//! Their protobuf counterpart (defined in rs/protobuf/def/bitcoin) are used
+//! only for serialization/deserialization of the ReplicatedState.
+
 use ic_protobuf::{
     bitcoin::v1,
     proxy::{try_from_option_field, ProxyDecodeError},

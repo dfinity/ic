@@ -1,7 +1,7 @@
 use crate::BitcoinPayloadBuilder;
 use ic_btc_types_internal::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
-    GetSuccessorsRequest, GetSuccessorsResponse,
+    BlockHeader, GetSuccessorsRequest, GetSuccessorsResponse,
 };
 use ic_interfaces::self_validating_payload::SelfValidatingPayloadBuilder;
 use ic_interfaces_bitcoin_adapter_client::RpcError;
@@ -74,16 +74,12 @@ fn can_successfully_create_bitcoin_payload_if_feature_enabled() {
         .expect_send_request()
         .times(1)
         .returning(|_, _| {
-            Ok(pb_bitcoin::BitcoinAdapterResponseWrapper {
-                r: Some(
-                    pb_bitcoin::bitcoin_adapter_response_wrapper::R::GetSuccessorsResponse(
-                        pb_bitcoin::GetSuccessorsResponse {
-                            blocks: vec![],
-                            next: vec![],
-                        },
-                    ),
-                ),
-            })
+            Ok(BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
+                GetSuccessorsResponse {
+                    blocks: vec![],
+                    next: vec![],
+                },
+            ))
         });
 
     // Create a mock state manager that returns a `ReplicatedState` with
@@ -164,16 +160,12 @@ fn includes_only_successful_responses_in_the_payload() {
         .expect_send_request()
         .times(1)
         .returning(|_, _| {
-            Ok(pb_bitcoin::BitcoinAdapterResponseWrapper {
-                r: Some(
-                    pb_bitcoin::bitcoin_adapter_response_wrapper::R::GetSuccessorsResponse(
-                        pb_bitcoin::GetSuccessorsResponse {
-                            blocks: vec![],
-                            next: vec![],
-                        },
-                    ),
-                ),
-            })
+            Ok(BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
+                GetSuccessorsResponse {
+                    blocks: vec![],
+                    next: vec![],
+                },
+            ))
         });
     bitcoin_adapter_client
         .expect_send_request()
@@ -230,16 +222,12 @@ fn includes_only_responses_for_callback_ids_not_seen_in_past_payloads() {
         .expect_send_request()
         .times(1)
         .returning(|_, _| {
-            Ok(pb_bitcoin::BitcoinAdapterResponseWrapper {
-                r: Some(
-                    pb_bitcoin::bitcoin_adapter_response_wrapper::R::GetSuccessorsResponse(
-                        pb_bitcoin::GetSuccessorsResponse {
-                            blocks: vec![],
-                            next: vec![],
-                        },
-                    ),
-                ),
-            })
+            Ok(BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
+                GetSuccessorsResponse {
+                    blocks: vec![],
+                    next: vec![],
+                },
+            ))
         });
 
     // Create a mock state manager that returns a `ReplicatedState` with
@@ -368,23 +356,19 @@ fn bitcoin_payload_builder_respects_byte_limit() {
         bitcoin_adapter_client
             .expect_send_request()
             .returning(move |_, _| {
-                Ok(pb_bitcoin::BitcoinAdapterResponseWrapper {
-                    r: Some(
-                        pb_bitcoin::bitcoin_adapter_response_wrapper::R::GetSuccessorsResponse(
-                            pb_bitcoin::GetSuccessorsResponse {
-                                blocks: vec![],
-                                next: vec![pb_bitcoin::BlockHeader {
-                                    version: 1,
-                                    prev_blockhash: vec![10; 32],
-                                    merkle_root: vec![20; 32],
-                                    time: 100,
-                                    bits: 128,
-                                    nonce: 42,
-                                }],
-                            },
-                        ),
-                    ),
-                })
+                Ok(BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
+                    GetSuccessorsResponse {
+                        blocks: vec![],
+                        next: vec![BlockHeader {
+                            version: 1,
+                            prev_blockhash: vec![10; 32],
+                            merkle_root: vec![20; 32],
+                            time: 100,
+                            bits: 128,
+                            nonce: 42,
+                        }],
+                    },
+                ))
             });
 
         // Create a mock state manager that returns a `ReplicatedState` with

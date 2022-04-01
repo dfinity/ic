@@ -1,5 +1,5 @@
+use ic_btc_types_internal::{BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper};
 use ic_interfaces_bitcoin_adapter_client::{BitcoinAdapterClient, Options, RpcResult};
-use ic_protobuf::bitcoin::v1::{BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper};
 use mockall::*;
 
 mock! {

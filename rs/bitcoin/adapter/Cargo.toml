@@ -15,7 +15,6 @@ ic-btc-adapter-service = { path = "../adapter_service" }
 ic-btc-validation = { path = "../validation" }
 ic-config = { path = "../../config" }
 ic-logger = { path = "../../monitoring/logger" }
-ic-protobuf = { path = "../../protobuf" }
 parking_lot = "0.11.1"
 prost = "0.9"
 rand = "0.8.3"

@@ -3413,7 +3413,6 @@ dependencies = [
  "ic-btc-validation",
  "ic-config",
  "ic-logger",
- "ic-protobuf",
  "parking_lot 0.11.1",
  "prost",
  "rand 0.8.4",
@@ -3432,7 +3431,6 @@ dependencies = [
 name = "ic-btc-adapter-service"
 version = "0.1.0"
 dependencies = [
- "ic-protobuf",
  "prost",
  "prost-build",
  "tonic",
@@ -5015,7 +5013,7 @@ dependencies = [
 name = "ic-interfaces-bitcoin-adapter-client"
 version = "0.8.0"
 dependencies = [
- "ic-protobuf",
+ "ic-btc-types-internal",
  "tonic",
 ]
 
@@ -5988,12 +5986,14 @@ version = "0.8.0"
 dependencies = [
  "assert_cmd",
  "base64 0.11.0",
+ "bitcoin",
  "canister-test",
  "criterion",
  "hex",
  "ic-async-utils",
  "ic-btc-adapter-service",
  "ic-btc-consensus",
+ "ic-btc-types-internal",
  "ic-config",
  "ic-consensus",
  "ic-consensus-message",
@@ -6037,6 +6037,7 @@ dependencies = [
  "rand 0.7.3",
  "regex",
  "serde",
+ "serde_bytes",
  "serde_cbor",
  "slog",
  "slog-async",

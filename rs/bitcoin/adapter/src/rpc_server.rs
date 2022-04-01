@@ -2,13 +2,15 @@ use crate::{
     get_successors_handler::{GetSuccessorsRequest, GetSuccessorsResponse},
     AdapterState, Config, GetSuccessorsHandler, IncomingSource, TransactionManagerRequest,
 };
-
-use bitcoin::{hashes::Hash, Block, BlockHash, BlockHeader};
+use bitcoin::{consensus::Encodable, hashes::Hash, BlockHash};
 use ic_async_utils::{
     ensure_single_systemd_socket, incoming_from_first_systemd_socket, incoming_from_path,
 };
-use ic_btc_adapter_service::btc_adapter_server::{BtcAdapter, BtcAdapterServer};
-use ic_protobuf::bitcoin::v1;
+use ic_btc_adapter_service::{
+    btc_adapter_server::{BtcAdapter, BtcAdapterServer},
+    GetSuccessorsRpcRequest, GetSuccessorsRpcResponse, SendTransactionRpcRequest,
+    SendTransactionRpcResponse,
+};
 use std::convert::{TryFrom, TryInto};
 use tokio::sync::mpsc::UnboundedSender;
 use tonic::{transport::Server, Request, Response, Status};
@@ -19,63 +21,16 @@ struct BtcAdapterImpl {
     transaction_manager_tx: UnboundedSender<TransactionManagerRequest>,
 }
 
-fn header_to_proto(header: &BlockHeader) -> v1::BlockHeader {
-    v1::BlockHeader {
-        version: header.version,
-        prev_blockhash: header.prev_blockhash.to_vec(),
-        merkle_root: header.merkle_root.to_vec(),
-        time: header.time,
-        bits: header.bits,
-        nonce: header.nonce,
-    }
-}
-
-/// Converts a `Block` into a protobuf struct.
-fn block_to_proto(block: &Block) -> v1::Block {
-    v1::Block {
-        header: Some(header_to_proto(&block.header)),
-        txdata: block
-            .txdata
-            .iter()
-            .map(|t| v1::Transaction {
-                version: t.version,
-                lock_time: t.lock_time,
-                input: t
-                    .input
-                    .iter()
-                    .map(|i| v1::TxIn {
-                        previous_output: Some(v1::OutPoint {
-                            txid: i.previous_output.txid.to_vec(),
-                            vout: i.previous_output.vout,
-                        }),
-                        script_sig: i.script_sig.to_bytes(),
-                        sequence: i.sequence,
-                        witness: i.witness.clone(),
-                    })
-                    .collect(),
-                output: t
-                    .output
-                    .iter()
-                    .map(|o| v1::TxOut {
-                        value: o.value,
-                        script_pubkey: o.script_pubkey.to_bytes(),
-                    })
-                    .collect(),
-            })
-            .collect(),
-    }
-}
-
-impl TryFrom<v1::GetSuccessorsRequest> for GetSuccessorsRequest {
+impl TryFrom<GetSuccessorsRpcRequest> for GetSuccessorsRequest {
     type Error = Status;
 
-    fn try_from(request: v1::GetSuccessorsRequest) -> Result<Self, Self::Error> {
+    fn try_from(request: GetSuccessorsRpcRequest) -> Result<Self, Self::Error> {
         let anchor = BlockHash::from_slice(request.anchor.as_slice())
             .map_err(|_| Status::internal("Failed to parse anchor hash!"))?;
 
         let processed_block_hashes = request
             .processed_block_hashes
-            .into_iter()
+            .iter()
             .map(|hash| {
                 BlockHash::from_slice(hash.as_slice())
                     .map_err(|_| Status::internal("Failed to read processed_block_hashes!"))
@@ -89,12 +44,27 @@ impl TryFrom<v1::GetSuccessorsRequest> for GetSuccessorsRequest {
     }
 }
 
-impl From<GetSuccessorsResponse> for v1::GetSuccessorsResponse {
-    fn from(response: GetSuccessorsResponse) -> Self {
-        v1::GetSuccessorsResponse {
-            blocks: response.blocks.iter().map(block_to_proto).collect(),
-            next: response.next.iter().map(header_to_proto).collect(),
+impl TryFrom<GetSuccessorsResponse> for GetSuccessorsRpcResponse {
+    type Error = Status;
+    fn try_from(response: GetSuccessorsResponse) -> Result<Self, Self::Error> {
+        let mut blocks = vec![];
+        for block in response.blocks.iter() {
+            let mut encoded_block = vec![];
+            block
+                .consensus_encode(&mut encoded_block)
+                .map_err(|_| Status::internal("Failed to encode block!"))?;
+            blocks.push(encoded_block);
         }
+
+        let mut next = vec![];
+        for block_header in response.next.iter() {
+            let mut encoded_block_header = vec![];
+            block_header
+                .consensus_encode(&mut encoded_block_header)
+                .map_err(|_| Status::internal("Failed to encode block header!"))?;
+            next.push(encoded_block_header);
+        }
+        Ok(GetSuccessorsRpcResponse { blocks, next })
     }
 }
 
@@ -102,18 +72,22 @@ impl From<GetSuccessorsResponse> for v1::GetSuccessorsResponse {
 impl BtcAdapter for BtcAdapterImpl {
     async fn get_successors(
         &self,
-        request: Request<v1::GetSuccessorsRequest>,
-    ) -> Result<Response<v1::GetSuccessorsResponse>, Status> {
+        request: Request<GetSuccessorsRpcRequest>,
+    ) -> Result<Response<GetSuccessorsRpcResponse>, Status> {
         self.adapter_state.received_now();
         let request = request.into_inner().try_into()?;
-        let response = self.get_successors_handler.get_successors(request).await;
-        Ok(Response::new(response.into()))
+        match GetSuccessorsRpcResponse::try_from(
+            self.get_successors_handler.get_successors(request).await,
+        ) {
+            Ok(res) => Ok(Response::new(res)),
+            Err(err) => Err(err),
+        }
     }
 
     async fn send_transaction(
         &self,
-        request: Request<v1::SendTransactionRequest>,
-    ) -> Result<Response<v1::SendTransactionResponse>, Status> {
+        request: Request<SendTransactionRpcRequest>,
+    ) -> Result<Response<SendTransactionRpcResponse>, Status> {
         self.adapter_state.received_now();
         let transaction = request.into_inner().transaction;
         self.transaction_manager_tx
@@ -121,7 +95,7 @@ impl BtcAdapter for BtcAdapterImpl {
             .expect(
                 "Sending should not fail because we never close the receiving part of the channel.",
             );
-        Ok(Response::new(v1::SendTransactionResponse {}))
+        Ok(Response::new(SendTransactionRpcResponse {}))
     }
 }
 
