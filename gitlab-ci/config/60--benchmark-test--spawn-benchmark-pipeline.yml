@@ -51,7 +51,7 @@ maximum-capacity-system-baseline-query:
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
 
-      $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
+      $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
 
 # BENCHMARK SUITE maximum_capacity_system_baseline with update calls
 maximum-capacity-system-baseline-update:
@@ -81,7 +81,7 @@ maximum-capacity-system-baseline-update:
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
 
-      $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
+      $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
 
 # BENCHMARK SUITE maximum_capacity_large_memory with query calls
 maximum-capacity-large-memory-query:
@@ -113,7 +113,7 @@ maximum-capacity-large-memory-query:
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
 
-      $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
+      $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
 
 # BENCHMARK SUITE maximum_capacity_large_memory with update calls
 maximum-capacity-large-memory-update:
@@ -143,7 +143,7 @@ maximum-capacity-large-memory-update:
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
 
-      $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
+      $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
 
 
 # SCENARIO TEST maximum_capacity_rejoin_script: have 30GiB state in old checkpoint and start from 20GiB of fetched state size and increase by 5GiB each time
@@ -204,7 +204,7 @@ benchmark-xnet:
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
 
-      $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
+      $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
   timeout: 6 hours
 
 # BENCHMARK SUITE gossip experiment
@@ -235,7 +235,7 @@ large-subnet-gossip-experiment:
 
       cd -
 
-      $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
+      $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
 
 .benchmark-spot-test:
   extends:
@@ -293,6 +293,10 @@ system-baseline-query-performance-test-nightly:
       $SHELL_WRAPPER pipenv run python3 common/verify_perf.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --median_latency_threshold=200
       $SHELL_WRAPPER pipenv run python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --branch="$CURRENT_BRANCH" --is_max_capacity_run="False" --gitlab_job_id="$CI_JOB_ID"
 
+      cd -
+
+      $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
+
 # Checks system performance with update calls
 system-baseline-update-performance-test-nightly:
    extends: .benchmark-spot-test
@@ -322,6 +326,10 @@ system-baseline-update-performance-test-nightly:
       $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
       $SHELL_WRAPPER pipenv run python3 common/verify_perf.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --median_latency_threshold=2300
       $SHELL_WRAPPER pipenv run python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --branch="$CURRENT_BRANCH" --is_max_capacity_run="False" --gitlab_job_id="$CI_JOB_ID"
+
+      cd -
+
+      $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
 
 
 # Check system performance during heavy memory updates
@@ -353,3 +361,6 @@ heavy-memory-update-performance-test-nightly:
       $SHELL_WRAPPER pipenv run python3 common/verify_perf.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --median_latency_threshold=3300
       $SHELL_WRAPPER pipenv run python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --branch="$CURRENT_BRANCH" --is_max_capacity_run="False" --gitlab_job_id="$CI_JOB_ID"
 
+      cd -
+
+      $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
