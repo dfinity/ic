@@ -37,6 +37,8 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::{collections::BTreeSet, convert::TryFrom, str::FromStr, sync::Arc};
 
+const MAX_BALANCE: Cycles = Cycles::new(1 << 60);
+
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct InstallCodeResult {
     pub heap_delta: NumBytes,
@@ -339,6 +341,15 @@ impl CanisterManager {
         max_number_of_canisters: u64,
         state: &mut ReplicatedState,
     ) -> (Result<CanisterId, CanisterManagerError>, Cycles) {
+        if cycles > MAX_BALANCE {
+            return (
+                Err(CanisterManagerError::InvalidSettings {
+                    message: "Create canister received too many cycles.".to_string(),
+                }),
+                cycles,
+            );
+        }
+
         // Creating a canister is possible only in the following cases:
         // 1. sender is on NNS => it can create canister on any subnet
         // 2. sender is not NNS => can create canister only if sender is on
@@ -433,6 +444,16 @@ impl CanisterManager {
             }
             Some(canister) => canister,
         };
+
+        if old_canister.system_state.balance() > MAX_BALANCE {
+            return (
+                execution_parameters.instruction_limit,
+                Err(CanisterManagerError::InstallCodeRateLimited(
+                    old_canister.system_state.canister_id,
+                )),
+            );
+        }
+
         if let Err(err) = self.validate_compute_allocation(
             compute_allocation_used,
             old_canister,
