@@ -463,7 +463,7 @@ impl Governance {
         let voting_period = self
             .nervous_system_parameters()
             .initial_voting_period
-            .expect("NervousSystemParameters must have wait_for_quiet_threshold_seconds");
+            .expect("NervousSystemParameters must have initial_voting_period");
 
         move || voting_period
     }
@@ -1437,8 +1437,7 @@ impl Governance {
     pub fn process_proposal(&mut self, pid: u64) {
         let now_seconds = self.env.now();
         // Due to Rust lifetime issues, we must extract a closure that
-        // computes the voting period from a topic before we borrow
-        // `self.proposals` mutably.
+        // computes the voting period before we borrow `self.proposals` mutably.
         let voting_period_seconds_fn = self.voting_period_seconds();
         if let Some(p) = self.proto.proposals.get_mut(&pid) {
             if p.status() != ProposalDecisionStatus::ProposalStatusOpen {
@@ -2121,7 +2120,7 @@ impl Governance {
     ///
     /// If the list of followees is empty, remove the followees for
     /// this action. If the list has at least one element, replace the
-    /// current list of followees for the given topic with the
+    /// current list of followees for the given action with the
     /// provided list. Note that the list is replaced, not added to.
     fn follow(
         &mut self,
@@ -2131,7 +2130,7 @@ impl Governance {
     ) -> Result<(), GovernanceError> {
         // The implementation of this method is complicated by the
         // fact that we have to maintain a reverse index of all follow
-        // relationships, i.e., the `topic_followee_index`.
+        // relationships, i.e., the `action_followee_index`.
         let neuron = self.proto.neurons.get_mut(&id.to_string()).ok_or_else(||
             // The specified neuron is not present.
             GovernanceError::new_with_message(ErrorType::NotFound, &format!("Follower neuron not found: {}", id)))?;
@@ -2140,19 +2139,19 @@ impl Governance {
         // as voting required).
         neuron.check_authorized(caller, NeuronPermissionType::Vote)?;
 
-        let max_followees_per_topic = self
+        let max_followees_per_action = self
             .proto
             .parameters
             .as_ref()
             .expect("NervousSystemParameters not present")
             .max_followees_per_action
-            .expect("NervousSystemParameters must have max_followees_per_topic");
+            .expect("NervousSystemParameters must have max_followees_per_action");
 
         // Check that the list of followees is not too
         // long. Allowing neurons to follow too many neurons
         // allows a memory exhaustion attack on the neurons
         // canister.
-        if f.followees.len() > max_followees_per_topic as usize {
+        if f.followees.len() > max_followees_per_action as usize {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidCommand,
                 "Too many followees.",
@@ -2184,7 +2183,7 @@ impl Governance {
             // doesn't allow users submitting a follow to spam "unofficial"
             // action_type_keys
 
-            // Insert the new list of followees for this topic in
+            // Insert the new list of followees for this action in
             // the neuron, removing the old list, which has
             // already been removed from the follower cache above.
             neuron.followees.insert(
@@ -2207,7 +2206,7 @@ impl Governance {
             }
             Ok(())
         } else {
-            // This operation clears the followees for the given topic.
+            // This operation clears the followees for the given action.
             neuron.followees.remove(&f.action_type);
             Ok(())
         }
