@@ -286,14 +286,13 @@ fn merge_subnet_record(
     maybe_set!(subnet_record, max_instructions_per_install_code);
 
     // TODO(NNS1-1129): Removal of a threshold ECDSA key from a subnet is not supported
-    if let Some(existing_ecdsa_record) = subnet_record.ecdsa_config.as_ref() {
-        let new_ecdsa_config = ecdsa_config
-            .as_ref()
-            .expect("Cannot set this config to `None`, removal of ECDSA keys is not supported");
-        assert!(existing_ecdsa_record
-            .key_ids
-            .iter()
-            .all(|x| new_ecdsa_config.key_ids.contains(x)));
+    if let Some(new_ecdsa_config) = ecdsa_config.as_ref() {
+        if let Some(existing_ecdsa_record) = subnet_record.ecdsa_config.as_ref() {
+            assert!(existing_ecdsa_record
+                .key_ids
+                .iter()
+                .all(|x| new_ecdsa_config.key_ids.contains(x)));
+        }
     }
     maybe_set_option!(subnet_record, features);
     maybe_set_option!(subnet_record, ecdsa_config);
