@@ -412,6 +412,7 @@ struct CertificationMetadata {
     certification: Option<Certification>,
 }
 
+#[derive(Clone)]
 struct Snapshot {
     height: Height,
     state: Arc<ReplicatedState>,
@@ -616,6 +617,8 @@ pub struct StateManagerImpl {
     checkpoint_thread_pool: Arc<Mutex<scoped_threadpool::Pool>>,
     _state_hasher_handle: JoinOnDrop<()>,
     _deallocation_handle: JoinOnDrop<()>,
+    #[cfg(debug_assertions)]
+    load_checkpoint_as_tip_guard: Arc<Mutex<()>>,
 }
 
 fn load_checkpoint(
@@ -642,35 +645,34 @@ fn load_checkpoint(
 // files located in the checkpoint directory. This is important to ensure
 // that message execution never reads from mutable tip files.
 fn load_checkpoint_as_tip(
+    #[cfg(debug_assertions)] lock: &Arc<Mutex<()>>,
     log: &ReplicaLogger,
     state_layout: &StateLayout,
-    height: Height,
+    snapshot: &Snapshot,
     own_subnet_type: SubnetType,
 ) -> ReplicatedState {
-    info!(log, "Recovering checkpoint @{} as tip", height);
+    #[cfg(debug_assertions)]
+    let _guard = lock
+        .try_lock()
+        .expect("load_checkpoint_as_tip() must never be called concurrently");
+
+    info!(log, "Recovering checkpoint @{} as tip", snapshot.height);
 
     state_layout
-        .reset_tip_to(height)
+        .reset_tip_to(snapshot.height)
         .unwrap_or_else(|err| fatal!(log, "Failed to reset tip to checkpoint height: {:?}", err));
 
     let tip_layout = state_layout
-        .tip(height)
+        .tip(snapshot.height)
         .unwrap_or_else(|err| fatal!(log, "Failed to retrieve tip {:?}", err));
 
     let mut tip = checkpoint::load_checkpoint(&tip_layout, own_subnet_type, None)
         .unwrap_or_else(|err| fatal!(log, "Failed to load checkpoint as tip {:?}", err));
 
-    let checkpoint_layout = state_layout
-        .checkpoint(height)
-        .unwrap_or_else(|err| fatal!(log, "Failed to retrieve checkpoint {:?}", err));
-
-    let checkpointed_state = checkpoint::load_checkpoint(&checkpoint_layout, own_subnet_type, None)
-        .unwrap_or_else(|err| fatal!(log, "Failed to load checkpoint {:?}", err));
-
     // Ensure that the `PageMap`s of the tip use the clean read-only checkpoint
     // files similar to how this is done in `commit_and_certify()` after a full
     // checkpoint.
-    switch_to_checkpoint(&mut tip, &checkpointed_state);
+    switch_to_checkpoint(&mut tip, &snapshot.state);
 
     tip
 }
@@ -1077,28 +1079,6 @@ impl StateManagerImpl {
         let latest_certified_height = AtomicU64::new(0);
         let last_checkpoint = checkpoint_heights.last();
 
-        let starting_time = Instant::now();
-        let height_and_state = match last_checkpoint {
-            Some(height) => {
-                // Set latest state height in metadata to be last checkpoint height
-                latest_state_height.store(height.get(), Ordering::Relaxed);
-
-                (
-                    *height,
-                    load_checkpoint_as_tip(&log, &state_layout, *height, own_subnet_type),
-                )
-            }
-            None => (
-                Self::INITIAL_STATE_HEIGHT,
-                ReplicatedState::new_rooted_at(
-                    own_subnet_id,
-                    own_subnet_type,
-                    state_layout.tip_path(),
-                ),
-            ),
-        };
-        info!(log, "Loading checkpoint took {:?}", starting_time.elapsed());
-
         let initial_snapshot = Snapshot {
             height: Self::INITIAL_STATE_HEIGHT,
             state: Arc::new(initial_state(own_subnet_id, own_subnet_type).take()),
@@ -1119,6 +1099,37 @@ impl StateManagerImpl {
                 state: Arc::new(state),
             }
         });
+
+        #[cfg(debug_assertions)]
+        let load_checkpoint_as_tip_guard = Arc::new(Mutex::new(()));
+
+        let height_and_state = match &maybe_last_snapshot {
+            Some(snapshot) => {
+                // Set latest state height in metadata to be last checkpoint height
+                latest_state_height.store(snapshot.height.get(), Ordering::Relaxed);
+                let starting_time = Instant::now();
+
+                let tip = load_checkpoint_as_tip(
+                    #[cfg(debug_assertions)]
+                    &load_checkpoint_as_tip_guard,
+                    &log,
+                    &state_layout,
+                    snapshot,
+                    own_subnet_type,
+                );
+
+                info!(log, "Loading checkpoint took {:?}", starting_time.elapsed());
+                (snapshot.height, tip)
+            }
+            None => (
+                Self::INITIAL_STATE_HEIGHT,
+                ReplicatedState::new_rooted_at(
+                    own_subnet_id,
+                    own_subnet_type,
+                    state_layout.tip_path(),
+                ),
+            ),
+        };
 
         let snapshots: VecDeque<_> = std::iter::once(initial_snapshot)
             .chain(maybe_last_snapshot.into_iter())
@@ -1216,6 +1227,8 @@ impl StateManagerImpl {
             checkpoint_thread_pool,
             _state_hasher_handle,
             _deallocation_handle,
+            #[cfg(debug_assertions)]
+            load_checkpoint_as_tip_guard,
         }
     }
 
@@ -1762,6 +1775,13 @@ impl StateManagerImpl {
         self.metrics.max_resident_height.set(latest_height as i64);
 
         self.persist_metadata_or_die(&states.states_metadata);
+
+        // Note: it might feel tempting to also set states.tip here.  We should
+        // NOT do that.  We might be applying blocks and fetching states in
+        // parallel.  Tip is a unique resource that only the state machine
+        // should touch.  Instead of pro-actively updating tip here, we let the
+        // state machine discover a newer state the next time it calls
+        // `take_tip()` and update the tip accordingly.
     }
 }
 
@@ -1841,24 +1861,43 @@ impl StateManager for StateManagerImpl {
 
         let mut states = self.states.write();
         let (tip_height, tip) = states.tip.take().expect("failed to get TIP");
-        let checkpoints = self
-            .state_layout
-            .checkpoint_heights()
-            .unwrap_or_else(|err| fatal!(self.log, "Failed to gather checkpoint heights: {}", err));
-        if let Some(checkpoint_height) = checkpoints.last() {
-            // This can happen if state sync fetched a fresh state in the
-            // background.
-            if *checkpoint_height > tip_height {
-                let new_tip = load_checkpoint_as_tip(
-                    &self.log,
-                    &self.state_layout,
-                    *checkpoint_height,
-                    self.own_subnet_type,
-                );
-                return (*checkpoint_height, new_tip);
-            }
-        }
-        (tip_height, tip)
+
+        let target_snapshot = match states.snapshots.back() {
+            Some(snapshot) if snapshot.height > tip_height => snapshot.clone(),
+            _ => return (tip_height, tip),
+        };
+
+        // The latest checkpoint is newer than tip.
+        // This can happen when we replay blocks and sync states concurrently.
+        //
+        // We release the states write lock here because loading a checkpoint
+        // can take a lot of time (many seconds), and we do not want to block
+        // state readers (like HTTP handler) for too long.
+        //
+        // Note that we still will not call load_checkpoint_as_tip()
+        // concurrently because only a thread that owns the tip can call
+        // this function.
+        //
+        // This thread has already consumed states.tip, so a concurrent call to
+        // take_tip() will fail on states.tip.take().
+        //
+        // In general, there should always be one thread that calls
+        // take_tip() and commit_and_certify() — the state machine thread.
+        std::mem::drop(states);
+
+        let new_tip = load_checkpoint_as_tip(
+            #[cfg(debug_assertions)]
+            &self.load_checkpoint_as_tip_guard,
+            &self.log,
+            &self.state_layout,
+            &target_snapshot,
+            self.own_subnet_type,
+        );
+
+        // This might still not be the latest version: there might have been
+        // another successful state sync while we were updating the tip.
+        // That is not a problem: we will handle this case later in commit_and_certify().
+        (target_snapshot.height, new_tip)
     }
 
     fn take_tip_at(&self, height: Height) -> StateManagerResult<ReplicatedState> {
@@ -2452,22 +2491,9 @@ impl StateManager for StateManagerImpl {
                     height,
                     latest_snapshot.height
                 );
-                if height == latest_snapshot.height {
-                    (height, state)
-                } else {
-                    // Will crash if it's not a checkpoint, which is reasonable
-                    // for now as we can only get fresher states from state
-                    // sync.
-                    (
-                        latest_snapshot.height,
-                        load_checkpoint_as_tip(
-                            &self.log,
-                            &self.state_layout,
-                            latest_snapshot.height,
-                            self.own_subnet_type,
-                        ),
-                    )
-                }
+                // The next call to take_tip() will take care of updating the
+                // tip if needed.
+                (height, state)
             }
             _ => {
                 states.snapshots.push_back(Snapshot {
