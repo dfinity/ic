@@ -36,7 +36,7 @@ DOCKER_RUN_ARGS=(
 )
 
 # if i'm not withing docker already, bind mount the source
-if [ ! -e /.dockerenv ]; then
+if [ ! -e /.dockerenv ] && [[ "$IMAGE" != "ic-build-bd:"* ]]; then
     mkdir -p "${REPO_ROOT}/rs/target"
     # Important: The mount points inside the docker container must match
     # the corresponding environment variables [e.g. defined in the Dockerfile]
@@ -54,7 +54,7 @@ if [ ! -e /.dockerenv ]; then
         # destination must match RUSTUP_HOME.
         --mount type=volume,source="ic-rustup-${USER}",destination=/opt/rustup
     )
-else
+elif [ -e /.dockerenv ]; then
     DOCKER_RUN_ARGS+=(
         --mount type=volume,source="ic-artifacts${CI_JOB_ID:-}",destination=/ic/artifacts
     )
