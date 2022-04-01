@@ -8,7 +8,6 @@ use crate::registry_helper::RegistryHelper;
 use crate::replica_process::ReplicaProcess;
 use crate::ssh_access_manager::SshAccessManager;
 use crate::upgrade::Upgrade;
-use crate::utils;
 use ic_config::metrics::{Config as MetricsConfig, Exporter};
 use ic_crypto::utils::get_node_keys_or_generate_if_missing;
 use ic_crypto_tls_interfaces::TlsHandshake;
@@ -21,7 +20,6 @@ use ic_registry_client_helpers::node_operator::NodeOperatorRegistry;
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::{PrincipalId, ReplicaVersion, SubnetId};
 use slog_async::AsyncGuard;
-use std::env;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -72,15 +70,10 @@ impl Orchestrator {
         let (logger, _async_log_guard) =
             new_replica_logger_from_config(&config.orchestrator_logger);
         let metrics_registry = MetricsRegistry::global();
-        let current_orchestrator_hash = utils::get_orchestrator_binary_hash()
-            .expect("Failed to determine sha256 of orchestrator binary");
-
+        let replica_version = load_version_from_file(&logger, &args.version_file)?;
         info!(
             logger,
-            "Running orchestrator ({:?} sha256 hash: {:?}) with upgrade support, config is: {:?}",
-            env::current_exe(),
-            current_orchestrator_hash,
-            config
+            "Orchestrator started: version={}, config={:?}", replica_version, config
         );
 
         let registry_replicator = Arc::new(RegistryReplicator::new_from_config(
@@ -142,8 +135,6 @@ impl Orchestrator {
             crypto.clone(),
             logger.clone(),
         ));
-
-        let replica_version = load_version_from_file(&logger, &args.version_file)?;
 
         let upgrade = Some(Upgrade::new(
             Arc::clone(&registry),

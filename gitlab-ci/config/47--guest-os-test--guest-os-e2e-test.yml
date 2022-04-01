@@ -84,140 +84,6 @@ e2e-workload-test:
           --log_directory "${CI_PROJECT_DIR}/ic-os/guestos/test-out/e2e" \
           --timeout "$GUEST_OS_TEST_TIMEOUT"
 
-.guest-os-upgrade-downgrade-test:
-  extends:
-    - .e2e-test-base
-  needs:
-    - job: artifacts-upload-to-s3
-    - job: guest-os-diskimg
-      artifacts: false
-    - job: guest-os-updateimg-build
-      artifacts: false
-  artifacts:
-    paths:
-    - ic-os/guestos/test-out/e2e-upgrade-from-mainnet-app-subnet-to-new-version-update-workload
-  variables:
-    TEST_SUBNET: ""
-    DOWNGRADE: ""
-    REQUEST_TYPE: ""
-  script:
-    - |
-      VERSION=$(cat VERSION)
-      export VERSION
-      # release
-      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
-          --git-rev="${VERSION}" --remote-path="release" \
-          --out="artifacts/release"
-      # canisters
-      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
-          --git-rev="${VERSION}" --remote-path="canisters" \
-          --out="artifacts/canisters"
-      # update-img
-      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
-          --git-rev="${VERSION}" --remote-path="guest-os/update-img" \
-          --out="ic-os/guestos/build-out/update-img"
-      # disk-img
-      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
-          --git-rev="${VERSION}" --remote-path="guest-os/disk-img" \
-          --out="ic-os/guestos/build-out/disk-img"
-
-      mkdir -p test-tools-tmp
-      IC_ADMIN="test-tools-tmp/ic-admin"
-      gunzip -c "artifacts/release/ic-admin.gz" > "${IC_ADMIN}"
-      chmod +x "${IC_ADMIN}"
-
-      # sets the variable $revision
-      # shellcheck source=/dev/null
-      source ic-os/guestos/tests/mainnet-revision.sh
-      # shellcheck disable=SC2154
-      $SHELL_WRAPPER timeout -k 10 "${GUEST_OS_TEST_TIMEOUT}" \
-      capsule -v \
-         -i "ic-os/guestos/tests/*" \
-         -i "ic-os/guestos/scripts/*" \
-         -i "ic-os/guestos/build-out/disk-img/SHA256SUMS" \
-         -i "ic-os/guestos/build-out/update-img/SHA256SUMS" \
-         -i "artifacts/canisters/registry-canister.wasm.gz" \
-         -i "artifacts/canisters/governance-canister.wasm.gz" \
-         -i "artifacts/canisters/governance-canister_test.wasm.gz" \
-         -i "artifacts/canisters/ledger-canister_notify-method.wasm.gz" \
-         -i "artifacts/canisters/root-canister.wasm.gz" \
-         -i "artifacts/canisters/cycles-minting-canister.wasm.gz" \
-         -i "artifacts/canisters/lifeline.wasm.gz" \
-         -i "artifacts/canisters/genesis-token-canister.wasm.gz" \
-         -i "artifacts/canisters/identity-canister.wasm.gz" \
-         -i "artifacts/canisters/nns-ui-canister.wasm.gz" \
-         -i "artifacts/release/ic-prep.gz" \
-         -i "artifacts/release/ic-admin.gz" \
-         -i "artifacts/release/ic-nns-init.gz" \
-         -i "artifacts/release/ic-workload-generator.gz" \
-         -t "mainnet-${revision}" -- \
-      "$CI_PROJECT_DIR"/ic-os/guestos/tests/e2e-upgrade-with-mainnet-version.sh "$CI_PROJECT_DIR" "$TEST_SUBNET" "$DOWNGRADE" "$REQUEST_TYPE" "$revision"
-
-guest-os-upgrade-from-mainnet-app-subnet-to-new-version-update-workload:
-  extends:
-    .guest-os-upgrade-downgrade-test
-  variables:
-    TEST_SUBNET: "app"
-    DOWNGRADE: "false"
-    REQUEST_TYPE: "update"
-
-guest-os-downgrade-from-new-version-to-mainnet-app-subnet-update-workload:
-  extends:
-    .guest-os-upgrade-downgrade-test
-  variables:
-    TEST_SUBNET: "app"
-    DOWNGRADE: "true"
-    REQUEST_TYPE: "update"
-
-guest-os-upgrade-from-mainnet-nns-subnet-to-new-version-update-workload:
-  extends:
-    .guest-os-upgrade-downgrade-test
-  variables:
-    TEST_SUBNET: "nns"
-    DOWNGRADE: "false"
-    REQUEST_TYPE: "update"
-
-guest-os-downgrade-from-new-version-to-mainnet-nns-subnet-update-workload:
-  extends:
-    .guest-os-upgrade-downgrade-test
-  variables:
-    TEST_SUBNET: "nns"
-    DOWNGRADE: "true"
-    REQUEST_TYPE: "update"
-
-guest-os-upgrade-from-mainnet-app-subnet-to-new-version-query-workload:
-  extends:
-    .guest-os-upgrade-downgrade-test
-  variables:
-    TEST_SUBNET: "app"
-    DOWNGRADE: "false"
-    REQUEST_TYPE: "query"
-
-guest-os-downgrade-from-new-version-to-mainnet-app-subnet-query-workload:
-  extends:
-    .guest-os-upgrade-downgrade-test
-  variables:
-    TEST_SUBNET: "app"
-    DOWNGRADE: "true"
-    REQUEST_TYPE: "query"
-
-guest-os-upgrade-from-mainnet-nns-subnet-to-new-version-query-workload:
-  extends:
-    .guest-os-upgrade-downgrade-test
-  variables:
-    TEST_SUBNET: "nns"
-    DOWNGRADE: "false"
-    REQUEST_TYPE: "query"
-
-guest-os-downgrade-from-new-version-to-mainnet-nns-subnet-query-workload:
-  extends:
-    .guest-os-upgrade-downgrade-test
-  variables:
-    TEST_SUBNET: "nns"
-    DOWNGRADE: "true"
-    REQUEST_TYPE: "query"
-
-
 .run-farm-based-test: &run-farm-based-test |
   # we get VERSION from artifacts-upload-to-s3
   IC_VERSION_ID=$(cat VERSION)
@@ -286,14 +152,35 @@ rosetta-pre-master:
 
 upgrade-compatibility-pre-master:
   extends: .system-tests
-  allow_failure: true  # VER-1537
+  needs:
+    - job: artifacts-upload-to-s3
+    - job: guest-os-diskimg
+      artifacts: false
+    - job: guest-os-updateimg-build
+      artifacts: false
+  artifacts:
+    paths:
+    - "test-results.json"
+    - "logs/"
   variables:
     SUITE_NAME: "upgrade_compatibility"
   script:
     - |
-      # Set the proper environment variables with versions
-      MASTER_GIT_REVISION=$("${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh origin/master)
-      export MASTER_GIT_REVISION
+      VERSION=$(cat VERSION)
+      export VERSION
+      # release
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
+          --git-rev="${VERSION}" --remote-path="release" \
+          --out="artifacts/release"
+
+      mkdir -p test-tools-tmp
+      IC_ADMIN="test-tools-tmp/ic-admin"
+      gunzip -c "artifacts/release/ic-admin.gz" > "${IC_ADMIN}"
+      chmod +x "${IC_ADMIN}"
+
+      # sets the variable $TARGET_VERSION
+      # shellcheck source=/dev/null
+      source ic-os/guestos/tests/mainnet-revision.sh
     - *run-farm-based-test
 
 spec-compliance-pre-master:

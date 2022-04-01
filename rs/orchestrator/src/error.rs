@@ -55,16 +55,8 @@ impl OrchestratorError {
         OrchestratorError::IoError(format!("Failed to write to file: {:?}", file_path), e)
     }
 
-    pub(crate) fn file_open_error(file_path: &Path, e: io::Error) -> Self {
-        OrchestratorError::IoError(format!("Failed to open file: {:?}", file_path), e)
-    }
-
     pub(crate) fn dir_create_error(dir: &Path, e: io::Error) -> Self {
         OrchestratorError::IoError(format!("Failed to create dir: {:?}", dir), e)
-    }
-
-    pub(crate) fn compute_hash_error(file_path: &Path, e: io::Error) -> Self {
-        OrchestratorError::IoError(format!("Failed to hash of: {:?}", file_path), e)
     }
 
     pub(crate) fn invalid_configuration_error(msg: impl ToString) -> Self {

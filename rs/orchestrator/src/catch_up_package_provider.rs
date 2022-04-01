@@ -145,7 +145,7 @@ impl CatchUpPackageProvider {
             .map_err(|e| {
                 warn!(
                     self.logger,
-                    "Failed to verify cup signature at: {:?} with: {:?}", url, e
+                    "Failed to verify CUP signature at: {:?} with: {:?}", url, e
                 )
             })
             .ok()?;
