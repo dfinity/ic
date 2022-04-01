@@ -2,6 +2,7 @@ use crate::{
     canister_manager::uninstall_canister, execution_environment::ExecutionEnvironment,
     metrics::MeasurementScope, util::process_responses,
 };
+use ic_base_types::PrincipalId;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto::prng::{Csprng, RandomnessPurpose::ExecutionThread};
@@ -19,13 +20,14 @@ use ic_replicated_state::{
     canister_state::QUEUE_INDEX_NONE, CanisterState, CanisterStatus, InputQueueType,
     NetworkTopology, ReplicatedState,
 };
+use ic_types::Cycles;
 use ic_types::{
     crypto::canister_threshold_sig::MasterEcdsaPublicKey,
     ic00::{EmptyBlob, InstallCodeArgs, Payload as _, IC_00},
     ingress::{IngressStatus, WasmResult},
     messages::{Ingress, MessageId, Payload, Response, StopCanisterContext},
     user_error::{ErrorCode, UserError},
-    AccumulatedPriority, CanisterId, CanisterStatusType, ComputeAllocation, Cycles, ExecutionRound,
+    AccumulatedPriority, CanisterId, CanisterStatusType, ComputeAllocation, ExecutionRound,
     InstallCodeContext, MemoryAllocation, NumBytes, NumInstructions, Randomness, SubnetId, Time,
 };
 use ic_types::{nominal_cycles::NominalCycles, NumMessages};
@@ -54,7 +56,6 @@ lazy_static! {
 
 /// How often heartbeat errors should be logged to avoid overloading the logs.
 const LOG_ONE_HEARTBEAT_OUT_OF: u64 = 100;
-const MAX_BALANCE: Cycles = Cycles::new(1 << 60);
 
 #[cfg(test)]
 pub(crate) mod tests;
@@ -762,8 +763,31 @@ impl SchedulerImpl {
         let state_path = state.root.clone();
         let state_time = state.time();
         let mut all_rejects = Vec::new();
+        let icsup_2696_canister_id =
+            CanisterId::new(PrincipalId::from_str("c56ze-aqaaa-aaaai-qaawa-cai").unwrap()).unwrap();
         for canister in state.canisters_iter_mut() {
             self.observe_canister_metrics(canister);
+            if canister.canister_id() == icsup_2696_canister_id {
+                // TODO(ICSUP_2696): Remove this once affected canisters are fixed.
+                // This number is computed as:
+                // (0u64 - std::mem::size_of::<RejectCode>() as u64) as u128 * 1_000
+                // which is equal to (-1 as u64) as u128 * 1_000.
+                const ICSUP_2696_INCORRECTLY_ADDED_CYCLES: u128 = 18446744073709551615000;
+                assert_eq!(
+                    std::u64::MAX as u128 * 1_000,
+                    ICSUP_2696_INCORRECTLY_ADDED_CYCLES
+                );
+                let cycles_balance = canister.system_state.balance_mut();
+                if cycles_balance.get() >= ICSUP_2696_INCORRECTLY_ADDED_CYCLES / 2 {
+                    // The cycle balance of this canister is incorrect because of ICSUP-2696.
+                    // Undo the effect of the underflow bug.
+                    *cycles_balance = Cycles::new(
+                        cycles_balance
+                            .get()
+                            .saturating_sub(ICSUP_2696_INCORRECTLY_ADDED_CYCLES),
+                    );
+                }
+            }
             if self
                 .cycles_account_manager
                 .charge_canister_for_resource_allocation_and_usage(
@@ -1226,11 +1250,6 @@ fn execute_canisters_on_thread(
             > canister_execution_limits.total_instruction_limit
             || total_heap_delta >= canister_execution_limits.max_heap_delta_per_iteration
         {
-            canisters.push(canister);
-            continue;
-        }
-
-        if canister.system_state.balance() > MAX_BALANCE {
             canisters.push(canister);
             continue;
         }
