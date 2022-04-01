@@ -31,10 +31,10 @@ Coverage::
 
 end::catalog[] */
 
+use crate::driver::ic::{InternetComputer, Subnet};
+use crate::driver::test_env_api::*;
+use crate::driver::{ic::VmAllocationStrategy, test_env::TestEnv};
 use crate::util::*; // to use the universal canister
-use ic_fondue::prod_tests::ic::{InternetComputer, Subnet};
-use ic_fondue::prod_tests::test_env_api::*;
-use ic_fondue::prod_tests::{ic::VmAllocationStrategy, test_env::TestEnv};
 use ic_registry_subnet_type::SubnetType;
 use slog::{info, Logger};
 

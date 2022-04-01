@@ -1,14 +1,12 @@
 /* tag::catalog[]
 end::catalog[] */
 
+use crate::driver::ic::{InternetComputer, Subnet};
 use crate::types::*;
 use crate::util::*;
 use candid::Encode;
 use candid::Principal;
-use ic_fondue::{
-    ic_manager::IcHandle,
-    prod_tests::ic::{InternetComputer, Subnet},
-};
+use ic_fondue::ic_manager::IcHandle;
 use ic_ic00_types::SignWithECDSAArgs;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;

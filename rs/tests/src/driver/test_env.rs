@@ -1,11 +1,11 @@
 use anyhow::{Context, Result};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
-use ic_utils::fs::sync_path;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use slog::Logger;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
+use utils::fs::{sync_path, write_atomically};
 
 use super::pot_dsl::TestPath;
 
@@ -37,7 +37,7 @@ impl TestEnv {
         if let Some(parent_dir) = path.parent() {
             fs::create_dir_all(parent_dir)?;
         }
-        ic_utils::fs::write_atomically(&path, |buf| {
+        write_atomically(&path, |buf| {
             serde_json::to_writer(buf, t)
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
         })

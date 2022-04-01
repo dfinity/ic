@@ -32,12 +32,10 @@ use crate::util::{
     runtime_from_url, EndpointsStatus,
 };
 
+use crate::driver::{ic::InternetComputer, vm_control::IcControl};
 use canister_test::{Canister, Project, Runtime, Wasm};
 use dfn_candid::candid;
-use ic_fondue::{
-    ic_manager::{IcControl, IcHandle},
-    prod_tests::ic::InternetComputer,
-};
+use ic_fondue::ic_manager::IcHandle;
 use ic_registry_subnet_type::SubnetType;
 use slog::info;
 use tokio::time::sleep;

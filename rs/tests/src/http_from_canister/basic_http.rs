@@ -27,14 +27,14 @@ use crate::nns::NnsExt;
 use crate::util::{self /* runtime_from_url */};
 // use canister_test::Project;
 // use dfn_candid::candid;
+use crate::driver::pot_dsl::get_ic_handle_and_ctx;
+use crate::driver::test_env::TestEnv;
+use crate::driver::test_env_api::{DefaultIC, HasPublicApiUrl, IcNodeContainer};
+use crate::driver::universal_vm::UniversalVms;
 use crate::util::UniversalCanister;
-use ic_fondue::prod_tests::pot_dsl::get_ic_handle_and_ctx;
-use ic_fondue::prod_tests::test_env::TestEnv;
-use ic_fondue::prod_tests::test_env_api::{DefaultIC, HasPublicApiUrl, IcNodeContainer};
-use ic_fondue::prod_tests::universal_vm::UniversalVms;
-use ic_fondue::{
-    prod_tests::ic::{InternetComputer, Subnet},
-    prod_tests::universal_vm::UniversalVm,
+use crate::{
+    driver::ic::{InternetComputer, Subnet},
+    driver::universal_vm::UniversalVm,
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;

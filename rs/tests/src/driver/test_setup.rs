@@ -1,9 +1,9 @@
-use crate::ic_manager::{FarmInfo, IcEndpoint, IcHandle, IcSubnet, RuntimeDescriptor};
-use crate::prod_tests::cli::AuthorizedSshAccount;
-use crate::prod_tests::driver_setup::{AUTHORIZED_SSH_ACCOUNTS, FARM_BASE_URL, FARM_GROUP_NAME};
-use crate::prod_tests::test_env::{HasIcPrepDir, TestEnv};
-use crate::prod_tests::test_env_api::*;
+use crate::driver::driver_setup::{AUTHORIZED_SSH_ACCOUNTS, FARM_BASE_URL, FARM_GROUP_NAME};
+use crate::driver::test_env::{HasIcPrepDir, TestEnv};
+use crate::driver::test_env_api::*;
 use anyhow::{bail, Result};
+use ic_fondue::ic_manager::handle::AuthorizedSshAccount;
+use ic_fondue::ic_manager::{FarmInfo, IcEndpoint, IcHandle, IcSubnet, RuntimeDescriptor};
 use std::time::Instant;
 use url::Url;
 

@@ -1,4 +1,4 @@
-use ic_fondue::prod_tests::pot_dsl::{par, pot, t, Pot};
+use crate::driver::pot_dsl::{par, pot, t, Pot};
 
 use crate::{
     execution::{self, config_system_verified_application_subnets},

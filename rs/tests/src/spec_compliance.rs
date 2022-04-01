@@ -10,10 +10,8 @@ Success:: The ic-ref-test binary does not return an error.
 
 end::catalog[] */
 
-use ic_fondue::{
-    ic_manager::{IcEndpoint, IcHandle},
-    prod_tests::ic::InternetComputer,
-};
+use crate::driver::ic::InternetComputer;
+use ic_fondue::ic_manager::{IcEndpoint, IcHandle};
 use ic_registry_subnet_type::SubnetType;
 use slog::info;
 use std::process::{Command, Stdio};

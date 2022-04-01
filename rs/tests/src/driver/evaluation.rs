@@ -4,11 +4,11 @@ use std::{panic::catch_unwind, time::Instant};
 use super::driver_setup::{DriverContext, FARM_BASE_URL};
 use super::farm::{Farm, GroupSpec};
 use super::pot_dsl::{ExecutionMode, Pot, Suite, Test, TestPath, TestSet};
-use crate::prod_tests::driver_setup::{FARM_GROUP_NAME, POT_TIMEOUT};
-use crate::prod_tests::test_env::{HasTestPath, TestEnv};
-use crate::result::*;
+use crate::driver::driver_setup::{FARM_GROUP_NAME, POT_TIMEOUT};
+use crate::driver::test_env::{HasTestPath, TestEnv};
 use anyhow::{bail, Result};
 use crossbeam_channel::{bounded, Receiver, Sender};
+use ic_fondue::result::*;
 use slog::{error, info, warn, Logger};
 
 pub const N_THREADS_PER_SUITE: usize = 6;

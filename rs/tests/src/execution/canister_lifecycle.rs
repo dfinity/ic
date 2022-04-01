@@ -27,6 +27,7 @@ AKA:: Testcase 2.4
 
 end::catalog[] */
 
+use crate::driver::ic::{InternetComputer, Subnet};
 use crate::types::*;
 use crate::util::*;
 use candid::{Decode, Encode};
@@ -37,7 +38,6 @@ use ic_agent::AgentError;
 use ic_fondue::{
     ic_instance::{LegacyInternetComputer, Subnet as LegacySubnet},
     ic_manager::IcHandle,
-    prod_tests::ic::{InternetComputer, Subnet},
 };
 use ic_ic00_types::{CanisterSettingsArgs, CanisterStatusResultV2, CreateCanisterArgs, EmptyBlob};
 use ic_registry_subnet_type::SubnetType;

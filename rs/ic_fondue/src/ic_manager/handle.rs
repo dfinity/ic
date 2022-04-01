@@ -5,14 +5,13 @@ use url::{Host, Url};
 
 use crate::iterator::{InfStreamOf, PermOf};
 use crate::pot;
-use crate::prod_tests::{cli::AuthorizedSshAccount, farm};
 use anyhow::Result;
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use ic_types::SubnetId;
+use serde::{Deserialize, Serialize};
 use slog::info;
-use slog::Logger;
 use std::{
     net::IpAddr,
     time::{Duration, Instant},
@@ -65,6 +64,17 @@ pub struct IcSubnet {
     pub type_of: SubnetType,
 }
 
+pub type PrivateKeyFileContent = Vec<u8>;
+pub type PublicKeyFileContent = Vec<u8>;
+
+/// The key pair of an authorized ssh account.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct AuthorizedSshAccount {
+    pub name: String,
+    pub private_key: PrivateKeyFileContent,
+    pub public_key: PublicKeyFileContent,
+}
+
 #[derive(Clone, Debug)]
 pub struct IcEndpoint {
     /// A descriptor of this endpoint. This is public to give us a simple
@@ -102,78 +112,6 @@ pub struct IcEndpoint {
 
     /// The node id
     pub node_id: NodeId,
-}
-
-/// A set of operations on an IC node. Note that all calls are blocking.
-pub trait IcControl {
-    fn start_node(&self, logger: Logger) -> IcEndpoint;
-    fn kill_node(&self, logger: Logger);
-    fn restart_node(&self, logger: Logger) -> IcEndpoint;
-    fn ip_address(&self) -> Option<IpAddr>;
-    fn hostname(&self) -> Option<String>;
-}
-
-impl IcControl for IcEndpoint {
-    fn start_node(&self, logger: Logger) -> Self {
-        if let RuntimeDescriptor::Vm(info) = &self.runtime_descriptor {
-            let farm = farm::Farm::new(info.url.clone(), logger);
-            if let Err(e) = farm.start_vm(&info.group_name, &info.vm_name) {
-                panic!("failed to start VM: {:?}", e);
-            }
-            Self {
-                started_at: Instant::now(),
-                ..self.clone()
-            }
-        } else {
-            panic!("Cannot start a node with IcControl that is not hosted by farm.");
-        }
-    }
-
-    fn kill_node(&self, logger: Logger) {
-        if let RuntimeDescriptor::Vm(info) = &self.runtime_descriptor {
-            let farm = farm::Farm::new(info.url.clone(), logger);
-            if let Err(e) = farm.destroy_vm(&info.group_name, &info.vm_name) {
-                panic!("failed to destroy VM: {:?}", e);
-            }
-        } else {
-            panic!("Cannot kill a node with IcControl that is not hosted by farm.");
-        }
-    }
-
-    fn restart_node(&self, logger: Logger) -> Self {
-        if let RuntimeDescriptor::Vm(info) = &self.runtime_descriptor {
-            let farm = farm::Farm::new(info.url.clone(), logger);
-            if let Err(e) = farm.reboot_vm(&info.group_name, &info.vm_name) {
-                panic!("failed to reboot VM: {:?}", e);
-            }
-            Self {
-                started_at: Instant::now(),
-                ..self.clone()
-            }
-        } else {
-            panic!("Cannot restart a node with IcControl that is not hosted by farm.");
-        }
-    }
-
-    /// An IpAddress assigned to the Virtual Machine of the corresponding node,
-    /// if available.
-    fn ip_address(&self) -> Option<IpAddr> {
-        self.url.host().and_then(|h| match h {
-            Host::Domain(_) => None,
-            Host::Ipv4(ip_addr) => Some(IpAddr::V4(ip_addr)),
-            Host::Ipv6(ip_addr) => Some(IpAddr::V6(ip_addr)),
-        })
-    }
-
-    /// Returns the hostname assigned to the Virtual Machine of the
-    /// corresponding node, if available.
-    fn hostname(&self) -> Option<String> {
-        self.url.host().and_then(|h| match h {
-            Host::Domain(s) => Some(s.to_string()),
-            Host::Ipv4(_) => None,
-            Host::Ipv6(_) => None,
-        })
-    }
 }
 
 impl<'a> IcHandle {
@@ -362,6 +300,26 @@ impl<'a> IcEndpoint {
         }
     }
 
+    /// An IpAddress assigned to the Virtual Machine of the corresponding node,
+    /// if available.
+    pub fn ip_address(&self) -> Option<IpAddr> {
+        self.url.host().and_then(|h| match h {
+            Host::Domain(_) => None,
+            Host::Ipv4(ip_addr) => Some(IpAddr::V4(ip_addr)),
+            Host::Ipv6(ip_addr) => Some(IpAddr::V6(ip_addr)),
+        })
+    }
+
+    /// Returns the hostname assigned to the Virtual Machine of the
+    /// corresponding node, if available.
+    fn hostname(&self) -> Option<String> {
+        self.url.host().and_then(|h| match h {
+            Host::Domain(s) => Some(s.to_string()),
+            Host::Ipv4(_) => None,
+            Host::Ipv6(_) => None,
+        })
+    }
+
     /// Returns the `SubnetId` of this [IcEndpoint] if it exists.
     pub fn subnet_id(&self) -> Option<SubnetId> {
         self.subnet.as_ref().map(|s| s.id)
@@ -387,7 +345,7 @@ mod tests {
     use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
     use url::Url;
 
-    use super::{IcControl, IcEndpoint};
+    use super::IcEndpoint;
     #[test]
     fn returns_ipv4_and_ipv6_address() {
         let hostname = "some_host.com".to_string();

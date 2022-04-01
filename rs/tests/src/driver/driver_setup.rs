@@ -1,4 +1,4 @@
-use crate::prod_tests::test_env::TestEnv;
+use crate::driver::test_env::TestEnv;
 use anyhow::Result;
 use chrono::{DateTime, SecondsFormat, Utc};
 use ic_nns_init::set_up_env_vars_for_all_canisters;
@@ -14,10 +14,11 @@ use std::{
 };
 use url::Url;
 
-use super::cli::{AuthorizedSshAccount, ValidatedCliArgs};
+use super::cli::ValidatedCliArgs;
 use super::farm::Farm;
 use super::pot_dsl::{self};
 use super::test_env::HasBaseLogDir;
+use ic_fondue::ic_manager::handle::AuthorizedSshAccount;
 
 const ASYNC_CHAN_SIZE: usize = 8192;
 const DEFAULT_FARM_BASE_URL: &str = "https://farm.dfinity.systems";
@@ -116,7 +117,7 @@ pub fn mk_logger() -> Logger {
 }
 
 pub fn tee_logger(test_env: &TestEnv, logger: Logger) -> Logger {
-    use crate::prod_tests::test_env::HasTestPath;
+    use crate::driver::test_env::HasTestPath;
     if let Some(base_dir) = test_env.base_log_dir() {
         let stdout_drain = slog::LevelFilter::new(logger.clone(), slog::Level::Warning);
         let test_path = test_env.test_path();

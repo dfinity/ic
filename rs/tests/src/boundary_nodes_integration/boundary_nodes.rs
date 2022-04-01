@@ -2,11 +2,11 @@
 Title:: Boundary nodes integration test
 end::catalog[] */
 
-use ic_fondue::prod_tests::boundary_node::{BoundaryNode, BoundaryNodeVm};
-use ic_fondue::prod_tests::ic::{InternetComputer, Subnet};
-use ic_fondue::prod_tests::pot_dsl::get_ic_handle_and_ctx;
-use ic_fondue::prod_tests::test_env::{HasIcPrepDir, TestEnv};
-use ic_fondue::prod_tests::test_env_api::{DefaultIC, HasPublicApiUrl, IcNodeContainer};
+use crate::driver::boundary_node::{BoundaryNode, BoundaryNodeVm};
+use crate::driver::ic::{InternetComputer, Subnet};
+use crate::driver::pot_dsl::get_ic_handle_and_ctx;
+use crate::driver::test_env::{HasIcPrepDir, TestEnv};
+use crate::driver::test_env_api::{DefaultIC, HasPublicApiUrl, IcNodeContainer};
 
 use ic_registry_subnet_type::SubnetType;
 use slog::{info, Logger};

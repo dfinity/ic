@@ -18,6 +18,7 @@ Success::
 
 end::catalog[] */
 
+use crate::driver::ic::{InternetComputer, Subnet};
 use crate::util::{assert_create_agent, delay, runtime_from_url, UniversalCanister};
 use crate::{
     nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed, NnsExt},
@@ -25,10 +26,7 @@ use crate::{
     util::{assert_endpoints_reachability, block_on, EndpointsStatus},
 };
 use ic_agent::{export::Principal, Agent};
-use ic_fondue::{
-    ic_manager::IcHandle,
-    prod_tests::ic::{InternetComputer, Subnet},
-};
+use ic_fondue::ic_manager::IcHandle;
 use ic_nns_governance::pb::v1::NnsFunction;
 use ic_registry_subnet_type::SubnetType;
 use ic_utils::{call::AsyncCall, interfaces::ManagementCanister};

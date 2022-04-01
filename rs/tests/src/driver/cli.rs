@@ -1,8 +1,8 @@
 use anyhow::{bail, Result};
 use humantime::parse_duration;
+use ic_fondue::ic_manager::handle::AuthorizedSshAccount;
 use ic_types::ReplicaVersion;
 use regex::Regex;
-use serde::{Deserialize, Serialize};
 use std::{
     convert::TryFrom,
     path::{Path, PathBuf},
@@ -263,17 +263,6 @@ pub struct ValidatedCliArgs {
     pub log_debug_overrides: Vec<String>,
     pub pot_timeout: Duration,
     pub working_dir: PathBuf,
-}
-
-pub type PrivateKeyFileContent = Vec<u8>;
-pub type PublicKeyFileContent = Vec<u8>;
-
-/// The key pair of an authorized ssh account.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct AuthorizedSshAccount {
-    pub name: String,
-    pub private_key: PrivateKeyFileContent,
-    pub public_key: PublicKeyFileContent,
 }
 
 fn is_sha256_hex(s: &str) -> bool {

@@ -23,12 +23,9 @@ use std::time::Duration;
 
 use ic_nns_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 
+use crate::driver::ic::{InternetComputer, Subnet};
 use ic_base_types::SubnetId;
-use ic_fondue::{
-    ic_manager::IcHandle,                       // we run the test on the IC
-    prod_tests::ic::{InternetComputer, Subnet}, // which is declared through these types
-};
-
+use ic_fondue::ic_manager::IcHandle;
 use ic_nns_common::types::NeuronId;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, ReplicaVersion};

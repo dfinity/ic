@@ -117,15 +117,15 @@
 //! Thus, instead of randomly selecting a node to fetch registry updates, it is
 //! better to let the user select a node.
 //!
-use crate::ic_manager::handle::READY_RESPONSE_TIMEOUT;
-use crate::ic_manager::{FarmInfo, IcEndpoint, IcHandle, IcSubnet, RuntimeDescriptor};
-use crate::prod_tests::cli::AuthorizedSshAccount;
-use crate::prod_tests::driver_setup::{AUTHORIZED_SSH_ACCOUNTS, FARM_BASE_URL, FARM_GROUP_NAME};
-use crate::prod_tests::farm::Farm;
-use crate::prod_tests::test_env::{HasIcPrepDir, TestEnv};
+use crate::driver::driver_setup::{AUTHORIZED_SSH_ACCOUNTS, FARM_BASE_URL, FARM_GROUP_NAME};
+use crate::driver::farm::Farm;
+use crate::driver::test_env::{HasIcPrepDir, TestEnv};
+use crate::util::create_agent;
 use anyhow::{bail, Result};
-use ic_agent::{agent::http_transport::ReqwestHttpReplicaV2Transport, Agent, AgentError, Identity};
-use ic_constants::MAX_INGRESS_TTL;
+use ic_agent::Agent;
+use ic_fondue::ic_manager::handle::AuthorizedSshAccount;
+use ic_fondue::ic_manager::handle::READY_RESPONSE_TIMEOUT;
+use ic_fondue::ic_manager::{FarmInfo, IcEndpoint, IcHandle, IcSubnet, RuntimeDescriptor};
 use ic_interfaces::registry::{RegistryClient, RegistryClientResult};
 use ic_protobuf::registry::{node::v1 as pb_node, subnet::v1 as pb_subnet};
 use ic_registry_client::local_registry::LocalRegistry;
@@ -641,50 +641,4 @@ impl HttpFileStore for FarmFileStore {
                 .expect("cannot join urls"),
         }))
     }
-}
-
-// TODO(VER-1534): remove the following functions once the prod_tests directory gets moved to rs/tests
-
-fn get_identity() -> ic_agent::identity::BasicIdentity {
-    let contents = "-----BEGIN PRIVATE KEY-----\nMFMCAQEwBQYDK2VwBCIEILhMGpmYuJ0JEhDwocj6pxxOmIpGAXZd40AjkNhuae6q\noSMDIQBeXC6ae2dkJ8QC50bBjlyLqsFQFsMsIThWB21H6t6JRA==\n-----END PRIVATE KEY-----";
-    ic_agent::identity::BasicIdentity::from_pem(contents.as_bytes()).expect("Invalid secret key.")
-}
-
-/// Initializes an `Agent` using the provided URL.
-/// The root key is fetched as part of the initialization in order
-/// to validate certificates from the replica.
-pub async fn assert_create_agent(url: &str) -> Agent {
-    create_agent(url)
-        .await
-        .unwrap_or_else(|err| panic!("Failed to create agent for {}: {:?}", url, err))
-}
-
-pub async fn create_agent(url: &str) -> Result<Agent, AgentError> {
-    agent_with_identity(url, get_identity()).await
-}
-
-pub async fn agent_with_identity(
-    url: &str,
-    identity: impl Identity + 'static,
-) -> Result<Agent, AgentError> {
-    let a = Agent::builder()
-        .with_transport(ReqwestHttpReplicaV2Transport::create(url).unwrap())
-        .with_identity(identity)
-        // Ingresses are created with the system time but are checked against the consensus time.
-        // Consensus time is the time that is in the last finalized block. Consensus time might lag
-        // behind, for example when the subnet has many modes and the progress of consensus is
-        // computaionally heavy for the system to deal with in time. In such cases, the consensus
-        // time might be 'x', while the system time is x+2sn, for example. When the handlers check
-        // the validity of ingresses, they expect the expiry time to be between x and
-        // x+MAX_INGRESS_TTL. If we used MAX_INGRESS_TTL as the expiry delay while creating the
-        // ingresses as well, we would set the ingresses' expiry_time to x+MAX_INGRESS_TTL+2sn in
-        // this case. Then, such ingresses would get rejected by the replica as their expiry_time is
-        // too further in the future, i.e. greater than x+MAX_INGRESS_TTL in this case. To tolerate
-        // the delays in the progress of consensus, we reduce 30sn from MAX_INGRESS_TTL and set the
-        // expiry_time of ingresses accordingly.
-        .with_ingress_expiry(Some(MAX_INGRESS_TTL - std::time::Duration::from_secs(30)))
-        .build()
-        .unwrap();
-    a.fetch_root_key().await?;
-    Ok(a)
 }

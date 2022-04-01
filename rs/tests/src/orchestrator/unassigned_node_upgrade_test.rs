@@ -23,10 +23,8 @@ end::catalog[] */
 use core::time;
 use std::{convert::TryFrom, thread};
 
-use ic_fondue::{
-    ic_manager::{IcControl, IcHandle},
-    prod_tests::ic::InternetComputer,
-};
+use crate::driver::ic::InternetComputer;
+use ic_fondue::ic_manager::IcHandle;
 
 use crate::{
     nns::{

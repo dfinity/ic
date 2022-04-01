@@ -5,14 +5,16 @@ use std::env;
 use std::net::IpAddr;
 use std::{collections::BTreeMap, fs::File, io, net::SocketAddr, path::PathBuf, process::Command};
 
-use crate::ic_instance::{node_software_version::NodeSoftwareVersion, port_allocator::AddrType};
-use crate::prod_tests::driver_setup::{
+use crate::driver::driver_setup::{
     AUTHORIZED_SSH_ACCOUNTS_DIR, INITIAL_REPLICA_VERSION, JOURNALBEAT_HOSTS, LOG_DEBUG_OVERRIDES,
 };
-use crate::prod_tests::farm::FarmResult;
-use crate::prod_tests::ic::{InternetComputer, Node};
-use crate::prod_tests::test_env::{HasIcPrepDir, TestEnv};
+use crate::driver::farm::FarmResult;
+use crate::driver::ic::{InternetComputer, Node};
+use crate::driver::test_env::{HasIcPrepDir, TestEnv};
 use ic_base_types::NodeId;
+use ic_fondue::ic_instance::{
+    node_software_version::NodeSoftwareVersion, port_allocator::AddrType,
+};
 
 use ic_prep_lib::{
     internet_computer::{IcConfig, InitializedIc, TopologyConfig},
@@ -150,7 +152,7 @@ pub fn init_ic(
     Ok(ic_config.initialize().expect("can't fail"))
 }
 
-use crate::prod_tests::farm::Farm;
+use crate::driver::farm::Farm;
 
 pub fn setup_and_start_vms(
     initialized_ic: &InitializedIc,

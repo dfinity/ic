@@ -7,10 +7,10 @@ use slog::Logger;
 use super::driver_setup::tee_logger;
 use super::ic::VmAllocationStrategy;
 use super::test_env_api::IcHandleConstructor;
-use crate::ic_manager::IcHandle;
-use crate::pot::{Context, FondueTestFn};
-use crate::prod_tests::ic::InternetComputer;
-use crate::prod_tests::test_env::TestEnv;
+use crate::driver::ic::InternetComputer;
+use crate::driver::test_env::TestEnv;
+use ic_fondue::ic_manager::IcHandle;
+use ic_fondue::pot::{Context, FondueTestFn};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 

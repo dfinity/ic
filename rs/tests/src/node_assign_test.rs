@@ -26,13 +26,13 @@ use crate::nns::{
     submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed, NnsExt,
 };
 use crate::util;
+use crate::{
+    driver::ic::{InternetComputer, Subnet},
+    driver::vm_control::IcControl,
+};
 use canister_test;
 use ic_base_types::NodeId;
-use ic_fondue::{
-    ic_manager::{IcControl, IcHandle},
-    iterator::PermOf,
-    prod_tests::ic::{InternetComputer, Subnet},
-};
+use ic_fondue::{ic_manager::IcHandle, iterator::PermOf};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::pb::v1::NnsFunction;
 use ic_registry_subnet_type::SubnetType;

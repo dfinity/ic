@@ -22,14 +22,11 @@ end::catalog[] */
 
 use std::time::Duration;
 
+use crate::driver::ic::{InternetComputer, Subnet};
 use crate::util::{assert_endpoints_reachability, block_on, runtime_from_url, EndpointsStatus};
 use canister_test::{Canister, Project, Runtime, Wasm};
 use dfn_candid::candid;
-use ic_fondue::{
-    ic_manager::IcHandle,
-    pot::FondueTestFn,
-    prod_tests::ic::{InternetComputer, Subnet},
-};
+use ic_fondue::{ic_manager::IcHandle, pot::FondueTestFn};
 use ic_registry_subnet_type::SubnetType;
 use slog::info;
 use std::fmt::Display;

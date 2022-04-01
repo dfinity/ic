@@ -1,15 +1,13 @@
 use ic_fondue::pot::execution::TestResult;
-use ic_fondue::prod_tests::cli::CliArgs;
-use ic_fondue::prod_tests::driver_setup::{
-    create_driver_context_from_cli, initialize_env, mk_logger,
-};
-use ic_fondue::prod_tests::evaluation::evaluate;
-use ic_fondue::prod_tests::pot_dsl::*;
-use ic_fondue::prod_tests::test_env::TestEnv;
 use ic_tests::api_test;
 use ic_tests::boundary_nodes_integration::boundary_nodes;
 use ic_tests::btc_integration::btc;
 use ic_tests::create_subnet::{self, create_subnet_test};
+use ic_tests::driver::cli::CliArgs;
+use ic_tests::driver::driver_setup::{create_driver_context_from_cli, initialize_env, mk_logger};
+use ic_tests::driver::evaluation::evaluate;
+use ic_tests::driver::pot_dsl::*;
+use ic_tests::driver::test_env::TestEnv;
 use ic_tests::http_from_canister::basic_http;
 use ic_tests::nns_fault_tolerance_test;
 use ic_tests::nns_follow_test::{self, test as follow_test};

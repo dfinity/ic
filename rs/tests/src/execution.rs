@@ -12,8 +12,8 @@ pub mod queries;
 pub mod subnet_capacity;
 pub mod upgraded_pots;
 
+use crate::driver::ic::{InternetComputer, Subnet};
 use ic_fondue::ic_instance::{LegacyInternetComputer, Subnet as LegacySubnet};
-use ic_fondue::prod_tests::ic::{InternetComputer, Subnet};
 use ic_registry_subnet_type::SubnetType;
 
 pub fn config_system_verified_application_subnets() -> InternetComputer {

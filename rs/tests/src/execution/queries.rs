@@ -1,9 +1,10 @@
 /* tag::catalog[]
 end::catalog[] */
 
+use crate::driver::ic::InternetComputer;
 use crate::types::*;
 use crate::util::*;
-use ic_fondue::{ic_manager::IcHandle, prod_tests::ic::InternetComputer};
+use ic_fondue::ic_manager::IcHandle;
 use ic_registry_subnet_type::SubnetType;
 use ic_utils::interfaces::ManagementCanister;
 

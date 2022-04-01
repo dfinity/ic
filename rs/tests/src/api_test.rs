@@ -1,6 +1,6 @@
 //! This module tests the system tests API itself.
 
-use ic_fondue::prod_tests::{
+use crate::driver::{
     ic::InternetComputer,
     test_env::TestEnv,
     test_env_api::{DefaultIC, HasHttpFileStore},
