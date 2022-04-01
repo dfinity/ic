@@ -222,3 +222,15 @@
         - ic-os/guestos/rootfs/packages.common
         - ic-os/guestos/rootfs/packages.dev
 
+.rules-service-worker-build:
+  rules:
+    - if: '$CI_COMMIT_REF_PROTECTED == "true" && $SCHEDULE_NAME == "run-all-master"'
+    - if: '$CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_BRANCH =~ /^rc--/'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_TAG =~ /^service-worker_v([0-9\.]+)$/'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - typescript/service-worker/**/*
+
+.rules-service-worker-release:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_TAG =~ /^service-worker_v([0-9\.]+)$/'

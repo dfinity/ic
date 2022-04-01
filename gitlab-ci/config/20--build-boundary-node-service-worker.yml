@@ -1,13 +1,9 @@
 boundary-node-service-worker:
   extends:
     - .ubuntu-nix-docker
-    - .rules-protected-branch
+    - .rules-service-worker-build
   needs: [] # don't wait on other jobs
   stage: test
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      changes:
-        - typescript/service-worker/**/*
   script:
     - |
       set -eExuo pipefail
