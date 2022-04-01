@@ -728,8 +728,8 @@ impl Governance {
     ///
     /// This causes the stake of a neuron to be disbursed to the provided
     /// principal (and optional subaccount). If `amount` is provided then
-    /// that amount is disbursed.
-    /// TODO explain other affects i.e. rewards that will be minted.
+    /// that amount is disbursed. In addition, the neuron's management fees
+    /// are burned.
     ///
     /// Note that we don't enforce that 'amount' is actually smaller
     /// than or equal to the cached stake in the neuron.
@@ -777,7 +777,6 @@ impl Governance {
             })?,
         };
 
-        let rewards_amount_e8s = neuron.maturity_e8s_equivalent;
         let fees_amount_e8s = neuron.neuron_fees_e8s;
         // Calculate the amount to transfer, and adjust the cached stake,
         // accordingly. Make sure no matter what the user disburses we still
@@ -806,11 +805,9 @@ impl Governance {
             },
         )?;
 
-        // We need to do 3 transfers:
+        // We need to do 2 transfers:
         // 1 - Burn the neuron management fees.
         // 2 - Transfer the disbursed amount to the target account
-        // 3 - Transfer the accumulated rewards that haven't been spawned yet
-        //     to the target account.
 
         // Transfer 1 - burn the fees, but only if the value exceeds the cost of
         // a transaction fee, as the ledger doesn't support burn transfers for
@@ -860,25 +857,6 @@ impl Governance {
         let to_deduct = disburse_amount_e8s + transaction_fee_e8s;
         // The transfer was successful we can change the stake of the neuron.
         neuron.cached_neuron_stake_e8s = neuron.cached_neuron_stake_e8s.saturating_sub(to_deduct);
-
-        // Transfer 3 - Transfer the accumulated maturity by minting into the
-        // chosen account, but only if the value exceeds the cost of a transaction fee
-        // as the ledger doesn't support ledger transfers for an amount less than the
-        // transaction fee.
-        if rewards_amount_e8s > transaction_fee_e8s {
-            let _ = self
-                .ledger
-                .transfer_funds(
-                    rewards_amount_e8s,
-                    0, // Minting transfer don't pay a fee.
-                    None,
-                    to_account,
-                    self.env.now(),
-                )
-                .await?;
-        }
-
-        neuron.maturity_e8s_equivalent = 0;
 
         Ok(block_height)
     }

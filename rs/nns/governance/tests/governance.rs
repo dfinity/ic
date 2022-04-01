@@ -3350,7 +3350,6 @@ fn test_neuron_lifecycle() {
     let from = neuron.controller.unwrap();
     let neuron_stake_e8s = neuron.cached_neuron_stake_e8s;
     let neuron_fees_e8s = neuron.neuron_fees_e8s;
-    let neuron_maturity = neuron.maturity_e8s_equivalent;
 
     gov.disburse_neuron(
         &id,
@@ -3367,9 +3366,10 @@ fn test_neuron_lifecycle() {
     // The user's account should now have the amount
     driver.assert_account_contains(
         &AccountIdentifier::new(from, None),
-        // In the end, the user's account should have the stake + rewards - fees
+        // In the end, the user's account should have the stake - fees
         // - transaction fees.
-        neuron_stake_e8s - neuron_fees_e8s + neuron_maturity
+        neuron_stake_e8s
+            - neuron_fees_e8s
             - gov.proto.economics.as_ref().unwrap().transaction_fee_e8s,
     );
 }
@@ -3382,7 +3382,6 @@ fn test_disburse_to_subaccount() {
     let from = neuron.controller.unwrap();
     let neuron_stake_e8s = neuron.cached_neuron_stake_e8s;
     let neuron_fees_e8s = neuron.neuron_fees_e8s;
-    let neuron_maturity = neuron.maturity_e8s_equivalent;
 
     let to_subaccount = Subaccount({
         let mut sha = Sha256::new();
@@ -3405,9 +3404,10 @@ fn test_disburse_to_subaccount() {
     // The user's account should now have the amount
     driver.assert_account_contains(
         &AccountIdentifier::new(from, Some(to_subaccount)),
-        // In the end, the user's account should have the stake + rewards - fees
+        // In the end, the user's account should have the stake - fees
         // - transaction fees.
-        neuron_stake_e8s - neuron_fees_e8s + neuron_maturity
+        neuron_stake_e8s
+            - neuron_fees_e8s
             - gov.proto.economics.as_ref().unwrap().transaction_fee_e8s,
     );
 }
@@ -3420,7 +3420,6 @@ fn test_nns1_520() {
     let from = neuron.controller.unwrap();
     let neuron_stake_e8s = neuron.cached_neuron_stake_e8s;
     let neuron_fees_e8s = neuron.neuron_fees_e8s;
-    let neuron_maturity = neuron.maturity_e8s_equivalent;
 
     let to_subaccount = Subaccount({
         let mut sha = Sha256::new();
@@ -3443,9 +3442,10 @@ fn test_nns1_520() {
     // The user's account should now have the amount
     driver.assert_account_contains(
         &AccountIdentifier::new(from, Some(to_subaccount)),
-        // In the end, the user's account should have the stake + rewards - fees
+        // In the end, the user's account should have the stake - fees
         // - transaction fees.
-        neuron_stake_e8s - neuron_fees_e8s + neuron_maturity
+        neuron_stake_e8s
+            - neuron_fees_e8s
             - gov.proto.economics.as_ref().unwrap().transaction_fee_e8s,
     );
 
@@ -3467,7 +3467,6 @@ fn test_disburse_to_main_acccount() {
     let from = neuron.controller.unwrap();
     let neuron_stake_e8s = neuron.cached_neuron_stake_e8s;
     let neuron_fees_e8s = neuron.neuron_fees_e8s;
-    let neuron_maturity = neuron.maturity_e8s_equivalent;
 
     gov.disburse_neuron(
         &id,
@@ -3484,9 +3483,10 @@ fn test_disburse_to_main_acccount() {
     // The user's account should now have the amount
     driver.assert_account_contains(
         &AccountIdentifier::new(from, None),
-        // In the end, the user's account should have the stake + rewards - fees
+        // In the end, the user's account should have the stake - fees
         // - transaction fees.
-        neuron_stake_e8s - neuron_fees_e8s + neuron_maturity
+        neuron_stake_e8s
+            - neuron_fees_e8s
             - gov.proto.economics.as_ref().unwrap().transaction_fee_e8s,
     );
 }
@@ -4027,7 +4027,6 @@ fn test_cant_disburse_without_paying_fees() {
     let from = neuron.controller.unwrap();
     let neuron_stake_e8s = neuron.cached_neuron_stake_e8s;
     let neuron_fees_e8s = neuron.neuron_fees_e8s;
-    let neuron_maturity = neuron.maturity_e8s_equivalent;
 
     // Try to disburse more than the stake amount, this should fail.
     // and cause the neuron to be unchanged.
@@ -4095,9 +4094,10 @@ fn test_cant_disburse_without_paying_fees() {
     // The user's account should now have the amount
     driver.assert_account_contains(
         &AccountIdentifier::new(from, None),
-        // In the end, the user's account should have the stake + rewards - fees
+        // In the end, the user's account should have the stake - fees
         // - transaction fees.
-        neuron_stake_e8s - neuron_fees_e8s + neuron_maturity
+        neuron_stake_e8s
+            - neuron_fees_e8s
             - gov.proto.economics.as_ref().unwrap().transaction_fee_e8s,
     );
 }
