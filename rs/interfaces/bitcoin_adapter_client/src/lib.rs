@@ -1,4 +1,4 @@
-use ic_protobuf::bitcoin::v1::{BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper};
+use ic_btc_types_internal::{BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper};
 use std::time::Duration;
 
 /// Describe RPC error -- can be either related to transport (i.e.

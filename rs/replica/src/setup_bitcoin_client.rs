@@ -1,10 +1,15 @@
-use ic_btc_adapter_service::btc_adapter_client::BtcAdapterClient;
+use bitcoin::consensus::Decodable;
+use ic_btc_adapter_service::{
+    btc_adapter_client::BtcAdapterClient, GetSuccessorsRpcRequest, SendTransactionRpcRequest,
+};
+use ic_btc_types_internal::{
+    BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper, Block as InternalBlock,
+    BlockHeader as InternalBlockHeader, GetSuccessorsResponse, OutPoint as InternalOutPoint,
+    SendTransactionResponse, Transaction as InternalTransaction, TxIn as InternalTxIn,
+    TxOut as InternalTxOut, Txid as InternalTxid,
+};
 use ic_interfaces_bitcoin_adapter_client::{BitcoinAdapterClient, Options, RpcError, RpcResult};
 use ic_logger::{error, ReplicaLogger};
-use ic_protobuf::bitcoin::v1::{
-    bitcoin_adapter_request_wrapper, bitcoin_adapter_response_wrapper,
-    BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper,
-};
 use std::{convert::TryFrom, path::PathBuf, sync::Arc};
 use tokio::net::UnixStream;
 use tonic::transport::{Channel, Endpoint, Uri};
@@ -30,6 +35,57 @@ impl BitcoinAdapterClientImpl {
     }
 }
 
+fn to_internal_txin(txin: &bitcoin::TxIn) -> InternalTxIn {
+    InternalTxIn {
+        previous_output: InternalOutPoint {
+            txid: InternalTxid::try_from(&txin.previous_output.txid[..])
+                .expect("The len of the bitcoin::Txid hash is not 32 bytes."),
+            vout: txin.previous_output.vout,
+        },
+        script_sig: txin.script_sig.as_bytes().to_vec(),
+        sequence: txin.sequence,
+        witness: txin
+            .witness
+            .iter()
+            .map(|v| serde_bytes::ByteBuf::from(v.clone()))
+            .collect(),
+    }
+}
+
+fn to_internal_block(block: &bitcoin::Block) -> InternalBlock {
+    InternalBlock {
+        header: to_internal_block_header(&block.header),
+        txdata: block
+            .txdata
+            .iter()
+            .map(|x| InternalTransaction {
+                version: x.version,
+                lock_time: x.lock_time,
+                input: x.input.iter().map(to_internal_txin).collect(),
+                output: x
+                    .output
+                    .iter()
+                    .map(|x| InternalTxOut {
+                        value: x.value,
+                        script_pubkey: x.script_pubkey.as_bytes().to_vec(),
+                    })
+                    .collect(),
+            })
+            .collect(),
+    }
+}
+
+fn to_internal_block_header(block_header: &bitcoin::BlockHeader) -> InternalBlockHeader {
+    InternalBlockHeader {
+        version: block_header.version,
+        prev_blockhash: block_header.prev_blockhash.to_vec(),
+        merkle_root: block_header.merkle_root.to_vec(),
+        time: block_header.time,
+        bits: block_header.bits,
+        nonce: block_header.nonce,
+    }
+}
+
 impl BitcoinAdapterClient for BitcoinAdapterClientImpl {
     fn send_request(
         &self,
@@ -38,46 +94,60 @@ impl BitcoinAdapterClient for BitcoinAdapterClientImpl {
     ) -> RpcResult<BitcoinAdapterResponseWrapper> {
         let mut client = self.client.clone();
         self.rt_handle.block_on(async move {
-            match request.r {
-                Some(wrapped_request) => match wrapped_request {
-                    bitcoin_adapter_request_wrapper::R::GetSuccessorsRequest(r) => {
-                        let mut tonic_request = tonic::Request::new(r);
-                        if let Some(timeout) = opts.timeout {
-                            tonic_request.set_timeout(timeout);
-                        }
-
-                        client
-                            .get_successors(tonic_request)
-                            .await
-                            .map(|tonic_response| BitcoinAdapterResponseWrapper {
-                                r: Some(
-                                    bitcoin_adapter_response_wrapper::R::GetSuccessorsResponse(
-                                        tonic_response.into_inner(),
-                                    ),
-                                ),
-                            })
-                            .map_err(convert_tonic_error)
+            match request {
+                BitcoinAdapterRequestWrapper::GetSuccessorsRequest(r) => {
+                    let get_successors_request = GetSuccessorsRpcRequest {
+                        processed_block_hashes: r.processed_block_hashes,
+                        anchor: r.anchor,
+                    };
+                    let mut tonic_request = tonic::Request::new(get_successors_request);
+                    if let Some(timeout) = opts.timeout {
+                        tonic_request.set_timeout(timeout);
                     }
-                    bitcoin_adapter_request_wrapper::R::SendTransactionRequest(r) => {
-                        let mut tonic_request = tonic::Request::new(r);
-                        if let Some(timeout) = opts.timeout {
-                            tonic_request.set_timeout(timeout);
-                        }
 
-                        client
-                            .send_transaction(tonic_request)
-                            .await
-                            .map(|tonic_response| BitcoinAdapterResponseWrapper {
-                                r: Some(
-                                    bitcoin_adapter_response_wrapper::R::SendTransactionResponse(
-                                        tonic_response.into_inner(),
-                                    ),
-                                ),
-                            })
-                            .map_err(convert_tonic_error)
+                    client
+                        .get_successors(tonic_request)
+                        .await
+                        .map(|tonic_response| {
+                            let inner = tonic_response.into_inner();
+
+                            let mut blocks = vec![];
+                            for b in inner.blocks.into_iter() {
+                                let bitcoin_block = bitcoin::Block::consensus_decode(&*b).unwrap();
+                                blocks.push(to_internal_block(&bitcoin_block));
+                            }
+                            let mut next = vec![];
+                            for n in inner.next.into_iter() {
+                                let bitcoin_block_header =
+                                    bitcoin::BlockHeader::consensus_decode(&*n).unwrap();
+                                next.push(to_internal_block_header(&bitcoin_block_header));
+                            }
+                            BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
+                                GetSuccessorsResponse { blocks, next },
+                            )
+                        })
+                        .map_err(convert_tonic_error)
+                }
+                BitcoinAdapterRequestWrapper::SendTransactionRequest(r) => {
+                    let send_transaction_request = SendTransactionRpcRequest {
+                        transaction: r.transaction,
+                    };
+                    let mut tonic_request = tonic::Request::new(send_transaction_request);
+                    if let Some(timeout) = opts.timeout {
+                        tonic_request.set_timeout(timeout);
                     }
-                },
-                None => Err(RpcError::InvalidRequest(request)),
+
+                    client
+                        .send_transaction(tonic_request)
+                        .await
+                        .map(|tonic_response| {
+                            let _inner = tonic_response.into_inner();
+                            BitcoinAdapterResponseWrapper::SendTransactionResponse(
+                                SendTransactionResponse {},
+                            )
+                        })
+                        .map_err(convert_tonic_error)
+                }
             }
         })
     }

@@ -6,8 +6,10 @@ edition = "2018"
 
 [dependencies]
 base64 = "0.11.0"
+bitcoin = "0.27.1"
 hex = "0.4.2"
 ic-btc-adapter-service = { path = "../bitcoin/adapter_service" }
+ic-btc-types-internal = { path = "../bitcoin/types/internal" }
 ic-async-utils = { path = "../async_utils" }
 ic-btc-consensus = { path = "../bitcoin/consensus" }
 ic-config = { path = "../config" }
@@ -51,6 +53,7 @@ prost = "0.9.0"
 rand = "0.7.3"
 regex = "1.3.9"
 serde = { version = "1.0.99", features = [ "derive" ] }
+serde_bytes = "0.11.5"
 serde_cbor = "0.11.1"
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
 slog-async = "2.5.0"
