@@ -31,7 +31,6 @@ ic-system-api = { path = "../system_api" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
-itertools = "0.10.0"
 lazy_static = "1.4.0"
 memory_tracker = { path = "../memory_tracker" }
 nix = "0.23.0"
