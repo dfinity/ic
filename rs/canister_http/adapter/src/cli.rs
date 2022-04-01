@@ -55,6 +55,7 @@ pub mod test {
     use std::path::PathBuf;
     use std::str::FromStr;
     use tempfile::NamedTempFile;
+    use url::Url;
 
     /// This function tests the `Cli::get_logging_level()` function.
     #[test]
@@ -210,7 +211,8 @@ pub mod test {
                 "debug_overrides": [],
                 "enabled_tags": [],
                 "block_on_overflow": true
-            }        
+            },
+            "socks_proxy": "socks5://notaproxy.com"        
         }       
         "#;
 
@@ -237,8 +239,8 @@ pub mod test {
                 debug_overrides: Vec::new(),
                 ..Default::default()
             },
+            socks_proxy: Some(Url::parse("socks5://notaproxy.com").unwrap()),
         };
-
         assert_eq!(config, expected_config);
     }
 }

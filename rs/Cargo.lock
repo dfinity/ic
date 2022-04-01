@@ -420,6 +420,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-socks5"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77f634add2445eb2c1f785642a67ca1073fedd71e73dc3ca69435ef9b9bdedc7"
+dependencies = [
+ "async-trait",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "async-stream"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2381,6 +2392,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7360491ce676a36bf9bb3c56c1aa791658183a54d2744120f27285738d90465a"
 
 [[package]]
+name = "fast-socks5"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "30f86aa7137ebcd85fc19428580f252854341ab32d8e2f740cc239b40828696f"
+dependencies = [
+ "anyhow",
+ "log",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+]
+
+[[package]]
 name = "fastrand"
 version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3135,6 +3159,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "hyper-socks2"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e01b408a306f4e49b1eac23dd88f0852c0abb2b1d162d498cd889cfcd56d8eec"
+dependencies = [
+ "async-socks5",
+ "futures",
+ "http",
+ "hyper",
+ "hyper-tls",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "hyper-timeout"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3539,11 +3578,14 @@ dependencies = [
 name = "ic-canister-http-adapter"
 version = "0.1.0"
 dependencies = [
+ "async-socks5",
  "async-stream",
  "clap 3.0.0-beta.2",
+ "fast-socks5",
  "futures",
  "http",
  "hyper",
+ "hyper-socks2",
  "hyper-tls",
  "ic-async-utils",
  "ic-canister-http-adapter-service",
@@ -3561,6 +3603,7 @@ dependencies = [
  "tokio",
  "tonic",
  "tower",
+ "url",
  "uuid",
 ]
 
@@ -11675,9 +11718,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-stream"
-version = "0.1.6"
+version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8864d706fdb3cc0843a49647ac892720dac98a6eeb818b77190592cf4994066"
+checksum = "50145484efff8818b5ccd256697f36863f587da82cf8b409c53adf1e840798e3"
 dependencies = [
  "futures-core",
  "pin-project-lite",

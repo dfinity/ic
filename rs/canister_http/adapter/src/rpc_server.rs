@@ -31,7 +31,6 @@ impl<C: Clone + Connect + Send + Sync + 'static> HttpAdapter for CanisterHttp<C>
             Status::new(tonic::Code::InvalidArgument, "Failed to parse url")
         })?;
 
-        // TODO: Connect to SOCKS proxy (NET-881)
         let http_req = hyper::Request::builder()
             .method(Method::GET)
             .uri(uri)

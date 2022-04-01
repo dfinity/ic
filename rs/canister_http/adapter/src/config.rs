@@ -1,6 +1,7 @@
 use ic_config::logger::Config as LoggerConfig;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use url::Url;
 
 const DEFAULT_HTTP_CONNECT_TIMEOUT_SECS: u64 = 1;
 const DEFAULT_HTTP_REQUEST_TIMEOUT_SECS: u64 = 3;
@@ -31,6 +32,9 @@ pub struct Config {
     pub http_request_size_limit_bytes: u64,
     pub incoming_source: IncomingSource,
     pub logger: LoggerConfig,
+    // Boundary node socks proxy on mainnet: https://gitlab.com/dfinity-lab/public/ic/-/blob/master/ic-os/boundary-guestos/doc/Components.adoc#user-content-socks-proxy
+    // Testing environment shared socks proxy address: socks5.testnet.dfinity.network:1080
+    pub socks_proxy: Option<Url>,
 }
 
 impl Default for Config {
@@ -41,6 +45,7 @@ impl Default for Config {
             http_request_size_limit_bytes: DEFAULT_HTTP_REQUEST_SIZE_LIMIT_BYTES,
             incoming_source: IncomingSource::default(),
             logger: LoggerConfig::default(),
+            socks_proxy: None,
         }
     }
 }

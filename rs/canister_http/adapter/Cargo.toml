@@ -6,11 +6,13 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+async-socks5 = "0.5.1"
 async-stream = "0.3.2"
 clap = "=3.0.0-beta.2"
 futures = "0.3.17"
 http = "0.2"
 hyper = { version = "0.14", features = ["full"] }
+hyper-socks2 = "0.6.0"
 hyper-tls = "0.5.0"
 ic-async-utils = { path = "../../async_utils" }
 ic-canister-http-adapter-service = { path = "../adapter_service"}
@@ -28,6 +30,8 @@ thiserror = "1.0.26"
 tokio = { version = "1.15.0", features = ["full"] }
 tonic = "0.6.2"
 tower =  { version = "0.4.8", features = ["load-shed", "limit", "steer"] }
+url = "2.2.1"
 
 [dev-dependencies]
+fast-socks5 = "0.7.0"
 uuid = { version = "0.8.2", features = ["v4"] }
