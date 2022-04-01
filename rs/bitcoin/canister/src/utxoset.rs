@@ -30,37 +30,25 @@ fn remove_spent_txs(utxo_set: &mut UtxoSet, tx: &Transaction) {
     }
 
     for input in &tx.input {
-        // Verify that we've seen the outpoint before.
+        // Remove the input from the UTXOs. The input *must* exist in the UTXO set.
         match utxo_set.utxos.remove(&input.previous_output) {
             Some((txout, _)) => {
                 if let Some(address) = Address::from_script(&txout.script_pubkey, utxo_set.network)
                 {
                     let address = address.to_string();
-                    let address_outpoints =
-                        utxo_set.address_to_outpoints.get_mut(&address).unwrap();
+                    let found = utxo_set
+                        .address_to_outpoints
+                        .remove(&(address, input.previous_output));
 
-                    let mut found = false;
-                    for (index, outpoint) in address_outpoints.iter().enumerate() {
-                        if outpoint == &input.previous_output {
-                            address_outpoints.remove(index);
-                            found = true;
-                            break;
-                        }
-                    }
-
-                    if !found && utxo_set.strict {
-                        panic!("Outpoint {:?} not found in index.", input.previous_output);
-                    }
-
-                    if address_outpoints.is_empty() {
-                        utxo_set.address_to_outpoints.remove(&address);
-                    }
+                    assert!(
+                        found,
+                        "Outpoint {:?} not found in the index.",
+                        input.previous_output
+                    );
                 }
             }
             None => {
-                if utxo_set.strict {
-                    panic!("Outpoint {:?} not found.", input.previous_output);
-                }
+                panic!("Outpoint {:?} not found.", input.previous_output);
             }
         }
     }
@@ -107,9 +95,7 @@ pub(crate) fn insert_utxo(
         // Add the address to the index if we can parse it.
         utxo_set
             .address_to_outpoints
-            .entry(address.to_string())
-            .or_insert_with(Vec::new)
-            .push(outpoint);
+            .insert((address.to_string(), outpoint));
     }
 
     utxo_set.utxos.insert(outpoint, (output, height));
@@ -166,7 +152,7 @@ mod test {
             insert_tx(&mut utxo, &coinbase_empty_tx, 0);
 
             assert!(utxo.utxos.is_empty());
-            assert_eq!(utxo.address_to_outpoints, maplit::btreemap! {});
+            assert_eq!(utxo.address_to_outpoints, maplit::btreeset! {});
         }
     }
 
@@ -188,7 +174,7 @@ mod test {
             insert_tx(&mut utxo, &coinbase_op_return_tx, 0);
 
             assert!(utxo.utxos.is_empty());
-            assert_eq!(utxo.address_to_outpoints, maplit::btreemap! {});
+            assert_eq!(utxo.address_to_outpoints, maplit::btreeset! {});
         }
     }
 
@@ -224,11 +210,11 @@ mod test {
             );
             assert_eq!(
                 utxo.address_to_outpoints,
-                maplit::btreemap! {
-                    address_1.to_string() => vec![OutPoint {
+                maplit::btreeset! {
+                    (address_1.to_string(), OutPoint {
                         txid: coinbase_tx.txid(),
                         vout: 0
-                    }]
+                    })
                 }
             );
 
@@ -252,11 +238,11 @@ mod test {
             );
             assert_eq!(
                 utxo.address_to_outpoints,
-                maplit::btreemap! {
-                    address_2.to_string() => vec![OutPoint {
+                maplit::btreeset! {
+                    (address_2.to_string(), OutPoint {
                         txid: tx.txid(),
                         vout: 0
-                    }]
+                    })
                 }
             );
         }
