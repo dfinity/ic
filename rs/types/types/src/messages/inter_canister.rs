@@ -1,5 +1,5 @@
 use crate::{ingress::WasmResult, CanisterId, CountBytes, Cycles, Funds, NumBytes};
-use ic_error_types::{RejectCode, UserError};
+use ic_error_types::{RejectCode, TryFromError, UserError};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::queues::v1 as pb_queues,
@@ -262,7 +262,12 @@ impl TryFrom<pb_queues::RejectContext> for RejectContext {
 
     fn try_from(rc: pb_queues::RejectContext) -> Result<Self, Self::Error> {
         Ok(RejectContext {
-            code: rc.reject_code.try_into()?,
+            code: rc.reject_code.try_into().map_err(|err| match err {
+                TryFromError::ValueOutOfRange(code) => ProxyDecodeError::ValueOutOfRange {
+                    typ: "RejectContext",
+                    err: code.to_string(),
+                },
+            })?,
             message: rc.reject_message,
         })
     }

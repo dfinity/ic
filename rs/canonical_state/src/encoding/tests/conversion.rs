@@ -130,7 +130,7 @@ fn try_from_reject_context_code_zero() {
     match RejectContext::try_from(context) {
         Ok(ctx) => panic!("Expected Err(_), got Ok({:?})", ctx),
         Err(ProxyDecodeError::ValueOutOfRange { typ, err }) => {
-            assert_eq!(("RejectCode", "0"), (typ, err.as_str()))
+            assert_eq!(("RejectContext", "0"), (typ, err.as_str()))
         }
         Err(err) => panic!(
             "Expected Err(ProxyDecodeError::ValueOutOfRange), got Err({:?})",
@@ -150,7 +150,7 @@ fn try_from_reject_context_code_out_of_range() {
     match RejectContext::try_from(context) {
         Ok(ctx) => panic!("Expected Err(_), got Ok({:?})", ctx),
         Err(ProxyDecodeError::ValueOutOfRange { typ, err }) => {
-            assert_eq!(("RejectCode", "6"), (typ, err.as_str()))
+            assert_eq!(("RejectContext", "6"), (typ, err.as_str()))
         }
         Err(err) => panic!(
             "Expected Err(ProxyDecodeError::ValueOutOfRange), got Err({:?})",

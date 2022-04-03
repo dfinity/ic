@@ -3717,6 +3717,7 @@ dependencies = [
  "ic-base-types",
  "ic-certification-version",
  "ic-crypto-tree-hash",
+ "ic-error-types",
  "ic-protobuf",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
@@ -4758,7 +4759,6 @@ dependencies = [
 name = "ic-error-types"
 version = "0.8.0"
 dependencies = [
- "ic-protobuf",
  "serde",
  "strum 0.23.0",
  "strum_macros 0.23.1",

@@ -11,6 +11,7 @@
 //! `CanisterIds` are represented as byte vectors.
 
 use crate::CertificationVersion;
+use ic_error_types::TryFromError;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::xnet::StreamIndex;
 use serde::{Deserialize, Serialize};
@@ -410,7 +411,12 @@ impl TryFrom<RejectContext> for ic_types::messages::RejectContext {
 
     fn try_from(context: RejectContext) -> Result<Self, Self::Error> {
         Ok(Self {
-            code: (context.code as u64).try_into()?,
+            code: (context.code as u64).try_into().map_err(|err| match err {
+                TryFromError::ValueOutOfRange(code) => ProxyDecodeError::ValueOutOfRange {
+                    typ: "RejectContext",
+                    err: code.to_string(),
+                },
+            })?,
             message: context.message,
         })
     }
