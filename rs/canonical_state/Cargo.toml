@@ -4,6 +4,7 @@ version = "0.8.0"
 edition = "2018"
 
 [dependencies]
+ic-error-types = { path = "../types/error_types" }
 ic-base-types = { path = "../types/base_types" }
 ic-certification-version = { path = "./certification_version" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }

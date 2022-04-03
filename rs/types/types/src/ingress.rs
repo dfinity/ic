@@ -2,7 +2,7 @@
 
 use crate::artifact::IngressMessageId;
 use crate::{CanisterId, CountBytes, PrincipalId, Time, UserId};
-use ic_error_types::{ErrorCode, UserError};
+use ic_error_types::{ErrorCode, TryFromError, UserError};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::ingress::v1 as pb_ingress,
@@ -325,7 +325,17 @@ impl TryFrom<pb_ingress::IngressStatus> for IngressStatus {
                         f.user_id,
                         "IngressStatus::Failed::user_id",
                     )?)?,
-                    error: UserError::new(ErrorCode::try_from(f.err_code)?, f.err_description),
+                    error: UserError::new(
+                        ErrorCode::try_from(f.err_code).map_err(|err| match err {
+                            TryFromError::ValueOutOfRange(code) => {
+                                ProxyDecodeError::ValueOutOfRange {
+                                    typ: "ErrorCode",
+                                    err: code.to_string(),
+                                }
+                            }
+                        })?,
+                        f.err_description,
+                    ),
                 },
                 Status::Processing(p) => IngressStatus::Processing {
                     receiver: try_from_option_field(
