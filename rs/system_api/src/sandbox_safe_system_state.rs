@@ -137,9 +137,9 @@ impl SystemStateChanges {
         }
 
         // Push outgoing messages.
-        for msg in &self.requests {
+        for msg in self.requests {
             system_state
-                .push_output_request(msg.clone())
+                .push_output_request(msg)
                 .expect("Unable to send new request");
         }
 
