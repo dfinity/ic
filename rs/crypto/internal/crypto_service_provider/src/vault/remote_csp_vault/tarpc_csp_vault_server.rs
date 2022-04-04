@@ -28,8 +28,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 };
 use ic_crypto_internal_types::NodeIndex;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_logger::new_logger;
-use ic_logger::replica_logger::no_op_logger;
+use ic_logger::{new_logger, ReplicaLogger};
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
     IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
@@ -52,6 +51,8 @@ use tokio_util::codec::length_delimited::LengthDelimitedCodec;
 pub struct TarpcCspVaultServerImpl {
     local_csp_vault: Arc<LocalCspVault<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore>>,
     listener: UnixListener,
+    #[allow(unused)]
+    logger: ReplicaLogger,
 }
 
 #[derive(Clone)]
@@ -353,9 +354,7 @@ impl TarpcCspVault for TarpcCspVaultServerWorker {
 }
 
 impl TarpcCspVaultServerImpl {
-    pub fn new(sks_dir: &Path, listener: UnixListener) -> Self {
-        // TODO(CRP-1254: add a real logger.
-        let logger = no_op_logger();
+    pub fn new(sks_dir: &Path, listener: UnixListener, logger: ReplicaLogger) -> Self {
         let node_secret_key_store =
             ProtoSecretKeyStore::open(sks_dir, SKS_DATA_FILENAME, Some(new_logger!(&logger)));
         let canister_secret_key_store = ProtoSecretKeyStore::open(
@@ -372,6 +371,7 @@ impl TarpcCspVaultServerImpl {
         Self {
             local_csp_vault: local_csp_server,
             listener,
+            logger,
         }
     }
 

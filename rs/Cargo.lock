@@ -4230,6 +4230,7 @@ dependencies = [
  "ic-crypto-internal-csp",
  "ic-crypto-internal-test-vectors",
  "ic-crypto-internal-types",
+ "ic-logger",
  "ic-types 0.8.0",
  "ic-types-test-utils",
  "mockall 0.7.2",

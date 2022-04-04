@@ -17,6 +17,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
+use ic_logger::ReplicaLogger;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
     IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
@@ -200,7 +201,7 @@ pub trait TarpcCspVault {
     ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError>;
 }
 
-pub async fn run_csp_vault_server(sks_dir: &Path, listener: UnixListener) {
-    let server = tarpc_csp_vault_server::TarpcCspVaultServerImpl::new(sks_dir, listener);
+pub async fn run_csp_vault_server(sks_dir: &Path, listener: UnixListener, logger: ReplicaLogger) {
+    let server = tarpc_csp_vault_server::TarpcCspVaultServerImpl::new(sks_dir, listener, logger);
     server.run().await
 }
