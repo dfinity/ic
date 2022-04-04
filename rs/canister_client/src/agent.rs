@@ -413,6 +413,12 @@ impl Agent {
                     "replied" => {
                         return Ok(request_status.reply);
                     }
+                    "done" => {
+                        return Err(
+                            "The call has completed but the reply/reject data has been pruned."
+                                .to_string(),
+                        );
+                    }
                     "unknown" | "received" | "processing" => {}
                     _ => {
                         return Err(format!(
