@@ -79,6 +79,7 @@ replicated_state/src/page_map.rs:use std::fs::{File, OpenOptions};
 replicated_state/src/page_map/checkpoint.rs:use std::fs::{File, OpenOptions};
 replicated_state/src/page_map/tests.rs:use std::fs::OpenOptions;
 rust_canisters/canister_test/src/canister.rs:use std::{convert::AsRef, fs::File, io::Read, path::Path};
+sns/cli/src/main.rs:use std::fs::File;
 state_layout/src/basic_cpmgr.rs:    fs, io,
 state_layout/src/basic_cpmgr.rs:use std::{
 state_layout/src/state_layout.rs:use std::fs::OpenOptions;
