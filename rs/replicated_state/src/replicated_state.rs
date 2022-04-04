@@ -424,8 +424,15 @@ impl ReplicatedState {
             .insert(canister_state.canister_id(), canister_state);
     }
 
+    /// Replaces the content of `self.canister_states` with the provided `canisters`.
+    ///
+    /// Panics if `self.canister_states` was not empty. The intended use is to
+    /// call `put_canister_states()` after `take_canister_states()`, with no
+    /// other canister-related calls in-between, in order to prevent concurrent
+    /// mutations from replacing each other.
     pub fn put_canister_states(&mut self, canisters: BTreeMap<CanisterId, CanisterState>) {
-        self.canister_states.extend(canisters.into_iter());
+        assert!(self.canister_states.is_empty());
+        self.canister_states = canisters;
     }
 
     /// Returns an iterator over canister states, ordered by canister ID.
