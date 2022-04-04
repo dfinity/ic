@@ -24,7 +24,7 @@ use crate::{
 };
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use serde::{Deserialize, Serialize};
-use std::{convert::TryFrom, path::PathBuf};
+use std::{collections::HashSet, convert::TryFrom, path::PathBuf};
 
 /// The config struct for the replica.  Just consists of `Config`s for
 /// the components.
@@ -172,6 +172,25 @@ impl Config {
 
 impl ConfigValidate for ConfigOptional {
     fn validate(self) -> Result<Self, String> {
+        let mut same_uds_paths = false;
+        if let Some(adapters_config) = &self.adapters_config {
+            let mut uds_paths = HashSet::new();
+            if let Some(uds_path) = &adapters_config.bitcoin_mainnet_uds_path {
+                same_uds_paths |= !uds_paths.insert(uds_path.clone());
+            }
+            if let Some(uds_path) = &adapters_config.bitcoin_testnet_uds_path {
+                same_uds_paths |= !uds_paths.insert(uds_path.clone());
+            }
+            if let Some(uds_path) = &adapters_config.canister_http_uds_path {
+                same_uds_paths |= !uds_paths.insert(uds_path.clone());
+            }
+            if same_uds_paths {
+                return Err(
+                    "Inside Config::adapters_config at least two UDS paths are the same."
+                        .to_string(),
+                );
+            }
+        }
         Ok(self)
     }
 }

@@ -48,7 +48,8 @@ impl GetPayloadError {
 pub struct BitcoinPayloadBuilder {
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     metrics: Arc<BitcoinPayloadBuilderMetrics>,
-    bitcoin_adapter_client: Arc<dyn BitcoinAdapterClient>,
+    _bitcoin_mainnet_adapter_client: Arc<dyn BitcoinAdapterClient>,
+    bitcoin_testnet_adapter_client: Arc<dyn BitcoinAdapterClient>,
     log: ReplicaLogger,
 }
 
@@ -56,13 +57,15 @@ impl BitcoinPayloadBuilder {
     pub fn new(
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         metrics_registry: &MetricsRegistry,
-        bitcoin_adapter_client: Arc<dyn BitcoinAdapterClient>,
+        bitcoin_mainnet_adapter_client: Arc<dyn BitcoinAdapterClient>,
+        bitcoin_testnet_adapter_client: Arc<dyn BitcoinAdapterClient>,
         log: ReplicaLogger,
     ) -> Self {
         Self {
             state_manager,
             metrics: Arc::new(BitcoinPayloadBuilderMetrics::new(metrics_registry)),
-            bitcoin_adapter_client,
+            _bitcoin_mainnet_adapter_client: bitcoin_mainnet_adapter_client,
+            bitcoin_testnet_adapter_client,
             log,
         }
     }
@@ -108,7 +111,7 @@ impl BitcoinPayloadBuilder {
 
                     let timer = Timer::start();
                     let result = self
-                        .bitcoin_adapter_client
+                        .bitcoin_testnet_adapter_client
                         .send_request(request.request.clone(), Options::default());
                     match result {
                         Ok(response_wrapper) => {

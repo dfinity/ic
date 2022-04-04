@@ -217,15 +217,21 @@ pub fn construct_ic_stack(
     );
     let xnet_payload_builder = Arc::new(xnet_payload_builder);
 
-    let btc_client = setup_bitcoin_client(
+    let btc_testnet_client = setup_bitcoin_client(
         replica_logger.clone(),
         rt_handle.clone(),
-        config.adapters_config.bitcoin_uds_path,
+        config.adapters_config.bitcoin_testnet_uds_path,
+    );
+    let btc_mainnet_client = setup_bitcoin_client(
+        replica_logger.clone(),
+        rt_handle.clone(),
+        config.adapters_config.bitcoin_mainnet_uds_path,
     );
     let self_validating_payload_builder = BitcoinPayloadBuilder::new(
         state_manager.clone(),
         &metrics_registry,
-        btc_client,
+        btc_mainnet_client,
+        btc_testnet_client,
         replica_logger.clone(),
     );
     let self_validating_payload_builder = Arc::new(self_validating_payload_builder);
