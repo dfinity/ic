@@ -16,6 +16,13 @@ In addition to a standard installation of Ubuntu 20.4 at least the following pac
 The Boundary Node needs two IC binaries: `boundary-node-control-plane` and `boundary-node-prober`.
 These can be build as described link:../../README.adoc#building-the-code[here].
 
+This will get all the artifacts in <root>/artifacts/release directory. Run the following command to copy the required binaries in the correct place:
+[source, shell]
+----
+gunzip -c -d ../../artifacts/release/boundary-node-control-plane.gz > rootfs/opt/ic/bin/boundary-node-control-plane
+gunzip -c -d ../../artifacts/release/boundary-node-prober.gz > rootfs/opt/ic/bin/boundary-node-prober
+----
+
 == Quick build and test instructions (Linux)
 To build a full system image, run:
 
