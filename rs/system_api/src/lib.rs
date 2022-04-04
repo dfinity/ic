@@ -2677,6 +2677,8 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn ic0_debug_print(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()> {
+        const MAX_DEBUG_MESSAGE_SIZE: u32 = 32 * 1024;
+        let size = size.min(MAX_DEBUG_MESSAGE_SIZE);
         let msg = match valid_subslice("ic0.debug_print", src, size, heap) {
             Ok(bytes) => String::from_utf8_lossy(bytes).to_string(),
             Err(_) => {
