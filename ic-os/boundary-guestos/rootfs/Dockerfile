@@ -47,8 +47,8 @@ RUN cd /tmp/ && \
 
 # Download icx-proxy.deb 
 RUN cd /tmp/ && \
-   curl -L -O https://github.com/dfinity/icx-proxy/releases/download/39bc74c/icx-proxy.deb && \
-   echo "56c819a65c05df78748225b92df69e6655e9b45f  ./icx-proxy.deb" > icx-proxy.sha256 && \
+   curl -L -O https://github.com/dfinity/icx-proxy/releases/download/f289318/icx-proxy.deb && \
+   echo "9b434ce9ec1cddb2caf5e6550d5b8bcebd225614809280233334187e088017a9  ./icx-proxy.deb" > icx-proxy.sha256 && \
    shasum -c icx-proxy.sha256
 
 # Download and check service worker
