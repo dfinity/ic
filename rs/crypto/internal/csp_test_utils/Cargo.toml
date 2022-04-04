@@ -8,6 +8,7 @@ edition = "2018"
 ic-crypto-internal-csp = { path = "../crypto_service_provider" }
 ic-crypto-internal-test-vectors = { path = "../test_vectors" }
 ic-crypto-internal-types = { path = "../crypto_lib/types" }
+ic-logger = { path = "../../../monitoring/logger" }
 ic-types = { path = "../../../types/types" } # Would like to get rid of this but as long as the CSP depends on ic-types we can't really.
 ic-types-test-utils = { path = "../../../types/types_test_utils" }
 serde = { version = "1.0.99", features = ["derive"] }

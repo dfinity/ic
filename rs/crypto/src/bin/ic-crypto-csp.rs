@@ -1,5 +1,6 @@
 use clap::{App, Arg};
 use ic_config::{Config, ConfigSource};
+use ic_logger::{info, new_replica_logger_from_config};
 use std::os::unix::io::FromRawFd;
 use std::path::PathBuf;
 
@@ -30,19 +31,25 @@ async fn main() {
 
     let replica_config_file_flag = flags.value_of("replica-config-file").unwrap();
     let ic_config = get_ic_config(PathBuf::from(replica_config_file_flag));
+
     let sks_dir = ic_config.crypto.crypto_root.as_path();
 
     ensure_single_named_systemd_socket(IC_CRYPTO_CSP_SOCKET_NAME);
     let systemd_socket_listener = listener_from_first_systemd_socket();
 
-    println!(
-        "Starting CspVault server listening at systemd socket '{:?}', with SKS-data in '{}' ...",
-        systemd_socket_listener
-            .local_addr()
-            .expect("failed to get local socket address"),
-        sks_dir.display()
+    // The `AsyncGuard` must be kept in scope for asynchronously logged messages to appear in the logs.
+    let (logger, _async_log_guard) = new_replica_logger_from_config(&ic_config.csp_vault_logger);
+
+    info!(logger;
+        crypto.method_name => "main",
+        crypto.description => format!(
+            "Starting CspVault server listening at systemd socket '{:?}', with SKS-data in '{}' ...",
+            systemd_socket_listener.local_addr().expect("failed to get local socket address"),
+            sks_dir.display()
+        )
     );
-    ic_crypto_internal_csp::run_csp_vault_server(sks_dir, systemd_socket_listener).await;
+
+    ic_crypto_internal_csp::run_csp_vault_server(sks_dir, systemd_socket_listener, logger).await;
 }
 
 fn get_ic_config(replica_config_file: PathBuf) -> Config {

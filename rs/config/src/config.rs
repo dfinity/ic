@@ -43,6 +43,9 @@ pub struct Config {
     // If `orchestrator_logger` is not specified in the configuration file, it
     // defaults to the value specified for `logger`.
     pub orchestrator_logger: LoggerConfig,
+    // If `csp_vault_logger` is not specified in the configuration file, it
+    // defaults to the value specified for `logger`.
+    pub csp_vault_logger: LoggerConfig,
     pub message_routing: MessageRoutingConfig,
     pub malicious_behaviour: MaliciousBehaviour,
     pub firewall: FirewallConfig,
@@ -66,6 +69,7 @@ pub struct ConfigOptional {
     pub crypto: Option<CryptoConfig>,
     pub logger: Option<LoggerConfig>,
     pub orchestrator_logger: Option<LoggerConfig>,
+    pub csp_vault_logger: Option<LoggerConfig>,
     pub message_routing: Option<MessageRoutingConfig>,
     pub malicious_behaviour: Option<MaliciousBehaviour>,
     pub firewall: Option<FirewallConfig>,
@@ -93,7 +97,8 @@ impl Config {
             consensus: ConsensusConfig::default(),
             crypto: CryptoConfig::new(parent_dir.join("crypto")),
             logger: logger.clone(),
-            orchestrator_logger: logger,
+            orchestrator_logger: logger.clone(),
+            csp_vault_logger: logger,
             message_routing: MessageRoutingConfig::default(),
             malicious_behaviour: MaliciousBehaviour::default(),
             firewall: FirewallConfig::default(),
@@ -128,6 +133,7 @@ impl Config {
         let cfg = source.load::<ConfigOptional>()?;
         let logger = cfg.logger.unwrap_or(default.logger);
         let orchestrator_logger = cfg.orchestrator_logger.unwrap_or_else(|| logger.clone());
+        let csp_vault_logger = cfg.csp_vault_logger.unwrap_or_else(|| logger.clone());
 
         Ok(Self {
             registry_client: cfg.registry_client.unwrap_or(default.registry_client),
@@ -146,6 +152,7 @@ impl Config {
             crypto: cfg.crypto.unwrap_or(default.crypto),
             logger,
             orchestrator_logger,
+            csp_vault_logger,
             message_routing: cfg.message_routing.unwrap_or(default.message_routing),
             malicious_behaviour: cfg
                 .malicious_behaviour

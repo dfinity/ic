@@ -1,4 +1,5 @@
 use crate::files::mk_temp_dir_with_permissions;
+use ic_logger::replica_logger::no_op_logger;
 use std::path::PathBuf;
 use tokio::net::UnixListener;
 
@@ -35,6 +36,7 @@ pub fn start_new_remote_csp_vault_server_for_test() -> PathBuf {
     let server = ic_crypto_internal_csp::vault::remote_csp_vault::TarpcCspVaultServerImpl::new(
         sks_dir.path(),
         listener,
+        no_op_logger(),
     );
     tokio::spawn(async move {
         let _move_temp_dir_here_to_ensure_it_is_not_cleaned_up = sks_dir;
