@@ -42,7 +42,8 @@ fn mock_state_manager(
 }
 
 fn bitcoin_payload_builder_test(
-    bitcoin_adapter_client: MockBitcoinAdapterClient,
+    bitcoin_mainnet_adapter_client: MockBitcoinAdapterClient,
+    bitcoin_testnet_adapter_client: MockBitcoinAdapterClient,
     state_manager: MockStateManager,
     run_test: impl FnOnce(ValidationContext, BitcoinPayloadBuilder),
 ) {
@@ -57,7 +58,8 @@ fn bitcoin_payload_builder_test(
         let bitcoin_payload_builder = BitcoinPayloadBuilder::new(
             Arc::new(state_manager),
             &MetricsRegistry::new(),
-            Arc::new(bitcoin_adapter_client),
+            Arc::new(bitcoin_mainnet_adapter_client),
+            Arc::new(bitcoin_testnet_adapter_client),
             log,
         );
 
@@ -69,8 +71,9 @@ fn bitcoin_payload_builder_test(
 fn can_successfully_create_bitcoin_payload_if_feature_enabled() {
     // Create a mock bitcoin adapter client that returns a dummy response
     // for each request.
-    let mut bitcoin_adapter_client = MockBitcoinAdapterClient::new();
-    bitcoin_adapter_client
+    let bitcoin_mainnet_adapter_client = MockBitcoinAdapterClient::new();
+    let mut bitcoin_testnet_adapter_client = MockBitcoinAdapterClient::new();
+    bitcoin_testnet_adapter_client
         .expect_send_request()
         .times(1)
         .returning(|_, _| {
@@ -95,7 +98,8 @@ fn can_successfully_create_bitcoin_payload_if_feature_enabled() {
     );
 
     bitcoin_payload_builder_test(
-        bitcoin_adapter_client,
+        bitcoin_mainnet_adapter_client,
+        bitcoin_testnet_adapter_client,
         state_manager,
         |validation_context, bitcoin_payload_builder| {
             let expected_payload = FakeSelfValidatingPayloadBuilder::new()
@@ -132,10 +136,12 @@ fn bitcoin_payload_builder_does_not_send_requests_if_feature_is_not_enabled() {
 
     for state_manager in state_managers.into_iter() {
         // No calls to `send_request` are expected.
-        let bitcoin_adapter_client = MockBitcoinAdapterClient::new();
+        let bitcoin_mainnet_adapter_client = MockBitcoinAdapterClient::new();
+        let bitcoin_testnet_adapter_client = MockBitcoinAdapterClient::new();
 
         bitcoin_payload_builder_test(
-            bitcoin_adapter_client,
+            bitcoin_mainnet_adapter_client,
+            bitcoin_testnet_adapter_client,
             state_manager,
             |validation_context, bitcoin_payload_builder| {
                 let expected_payload = FakeSelfValidatingPayloadBuilder::new().build();
@@ -155,8 +161,9 @@ fn bitcoin_payload_builder_does_not_send_requests_if_feature_is_not_enabled() {
 fn includes_only_successful_responses_in_the_payload() {
     // Create a mock bitcoin adapter client that returns a successful response
     // for the first request and an error for the second.
-    let mut bitcoin_adapter_client = MockBitcoinAdapterClient::new();
-    bitcoin_adapter_client
+    let bitcoin_mainnet_adapter_client = MockBitcoinAdapterClient::new();
+    let mut bitcoin_testnet_adapter_client = MockBitcoinAdapterClient::new();
+    bitcoin_testnet_adapter_client
         .expect_send_request()
         .times(1)
         .returning(|_, _| {
@@ -167,7 +174,7 @@ fn includes_only_successful_responses_in_the_payload() {
                 },
             ))
         });
-    bitcoin_adapter_client
+    bitcoin_testnet_adapter_client
         .expect_send_request()
         .times(1)
         .returning(|_, _| Err(RpcError::ConnectionBroken));
@@ -189,7 +196,8 @@ fn includes_only_successful_responses_in_the_payload() {
     );
 
     bitcoin_payload_builder_test(
-        bitcoin_adapter_client,
+        bitcoin_mainnet_adapter_client,
+        bitcoin_testnet_adapter_client,
         state_manager,
         |validation_context, bitcoin_payload_builder| {
             let expected_payload = FakeSelfValidatingPayloadBuilder::new()
@@ -217,8 +225,9 @@ fn includes_only_successful_responses_in_the_payload() {
 fn includes_only_responses_for_callback_ids_not_seen_in_past_payloads() {
     // Create a mock bitcoin adapter client that returns a dummy response
     // for each request.
-    let mut bitcoin_adapter_client = MockBitcoinAdapterClient::new();
-    bitcoin_adapter_client
+    let bitcoin_mainnet_adapter_client = MockBitcoinAdapterClient::new();
+    let mut bitcoin_testnet_adapter_client = MockBitcoinAdapterClient::new();
+    bitcoin_testnet_adapter_client
         .expect_send_request()
         .times(1)
         .returning(|_, _| {
@@ -247,7 +256,8 @@ fn includes_only_responses_for_callback_ids_not_seen_in_past_payloads() {
     );
 
     bitcoin_payload_builder_test(
-        bitcoin_adapter_client,
+        bitcoin_mainnet_adapter_client,
+        bitcoin_testnet_adapter_client,
         state_manager,
         |validation_context, bitcoin_payload_builder| {
             let past_payload = FakeSelfValidatingPayloadBuilder::new()
@@ -352,8 +362,9 @@ fn bitcoin_payload_builder_respects_byte_limit() {
     for (i, byte_limit) in byte_limits.into_iter().enumerate() {
         // Create a mock bitcoin adapter client that returns a dummy response
         // for each request.
-        let mut bitcoin_adapter_client = MockBitcoinAdapterClient::new();
-        bitcoin_adapter_client
+        let bitcoin_mainnet_adapter_client = MockBitcoinAdapterClient::new();
+        let mut bitcoin_testnet_adapter_client = MockBitcoinAdapterClient::new();
+        bitcoin_testnet_adapter_client
             .expect_send_request()
             .returning(move |_, _| {
                 Ok(BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
@@ -392,7 +403,8 @@ fn bitcoin_payload_builder_respects_byte_limit() {
         );
 
         bitcoin_payload_builder_test(
-            bitcoin_adapter_client,
+            bitcoin_mainnet_adapter_client,
+            bitcoin_testnet_adapter_client,
             state_manager,
             |validation_context, bitcoin_payload_builder| {
                 let payload = bitcoin_payload_builder.get_self_validating_payload(
