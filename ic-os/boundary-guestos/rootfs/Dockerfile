@@ -186,7 +186,15 @@ RUN addgroup node_exporter && \
     adduser --system --disabled-password --shell /usr/sbin/nologin -c "Node Exporter" node_exporter && \
     adduser node_exporter node_exporter
 
-# Install journalbeat/
+# The "socks" account for socks proxy
+# Also set correct permissions for dante and stunnel.
+# Stunnel4 cannot be started as a systemctl service so starting it as `stunnel4 start`
+RUN addgroup socks && \
+    adduser --system --disabled-password --shell /usr/sbin/nologin -c "Socks" socks && \
+    adduser socks socks && chmod +s /usr/sbin/danted && \
+    chmod 0755 /etc/init.d/stunnel4
+
+# Install journalbeat
 COPY --from=download /tmp/journalbeat-oss-7.5.1-linux-x86_64.tar.gz /tmp/journalbeat-oss-7.5.1-linux-x86_64.tar.gz
 RUN cd /tmp/ && \
     mkdir -p /etc/journalbeat \
