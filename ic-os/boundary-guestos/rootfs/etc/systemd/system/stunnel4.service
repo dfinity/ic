@@ -1,0 +1,21 @@
+[Unit]
+SourcePath=/etc/init.d/stunnel4
+Description=LSB: Start or stop stunnel 4.x (TLS tunnel for network daemons)
+Before=multi-user.target
+Before=graphical.target
+After=remote-fs.target
+After=bootstrap-ic-node.service
+Wants=network-online.target
+After=network-online.target
+Wants=setup-nginx.service
+After=setup-nginx.service
+
+[Service]
+Type=forking
+ExecStartPre=/opt/ic/bin/setup-stunnel.sh
+ExecStart=/etc/init.d/stunnel4 start
+ExecStop=/etc/init.d/stunnel4 stop
+ExecReload=/etc/init.d/stunnel4 reload
+
+[Install]
+WantedBy=multi-user.target

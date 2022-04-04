@@ -36,9 +36,13 @@ JS script that is delivered to the browser to transform plain HTTP requests into
 - Performs dynamic probes and export the results to Prometheus
 
 == Socks proxy
-- TODO BOUN-179
-
-== Dante socks-proxy
-
-- TODO BOUN-179
+- A SOCKS proxy will be running on port 1443 and 1080 on the boundary nodes,
+ only accessible from IPv6 netblock addresses.
+- The 1443 listener is stunnel4 configured as a SSL->TCP proxy to the dante service running on localhost:9898.
+- The 1080 listener is configured for TCP proxy to the dante service,
+- The dante service is configured to allow outbound IPv4 TCP connections to any TCP port.
+- Replica nodes can use the Boundary node SOCKS proxy for IPv4 connections
+- Replica -> IPv6:1443 -> Stunnel4 -> localhost:9898 -> Dante -> IPv4 -> Internet (TLS)
+- Replica -> IPv6:1080 -> Dante -> IPv4 -> Internet (non TLS)
+- Firewall rules are set such that connections are allowed from IPv6 netblock addresses on IPv6 ports 1443 and 1080.
 
