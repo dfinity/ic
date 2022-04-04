@@ -33,7 +33,7 @@ use tokio::{
         mpsc::{channel, Receiver, Sender},
         OwnedSemaphorePermit, Semaphore,
     },
-    time::sleep,
+    time::{sleep, sleep_until},
 };
 use url::Url;
 
@@ -160,19 +160,16 @@ impl Engine {
             time_origin,
         ));
 
-        // Distribute the RPS within a second. If we just do
-        // .refill_interval(1).refill_amount(rps) we risk of having spikes of requests
-        // at every second.
-        let rate_limiter = RateLimiter::builder()
-            .initial(rps)
-            .interval(Duration::from_secs(1))
-            .refill(rps)
-            .build();
-        // Generate requests as allowed by the rate limiter
-        sleep(START_OFFSET).await;
+        // Time between each two consecutive requests
+        let inter_arrival_time = 1. / rps as f64;
         let mut tx_handles = vec![];
         for n in 0..requests {
-            rate_limiter.acquire_one().await;
+            // Calculate the time at which the request should be running from start time
+            // and inter arrival time.
+            let target_instant =
+                time_origin + START_OFFSET + Duration::from_secs_f64(inter_arrival_time * n as f64);
+            sleep_until(tokio::time::Instant::from_std(target_instant)).await;
+            println!("Running {:?}", (Instant::now() - time_origin).as_secs_f64());
             let tx = tx.clone();
             let plan = plan.clone();
             let agent = self.agents[n % self.agents.len()].clone();
