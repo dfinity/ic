@@ -3138,6 +3138,8 @@ fn test_allocating_memory_reduces_subnet_available_memory() {
 fn execute_canister_http_request() {
     with_test_replica_logger(|log| {
         let (mut state, exec_env) = ExecutionEnvironmentBuilder::new().with_log(log).build();
+        // Enable http requests feature.
+        state.metadata.own_subnet_features.http_requests = true;
 
         // Create payload of the request.
         let url = "https::/".to_string();
@@ -3197,6 +3199,61 @@ fn execute_canister_http_request() {
         );
         assert_eq!(http_request_context.http_method, HttpMethodType::GET);
         assert_eq!(http_request_context.request, request);
+    });
+}
+
+#[test]
+fn execute_canister_http_request_disabled() {
+    with_test_replica_logger(|log| {
+        let (mut state, exec_env) = ExecutionEnvironmentBuilder::new().with_log(log).build();
+        // Enable http requests feature.
+        state.metadata.own_subnet_features.http_requests = false;
+
+        // Create payload of the request.
+        let request_payload = CanisterHttpRequestArgs {
+            url: "https::/".to_string(),
+            body: None,
+            http_method: HttpMethodType::GET,
+            transform_method_name: Some("transform".to_string()),
+        };
+
+        // Create request to HTTP_REQUEST method.
+        let sender = canister_test_id(257);
+        let request = RequestBuilder::new()
+            .sender(sender)
+            .receiver(IC_00)
+            .method_name(Method::HttpRequest)
+            .method_payload(Encode!(&request_payload).unwrap())
+            .build();
+
+        // Push the request in the subnet queue.
+        state
+            .subnet_queues_mut()
+            .push_input(
+                QUEUE_INDEX_NONE,
+                RequestOrResponse::Request(request),
+                InputQueueType::LocalSubnet,
+            )
+            .unwrap();
+
+        // Execute IC00::HTTP_REQUEST.
+        let (new_state, _) = exec_env.execute_subnet_message(
+            state.subnet_queues_mut().pop_input().unwrap(),
+            state,
+            MAX_NUM_INSTRUCTIONS,
+            &mut mock_random_number_generator(),
+            &None,
+            &ProvisionalWhitelist::Set(BTreeSet::new()),
+            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+            MAX_NUMBER_OF_CANISTERS,
+        );
+
+        // Check that the SubnetCallContextManager does not contains any request.
+        let canister_http_request_contexts = new_state
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts;
+        assert_eq!(canister_http_request_contexts.len(), 0);
     });
 }
 

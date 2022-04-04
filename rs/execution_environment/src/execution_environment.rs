@@ -453,39 +453,48 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                     instructions_limit,
                 ),
             },
-            Ok(Ic00Method::HttpRequest) => match &msg {
-                RequestOrIngress::Request(request) => {
-                    match CanisterHttpRequestArgs::decode(payload) {
-                        Err(err) => (
-                            Some((Err(candid_error_to_user_error(err)), msg.take_cycles())),
-                            instructions_limit,
-                        ),
-                        Ok(args) => {
-                            state
-                                .metadata
-                                .subnet_call_context_manager
-                                .push_http_request(CanisterHttpRequestContext {
-                                    request: request.clone(),
-                                    url: args.url,
-                                    body: args.body,
-                                    http_method: args.http_method,
-                                    transform_method_name: args.transform_method_name,
-                                    time: state.time(),
-                                });
-                            (None, instructions_limit)
+            Ok(Ic00Method::HttpRequest) => match state.metadata.own_subnet_features.http_requests {
+                true => match &msg {
+                    RequestOrIngress::Request(request) => {
+                        match CanisterHttpRequestArgs::decode(payload) {
+                            Err(err) => (
+                                Some((Err(candid_error_to_user_error(err)), msg.take_cycles())),
+                                instructions_limit,
+                            ),
+                            Ok(args) => {
+                                state
+                                    .metadata
+                                    .subnet_call_context_manager
+                                    .push_http_request(CanisterHttpRequestContext {
+                                        request: request.clone(),
+                                        url: args.url,
+                                        body: args.body,
+                                        http_method: args.http_method,
+                                        transform_method_name: args.transform_method_name,
+                                        time: state.time(),
+                                    });
+                                (None, instructions_limit)
+                            }
                         }
                     }
-                }
-                RequestOrIngress::Ingress(_) => {
-                    error!(self.log, "[EXC-BUG] Ingress messages to HttpRequest should've been filtered earlier.");
-                    let error_string = format!(
-                        "HttpRequest is called by user {}. It can only be called by a canister.",
-                        msg.sender()
-                    );
-                    let user_error =
-                        UserError::new(ErrorCode::CanisterContractViolation, error_string);
-                    let res = Some((Err(user_error), msg.take_cycles()));
-                    (res, instructions_limit)
+                    RequestOrIngress::Ingress(_) => {
+                        error!(self.log, "[EXC-BUG] Ingress messages to HttpRequest should've been filtered earlier.");
+                        let error_string = format!(
+                                "HttpRequest is called by user {}. It can only be called by a canister.",
+                                msg.sender()
+                            );
+                        let user_error =
+                            UserError::new(ErrorCode::CanisterContractViolation, error_string);
+                        let res = Some((Err(user_error), msg.take_cycles()));
+                        (res, instructions_limit)
+                    }
+                },
+                false => {
+                    let err = Err(UserError::new(
+                        ErrorCode::CanisterContractViolation,
+                        "This API is not enabled on this subnet".to_string(),
+                    ));
+                    (Some((err, msg.take_cycles())), instructions_limit)
                 }
             },
             Ok(Ic00Method::SetupInitialDKG) => match &msg {
