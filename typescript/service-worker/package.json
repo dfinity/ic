@@ -1,7 +1,7 @@
 {
   "name": "@dfinity/service-worker",
   "description": "Service worker to check certification when loading assets from the Internet Computer.",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "license": "Apache-2.0",
   "files": [
     "dist-dev",
@@ -11,7 +11,8 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/dfinity/ic.git"
+    "url": "https://github.com/dfinity/ic.git",
+    "directory": "typescript/service-worker"
   },
   "dependencies": {
     "@dfinity/agent": "^0.10.4",

@@ -47,5 +47,5 @@ release-boundary-node-service-worker:
         fi
       
         printf '%s\n' "//registry.npmjs.org/:_authToken=\${SW_NODE_AUTH_TOKEN}" "registry=https://registry.npmjs.org/" "always-auth=true" >> .npmrc
-        npm publish "artifacts/dfinity-service-worker-$PACKAGE_JSON_VERSION.tgz" --access public
+        npm publish "file:artifacts/dfinity-service-worker-$PACKAGE_JSON_VERSION.tgz" --access public
       )
