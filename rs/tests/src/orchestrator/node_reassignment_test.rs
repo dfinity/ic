@@ -96,6 +96,8 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     info!(ctx.logger, "Message on app node verified!");
 
     // Unassign 2 nns nodes
+    block_on(node3.assert_ready(ctx));
+    block_on(node4.assert_ready(ctx));
     let node_ids: Vec<_> = vec![node1.node_id, node2.node_id];
     block_on(remove_nodes_via_endpoint(node3.url.clone(), &node_ids)).unwrap();
     info!(
@@ -126,8 +128,6 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         "App message on former NNS nodes could be retrieved!"
     );
 
-    block_on(node3.assert_ready(ctx));
-    block_on(node4.assert_ready(ctx));
     assert!(block_on(can_read_msg(log, &node3.url, nns_can_id, nns_msg)));
     assert!(block_on(can_read_msg(log, &node4.url, nns_can_id, nns_msg)));
     info!(
