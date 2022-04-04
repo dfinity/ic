@@ -1,12 +1,13 @@
 //! Data types used for encoding/decoding the Candid payloads of ic:00.
 use candid::{CandidType, Decode, Deserialize, Encode};
 use ic_base_types::{
-    CanisterId, CanisterInstallMode, CanisterStatusType, HttpMethodType, NodeId, NumBytes,
-    PrincipalId, RegistryVersion, SubnetId,
+    CanisterId, CanisterInstallMode, CanisterStatusType, NodeId, NumBytes, PrincipalId,
+    RegistryVersion, SubnetId,
 };
 use ic_error_types::{ErrorCode, UserError};
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
+use ic_protobuf::state::system_metadata::v1 as pb_metadata;
 use num_traits::cast::ToPrimitive;
 use serde::Serialize;
 use std::{collections::BTreeSet, convert::TryFrom};
@@ -768,3 +769,26 @@ impl ComputeInitialEcdsaDealingsArgs {
 }
 
 impl Payload<'_> for ComputeInitialEcdsaDealingsArgs {}
+
+#[derive(Clone, Debug, PartialEq, CandidType, Eq, Hash, Serialize, Deserialize)]
+pub enum HttpMethodType {
+    GET,
+}
+
+impl From<&HttpMethodType> for pb_metadata::HttpMethodType {
+    fn from(http_method_type: &HttpMethodType) -> Self {
+        match http_method_type {
+            HttpMethodType::GET => pb_metadata::HttpMethodType::Get,
+        }
+    }
+}
+
+impl From<pb_metadata::HttpMethodType> for HttpMethodType {
+    fn from(http_method_type: pb_metadata::HttpMethodType) -> Self {
+        match http_method_type {
+            pb_metadata::HttpMethodType::Unspecified | pb_metadata::HttpMethodType::Get => {
+                HttpMethodType::GET
+            }
+        }
+    }
+}

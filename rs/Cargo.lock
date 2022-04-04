@@ -6181,6 +6181,7 @@ dependencies = [
  "ic-btc-types-internal",
  "ic-config",
  "ic-constants",
+ "ic-ic00-types",
  "ic-interfaces",
  "ic-logger",
  "ic-protobuf",

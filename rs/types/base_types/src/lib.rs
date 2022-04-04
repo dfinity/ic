@@ -3,7 +3,6 @@
 
 use candid::CandidType;
 use ic_protobuf::proxy::ProxyDecodeError;
-use ic_protobuf::state::system_metadata::v1 as pb_metadata;
 use ic_protobuf::types::v1 as pb;
 use phantom_newtype::{AmountOf, DisplayerOf, Id};
 use serde::{Deserialize, Serialize};
@@ -181,28 +180,5 @@ impl From<PrincipalIdError> for ProxyDecodeError {
 impl From<CanisterIdError> for ProxyDecodeError {
     fn from(err: CanisterIdError) -> Self {
         Self::InvalidCanisterId(Box::new(err))
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, CandidType, Eq, Hash, Serialize, Deserialize)]
-pub enum HttpMethodType {
-    GET,
-}
-
-impl From<&HttpMethodType> for pb_metadata::HttpMethodType {
-    fn from(http_method_type: &HttpMethodType) -> Self {
-        match http_method_type {
-            HttpMethodType::GET => pb_metadata::HttpMethodType::Get,
-        }
-    }
-}
-
-impl From<pb_metadata::HttpMethodType> for HttpMethodType {
-    fn from(http_method_type: pb_metadata::HttpMethodType) -> Self {
-        match http_method_type {
-            pb_metadata::HttpMethodType::Unspecified | pb_metadata::HttpMethodType::Get => {
-                HttpMethodType::GET
-            }
-        }
     }
 }

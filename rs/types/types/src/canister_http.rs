@@ -31,7 +31,7 @@ use crate::{
     signature::*,
     Time,
 };
-use ic_base_types::HttpMethodType;
+use ic_ic00_types::HttpMethodType;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::system_metadata::v1 as pb_metadata,

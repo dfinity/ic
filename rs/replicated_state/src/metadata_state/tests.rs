@@ -1,7 +1,7 @@
 use super::*;
 use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager;
-use ic_base_types::HttpMethodType;
 use ic_constants::MAX_INGRESS_TTL;
+use ic_ic00_types::HttpMethodType;
 use ic_test_utilities::{
     mock_time,
     types::{

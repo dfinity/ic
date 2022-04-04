@@ -1,10 +1,11 @@
 use assert_matches::assert_matches;
 use candid::Encode;
-use ic_base_types::{HttpMethodType, NumSeconds};
+use ic_base_types::NumSeconds;
 use ic_config::{execution_environment, subnet_config::CyclesAccountManagerConfig};
 use ic_execution_environment::{
     ExecutionEnvironment, ExecutionEnvironmentImpl, Hypervisor, IngressHistoryWriterImpl,
 };
+use ic_ic00_types::HttpMethodType;
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_interfaces::{
     execution_environment::{
