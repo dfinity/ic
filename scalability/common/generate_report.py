@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
+import statistics
 import sys
 import traceback
 from collections import Counter
@@ -216,7 +217,10 @@ def generate_report(base, githash, timestamp):
                     try:
                         metrics = json.loads(prometheus_metrics.read())
                         try:
-                            http_request_duration.append(metrics["http_request_duration"][0])
+                            request_duration = statistics.mean(
+                                map(float, filter(lambda x: x != "NaN", metrics["http_request_duration"]))
+                            )
+                            http_request_duration.append(request_duration)
                         except Exception as err:
                             print(
                                 f"Failed to determine HTTP request duration for iteration {i} in file {path}/prometheus.json - {err}"
@@ -338,9 +342,15 @@ def generate_report(base, githash, timestamp):
             # With that, we can then also determine the label:
             workload_generator_label = list(counts.elements())[0]
 
+            # This seems to be used in the workload generator for invalid requests?
+            # Need to be careful with floating point arithmetic when comparing int to float
+            def filter_or_minus_one(x):
+                INVALID = 18446744073709552000000
+                return -1 if abs(x - INVALID) < 0.0000001 else x
+
             plots.append(
                 (
-                    [x[workload_generator_id] for x in wg_http_latency],
+                    [filter_or_minus_one(x[workload_generator_id]) for x in wg_http_latency],
                     f"median {workload_generator_label}",
                 )
             )

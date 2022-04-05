@@ -1,0 +1,16 @@
+[package]
+name = "response-payload-test"
+version = "0.1.0"
+edition = "2018"
+
+[[bin]]
+name = "response-payload-test-canister"
+path = "src/main.rs"
+
+[dependencies]
+dfn_core = { path = "../dfn_core" }
+dfn_json = { path = "../dfn_json" }
+dfn_macro = { path = "../dfn_macro" }
+serde = "1.0"
+
+

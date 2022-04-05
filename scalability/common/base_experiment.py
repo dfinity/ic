@@ -305,7 +305,7 @@ class BaseExperiment:
         ip = (
             "2001:920:401a:1708:5000:4fff:fe92:48f1"
             if FLAGS.testnet == "mercury"
-            else ansible.get_ansible_hostnames_for_subnet(FLAGS.testnet, NNS_SUBNET_INDEX)[0]
+            else ansible.get_ansible_hostnames_for_subnet(FLAGS.testnet, NNS_SUBNET_INDEX, sort=False)[0]
         )
         return f"http://[{ip}]:8080"
 

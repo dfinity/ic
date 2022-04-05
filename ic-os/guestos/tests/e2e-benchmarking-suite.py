@@ -103,6 +103,21 @@ def main(argv):
     # --------------------------------------------------
     # Turns off replicas, so only load based benchmarks from this point onward.
 
+    print("📂 Response Payload size experiment")
+    run(
+        [
+            "python3",
+            "experiments/run_response_payload_size_experiment.py",
+            "--iter_duration",
+            "10",
+            "--initial_response_size_kb",
+            "250",
+            "--max_size_increment_kb",
+            "250",
+        ]
+        + base_arguments_load_test
+    )
+
     print("📂 System baseline experiment with queries")
     run(
         [
