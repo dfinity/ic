@@ -1,3 +1,14 @@
+use crate::consensus::ecdsa::EcdsaDealing;
+use crate::crypto::canister_threshold_sig::error::{
+    ExtendedDerivationPathSerializationError, InitialIDkgDealingsValidationError,
+};
+use crate::crypto::canister_threshold_sig::idkg::{
+    IDkgDealing, IDkgMultiSignedDealing, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
+    IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType, InitialIDkgDealings,
+};
+use crate::crypto::canister_threshold_sig::ExtendedDerivationPath;
+use crate::crypto::{AlgorithmId, CombinedMultiSig, CombinedMultiSigOf};
+use crate::{node_id_into_protobuf, node_id_try_from_protobuf, Height, NodeIndex};
 use ic_base_types::{
     subnet_id_into_protobuf, subnet_id_try_from_protobuf, NodeId, PrincipalId, RegistryVersion,
 };
@@ -13,89 +24,71 @@ use ic_protobuf::registry::subnet::v1::InitialIDkgDealings as InitialIDkgDealing
 use ic_protobuf::registry::subnet::v1::VerifiedIDkgDealing as VerifiedIDkgDealingProto;
 use ic_protobuf::types::v1::NodeId as NodeIdProto;
 use ic_protobuf::types::v1::PrincipalId as PrincipalIdProto;
-use ic_types::consensus::ecdsa::EcdsaDealing;
-use ic_types::crypto::canister_threshold_sig::error::InitialIDkgDealingsValidationError;
-use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgDealing, IDkgMultiSignedDealing, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
-    IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType, InitialIDkgDealings,
-};
-use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
-use ic_types::crypto::{AlgorithmId, CombinedMultiSig, CombinedMultiSigOf};
-use ic_types::{node_id_into_protobuf, node_id_try_from_protobuf, Height, NodeIndex};
-use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 use std::iter::FromIterator;
 
-#[cfg(test)]
-mod tests;
-
 const CURRENT_INITIAL_IDKG_DEALINGS_VERSION: u32 = 0;
 
-/// Converts `InitialIDkgDealings` into the corresponding protobuf representation.
-pub fn idkg_initial_dealings_to_proto(
-    initial_dealings: InitialIDkgDealings,
-) -> InitialIDkgDealingsProto {
-    let dealings = initial_dealings
-        .dealings()
-        .iter()
-        .map(|(dealer_id, idkg_dealing)| idkg_dealing_tuple_proto(dealer_id, idkg_dealing))
-        .collect();
-    InitialIDkgDealingsProto {
-        version: CURRENT_INITIAL_IDKG_DEALINGS_VERSION,
-        params: Some(idkg_transcript_params_proto(&initial_dealings.params())),
-        dealings,
-    }
-}
-
-/// Converts `InitialIDkgDealings`-proto into the corresponding Rust-struct representation.
-pub fn idkg_initial_dealings_from_proto(
-    initial_dealings_proto: InitialIDkgDealingsProto,
-) -> Result<InitialIDkgDealings, InitialIDkgDealingsValidationError> {
-    let params_proto = initial_dealings_proto.params.ok_or(
-        InitialIDkgDealingsValidationError::DeserializationError {
-            error: "Missing IDkgTranscriptParams.".to_string(),
-        },
-    )?;
-    let params = idkg_transcript_params_struct(&params_proto)?;
-    let dealings = initial_dealings_map(&initial_dealings_proto.dealings)?;
-    InitialIDkgDealings::new(params, dealings)
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ExtendedDerivationPathSerializationError {
-    MissingCaller,
-    InvalidCaller { error: String },
-}
-
-/// Converts `ExtendedDerivationPath` into the corresponding protobuf representation.
-pub fn extended_derivation_path_to_proto(
-    path: &ExtendedDerivationPath,
-) -> ExtendedDerivationPathProto {
-    ExtendedDerivationPathProto {
-        caller: Some(PrincipalIdProto::from(path.caller)),
-        derivation_path: path.derivation_path.clone(),
-    }
-}
-
-/// Converts `ExtendedDerivationPath`-proto into the corresponding Rust-struct representation.
-pub fn extended_derivation_path_from_proto(
-    proto: &ExtendedDerivationPathProto,
-) -> Result<ExtendedDerivationPath, ExtendedDerivationPathSerializationError> {
-    let caller_proto = proto
-        .caller
-        .as_ref()
-        .ok_or(ExtendedDerivationPathSerializationError::MissingCaller)?;
-    let caller = PrincipalId::try_from(&caller_proto.raw).map_err(|e| {
-        ExtendedDerivationPathSerializationError::InvalidCaller {
-            error: e.to_string(),
+impl From<InitialIDkgDealings> for InitialIDkgDealingsProto {
+    fn from(initial_dealings: InitialIDkgDealings) -> Self {
+        let dealings = initial_dealings
+            .dealings()
+            .iter()
+            .map(|(dealer_id, idkg_dealing)| idkg_dealing_tuple_proto(dealer_id, idkg_dealing))
+            .collect();
+        InitialIDkgDealingsProto {
+            version: CURRENT_INITIAL_IDKG_DEALINGS_VERSION,
+            params: Some(idkg_transcript_params_proto(&initial_dealings.params())),
+            dealings,
         }
-    })?;
-    Ok(ExtendedDerivationPath {
-        caller,
-        derivation_path: proto.derivation_path.clone(),
-    })
+    }
 }
+
+impl TryFrom<InitialIDkgDealingsProto> for InitialIDkgDealings {
+    type Error = InitialIDkgDealingsValidationError;
+
+    fn try_from(proto: InitialIDkgDealingsProto) -> Result<Self, Self::Error> {
+        let params_proto =
+            proto
+                .params
+                .ok_or(InitialIDkgDealingsValidationError::DeserializationError {
+                    error: "Missing IDkgTranscriptParams.".to_string(),
+                })?;
+        let params = idkg_transcript_params_struct(&params_proto)?;
+        let dealings = initial_dealings_map(&proto.dealings)?;
+        InitialIDkgDealings::new(params, dealings)
+    }
+}
+
+impl From<ExtendedDerivationPath> for ExtendedDerivationPathProto {
+    fn from(path: ExtendedDerivationPath) -> Self {
+        ExtendedDerivationPathProto {
+            caller: Some(PrincipalIdProto::from(path.caller)),
+            derivation_path: path.derivation_path,
+        }
+    }
+}
+
+impl TryFrom<ExtendedDerivationPathProto> for ExtendedDerivationPath {
+    type Error = ExtendedDerivationPathSerializationError;
+    fn try_from(proto: ExtendedDerivationPathProto) -> Result<Self, Self::Error> {
+        let caller_proto = proto
+            .caller
+            .as_ref()
+            .ok_or(ExtendedDerivationPathSerializationError::MissingCaller)?;
+        let caller = PrincipalId::try_from(&caller_proto.raw).map_err(|e| {
+            ExtendedDerivationPathSerializationError::InvalidCaller {
+                error: e.to_string(),
+            }
+        })?;
+        Ok(ExtendedDerivationPath {
+            caller,
+            derivation_path: proto.derivation_path.clone(),
+        })
+    }
+}
+
 // ----- Conversion helpers.
 fn idkg_transcript_id_proto(idkg_transcript_id: &IDkgTranscriptId) -> IDkgTranscriptIdProto {
     IDkgTranscriptIdProto {

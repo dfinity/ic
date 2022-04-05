@@ -57,6 +57,13 @@ pub enum InitialIDkgDealingsValidationError {
 impl_display_using_debug!(InitialIDkgDealingsValidationError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ExtendedDerivationPathSerializationError {
+    MissingCaller,
+    InvalidCaller { error: String },
+}
+impl_display_using_debug!(ExtendedDerivationPathSerializationError);
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ThresholdEcdsaGetPublicKeyError {
     InvalidArgument(String),
     InternalError(String),

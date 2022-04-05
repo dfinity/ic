@@ -14,6 +14,7 @@ use std::convert::TryFrom;
 use std::hash::{Hash, Hasher};
 
 pub mod conversions;
+pub mod proto_conversions;
 pub use conversions::*;
 
 #[cfg(test)]
