@@ -1,7 +1,9 @@
 use ic_base_types::PrincipalId;
 use ic_crypto::utils::TempCryptoComponent;
 use ic_crypto::{derive_tecdsa_public_key, get_tecdsa_master_public_key};
-use ic_crypto_internal_threshold_sig_ecdsa::{EccScalar, IDkgDealingInternal, MEGaCiphertext};
+use ic_crypto_internal_threshold_sig_ecdsa::{
+    test_utils::corrupt_dealing_for_all_recipients, EccScalar, IDkgDealingInternal, MEGaCiphertext,
+};
 use ic_crypto_test_utils_canister_threshold_sigs::{
     build_params_from_previous, create_and_verify_dealing, create_dealings,
     generate_key_transcript, generate_presig_quadruple, load_input_transcripts, load_transcript,
@@ -1773,27 +1775,16 @@ fn corrupt_signed_dealings_for_all_receivers(
 /// Corrupts the dealing by multiplying the ephemeral_key EccPoint with a random node index
 fn corrupt_signed_dealing_for_all_receivers(signed_dealing: &mut IDkgMultiSignedDealing) {
     let invalidated_internal_dealing_raw = {
-        let mut internal_dealing = IDkgDealingInternal::deserialize(
+        let internal_dealing = IDkgDealingInternal::deserialize(
             &signed_dealing.dealing.idkg_dealing.internal_dealing_raw,
         )
         .expect("failed to deserialize internal dealing");
-        match internal_dealing.ciphertext {
-            MEGaCiphertext::Single(ref mut ctext) => {
-                let corrupted_key = ctext
-                    .ephemeral_key
-                    .mul_by_node_index(thread_rng().gen::<u32>())
-                    .expect("failed to corrupt key");
-                ctext.ephemeral_key = corrupted_key;
-            }
-            MEGaCiphertext::Pairs(ref mut ctext) => {
-                let corrupted_key = ctext
-                    .ephemeral_key
-                    .mul_by_node_index(thread_rng().gen::<u32>())
-                    .expect("failed to corrupt key");
-                ctext.ephemeral_key = corrupted_key;
-            }
-        };
-        internal_dealing
+
+        let corrupted_dealing =
+            corrupt_dealing_for_all_recipients(&internal_dealing, &mut thread_rng())
+                .expect("Failed to corrupt dealing");
+
+        corrupted_dealing
             .serialize()
             .expect("failed to serialize internal dealing")
     };

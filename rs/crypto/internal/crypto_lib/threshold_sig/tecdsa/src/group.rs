@@ -259,6 +259,11 @@ impl EccScalar {
         }
     }
 
+    pub fn from_seed(curve: EccCurveType, seed: Seed) -> ThresholdEcdsaResult<Self> {
+        let mut rng = seed.into_rng();
+        Self::random(curve, &mut rng)
+    }
+
     /// Return true iff self is equal to zero
     pub fn is_zero(&self) -> bool {
         match self {

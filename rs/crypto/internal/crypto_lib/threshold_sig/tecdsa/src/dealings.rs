@@ -335,9 +335,11 @@ impl IDkgDealingInternal {
             return Err(ThresholdEcdsaError::CurveMismatch);
         }
 
-        if self.ciphertext.recipients() != number_of_receivers.get() as usize {
-            return Err(ThresholdEcdsaError::InvalidRecipients);
-        }
+        self.ciphertext.check_validity(
+            number_of_receivers.get() as usize,
+            associated_data,
+            dealer_index,
+        )?;
 
         type Op = IDkgTranscriptOperationInternal;
 

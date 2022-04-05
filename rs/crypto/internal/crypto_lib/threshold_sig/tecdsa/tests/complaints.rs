@@ -112,24 +112,22 @@ fn should_complaint_system_work() -> ThresholdEcdsaResult<()> {
     }
 
     // a complaint against a dealing with modified ephemeral key will not verify
-    // (because the proof will fail)
+    // (because the complaint proof will fail)
 
-    let modified_ephemeral_key = MEGaCiphertextPair {
-        ephemeral_key: EccPoint::hash_to_point(curve, &rng.gen::<[u8; 32]>(), "ad".as_bytes())?,
-        ctexts: vec![
-            (
-                EccScalar::random(curve, &mut rng)?,
-                EccScalar::random(curve, &mut rng)?,
-            ),
-            (
-                EccScalar::random(curve, &mut rng)?,
-                EccScalar::random(curve, &mut rng)?,
-            ),
-        ],
-    };
+    // Create a new dealing so we can steal the dealing's ephemeral key and PoP
+
+    let dealing2 = IDkgDealingInternal::new(
+        &SecretShares::Random,
+        curve,
+        Seed::from_rng(&mut rng),
+        threshold,
+        &[pk0, pk1],
+        dealer_index,
+        associated_data,
+    )?;
 
     let bad_key_dealing = IDkgDealingInternal {
-        ciphertext: modified_ephemeral_key.into(),
+        ciphertext: dealing2.ciphertext,
         commitment: dealing.commitment.clone(),
         proof: dealing.proof,
     };
