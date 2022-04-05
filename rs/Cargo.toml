@@ -160,6 +160,7 @@ members = [
   "rust_canisters/statesync_test",
   "rust_canisters/tests",
   "rust_canisters/xnet_test",
+  "rust_canisters/response_payload_test",
   "scenario_tests",
   "sns/cli",
   "sns/governance",

@@ -28,6 +28,7 @@ wasm_canister_build_list=(
     ledger-canister
     mem-utils-test-canister
     memory-test-canister
+    response-payload-test-canister
     nan_canonicalized
     nns-ui-canister
     panics

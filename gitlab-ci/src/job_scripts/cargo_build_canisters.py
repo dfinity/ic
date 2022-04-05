@@ -30,6 +30,7 @@ CANISTERS = [
     "panics",
     "pmap_canister",
     "registry-canister",
+    "response-payload-test-canister",
     "root-canister",
     "sns-governance-canister",
     "sns-root-canister",

@@ -145,6 +145,31 @@ maximum-capacity-large-memory-update:
 
       $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
 
+# BENCHMARK SUITE response_payload_size
+benchmark-response-payload:
+  extends: .benchmark-test
+  artifacts:
+    when: always
+    paths:
+      - scalability/
+  script:
+    - |
+      set -eExou pipefail
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+
+      $SHELL_WRAPPER timeout 30m ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION"
+      cd ./scalability
+
+      $SHELL_WRAPPER pipenv --python 3
+      $SHELL_WRAPPER pipenv install -r requirements.txt
+
+      $SHELL_WRAPPER pipenv run experiments/run_response_payload_size_experiment.py --testnet $TESTNET --skip_generate_report=False  --branch="$CURRENT_BRANCH"
+
+      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
+      cd -
+
+      $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
 
 # SCENARIO TEST maximum_capacity_rejoin_script: have 30GiB state in old checkpoint and start from 20GiB of fetched state size and increase by 5GiB each time
 # Repeatedly run rejoin tests for at most 20 times until state sync reaches its limit

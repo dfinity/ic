@@ -36,16 +36,17 @@ def get_host_for_ip(testnet: str, ip: str):
 def get_ansible_machine_info_for_subnet(testnet, subnet=0):
     """Get a list of ansible machine configurations for the given subnetwork and testnet."""
     j = get_ansible_inventory(testnet)
-
     hosts = [
         info
         for (_, info) in j["_meta"]["hostvars"].items()
         if "subnet_index" in info and info["subnet_index"] == subnet
     ]
-
     return hosts
 
 
-def get_ansible_hostnames_for_subnet(testnet, subnet=0):
+def get_ansible_hostnames_for_subnet(testnet, subnet=0, sort=True):
     """Return hostnames of all machines in the given testnet and subnet from ansible files."""
-    return sorted([h["ansible_host"] for h in get_ansible_machine_info_for_subnet(testnet, subnet)])
+    hosts = [h["ansible_host"] for h in get_ansible_machine_info_for_subnet(testnet, subnet)]
+    if sort:
+        hosts = sorted(hosts)
+    return hosts
