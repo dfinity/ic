@@ -106,67 +106,6 @@ impl BoundaryNode {
     }
 }
 
-pub trait BoundaryNodeVm {
-    fn write_boundary_node_vm(&self, name: &str, vm: &VMCreateResponse) -> Result<()>;
-
-    fn get_boundary_node_vm(&self, name: &str) -> Result<VMCreateResponse>;
-
-    fn boundary_node_ssh_session(&self, name: &str) -> Result<Session>;
-
-    fn await_boundary_node_ssh_session(&self, name: &str) -> Result<Session>;
-
-    fn await_boundary_node_ipv4(&self, name: &str) -> Result<Ipv4Addr>;
-}
-
-impl BoundaryNodeVm for TestEnv {
-    fn write_boundary_node_vm(&self, name: &str, vm: &VMCreateResponse) -> Result<()> {
-        let vm_path: PathBuf = [BOUNDARY_NODE_VMS_DIR, name].iter().collect();
-        self.write_object(vm_path.join(BOUNDARY_NODE_VM_PATH), &vm)
-    }
-
-    fn get_boundary_node_vm(&self, name: &str) -> Result<VMCreateResponse> {
-        let vm_path: PathBuf = [BOUNDARY_NODE_VMS_DIR, name].iter().collect();
-        self.read_object(vm_path.join(BOUNDARY_NODE_VM_PATH))
-    }
-
-    fn boundary_node_ssh_session(&self, name: &str) -> Result<Session> {
-        let vm = self.get_boundary_node_vm(name)?;
-        let tcp = TcpStream::connect((vm.ipv6, 22))?;
-        let mut sess = Session::new()?;
-        sess.set_tcp_stream(tcp);
-        sess.handshake()?;
-        let admin_priv_key_path = self.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR).join(ADMIN_USER);
-        sess.userauth_pubkey_file(ADMIN_USER, None, admin_priv_key_path.as_path(), None)?;
-        Ok(sess)
-    }
-
-    fn await_boundary_node_ssh_session(&self, name: &str) -> Result<Session> {
-        retry(self.logger(), RETRY_TIMEOUT, RETRY_BACKOFF, || {
-            self.boundary_node_ssh_session(name)
-        })
-    }
-
-    fn await_boundary_node_ipv4(&self, name: &str) -> Result<Ipv4Addr> {
-        let sess = self.await_boundary_node_ssh_session(name)?;
-        let mut channel = sess.channel_session()?;
-        channel.exec("bash").unwrap();
-
-        let get_ipv4_script = r#"set -e -o pipefail
-until ipv4=$(ip address show dev enp2s0 | grep 'inet.*scope global' | awk '{print $2}' | cut -d/ -f1); \
-do
-  sleep 1
-done
-echo "$ipv4"
-"#;
-        channel.write_all(get_ipv4_script.as_bytes())?;
-        channel.flush()?;
-        channel.send_eof()?;
-        let mut out = String::new();
-        channel.read_to_string(&mut out)?;
-        let ipv4 = out.trim().parse::<Ipv4Addr>()?;
-        Ok(ipv4)
-    }
-}
 /// side-effectful function that creates the config disk images
 /// in the boundary node directories.
 pub fn create_and_upload_config_disk_image(
@@ -250,4 +189,83 @@ pub fn create_and_upload_config_disk_image(
     info!(farm.logger, "Uploaded image: {}", image_id);
 
     Ok(image_id)
+}
+
+pub trait BoundaryNodeVm {
+    fn get_deployed_boundary_node(&self, name: &str) -> Result<DeployedBoundaryNode>;
+
+    fn write_boundary_node_vm(&self, name: &str, vm: &VMCreateResponse) -> Result<()>;
+}
+
+impl BoundaryNodeVm for TestEnv {
+    fn get_deployed_boundary_node(&self, name: &str) -> Result<DeployedBoundaryNode> {
+        let rel_boundary_node_dir: PathBuf = [BOUNDARY_NODE_VMS_DIR, name].iter().collect();
+        let abs_boundary_node_dir = self.get_path(rel_boundary_node_dir);
+        if abs_boundary_node_dir.is_dir() {
+            Ok(DeployedBoundaryNode {
+                env: self.clone(),
+                name: name.to_string(),
+            })
+        } else {
+            bail!("Did not find deployed boundary node '{name}'!")
+        }
+    }
+
+    fn write_boundary_node_vm(&self, name: &str, vm: &VMCreateResponse) -> Result<()> {
+        let vm_path: PathBuf = [BOUNDARY_NODE_VMS_DIR, name].iter().collect();
+        self.write_object(vm_path.join(BOUNDARY_NODE_VM_PATH), &vm)
+    }
+}
+
+pub struct DeployedBoundaryNode {
+    env: TestEnv,
+    name: String,
+}
+
+impl DeployedBoundaryNode {
+    pub fn get_vm(&self) -> Result<VMCreateResponse> {
+        let vm_path: PathBuf = [BOUNDARY_NODE_VMS_DIR, &self.name].iter().collect();
+        self.env.read_object(vm_path.join(BOUNDARY_NODE_VM_PATH))
+    }
+
+    pub fn get_ssh_session(&self) -> Result<Session> {
+        let vm = self.get_vm()?;
+        let tcp = TcpStream::connect((vm.ipv6, 22))?;
+        let mut sess = Session::new()?;
+        sess.set_tcp_stream(tcp);
+        sess.handshake()?;
+        let admin_priv_key_path = self
+            .env
+            .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
+            .join(ADMIN_USER);
+        sess.userauth_pubkey_file(ADMIN_USER, None, admin_priv_key_path.as_path(), None)?;
+        Ok(sess)
+    }
+
+    pub fn await_ssh_session(&self) -> Result<Session> {
+        retry(self.env.logger(), RETRY_TIMEOUT, RETRY_BACKOFF, || {
+            self.get_ssh_session()
+        })
+    }
+
+    pub fn await_ipv4(&self) -> Result<Ipv4Addr> {
+        let sess = self.await_ssh_session()?;
+        let mut channel = sess.channel_session()?;
+        channel.exec("bash").unwrap();
+
+        let get_ipv4_script = r#"set -e -o pipefail
+until ipv4=$(ip address show dev enp2s0 | grep 'inet.*scope global' | awk '{print $2}' | cut -d/ -f1); \
+do
+  sleep 1
+done
+echo "$ipv4"
+"#;
+        channel.write_all(get_ipv4_script.as_bytes())?;
+        channel.flush()?;
+        channel.send_eof()?;
+        let mut out = String::new();
+        channel.read_to_string(&mut out)?;
+        let ipv4 = out.trim().parse::<Ipv4Addr>()?;
+        Ok(ipv4)
+    }
 }

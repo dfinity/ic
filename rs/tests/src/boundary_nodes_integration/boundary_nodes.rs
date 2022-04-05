@@ -38,13 +38,14 @@ pub fn config(env: TestEnv) {
 }
 
 pub fn test(env: TestEnv, logger: Logger) {
-    let boundary_node_vm = env.get_boundary_node_vm(BOUNDARY_NODE_NAME).unwrap();
+    let deployed_boundary_node = env.get_deployed_boundary_node(BOUNDARY_NODE_NAME).unwrap();
+    let boundary_node_vm = deployed_boundary_node.get_vm().unwrap();
     info!(
         &logger,
         "Boundary node {BOUNDARY_NODE_NAME} has IPv6: {:?}", boundary_node_vm.ipv6
     );
 
-    let boundary_node_ipv4: Ipv4Addr = env.await_boundary_node_ipv4(BOUNDARY_NODE_NAME).unwrap();
+    let boundary_node_ipv4: Ipv4Addr = deployed_boundary_node.await_ipv4().unwrap();
     info!(
         &logger,
         "Boundary node {BOUNDARY_NODE_NAME} has IPv4 {:?}", boundary_node_ipv4
@@ -55,9 +56,7 @@ pub fn test(env: TestEnv, logger: Logger) {
         logger,
         "Executing the 'uname -a' command on {BOUNDARY_NODE_NAME} via SSH..."
     );
-    let sess = env
-        .await_boundary_node_ssh_session(BOUNDARY_NODE_NAME)
-        .unwrap();
+    let sess = deployed_boundary_node.await_ssh_session().unwrap();
     let mut channel = sess.channel_session().unwrap();
     channel.exec("uname -a").unwrap();
     let mut s = String::new();
