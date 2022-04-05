@@ -308,7 +308,7 @@ impl ProofOfProduct {
 /// Witness = `x` ∈  Zₚ,
 /// such that:
 /// `A = g*x` and `B = h*x`
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProofOfDLogEquivalence {
     challenge: EccScalar,
     response: EccScalar,

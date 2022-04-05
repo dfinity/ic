@@ -4378,7 +4378,6 @@ dependencies = [
  "rand_core 0.5.1",
  "serde",
  "serde_cbor",
- "sha2 0.9.9",
  "subtle",
  "zeroize",
 ]

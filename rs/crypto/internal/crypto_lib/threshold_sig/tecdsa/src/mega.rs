@@ -9,10 +9,19 @@ use std::convert::{TryFrom, TryInto};
 use zeroize::Zeroize;
 
 const MEGA_SINGLE_ENC_DOMAIN_SEPARATOR: &str = "ic-crypto-tecdsa-mega-encryption-single-encrypt";
-const MEGA_SINGLE_SEED_DOMAIN_SEPARATOR: &str = "ic-crypto-tecdsa-mega-encryption-single-seed";
+const MEGA_SINGLE_EPHEMERAL_KEY_DOMAIN_SEPARATOR: &str =
+    "ic-crypto-tecdsa-mega-encryption-single-ephemeral-key";
+const MEGA_SINGLE_POP_BASE_DOMAIN_SEPARATOR: &str =
+    "ic-crypto-tecdsa-mega-encryption-single-pop-base";
+const MEGA_SINGLE_POP_PROOF_DOMAIN_SEPARATOR: &str =
+    "ic-crypto-tecdsa-mega-encryption-single-pop-proof";
 
 const MEGA_PAIR_ENC_DOMAIN_SEPARATOR: &str = "ic-crypto-tecdsa-mega-encryption-pair-encrypt";
-const MEGA_PAIR_SEED_DOMAIN_SEPARATOR: &str = "ic-crypto-tecdsa-mega-encryption-pair-seed";
+const MEGA_PAIR_EPHEMERAL_KEY_DOMAIN_SEPARATOR: &str =
+    "ic-crypto-tecdsa-mega-encryption-pair-ephemeral-key";
+const MEGA_PAIR_POP_BASE_DOMAIN_SEPARATOR: &str = "ic-crypto-tecdsa-mega-encryption-pair-pop-base";
+const MEGA_PAIR_POP_PROOF_DOMAIN_SEPARATOR: &str =
+    "ic-crypto-tecdsa-mega-encryption-pair-pop-proof";
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct MEGaPublicKey {
@@ -96,13 +105,17 @@ impl Debug for MEGaPrivateKey {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MEGaCiphertextSingle {
-    pub ephemeral_key: EccPoint, // "v" in the paper
+    pub ephemeral_key: EccPoint,  // "v" in the paper
+    pub pop_public_key: EccPoint, // "v'" in the paper
+    pub pop_proof: zk::ProofOfDLogEquivalence,
     pub ctexts: Vec<EccScalar>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MEGaCiphertextPair {
-    pub ephemeral_key: EccPoint, // "v" in the paper
+    pub ephemeral_key: EccPoint,  // "v" in the paper
+    pub pop_public_key: EccPoint, // "v'" in the paper
+    pub pop_proof: zk::ProofOfDLogEquivalence,
     pub ctexts: Vec<(EccScalar, EccScalar)>,
 }
 
@@ -142,11 +155,40 @@ impl MEGaCiphertext {
         }
     }
 
+    /// Check the validity of a MEGa ciphertext
+    ///
+    /// Specifically this checks the ZK proof of the ephemeral key,
+    /// and also checks that the ciphertext has the expected number of
+    /// recipients.
+    pub fn check_validity(
+        &self,
+        expected_recipients: usize,
+        associated_data: &[u8],
+        dealer_index: NodeIndex,
+    ) -> ThresholdEcdsaResult<()> {
+        match self {
+            MEGaCiphertext::Single(c) => {
+                c.check_validity(expected_recipients, associated_data, dealer_index)
+            }
+            MEGaCiphertext::Pairs(c) => {
+                c.check_validity(expected_recipients, associated_data, dealer_index)
+            }
+        }
+    }
+
+    /// Simple type verification for MEGa ciphertexts
+    ///
+    /// Verifies that the ciphertext is of the expected type (single or pairs)
+    /// and is for the expected curve.
     pub fn verify_is(
         &self,
         ctype: MEGaCiphertextType,
         curve: EccCurveType,
     ) -> ThresholdEcdsaResult<()> {
+        if self.ephemeral_key().curve_type() != curve {
+            return Err(ThresholdEcdsaError::CurveMismatch);
+        }
+
         let curves_ok = match self {
             MEGaCiphertext::Single(c) => c.ctexts.iter().all(|x| x.curve_type() == curve),
             MEGaCiphertext::Pairs(c) => c
@@ -363,10 +405,21 @@ impl MEGaCiphertextSingle {
     ) -> ThresholdEcdsaResult<Self> {
         let curve_type = check_plaintexts(plaintexts, recipients)?;
 
-        let mut rng = seed.derive(MEGA_SINGLE_SEED_DOMAIN_SEPARATOR).into_rng();
-
-        let beta = EccScalar::random(curve_type, &mut rng)?;
+        let beta = EccScalar::from_seed(
+            curve_type,
+            seed.derive(MEGA_SINGLE_EPHEMERAL_KEY_DOMAIN_SEPARATOR),
+        )?;
         let v = EccPoint::mul_by_g(&beta)?;
+
+        let pop_base = Self::compute_pop_base(curve_type, associated_data, dealer_index, &v)?;
+        let pop_public_key = pop_base.scalar_mul(&beta)?;
+        let pop_proof = zk::ProofOfDLogEquivalence::create(
+            seed.derive(MEGA_SINGLE_POP_PROOF_DOMAIN_SEPARATOR),
+            &beta,
+            &EccPoint::generator_g(curve_type)?,
+            &pop_base,
+            associated_data,
+        )?;
 
         let mut ctexts = Vec::with_capacity(recipients.len());
 
@@ -389,6 +442,8 @@ impl MEGaCiphertextSingle {
 
         Ok(Self {
             ephemeral_key: v,
+            pop_public_key,
+            pop_proof,
             ctexts,
         })
     }
@@ -419,6 +474,36 @@ impl MEGaCiphertextSingle {
         self.ctexts[recipient_index as usize].sub(&hm)
     }
 
+    pub fn check_validity(
+        &self,
+        expected_recipients: usize,
+        associated_data: &[u8],
+        dealer_index: NodeIndex,
+    ) -> ThresholdEcdsaResult<()> {
+        if self.ctexts.len() != expected_recipients {
+            return Err(ThresholdEcdsaError::InvalidRecipients);
+        }
+
+        let curve_type = self.ephemeral_key.curve_type();
+
+        let pop_base = Self::compute_pop_base(
+            curve_type,
+            associated_data,
+            dealer_index,
+            &self.ephemeral_key,
+        )?;
+
+        self.pop_proof.verify(
+            &EccPoint::generator_g(curve_type)?,
+            &pop_base,
+            &self.ephemeral_key,
+            &self.pop_public_key,
+            associated_data,
+        )?;
+
+        Ok(())
+    }
+
     pub fn decrypt(
         &self,
         associated_data: &[u8],
@@ -427,6 +512,8 @@ impl MEGaCiphertextSingle {
         our_private_key: &MEGaPrivateKey,
         recipient_public_key: &MEGaPublicKey,
     ) -> ThresholdEcdsaResult<EccScalar> {
+        self.check_validity(self.ctexts.len(), associated_data, dealer_index)?;
+
         let ubeta = self.ephemeral_key.scalar_mul(&our_private_key.secret)?;
 
         self.decrypt_from_shared_secret(
@@ -436,6 +523,19 @@ impl MEGaCiphertextSingle {
             recipient_public_key,
             &ubeta,
         )
+    }
+
+    fn compute_pop_base(
+        curve_type: EccCurveType,
+        associated_data: &[u8],
+        dealer_index: NodeIndex,
+        ephemeral_key: &EccPoint,
+    ) -> ThresholdEcdsaResult<EccPoint> {
+        let mut ro = ro::RandomOracle::new(MEGA_SINGLE_POP_BASE_DOMAIN_SEPARATOR);
+        ro.add_bytestring("associated_data", associated_data)?;
+        ro.add_u32("dealer_index", dealer_index)?;
+        ro.add_point("ephemeral_key", ephemeral_key)?;
+        ro.output_point(curve_type)
     }
 }
 
@@ -449,10 +549,21 @@ impl MEGaCiphertextPair {
     ) -> ThresholdEcdsaResult<Self> {
         let curve_type = check_plaintexts_pair(plaintexts, recipients)?;
 
-        let mut rng = seed.derive(MEGA_PAIR_SEED_DOMAIN_SEPARATOR).into_rng();
-
-        let beta = EccScalar::random(curve_type, &mut rng)?;
+        let beta = EccScalar::from_seed(
+            curve_type,
+            seed.derive(MEGA_PAIR_EPHEMERAL_KEY_DOMAIN_SEPARATOR),
+        )?;
         let v = EccPoint::mul_by_g(&beta)?;
+
+        let pop_base = Self::compute_pop_base(curve_type, associated_data, dealer_index, &v)?;
+        let pop_public_key = pop_base.scalar_mul(&beta)?;
+        let pop_proof = zk::ProofOfDLogEquivalence::create(
+            seed.derive(MEGA_PAIR_POP_PROOF_DOMAIN_SEPARATOR),
+            &beta,
+            &EccPoint::generator_g(curve_type)?,
+            &pop_base,
+            associated_data,
+        )?;
 
         let mut ctexts = Vec::with_capacity(recipients.len());
 
@@ -476,8 +587,40 @@ impl MEGaCiphertextPair {
 
         Ok(Self {
             ephemeral_key: v,
+            pop_public_key,
+            pop_proof,
             ctexts,
         })
+    }
+
+    pub fn check_validity(
+        &self,
+        expected_recipients: usize,
+        associated_data: &[u8],
+        dealer_index: NodeIndex,
+    ) -> ThresholdEcdsaResult<()> {
+        if self.ctexts.len() != expected_recipients {
+            return Err(ThresholdEcdsaError::InvalidRecipients);
+        }
+
+        let curve_type = self.ephemeral_key.curve_type();
+
+        let pop_base = Self::compute_pop_base(
+            curve_type,
+            associated_data,
+            dealer_index,
+            &self.ephemeral_key,
+        )?;
+
+        self.pop_proof.verify(
+            &EccPoint::generator_g(curve_type)?,
+            &pop_base,
+            &self.ephemeral_key,
+            &self.pop_public_key,
+            associated_data,
+        )?;
+
+        Ok(())
     }
 
     pub fn decrypt_from_shared_secret(
@@ -517,6 +660,8 @@ impl MEGaCiphertextPair {
         our_private_key: &MEGaPrivateKey,
         recipient_public_key: &MEGaPublicKey,
     ) -> ThresholdEcdsaResult<(EccScalar, EccScalar)> {
+        self.check_validity(self.ctexts.len(), associated_data, dealer_index)?;
+
         let ubeta = self.ephemeral_key.scalar_mul(&our_private_key.secret)?;
 
         self.decrypt_from_shared_secret(
@@ -526,6 +671,19 @@ impl MEGaCiphertextPair {
             recipient_public_key,
             &ubeta,
         )
+    }
+
+    fn compute_pop_base(
+        curve_type: EccCurveType,
+        associated_data: &[u8],
+        dealer_index: NodeIndex,
+        ephemeral_key: &EccPoint,
+    ) -> ThresholdEcdsaResult<EccPoint> {
+        let mut ro = ro::RandomOracle::new(MEGA_PAIR_POP_BASE_DOMAIN_SEPARATOR);
+        ro.add_bytestring("associated_data", associated_data)?;
+        ro.add_u32("dealer_index", dealer_index)?;
+        ro.add_point("ephemeral_key", ephemeral_key)?;
+        ro.output_point(curve_type)
     }
 }
 

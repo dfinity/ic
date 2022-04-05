@@ -17,7 +17,9 @@ fn verify_data(tag: String, expected: &str, serialized: &[u8]) {
         of the tECDSA artifacts), then comment out the below assert, uncomment
         the println, and then run
 
-        cargo test verify_serialization_remains_unchanged_over_time -- --nocapture | grep ^perl | parallel -j1
+        $ cargo test verify_serialization_remains_unchanged_over_time -- --nocapture | grep ^perl | parallel -j1
+
+        which will update this file with the produced values.
          */
         assert_eq!(hex_encoding, expected, "{}", tag);
         //println!("perl -pi -e s/{}/{}/g tests/serialization.rs", expected, hex_encoding);
@@ -92,11 +94,11 @@ fn verify_serialization_remains_unchanged_over_time() -> Result<(), ThresholdEcd
         "3b1651f91235bea0",
         "dcb0d33a0444c4da",
         &[
-            (0, "cdb3774cf1fc4d32"),
-            (1, "6f65179a607eed92"),
-            (2, "654b3581d9fd2aef"),
-            (3, "52b2b0f8f42c8628"),
-            (4, "7bdd2609a3d62fad"),
+            (0, "ec4517ab6561913c"),
+            (1, "56aa35ae8874e3a9"),
+            (2, "da4b52b0e8b28c56"),
+            (3, "ace0b7dc54ce98f9"),
+            (4, "c170456f46da7ef8"),
         ],
     )?;
 
@@ -106,11 +108,11 @@ fn verify_serialization_remains_unchanged_over_time() -> Result<(), ThresholdEcd
         "00dd83ba807ddb8b",
         "fb73e2b787bed6a8",
         &[
-            (0, "fdf08318386cd9ee"),
-            (1, "cfdc426d579b8ccb"),
-            (2, "9444cd74284ac8e2"),
-            (3, "b345efd1475c6173"),
-            (4, "dc58053be29a5f39"),
+            (0, "2919ed5ef005e24d"),
+            (1, "d13d75c5ba452aa7"),
+            (2, "051966db42301a4f"),
+            (3, "8046613091b60bc4"),
+            (4, "073a46541f43daa5"),
         ],
     )?;
 
@@ -120,11 +122,11 @@ fn verify_serialization_remains_unchanged_over_time() -> Result<(), ThresholdEcd
         "072e2cc0b419ed05",
         "12bdfac755057274",
         &[
-            (0, "5f66d246f78a6523"),
-            (1, "f9107252b93d6bc9"),
-            (2, "e44f6c4bab4acfce"),
-            (3, "edced8f70dce8d5f"),
-            (4, "3d170817dda1e6e1"),
+            (0, "983683af4ffedddc"),
+            (1, "f59f3afe3a5734a8"),
+            (2, "808030e98d7f2a65"),
+            (3, "571c30277c76871a"),
+            (4, "4b0a9b482900ae06"),
         ],
     )?;
 
@@ -134,11 +136,11 @@ fn verify_serialization_remains_unchanged_over_time() -> Result<(), ThresholdEcd
         "2ded0f153929b9f0",
         "44f5c86382cc479c",
         &[
-            (0, "0bd58d1dc1ea5394"),
-            (1, "23901fcc0a49a4e5"),
-            (2, "92fb0d6770c1eec8"),
-            (3, "c1e3a00405475fbb"),
-            (4, "cd1533ec8a96540b"),
+            (0, "9cae036e691c746c"),
+            (1, "cae56922b4ffdb34"),
+            (2, "8aa27cb2732f560f"),
+            (3, "0dab338fe09c4b91"),
+            (4, "e8c8dde553e9b676"),
         ],
     )?;
 
@@ -148,11 +150,11 @@ fn verify_serialization_remains_unchanged_over_time() -> Result<(), ThresholdEcd
         "fead521acec68d9d",
         "0400f8b432760ed3",
         &[
-            (0, "b25daca699ed741a"),
-            (1, "ca307ea916c62411"),
-            (2, "a129528acf78eccc"),
-            (3, "0b221a208519f149"),
-            (4, "e104343cee3218d8"),
+            (0, "43b424974b8d6ae5"),
+            (1, "21bd4b7f691d8236"),
+            (2, "ac5b0f9cf7ed2ee7"),
+            (3, "062cf5b78c206495"),
+            (4, "4a4c88f1f8fe8ee1"),
         ],
     )?;
 

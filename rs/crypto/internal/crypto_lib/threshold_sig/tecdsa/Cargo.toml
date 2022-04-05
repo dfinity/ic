@@ -16,7 +16,6 @@ p256 = { version = "0.10", default-features = false, features = ["arithmetic"] }
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 rand_core = "0.5"
 rand_chacha = "0.2.2"
-sha2 = "0.9"
 hex = "0.4"
 hex-literal = "0.3.3"
 paste = "1.0.0"
