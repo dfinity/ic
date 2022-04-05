@@ -41,7 +41,7 @@ python3 "${CI_PROJECT_DIR}"/gitlab-ci/src/test_results/honeycomb.py \
     --test_results "${CI_PROJECT_DIR}"/test-results.json \
     --trace_id "$ROOT_PIPELINE_ID" \
     --parent_id "$CI_JOB_ID" \
-    --type "system-tests"
+    --type "legacy-system-tests"
 
 # Print a summary of system tests execution.
 python3 "${CI_PROJECT_DIR}"/gitlab-ci/src/test_results/summary.py \

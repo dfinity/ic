@@ -8,18 +8,26 @@ import input
 import libhoney
 
 
-def create_and_export_spans(node, trace_id, parent_id, service_name):
+class Context:
+    def __init__(self, trace_id, suite_name, service_name):
+        self.trace_id = trace_id
+        self.suite_name = suite_name
+        self.service_name = service_name
+
+
+def create_and_export_spans(node, parent_id, ctx, depth):
     """Create spans for all tests and organize them into a tree mirroring the structure of a test suite."""
-    parent_span_id = push_span(node, trace_id, parent_id, service_name)
+    parent_span_id = push_span(node, parent_id, ctx, depth)
     for ch in node.children:
-        create_and_export_spans(ch, trace_id, parent_span_id, service_name)
+        create_and_export_spans(ch, parent_span_id, ctx, depth + 1)
 
 
-def push_span(node, trace_id, parent_id, service_name):
+def push_span(node, parent_id, ctx, depth):
     """Pushes to Honeycomb a span corresponding to a given test result object and returns its randomly generated ID."""
     span_id = secrets.token_hex(16)
     ev = libhoney.new_event()
-    ev.add_field("service_name", service_name)
+    ev.add_field("service_name", ctx.service_name)
+    ev.add_field("suite_name", ctx.suite_name)
     ev.add_field("name", node.name)
     ev.created_at = datetime.datetime.fromtimestamp(node.started_at // 1000)
     ev.add_field(
@@ -28,9 +36,10 @@ def push_span(node, trace_id, parent_id, service_name):
     )
     ev.add_field("trace.parent_id", parent_id)
     ev.add_field("trace.span_id", span_id)
-    ev.add_field("trace.trace_id", trace_id)
+    ev.add_field("trace.trace_id", ctx.trace_id)
     ev.add_field("ci_provider", "GitLab-CI")
     ev.add_field("execution_result", node.result)
+    ev.add_field("result_depth", depth)
     ev.send()
     return span_id
 
@@ -42,26 +51,12 @@ def to_millis(secs, nanos):
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--test_results", type=str, help="Path to a file containing test results.")
+    parser.add_argument("--trace_id", type=str, help="Id of a trace containing the tests.")
     parser.add_argument(
-        "--test_results",
-        type=str,
-        help="Path to a file containing test results.",
+        "--parent_id", type=str, help="Id of a parent span to which all top-level spans will be linked to."
     )
-    parser.add_argument(
-        "--trace_id",
-        type=str,
-        help="Id of a trace containing the tests.",
-    )
-    parser.add_argument(
-        "--parent_id",
-        type=str,
-        help="Id of a parent span to which all top-level spans will be linked to.",
-    )
-    parser.add_argument(
-        "--type",
-        type=str,
-        help="Type of a tests suite that spans relate to.",
-    )
+    parser.add_argument("--type", type=str, help="Type of a test suite that spans correspond to.")
     args = parser.parse_args()
 
     api_token = os.getenv("HONEYCOMB_API_TOKEN")
@@ -70,7 +65,8 @@ def main():
 
     libhoney.init(writekey=api_token, dataset="gitlab-ci-dfinity", debug=False)
     root = input.read_test_results(args.test_results)
-    create_and_export_spans(root, args.trace_id, args.parent_id, args.type)
+    ctx = Context(args.trace_id, root.name, args.type)
+    create_and_export_spans(root, args.parent_id, ctx, 0)
     libhoney.close()
 
 
