@@ -226,14 +226,18 @@ impl NervousSystemParameters {
     }
 
     fn validate_default_followees(&self) -> Result<(), String> {
+        let default_followees = self
+            .default_followees
+            .as_ref()
+            .ok_or_else(|| "NervousSystemParameters.default_followees must be set".to_string())?;
+
         let max_followees_per_action = self.validate_max_followees_per_action()?;
-        if let Some(default_followees) = &self.default_followees {
-            if default_followees.followees.len() > max_followees_per_action as usize {
-                return Err(format!(
-                    "NervousSystemParameters.default_followees must have size less than {}",
-                    max_followees_per_action
-                ));
-            }
+
+        if default_followees.followees.len() > max_followees_per_action as usize {
+            return Err(format!(
+                "NervousSystemParameters.default_followees must have size less than {}",
+                max_followees_per_action
+            ));
         }
 
         Ok(())
@@ -300,10 +304,18 @@ impl NervousSystemParameters {
     }
 
     fn validate_max_neuron_age_for_age_bonus(&self) -> Result<(), String> {
+        self.max_neuron_age_for_age_bonus.ok_or_else(|| {
+            "NervousSystemParameters.max_neuron_age_for_age_bonus must be set".to_string()
+        })?;
+
         Ok(())
     }
 
     fn validate_reward_distribution_period_seconds(&self) -> Result<(), String> {
+        self.reward_distribution_period_seconds.ok_or_else(|| {
+            "NervousSystemParameters.reward_distribution_period_seconds must be set".to_string()
+        })?;
+
         Ok(())
     }
 
@@ -332,13 +344,16 @@ impl NervousSystemParameters {
     }
 
     fn validate_neuron_claimer_permissions(&self) -> Result<(), String> {
-        if let Some(neuron_claimer_permissions) = &self.neuron_claimer_permissions {
-            if !neuron_claimer_permissions
-                .permissions
-                .contains(&(NeuronPermissionType::ManagePrincipals as i32))
-            {
-                return Err("NervousSystemParameters.neuron_claimer_permissions must contain NeuronPermissionType::ManagePrincipals".to_string());
-            }
+        let neuron_claimer_permissions =
+            self.neuron_claimer_permissions.as_ref().ok_or_else(|| {
+                "NervousSystemParameters.neuron_claimer_permissions must be set".to_string()
+            })?;
+
+        if !neuron_claimer_permissions
+            .permissions
+            .contains(&(NeuronPermissionType::ManagePrincipals as i32))
+        {
+            return Err("NervousSystemParameters.neuron_claimer_permissions must contain NeuronPermissionType::ManagePrincipals".to_string());
         }
 
         Ok(())
@@ -351,6 +366,10 @@ impl NervousSystemParameters {
     }
 
     fn validate_neuron_grantable_permissions(&self) -> Result<(), String> {
+        self.neuron_grantable_permissions.as_ref().ok_or_else(|| {
+            "NervousSystemParameters.neuron_grantable_permissions must be set".to_string()
+        })?;
+
         Ok(())
     }
 
@@ -784,6 +803,10 @@ mod tests {
                 ..NervousSystemParameters::with_default_values()
             },
             NervousSystemParameters {
+                default_followees: None,
+                ..NervousSystemParameters::with_default_values()
+            },
+            NervousSystemParameters {
                 max_number_of_neurons: None,
                 ..NervousSystemParameters::with_default_values()
             },
@@ -821,6 +844,14 @@ mod tests {
                 ..NervousSystemParameters::with_default_values()
             },
             NervousSystemParameters {
+                max_neuron_age_for_age_bonus: None,
+                ..NervousSystemParameters::with_default_values()
+            },
+            NervousSystemParameters {
+                reward_distribution_period_seconds: None,
+                ..NervousSystemParameters::with_default_values()
+            },
+            NervousSystemParameters {
                 max_number_of_proposals_with_ballots: None,
                 ..NervousSystemParameters::with_default_values()
             },
@@ -838,6 +869,14 @@ mod tests {
                 neuron_claimer_permissions: Some(NeuronPermissionList {
                     permissions: vec![NeuronPermissionType::Vote as i32],
                 }),
+                ..NervousSystemParameters::with_default_values()
+            },
+            NervousSystemParameters {
+                neuron_claimer_permissions: None,
+                ..NervousSystemParameters::with_default_values()
+            },
+            NervousSystemParameters {
+                neuron_grantable_permissions: None,
                 ..NervousSystemParameters::with_default_values()
             },
             NervousSystemParameters {
