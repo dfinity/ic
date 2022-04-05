@@ -56,6 +56,10 @@ impl CombinedCommitment {
         }
     }
 
+    pub(crate) fn reconstruction_threshold(&self) -> usize {
+        self.commitment().len()
+    }
+
     pub fn serialize(&self) -> ThresholdEcdsaResult<Vec<u8>> {
         serde_cbor::to_vec(self)
             .map_err(|e| ThresholdEcdsaError::SerializationError(format!("{}", e)))
@@ -428,6 +432,10 @@ impl CommitmentOpening {
         receiver_index: NodeIndex,
         curve: EccCurveType,
     ) -> ThresholdEcdsaResult<Self> {
+        if openings.len() < transcript_commitment.reconstruction_threshold() {
+            return Err(ThresholdEcdsaError::InsufficientOpenings);
+        }
+
         // Recombine the openings according to the type of combined polynomial
         match transcript_commitment {
             CombinedCommitment::BySummation(commitment) => {
