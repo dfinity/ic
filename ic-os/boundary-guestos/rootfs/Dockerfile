@@ -256,6 +256,8 @@ RUN cd /tmp && tar xfvz service-worker-${sw_version}.tgz &&\
     rm -rf /tmp/package /tmp/service-worker-${sw_version}.tgz
 RUN chown www-data:www-data /var/www/html && \
     chmod 0755 /var/www/html/*
+# Install other files (e.g. the uninstall-script)
+COPY var/www/html /var/www/html
 
 # Clear all files that may lead to indeterministic build.
 RUN apt-get clean && \
@@ -279,6 +281,7 @@ RUN find /opt -type d -exec chmod 0755 {} \+ && \
 COPY boot /boot
 # Update POSIX permissions in /boot/
 RUN chmod 0644 /boot/extra_boot_args /boot/version.txt
+
 
 
 # CERTIFICATES
