@@ -3,6 +3,7 @@ Title:: Bitcoin integration test
 end::catalog[] */
 
 use std::io::Read;
+use std::net::IpAddr;
 
 use crate::nns::NnsExt;
 use crate::util::{self /* runtime_from_url */};
@@ -39,7 +40,12 @@ docker run -v bitcoind-data:/bitcoin/.bitcoin --name=bitcoind-node -d \
         .start(&env)
         .expect("failed to setup universal VM");
 
+    let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
+    let universal_vm = deployed_universal_vm.get_vm().unwrap();
+    let btc_node_ipv6 = universal_vm.ipv6;
+
     InternetComputer::new()
+        .with_bitcoind_addr(IpAddr::V6(btc_node_ipv6))
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(4))
         .add_subnet(
             Subnet::new(SubnetType::Application)
@@ -54,12 +60,6 @@ docker run -v bitcoind-data:/bitcoin/.bitcoin --name=bitcoind-node -d \
 }
 
 pub fn test(env: TestEnv, logger: Logger) {
-    let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
-    let universal_vm = deployed_universal_vm.get_vm().unwrap();
-    let btc_node_ipv6 = universal_vm.ipv6;
-
-    info!(&logger, "BTC Node has IPv6 {:?}", btc_node_ipv6);
-
     info!(&logger, "Checking readiness of all nodes...");
     for subnet in env.topology_snapshot().subnets() {
         for node in subnet.nodes() {
@@ -72,6 +72,7 @@ pub fn test(env: TestEnv, logger: Logger) {
         logger,
         "Executing the uname -a command on the universal VM via SSH..."
     );
+    let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
     let sess = deployed_universal_vm.await_ssh_session().unwrap();
     let mut channel = sess.channel_session().unwrap();
     channel.exec("uname -a").unwrap();

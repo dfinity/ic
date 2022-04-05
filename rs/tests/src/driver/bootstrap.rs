@@ -36,6 +36,7 @@ pub type UnassignedNodes = BTreeMap<NodeIndex, NodeConfiguration>;
 pub type NodeVms = BTreeMap<NodeId, AllocatedVm>;
 
 const CONF_IMG_FNAME: &str = "config_disk.img";
+const BITCOIND_ADDR_PATH: &str = "bitcoind_addr";
 
 fn mk_compressed_img_path() -> std::string::String {
     return format!("{}.gz", CONF_IMG_FNAME);
@@ -49,6 +50,10 @@ pub fn init_ic(
     let mut next_node_index = 0u64;
     let ic_name = ic.name();
     let working_dir = test_env.create_prep_dir(&ic_name)?;
+
+    if let Some(bitcoind_addr) = ic.bitcoind_addr {
+        test_env.write_object(BITCOIND_ADDR_PATH, &bitcoind_addr)?;
+    }
 
     // In production, this dummy hash is not actually checked and exists
     // only as a placeholder: Updating individual binaries (replica/orchestrator)
@@ -256,6 +261,12 @@ pub fn create_config_disk_image(
         );
         cmd.arg("--log_debug_overrides")
             .arg(log_debug_overrides_val);
+    }
+
+    let bitcoind_addr_path = test_env.get_path(BITCOIND_ADDR_PATH);
+    if bitcoind_addr_path.exists() {
+        let bitcoind_addr: IpAddr = test_env.read_object(BITCOIND_ADDR_PATH)?;
+        cmd.arg("--bitcoind_addr").arg(bitcoind_addr.to_string());
     }
 
     let output = cmd.output()?;
