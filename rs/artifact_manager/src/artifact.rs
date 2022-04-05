@@ -3,9 +3,9 @@
 use ic_consensus_message::ConsensusMessageHashable;
 use ic_ecdsa_object::ecdsa_msg_hash;
 use ic_types::{
-    artifact::*, consensus::certification::CertificationMessageHash,
-    consensus::ecdsa::EcdsaMessageAttribute, crypto::CryptoHashOf, messages::SignedRequestBytes,
-    CountBytes,
+    artifact::*, canister_http::CanisterHttpResponseShare,
+    consensus::certification::CertificationMessageHash, consensus::ecdsa::EcdsaMessageAttribute,
+    crypto::CryptoHashOf, messages::SignedRequestBytes, CountBytes,
 };
 use serde::{Deserialize, Serialize};
 
@@ -161,6 +161,32 @@ impl ArtifactKind for EcdsaArtifact {
             attribute: EcdsaMessageAttribute::from(msg),
             size,
             integrity_hash: ic_crypto_hash::crypto_hash(msg).get(),
+        }
+    }
+}
+
+pub struct CanisterHttpArtifact;
+
+/// `CanisterHttpArtifact` implements the `ArtifactKind` trait.
+impl ArtifactKind for CanisterHttpArtifact {
+    const TAG: ArtifactTag = ArtifactTag::CanisterHttpArtifact;
+    type Id = CanisterHttpResponseId;
+    type Message = CanisterHttpResponseShare;
+    type SerializeAs = CanisterHttpResponseShare;
+    type Attribute = ();
+    type Filter = ();
+
+    /// This function converts a `CanisterHttpResponseShare` into an advert for a
+    /// `CanisterHttpArtifact`.
+    fn message_to_advert(msg: &CanisterHttpResponseShare) -> Advert<CanisterHttpArtifact> {
+        // TODO: use serialize_len() in all the clients
+        let size = bincode::serialize(msg).unwrap().len();
+        let hash = ic_crypto_hash::crypto_hash(msg);
+        Advert {
+            id: hash.clone(),
+            attribute: (),
+            size,
+            integrity_hash: hash.get(),
         }
     }
 }

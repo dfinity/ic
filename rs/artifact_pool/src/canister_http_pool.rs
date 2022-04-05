@@ -16,12 +16,13 @@ use ic_interfaces::{
 use ic_metrics::MetricsRegistry;
 use ic_types::{
     artifact::CanisterHttpResponseId,
-    canister_http::{CanisterHttpResponseShare, CanisterHttpResponseShareSignature},
+    canister_http::{CanisterHttpResponseContent, CanisterHttpResponseShare},
     crypto::CryptoHashOf,
     time::current_time,
 };
 
 const POOL_CANISTER_HTTP: &str = "canister_http";
+const POOL_CANISTER_HTTP_CONTENT: &str = "canister_http_content";
 
 type ValidatedCanisterHttpPoolSection = PoolSection<
     CryptoHashOf<CanisterHttpResponseShare>,
@@ -33,16 +34,29 @@ type UnvalidatedCanisterHttpPoolSection = PoolSection<
     UnvalidatedArtifact<CanisterHttpResponseShare>,
 >;
 
+type ContentCanisterHttpPoolSection =
+    PoolSection<CryptoHashOf<CanisterHttpResponseContent>, CanisterHttpResponseContent>;
+
 pub struct CanisterHttpPoolImpl {
     validated: ValidatedCanisterHttpPoolSection,
     unvalidated: UnvalidatedCanisterHttpPoolSection,
+    content: ContentCanisterHttpPoolSection,
 }
 
 impl CanisterHttpPoolImpl {
     pub fn new(metrics: MetricsRegistry) -> Self {
         Self {
             validated: PoolSection::new(metrics.clone(), POOL_CANISTER_HTTP, POOL_TYPE_VALIDATED),
-            unvalidated: PoolSection::new(metrics, POOL_CANISTER_HTTP, POOL_TYPE_UNVALIDATED),
+            unvalidated: PoolSection::new(
+                metrics.clone(),
+                POOL_CANISTER_HTTP,
+                POOL_TYPE_UNVALIDATED,
+            ),
+            content: ContentCanisterHttpPoolSection::new(
+                metrics,
+                POOL_CANISTER_HTTP_CONTENT,
+                POOL_TYPE_VALIDATED,
+            ),
         }
     }
 }
@@ -55,6 +69,20 @@ impl CanisterHttpPool for CanisterHttpPoolImpl {
     fn get_unvalidated_shares(&self) -> Box<dyn Iterator<Item = &CanisterHttpResponseShare> + '_> {
         Box::new(self.unvalidated.values().map(|artifact| &artifact.message))
     }
+
+    fn lookup_validated(
+        &self,
+        msg_id: &CanisterHttpResponseId,
+    ) -> Option<CanisterHttpResponseShare> {
+        self.validated.get(msg_id).map(|s| s.msg.clone())
+    }
+
+    fn lookup_unvalidated(
+        &self,
+        msg_id: &CanisterHttpResponseId,
+    ) -> Option<CanisterHttpResponseShare> {
+        self.unvalidated.get(msg_id).map(|s| s.message.clone())
+    }
 }
 
 impl MutableCanisterHttpPool for CanisterHttpPoolImpl {
@@ -66,17 +94,16 @@ impl MutableCanisterHttpPool for CanisterHttpPoolImpl {
     fn apply_changes(&mut self, change_set: CanisterHttpChangeSet) {
         for action in change_set {
             match action {
-                CanisterHttpChangeAction::AddToValidated(msg) => {
-                    // NOTE: We should always inserts a share that has content attached.
-                    debug_assert!(msg.has_content());
-
+                CanisterHttpChangeAction::AddToValidated(share, content) => {
                     self.validated.insert(
-                        ic_crypto::crypto_hash(&msg),
+                        ic_crypto::crypto_hash(&share),
                         ValidatedArtifact {
-                            msg,
+                            msg: share,
                             timestamp: current_time(),
                         },
                     );
+                    self.content
+                        .insert(ic_crypto::crypto_hash(&content), content);
                 }
                 CanisterHttpChangeAction::MoveToValidated(id) => {
                     match self.unvalidated.remove(&id) {
@@ -107,9 +134,7 @@ impl MutableCanisterHttpPool for CanisterHttpPoolImpl {
     }
 }
 
-impl GossipPool<CanisterHttpResponseShareSignature, CanisterHttpChangeSet>
-    for CanisterHttpPoolImpl
-{
+impl GossipPool<CanisterHttpResponseShare, CanisterHttpChangeSet> for CanisterHttpPoolImpl {
     type MessageId = CanisterHttpResponseId;
     type Filter = ();
 
@@ -120,16 +145,17 @@ impl GossipPool<CanisterHttpResponseShareSignature, CanisterHttpChangeSet>
     fn get_validated_by_identifier(
         &self,
         id: &Self::MessageId,
-    ) -> Option<CanisterHttpResponseShareSignature> {
+    ) -> Option<CanisterHttpResponseShare> {
         self.validated
             .get(id)
-            .map(|artifact| (&artifact.msg).into())
+            .map(|artifact| (&artifact.msg))
+            .cloned()
     }
 
     fn get_all_validated_by_filter(
         &self,
         _filter: Self::Filter,
-    ) -> Box<dyn Iterator<Item = CanisterHttpResponseShareSignature> + '_> {
+    ) -> Box<dyn Iterator<Item = CanisterHttpResponseShare> + '_> {
         unimplemented!()
     }
 }
