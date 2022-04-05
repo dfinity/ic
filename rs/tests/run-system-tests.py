@@ -329,9 +329,14 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
 
     if is_honeycomb_push:
         logging.info("Pushing results to honeycomb.")
-        honeycomb_cmd = (
-            f"python3 {CI_PROJECT_DIR}/gitlab-ci/src/test_results/honeycomb.py "
-            f"--test_results={RESULT_FILE} --trace_id={ROOT_PIPELINE_ID} --parent_id={JOB_ID} --type=farm-based-tests"
+        honeycomb_cmd = " ".join(
+            [
+                f"python3 {CI_PROJECT_DIR}/gitlab-ci/src/test_results/honeycomb.py",
+                f"--test_results={RESULT_FILE}",
+                f"--trace_id={ROOT_PIPELINE_ID}",
+                f"--parent_id={JOB_ID}",
+                "--type=system-tests",
+            ]
         )
         honeycomb_returncode = run_command(command=honeycomb_cmd)
         if honeycomb_returncode == 0:
