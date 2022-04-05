@@ -1,7 +1,6 @@
 use ic_base_types::{CanisterIdError, PrincipalIdBlobParseError};
-use ic_types::{
-    methods::WasmMethod, user_error::UserError, CanisterId, CanisterStatusType, Cycles,
-};
+use ic_error_types::UserError;
+use ic_types::{methods::WasmMethod, CanisterId, CanisterStatusType, Cycles};
 use ic_wasm_types::{WasmEngineError, WasmInstrumentationError, WasmValidationError};
 use serde::{Deserialize, Serialize};
 
@@ -193,7 +192,7 @@ impl std::fmt::Display for HypervisorError {
 
 impl HypervisorError {
     pub fn into_user_error(self, canister_id: &CanisterId) -> UserError {
-        use ic_types::user_error::ErrorCode as E;
+        use ic_error_types::ErrorCode as E;
 
         match self {
             Self::MessageRejected => UserError::new(

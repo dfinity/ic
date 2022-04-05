@@ -3,6 +3,7 @@ use ic_base_types::{PrincipalId, SubnetId};
 use ic_canister_client::Sender;
 use ic_config::Config;
 use ic_config::{crypto::CryptoConfig, transport::TransportFlowConfig};
+use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_interfaces::execution_environment::{IngressHistoryReader, QueryHandler};
 use ic_interfaces::registry::RegistryClient;
@@ -24,7 +25,6 @@ use ic_test_utilities::{
     types::ids::user_anonymous_id, types::messages::SignedIngressBuilder,
     universal_canister::UNIVERSAL_CANISTER_WASM, with_test_replica_logger,
 };
-use ic_types::user_error::{ErrorCode, RejectCode};
 use ic_types::{
     ic00::{
         CanisterIdRecord, InstallCodeArgs, Method, Payload,
@@ -34,7 +34,6 @@ use ic_types::{
     messages::{CanisterInstallMode, SignedIngress, UserQuery},
     replica_config::NODE_INDEX_DEFAULT,
     time::current_time_and_expiry_time,
-    user_error::UserError,
     CanisterId, Height, NodeId, RegistryVersion, Time,
 };
 use prost::Message;

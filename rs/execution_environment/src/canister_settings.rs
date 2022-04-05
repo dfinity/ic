@@ -1,7 +1,7 @@
 use ic_base_types::{NumBytes, NumSeconds};
+use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::CanisterSettingsArgs;
 use ic_types::{
-    user_error::{ErrorCode, UserError},
     ComputeAllocation, InvalidComputeAllocationError, InvalidMemoryAllocationError,
     MemoryAllocation, PrincipalId,
 };

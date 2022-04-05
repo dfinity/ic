@@ -1,3 +1,4 @@
+use ic_error_types::{ErrorCode::CanisterNotFound, UserError};
 use ic_execution_environment::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
 use ic_interfaces::execution_environment::{IngressHistoryReader, IngressHistoryWriter};
 use ic_interfaces_state_manager::Labeled;
@@ -12,7 +13,6 @@ use ic_test_utilities::{
 };
 use ic_types::{
     ingress::{IngressStatus, WasmResult},
-    user_error::{ErrorCode::CanisterNotFound, UserError},
     Height,
 };
 use IngressStatus::*;

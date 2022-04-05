@@ -42,6 +42,7 @@ use crate::{
     NonReplicatedQueryKind, QueryExecutionType,
 };
 use ic_base_types::NumBytes;
+use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
     ExecutionMode, ExecutionParameters, HypervisorError, HypervisorResult, SubnetAvailableMemory,
 };
@@ -56,7 +57,6 @@ use ic_types::{
         CallContextId, CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response,
         UserQuery,
     },
-    user_error::{ErrorCode, RejectCode, UserError},
     CanisterId, Cycles, NumInstructions, NumMessages, PrincipalId, QueryAllocation,
 };
 use std::{

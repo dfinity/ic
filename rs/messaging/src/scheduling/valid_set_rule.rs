@@ -7,6 +7,7 @@ use ic_base_types::NumBytes;
 use ic_cycles_account_manager::{
     CyclesAccountManager, IngressInductionCost, IngressInductionCostError,
 };
+use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::IngressHistoryWriter;
 use ic_logger::{debug, error, trace, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, buckets::linear_buckets, MetricsRegistry};
@@ -23,7 +24,6 @@ use ic_types::{
     ingress::IngressStatus,
     messages::{is_subnet_message, SignedIngressContent},
     time::current_time_and_expiry_time,
-    user_error::{ErrorCode, UserError},
     CanisterStatusType, SubnetId, Time,
 };
 use prometheus::{Histogram, HistogramVec, IntCounterVec, IntGauge};

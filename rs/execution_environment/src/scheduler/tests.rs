@@ -4,6 +4,7 @@ use crate::execution_environment::MockExecutionEnvironment;
 use candid::Encode;
 use ic_base_types::NumSeconds;
 use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
+use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{CanisterIdRecord, Method};
 use ic_interfaces::execution_environment::{
     CanisterHeartbeatError, ExecuteMessageResult, HypervisorError,
@@ -40,11 +41,7 @@ use ic_test_utilities::{
 use ic_types::messages::CallContextId;
 use ic_types::methods::{Callback, SystemMethod, WasmClosure};
 use ic_types::{
-    ingress::WasmResult,
-    methods::WasmMethod,
-    time::UNIX_EPOCH,
-    user_error::{ErrorCode, UserError},
-    ComputeAllocation, Cycles, NumBytes,
+    ingress::WasmResult, methods::WasmMethod, time::UNIX_EPOCH, ComputeAllocation, Cycles, NumBytes,
 };
 use ic_types::{
     messages::{CallbackId, RequestOrResponse, MAX_RESPONSE_COUNT_BYTES},

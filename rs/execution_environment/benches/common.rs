@@ -3,6 +3,7 @@
 ///
 use criterion::{BatchSize, Criterion};
 use ic_config::execution_environment::Config;
+use ic_error_types::RejectCode;
 use ic_execution_environment::Hypervisor;
 use ic_interfaces::{
     execution_environment::{
@@ -25,7 +26,6 @@ use ic_test_utilities::{
 use ic_types::{
     messages::{CallbackId, Payload, RejectContext},
     methods::{Callback, WasmClosure},
-    user_error::RejectCode,
     CanisterId, Cycles, MemoryAllocation, NumBytes, NumInstructions, Time,
 };
 use lazy_static::lazy_static;

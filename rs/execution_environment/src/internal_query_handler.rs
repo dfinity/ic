@@ -1,11 +1,11 @@
 use crate::ExecutionEnvironmentImpl;
+use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::AnonymousQueryService;
 use ic_interfaces_state_manager::StateReader;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     ingress::WasmResult,
     messages::{Blob, InternalQuery, InternalQueryResponse, InternalQueryResponseReply},
-    user_error::RejectCode,
     NumInstructions,
 };
 use std::convert::Infallible;

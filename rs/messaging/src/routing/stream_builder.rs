@@ -1,6 +1,7 @@
 use crate::message_routing::LatencyMetrics;
 use crate::xnet_payload_builder::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_base_types::NumBytes;
+use ic_error_types::RejectCode;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_registry_subnet_type::SubnetType;
@@ -10,10 +11,9 @@ use ic_replicated_state::{
     canister_state::QUEUE_INDEX_NONE, replicated_state::ReplicatedStateMessageRouting,
     ReplicatedState,
 };
-use ic_types::xnet::QueueId;
 use ic_types::{
     messages::{Payload, RejectContext, Request, RequestOrResponse, Response},
-    user_error::RejectCode,
+    xnet::QueueId,
     CountBytes, QueueIndex, SubnetId,
 };
 #[cfg(test)]

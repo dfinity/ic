@@ -6,6 +6,7 @@ use crate::{
 };
 use ic_base_types::NumSeconds;
 use ic_config::{execution_environment::Config, flag_status::FlagStatus};
+use ic_error_types::ErrorCode;
 use ic_interfaces::execution_environment::{
     AvailableMemory, ExecutionMode, ExecutionParameters, QueryHandler,
 };
@@ -22,9 +23,7 @@ use ic_test_utilities::{
     universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM},
     with_test_replica_logger,
 };
-use ic_types::{
-    ingress::WasmResult, messages::UserQuery, user_error::ErrorCode, ComputeAllocation,
-};
+use ic_types::{ingress::WasmResult, messages::UserQuery, ComputeAllocation};
 use ic_types::{CanisterId, Cycles, NumBytes, NumInstructions, SubnetId};
 use maplit::btreemap;
 use std::{convert::TryFrom, path::Path, sync::Arc};

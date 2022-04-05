@@ -8,6 +8,7 @@ use candid::Decode;
 use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::CyclesAccountManager;
+use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
     CanisterIdRecord, CanisterStatusResultV2, InstallCodeArgs, Method as Ic00Method,
     SetControllerArgs, UpdateSettingsArgs,
@@ -29,7 +30,6 @@ use ic_types::{
         CanisterInstallMode, Payload, RejectContext, Response as CanisterResponse,
         StopCanisterContext,
     },
-    user_error::{ErrorCode, RejectCode, UserError},
     CanisterId, CanisterStatusType, ComputeAllocation, Cycles, Height, InstallCodeContext,
     MemoryAllocation, NumBytes, NumInstructions, PrincipalId, SubnetId, Time, UserId,
 };

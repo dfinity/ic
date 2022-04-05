@@ -7,6 +7,7 @@ edition = "2018"
 futures = "0.3.13"
 ic-config = { path = "../config" }
 ic-canister-client = { path = "../canister_client" }
+ic-error-types = { path = "../types/error_types" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-replica = { path = "../replica" }
 ic-registry-client-fake = { path = "../registry/fake" }

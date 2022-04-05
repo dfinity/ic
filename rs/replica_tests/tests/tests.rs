@@ -1,5 +1,6 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
+use ic_error_types::ErrorCode;
 use ic_replica_tests as utils;
 use ic_replica_tests::assert_reply;
 use ic_replicated_state::{PageIndex, PageMap};
@@ -12,7 +13,6 @@ use ic_types::{
     ingress::WasmResult,
     messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
     time::current_time_and_expiry_time,
-    user_error::ErrorCode,
     CanisterId, NumBytes, RegistryVersion,
 };
 

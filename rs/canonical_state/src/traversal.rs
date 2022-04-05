@@ -470,11 +470,9 @@ mod tests {
     #[test]
     fn test_traverse_ingress_history() {
         use crate::subtree_visitor::{Pattern, SubtreeVisitor};
+        use ic_error_types::{ErrorCode, UserError};
         use ic_test_utilities::types::ids::{message_test_id, subnet_test_id, user_test_id};
-        use ic_types::{
-            ingress::{IngressStatus, WasmResult},
-            user_error::{ErrorCode, UserError},
-        };
+        use ic_types::ingress::{IngressStatus, WasmResult};
 
         let user_id = user_test_id(1);
         let canister_id = canister_test_id(1);

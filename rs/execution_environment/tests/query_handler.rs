@@ -1,5 +1,6 @@
 use ic_config::execution_environment::Config;
 use ic_config::subnet_config::SubnetConfigs;
+use ic_error_types::ErrorCode;
 use ic_execution_environment::ExecutionServices;
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
@@ -11,7 +12,7 @@ use ic_test_utilities::{
     types::ids::{subnet_test_id, user_test_id},
     with_test_replica_logger,
 };
-use ic_types::{messages::UserQuery, user_error::ErrorCode, CanisterId, SubnetId};
+use ic_types::{messages::UserQuery, CanisterId, SubnetId};
 use maplit::btreemap;
 use std::{convert::TryFrom, path::Path, sync::Arc};
 

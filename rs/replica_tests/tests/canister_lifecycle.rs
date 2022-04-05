@@ -1,6 +1,7 @@
 use assert_matches::assert_matches;
 use candid::Encode;
 use ic_config::Config;
+use ic_error_types::{ErrorCode, RejectCode};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replica_tests as utils;
 use ic_replica_tests::assert_reject;
@@ -14,7 +15,6 @@ use ic_types::{
     },
     ingress::WasmResult,
     messages::CanisterInstallMode,
-    user_error::{ErrorCode, RejectCode},
     CanisterId, CanisterStatusType, ComputeAllocation, Cycles, NumBytes, PrincipalId,
 };
 use maplit::btreeset;

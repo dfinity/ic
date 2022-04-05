@@ -9,6 +9,7 @@ use crate::{
     CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION,
 };
 use ic_crypto_tree_hash::Label;
+use ic_error_types::RejectCode;
 use ic_registry_routing_table::RoutingTable;
 use ic_replicated_state::{
     canister_state::CanisterState,
@@ -19,7 +20,6 @@ use ic_replicated_state::{
 use ic_types::{
     ingress::{IngressStatus, WasmResult},
     messages::{MessageId, EXPECTED_MESSAGE_ID_LENGTH},
-    user_error::RejectCode,
     xnet::{StreamHeader, StreamIndex, StreamIndexedQueue},
     CanisterId, PrincipalId, SubnetId,
 };

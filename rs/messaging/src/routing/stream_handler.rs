@@ -1,6 +1,7 @@
 use crate::message_routing::LatencyMetrics;
 use ic_base_types::{CanisterId, NumBytes};
 use ic_config::execution_environment::Config as HypervisorConfig;
+use ic_error_types::RejectCode;
 use ic_logger::{debug, error, fatal, trace, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_registry_routing_table::RoutingTable;
@@ -17,7 +18,6 @@ use ic_replicated_state::{
 };
 use ic_types::{
     messages::{Payload, RejectContext, RequestOrResponse, Response},
-    user_error::RejectCode,
     xnet::{StreamIndex, StreamIndexedQueue, StreamSlice},
     SubnetId,
 };

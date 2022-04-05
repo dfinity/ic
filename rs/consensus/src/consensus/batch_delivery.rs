@@ -313,16 +313,16 @@ pub fn generate_responses_to_setup_initial_dkg_calls(
             }
             (Some(Err(err_str1)), Some(Err(err_str2))) => {
                 Some(messages::Payload::Reject(messages::RejectContext {
-                    code: ic_types::user_error::RejectCode::CanisterReject,
+                    code: ic_error_types::RejectCode::CanisterReject,
                     message: format!("{}{}", err_str1, err_str2),
                 }))
             }
             (Some(Err(err_str)), _) => Some(messages::Payload::Reject(messages::RejectContext {
-                code: ic_types::user_error::RejectCode::CanisterReject,
+                code: ic_error_types::RejectCode::CanisterReject,
                 message: err_str.to_string(),
             })),
             (_, Some(Err(err_str))) => Some(messages::Payload::Reject(messages::RejectContext {
-                code: ic_types::user_error::RejectCode::CanisterReject,
+                code: ic_error_types::RejectCode::CanisterReject,
                 message: err_str.to_string(),
             })),
             _ => None,
