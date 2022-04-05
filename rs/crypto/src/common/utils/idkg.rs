@@ -1,7 +1,8 @@
 use ic_base_types::{
-    subnet_id_into_protobuf, subnet_id_try_from_protobuf, NodeId, RegistryVersion,
+    subnet_id_into_protobuf, subnet_id_try_from_protobuf, NodeId, PrincipalId, RegistryVersion,
 };
 use ic_protobuf::registry::subnet::v1::DealerTuple as DealerTupleProto;
+use ic_protobuf::registry::subnet::v1::ExtendedDerivationPath as ExtendedDerivationPathProto;
 use ic_protobuf::registry::subnet::v1::IDkgDealing as IDkgDealingProto;
 use ic_protobuf::registry::subnet::v1::IDkgDealingTuple as IDkgDealingTupleProto;
 use ic_protobuf::registry::subnet::v1::IDkgTranscript as IDkgTranscriptProto;
@@ -11,15 +12,19 @@ use ic_protobuf::registry::subnet::v1::IDkgTranscriptParams as IDkgTranscriptPar
 use ic_protobuf::registry::subnet::v1::InitialIDkgDealings as InitialIDkgDealingsProto;
 use ic_protobuf::registry::subnet::v1::VerifiedIDkgDealing as VerifiedIDkgDealingProto;
 use ic_protobuf::types::v1::NodeId as NodeIdProto;
+use ic_protobuf::types::v1::PrincipalId as PrincipalIdProto;
 use ic_types::consensus::ecdsa::EcdsaDealing;
 use ic_types::crypto::canister_threshold_sig::error::InitialIDkgDealingsValidationError;
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgDealing, IDkgMultiSignedDealing, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
     IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType, InitialIDkgDealings,
 };
+use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, CombinedMultiSig, CombinedMultiSigOf};
 use ic_types::{node_id_into_protobuf, node_id_try_from_protobuf, Height, NodeIndex};
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
+use std::convert::TryFrom;
 use std::iter::FromIterator;
 
 #[cfg(test)]
@@ -27,7 +32,7 @@ mod tests;
 
 const CURRENT_INITIAL_IDKG_DEALINGS_VERSION: u32 = 0;
 
-/// Converts InitialIDkgDealings into the corresponding protobuf representation.
+/// Converts `InitialIDkgDealings` into the corresponding protobuf representation.
 pub fn idkg_initial_dealings_to_proto(
     initial_dealings: InitialIDkgDealings,
 ) -> InitialIDkgDealingsProto {
@@ -43,7 +48,7 @@ pub fn idkg_initial_dealings_to_proto(
     }
 }
 
-/// Converts InitialIDkgDealings-proto into the corresponding Rust-struct representation.
+/// Converts `InitialIDkgDealings`-proto into the corresponding Rust-struct representation.
 pub fn idkg_initial_dealings_from_proto(
     initial_dealings_proto: InitialIDkgDealingsProto,
 ) -> Result<InitialIDkgDealings, InitialIDkgDealingsValidationError> {
@@ -57,6 +62,40 @@ pub fn idkg_initial_dealings_from_proto(
     InitialIDkgDealings::new(params, dealings)
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ExtendedDerivationPathSerializationError {
+    MissingCaller,
+    InvalidCaller { error: String },
+}
+
+/// Converts `ExtendedDerivationPath` into the corresponding protobuf representation.
+pub fn extended_derivation_path_to_proto(
+    path: &ExtendedDerivationPath,
+) -> ExtendedDerivationPathProto {
+    ExtendedDerivationPathProto {
+        caller: Some(PrincipalIdProto::from(path.caller)),
+        derivation_path: path.derivation_path.clone(),
+    }
+}
+
+/// Converts `ExtendedDerivationPath`-proto into the corresponding Rust-struct representation.
+pub fn extended_derivation_path_from_proto(
+    proto: &ExtendedDerivationPathProto,
+) -> Result<ExtendedDerivationPath, ExtendedDerivationPathSerializationError> {
+    let caller_proto = proto
+        .caller
+        .as_ref()
+        .ok_or(ExtendedDerivationPathSerializationError::MissingCaller)?;
+    let caller = PrincipalId::try_from(&caller_proto.raw).map_err(|e| {
+        ExtendedDerivationPathSerializationError::InvalidCaller {
+            error: e.to_string(),
+        }
+    })?;
+    Ok(ExtendedDerivationPath {
+        caller,
+        derivation_path: proto.derivation_path.clone(),
+    })
+}
 // ----- Conversion helpers.
 fn idkg_transcript_id_proto(idkg_transcript_id: &IDkgTranscriptId) -> IDkgTranscriptIdProto {
     IDkgTranscriptIdProto {
