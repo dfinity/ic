@@ -6,6 +6,7 @@ use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto::prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_cycles_account_manager::CyclesAccountManager;
+use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::Method as Ic00Method;
 use ic_interfaces::execution_environment::AvailableMemory;
 use ic_interfaces::{
@@ -24,7 +25,6 @@ use ic_types::{
     ic00::{EmptyBlob, InstallCodeArgs, Payload as _, IC_00},
     ingress::{IngressStatus, WasmResult},
     messages::{Ingress, MessageId, Payload, Response, StopCanisterContext},
-    user_error::{ErrorCode, UserError},
     AccumulatedPriority, CanisterId, CanisterStatusType, ComputeAllocation, ExecutionRound,
     InstallCodeContext, MemoryAllocation, NumBytes, NumInstructions, Randomness, SubnetId, Time,
 };

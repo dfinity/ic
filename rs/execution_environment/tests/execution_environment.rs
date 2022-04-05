@@ -2,6 +2,7 @@ use assert_matches::assert_matches;
 use candid::Encode;
 use ic_base_types::NumSeconds;
 use ic_config::{execution_environment, subnet_config::CyclesAccountManagerConfig};
+use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::{
     ExecutionEnvironment, ExecutionEnvironmentImpl, Hypervisor, IngressHistoryWriterImpl,
 };
@@ -61,7 +62,6 @@ use ic_types::{
         Response, StopCanisterContext, MAX_RESPONSE_COUNT_BYTES,
     },
     methods::{Callback, WasmClosure},
-    user_error::{ErrorCode, RejectCode, UserError},
     CanisterId, CanisterStatusType, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
     NumInstructions, PrincipalId, QueueIndex, RegistryVersion, SubnetId, Time,
 };

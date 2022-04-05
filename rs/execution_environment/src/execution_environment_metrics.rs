@@ -1,6 +1,7 @@
+use ic_error_types::UserError;
 use ic_metrics::buckets::decimal_buckets;
 use ic_metrics::{MetricsRegistry, Timer};
-use ic_types::{ic00, user_error::UserError};
+use ic_types::ic00;
 use prometheus::HistogramVec;
 use std::str::FromStr;
 

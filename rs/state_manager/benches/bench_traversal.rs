@@ -72,10 +72,8 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     let time = mock_time();
 
     for i in 1..NUM_STATUSES {
-        use ic_types::{
-            ingress::{IngressStatus::*, WasmResult::*},
-            user_error::{ErrorCode, UserError},
-        };
+        use ic_error_types::{ErrorCode, UserError};
+        use ic_types::ingress::{IngressStatus::*, WasmResult::*};
 
         let status = match i % 6 {
             0 => Received {

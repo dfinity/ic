@@ -13,6 +13,7 @@ ic-config = { path = "../config" }
 ic-crypto-hash = { path = "../crypto/hash" }
 ic-crypto-sha = { path = "../crypto/sha" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
+ic-error-types = { path = "../types/error_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-logger = { path = "../monitoring/logger" }

@@ -1,3 +1,4 @@
+use ic_error_types::{ErrorCode, RejectCode};
 use ic_interfaces::execution_environment::{
     IngressHistoryError, IngressHistoryReader, IngressHistoryWriter,
 };
@@ -5,12 +6,7 @@ use ic_interfaces_state_manager::{StateManagerError, StateReader};
 use ic_logger::{fatal, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry, Timer};
 use ic_replicated_state::ReplicatedState;
-use ic_types::{
-    ingress::IngressStatus,
-    messages::MessageId,
-    user_error::{ErrorCode, RejectCode},
-    Height, Time,
-};
+use ic_types::{ingress::IngressStatus, messages::MessageId, Height, Time};
 use prometheus::{Histogram, HistogramVec};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};

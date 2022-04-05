@@ -1,5 +1,6 @@
 use crate::config;
 use candid::{Decode, Encode};
+use ic_error_types::RejectCode;
 use ic_execution_environment::{Hypervisor, QueryExecutionType};
 use ic_ic00_types::CanisterHttpResponsePayload;
 use ic_interfaces::execution_environment::{
@@ -37,7 +38,6 @@ use ic_types::{
     ingress::WasmResult,
     messages::{CallbackId, Payload, RejectContext, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
     methods::{Callback, FuncRef, SystemMethod, WasmClosure, WasmMethod},
-    user_error::RejectCode,
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
     PrincipalId, SubnetId, Time, UserId,
 };

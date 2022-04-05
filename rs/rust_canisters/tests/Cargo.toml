@@ -44,6 +44,7 @@ criterion = "0.3"
 assert_matches = "1.3.0"
 on_wire = { path = "../on_wire" }
 ic-canister-client = { path = "../../canister_client" }
+ic-error-types = { path = "../../types/error_types" }
 ic-test-identity = { path = "../../test_utilities/identity" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-types = { path = "../../types/types" }

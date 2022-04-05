@@ -13,17 +13,18 @@ use crate::{
 };
 use ic_base_types::PrincipalId;
 use ic_btc_types_internal::{BitcoinAdapterRequestWrapper, BitcoinAdapterResponse};
+use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::{
     execution_environment::CanisterOutOfCyclesError, messages::CanisterInputMessage,
 };
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_features::BitcoinFeature;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::messages::CallbackId;
 use ic_types::{
     ingress::IngressStatus,
-    messages::{is_subnet_message, MessageId, RequestOrResponse, Response, SignedIngressContent},
-    user_error::{ErrorCode, UserError},
+    messages::{
+        is_subnet_message, CallbackId, MessageId, RequestOrResponse, Response, SignedIngressContent,
+    },
     xnet::QueueId,
     CanisterId, MemoryAllocation, NumBytes, QueueIndex, SubnetId, Time,
 };
@@ -756,7 +757,7 @@ impl ReplicatedState {
             BitcoinFeature::Enabled => self
                 .bitcoin_testnet
                 .push_request(request)
-                .map_err(|err| StateError::BitcoinStateError(err)),
+                .map_err(StateError::BitcoinStateError),
             BitcoinFeature::Paused => Err(StateError::BitcoinStateError(
                 BitcoinStateError::TestnetFeatureNotEnabled,
             )),
@@ -779,11 +780,11 @@ impl ReplicatedState {
             BitcoinFeature::Enabled => self
                 .bitcoin_testnet
                 .push_response(response)
-                .map_err(|err| StateError::BitcoinStateError(err)),
+                .map_err(StateError::BitcoinStateError),
             BitcoinFeature::Paused => self
                 .bitcoin_testnet
                 .push_response(response)
-                .map_err(|err| StateError::BitcoinStateError(err)),
+                .map_err(StateError::BitcoinStateError),
             BitcoinFeature::Disabled => Err(StateError::BitcoinStateError(
                 BitcoinStateError::TestnetFeatureNotEnabled,
             )),

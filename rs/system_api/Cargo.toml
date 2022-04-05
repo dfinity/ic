@@ -9,6 +9,7 @@ edition = "2018"
 candid = "0.7.4"
 ic-base-types = { path = "../types/base_types" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
+ic-error-types = { path = "../types/error_types" }
 ic-ic00-types = { path = "../types/ic00_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-nns-constants = { path = "../nns/constants" }

@@ -3,6 +3,7 @@ mod errors;
 
 pub use errors::{CanisterHeartbeatError, CanisterOutOfCyclesError, HypervisorError, TrapCode};
 use ic_base_types::NumBytes;
+use ic_error_types::UserError;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::{PageBytes, PageIndex};
@@ -14,7 +15,6 @@ use ic_types::{
         CertificateDelegation, HttpQueryResponse, InternalQuery, InternalQueryResponse, MessageId,
         SignedIngressContent, UserQuery,
     },
-    user_error::UserError,
     ComputeAllocation, Cycles, ExecutionRound, Height, NumInstructions, Randomness, Time,
 };
 use serde::{Deserialize, Serialize};

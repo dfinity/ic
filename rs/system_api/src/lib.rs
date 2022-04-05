@@ -4,6 +4,7 @@ pub mod sandbox_safe_system_state;
 mod stable_memory;
 pub mod system_api_empty;
 
+use ic_error_types::RejectCode;
 use ic_ic00_types::IC_00;
 use ic_interfaces::execution_environment::{
     ExecutionParameters,
@@ -22,7 +23,6 @@ use ic_types::{
     ingress::WasmResult,
     messages::{CallContextId, RejectContext, Request, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
     methods::{Callback, WasmClosure},
-    user_error::RejectCode,
     CanisterId, Cycles, NumBytes, NumInstructions, PrincipalId, SubnetId, Time,
 };
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;

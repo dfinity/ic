@@ -10,6 +10,7 @@ use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_crypto::derive_tecdsa_public_key;
 use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost};
+use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
     CanisterHttpRequestArgs, CanisterIdRecord, CanisterSettingsArgs,
     ComputeInitialEcdsaDealingsArgs, CreateCanisterArgs, ECDSAPublicKeyArgs,
@@ -46,7 +47,6 @@ use ic_types::{
         is_subnet_message, CallbackId, Ingress, MessageId, Payload, RejectContext, Request,
         Response, SignedIngressContent, StopCanisterContext,
     },
-    user_error::{ErrorCode, RejectCode, UserError},
     CanisterId, CanisterStatusType, ComputeAllocation, Cycles, InstallCodeContext, NumBytes,
     NumInstructions, SubnetId, Time, UserId,
 };
@@ -544,7 +544,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                             originator_reply_callback: request.sender_reply_callback,
                             refund: request.payment,
                             response_payload: messages::Payload::Reject(messages::RejectContext {
-                                code: ic_types::user_error::RejectCode::CanisterReject,
+                                code: ic_error_types::RejectCode::CanisterReject,
                                 message: reject_message,
                             }),
                         });

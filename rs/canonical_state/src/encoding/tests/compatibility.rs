@@ -12,6 +12,7 @@ use crate::{
     all_supported_versions, encoding::*, CertificationVersion, CURRENT_CERTIFICATION_VERSION,
 };
 use assert_matches::assert_matches;
+use ic_error_types::RejectCode;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::SystemMetadata;
 use ic_test_utilities::types::{
@@ -21,7 +22,6 @@ use ic_test_utilities::types::{
 use ic_types::{
     crypto::CryptoHash,
     messages::{CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response},
-    user_error::RejectCode,
     xnet::StreamHeader,
     CryptoHashOfPartialState, Cycles, Funds,
 };

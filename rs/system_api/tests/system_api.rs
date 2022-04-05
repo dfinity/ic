@@ -1,4 +1,5 @@
 use ic_base_types::NumSeconds;
+use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
     AvailableMemory, CanisterOutOfCyclesError, ExecutionParameters, HypervisorError,
     HypervisorResult, SubnetAvailableMemory, SystemApi, TrapCode,
@@ -25,7 +26,6 @@ use ic_test_utilities::{
 use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext, MAX_RESPONSE_COUNT_BYTES},
     methods::{Callback, WasmClosure},
-    user_error::RejectCode,
     CountBytes, Cycles, NumBytes, NumInstructions, Time,
 };
 use std::{

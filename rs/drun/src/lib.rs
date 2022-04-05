@@ -4,6 +4,7 @@ use crate::message::{msg_stream_from_file, Message};
 use hex::encode;
 use ic_config::{subnet_config::SubnetConfigs, Config};
 use ic_cycles_account_manager::CyclesAccountManager;
+use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::ExecutionServices;
 use ic_interfaces::{execution_environment::IngressHistoryReader, messaging::MessageRouting};
 use ic_interfaces_state_manager::StateReader;
@@ -30,13 +31,11 @@ use ic_test_utilities::{
     mock_time,
     registry::{add_subnet_record, insert_initial_dkg_transcript, SubnetRecordBuilder},
 };
-use ic_types::user_error::ErrorCode;
 use ic_types::{
     batch::{Batch, BatchPayload, IngressPayload, SelfValidatingPayload, XNetPayload},
     ingress::{IngressStatus, WasmResult},
     messages::{MessageId, SignedIngress},
     replica_config::ReplicaConfig,
-    user_error::UserError,
     CanisterId, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId,
 };
 use slog::{Drain, Logger};

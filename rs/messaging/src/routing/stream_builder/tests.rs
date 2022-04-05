@@ -1,5 +1,6 @@
 use super::*;
 use ic_base_types::NumSeconds;
+use ic_error_types::RejectCode;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -22,7 +23,6 @@ use ic_test_utilities::{
 use ic_types::{
     ic00::Method,
     messages::{CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response},
-    user_error::RejectCode,
     xnet::{StreamIndex, StreamIndexedQueue},
     CanisterId, Cycles, SubnetId, Time,
 };

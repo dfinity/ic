@@ -1,10 +1,8 @@
 use super::test_fixtures::*;
 use crate::{all_supported_versions, encoding::types};
+use ic_error_types::RejectCode;
 use ic_protobuf::proxy::ProxyDecodeError;
-use ic_types::{
-    messages::{Payload, RejectContext, RequestOrResponse},
-    user_error::RejectCode,
-};
+use ic_types::messages::{Payload, RejectContext, RequestOrResponse};
 use std::convert::{TryFrom, TryInto};
 
 #[test]

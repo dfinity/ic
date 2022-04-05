@@ -1,6 +1,7 @@
 use ic_config::subnet_config::SubnetConfig;
 use ic_config::subnet_config::SubnetConfigs;
 use ic_cycles_account_manager::CyclesAccountManager;
+use ic_error_types::UserError;
 use ic_execution_environment::ExecutionServices;
 use ic_interfaces::registry::RegistryClient;
 use ic_interfaces::{
@@ -33,15 +34,13 @@ use ic_test_utilities::{
     registry::{add_subnet_record, insert_initial_dkg_transcript, SubnetRecordBuilder},
     types::messages::SignedIngressBuilder,
 };
-use ic_types::batch::SelfValidatingPayload;
 use ic_types::{
-    batch::{Batch, BatchPayload, IngressPayload, XNetPayload},
+    batch::{Batch, BatchPayload, IngressPayload, SelfValidatingPayload, XNetPayload},
     ic00,
     ic00::{CanisterIdRecord, CanisterSettingsArgs, InstallCodeArgs, Method, Payload},
     ingress::{IngressStatus, WasmResult},
     messages::{CanisterInstallMode, MessageId, SignedIngress, UserQuery},
     time::Time,
-    user_error::UserError,
     CanisterId, CryptoHashOfState, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId,
     UserId,
 };
