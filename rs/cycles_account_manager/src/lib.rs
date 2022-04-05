@@ -266,10 +266,15 @@ impl CyclesAccountManager {
         &self,
         system_state: &mut SystemState,
         num_instructions: NumInstructions,
+        num_instructions_initially_charged: NumInstructions,
     ) {
-        let cycles_to_refund = self.config.ten_update_instructions_execution_fee
-            * Cycles::from(num_instructions.get() / 10);
-        self.refund_cycles(system_state, cycles_to_refund);
+        // TODO(EXC-1055): Log an error if `num_instructions` is larger.
+        let num_instructions_to_refund =
+            std::cmp::min(num_instructions, num_instructions_initially_charged);
+        self.refund_cycles(
+            system_state,
+            self.convert_instructions_to_cycles(num_instructions_to_refund),
+        );
     }
 
     /// Charges the canister for its compute allocation
@@ -627,6 +632,11 @@ impl CyclesAccountManager {
         }
     }
 
+    fn convert_instructions_to_cycles(&self, num_instructions: NumInstructions) -> Cycles {
+        self.config.ten_update_instructions_execution_fee
+            * Cycles::from(num_instructions.get() / 10)
+    }
+
     /// Returns the cost of the provided `num_instructions` in `Cycles`.
     ///
     /// Note that this function is made public to facilitate some logistic in
@@ -634,8 +644,7 @@ impl CyclesAccountManager {
     #[doc(hidden)]
     pub fn execution_cost(&self, num_instructions: NumInstructions) -> Cycles {
         self.config.update_message_execution_fee
-            + self.config.ten_update_instructions_execution_fee
-                * Cycles::from(num_instructions.get() / 10)
+            + self.convert_instructions_to_cycles(num_instructions)
     }
 
     /// Charges a canister for its resource allocation and usage for the

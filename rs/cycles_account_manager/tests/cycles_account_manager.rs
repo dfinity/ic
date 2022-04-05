@@ -242,9 +242,38 @@ fn verify_no_cycles_charged_for_message_execution_on_system_subnets() {
         .unwrap();
     assert_eq!(system_state.balance(), INITIAL_CYCLES);
 
-    cycles_account_manager
-        .refund_execution_cycles(&mut system_state, NumInstructions::from(5_000_000));
+    cycles_account_manager.refund_execution_cycles(
+        &mut system_state,
+        NumInstructions::from(5_000_000),
+        NumInstructions::from(1_000_000),
+    );
     assert_eq!(system_state.balance(), INITIAL_CYCLES);
+}
+
+#[test]
+fn larger_instructions_left_value_doesnt_mint_cycles() {
+    let mut system_state = SystemStateBuilder::new().build();
+    let cycles_account_manager = CyclesAccountManagerBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let initial_instructions_charged_for = NumInstructions::from(1_000_000);
+
+    cycles_account_manager
+        .withdraw_execution_cycles(
+            &mut system_state,
+            NumBytes::from(0),
+            ComputeAllocation::default(),
+            initial_instructions_charged_for,
+        )
+        .unwrap();
+
+    cycles_account_manager.refund_execution_cycles(
+        &mut system_state,
+        initial_instructions_charged_for * 2,
+        initial_instructions_charged_for,
+    );
+    assert!(system_state.balance() <= INITIAL_CYCLES);
 }
 
 #[test]
