@@ -109,15 +109,7 @@ impl UniversalVm {
 }
 
 pub trait UniversalVms {
-    fn universal_vm(&self, universal_vm_name: &str) -> Result<AllocatedVm>;
-
-    fn universal_vm_path(&self, universal_vm_name: &str) -> PathBuf;
-
-    fn universal_vm_ssh_session(&self, universal_vm_name: &str) -> Result<Session>;
-
-    fn await_universal_vm_ssh_session(&self, universal_vm_name: &str) -> Result<Session>;
-
-    fn await_universal_vm_ipv4(&self, universal_vm_name: &str) -> Result<Ipv4Addr>;
+    fn get_deployed_universal_vm(&self, name: &str) -> Result<DeployedUniversalVm>;
 
     fn single_activate_script_config_dir(
         &self,
@@ -127,53 +119,17 @@ pub trait UniversalVms {
 }
 
 impl UniversalVms for TestEnv {
-    fn universal_vm(&self, universal_vm_name: &str) -> Result<AllocatedVm> {
-        let p: PathBuf = [UNIVERSAL_VMS_DIR, universal_vm_name].iter().collect();
-        self.read_object(p.join("vm.json"))
-    }
-    fn universal_vm_path(&self, universal_vm_name: &str) -> PathBuf {
-        let p: PathBuf = [UNIVERSAL_VMS_DIR, universal_vm_name].iter().collect();
-        self.get_path(p)
-    }
-
-    fn universal_vm_ssh_session(&self, universal_vm_name: &str) -> Result<Session> {
-        let vm = self.universal_vm(universal_vm_name)?;
-        let tcp = TcpStream::connect((vm.ipv6, 22))?;
-        let mut sess = Session::new().unwrap();
-        sess.set_tcp_stream(tcp);
-        sess.handshake().unwrap();
-        let admin_priv_key_path = self.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR).join(ADMIN_USER);
-        sess.userauth_pubkey_file(ADMIN_USER, None, admin_priv_key_path.as_path(), None)?;
-        Ok(sess)
-    }
-
-    fn await_universal_vm_ssh_session(&self, universal_vm_name: &str) -> Result<Session> {
-        retry(self.logger(), RETRY_TIMEOUT, RETRY_BACKOFF, || {
-            self.universal_vm_ssh_session(universal_vm_name)
-        })
-    }
-
-    fn await_universal_vm_ipv4(&self, universal_vm_name: &str) -> Result<Ipv4Addr> {
-        let sess = self.await_universal_vm_ssh_session(universal_vm_name)?;
-        let mut channel = sess.channel_session()?;
-        channel.exec("bash").unwrap();
-
-        let get_ipv4_script = r#"set -e -o pipefail
-until ipv4=$(ip -j address show dev enp2s0 \
-            | jq -r -e \
-            '.[0].addr_info | map(select(.scope == "global")) | .[0].local'); \
-do
-  sleep 1
-done
-echo "$ipv4"
-"#;
-        channel.write_all(get_ipv4_script.as_bytes())?;
-        channel.flush()?;
-        channel.send_eof()?;
-        let mut out = String::new();
-        channel.read_to_string(&mut out)?;
-        let ipv4 = out.trim().parse::<Ipv4Addr>()?;
-        Ok(ipv4)
+    fn get_deployed_universal_vm(&self, name: &str) -> Result<DeployedUniversalVm> {
+        let rel_universal_vm_dir: PathBuf = [UNIVERSAL_VMS_DIR, name].iter().collect();
+        let abs_universal_vm_dir = self.get_path(rel_universal_vm_dir);
+        if abs_universal_vm_dir.is_dir() {
+            Ok(DeployedUniversalVm {
+                env: self.clone(),
+                name: name.to_string(),
+            })
+        } else {
+            bail!("Did not find deployed universal VM '{name}'!")
+        }
     }
 
     fn single_activate_script_config_dir(
@@ -211,4 +167,59 @@ fn setup_ssh(env: &TestEnv, config_dir: PathBuf) -> Result<()> {
         config_dir_ssh_dir.join(ADMIN_USER),
     )?;
     Ok(())
+}
+
+pub struct DeployedUniversalVm {
+    env: TestEnv,
+    name: String,
+}
+
+impl DeployedUniversalVm {
+    pub fn get_vm(&self) -> Result<AllocatedVm> {
+        let p: PathBuf = [UNIVERSAL_VMS_DIR, &self.name].iter().collect();
+        self.env.read_object(p.join("vm.json"))
+    }
+
+    pub fn get_ssh_session(&self) -> Result<Session> {
+        let vm = self.get_vm()?;
+        let tcp = TcpStream::connect((vm.ipv6, 22))?;
+        let mut sess = Session::new().unwrap();
+        sess.set_tcp_stream(tcp);
+        sess.handshake().unwrap();
+        let admin_priv_key_path = self
+            .env
+            .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
+            .join(ADMIN_USER);
+        sess.userauth_pubkey_file(ADMIN_USER, None, admin_priv_key_path.as_path(), None)?;
+        Ok(sess)
+    }
+
+    pub fn await_ssh_session(&self) -> Result<Session> {
+        retry(self.env.logger(), RETRY_TIMEOUT, RETRY_BACKOFF, || {
+            self.get_ssh_session()
+        })
+    }
+
+    pub fn await_ipv4(&self) -> Result<Ipv4Addr> {
+        let sess = self.await_ssh_session()?;
+        let mut channel = sess.channel_session()?;
+        channel.exec("bash").unwrap();
+
+        let get_ipv4_script = r#"set -e -o pipefail
+until ipv4=$(ip -j address show dev enp2s0 \
+            | jq -r -e \
+            '.[0].addr_info | map(select(.scope == "global")) | .[0].local'); \
+do
+  sleep 1
+done
+echo "$ipv4"
+"#;
+        channel.write_all(get_ipv4_script.as_bytes())?;
+        channel.flush()?;
+        channel.send_eof()?;
+        let mut out = String::new();
+        channel.read_to_string(&mut out)?;
+        let ipv4 = out.trim().parse::<Ipv4Addr>()?;
+        Ok(ipv4)
+    }
 }

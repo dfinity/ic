@@ -97,13 +97,12 @@ pub fn test(env: TestEnv, logger: Logger) {
             node.await_status_is_healthy().unwrap();
         }
     }
-    let webserver_ipv6: Ipv6Addr = env
-        .universal_vm(UNIVERSAL_VM_NAME)
-        .expect("No webserver found")
-        .ipv6;
+    let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
+    let universal_vm = deployed_universal_vm.get_vm().unwrap();
+    let webserver_ipv6: Ipv6Addr = universal_vm.ipv6;
     info!(&logger, "Webserver has IPv6 {:?}", webserver_ipv6);
 
-    let webserver_ipv4 = env.await_universal_vm_ipv4(UNIVERSAL_VM_NAME).unwrap();
+    let webserver_ipv4 = deployed_universal_vm.await_ipv4().unwrap();
     info!(&logger, "Webserver has IPv4 {:?}", webserver_ipv4);
 
     // TODO: adapt the test below to use the env directly
