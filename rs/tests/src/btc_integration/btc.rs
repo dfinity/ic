@@ -54,7 +54,9 @@ docker run -v bitcoind-data:/bitcoin/.bitcoin --name=bitcoind-node -d \
 }
 
 pub fn test(env: TestEnv, logger: Logger) {
-    let btc_node_ipv6 = env.universal_vm(UNIVERSAL_VM_NAME).expect("foo").ipv6;
+    let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
+    let universal_vm = deployed_universal_vm.get_vm().unwrap();
+    let btc_node_ipv6 = universal_vm.ipv6;
 
     info!(&logger, "BTC Node has IPv6 {:?}", btc_node_ipv6);
 
@@ -70,7 +72,7 @@ pub fn test(env: TestEnv, logger: Logger) {
         logger,
         "Executing the uname -a command on the universal VM via SSH..."
     );
-    let sess = env.universal_vm_ssh_session(UNIVERSAL_VM_NAME).unwrap();
+    let sess = deployed_universal_vm.await_ssh_session().unwrap();
     let mut channel = sess.channel_session().unwrap();
     channel.exec("uname -a").unwrap();
     let mut s = String::new();
