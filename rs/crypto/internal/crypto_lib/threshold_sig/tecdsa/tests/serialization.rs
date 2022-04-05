@@ -8,7 +8,20 @@ use crate::test_utils::*;
 
 fn verify_data(tag: String, expected: &str, serialized: &[u8]) {
     let hash = ic_crypto_sha::Sha256::hash(serialized);
-    assert_eq!(hex::encode(&hash[0..8]), expected, "{}", tag);
+    let hex_encoding = hex::encode(&hash[0..8]);
+
+    if hex_encoding != expected {
+        /*
+        Should updating the values in this test be required (eg because you have
+        *intentionally* made a change which changed the serialization of some
+        of the tECDSA artifacts), then comment out the below assert, uncomment
+        the println, and then run
+
+        cargo test verify_serialization_remains_unchanged_over_time -- --nocapture | grep ^perl | parallel -j1
+         */
+        assert_eq!(hex_encoding, expected, "{}", tag);
+        //println!("perl -pi -e s/{}/{}/g tests/serialization.rs", expected, hex_encoding);
+    }
 }
 
 fn check_dealings(
@@ -65,76 +78,81 @@ fn verify_serialization_remains_unchanged_over_time() -> Result<(), ThresholdEcd
 
     let seed = Seed::from_bytes(b"ic-crypto-tecdsa-fixed-seed");
 
-    let setup =
-        SignatureProtocolSetup::new(EccCurveType::K256, nodes, threshold, seed.derive("setup"))?;
+    let setup = SignatureProtocolSetup::new(
+        EccCurveType::K256,
+        nodes,
+        threshold,
+        0,
+        seed.derive("setup"),
+    )?;
 
     check_dealings(
         "key",
         &setup.key,
-        "d81bf365bcc449ae",
-        "b6a77502144a501d",
+        "3b1651f91235bea0",
+        "dcb0d33a0444c4da",
         &[
-            (0, "5357d0ec495b3db2"),
-            (1, "769f6341db0b972f"),
-            (2, "0f52dac309b0b672"),
-            (3, "1d47b9521d9c38dc"),
-            (4, "56f370f9bb04976c"),
+            (0, "cdb3774cf1fc4d32"),
+            (1, "6f65179a607eed92"),
+            (2, "654b3581d9fd2aef"),
+            (3, "52b2b0f8f42c8628"),
+            (4, "7bdd2609a3d62fad"),
         ],
     )?;
 
     check_dealings(
         "key*lambda",
         &setup.key_times_lambda,
-        "eb81a06c0ebe3dd9",
-        "3a4e03abdf31de8c",
+        "00dd83ba807ddb8b",
+        "fb73e2b787bed6a8",
         &[
-            (0, "a00eed6d66f24e62"),
-            (1, "0723cc77b6b5f559"),
-            (2, "83ee87383da6ee5e"),
-            (3, "81c08c1d70007366"),
-            (4, "20e05fe40381443e"),
+            (0, "fdf08318386cd9ee"),
+            (1, "cfdc426d579b8ccb"),
+            (2, "9444cd74284ac8e2"),
+            (3, "b345efd1475c6173"),
+            (4, "dc58053be29a5f39"),
         ],
     )?;
 
     check_dealings(
         "lambda",
         &setup.lambda,
-        "2e494300ce9229d7",
-        "5cb31a17676257fe",
+        "072e2cc0b419ed05",
+        "12bdfac755057274",
         &[
-            (0, "9d83b661fb8ea7e6"),
-            (1, "ced1a78a33c5a03d"),
-            (2, "667ea7eb87a7d65b"),
-            (3, "5a792bf6c62f8016"),
-            (4, "cbe6feff7f274e5e"),
+            (0, "5f66d246f78a6523"),
+            (1, "f9107252b93d6bc9"),
+            (2, "e44f6c4bab4acfce"),
+            (3, "edced8f70dce8d5f"),
+            (4, "3d170817dda1e6e1"),
         ],
     )?;
 
     check_dealings(
         "kappa",
         &setup.kappa,
-        "0e5829e1e11cf7f5",
-        "21bad7d76631a6c0",
+        "2ded0f153929b9f0",
+        "44f5c86382cc479c",
         &[
-            (0, "09d3b0c78f7530c5"),
-            (1, "1b9f3c61fac8348b"),
-            (2, "54f2b81be50e8eb5"),
-            (3, "3ed3f16f3063f624"),
-            (4, "5b5d852c1708e753"),
+            (0, "0bd58d1dc1ea5394"),
+            (1, "23901fcc0a49a4e5"),
+            (2, "92fb0d6770c1eec8"),
+            (3, "c1e3a00405475fbb"),
+            (4, "cd1533ec8a96540b"),
         ],
     )?;
 
     check_dealings(
         "kappa*lambda",
         &setup.kappa_times_lambda,
-        "9f87096af2d8673c",
-        "d2d1fa319644a975",
+        "fead521acec68d9d",
+        "0400f8b432760ed3",
         &[
-            (0, "f0374229369fd614"),
-            (1, "9352112806281c09"),
-            (2, "aec82fa00b346664"),
-            (3, "07316740e06c2f1f"),
-            (4, "ace454e12a6eeb62"),
+            (0, "b25daca699ed741a"),
+            (1, "ca307ea916c62411"),
+            (2, "a129528acf78eccc"),
+            (3, "0b221a208519f149"),
+            (4, "e104343cee3218d8"),
         ],
     )?;
 
@@ -151,11 +169,11 @@ fn verify_serialization_remains_unchanged_over_time() -> Result<(), ThresholdEcd
     check_shares(
         &shares,
         &[
-            (0, "b6cf5b8d7aac3128"),
-            (1, "cc2bc61353c7d2c8"),
-            (2, "e5477a9f47438000"),
-            (3, "6b7f5c032909595e"),
-            (4, "2c21e9038bd41e0e"),
+            (0, "6a61b6e3df84bb14"),
+            (1, "b5ac8f25f0214b8b"),
+            (2, "3e0fe141356581f1"),
+            (3, "dec2319a9f4cb630"),
+            (4, "2742a17e8238f394"),
         ],
     )?;
 
@@ -163,7 +181,7 @@ fn verify_serialization_remains_unchanged_over_time() -> Result<(), ThresholdEcd
 
     verify_data(
         "signature".to_string(),
-        "59960e59d2a46f69",
+        "1aac78183716fd7c",
         &sig.serialize(),
     );
 

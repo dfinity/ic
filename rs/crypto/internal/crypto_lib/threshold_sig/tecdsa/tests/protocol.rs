@@ -216,7 +216,14 @@ fn should_basic_signing_protocol_work() -> Result<(), ThresholdEcdsaError> {
 
     let nodes = 10;
     let threshold = nodes / 3;
-    let setup = SignatureProtocolSetup::new(EccCurveType::K256, nodes, threshold, random_seed())?;
+    let number_of_dealings_corrupted = threshold;
+    let setup = SignatureProtocolSetup::new(
+        EccCurveType::K256,
+        nodes,
+        threshold,
+        number_of_dealings_corrupted,
+        random_seed(),
+    )?;
 
     let alg = setup.alg();
 

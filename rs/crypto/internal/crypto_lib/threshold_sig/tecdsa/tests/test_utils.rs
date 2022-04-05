@@ -4,7 +4,7 @@ use ic_crypto_internal_threshold_sig_ecdsa::*;
 use ic_types::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
 use ic_types::crypto::AlgorithmId;
 use ic_types::*;
-use rand::Rng;
+use rand::{seq::IteratorRandom, Rng};
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
@@ -352,6 +352,10 @@ impl ProtocolRound {
     ) -> Vec<CommitmentOpening> {
         let mut openings = Vec::with_capacity(setup.receivers);
 
+        let reconstruction_threshold = setup.threshold.get() as usize;
+        let seed = Seed::from_bytes(&transcript.combined_commitment.serialize().unwrap());
+        let mut rng = seed.derive("rng").into_rng();
+
         // Ensure every receiver can open
         for receiver in 0..setup.receivers {
             let opening = compute_secret_shares(
@@ -373,7 +377,7 @@ impl ProtocolRound {
                     receiver as NodeIndex,
                     &setup.sk[receiver],
                     &setup.pk[receiver],
-                    setup.next_dealing_seed(),
+                    seed.derive(&format!("complaint-{}", receiver)),
                 )
                 .expect("Unable to generate complaints");
 
@@ -395,8 +399,23 @@ impl ProtocolRound {
                     let mut openings_for_this_dealing = BTreeMap::new();
 
                     // create openings in response to the complaints
-                    for opener in 0..setup.receivers {
-                        if opener == receiver {
+                    for (private_key, public_key, opener) in setup.receiver_info() {
+                        if opener == receiver as NodeIndex {
+                            continue;
+                        }
+
+                        // we can't open, if we ourselves got an invalid dealing
+                        if privately_verify_dealing(
+                            setup.alg,
+                            dealing,
+                            &private_key,
+                            &public_key,
+                            &setup.ad,
+                            *dealer_index,
+                            opener,
+                        )
+                        .is_err()
+                        {
                             continue;
                         }
 
@@ -405,8 +424,8 @@ impl ProtocolRound {
                             &setup.ad,
                             *dealer_index,
                             opener as NodeIndex,
-                            &setup.sk[opener],
-                            &setup.pk[opener],
+                            &setup.sk[opener as usize],
+                            &setup.pk[opener as usize],
                         )
                         .expect("Unable to open dealing");
 
@@ -416,6 +435,12 @@ impl ProtocolRound {
                         );
 
                         openings_for_this_dealing.insert(opener as NodeIndex, dopening);
+                    }
+
+                    // drop all but the required # of openings
+                    while openings_for_this_dealing.len() > reconstruction_threshold {
+                        let index = *openings_for_this_dealing.keys().choose(&mut rng).unwrap();
+                        openings_for_this_dealing.remove(&index);
                     }
 
                     provided_openings.insert(*dealer_index, openings_for_this_dealing);
@@ -473,7 +498,6 @@ impl ProtocolRound {
         transcript_type: &IDkgTranscriptOperationInternal,
         seed: Seed,
     ) -> BTreeMap<NodeIndex, IDkgDealingInternal> {
-        use rand::seq::IteratorRandom;
         assert!(number_of_dealers <= shares.len());
         assert!(number_of_dealings_corrupted <= number_of_dealers);
 
@@ -543,11 +567,35 @@ impl ProtocolRound {
             .iter_mut()
             .choose_multiple(rng, number_of_dealings_corrupted);
 
-        for (_index, dealing) in dealings_to_damage {
-            let corrupted_recip = rng.gen_range(0, setup.receivers);
+        for (dealer_index, dealing) in dealings_to_damage {
+            let number_of_corruptions = rng.gen_range(1, setup.threshold.get() as usize + 1);
 
-            let bad_dealing =
-                test_utils::corrupt_dealing(dealing, &[corrupted_recip as NodeIndex], rng).unwrap();
+            let corrupted_recip =
+                (0..setup.receivers as NodeIndex).choose_multiple(rng, number_of_corruptions);
+
+            let bad_dealing = test_utils::corrupt_dealing(dealing, &corrupted_recip, rng).unwrap();
+
+            // Privately invalid iff we were corrupted
+            for (private_key, public_key, recipient_index) in setup.receiver_info() {
+                let was_corrupted = corrupted_recip.contains(&recipient_index);
+
+                let locally_invalid = privately_verify_dealing(
+                    setup.alg,
+                    &bad_dealing,
+                    &private_key,
+                    &public_key,
+                    &setup.ad,
+                    *dealer_index,
+                    recipient_index,
+                )
+                .is_err();
+
+                if locally_invalid {
+                    assert!(was_corrupted);
+                } else {
+                    assert!(!was_corrupted);
+                }
+            }
 
             // replace the dealing with a corrupted one
             *dealing = bad_dealing;
@@ -575,11 +623,10 @@ impl SignatureProtocolSetup {
         curve: EccCurveType,
         number_of_dealers: usize,
         threshold: usize,
+        number_of_dealings_corrupted: usize,
         seed: Seed,
     ) -> ThresholdEcdsaResult<Self> {
         let setup = ProtocolSetup::new(curve, number_of_dealers, threshold, seed)?;
-
-        let number_of_dealings_corrupted = threshold;
 
         let key = ProtocolRound::random(&setup, number_of_dealers, number_of_dealings_corrupted)?;
         let kappa = ProtocolRound::random(&setup, number_of_dealers, number_of_dealings_corrupted)?;
