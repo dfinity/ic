@@ -523,8 +523,11 @@ impl CanisterManager {
                 // replace the old canister with the new one.
                 let old_wasm_hash = self.get_wasm_hash(old_canister);
                 let new_wasm_hash = self.get_wasm_hash(&new_canister);
-                self.cycles_account_manager
-                    .refund_execution_cycles(&mut new_canister.system_state, instructions_left);
+                self.cycles_account_manager.refund_execution_cycles(
+                    &mut new_canister.system_state,
+                    instructions_left,
+                    instruction_limit,
+                );
                 if self.config.rate_limiting_of_instructions == FlagStatus::Enabled {
                     new_canister.scheduler_state.install_code_debit += instructions_consumed;
                 }
@@ -548,8 +551,11 @@ impl CanisterManager {
                 // the install / upgrade failed. Refund the left over cycles to
                 // the old canister and leave it in the state.
                 old_canister.scheduler_state.install_code_debit += instructions_consumed;
-                self.cycles_account_manager
-                    .refund_execution_cycles(&mut old_canister.system_state, instructions_left);
+                self.cycles_account_manager.refund_execution_cycles(
+                    &mut old_canister.system_state,
+                    instructions_left,
+                    instruction_limit,
+                );
                 Err(err)
             }
         };

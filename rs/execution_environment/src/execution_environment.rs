@@ -840,8 +840,11 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
             let cycles_account_manager = Arc::clone(&self.cycles_account_manager);
 
             // Refund the canister with any cycles left after message execution.
-            cycles_account_manager
-                .refund_execution_cycles(&mut res.canister.system_state, res.num_instructions_left);
+            cycles_account_manager.refund_execution_cycles(
+                &mut res.canister.system_state,
+                res.num_instructions_left,
+                instructions_limit,
+            );
         }
         res
     }
@@ -898,8 +901,11 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
         let cycles_account_manager = Arc::clone(&self.cycles_account_manager);
 
         // Refund the canister with any cycles left after message execution.
-        cycles_account_manager
-            .refund_execution_cycles(&mut canister.system_state, num_instructions_left);
+        cycles_account_manager.refund_execution_cycles(
+            &mut canister.system_state,
+            num_instructions_left,
+            instructions_limit,
+        );
         let result = match result {
             Ok(heap_delta) => Ok(heap_delta),
             Err(err) => Err(CanisterHeartbeatError::CanisterExecutionFailed(err)),
