@@ -71,7 +71,7 @@ function process_bootstrap() {
 
     # stash the following configuration files to config store
     # note: keep this list in sync with configurations supported in build-bootstrap-config-image.sh
-    for FILE in journalbeat.conf network.conf nns.conf backup.conf log.conf malicious_behavior.conf; do
+    for FILE in journalbeat.conf network.conf nns.conf backup.conf log.conf malicious_behavior.conf bitcoind_addr.conf; do
         if [ -e "${TMPDIR}/${FILE}" ]; then
             echo "Setting up ${FILE}"
             cp "${TMPDIR}/${FILE}" "${CONFIG_ROOT}/${FILE}"
