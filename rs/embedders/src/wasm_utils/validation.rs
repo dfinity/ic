@@ -22,12 +22,7 @@ use wasmtime::Config;
 
 /// Symbols that are reserved and cannot be exported by canisters.
 #[doc(hidden)] // pub for usage in tests
-pub const RESERVED_SYMBOLS: [&str; 4] = [
-    "canister counter_instructions",
-    "canister counter_get",
-    "canister counter_set",
-    "canister_start",
-];
+pub const RESERVED_SYMBOLS: [&str; 2] = ["canister counter_instructions", "canister_start"];
 
 // Represents the expected function signature for any System APIs the Internet
 // Computer provides or any special exported user functions.

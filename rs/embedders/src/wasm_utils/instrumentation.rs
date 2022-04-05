@@ -14,14 +14,12 @@
 //! we can run the initialization after we have set the instructions counter to
 //! some value).
 //!
-//! After the instrumentation, exported functions `canister counter_set` and
-//! `canister counter_get` can be used to set/get the counter value. Any other
-//! function of that module will only be able to execute as long as at every
-//! reentrant basic block of its execution path, the counter is verified to be
-//! above zero. Otherwise, the function will trap (via calling a special system
-//! API call). If the function returns before the counter overflows, the value
-//! of the counter is the initial value minus the sum of cost of all
-//! executed instructions.
+//! After instrumentation any function of that module will only be able to
+//! execute as long as at every reentrant basic block of its execution path, the
+//! counter is verified to be above zero. Otherwise, the function will trap (via
+//! calling a special system API call). If the function returns before the
+//! counter overflows, the value of the counter is the initial value minus the
+//! sum of cost of all executed instructions.
 //!
 //! In more details, first, it inserts two System API functions:
 //!
@@ -30,22 +28,12 @@
 //! (import "__" "update_available_memory" (func (;1;) ((param i32 i32) (result i32))))
 //! ```
 //!
-//! It then inserts a global mutable counter:
+//! It then inserts (and exports) a global mutable counter:
 //! ```wasm
-//! (global (mut i64) (i64.const 0))
+//! (global (;0;) (mut i64) (i64.const 0))
+//! (export "canister counter_instructions" (global 0)))
 //! ```
 //!
-//! and two exported functions setting and reading the instructions value:
-//!
-//! ```wasm
-//! (func (;2;) (type 1) (param i64)
-//!   local.get 0
-//!   global.set 1)
-//! (func (;3;) (type 2) (result i64)
-//!   global.get 1)
-//! (export "canister counter_set" (func 2))
-//! (export "canister counter_get" (func 3))
-//! ```
 //! An additional function is also inserted to handle updates to the instruction
 //! counter for bulk memory instructions whose cost can only be determined at
 //! runtime:
@@ -56,7 +44,7 @@
 //!   i64.const 0
 //!   i64.lt_s
 //!   if  ;; label = @1
-//!     call 0
+//!     call 0           # the `out_of_instructions` function
 //!   end
 //!   global.get 0
 //!   local.get 0
@@ -66,9 +54,9 @@
 //!   local.get 0)
 //! ```
 //!
-//! The function `canister counter_set` should be called before the execution of
-//! the instrumented code. After the execution, the counter can be read using
-//! the exported function `canister counter_get`.
+//! The `counter_instructions` global should be set before the execution of
+//! canister code. After execution the global can be read to determine the
+//! number of instructions used.
 //!
 //! Moreover, it injects a decrementation of the instructions counter (by the
 //! sum of cost of all instructions inside this block) at the beginning of every
@@ -387,8 +375,6 @@ pub struct InstrumentationOutput {
 pub struct ExportModuleData {
     pub out_of_instructions_fn: u32,
     pub instructions_counter_ix: u32,
-    pub set_counter_fn: u32,
-    pub get_counter_fn: u32,
     pub decr_instruction_counter_fn: u32,
     pub start_fn_ix: Option<u32>,
 }
@@ -415,9 +401,7 @@ pub fn instrument(
     let export_module_data = ExportModuleData {
         out_of_instructions_fn: 0, // because it's the first import
         instructions_counter_ix: num_globals,
-        set_counter_fn: num_functions,
-        get_counter_fn: num_functions + 1,
-        decr_instruction_counter_fn: num_functions + 2,
+        decr_instruction_counter_fn: num_functions,
         start_fn_ix: module.start_section(),
     };
 
@@ -510,41 +494,6 @@ pub fn export_additional_symbols(
     export_module_data: &ExportModuleData,
 ) -> Result<Module, WasmInstrumentationError> {
     let mut mbuilder = WasmModuleBuilder::new(builder::from_module(module));
-
-    // push canister counter_set
-    mbuilder.push_function(
-        builder::function()
-            .with_signature(builder::signature().with_param(ValueType::I64).build_sig())
-            .body()
-            .with_instructions(Instructions::new(vec![
-                Instruction::GetLocal(0),
-                Instruction::SetGlobal(export_module_data.instructions_counter_ix),
-                Instruction::End,
-            ]))
-            .build()
-            .build(),
-    );
-    mbuilder.push_export(
-        "canister counter_set",
-        Internal::Function(export_module_data.set_counter_fn),
-    )?;
-
-    // push canister counter_get
-    mbuilder.push_function(
-        builder::function()
-            .with_signature(builder::signature().with_result(ValueType::I64).build_sig())
-            .body()
-            .with_instructions(Instructions::new(vec![
-                Instruction::GetGlobal(export_module_data.instructions_counter_ix),
-                Instruction::End,
-            ]))
-            .build()
-            .build(),
-    );
-    mbuilder.push_export(
-        "canister counter_get",
-        Internal::Function(export_module_data.get_counter_fn),
-    )?;
 
     // push function to decrement the instruction counter
     mbuilder.push_function(

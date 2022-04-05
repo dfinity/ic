@@ -7,9 +7,7 @@ expression: out
   (type (;1;) (func (param i32)))
   (type (;2;) (func))
   (type (;3;) (func (param i32 i32) (result i32)))
-  (type (;4;) (func (param i64)))
-  (type (;5;) (func (result i64)))
-  (type (;6;) (func (param i32) (result i32)))
+  (type (;4;) (func (param i32) (result i32)))
   (import "__" "out_of_instructions" (func (;0;) (type 2)))
   (import "__" "update_available_memory" (func (;1;) (type 3)))
   (import "js" "println" (func (;2;) (type 0)))
@@ -141,12 +139,7 @@ expression: out
       i32.lt_u
       br_if 0 (;@1;)
     end)
-  (func (;4;) (type 4) (param i64)
-    local.get 0
-    global.set 0)
-  (func (;5;) (type 5) (result i64)
-    global.get 0)
-  (func (;6;) (type 6) (param i32) (result i32)
+  (func (;4;) (type 4) (param i32) (result i32)
     global.get 0
     local.get 0
     i64.extend_i32_u
@@ -164,7 +157,5 @@ expression: out
   (global (;0;) (mut i64) (i64.const 0))
   (export "fizzbuzz" (func 3))
   (export "memory" (memory 0))
-  (export "canister counter_set" (func 4))
-  (export "canister counter_get" (func 5))
   (export "canister counter_instructions" (global 0)))
 
