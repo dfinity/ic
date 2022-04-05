@@ -6,7 +6,7 @@ use std::net::IpAddr;
 use std::{collections::BTreeMap, fs::File, io, net::SocketAddr, path::PathBuf, process::Command};
 
 use crate::driver::driver_setup::{
-    AUTHORIZED_SSH_ACCOUNTS_DIR, INITIAL_REPLICA_VERSION, JOURNALBEAT_HOSTS, LOG_DEBUG_OVERRIDES,
+    INITIAL_REPLICA_VERSION, JOURNALBEAT_HOSTS, LOG_DEBUG_OVERRIDES,
 };
 use crate::driver::farm::FarmResult;
 use crate::driver::ic::{InternetComputer, Node};
@@ -28,6 +28,7 @@ use std::io::Write;
 use std::thread::{self, JoinHandle};
 use url::Url;
 
+use super::driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR;
 use super::resource::AllocatedVm;
 use ic_types::ReplicaVersion;
 
@@ -221,7 +222,7 @@ pub fn create_config_disk_image(
     let mut cmd =
         Command::new(ci_project_dir.join("ic-os/guestos/scripts/build-bootstrap-config-image.sh"));
 
-    let authorized_ssh_accounts_dir: PathBuf = test_env.get_path(AUTHORIZED_SSH_ACCOUNTS_DIR);
+    let ssh_authorized_pub_keys_dir: PathBuf = test_env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
     let journalbeat_hosts: Vec<String> = test_env.read_object(JOURNALBEAT_HOSTS)?;
     let log_debug_overrides: Vec<String> = test_env.read_object(LOG_DEBUG_OVERRIDES)?;
     let local_store_path = test_env
@@ -235,7 +236,7 @@ pub fn create_config_disk_image(
         .arg("--ic_crypto")
         .arg(node.crypto_path())
         .arg("--accounts_ssh_authorized_keys")
-        .arg(authorized_ssh_accounts_dir)
+        .arg(ssh_authorized_pub_keys_dir)
         .arg("--journalbeat_tags")
         .arg(format!("system_test {}", group_name));
 

@@ -145,8 +145,11 @@ pub fn get_resource_request(
     Ok(res_req)
 }
 
+/// The SHA-256 hash of the Universal VM disk image.
+/// The latest hash can be retrieved by downloading the SHA256SUMS file from:
+/// https://hydra.dfinity.systems/job/dfinity-ci-build/infra/infra.farm.universal-vm.img.x86_64-linux/latest
 const DEFAULT_UNIVERSAL_VM_IMG_SHA256: &str =
-    "d9e52eb68c6028682aee247723e2a6d90ad34651a6c074dace55d657362f5ca5";
+    "58711b2e9f2760e90237ccf43fbcdc24caa2118220cdd33ea05fd4dcffa32aca";
 
 pub fn get_resource_request_for_universal_vm(
     universal_vm: &UniversalVm,

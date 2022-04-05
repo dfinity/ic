@@ -1,25 +1,30 @@
 use std::{
     env,
     fs::File,
-    io::{self, Write},
+    io::{self, Read, Write},
+    net::{Ipv4Addr, TcpStream},
     path::PathBuf,
     process::Command,
 };
 
+use crate::driver::driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR;
+
 use super::{
     driver_setup::{
-        AUTHORIZED_SSH_ACCOUNTS_DIR, BOUNDARY_NODE_IMG_SHA256, BOUNDARY_NODE_IMG_URL,
-        FARM_BASE_URL, FARM_GROUP_NAME, JOURNALBEAT_HOSTS,
+        BOUNDARY_NODE_IMG_SHA256, BOUNDARY_NODE_IMG_URL, FARM_BASE_URL, FARM_GROUP_NAME,
+        JOURNALBEAT_HOSTS, SSH_AUTHORIZED_PRIV_KEYS_DIR,
     },
     farm::{CreateVmRequest, Farm, ImageLocation, VMCreateResponse},
     ic::{AmountOfMemoryKiB, NrOfVCPUs, VmResources},
     resource::DiskImage,
     test_env::TestEnv,
+    test_env_api::{retry, RETRY_BACKOFF, RETRY_TIMEOUT},
 };
 use anyhow::{bail, Result};
 use flate2::{write::GzEncoder, Compression};
 use reqwest::Url;
 use slog::info;
+use ssh2::Session;
 
 const DEFAULT_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(4);
 const DEFAULT_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(25165824); // 24GiB
@@ -27,6 +32,8 @@ const DEFAULT_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(2516
 const BOUNDARY_NODE_VMS_DIR: &str = "boundary_node_vms";
 const BOUNDARY_NODE_VM_PATH: &str = "vm.json";
 const CONF_IMG_FNAME: &str = "config_disk.img";
+
+const ADMIN_USER: &str = "admin";
 
 fn mk_compressed_img_path() -> std::string::String {
     return format!("{}.gz", CONF_IMG_FNAME);
@@ -103,6 +110,12 @@ pub trait BoundaryNodeVm {
     fn write_boundary_node_vm(&self, name: &str, vm: &VMCreateResponse) -> Result<()>;
 
     fn get_boundary_node_vm(&self, name: &str) -> Result<VMCreateResponse>;
+
+    fn boundary_node_ssh_session(&self, name: &str) -> Result<Session>;
+
+    fn await_boundary_node_ssh_session(&self, name: &str) -> Result<Session>;
+
+    fn await_boundary_node_ipv4(&self, name: &str) -> Result<Ipv4Addr>;
 }
 
 impl BoundaryNodeVm for TestEnv {
@@ -114,6 +127,44 @@ impl BoundaryNodeVm for TestEnv {
     fn get_boundary_node_vm(&self, name: &str) -> Result<VMCreateResponse> {
         let vm_path: PathBuf = [BOUNDARY_NODE_VMS_DIR, name].iter().collect();
         self.read_object(vm_path.join(BOUNDARY_NODE_VM_PATH))
+    }
+
+    fn boundary_node_ssh_session(&self, name: &str) -> Result<Session> {
+        let vm = self.get_boundary_node_vm(name)?;
+        let tcp = TcpStream::connect((vm.ipv6, 22))?;
+        let mut sess = Session::new()?;
+        sess.set_tcp_stream(tcp);
+        sess.handshake()?;
+        let admin_priv_key_path = self.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR).join(ADMIN_USER);
+        sess.userauth_pubkey_file(ADMIN_USER, None, admin_priv_key_path.as_path(), None)?;
+        Ok(sess)
+    }
+
+    fn await_boundary_node_ssh_session(&self, name: &str) -> Result<Session> {
+        retry(self.logger(), RETRY_TIMEOUT, RETRY_BACKOFF, || {
+            self.boundary_node_ssh_session(name)
+        })
+    }
+
+    fn await_boundary_node_ipv4(&self, name: &str) -> Result<Ipv4Addr> {
+        let sess = self.await_boundary_node_ssh_session(name)?;
+        let mut channel = sess.channel_session()?;
+        channel.exec("bash").unwrap();
+
+        let get_ipv4_script = r#"set -e -o pipefail
+until ipv4=$(ip address show dev enp2s0 | grep 'inet.*scope global' | awk '{print $2}' | cut -d/ -f1); \
+do
+  sleep 1
+done
+echo "$ipv4"
+"#;
+        channel.write_all(get_ipv4_script.as_bytes())?;
+        channel.flush()?;
+        channel.send_eof()?;
+        let mut out = String::new();
+        channel.read_to_string(&mut out)?;
+        let ipv4 = out.trim().parse::<Ipv4Addr>()?;
+        Ok(ipv4)
     }
 }
 /// side-effectful function that creates the config disk images
@@ -137,12 +188,12 @@ pub fn create_and_upload_config_disk_image(
         ci_project_dir.join("ic-os/boundary-guestos/scripts/build-bootstrap-config-image.sh"),
     );
 
-    let authorized_ssh_accounts_dir: PathBuf = env.get_path(AUTHORIZED_SSH_ACCOUNTS_DIR);
+    let ssh_authorized_pub_keys_dir: PathBuf = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
     let journalbeat_hosts: Vec<String> = env.read_object(JOURNALBEAT_HOSTS)?;
 
     cmd.arg(img_path.clone())
         .arg("--accounts_ssh_authorized_keys")
-        .arg(authorized_ssh_accounts_dir)
+        .arg(ssh_authorized_pub_keys_dir)
         .arg("--journalbeat_tags")
         .arg(format!("system_test {}", group_name));
 

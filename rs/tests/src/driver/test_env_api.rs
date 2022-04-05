@@ -117,13 +117,12 @@
 //! Thus, instead of randomly selecting a node to fetch registry updates, it is
 //! better to let the user select a node.
 //!
-use crate::driver::driver_setup::{AUTHORIZED_SSH_ACCOUNTS, FARM_BASE_URL, FARM_GROUP_NAME};
+use crate::driver::driver_setup::{FARM_BASE_URL, FARM_GROUP_NAME};
 use crate::driver::farm::Farm;
 use crate::driver::test_env::{HasIcPrepDir, TestEnv};
 use crate::util::create_agent;
 use anyhow::{bail, Result};
 use ic_agent::Agent;
-use ic_fondue::ic_manager::handle::AuthorizedSshAccount;
 use ic_fondue::ic_manager::handle::READY_RESPONSE_TIMEOUT;
 use ic_fondue::ic_manager::{FarmInfo, IcEndpoint, IcHandle, IcSubnet, RuntimeDescriptor};
 use ic_interfaces::registry::{RegistryClient, RegistryClientResult};
@@ -154,7 +153,6 @@ impl IcHandleConstructor for TestEnv {
         use ic_registry_client_helpers::subnet::SubnetRegistry;
         let group_name: String = self.read_object(FARM_GROUP_NAME)?;
         let farm_url: Url = self.read_object(FARM_BASE_URL)?;
-        let ssh_key_pairs: Vec<AuthorizedSshAccount> = self.read_object(AUTHORIZED_SSH_ACCOUNTS)?;
         let ts = self.topology_snapshot();
 
         let mut nodes = vec![];
@@ -183,7 +181,6 @@ impl IcHandleConstructor for TestEnv {
                     type_of: s.subnet_type(),
                 }),
                 started_at,
-                ssh_key_pairs: ssh_key_pairs.clone(),
                 runtime_descriptor: RuntimeDescriptor::Vm(FarmInfo {
                     group_name: group_name.clone(),
                     vm_name: n.node_id.to_string(),

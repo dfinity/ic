@@ -1,14 +1,8 @@
 use anyhow::{bail, Result};
 use humantime::parse_duration;
-use ic_fondue::ic_manager::handle::AuthorizedSshAccount;
 use ic_types::ReplicaVersion;
 use regex::Regex;
-use std::{
-    convert::TryFrom,
-    path::{Path, PathBuf},
-    str::FromStr,
-    time::Duration,
-};
+use std::{convert::TryFrom, path::PathBuf, str::FromStr, time::Duration};
 use structopt::StructOpt;
 use url::Url;
 
@@ -197,11 +191,6 @@ impl CliArgs {
         let ignore_pattern = parse_pattern(self.ignore_pattern)?;
         let skip_pattern = parse_pattern(self.skip_pattern)?;
 
-        let authorized_ssh_accounts = match self.authorized_ssh_accounts {
-            Some(path) => is_valid_ssh_key_dir(path)?,
-            None => vec![],
-        };
-
         let journalbeat_hosts = parse_journalbeat_hosts(self.journalbeat_hosts)?;
 
         let log_debug_overrides = parse_log_debug_overrides(self.log_debug_overrides)?;
@@ -223,7 +212,7 @@ impl CliArgs {
             include_pattern,
             ignore_pattern,
             skip_pattern,
-            authorized_ssh_accounts,
+            authorized_ssh_accounts: self.authorized_ssh_accounts,
             journalbeat_hosts,
             log_debug_overrides,
             pot_timeout: self.pot_timeout,
@@ -258,7 +247,7 @@ pub struct ValidatedCliArgs {
     pub include_pattern: Option<Regex>,
     pub ignore_pattern: Option<Regex>,
     pub skip_pattern: Option<Regex>,
-    pub authorized_ssh_accounts: Vec<AuthorizedSshAccount>,
+    pub authorized_ssh_accounts: Option<PathBuf>,
     pub journalbeat_hosts: Vec<String>,
     pub log_debug_overrides: Vec<String>,
     pub pot_timeout: Duration,
@@ -268,43 +257,6 @@ pub struct ValidatedCliArgs {
 fn is_sha256_hex(s: &str) -> bool {
     let l = s.len();
     l == 64 && s.chars().all(|c| c.is_ascii_hexdigit())
-}
-
-fn is_valid_ssh_key_dir<P: AsRef<Path>>(p: P) -> Result<Vec<AuthorizedSshAccount>> {
-    let mut res: Vec<AuthorizedSshAccount> = vec![];
-    // directory exists
-    if !p.as_ref().is_dir() {
-        bail!("Not a directory!")
-    }
-    let entries = std::fs::read_dir(p.as_ref())?;
-    let entries = entries
-        .into_iter()
-        .map(|file| {
-            let path = file?.path();
-            if std::fs::metadata(&path)?.len() == 0 {
-                bail!("Found empty file!")
-            }
-            Ok(path)
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    for pub_path in entries {
-        // for each x.pub, x exists
-        let pub_filename = pub_path.file_name().and_then(|s| s.to_str()).unwrap_or("");
-        if let Some(filename) = pub_filename.strip_suffix(".pub") {
-            let pk_path = p.as_ref().join(filename);
-            if !pk_path.is_file() {
-                bail!("Private key file does not exist")
-            }
-            let private_key = std::fs::read(pk_path)?;
-            let public_key = std::fs::read(&pub_path)?;
-            res.push(AuthorizedSshAccount {
-                name: filename.to_string(),
-                private_key,
-                public_key,
-            })
-        }
-    }
-    Ok(res)
 }
 
 /// Checks whether the input string as the form [hostname:port{,hostname:port}]
@@ -348,51 +300,7 @@ fn parse_log_debug_overrides(s: Option<String>) -> Result<Vec<String>> {
 #[cfg(test)]
 #[cfg(target_os = "linux")]
 mod tests {
-    use super::{is_valid_ssh_key_dir, parse_journalbeat_hosts};
-    use std::{fs::OpenOptions, path::Path, process::Command};
-
-    #[test]
-    fn valid_key_dir_is_valid_key_dir() {
-        let tempdir = tempfile::tempdir().expect("Could not create a temp dir");
-        let path = tempdir.path();
-        create_key(path, "admin");
-        create_key(path, "root");
-
-        let r = is_valid_ssh_key_dir(path).unwrap();
-        assert_eq!(r.len(), 2);
-    }
-
-    #[test]
-    fn empty_pk_file_fails() {
-        let tempdir = tempfile::tempdir().expect("Could not create a temp dir");
-        let path = tempdir.path();
-        create_key(path, "admin");
-        create_key(path, "root");
-
-        let touched_file = path.join("root");
-        std::fs::remove_file(&touched_file).unwrap();
-        let _ = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .open(touched_file)
-            .unwrap();
-
-        assert!(is_valid_ssh_key_dir(path).is_err());
-    }
-
-    // ssh-keygen -t ed25519 -N '' -f "$SSH_KEY_DIR/admin"
-    fn create_key<P: AsRef<Path>>(p: P, key_name: &str) {
-        let filename = p.as_ref().join(key_name);
-        Command::new("ssh-keygen")
-            .arg("-t")
-            .arg("ed25519")
-            .arg("-N")
-            .arg("")
-            .arg("-f")
-            .arg(filename)
-            .output()
-            .expect("Could not execute ssh-keygen");
-    }
+    use super::parse_journalbeat_hosts;
 
     #[test]
     fn invalid_journalbeat_hostnames_are_rejected() {
