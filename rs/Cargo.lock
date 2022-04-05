@@ -854,7 +854,7 @@ dependencies = [
  "slog-term",
  "tokio",
  "tokio-openssl",
- "wabt 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wabt",
 ]
 
 [[package]]
@@ -1069,7 +1069,7 @@ dependencies = [
  "rand 0.7.3",
  "reqwest",
  "tokio",
- "wabt 0.10.0 (git+https://github.com/dfinity-lab/wabt-rs?tag=0.10.0-dfinity)",
+ "wabt",
 ]
 
 [[package]]
@@ -3644,7 +3644,7 @@ dependencies = [
  "nix 0.23.0",
  "serde_json",
  "threadpool",
- "wabt 0.10.0 (git+https://github.com/dfinity-lab/wabt-rs?tag=0.10.0-dfinity)",
+ "wabt",
 ]
 
 [[package]]
@@ -3704,7 +3704,7 @@ dependencies = [
  "slog-async",
  "slog-term",
  "tempfile",
- "wabt 0.10.0 (git+https://github.com/dfinity-lab/wabt-rs?tag=0.10.0-dfinity)",
+ "wabt",
  "which 4.2.2",
 ]
 
@@ -4674,7 +4674,7 @@ dependencies = [
  "ic-types 0.8.0",
  "slog",
  "tokio",
- "wabt 0.10.0 (git+https://github.com/dfinity-lab/wabt-rs?tag=0.10.0-dfinity)",
+ "wabt",
 ]
 
 [[package]]
@@ -4750,7 +4750,7 @@ dependencies = [
  "proptest 0.9.6",
  "serde",
  "slog",
- "wabt 0.10.0 (git+https://github.com/dfinity-lab/wabt-rs?tag=0.10.0-dfinity)",
+ "wabt",
  "wasmtime",
  "wasmtime-environ",
  "wasmtime-runtime",
@@ -4821,7 +4821,7 @@ dependencies = [
  "threadpool",
  "tokio",
  "tower",
- "wabt 0.10.0 (git+https://github.com/dfinity-lab/wabt-rs?tag=0.10.0-dfinity)",
+ "wabt",
 ]
 
 [[package]]
@@ -5486,7 +5486,7 @@ dependencies = [
  "statrs",
  "strum 0.23.0",
  "tokio",
- "wabt 0.10.0 (git+https://github.com/dfinity-lab/wabt-rs?tag=0.10.0-dfinity)",
+ "wabt",
 ]
 
 [[package]]
@@ -6091,7 +6091,7 @@ dependencies = [
  "tonic",
  "tower",
  "tracing",
- "wabt 0.10.0 (git+https://github.com/dfinity-lab/wabt-rs?tag=0.10.0-dfinity)",
+ "wabt",
 ]
 
 [[package]]
@@ -6166,7 +6166,7 @@ dependencies = [
  "slog-scope",
  "tokio",
  "tower",
- "wabt 0.10.0 (git+https://github.com/dfinity-lab/wabt-rs?tag=0.10.0-dfinity)",
+ "wabt",
 ]
 
 [[package]]
@@ -6578,7 +6578,7 @@ dependencies = [
  "slog-term",
  "tempfile",
  "tokio",
- "wabt 0.10.0 (git+https://github.com/dfinity-lab/wabt-rs?tag=0.10.0-dfinity)",
+ "wabt",
 ]
 
 [[package]]
@@ -6792,7 +6792,7 @@ dependencies = [
  "strum 0.23.0",
  "tempfile",
  "tokio",
- "wabt 0.10.0 (git+https://github.com/dfinity-lab/wabt-rs?tag=0.10.0-dfinity)",
+ "wabt",
 ]
 
 [[package]]
@@ -7059,7 +7059,7 @@ dependencies = [
  "slog-term",
  "tokio",
  "url",
- "wabt 0.10.0 (git+https://github.com/dfinity-lab/wabt-rs?tag=0.10.0-dfinity)",
+ "wabt",
 ]
 
 [[package]]
@@ -7609,7 +7609,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-test-utils",
- "wabt 0.10.0 (git+https://github.com/dfinity-lab/wabt-rs?tag=0.10.0-dfinity)",
+ "wabt",
 ]
 
 [[package]]
@@ -11452,7 +11452,7 @@ dependencies = [
  "tokio",
  "tree-deserializer",
  "url",
- "wabt 0.10.0 (git+https://github.com/dfinity-lab/wabt-rs?tag=0.10.0-dfinity)",
+ "wabt",
  "xnet-test",
 ]
 
@@ -12127,35 +12127,12 @@ dependencies = [
 [[package]]
 name = "wabt"
 version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00bef93d5e6c81a293bccf107cf43aa47239382f455ba14869d36695d8963b9c"
-dependencies = [
- "serde",
- "serde_derive",
- "serde_json",
- "wabt-sys 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "wabt"
-version = "0.10.0"
 source = "git+https://github.com/dfinity-lab/wabt-rs?tag=0.10.0-dfinity#7ab9062ddc63067843b62af8ae2cb83bf4bf601e"
 dependencies = [
  "serde",
  "serde_derive",
  "serde_json",
- "wabt-sys 0.8.0 (git+https://github.com/dfinity-lab/wabt-rs?tag=0.10.0-dfinity)",
-]
-
-[[package]]
-name = "wabt-sys"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1a4e043159f63e16986e713e9b5e1c06043df4848565bf672e27c523864c7791"
-dependencies = [
- "cc",
- "cmake",
- "glob 0.2.11",
+ "wabt-sys",
 ]
 
 [[package]]
