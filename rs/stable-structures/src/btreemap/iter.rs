@@ -4,14 +4,14 @@ use super::{
 };
 use crate::{types::NULL, Address, Memory};
 
-// An indicator of the current position in the map.
-enum Cursor {
+/// An indicator of the current position in the map.
+pub(crate) enum Cursor {
     Address(Address),
     Node { node: Node, next: Index },
 }
 
-// An index into a node's child or entry.
-enum Index {
+/// An index into a node's child or entry.
+pub(crate) enum Index {
     Child(usize),
     Entry(usize),
 }
@@ -24,6 +24,10 @@ pub struct Iter<'a, M: Memory> {
 
     // A stack of cursors indicating the current position in the tree.
     cursors: Vec<Cursor>,
+
+    // An optional prefix that the keys of all the entries returned must have.
+    // Iteration stops as soon as it runs into a key that doesn't have this prefix.
+    prefix: Option<Vec<u8>>,
 }
 
 impl<'a, M: Memory> Iter<'a, M> {
@@ -32,6 +36,28 @@ impl<'a, M: Memory> Iter<'a, M> {
             map,
             // Initialize the cursors with the address of the root of the map.
             cursors: vec![Cursor::Address(map.root_addr)],
+            prefix: None,
+        }
+    }
+
+    /// Returns an empty iterator.
+    pub(crate) fn null(map: &'a StableBTreeMap<M>) -> Self {
+        Self {
+            map,
+            cursors: vec![],
+            prefix: None,
+        }
+    }
+
+    pub(crate) fn new_with_prefix(
+        map: &'a StableBTreeMap<M>,
+        prefix: Vec<u8>,
+        cursors: Vec<Cursor>,
+    ) -> Self {
+        Self {
+            map,
+            cursors,
+            prefix: Some(prefix),
         }
     }
 }
@@ -103,6 +129,17 @@ impl<M: Memory + Clone> Iterator for Iter<'_, M> {
                     },
                     node,
                 });
+
+                // If there's a prefix, verify that the key has that given prefix.
+                // Otherwise iteration is stopped.
+                if let Some(prefix) = &self.prefix {
+                    if !entry.0.starts_with(prefix) {
+                        // Clear all cursors to avoid needless work in subsequent calls.
+                        self.cursors = vec![];
+                        return None;
+                    }
+                }
+
                 Some(entry)
             }
             None => {
