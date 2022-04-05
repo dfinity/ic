@@ -62,9 +62,10 @@ impl TransportImpl {
         *self.registry_version.write().unwrap() = registry_version;
         info!(
             self.log,
-            "ControlPlane::start_peer_connections(): node_id = {:?} peer_id = {:?}",
+            "ControlPlane::start_peer_connections(): node_id = {:?}, peer_id = {:?}, registry_version = {}",
             self.node_id,
-            peer_id
+            peer_id,
+            registry_version
         );
         self.start_peer(peer_id, peer_record, client_state, role)
     }
@@ -164,7 +165,7 @@ impl TransportImpl {
                 None => {
                     warn!(
                         self.log,
-                        "ControlPlane::start_peer(): missing endpoint flow = {:?}",
+                        "ControlPlane::start_peer(): missing endpoint flow_tag = {:?}",
                         flow_endpoint.flow_tag
                     );
                     continue;
@@ -177,7 +178,7 @@ impl TransportImpl {
                 None => {
                     error!(
                         self.log,
-                        "ControlPlane::start_peer(): TransportConfig NodeRecord mismatch = {:?}",
+                        "ControlPlane::start_peer(): TransportConfig NodeRecord mismatch: flow_tag = {:?}",
                         flow_endpoint.flow_tag
                     );
                     continue;
@@ -240,6 +241,12 @@ impl TransportImpl {
                     Some(arc_self) => arc_self,
                     _ => return,
                 };
+                info!(
+                    arc_self.log,
+                    "ControlPlane::spawn_accept_task(): local_addr = {:?}, flow_tag = {:?}",
+                    local_addr,
+                    flow_tag,
+                );
                 match tcp_listener.accept().await {
                     Ok((stream, _)) => {
                         let metrics = metrics.clone();
@@ -269,7 +276,7 @@ impl TransportImpl {
                             .inc();
                         warn!(
                             arc_self.log,
-                            "ControlPlane::accept(): local_addr = {:?} flow = {:?}, err = {:?}",
+                            "ControlPlane::accept(): local_addr = {:?}, flow_tag = {:?}, error = {:?}",
                             local_addr,
                             flow_tag,
                             e,
@@ -283,7 +290,10 @@ impl TransportImpl {
         let log_cl = self.log.clone();
         self.tokio_runtime.spawn(async move {
             if let Err(Aborted) = Abortable::new(accept_task, abort_registration).await {
-                warn!(log_cl, "ControlPlane: accept task aborted");
+                warn!(
+                    log_cl,
+                    "ControlPlane: accept task aborted: flow_tag = {:?}", flow_tag,
+                );
             }
         });
         abort_handle
@@ -339,12 +349,12 @@ impl TransportImpl {
                                     .inc();
                                 info!(
                                     arc_self.log,
-                                    "ControlPlane::connect_to_server(): Successful TLS handshake. local_addr = {:?} peer = {:?}/{:?}, \
-                                    flow = {:?}, retries = {}",
+                                    "ControlPlane::connect_to_server(): Successful TLS handshake. local_addr = {:?}, \
+                                     flow_tag = {:?}, peer = {:?}/{:?}, retries = {}",
                                     local_addr,
+                                    flow_tag,
                                     peer_id,
                                     peer_addr,
-                                    flow_tag,
                                     retries,
                                 );
                                 return;
@@ -360,12 +370,12 @@ impl TransportImpl {
                                 info!(
                                     every_n_seconds => 300,
                                     arc_self.log,
-                                    "ControlPlane::connect_to_server(): TLS handshake failed. local_addr = {:?} peer = {:?}/{:?}, \
-                                    flow = {:?}, err = {:?}, retries = {}",
+                                    "ControlPlane::connect_to_server(): TLS handshake failed. local_addr = {:?}, \
+                                     flow_tag = {:?}, peer = {:?}/{:?}, error = {:?}, retries = {}",
                                     local_addr,
+                                    flow_tag,
                                     peer_id,
                                     peer_addr,
-                                    flow_tag,
                                     e,
                                     retries
                                 );
@@ -381,12 +391,12 @@ impl TransportImpl {
                             .inc();
                         warn!(
                             arc_self.log,
-                            "ControlPlane::connect_to_server(): local_addr = {:?} peer = {:?}/{:?}, \
-                             flow = {:?}, err = {:?}, retries = {}",
+                            "ControlPlane::connect_to_server(): local_addr = {:?}, peer = {:?}/{:?}, \
+                             flow_tag = {:?}, error = {:?}, retries = {}",
                             local_addr,
+                            flow_tag,
                             peer_id,
                             peer_addr,
-                            flow_tag,
                             e,
                             retries,
                         );
@@ -400,7 +410,12 @@ impl TransportImpl {
         let log_cl = self.log.clone();
         self.tokio_runtime.spawn(async move {
             if let Err(Aborted) = Abortable::new(connect_task, abort_registration).await {
-                warn!(log_cl, "ControlPlane: connect task aborted");
+                warn!(
+                    log_cl,
+                    "ControlPlane: connect task aborted: flow_tag = {:?}, peer_id = {:?}",
+                    flow_tag,
+                    peer_id
+                );
             }
         });
         abort_handle
@@ -435,13 +450,14 @@ impl TransportImpl {
                 every_n_seconds => 30,
                 self.log,
                 "ControlPlane::handshake_result(): failed to add flow: \
-                 node_id = {:?}, local_addr = {:?}, peer_addr = {:?}, role = {:?}, \
-                 flow = {:?}, error = {:?}",
+                 node = {:?}/{:?}, flow_tag = {:?}, peer = {:?}/{:?}, role = {:?}, \
+                 error = {:?}",
                 self.node_id,
                 local_addr,
+                flow_tag,
+                peer_id,
                 peer_addr,
                 Self::connection_role(&self.node_id, &peer_id),
-                flow_tag,
                 e
             );
             e
@@ -452,7 +468,10 @@ impl TransportImpl {
     pub(crate) fn retry_connection(&self, flow_id: &FlowId) -> Result<(), TransportErrorCode> {
         warn!(
             self.log,
-            "ControlPlane::retry_connection(): node_id = {:?}, flow = {:?}", self.node_id, flow_id,
+            "ControlPlane::retry_connection(): node_id = {:?}, flow_tag = {:?}, peer_id = {:?}",
+            self.node_id,
+            flow_id.flow_tag,
+            flow_id.peer_id
         );
         self.control_plane_metrics
             .retry_connection
@@ -485,10 +504,11 @@ impl TransportImpl {
             flow_state.update(ConnectionState::Listening);
             warn!(
                 self.log,
-                "ControlPlane::process_disconnect(): node_id = {:?}, flow = {:?}, \
-                    waiting for peer to reconnect",
+                "ControlPlane::process_disconnect(): waiting for peer to reconnect: \
+                 node_id = {:?}, flow_tag = {:?}, peer_id = {:?}",
                 self.node_id,
-                flow_id,
+                flow_id.flow_tag,
+                flow_id.peer_id
             );
         } else {
             // reconnect if we have a listener
@@ -508,11 +528,12 @@ impl TransportImpl {
 
                 warn!(
                     self.log,
-                    "ControlPlane::process_disconnect(): spawning reconnect task: node_id = {:?}, \
-                flow = {:?}, local_addr = {:?}, peer_addr = {:?}, peer_port = {:?}",
+                    "ControlPlane::process_disconnect(): spawning reconnect task: node = {:?}/{:?}, \
+                    flow_tag = {:?}, peer = {:?}/{:?}, peer_port = {:?}",
                     self.node_id,
-                    flow_id,
                     self.node_ip,
+                    flow_id.flow_tag,
+                    flow_id.peer_id,
                     socket_addr.ip(),
                     socket_addr.port(),
                 );
@@ -535,7 +556,7 @@ impl TransportImpl {
             ConnectStatus::Error(err_code) => {
                 warn!(
                     log,
-                    "ControlPlane::connect_to_server(): local_addr = {:?} peer_addr = {:?}, error {:?}",
+                    "ControlPlane::connect_to_server(): local_addr = {:?}, peer_addr = {:?}, error = {:?}",
                     local_addr,
                     peer_addr,
                     err_code,
@@ -554,7 +575,7 @@ impl TransportImpl {
             warn!(
                 log,
                 "ControlPlane::set_send_sockopts(): set_nodelay() failed: \
-                 local_addr = {:?}, peer_addr = {:?}, err = {:?}",
+                 local_addr = {:?}, peer_addr = {:?}, error = {:?}",
                 stream
                     .local_addr()
                     .map_err(|e| format!("Unknown IP: {:?}", e)),
@@ -588,11 +609,14 @@ impl TransportImpl {
                     warn!(
                         every_n_seconds => 30,
                         self.log,
-                        "ControlPlane::tls_server_handshake() no allowed clients: failed local_addr = {:?} node_id = {:?}, peer_addr = {:?}, error = {:?}",
-                     local_addr,
-                     self.node_id,
-                     peer_addr,
-                     e);
+                        "ControlPlane::tls_server_handshake() no allowed clients: failed node = {:?}/{:?}, \
+                         flow_tag = {:?}, peer_addr = {:?}, error = {:?}",
+                        self.node_id,
+                        local_addr,
+                        flow_tag,
+                        peer_addr,
+                        e
+                    );
                     return Err(TransportErrorCode::PeerTlsInfoNotFound);
                 }
                 Ok(allowed_clients) => allowed_clients,
@@ -613,11 +637,13 @@ impl TransportImpl {
             warn!(
                 every_n_seconds => 30,
                 self.log,
-                    "ControlPlane::tls_server_handshake() timed out: \
-                      local_addr = {:?}, node_id = {:?}, peer_addr = {:?}",
-                     local_addr,
-                     self.node_id,
-                     peer_addr);
+                "ControlPlane::tls_server_handshake() timed out: \
+                 node = {:?}/{:?}, flow_tag = {:?}, peer_addr = {:?}",
+                self.node_id,
+                local_addr,
+                flow_tag,
+                peer_addr
+            );
             return Err(TransportErrorCode::TimeoutExpired);
         }
 
@@ -631,10 +657,11 @@ impl TransportImpl {
                 warn!(
                     every_n_seconds => 30,
                     self.log,
-                    "ControlPlane::tls_server_handshake(): failed local_addr = {:?} \
-                     node_id = {:?}, peer_addr = {:?}, error = {:?}",
-                    local_addr,
+                    "ControlPlane::tls_server_handshake() failed: node = {:?}/{:?}, \
+                     flow_tag = {:?}, peer_addr = {:?}, error = {:?}",
                     self.node_id,
+                    local_addr,
+                    flow_tag,
                     peer_addr,
                     e
                 );
@@ -648,10 +675,11 @@ impl TransportImpl {
                 warn!(
                     every_n_seconds => 10,
                     self.log,
-                    "ControlPlane::tls_server_handshake(): failed local_addr = {:?} \
-                        node_id = {:?}, peer_addr = {:?}, error = cert instead of node id",
-                    local_addr,
+                    "ControlPlane::tls_server_handshake() failed: node = {:?}/{:?}, \
+                     flow_tag = {:?}, peer_addr = {:?}, error = cert instead of node id",
                     self.node_id,
+                    local_addr,
+                    flow_tag,
                     peer_addr
                 );
                 return Err(TransportErrorCode::PeerTlsInfoNotFound);
@@ -697,35 +725,38 @@ impl TransportImpl {
                 every_n_seconds => 30,
                 self.log,
                 "ControlPlane::tls_client_handshake(): timed out \
-                 node_id = {:?} local_addr = {:?} peer_addr = {:?}, flow = {:?}",
+                 node = {:?}/{:?}, flow_tag = {:?}, peer = {:?}/{:?}",
                 self.node_id,
                 local_addr,
-                peer_addr,
-                flow_tag
+                flow_tag,
+                peer_id,
+                peer_addr
             );
             return Err(TransportErrorCode::TimeoutExpired);
         }
 
-        let (tls_reader, tls_writer) = ret.unwrap().map(|tls_stream| tls_stream.split()).map_err(
-            |e| {
-                self.control_plane_metrics
-                    .tcp_client_handshake_failed
-                    .with_label_values(&[&flow_tag.to_string()])
-                    .inc();
-                warn!(
-                    every_n_seconds => 30,
-                    self.log,
-                    "ControlPlane::tls_client_handshake(): failed \
-                     node_id = {:?} local_addr = {:?} peer_addr = {:?}, flow = {:?} error = {:?}",
-                    self.node_id,
-                    local_addr,
-                    peer_addr,
-                    flow_tag,
-                    e
-                );
-                TransportErrorCode::PeerTlsInfoNotFound
-            },
-        )?;
+        let (tls_reader, tls_writer) =
+            ret.unwrap()
+                .map(|tls_stream| tls_stream.split())
+                .map_err(|e| {
+                    self.control_plane_metrics
+                        .tcp_client_handshake_failed
+                        .with_label_values(&[&flow_tag.to_string()])
+                        .inc();
+                    warn!(
+                        every_n_seconds => 30,
+                        self.log,
+                        "ControlPlane::tls_client_handshake(): failed \
+                         node = {:?}/{:?}, flow_tag = {:?}, peer = {:?}/{:?}, error = {:?}",
+                        self.node_id,
+                        local_addr,
+                        flow_tag,
+                        peer_id,
+                        peer_addr,
+                        e
+                    );
+                    TransportErrorCode::PeerTlsInfoNotFound
+                })?;
 
         self.process_handshake_result(
             peer_id,
@@ -758,7 +789,7 @@ impl TransportImpl {
                 warn!(
                     every_n_seconds => 30,
                     self.log,
-                    "ControlPlane::listen(): Failed to create socket: local_addr = {:?} {:?}",
+                    "ControlPlane::listen(): Failed to create socket: local_addr = {:?}, error = {:?}",
                     local_addr,
                     e
                 );
@@ -779,7 +810,7 @@ impl TransportImpl {
             warn!(
                 every_n_seconds => 30,
                 self.log,
-                "ControlPlane::listen(): Failed to bind: local_addr = {:?} {:?}", local_addr, e
+                "ControlPlane::listen(): Failed to bind: local_addr = {:?}, error = {:?}", local_addr, e
             );
             return Err(TransportErrorCode::ServerSocketBindFailed);
         }
@@ -789,7 +820,7 @@ impl TransportImpl {
             Err(e) => {
                 warn!(
                     self.log,
-                    "ControlPlane::listen(): Failed to listen: local_addr = {:?} {:?}",
+                    "ControlPlane::listen(): Failed to listen: local_addr = {:?}, error = {:?}",
                     local_addr,
                     e
                 );
@@ -814,7 +845,7 @@ impl TransportImpl {
                 warn!(
                     every_n_seconds => 30,
                     log,
-                    "ControlPlane::connect(): Failed to create socket: local_addr = {:?} {:?}",
+                    "ControlPlane::connect(): Failed to create socket: local_addr = {:?}, error = {:?}",
                     local_addr,
                     e
                 );
@@ -827,7 +858,7 @@ impl TransportImpl {
                 warn!(
                     every_n_seconds => 30,
                     log,
-                    "ControlPlane::connect(): Failed to bind(): local_addr = {:?} {:?}",
+                    "ControlPlane::connect(): Failed to bind(): local_addr = {:?}, error = {:?}",
                     local_addr,
                     e
                 );
