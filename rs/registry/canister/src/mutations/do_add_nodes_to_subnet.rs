@@ -15,7 +15,10 @@ impl Registry {
     /// This method is called by the governance canister, after a proposal
     /// for modifying a subnet by adding nodes has been accepted.
     pub fn do_add_nodes_to_subnet(&mut self, payload: AddNodesToSubnetPayload) {
-        println!("{}do_add_nodes_to_subnet: {:?}", LOG_PREFIX, payload);
+        println!(
+            "{}do_add_nodes_to_subnet started: {:?}",
+            LOG_PREFIX, payload
+        );
 
         let mut nodes_to_add = payload.node_ids.clone();
         let subnet_record = self.get_subnet_or_panic(SubnetId::from(payload.subnet_id));
@@ -35,6 +38,11 @@ impl Registry {
 
         // Check invariants before applying mutations
         self.maybe_apply_mutation_internal(mutations);
+
+        println!(
+            "{}do_add_nodes_to_subnet finished: {:?}",
+            LOG_PREFIX, payload
+        );
     }
 }
 
