@@ -226,7 +226,6 @@ impl IcManager {
                     type_of: nc.initial_subnet_type,
                 }),
                 started_at: Instant::now(),
-                ssh_key_pairs: vec![],
                 node_id: nc.node_id,
             }
         };

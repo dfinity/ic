@@ -73,7 +73,6 @@ impl Options {
                         }),
                         metrics_url: None,
                         started_at: Instant::now(),
-                        ssh_key_pairs: vec![],
                         // this interface is deprecated and that's why we use a fake id here
                         node_id: NodeId::from(PrincipalId::new_node_test_id(0)),
                     })

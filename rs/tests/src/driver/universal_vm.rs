@@ -1,4 +1,6 @@
-use super::driver_setup::{FARM_BASE_URL, FARM_GROUP_NAME};
+use super::driver_setup::{
+    FARM_BASE_URL, FARM_GROUP_NAME, SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
+};
 use super::farm::Farm;
 use super::ic::VmResources;
 use super::resource::AllocatedVm;
@@ -14,7 +16,6 @@ use std::net::{Ipv4Addr, TcpStream};
 use std::os::unix::prelude::PermissionsExt;
 use std::path::PathBuf;
 use std::process::Command;
-use tempfile::TempDir;
 /// A builder for the initial configuration of a universal VM.
 /// See: https://github.com/dfinity-lab/infra/tree/master/farm/universal-vm
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -30,8 +31,8 @@ const UNIVERSAL_VMS_DIR: &str = "universal_vms";
 const CONF_IMG_FNAME: &str = "config_disk.img.zst";
 
 const CONFIG_DIR_NAME: &str = "config";
-const SSH_AUTHORIZED_KEYS_DIR_NAME: &str = "ssh-authorized-keys";
-const TEST_USER: &str = "test";
+const CONFIG_DIR_SSH_AUTHORIZED_KEYS_DIR: &str = "ssh-authorized-keys";
+const ADMIN_USER: &str = "admin";
 
 impl UniversalVm {
     pub fn new(name: String) -> Self {
@@ -141,11 +142,8 @@ impl UniversalVms for TestEnv {
         let mut sess = Session::new().unwrap();
         sess.set_tcp_stream(tcp);
         sess.handshake().unwrap();
-
-        let universal_vm_path = self.universal_vm_path(universal_vm_name);
-        let test_priv_key_path = universal_vm_path.join(TEST_USER.to_owned() + ".key");
-        sess.userauth_pubkey_file(TEST_USER, None, test_priv_key_path.as_path(), None)?;
-
+        let admin_priv_key_path = self.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR).join(ADMIN_USER);
+        sess.userauth_pubkey_file(ADMIN_USER, None, admin_priv_key_path.as_path(), None)?;
         Ok(sess)
     }
 
@@ -189,7 +187,7 @@ echo "$ipv4"
         let config_dir = self.get_path(p);
         fs::create_dir_all(config_dir.clone())?;
 
-        setup_ssh(self, universal_vm_name, config_dir.clone())?;
+        setup_ssh(self, config_dir.clone())?;
 
         let activate_path = config_dir.join("activate");
 
@@ -204,35 +202,13 @@ echo "$ipv4"
     }
 }
 
-fn setup_ssh(env: &TestEnv, universal_vm_name: &str, config_dir: PathBuf) -> Result<()> {
-    let tmp_ssh_dir = TempDir::new()?;
-    let tmp_ssh_dir_path = tmp_ssh_dir.path();
-    let mut ssh_key_gen_cmd = Command::new("ssh-keygen");
-    ssh_key_gen_cmd
-        .arg("-t")
-        .arg("ed25519")
-        .arg("-P")
-        .arg("")
-        .arg("-C")
-        .arg(TEST_USER.to_owned() + " user")
-        .arg("-f")
-        .arg(tmp_ssh_dir_path.join(TEST_USER));
-
-    let output = ssh_key_gen_cmd.output()?;
-    std::io::stdout().write_all(&output.stdout)?;
-    std::io::stderr().write_all(&output.stderr)?;
-
-    let ssh_dir = config_dir.join(SSH_AUTHORIZED_KEYS_DIR_NAME);
-    fs::create_dir_all(ssh_dir.clone())?;
-
-    fs::rename(
-        tmp_ssh_dir_path.join(TEST_USER.to_owned() + ".pub"),
-        ssh_dir.join(TEST_USER),
+fn setup_ssh(env: &TestEnv, config_dir: PathBuf) -> Result<()> {
+    let ssh_authorized_pub_keys_dir = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
+    let config_dir_ssh_dir = config_dir.join(CONFIG_DIR_SSH_AUTHORIZED_KEYS_DIR);
+    fs::create_dir_all(config_dir_ssh_dir.clone())?;
+    fs::copy(
+        ssh_authorized_pub_keys_dir.join(ADMIN_USER),
+        config_dir_ssh_dir.join(ADMIN_USER),
     )?;
-
-    let universal_vm_path = env.universal_vm_path(universal_vm_name);
-    let test_priv_key_path = universal_vm_path.join(TEST_USER.to_owned() + ".key");
-    fs::rename(tmp_ssh_dir_path.join(TEST_USER), test_priv_key_path)?;
-
     Ok(())
 }
