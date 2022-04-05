@@ -11,7 +11,7 @@ use crossbeam_channel::{bounded, Receiver, Sender};
 use ic_fondue::result::*;
 use slog::{error, info, warn, Logger};
 
-pub const N_THREADS_PER_SUITE: usize = 6;
+pub const N_THREADS_PER_SUITE: usize = 8;
 pub const N_THREADS_PER_POT: usize = 8;
 
 pub fn evaluate(ctx: &DriverContext, ts: Suite) -> TestResultNode {
