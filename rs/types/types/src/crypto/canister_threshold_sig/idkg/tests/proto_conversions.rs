@@ -1,17 +1,29 @@
 #![allow(clippy::unwrap_used)]
 
-use super::*;
-use ic_crypto_test_utils_canister_threshold_sigs::{
-    create_params_for_dealers, mock_transcript, mock_unmasked_transcript_type, set_of_nodes,
+use crate::crypto::canister_threshold_sig::error::ExtendedDerivationPathSerializationError;
+use crate::crypto::canister_threshold_sig::idkg::{
+    IDkgDealing, IDkgTranscriptId, IDkgTranscriptOperation, InitialIDkgDealings,
 };
+use crate::crypto::canister_threshold_sig::ExtendedDerivationPath;
+use crate::{NodeId, PrincipalId};
+
+use crate::crypto::canister_threshold_sig::idkg::tests::test_utils::{
+    create_params_for_dealers, mock_transcript, mock_unmasked_transcript_type,
+};
+use ic_crypto_test_utils_canister_threshold_sigs::set_of_nodes;
+use ic_protobuf::registry::subnet::v1::ExtendedDerivationPath as ExtendedDerivationPathProto;
+use ic_protobuf::registry::subnet::v1::InitialIDkgDealings as InitialIDkgDealingsProto;
+use ic_protobuf::types::v1::PrincipalId as PrincipalIdProto;
 use rand::distributions::Standard;
 use rand::{Rng, RngCore};
+use std::collections::{BTreeMap, BTreeSet};
+use std::convert::TryFrom;
 
 #[test]
 fn should_correctly_serialize_and_deserialize_initial_dealings() {
     let initial_dealings = initial_dealings();
-    let proto = idkg_initial_dealings_to_proto(initial_dealings.clone());
-    let parsing_result = idkg_initial_dealings_from_proto(proto);
+    let proto = InitialIDkgDealingsProto::from(initial_dealings.clone());
+    let parsing_result = InitialIDkgDealings::try_from(proto);
     assert!(parsing_result.is_ok(), "{:?}", parsing_result.err());
     let parsed = parsing_result.unwrap();
     assert_eq!(initial_dealings, parsed);
@@ -20,8 +32,8 @@ fn should_correctly_serialize_and_deserialize_initial_dealings() {
 #[test]
 fn should_correctly_serialize_and_deserialize_extended_derivation_path() {
     let derivation_path = dummy_extended_derivation_path();
-    let proto = extended_derivation_path_to_proto(&derivation_path);
-    let parsing_result = extended_derivation_path_from_proto(&proto);
+    let proto = ExtendedDerivationPathProto::from(derivation_path.clone());
+    let parsing_result = ExtendedDerivationPath::try_from(proto);
     assert!(parsing_result.is_ok(), "{:?}", parsing_result.err());
     let parsed = parsing_result.unwrap();
     assert_eq!(derivation_path, parsed);
@@ -30,9 +42,9 @@ fn should_correctly_serialize_and_deserialize_extended_derivation_path() {
 #[test]
 fn should_fail_parsing_extended_derivation_path_proto_without_caller() {
     let derivation_path = dummy_extended_derivation_path();
-    let mut proto = extended_derivation_path_to_proto(&derivation_path);
+    let mut proto = ExtendedDerivationPathProto::from(derivation_path);
     proto.caller = None;
-    let parsing_result = extended_derivation_path_from_proto(&proto);
+    let parsing_result = ExtendedDerivationPath::try_from(proto);
     assert!(matches!(
         parsing_result,
         Err(ExtendedDerivationPathSerializationError::MissingCaller)
@@ -42,9 +54,9 @@ fn should_fail_parsing_extended_derivation_path_proto_without_caller() {
 #[test]
 fn should_fail_parsing_extended_derivation_path_proto_with_malformed_caller() {
     let derivation_path = dummy_extended_derivation_path();
-    let mut proto = extended_derivation_path_to_proto(&derivation_path);
+    let mut proto = ExtendedDerivationPathProto::from(derivation_path);
     proto.caller = Some(PrincipalIdProto { raw: vec![42; 42] });
-    let parsing_result = extended_derivation_path_from_proto(&proto);
+    let parsing_result = ExtendedDerivationPath::try_from(proto);
     assert!(matches!(
         parsing_result,
         Err(ExtendedDerivationPathSerializationError::InvalidCaller { .. })

@@ -3,6 +3,7 @@ mod dealers;
 mod index;
 mod initial_dealings;
 mod params;
+mod proto_conversions;
 mod receivers;
 mod test_utils;
 mod verify_transcript_params;
