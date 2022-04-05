@@ -96,6 +96,10 @@ options may be specified:
     The Json-object corresponds to this Rust-structure:
       ic_types::malicious_behaviour::MaliciousBehaviour
 
+  --bitcoind_addr address
+    The IP address of a running bitcoind instance. To be used in
+    systems tests only.
+
     Be sure to properly quote the string.
 EOF
 }
@@ -115,6 +119,7 @@ function build_ic_bootstrap_tar() {
     local ACCOUNTS_SSH_AUTHORIZED_KEYS
     local LOG_DEBUG_OVERRIDES
     local MALICIOUS_BEHAVIOR
+    local BITCOIND_ADDR
     while true; do
         if [ $# == 0 ]; then
             break
@@ -165,6 +170,9 @@ function build_ic_bootstrap_tar() {
             --malicious_behavior)
                 MALICIOUS_BEHAVIOR="$2"
                 ;;
+            --bitcoind_addr)
+                BITCOIND_ADDR="$2"
+                ;;
             *)
                 echo "Unrecognized option: $1"
                 usage
@@ -209,6 +217,9 @@ EOF
     fi
     if [ "${MALICIOUS_BEHAVIOR}" != "" ]; then
         echo "malicious_behavior=${MALICIOUS_BEHAVIOR}" >"${BOOTSTRAP_TMPDIR}/malicious_behavior.conf"
+    fi
+    if [ "${BITCOIND_ADDR}" != "" ]; then
+        echo "bitcoind_addr=${BITCOIND_ADDR}" >"${BOOTSTRAP_TMPDIR}/bitcoind_addr.conf"
     fi
     if [ "${IC_CRYPTO}" != "" ]; then
         cp -r "${IC_CRYPTO}" "${BOOTSTRAP_TMPDIR}/ic_crypto"
