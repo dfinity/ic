@@ -204,6 +204,11 @@ message InitialIDkgDealings {
     repeated IDkgDealingTuple dealings = 3;
 }
 
+message ExtendedDerivationPath {
+  types.v1.PrincipalId caller = 1;
+  repeated bytes derivation_path = 2;
+}
+
 // Per subnet P2P configuration
 // Note: protoc is mangling the name P2PConfig to P2pConfig
 message GossipConfig {
