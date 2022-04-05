@@ -38,7 +38,7 @@ fn get_subnet_record(registry: &Registry, subnet_id: SubnetId) -> SubnetRecord {
         .get(subnet_key.as_bytes(), registry.latest_version())
         .map_or(
             Err(format!(
-                "{}do_remove_node: Subnet not found in the registry, aborting node removal.",
+                "{}do_remove_nodes: Subnet not found in the registry, aborting node removal.",
                 LOG_PREFIX
             )),
             Ok,
@@ -60,7 +60,7 @@ pub fn get_subnet_list_record(registry: &Registry) -> SubnetListRecord {
         )
         .map_or(
             Err(format!(
-                "{}do_remove_node: Subnet List not found in the registry, aborting node removal.",
+                "{}do_remove_nodes: Subnet List not found in the registry, aborting node removal.",
                 LOG_PREFIX
             )),
             Ok,

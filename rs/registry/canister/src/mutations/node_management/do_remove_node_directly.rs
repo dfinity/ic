@@ -18,7 +18,10 @@ impl Registry {
     ///
     /// This method is called directly by the node operator tied to the node.
     pub fn do_remove_node_directly(&mut self, payload: RemoveNodeDirectlyPayload) {
-        println!("{}do_remove_node_directly: {:?}", LOG_PREFIX, payload);
+        println!(
+            "{}do_remove_node_directly started: {:?}",
+            LOG_PREFIX, payload
+        );
 
         // 1. Find the node operator id for this record
         // and abort if the node record is not found
@@ -75,6 +78,11 @@ impl Registry {
 
         // 6. Apply mutations after checking invariants
         self.maybe_apply_mutation_internal(mutations);
+
+        println!(
+            "{}do_remove_node_directly finished: {:?}",
+            LOG_PREFIX, payload
+        );
     }
 }
 

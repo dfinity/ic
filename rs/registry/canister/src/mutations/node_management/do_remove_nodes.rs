@@ -44,7 +44,6 @@ impl Registry {
                     .map_err(|e| format!("{}do_remove_nodes: Aborting node removal: {}", LOG_PREFIX, e))
                     .unwrap();
 
-
                 // 5. Ensure node is not in a subnet 
                 let is_node_in_subnet = find_subnet_for_node(self, node_to_remove, &subnet_list_record);
                 if let Some(subnet_id) = is_node_in_subnet {
@@ -58,7 +57,7 @@ impl Registry {
                 let mut new_node_operator_record = get_node_operator_record(self, node_operator_id)
                     .map_err(|err| {
                         format!(
-                            "{}do_remove_node: Aborting node removal: {}",
+                            "{}do_remove_nodes: Aborting node removal: {}",
                             LOG_PREFIX, err
                         )
                     })

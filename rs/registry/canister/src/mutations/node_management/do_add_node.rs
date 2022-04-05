@@ -32,7 +32,7 @@ impl Registry {
     /// This method is called directly by the node or tool that needs to
     /// add a node.
     pub fn do_add_node(&mut self, payload: AddNodePayload) -> Result<NodeId, String> {
-        println!("{}do_add_node: {:?}", LOG_PREFIX, payload);
+        println!("{}do_add_node started: {:?}", LOG_PREFIX, payload);
 
         // The steps are now:
         // 1. get the caller ID and check if it is in the registry
@@ -133,6 +133,8 @@ impl Registry {
 
         // Check invariants before applying mutations
         self.maybe_apply_mutation_internal(mutations);
+
+        println!("{}do_add_node finished: {:?}", LOG_PREFIX, payload);
 
         Ok(node_id)
     }
