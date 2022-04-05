@@ -9,13 +9,15 @@ use ic_interfaces::execution_environment::{
     ExecutionParameters,
     HypervisorError::{self, *},
     HypervisorResult, OutOfInstructionsHandler, SubnetAvailableMemory, SystemApi,
-    TrapCode::CyclesAmountTooBigFor64Bit,
+    TrapCode::{self, CyclesAmountTooBigFor64Bit},
 };
 use ic_logger::{error, info, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::ENFORCE_MESSAGE_MEMORY_USAGE, memory_required_to_push_request,
-    page_map::PAGE_SIZE, Memory, NetworkTopology, NumWasmPages, PageIndex, StateError,
+    canister_state::{ENFORCE_MESSAGE_MEMORY_USAGE, WASM_PAGE_SIZE_IN_BYTES},
+    memory_required_to_push_request,
+    page_map::PAGE_SIZE,
+    Memory, NetworkTopology, NumWasmPages, PageIndex, StateError,
 };
 use ic_sys::PageBytes;
 use ic_types::{
@@ -2265,13 +2267,32 @@ impl SystemApi for SystemApiImpl {
             | ApiType::PreUpgrade { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
-            | ApiType::InspectMessage { .. } => self
-                .stable_memory
-                .stable64_write(offset, src, size, heap)
-                .map(|_| {
-                    self.memory_usage.stable_memory_delta +=
-                        (size as usize / PAGE_SIZE) + std::cmp::min(1, size as usize % PAGE_SIZE);
-                }),
+            | ApiType::InspectMessage { .. } => {
+                if self.subnet_type() == SubnetType::VerifiedApplication {
+                    let memory_size_in_pages = self.stable_memory.stable64_size()?;
+                    let (memory_size_in_bytes, overflow) =
+                        memory_size_in_pages.overflowing_mul(WASM_PAGE_SIZE_IN_BYTES as u64);
+                    if overflow {
+                        return Err(HypervisorError::Trapped(TrapCode::StableMemoryOutOfBounds));
+                    }
+                    let (memory_end, overflow) = offset.overflowing_add(size);
+                    if overflow {
+                        return Err(HypervisorError::Trapped(TrapCode::StableMemoryOutOfBounds));
+                    }
+                    let additional_bytes = memory_end.saturating_sub(memory_size_in_bytes);
+                    let additional_pages = (additional_bytes + WASM_PAGE_SIZE_IN_BYTES as u64 - 1)
+                        / (WASM_PAGE_SIZE_IN_BYTES as u64);
+                    if additional_pages > 0 {
+                        self.stable_memory.stable64_grow(additional_pages)?;
+                    }
+                }
+                self.stable_memory
+                    .stable64_write(offset, src, size, heap)
+                    .map(|_| {
+                        self.memory_usage.stable_memory_delta += (size as usize / PAGE_SIZE)
+                            + std::cmp::min(1, size as usize % PAGE_SIZE);
+                    })
+            }
         };
         trace_syscall!(
             self,
