@@ -1,13 +1,14 @@
 //! Canister Http related public interfaces.
 use crate::artifact_pool::UnvalidatedArtifact;
+use crate::consensus_pool::ConsensusPoolCache;
 use ic_types::{
     artifact::{CanisterHttpResponseId, PriorityFn},
-    canister_http::CanisterHttpResponseShare,
+    canister_http::{CanisterHttpResponseContent, CanisterHttpResponseShare},
     Height,
 };
 
 pub enum CanisterHttpChangeAction {
-    AddToValidated(CanisterHttpResponseShare),
+    AddToValidated(CanisterHttpResponseShare, CanisterHttpResponseContent),
     MoveToValidated(CanisterHttpResponseId),
     RemoveValidated(CanisterHttpResponseId),
     RemoveUnvalidated(CanisterHttpResponseId),
@@ -20,6 +21,16 @@ pub type CanisterHttpChangeSet = Vec<CanisterHttpChangeAction>;
 pub trait CanisterHttpPool: Send + Sync {
     fn get_validated_shares(&self) -> Box<dyn Iterator<Item = &CanisterHttpResponseShare> + '_>;
     fn get_unvalidated_shares(&self) -> Box<dyn Iterator<Item = &CanisterHttpResponseShare> + '_>;
+
+    fn lookup_validated(
+        &self,
+        msg_id: &CanisterHttpResponseId,
+    ) -> Option<CanisterHttpResponseShare>;
+
+    fn lookup_unvalidated(
+        &self,
+        msg_id: &CanisterHttpResponseId,
+    ) -> Option<CanisterHttpResponseShare>;
 }
 
 /// Artifact pool for the ECDSA messages (update interface)
@@ -36,4 +47,17 @@ pub trait CanisterHttpGossip: Send + Sync {
         &self,
         canister_http_pool: &dyn CanisterHttpPool,
     ) -> PriorityFn<CanisterHttpResponseId, Height>;
+}
+
+pub trait CanisterHttpPoolManager: Send {
+    /// A function to be invoked every time the canister http pool is changed.
+    fn on_state_change(
+        &self,
+        consensus_cache: &dyn ConsensusPoolCache,
+        canister_http_pool: &dyn CanisterHttpPool,
+    ) -> CanisterHttpChangeSet;
+}
+
+pub enum CanisterHttpResponseAttribute {
+    None,
 }

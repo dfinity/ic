@@ -430,6 +430,7 @@ impl DownloadManager for DownloadManagerImpl {
             }) {
                 let artifact_type = match &gossip_chunk.artifact_id {
                     ArtifactId::ConsensusMessage(_) => "consensus",
+                    ArtifactId::CanisterHttpMessage(_) => "canister_http",
                     ArtifactId::IngressMessage(_) => "ingress",
                     ArtifactId::CertificationMessage(_) => "certification",
                     ArtifactId::DkgMessage(_) => "dkg",

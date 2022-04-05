@@ -6,14 +6,15 @@ use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_ARTIFACT_MANAGER};
 use ic_interfaces::{
     artifact_manager::{AdvertMismatchError, ArtifactAcceptance, ArtifactClient, OnArtifactError},
     artifact_pool::{ArtifactPoolError, ReplicaVersionMismatch, UnvalidatedArtifact},
+    canister_http::*,
     certification::{CertificationPool, CertifierGossip},
     consensus::ConsensusGossip,
     consensus_pool::{ConsensusPool, ConsensusPoolCache},
     dkg::{DkgGossip, DkgPool},
     ecdsa::{EcdsaGossip, EcdsaPool},
     gossip_pool::{
-        CertificationGossipPool, ConsensusGossipPool, DkgGossipPool, EcdsaGossipPool,
-        IngressGossipPool,
+        CanisterHttpGossipPool, CertificationGossipPool, ConsensusGossipPool, DkgGossipPool,
+        EcdsaGossipPool, IngressGossipPool,
     },
     ingress_pool::IngressPool,
     time_source::TimeSource,
@@ -22,6 +23,7 @@ use ic_logger::{debug, ReplicaLogger};
 use ic_types::{
     artifact,
     artifact::*,
+    canister_http::*,
     chunkable::*,
     consensus::{
         certification::CertificationMessage, dkg::Message as DkgMessage, ConsensusMessage,
@@ -664,5 +666,60 @@ impl<Pool: EcdsaPool + EcdsaGossipPool + Send + Sync> ArtifactClient<EcdsaArtifa
 
     fn get_chunk_tracker(&self, _id: &EcdsaMessageId) -> Box<dyn Chunkable + Send + Sync> {
         Box::new(SingleChunked::Ecdsa)
+    }
+}
+
+/// The CanisterHttp Client
+pub struct CanisterHttpClient<Pool> {
+    pool: Arc<RwLock<Pool>>,
+    _gossip: Arc<dyn CanisterHttpGossip + Send + Sync>,
+}
+
+impl<Pool: CanisterHttpPool + CanisterHttpGossipPool + Send + Sync> CanisterHttpClient<Pool> {
+    pub fn new<T: CanisterHttpGossip + Send + Sync + 'static>(
+        pool: Arc<RwLock<Pool>>,
+        gossip: T,
+    ) -> Self {
+        Self {
+            pool,
+            _gossip: Arc::new(gossip),
+        }
+    }
+}
+
+impl<Pool: CanisterHttpGossipPool + CanisterHttpGossip + Send + Sync>
+    ArtifactClient<CanisterHttpArtifact> for CanisterHttpClient<Pool>
+{
+    fn check_artifact_acceptance(
+        &self,
+        msg: CanisterHttpResponseShare,
+        _peer_id: &NodeId,
+    ) -> Result<ArtifactAcceptance<CanisterHttpResponseShare>, ArtifactPoolError> {
+        Ok(ArtifactAcceptance::AcceptedForProcessing(msg))
+    }
+
+    fn has_artifact(&self, msg_id: &CanisterHttpResponseId) -> bool {
+        self.pool.read().unwrap().contains(msg_id)
+    }
+
+    fn get_validated_by_identifier(
+        &self,
+        msg_id: &CanisterHttpResponseId,
+    ) -> Option<CanisterHttpResponseShare> {
+        self.pool
+            .read()
+            .unwrap()
+            .get_validated_by_identifier(msg_id)
+    }
+
+    fn get_priority_function(&self) -> Option<PriorityFn<CanisterHttpResponseId, ()>> {
+        // TODO: This priority function makes it so that we will unconditionally
+        // drop all incoming messages. We need to implement a proper priority
+        // function for the canister http feature to work at all.
+        Some(Box::new(|_, _| Priority::Drop))
+    }
+
+    fn get_chunk_tracker(&self, _id: &CanisterHttpResponseId) -> Box<dyn Chunkable + Send + Sync> {
+        Box::new(SingleChunked::CanisterHttp)
     }
 }

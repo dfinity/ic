@@ -88,6 +88,7 @@ impl ArtifactChunk {
 
 /// Artifact types composed of a single chunk.
 pub enum SingleChunked {
+    CanisterHttp,
     Consensus,
     Ingress,
     Certification,

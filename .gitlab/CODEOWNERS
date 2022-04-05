@@ -105,6 +105,7 @@
 /rs/interfaces/p2p/                     @dfinity-lab/teams/networking-team
 /rs/interfaces/transport/               @dfinity-lab/teams/networking-team
 /rs/interfaces/src/artifact_pool.rs     @dfinity-lab/teams/consensus-owners
+/rs/interfaces/src/canister_http.rs     @dfinity-lab/teams/consensus-owners
 /rs/interfaces/src/consensus.rs         @dfinity-lab/teams/consensus-owners
 /rs/interfaces/src/consensus_pool.rs    @dfinity-lab/teams/consensus-owners
 /rs/interfaces/src/dkg.rs               @dfinity-lab/teams/consensus-owners
@@ -176,6 +177,7 @@
 /rs/constants                           @dfinity-lab/teams/interface-owners
 /rs/types/base_types/                   @dfinity-lab/teams/interface-owners
 /rs/types/types/                        @dfinity-lab/teams/interface-owners
+/rs/types/types/src/canister_http.rs    @dfinity-lab/teams/consensus-owners
 /rs/types/types/src/consensus.rs        @dfinity-lab/teams/consensus-owners
 /rs/types/types/src/consensus/          @dfinity-lab/teams/consensus-owners
 /rs/types/types/src/signature.rs        @dfinity-lab/teams/consensus-owners

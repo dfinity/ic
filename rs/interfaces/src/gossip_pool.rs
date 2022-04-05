@@ -10,7 +10,7 @@ use ic_types::{
         CanisterHttpResponseId, CertificationMessageId, ConsensusMessageId, DkgMessageId,
         EcdsaMessageId, IngressMessageId,
     },
-    canister_http::CanisterHttpResponseShareSignature,
+    canister_http::CanisterHttpResponseShare,
     consensus::{certification::CertificationMessage, dkg, ecdsa::EcdsaMessage, ConsensusMessage},
     messages::SignedIngress,
     Height, NodeId, Time,
@@ -96,7 +96,7 @@ pub trait EcdsaGossipPool:
 
 pub trait CanisterHttpGossipPool:
     GossipPool<
-    CanisterHttpResponseShareSignature,
+    CanisterHttpResponseShare,
     CanisterHttpChangeSet,
     MessageId = CanisterHttpResponseId,
     Filter = (),
