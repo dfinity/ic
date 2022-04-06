@@ -76,7 +76,8 @@ fn build_log_proto() {
         "log.consensus_log_entry.v1",
         consensus,
         height,
-        hash
+        hash,
+        replica_version
     );
 
     add_log_proto_derives!(

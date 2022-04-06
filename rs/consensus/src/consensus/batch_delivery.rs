@@ -79,7 +79,11 @@ pub fn deliver_batches(
                 debug!(
                     log,
                     "Finalized height";
-                    consensus => ConsensusLogEntry { height: Some(h.get()), hash: Some(get_block_hash_string(&block)) }
+                    consensus => ConsensusLogEntry {
+                        height: Some(h.get()),
+                        hash: Some(get_block_hash_string(&block)),
+                        replica_version: Some(String::from(current_replica_version.clone()))
+                    }
                 );
                 // Compute consensus' responses to subnet calls.
                 let consensus_responses =
@@ -161,7 +165,10 @@ pub fn deliver_batches(
                 let block_context_certified_height = block.context.certified_height.get();
                 debug!(
                     log,
-                    "deliver batch {:?} for block_hash {:?}", batch_height, block_hash
+                    "replica {:?} delivered batch {:?} for block_hash {:?}",
+                    current_replica_version,
+                    batch_height,
+                    block_hash
                 );
                 let result = message_routing.deliver_batch(batch);
                 if let Some(f) = result_processor {
