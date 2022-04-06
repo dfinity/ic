@@ -40,7 +40,6 @@ libc = "0.2.91"
 mio = { version = "0.7", features = ["os-poll", "os-ext", "pipe"] }
 nix = "0.23.0"
 nonblock = "0.1.0"
-phantom_newtype = { path = "../phantom_newtype" }
 pico-args = "0.3"
 rand = "0.8.3"
 rand_chacha = "0.3.0"
