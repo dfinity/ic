@@ -129,7 +129,7 @@ impl Hypervisor {
         if CanisterStatusType::Running != canister.status() {
             return (
                 canister,
-                execution_parameters.instruction_limit,
+                execution_parameters.total_instruction_limit,
                 CallContextAction::Fail {
                     error: HypervisorError::CanisterStopped,
                     refund: incoming_cycles,
@@ -147,7 +147,7 @@ impl Hypervisor {
             None => {
                 return (
                     CanisterState::from_parts(None, system_state, scheduler_state),
-                    execution_parameters.instruction_limit,
+                    execution_parameters.total_instruction_limit,
                     CallContextAction::Fail {
                         error: HypervisorError::WasmModuleNotFound,
                         refund: incoming_cycles,
@@ -162,7 +162,7 @@ impl Hypervisor {
         if !execution_state.exports_method(&method) {
             return (
                 CanisterState::from_parts(Some(execution_state), system_state, scheduler_state),
-                execution_parameters.instruction_limit,
+                execution_parameters.total_instruction_limit,
                 CallContextAction::Fail {
                     error: HypervisorError::MethodNotFound(method),
                     refund: incoming_cycles,
@@ -242,7 +242,7 @@ impl Hypervisor {
         if CanisterStatusType::Running != canister.status() {
             return (
                 canister,
-                execution_parameters.instruction_limit,
+                execution_parameters.total_instruction_limit,
                 Err(HypervisorError::CanisterStopped),
             );
         }
@@ -256,7 +256,7 @@ impl Hypervisor {
             None => {
                 return (
                     CanisterState::from_parts(None, system_state, scheduler_state),
-                    execution_parameters.instruction_limit,
+                    execution_parameters.total_instruction_limit,
                     Err(HypervisorError::WasmModuleNotFound),
                 );
             }
@@ -267,7 +267,7 @@ impl Hypervisor {
         if !execution_state.exports_method(&method) {
             return (
                 CanisterState::from_parts(Some(execution_state), system_state, scheduler_state),
-                execution_parameters.instruction_limit,
+                execution_parameters.total_instruction_limit,
                 Err(HypervisorError::MethodNotFound(method)),
             );
         }
@@ -362,7 +362,7 @@ impl Hypervisor {
         if CanisterStatusType::Running != canister.status() {
             return (
                 canister,
-                execution_parameters.instruction_limit,
+                execution_parameters.total_instruction_limit,
                 Err(HypervisorError::CanisterStopped),
             );
         }
@@ -376,7 +376,7 @@ impl Hypervisor {
             None => {
                 return (
                     CanisterState::from_parts(None, system_state, scheduler_state),
-                    execution_parameters.instruction_limit,
+                    execution_parameters.total_instruction_limit,
                     Err(HypervisorError::WasmModuleNotFound),
                 );
             }
@@ -387,7 +387,7 @@ impl Hypervisor {
         if !execution_state.exports_method(&method) {
             return (
                 CanisterState::from_parts(Some(execution_state), system_state, scheduler_state),
-                execution_parameters.instruction_limit,
+                execution_parameters.total_instruction_limit,
                 Err(HypervisorError::MethodNotFound(method)),
             );
         }
@@ -455,7 +455,7 @@ impl Hypervisor {
         if canister.status() == CanisterStatusType::Stopped {
             return (
                 canister,
-                execution_parameters.instruction_limit,
+                execution_parameters.total_instruction_limit,
                 NumBytes::from(0),
                 Err(HypervisorError::CanisterStopped),
             );
@@ -465,7 +465,7 @@ impl Hypervisor {
         if canister.execution_state.is_none() {
             return (
                 canister,
-                execution_parameters.instruction_limit,
+                execution_parameters.total_instruction_limit,
                 NumBytes::from(0),
                 Err(HypervisorError::WasmModuleNotFound),
             );
@@ -566,7 +566,8 @@ impl Hypervisor {
                                 canister.system_state.clone(),
                                 canister_current_memory_usage,
                                 ExecutionParameters {
-                                    instruction_limit: output.num_instructions_left,
+                                    total_instruction_limit: output.num_instructions_left,
+                                    slice_instruction_limit: output.num_instructions_left,
                                     ..execution_parameters
                                 },
                                 func_ref,
@@ -637,7 +638,7 @@ impl Hypervisor {
             None => {
                 return (
                     CanisterState::from_parts(None, system_state, scheduler_state),
-                    execution_parameters.instruction_limit,
+                    execution_parameters.total_instruction_limit,
                     Err(HypervisorError::WasmModuleNotFound),
                 );
             }
@@ -649,7 +650,7 @@ impl Hypervisor {
         if !execution_state.exports_method(&method) {
             return (
                 CanisterState::from_parts(Some(execution_state), system_state, scheduler_state),
-                execution_parameters.instruction_limit,
+                execution_parameters.total_instruction_limit,
                 Ok(NumBytes::from(0)),
             );
         }
@@ -699,7 +700,7 @@ impl Hypervisor {
             None => {
                 return (
                     CanisterState::from_parts(None, old_system_state, scheduler_state),
-                    execution_parameters.instruction_limit,
+                    execution_parameters.total_instruction_limit,
                     Err(HypervisorError::WasmModuleNotFound),
                 );
             }
@@ -711,7 +712,7 @@ impl Hypervisor {
         if !execution_state.exports_method(&method) {
             return (
                 CanisterState::from_parts(Some(execution_state), old_system_state, scheduler_state),
-                execution_parameters.instruction_limit,
+                execution_parameters.total_instruction_limit,
                 Ok(NumBytes::from(0)),
             );
         }
@@ -762,7 +763,7 @@ impl Hypervisor {
             None => {
                 return (
                     CanisterState::from_parts(None, old_system_state, scheduler_state),
-                    execution_parameters.instruction_limit,
+                    execution_parameters.total_instruction_limit,
                     Err(HypervisorError::WasmModuleNotFound),
                 );
             }
@@ -774,7 +775,7 @@ impl Hypervisor {
         if !execution_state.exports_method(&method) {
             return (
                 CanisterState::from_parts(Some(execution_state), old_system_state, scheduler_state),
-                execution_parameters.instruction_limit,
+                execution_parameters.total_instruction_limit,
                 Ok(NumBytes::from(0)),
             );
         }
@@ -825,7 +826,7 @@ impl Hypervisor {
             None => {
                 return (
                     CanisterState::from_parts(None, old_system_state, scheduler_state),
-                    execution_parameters.instruction_limit,
+                    execution_parameters.total_instruction_limit,
                     Err(HypervisorError::WasmModuleNotFound),
                 );
             }
@@ -837,7 +838,7 @@ impl Hypervisor {
         if !execution_state.exports_method(&method) {
             return (
                 CanisterState::from_parts(Some(execution_state), old_system_state, scheduler_state),
-                execution_parameters.instruction_limit,
+                execution_parameters.total_instruction_limit,
                 Ok(NumBytes::from(0)),
             );
         }
@@ -881,7 +882,7 @@ impl Hypervisor {
         let execution_state = match execution_state {
             None => {
                 return (
-                    execution_parameters.instruction_limit,
+                    execution_parameters.total_instruction_limit,
                     Err(UserError::new(
                         ErrorCode::CanisterWasmModuleNotFound,
                         "Requested canister has no wasm module",
@@ -894,7 +895,7 @@ impl Hypervisor {
         // If the Wasm module does not export the method, then this execution
         // succeeds as a no-op.
         if !execution_state.exports_method(&method) {
-            return (execution_parameters.instruction_limit, Ok(()));
+            return (execution_parameters.total_instruction_limit, Ok(()));
         }
 
         let system_api = ApiType::inspect_message(sender, method_name, method_payload, time);
@@ -950,7 +951,7 @@ impl Hypervisor {
             None => {
                 return (
                     CanisterState::from_parts(None, old_system_state, scheduler_state),
-                    execution_parameters.instruction_limit,
+                    execution_parameters.total_instruction_limit,
                     Err(HypervisorError::WasmModuleNotFound),
                 );
             }
@@ -962,7 +963,7 @@ impl Hypervisor {
         if !execution_state.exports_method(&method) {
             return (
                 CanisterState::from_parts(Some(execution_state), old_system_state, scheduler_state),
-                execution_parameters.instruction_limit,
+                execution_parameters.total_instruction_limit,
                 Ok(NumBytes::from(0)),
             );
         }

@@ -1128,8 +1128,8 @@ impl SystemApi for SystemApiImpl {
         self.execution_parameters.subnet_type
     }
 
-    fn instruction_limit(&self) -> NumInstructions {
-        self.execution_parameters.instruction_limit
+    fn slice_instruction_limit(&self) -> NumInstructions {
+        self.execution_parameters.slice_instruction_limit
     }
 
     fn ic0_msg_caller_size(&self) -> HypervisorResult<u32> {

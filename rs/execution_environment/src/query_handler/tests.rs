@@ -125,7 +125,8 @@ fn universal_canister(
                 .build(),
             state,
             ExecutionParameters {
-                instruction_limit: INSTRUCTION_LIMIT,
+                total_instruction_limit: INSTRUCTION_LIMIT,
+                slice_instruction_limit: INSTRUCTION_LIMIT,
                 canister_memory_limit: MEMORY_CAPACITY,
                 subnet_available_memory: AvailableMemory::new(
                     MEMORY_CAPACITY.get() as i64,

@@ -265,7 +265,8 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                             let timer = Timer::start();
 
                             let execution_parameters = ExecutionParameters {
-                                instruction_limit: instructions_limit,
+                                total_instruction_limit: instructions_limit,
+                                slice_instruction_limit: instructions_limit,
                                 canister_memory_limit: self.config.max_canister_memory_size,
                                 subnet_available_memory,
                                 compute_allocation: ComputeAllocation::default(),
@@ -931,7 +932,8 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
         execution_mode: ExecutionMode,
     ) -> ExecutionParameters {
         ExecutionParameters {
-            instruction_limit,
+            total_instruction_limit: instruction_limit,
+            slice_instruction_limit: instruction_limit,
             canister_memory_limit: canister.memory_limit(self.config.max_canister_memory_size),
             subnet_available_memory,
             compute_allocation: canister.scheduler_state.compute_allocation,

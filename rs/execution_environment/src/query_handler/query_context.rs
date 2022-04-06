@@ -885,7 +885,8 @@ impl<'a> QueryContext<'a> {
         instruction_limit: NumInstructions,
     ) -> ExecutionParameters {
         ExecutionParameters {
-            instruction_limit,
+            total_instruction_limit: instruction_limit,
+            slice_instruction_limit: instruction_limit,
             canister_memory_limit: canister.memory_limit(self.max_canister_memory_size),
             subnet_available_memory: self.subnet_available_memory.clone(),
             compute_allocation: canister.scheduler_state.compute_allocation,

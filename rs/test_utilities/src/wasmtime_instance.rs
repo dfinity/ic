@@ -26,7 +26,8 @@ pub const DEFAULT_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000
 
 fn execution_parameters() -> ExecutionParameters {
     ExecutionParameters {
-        instruction_limit: DEFAULT_NUM_INSTRUCTIONS,
+        total_instruction_limit: DEFAULT_NUM_INSTRUCTIONS,
+        slice_instruction_limit: DEFAULT_NUM_INSTRUCTIONS,
         canister_memory_limit: ic_types::NumBytes::from(4 << 30),
         subnet_available_memory: AvailableMemory::new(i64::MAX / 2, i64::MAX / 2).into(),
         compute_allocation: ComputeAllocation::default(),

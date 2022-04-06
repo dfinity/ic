@@ -79,7 +79,8 @@ lazy_static! {
     static ref INITIAL_CYCLES: Cycles =
         CANISTER_FREEZE_BALANCE_RESERVE + Cycles::new(5_000_000_000_000);
     static ref EXECUTION_PARAMETERS: ExecutionParameters = ExecutionParameters {
-        instruction_limit: MAX_NUM_INSTRUCTIONS,
+        total_instruction_limit: MAX_NUM_INSTRUCTIONS,
+        slice_instruction_limit: MAX_NUM_INSTRUCTIONS,
         canister_memory_limit: NumBytes::new(u64::MAX / 2),
         subnet_available_memory: MAX_SUBNET_AVAILABLE_MEMORY.clone(),
         compute_allocation: ComputeAllocation::default(),
@@ -2698,7 +2699,8 @@ fn install_code_respects_instruction_limit() {
         },
         &mut state,
         ExecutionParameters {
-            instruction_limit: NumInstructions::from(3),
+            total_instruction_limit: NumInstructions::from(3),
+            slice_instruction_limit: NumInstructions::from(3),
             ..EXECUTION_PARAMETERS.clone()
         },
     );
@@ -2725,7 +2727,8 @@ fn install_code_respects_instruction_limit() {
         },
         &mut state,
         ExecutionParameters {
-            instruction_limit: NumInstructions::from(5),
+            total_instruction_limit: NumInstructions::from(5),
+            slice_instruction_limit: NumInstructions::from(5),
             ..EXECUTION_PARAMETERS.clone()
         },
     );
@@ -2746,7 +2749,8 @@ fn install_code_respects_instruction_limit() {
         },
         &mut state,
         ExecutionParameters {
-            instruction_limit: NumInstructions::from(5),
+            total_instruction_limit: NumInstructions::from(5),
+            slice_instruction_limit: NumInstructions::from(5),
             ..EXECUTION_PARAMETERS.clone()
         },
     );
@@ -2773,7 +2777,8 @@ fn install_code_respects_instruction_limit() {
         },
         &mut state,
         ExecutionParameters {
-            instruction_limit: NumInstructions::from(10),
+            total_instruction_limit: NumInstructions::from(10),
+            slice_instruction_limit: NumInstructions::from(10),
             ..EXECUTION_PARAMETERS.clone()
         },
     );
@@ -3897,7 +3902,10 @@ fn test_install_code_rate_limiting() {
         EXECUTION_PARAMETERS.clone(),
     );
 
-    assert_eq!(instructions_left, EXECUTION_PARAMETERS.instruction_limit);
+    assert_eq!(
+        instructions_left,
+        EXECUTION_PARAMETERS.total_instruction_limit
+    );
     assert_eq!(
         result,
         Err(CanisterManagerError::InstallCodeRateLimited(canister_id))

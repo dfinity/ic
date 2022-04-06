@@ -85,7 +85,8 @@ fn test_api_for_update(
         static_system_state,
         canister_current_memory_usage,
         ExecutionParameters {
-            instruction_limit: MAX_NUM_INSTRUCTIONS,
+            total_instruction_limit: MAX_NUM_INSTRUCTIONS,
+            slice_instruction_limit: MAX_NUM_INSTRUCTIONS,
             canister_memory_limit,
             subnet_available_memory: MAX_SUBNET_AVAILABLE_MEMORY.clone(),
             compute_allocation: ComputeAllocation::default(),

@@ -130,7 +130,8 @@ mod tests {
 
     fn execution_parameters() -> ExecutionParameters {
         ExecutionParameters {
-            instruction_limit: NumInstructions::new(1000),
+            total_instruction_limit: NumInstructions::new(1000),
+            slice_instruction_limit: NumInstructions::new(1000),
             canister_memory_limit: NumBytes::new(4 << 30),
             subnet_available_memory: AvailableMemory::new(i64::MAX / 2, i64::MAX / 2).into(),
             compute_allocation: ComputeAllocation::default(),

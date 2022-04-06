@@ -66,7 +66,8 @@ fn execution_parameters_with_unique_subnet_available_memory(
     subnet_available_memory: SubnetAvailableMemory,
 ) -> ExecutionParameters {
     ExecutionParameters {
-        instruction_limit,
+        total_instruction_limit: instruction_limit,
+        slice_instruction_limit: instruction_limit,
         canister_memory_limit: canister.memory_limit(NumBytes::new(u64::MAX / 2)),
         subnet_available_memory,
         compute_allocation: canister.scheduler_state.compute_allocation,
@@ -350,7 +351,8 @@ fn execute(
             .create_execution_state(wasm_binary, tmp_path, system_state.canister_id)
             .unwrap();
         let execution_parameters = ExecutionParameters {
-            instruction_limit: MAX_NUM_INSTRUCTIONS,
+            total_instruction_limit: MAX_NUM_INSTRUCTIONS,
+            slice_instruction_limit: MAX_NUM_INSTRUCTIONS,
             canister_memory_limit: NumBytes::from(4 << 30),
             subnet_available_memory: MAX_SUBNET_AVAILABLE_MEMORY.clone(),
             compute_allocation: ComputeAllocation::default(),
