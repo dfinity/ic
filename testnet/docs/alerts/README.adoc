@@ -18,6 +18,8 @@ include::NGINX_InstanceFlapping.adoc[leveloffset=+2]
 
 include::IC_TooFewRequestsReachReplica.adoc[leveloffset=+2]
 
+include::IC_Execution_LongRunningCallContext.adoc[leveloffset=+2]
+
 == Creating new runbook entries
 
 To create a new alert runbook file:

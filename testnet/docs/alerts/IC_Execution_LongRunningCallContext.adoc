@@ -1,0 +1,24 @@
+:url-other-execution-metrics: https://grafana.dfinity.systems/d/0rFia6ynz/other-execution-metrics?viewPanel=105&orgId=1&from=1649159889197&to=1649161689197
+
+= IC_Execution_LongRunningCallContext.adoc
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+There is an open call context which has existed for more than 1 day.
+
+== Impact
+
+There is at least one call which has not gotten a response for a full day. Services may be hanging because they are not getting rejections or responses.
+
+== Possible causes (non-exhaustive)
+
+- Bug in the code could result responses or rejects being dropped.
+- A canister has gone into a loop (repeatedly calling itself, or multiple canisters calling each other) when handling a request.
+
+== Troubleshooting and remediation
+
+- Check the {url-other-execution-metrics}[execution metrics] to see if there are multiple long open call contexts and if they are appearing on different subnets. If more start appearing on multiple subnets it is likely this is a bug in replica code - check whether there was a recent upgrade that could have introduced a bug.
+
+- Escalate to the execution team.
