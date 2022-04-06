@@ -54,6 +54,7 @@ use std::string::ToString;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
+use tokio::runtime::Runtime;
 
 struct FakeVerifier;
 impl Verifier for FakeVerifier {
@@ -132,6 +133,7 @@ pub struct StateMachine {
     message_routing: MessageRoutingImpl,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
     query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
+    _runtime: Runtime,
     state_dir: TempDir,
     nonce: std::cell::Cell<u64>,
     time: std::cell::Cell<Time>,
@@ -222,16 +224,30 @@ impl StateMachine {
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
         ));
-        let execution_services = ExecutionServices::setup_execution(
-            replica_logger.clone(),
-            &metrics_registry,
-            subnet_id,
-            subnet_type,
-            subnet_config.scheduler_config,
-            hypervisor_config.clone(),
-            Arc::clone(&cycles_account_manager),
-            Arc::clone(&state_manager) as Arc<_>,
-        );
+
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .expect("failed to create a tokio runtime");
+
+        // NOTE: constructing execution services requires tokio context.
+        //
+        // We could have required the client to use [tokio::test] for state
+        // machine tests, but this is error prone and leads to poor dev
+        // experience.
+        //
+        // The API state machine provides is blocking anyway.
+        let execution_services = runtime.block_on(async {
+            ExecutionServices::setup_execution(
+                replica_logger.clone(),
+                &metrics_registry,
+                subnet_id,
+                subnet_type,
+                subnet_config.scheduler_config,
+                hypervisor_config.clone(),
+                Arc::clone(&cycles_account_manager),
+                Arc::clone(&state_manager) as Arc<_>,
+            )
+        });
 
         let message_routing = MessageRoutingImpl::new(
             Arc::clone(&state_manager) as _,
@@ -253,6 +269,7 @@ impl StateMachine {
             ingress_history_reader: execution_services.ingress_history_reader,
             message_routing,
             query_handler: execution_services.sync_query_handler,
+            _runtime: runtime,
             state_dir,
             nonce: std::cell::Cell::new(nonce),
             time: std::cell::Cell::new(time),

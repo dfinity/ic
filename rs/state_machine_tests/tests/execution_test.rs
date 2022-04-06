@@ -129,8 +129,8 @@ fn to_int(v: Vec<u8>) -> i32 {
 /// re-install, and that the heap stays discarded after a checkpoint
 /// recovery. It's a common bug in execution to reset the heap in
 /// memory, but not on disk, which results in corrupted checkpoints.
-#[tokio::test]
-async fn test_canister_reinstall_restart() {
+#[test]
+fn test_canister_reinstall_restart() {
     let env = StateMachine::new();
 
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
@@ -153,8 +153,8 @@ async fn test_canister_reinstall_restart() {
 
 /// Same test as above, but checks the upgrade path when no upgrade
 /// hooks are present instead of the re-install path.
-#[tokio::test]
-async fn test_canister_upgrade_restart() {
+#[test]
+fn test_canister_upgrade_restart() {
     let env = StateMachine::new();
 
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
@@ -177,8 +177,8 @@ async fn test_canister_upgrade_restart() {
 /// re-install, and that the stable memory stays discarded after a checkpoint
 /// recovery. It's a common bug in execution to reset a page map in memory, but
 /// not on disk, which results in corrupted checkpoints.
-#[tokio::test]
-async fn test_canister_stable_memory_reinstall_restart() {
+#[test]
+fn test_canister_stable_memory_reinstall_restart() {
     let env = StateMachine::new();
 
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
@@ -214,8 +214,8 @@ async fn test_canister_stable_memory_reinstall_restart() {
 
 /// Same test as above, but checks the upgrade path when no upgrade
 /// hooks are present instead of the re-install path.
-#[tokio::test]
-async fn test_canister_stable_memory_upgrade_restart() {
+#[test]
+fn test_canister_stable_memory_upgrade_restart() {
     let env = StateMachine::new();
 
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
@@ -244,8 +244,8 @@ async fn test_canister_stable_memory_upgrade_restart() {
 /// Verifies that, if a canister runs out of cycles and is automatically
 /// uninstalled by the system, then making a checkpoint doesn't crash.
 /// This was a bug in the past that caused ICSUP-2400.
-#[tokio::test]
-async fn test_canister_out_of_cycles() {
+#[test]
+fn test_canister_out_of_cycles() {
     // Start a node with a config where all computation/storage is free.
     let mut config = SubnetConfigs::default().own_subnet_config(SubnetType::System);
     let env = StateMachine::new_with_config(config.clone());
@@ -299,8 +299,8 @@ async fn test_canister_out_of_cycles() {
 
 /// Verifies that incremental manifest computation correctly handles memory
 /// grow and shrink.
-#[tokio::test]
-async fn test_manifest_computation_memory_grow() {
+#[test]
+fn test_manifest_computation_memory_grow() {
     let env = StateMachine::new();
 
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
@@ -322,8 +322,8 @@ async fn test_manifest_computation_memory_grow() {
 
 /// Verifies that incremental manifest computation correctly handles heap file
 /// size changes.
-#[tokio::test]
-async fn test_manifest_computation_memory_expand() {
+#[test]
+fn test_manifest_computation_memory_expand() {
     let env = StateMachine::new();
 
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
@@ -355,8 +355,8 @@ async fn test_manifest_computation_memory_expand() {
     assert_ne!(state_hash_2, state_hash_3);
 }
 
-#[tokio::test]
-async fn automatic_stopped_canister_removal() {
+#[test]
+fn automatic_stopped_canister_removal() {
     let env = StateMachine::new();
 
     let canister_id_1 = env.install_canister_wat(TEST_CANISTER, vec![], None);
@@ -375,8 +375,8 @@ async fn automatic_stopped_canister_removal() {
     assert_eq!(user_error.code(), ErrorCode::CanisterNotFound);
 }
 
-#[tokio::test]
-async fn compressed_canisters_support() {
+#[test]
+fn compressed_canisters_support() {
     let env = StateMachine::new();
 
     let test_canister_wasm = wabt::wat2wasm(TEST_CANISTER).expect("invalid WAT");
