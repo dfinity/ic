@@ -11,6 +11,7 @@ mod malicious_consensus;
 pub(crate) mod membership;
 pub(crate) mod metrics;
 mod notary;
+mod payload;
 pub mod payload_builder;
 pub mod pool_reader;
 mod prelude;

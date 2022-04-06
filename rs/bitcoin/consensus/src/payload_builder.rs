@@ -1,7 +1,8 @@
 use crate::metrics::BitcoinPayloadBuilderMetrics;
 use ic_btc_types_internal::{BitcoinAdapterResponse, BitcoinAdapterResponseWrapper};
-use ic_interfaces::self_validating_payload::{
-    SelfValidatingPayloadBuilder, SelfValidatingPayloadValidationError,
+use ic_interfaces::{
+    payload::BatchPayloadSectionBuilder,
+    self_validating_payload::{SelfValidatingPayloadBuilder, SelfValidatingPayloadValidationError},
 };
 use ic_interfaces_bitcoin_adapter_client::{BitcoinAdapterClient, Options};
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
@@ -11,7 +12,8 @@ use ic_registry_subnet_features::BitcoinFeature;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::{SelfValidatingPayload, ValidationContext},
-    Height, NumBytes,
+    consensus::Payload,
+    CountBytes, Height, NumBytes, Time,
 };
 use std::sync::Arc;
 use thiserror::Error;
@@ -228,6 +230,32 @@ impl SelfValidatingPayloadBuilder for BitcoinPayloadBuilder {
         self.metrics
             .observe_validate_duration(VALIDATION_STATUS_VALID, timer);
         Ok(0.into())
+    }
+}
+
+impl BatchPayloadSectionBuilder<SelfValidatingPayload> for BitcoinPayloadBuilder {
+    fn build_payload(
+        &self,
+        validation_context: &ValidationContext,
+        max_size: NumBytes,
+        _priority: usize,
+        past_payloads: &[(Height, Time, Payload)],
+    ) -> (SelfValidatingPayload, NumBytes) {
+        let past_payloads = self.filter_past_payloads(past_payloads);
+        let payload =
+            self.get_self_validating_payload(validation_context, &past_payloads, max_size);
+        let size = NumBytes::new(payload.count_bytes() as u64);
+        (payload, size)
+    }
+
+    fn validate_payload(
+        &self,
+        payload: &SelfValidatingPayload,
+        validation_context: &ValidationContext,
+        past_payloads: &[(Height, Time, Payload)],
+    ) -> Result<NumBytes, SelfValidatingPayloadValidationError> {
+        let past_payloads = self.filter_past_payloads(past_payloads);
+        self.validate_self_validating_payload(payload, validation_context, &past_payloads)
     }
 }
 

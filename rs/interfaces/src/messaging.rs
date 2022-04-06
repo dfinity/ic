@@ -1,5 +1,5 @@
 //! Message Routing public interfaces.
-use crate::validation::ValidationError;
+use crate::{payload::BatchPayloadSectionType, validation::ValidationError};
 use ic_types::{
     batch::{Batch, ValidationContext, XNetPayload},
     consensus::Payload,
@@ -34,6 +34,10 @@ pub enum XNetTransientValidationError {
 pub type XNetPayloadValidationError =
     ValidationError<InvalidXNetPayload, XNetTransientValidationError>;
 
+impl BatchPayloadSectionType for XNetPayload {
+    type PermanentValidationError = InvalidXNetPayload;
+    type TransientValidationError = XNetTransientValidationError;
+}
 /// The public interface for the MessageRouting layer.
 pub trait MessageRouting: Send + Sync {
     /// Delivers a finalized `Batch` for deterministic processing.
