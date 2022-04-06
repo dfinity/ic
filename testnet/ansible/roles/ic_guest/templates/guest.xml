@@ -22,37 +22,8 @@
     <acpi/>
     <apic/>
   </features>
-  <cpu mode='custom' match='exact' check='full'>
-    <model fallback='forbid'>EPYC-IBPB</model>
-    <vendor>AMD</vendor>
-    <feature policy='require' name='x2apic'/>
-    <feature policy='require' name='tsc-deadline'/>
-    <feature policy='require' name='hypervisor'/>
-    <feature policy='require' name='tsc_adjust'/>
-    <feature policy='require' name='clwb'/>
-    <feature policy='require' name='umip'/>
-    <feature policy='require' name='rdpid'/>
-    <feature policy='require' name='spec-ctrl'/>
-    <feature policy='require' name='stibp'/>
-    <feature policy='require' name='arch-capabilities'/>
-    <feature policy='require' name='ssbd'/>
-    <feature policy='require' name='xsaves'/>
-    <feature policy='require' name='cmp_legacy'/>
-    <feature policy='require' name='perfctr_core'/>
-    <feature policy='require' name='clzero'/>
-    <feature policy='require' name='xsaveerptr'/>
-    <feature policy='require' name='wbnoinvd'/>
-    <feature policy='require' name='amd-stibp'/>
-    <feature policy='require' name='amd-ssbd'/>
-    <feature policy='require' name='virt-ssbd'/>
-    <feature policy='require' name='npt'/>
-    <feature policy='require' name='nrip-save'/>
-    <feature policy='require' name='rdctl-no'/>
-    <feature policy='require' name='skip-l1dfl-vmentry'/>
-    <feature policy='require' name='mds-no'/>
-    <feature policy='require' name='pschange-mc-no'/>
-    <feature policy='disable' name='monitor'/>
-    <feature policy='require' name='topoext'/>
+  <cpu mode='host-model' check='partial'>
+    <model fallback='allow'/>
   </cpu>
   <clock offset='utc'>
     <timer name='rtc' tickpolicy='catchup'/>
@@ -161,6 +132,13 @@
       <model type='virtio'/>
       <alias name='net0'/>
       <address type='pci' domain='0x0000' bus='0x01' slot='0x00' function='0x0'/>
+    </interface>
+    <interface type='bridge'>
+      <source bridge='vlan66'/>
+      <target dev='vnet2'/>
+      <model type='virtio'/>
+      <alias name='net1'/>
+      <address type='pci' domain='0x0000' bus='0x02' slot='0x00' function='0x0'/>
     </interface>
     <serial type='pty'>
       <source path='/dev/pts/3'/>

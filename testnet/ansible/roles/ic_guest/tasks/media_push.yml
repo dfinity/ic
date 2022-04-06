@@ -1,5 +1,15 @@
 ---
 
+#- name: Retrieve host vars
+#  debug:
+#    var: "{{ index }} - {{ item }}"
+#  tags: [ "boundary_node_vm" ]
+#
+#- name: Retrieve host vars
+#  debug:
+#    var: inventory_hostname
+#  tags: [ "boundary_node_vm" ]
+
 - name: copy media.img to remote
   copy:
     # copy the media image built for the node, or fallback to the generic 'media.img'
@@ -8,7 +18,7 @@
     mode: "0644"
     owner: root
     group: root
-  loop: "{{ hostvars[inventory_hostname].ic_guests }}"
+  loop: "{{ hostvars[inventory_hostname].ic_guests | default([]) }}"
   tags: [ "ic_guest" ]
 
 - name: copy new boundary node VM media.img to remote
@@ -19,5 +29,19 @@
     mode: "0644"
     owner: root
     group: root
-  loop: "{{ hostvars[inventory_hostname].groups.boundary }}"
+  loop: "{{ hostvars[inventory_hostname].groups.boundary | default([]) }}"
   tags: [ "boundary_node_vm" ]
+
+- name: copy single boundary node VM media.img to remote
+  copy:
+    # copy the media image built for the new boundary node
+    src: "{{ bn_media_path }}/{{ item }}.img"
+    dest: "/var/lib/libvirt/media/{{ item }}.img"
+    mode: "0644"
+    owner: root
+    group: root
+  loop: "{{ hostvars[inventory_hostname].groups.boundary | default([]) }}"
+  loop_control:
+    index_var: index
+  tags: [ "boundary_node_vm" ]
+
