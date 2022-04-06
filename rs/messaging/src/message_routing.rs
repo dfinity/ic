@@ -25,16 +25,12 @@ use ic_registry_client_helpers::{
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{
-    CanisterState, NetworkTopology, NodeTopology, ReplicatedState, SubnetTopology,
-};
+use ic_replicated_state::{NetworkTopology, NodeTopology, ReplicatedState, SubnetTopology};
 use ic_types::{
     batch::Batch,
-    ingress::IngressStatus,
-    messages::MessageId,
     registry::RegistryClientError,
     xnet::{StreamHeader, StreamIndex},
-    CanisterId, CanisterStatusType, Height, NodeId, NumBytes, RegistryVersion, SubnetId,
+    CanisterStatusType, Height, NodeId, NumBytes, RegistryVersion, SubnetId,
 };
 use ic_utils::thread::JoinOnDrop;
 #[cfg(test)]
@@ -734,26 +730,6 @@ impl FakeBatchProcessorImpl {
     }
 }
 
-fn update_state(
-    ingress_history_writer: &dyn IngressHistoryWriter<State = ReplicatedState>,
-    not_run_canisters: BTreeMap<CanisterId, CanisterState>,
-    state: &mut ReplicatedState,
-    all_canister_states: Vec<CanisterState>,
-    all_ingress_execution_results: Vec<(MessageId, IngressStatus)>,
-) {
-    state.put_canister_states(
-        all_canister_states
-            .into_iter()
-            .map(|canister| (canister.canister_id(), canister))
-            .chain(not_run_canisters.into_iter())
-            .collect(),
-    );
-
-    for (msg_id, status) in all_ingress_execution_results {
-        ingress_history_writer.set_status(state, msg_id, status);
-    }
-}
-
 impl BatchProcessor for FakeBatchProcessorImpl {
     fn process_batch(&self, batch: Batch) {
         // Fetch the mutable tip from StateManager
@@ -792,31 +768,25 @@ impl BatchProcessor for FakeBatchProcessorImpl {
             batch.payload.into_messages().unwrap();
 
         // Treat all ingress messages as already executed.
-        let canisters = state.take_canister_states();
-        let all_canister_states = Vec::new();
-        let all_ingress_execution_results = signed_ingress_msgs
-            .into_iter()
-            .map(|ingress| {
-                // It is safe to assume valid expiry time here
-                (
-                    ingress.id(),
-                    ic_types::ingress::IngressStatus::Completed {
-                        receiver: ingress.canister_id().get(),
-                        user_id: ingress.sender(),
-                        // The byte content mimicks a good reply for the counter example
-                        result: ic_types::ingress::WasmResult::Reply(vec![68, 73, 68, 76, 0, 0]),
-                        time,
-                    },
-                )
-            })
-            .collect::<Vec<_>>();
-        update_state(
-            self.ingress_history_writer.as_ref(),
-            canisters,
-            &mut state,
-            all_canister_states,
-            all_ingress_execution_results,
-        );
+        let all_ingress_execution_results = signed_ingress_msgs.into_iter().map(|ingress| {
+            // It is safe to assume valid expiry time here
+            (
+                ingress.id(),
+                ic_types::ingress::IngressStatus::Completed {
+                    receiver: ingress.canister_id().get(),
+                    user_id: ingress.sender(),
+                    // The byte content mimicks a good reply for the counter example
+                    result: ic_types::ingress::WasmResult::Reply(vec![68, 73, 68, 76, 0, 0]),
+                    time,
+                },
+            )
+        });
+
+        for (msg_id, status) in all_ingress_execution_results {
+            self.ingress_history_writer
+                .set_status(&mut state, msg_id, status);
+        }
+
         state.prune_ingress_history();
 
         // Postprocess the state and consolidate the Streams.
