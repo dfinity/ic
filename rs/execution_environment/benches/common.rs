@@ -150,7 +150,8 @@ where
 
     // Create execution parameters
     let execution_parameters = ExecutionParameters {
-        instruction_limit: MAX_NUM_INSTRUCTIONS,
+        total_instruction_limit: MAX_NUM_INSTRUCTIONS,
+        slice_instruction_limit: MAX_NUM_INSTRUCTIONS,
         canister_memory_limit: canister_state.memory_limit(NumBytes::new(std::u64::MAX)),
         subnet_available_memory: MAX_SUBNET_AVAILABLE_MEMORY.clone(),
         compute_allocation: canister_state.scheduler_state.compute_allocation,

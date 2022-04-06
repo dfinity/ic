@@ -189,7 +189,18 @@ pub enum ExecutionMode {
 // Canister and subnet configuration parameters required for execution.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ExecutionParameters {
-    pub instruction_limit: NumInstructions,
+    /// The total instruction limit of message execution. With deterministic
+    /// time slicing this limit may exceed the per-round instruction limit.
+    /// The message fails with an out-of-instructions error if it executes
+    /// more instructions than this limit.
+    pub total_instruction_limit: NumInstructions,
+
+    /// Without deterministic time slicing, this limit must be equal to
+    /// `total_instruction_limit`. With deterministic time slicing this
+    /// limit specifies the number of instructions to execute before
+    /// pausing the execution.
+    pub slice_instruction_limit: NumInstructions,
+
     pub canister_memory_limit: NumBytes,
     pub subnet_available_memory: SubnetAvailableMemory,
     pub compute_allocation: ComputeAllocation,
@@ -333,8 +344,8 @@ pub trait SystemApi {
     /// Returns the subnet type the replica runs on.
     fn subnet_type(&self) -> SubnetType;
 
-    /// Returns the execution instructions limit.
-    fn instruction_limit(&self) -> NumInstructions;
+    /// Returns the instruction limit for the current execution slice.
+    fn slice_instruction_limit(&self) -> NumInstructions;
 
     /// Copies `size` bytes starting from `offset` inside the opaque caller blob
     /// and copies them to heap[dst..dst+size]. The caller is the canister

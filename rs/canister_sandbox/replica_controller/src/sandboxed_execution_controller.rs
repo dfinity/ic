@@ -524,7 +524,13 @@ impl SandboxedExecutionController {
             mut execution_state,
         }: WasmExecutionInput,
     ) -> (WasmExecutionOutput, ExecutionState, SystemStateChanges) {
-        let initial_num_instructions_left = execution_parameters.instruction_limit;
+        // TODO(EXC-868): Adjust this assertion once the execution environment
+        // supports deterministic time slicing with sandbox.
+        assert_eq!(
+            execution_parameters.total_instruction_limit,
+            execution_parameters.slice_instruction_limit
+        );
+        let initial_num_instructions_left = execution_parameters.slice_instruction_limit;
         let api_type_label = api_type.as_str();
         let _execute_timer = self
             .metrics

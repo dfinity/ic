@@ -115,7 +115,7 @@ fn charge_for_system_api_call<S: SystemApi>(
         load_value(&num_instructions_global, caller, log, canister_id)?.get() as i64;
     // Assert the current instruction counter is sane
     let system_api = &caller.data().system_api;
-    let instruction_limit = system_api.instruction_limit().get() as i64;
+    let instruction_limit = system_api.slice_instruction_limit().get() as i64;
     if current_instructions > instruction_limit {
         error!(
             log,

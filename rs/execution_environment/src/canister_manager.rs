@@ -442,7 +442,7 @@ impl CanisterManager {
         let old_canister = match state.canister_state_mut(&context.canister_id) {
             None => {
                 return (
-                    execution_parameters.instruction_limit,
+                    execution_parameters.total_instruction_limit,
                     Err(CanisterManagerError::CanisterNotFound(context.canister_id)),
                 );
             }
@@ -453,21 +453,21 @@ impl CanisterManager {
             old_canister,
             context.compute_allocation,
         ) {
-            return (execution_parameters.instruction_limit, Err(err));
+            return (execution_parameters.total_instruction_limit, Err(err));
         }
         if let Err(err) =
             self.validate_memory_allocation(memory_taken, old_canister, context.memory_allocation)
         {
-            return (execution_parameters.instruction_limit, Err(err));
+            return (execution_parameters.total_instruction_limit, Err(err));
         }
         if let Err(err) = self.validate_controller(old_canister, &context.sender) {
-            return (execution_parameters.instruction_limit, Err(err));
+            return (execution_parameters.total_instruction_limit, Err(err));
         }
         match context.mode {
             CanisterInstallMode::Install => {
                 if old_canister.execution_state.is_some() {
                     return (
-                        execution_parameters.instruction_limit,
+                        execution_parameters.total_instruction_limit,
                         Err(CanisterManagerError::CanisterNonEmpty(context.canister_id)),
                     );
                 }
@@ -479,7 +479,7 @@ impl CanisterManager {
             && self.config.rate_limiting_of_instructions == FlagStatus::Enabled
         {
             return (
-                execution_parameters.instruction_limit,
+                execution_parameters.total_instruction_limit,
                 Err(CanisterManagerError::InstallCodeRateLimited(
                     old_canister.system_state.canister_id,
                 )),
@@ -500,10 +500,10 @@ impl CanisterManager {
             &mut old_canister.system_state,
             memory_usage,
             compute_allocation,
-            execution_parameters.instruction_limit,
+            execution_parameters.total_instruction_limit,
         ) {
             return (
-                execution_parameters.instruction_limit,
+                execution_parameters.total_instruction_limit,
                 Err(CanisterManagerError::InstallCodeNotEnoughCycles(err)),
             );
         }
@@ -511,7 +511,7 @@ impl CanisterManager {
         // Copy bits out of context as the calls below are going to consume it.
         let canister_id = context.canister_id;
         let mode = context.mode;
-        let instruction_limit = execution_parameters.instruction_limit;
+        let instruction_limit = execution_parameters.total_instruction_limit;
 
         let (instructions_left, result) = match context.mode {
             CanisterInstallMode::Install | CanisterInstallMode::Reinstall => self.install(
@@ -882,7 +882,7 @@ impl CanisterManager {
             Ok(execution_state) => Some(execution_state),
             Err(err) => {
                 return (
-                    execution_parameters.instruction_limit,
+                    execution_parameters.total_instruction_limit,
                     Err((canister_id, err).into()),
                 );
             }
@@ -909,7 +909,7 @@ impl CanisterManager {
         if let MemoryAllocation::Reserved(bytes) = desired_memory_allocation {
             if bytes < new_canister.memory_usage(self.config.own_subnet_type) {
                 return (
-                    execution_parameters.instruction_limit,
+                    execution_parameters.total_instruction_limit,
                     Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
                         canister_id,
                         memory_allocation_given: desired_memory_allocation,
@@ -931,7 +931,7 @@ impl CanisterManager {
             self.log,
             "Executing (start) on canister {} consumed {} instructions.  {} instructions are left.",
             canister_id,
-            execution_parameters.instruction_limit - instructions_left,
+            execution_parameters.total_instruction_limit - instructions_left,
             instructions_left
         );
         match result {
@@ -941,7 +941,8 @@ impl CanisterManager {
             Err(err) => return (instructions_left, Err((canister_id, err).into())),
         }
 
-        execution_parameters.instruction_limit = instructions_left;
+        execution_parameters.total_instruction_limit = instructions_left;
+        execution_parameters.slice_instruction_limit = instructions_left;
 
         // Run canister_init
         let (new_canister, instructions_left, result) = self.hypervisor.execute_canister_init(
@@ -955,7 +956,7 @@ impl CanisterManager {
             self.log,
             "Executing (canister_init) on canister {} consumed {} instructions.  {} instructions are left.",
             canister_id,
-            execution_parameters.instruction_limit - instructions_left,
+            execution_parameters.total_instruction_limit - instructions_left,
             instructions_left
         );
         match result {
@@ -993,10 +994,11 @@ impl CanisterManager {
             self.log,
             "Executing (canister_pre_upgrade) on canister {} consumed {} instructions.  {} instructions are left.",
             canister_id,
-            execution_parameters.instruction_limit - instructions_left,
+            execution_parameters.total_instruction_limit - instructions_left,
             instructions_left
         );
-        execution_parameters.instruction_limit = instructions_left;
+        execution_parameters.total_instruction_limit = instructions_left;
+        execution_parameters.slice_instruction_limit = instructions_left;
         match res {
             Ok(heap_delta) => {
                 total_heap_delta += heap_delta;
@@ -1061,10 +1063,11 @@ impl CanisterManager {
             self.log,
             "Executing (start) on canister {} consumed {} instructions.  {} instructions are left.",
             canister_id,
-            execution_parameters.instruction_limit - instructions_left,
+            execution_parameters.total_instruction_limit - instructions_left,
             instructions_left
         );
-        execution_parameters.instruction_limit = instructions_left;
+        execution_parameters.total_instruction_limit = instructions_left;
+        execution_parameters.slice_instruction_limit = instructions_left;
         match result {
             Ok(heap_delta) => {
                 total_heap_delta += heap_delta;
@@ -1085,7 +1088,7 @@ impl CanisterManager {
             self.log,
             "Executing (canister_post_upgrade) on canister {} consumed {} instructions.  {} instructions are left.",
             canister_id,
-            execution_parameters.instruction_limit - instructions_left,
+            execution_parameters.total_instruction_limit - instructions_left,
             instructions_left
         );
         match result {

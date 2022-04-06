@@ -202,6 +202,14 @@ impl WasmExecutor {
             mut execution_state,
         }: WasmExecutionInput,
     ) -> (WasmExecutionOutput, ExecutionState, SystemStateChanges) {
+        // This function is called when canister sandboxing is disabled.
+        // Since deterministic time slicing works only with sandboxing,
+        // it must also be disabled and the execution limits must match.
+        assert_eq!(
+            execution_parameters.total_instruction_limit,
+            execution_parameters.slice_instruction_limit
+        );
+
         // Ensure that Wasm is compiled.
         let embedder_cache = match self.get_embedder_cache(None, &execution_state.wasm_binary) {
             Ok(embedder_cache) => embedder_cache,
@@ -438,7 +446,7 @@ pub fn process(
     Option<WasmStateChanges>,
     Result<WasmtimeInstance<SystemApiImpl>, SystemApiImpl>,
 ) {
-    let instruction_limit = execution_parameters.instruction_limit;
+    let instruction_limit = execution_parameters.slice_instruction_limit;
     let canister_id = sandbox_safe_system_state.canister_id();
     let modification_tracking = api_type.modification_tracking();
     let system_api = SystemApiImpl::new(
