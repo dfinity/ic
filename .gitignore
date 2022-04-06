@@ -86,6 +86,7 @@ ic-os.img
 **/bin/state-tool
 **/bin/vsock_agent
 **/bin/canister_sandbox
+**/bin/boundary-node-prober
 
 # Boundary node control plane binary
 boundary-node-control-plane

@@ -5,7 +5,7 @@
     set -eExuo pipefail
 
     MEDIA_DIR="/var/local/ic/media/{{ ic_deployment_name }}/{{ ic_git_revision }}"
-    ITEMS=({{ hostvars[inventory_hostname].ic_guests | join(' ') }})
+    ITEMS=({{ hostvars[inventory_hostname].ic_guests | default([]) | join(' ') }})
     parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty cp -v --reflink=auto --sparse=always $MEDIA_DIR/'{}.img' /var/lib/libvirt/media/'{}.img'
     chown libvirt-qemu:kvm /var/lib/libvirt/media/*.img
     chmod 0664 /var/lib/libvirt/media/*.img
@@ -19,7 +19,7 @@
   vars:
     boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary  | default([]) }}"
     aux_nodes: "{{ hostvars[inventory_hostname].groups.aux  | default([]) }}"
-    replica_nodes: "{{ hostvars[inventory_hostname].ic_guests | difference(boundary_nodes) | difference(aux_nodes) | join(' ') }}"
+    replica_nodes: "{{ hostvars[inventory_hostname].ic_guests | default([]) | difference(boundary_nodes) | difference(aux_nodes) | join(' ') }}"
     ic_disk_size_bytes: "{{ ic_disk_gb | int * (1024 | pow(3)) | int }}"
   shell: |
     set -eExuo pipefail
@@ -29,8 +29,8 @@
     ITEMS=({{ replica_nodes }})
     parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty test -r /var/lib/libvirt/images/'{}.img' \|\| cp -v --reflink=auto --sparse=always "$IMAGE_DIR/disk.img" /var/lib/libvirt/images/'{}.img'
 
-    chown libvirt-qemu:kvm /var/lib/libvirt/images/*.img
-    chmod 0664 /var/lib/libvirt/images/*.img
+    parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty chown libvirt-qemu:kvm /var/lib/libvirt/images/'{}.img'
+    parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty chmod 0664 /var/lib/libvirt/images/'{}.img'
     parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty truncate --size {{ ic_disk_size_bytes }} /var/lib/libvirt/images/'{}.img'
   register: script_res
   changed_when: "'stdout' in script_res and script_res.stdout"
@@ -47,8 +47,8 @@
     MEDIA_DIR="/var/local/ic/media/{{ ic_deployment_name }}/{{ ic_git_revision }}/boundary"
     ITEMS=({{ boundary_nodes }})
     parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty cp -v --reflink=auto --sparse=always $MEDIA_DIR/'{}.img' /var/lib/libvirt/media/'{}.img'
-    chown libvirt-qemu:kvm /var/lib/libvirt/media/*.img
-    chmod 0664 /var/lib/libvirt/media/*.img
+    parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty chown libvirt-qemu:kvm /var/lib/libvirt/media/'{}.img'
+    parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty chmod 0664 /var/lib/libvirt/media/'{}.img'
   register: script_res
   changed_when: "script_res.stdout | default('')"
   args:
@@ -67,8 +67,8 @@
     ITEMS=({{ boundary_nodes }})
     parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty test -r /var/lib/libvirt/images/'{}.img' \|\| cp -v --reflink=auto --sparse=always "$IMAGE_DIR/disk.img" /var/lib/libvirt/images/'{}.img'
 
-    chown libvirt-qemu:kvm /var/lib/libvirt/images/*.img
-    chmod 0664 /var/lib/libvirt/images/*.img
+    parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty chown libvirt-qemu:kvm /var/lib/libvirt/images/'{}.img'
+    parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty chmod 0664 /var/lib/libvirt/images/'{}.img'
     parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty truncate --size {{ ic_disk_size_bytes }} /var/lib/libvirt/images/'{}.img'
   register: script_res
   changed_when: "script_res.stdout | default('')"
@@ -89,8 +89,8 @@
     ITEMS=({{ aux_nodes }})
     parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty test -r /var/lib/libvirt/images/'{}.img' \|\| cp -v --reflink=auto --sparse=always "$IMAGE_DIR/disk.img" /var/lib/libvirt/images/'{}.img'
 
-    chown libvirt-qemu:kvm /var/lib/libvirt/images/*.img
-    chmod 0664 /var/lib/libvirt/images/*.img
+    parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty chown libvirt-qemu:kvm /var/lib/libvirt/images/'{}.img'
+    parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty chmod 0664 /var/lib/libvirt/images/'{}.img'
     parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty truncate --size {{ ic_disk_size_bytes }} /var/lib/libvirt/images/'{}.img'
   register: script_res
   changed_when: "script_res.stdout | default('')"
@@ -109,7 +109,7 @@
     owner: root
     group: root
     mode: 0644
-  loop: "{{ hostvars[inventory_hostname].ic_guests }}"
+  loop: "{{ hostvars[inventory_hostname].ic_guests | default([]) }}"
   loop_control:
     label:
   tags: [ "ic_guest" ]
@@ -119,17 +119,23 @@
     set -eExuo pipefail
     virsh define "/var/local/ic/disk/{{ ic_deployment_name }}/{{ item }}.xml"
     virsh dominfo "{{ item }}"
-  loop: "{{ hostvars[inventory_hostname].ic_guests }}"
+  loop: "{{ hostvars[inventory_hostname].ic_guests | default([]) }}"
   loop_control:
     label:
   args:
     executable: /bin/bash
   tags: [ "ic_guest" ]
 
+- name: Check if dfinity-hsm-agent service exist
+  shell: service dfinity-hsm-agent status 
+  register: dfinity_hsm_agent_status
+  failed_when: not(dfinity_hsm_agent_status.rc == 4 or dfinity_hsm_agent_status.rc == 3 or dfinity_hsm_agent_status.rc == 0)
+
 - name: Stop the dfinity-hsm-agent.service
   systemd:
     state: stopped
     name: dfinity-hsm-agent
+  when: dfinity_hsm_agent_status.rc == 0
   tags: [ "ic_guest" ]
 
 - name: Ensure potentially conflicting kernel modules are not loaded
@@ -155,4 +161,5 @@
   systemd:
     state: started
     name: dfinity-hsm-agent
+  when: dfinity_hsm_agent_status.rc == 0
   tags: [ "ic_guest" ]

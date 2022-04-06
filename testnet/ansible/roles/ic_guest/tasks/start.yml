@@ -3,9 +3,9 @@
 - name: start guest
   shell: |
     set -eExuo pipefail
-    virsh start "{{ item }}"
-    virsh autostart "{{ item }}"
-  loop: "{{ hostvars[inventory_hostname].ic_guests }}"
+    virsh start "{{ item }}" || true
+    virsh autostart "{{ item }}" || true
+  loop: "{{ hostvars[inventory_hostname].ic_guests | default([]) }}"
   loop_control:
     label:
   args:
