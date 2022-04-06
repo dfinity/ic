@@ -6466,6 +6466,7 @@ dependencies = [
  "ledger-canister",
  "on_wire",
  "tokio",
+ "wabt",
 ]
 
 [[package]]

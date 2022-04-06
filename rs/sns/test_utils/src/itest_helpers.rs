@@ -57,12 +57,14 @@ pub struct SnsCanisters<'a> {
 pub struct SnsInitPayloads {
     pub governance: Governance,
     pub ledger: LedgerCanisterInitPayload,
+    pub root: SnsRootCanister,
 }
 
 /// Builder to help create the initial payloads for the SNS canisters.
 pub struct SnsInitPayloadsBuilder {
     pub governance: GovernanceCanisterInitPayloadBuilder,
     pub ledger: LedgerCanisterInitPayload,
+    pub root: SnsRootCanister,
 }
 
 /// Packages commonly used test data into a single struct.
@@ -128,6 +130,7 @@ impl SnsInitPayloadsBuilder {
                 token_symbol: None,
                 token_name: None,
             },
+            root: SnsRootCanister::default(),
         }
     }
 
@@ -174,6 +177,7 @@ impl SnsInitPayloadsBuilder {
         SnsInitPayloads {
             governance: self.governance.build(),
             ledger: self.ledger.clone(),
+            root: self.root.clone(),
         }
     }
 }
@@ -230,9 +234,9 @@ impl SnsCanisters<'_> {
             .is_none());
 
         // Root canister_init args.
-        let root_canister_init_args = SnsRootCanister {
-            governance_canister_id: Some(governance_canister_id.into()),
-        };
+        if init_payloads.root.governance_canister_id.is_none() {
+            init_payloads.root.governance_canister_id = Some(governance_canister_id.into());
+        }
 
         // Set initial neurons
         for n in init_payloads.governance.neurons.values() {
@@ -252,7 +256,7 @@ impl SnsCanisters<'_> {
         futures::join!(
             install_governance_canister(&mut governance, init_payloads.governance.clone()),
             install_ledger_canister(&mut ledger, init_payloads.ledger),
-            install_root_canister(&mut root, root_canister_init_args),
+            install_root_canister(&mut root, init_payloads.root),
         );
 
         eprintln!("SNS canisters installed after {:.1} s", since_start_secs());
@@ -260,6 +264,7 @@ impl SnsCanisters<'_> {
         // We can set all the controllers at once. Several -- or all -- may go
         // into the same block, this makes setup faster.
         futures::try_join!(
+            root.set_controller_with_retries(governance_canister_id.get()),
             governance.set_controller_with_retries(root_canister_id.get()),
             ledger.set_controller_with_retries(root_canister_id.get()),
         )

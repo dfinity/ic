@@ -12,11 +12,14 @@ path = "src/lib.rs"
 
 [dependencies]
 async-trait = "0.1.42"
+bytes = "1.0.1"
 candid = "0.7.4"
-dfn_core = { path = "../../rust_canisters/dfn_core" }
+comparable = { version = "0.5", features = ["derive"] }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
+dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 futures = "0.3.13"
+hex = "0.4.3"
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha = {path = "../../crypto/sha/"}
 ic-ic00-types = { path = "../../types/ic00_types" }
@@ -29,15 +32,12 @@ ic-protobuf = { path = "../../protobuf" }
 ledger-canister = { path = "../../rosetta-api/ledger_canister" }
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = "0.9.0"
-serde = { version = "1.0", features = ["derive"] }
 rand = "0.7.3"
 rand_core = "0.5.1"
 registry-canister = { path = "../../registry/canister" }
-bytes = "1.0.1"
-strum_macros = "0.18.0"
+serde = { version = "1.0", features = ["derive"] }
 strum = "0.18.0"
-comparable = { version = "0.5", features = ["derive"] }
-hex = "0.4.3"
+strum_macros = "0.18.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 clap = "3.0.0-beta.2"
