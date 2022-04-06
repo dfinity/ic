@@ -75,7 +75,7 @@ pub fn start_router(
                     if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) = blockchain_manager.process_bitcoin_network_message(address, &message).await {
                         connection_manager.discard(address);
                     }
-                    if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) = transaction_manager.process_bitcoin_network_message(address, &message) {
+                    if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) = transaction_manager.process_bitcoin_network_message(&mut connection_manager, address, &message) {
                         connection_manager.discard(address);
                     }
                 },
