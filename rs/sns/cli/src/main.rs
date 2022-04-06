@@ -6,7 +6,7 @@ use ic_sns_governance::init::GovernanceCanisterInitPayloadBuilder;
 use ic_sns_governance::pb::v1::{Governance, NeuronPermissionList, NeuronPermissionType};
 use ic_sns_root::pb::v1::SnsRootCanister;
 use ledger_canister::{
-    AccountIdentifier, BinaryAccountBalanceArgs, LedgerCanisterInitPayload, Tokens,
+    AccountIdentifier, ArchiveOptions, BinaryAccountBalanceArgs, LedgerCanisterInitPayload, Tokens,
 };
 use maplit::hashset;
 use std::collections::HashMap;
@@ -431,9 +431,23 @@ fn ledger_init_args(
     sns_canister_ids: &SnsCanisterIds,
     args: &LocalDeployArgs,
 ) -> LedgerCanisterInitPayload {
+    let root_canister_id = CanisterId::new(sns_canister_ids.root).unwrap();
+
     let mut payload = LedgerCanisterInitPayload::builder()
         .minting_account(sns_canister_ids.governance.into())
         .token_symbol_and_name(&args.token_symbol, &args.token_name)
+        .archive_options(ArchiveOptions {
+            trigger_threshold: 2000,
+            num_blocks_to_archive: 1000,
+            // 1 GB, which gives us 3 GB space when upgrading
+            node_max_memory_size_bytes: Some(1024 * 1024 * 1024),
+            // 128kb
+            max_message_size_bytes: Some(128 * 1024),
+            controller_id: root_canister_id,
+            // TODO: allow users to set this value
+            // 10 Trillion cycles
+            cycles_for_archive_creation: Some(10_000_000_000_000),
+        })
         .build()
         .unwrap();
 
