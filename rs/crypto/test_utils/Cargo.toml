@@ -13,7 +13,6 @@ ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 ic-types = { path = "../../types/types" }
 openssl = "0.10.29"
-phantom_newtype = { path = "../../phantom_newtype" }
 rand = "0.7.3"
 serde = { version = "1.0.99", features = [ "derive" ] }
 strum_macros = "0.23.0"
