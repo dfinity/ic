@@ -1593,7 +1593,7 @@ impl Governance {
 
             // The other values of this type (Install and Reinstall) are never
             // appropriate for us.
-            let mode = ic_base_types::CanisterInstallMode::Upgrade;
+            let mode = ic_ic00_types::CanisterInstallMode::Upgrade;
 
             let change_canister_arg = ChangeCanisterProposal::new(
                 stop_before_installing,

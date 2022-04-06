@@ -10,8 +10,8 @@ use std::time::Duration;
 use candid::{CandidType, Encode};
 use canister_test::{Canister, Wasm};
 use dfn_candid::{candid, candid_one};
-use ic_base_types::CanisterInstallMode;
 use ic_canister_client::Sender;
+use ic_ic00_types::CanisterInstallMode;
 use ic_nervous_system_root::{
     CanisterIdRecord, CanisterStatusResult, CanisterStatusType::Running, ChangeCanisterProposal,
 };

@@ -86,11 +86,12 @@ pub use funds::*;
 use ic_base_types::NumSeconds;
 pub use ic_base_types::{
     subnet_id_into_protobuf, subnet_id_try_from_protobuf, CanisterId, CanisterIdBlobParseError,
-    CanisterIdError, CanisterStatusType, NodeId, NodeTag, NumBytes, PrincipalId,
-    PrincipalIdBlobParseError, PrincipalIdParseError, RegistryVersion, SubnetId,
+    NodeId, NodeTag, NumBytes, PrincipalId, PrincipalIdBlobParseError, PrincipalIdParseError,
+    RegistryVersion, SubnetId,
 };
 pub use ic_crypto_internal_types::NodeIndex;
 use ic_error_types::{ErrorCode, UserError};
+pub use ic_ic00_types::CanisterStatusType;
 use ic_ic00_types::InstallCodeArgs;
 use ic_protobuf::types::v1 as pb;
 use num_traits::cast::ToPrimitive;

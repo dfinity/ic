@@ -1,8 +1,8 @@
 use candid::{CandidType, Deserialize};
 use dfn_core::api::{call, CanisterId};
-use ic_base_types::{CanisterInstallMode, PrincipalId};
+use ic_base_types::PrincipalId;
 use ic_crypto_sha::Sha256;
-use ic_ic00_types::{InstallCodeArgs, IC_00};
+use ic_ic00_types::{CanisterInstallMode, InstallCodeArgs, IC_00};
 use ic_nervous_system_common::MethodAuthzChange;
 
 use serde::Serialize;

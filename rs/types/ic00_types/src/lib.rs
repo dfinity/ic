@@ -1,16 +1,13 @@
 //! Data types used for encoding/decoding the Candid payloads of ic:00.
 use candid::{CandidType, Decode, Deserialize, Encode};
-use ic_base_types::{
-    CanisterId, CanisterInstallMode, CanisterStatusType, NodeId, NumBytes, PrincipalId,
-    RegistryVersion, SubnetId,
-};
+use ic_base_types::{CanisterId, NodeId, NumBytes, PrincipalId, RegistryVersion, SubnetId};
 use ic_error_types::{ErrorCode, UserError};
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
 use ic_protobuf::state::system_metadata::v1 as pb_metadata;
 use num_traits::cast::ToPrimitive;
 use serde::Serialize;
-use std::{collections::BTreeSet, convert::TryFrom};
+use std::{collections::BTreeSet, convert::TryFrom, fmt, slice::Iter};
 use strum_macros::{Display, EnumIter, EnumString};
 
 /// The id of the management canister.
@@ -261,6 +258,96 @@ impl CanisterStatusResultV2 {
 
     pub fn freezing_threshold(&self) -> u64 {
         self.freezing_threshold.0.to_u64().unwrap()
+    }
+}
+
+/// Indicates whether the canister is running, stopping, or stopped.
+///
+/// Unlike `CanisterStatus`, it contains no additional metadata.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, CandidType)]
+pub enum CanisterStatusType {
+    #[serde(rename = "running")]
+    Running,
+    #[serde(rename = "stopping")]
+    Stopping,
+    #[serde(rename = "stopped")]
+    Stopped,
+}
+
+/// These strings are used to generate metrics -- changing any existing entries
+/// will invalidate monitoring dashboards.
+impl fmt::Display for CanisterStatusType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CanisterStatusType::Running => write!(f, "running"),
+            CanisterStatusType::Stopping => write!(f, "stopping"),
+            CanisterStatusType::Stopped => write!(f, "stopped"),
+        }
+    }
+}
+
+/// The mode with which a canister is installed.
+#[derive(
+    Clone, Debug, Deserialize, PartialEq, Serialize, Eq, EnumString, Hash, CandidType, Copy,
+)]
+pub enum CanisterInstallMode {
+    /// A fresh install of a new canister.
+    #[serde(rename = "install")]
+    #[strum(serialize = "install")]
+    Install,
+    /// Reinstalling a canister that was already installed.
+    #[serde(rename = "reinstall")]
+    #[strum(serialize = "reinstall")]
+    Reinstall,
+    /// Upgrade an existing canister.
+    #[serde(rename = "upgrade")]
+    #[strum(serialize = "upgrade")]
+    Upgrade,
+}
+
+impl Default for CanisterInstallMode {
+    fn default() -> Self {
+        CanisterInstallMode::Install
+    }
+}
+
+impl CanisterInstallMode {
+    pub fn iter() -> Iter<'static, CanisterInstallMode> {
+        static MODES: [CanisterInstallMode; 3] = [
+            CanisterInstallMode::Install,
+            CanisterInstallMode::Reinstall,
+            CanisterInstallMode::Upgrade,
+        ];
+        MODES.iter()
+    }
+}
+
+/// A type to represent an error that can occur when installing a canister.
+#[derive(Debug)]
+pub struct CanisterInstallModeError(pub String);
+
+impl TryFrom<String> for CanisterInstallMode {
+    type Error = CanisterInstallModeError;
+
+    fn try_from(mode: String) -> Result<Self, Self::Error> {
+        let mode = mode.as_str();
+        match mode {
+            "install" => Ok(CanisterInstallMode::Install),
+            "reinstall" => Ok(CanisterInstallMode::Reinstall),
+            "upgrade" => Ok(CanisterInstallMode::Upgrade),
+            _ => Err(CanisterInstallModeError(mode.to_string())),
+        }
+    }
+}
+
+impl From<CanisterInstallMode> for String {
+    fn from(mode: CanisterInstallMode) -> Self {
+        let res = match mode {
+            CanisterInstallMode::Install => "install",
+            CanisterInstallMode::Reinstall => "reinstall",
+            CanisterInstallMode::Upgrade => "upgrade",
+        };
+        res.to_string()
     }
 }
 

@@ -110,7 +110,7 @@ fn no_authz() {
 
     let mut proposal = ChangeCanisterProposal::new(
         false, // stop before_installing
-        ic_base_types::CanisterInstallMode::Upgrade,
+        ic_ic00_types::CanisterInstallMode::Upgrade,
         canister_id,
     );
 

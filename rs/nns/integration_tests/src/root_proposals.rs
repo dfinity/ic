@@ -1,6 +1,7 @@
 use canister_test::{Canister, Project};
-use ic_base_types::{CanisterInstallMode, PrincipalId};
+use ic_base_types::PrincipalId;
 use ic_canister_client::Sender;
+use ic_ic00_types::CanisterInstallMode;
 use ic_nervous_system_root::{CanisterIdRecord, CanisterStatusResult, ChangeCanisterProposal};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};

@@ -8,7 +8,8 @@ use candid::{CandidType, Deserialize};
 use dfn_core::api::{call, now, CanisterId};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use ic_base_types::{CanisterInstallMode, NodeId, PrincipalId, SubnetId};
+use ic_base_types::{NodeId, PrincipalId, SubnetId};
+use ic_ic00_types::CanisterInstallMode;
 use ic_nervous_system_root::{
     change_canister, CanisterIdRecord, CanisterStatusResult, ChangeCanisterProposal, LOG_PREFIX,
 };
