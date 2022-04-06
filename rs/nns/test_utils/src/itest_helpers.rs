@@ -128,6 +128,7 @@ impl NnsInitPayloadsBuilder {
                 ledger_canister_id: LEDGER_CANISTER_ID,
                 governance_canister_id: GOVERNANCE_CANISTER_ID,
                 minting_account_id: Some(GOVERNANCE_CANISTER_ID.get().into()),
+                last_purged_notification: Some(1),
             },
             lifeline: LifelineCanisterInitPayloadBuilder::new(),
             genesis_token: GenesisTokenCanisterInitPayloadBuilder::new(),

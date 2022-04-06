@@ -16,6 +16,7 @@ pub struct CyclesCanisterInitPayload {
     pub ledger_canister_id: CanisterId,
     pub governance_canister_id: CanisterId,
     pub minting_account_id: Option<AccountIdentifier>,
+    pub last_purged_notification: Option<BlockHeight>,
 }
 
 /// Argument taken by top up notification endpoint

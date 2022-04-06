@@ -189,6 +189,7 @@ fn init(args: CyclesCanisterInitPayload) {
     state.ledger_canister_id = args.ledger_canister_id;
     state.governance_canister_id = args.governance_canister_id;
     state.minting_account_id = args.minting_account_id;
+    state.last_purged_notification = args.last_purged_notification;
 }
 
 expose_build_metadata! {}
@@ -533,15 +534,12 @@ fn is_transient_error<T>(result: &Result<T, NotifyError>) -> bool {
 ///   notification about.
 /// * `canister_id` - Canister to be topped up.
 #[candid_method(update, rename = "notify_top_up")]
-#[allow(unreachable_code)]
-#[allow(unused_variables)]
 async fn notify_top_up(
     NotifyTopUp {
         block_index,
         canister_id,
     }: NotifyTopUp,
 ) -> Result<Cycles, NotifyError> {
-    panic!("Endpoint not enabled");
     let cmc_id = dfn_core::api::id();
     let sub = Subaccount::from(&canister_id);
     let expected_to = AccountIdentifier::new(cmc_id.get(), Some(sub));
@@ -594,15 +592,12 @@ async fn notify_top_up(
 ///   notification about.
 /// * `controller` - PrincipalId of the canister controller.
 #[candid_method(update, rename = "notify_create_canister")]
-#[allow(unreachable_code)]
-#[allow(unused_variables)]
 async fn notify_create_canister(
     NotifyCreateCanister {
         block_index,
         controller,
     }: NotifyCreateCanister,
 ) -> Result<CanisterId, NotifyError> {
-    panic!("Endpoint not enabled");
     let cmc_id = dfn_core::api::id();
     let sub = Subaccount::from(&controller);
     let expected_to = AccountIdentifier::new(cmc_id.get(), Some(sub));
@@ -1230,10 +1225,16 @@ fn post_upgrade() {
         if STATE.read().unwrap().blocks_notified.is_none() {
             STATE.write().unwrap().blocks_notified = Some(BTreeMap::new());
         }
-        if STATE.read().unwrap().last_purged_notification.is_none() {
-            // put a right number here manually on the next upgrade
-            STATE.write().unwrap().last_purged_notification = Some(0);
-        }
+        let last_purged_notification = match STATE.read().unwrap().last_purged_notification {
+            // Stage 1 release: set the last purged notification to zero and fill in the cache.
+            None => Some(0),
+            // Stage 2 release: set the last_purged notification to the block observed right
+            // after the Stage 1 release.
+            Some(0) => Some(3_152_000),
+            // Post stage 2: keep the current block index.
+            Some(block_index) => Some(block_index),
+        };
+        STATE.write().unwrap().last_purged_notification = last_purged_notification;
     })
 }
 
