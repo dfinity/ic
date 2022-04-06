@@ -7434,9 +7434,9 @@ checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 
 [[package]]
 name = "leaky-bucket"
-version = "0.11.0"
+version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d96392400fa7340b9ee203a83c6978790929eec36a20feb6fa8155408fbd800"
+checksum = "73fec97a5ac23f00d097097c6c0b91618fcfb43ec46acdba5e636d8afed5fb62"
 dependencies = [
  "parking_lot 0.11.1",
  "tokio",
@@ -11454,6 +11454,7 @@ dependencies = [
  "itertools 0.10.0",
  "json5",
  "lazy_static",
+ "leaky-bucket",
  "ledger-canister",
  "lifeline",
  "log_analyzer",
