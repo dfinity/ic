@@ -142,13 +142,17 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use ic_types::{NodeId, RegistryVersion, SubnetId};
 use slog::{info, warn};
+use ssh2::Session;
 use std::collections::HashSet;
 use std::future::Future;
+use std::net::{Ipv4Addr, TcpStream};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use std::{convert::TryFrom, net::IpAddr, str::FromStr, sync::Arc};
 use tokio::runtime::Runtime as Rt;
 use url::Url;
+
+use super::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
 
 pub const RETRY_TIMEOUT: Duration = Duration::from_secs(120);
 pub const RETRY_BACKOFF: Duration = Duration::from_secs(5);
@@ -706,4 +710,44 @@ impl HttpFileStore for FarmFileStore {
                 .expect("cannot join urls"),
         }))
     }
+}
+
+pub trait SshSession {
+    /// Return an SSH session to the machine referenced from self authenticating with the given user.
+    fn get_ssh_session(&self, user: &str) -> Result<Session>;
+
+    /// Try a number of times to establish an SSH session to the machine referenced from self authenticating with the given user.
+    fn block_on_ssh_session(&self, user: &str) -> Result<Session>;
+}
+
+pub const ADMIN: &str = "admin";
+
+pub fn get_ssh_session_from_env(env: &TestEnv, user: &str, ip: IpAddr) -> Result<Session> {
+    let tcp = TcpStream::connect((ip, 22))?;
+    let mut sess = Session::new()?;
+    sess.set_tcp_stream(tcp);
+    sess.handshake()?;
+    let priv_key_path = env.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR).join(user);
+    sess.userauth_pubkey_file(user, None, priv_key_path.as_path(), None)?;
+    Ok(sess)
+}
+
+impl SshSession for IcNodeSnapshot {
+    fn get_ssh_session(&self, user: &str) -> Result<Session> {
+        let node_record = self.raw_node_record();
+        let connection_endpoint = node_record.http.unwrap();
+        let ip_addr = IpAddr::from_str(&connection_endpoint.ip_addr)?;
+        get_ssh_session_from_env(&self.env, user, ip_addr)
+    }
+
+    fn block_on_ssh_session(&self, user: &str) -> Result<Session> {
+        retry(self.env.logger(), RETRY_TIMEOUT, RETRY_BACKOFF, || {
+            self.get_ssh_session(user)
+        })
+    }
+}
+
+pub trait RetrieveIpv4Addr {
+    /// Try a number of times to retrieve the IPv4 address from the machine referenced from self.  
+    fn block_on_ipv4(&self) -> Result<Ipv4Addr>;
 }

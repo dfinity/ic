@@ -2,7 +2,7 @@ use std::{
     env,
     fs::File,
     io::{self, Read, Write},
-    net::{Ipv4Addr, TcpStream},
+    net::{IpAddr, Ipv4Addr},
     path::PathBuf,
     process::Command,
 };
@@ -12,13 +12,16 @@ use crate::driver::driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR;
 use super::{
     driver_setup::{
         BOUNDARY_NODE_IMG_SHA256, BOUNDARY_NODE_IMG_URL, FARM_BASE_URL, FARM_GROUP_NAME,
-        JOURNALBEAT_HOSTS, SSH_AUTHORIZED_PRIV_KEYS_DIR,
+        JOURNALBEAT_HOSTS,
     },
     farm::{CreateVmRequest, Farm, ImageLocation, VMCreateResponse},
     ic::{AmountOfMemoryKiB, NrOfVCPUs, VmResources},
     resource::DiskImage,
     test_env::TestEnv,
-    test_env_api::{retry, RETRY_BACKOFF, RETRY_TIMEOUT},
+    test_env_api::{
+        get_ssh_session_from_env, retry, RetrieveIpv4Addr, SshSession, ADMIN, RETRY_BACKOFF,
+        RETRY_TIMEOUT,
+    },
 };
 use anyhow::{bail, Result};
 use flate2::{write::GzEncoder, Compression};
@@ -32,8 +35,6 @@ const DEFAULT_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(2516
 const BOUNDARY_NODE_VMS_DIR: &str = "boundary_node_vms";
 const BOUNDARY_NODE_VM_PATH: &str = "vm.json";
 const CONF_IMG_FNAME: &str = "config_disk.img";
-
-const ADMIN_USER: &str = "admin";
 
 fn mk_compressed_img_path() -> std::string::String {
     return format!("{}.gz", CONF_IMG_FNAME);
@@ -227,29 +228,24 @@ impl DeployedBoundaryNode {
         let vm_path: PathBuf = [BOUNDARY_NODE_VMS_DIR, &self.name].iter().collect();
         self.env.read_object(vm_path.join(BOUNDARY_NODE_VM_PATH))
     }
+}
 
-    pub fn get_ssh_session(&self) -> Result<Session> {
+impl SshSession for DeployedBoundaryNode {
+    fn get_ssh_session(&self, user: &str) -> Result<Session> {
         let vm = self.get_vm()?;
-        let tcp = TcpStream::connect((vm.ipv6, 22))?;
-        let mut sess = Session::new()?;
-        sess.set_tcp_stream(tcp);
-        sess.handshake()?;
-        let admin_priv_key_path = self
-            .env
-            .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
-            .join(ADMIN_USER);
-        sess.userauth_pubkey_file(ADMIN_USER, None, admin_priv_key_path.as_path(), None)?;
-        Ok(sess)
+        get_ssh_session_from_env(&self.env, user, IpAddr::V6(vm.ipv6))
     }
 
-    pub fn await_ssh_session(&self) -> Result<Session> {
+    fn block_on_ssh_session(&self, user: &str) -> Result<Session> {
         retry(self.env.logger(), RETRY_TIMEOUT, RETRY_BACKOFF, || {
-            self.get_ssh_session()
+            self.get_ssh_session(user)
         })
     }
+}
 
-    pub fn await_ipv4(&self) -> Result<Ipv4Addr> {
-        let sess = self.await_ssh_session()?;
+impl RetrieveIpv4Addr for DeployedBoundaryNode {
+    fn block_on_ipv4(&self) -> Result<Ipv4Addr> {
+        let sess = self.block_on_ssh_session(ADMIN)?;
         let mut channel = sess.channel_session()?;
         channel.exec("bash").unwrap();
 

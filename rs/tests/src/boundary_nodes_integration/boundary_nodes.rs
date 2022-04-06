@@ -6,7 +6,9 @@ use crate::driver::boundary_node::{BoundaryNode, BoundaryNodeVm};
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::{HasIcPrepDir, TestEnv};
-use crate::driver::test_env_api::{DefaultIC, HasPublicApiUrl, IcNodeContainer};
+use crate::driver::test_env_api::{
+    DefaultIC, HasPublicApiUrl, IcNodeContainer, RetrieveIpv4Addr, SshSession, ADMIN,
+};
 use std::io::Read;
 use std::net::Ipv4Addr;
 
@@ -45,30 +47,44 @@ pub fn test(env: TestEnv, logger: Logger) {
         "Boundary node {BOUNDARY_NODE_NAME} has IPv6: {:?}", boundary_node_vm.ipv6
     );
 
-    let boundary_node_ipv4: Ipv4Addr = deployed_boundary_node.await_ipv4().unwrap();
+    let boundary_node_ipv4: Ipv4Addr = deployed_boundary_node.block_on_ipv4().unwrap();
     info!(
         &logger,
         "Boundary node {BOUNDARY_NODE_NAME} has IPv4 {:?}", boundary_node_ipv4
     );
 
-    // SSH to Boundary Node example:
-    info!(
-        logger,
-        "Executing the 'uname -a' command on {BOUNDARY_NODE_NAME} via SSH..."
-    );
-    let sess = deployed_boundary_node.await_ssh_session().unwrap();
+    // Example of SSH access to Boundary Nodes:
+    let sess = deployed_boundary_node.block_on_ssh_session(ADMIN).unwrap();
     let mut channel = sess.channel_session().unwrap();
     channel.exec("uname -a").unwrap();
-    let mut s = String::new();
-    channel.read_to_string(&mut s).unwrap();
-    info!(logger, "{}", s);
+    let mut uname = String::new();
+    channel.read_to_string(&mut uname).unwrap();
     channel.wait_close().unwrap();
-    info!(logger, "Exit status: {}", channel.exit_status().unwrap());
+    info!(
+        logger,
+        "uname of {BOUNDARY_NODE_NAME} = '{}'. Exit status = {}",
+        uname.trim(),
+        channel.exit_status().unwrap()
+    );
 
     info!(&logger, "Checking readiness of all nodes...");
     for subnet in env.topology_snapshot().subnets() {
         for node in subnet.nodes() {
             node.await_status_is_healthy().unwrap();
+
+            // Example of SSH access to IC nodes:
+            let sess = node.block_on_ssh_session(ADMIN).unwrap();
+            let mut channel = sess.channel_session().unwrap();
+            channel.exec("hostname").unwrap();
+            let mut hostname = String::new();
+            channel.read_to_string(&mut hostname).unwrap();
+            info!(
+                logger,
+                "Hostname of node {:?} = '{}'",
+                node.node_id,
+                hostname.trim()
+            );
+            channel.wait_close().unwrap();
         }
     }
 }
