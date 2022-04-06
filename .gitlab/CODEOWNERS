@@ -117,6 +117,7 @@
 /rs/interfaces/state_manager/           @dfinity-lab/teams/message-routing-owners
 /rs/memory_tracker/                     @dfinity-lab/teams/execution-owners
 /rs/messaging/                          @dfinity-lab/teams/message-routing-owners
+/rs/nervous_system/                     @dfinity-lab/teams/nns-team
 /rs/nns/                                @dfinity-lab/teams/nns-team @granstrom1
 /rs/orchestrator/                       @dfinity-lab/teams/orchestrator-owners
 /rs/p2p/                                @dfinity-lab/teams/networking-team
@@ -149,6 +150,7 @@
 /rs/rust_canisters/                     @dfinity-lab/teams/nns-team
 /rs/rust_canisters/memory_test/         @dfinity-lab/teams/execution-owners
 /rs/scenario_tests/                     @dfinity-lab/teams/ic-testing-verification
+/rs/sns/                                @dfinity-lab/teams/nns-team
 /rs/state_layout/                       @dfinity-lab/teams/execution-owners @dfinity-lab/teams/message-routing-owners
 /rs/state_machine_tests/                @dfinity-lab/teams/message-routing-owners
 /rs/state_manager/                      @dfinity-lab/teams/execution-owners @dfinity-lab/teams/message-routing-owners
