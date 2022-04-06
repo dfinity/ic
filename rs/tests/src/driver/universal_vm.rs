@@ -1,18 +1,19 @@
-use super::driver_setup::{
-    FARM_BASE_URL, FARM_GROUP_NAME, SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
-};
+use super::driver_setup::{FARM_BASE_URL, FARM_GROUP_NAME, SSH_AUTHORIZED_PUB_KEYS_DIR};
 use super::farm::Farm;
 use super::ic::VmResources;
 use super::resource::AllocatedVm;
 use super::resource::{allocate_resources, get_resource_request_for_universal_vm, DiskImage};
 use super::test_env::TestEnv;
-use super::test_env_api::{retry, RETRY_BACKOFF, RETRY_TIMEOUT};
+use super::test_env_api::{
+    get_ssh_session_from_env, retry, RetrieveIpv4Addr, SshSession, ADMIN, RETRY_BACKOFF,
+    RETRY_TIMEOUT,
+};
 use anyhow::{bail, Result};
 use slog::info;
 use ssh2::Session;
 use std::fs::{self, File};
 use std::io::{Read, Write};
-use std::net::{Ipv4Addr, TcpStream};
+use std::net::{IpAddr, Ipv4Addr};
 use std::os::unix::prelude::PermissionsExt;
 use std::path::PathBuf;
 use std::process::Command;
@@ -32,7 +33,6 @@ const CONF_IMG_FNAME: &str = "config_disk.img.zst";
 
 const CONFIG_DIR_NAME: &str = "config";
 const CONFIG_DIR_SSH_AUTHORIZED_KEYS_DIR: &str = "ssh-authorized-keys";
-const ADMIN_USER: &str = "admin";
 
 impl UniversalVm {
     pub fn new(name: String) -> Self {
@@ -163,8 +163,8 @@ fn setup_ssh(env: &TestEnv, config_dir: PathBuf) -> Result<()> {
     let config_dir_ssh_dir = config_dir.join(CONFIG_DIR_SSH_AUTHORIZED_KEYS_DIR);
     fs::create_dir_all(config_dir_ssh_dir.clone())?;
     fs::copy(
-        ssh_authorized_pub_keys_dir.join(ADMIN_USER),
-        config_dir_ssh_dir.join(ADMIN_USER),
+        ssh_authorized_pub_keys_dir.join(ADMIN),
+        config_dir_ssh_dir.join(ADMIN),
     )?;
     Ok(())
 }
@@ -179,29 +179,24 @@ impl DeployedUniversalVm {
         let p: PathBuf = [UNIVERSAL_VMS_DIR, &self.name].iter().collect();
         self.env.read_object(p.join("vm.json"))
     }
+}
 
-    pub fn get_ssh_session(&self) -> Result<Session> {
+impl SshSession for DeployedUniversalVm {
+    fn get_ssh_session(&self, user: &str) -> Result<Session> {
         let vm = self.get_vm()?;
-        let tcp = TcpStream::connect((vm.ipv6, 22))?;
-        let mut sess = Session::new().unwrap();
-        sess.set_tcp_stream(tcp);
-        sess.handshake().unwrap();
-        let admin_priv_key_path = self
-            .env
-            .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
-            .join(ADMIN_USER);
-        sess.userauth_pubkey_file(ADMIN_USER, None, admin_priv_key_path.as_path(), None)?;
-        Ok(sess)
+        get_ssh_session_from_env(&self.env, user, IpAddr::V6(vm.ipv6))
     }
 
-    pub fn await_ssh_session(&self) -> Result<Session> {
+    fn block_on_ssh_session(&self, user: &str) -> Result<Session> {
         retry(self.env.logger(), RETRY_TIMEOUT, RETRY_BACKOFF, || {
-            self.get_ssh_session()
+            self.get_ssh_session(user)
         })
     }
+}
 
-    pub fn await_ipv4(&self) -> Result<Ipv4Addr> {
-        let sess = self.await_ssh_session()?;
+impl RetrieveIpv4Addr for DeployedUniversalVm {
+    fn block_on_ipv4(&self) -> Result<Ipv4Addr> {
+        let sess = self.block_on_ssh_session(ADMIN)?;
         let mut channel = sess.channel_session()?;
         channel.exec("bash").unwrap();
 

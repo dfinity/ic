@@ -11,7 +11,7 @@ use crate::util::{self /* runtime_from_url */};
 // use dfn_candid::candid;
 use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{DefaultIC, HasPublicApiUrl, IcNodeContainer};
+use crate::driver::test_env_api::{DefaultIC, HasPublicApiUrl, IcNodeContainer, SshSession, ADMIN};
 use crate::driver::universal_vm::UniversalVms;
 use crate::{
     driver::ic::{InternetComputer, Subnet},
@@ -73,7 +73,7 @@ pub fn test(env: TestEnv, logger: Logger) {
         "Executing the uname -a command on the universal VM via SSH..."
     );
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
-    let sess = deployed_universal_vm.await_ssh_session().unwrap();
+    let sess = deployed_universal_vm.block_on_ssh_session(ADMIN).unwrap();
     let mut channel = sess.channel_session().unwrap();
     channel.exec("uname -a").unwrap();
     let mut s = String::new();

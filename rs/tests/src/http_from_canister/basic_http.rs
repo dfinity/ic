@@ -29,7 +29,7 @@ use crate::util::{self /* runtime_from_url */};
 // use dfn_candid::candid;
 use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{DefaultIC, HasPublicApiUrl, IcNodeContainer};
+use crate::driver::test_env_api::{DefaultIC, HasPublicApiUrl, IcNodeContainer, RetrieveIpv4Addr};
 use crate::driver::universal_vm::UniversalVms;
 use crate::util::UniversalCanister;
 use crate::{
@@ -44,12 +44,13 @@ const UNIVERSAL_VM_NAME: &str = "webserver";
 
 pub fn config(env: TestEnv) {
     let activate_script = r#"#!/bin/sh
-        docker run \
-        -it --rm -d \
-        -p 80:80 \
-        --name web \
-        -v /config/web-root:/usr/share/nginx/html \
-        nginx"#;
+docker run \
+  -it --rm -d \
+  -p 80:80 \
+  --name web \
+  -v /config/web-root:/usr/share/nginx/html \
+  nginx
+"#;
     let config_dir = env
         .single_activate_script_config_dir(UNIVERSAL_VM_NAME, activate_script)
         .unwrap();
@@ -102,7 +103,7 @@ pub fn test(env: TestEnv, logger: Logger) {
     let webserver_ipv6: Ipv6Addr = universal_vm.ipv6;
     info!(&logger, "Webserver has IPv6 {:?}", webserver_ipv6);
 
-    let webserver_ipv4 = deployed_universal_vm.await_ipv4().unwrap();
+    let webserver_ipv4 = deployed_universal_vm.block_on_ipv4().unwrap();
     info!(&logger, "Webserver has IPv4 {:?}", webserver_ipv4);
 
     // TODO: adapt the test below to use the env directly
