@@ -6,6 +6,7 @@ package types.v1;
 import "bitcoin/v1/bitcoin.proto";
 import "types/v1/types.proto";
 import "types/v1/dkg.proto";
+import "types/v1/ecdsa.proto";
 import "messaging/xnet/v1/certified_stream_slice.proto";
 
 message CatchUpPackage {
@@ -36,6 +37,8 @@ message Block {
 	IngressPayload ingress_payload = 9;
 	XNetPayload xnet_payload = 10;
 	SelfValidatingPayload self_validating_payload = 12;
+	// Only present in summary blocks
+	EcdsaSummaryPayload ecdsa_summary = 13;
 	bytes payload_hash = 11;
 }
 

@@ -90,14 +90,14 @@ impl TryFrom<ExtendedDerivationPathProto> for ExtendedDerivationPath {
 }
 
 // ----- Conversion helpers.
-fn idkg_transcript_id_proto(idkg_transcript_id: &IDkgTranscriptId) -> IDkgTranscriptIdProto {
+pub fn idkg_transcript_id_proto(idkg_transcript_id: &IDkgTranscriptId) -> IDkgTranscriptIdProto {
     IDkgTranscriptIdProto {
         id: idkg_transcript_id.id() as u64,
         subnet_id: Some(subnet_id_into_protobuf(*idkg_transcript_id.subnet())),
     }
 }
 
-fn idkg_transcript_id_struct(
+pub fn idkg_transcript_id_struct(
     maybe_proto: &Option<IDkgTranscriptIdProto>,
 ) -> Result<IDkgTranscriptId, InitialIDkgDealingsValidationError> {
     let proto =
@@ -285,7 +285,7 @@ fn idkg_transcript_params_struct(
     Ok(params)
 }
 
-fn idkg_transcript_proto(idkg_transcript: &IDkgTranscript) -> IDkgTranscriptProto {
+pub fn idkg_transcript_proto(idkg_transcript: &IDkgTranscript) -> IDkgTranscriptProto {
     let verified_dealings = idkg_transcript
         .verified_dealings
         .iter()
@@ -310,7 +310,7 @@ fn idkg_transcript_proto(idkg_transcript: &IDkgTranscript) -> IDkgTranscriptProt
     }
 }
 
-fn idkg_transcript_struct(
+pub fn idkg_transcript_struct(
     proto: &IDkgTranscriptProto,
 ) -> Result<IDkgTranscript, InitialIDkgDealingsValidationError> {
     let transcript_id = idkg_transcript_id_struct(&proto.transcript_id)?;
@@ -344,7 +344,7 @@ fn idkg_transcript_struct(
     })
 }
 
-fn idkg_dealing_tuple_proto(
+pub fn idkg_dealing_tuple_proto(
     dealer_id: &NodeId,
     idkg_dealing: &IDkgDealing,
 ) -> IDkgDealingTupleProto {
@@ -378,7 +378,7 @@ fn verified_idkg_dealing_proto(
     }
 }
 
-fn idkg_dealing_struct(
+pub fn idkg_dealing_struct(
     maybe_proto: &Option<IDkgDealingTupleProto>,
 ) -> Result<IDkgDealing, InitialIDkgDealingsValidationError> {
     let proto =
