@@ -17,7 +17,7 @@ use dfn_candid::CandidOne;
 use dfn_protobuf::{ProtoBuf, ToProto};
 use ic_canister_client::{Agent, HttpClient, Sender};
 use ic_nns_governance::pb::v1::manage_neuron_response::{
-    DisburseResponse, MergeMaturityResponse, SpawnResponse,
+    DisburseResponse, FollowResponse, MergeMaturityResponse, SpawnResponse,
 };
 use ic_nns_governance::pb::v1::{
     claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshResult,
@@ -1022,6 +1022,31 @@ impl LedgerClient {
                                                                 return Ok(Ok(Some(output)));
                                                             }
                                                         };
+                                                    }
+                                                    RequestType::Follow { .. } => {
+                                                        let response: ManageNeuronResponse =
+                                                            candid::decode_one(bytes.as_ref())
+                                                                .map_err(|err| {
+                                                                    format!(
+                                                                        "Could not decode FOLLOW response: {}",
+                                                                        err
+                                                                    )
+                                                                })?;
+                                                        match &response.command {
+                                                            Some(manage_neuron_response::Command::Follow(FollowResponse{ .. })) => {
+                                                                return Ok(Ok(None));
+                                                            }
+                                                            Some(manage_neuron_response::Command::Error(err)) => {
+                                                                return Ok(Err(ApiError::TransactionRejected(
+                                                                    false,
+                                                                    format!("Could not follow: {}",err).into()
+                                                                )));
+                                                            }
+                                                            _ => panic!(
+                                                                "unexpected follow result: {:?}",
+                                                                response.command
+                                                            ),
+                                                        }
                                                     }
                                                 }
                                             }

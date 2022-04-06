@@ -37,6 +37,7 @@ pub const REMOVE_HOTKEY: &str = "REMOVE_HOTKEY";
 pub const SPAWN: &str = "SPAWN";
 pub const MERGE_MATURITY: &str = "MERGE_MATURITY";
 pub const NEURON_INFO: &str = "NEURON_INFO";
+pub const FOLLOW: &str = "FOLLOW";
 
 /// `RequestType` contains all supported values of `Operation.type`.
 /// Extra information, such as `neuron_index` should only be included
@@ -80,6 +81,12 @@ pub enum RequestType {
         neuron_index: u64,
         controller: Option<PublicKeyOrPrincipal>,
     },
+    #[serde(rename = "FOLLOW")]
+    #[serde(alias = "Follow")]
+    Follow {
+        neuron_index: u64,
+        controller: Option<PublicKeyOrPrincipal>,
+    },
 }
 
 impl RequestType {
@@ -96,6 +103,7 @@ impl RequestType {
             RequestType::Spawn { .. } => SPAWN,
             RequestType::MergeMaturity { .. } => MERGE_MATURITY,
             RequestType::NeuronInfo { .. } => NEURON_INFO,
+            RequestType::Follow { .. } => FOLLOW,
         }
     }
 
@@ -116,6 +124,7 @@ impl RequestType {
                 | RequestType::Spawn { .. }
                 | RequestType::MergeMaturity { .. }
                 | RequestType::NeuronInfo { .. }
+                | RequestType::Follow { .. }
         )
     }
 }
@@ -426,6 +435,8 @@ pub enum Request {
     MergeMaturity(MergeMaturity),
     #[serde(rename = "NEURON_INFO")]
     NeuronInfo(NeuronInfo),
+    #[serde(rename = "FOLLOW")]
+    Follow(Follow),
 }
 
 impl Request {
@@ -483,6 +494,14 @@ impl Request {
                 neuron_index: *neuron_index,
                 controller: controller.map(|pid| PublicKeyOrPrincipal::Principal(pid)),
             }),
+            Request::Follow(Follow {
+                neuron_index,
+                controller,
+                ..
+            }) => Ok(RequestType::Follow {
+                neuron_index: *neuron_index,
+                controller: controller.map(|pid| PublicKeyOrPrincipal::Principal(pid)),
+            }),
         }
     }
 
@@ -508,6 +527,7 @@ impl Request {
                 Request::Spawn(o) => builder.spawn(o),
                 Request::MergeMaturity(o) => builder.merge_maturity(o),
                 Request::NeuronInfo(o) => builder.neuron_info(o),
+                Request::Follow(o) => builder.follow(o),
             };
         }
         Ok(builder.build())
@@ -530,6 +550,7 @@ impl Request {
                 | Request::Spawn(_)
                 | Request::MergeMaturity(_)
                 | Request::NeuronInfo(_) // not neuron management but we need it signed.
+                | Request::Follow(_)
         )
     }
 }
@@ -739,6 +760,38 @@ impl TryFrom<&models::Request> for Request {
                     Some(Err(e)) => Err(e),
                 }
             }
+            RequestType::Follow {
+                neuron_index,
+                controller,
+            } => {
+                if let Some(Command::Follow(manage_neuron::Follow { topic, followees })) =
+                    manage_neuron()?
+                {
+                    let ids = followees.iter().map(|n| n.id).collect();
+                    match controller
+                        .clone()
+                        .map(|pkp| principal_id_from_public_key_or_principal(pkp))
+                    {
+                        None => Ok(Request::Follow(Follow {
+                            account,
+                            topic,
+                            followees: ids,
+                            controller: None,
+                            neuron_index: *neuron_index,
+                        })),
+                        Some(Ok(pid)) => Ok(Request::Follow(Follow {
+                            account,
+                            topic,
+                            followees: ids,
+                            controller: Some(pid),
+                            neuron_index: *neuron_index,
+                        })),
+                        Some(Err(e)) => Err(e),
+                    }
+                } else {
+                    Err(ApiError::invalid_request("Invalid follow request."))
+                }
+            }
         }
     }
 }
@@ -885,6 +938,16 @@ pub struct MergeMaturity {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct NeuronInfo {
     pub account: ledger_canister::AccountIdentifier,
+    pub controller: Option<PrincipalId>,
+    #[serde(default)]
+    pub neuron_index: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct Follow {
+    pub account: ledger_canister::AccountIdentifier,
+    pub topic: i32,
+    pub followees: Vec<u64>,
     pub controller: Option<PrincipalId>,
     #[serde(default)]
     pub neuron_index: u64,
@@ -1179,6 +1242,36 @@ impl TryFrom<Option<Object>> for NeuronInfoMetadata {
 
 impl From<NeuronInfoMetadata> for Object {
     fn from(m: NeuronInfoMetadata) -> Self {
+        match serde_json::to_value(m) {
+            Ok(Value::Object(o)) => o,
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+pub struct FollowMetadata {
+    pub topic: i32,
+    pub followees: Vec<u64>,
+    pub controller: Option<PrincipalId>,
+    #[serde(default)]
+    pub neuron_index: u64,
+}
+
+impl TryFrom<Option<Object>> for FollowMetadata {
+    type Error = ApiError;
+    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+        serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
+            ApiError::internal_error(format!(
+                "Could not parse a `neuron_index` from metadata JSON object: {}",
+                e
+            ))
+        })
+    }
+}
+
+impl From<FollowMetadata> for Object {
+    fn from(m: FollowMetadata) -> Self {
         match serde_json::to_value(m) {
             Ok(Value::Object(o)) => o,
             _ => unreachable!(),
@@ -1530,6 +1623,35 @@ impl TransactionBuilder {
             coin_change: None,
             metadata: Some(
                 NeuronInfoMetadata {
+                    controller: *controller,
+                    neuron_index: *neuron_index,
+                }
+                .into(),
+            ),
+        });
+    }
+
+    pub fn follow(&mut self, follow: &Follow) {
+        let Follow {
+            account,
+            topic,
+            followees,
+            controller,
+            neuron_index,
+        } = follow;
+        let operation_identifier = self.allocate_op_id();
+        self.ops.push(Operation {
+            operation_identifier,
+            _type: OperationType::Follow,
+            status: None,
+            account: Some(to_model_account_identifier(account)),
+            amount: None,
+            related_operations: None,
+            coin_change: None,
+            metadata: Some(
+                FollowMetadata {
+                    topic: *topic,
+                    followees: followees.clone(),
                     controller: *controller,
                     neuron_index: *neuron_index,
                 }

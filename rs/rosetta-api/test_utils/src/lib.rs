@@ -9,7 +9,7 @@ use ic_rosetta_api::models::{
 };
 use ic_rosetta_api::models::{ConstructionSubmitResponse, Error as RosettaError};
 use ic_rosetta_api::request_types::{
-    AddHotKey, Disburse, MergeMaturity, NeuronInfo, RemoveHotKey, Request, RequestResult,
+    AddHotKey, Disburse, Follow, MergeMaturity, NeuronInfo, RemoveHotKey, Request, RequestResult,
     SetDissolveTimestamp, Spawn, Stake, StartDissolve, StopDissolve, TransactionOperationResults,
     TransactionResults,
 };
@@ -117,7 +117,8 @@ pub async fn prepare_multiple_txn(
             | Request::Disburse(Disburse { account, .. })
             | Request::Spawn(Spawn { account, .. })
             | Request::MergeMaturity(MergeMaturity { account, .. })
-            | Request::NeuronInfo(NeuronInfo { account, .. }) => {
+            | Request::NeuronInfo(NeuronInfo { account, .. })
+            | Request::Follow(Follow { account, .. }) => {
                 all_sender_account_ids.push(to_model_account_identifier(&account));
             }
             Request::Transfer(Operation::Burn { .. }) => {

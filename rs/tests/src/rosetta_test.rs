@@ -41,9 +41,9 @@ use ic_rosetta_api::convert::{
     neuron_subaccount_bytes_from_public_key, to_hex, to_model_account_identifier,
 };
 use ic_rosetta_api::request_types::{
-    AddHotKey, Disburse, MergeMaturity, NeuronInfo as NeuronInfoRequest, PublicKeyOrPrincipal,
-    RemoveHotKey, Request, RequestResult, SetDissolveTimestamp, Spawn, Stake, StartDissolve,
-    Status, StopDissolve,
+    AddHotKey, Disburse, Follow, MergeMaturity, NeuronInfo as NeuronInfoRequest,
+    PublicKeyOrPrincipal, RemoveHotKey, Request, RequestResult, SetDissolveTimestamp, Spawn, Stake,
+    StartDissolve, Status, StopDissolve,
 };
 use ic_rosetta_test_utils::{
     acc_id, assert_canister_error, assert_ic_error, do_multiple_txn, do_multiple_txn_external,
@@ -304,6 +304,33 @@ pub fn test_everything(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             );
             neuron.maturity_e8s_equivalent = 678_000_000;
             neuron.kyc_verified = true;
+        },
+    );
+
+    neuron_tests.add(
+        &mut ledger_balances,
+        "Test follow",
+        rand::random(),
+        |neuron| {
+            neuron.maturity_e8s_equivalent = 300_000_000;
+        },
+    );
+
+    neuron_tests.add(
+        &mut ledger_balances,
+        "Test follow with hotkey",
+        rand::random(),
+        |neuron| {
+            neuron.maturity_e8s_equivalent = 300_000_000;
+        },
+    );
+
+    neuron_tests.add(
+        &mut ledger_balances,
+        "Test follow too many",
+        rand::random(),
+        |neuron| {
+            neuron.maturity_e8s_equivalent = 300_000_000;
         },
     );
 
@@ -593,6 +620,14 @@ pub fn test_everything(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         test_neuron_info(&rosetta_api_serv, &ledger_for_governance, neuron_info).await;
         let neuron_info= neuron_tests.get_neuron_for_test("Test get neuron info with hotkey");
         test_neuron_info_with_hotkey(&rosetta_api_serv, &ledger_for_governance, neuron_info).await;
+
+        // Follow.
+        let neuron_info = neuron_tests.get_neuron_for_test("Test follow");
+        test_follow(&rosetta_api_serv, &ledger_for_governance, neuron_info).await;
+        let neuron_info = neuron_tests.get_neuron_for_test("Test follow with hotkey");
+        test_follow_with_hotkey(&rosetta_api_serv, &ledger_for_governance, neuron_info).await;
+        let neuron_info = neuron_tests.get_neuron_for_test("Test follow too many");
+        test_follow_too_many(&rosetta_api_serv, &ledger_for_governance, neuron_info).await;
 
         info!(&ctx.logger, "Test staking");
         let _ = test_staking(&rosetta_api_serv, acc_b, Arc::clone(&kp_b)).await;
@@ -2702,6 +2737,211 @@ async fn test_neuron_info_with_hotkey(
             .as_str()
             .unwrap()
     );
+}
+
+async fn test_follow(ros: &RosettaApiHandle, _ledger: &Canister<'_>, neuron_info: NeuronInfo) {
+    // Create neurons to follow (f1 and f2).
+    let f1 = create_neuron(1001);
+    let f2 = create_neuron(1002);
+
+    let acc = neuron_info.account_id;
+    let neuron_index = neuron_info.neuron_subaccount_identifier;
+    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.into();
+    let _expected_type = "FOLLOW".to_string();
+    let res = do_multiple_txn_external(
+        ros,
+        &[RequestInfo {
+            request: Request::Follow(Follow {
+                account: acc,
+                topic: 0, // 0 is "Unspecified" topic.
+                followees: vec![f1.id.unwrap().id, f2.id.unwrap().id],
+                controller: None,
+                neuron_index,
+            }),
+            sender_keypair: Arc::clone(&key_pair),
+        }],
+        false,
+        Some(one_day_from_now_nanos()),
+        None,
+    )
+    .await
+    .map(|(tx_id, results, _)| {
+        assert!(!tx_id.is_transfer());
+        assert!(matches!(
+            results
+                .operations
+                .first()
+                .expect("Expected one follow operation."),
+            ic_rosetta_api::models::Operation {
+                _type: _expected_type,
+                ..
+            }
+        ));
+        results
+    })
+    .expect("Failed to follow");
+
+    assert_eq!(1, res.operations.len());
+    let status = res
+        .operations
+        .get(0)
+        .unwrap()
+        .status
+        .as_ref()
+        .expect("Status expected");
+    assert_eq!(status, "COMPLETED");
+}
+
+async fn test_follow_with_hotkey(
+    ros: &RosettaApiHandle,
+    _ledger: &Canister<'_>,
+    neuron_info: NeuronInfo,
+) {
+    // Create neurons to follow (f1 and f2).
+    let f1 = create_neuron(1001);
+    let f2 = create_neuron(1002);
+
+    let acc = neuron_info.account_id;
+    let neuron_index = neuron_info.neuron_subaccount_identifier;
+    let neuron_controller = neuron_info.principal_id;
+    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.into();
+
+    // Add hotkey.
+    let (hotkey_acc, hotkey_keypair, hotkey_pk, _) = make_user(5010);
+    do_multiple_txn(
+        ros,
+        &[RequestInfo {
+            request: Request::AddHotKey(AddHotKey {
+                account: acc,
+                neuron_index,
+                key: PublicKeyOrPrincipal::PublicKey(hotkey_pk),
+            }),
+            sender_keypair: Arc::clone(&key_pair),
+        }],
+        false,
+        Some(one_day_from_now_nanos()),
+        None,
+    )
+    .await
+    .map(|(tx_id, results, _)| {
+        assert!(!tx_id.is_transfer());
+        assert!(matches!(
+            results.operations.first().unwrap(),
+            RequestResult {
+                _type: Request::AddHotKey(_),
+                ..
+            }
+        ));
+    })
+    .expect("Error while adding hotkey.");
+    let hotkey_keypair: Arc<EdKeypair> = hotkey_keypair.into();
+    println!("Added hotkey for neuron management");
+
+    // Follow.
+    let _expected_type = "FOLLOW".to_string();
+    let res = do_multiple_txn_external(
+        ros,
+        &[RequestInfo {
+            request: Request::Follow(Follow {
+                account: hotkey_acc,
+                topic: 0, // 0 is "Unspecified" topic.
+                followees: vec![f1.id.unwrap().id, f2.id.unwrap().id],
+                controller: Some(neuron_controller),
+                neuron_index,
+            }),
+            sender_keypair: Arc::clone(&hotkey_keypair),
+        }],
+        false,
+        Some(one_day_from_now_nanos()),
+        None,
+    )
+    .await
+    .map(|(tx_id, results, _)| {
+        assert!(!tx_id.is_transfer());
+        assert!(matches!(
+            results
+                .operations
+                .first()
+                .expect("Expected one follow operation."),
+            ic_rosetta_api::models::Operation {
+                _type: _expected_type,
+                ..
+            }
+        ));
+        results
+    })
+    .expect("Failed to follow");
+
+    assert_eq!(1, res.operations.len());
+    let status = res
+        .operations
+        .get(0)
+        .unwrap()
+        .status
+        .as_ref()
+        .expect("Status expected");
+    assert_eq!(status, "COMPLETED");
+}
+
+/// Test adding too many followees (max allowed by governance is 15).
+async fn test_follow_too_many(
+    ros: &RosettaApiHandle,
+    _ledger: &Canister<'_>,
+    neuron_info: NeuronInfo,
+) {
+    let acc = neuron_info.account_id;
+    let neuron_index = neuron_info.neuron_subaccount_identifier;
+    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.into();
+    let _expected_type = "FOLLOW".to_string();
+    let mut followees = Vec::new();
+    for i in 0..16 {
+        followees.push(create_neuron(1000 + i).id.unwrap().id);
+    }
+    let res = do_multiple_txn_external(
+        ros,
+        &[RequestInfo {
+            request: Request::Follow(Follow {
+                account: acc,
+                topic: 0, // 0 is "Unspecified" topic.
+                followees,
+                controller: None,
+                neuron_index,
+            }),
+            sender_keypair: Arc::clone(&key_pair),
+        }],
+        false,
+        Some(one_day_from_now_nanos()),
+        None,
+    )
+    .await;
+    assert!(
+        res.is_err(),
+        "Expecting an error while following too many neurons (16 followed while limit is 15)."
+    );
+    let res = res.unwrap_err();
+    assert_eq!(res.code, 770);
+    assert_eq!(res.message, "Operation failed");
+}
+
+// Create neurons to follow.
+fn create_neuron(id: u64) -> Neuron {
+    let (_, _, pk, pid) = make_user(10_000 + id);
+    let created_timestamp_seconds = (SystemTime::now().duration_since(UNIX_EPOCH).unwrap()
+        - Duration::from_secs(60 * 60 * 24 * 365))
+    .as_secs();
+    Neuron {
+        id: Some(NeuronId { id }),
+        account: neuron_subaccount_bytes_from_public_key(&pk, rand::random())
+            .unwrap()
+            .to_vec(),
+        controller: Some(pid),
+        created_timestamp_seconds,
+        aging_since_timestamp_seconds: created_timestamp_seconds + 10,
+        dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+        cached_neuron_stake_e8s: Tokens::new(10, 0).unwrap().get_e8s(),
+        kyc_verified: true,
+        ..Default::default()
+    }
 }
 
 fn rosetta_cli_construction_check(conf_file: &str) {
