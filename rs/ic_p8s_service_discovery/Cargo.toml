@@ -14,7 +14,7 @@ gflags = "0.3.7"
 gflags-derive = "0.1"
 humantime = "2.0"
 humantime-serde = "1.0"
-hyper = { version ="0.14.16", features = ["full"] }
+hyper = { version ="0.14.18", features = ["full"] }
 ic-async-utils = { path = "../async_utils" }
 ic-config = { path = "../config" }
 ic-interfaces = { path = "../interfaces" }
