@@ -71,7 +71,8 @@ impl TransactionIdentifier {
             | RequestType::RemoveHotKey { .. }
             | RequestType::Spawn { .. }
             | RequestType::MergeMaturity { .. }
-            | RequestType::NeuronInfo { .. } => {
+            | RequestType::NeuronInfo { .. }
+            | RequestType::Follow { .. } => {
                 // Unfortunately, staking operations don't really have a transaction ID
                 Ok(TransactionIdentifier {
                     hash: NEURON_MANAGEMENT_PSEUDO_HASH.to_string(),

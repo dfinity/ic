@@ -170,7 +170,8 @@ If you do specify the `neuron_index`, its value must be the same as you used to 
         "status": "COMPLETED",
         "account": { "address": "907ff6c714a545110b42982b72aa39c5b7742d610e234a9d40bf8cf624e7a70d" },
         "metadata": {
-          "neuron_index": 0
+          "neuron_index": 0,
+          "neuron_id": 18089972080608815000
         }
       }
     ]
@@ -494,6 +495,94 @@ The percentage of maturity to merge can be specified, otherwise the entire matur
 
 NOTE: `percentage_to_merge` metadata field is optional and equal to 100 by default.
 If specified, the value must be an integer between 1 and 100 (bounds included).
+
+=== Follow neurons
+
+[cols="1,1"]
+|===
+| Since version
+| 1.5.0
+
+| Idempotent?
+| yes
+
+| Minimal access level
+| hotkey
+|===
+
+The `FOLLOW` operation sets a follow rule for a neuron.
+The Governance canister smart contract will automatically deduce the vote of the following neurons from the votes of the followees during the voting.
+
+The `followees` metadata field contains the list of neurons to follow.
+If the list contains more than one neuron, the neuron will vote according to the majority of followed neurons votes (or abstain in case of draw).
+If the list is empty, the rule for this topic will be discarded (i.e., the neuron will not follow any other neuron for proposals of this type).
+
+You can restrict the rule to a specific topic by specifying the `topic` metadata field.
+The topic is an integer between 0 and 10 (inclusive).
+The default value for the `topic` field is 0.
+Each topic can have at most one rule associated with it.
+The topic codes are listed below.
+
+0:: Undefined (all topics).
+1:: Neuron management.
+2:: Exchange rate.
+3:: Network economics.
+4:: Governance.
+5:: Node administration.
+6:: Participant management.
+7:: Subnet management.
+8:: Network canister management.
+9:: KYC.
+10:: Node provider rewards.
+
+
+.Preconditions
+* `account.address` is the ledger address of the neuron controller or hotkey.
+* `metadata.followees` contains an array of valid neuron identifiers.
+* `metadata.topic` is a valid topic identifier.
+
+.Postconditions
+* Neuron votes according to specified follow rule.
+
+.Calling `FOLLOW` as a controller.
+[source,json]
+----
+{
+  "operation_identifier": { "index": 0 },
+  "type": "FOLLOW",
+  "account": { "address": "907ff6c714a545110b42982b72aa39c5b7742d610e234a9d40bf8cf624e7a70d" },
+  "metadata": {
+    "topic": 0,
+    "followees": [4169717477823915596, 7814871076665269296],
+    "neuron_index": 0
+  }
+}
+----
+
+.Calling `FOLLOW` with a hotkey.
+[source,json]
+----
+{
+  "operation_identifier": { "index": 0 },
+  "type": "FOLLOW",
+  "account": { "address": "8af54f1fa09faeca18d294e0787346264f9f1d6189ed20ff14f029a160b787e8" },
+  "metadata": {
+    "topic": 0,
+    "followees": [4169717477823915596, 7814871076665269296],
+    "neuron_index": 0,
+    "controller": {
+      "hex_bytes": "ba5242d02642aede88a5f9fe82482a9fd0b6dc25f38c729253116c6865384a9d",
+      "curve_type": "edwards25519"
+    }
+  }
+}
+----
+
+[NOTE]
+====
+The `followees` metadata field contains list of unique neuron identifiers assigned by the Governance canister smart contract, not the list of neuron indices chosen by the caller.
+You can obtain unique neuron identifiers of you your neurons from the `neuron_id` metadata field of the `STAKE` and `NEURON_INFO` operations.
+====
 
 == Accessing neuron attributes
 

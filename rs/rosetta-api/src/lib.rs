@@ -12,14 +12,13 @@ pub mod transaction_id;
 
 use crate::convert::{
     account_from_public_key, from_arg, from_hex, from_model_account_identifier, from_public_key,
-    make_read_state_from_update, neuron_account_from_public_key,
-    neuron_subaccount_bytes_from_public_key, principal_id_from_public_key,
+    make_read_state_from_update, neuron_account_from_public_key, principal_id_from_public_key,
     principal_id_from_public_key_or_principal, to_model_account_identifier,
 };
 use crate::ledger_client::LedgerAccess;
 use crate::request_types::{
-    AddHotKey, Disburse, MergeMaturity, NeuronInfo, PublicKeyOrPrincipal, RemoveHotKey, Request,
-    RequestType, SetDissolveTimestamp, Spawn, Stake, StartDissolve, StopDissolve,
+    AddHotKey, Disburse, Follow, MergeMaturity, NeuronInfo, PublicKeyOrPrincipal, RemoveHotKey,
+    Request, RequestType, SetDissolveTimestamp, Spawn, Stake, StartDissolve, StopDissolve,
     TransactionOperationResults,
 };
 use crate::store::HashedBlock;
@@ -726,7 +725,6 @@ impl RosettaRequestHandler {
                         ));
                     }
                 }
-
                 RequestType::MergeMaturity { neuron_index } => {
                     let manage: ManageNeuron = candid::decode_one(arg.0.as_ref()).map_err(|e| {
                         ApiError::internal_error(format!(
@@ -749,7 +747,6 @@ impl RosettaRequestHandler {
                         ));
                     }
                 }
-
                 RequestType::NeuronInfo {
                     neuron_index,
                     controller,
@@ -783,6 +780,52 @@ impl RosettaRequestHandler {
                         _ => {
                             return Err(ApiError::invalid_request("Invalid neuron info request."));
                         }
+                    }
+                }
+                RequestType::Follow {
+                    neuron_index,
+                    controller,
+                } => {
+                    let manage: ManageNeuron = candid::decode_one(arg.0.as_ref()).map_err(|e| {
+                        ApiError::internal_error(format!(
+                            "Could not decode ManageNeuron argument: {}",
+                            e
+                        ))
+                    })?;
+                    if let Some(Command::Follow(manage_neuron::Follow { topic, followees })) =
+                        manage.command
+                    {
+                        let ids = followees.iter().map(|x| x.id).collect();
+                        match controller
+                            .clone()
+                            .map(|pkp| principal_id_from_public_key_or_principal(pkp))
+                        {
+                            None => {
+                                requests.push(Request::Follow(Follow {
+                                    account: from,
+                                    topic,
+                                    followees: ids,
+                                    controller: None,
+                                    neuron_index,
+                                }));
+                            }
+                            Some(Ok(pid)) => {
+                                requests.push(Request::Follow(Follow {
+                                    account: from,
+                                    topic,
+                                    followees: ids,
+                                    controller: Some(pid),
+                                    neuron_index,
+                                }));
+                            }
+                            _ => {
+                                return Err(ApiError::invalid_request("Invalid follow request."));
+                            }
+                        }
+                    } else {
+                        return Err(ApiError::internal_error(
+                            "Incompatible manage_neuron command".to_string(),
+                        ));
                     }
                 }
             }
@@ -903,22 +946,55 @@ impl RosettaRequestHandler {
             }
         }
 
+        // Process the neuron subaccount from controller or hotkey.
+        let neuron_subaccount = |account: ledger_canister::AccountIdentifier,
+                                 controller: Option<PrincipalId>,
+                                 neuron_index: u64|
+         -> [u8; 32] {
+            match controller {
+                Some(neuron_controller) => {
+                    // Hotkey (or any explicit controller).
+                    crate::convert::neuron_subaccount_bytes_from_principal(
+                        &neuron_controller,
+                        neuron_index,
+                    )
+                }
+                None => {
+                    // Default controller.
+                    let pk = pks_map
+                        .get(&account)
+                        .ok_or_else(|| {
+                            ApiError::internal_error(format!(
+                                "Cannot find public key for account {}",
+                                account,
+                            ))
+                        })
+                        .unwrap();
+                    crate::convert::neuron_subaccount_bytes_from_public_key(pk, neuron_index)
+                        .expect("Error while processing neuron subaccount")
+                }
+            }
+        };
+
         let add_neuron_management_payload =
             |request_type: RequestType,
              account: ledger_canister::AccountIdentifier,
+             controller: Option<PrincipalId>, // specify with hotkey.
              neuron_index: u64,
              command: Command,
              payloads: &mut Vec<SigningPayload>,
              updates: &mut Vec<(RequestType, HttpCanisterUpdate)>|
              -> Result<(), ApiError> {
+                let neuron_subaccount = neuron_subaccount(account, controller, neuron_index);
+
+                // In the case of an hotkey, account will be derived from the hotkey so
+                // we can use the same logic for controller or hotkey.
                 let pk = pks_map.get(&account).ok_or_else(|| {
                     ApiError::internal_error(format!(
-                        "Cannot find public key for account identifier {}",
+                        "Neuron management - Cannot find public key for account {}",
                         account,
                     ))
                 })?;
-
-                let neuron_subaccount = neuron_subaccount_bytes_from_public_key(pk, neuron_index)?;
 
                 let manage_neuron = ManageNeuron {
                     id: None,
@@ -963,28 +1039,7 @@ impl RosettaRequestHandler {
                     controller,
                     neuron_index,
                 }) => {
-                    let neuron_subaccount = match controller {
-                        Some(neuron_controller) => {
-                            // Hotkey (or any explicit controller).
-                            crate::convert::neuron_subaccount_bytes_from_principal(
-                                &neuron_controller,
-                                neuron_index,
-                            )
-                        }
-                        None => {
-                            // Default controller.
-                            let pk = pks_map.get(&account).ok_or_else(|| {
-                                ApiError::internal_error(format!(
-                                    "NeuronInfo - Cannot find public key for account {}",
-                                    account,
-                                ))
-                            })?;
-                            crate::convert::neuron_subaccount_bytes_from_public_key(
-                                pk,
-                                neuron_index,
-                            )?
-                        }
-                    };
+                    let neuron_subaccount = neuron_subaccount(account, controller, neuron_index);
 
                     // In the case of an hotkey, account will be derived from the hotkey so
                     // we can use the same logic for controller or hotkey.
@@ -1137,6 +1192,7 @@ impl RosettaRequestHandler {
                             RequestType::StopDissolve { neuron_index }
                         },
                         account,
+                        None,
                         neuron_index,
                         command,
                         &mut payloads,
@@ -1159,6 +1215,7 @@ impl RosettaRequestHandler {
                     add_neuron_management_payload(
                         RequestType::SetDissolveTimestamp { neuron_index },
                         account,
+                        None,
                         neuron_index,
                         command,
                         &mut payloads,
@@ -1184,6 +1241,7 @@ impl RosettaRequestHandler {
                     add_neuron_management_payload(
                         RequestType::AddHotKey { neuron_index },
                         account,
+                        None,
                         neuron_index,
                         command,
                         &mut payloads,
@@ -1209,6 +1267,7 @@ impl RosettaRequestHandler {
                     add_neuron_management_payload(
                         RequestType::RemoveHotKey { neuron_index },
                         account,
+                        None,
                         neuron_index,
                         command,
                         &mut payloads,
@@ -1231,6 +1290,7 @@ impl RosettaRequestHandler {
                     add_neuron_management_payload(
                         RequestType::Disburse { neuron_index },
                         account,
+                        None,
                         neuron_index,
                         command,
                         &mut payloads,
@@ -1262,6 +1322,7 @@ impl RosettaRequestHandler {
                     add_neuron_management_payload(
                         RequestType::Spawn { neuron_index },
                         account,
+                        None,
                         neuron_index,
                         command,
                         &mut payloads,
@@ -1279,6 +1340,32 @@ impl RosettaRequestHandler {
                     add_neuron_management_payload(
                         RequestType::MergeMaturity { neuron_index },
                         account,
+                        None,
+                        neuron_index,
+                        command,
+                        &mut payloads,
+                        &mut updates,
+                    )?;
+                }
+                Request::Follow(Follow {
+                    account,
+                    topic,
+                    followees,
+                    controller,
+                    neuron_index,
+                }) => {
+                    let nids = followees.iter().map(|id| NeuronId { id: *id }).collect();
+                    let command = Command::Follow(manage_neuron::Follow {
+                        topic,
+                        followees: nids,
+                    });
+                    add_neuron_management_payload(
+                        RequestType::Follow {
+                            neuron_index,
+                            controller: controller.map(|pid| PublicKeyOrPrincipal::Principal(pid)),
+                        },
+                        account,
+                        controller,
                         neuron_index,
                         command,
                         &mut payloads,
@@ -1326,7 +1413,8 @@ impl RosettaRequestHandler {
                     | Request::RemoveHotKey(RemoveHotKey { account, .. })
                     | Request::Spawn(Spawn { account, .. })
                     | Request::MergeMaturity(MergeMaturity { account, .. })
-                    | Request::NeuronInfo(NeuronInfo { account, .. }) => Ok(account),
+                    | Request::NeuronInfo(NeuronInfo { account, .. })
+                    | Request::Follow(Follow { account, .. }) => Ok(account),
                     Request::Transfer(Operation::Burn { .. }) => Err(ApiError::invalid_request(
                         "Burn operations are not supported through rosetta",
                     )),

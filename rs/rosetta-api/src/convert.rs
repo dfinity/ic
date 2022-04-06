@@ -4,11 +4,11 @@ use crate::models::{
     AccountIdentifier, Amount, BlockIdentifier, Currency, Operation, OperationType, Timestamp,
 };
 use crate::request_types::{
-    AddHotKey, Disburse, DisburseMetadata, KeyMetadata, MergeMaturity, MergeMaturityMetadata,
-    NeuronIdentifierMetadata, NeuronInfo, NeuronInfoMetadata, PublicKeyOrPrincipal, RemoveHotKey,
-    Request, RequestResult, RequestResultMetadata, SetDissolveTimestamp,
-    SetDissolveTimestampMetadata, Spawn, SpawnMetadata, Stake, StartDissolve, Status, StopDissolve,
-    TransactionOperationResults, TransactionResults, STATUS_COMPLETED,
+    AddHotKey, Disburse, DisburseMetadata, Follow, FollowMetadata, KeyMetadata, MergeMaturity,
+    MergeMaturityMetadata, NeuronIdentifierMetadata, NeuronInfo, NeuronInfoMetadata,
+    PublicKeyOrPrincipal, RemoveHotKey, Request, RequestResult, RequestResultMetadata,
+    SetDissolveTimestamp, SetDissolveTimestampMetadata, Spawn, SpawnMetadata, Stake, StartDissolve,
+    Status, StopDissolve, TransactionOperationResults, TransactionResults, STATUS_COMPLETED,
 };
 use crate::store::HashedBlock;
 use crate::time::Seconds;
@@ -336,6 +336,25 @@ impl State {
         }));
         Ok(())
     }
+
+    fn follow(
+        &mut self,
+        account: ledger_canister::AccountIdentifier,
+        controller: Option<PrincipalId>,
+        neuron_index: u64,
+        topic: i32,
+        followees: Vec<u64>,
+    ) -> Result<(), ApiError> {
+        self.flush()?;
+        self.actions.push(Request::Follow(Follow {
+            account,
+            topic,
+            followees,
+            controller,
+            neuron_index,
+        }));
+        Ok(())
+    }
 }
 
 pub fn from_operations(
@@ -491,6 +510,16 @@ pub fn from_operations(
             OperationType::Burn | OperationType::Mint => {
                 let msg = format!("Unsupported operation type: {}", o._type);
                 return Err(op_error(o, msg));
+            }
+            OperationType::Follow => {
+                let FollowMetadata {
+                    topic,
+                    followees,
+                    controller,
+                    neuron_index,
+                } = o.metadata.clone().try_into()?;
+                validate_neuron_management_op()?;
+                state.follow(account, controller, neuron_index, topic, followees)?;
             }
         }
     }

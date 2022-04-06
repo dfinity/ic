@@ -1481,6 +1481,9 @@ pub enum OperationType {
     #[serde(rename = "NEURON_INFO")]
     #[strum(serialize = "NEURON_INFO")]
     NeuronInfo,
+    #[serde(rename = "FOLLOW")]
+    #[strum(serialize = "FOLLOW")]
+    Follow,
 }
 
 /// Operations contain all balance-changing information within a transaction.
