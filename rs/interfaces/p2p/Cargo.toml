@@ -5,4 +5,4 @@ edition = "2018"
 
 [dependencies]
 ic-types = { path = "../../types/types" }
-tower = { version = "0.4.8", features = ["util", "buffer"] }
+tower = { version = "0.4.11", features = ["util", "buffer"] }

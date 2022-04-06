@@ -25,5 +25,5 @@ ic-transport = { path = "../../transport" }
 ic-types = { path = "../../types/types" }
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
 tokio = { version = "1.15.0", features = ["full"] }
-tower = { version = "0.4.8", features = ["load-shed", "buffer", "limit", "util"] }
+tower = { version = "0.4.11", features = ["load-shed", "buffer", "limit", "util"] }
 

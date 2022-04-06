@@ -65,7 +65,7 @@ thread_profiler = { version = "0.3", optional = true }
 tokio = { version = "1.15.0", features = ["full"] }
 tonic = "0.6.2"
 tracing = "0.1.13"
-tower = { version = "0.4.8", features = ["util"] }
+tower = { version = "0.4.11", features = ["util"] }
 
 [dev-dependencies]
 assert_cmd = "0.12"

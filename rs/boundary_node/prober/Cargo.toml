@@ -10,7 +10,7 @@ boundary-node-control-plane = { path = "../control_plane" }
 ed25519-dalek = "1.0.1"
 garcon = "0.2"
 gflags = "0.3.7"
-hyper = "0.14.5"
+hyper = "0.14.18"
 native-tls = "0.2.7"
 ic-utils = "0.11.1"
 ic-agent = "0.11.1"
