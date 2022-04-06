@@ -1,0 +1,16 @@
+[package]
+name = "ic-test-utilities-registry"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+ic-crypto = { path = "../../crypto" }
+ic-interfaces = { path = "../../interfaces" }
+ic-protobuf = { path = "../../protobuf" }
+ic-registry-client-fake = { path = "../../registry/fake" }
+ic-registry-keys = { path = "../../registry/keys" }
+ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-types = { path = "../../types/types" }
+mockall = "0.7.2"
+serde_cbor = "0.11.1"

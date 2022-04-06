@@ -1439,11 +1439,11 @@ pub mod test {
         crypto::CryptoReturningOk,
         matches_pattern,
         message_routing::MockMessageRouting,
-        registry::{add_subnet_record, SubnetRecordBuilder},
         state_manager::RefMockStateManager,
         types::ids::{node_test_id, subnet_test_id},
         FastForwardTimeSource,
     };
+    use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_types::replica_config::ReplicaConfig;
     use std::borrow::Borrow;
     use std::sync::{Arc, RwLock};

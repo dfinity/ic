@@ -13,9 +13,9 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::{
-    consensus::fake::FakeVerifier, mock_time, registry::MockRegistryClient,
-    types::messages::SignedIngressBuilder,
+    consensus::fake::FakeVerifier, mock_time, types::messages::SignedIngressBuilder,
 };
+use ic_test_utilities_registry::MockRegistryClient;
 use ic_types::{
     batch::{Batch, BatchPayload, IngressPayload, SelfValidatingPayload, XNetPayload},
     ic00,

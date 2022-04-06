@@ -52,6 +52,7 @@ ic-state-manager = { path = "../state_manager" }
 ic-test-artifact-pool = { path = "../test_utilities/artifact_pool" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-registry = { path = "../test_utilities/registry" }
 mockall = "0.7.2"
 proptest = "0.9.4"
 slog-async = "2.5.0"

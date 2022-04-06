@@ -273,12 +273,12 @@ mod test {
         consensus::fake::Fake,
         ingress_selector::FakeIngressSelector,
         mock_time,
-        registry::SubnetRecordBuilder,
         self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
         types::ids::{node_test_id, subnet_test_id},
         types::messages::SignedIngressBuilder,
         xnet_payload_builder::FakeXNetPayloadBuilder,
     };
+    use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_types::{
         consensus::{
             certification::{Certification, CertificationContent},

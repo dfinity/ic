@@ -13,7 +13,6 @@ use ic_test_utilities::{
     crypto::CryptoReturningOk,
     ingress_selector::FakeIngressSelector,
     message_routing::FakeMessageRouting,
-    registry::{setup_registry, SubnetRecordBuilder},
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
     state::get_initial_state,
     state_manager::MockStateManager,
@@ -22,6 +21,7 @@ use ic_test_utilities::{
     xnet_payload_builder::FakeXNetPayloadBuilder,
     FastForwardTimeSource,
 };
+use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
 use ic_types::{
     crypto::CryptoHash, malicious_flags::MaliciousFlags, replica_config::ReplicaConfig,
     CryptoHashOfState, Height,

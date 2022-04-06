@@ -37,16 +37,17 @@ tower = { version = "0.4.8", features = ["util"] }
 ic-consensus-message = { path = "../consensus/message" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-execution-environment = { path = "../execution_environment" }
+ic-logger = { path = "../monitoring/logger" }
 ic-registry-common = { path = "../registry/common" }
-ic-test-utilities = { path = "../test_utilities" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-fake = { path = "../registry/fake" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
-ic-logger = { path = "../monitoring/logger" }
 ic-replica-setup-ic-network = { path = "../replica/setup_ic_network" }
+ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-registry = { path = "../test_utilities/registry" }
 mockall = "0.7.2"
-tempfile = "3.1.0"
 proptest = "0.9.4"
+tempfile = "3.1.0"
 
 [features]
 malicious_code = ["ic-artifact-manager/malicious_code"]

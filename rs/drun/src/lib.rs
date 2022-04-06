@@ -26,16 +26,16 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_manager::StateManagerImpl;
-use ic_test_utilities::{
-    consensus::fake::FakeVerifier,
-    mock_time,
-    registry::{add_subnet_record, insert_initial_dkg_transcript, SubnetRecordBuilder},
+use ic_test_utilities::consensus::fake::FakeVerifier;
+use ic_test_utilities_registry::{
+    add_subnet_record, insert_initial_dkg_transcript, SubnetRecordBuilder,
 };
 use ic_types::{
     batch::{Batch, BatchPayload, IngressPayload, SelfValidatingPayload, XNetPayload},
     ingress::{IngressStatus, WasmResult},
     messages::{MessageId, SignedIngress},
     replica_config::ReplicaConfig,
+    time::UNIX_EPOCH,
     CanisterId, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId,
 };
 use slog::{Drain, Logger};
@@ -316,7 +316,7 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
         randomness: Randomness::from([0; 32]),
         ecdsa_subnet_public_key: None,
         registry_version: RegistryVersion::from(1),
-        time: mock_time(),
+        time: UNIX_EPOCH,
         consensus_responses: vec![],
     }
 }

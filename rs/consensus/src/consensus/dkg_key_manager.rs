@@ -455,10 +455,10 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::{
         crypto::CryptoReturningOk,
-        registry::SubnetRecordBuilder,
         types::ids::{node_test_id, subnet_test_id},
         with_test_replica_logger,
     };
+    use ic_test_utilities_registry::SubnetRecordBuilder;
 
     #[test]
     fn test_transcripts_get_loaded_and_retained() {

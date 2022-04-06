@@ -244,9 +244,9 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::{
         message_routing::FakeMessageRouting,
-        registry::SubnetRecordBuilder,
         types::ids::{node_test_id, subnet_test_id},
     };
+    use ic_test_utilities_registry::SubnetRecordBuilder;
     use std::sync::{Arc, RwLock};
 
     #[test]

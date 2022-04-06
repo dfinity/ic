@@ -1,4 +1,3 @@
-use crate::crypto::empty_ni_dkg_transcripts_with_committee;
 use ic_crypto::utils::ni_dkg::initial_ni_dkg_transcript_record_from_transcript;
 use ic_interfaces::registry::{
     LocalStoreCertifiedTimeReader, RegistryClient, RegistryClientResult,
@@ -12,7 +11,7 @@ use ic_registry_keys::{
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTag;
+use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript};
 use ic_types::{registry::RegistryClientError, PrincipalId, Time};
 use ic_types::{NodeId, RegistryVersion, ReplicaVersion, SubnetId};
 use mockall::predicate::*;
@@ -39,6 +38,34 @@ mock! {
 
         fn get_version_timestamp(&self, registry_version: RegistryVersion) -> Option<Time>;
     }
+}
+
+fn empty_ni_dkg_transcripts_with_committee(
+    committee: Vec<NodeId>,
+    registry_version: u64,
+) -> std::collections::BTreeMap<NiDkgTag, NiDkgTranscript> {
+    vec![
+        (
+            NiDkgTag::LowThreshold,
+            NiDkgTranscript::dummy_transcript_for_tests_with_params(
+                committee.clone(),
+                NiDkgTag::LowThreshold,
+                NiDkgTag::LowThreshold.threshold_for_subnet_of_size(committee.len()) as u32,
+                registry_version,
+            ),
+        ),
+        (
+            NiDkgTag::HighThreshold,
+            NiDkgTranscript::dummy_transcript_for_tests_with_params(
+                committee.clone(),
+                NiDkgTag::HighThreshold,
+                NiDkgTag::HighThreshold.threshold_for_subnet_of_size(committee.len()) as u32,
+                registry_version,
+            ),
+        ),
+    ]
+    .into_iter()
+    .collect()
 }
 
 /// Returns the registry with provided subnet records.

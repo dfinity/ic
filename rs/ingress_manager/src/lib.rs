@@ -219,12 +219,12 @@ pub(crate) mod tests {
         crypto::temp_crypto_component_with_fake_registry,
         cycles_account_manager::CyclesAccountManagerBuilder,
         history::MockIngressHistory,
-        registry::test_subnet_record,
         state::ReplicatedStateBuilder,
         state_manager::MockStateManager,
         types::ids::{node_test_id, subnet_test_id},
         with_test_replica_logger,
     };
+    use ic_test_utilities_registry::test_subnet_record;
     use ic_types::{ingress::IngressStatus, Height, RegistryVersion, SubnetId};
     use std::sync::{Arc, RwLockWriteGuard};
 

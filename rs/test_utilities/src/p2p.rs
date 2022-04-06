@@ -1,9 +1,6 @@
 //! This file contains the helper functions required to setup testing framework.
 
-use crate::{
-    registry::{setup_registry_non_final, SubnetRecordBuilder},
-    types::ids::node_test_id,
-};
+use crate::types::ids::node_test_id;
 use ic_config::{
     logger::{default_logtarget, Config as LoggerConfig, LogFormat},
     transport::{TransportConfig, TransportFlowConfig},
@@ -16,6 +13,7 @@ use ic_protobuf::registry::node::v1::{
     connection_endpoint::Protocol, ConnectionEndpoint, FlowEndpoint, NodeRecord,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_test_utilities_registry::{setup_registry_non_final, SubnetRecordBuilder};
 use ic_types::{replica_config::ReplicaConfig, NodeId, RegistryVersion, SubnetId};
 
 use ic_registry_keys::make_node_record_key;

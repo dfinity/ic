@@ -521,10 +521,8 @@ impl<'a> PoolReader<'a> {
 pub mod test {
     use super::*;
     use crate::consensus::mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
-    use ic_test_utilities::{
-        registry::{add_subnet_record, SubnetRecordBuilder},
-        types::ids::{node_test_id, subnet_test_id},
-    };
+    use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
 
     #[test]
     fn test_get_dkg_summary_block() {

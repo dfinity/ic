@@ -46,6 +46,7 @@ ic-p2p = { path = "../p2p" }
 ic-replica-setup-ic-network = { path = "../replica/setup_ic_network" }
 ic-sys = { path = "../sys" }
 ic-system-api = { path = "../system_api" }
+ic-test-utilities-registry = { path = "./registry" }
 ic-types = { path = "../types/types" }
 ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }

@@ -8,7 +8,6 @@ use ic_test_utilities::{
     metrics::{
         fetch_histogram_stats, fetch_histogram_vec_count, metric_vec, HistogramStats, MetricVec,
     },
-    registry::MockRegistryClient,
     state_manager::FakeStateManager,
     types::{
         ids::{canister_test_id, SUBNET_6, SUBNET_7},
@@ -16,6 +15,7 @@ use ic_test_utilities::{
     },
     with_test_replica_logger,
 };
+use ic_test_utilities_registry::MockRegistryClient;
 use ic_types::{messages::CallbackId, xnet::StreamIndexedQueue, Height, SubnetId};
 use maplit::btreemap;
 use url::Url;

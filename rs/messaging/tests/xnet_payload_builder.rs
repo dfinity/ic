@@ -26,7 +26,6 @@ use ic_test_utilities::{
         fetch_histogram_stats, fetch_histogram_vec_count, metric_vec, HistogramStats, MetricVec,
     },
     mock_time,
-    registry::SubnetRecordBuilder,
     state::arb_stream,
     types::ids::{
         NODE_1, NODE_2, NODE_3, NODE_4, NODE_42, NODE_5, SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4,
@@ -34,6 +33,7 @@ use ic_test_utilities::{
     },
     with_test_replica_logger,
 };
+use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_types::{
     batch::ValidationContext,
     xnet::{CertifiedStreamSlice, StreamIndex, StreamIndexedQueue, StreamSlice},

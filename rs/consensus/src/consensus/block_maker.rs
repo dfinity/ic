@@ -655,10 +655,8 @@ mod tests {
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities::{
-        registry::{add_subnet_record, SubnetRecordBuilder},
-        types::ids::{node_test_id, subnet_test_id},
-    };
+    use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_types::*;
     use ic_types::{batch::*, consensus::dkg};
     use std::sync::{Arc, RwLock};

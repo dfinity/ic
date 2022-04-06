@@ -235,9 +235,9 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::{
         consensus::fake::*,
-        registry::SubnetRecordBuilder,
         types::ids::{node_test_id, subnet_test_id},
     };
+    use ic_test_utilities_registry::SubnetRecordBuilder;
     use std::sync::Arc;
     use std::time::Duration;
 

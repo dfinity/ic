@@ -5,8 +5,10 @@ use ic_error_types::UserError;
 use ic_execution_environment::ExecutionServices;
 use ic_interfaces::registry::RegistryClient;
 use ic_interfaces::{
+    certification::{Verifier, VerifierError},
     execution_environment::{IngressHistoryReader, QueryHandler},
     messaging::MessageRouting,
+    validation::ValidationResult,
 };
 use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager, StateReader};
 use ic_logger::ReplicaLogger;
@@ -28,28 +30,42 @@ use ic_registry_routing_table::{routing_table_insert_subnet, CanisterIdRange, Ro
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::StateManagerImpl;
-use ic_test_utilities::{
-    consensus::fake::FakeVerifier,
-    mock_time,
-    registry::{add_subnet_record, insert_initial_dkg_transcript, SubnetRecordBuilder},
-    types::messages::SignedIngressBuilder,
+use ic_test_utilities_registry::{
+    add_subnet_record, insert_initial_dkg_transcript, SubnetRecordBuilder,
 };
 use ic_types::{
     batch::{Batch, BatchPayload, IngressPayload, SelfValidatingPayload, XNetPayload},
+    consensus::certification::Certification,
     ic00,
     ic00::{CanisterIdRecord, CanisterSettingsArgs, InstallCodeArgs, Method, Payload},
     ingress::{IngressStatus, WasmResult},
-    messages::{CanisterInstallMode, MessageId, SignedIngress, UserQuery},
-    time::Time,
+    messages::{
+        Blob, CanisterInstallMode, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope,
+        MessageId, SignedIngress, UserQuery,
+    },
+    time::{current_time_and_expiry_time, Time, UNIX_EPOCH},
     CanisterId, CryptoHashOfState, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId,
     UserId,
 };
+use std::convert::TryFrom;
 use std::fmt;
 use std::path::Path;
 use std::string::ToString;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
+
+struct FakeVerifier;
+impl Verifier for FakeVerifier {
+    fn validate(
+        &self,
+        _: SubnetId,
+        _: &Certification,
+        _: RegistryVersion,
+    ) -> ValidationResult<VerifierError> {
+        Ok(())
+    }
+}
 
 /// Constructs the initial version of the registry containing a subnet with the
 /// specified SUBNET_ID, with the node with the specified NODE_ID assigned to
@@ -95,8 +111,9 @@ fn make_single_node_registry(
         .unwrap();
 
     // Set subnetwork list(needed for filling network_topology.nns_subnet_id)
-    let mut record = SubnetRecordBuilder::from(&[node_id]).build();
-    record.subnet_type = i32::from(subnet_type);
+    let record = SubnetRecordBuilder::from(&[node_id])
+        .with_subnet_type(subnet_type)
+        .build();
 
     insert_initial_dkg_transcript(registry_version.get(), subnet_id, &record, &data_provider);
     add_subnet_record(&data_provider, registry_version.get(), subnet_id, record);
@@ -142,7 +159,7 @@ impl StateMachine {
         Self::setup_from_dir(
             TempDir::new().expect("failed to create a temporary directory"),
             0,
-            mock_time(),
+            UNIX_EPOCH,
             None,
         )
     }
@@ -151,7 +168,7 @@ impl StateMachine {
         Self::setup_from_dir(
             TempDir::new().expect("failed to create a temporary directory"),
             0,
-            mock_time(),
+            UNIX_EPOCH,
             Some(config),
         )
     }
@@ -196,7 +213,7 @@ impl StateMachine {
             subnet_config.cycles_account_manager_config,
         ));
         let state_manager = Arc::new(StateManagerImpl::new(
-            Arc::new(FakeVerifier::new()),
+            Arc::new(FakeVerifier),
             subnet_id,
             subnet_type,
             replica_logger.clone(),
@@ -598,13 +615,23 @@ impl StateMachine {
         payload: Vec<u8>,
     ) -> MessageId {
         self.nonce.set(self.nonce.get() + 1);
-        let msg = SignedIngressBuilder::new()
-            .sender(UserId::from(sender))
-            .canister_id(canister_id)
-            .method_name(method.to_string())
-            .method_payload(payload)
-            .nonce(self.nonce.get())
-            .build();
+        let msg = SignedIngress::try_from(HttpRequestEnvelope::<HttpCallContent> {
+            content: HttpCallContent::Call {
+                update: HttpCanisterUpdate {
+                    canister_id: Blob(canister_id.get().into_vec()),
+                    method_name: method.to_string(),
+                    arg: Blob(payload),
+                    sender: Blob(sender.into_vec()),
+                    ingress_expiry: current_time_and_expiry_time().1.as_nanos_since_unix_epoch(),
+                    nonce: Some(Blob(self.nonce.get().to_be_bytes().to_vec())),
+                },
+            },
+            sender_pubkey: None,
+            sender_sig: None,
+            sender_delegation: None,
+        })
+        .unwrap();
+
         let msg_id = msg.id();
         self.send_signed_ingress(msg);
         msg_id
