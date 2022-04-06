@@ -312,6 +312,7 @@ fn build_types_proto() {
         "def/types/v1/types.proto",
         "def/types/v1/dkg.proto",
         "def/types/v1/consensus.proto",
+        "def/types/v1/ecdsa.proto",
     ];
     compile_protos(config, &files);
 }

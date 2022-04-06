@@ -1179,13 +1179,18 @@ pub fn get_faults_tolerated(n: usize) -> usize {
 impl From<&Block> for pb::Block {
     fn from(block: &Block) -> Self {
         let payload: &BlockPayload = block.payload.as_ref();
-        let (dkg_payload, xnet_payload, ingress_payload, self_validating_payload) =
+        let (dkg_payload, xnet_payload, ingress_payload, self_validating_payload, ecdsa_summary) =
             if payload.is_summary() {
                 (
                     pb::DkgPayload::from(&payload.as_summary().dkg),
                     None,
                     None,
                     None,
+                    payload
+                        .as_summary()
+                        .ecdsa
+                        .as_ref()
+                        .map(|ecdsa| ecdsa.into()),
                 )
             } else {
                 let batch = &payload.as_data().batch;
@@ -1194,6 +1199,7 @@ impl From<&Block> for pb::Block {
                     Some(pb::XNetPayload::from(&batch.xnet)),
                     Some(pb::IngressPayload::from(&batch.ingress)),
                     Some(pb::SelfValidatingPayload::from(&batch.self_validating)),
+                    None,
                 )
             };
         Self {
@@ -1208,6 +1214,7 @@ impl From<&Block> for pb::Block {
             xnet_payload,
             ingress_payload,
             self_validating_payload,
+            ecdsa_summary,
             payload_hash: block.payload.get_hash().clone().get().0,
         }
     }
@@ -1244,12 +1251,26 @@ impl TryFrom<pb::Block> for Block {
                     batch.is_empty(),
                     "Error: Summary block has non-empty batch payload."
                 );
+                // Convert the ECDSA summary and adjust the refs to point to
+                // the new summary height
+                let height = Height::from(block.height);
+                let ecdsa = block
+                    .ecdsa_summary
+                    .as_ref()
+                    .map(|ecdsa| (ecdsa, height).try_into())
+                    .transpose()?;
                 BlockPayload::Summary(SummaryPayload {
                     dkg: summary,
-                    ecdsa: ecdsa::Summary::default(),
+                    ecdsa,
                 })
             }
-            dkg::Payload::Dealings(dealings) => (batch, dealings, None).into(),
+            dkg::Payload::Dealings(dealings) => {
+                assert!(
+                    block.ecdsa_summary.is_none(),
+                    "Error: Payload block has ECDSA summary."
+                );
+                (batch, dealings, None).into()
+            }
         };
         Ok(Block {
             version: ReplicaVersion::try_from(block.version.as_str())

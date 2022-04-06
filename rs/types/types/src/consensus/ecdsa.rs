@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::fmt::{self, Display, Formatter};
 use strum_macros::EnumIter;
 
@@ -16,12 +16,19 @@ pub use crate::consensus::ecdsa_refs::{
 use crate::consensus::{BasicSignature, MultiSignature, MultiSignatureShare};
 use crate::crypto::{
     canister_threshold_sig::idkg::{
+        proto_conversions::{
+            idkg_dealing_struct, idkg_dealing_tuple_proto, idkg_transcript_id_proto,
+            idkg_transcript_id_struct, idkg_transcript_proto, idkg_transcript_struct,
+        },
         IDkgComplaint, IDkgDealing, IDkgOpening, IDkgTranscript, IDkgTranscriptId,
     },
     canister_threshold_sig::{ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigShare},
     CryptoHash, CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator,
 };
+use crate::{node_id_into_protobuf, node_id_try_from_protobuf};
 use crate::{Height, NodeId, RegistryVersion};
+use ic_protobuf::registry::subnet::v1 as subnet_pb;
+use ic_protobuf::types::v1 as pb;
 
 /// For completed signature requests, we differentiate between those
 /// that have already been reported and those that have not. This is
@@ -110,6 +117,16 @@ impl KeyTranscriptCreation {
             Self::Created(unmasked) => vec![*unmasked.as_ref()],
         }
     }
+
+    fn update(&mut self, height: Height) {
+        match self {
+            Self::Begin => (),
+            Self::RandomTranscriptParams(params) => params.as_mut().update(height),
+            Self::ReshareOfMaskedParams(params) => params.as_mut().update(height),
+            Self::ReshareOfUnmaskedParams(params) => params.as_mut().update(height),
+            Self::Created(unmasked) => unmasked.as_mut().update(height),
+        }
+    }
 }
 
 impl EcdsaPayload {
@@ -129,6 +146,51 @@ impl EcdsaPayload {
                 .flatten()
                 .chain(iter),
         )
+    }
+
+    /// Return active transcript references in the  payload.
+    pub fn active_transcripts(&self) -> Vec<TranscriptRef> {
+        let mut active_refs = Vec::new();
+        for obj in self.ongoing_signatures.values() {
+            active_refs.append(&mut obj.get_refs());
+        }
+        for obj in self.available_quadruples.values() {
+            active_refs.append(&mut obj.get_refs());
+        }
+        for obj in self.quadruples_in_creation.values() {
+            active_refs.append(&mut obj.get_refs());
+        }
+        for obj in self.ongoing_xnet_reshares.values() {
+            active_refs.append(&mut obj.as_ref().get_refs());
+        }
+        for obj in self.xnet_reshare_agreements.values() {
+            if let CompletedReshareRequest::Unreported(response) = obj {
+                active_refs.append(&mut response.reshare_param.as_ref().get_refs());
+            }
+        }
+
+        active_refs
+    }
+
+    /// Updates the height of all the transcript refs to the given height.
+    pub fn update_refs(&mut self, height: Height) {
+        for obj in self.ongoing_signatures.values_mut() {
+            obj.update(height);
+        }
+        for obj in self.available_quadruples.values_mut() {
+            obj.update(height);
+        }
+        for obj in self.quadruples_in_creation.values_mut() {
+            obj.update(height);
+        }
+        for obj in self.ongoing_xnet_reshares.values_mut() {
+            obj.as_mut().update(height);
+        }
+        for obj in self.xnet_reshare_agreements.values_mut() {
+            if let CompletedReshareRequest::Unreported(response) = obj {
+                response.reshare_param.as_mut().update(height);
+            }
+        }
     }
 }
 
@@ -155,28 +217,16 @@ impl EcdsaDataPayload {
 
     /// Return active transcript references in the data payload.
     pub fn active_transcripts(&self) -> Vec<TranscriptRef> {
-        let ecdsa_payload = &self.ecdsa_payload;
-        let mut active_refs = Vec::new();
-        for obj in ecdsa_payload.ongoing_signatures.values() {
-            active_refs.append(&mut obj.get_refs());
-        }
-        for obj in ecdsa_payload.available_quadruples.values() {
-            active_refs.append(&mut obj.get_refs());
-        }
-        for obj in ecdsa_payload.quadruples_in_creation.values() {
-            active_refs.append(&mut obj.get_refs());
-        }
-        for obj in ecdsa_payload.ongoing_xnet_reshares.values() {
-            active_refs.append(&mut obj.as_ref().get_refs());
-        }
-        for obj in ecdsa_payload.xnet_reshare_agreements.values() {
-            if let CompletedReshareRequest::Unreported(response) = obj {
-                active_refs.append(&mut response.reshare_param.as_ref().get_refs());
-            }
-        }
+        let mut active_refs = self.ecdsa_payload.active_transcripts();
         active_refs.append(&mut self.next_key_transcript_creation.get_refs());
 
         active_refs
+    }
+
+    /// Updates the height of all the transcript refs to the given height.
+    pub fn update_refs(&mut self, height: Height) {
+        self.ecdsa_payload.update_refs(height);
+        self.next_key_transcript_creation.update(height);
     }
 }
 
@@ -221,12 +271,26 @@ impl EcdsaSummaryPayload {
             },
         )
     }
+
+    /// Return active transcript references in the summary payload.
+    pub fn active_transcripts(&self) -> Vec<TranscriptRef> {
+        let mut active_refs = self.ecdsa_payload.active_transcripts();
+        active_refs.push(*self.current_key_transcript.as_ref());
+
+        active_refs
+    }
+
+    /// Updates the height of all the transcript refs to the given height.
+    pub fn update_refs(&mut self, height: Height) {
+        self.ecdsa_payload.update_refs(height);
+        self.current_key_transcript.as_mut().update(height);
+    }
 }
 
 #[derive(
     Copy, Clone, Default, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize, Hash,
 )]
-pub struct QuadrupleId(pub usize);
+pub struct QuadrupleId(pub u64);
 
 impl QuadrupleId {
     pub fn increment(self) -> QuadrupleId {
@@ -242,6 +306,42 @@ pub struct EcdsaReshareRequest {
     pub registry_version: RegistryVersion,
 }
 
+impl From<&EcdsaReshareRequest> for pb::EcdsaReshareRequest {
+    fn from(request: &EcdsaReshareRequest) -> Self {
+        let mut receiving_node_ids = Vec::new();
+        for node in &request.receiving_node_ids {
+            receiving_node_ids.push(node_id_into_protobuf(*node));
+        }
+        Self {
+            key_id: request.key_id.clone(),
+            receiving_node_ids,
+            registry_version: request.registry_version.get(),
+        }
+    }
+}
+
+impl TryFrom<&pb::EcdsaReshareRequest> for EcdsaReshareRequest {
+    type Error = String;
+    fn try_from(request: &pb::EcdsaReshareRequest) -> Result<Self, Self::Error> {
+        let mut receiving_node_ids = Vec::new();
+        for node in &request.receiving_node_ids {
+            let node_id = node_id_try_from_protobuf(node.clone()).map_err(|err| {
+                format!(
+                    "pb::EcdsaReshareRequest:: Failed to convert node_id: {:?}",
+                    err
+                )
+            })?;
+            receiving_node_ids.push(node_id);
+        }
+
+        Ok(Self {
+            key_id: request.key_id.clone(),
+            receiving_node_ids,
+            registry_version: RegistryVersion::new(request.registry_version),
+        })
+    }
+}
+
 /// Internal format of the completed response.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct EcdsaReshareResponse {
@@ -252,6 +352,57 @@ pub struct EcdsaReshareResponse {
 
     /// The verified dealings in the created transcript.
     pub dealings: Vec<(NodeId, IDkgDealing)>,
+}
+
+impl From<&EcdsaReshareResponse> for pb::EcdsaReshareResponse {
+    fn from(response: &EcdsaReshareResponse) -> Self {
+        let mut tuples = Vec::new();
+        for (dealer, dealing) in &response.dealings {
+            tuples.push(idkg_dealing_tuple_proto(dealer, dealing));
+        }
+
+        Self {
+            transcript: Some((&response.reshare_param).into()),
+            tuples,
+        }
+    }
+}
+
+impl TryFrom<&pb::EcdsaReshareResponse> for EcdsaReshareResponse {
+    type Error = String;
+    fn try_from(response: &pb::EcdsaReshareResponse) -> Result<Self, Self::Error> {
+        let proto = response
+            .transcript
+            .as_ref()
+            .ok_or("pb::EcdsaReshareResponse:: Missing reshare transcript")?;
+        let reshare_param: ReshareOfUnmaskedParams = proto.try_into()?;
+
+        let mut dealings = Vec::new();
+        for tuple in &response.tuples {
+            let proto = tuple
+                .dealer
+                .as_ref()
+                .ok_or("pb::EcdsaReshareResponse:: Missing dealer")?;
+            let dealer = node_id_try_from_protobuf(proto.clone()).map_err(|err| {
+                format!(
+                    "pb::EcdsaReshareResponse:: Failed to convert dealer: {:?}",
+                    err
+                )
+            })?;
+            let dealing = idkg_dealing_struct(&Some(tuple.clone())).map_err(|err| {
+                format!(
+                    "pb::EcdsaReshareResponse:: Failed to convert dealing: {:?}",
+                    err
+                )
+            })?;
+            dealings.push((dealer, dealing));
+        }
+
+        Ok(Self {
+            reshare_param,
+            dealings,
+        })
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -344,7 +495,6 @@ pub struct EcdsaDealing {
     pub requested_height: Height,
 
     /// The crypto dealing
-    /// TODO: dealers should send the BasicSigned<> dealing
     pub idkg_dealing: IDkgDealing,
 }
 
@@ -608,3 +758,243 @@ impl TryFrom<EcdsaMessage> for EcdsaOpening {
 pub type Summary = Option<EcdsaSummaryPayload>;
 
 pub type Payload = Option<EcdsaDataPayload>;
+
+impl From<&EcdsaSummaryPayload> for pb::EcdsaSummaryPayload {
+    fn from(summary: &EcdsaSummaryPayload) -> Self {
+        // signature_agreements
+        let mut signature_agreements = Vec::new();
+        for (request_id, completed) in &summary.ecdsa_payload.signature_agreements {
+            let unreported = match completed {
+                CompletedSignature::Unreported(signature) => signature.signature.clone(),
+                CompletedSignature::ReportedToExecution => vec![],
+            };
+            signature_agreements.push(pb::CompletedSignature {
+                request_id: Some(pb::RequestId {
+                    request_id: request_id.as_ref().clone(),
+                }),
+                unreported,
+            });
+        }
+
+        // ongoing_signatures
+        let mut ongoing_signatures = Vec::new();
+        for (request_id, ongoing) in &summary.ecdsa_payload.ongoing_signatures {
+            ongoing_signatures.push(pb::OngoingSignature {
+                request_id: Some(pb::RequestId {
+                    request_id: request_id.as_ref().clone(),
+                }),
+                sig_inputs: Some(ongoing.into()),
+            })
+        }
+
+        // available_quadruples
+        let mut available_quadruples = Vec::new();
+        for (quadruple_id, quadruple) in &summary.ecdsa_payload.available_quadruples {
+            available_quadruples.push(pb::AvailableQuadruple {
+                quadrupled_id: quadruple_id.0,
+                quadruple: Some(quadruple.into()),
+            });
+        }
+
+        // quadruples_in_creation
+        let mut quadruples_in_creation = Vec::new();
+        for (quadruple_id, quadruple) in &summary.ecdsa_payload.quadruples_in_creation {
+            quadruples_in_creation.push(pb::QuadrupleInProgress {
+                quadrupled_id: quadruple_id.0,
+                quadruple: Some(quadruple.into()),
+            });
+        }
+
+        let next_unused_transcript_id: Option<subnet_pb::IDkgTranscriptId> = Some(
+            idkg_transcript_id_proto(&summary.ecdsa_payload.next_unused_transcript_id),
+        );
+
+        // idkg_transcripts
+        let mut idkg_transcripts = Vec::new();
+        for transcript in summary.ecdsa_payload.idkg_transcripts.values() {
+            idkg_transcripts.push(idkg_transcript_proto(transcript));
+        }
+
+        // ongoing_xnet_reshares
+        let mut ongoing_xnet_reshares = Vec::new();
+        for (request, transcript) in &summary.ecdsa_payload.ongoing_xnet_reshares {
+            ongoing_xnet_reshares.push(pb::OngoingXnetReshare {
+                request: Some(request.into()),
+                transcript: Some(transcript.into()),
+            });
+        }
+
+        // xnet_reshare_agreements
+        let mut xnet_reshare_agreements = Vec::new();
+        for (request, completed) in &summary.ecdsa_payload.xnet_reshare_agreements {
+            let response = match completed {
+                CompletedReshareRequest::Unreported(response) => Some(response.as_ref().into()),
+                CompletedReshareRequest::ReportedToExecution => None,
+            };
+
+            xnet_reshare_agreements.push(pb::XnetReshareAgreement {
+                request: Some(request.into()),
+                response,
+            });
+        }
+
+        let current_key_transcript = Some((&summary.current_key_transcript).into());
+
+        Self {
+            signature_agreements,
+            ongoing_signatures,
+            available_quadruples,
+            quadruples_in_creation,
+            next_unused_transcript_id,
+            idkg_transcripts,
+            ongoing_xnet_reshares,
+            xnet_reshare_agreements,
+            current_key_transcript,
+        }
+    }
+}
+
+impl TryFrom<(&pb::EcdsaSummaryPayload, Height)> for EcdsaSummaryPayload {
+    type Error = String;
+    fn try_from(
+        (summary, height): (&pb::EcdsaSummaryPayload, Height),
+    ) -> Result<Self, Self::Error> {
+        // signature_agreements
+        let mut signature_agreements = BTreeMap::new();
+        for completed_signature in &summary.signature_agreements {
+            let request_id = completed_signature
+                .request_id
+                .as_ref()
+                .ok_or("pb::EcdsaSummaryPayload:: Missing completed_signature request Id")
+                .map(|id| RequestId::new(id.request_id.clone()))?;
+
+            let signature = if !completed_signature.unreported.is_empty() {
+                CompletedSignature::Unreported(ThresholdEcdsaCombinedSignature {
+                    signature: completed_signature.unreported.clone(),
+                })
+            } else {
+                CompletedSignature::ReportedToExecution
+            };
+            signature_agreements.insert(request_id, signature);
+        }
+
+        // ongoing_signatures
+        let mut ongoing_signatures = BTreeMap::new();
+        for ongoing_signature in &summary.ongoing_signatures {
+            let request_id = ongoing_signature
+                .request_id
+                .as_ref()
+                .ok_or("pb::EcdsaSummaryPayload:: Missing ongoing_signature request Id")
+                .map(|id| RequestId::new(id.request_id.clone()))?;
+            let proto = ongoing_signature
+                .sig_inputs
+                .as_ref()
+                .ok_or("pb::EcdsaSummaryPayload:: Missing sig inputs")?;
+            let sig_inputs: ThresholdEcdsaSigInputsRef = proto.try_into()?;
+            ongoing_signatures.insert(request_id, sig_inputs);
+        }
+
+        // available_quadruples
+        let mut available_quadruples = BTreeMap::new();
+        for available_quadruple in &summary.available_quadruples {
+            let quadruple_id = QuadrupleId(available_quadruple.quadrupled_id);
+            let proto = available_quadruple
+                .quadruple
+                .as_ref()
+                .ok_or("pb::EcdsaSummaryPayload:: Missing available_quadruple")?;
+            let quadruple: PreSignatureQuadrupleRef = proto.try_into()?;
+            available_quadruples.insert(quadruple_id, quadruple);
+        }
+
+        // quadruples_in_creation
+        let mut quadruples_in_creation = BTreeMap::new();
+        for quadruple_in_creation in &summary.quadruples_in_creation {
+            let quadruple_id = QuadrupleId(quadruple_in_creation.quadrupled_id);
+            let proto = quadruple_in_creation
+                .quadruple
+                .as_ref()
+                .ok_or("pb::EcdsaSummaryPayload:: Missing quadruple_in_creation Id")?;
+            let quadruple: QuadrupleInCreation = proto.try_into()?;
+            quadruples_in_creation.insert(quadruple_id, quadruple);
+        }
+
+        let next_unused_transcript_id: IDkgTranscriptId =
+            idkg_transcript_id_struct(&summary.next_unused_transcript_id).map_err(|err| {
+                format!(
+                    "pb::EcdsaSummaryPayload:: Failed to convert next_unused_transcript_id: {:?}",
+                    err
+                )
+            })?;
+
+        // idkg_transcripts
+        let mut idkg_transcripts = BTreeMap::new();
+        for proto in &summary.idkg_transcripts {
+            let transcript: IDkgTranscript = idkg_transcript_struct(proto).map_err(|err| {
+                format!(
+                    "pb::EcdsaSummaryPayload:: Failed to convert transcript: {:?}",
+                    err
+                )
+            })?;
+            let transcript_id = transcript.transcript_id;
+            idkg_transcripts.insert(transcript_id, transcript);
+        }
+
+        // ongoing_xnet_reshares
+        let mut ongoing_xnet_reshares = BTreeMap::new();
+        for reshare in &summary.ongoing_xnet_reshares {
+            let proto = reshare
+                .request
+                .as_ref()
+                .ok_or("pb::EcdsaSummaryPayload:: Missing reshare request")?;
+            let request: EcdsaReshareRequest = proto.try_into()?;
+
+            let proto = reshare
+                .transcript
+                .as_ref()
+                .ok_or("pb::EcdsaSummaryPayload:: Missing reshare transcript")?;
+            let transcript: ReshareOfUnmaskedParams = proto.try_into()?;
+            ongoing_xnet_reshares.insert(request, transcript);
+        }
+
+        // xnet_reshare_agreements
+        let mut xnet_reshare_agreements = BTreeMap::new();
+        for agreement in &summary.xnet_reshare_agreements {
+            let proto = agreement
+                .request
+                .as_ref()
+                .ok_or("pb::EcdsaSummaryPayload:: Missing agreement reshare request")?;
+            let request: EcdsaReshareRequest = proto.try_into()?;
+
+            let completed = match &agreement.response {
+                Some(rsp) => {
+                    let unreported = rsp.try_into()?;
+                    CompletedReshareRequest::Unreported(Box::new(unreported))
+                }
+                None => CompletedReshareRequest::ReportedToExecution,
+            };
+            xnet_reshare_agreements.insert(request, completed);
+        }
+
+        let proto = summary
+            .current_key_transcript
+            .as_ref()
+            .ok_or("pb::EcdsaSummaryPayload:: Missing current_key_transcript")?;
+        let current_key_transcript: UnmaskedTranscript = proto.try_into()?;
+
+        let mut ret = Self {
+            ecdsa_payload: EcdsaPayload {
+                signature_agreements,
+                ongoing_signatures,
+                available_quadruples,
+                quadruples_in_creation,
+                next_unused_transcript_id,
+                idkg_transcripts,
+                ongoing_xnet_reshares,
+                xnet_reshare_agreements,
+            },
+            current_key_transcript,
+        };
+        ret.update_refs(height);
+        Ok(ret)
+    }
+}

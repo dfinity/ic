@@ -1,0 +1,140 @@
+syntax = "proto3";
+
+package types.v1;
+import "registry/crypto/v1/crypto.proto";
+import "registry/subnet/v1/subnet.proto";
+import "types/v1/types.proto";
+
+message EcdsaSummaryPayload {
+  repeated CompletedSignature signature_agreements = 1;
+  repeated OngoingSignature ongoing_signatures = 2;
+  repeated AvailableQuadruple available_quadruples = 3;
+  repeated QuadrupleInProgress quadruples_in_creation = 4;
+  registry.subnet.v1.IDkgTranscriptId next_unused_transcript_id = 5;
+  repeated registry.subnet.v1.IDkgTranscript idkg_transcripts = 6;
+  repeated OngoingXnetReshare ongoing_xnet_reshares = 7;
+  repeated XnetReshareAgreement xnet_reshare_agreements = 8;
+  UnmaskedTranscript current_key_transcript = 9;
+}
+
+message OngoingSignature {
+  RequestId request_id = 1;
+  ThresholdEcdsaSigInputsRef sig_inputs = 2;
+}
+
+message AvailableQuadruple {
+  uint64 quadrupled_id = 1;
+  PreSignatureQuadrupleRef quadruple = 2;
+}
+
+message QuadrupleInProgress {
+  uint64 quadrupled_id = 1;
+  QuadrupleInCreation quadruple = 2;
+}
+
+message OngoingXnetReshare {
+  EcdsaReshareRequest request = 1;
+  ReshareOfUnmaskedParams transcript = 2;
+}
+
+message XnetReshareAgreement {
+  EcdsaReshareRequest request = 1;
+  EcdsaReshareResponse response = 2;
+}
+
+message RequestId {
+  bytes request_id = 1;
+}
+
+message TranscriptRef {
+  uint64 height = 1;
+  registry.subnet.v1.IDkgTranscriptId transcript_id = 2;
+}
+
+message MaskedTranscript {
+  TranscriptRef transcript_ref = 1;
+}
+
+message UnmaskedTranscript {
+  TranscriptRef transcript_ref = 1;
+}
+
+message IDkgTranscriptOperationRef {
+  int32 op_type = 1;
+  MaskedTranscript masked = 2;
+  UnmaskedTranscript unmasked = 3;
+}
+
+message IDkgTranscriptParamsRef {
+  registry.subnet.v1.IDkgTranscriptId transcript_id = 1;
+  repeated types.v1.NodeId dealers = 2;
+  repeated types.v1.NodeId receivers = 3;
+  uint64 registry_version = 4;
+  int32 algorithm_id = 5;
+  IDkgTranscriptOperationRef operation_type_ref = 6;
+}
+
+message RandomTranscriptParams {
+  IDkgTranscriptParamsRef transcript_ref = 1;
+}
+
+message ReshareOfMaskedParams {
+  IDkgTranscriptParamsRef transcript_ref = 1;
+}
+
+message ReshareOfUnmaskedParams {
+  IDkgTranscriptParamsRef transcript_ref = 1;
+}
+
+message UnmaskedTimesMaskedParams {
+  IDkgTranscriptParamsRef transcript_ref = 1;
+}
+
+message QuadrupleInCreation {
+  RandomTranscriptParams kappa_config = 1;
+  MaskedTranscript kappa_masked = 2;
+
+  RandomTranscriptParams lambda_config = 3;
+  MaskedTranscript lambda_masked = 4;
+
+  ReshareOfMaskedParams unmask_kappa_config = 5;
+  UnmaskedTranscript kappa_unmasked = 6;
+
+  UnmaskedTimesMaskedParams key_times_lambda_config = 7;
+  MaskedTranscript key_times_lambda = 8;
+
+  UnmaskedTimesMaskedParams kappa_times_lambda_config = 9;
+  MaskedTranscript kappa_times_lambda = 10;
+}
+
+message PreSignatureQuadrupleRef {
+  UnmaskedTranscript kappa_unmasked_ref = 1;
+  MaskedTranscript lambda_masked_ref = 2;
+  MaskedTranscript kappa_times_lambda_ref = 3;
+  MaskedTranscript key_times_lambda_ref = 4;
+}
+
+message ThresholdEcdsaSigInputsRef {
+  registry.subnet.v1.ExtendedDerivationPath derivation_path = 1;
+  bytes hashed_message = 2;
+  bytes nonce = 3;
+  PreSignatureQuadrupleRef presig_quadruple_ref = 4;
+  UnmaskedTranscript key_transcript_ref = 5;
+}
+
+message CompletedSignature {
+  RequestId request_id = 1;
+  bytes unreported = 2;
+}
+
+message EcdsaReshareRequest {
+  bytes key_id = 1;
+  repeated types.v1.NodeId receiving_node_ids = 2;
+  uint64 registry_version = 3;
+}
+
+message EcdsaReshareResponse {
+  ReshareOfUnmaskedParams transcript = 1;
+  repeated registry.subnet.v1.IDkgDealingTuple tuples = 2;
+}
+

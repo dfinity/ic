@@ -1245,6 +1245,7 @@ mod tests {
     };
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
+    use ic_protobuf::types::v1 as pb;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::{
         mock_time,
@@ -1258,8 +1259,10 @@ mod tests {
     use ic_types::consensus::dkg::{Dealings, Summary};
     use ic_types::consensus::{BlockPayload, DataPayload, HashedBlock, Payload, SummaryPayload};
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
+    use ic_types::crypto::canister_threshold_sig::ThresholdEcdsaCombinedSignature;
     use ic_types::{messages::CallbackId, Height, RegistryVersion};
     use std::collections::BTreeSet;
+    use std::convert::TryInto;
 
     fn empty_ecdsa_payload(subnet_id: SubnetId) -> ecdsa::EcdsaPayload {
         ecdsa::EcdsaPayload {
@@ -2324,6 +2327,252 @@ mod tests {
             for transcript_id in summary.ecdsa_payload.idkg_transcripts.keys() {
                 assert!(expected_transcripts.contains(transcript_id));
             }
+        })
+    }
+
+    #[test]
+    fn test_ecdsa_summary_proto_conversion() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let Dependencies { mut pool, .. } = dependencies(pool_config.clone(), 1);
+            let subnet_id = subnet_test_id(1);
+            let transcript_builder = TestEcdsaTranscriptBuilder::new();
+            let ecdsa_pool =
+                EcdsaPoolImpl::new(pool_config, no_op_logger(), MetricsRegistry::new());
+            let mut transcript_cache =
+                TranscriptBuilderCache::new(&transcript_builder, &ecdsa_pool);
+            let create_key_transcript = || {
+                let env = CanisterThresholdSigTestEnvironment::new(4);
+                generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1)
+            };
+
+            // Create a summary block with transcripts
+            let summary_height = Height::new(5);
+            let env = CanisterThresholdSigTestEnvironment::new(4);
+            let subnet_nodes = env.receivers().into_iter().collect::<Vec<_>>();
+            let key_transcript = create_key_transcript();
+            let key_transcript_ref =
+                ecdsa::UnmaskedTranscript::try_from((summary_height, &key_transcript)).unwrap();
+            let reshare_key_transcript = create_key_transcript();
+            let reshare_key_transcript_ref =
+                ecdsa::UnmaskedTranscript::try_from((summary_height, &reshare_key_transcript))
+                    .unwrap();
+            let reshare_params_1 = ecdsa::ReshareOfUnmaskedParams::new(
+                create_transcript_id(1001),
+                BTreeSet::new(),
+                BTreeSet::new(),
+                RegistryVersion::from(1001),
+                AlgorithmId::ThresholdEcdsaSecp256k1,
+                reshare_key_transcript_ref,
+            );
+            let mut reshare_refs = BTreeMap::new();
+            reshare_refs.insert(*reshare_key_transcript_ref.as_ref(), reshare_key_transcript);
+
+            let inputs_1 = create_sig_inputs_with_height(91, summary_height);
+            let inputs_2 = create_sig_inputs_with_height(92, summary_height);
+            let summary_block = create_summary_block_with_transcripts(
+                subnet_id,
+                summary_height,
+                (key_transcript_ref, key_transcript),
+                vec![
+                    inputs_1.idkg_transcripts.clone(),
+                    inputs_2.idkg_transcripts.clone(),
+                    reshare_refs,
+                ],
+            );
+            add_block(summary_block, summary_height.get(), &mut pool);
+            let sig_1 = inputs_1.sig_inputs_ref;
+            let quad_1 = inputs_2.sig_inputs_ref.presig_quadruple_ref;
+
+            // Create payload blocks with transcripts
+            let payload_height_1 = Height::new(10);
+            let inputs_1 = create_sig_inputs_with_height(93, payload_height_1);
+            let inputs_2 = create_sig_inputs_with_height(94, payload_height_1);
+            let reshare_key_transcript = create_key_transcript();
+            let reshare_key_transcript_ref =
+                ecdsa::UnmaskedTranscript::try_from((payload_height_1, &reshare_key_transcript))
+                    .unwrap();
+            let reshare_params_2 = ecdsa::ReshareOfUnmaskedParams::new(
+                create_transcript_id(2001),
+                BTreeSet::new(),
+                BTreeSet::new(),
+                RegistryVersion::from(2001),
+                AlgorithmId::ThresholdEcdsaSecp256k1,
+                reshare_key_transcript_ref,
+            );
+            let mut reshare_refs = BTreeMap::new();
+            reshare_refs.insert(*reshare_key_transcript_ref.as_ref(), reshare_key_transcript);
+            let payload_block_1 = create_payload_block_with_transcripts(
+                subnet_id,
+                summary_height,
+                vec![
+                    inputs_1.idkg_transcripts.clone(),
+                    inputs_2.idkg_transcripts.clone(),
+                    reshare_refs,
+                ],
+            );
+            add_block(
+                payload_block_1,
+                payload_height_1.get() - summary_height.get(),
+                &mut pool,
+            );
+            let sig_2 = inputs_1.sig_inputs_ref;
+            let quad_2 = inputs_2.sig_inputs_ref.presig_quadruple_ref;
+
+            // Create a payload block with references to these past blocks
+            let (req_id_1, req_id_2) = (create_request_id(1), create_request_id(2));
+            let (quadruple_id_1, quadruple_id_2) =
+                (ecdsa::QuadrupleId(1000), ecdsa::QuadrupleId(2000));
+            let mut ecdsa_payload = empty_ecdsa_payload(subnet_id);
+            ecdsa_payload.ongoing_signatures.insert(req_id_1, sig_1);
+            ecdsa_payload.ongoing_signatures.insert(req_id_2, sig_2);
+            ecdsa_payload
+                .available_quadruples
+                .insert(quadruple_id_1, quad_1);
+            ecdsa_payload
+                .available_quadruples
+                .insert(quadruple_id_2, quad_2);
+
+            let req_1 = create_reshare_request(1, 1);
+            let req_2 = create_reshare_request(2, 2);
+            let response = ecdsa::EcdsaReshareResponse {
+                reshare_param: reshare_params_2,
+                dealings: vec![],
+            };
+            ecdsa_payload
+                .ongoing_xnet_reshares
+                .insert(req_1, reshare_params_1);
+            ecdsa_payload.xnet_reshare_agreements.insert(
+                req_2,
+                ecdsa::CompletedReshareRequest::Unreported(Box::new(response)),
+            );
+
+            // Add some quadruples in creation
+            let mut next_quadruple_id = ecdsa::QuadrupleId(100);
+            let block_reader = TestEcdsaBlockReader::new();
+            let (kappa_config_ref, _lambda_config_ref) = create_new_quadruple_in_creation(
+                &subnet_nodes,
+                env.newest_registry_version,
+                &mut ecdsa_payload.next_unused_transcript_id,
+                &mut next_quadruple_id,
+                &mut ecdsa_payload.quadruples_in_creation,
+            );
+            let kappa_transcript = {
+                let param = kappa_config_ref.as_ref();
+                run_idkg_and_create_and_verify_transcript(
+                    &param.translate(&block_reader).unwrap(),
+                    &env.crypto_components,
+                )
+            };
+            transcript_builder.add_transcript(
+                kappa_config_ref.as_ref().transcript_id,
+                kappa_transcript.clone(),
+            );
+            ecdsa_payload
+                .idkg_transcripts
+                .insert(kappa_config_ref.as_ref().transcript_id, kappa_transcript);
+            let parent_block_height = Height::new(15);
+            let result = update_quadruples_in_creation(
+                Some(&key_transcript_ref),
+                &mut ecdsa_payload,
+                &mut transcript_cache,
+                parent_block_height,
+                &no_op_logger(),
+            )
+            .unwrap();
+            assert_eq!(result.len(), 1);
+
+            ecdsa_payload.signature_agreements.insert(
+                create_request_id(3),
+                ecdsa::CompletedSignature::ReportedToExecution,
+            );
+            ecdsa_payload.signature_agreements.insert(
+                create_request_id(4),
+                ecdsa::CompletedSignature::Unreported(ThresholdEcdsaCombinedSignature {
+                    signature: vec![10; 10],
+                }),
+            );
+            ecdsa_payload.xnet_reshare_agreements.insert(
+                create_reshare_request(6, 6),
+                ecdsa::CompletedReshareRequest::ReportedToExecution,
+            );
+
+            let parent_block_payload = BlockPayload::Data(DataPayload {
+                batch: BatchPayload::default(),
+                dealings: Dealings::new_empty(summary_height),
+                ecdsa: Some(ecdsa::EcdsaDataPayload {
+                    ecdsa_payload: ecdsa_payload.clone(),
+                    next_key_transcript_creation: ecdsa::KeyTranscriptCreation::Begin,
+                }),
+            });
+            let parent_block = add_block(
+                parent_block_payload,
+                parent_block_height.get() - payload_height_1.get(),
+                &mut pool,
+            );
+            let pool_reader = PoolReader::new(&pool);
+
+            // Add a summary block after the payload block and update the refs
+            let mut summary = ecdsa::EcdsaSummaryPayload {
+                ecdsa_payload: ecdsa_payload.clone(),
+                current_key_transcript: key_transcript_ref,
+            };
+            assert!(update_summary_refs(
+                &mut summary,
+                &pool_reader,
+                &parent_block,
+                &EcdsaPayloadMetrics::new(MetricsRegistry::new()),
+                &no_op_logger()
+            )
+            .is_ok());
+
+            let (reported, unreported) = {
+                let mut reported = 0;
+                let mut unreported = 0;
+                for agreement in summary.ecdsa_payload.signature_agreements.values() {
+                    match agreement {
+                        ecdsa::CompletedSignature::ReportedToExecution => {
+                            reported += 1;
+                        }
+                        ecdsa::CompletedSignature::Unreported(_) => {
+                            unreported += 1;
+                        }
+                    }
+                }
+                (reported, unreported)
+            };
+            assert!(!summary.ecdsa_payload.signature_agreements.is_empty());
+            assert!(reported > 0);
+            assert!(unreported > 0);
+            assert!(!summary.ecdsa_payload.ongoing_signatures.is_empty());
+            assert!(!summary.ecdsa_payload.available_quadruples.is_empty());
+            assert!(!summary.ecdsa_payload.quadruples_in_creation.is_empty());
+            assert!(!summary.ecdsa_payload.idkg_transcripts.is_empty());
+            assert!(!summary.ecdsa_payload.ongoing_xnet_reshares.is_empty());
+            let (reported, unreported) = {
+                let mut reported = 0;
+                let mut unreported = 0;
+                for agreement in summary.ecdsa_payload.xnet_reshare_agreements.values() {
+                    match agreement {
+                        ecdsa::CompletedReshareRequest::ReportedToExecution => {
+                            reported += 1;
+                        }
+                        ecdsa::CompletedReshareRequest::Unreported(_) => {
+                            unreported += 1;
+                        }
+                    }
+                }
+                (reported, unreported)
+            };
+            assert!(!summary.ecdsa_payload.xnet_reshare_agreements.is_empty());
+            assert!(reported > 0);
+            assert!(unreported > 0);
+
+            // Convert to proto format and back
+            let new_summary_height = Height::new(parent_block_height.get() + 1234);
+            let summary_proto: pb::EcdsaSummaryPayload = (&summary).into();
+            let summary_from_proto = (&summary_proto, new_summary_height).try_into().unwrap();
+            summary.update_refs(new_summary_height); // expected
+            assert_eq!(summary, summary_from_proto);
         })
     }
 }
