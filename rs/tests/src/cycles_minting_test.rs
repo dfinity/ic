@@ -11,8 +11,8 @@ use crate::driver::ic::InternetComputer;
 use canister_test::{Canister, Project, Wasm};
 use cycles_minting_canister::{
     create_canister_txn, top_up_canister_txn, CreateCanisterResult,
-    IcpXdrConversionRateCertifiedResponse, TokensToCycles, TopUpCanisterResult,
-    CREATE_CANISTER_REFUND_FEE, DEFAULT_CYCLES_PER_XDR,
+    IcpXdrConversionRateCertifiedResponse, NotifyCreateCanister, NotifyError, NotifyTopUp,
+    TokensToCycles, TopUpCanisterResult, CREATE_CANISTER_REFUND_FEE, DEFAULT_CYCLES_PER_XDR,
 };
 use dfn_candid::{candid_one, CandidOne};
 use dfn_protobuf::{ProtoBuf, ToProto};
@@ -354,6 +354,16 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             .await
             .unwrap();
 
+        // second notify should return the success result together with canister id
+        let tip = tst.get_tip().await.unwrap();
+        let can_id = user1
+            .notify_canister_create_cmc(bh, None, &controller_pid)
+            .await
+            .unwrap();
+        assert_eq!(new_canister_id, can_id);
+        let tip2 = tst.get_tip().await.unwrap();
+        assert_eq!(tip, tip2, "No block should have been created");
+
         /* Check that the funds for the canister creation attempt are burned. */
         let block = tst.get_tip().await.unwrap();
         let txn = block.transaction();
@@ -401,6 +411,15 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             .await
             .unwrap_err();
 
+        let tip = tst.get_tip().await.unwrap();
+        // cmc now returns the status of notification (so success again, but doesn't mint cycles again)
+        user1
+            .notify_top_up_cmc(bh, None, &new_canister_id)
+            .await
+            .unwrap();
+        let tip2 = tst.get_tip().await.unwrap();
+        assert_eq!(tip, tip2, "No block should have been created");
+
         let bh = user1.pay_for_top_up(topup3, None, &new_canister_id).await;
 
         user1
@@ -412,6 +431,14 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             .notify_top_up_ledger(bh, None, &new_canister_id)
             .await
             .unwrap_err();
+        // cmc should return successful topup status
+        let tip = tst.get_tip().await.unwrap();
+        user1
+            .notify_top_up_cmc(bh, None, &new_canister_id)
+            .await
+            .unwrap();
+        let tip2 = tst.get_tip().await.unwrap();
+        assert_eq!(tip, tip2, "No block should have been created");
 
         assert_eq!(
             tst.get_balance(user1.acc_for_top_up(&new_canister_id))
@@ -999,12 +1026,27 @@ impl UserHandle {
     pub async fn notify_canister_create_cmc(
         &self,
         block: BlockHeight,
-        sender_subaccount: Option<Subaccount>,
+        _sender_subaccount: Option<Subaccount>,
         controller_id: &PrincipalId,
     ) -> CreateCanisterResult {
-        // switch to cmc path when it's enabled
-        self.notify_canister_create_ledger(block, sender_subaccount, controller_id)
+        let notify_arg = NotifyCreateCanister {
+            block_index: block,
+            controller: *controller_id,
+        };
+
+        let result: Result<CanisterId, NotifyError> = self
+            .update_did(&self.cmc_id, "notify_create_canister", notify_arg)
             .await
+            .map_err(|err| (err, None))?;
+
+        match result {
+            Ok(cid) => Ok(cid),
+            Err(NotifyError::Refunded {
+                reason,
+                block_index,
+            }) => Err((reason, block_index)),
+            Err(e) => Err((e.to_string(), None)),
+        }
     }
 
     pub async fn notify_canister_create_ledger(
@@ -1038,12 +1080,27 @@ impl UserHandle {
     pub async fn notify_top_up_cmc(
         &self,
         block_idx: BlockHeight,
-        sender_subaccount: Option<Subaccount>,
+        _sender_subaccount: Option<Subaccount>,
         target_canister_id: &CanisterId,
     ) -> TopUpCanisterResult {
-        // switch to cmc path when it's enabled
-        self.notify_top_up_ledger(block_idx, sender_subaccount, target_canister_id)
+        let notify_arg = NotifyTopUp {
+            block_index: block_idx,
+            canister_id: *target_canister_id,
+        };
+
+        let result: Result<Cycles, NotifyError> = self
+            .update_did(&self.cmc_id, "notify_top_up", notify_arg)
             .await
+            .map_err(|err| (err, None))?;
+
+        match result {
+            Ok(_) => Ok(()),
+            Err(NotifyError::Refunded {
+                reason,
+                block_index,
+            }) => Err((reason, block_index)),
+            Err(e) => Err((e.to_string(), None)),
+        }
     }
 
     pub async fn notify_top_up_ledger(
