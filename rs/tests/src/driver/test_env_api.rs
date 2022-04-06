@@ -27,6 +27,15 @@
 //! let topology_snapshot = env.topology_snapshot();
 //! ```
 //!
+//! It is possible to create multiple IC within a test environment. To
+//! differentiate IC instance, they can be given a name. For example, a topology
+//! snapshot for an Internet Computer instance named `ic1` can be retrieved as
+//! follows:
+//!
+//! ```text
+//! let topology_snapshot = env.topology_snapshot_by_name("ic1");
+//! ```
+//!
 //! **Note**: Calling this function does *not* update the local store.
 //!
 //! ### Selecting a node
@@ -307,6 +316,65 @@ impl TopologySnapshot {
         self.local_registry
             .get_root_subnet_id(self.registry_version)
             .expect("failed to fetch root subnet id from registry")
+    }
+
+    /// This method blocks and repeatedly fetches updates from the registry
+    /// canister until the latest available registry version is newer than the
+    /// registry version of this snapshot.
+    ///
+    /// The registry version of the returned snapshot is the newest available
+    /// registry version.
+    ///
+    /// # Known Limitations
+    ///
+    /// As the test driver does not implement timeouts on the test level, this
+    /// method blocks for a duration of 180 seconds at maximum.
+    pub fn block_for_newer_registry_version(&self) -> Result<TopologySnapshot> {
+        let minimum_version = self.local_registry.get_latest_version() + RegistryVersion::from(1);
+        self.block_for_min_registry_version(minimum_version)
+    }
+
+    /// This method blocks and repeatedly fetches updates from the registry
+    /// canister until the latest available registry version is higher or equal
+    /// to `min_version`.
+    ///
+    /// The registry version of the returned snapshot is the newest available
+    /// registry version.
+    ///
+    /// Note that this method will immediately return if `min_version` is
+    /// less than or equal to the latest available version.
+    ///
+    /// # Known Limitations
+    ///
+    /// As the test driver does not implement timeouts on the test level, this
+    /// method blocks for a duration of 180 seconds at maximum.
+    pub fn block_for_min_registry_version(
+        &self,
+        min_version: RegistryVersion,
+    ) -> Result<TopologySnapshot> {
+        let duration = Duration::from_secs(180);
+        let backoff = Duration::from_secs(2);
+        let mut latest_version = self.local_registry.get_latest_version();
+        if min_version > latest_version {
+            latest_version = retry(self.env.logger(), duration, backoff, || {
+                self.local_registry.sync_with_nns()?;
+                let latest_version = self.local_registry.get_latest_version();
+                if latest_version >= min_version {
+                    Ok(latest_version)
+                } else {
+                    bail!(
+                        "latest_version: {}, expected minimum version: {}",
+                        latest_version,
+                        min_version
+                    )
+                }
+            })?;
+        }
+        Ok(Self {
+            registry_version: latest_version,
+            local_registry: self.local_registry.clone(),
+            env: self.env.clone(),
+        })
     }
 }
 
