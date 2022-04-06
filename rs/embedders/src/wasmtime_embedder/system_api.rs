@@ -113,10 +113,20 @@ fn charge_for_system_api_call<S: SystemApi>(
     let num_instructions_global = get_num_instructions_global(caller, log, canister_id)?;
     let current_instructions =
         load_value(&num_instructions_global, caller, log, canister_id)?.get() as i64;
-    let fee = caller
-        .as_context_mut()
-        .data_mut()
-        .system_api
+    // Assert the current instruction counter is sane
+    let system_api = &caller.data().system_api;
+    let instruction_limit = system_api.instruction_limit().get() as i64;
+    if current_instructions > instruction_limit {
+        error!(
+            log,
+            "[EXC-BUG] Canister {}: current instructions counter {} is greater than the limit {}",
+            canister_id,
+            current_instructions,
+            instruction_limit
+        );
+        // Continue execution
+    }
+    let fee = system_api
         .get_num_instructions_from_bytes(NumBytes::from(num_bytes as u64))
         .get() as i64
         + system_api_charge.get() as i64;

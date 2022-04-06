@@ -33,6 +33,9 @@ impl SystemApi for SystemApiEmpty {
     fn subnet_type(&self) -> SubnetType {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
+    fn instruction_limit(&self) -> NumInstructions {
+        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
+    }
     fn ic0_msg_caller_copy(&self, _: u32, _: u32, _: u32, _: &mut [u8]) -> HypervisorResult<()> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }

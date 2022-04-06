@@ -338,6 +338,9 @@ pub trait SystemApi {
     /// Returns the subnet type the replica runs on.
     fn subnet_type(&self) -> SubnetType;
 
+    /// Returns the execution instructions limit.
+    fn instruction_limit(&self) -> NumInstructions;
+
     /// Copies `size` bytes starting from `offset` inside the opaque caller blob
     /// and copies them to heap[dst..dst+size]. The caller is the canister
     /// id in case of requests or the user id in case of an ingress message.
