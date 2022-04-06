@@ -1,9 +1,10 @@
 use crate::ExecutionEnvironmentImpl;
+use ic_error_types::UserError;
 use ic_interfaces::execution_environment::{ExecutionMode, IngressFilterService};
 use ic_interfaces_state_manager::StateReader;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::ReplicatedState;
-use ic_types::{canonical_error::CanonicalError, messages::SignedIngressContent};
+use ic_types::messages::SignedIngressContent;
 use std::convert::Infallible;
 use std::future::Future;
 use std::pin::Pin;
@@ -43,7 +44,7 @@ impl IngressFilter {
 }
 
 impl Service<(ProvisionalWhitelist, SignedIngressContent)> for IngressFilter {
-    type Response = Result<(), CanonicalError>;
+    type Response = Result<(), UserError>;
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;

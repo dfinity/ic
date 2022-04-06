@@ -2,15 +2,15 @@
 
 use crate::{
     common::{
-        get_cors_headers, make_response, make_response_on_validation_error,
-        map_box_error_to_response,
+        get_cors_headers, make_plaintext_response, make_response,
+        make_response_on_validation_error, map_box_error_to_response,
     },
     types::{ApiReqType, RequestType},
-    HttpHandlerMetrics, IngressFilterService, UNKNOWN_LABEL,
+    HttpError, HttpHandlerMetrics, IngressFilterService, UNKNOWN_LABEL,
 };
 use hyper::{Body, Response, StatusCode};
 use ic_interfaces::{crypto::IngressSigVerifier, registry::RegistryClient};
-use ic_interfaces_p2p::IngressIngestionService;
+use ic_interfaces_p2p::{IngressError, IngressIngestionService};
 use ic_logger::{error, info_sample, warn, ReplicaLogger};
 use ic_registry_client_helpers::{
     provisional_whitelist::ProvisionalWhitelistRegistry,
@@ -18,7 +18,6 @@ use ic_registry_client_helpers::{
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_types::{
-    canonical_error::{internal_error, invalid_argument_error, out_of_range_error, CanonicalError},
     malicious_flags::MaliciousFlags,
     messages::{SignedIngress, SignedRequestBytes},
     time::current_time,
@@ -74,24 +73,30 @@ fn get_registry_data(
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
     registry_client: &dyn RegistryClient,
-) -> Result<(IngressMessageSettings, ProvisionalWhitelist), CanonicalError> {
+) -> Result<(IngressMessageSettings, ProvisionalWhitelist), HttpError> {
     let settings = match registry_client.get_ingress_message_settings(subnet_id, registry_version) {
         Ok(Some(settings)) => settings,
         Ok(None) => {
-            let err_msg = format!(
+            let message = format!(
                 "No subnet record found for registry_version={:?} and subnet_id={:?}",
                 registry_version, subnet_id
             );
-            warn!(log, "{}", err_msg);
-            return Err(internal_error(err_msg));
+            warn!(log, "{}", message);
+            return Err(HttpError {
+                status: StatusCode::INTERNAL_SERVER_ERROR,
+                message,
+            });
         }
         Err(err) => {
-            let err_msg = format!(
+            let message = format!(
                 "max_ingress_bytes_per_message not found for registry_version={:?} and subnet_id={:?}. {:?}",
                 registry_version, subnet_id, err
             );
-            error!(log, "{}", err_msg);
-            return Err(internal_error(err_msg));
+            error!(log, "{}", message);
+            return Err(HttpError {
+                status: StatusCode::INTERNAL_SERVER_ERROR,
+                message,
+            });
         }
     };
 
@@ -135,10 +140,10 @@ impl Service<Vec<u8>> for CallService {
         let msg: SignedIngress = match SignedRequestBytes::from(body).try_into() {
             Ok(msg) => msg,
             Err(e) => {
-                let res = make_response(invalid_argument_error(format!(
-                    "Could not parse body as call message: {}",
-                    e
-                )));
+                let res = make_plaintext_response(
+                    StatusCode::BAD_REQUEST,
+                    format!("Could not parse body as call message: {}", e),
+                );
                 return Box::pin(async move { Ok(res) });
             }
         };
@@ -151,17 +156,20 @@ impl Service<Vec<u8>> for CallService {
             self.registry_client.as_ref(),
         ) {
             Ok((s, p)) => (s, p),
-            Err(err) => {
-                return Box::pin(async move { Ok(make_response(err)) });
+            Err(HttpError { status, message }) => {
+                return Box::pin(async move { Ok(make_plaintext_response(status, message)) });
             }
         };
         if msg.count_bytes() > ingress_registry_settings.max_ingress_bytes_per_message {
-            let res = make_response(out_of_range_error(format!(
-                "Request {} is too large. Message bytes {} is bigger than the max allowed {}.",
-                message_id,
-                msg.count_bytes(),
-                ingress_registry_settings.max_ingress_bytes_per_message
-            )));
+            let res = make_plaintext_response(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                format!(
+                    "Request {} is too large. Message byte size {} is larger than the max allowed {}.",
+                    message_id,
+                    msg.count_bytes(),
+                    ingress_registry_settings.max_ingress_bytes_per_message
+                ),
+            );
             return Box::pin(async move { Ok(res) });
         }
 
@@ -220,7 +228,10 @@ impl Service<Vec<u8>> for CallService {
             let ingress_log_entry = msg.log_entry();
             let response = match ingress_sender.call(msg).await {
                 Err(err) => map_box_error_to_response(err),
-                Ok(Err(err)) => make_response(err),
+                Ok(Err(IngressError::Overloaded)) => make_plaintext_response(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "Service is overloaded, try again later.".to_string(),
+                ),
                 Ok(Ok(())) => {
                     // We're pretty much done, just need to send the message to ingress and
                     // make_response to the client

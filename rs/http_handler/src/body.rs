@@ -1,7 +1,7 @@
-use crate::{common::make_response, MAX_REQUEST_RECEIVE_DURATION, MAX_REQUEST_SIZE_BYTES};
+use crate::{common::make_plaintext_response, HttpError};
+use crate::{MAX_REQUEST_RECEIVE_DURATION, MAX_REQUEST_SIZE_BYTES};
 use futures_util::StreamExt;
-use hyper::{body::HttpBody, Body, Response};
-use ic_types::canonical_error::{out_of_range_error, unknown_error, CanonicalError};
+use hyper::{body::HttpBody, Body, Response, StatusCode};
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -54,29 +54,35 @@ pub(crate) struct BodyReceiverService<S> {
 async fn receive_body_without_timeout(
     mut body: Body,
     max_request_body_size_bytes: usize,
-) -> Result<Vec<u8>, CanonicalError> {
+) -> Result<Vec<u8>, HttpError> {
     let body_size_hint = body.size_hint().lower() as usize;
     if body_size_hint > max_request_body_size_bytes {
-        return Err(out_of_range_error(format!(
-            "The request body is bigger than {} bytes.",
-            max_request_body_size_bytes
-        )));
+        return Err(HttpError {
+            status: StatusCode::PAYLOAD_TOO_LARGE,
+            message: format!(
+                "The request body is bigger than {} bytes.",
+                max_request_body_size_bytes
+            ),
+        });
     }
     let mut received_body = Vec::<u8>::with_capacity(body_size_hint);
     while let Some(chunk) = body.next().await {
         match chunk {
             Err(err) => {
-                return Err(unknown_error(format!(
-                    "Unexpected error while reading request: {}",
-                    err
-                )));
+                return Err(HttpError {
+                    status: StatusCode::INTERNAL_SERVER_ERROR,
+                    message: format!("Unexpected error while reading request: {}", err),
+                });
             }
             Ok(bytes) => {
                 if received_body.len() + bytes.len() > max_request_body_size_bytes {
-                    return Err(out_of_range_error(format!(
-                        "The request body is bigger than {} bytes.",
-                        max_request_body_size_bytes
-                    )));
+                    return Err(HttpError {
+                        status: StatusCode::PAYLOAD_TOO_LARGE,
+                        message: format!(
+                            "The request body is bigger than {} bytes.",
+                            max_request_body_size_bytes
+                        ),
+                    });
                 }
                 received_body.append(&mut bytes.to_vec());
             }
@@ -89,7 +95,7 @@ async fn receive_body(
     body: Body,
     max_request_receive_duration: Duration,
     max_request_body_size_bytes: usize,
-) -> Result<Vec<u8>, CanonicalError> {
+) -> Result<Vec<u8>, HttpError> {
     match timeout(
         max_request_receive_duration,
         receive_body_without_timeout(body, max_request_body_size_bytes),
@@ -97,10 +103,13 @@ async fn receive_body(
     .await
     {
         Ok(res) => res,
-        Err(_err) => Err(out_of_range_error(format!(
-            "The request body was not received within {:?} seconds.",
-            max_request_receive_duration
-        ))),
+        Err(_err) => Err(HttpError {
+            status: StatusCode::REQUEST_TIMEOUT,
+            message: format!(
+                "The request body was not received within {:?} seconds.",
+                max_request_receive_duration
+            ),
+        }),
     }
 }
 
@@ -152,7 +161,7 @@ where
             )
             .await
             {
-                Err(err) => Ok(make_response(err)),
+                Err(HttpError { status, message }) => Ok(make_plaintext_response(status, message)),
                 Ok(body) => inner.call(body).await,
             }
         })
@@ -162,6 +171,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::HttpError;
     use rand::{distributions::Alphanumeric, thread_rng, Rng};
 
     #[tokio::test]
@@ -210,10 +220,13 @@ mod tests {
             .expect_err("The service must have returned an Err.");
         assert_eq!(
             response,
-            out_of_range_error(format!(
-                "The request body is bigger than {} bytes.",
-                MAX_REQUEST_SIZE_BYTES
-            ))
+            HttpError {
+                status: StatusCode::PAYLOAD_TOO_LARGE,
+                message: format!(
+                    "The request body is bigger than {} bytes.",
+                    MAX_REQUEST_SIZE_BYTES
+                )
+            }
         );
         // Check we can't send more data. The other end of the channel - the body - is
         // dropped.
@@ -245,10 +258,13 @@ mod tests {
             .expect_err("parse_body must have returned an Err.");
         assert_eq!(
             response,
-            out_of_range_error(format!(
-                "The request body was not received within {:?} seconds.",
-                time_to_wait
-            ))
+            HttpError {
+                status: StatusCode::REQUEST_TIMEOUT,
+                message: format!(
+                    "The request body was not received within {:?} seconds.",
+                    time_to_wait
+                )
+            }
         );
     }
 
@@ -284,10 +300,13 @@ mod tests {
             .expect_err("parse_body must have returned an Err.");
         assert_eq!(
             response,
-            out_of_range_error(format!(
-                "The request body was not received within {:?} seconds.",
-                time_to_wait
-            ))
+            HttpError {
+                status: StatusCode::REQUEST_TIMEOUT,
+                message: format!(
+                    "The request body was not received within {:?} seconds.",
+                    time_to_wait
+                )
+            }
         );
     }
 }

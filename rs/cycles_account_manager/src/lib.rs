@@ -331,19 +331,35 @@ impl CyclesAccountManager {
                 | Ok(Method::UninstallCode)
                 | Ok(Method::StopCanister) => match CanisterIdRecord::decode(ingress.arg()) {
                     Ok(record) => Some(record.get_canister_id()),
-                    Err(_) => return Err(IngressInductionCostError::InvalidSubnetPayload),
+                    Err(err) => {
+                        return Err(IngressInductionCostError::InvalidSubnetPayload(
+                            err.to_string(),
+                        ))
+                    }
                 },
                 Ok(Method::UpdateSettings) => match UpdateSettingsArgs::decode(ingress.arg()) {
                     Ok(record) => Some(record.get_canister_id()),
-                    Err(_) => return Err(IngressInductionCostError::InvalidSubnetPayload),
+                    Err(err) => {
+                        return Err(IngressInductionCostError::InvalidSubnetPayload(
+                            err.to_string(),
+                        ))
+                    }
                 },
                 Ok(Method::SetController) => match SetControllerArgs::decode(ingress.arg()) {
                     Ok(record) => Some(record.get_canister_id()),
-                    Err(_) => return Err(IngressInductionCostError::InvalidSubnetPayload),
+                    Err(err) => {
+                        return Err(IngressInductionCostError::InvalidSubnetPayload(
+                            err.to_string(),
+                        ))
+                    }
                 },
                 Ok(Method::InstallCode) => match InstallCodeArgs::decode(ingress.arg()) {
                     Ok(record) => Some(record.get_canister_id()),
-                    Err(_) => return Err(IngressInductionCostError::InvalidSubnetPayload),
+                    Err(err) => {
+                        return Err(IngressInductionCostError::InvalidSubnetPayload(
+                            err.to_string(),
+                        ))
+                    }
                 },
                 Ok(Method::CreateCanister)
                 | Ok(Method::SetupInitialDKG)
@@ -355,8 +371,10 @@ impl CyclesAccountManager {
                 | Ok(Method::ComputeInitialEcdsaDealings)
                 | Ok(Method::BitcoinTestnetGetBalance)
                 | Ok(Method::BitcoinTestnetGetUtxos)
-                | Ok(Method::BitcoinTestnetSendTransaction)
-                | Err(_) => {
+                | Ok(Method::BitcoinTestnetSendTransaction) => {
+                    return Err(IngressInductionCostError::SubnetMethodNotAllowed);
+                }
+                Err(_) => {
                     return Err(IngressInductionCostError::UnknownSubnetMethod);
                 }
             }
@@ -717,6 +735,10 @@ impl IngressInductionCost {
 /// Errors returned when computing the cost of receiving an ingress.
 #[derive(Debug, Eq, PartialEq)]
 pub enum IngressInductionCostError {
+    /// The requested subnet method is not available.
     UnknownSubnetMethod,
-    InvalidSubnetPayload,
+    /// Failed to parse method payload.
+    InvalidSubnetPayload(String),
+    /// The subnet method can be called only by a canister.
+    SubnetMethodNotAllowed,
 }

@@ -4906,6 +4906,7 @@ dependencies = [
  "ic-config",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tree-hash",
+ "ic-error-types",
  "ic-interfaces",
  "ic-interfaces-p2p",
  "ic-interfaces-state-manager",

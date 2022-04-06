@@ -255,12 +255,15 @@ impl ValidSetRuleImpl {
         // Compute the cost of induction.
         let induction_cost = match self.cycles_account_manager.ingress_induction_cost(&msg) {
             Ok(induction_cost) => induction_cost,
-            Err(IngressInductionCostError::UnknownSubnetMethod) => {
+            Err(
+                IngressInductionCostError::UnknownSubnetMethod
+                | IngressInductionCostError::SubnetMethodNotAllowed,
+            ) => {
                 return Err(StateError::UnknownSubnetMethod(
                     msg.method_name().to_string(),
                 ))
             }
-            Err(IngressInductionCostError::InvalidSubnetPayload) => {
+            Err(IngressInductionCostError::InvalidSubnetPayload(_)) => {
                 return Err(StateError::InvalidSubnetPayload)
             }
         };

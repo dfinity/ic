@@ -21,7 +21,7 @@ use crate::{
     body::BodyReceiverLayer,
     call::CallService,
     catch_up_package::CatchUpPackageService,
-    common::{get_cors_headers, map_box_error_to_response},
+    common::{get_cors_headers, make_plaintext_response, map_box_error_to_response},
     dashboard::DashboardService,
     metrics::{
         LABEL_REQUEST_TYPE, LABEL_STATUS, LABEL_TYPE, REQUESTS_LABEL_NAMES, REQUESTS_NUM_LABELS,
@@ -49,7 +49,6 @@ use ic_metrics::{histogram_vec_timer::HistogramVecTimer, MetricsRegistry};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{NodeTopology, ReplicatedState};
 use ic_types::{
-    canonical_error::{invalid_argument_error, unknown_error, CanonicalError},
     malicious_flags::MaliciousFlags,
     messages::{
         Blob, Certificate, CertificateDelegation, HttpReadState, HttpReadStateContent,
@@ -74,8 +73,7 @@ use tokio::{
     time::{sleep, timeout, Instant},
 };
 use tower::{
-    load_shed::LoadShed, service_fn, util::BoxService, BoxError, Service, ServiceBuilder,
-    ServiceExt,
+    load_shed::LoadShed, service_fn, util::BoxService, Service, ServiceBuilder, ServiceExt,
 };
 
 // Constants defining the limits of the HttpHandler.
@@ -130,6 +128,20 @@ const CONTENT_TYPE_CBOR: &str = "application/cbor";
 
 // Placeholder used when we can't determine the approriate prometheus label.
 const UNKNOWN_LABEL: &str = "unknown";
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct HttpError {
+    pub status: StatusCode,
+    pub message: String,
+}
+
+impl std::fmt::Display for HttpError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl std::error::Error for HttpError {}
 
 /// The struct that handles incoming HTTP requests for the IC replica.
 /// This is collection of thread-safe data members.
@@ -414,12 +426,12 @@ fn create_main_service(
     metrics: HttpHandlerMetrics,
     http_handler: HttpHandler,
     app_layer: AppLayer,
-) -> BoxService<Request<Body>, Response<Body>, CanonicalError> {
+) -> BoxService<Request<Body>, Response<Body>, HttpError> {
     let metrics_for_map_request = metrics.clone();
     let route_service = service_fn(move |req: RequestWithTimer| {
         let metrics = metrics.clone();
         let http_handler = http_handler.clone();
-        async move { Ok::<_, BoxError>(make_router(metrics, http_handler, app_layer, req).await) }
+        async move { Ok::<_, HttpError>(make_router(metrics, http_handler, app_layer, req).await) }
     });
     BoxService::new(
         ServiceBuilder::new()
@@ -441,11 +453,12 @@ fn create_main_service(
                     // str`. It ensures `request_timer` is dropped before `status`.
                     let mut timer = request_timer;
                     timer.set_label(LABEL_STATUS, status.as_str());
-                    Ok::<_, CanonicalError>(response)
+                    Ok::<_, HttpError>(response)
                 }
-                Err(_err) => Err(unknown_error(
-                    "We should never return an error here.".to_string(),
-                )),
+                Err(err) => {
+                    // This should never happen
+                    Err(err)
+                }
             }),
     )
 }
@@ -598,12 +611,11 @@ async fn make_router(
             )),
     );
 
-    let invalid_argument_response = common::make_response(invalid_argument_error(String::new()));
     metrics
         .protocol_version_total
         .with_label_values(&[app_layer.as_str(), &format!("{:?}", req.version())])
         .inc();
-    let svc = match *req.method() {
+    let svc = match req.method().clone() {
         Method::POST => {
             // Check the content-type header
             if !req
@@ -622,7 +634,13 @@ async fn make_router(
                     RequestType::InvalidArgument,
                     ApiReqType::InvalidArgument,
                 );
-                return (invalid_argument_response, timer);
+                return (
+                    make_plaintext_response(
+                        StatusCode::BAD_REQUEST,
+                        format!("Unexpected content-type, expected {}.", CONTENT_TYPE_CBOR),
+                    ),
+                    timer,
+                );
             }
 
             // Check the path
@@ -654,7 +672,13 @@ async fn make_router(
                         RequestType::InvalidArgument,
                         ApiReqType::InvalidArgument,
                     );
-                    return (invalid_argument_response, timer);
+                    return (
+                        make_plaintext_response(
+                            StatusCode::NOT_FOUND,
+                            "Unexpected POST request path.".to_string(),
+                        ),
+                        timer,
+                    );
                 }
             }
         }
@@ -701,7 +725,13 @@ async fn make_router(
                     RequestType::InvalidArgument,
                     ApiReqType::InvalidArgument,
                 );
-                return (invalid_argument_response, timer);
+                return (
+                    make_plaintext_response(
+                        StatusCode::NOT_FOUND,
+                        "Unexpected GET request path.".to_string(),
+                    ),
+                    timer,
+                );
             }
         },
         Method::OPTIONS => {
@@ -714,7 +744,16 @@ async fn make_router(
                 RequestType::InvalidArgument,
                 ApiReqType::InvalidArgument,
             );
-            return (invalid_argument_response, timer);
+            return (
+                make_plaintext_response(
+                    StatusCode::METHOD_NOT_ALLOWED,
+                    format!(
+                        "Unsupported method: {}. supported methods: POST, GET, OPTIONS.",
+                        req.method()
+                    ),
+                ),
+                timer,
+            );
         }
     };
     (

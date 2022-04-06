@@ -202,7 +202,7 @@ pub fn canister_rejects_ingress_only_from_one_caller(
                     .update(&canister.canister_id(), "update")
                     .call()
                     .await,
-                StatusCode::FORBIDDEN,
+                StatusCode::INTERNAL_SERVER_ERROR,
             );
 
             // Send an ingress from user 2. Should succeed.

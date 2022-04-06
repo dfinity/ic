@@ -10,8 +10,7 @@ use ic_ic00_types::HttpMethodType;
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_interfaces::{
     execution_environment::{
-        AvailableMemory, CanisterHeartbeatError, CanisterOutOfCyclesError, ExecuteMessageResult,
-        ExecutionMode,
+        AvailableMemory, CanisterHeartbeatError, ExecuteMessageResult, ExecutionMode,
     },
     messages::CanisterInputMessage,
 };
@@ -50,7 +49,6 @@ use ic_test_utilities::{
     with_test_replica_logger,
 };
 use ic_types::{
-    canonical_error::{not_found_error, permission_denied_error},
     ic00,
     ic00::{
         CanisterHttpRequestArgs, CanisterIdRecord, CanisterStatusResultV2, EmptyBlob,
@@ -2758,31 +2756,26 @@ fn message_to_canister_with_not_enough_balance_is_rejected() {
             .cost();
         let available = ingress_induction_cost - Cycles::from(1);
         assert_eq!(
-            exec_env.should_accept_ingress_message(
-                Arc::new(
-                    ReplicatedStateBuilder::default()
-                        .with_canister(
-                            CanisterStateBuilder::default()
-                                .with_canister_id(canister_id)
-                                // Just under the cycles required to accept the message.
-                                .with_cycles(available)
-                                .build()
-                        )
-                        .build()
-                ),
-                &ProvisionalWhitelist::new_empty(),
-                &ingress,
-                ExecutionMode::NonReplicated,
-            ),
-            Err(permission_denied_error(
-                CanisterOutOfCyclesError {
-                    canister_id,
-                    available,
-                    requested: ingress_induction_cost,
-                    threshold: Cycles::from(0),
-                }
-                .to_string()
-            )),
+            exec_env
+                .should_accept_ingress_message(
+                    Arc::new(
+                        ReplicatedStateBuilder::default()
+                            .with_canister(
+                                CanisterStateBuilder::default()
+                                    .with_canister_id(canister_id)
+                                    // Just under the cycles required to accept the message.
+                                    .with_cycles(available)
+                                    .build()
+                            )
+                            .build()
+                    ),
+                    &ProvisionalWhitelist::new_empty(),
+                    &ingress,
+                    ExecutionMode::NonReplicated,
+                )
+                .unwrap_err()
+                .code(),
+            ErrorCode::CanisterOutOfCycles,
         );
     });
 }
@@ -2872,38 +2865,28 @@ fn management_message_to_canister_with_not_enough_balance_is_not_accepted() {
                 .method_name("start_canister")
                 .method_payload(CanisterIdRecord::from(canister_id).encode())
                 .build();
-            let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-            let ingress_induction_cost = cycles_account_manager
-                .ingress_induction_cost(ingress.content())
-                .unwrap()
-                .cost();
             assert_eq!(
-                exec_env.should_accept_ingress_message(
-                    Arc::new(
-                        ReplicatedStateBuilder::default()
-                            .with_canister(
-                                CanisterStateBuilder::default()
-                                    .with_canister_id(canister_id)
-                                    .with_controller(user_test_id(0).get())
-                                    .with_cycles(0)
-                                    .with_wasm(vec![1, 2, 3])
-                                    .build()
-                            )
-                            .build()
-                    ),
-                    &ProvisionalWhitelist::new_empty(),
-                    ingress.content(),
-                    ExecutionMode::NonReplicated,
-                ),
-                Err(permission_denied_error(
-                    CanisterOutOfCyclesError {
-                        canister_id,
-                        available: Cycles::from(0),
-                        requested: ingress_induction_cost,
-                        threshold: Cycles::from(381000),
-                    }
-                    .to_string()
-                )),
+                exec_env
+                    .should_accept_ingress_message(
+                        Arc::new(
+                            ReplicatedStateBuilder::default()
+                                .with_canister(
+                                    CanisterStateBuilder::default()
+                                        .with_canister_id(canister_id)
+                                        .with_controller(user_test_id(0).get())
+                                        .with_cycles(0)
+                                        .with_wasm(vec![1, 2, 3])
+                                        .build()
+                                )
+                                .build()
+                        ),
+                        &ProvisionalWhitelist::new_empty(),
+                        ingress.content(),
+                        ExecutionMode::NonReplicated,
+                    )
+                    .unwrap_err()
+                    .code(),
+                ErrorCode::CanisterOutOfCycles,
             );
         }
     });
@@ -2920,15 +2903,16 @@ fn management_message_to_canister_that_doesnt_exist_is_not_accepted() {
                 .method_payload(CanisterIdRecord::from(canister_test_id(0)).encode())
                 .build();
             assert_eq!(
-                exec_env.should_accept_ingress_message(
-                    Arc::new(ReplicatedStateBuilder::default().build()),
-                    &ProvisionalWhitelist::new_empty(),
-                    ingress.content(),
-                    ExecutionMode::NonReplicated,
-                ),
-                Err(not_found_error(
-                    "Requested canister does not exist".to_string()
-                )),
+                exec_env
+                    .should_accept_ingress_message(
+                        Arc::new(ReplicatedStateBuilder::default().build()),
+                        &ProvisionalWhitelist::new_empty(),
+                        ingress.content(),
+                        ExecutionMode::NonReplicated,
+                    )
+                    .unwrap_err()
+                    .code(),
+                ErrorCode::CanisterNotFound,
             );
         }
     });
@@ -2945,15 +2929,16 @@ fn management_message_with_invalid_payload_is_not_accepted() {
                 .method_payload(vec![]) // an invalid payload
                 .build();
             assert_eq!(
-                exec_env.should_accept_ingress_message(
-                    Arc::new(ReplicatedStateBuilder::default().build()),
-                    &ProvisionalWhitelist::new_empty(),
-                    ingress.content(),
-                    ExecutionMode::NonReplicated,
-                ),
-                Err(permission_denied_error(
-                    "Requested canister rejected the message".to_string()
-                )),
+                exec_env
+                    .should_accept_ingress_message(
+                        Arc::new(ReplicatedStateBuilder::default().build()),
+                        &ProvisionalWhitelist::new_empty(),
+                        ingress.content(),
+                        ExecutionMode::NonReplicated,
+                    )
+                    .unwrap_err()
+                    .code(),
+                ErrorCode::InvalidManagementPayload
             );
         }
     });
@@ -2969,15 +2954,16 @@ fn management_message_with_invalid_method_is_not_accepted() {
                 .method_name("invalid_method")
                 .build();
             assert_eq!(
-                exec_env.should_accept_ingress_message(
-                    Arc::new(ReplicatedStateBuilder::default().build()),
-                    &ProvisionalWhitelist::new_empty(),
-                    ingress.content(),
-                    ExecutionMode::NonReplicated,
-                ),
-                Err(permission_denied_error(
-                    "Requested canister rejected the message".to_string()
-                )),
+                exec_env
+                    .should_accept_ingress_message(
+                        Arc::new(ReplicatedStateBuilder::default().build()),
+                        &ProvisionalWhitelist::new_empty(),
+                        ingress.content(),
+                        ExecutionMode::NonReplicated,
+                    )
+                    .unwrap_err()
+                    .code(),
+                ErrorCode::CanisterMethodNotFound,
             );
         }
     });

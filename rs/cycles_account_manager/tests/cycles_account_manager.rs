@@ -318,17 +318,22 @@ fn ingress_induction_cost_subnet_message_with_invalid_payload() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
 
     for receiver in [IC_00, CanisterId::from(subnet_test_id(0))].iter() {
-        assert_eq!(
-            cycles_account_manager.ingress_induction_cost(
-                SignedIngressBuilder::new()
-                    .sender(user_test_id(0))
-                    .canister_id(*receiver)
-                    .method_name("start_canister")
-                    .method_payload(vec![]) // an invalid payload
-                    .build()
-                    .content(),
+        let result = cycles_account_manager.ingress_induction_cost(
+            SignedIngressBuilder::new()
+                .sender(user_test_id(0))
+                .canister_id(*receiver)
+                .method_name("start_canister")
+                .method_payload(vec![]) // an invalid payload
+                .build()
+                .content(),
+        );
+        assert!(
+            matches!(
+                result,
+                Err(IngressInductionCostError::InvalidSubnetPayload(_))
             ),
-            Err(IngressInductionCostError::InvalidSubnetPayload)
+            "Expected InvalidSubnetPayload error, got: {:?}",
+            result
         );
     }
 }
