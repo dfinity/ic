@@ -78,6 +78,7 @@ repos:
   rev: 20.8b1
   hooks:
   - id: black
+    additional_dependencies: ['click==8.0.4']
     args:
       - --line-length=120
 
