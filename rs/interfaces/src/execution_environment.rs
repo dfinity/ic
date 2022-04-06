@@ -8,7 +8,6 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::{PageBytes, PageIndex};
 use ic_types::{
-    canonical_error::CanonicalError,
     crypto::canister_threshold_sig::MasterEcdsaPublicKey,
     ingress::{IngressStatus, WasmResult},
     messages::{
@@ -232,11 +231,7 @@ pub type AnonymousQueryService =
 // The buffer also dampens usage by reducing the risk of
 // spiky traffic when users retry in case failed requests.
 pub type IngressFilterService = Buffer<
-    BoxService<
-        (ProvisionalWhitelist, SignedIngressContent),
-        Result<(), CanonicalError>,
-        Infallible,
-    >,
+    BoxService<(ProvisionalWhitelist, SignedIngressContent), Result<(), UserError>, Infallible>,
     (ProvisionalWhitelist, SignedIngressContent),
 >;
 

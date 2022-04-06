@@ -74,6 +74,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use ic_interfaces::ingress_pool::IngressPoolThrottler;
+use ic_interfaces_p2p::IngressError;
 use ic_interfaces_transport::{
     AsyncTransportEventHandler, FlowId, SendError, TransportError, TransportErrorCode,
     TransportNotification, TransportPayload, TransportStateChange,
@@ -81,13 +82,7 @@ use ic_interfaces_transport::{
 use ic_logger::{debug, info, replica_logger::ReplicaLogger, trace};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy, registry::subnet::v1::GossipConfig};
-use ic_types::{
-    artifact::AdvertClass,
-    canonical_error::{unavailable_error, CanonicalError},
-    messages::SignedIngress,
-    p2p::GossipAdvert,
-    NodeId,
-};
+use ic_types::{artifact::AdvertClass, messages::SignedIngress, p2p::GossipAdvert, NodeId};
 use parking_lot::RwLock;
 use std::{
     cmp::max,
@@ -454,7 +449,7 @@ impl IngressEventHandler {
 
 /// `IngressEventHandler` implements the `IngressEventHandler` trait.
 impl Service<SignedIngress> for IngressEventHandler {
-    type Response = Result<(), CanonicalError>;
+    type Response = Result<(), IngressError>;
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
@@ -473,7 +468,7 @@ impl Service<SignedIngress> for IngressEventHandler {
             // We ingnore the error in case the receiver was dropped. This can happen when the
             // client drops the future executing this code.
             let _ = tx.send(if throttler.read().unwrap().exceeds_threshold() {
-                Err(unavailable_error("Service Unavailable!".to_string()))
+                Err(IngressError::Overloaded)
             } else {
                 gossip.on_user_ingress(signed_ingress, node_id)
             });
@@ -710,7 +705,7 @@ pub mod tests {
             &self,
             _ingress: Self::Ingress,
             peer_id: Self::NodeId,
-        ) -> Result<(), CanonicalError> {
+        ) -> Result<(), IngressError> {
             TestGossip::increment_or_set(&self.num_ingress, peer_id);
             Ok(())
         }

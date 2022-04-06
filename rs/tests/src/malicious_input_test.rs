@@ -69,7 +69,7 @@ fn test_invalid_get_requests(handle: &IcHandle, ctx: &ic_fondue::pot::Context) {
             ))
             .send()
             .unwrap();
-        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(res.status(), StatusCode::NOT_FOUND);
     }
 }
 

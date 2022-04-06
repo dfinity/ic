@@ -57,7 +57,6 @@
 pub mod artifact;
 pub mod batch;
 pub mod canister_http;
-pub mod canonical_error;
 pub mod chunkable;
 pub mod consensus;
 pub mod crypto;

@@ -61,6 +61,7 @@ use crate::{
 use ic_artifact_manager::artifact::IngressArtifact;
 use ic_interfaces::artifact_manager::ArtifactManager;
 use ic_interfaces::registry::RegistryClient;
+use ic_interfaces_p2p::IngressError;
 use ic_interfaces_transport::{
     FlowTag, Transport, TransportError, TransportNotification, TransportStateChange,
 };
@@ -72,7 +73,6 @@ use ic_protobuf::p2p::v1::gossip_message::Body;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError, ProxyDecodeError::*};
 use ic_types::{
     artifact::{Artifact, ArtifactFilter, ArtifactId, ArtifactKind},
-    canonical_error::{unavailable_error, CanonicalError},
     chunkable::{ArtifactChunk, ArtifactChunkData, ChunkId},
     crypto::CryptoHash,
     malicious_flags::MaliciousFlags,
@@ -122,7 +122,7 @@ pub trait Gossip {
         &self,
         ingress: Self::Ingress,
         peer_id: Self::NodeId,
-    ) -> Result<(), CanonicalError>;
+    ) -> Result<(), IngressError>;
 
     /// The method broadcasts the given advert to other peers.
     fn broadcast_advert(&self, advert_request: GossipAdvertSendRequest);
@@ -432,7 +432,7 @@ impl Gossip for GossipImpl {
         &self,
         ingress: Self::Ingress,
         peer_id: Self::NodeId,
-    ) -> Result<(), CanonicalError> {
+    ) -> Result<(), IngressError> {
         let advert = IngressArtifact::message_to_advert(&ingress);
         self.artifact_manager
             .on_artifact(
@@ -442,7 +442,7 @@ impl Gossip for GossipImpl {
             )
             .map_err(|e| {
                 info!(self.log, "Artifact not inserted {:?}", e);
-                unavailable_error("Service Unavailable!".to_string())
+                IngressError::Overloaded
             })
     }
 

@@ -4,6 +4,7 @@ use ic_config::flag_status::FlagStatus;
 use ic_config::{embedders::Config as EmbeddersConfig, execution_environment::Config};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{wasm_executor::WasmExecutor, WasmExecutionInput, WasmtimeEmbedder};
+use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
     ExecutionParameters, HypervisorError, HypervisorResult, WasmExecutionOutput,
 };
@@ -22,7 +23,6 @@ use ic_system_api::{
 };
 use ic_types::ic00::IC_00;
 use ic_types::{
-    canonical_error::{internal_error, not_found_error, permission_denied_error, CanonicalError},
     ingress::WasmResult,
     messages::Payload,
     methods::{Callback, FuncRef, SystemMethod, WasmMethod},
@@ -871,9 +871,10 @@ impl Hypervisor {
         method_payload: Vec<u8>,
         time: Time,
         execution_parameters: ExecutionParameters,
-    ) -> (NumInstructions, Result<(), CanonicalError>) {
+    ) -> (NumInstructions, Result<(), UserError>) {
         let method = WasmMethod::System(SystemMethod::CanisterInspectMessage);
         let memory_usage = canister.memory_usage(self.own_subnet_type);
+        let canister_id = canister.canister_id();
         let (execution_state, system_state, _) = canister.into_parts();
 
         // Validate that the Wasm module is present.
@@ -881,8 +882,9 @@ impl Hypervisor {
             None => {
                 return (
                     execution_parameters.instruction_limit,
-                    Err(not_found_error(
-                        "Requested canister has no wasm module".into(),
+                    Err(UserError::new(
+                        ErrorCode::CanisterWasmModuleNotFound,
+                        "Requested canister has no wasm module",
                     )),
                 );
             }
@@ -913,29 +915,10 @@ impl Hypervisor {
                     "SystemApi should guarantee that the canister does not reply"
                 ),
             },
-            Err(err) => match err {
-                HypervisorError::MessageRejected => (
-                    output.num_instructions_left,
-                    Err(permission_denied_error(
-                        "Requested canister rejected the message".to_string(),
-                    )),
-                ),
-                err => {
-                    let canonical_error = match err {
-                        HypervisorError::MethodNotFound(_) => not_found_error(
-                            "Attempt to execute non-existent method on the canister".to_string(),
-                        ),
-                        HypervisorError::CalledTrap(_) => permission_denied_error(
-                            "Requested canister rejected the message".to_string(),
-                        ),
-                        _ => internal_error(
-                            "Requested canister failed to process the message acceptance request"
-                                .to_string(),
-                        ),
-                    };
-                    (output.num_instructions_left, Err(canonical_error))
-                }
-            },
+            Err(err) => (
+                output.num_instructions_left,
+                Err(err.into_user_error(&canister_id)),
+            ),
         }
     }
 

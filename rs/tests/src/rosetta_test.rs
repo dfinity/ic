@@ -872,7 +872,12 @@ async fn test_wrong_canister_id(node_url: Url, root_key_blob: Option<&Blob>) {
     let err = send_icpts(&ros, Arc::new(kp), acc2, Tokens::from_e8s(1000))
         .await
         .unwrap_err();
-    assert_ic_error(&err, 740, 404, "Requested canister does not exist");
+    assert_ic_error(
+        &err,
+        740,
+        404,
+        &format!("Canister {} not found", some_can_id),
+    );
 }
 
 /// Test doing multiple transfers in a single submit call

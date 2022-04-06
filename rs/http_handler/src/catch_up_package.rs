@@ -7,7 +7,7 @@ use crate::{
 };
 use hyper::{Body, Response, StatusCode};
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
-use ic_types::{canonical_error::invalid_argument_error, consensus::catchup::CatchUpPackageParam};
+use ic_types::consensus::catchup::CatchUpPackageParam;
 use prost::Message;
 use std::future::Future;
 use std::pin::Pin;
@@ -82,10 +82,10 @@ impl Service<Vec<u8>> for CatchUpPackageService {
                         Ok(common::empty_response())
                     }
                 }
-                Err(e) => Ok(common::make_response(invalid_argument_error(format!(
-                    "Could not parse body as CatchUpPackage param: {}",
-                    e
-                )))),
+                Err(e) => Ok(common::make_plaintext_response(
+                    StatusCode::BAD_REQUEST,
+                    format!("Could not parse body as CatchUpPackage param: {}", e),
+                )),
             }
         };
         Box::pin(async move { res })

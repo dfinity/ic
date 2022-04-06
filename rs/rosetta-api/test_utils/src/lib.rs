@@ -573,12 +573,17 @@ pub fn assert_ic_error(err: &RosettaError, code: u32, ic_http_status: u64, text:
         details.get("ic_http_status").unwrap().as_u64().unwrap(),
         ic_http_status
     );
-    assert!(details
-        .get("error_message")
-        .unwrap()
-        .as_str()
-        .unwrap()
-        .contains(text));
+    assert!(
+        details
+            .get("error_message")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .contains(text),
+        "Expected error message to contain '{}' but got: '{}'",
+        text,
+        details.get("error_message").unwrap().as_str().unwrap()
+    );
 }
 
 pub fn assert_canister_error(err: &RosettaError, code: u32, text: &str) {

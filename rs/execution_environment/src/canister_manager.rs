@@ -24,7 +24,6 @@ use ic_replicated_state::{
 };
 use ic_state_layout::{CanisterLayout, CheckpointLayout, RwPolicy};
 use ic_types::{
-    canonical_error::{not_found_error, permission_denied_error, CanonicalError},
     ingress::IngressStatus,
     messages::{
         CanisterInstallMode, Payload, RejectContext, Response as CanisterResponse,
@@ -131,31 +130,44 @@ impl CanisterManager {
         sender: UserId,
         method_name: &str,
         payload: &[u8],
-    ) -> Result<(), CanonicalError> {
-        fn is_sender_controller(
-            canister_id: CanisterId,
-            sender: UserId,
-            state: Arc<ReplicatedState>,
-        ) -> Result<(), CanonicalError> {
+    ) -> Result<(), UserError> {
+        let is_sender_controller = |canister_id: CanisterId| -> Result<(), UserError> {
             match state.canister_state(&canister_id) {
                 Some(canister) => {
                     if !canister.controllers().contains(&sender.get()) {
-                        Err(permission_denied_error(
-                            "Requested canister rejected the message".to_string(),
+                        Err(UserError::new(
+                            ErrorCode::CanisterInvalidController,
+                            format!(
+                                "Only controllers of canister {} can call ic00 method {}",
+                                canister_id, method_name,
+                            ),
                         ))
                     } else {
                         Ok(())
                     }
                 }
-                None => Err(not_found_error(
-                    "Requested canister does not exist".to_string(),
+                None => Err(UserError::new(
+                    ErrorCode::CanisterNotFound,
+                    format!("Canister {} not found", canister_id),
                 )),
             }
-        }
+        };
 
-        let rejected_canister_err = Err(permission_denied_error(
-            "Requested canister rejected the message".to_string(),
-        ));
+        let failed_to_decode = |e: &dyn std::error::Error| {
+            Err(UserError::new(
+                ErrorCode::InvalidManagementPayload,
+                format!(
+                    "Failed to decode payload for ic00 method {}: {}",
+                    method_name, e
+                ),
+            ))
+        };
+        let only_canisters_allowed = || {
+            Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!("Only canisters can call ic00 method {}", method_name),
+            ))
+        };
         // The message is targeted towards the management canister. The
         // actual type of the method will determine if the message should be
         // accepted or not.
@@ -171,7 +183,7 @@ impl CanisterManager {
             // "DepositCycles" can be called by anyone however as ingress message
             // cannot carry cycles, it does not make sense to allow them from users.
             | Ok(Ic00Method::DepositCycles)
-            | Ok(Ic00Method::HttpRequest) => rejected_canister_err,
+            | Ok(Ic00Method::HttpRequest) => only_canisters_allowed(),
 
             // These methods are only valid if they are sent by the controller
             // of the canister. We assume that the canister always wants to
@@ -181,36 +193,39 @@ impl CanisterManager {
             | Ok(Ic00Method::UninstallCode)
             | Ok(Ic00Method::StopCanister)
             | Ok(Ic00Method::DeleteCanister) => match Decode!(payload, CanisterIdRecord) {
-                Err(_) => rejected_canister_err,
-                Ok(args) => is_sender_controller(args.get_canister_id(), sender, state),
+                Err(e) => failed_to_decode(&e),
+                Ok(args) => is_sender_controller(args.get_canister_id()),
             },
             Ok(Ic00Method::UpdateSettings) => match Decode!(payload, UpdateSettingsArgs) {
-                Err(_) => rejected_canister_err,
-                Ok(args) => is_sender_controller(args.get_canister_id(), sender, state),
+                Err(e) => failed_to_decode(&e),
+                Ok(args) => is_sender_controller(args.get_canister_id()),
             },
             Ok(Ic00Method::InstallCode) => match Decode!(payload, InstallCodeArgs) {
-                Err(_) => rejected_canister_err,
-                Ok(args) => is_sender_controller(args.get_canister_id(), sender, state),
+                Err(e) => failed_to_decode(&e),
+                Ok(args) => is_sender_controller(args.get_canister_id()),
             },
             Ok(Ic00Method::SetController) => match Decode!(payload, SetControllerArgs) {
-                Err(_) => rejected_canister_err,
-                Ok(args) => is_sender_controller(args.get_canister_id(), sender, state),
+                Err(e) => failed_to_decode(&e),
+                Ok(args) => is_sender_controller(args.get_canister_id()),
             },
 
             // Nobody pays for `raw_rand`, so this cannot be used via ingress messages
-            Ok(Ic00Method::RawRand) => rejected_canister_err,
+            Ok(Ic00Method::RawRand) => only_canisters_allowed(),
 
             // Bitcoin messages require cycles, so we reject all ingress messages.
             Ok(Ic00Method::BitcoinTestnetGetBalance)
                 | Ok(Ic00Method::BitcoinTestnetGetUtxos)
-                | Ok(Ic00Method::BitcoinTestnetSendTransaction) => rejected_canister_err,
+                | Ok(Ic00Method::BitcoinTestnetSendTransaction) => only_canisters_allowed(),
 
             Ok(Ic00Method::ProvisionalCreateCanisterWithCycles)
             | Ok(Ic00Method::ProvisionalTopUpCanister) => {
                 if provisional_whitelist.contains(sender.get_ref()) {
                     Ok(())
                 } else {
-                    rejected_canister_err
+                    Err(UserError::new(
+                        ErrorCode::CanisterRejectedMessage,
+                        format!("Caller {} is not allowed to call ic00 method {}", sender, method_name)
+                    ))
                 }
             }
         }

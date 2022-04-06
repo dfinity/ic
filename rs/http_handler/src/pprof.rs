@@ -1,8 +1,9 @@
-use crate::common::{get_cors_headers, make_response, CONTENT_TYPE_HTML, CONTENT_TYPE_PROTOBUF};
+use crate::common::{
+    get_cors_headers, make_plaintext_response, CONTENT_TYPE_HTML, CONTENT_TYPE_PROTOBUF,
+};
 use http::{header, request::Parts};
 use hyper::{self, Body, Response, StatusCode};
 use ic_pprof::{flamegraph, profile, Error};
-use ic_types::canonical_error::{internal_error, invalid_argument_error, CanonicalError};
 use std::{collections::HashMap, time::Duration};
 
 pub const CONTENT_TYPE_SVG: &str = "image/svg+xml";
@@ -61,7 +62,7 @@ pub(crate) async fn cpu_profile(parts: Parts) -> Response<Body> {
         Ok((duration, frequency)) => {
             into_response(profile(duration, frequency).await, CONTENT_TYPE_PROTOBUF)
         }
-        Err(err) => make_response(err),
+        Err(err) => make_plaintext_response(StatusCode::BAD_REQUEST, err),
     }
 }
 
@@ -70,11 +71,11 @@ pub(crate) async fn cpu_flamegraph(parts: Parts) -> Response<Body> {
         Ok((duration, frequency)) => {
             into_response(flamegraph(duration, frequency).await, CONTENT_TYPE_SVG)
         }
-        Err(err) => make_response(err),
+        Err(err) => make_plaintext_response(StatusCode::BAD_REQUEST, err),
     }
 }
 
-fn query(parts: Parts) -> Result<(Duration, i32), CanonicalError> {
+fn query(parts: Parts) -> Result<(Duration, i32), String> {
     let query_pairs: HashMap<_, _> = match parts.uri.query() {
         Some(query) => url::form_urlencoded::parse(query.as_bytes()).collect(),
         None => Default::default(),
@@ -84,7 +85,7 @@ fn query(parts: Parts) -> Result<(Duration, i32), CanonicalError> {
         Some(val) => match val.parse() {
             Ok(val) => val,
             Err(err) => {
-                return Err(invalid_argument_error(err.to_string()));
+                return Err(err.to_string());
             }
         },
         None => DEFAULT_DURATION_SECONDS,
@@ -95,7 +96,7 @@ fn query(parts: Parts) -> Result<(Duration, i32), CanonicalError> {
         Some(val) => match val.parse() {
             Ok(val) => val,
             Err(err) => {
-                return Err(invalid_argument_error(err.to_string()));
+                return Err(err.to_string());
             }
         },
         None => DEFAULT_FREQUENCY,
@@ -107,7 +108,7 @@ fn query(parts: Parts) -> Result<(Duration, i32), CanonicalError> {
 fn into_response(result: Result<Vec<u8>, Error>, content_type: &'static str) -> Response<Body> {
     match result {
         Ok(body) => ok_response(body, content_type),
-        Err(err) => make_response(internal_error(err.to_string())),
+        Err(err) => make_plaintext_response(StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
     }
 }
 

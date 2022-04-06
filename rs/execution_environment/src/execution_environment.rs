@@ -9,7 +9,9 @@ use candid::Encode;
 use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_crypto::derive_tecdsa_public_key;
-use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost};
+use ic_cycles_account_manager::{
+    CyclesAccountManager, IngressInductionCost, IngressInductionCostError,
+};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
     CanisterHttpRequestArgs, CanisterIdRecord, CanisterSettingsArgs,
@@ -39,7 +41,6 @@ use ic_replicated_state::{
 use ic_types::messages::InternalQuery;
 use ic_types::{
     canister_http::CanisterHttpRequestContext,
-    canonical_error::{not_found_error, permission_denied_error, CanonicalError},
     crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterEcdsaPublicKey},
     crypto::threshold_sig::ni_dkg::NiDkgTargetId,
     ingress::{IngressStatus, WasmResult},
@@ -1510,7 +1511,7 @@ impl ExecutionEnvironmentImpl {
         provisional_whitelist: &ProvisionalWhitelist,
         ingress: &SignedIngressContent,
         execution_mode: ExecutionMode,
-    ) -> Result<(), CanonicalError> {
+    ) -> Result<(), UserError> {
         // A first-pass check on the canister's balance to prevent needless gossiping
         // if the canister's balance is too low. A more rigorous check happens later
         // in the ingress selector.
@@ -1518,8 +1519,29 @@ impl ExecutionEnvironmentImpl {
             let induction_cost = self
                 .cycles_account_manager
                 .ingress_induction_cost(ingress)
-                .map_err(|_| {
-                    permission_denied_error("Requested canister rejected the message".to_string())
+                .map_err(|e| match e {
+                    IngressInductionCostError::UnknownSubnetMethod => UserError::new(
+                        ErrorCode::CanisterMethodNotFound,
+                        format!(
+                            "ic00 interface does not expose method {}",
+                            ingress.method_name()
+                        ),
+                    ),
+                    IngressInductionCostError::SubnetMethodNotAllowed => UserError::new(
+                        ErrorCode::CanisterRejectedMessage,
+                        format!(
+                            "ic00 method {} can be called only by a canister",
+                            ingress.method_name()
+                        ),
+                    ),
+                    IngressInductionCostError::InvalidSubnetPayload(err) => UserError::new(
+                        ErrorCode::InvalidManagementPayload,
+                        format!(
+                            "Failed to parse payload for ic00 method {}: {}",
+                            ingress.method_name(),
+                            err
+                        ),
+                    ),
                 })?;
 
             if let IngressInductionCost::Fee { payer, cost } = induction_cost {
@@ -1531,12 +1553,16 @@ impl ExecutionEnvironmentImpl {
                             canister.memory_usage(self.own_subnet_type),
                             canister.scheduler_state.compute_allocation,
                         ) {
-                            return Err(permission_denied_error(err.to_string()));
+                            return Err(UserError::new(
+                                ErrorCode::CanisterOutOfCycles,
+                                err.to_string(),
+                            ));
                         }
                     }
                     None => {
-                        return Err(not_found_error(
-                            "Requested canister does not exist".to_string(),
+                        return Err(UserError::new(
+                            ErrorCode::CanisterNotFound,
+                            format!("Canister {} not found", payer),
                         ));
                     }
                 }
@@ -1579,8 +1605,9 @@ impl ExecutionEnvironmentImpl {
                         )
                         .1
                 }
-                None => Err(not_found_error(
-                    "Requested canister does not exist".to_string(),
+                None => Err(UserError::new(
+                    ErrorCode::CanisterNotFound,
+                    format!("Canister {} not found", canister_id),
                 )),
             }
         }

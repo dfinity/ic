@@ -1,14 +1,14 @@
 //! Module that serves the human-readable replica dashboard, which provide
 //! information about the state of the replica.
 
-use crate::common::{make_response, CONTENT_TYPE_HTML};
+use crate::common::{make_plaintext_response, CONTENT_TYPE_HTML};
 use askama::Template;
 use hyper::{Body, Response, StatusCode};
 use ic_config::http_handler::Config;
 use ic_interfaces_state_manager::StateReader;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
-use ic_types::{canonical_error::internal_error, Height, ReplicaVersion};
+use ic_types::{Height, ReplicaVersion};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -81,7 +81,10 @@ impl Service<Body> for DashboardService {
             }
             // If there was an internal error, the error description is text, not HTML, and
             // therefore we don't attach the header
-            Err(e) => make_response(internal_error(format!("Internal error: {}", e))),
+            Err(e) => make_plaintext_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Internal error: {}", e),
+            ),
         };
         Box::pin(async move { Ok(res) })
     }
