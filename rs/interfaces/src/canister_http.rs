@@ -1,6 +1,7 @@
 //! Canister Http related public interfaces.
 use crate::artifact_pool::UnvalidatedArtifact;
 use crate::consensus_pool::ConsensusPoolCache;
+use ic_types::crypto::CryptoHashOf;
 use ic_types::{
     artifact::{CanisterHttpResponseId, PriorityFn},
     canister_http::{CanisterHttpResponseContent, CanisterHttpResponseShare},
@@ -21,6 +22,16 @@ pub type CanisterHttpChangeSet = Vec<CanisterHttpChangeAction>;
 pub trait CanisterHttpPool: Send + Sync {
     fn get_validated_shares(&self) -> Box<dyn Iterator<Item = &CanisterHttpResponseShare> + '_>;
     fn get_unvalidated_shares(&self) -> Box<dyn Iterator<Item = &CanisterHttpResponseShare> + '_>;
+    fn get_response_content_items(
+        &self,
+    ) -> Box<
+        dyn Iterator<
+                Item = (
+                    &CryptoHashOf<CanisterHttpResponseContent>,
+                    &CanisterHttpResponseContent,
+                ),
+            > + '_,
+    >;
 
     fn lookup_validated(
         &self,

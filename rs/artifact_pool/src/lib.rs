@@ -1,4 +1,4 @@
-mod canister_http_pool;
+pub mod canister_http_pool;
 pub mod certification_pool;
 pub mod consensus_pool;
 mod consensus_pool_cache;
