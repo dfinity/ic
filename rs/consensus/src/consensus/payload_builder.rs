@@ -1,6 +1,6 @@
 //! Payload creation/validation subcomponent
 
-use crate::consensus::metrics::PayloadBuilderMetrics;
+use crate::consensus::{block_maker::SubnetRecords, metrics::PayloadBuilderMetrics};
 use ic_interfaces::{
     consensus::{PayloadPermanentError, PayloadTransientError, PayloadValidationError},
     ingress_manager::IngressSelector,
@@ -21,9 +21,7 @@ use ic_types::{
 };
 use std::sync::Arc;
 
-use super::block_maker::SubnetRecords;
-
-/// The PayloadBuilder is responsible for creating and validating payload that
+/// The [`PayloadBuilder`] is responsible for creating and validating payload that
 /// is included in consensus blocks.
 pub trait PayloadBuilder: Send + Sync {
     /// Produces a payload that is valid given `past_payloads` and `context`.

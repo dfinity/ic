@@ -12,6 +12,7 @@ use ic_interfaces::{
         IngressTransientError,
     },
     ingress_pool::{IngressPoolSelect, SelectResult},
+    payload::BatchPayloadSectionBuilder,
     validation::{ValidationError, ValidationResult},
 };
 use ic_interfaces_state_manager::StateManagerError;
@@ -269,6 +270,32 @@ impl<'a> IngressSelector for IngressManager {
 
     fn request_purge_finalized_messages(&self, message_ids: Vec<IngressMessageId>) {
         self.messages_to_purge.write().unwrap().push(message_ids)
+    }
+}
+
+impl BatchPayloadSectionBuilder<IngressPayload> for IngressManager {
+    fn build_payload(
+        &self,
+        validation_context: &ValidationContext,
+        max_size: NumBytes,
+        _priority: usize,
+        past_payloads: &[(Height, Time, Payload)],
+    ) -> (IngressPayload, NumBytes) {
+        let past_payloads = self.filter_past_payloads(past_payloads, validation_context);
+        let payload = self.get_ingress_payload(&past_payloads, validation_context, max_size);
+        let size = NumBytes::new(payload.count_bytes() as u64);
+        (payload, size)
+    }
+
+    fn validate_payload(
+        &self,
+        payload: &IngressPayload,
+        validation_context: &ValidationContext,
+        past_payloads: &[(Height, Time, Payload)],
+    ) -> Result<NumBytes, IngressPayloadValidationError> {
+        let past_payloads = self.filter_past_payloads(past_payloads, validation_context);
+        self.validate_ingress_payload(payload, &past_payloads, validation_context)?;
+        Ok(NumBytes::new(payload.count_bytes() as u64))
     }
 }
 
