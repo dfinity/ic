@@ -36,7 +36,6 @@ use ic_test_utilities::{
     consensus::{fake::*, make_genesis, MockConsensusCache},
     crypto::temp_crypto_component_with_fake_registry,
     cycles_account_manager::CyclesAccountManagerBuilder,
-    registry::{setup_registry, SubnetRecordBuilder},
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
     state::ReplicatedStateBuilder,
     state_manager::MockStateManager,
@@ -45,6 +44,7 @@ use ic_test_utilities::{
     xnet_payload_builder::FakeXNetPayloadBuilder,
     FastForwardTimeSource,
 };
+use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
 use ic_types::{
     batch::{BatchPayload, IngressPayload, SelfValidatingPayload, ValidationContext, XNetPayload},
     consensus::certification::*,

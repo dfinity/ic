@@ -678,12 +678,12 @@ mod tests {
     use ic_test_utilities::{
         ingress_selector::FakeIngressSelector,
         message_routing::FakeMessageRouting,
-        registry::{FakeLocalStoreCertifiedTimeReader, SubnetRecordBuilder},
         self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
         types::ids::{node_test_id, subnet_test_id},
         xnet_payload_builder::FakeXNetPayloadBuilder,
         FastForwardTimeSource,
     };
+    use ic_test_utilities_registry::{FakeLocalStoreCertifiedTimeReader, SubnetRecordBuilder};
     use std::borrow::Borrow;
     use std::sync::Arc;
     use std::time::Duration;

@@ -4,9 +4,8 @@ use ic_protobuf::registry::node::v1::{
     connection_endpoint::Protocol, ConnectionEndpoint, NodeRecord,
 };
 use ic_registry_keys::make_node_record_key;
-use ic_test_utilities::{
-    registry::MockRegistryClient, types::ids::node_test_id, with_test_replica_logger,
-};
+use ic_test_utilities::{types::ids::node_test_id, with_test_replica_logger};
+use ic_test_utilities_registry::MockRegistryClient;
 use ic_types::{registry::RegistryClientError, NodeId, RegistryVersion};
 use prost::Message;
 use std::net::SocketAddr;

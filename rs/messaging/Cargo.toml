@@ -50,6 +50,7 @@ ic-state-manager = { path = "../state_manager" }
 ic-registry-client-fake = { path = "../registry/fake" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-registry = { path = "../test_utilities/registry" }
 maplit = "1.0.2"
 mockall = "0.7.2"
 nix = "0.23.0"

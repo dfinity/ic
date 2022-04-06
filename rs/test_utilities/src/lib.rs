@@ -14,7 +14,6 @@ pub mod metrics;
 pub mod notification;
 pub mod p2p;
 pub mod port_allocation;
-pub mod registry;
 pub mod self_validating_payload_builder;
 pub mod stable_memory_reader;
 pub mod state;

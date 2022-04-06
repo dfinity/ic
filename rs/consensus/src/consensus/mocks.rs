@@ -10,11 +10,11 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
 use ic_test_utilities::{
     crypto::CryptoReturningOk,
-    registry::{setup_registry_non_final, SubnetRecordBuilder},
     state_manager::RefMockStateManager,
     types::ids::{node_test_id, subnet_test_id},
     FastForwardTimeSource,
 };
+use ic_test_utilities_registry::{setup_registry_non_final, SubnetRecordBuilder};
 use ic_types::{
     batch::{BatchPayload, ValidationContext},
     consensus::Payload,

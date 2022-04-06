@@ -1523,7 +1523,6 @@ pub mod tests {
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_test_utilities::consensus::fake::FakeSigner;
     use ic_test_utilities::port_allocation::allocate_ports;
-    use ic_test_utilities::registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities::{
         consensus::MockConsensusCache,
         p2p::*,
@@ -1531,6 +1530,7 @@ pub mod tests {
         transport::MockTransport,
         types::ids::{node_id_to_u64, node_test_id, subnet_test_id},
     };
+    use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_types::artifact::{DkgMessage, DkgMessageAttribute};
     use ic_types::consensus::dkg::DealingContent;
     use ic_types::crypto::threshold_sig::ni_dkg::{

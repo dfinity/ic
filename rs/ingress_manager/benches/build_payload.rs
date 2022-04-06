@@ -31,13 +31,13 @@ use ic_test_utilities::{
     crypto::temp_crypto_component_with_fake_registry,
     cycles_account_manager::CyclesAccountManagerBuilder,
     history::MockIngressHistory,
-    registry::test_subnet_record,
     state::ReplicatedStateBuilder,
     state_manager::MockStateManager,
     types::ids::{node_test_id, subnet_test_id},
     types::messages::SignedIngressBuilder,
     FastForwardTimeSource,
 };
+use ic_test_utilities_registry::test_subnet_record;
 use ic_types::{
     artifact::{IngressMessageAttribute, IngressMessageId},
     batch::ValidationContext,

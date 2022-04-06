@@ -36,13 +36,13 @@ use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     history::MockIngressHistory,
     mock_time,
-    registry::test_subnet_record,
     state::ReplicatedStateBuilder,
     state_manager::MockStateManager,
     types::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id},
     types::messages::SignedIngressBuilder,
     FastForwardTimeSource,
 };
+use ic_test_utilities_registry::test_subnet_record;
 use ic_types::{
     ingress::IngressStatus,
     malicious_flags::MaliciousFlags,

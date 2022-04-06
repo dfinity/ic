@@ -7,10 +7,10 @@ use ic_interfaces::{consensus_pool::ConsensusPool, registry::RegistryClient};
 use ic_test_utilities::{
     consensus::make_catch_up_package_with_empty_transcript,
     crypto::CryptoReturningOk,
-    registry::{setup_registry_non_final, SubnetRecordBuilder},
     types::ids::{node_test_id, subnet_test_id},
     FastForwardTimeSource,
 };
+use ic_test_utilities_registry::{setup_registry_non_final, SubnetRecordBuilder};
 use ic_types::{crypto::CryptoHash, replica_config::ReplicaConfig, Height, RegistryVersion};
 use std::cell::RefCell;
 use std::rc::Rc;

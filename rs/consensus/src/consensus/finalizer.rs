@@ -361,10 +361,10 @@ mod tests {
     use ic_test_utilities::{
         ingress_selector::FakeIngressSelector,
         message_routing::FakeMessageRouting,
-        registry::SubnetRecordBuilder,
         state_manager::{FakeStateManager, MockStateManager},
         types::ids::{node_test_id, subnet_test_id},
     };
+    use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_types::{
         crypto::threshold_sig::ni_dkg::{
             NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet, NiDkgTranscript,

@@ -29,6 +29,7 @@ ic-state-manager = { path = "../state_manager" }
 # is meant to be used mostly for testing anyway, so this dependency
 # should be fine.
 ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-types = { path = "../types/types" }
 clap = "2.33.3"
 hex = "0.4.2"

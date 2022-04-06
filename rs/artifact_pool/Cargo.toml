@@ -38,6 +38,7 @@ criterion = "0.3"
 ic-constants = { path = "../constants" }
 ic-test-artifact-pool = { path = "../test_utilities/artifact_pool" }
 ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-registry = { path = "../test_utilities/registry" }
 slog-term = "2.6.0"
 slog-envlogger = "2.2.0"
 slog-async = "2.5.0"

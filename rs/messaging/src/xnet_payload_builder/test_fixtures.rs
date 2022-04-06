@@ -15,7 +15,6 @@ use ic_replicated_state::{
 };
 use ic_test_utilities::{
     mock_time,
-    registry::test_subnet_record,
     state_manager::FakeStateManager,
     types::{
         ids::{
@@ -25,6 +24,7 @@ use ic_test_utilities::{
         messages::RequestBuilder,
     },
 };
+use ic_test_utilities_registry::test_subnet_record;
 use ic_types::{
     messages::CallbackId,
     xnet::{CertifiedStreamSlice, StreamIndex, StreamIndexedQueue},

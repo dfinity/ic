@@ -177,6 +177,7 @@ members = [
   "system_api",
   "test_utilities",
   "test_utilities/artifact_pool",
+  "test_utilities/registry",
   "tests",
   "transport",
   "transport_test_client",

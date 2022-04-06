@@ -72,6 +72,7 @@ assert_cmd = "0.12"
 canister-test = { path = "../rust_canisters/canister_test" }
 criterion = "0.3"
 ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-registry = { path = "../test_utilities/registry" }
 predicates = "1.0.1"
 wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" }
 
