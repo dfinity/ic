@@ -13,7 +13,8 @@ use crate::{
     ecdsa,
 };
 use ic_interfaces::{
-    dkg::DkgPool, ecdsa::EcdsaPool, registry::RegistryClient, time_source::TimeSource,
+    canister_http::CanisterHttpPool, dkg::DkgPool, ecdsa::EcdsaPool, registry::RegistryClient,
+    time_source::TimeSource,
 };
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::{debug, error, trace, warn, ReplicaLogger};
@@ -79,6 +80,8 @@ pub struct BlockMaker {
     payload_builder: Arc<dyn PayloadBuilder>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
     ecdsa_pool: Arc<RwLock<dyn EcdsaPool>>,
+    #[allow(dead_code)]
+    canister_http_pool: Arc<RwLock<dyn CanisterHttpPool>>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     metrics: BlockMakerMetrics,
     ecdsa_payload_metrics: EcdsaPayloadMetrics,
@@ -101,6 +104,7 @@ impl BlockMaker {
         payload_builder: Arc<dyn PayloadBuilder>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
         ecdsa_pool: Arc<RwLock<dyn EcdsaPool>>,
+        canister_http_pool: Arc<RwLock<dyn CanisterHttpPool>>,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         stable_registry_version_age: Duration,
         metrics_registry: MetricsRegistry,
@@ -115,6 +119,7 @@ impl BlockMaker {
             payload_builder,
             dkg_pool,
             ecdsa_pool,
+            canister_http_pool,
             state_manager,
             log,
             metrics: BlockMakerMetrics::new(metrics_registry.clone()),
@@ -684,6 +689,7 @@ mod tests {
                 state_manager,
                 dkg_pool,
                 ecdsa_pool,
+                canister_http_pool,
                 ..
             } = dependencies_with_subnet_params(
                 pool_config,
@@ -722,6 +728,7 @@ mod tests {
                 Arc::new(payload_builder),
                 dkg_pool.clone(),
                 ecdsa_pool.clone(),
+                canister_http_pool.clone(),
                 state_manager.clone(),
                 Duration::from_millis(0),
                 MetricsRegistry::new(),
@@ -799,6 +806,7 @@ mod tests {
                 Arc::new(payload_builder),
                 dkg_pool,
                 ecdsa_pool,
+                canister_http_pool,
                 state_manager,
                 Duration::from_millis(0),
                 MetricsRegistry::new(),
@@ -862,6 +870,7 @@ mod tests {
                 time_source,
                 replica_config,
                 state_manager,
+                canister_http_pool,
                 ..
             } = dependencies_with_subnet_params(
                 pool_config.clone(),
@@ -927,6 +936,7 @@ mod tests {
                 Arc::new(payload_builder),
                 dkg_pool.clone(),
                 ecdsa_pool.clone(),
+                canister_http_pool.clone(),
                 state_manager.clone(),
                 Duration::from_millis(0),
                 MetricsRegistry::new(),
@@ -969,6 +979,7 @@ mod tests {
                 Arc::new(payload_builder),
                 dkg_pool,
                 ecdsa_pool,
+                canister_http_pool,
                 state_manager,
                 Duration::from_millis(0),
                 MetricsRegistry::new(),
@@ -1022,6 +1033,7 @@ mod tests {
                 registry_data_provider,
                 dkg_pool,
                 ecdsa_pool,
+                canister_http_pool,
                 ..
             } = dependencies_with_subnet_params(pool_config, subnet_id, vec![(1, record.clone())]);
 
@@ -1044,6 +1056,7 @@ mod tests {
                 Arc::new(payload_builder),
                 dkg_pool,
                 ecdsa_pool,
+                canister_http_pool,
                 state_manager,
                 Duration::from_millis(0),
                 MetricsRegistry::new(),

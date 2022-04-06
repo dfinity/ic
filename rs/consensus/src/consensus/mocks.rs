@@ -1,6 +1,8 @@
 //! Contains mocks for traits internal to consensus
 use crate::consensus::{membership::Membership, payload_builder::PayloadBuilder};
-use ic_artifact_pool::{dkg_pool::DkgPoolImpl, ecdsa_pool::EcdsaPoolImpl};
+use ic_artifact_pool::{
+    canister_http_pool::CanisterHttpPoolImpl, dkg_pool::DkgPoolImpl, ecdsa_pool::EcdsaPoolImpl,
+};
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_interfaces::{consensus::PayloadValidationError, validation::ValidationResult};
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
@@ -59,6 +61,7 @@ pub struct Dependencies {
     pub state_manager: Arc<RefMockStateManager>,
     pub dkg_pool: Arc<RwLock<DkgPoolImpl>>,
     pub ecdsa_pool: Arc<RwLock<EcdsaPoolImpl>>,
+    pub canister_http_pool: Arc<RwLock<CanisterHttpPoolImpl>>,
 }
 
 /// Creates most common consensus components used for testing. All components
@@ -95,6 +98,9 @@ pub fn dependencies_with_subnet_records_with_raw_state_manager(
         ic_logger::replica_logger::no_op_logger(),
         ic_metrics::MetricsRegistry::new(),
     )));
+    let canister_http_pool = Arc::new(RwLock::new(CanisterHttpPoolImpl::new(
+        ic_metrics::MetricsRegistry::new(),
+    )));
     let pool = TestConsensusPool::new(
         subnet_id,
         pool_config,
@@ -120,6 +126,7 @@ pub fn dependencies_with_subnet_records_with_raw_state_manager(
         state_manager,
         dkg_pool,
         ecdsa_pool,
+        canister_http_pool,
     }
 }
 
@@ -143,6 +150,7 @@ pub fn dependencies_with_subnet_params(
         state_manager,
         dkg_pool,
         ecdsa_pool,
+        canister_http_pool,
         ..
     } = dependencies_with_subnet_records_with_raw_state_manager(pool_config, subnet_id, records);
 
@@ -165,6 +173,7 @@ pub fn dependencies_with_subnet_params(
         state_manager,
         dkg_pool,
         ecdsa_pool,
+        canister_http_pool,
     }
 }
 

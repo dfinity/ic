@@ -70,6 +70,19 @@ impl CanisterHttpPool for CanisterHttpPoolImpl {
         Box::new(self.unvalidated.values().map(|artifact| &artifact.message))
     }
 
+    fn get_response_content_items(
+        &self,
+    ) -> Box<
+        dyn Iterator<
+                Item = (
+                    &CryptoHashOf<CanisterHttpResponseContent>,
+                    &CanisterHttpResponseContent,
+                ),
+            > + '_,
+    > {
+        Box::new(self.content.iter())
+    }
+
     fn lookup_validated(
         &self,
         msg_id: &CanisterHttpResponseId,

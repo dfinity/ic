@@ -5,8 +5,8 @@
 
 use ic_artifact_manager::{manager, processors};
 use ic_artifact_pool::{
-    certification_pool::CertificationPoolImpl, consensus_pool::ConsensusPoolImpl,
-    dkg_pool::DkgPoolImpl, ecdsa_pool::EcdsaPoolImpl,
+    canister_http_pool::CanisterHttpPoolImpl, certification_pool::CertificationPoolImpl,
+    consensus_pool::ConsensusPoolImpl, dkg_pool::DkgPoolImpl, ecdsa_pool::EcdsaPoolImpl,
     ensure_persistent_pool_replica_version_compatibility, ingress_pool::IngressPoolImpl,
 };
 use ic_config::{
@@ -73,6 +73,7 @@ pub struct ArtifactPools {
     pub certification_pool: Arc<RwLock<CertificationPoolImpl>>,
     pub dkg_pool: Arc<RwLock<DkgPoolImpl>>,
     pub ecdsa_pool: Arc<RwLock<EcdsaPoolImpl>>,
+    pub canister_http_pool: Arc<RwLock<CanisterHttpPoolImpl>>,
 }
 
 /// The function constructs a P2P instance. Currently, it constructs all the
@@ -284,6 +285,7 @@ fn setup_artifact_manager(
                     Arc::clone(&self_validating_payload_builder) as Arc<_>,
                     Arc::clone(&artifact_pools.dkg_pool) as Arc<_>,
                     Arc::clone(&artifact_pools.ecdsa_pool) as Arc<_>,
+                    Arc::clone(&artifact_pools.canister_http_pool) as Arc<_>,
                     Arc::clone(&dkg_key_manager) as Arc<_>,
                     Arc::clone(&message_router) as Arc<_>,
                     Arc::clone(&state_manager) as Arc<_>,
@@ -438,7 +440,12 @@ pub fn init_artifact_pools(
         registry.clone(),
     )));
     let dkg_pool = Arc::new(RwLock::new(DkgPoolImpl::new(registry.clone())));
-    let ecdsa_pool = Arc::new(RwLock::new(EcdsaPoolImpl::new(config, log, registry)));
+    let ecdsa_pool = Arc::new(RwLock::new(EcdsaPoolImpl::new(
+        config,
+        log,
+        registry.clone(),
+    )));
+    let canister_http_pool = Arc::new(RwLock::new(CanisterHttpPoolImpl::new(registry)));
     ArtifactPools {
         ingress_pool,
         consensus_pool,
@@ -446,6 +453,7 @@ pub fn init_artifact_pools(
         certification_pool,
         dkg_pool,
         ecdsa_pool,
+        canister_http_pool,
     }
 }
 
