@@ -42,4 +42,6 @@ pub mod transaction_ledger_correctness_test;
 pub mod types;
 pub mod util;
 pub mod wasm_generator_test;
+pub mod workload;
+pub mod workload_counter_canister_test;
 pub mod xnet_slo_test;

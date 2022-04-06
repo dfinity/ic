@@ -26,6 +26,7 @@ use ic_tests::rosetta_test;
 use ic_tests::security::nns_voting_fuzzing_poc_test;
 use ic_tests::spec_compliance;
 use ic_tests::token_balance_test::{self, test as token_balance_test};
+use ic_tests::workload_counter_canister_test;
 use ic_tests::xnet_slo_test;
 use ic_tests::{
     basic_health_test::{self, basic_health_test},
@@ -158,6 +159,14 @@ fn get_test_suites() -> HashMap<String, Suite> {
         suite(
             "pre_master",
             vec![
+                pot(
+                    "workload_counter_canister_pot",
+                    workload_counter_canister_test::config(),
+                    par(vec![t(
+                        "workload_counter_canister_test",
+                        workload_counter_canister_test::test,
+                    )]),
+                ),
                 pot_with_setup(
                     "api_test",
                     api_test::two_ics,
