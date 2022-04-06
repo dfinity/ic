@@ -46,6 +46,14 @@ crates_config_override:
     artifacts:
       paths:
         - "logs/*"
+  ic-sns-integration-tests:
+    extends: .cargo-crate-tests-process-per-test
+    variables:
+      TARGET_CRATE: ic-sns-integration-tests
+      CARGO_TEST_TIMEOUT: 3600
+    artifacts:
+      paths:
+        - "logs/*"
   ic-nns-handler-root:
     extends: .cargo-crate-tests-process-per-test
   ic-nns-handler-subnet:

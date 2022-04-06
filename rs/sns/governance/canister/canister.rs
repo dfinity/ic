@@ -425,6 +425,29 @@ fn get_latest_reward_event() {
     });
 }
 
+/// Returns the root canister's status.
+///
+/// This is a specialized version of the root canister's `canister_status`
+/// method. Getting the root canister's status is special, because root is the
+/// canister that gets the status of all other canisters in the SNS.
+///
+/// The way the underlying system call works is that a principal can only
+/// request the status of canisters that it controls. In theory, this interface
+/// could be generalized to target any canister, but in practice, only the root
+/// canister would ever be targeted, because that is the only canister that
+/// governance controls.
+#[export_name = "canister_update get_root_canister_status"]
+fn get_root_canister_status() {
+    println!("{}get_root_canister_status", log_prefix());
+    over_async(candid_one, get_root_canister_status_)
+}
+
+/// Internal method for calling get_root_canister_status.
+#[candid_method(update, rename = "get_root_canister_status")]
+async fn get_root_canister_status_(_: ()) -> ic_nervous_system_root::CanisterStatusResult {
+    governance().get_root_canister_status().await
+}
+
 /// The canister's heartbeat.
 #[export_name = "canister_heartbeat"]
 fn canister_heartbeat() {
@@ -456,13 +479,6 @@ fn http_request() {
 #[export_name = "canister_query __get_candid_interface_tmp_hack"]
 fn expose_candid() {
     over(candid, |_: ()| include_str!("governance.did").to_string())
-}
-
-// Only for integration test(s).
-#[cfg(feature = "do-nothing")]
-#[export_name = "canister_query do_nothing"]
-fn do_nothing() {
-    over(candid_one, |()| ());
 }
 
 /// When run on native, this prints the candid service definition of this

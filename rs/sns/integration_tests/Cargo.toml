@@ -30,3 +30,4 @@ ic-sns-root = { path = "../root" }
 ic-sns-test-utils = { path = "../test_utils" }
 ic-types = { path = "../../types/types" }
 on_wire = { path = "../../rust_canisters/on_wire" }
+wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" }

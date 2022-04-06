@@ -20,6 +20,13 @@ type By = variant {
   MemoAndController : MemoAndController;
   NeuronId : record {};
 };
+type CanisterStatusResult = record {
+  controller : principal;
+  status : CanisterStatusType;
+  memory_size : nat;
+  module_hash : opt vec nat8;
+};
+type CanisterStatusType = variant { stopped; stopping; running };
 type ClaimOrRefresh = record { by : opt By };
 type ClaimOrRefreshResponse = record { refreshed_neuron_id : opt NeuronId };
 type Command = variant {
@@ -241,6 +248,7 @@ service : (Governance) -> {
   get_nervous_system_parameters : (null) -> (NervousSystemParameters) query;
   get_neuron : (GetNeuron) -> (GetNeuronResponse) query;
   get_proposal : (GetProposal) -> (GetProposalResponse) query;
+  get_root_canister_status : (null) -> (CanisterStatusResult);
   list_neurons : (ListNeurons) -> (ListNeuronsResponse) query;
   list_proposals : (ListProposals) -> (ListProposalsResponse) query;
   manage_neuron : (ManageNeuron) -> (ManageNeuronResponse);

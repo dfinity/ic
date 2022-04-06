@@ -45,12 +45,15 @@ use crate::proposal::{
 };
 use crate::types::{Environment, HeapGrowthPotential, LedgerUpdateLock};
 use candid::Encode;
-use dfn_core::api::{id, spawn, CanisterId};
+use dfn_core::api::{call, id, spawn, CanisterId};
 use ic_nervous_system_common::{
     ledger::{self, Ledger},
     NervousSystemError,
 };
-use ic_nervous_system_root::ChangeCanisterProposal;
+use ic_nervous_system_root::{
+    install_code, CanisterIdRecord, CanisterStatusResult, CanisterStatusType,
+    ChangeCanisterProposal,
+};
 use ledger_canister::Tokens;
 
 // When `list_proposals` is called, for each proposal if a payload exceeds
@@ -437,6 +440,11 @@ impl Governance {
         gov.initialize_indices();
 
         gov
+    }
+
+    pub async fn get_root_canister_status(&self) -> ic_nervous_system_root::CanisterStatusResult {
+        ic_nervous_system_root::canister_status((self.proto.root_canister_id_or_panic().into(),))
+            .await
     }
 
     /// Initializes the indices.
@@ -1514,7 +1522,7 @@ impl Governance {
         spawn(governance.perform_action(proposal_id, action.clone()));
     }
 
-    async fn perform_action(&mut self, pid: u64, action: proposal::Action) {
+    async fn perform_action(&mut self, proposal_id: u64, action: proposal::Action) {
         let result = match action {
             // A motion is not executed, just recorded for posterity.
             proposal::Action::Motion(_) => Ok(()),
@@ -1523,17 +1531,16 @@ impl Governance {
                 self.perform_manage_nervous_system_parameters_action(params)
             }
             proposal::Action::UpgradeSnsControlledCanister(params) => {
-                let result = self.perform_upgrade_sns_controlled_canister(pid, params);
+                self.perform_upgrade_sns_controlled_canister(proposal_id, params)
+                    .await;
 
-                if result.is_ok() {
-                    // We return early because the final result is not ready
-                    // yet. Rather, perform_upgrade_sns_controlled_canister
-                    // ensures that set_proposal_execution_status gets called
-                    // later.
-                    return;
-                }
-
-                result
+                // Unlike other cases, perform_upgrade_sns_controlled_canister
+                // takes care of setting proposal execution status. This has to
+                // do with how self.env.call_canister sets execution status for
+                // us. It's not clear how we can make it work differently,
+                // because of limitations on what you can put in a traits (such
+                // as our Environment trait).
+                return;
             }
             proposal::Action::ExecuteNervousSystemFunction(_) => {
                 todo!();
@@ -1542,7 +1549,7 @@ impl Governance {
                 unimplemented!();
             }
         };
-        self.set_proposal_execution_status(pid, result);
+        self.set_proposal_execution_status(proposal_id, result);
     }
 
     /// Execute a ManageNervousSystemParameters proposal by updating Governance's NervousSystemParameters
@@ -1576,11 +1583,62 @@ impl Governance {
         }
     }
 
-    fn perform_upgrade_sns_controlled_canister(
+    async fn perform_upgrade_sns_controlled_canister(
         &mut self,
         proposal_id: u64,
         upgrade: UpgradeSnsControlledCanister,
-    ) -> Result<(), GovernanceError> {
+    ) {
+        let target_canister_id = match upgrade.canister_id {
+            Some(c) => c,
+            // This should not be possible, because proposal validation should
+            // notice this defect when the proposal was originally made, and
+            // reject the proposal right away.
+            None => {
+                let result = Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    "Canister upgrade failed, because no target canister was specified.",
+                ));
+                self.set_proposal_execution_status(proposal_id, result);
+                return;
+            }
+        };
+        let target_canister_id = match CanisterId::new(target_canister_id) {
+            Ok(ok) => ok,
+            // This should not be possible, because proposal validation should
+            // notice this defect when the proposal was originally made, and
+            // reject the proposal right away.
+            Err(err) => {
+                let result = Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!(
+                        "(Direct) canister upgrade failed, because the specified target \
+                         canister ID was invalid: {:?}",
+                        err,
+                    ),
+                ));
+                self.set_proposal_execution_status(proposal_id, result);
+                return;
+            }
+        };
+
+        let target_is_root = target_canister_id == self.proto.root_canister_id_or_panic();
+        println!(
+            "{}target_is_root: {} (target_canister_id = {})",
+            log_prefix(),
+            target_is_root,
+            target_canister_id
+        );
+        if target_is_root {
+            let result =
+                upgrade_canister_directly(target_canister_id, upgrade.new_canister_wasm).await;
+            if let Err(err) = &result {
+                println!("{}upgrade_canister_directly failed: {}", log_prefix(), err);
+            }
+
+            self.set_proposal_execution_status(proposal_id, result);
+            return;
+        }
+
         // Serialize upgrade.
         let payload = {
             // Hard-coding this to true is safer in that it gives the canister a
@@ -1588,34 +1646,33 @@ impl Governance {
             // Without this, responses could arrive to the upgraded canister,
             // which it probably doesn't know how to handle.  For more details,
             // check out the comments above the (definition of the)
-            // stop_before_installing field in CanisterInstallMode.
+            // stop_before_installing field in ChangeCanisterProposal.
             let stop_before_installing = true;
 
             // The other values of this type (Install and Reinstall) are never
             // appropriate for us.
             let mode = ic_ic00_types::CanisterInstallMode::Upgrade;
 
-            let change_canister_arg = ChangeCanisterProposal::new(
-                stop_before_installing,
-                mode,
-                CanisterId::new(
-                    upgrade
-                        .canister_id
-                        .expect("UpgradeSnsControlledCanister must have canister_id."),
-                )
-                .unwrap(),
-            )
-            .with_wasm(upgrade.new_canister_wasm);
+            let change_canister_arg =
+                ChangeCanisterProposal::new(stop_before_installing, mode, target_canister_id)
+                    .with_wasm(upgrade.new_canister_wasm);
 
             candid::Encode!(&change_canister_arg).unwrap()
         };
 
-        self.env.call_canister(
+        let result = self.env.call_canister(
             proposal_id,
             self.proto.root_canister_id_or_panic(),
             "change_canister",
             payload,
-        )
+        );
+
+        if result.is_err() {
+            self.set_proposal_execution_status(proposal_id, result);
+        }
+        // In the case of Ok, something else could still go wrong down the
+        // road. Either way, self.env.call_canister will take care of setting
+        // proposal execution status for us.
     }
 
     fn nervous_system_parameters(&self) -> &NervousSystemParameters {
@@ -1709,6 +1766,10 @@ impl Governance {
                 .inherit_from(self.nervous_system_parameters())
                 .validate()
                 .map_err(|msg| GovernanceError::new_with_message(ErrorType::InvalidProposal, msg));
+        } else if let Some(proposal::Action::UpgradeSnsControlledCanister(upgrade)) =
+            &proposal.action
+        {
+            return validate_upgrade_sns_controlled_canister(upgrade);
         } else {
             return Ok(());
         };
@@ -2994,6 +3055,160 @@ impl Governance {
     }
 }
 
+fn validate_upgrade_sns_controlled_canister(
+    upgrade: &UpgradeSnsControlledCanister,
+) -> Result<(), GovernanceError> {
+    // Require that canister_id be supplied (and be valid).
+    let canister_id = match upgrade.canister_id {
+        Some(id) => id,
+        None => {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "Upgrade Proposal lacks a target canister ID.",
+            ))
+        }
+    };
+
+    // The canister_id (which is of type PrincipalId) field must be populated
+    // with a valid value. Based on the implementation of CanisterId::new, I
+    // believe that there is no way for this to fail, but there might be some
+    // reason they decided its return type should be Result.
+    CanisterId::new(canister_id).map_err(|err| {
+        GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            format!("Supplied canister ID was invalid: {}", err),
+        )
+    })?;
+
+    // Very basic checks on the wasm.
+    const WASM_HEADER: [u8; 4] = [0, 0x61, 0x73, 0x6d];
+    const MIN_WASM_LEN: usize = 8;
+    if upgrade.new_canister_wasm.len() < MIN_WASM_LEN
+        || upgrade.new_canister_wasm[..4] != WASM_HEADER[..]
+    {
+        return Err(GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            "The supplied wasm is invalid.",
+        ));
+    }
+
+    Ok(())
+}
+
+async fn upgrade_canister_directly(
+    canister_id: CanisterId,
+    wasm: Vec<u8>,
+) -> Result<(), GovernanceError> {
+    println!("{}Begin: Stop canister {}.", log_prefix(), canister_id);
+    stop_canister(&canister_id).await?;
+    println!("{}End: Stop canister {}.", log_prefix(), canister_id);
+
+    println!(
+        "{}Begin: Install code into canister {}",
+        log_prefix(),
+        canister_id
+    );
+    let install_code_arg = ChangeCanisterProposal::new(
+        false, // stop_before_installing. Not actually used by install_code though.
+        ic_ic00_types::CanisterInstallMode::Upgrade,
+        canister_id,
+    )
+    .with_wasm(wasm);
+    let install_result = install_code(install_code_arg).await.map_err(|err| {
+        let err = GovernanceError::new_with_message(
+            ErrorType::External,
+            format!("Failed to install code into the target canister: {:?}", err),
+        );
+        println!("{}{:?}", log_prefix(), err);
+        err
+    });
+    println!(
+        "{}End: Install code into canister {}",
+        log_prefix(),
+        canister_id
+    );
+
+    println!("{}Begin: Re-start canister {}", log_prefix(), canister_id);
+    start_canister(&canister_id).await?;
+    println!("{}End: Re-start canister {}", log_prefix(), canister_id);
+
+    install_result
+}
+
+async fn start_canister(canister_id: &CanisterId) -> Result<(), GovernanceError> {
+    call(
+        CanisterId::ic_00(),
+        "start_canister",
+        dfn_candid::candid_multi_arity,
+        (CanisterIdRecord::from(*canister_id),),
+    )
+    .await
+    .map_err(|err| {
+        let err = GovernanceError::new_with_message(
+            ErrorType::External,
+            format!("Failed to restart the target canister: {:?}", err),
+        );
+        println!("{}{:?}", log_prefix(), err);
+        err
+    })
+}
+
+async fn stop_canister(canister_id: &CanisterId) -> Result<(), GovernanceError> {
+    call(
+        CanisterId::ic_00(),
+        "stop_canister",
+        dfn_candid::candid_multi_arity,
+        (CanisterIdRecord::from(*canister_id),),
+    )
+    .await
+    .map_err(|err| {
+        let err = GovernanceError::new_with_message(
+            ErrorType::External,
+            format!("Unable to stop the target canister: {:?}", err),
+        );
+        println!("{}{:?}", log_prefix(), err);
+        err
+    })?;
+
+    // Wait until canister is in the stopped state.
+    loop {
+        let result = call(
+            CanisterId::ic_00(),
+            "canister_status",
+            dfn_candid::candid,
+            (CanisterIdRecord::from(*canister_id),),
+        )
+        .await;
+        let status: CanisterStatusResult = match result {
+            Ok(ok) => ok,
+
+            // This is probably a permanent error, so we give up right away.
+            Err(err) => {
+                let err = GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!(
+                        "An error occurred while waiting for the target canister to stop: {:?}",
+                        err
+                    ),
+                );
+                println!("{}{:?}", log_prefix(), err);
+                return Err(err);
+            }
+        };
+
+        if status.status == CanisterStatusType::Stopped {
+            return Ok(());
+        }
+
+        println!(
+            "{}Still waiting for canister {} to stop. status: {:?}",
+            log_prefix(),
+            canister_id,
+            status
+        );
+    }
+}
+
 /// Affects the perception of time by users of CanisterEnv (i.e. Governance).
 ///
 /// Specifically, the time that Governance sees is the real time + delta.
@@ -3010,6 +3225,60 @@ impl TimeWarp {
             timestamp_s - ((-self.delta_s) as u64)
         }
     }
+}
+
+#[cfg(test)]
+fn basic_upgrade_sns_controlled_canister() -> UpgradeSnsControlledCanister {
+    let result = UpgradeSnsControlledCanister {
+        canister_id: Some(PrincipalId::try_from(vec![42_u8]).unwrap()),
+        new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
+    };
+    assert!(validate_upgrade_sns_controlled_canister(&result).is_ok());
+    result
+}
+
+#[test]
+fn upgrade_must_have_canister_id() {
+    let mut upgrade = basic_upgrade_sns_controlled_canister();
+    upgrade.canister_id = None;
+
+    let result = validate_upgrade_sns_controlled_canister(&upgrade);
+    assert_eq!(
+        result.unwrap_err().error_type,
+        ErrorType::InvalidProposal as i32
+    );
+}
+
+/// Fun fact: the minimum WASM is 8 bytes long.
+///
+/// A corollary of the above fact is that we must not allow the
+/// new_canister_wasm field to be empty.
+#[test]
+fn upgrade_wasm_must_be_non_empty() {
+    let mut upgrade = basic_upgrade_sns_controlled_canister();
+    upgrade.new_canister_wasm = vec![];
+
+    let result = validate_upgrade_sns_controlled_canister(&upgrade);
+    assert_eq!(
+        result.unwrap_err().error_type,
+        ErrorType::InvalidProposal as i32
+    );
+}
+
+#[test]
+fn upgrade_wasm_must_not_be_dead_beef() {
+    let mut upgrade = basic_upgrade_sns_controlled_canister();
+    // This is invalid, because it does not have the magical first four bytes
+    // that a WASM is supposed to have. (Instead, the first four bytes of this
+    // Vec are 0xDeadBeef.)
+    upgrade.new_canister_wasm = vec![0xde, 0xad, 0xbe, 0xef, 1, 0, 0, 0];
+    assert!(upgrade.new_canister_wasm.len() == 8); // The minimum wasm len.
+
+    let result = validate_upgrade_sns_controlled_canister(&upgrade);
+    assert_eq!(
+        result.unwrap_err().error_type,
+        ErrorType::InvalidProposal as i32
+    );
 }
 
 #[cfg(test)]
