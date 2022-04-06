@@ -5,8 +5,8 @@ use prost::Message;
 use candid::Encode;
 use canister_test::{Canister, Project, Wasm};
 use dfn_candid::candid_one;
-use ic_base_types::CanisterInstallMode;
 use ic_canister_client::Sender;
+use ic_ic00_types::CanisterInstallMode;
 use ic_nns_common::{
     pb::v1::MethodAuthzInfo, types::NeuronId, types::UpdateIcpXdrConversionRatePayload,
 };

@@ -369,7 +369,7 @@ async fn submit_proposal_by_neuron(
     let governance = Canister::new(runtime, GOVERNANCE_CANISTER_ID);
     let proposal = ChangeCanisterProposal::new(
         false,
-        ic_base_types::CanisterInstallMode::Upgrade,
+        ic_ic00_types::CanisterInstallMode::Upgrade,
         root.canister_id(),
     );
     submit_external_update_proposal_allowing_error(

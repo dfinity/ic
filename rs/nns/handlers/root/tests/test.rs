@@ -1,7 +1,7 @@
 use assert_matches::assert_matches;
 use candid::Encode;
 use dfn_candid::candid;
-use ic_base_types::CanisterInstallMode::Upgrade;
+use ic_ic00_types::CanisterInstallMode::Upgrade;
 use ic_nervous_system_root::{CanisterIdRecord, CanisterStatusResult, ChangeCanisterProposal};
 use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
 use ic_nns_test_utils::itest_helpers::{

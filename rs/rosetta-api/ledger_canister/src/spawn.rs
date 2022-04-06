@@ -1,6 +1,6 @@
 use dfn_core::api::Funds;
-use ic_base_types::{CanisterId, CanisterInstallMode};
-use ic_ic00_types::{CanisterIdRecord, InstallCodeArgs, Method, IC_00};
+use ic_base_types::CanisterId;
+use ic_ic00_types::{CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, Method, IC_00};
 
 use on_wire::IntoWire;
 

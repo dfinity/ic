@@ -1,13 +1,10 @@
 //! A crate containing various basic types that are especially useful when
 //! writing Rust canisters.
 
-use candid::CandidType;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::types::v1 as pb;
 use phantom_newtype::{AmountOf, DisplayerOf, Id};
-use serde::{Deserialize, Serialize};
-use std::{convert::TryFrom, fmt, slice::Iter};
-use strum_macros::EnumString;
+use std::{convert::TryFrom, fmt};
 
 mod canister_id;
 mod pb_internal;
@@ -57,96 +54,6 @@ impl DisplayerOf<NumBytes> for NumBytesTag {
                 .get_appropriate_unit(true)
                 .format(2)
         )
-    }
-}
-
-/// Indicates whether the canister is running, stopping, or stopped.
-///
-/// Unlike `CanisterStatus`, it contains no additional metadata.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, CandidType)]
-pub enum CanisterStatusType {
-    #[serde(rename = "running")]
-    Running,
-    #[serde(rename = "stopping")]
-    Stopping,
-    #[serde(rename = "stopped")]
-    Stopped,
-}
-
-/// These strings are used to generate metrics -- changing any existing entries
-/// will invalidate monitoring dashboards.
-impl fmt::Display for CanisterStatusType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            CanisterStatusType::Running => write!(f, "running"),
-            CanisterStatusType::Stopping => write!(f, "stopping"),
-            CanisterStatusType::Stopped => write!(f, "stopped"),
-        }
-    }
-}
-
-/// The mode with which a canister is installed.
-#[derive(
-    Clone, Debug, Deserialize, PartialEq, Serialize, Eq, EnumString, Hash, CandidType, Copy,
-)]
-pub enum CanisterInstallMode {
-    /// A fresh install of a new canister.
-    #[serde(rename = "install")]
-    #[strum(serialize = "install")]
-    Install,
-    /// Reinstalling a canister that was already installed.
-    #[serde(rename = "reinstall")]
-    #[strum(serialize = "reinstall")]
-    Reinstall,
-    /// Upgrade an existing canister.
-    #[serde(rename = "upgrade")]
-    #[strum(serialize = "upgrade")]
-    Upgrade,
-}
-
-impl Default for CanisterInstallMode {
-    fn default() -> Self {
-        CanisterInstallMode::Install
-    }
-}
-
-impl CanisterInstallMode {
-    pub fn iter() -> Iter<'static, CanisterInstallMode> {
-        static MODES: [CanisterInstallMode; 3] = [
-            CanisterInstallMode::Install,
-            CanisterInstallMode::Reinstall,
-            CanisterInstallMode::Upgrade,
-        ];
-        MODES.iter()
-    }
-}
-
-/// A type to represent an error that can occur when installing a canister.
-#[derive(Debug)]
-pub struct CanisterInstallModeError(pub String);
-
-impl TryFrom<String> for CanisterInstallMode {
-    type Error = CanisterInstallModeError;
-
-    fn try_from(mode: String) -> Result<Self, Self::Error> {
-        let mode = mode.as_str();
-        match mode {
-            "install" => Ok(CanisterInstallMode::Install),
-            "reinstall" => Ok(CanisterInstallMode::Reinstall),
-            "upgrade" => Ok(CanisterInstallMode::Upgrade),
-            _ => Err(CanisterInstallModeError(mode.to_string())),
-        }
-    }
-}
-
-impl From<CanisterInstallMode> for String {
-    fn from(mode: CanisterInstallMode) -> Self {
-        let res = match mode {
-            CanisterInstallMode::Install => "install",
-            CanisterInstallMode::Reinstall => "reinstall",
-            CanisterInstallMode::Upgrade => "upgrade",
-        };
-        res.to_string()
     }
 }
 

@@ -12,11 +12,12 @@ dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_json = { path = "../../rust_canisters/dfn_json" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 futures = "0.3.8"
-ic-base-types={path="../../types/base_types"}
+ic-base-types = { path = "../../types/base_types"}
 ic-canister-client = { path = "../../canister_client" }
 ic-config = { path = "../../config" }
 ic-crypto = {path = "../../crypto"}
 ic-crypto-sha = {path = "../../crypto/sha"}
+ic-ic00-types = { path = "../../types/ic00_types"}
 ic-nns-common = { path = "../common" }
 ic-nns-constants = { path = "../constants" }
 ic-nns-governance = { path = "../governance" }

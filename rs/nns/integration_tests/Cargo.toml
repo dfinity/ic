@@ -45,6 +45,7 @@ ic-config = { path = "../../config" }
 ic-crypto = { path = "../../crypto" }
 ic-crypto-sha = { path = "../../crypto/sha" }
 ic-error-types = {path="../../types/error_types"}
+ic-ic00-types = {path="../../types/ic00_types"}
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nns-constants = { path = "../constants" }
 ic-nns-test-keys = { path = "../test_keys" }
