@@ -524,6 +524,7 @@ impl SandboxedExecutionController {
             mut execution_state,
         }: WasmExecutionInput,
     ) -> (WasmExecutionOutput, ExecutionState, SystemStateChanges) {
+        let initial_num_instructions_left = execution_parameters.instruction_limit;
         let api_type_label = api_type.as_str();
         let _execute_timer = self
             .metrics
@@ -587,6 +588,7 @@ impl SandboxedExecutionController {
 
         // Now set up resources on the sandbox to drive the execution.
         let wasm_memory_handle = open_remote_memory(&sandbox_process, &execution_state.wasm_memory);
+        let canister_id = sandbox_safe_system_state.canister_id();
         let wasm_memory_id = MemoryId::from(wasm_memory_handle.get_id());
         let next_wasm_memory_id = MemoryId::new();
 
@@ -628,13 +630,19 @@ impl SandboxedExecutionController {
             .with_label_values(&[api_type_label])
             .start_timer();
         // Wait for completion.
-        let exec_output = rx.recv().unwrap();
+        let mut exec_output = rx.recv().unwrap();
         drop(wait_timer);
         let _finish_timer = self
             .metrics
             .sandboxed_execution_replica_execute_finish_duration
             .with_label_values(&[api_type_label])
             .start_timer();
+
+        // If sandbox is compromised this value could be larger than the initial limit.
+        if exec_output.wasm.num_instructions_left > initial_num_instructions_left {
+            exec_output.wasm.num_instructions_left = initial_num_instructions_left;
+            error!(self.logger, "[EXC-BUG] Canister {} completed execution with more instructions left than the initial limit.", canister_id)
+        }
 
         // Unless execution trapped, commit state (applying execution state
         // changes, returning system state changes to caller).
