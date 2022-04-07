@@ -474,7 +474,8 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "test_tecdsa_remove_nodes",
                     tecdsa_remove_nodes_test::test,
                 )]),
-            ),
+            )
+            .with_ttl(Duration::from_secs(15 * 60)), // 15 minutes
             pot(
                 "rejoin",
                 rejoin_test::config(),
