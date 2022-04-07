@@ -460,7 +460,7 @@ impl EccPoint {
     /// Hash an input to a valid elliptic curve point
     ///
     /// This uses the techniques described in the hash to curve internet draft
-    /// <https://www.ietf.org/archive/id/draft-irtf-cfrg-hash-to-curve-12.txt>
+    /// <https://www.ietf.org/archive/id/draft-irtf-cfrg-hash-to-curve-14.txt>
     ///
     /// Only the random oracle ("RO") variant is supplied as the non-uniform
     /// ("NU") variant is possibly insecure to use in some contexts. Only curves
@@ -640,7 +640,31 @@ impl EccPoint {
 
     /// Deserialize a point. Only compressed points are accepted.
     pub fn deserialize(curve: EccCurveType, bytes: &[u8]) -> ThresholdEcdsaResult<Self> {
-        if bytes.len() != curve.point_bytes() || (bytes[0] != 2 && bytes[0] != 3) {
+        if bytes.len() != curve.point_bytes() {
+            return Err(ThresholdEcdsaError::InvalidPoint);
+        }
+
+        // We encode the point at infinity as all-zero byte string of the same
+        // length as a compressed point. This is non-standard (per SEC1) but a
+        // fixed length point format is easier to reason about.
+        //
+        // This check is not constant time but is only triggered in the
+        // event that the first byte is 0 which is otherwise invalid. So this
+        // would leak the first non-zero byte in an invalid point, which
+        // does not seem to be interesting from a side channel perspective.
+        //
+        // The initial check of bytes[0] == 0 may seem redundant, but
+        // [`iter::all`] does not guarantee the direction it examines the
+        // iterator. If it for example worked in the reverse order, it would
+        // leak information about valid non-infinity points. The initial check
+        // ensures that [`iter::all`] is only invoked in the case of a leading 0
+        // byte and can only leak information about invalid points.
+        if bytes[0] == 0 && bytes.iter().all(|x| *x == 0x00) {
+            return Ok(Self::identity(curve));
+        }
+
+        // If not all zeros, then first byte should be 2 or 3 indicating sign of y
+        if bytes[0] != 2 && bytes[0] != 3 {
             return Err(ThresholdEcdsaError::InvalidPoint);
         }
 

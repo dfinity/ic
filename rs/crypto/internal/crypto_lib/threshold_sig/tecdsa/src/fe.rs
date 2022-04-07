@@ -7,7 +7,7 @@ use zeroize::Zeroize;
 // [https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.186-4.pdf]
 //
 // The SSWU parameters are defined in
-// https://www.ietf.org/archive/id/draft-irtf-cfrg-hash-to-curve-12.html#name-suites-for-nist-p-256
+// https://www.ietf.org/archive/id/draft-irtf-cfrg-hash-to-curve-14.html#name-suites-for-nist-p-256
 fe_derive::derive_field_element!(
     Secp256r1FieldElement,
     Modulus = "0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF",
@@ -22,7 +22,7 @@ fe_derive::derive_field_element!(
 // [https://www.secg.org/sec2-v2.pdf] section 2.4.1
 //
 // The SSWU parameters are defined in
-// https://www.ietf.org/archive/id/draft-irtf-cfrg-hash-to-curve-12.html#name-suites-for-secp256k1
+// https://www.ietf.org/archive/id/draft-irtf-cfrg-hash-to-curve-14.html#name-suites-for-secp256k1
 fe_derive::derive_field_element!(
     Secp256k1FieldElement,
     Modulus = "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F",
@@ -112,7 +112,7 @@ impl EccFieldElement {
     }
 
     /// Return the field element "Z" as specified for the simplified
-    /// SWU map in draft-irtf-cfrg-hash-to-curve-12
+    /// SWU map in draft-irtf-cfrg-hash-to-curve-14
     pub fn sswu_z(curve: EccCurveType) -> Self {
         match curve {
             EccCurveType::K256 => Self::K256(Secp256k1FieldElement::sswu_z()),
@@ -121,7 +121,7 @@ impl EccFieldElement {
     }
 
     /// Return the field element "C2" as specified for the simplified
-    /// SWU map in draft-irtf-cfrg-hash-to-curve-12
+    /// SWU map in draft-irtf-cfrg-hash-to-curve-14
     /// See section F.2.1.2
     pub fn sswu_c2(curve: EccCurveType) -> Self {
         match curve {
@@ -306,7 +306,7 @@ impl EccFieldElement {
 
     /// Return the "sign" of self
     ///
-    /// See Section 4.1 of draft-irtf-cfrg-hash-to-curve-12 for details
+    /// See Section 4.1 of draft-irtf-cfrg-hash-to-curve-14 for details
     pub fn sign(&self) -> u8 {
         let bytes = match self {
             Self::K256(x) => x.as_bytes(),

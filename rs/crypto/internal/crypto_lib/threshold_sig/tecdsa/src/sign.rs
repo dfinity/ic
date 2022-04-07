@@ -11,6 +11,23 @@ pub(crate) fn ecdsa_conversion_function(pt: &EccPoint) -> ThresholdEcdsaResult<E
     EccScalar::from_bytes_wide(pt.curve_type(), &x_bytes)
 }
 
+fn convert_hash_to_integer(
+    hashed_message: &[u8],
+    curve_type: EccCurveType,
+) -> ThresholdEcdsaResult<EccScalar> {
+    // ECDSA has special rules for converting the hash to a scalar,
+    // when the hash is larger than the curve order. If this check is
+    // removed make sure these conversions are implemented, and not
+    // just doing a reduction mod order using from_bytes_wide
+    if hashed_message.len() != curve_type.scalar_bytes() {
+        return Err(ThresholdEcdsaError::InvalidScalar);
+    }
+
+    // Even though the same size, the integer representation of the
+    // message might be larger than the order, requiring a reduction.
+    EccScalar::from_bytes_wide(curve_type, hashed_message)
+}
+
 fn derive_rho(
     curve_type: EccCurveType,
     hashed_message: &[u8],
@@ -76,7 +93,7 @@ impl ThresholdEcdsaSigShareInternal {
 
         // Compute the message represenative from the hash, which may require
         // a reduction if int(hashed_message) >= group_order
-        let e = EccScalar::from_bytes_wide(curve_type, hashed_message)?;
+        let e = convert_hash_to_integer(hashed_message, curve_type)?;
 
         let theta = e.add(&rho.mul(&key_tweak)?)?;
 
@@ -145,7 +162,7 @@ impl ThresholdEcdsaSigShareInternal {
         )?;
 
         // Compute theta
-        let e = EccScalar::from_bytes_wide(curve_type, hashed_message)?;
+        let e = convert_hash_to_integer(hashed_message, curve_type)?;
 
         let theta = e.add(&rho.mul(&key_tweak)?)?;
 
@@ -322,13 +339,7 @@ impl ThresholdEcdsaCombinedSigInternal {
             return Ok(false);
         }
 
-        // ECDSA has special rules for converting the hash to a scalar,
-        // when the hash is larger than the curve order. If this check is
-        // removed make sure these conversions are implemented, and not
-        // just doing a reduction mod order using from_bytes_wide
-        if hashed_message.len() != curve_type.scalar_bytes() {
-            return Ok(false);
-        }
+        let msg = convert_hash_to_integer(hashed_message, curve_type)?;
 
         let (rho, key_tweak, _, pre_sig) = derive_rho(
             curve_type,
@@ -351,10 +362,6 @@ impl ThresholdEcdsaCombinedSigInternal {
         let master_public_key = key_transcript.constant_term();
         let tweak_g = EccPoint::mul_by_g(&key_tweak)?;
         let public_key = tweak_g.add_points(&master_public_key)?;
-
-        // Even though the same size, the integer represenatation of the
-        // message might be larger than the order, requiring a reduction.
-        let msg = EccScalar::from_bytes_wide(curve_type, hashed_message)?;
 
         let s_inv = self.s.invert()?;
 

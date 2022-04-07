@@ -23,6 +23,46 @@ fn not_affected_by_point_serialization_bug() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
+fn verify_serialization_round_trips_correctly() -> ThresholdEcdsaResult<()> {
+    fn assert_serialization_round_trips(pt: EccPoint) {
+        let curve_type = pt.curve_type();
+        let b = pt.serialize();
+
+        assert_eq!(b.len(), curve_type.point_bytes());
+
+        let pt2 = EccPoint::deserialize(curve_type, &b)
+            .expect("Failed to deserialize the point serialization");
+
+        assert_eq!(pt, pt2);
+
+        let b2 = pt2.serialize();
+        assert_eq!(b, b2);
+    }
+
+    let mut rng = rand::thread_rng();
+
+    for curve_type in EccCurveType::all() {
+        let identity = EccPoint::identity(curve_type);
+
+        // Identity should consist entirely of zero bytes
+        assert!(identity.serialize().iter().all(|x| *x == 0x00));
+
+        assert_serialization_round_trips(identity);
+        assert_serialization_round_trips(EccPoint::generator_g(curve_type)?);
+        assert_serialization_round_trips(EccPoint::generator_h(curve_type)?);
+
+        for _r in 0..100 {
+            let s = EccScalar::random(curve_type, &mut rng)?;
+            let gs = EccPoint::mul_by_g(&s)?;
+
+            assert_serialization_round_trips(gs);
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
 fn hash_to_scalar_is_deterministic() -> ThresholdEcdsaResult<()> {
     let input = "test input string".as_bytes();
     let domain_separator = "domain sep".as_bytes();
