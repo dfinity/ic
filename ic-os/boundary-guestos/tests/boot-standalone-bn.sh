@@ -10,7 +10,7 @@ TEMPDIR=$(mktemp -d /tmp/boot-standalone-bn.sh.XXXXXXXXXX)
 function usage() {
     cat <<EOF
 Usage:
-  boot-standalone-bn.sh [--farm-base-url FARM_BASE_URL] [--ttl TTL] [--img-CI-id  <ID>] [--disk-image <image>] [--config-image <config>]
+  boot-standalone-bn.sh [--farm-base-url FARM_BASE_URL] [--ttl TTL] [--img-CI-id  <ID>] [--disk-image <image>] [--config-image <config>] [--ic-binaries <path_to_ic_binaries>]
 
   This locally builds a boundary node VM image, takes a disk image as parameter
   or takes the ID of an image build by the CI pipeline.
@@ -23,7 +23,12 @@ Usage:
 
   The script will then wait until the user presses Enter after which the group and the associated VM will be deleted.
 
-  Example:
+  Examples:
+
+      Binaries for the boundary node have been build via cargo (i.e., boundary-node-control-plane)
+      ic-os/boundary-guestos/scripts/build-disk-image.sh --ic-binaries rs/target/x86_64-unknown-linux-gnu/debug/
+
+      In case you have build an image:
       ic-os/boundary-guestos/scripts/build-disk-image.sh -o /tmp/disk.img
       boot-standalone-bn.sh --disk-image /tmp/disk.img
 
@@ -52,8 +57,10 @@ Usage:
     Provide a disk image that has been build locally via:
       ic-os/boundary-guestos/scripts/build-disk-image.sh
 
-  --config-image
+  --ic-binaries
+      E.g., provided via the default way to build the ic binaries (see ic/README.adoc)
 
+  --config-image
     A custom config image can be provide. Such an image can be created via:
       ic-os/boundary-guestos/scripts/build-bootstrap-config-image.sh
 
@@ -92,6 +99,11 @@ while [[ $# -gt 0 ]]; do
             shift
             shift
             ;;
+        --ic-binaries)
+            IC_BINARIES="$2"
+            shift
+            shift
+            ;;
     esac
 done
 
@@ -116,10 +128,24 @@ if [ -z ${IMG_ID:-} ]; then
         info "Building boundary guestos image ..."
         image=$TEMPDIR/disk.img
         cd $REPO_ROOT/ic-os/boundary-guestos
-        ./scripts/build-disk-image.sh -o $image
+
+        if [ ! -z ${IC_BINARIES+x} ]; then
+            if [[ ! "${IC_BINARIES:0:1}" == / && ! "${IC_BINARIES:0:2}" == ~[/a-z] ]]; then
+                IC_BINARIES=$CURRENT/$IC_BINARIES
+            fi
+            info "We copy the IC binaries from here $IC_BINARIES"
+
+            ./scripts/build-disk-image.sh -o $image -x $IC_BINARIES
+        else
+            if [ ! -f "$REPO_ROOT/ic-os/boundary-guestos/rootfs/opt/ic/bin/boundary-node-control-plane" ]; then
+                info "Error: Could not find boundary-node-control-plane, consider providing binaries via --ic-binaries"
+                exit -1
+            fi
+            ./scripts/build-disk-image.sh -o $image
+        fi
     else
         if [[ "${DISK_IMAGE:0:1}" == / || "${DISK_IMAGE:0:2}" == ~[/a-z] ]]; then
-            image=$DISK_IMAGE
+            image=$disk_image
         else
             image=$CURRENT/$DISK_IMAGE
         fi
