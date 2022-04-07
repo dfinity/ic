@@ -11,7 +11,6 @@ use crate::crypto::{
         ThresholdEcdsaSigInputsCreationError,
     },
     canister_threshold_sig::idkg::{
-        proto_conversions::{idkg_transcript_id_proto, idkg_transcript_id_struct},
         IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
         IDkgTranscriptType,
     },
@@ -66,7 +65,7 @@ impl From<&TranscriptRef> for pb::TranscriptRef {
     fn from(trancript_ref: &TranscriptRef) -> Self {
         Self {
             height: trancript_ref.height.get(),
-            transcript_id: Some(idkg_transcript_id_proto(&trancript_ref.transcript_id)),
+            transcript_id: Some((&trancript_ref.transcript_id).into()),
         }
     }
 }
@@ -74,13 +73,12 @@ impl From<&TranscriptRef> for pb::TranscriptRef {
 impl TryFrom<&pb::TranscriptRef> for TranscriptRef {
     type Error = String;
     fn try_from(trancript_ref: &pb::TranscriptRef) -> Result<Self, Self::Error> {
-        let transcript_id =
-            idkg_transcript_id_struct(&trancript_ref.transcript_id).map_err(|err| {
-                format!(
-                    "pb::TranscriptRef:: Failed to convert transcript id: {:?}",
-                    err
-                )
-            })?;
+        let transcript_id = (&trancript_ref.transcript_id).try_into().map_err(|err| {
+            format!(
+                "pb::TranscriptRef:: Failed to convert transcript id: {:?}",
+                err
+            )
+        })?;
         Ok(Self {
             height: Height::from(trancript_ref.height),
             transcript_id,
@@ -899,7 +897,7 @@ pub struct IDkgTranscriptParamsRef {
 impl From<&IDkgTranscriptParamsRef> for pb::IDkgTranscriptParamsRef {
     fn from(params: &IDkgTranscriptParamsRef) -> Self {
         Self {
-            transcript_id: Some(idkg_transcript_id_proto(&params.transcript_id)),
+            transcript_id: Some((&params.transcript_id).into()),
             dealers: params.dealers.iter().fold(Vec::new(), |mut acc, node_id| {
                 acc.push(crate::node_id_into_protobuf(*node_id));
                 acc
@@ -921,8 +919,8 @@ impl From<&IDkgTranscriptParamsRef> for pb::IDkgTranscriptParamsRef {
 impl TryFrom<&pb::IDkgTranscriptParamsRef> for IDkgTranscriptParamsRef {
     type Error = String;
     fn try_from(params: &pb::IDkgTranscriptParamsRef) -> Result<Self, Self::Error> {
-        let transcript_id: IDkgTranscriptId = idkg_transcript_id_struct(&params.transcript_id)
-            .map_err(|err| {
+        let transcript_id: IDkgTranscriptId =
+            (&params.transcript_id).try_into().map_err(|err| {
                 format!(
                     "pb::IDkgTranscriptParamsRef:: Failed to convert transcript Id: {:?}",
                     err
