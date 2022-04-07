@@ -166,6 +166,13 @@ pub trait SubnetRegistry {
         subnet_id: SubnetId,
         version: RegistryVersion,
     ) -> RegistryClientVersionedResult<CatchUpPackageContents>;
+
+    /// Returns the maximum block payload size in bytes.
+    fn get_max_block_payload_size_bytes(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<u64>;
 }
 
 impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
@@ -406,6 +413,16 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
             value,
         })
     }
+
+    fn get_max_block_payload_size_bytes(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<u64> {
+        let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
+        Ok(deserialize_registry_value::<SubnetRecord>(bytes)?
+            .map(|subnet| subnet.max_block_payload_size))
+    }
 }
 
 pub fn get_node_ids_from_subnet_record(subnet: &SubnetRecord) -> Vec<NodeId> {
@@ -514,11 +531,44 @@ mod tests {
         SubnetId::from(PrincipalId::new_subnet_test_id(id))
     }
 
+    // Helper function to create a registry client with the provided information.
+    fn create_test_registry_client(
+        registry_version: RegistryVersion,
+        subnet_records: Vec<(SubnetId, SubnetRecord)>,
+        replica_version: Option<ReplicaVersion>,
+    ) -> Arc<dyn RegistryClient> {
+        let data_provider = Arc::new(ProtoRegistryDataProvider::new());
+
+        for (subnet_id, subnet_record) in subnet_records.into_iter() {
+            data_provider
+                .add(
+                    &make_subnet_record_key(subnet_id),
+                    registry_version,
+                    Some(subnet_record),
+                )
+                .unwrap();
+        }
+
+        if let Some(replica_version) = replica_version {
+            let replica_version_record = ReplicaVersionRecord::default();
+            data_provider
+                .add(
+                    &make_replica_version_key(String::from(&replica_version)),
+                    registry_version,
+                    Some(replica_version_record),
+                )
+                .unwrap();
+        }
+
+        let registry = Arc::new(FakeRegistryClient::new(data_provider));
+        registry.update_to_latest_version();
+        registry as Arc<dyn RegistryClient>
+    }
+
     #[test]
     fn can_get_node_ids_from_subnet() {
         let subnet_id = subnet_id(4);
         let version = RegistryVersion::from(2);
-        let data_provider = Arc::new(ProtoRegistryDataProvider::new());
         let subnet_record = SubnetRecord {
             membership: vec![
                 node_id(32u64).get().into_vec(),
@@ -526,18 +576,8 @@ mod tests {
             ],
             ..Default::default()
         };
-        data_provider
-            .add(
-                &make_subnet_record_key(subnet_id),
-                version,
-                Some(subnet_record),
-            )
-            .unwrap();
 
-        let registry = Arc::new(FakeRegistryClient::new(data_provider));
-        registry.update_to_latest_version();
-        // The trait can also "wrap" an arc of registry client.
-        let registry: Arc<dyn RegistryClient> = registry;
+        let registry = create_test_registry_client(version, vec![(subnet_id, subnet_record)], None);
 
         let node_ids = registry.get_node_ids_on_subnet(subnet_id, version).unwrap();
 
@@ -548,31 +588,17 @@ mod tests {
     fn can_get_replica_version_from_subnet() {
         let subnet_id = subnet_id(4);
         let version = RegistryVersion::from(2);
-        let data_provider = Arc::new(ProtoRegistryDataProvider::new());
         let mut subnet_record = SubnetRecord::default();
 
         let replica_version = ReplicaVersion::try_from("some_version").unwrap();
         let replica_version_record = ReplicaVersionRecord::default();
         subnet_record.replica_version_id = String::from(&replica_version);
-        data_provider
-            .add(
-                &make_subnet_record_key(subnet_id),
-                version,
-                Some(subnet_record),
-            )
-            .unwrap();
-        data_provider
-            .add(
-                &make_replica_version_key(String::from(&replica_version)),
-                version,
-                Some(replica_version_record.clone()),
-            )
-            .unwrap();
 
-        let registry = Arc::new(FakeRegistryClient::new(data_provider));
-        registry.update_to_latest_version();
-        // The trait can also "wrap" an arc of registry client.
-        let registry: Arc<dyn RegistryClient> = registry;
+        let registry = create_test_registry_client(
+            version,
+            vec![(subnet_id, subnet_record)],
+            Some(replica_version.clone()),
+        );
 
         let result = registry.get_replica_version(subnet_id, version).unwrap();
         assert_eq!(result, Some(replica_version));
@@ -581,5 +607,31 @@ mod tests {
             .get_replica_version_record(subnet_id, version)
             .unwrap();
         assert_eq!(result, Some(replica_version_record))
+    }
+
+    #[test]
+    fn can_get_max_block_size_from_subnet_record() {
+        let subnet_id = subnet_id(4);
+        let version = RegistryVersion::from(2);
+        let mut subnet_record = SubnetRecord::default();
+        let max_block_payload_size_bytes = 4 * 1024 * 1024; // 4MiB
+        subnet_record.max_block_payload_size = max_block_payload_size_bytes;
+
+        let replica_version = ReplicaVersion::try_from("some_version").unwrap();
+        subnet_record.replica_version_id = String::from(&replica_version);
+
+        let registry = create_test_registry_client(
+            version,
+            vec![(subnet_id, subnet_record)],
+            Some(replica_version.clone()),
+        );
+
+        let result = registry.get_replica_version(subnet_id, version).unwrap();
+        assert_eq!(result, Some(replica_version));
+
+        let result = registry
+            .get_max_block_payload_size_bytes(subnet_id, version)
+            .unwrap();
+        assert_eq!(result, Some(max_block_payload_size_bytes))
     }
 }
