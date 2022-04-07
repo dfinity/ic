@@ -24,6 +24,8 @@ use ic_canister_sandbox_common::protocol::structs::{
 };
 use ic_canister_sandbox_common::{controller_service::ControllerService, protocol};
 use ic_config::embedders::Config as EmbeddersConfig;
+use ic_embedders::wasm_utils::instrumentation::InstrumentationOutput;
+use ic_embedders::wasm_utils::validation::WasmValidationDetails;
 use ic_embedders::{
     wasm_executor::WasmStateChanges,
     wasm_utils::{
@@ -33,9 +35,7 @@ use ic_embedders::{
     },
     WasmtimeEmbedder,
 };
-use ic_interfaces::execution_environment::{
-    ExecutionMode, HypervisorError, HypervisorResult, WasmExecutionOutput,
-};
+use ic_interfaces::execution_environment::{ExecutionMode, HypervisorResult, WasmExecutionOutput};
 use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::page_map::PageMapSerialization;
 use ic_replicated_state::{EmbedderCache, Memory, PageMap};
@@ -226,17 +226,18 @@ impl CanisterWasm {
         config: &ic_config::embedders::Config,
         embedder: &Arc<WasmtimeEmbedder>,
         wasm_src: Vec<u8>,
-    ) -> HypervisorResult<Self> {
+    ) -> HypervisorResult<(Self, InstrumentationOutput, WasmValidationDetails)> {
         let wasm = decode_wasm(Arc::new(wasm_src))?;
-        let instrumentation_output = validate_wasm_binary(&wasm, config)
-            .map_err(HypervisorError::from)
-            .and_then(|_| {
-                instrument(&wasm, &InstructionCostTable::new()).map_err(HypervisorError::from)
-            })?;
+        let wasm_validation_details = validate_wasm_binary(&wasm, config)?;
+        let instrumentation_output = instrument(&wasm, &InstructionCostTable::new())?;
         let compilate = embedder.compile(&instrumentation_output.binary)?;
         let compilate = Arc::new(compilate);
 
-        Ok(Self { compilate })
+        Ok((
+            Self { compilate },
+            instrumentation_output,
+            wasm_validation_details,
+        ))
     }
 }
 
@@ -280,16 +281,25 @@ impl SandboxManager {
         }
     }
 
-    /// Compiles the given Wasm binary and registers it under the given id.
-    /// The function may fail if the Wasm binary is invalid.
-    pub fn open_wasm(&self, wasm_id: WasmId, wasm_src: Vec<u8>) -> HypervisorResult<()> {
+    // For internal use in creating execution states we use the outputs of
+    // compilation, but these aren't returned by the public RPC.
+    fn open_wasm_internal(
+        &self,
+        wasm_id: WasmId,
+        wasm_src: Vec<u8>,
+    ) -> HypervisorResult<(
+        Arc<CanisterWasm>,
+        InstrumentationOutput,
+        WasmValidationDetails,
+    )> {
         let mut guard = self.repr.lock().unwrap();
         assert!(
             !guard.canister_wasms.contains_key(&wasm_id),
             "Failed to open wasm session {}: id is already in use",
             wasm_id,
         );
-        let wasm = CanisterWasm::compile(&self.config, &self.embedder, wasm_src)?;
+        let (wasm, instrumentation_output, wasm_validation_details) =
+            CanisterWasm::compile(&self.config, &self.embedder, wasm_src)?;
         // Return as much memory as possible because compiling seems to use up
         // some extra memory that can be returned.
         //
@@ -298,7 +308,22 @@ impl SandboxManager {
         unsafe {
             libc::malloc_trim(0);
         }
-        guard.canister_wasms.insert(wasm_id, Arc::new(wasm));
+        let canister_wasm = Arc::new(wasm);
+        guard
+            .canister_wasms
+            .insert(wasm_id, Arc::clone(&canister_wasm));
+        Ok((
+            canister_wasm,
+            instrumentation_output,
+            wasm_validation_details,
+        ))
+    }
+
+    /// Compiles the given Wasm binary and registers it under the given id.
+    /// The function may fail if the Wasm binary is invalid.
+    pub fn open_wasm(&self, wasm_id: WasmId, wasm_src: Vec<u8>) -> HypervisorResult<()> {
+        let (_wasm, _instrumentation_output, _validation_details) =
+            self.open_wasm_internal(wasm_id, wasm_src)?;
         Ok(())
     }
 
@@ -405,38 +430,22 @@ impl SandboxManager {
         next_wasm_memory_id: MemoryId,
         canister_id: CanisterId,
     ) -> HypervisorResult<CreateExecutionStateSuccessReply> {
-        // Get the compiled binary from the cache.
-        let binary_encoded_wasm = decode_wasm(Arc::new(wasm_source))?;
-        let (embedder_cache, embedder) = {
-            let guard = self.repr.lock().unwrap();
-            let canister_wasm = guard.canister_wasms.get(&wasm_id).unwrap_or_else(|| {
-                unreachable!(
-                    "Failed to create execution state for {}: wasm {} not found",
-                    canister_id, wasm_id
-                )
-            });
-            (
-                Arc::clone(&canister_wasm.compilate),
-                Arc::clone(&self.embedder),
-            )
-        };
+        // Validate, instrument, and compile the binary.
+        let (canister_wasm, instrumentation_output, wasm_validation_details) =
+            self.open_wasm_internal(wasm_id, wasm_source)?;
+        let embedder_cache = Arc::clone(&canister_wasm.compilate);
+        let embedder = Arc::clone(&self.embedder);
 
         let mut wasm_page_map = PageMap::deserialize(wasm_page_map).unwrap();
 
-        let (
-            exported_functions,
-            exported_globals,
-            wasm_memory_delta,
-            wasm_memory_size,
-            wasm_validation_details,
-        ) = ic_embedders::wasm_executor::get_initial_globals_and_memory(
-            &binary_encoded_wasm,
-            &embedder_cache,
-            &embedder,
-            &self.config,
-            &mut wasm_page_map,
-            canister_id,
-        )?;
+        let (exported_functions, exported_globals, wasm_memory_delta, wasm_memory_size) =
+            ic_embedders::wasm_executor::get_initial_globals_and_memory(
+                instrumentation_output,
+                &embedder_cache,
+                &embedder,
+                &mut wasm_page_map,
+                canister_id,
+            )?;
 
         let wasm_memory = Memory::new(wasm_page_map, wasm_memory_size);
 

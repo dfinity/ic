@@ -9,10 +9,11 @@ use ic_system_api::{ApiType, DefaultOutOfInstructionsHandler};
 use ic_types::methods::{FuncRef, WasmMethod};
 use prometheus::{Histogram, IntCounter};
 
+use crate::wasm_utils::instrumentation::InstrumentationOutput;
 use crate::{
     wasm_utils::decoding::decode_wasm,
     wasm_utils::instrumentation::{instrument, InstructionCostTable},
-    wasm_utils::validation::{validate_wasm_binary, WasmImportsDetails, WasmValidationDetails},
+    wasm_utils::validation::{validate_wasm_binary, WasmImportsDetails},
     wasmtime_embedder::WasmtimeInstance,
     WasmExecutionInput, WasmtimeEmbedder,
 };
@@ -277,20 +278,19 @@ impl WasmExecutor {
         let embedder_cache = self.get_embedder_cache(Some(&binary_encoded_wasm), &wasm_binary)?;
         let mut wasm_page_map = PageMap::default();
 
-        let (
-            exported_functions,
-            globals,
-            _wasm_page_delta,
-            wasm_memory_size,
-            wasm_validation_details,
-        ) = get_initial_globals_and_memory(
-            &binary_encoded_wasm,
-            &embedder_cache,
-            &self.wasm_embedder,
-            &self.config,
-            &mut wasm_page_map,
-            canister_id,
-        )?;
+        // Get data from instrumentation output.
+        let wasm_validation_details = validate_wasm_binary(&binary_encoded_wasm, &self.config)?;
+        let instrumentation_output =
+            instrument(&binary_encoded_wasm, &InstructionCostTable::new())?;
+
+        let (exported_functions, globals, _wasm_page_delta, wasm_memory_size) =
+            get_initial_globals_and_memory(
+                instrumentation_output,
+                &embedder_cache,
+                &self.wasm_embedder,
+                &mut wasm_page_map,
+                canister_id,
+            )?;
 
         // Create the execution state.
         let stable_memory = Memory::default();
@@ -547,17 +547,16 @@ pub fn process(
     )
 }
 
-/// Validates and instruments a compiled wasm module, updating the wasm memory
-/// `PageMap`. Returns the exported methods and globals, as well as wasm memory
+/// Takes a validated and instrumented wasm module and updates the wasm memory
+/// `PageMap`.  Returns the exported methods and globals, as well as wasm memory
 /// delta and final wasm memory size.
 ///
 /// The only wasm code that will be run is const evaluation of the wasm globals.
 #[allow(clippy::type_complexity)]
 pub fn get_initial_globals_and_memory(
-    binary_encoded_wasm: &BinaryEncodedWasm,
+    instrumentation_output: InstrumentationOutput,
     embedder_cache: &EmbedderCache,
     embedder: &WasmtimeEmbedder,
-    config: &EmbeddersConfig,
     wasm_page_map: &mut PageMap,
     canister_id: CanisterId,
 ) -> HypervisorResult<(
@@ -565,15 +564,11 @@ pub fn get_initial_globals_and_memory(
     Vec<Global>,
     Vec<PageIndex>,
     NumWasmPages,
-    WasmValidationDetails,
 )> {
-    // Step 1. Get data from instrumentation output.
-    let wasm_validation_details = validate_wasm_binary(binary_encoded_wasm, config)?;
-    let instrumentation_output = instrument(binary_encoded_wasm, &InstructionCostTable::new())?;
     let exported_functions = instrumentation_output.exported_functions;
     let wasm_memory_pages = instrumentation_output.data.as_pages();
 
-    // Step 2. Apply the initial memory pages to the page map.
+    // Step 1. Apply the initial memory pages to the page map.
     let wasm_memory_delta = wasm_page_map.update(
         &wasm_memory_pages
             .iter()
@@ -581,7 +576,7 @@ pub fn get_initial_globals_and_memory(
             .collect::<Vec<(PageIndex, &PageBytes)>>(),
     );
 
-    // Step 3. Instantiate the Wasm module to get the globals and the memory size.
+    // Step 2. Instantiate the Wasm module to get the globals and the memory size.
     //
     // We are using the wasm instance to initialize the execution state properly.
     // SystemApi is needed when creating a Wasmtime instance because the Linker
@@ -613,6 +608,5 @@ pub fn get_initial_globals_and_memory(
         instance.get_exported_globals(),
         wasm_memory_delta,
         instance.heap_size(),
-        wasm_validation_details,
     ))
 }

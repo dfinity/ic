@@ -34,7 +34,7 @@ impl SandboxService for SandboxServer {
 
     fn open_wasm(&self, req: OpenWasmRequest) -> rpc::Call<OpenWasmReply> {
         let result = self.manager.open_wasm(req.wasm_id, req.wasm_src);
-        rpc::Call::new_resolved(Ok(OpenWasmReply(result)))
+        rpc::Call::new_resolved(Ok(OpenWasmReply(result.map(|_| ()))))
     }
 
     fn close_wasm(&self, req: CloseWasmRequest) -> rpc::Call<CloseWasmReply> {

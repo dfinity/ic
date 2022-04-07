@@ -709,16 +709,12 @@ impl SandboxedExecutionController {
         canister_id: CanisterId,
     ) -> HypervisorResult<ExecutionState> {
         let sandbox_process = self.get_sandbox_process(canister_id);
-
-        // Step 1: Compile Wasm binary and cache it.
+        self.compile_count_for_testing
+            .fetch_add(1, Ordering::Relaxed);
         let wasm_binary = WasmBinary::new(CanisterModule::new(wasm_source.clone()));
-        let (wasm_id, compile_count) = open_wasm(&sandbox_process, &wasm_binary)?;
-        if compile_count > 0 {
-            self.compile_count_for_testing
-                .fetch_add(compile_count, Ordering::Relaxed);
-        }
 
-        // Steps 2, 3, 4 are performed by the sandbox process.
+        // Steps 1, 2, 3, 4 are performed by the sandbox process.
+        let wasm_id = WasmId::new();
         let wasm_page_map = PageMap::default();
         let next_wasm_memory_id = MemoryId::new();
         sandbox_process.history.record(format!(
@@ -737,6 +733,12 @@ impl SandboxedExecutionController {
             .sync()
             .unwrap()
             .0?;
+
+        cache_opened_wasm(
+            &mut *wasm_binary.embedder_cache.lock().unwrap(),
+            &sandbox_process,
+            wasm_id,
+        );
 
         // Step 5. Create the execution state.
         let mut wasm_memory = Memory::new(wasm_page_map, reply.wasm_memory_modifications.size);
@@ -762,6 +764,17 @@ impl SandboxedExecutionController {
     pub fn compile_count_for_testing(&self) -> u64 {
         self.compile_count_for_testing.load(Ordering::Relaxed)
     }
+}
+
+// Cache the sandbox process and wasm id of the opened wasm in the embedder
+// cache.
+fn cache_opened_wasm(
+    embedder_cache: &mut Option<EmbedderCache>,
+    sandbox_process: &Arc<SandboxProcess>,
+    wasm_id: WasmId,
+) {
+    let opened_wasm = OpenedWasm::new(Arc::downgrade(sandbox_process), wasm_id);
+    *embedder_cache = Some(EmbedderCache::new(opened_wasm));
 }
 
 // Get compiled wasm object in sandbox. Ask cache first, upload + compile if
@@ -792,8 +805,7 @@ fn open_wasm(
         .sync()
         .unwrap()
         .0?;
-    let opened_wasm = OpenedWasm::new(Arc::downgrade(sandbox_process), wasm_id);
-    *embedder_cache = Some(EmbedderCache::new(opened_wasm));
+    cache_opened_wasm(&mut *embedder_cache, sandbox_process, wasm_id);
     Ok((wasm_id, 1))
 }
 
@@ -1012,10 +1024,6 @@ mod tests {
             thread::sleep(Duration::from_millis(100));
             logs = fs::read_to_string(&log_path).unwrap();
         }
-        assert!(logs.contains(&format!(
-            "History for canister {} with pid {}: OpenWasm",
-            canister_id, sandbox_pid
-        )));
         assert!(logs.contains(&format!(
             "History for canister {} with pid {}: CreateExecutionState",
             canister_id, sandbox_pid
