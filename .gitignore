@@ -94,3 +94,6 @@ boundary-node-control-plane
 # Scalability test results
 scalability/results/
 *Pipfile*
+
+# Bazel outdir dirs
+/bazel-*
