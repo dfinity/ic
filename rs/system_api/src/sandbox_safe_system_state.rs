@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, convert::TryFrom, convert::TryInto};
+use std::collections::BTreeMap;
 
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId};
 use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerError};
@@ -16,7 +16,7 @@ use ic_types::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::CERTIFIED_DATA_MAX_LENGTH;
+use crate::{cycles_balance_change::CyclesBalanceChange, CERTIFIED_DATA_MAX_LENGTH};
 
 /// The information that canisters can see about their own status.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -47,7 +47,7 @@ pub enum CallbackUpdate {
 pub struct SystemStateChanges {
     pub(super) new_certified_data: Option<Vec<u8>>,
     pub(super) callback_updates: Vec<CallbackUpdate>,
-    cycles_balance_change: i128,
+    cycles_balance_change: CyclesBalanceChange,
     cycles_consumed: Cycles,
     call_context_balance_taken: BTreeMap<CallContextId, Cycles>,
     request_slots_used: BTreeMap<CanisterId, usize>,
@@ -59,7 +59,7 @@ impl Default for SystemStateChanges {
         Self {
             new_certified_data: None,
             callback_updates: vec![],
-            cycles_balance_change: 0,
+            cycles_balance_change: CyclesBalanceChange::zero(),
             cycles_consumed: Cycles::from(0),
             call_context_balance_taken: BTreeMap::new(),
             request_slots_used: BTreeMap::new(),
@@ -72,26 +72,20 @@ impl SystemStateChanges {
     /// Checks that no cycles were created during the execution of this message
     /// (unless the canister is the cycles minting canister).
     fn cycle_change_is_valid(&self, is_cmc_canister: bool) -> bool {
-        let mut universal_cycle_change = 0;
-        universal_cycle_change += self.cycles_balance_change;
+        let mut universal_cycle_change = self.cycles_balance_change;
         for call_context_balance_taken in self.call_context_balance_taken.values() {
-            universal_cycle_change = universal_cycle_change.saturating_sub(
-                call_context_balance_taken
-                    .get()
-                    .try_into()
-                    .unwrap_or(i128::MAX), // saturate overflowing conversion
-            );
+            universal_cycle_change =
+                universal_cycle_change + CyclesBalanceChange::removed(*call_context_balance_taken);
         }
         for req in self.requests.iter() {
-            universal_cycle_change = universal_cycle_change
-                // saturate overflowing conversion
-                .saturating_add(req.payment.get().try_into().unwrap_or(i128::MAX));
+            universal_cycle_change =
+                universal_cycle_change + CyclesBalanceChange::added(req.payment);
         }
         if is_cmc_canister {
             true
         } else {
             // Check that no cycles were created.
-            universal_cycle_change <= 0
+            universal_cycle_change <= CyclesBalanceChange::zero()
         }
     }
 
@@ -105,16 +99,8 @@ impl SystemStateChanges {
     pub fn apply_changes(self, system_state: &mut SystemState) {
         // Verify total cycle change is not positive and update cycles balance.
         assert!(self.cycle_change_is_valid(system_state.canister_id == CYCLES_MINTING_CANISTER_ID));
-        if self.cycles_balance_change >= 0 {
-            *system_state.balance_mut() += Cycles::from(self.cycles_balance_change as u128);
-        } else {
-            let new_balance = system_state
-                .balance()
-                .get()
-                .checked_sub(-self.cycles_balance_change as u128)
-                .unwrap();
-            *system_state.balance_mut() = Cycles::from(new_balance);
-        }
+        self.cycles_balance_change
+            .apply_ref(system_state.balance_mut());
 
         // Observe consumed cycles.
         system_state
@@ -290,22 +276,8 @@ impl SandboxSafeSystemState {
     }
 
     pub(super) fn cycles_balance(&self) -> Cycles {
-        let cycle_change = self.system_state_changes.cycles_balance_change;
-        if cycle_change >= 0 {
-            Cycles::from(
-                self.initial_cycles_balance
-                    .get()
-                    .checked_add(cycle_change as u128)
-                    .unwrap(),
-            )
-        } else {
-            Cycles::from(
-                self.initial_cycles_balance
-                    .get()
-                    .checked_sub(-cycle_change as u128)
-                    .unwrap(),
-            )
-        }
+        let cycles_change = self.system_state_changes.cycles_balance_change;
+        cycles_change.apply(self.initial_cycles_balance)
     }
 
     pub(super) fn msg_cycles_available(&self, call_context_id: CallContextId) -> Cycles {
@@ -322,36 +294,24 @@ impl SandboxSafeSystemState {
     }
 
     fn update_balance_change(&mut self, new_balance: Cycles) {
-        let new_change;
-        if new_balance > self.initial_cycles_balance {
-            new_change =
-                i128::try_from(new_balance.get() - self.initial_cycles_balance.get()).unwrap();
-        } else {
-            new_change =
-                -i128::try_from(self.initial_cycles_balance.get() - new_balance.get()).unwrap();
-        }
-        self.system_state_changes.cycles_balance_change = new_change;
+        self.system_state_changes.cycles_balance_change =
+            CyclesBalanceChange::new(self.initial_cycles_balance, new_balance);
     }
 
     /// Same as [`update_balance_change`], but asserts the balance has decreased
     /// and marks the difference as cycles consumed (i.e. burned and not
     /// transferred).
     fn update_balance_change_consuming(&mut self, new_balance: Cycles) {
-        let new_change;
-        if new_balance > self.initial_cycles_balance {
-            new_change =
-                i128::try_from(new_balance.get() - self.initial_cycles_balance.get()).unwrap();
-        } else {
-            new_change =
-                -i128::try_from(self.initial_cycles_balance.get() - new_balance.get()).unwrap();
-        }
-
-        // Assert that the balance has decreased.
-        assert!(new_change <= self.system_state_changes.cycles_balance_change);
-        let consumed =
-            Cycles::from((self.system_state_changes.cycles_balance_change - new_change) as u128);
+        let old_balance = self.cycles_balance();
+        assert!(
+            new_balance <= old_balance,
+            "Unexpected increase of cycles balances {} => {}",
+            old_balance,
+            new_balance
+        );
+        let consumed = old_balance - new_balance;
         self.system_state_changes.cycles_consumed += consumed;
-        self.system_state_changes.cycles_balance_change = new_change;
+        self.update_balance_change(new_balance);
     }
 
     pub(super) fn mint_cycles(&mut self, amount_to_mint: Cycles) -> HypervisorResult<()> {
