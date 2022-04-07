@@ -1,5 +1,5 @@
 use crate::address_utxoset::AddressUtxoSet;
-use crate::{state::UtxoSet, utxos::UtxosTrait};
+use crate::{state::UtxoSet, types::Storable, utxos::UtxosTrait};
 use bitcoin::{Address, OutPoint, Transaction, TxOut, Txid};
 use std::str::FromStr;
 
@@ -38,10 +38,10 @@ fn remove_spent_txs(utxo_set: &mut UtxoSet, tx: &Transaction) {
                     let address = address.to_string();
                     let found = utxo_set
                         .address_to_outpoints
-                        .remove(&(address, input.previous_output));
+                        .remove(&(address, input.previous_output).to_bytes());
 
                     assert!(
-                        found,
+                        found.is_some(),
                         "Outpoint {:?} not found in the index.",
                         input.previous_output
                     );
@@ -95,7 +95,8 @@ pub(crate) fn insert_utxo(
         // Add the address to the index if we can parse it.
         utxo_set
             .address_to_outpoints
-            .insert((address.to_string(), outpoint));
+            .insert((address.to_string(), outpoint).to_bytes(), vec![])
+            .expect("insertion must succeed");
     }
 
     utxo_set.utxos.insert(outpoint, (output, height));
@@ -109,6 +110,7 @@ mod test {
     use bitcoin::secp256k1::rand::rngs::OsRng;
     use bitcoin::secp256k1::Secp256k1;
     use bitcoin::{Address, Network, PublicKey, TxOut};
+    use std::collections::BTreeSet;
 
     #[test]
     fn coinbase_tx() {
@@ -152,7 +154,7 @@ mod test {
             insert_tx(&mut utxo, &coinbase_empty_tx, 0);
 
             assert!(utxo.utxos.is_empty());
-            assert_eq!(utxo.address_to_outpoints, maplit::btreeset! {});
+            assert!(utxo.address_to_outpoints.is_empty());
         }
     }
 
@@ -174,7 +176,7 @@ mod test {
             insert_tx(&mut utxo, &coinbase_op_return_tx, 0);
 
             assert!(utxo.utxos.is_empty());
-            assert_eq!(utxo.address_to_outpoints, maplit::btreeset! {});
+            assert!(utxo.address_to_outpoints.is_empty());
         }
     }
 
@@ -209,7 +211,10 @@ mod test {
                 expected
             );
             assert_eq!(
-                utxo.address_to_outpoints,
+                utxo.address_to_outpoints
+                    .iter()
+                    .map(|(k, _)| <(String, OutPoint)>::from_bytes(k))
+                    .collect::<BTreeSet<_>>(),
                 maplit::btreeset! {
                     (address_1.to_string(), OutPoint {
                         txid: coinbase_tx.txid(),
@@ -237,7 +242,10 @@ mod test {
                 }]
             );
             assert_eq!(
-                utxo.address_to_outpoints,
+                utxo.address_to_outpoints
+                    .iter()
+                    .map(|(k, _)| <(String, OutPoint)>::from_bytes(k))
+                    .collect::<BTreeSet<_>>(),
                 maplit::btreeset! {
                     (address_2.to_string(), OutPoint {
                         txid: tx.txid(),
