@@ -55,13 +55,15 @@ variables:
     GIT_CACHE_PATH="/cache/git-v3/@{CI_PROJECT_PATH}/@{CI_CONCURRENT_ID}"
     mkdir -p "@{GIT_CACHE_PATH}"
 
-    # Step 1. Seed the repo if it doesn't exit
-    if [ -z "@(ls -A @{GIT_CACHE_PATH})" ]; then
-      pushd "@{GIT_CACHE_PATH}"
+    pushd "@{GIT_CACHE_PATH}"
+    # Step 1. Seed the repo if it doesn't exit or has been corrupted.
+    # On CI we've observed partial downloads of the repo [e.g. missing .git dir]
+    if ! git fsck; then
       echo "Cloning fresh git repository"
+      find . -delete
       time git clone "@{CI_REPOSITORY_URL}" .
-      popd
     fi
+    popd
 
     # Step 2. Fetch the commit sha into the cache.
     pushd "@{GIT_CACHE_PATH}"
