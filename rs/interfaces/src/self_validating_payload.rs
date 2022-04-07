@@ -69,26 +69,3 @@ pub trait SelfValidatingPayloadBuilder: Send + Sync {
             .collect()
     }
 }
-
-// TODO: Remove this once a real SelfValidatingPayloadBuilder is ready.
-pub struct NoOpSelfValidatingPayloadBuilder {}
-
-impl SelfValidatingPayloadBuilder for NoOpSelfValidatingPayloadBuilder {
-    fn get_self_validating_payload(
-        &self,
-        _validation_context: &ValidationContext,
-        _past_payloads: &[&SelfValidatingPayload],
-        _byte_limit: NumBytes,
-    ) -> SelfValidatingPayload {
-        SelfValidatingPayload::default()
-    }
-
-    fn validate_self_validating_payload(
-        &self,
-        _payload: &SelfValidatingPayload,
-        _validation_context: &ValidationContext,
-        _past_payloads: &[&SelfValidatingPayload],
-    ) -> Result<NumBytes, SelfValidatingPayloadValidationError> {
-        Ok(0.into())
-    }
-}
