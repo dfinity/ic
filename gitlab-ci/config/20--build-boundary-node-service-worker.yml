@@ -1,7 +1,6 @@
 boundary-node-service-worker:
   extends:
     - .ubuntu-nix-docker
-    - .rules-service-worker-build
   needs: [] # don't wait on other jobs
   stage: test
   script:
