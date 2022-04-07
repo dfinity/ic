@@ -1,7 +1,5 @@
 use crate::{
-    blocktree::BlockDoesNotExtendTree,
-    state::{Height, State},
-    unstable_blocks, utxoset,
+    blocktree::BlockDoesNotExtendTree, state::State, types::Height, unstable_blocks, utxoset,
 };
 use bitcoin::{Address, Block, Txid};
 use ic_btc_types::{GetBalanceError, GetUtxosError, GetUtxosResponse, Satoshi, Utxo};

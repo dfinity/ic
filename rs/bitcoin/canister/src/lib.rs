@@ -4,6 +4,7 @@ mod blocktree;
 pub mod state;
 pub mod store;
 pub mod test_builder;
+mod types;
 mod unstable_blocks;
 mod utxos;
 mod utxoset;

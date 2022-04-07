@@ -1,12 +1,10 @@
-use crate::{block, proto};
+use crate::{block, proto, types::Height};
 use bitcoin::{hashes::Hash, Block, Network, OutPoint, Script, TxOut, Txid};
 use core::cell::RefCell;
 use ic_protobuf::bitcoin::v1;
 use stable_structures::{StableBTreeMap, VectorMemory};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::rc::Rc;
-
-pub type Height = u32;
 
 /// A structure used to maintain the entire state.
 pub struct State {
@@ -133,6 +131,11 @@ pub const UTXO_VALUE_MAX_SIZE_SMALL: u32 = TX_OUT_MAX_SIZE_SMALL + HEIGHT_SIZE;
 /// The max size of a value in the "medium UTXOs" map.
 pub const UTXO_VALUE_MAX_SIZE_MEDIUM: u32 = TX_OUT_MAX_SIZE_MEDIUM + HEIGHT_SIZE;
 
+// The longest addresses are bech32 addresses, and a bech32 string can be at most 90 chars.
+// See https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki
+const MAX_ADDRESS_SIZE: u32 = 90;
+const MAX_ADDRESS_OUTPOINT_SIZE: u32 = MAX_ADDRESS_SIZE + OUTPOINT_SIZE;
+
 impl Default for Utxos {
     fn default() -> Self {
         let small_utxos_memory = make_memory();
@@ -170,18 +173,31 @@ pub struct UtxoSet {
     pub utxos: Utxos,
     pub network: Network,
     // An index for fast retrievals of an address's UTXOs.
-    pub address_to_outpoints: BTreeSet<(String, OutPoint)>,
+    // TODO(EXC-1039): Use pagemap instead of a vec.
+    pub address_to_outpoints: StableBTreeMap<VectorMemory>,
+
     // If true, a transaction's inputs must all be present in the UTXO for it to be accepted.
     pub strict: bool,
+
+    // Reference to the memory used in `address_to_outpoints` for protobuf conversions.
+    // This won't be necessary once we migrate to `PageMap`.
+    pub address_to_outpoints_memory: VectorMemory,
 }
 
 impl UtxoSet {
     pub fn new(strict: bool, network: Network) -> Self {
+        let address_to_outpoints_memory = make_memory();
+
         Self {
             utxos: Utxos::default(),
-            address_to_outpoints: BTreeSet::default(),
+            address_to_outpoints: StableBTreeMap::new(
+                address_to_outpoints_memory.clone(),
+                MAX_ADDRESS_OUTPOINT_SIZE,
+                0, // No values are stored in the map.
+            ),
             strict,
             network,
+            address_to_outpoints_memory,
         }
     }
 
@@ -205,6 +221,7 @@ impl UtxoSet {
                     height: *height,
                 })
                 .collect(),
+            address_to_outpoints: self.address_to_outpoints_memory.borrow().clone(),
             strict: self.strict,
             network: match self.network {
                 Network::Bitcoin => 0,
@@ -218,6 +235,7 @@ impl UtxoSet {
     pub fn from_proto(utxos_proto: proto::UtxoSet) -> Self {
         let small_utxos_memory = Rc::new(RefCell::new(utxos_proto.small_utxos));
         let medium_utxos_memory = Rc::new(RefCell::new(utxos_proto.medium_utxos));
+        let address_to_outpoints_memory = Rc::new(RefCell::new(utxos_proto.address_to_outpoints));
         let utxos = Utxos {
             small_utxos: StableBTreeMap::load(small_utxos_memory.clone()),
             medium_utxos: StableBTreeMap::load(medium_utxos_memory.clone()),
@@ -252,7 +270,8 @@ impl UtxoSet {
 
         Self {
             utxos,
-            address_to_outpoints: BTreeSet::default(),
+            address_to_outpoints: StableBTreeMap::load(address_to_outpoints_memory.clone()),
+            address_to_outpoints_memory,
             strict: utxos_proto.strict,
             network: match utxos_proto.network {
                 0 => Network::Bitcoin,
