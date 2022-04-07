@@ -1,0 +1,262 @@
+= Build tools for disk and filesystem images
+
+This directory contains various scripts that allow building
+filesystem and disk images from tar files, and extracting docker
+images into appropriately shaped tar files.
+
+It also contains build glue for bazel to make use of these tools
+as build rules.
+
+== Build tools
+
+The following build tools are provided:
+
+* +docker_tar.py+: Build a docker image and convert to tar file
+
+* +build_vfat_image.py+: Build vfat fs image from tar file
+
+* +build_ext4_image.py+: Build ext4 fs image from tar file
+
+* +build_disk_image.py+: Build disk image from partition images
+
+The tools are described in more details in the following
+sections.
+
+=== +docker_tar.py+: Build a docker image and convert to tar file
+
+Call synopsis: +docker_tar.py _dockerarg_ _dockerarg..._ >__out.tar__+
+
+The tool will call +docker build+ with all extra +_dockerargs_+
+passed as arguments to the build. The container will be built,
+subsequently extracted, and then saved as a +.tar+ file. The
++.tar+ will hold the contents of the docker image as a single
+"flattened" tree (this is different from the output of
++docker save+ which contains a +.tar+ file consisting of
+multiple layers of the docker build).
+
+Timestamps and other non-reproducible data resulting from docker
+build are squashed in this process, so this also produces
+perfectly reproducible results as long as the +Dockerfile+
+is suitably structured to avoid generating non-reproducible
+artifacts (or takes care of "purging" any non-reproducible
+artifacts at the end of the build).
+
+The resulting +.tar+ file is written to stdout.
+
+=== +build_vfat_image.py+ / +build_ext4_image.py+: Build fs image from tar file
+
+Call synopsis: +build_XXX_image.py -s _size_ -o _out.tar_ -i _in.tar_ -p _rootpath_ -S _filecontexts_ _filespec..._+
+
+The tool will build a filesystem image containing the filesystem tree from the
+input +_in.tar_+ file as well as the given +_filespecs_+ as individual files.
+The filesystem image will have the given nominal +_size_+. Since the image
+will (usually) be a very sparse file containing lots of zeroes and some
+build systems handle sparse files poorly, the built image is packaged up into
+a +.tar+ file itself. The resulting +_out.tar_+ will be an archive
+consisting of a single file by the name of +partition.img+. It is
+permissible to omit both +_in.tar_+ as well as any +_filespecs_+ resulting
+in an empty filesystem.
+
+Size can be given in either bytes (without a unit) or a number followed by
++K+, +M+ or +G+ for kilobytes, megabytes or gigabytes, respectively.
+
+Optionally, a +_rootpath_+ can be given. This allows to include only the files
+and directories below this path from the +_in.tar_+ (so the filesystem will
+effectively contain only a subdirectory of the original archive). Optional,
+a +_filecontexts_+ file can be given. This will result in the build of a
+labeled filesystem using the SELinux file contexts specified here applied to
+each file on the filesystem. (File contexts are not supported for +vfat+
+filesystems).
+
++_filespecs_+ must be a list of zero or more entries of the following form:
++__sourcepath___:__targetpath__:__mode__+. This will cause the file identified
+by +__sourcepath__+ to be installed into the target filesystem at the
+location +__targetpath__+, owned by +root:root+ and having file system
+mode +__mode__+ (given in octal, so e.g. +0755+ for executables and +0644+
+for ordinarily readable files).
+
+=== +build_disk_image.py+: Build a disk image from partition images
+
+Call synopsis: +build_disk_image.py -o _out.tar_ -p _partitions.csv_ _part1.tar_ _part2.tar..._+
+
+Builds a GPT-partitionend disk image and puts the given partition image
+contents into the respective partitions. The output disk image is generally
+a very sparse file containing lots of zeros and some build systems handle
+sparse files poorly, so it is wrapped into a +.tar+ file after build.
+The resulting +_out.tar_+ is a tar archive containing a single file
+named +_disk.img_+ (this is a raw disk image, after unpacking it can be
+directly used as e.g. disk image for +qemu+).
+
+The +_partitions.csv_+ must be a CSV file specifying the desired partition layout.
+It may consist of lines starting with +#+ designating comments (these are
+ignored), and must otherwise contain partition specifications one-by-one in
+the following form:
+
++__name__,__start__,__size__,__typecode__,__uuid__,__description__+
+
+The field have the following semantics:
+
+* +__name__+ is a free-form identifier (used for documentation purposes)
+
+* +__start__+ is the start sector (see below)
+
+* +__size__+ is the size of the partition in sectors
+
+* +__typecode__+ kind of partition, valid values are +U+ for UEFI and +L+ for Linux partitions
+
+* +__uuid__+ UUID written into the GPT, must be unique for the disk (and otherwise just a valid UUID format)
+
+* +__description__+ Freeform text for documentation purposes
+
+Start and size are given in "sector" units (512 bytes). Please take care that partitions
+do not overlap, and that start and size are always whole multiples of 1 MByte.
+
+Example structure:
+----
+esp   ,    2048,  204800,U,B78084E2-3363-1346-8C25-D426F26B8928,EFI system partition
+grub  ,  206848,  204800,L,6788E4CF-F456-104E-9A34-A2C58CFB0EE6,Grub bootloader modules and config
+config,  411648,  204800,L,A5BA3816-BEAA-D74D-993E-CFA5AA6BA1F6,System config store
+A_boot,  616448, 2097152,L,DDF618FE-7244-B446-A175-3296E6B9D02E,Boot partition for system A
+A_root, 2713600,20971520,L,7C0A626E-E5EA-E543-B5C5-300EB8304DB7,Root partition for system A
+A_var ,23685120,20971520,L,22D2F5A6-1E39-D247-81CF-90C95C113E21,Mutable data partition for system A
+B_boot,44656640, 2097152,L,D5214E4F-F7B0-B945-9A9B-52B9188DF4C5,Boot partition for system B
+B_root,46753792,20971520,L,A78BC3A8-376C-054A-96E7-3904B915D0C5,Root partition for system B
+B_var ,67725312,20971520,L,2237D1D1-CE96-584E-8EC5-8AE6661FAAE9,Mutable data partition for system B
+----
+
+The given partition images must be +.tar+ archives that contain exactly one file
+named +partition.img+, each. Their contents will be dumped into the correct on-disk location
+into their respective partitions in order of definition. Please make sure that the
+partitions are sized appropriately (the partition image may be smaller, but must not
+be larger than the target partition).
+
+== Bazel build rules
+
+The bazel rules can be imported using:
+
+----
+load("//toolchains/sysimage:toolchain.bzl", "docker_tar", "vfat_image", "ext4_image", "disk_image", "tar_extract")
+----
+
+=== Build docker image as tar
+
+Synopsis:
+[subs="quotes"]
+----
+docker_tar(
+  name="__out.tar__",
+  src=__dockerbuildir__,
+  dep=[__dependencies...__],
+  extra_args=[__args...__],
+)
+----
+
+Builds a docker image using the given +__dockerbuilddir__+ as build context (this
+directory should contain a +Dockerfile+). The bazel build rule needs to be
+pointed at the directory itself. All contents of the docker context directory should
+be given as additional +__dependencies__+ in order for bazel tracking to work
+correctly. All given +__args__+ are passed as extraneous arguments to the
++docker build+ command.
+
+=== Extract file from tar archive
+
+[subs="quotes"]
+----
+tar_extract(
+    name="__target filename__",
+    src="__src.tar__",
+    path="__path/to/file/in/tar__",
+)
+----
+
+Extracts the given individual file from the given tar archive. The file can be
+used as a generated files in subsequent build steps.
+
+=== Build filesystem image
+
+[subs="quotes"]
+----
+ext4_image(
+    name="__partition.img.tar__",
+    partition_size="__size__",
+    file_contexts="__file_contexts__",
+    subdir="__subdir__",
+    src="__tree.tar__",
+    extra_files={
+        "__srcfile__": "__targetpath__:__mode__",
+        ...
+    },
+)
+----
+
+[subs="quotes"]
+----
+vfat_image(
+    name="__partition.img.tar__",
+    partition_size="__size__",
+    subdir="__subdir__",
+    src="__tree.tar__",
+    extra_files={
+        "__srcfile__": "__targetpath__:__mode__",
+        ...
+    },
+)
+----
+
+Builds a filesystem image by putting the contents +__subdir__+ of the given input
++__tree.tar__+ into the filesystem. The filesystem image will have
+given +__size__+ (specified as either bytes or a number following by
++K+, +M+ or +G+ respectively). The additionally given files will
+also be installed into the target filesystem image under the given
+target paths and file modes. For +ext4+ images, SELinux file contexts
+can be specified to build a labelled filesystem.
+
+=== Build disk image
+
+Synopsis:
+
+[subs="quotes"]
+----
+disk_image(
+    name="__disk.img.tar__",
+    layout="__partitions.csv__",
+    partitions=[
+        "__partition1.img.tar__",
+        "__partition2.img.tar__",
+        ...
+    ],
+)
+----
+
+Builds a disk image with given partition layout (see above for format file)
+and containing the given partition images. The partition images should
+generally be build using the +ext4_image+ or +vfat_image+ rules above.
+They must be +tar+ archives containing a single file named +partition.img+
+each.
+
+=== Example
+
+A complete example to build a disk image using a single partition populated
+from the contents of a docker image:
+
+----
+docker_tar(
+    name="tree.tar",
+    src=":tree",
+    dep=glob(["tree/**"]),
+)
+
+ext4_image(
+    name="part1.img.tar",
+    src=":tree.tar",
+    partition_size="1G",
+)
+
+disk_image(
+    name="disk.img.tar",
+    layout=":partitions.csv",
+    partitions=[
+        ":part1.img.tar",
+    ],
+)
+----
