@@ -28,6 +28,7 @@ use ic_fondue::ic_manager::{IcEndpoint, IcHandle};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
+use slog::info;
 
 const DKG_INTERVAL: u64 = 14;
 const NODES_COUNT: usize = 4;
@@ -46,12 +47,18 @@ pub fn config() -> InternetComputer {
 }
 
 pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    // Setup: install all necessary NNS canisters.
+    let logger = ctx.logger.clone();
+
+    info!(logger, "Setup: install all necessary NNS canisters");
     ctx.install_nns_canisters(&handle, true);
     let mut rng = ctx.rng.clone();
     let mut endpoints: Vec<_> = handle.as_permutation(&mut rng).collect();
     let message_hash = [0xabu8; 32];
-    // Assert all nodes are reachable via http:://[IPv6]:8080/api/v2/status
+
+    info!(
+        logger,
+        "Assert all nodes are reachable via http:://[IPv6]:8080/api/v2/status"
+    );
     let (canister_id, public_key) = block_on(async {
         assert_endpoints_reachability(endpoints.as_slice(), EndpointsStatus::AllReachable).await;
         let agent = assert_create_agent(endpoints[0].url.as_str()).await;
@@ -59,18 +66,24 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         let public_key = get_public_key(&uni_can, ctx).await;
         (uni_can.canister_id(), public_key)
     });
-    // Randomly select X=floor(N/3)+1 nodes for removal.
+
+    info!(logger, "Randomly select X=floor(N/3)+1 nodes for removal");
     let mut endpoints_to_remove: Vec<&IcEndpoint> = Vec::new();
     for _ in 0..REMOVE_NODES_COUNT {
         endpoints_to_remove.push(endpoints.pop().unwrap());
     }
-    // Remove the nodes via proposal.
+
+    info!(logger, "Remove the nodes via proposal");
     let node_ids = endpoints_to_remove
         .iter()
         .map(|ep| ep.node_id)
         .collect::<Vec<_>>();
     ctx.remove_nodes(&handle, node_ids.as_slice());
-    // Assert all nodes are now unreachable via http:://[IPv6]:8080/api/v2/status
+
+    info!(
+        logger,
+        "Assert all nodes are now unreachable via http:://[IPv6]:8080/api/v2/status"
+    );
     block_on(async {
         assert_endpoints_reachability(
             endpoints_to_remove.as_slice(),
@@ -78,11 +91,16 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         )
         .await
     });
-    // Kill nodes after removal (last shot to the victims).
+
+    info!(
+        logger,
+        "Kill nodes after removal (last shot to the victims)"
+    );
     for ep in endpoints_to_remove {
         ep.kill_node(ctx.logger.clone());
     }
 
+    info!(logger, "Verify signature");
     block_on(async {
         let agent = assert_create_agent(endpoints[0].url.as_str()).await;
         let uni_can = UniversalCanister::from_canister_id(&agent, canister_id);
