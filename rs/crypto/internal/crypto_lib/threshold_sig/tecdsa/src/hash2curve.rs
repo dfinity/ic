@@ -3,7 +3,7 @@ use crate::group::{EccCurveType, EccPoint, EccScalar};
 use crate::{ThresholdEcdsaError, ThresholdEcdsaResult};
 use hex_literal::hex;
 
-/// Conditional move matching draft-irtf-cfrg-hash-to-curve-12 notation
+/// Conditional move matching draft-irtf-cfrg-hash-to-curve-14 notation
 ///
 /// CMOV(a, b, c): If c is False, CMOV returns a, otherwise it returns b.
 fn cmov(
@@ -36,7 +36,7 @@ fn sqrt_ratio(
 
     if curve_type == EccCurveType::P256 || curve_type == EccCurveType::K256 {
         // Fast codepath for curves where p == 3 (mod 4)
-        // See https://www.ietf.org/archive/id/draft-irtf-cfrg-hash-to-curve-12.html#appendix-F.2.1.2
+        // See https://www.ietf.org/archive/id/draft-irtf-cfrg-hash-to-curve-14.html#appendix-F.2.1.2
         let c2 = EccFieldElement::sswu_c2(curve_type);
 
         let tv1 = v.square()?;
@@ -52,6 +52,12 @@ fn sqrt_ratio(
         Ok((is_qr, y))
     } else {
         // Generic but slower codepath for other primes
+        //
+        // There is a faster algorithm for this presented in
+        // https://www.ietf.org/archive/id/draft-irtf-cfrg-hash-to-curve-14.html#appendix-F.2.1.1
+        // that we may want to consider using in the future, should we require
+        // hash2curve support for curves with p == 1 (mod 4)
+
         let z = EccFieldElement::sswu_z(curve_type);
         let vinv = v.invert();
         let uov = u.mul(&vinv)?;
@@ -64,7 +70,7 @@ fn sqrt_ratio(
 
 /// Simplified Shallue-van de Woestijne-Ulas method
 ///
-/// https://www.ietf.org/archive/id/draft-irtf-cfrg-hash-to-curve-12.html#name-simplified-swu-method
+/// https://www.ietf.org/archive/id/draft-irtf-cfrg-hash-to-curve-14.html#name-simplified-swu-method
 #[allow(clippy::many_single_char_names)]
 fn sswu(u: &EccFieldElement) -> ThresholdEcdsaResult<(EccFieldElement, EccFieldElement)> {
     let curve = u.curve_type();

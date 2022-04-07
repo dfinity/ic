@@ -134,7 +134,7 @@ fn poly_interpolate_fails_if_insufficient_points() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn poly_interpolate_is_resilient_to_duplicate_points() -> ThresholdEcdsaResult<()> {
+fn poly_interpolate_errors_on_duplicate_inputs() -> ThresholdEcdsaResult<()> {
     let mut rng = rand::thread_rng();
 
     for curve in EccCurveType::all() {
@@ -157,9 +157,7 @@ fn poly_interpolate_is_resilient_to_duplicate_points() -> ThresholdEcdsaResult<(
                 samples.push((dup_r, dup_p_r));
             }
 
-            let interp = Polynomial::interpolate(curve, &samples)?;
-
-            assert_eq!(poly, interp);
+            assert!(Polynomial::interpolate(curve, &samples).is_err());
         }
     }
 
@@ -215,41 +213,6 @@ fn poly_threshold_secret_sharing() -> ThresholdEcdsaResult<()> {
 
             let interp = Polynomial::interpolate(curve, &shares)?;
             assert_eq!(interp.evaluate_at(&zero)?, secret);
-        }
-    }
-
-    Ok(())
-}
-
-#[test]
-fn poly_get_coeff() -> ThresholdEcdsaResult<()> {
-    let curve = EccCurveType::K256;
-    let num_coefficients = 5;
-
-    let coeffs = vec![
-        EccScalar::from_u64(curve, 1),
-        EccScalar::from_u64(curve, 2),
-        EccScalar::from_u64(curve, 3),
-        EccScalar::from_u64(curve, 4),
-        EccScalar::from_u64(curve, 5),
-    ];
-
-    let poly = Polynomial::new(curve, coeffs.clone())?;
-
-    for i in 0..num_coefficients {
-        assert!(poly.get_coefficients(i).is_err());
-    }
-
-    for i in num_coefficients..(num_coefficients * 2) {
-        let c = poly.get_coefficients(i).unwrap();
-        assert_eq!(c.len(), i);
-
-        for (i, c) in c.iter().enumerate() {
-            if i < num_coefficients {
-                assert_eq!(*c, coeffs[i]);
-            } else {
-                assert!(c.is_zero());
-            }
         }
     }
 

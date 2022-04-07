@@ -1,7 +1,7 @@
 use crate::{ThresholdEcdsaError, ThresholdEcdsaResult};
 use ic_crypto_sha::Sha256;
 
-// Section 5.4.1 of https://www.ietf.org/archive/id/draft-irtf-cfrg-hash-to-curve-12.html
+// Section 5.4.1 of https://www.ietf.org/archive/id/draft-irtf-cfrg-hash-to-curve-14.html
 // Produces a uniformly random byte string of a given length using SHA-256
 // from a message and domain separator.
 // The desired length `len` must not exceed 255*32 = 8160 bytes.

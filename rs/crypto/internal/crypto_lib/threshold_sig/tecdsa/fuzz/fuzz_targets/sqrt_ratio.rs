@@ -41,7 +41,7 @@ fn sqrt_ratio_p_3_mod_4(
     let curve_type = u.curve_type();
 
     // Fast codepath for curves where p == 3 (mod 4)
-    // See https://www.ietf.org/archive/id/draft-irtf-cfrg-hash-to-curve-12.html#appendix-F.2.1.2
+    // See https://www.ietf.org/archive/id/draft-irtf-cfrg-hash-to-curve-14.html#appendix-F.2.1.2
     let c2 = EccFieldElement::sswu_c2(curve_type);
 
     let tv1 = v.square()?;

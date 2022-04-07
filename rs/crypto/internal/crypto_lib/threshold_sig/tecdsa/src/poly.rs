@@ -114,33 +114,6 @@ impl Polynomial {
         }
     }
 
-    /// Return the coefficients resized to the desired size
-    ///
-    /// The return value is zero-padded on the high coefficients as
-    /// necessary. It is ensured that no coefficients are truncated.
-    pub fn get_coefficients(
-        &self,
-        num_coefficients: usize,
-    ) -> ThresholdEcdsaResult<Vec<EccScalar>> {
-        if self.coefficients.len() > num_coefficients {
-            for c in &self.coefficients[num_coefficients..] {
-                if !c.is_zero() {
-                    return Err(ThresholdEcdsaError::InvalidArguments(
-                        "Too many coefficients".to_string(),
-                    ));
-                }
-            }
-        }
-
-        let mut coeff = Vec::with_capacity(num_coefficients);
-
-        for i in 0..num_coefficients {
-            coeff.push(self.coeff(i));
-        }
-
-        Ok(coeff)
-    }
-
     /// Return the count of non-zero coefficients
     pub fn non_zero_coefficients(&self) -> usize {
         let zeros = self
@@ -184,6 +157,7 @@ impl Polynomial {
 
         let lhs_coeffs = self.coefficients.len();
         let rhs_coeffs = rhs.coefficients.len();
+        // Slightly over-estimates the size when one of the poly is empty
         let n_coeffs = std::cmp::max(lhs_coeffs + rhs_coeffs, 1) - 1;
 
         let zero = EccScalar::zero(curve_type);
@@ -274,23 +248,25 @@ impl Polynomial {
             // `1/base(x_i)`.
             let inv = base.evaluate_at(x)?.invert()?;
 
-            if !inv.is_zero() {
-                // Scaling factor for the base polynomial: `(y_i-poly(x_i))/base(x_i)`
-                diff = diff.mul(&inv)?;
-                // Scale `base` so that the result:
-                // * Its value at `x_i` is the difference between `y_i` and `poly`'s current
-                //   value at `x_i`,
-                // * Its value is 0 at all previous evaluation points `x_j` for `j<i`.
-                // `base(x) = base(x)(y_i-poly(x_i))/base(x_i)`
-                base = base.mul_scalar(&diff)?;
-                // Shift `poly` by `base` so that it has same degree of base and value `y_j` at
-                // `x_j` for all j in 0..=i: `poly(x)=poly(x)+base(x)`
-                poly = poly.add(&base)?;
-
-                // Update `base` to a degree `i+1` polynomial that evaluates to 0 for all points
-                // `x_j` for j in 0..=i: `base(x) = base(x)(x-x_i)`
-                base = base.mul(&Polynomial::new(curve, vec![x.negate(), one])?)?;
+            if inv.is_zero() {
+                return Err(ThresholdEcdsaError::InterpolationError);
             }
+
+            // Scaling factor for the base polynomial: `(y_i-poly(x_i))/base(x_i)`
+            diff = diff.mul(&inv)?;
+            // Scale `base` so that the result:
+            // * Its value at `x_i` is the difference between `y_i` and `poly`'s current
+            //   value at `x_i`,
+            // * Its value is 0 at all previous evaluation points `x_j` for `j<i`.
+            // `base(x) = base(x)(y_i-poly(x_i))/base(x_i)`
+            base = base.mul_scalar(&diff)?;
+            // Shift `poly` by `base` so that it has same degree of base and value `y_j` at
+            // `x_j` for all j in 0..=i: `poly(x)=poly(x)+base(x)`
+            poly = poly.add(&base)?;
+
+            // Update `base` to a degree `i+1` polynomial that evaluates to 0 for all points
+            // `x_j` for j in 0..=i: `base(x) = base(x)(x-x_i)`
+            base = base.mul(&Polynomial::new(curve, vec![x.negate(), one])?)?;
         }
         Ok(poly)
     }
@@ -434,10 +410,16 @@ impl SimpleCommitment {
     ///
     /// The polynomial must have at most num_coefficients coefficients
     pub fn create(poly: &Polynomial, num_coefficients: usize) -> ThresholdEcdsaResult<Self> {
+        if poly.non_zero_coefficients() > num_coefficients {
+            return Err(ThresholdEcdsaError::InvalidArguments(
+                "Polynomial has more coefficients than expected".to_string(),
+            ));
+        }
+
         let mut points = Vec::with_capacity(num_coefficients);
 
-        for coeff in poly.get_coefficients(num_coefficients)? {
-            points.push(EccPoint::mul_by_g(&coeff)?);
+        for i in 0..num_coefficients {
+            points.push(EccPoint::mul_by_g(&poly.coeff(i))?);
         }
 
         Ok(Self::new(points))
@@ -486,14 +468,19 @@ impl PedersenCommitment {
             return Err(ThresholdEcdsaError::CurveMismatch);
         }
 
-        let coeffs_values = p_values.get_coefficients(num_coefficients)?;
-        let coeffs_masking = p_masking.get_coefficients(num_coefficients)?;
+        if p_values.non_zero_coefficients() > num_coefficients
+            || p_masking.non_zero_coefficients() > num_coefficients
+        {
+            return Err(ThresholdEcdsaError::InvalidArguments(
+                "Polynomial has more coefficients than expected".to_string(),
+            ));
+        }
 
         let mut points = Vec::with_capacity(num_coefficients);
 
-        for (coeff_values, coeff_masking) in coeffs_values.iter().zip(coeffs_masking) {
+        for i in 0..num_coefficients {
             // compute c = g*a + h*b
-            let c = EccPoint::pedersen(coeff_values, &coeff_masking)?;
+            let c = EccPoint::pedersen(&p_values.coeff(i), &p_masking.coeff(i))?;
             points.push(c);
         }
 
