@@ -1,7 +1,7 @@
 use std::{convert::TryFrom, path::PathBuf, time::Duration};
 
 use bitcoin::{blockdata::constants::genesis_block, consensus::Decodable, Block, BlockHash};
-use clap::Clap;
+use clap::Parser;
 use ic_btc_adapter_service::{btc_adapter_client::BtcAdapterClient, GetSuccessorsRpcRequest};
 use tokio::{
     net::UnixStream,

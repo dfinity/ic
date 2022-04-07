@@ -3,7 +3,7 @@
 /// Relevant configuration files:
 /// systemd service ic-os/guestos/rootfs/etc/systemd/system/ic-canister-http-adapter.service
 /// systemd socket ic-os/guestos/rootfs/etc/systemd/system/ic-canister-http-adapter.socket
-use clap::Clap;
+use clap::Parser;
 use hyper::{client::connect::HttpConnector, Client};
 use hyper_socks2::SocksConnector;
 use hyper_tls::HttpsConnector;
