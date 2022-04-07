@@ -1,0 +1,8 @@
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "docker_tar.py",
+    "build_vfat_image.py",
+    "build_ext4_image.py",
+    "build_disk_image.py",
+])
