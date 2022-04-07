@@ -1,0 +1,11 @@
+[package]
+name = "dfn_http_metrics"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+dfn_candid = { path = "../dfn_candid" }
+dfn_core = { path = "../dfn_core" }
+dfn_http = { path = "../dfn_http" }
+ic-metrics-encoder = { path = "../../monitoring/metrics_encoder" }
+serde_bytes = "0.11"

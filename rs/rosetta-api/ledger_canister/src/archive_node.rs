@@ -1,13 +1,13 @@
-use ledger_canister::{
-    metrics_encoder::MetricsEncoder, BlockHeight, BlockRange, BlockRes, CandidBlock, EncodedBlock,
-    GetBlocksArgs, GetBlocksError, GetBlocksResult, IterBlocksArgs, MAX_BLOCKS_PER_REQUEST,
-};
-
 use candid::candid_method;
 use dfn_candid::candid_one;
 use dfn_core::api::{print, stable_memory_size_in_pages};
 use dfn_core::{over_init, stable, BytesS};
 use dfn_protobuf::protobuf;
+use ic_metrics_encoder::MetricsEncoder;
+use ledger_canister::{
+    BlockHeight, BlockRange, BlockRes, CandidBlock, EncodedBlock, GetBlocksArgs, GetBlocksError,
+    GetBlocksResult, IterBlocksArgs, MAX_BLOCKS_PER_REQUEST,
+};
 use serde::{Deserialize, Serialize};
 use std::sync::RwLock;
 
@@ -291,7 +291,7 @@ fn encode_metrics(w: &mut MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
 
 #[export_name = "canister_query http_request"]
 fn http_request() {
-    ledger_canister::http_request::serve_metrics(encode_metrics);
+    dfn_http_metrics::serve_metrics(encode_metrics);
 }
 
 #[export_name = "canister_query __get_candid_interface_tmp_hack"]

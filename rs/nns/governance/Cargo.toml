@@ -28,10 +28,11 @@ candid = "0.7.4"
 cycles-minting-canister = { path = "../cmc" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
+dfn_http_metrics = { path = "../../rust_canisters/dfn_http_metrics" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
-futures = "0.3.13"
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha = {path = "../../crypto/sha/"}
+ic-metrics-encoder = { path = "../../monitoring/metrics_encoder" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nns-common = { path = "../common" }
 ic-nns-constants = { path = "../constants" }
@@ -65,6 +66,7 @@ prost-build = "0.9.0"
 [dev-dependencies]
 criterion = "0.3"
 ic-config = { path = "../../config" }
+futures = "0.3.13"
 proptest = "1.0"
 pretty_assertions = "1.0"
 ic-base-types = { path = "../../types/base_types", features = ["test"] }

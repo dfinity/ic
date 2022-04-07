@@ -1238,6 +1238,46 @@ fn post_upgrade() {
     })
 }
 
+#[export_name = "canister_query http_request"]
+fn http_request() {
+    dfn_http_metrics::serve_metrics(encode_metrics);
+}
+
+fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
+    let state = STATE.read().unwrap();
+    w.encode_gauge(
+        "cmc_last_purged_notification",
+        state.last_purged_notification.unwrap() as f64,
+        "Block index of the last purged notification.",
+    )?;
+    w.encode_gauge(
+        "cmc_blocks_notified_count",
+        state.blocks_notified.as_ref().unwrap().len() as f64,
+        "Number of notifications stored in the cache.",
+    )?;
+    w.encode_gauge(
+        "cmc_icp_xdr_conversion_rate",
+        state
+            .icp_xdr_conversion_rate
+            .as_ref()
+            .unwrap()
+            .xdr_permyriad_per_icp as f64
+            / 10_000f64,
+        "Amount of XDR corresponding to 1 ICP.",
+    )?;
+    w.encode_gauge(
+        "cmc_cycles_per_xdr",
+        state.cycles_per_xdr.get() as f64,
+        "Number of cycles corresponding to 1 XDR.",
+    )?;
+    w.encode_counter(
+        "cmc_cycles_minted_total",
+        state.total_cycles_minted.get() as f64,
+        "Number of cycles minted since the Genesis.",
+    )?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

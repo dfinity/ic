@@ -1810,10 +1810,12 @@ dependencies = [
  "candid",
  "dfn_candid",
  "dfn_core",
+ "dfn_http_metrics",
  "dfn_protobuf",
  "ic-base-types",
  "ic-certified-map",
  "ic-crypto-tree-hash",
+ "ic-metrics-encoder",
  "ic-nervous-system-common",
  "ic-nns-common",
  "ic-nns-constants",
@@ -2024,6 +2026,17 @@ dependencies = [
  "dfn_candid",
  "dfn_core",
  "serde",
+ "serde_bytes",
+]
+
+[[package]]
+name = "dfn_http_metrics"
+version = "0.8.0"
+dependencies = [
+ "dfn_candid",
+ "dfn_core",
+ "dfn_http",
+ "ic-metrics-encoder",
  "serde_bytes",
 ]
 
@@ -5189,6 +5202,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-metrics-encoder"
+version = "0.8.0"
+
+[[package]]
 name = "ic-metrics-exporter"
 version = "0.8.0"
 dependencies = [
@@ -5293,11 +5310,13 @@ dependencies = [
  "cycles-minting-canister",
  "dfn_candid",
  "dfn_core",
+ "dfn_http_metrics",
  "dfn_protobuf",
  "futures",
  "ic-base-types",
  "ic-config",
  "ic-crypto-sha",
+ "ic-metrics-encoder",
  "ic-nervous-system-common",
  "ic-nns-common",
  "ic-nns-constants",
@@ -6410,6 +6429,7 @@ dependencies = [
  "csv",
  "dfn_candid",
  "dfn_core",
+ "dfn_http_metrics",
  "dfn_protobuf",
  "futures",
  "hex",
@@ -6417,6 +6437,7 @@ dependencies = [
  "ic-config",
  "ic-crypto-sha",
  "ic-ic00-types",
+ "ic-metrics-encoder",
  "ic-nervous-system-common",
  "ic-nervous-system-root",
  "ic-nns-common",
@@ -7457,6 +7478,7 @@ dependencies = [
  "dfn_candid",
  "dfn_core",
  "dfn_http",
+ "dfn_http_metrics",
  "dfn_protobuf",
  "digest 0.9.0",
  "ed25519-dalek",
@@ -7466,6 +7488,7 @@ dependencies = [
  "ic-constants",
  "ic-crypto-sha",
  "ic-ic00-types",
+ "ic-metrics-encoder",
  "ic-nns-constants",
  "ic-utils 0.8.0",
  "intmap",

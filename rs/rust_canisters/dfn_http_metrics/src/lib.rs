@@ -1,10 +1,10 @@
 use dfn_http::types::{HttpRequest, HttpResponse};
 use serde_bytes::ByteBuf;
 
+/// Implements an HTTP endpoint that handles /metrics requests and return 404
+/// for all other paths.
 pub fn serve_metrics(
-    encode_metrics: impl FnOnce(
-        &mut crate::metrics_encoder::MetricsEncoder<Vec<u8>>,
-    ) -> std::io::Result<()>,
+    encode_metrics: impl FnOnce(&mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()>,
 ) {
     dfn_core::over(
         dfn_candid::candid,
@@ -15,7 +15,7 @@ pub fn serve_metrics(
             };
 
             if path == "/metrics" {
-                let mut writer = crate::metrics_encoder::MetricsEncoder::new(
+                let mut writer = ic_metrics_encoder::MetricsEncoder::new(
                     vec![],
                     dfn_core::api::time_nanos() as i64 / 1_000_000,
                 );

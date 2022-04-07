@@ -24,8 +24,6 @@ use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
 
 pub mod account_identifier;
-pub mod http_request;
-pub mod metrics_encoder;
 pub mod tokens;
 #[path = "../gen/ic_ledger.pb.v1.rs"]
 #[rustfmt::skip]
