@@ -17,12 +17,13 @@ candid = "0.7.4"
 comparable = { version = "0.5", features = ["derive"] }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
+dfn_http_metrics = { path = "../../rust_canisters/dfn_http_metrics" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
-futures = "0.3.13"
 hex = "0.4.3"
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha = {path = "../../crypto/sha/"}
 ic-ic00-types = { path = "../../types/ic00_types" }
+ic-metrics-encoder = { path = "../../monitoring/metrics_encoder" }
 ic-nervous-system-common = {path = "../../nervous_system/common"}
 ic-nervous-system-root = {path = "../../nervous_system/root"}
 ic-nns-common = { path = "../../nns/common" }
@@ -61,6 +62,7 @@ ic-base-types = { path = "../../types/base_types", features = ["test"] }
 ic-nns-common = { path = "../../nns/common", features = ["test"] }
 ledger-canister = { path = "../../rosetta-api/ledger_canister", features = ["test"] }
 ic-sns-governance = { path = ".", features = ["test"] }
+futures = "0.3.13"
 maplit = "1.0.2"
 
 [features]

@@ -66,7 +66,6 @@ use dfn_core::api::reject_message;
 use ic_nervous_system_common::ledger::LedgerCanister;
 use ic_nns_common::access_control::check_caller_is_gtc;
 use ic_nns_governance::governance::HeapGrowthPotential;
-use ledger_canister::metrics_encoder;
 
 /// Size of the buffer for stable memory reads and writes.
 ///
@@ -735,7 +734,7 @@ fn list_node_providers_() -> ListNodeProvidersResponse {
 }
 
 /// Encodes
-fn encode_metrics(w: &mut metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
+fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     let governance = governance();
 
     w.encode_gauge(
@@ -899,7 +898,7 @@ fn encode_metrics(w: &mut metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::
 
 #[export_name = "canister_query http_request"]
 fn http_request() {
-    ledger_canister::http_request::serve_metrics(encode_metrics);
+    dfn_http_metrics::serve_metrics(encode_metrics);
 }
 
 // This makes this Candid service self-describing, so that for example Candid

@@ -1,0 +1,6 @@
+[package]
+name = "ic-metrics-encoder"
+authors = ["The Internet Computer Project Developers"]
+description = "A library for encoding metrics in Prometheus text exposition format."
+version = "0.8.0"
+edition = "2018"

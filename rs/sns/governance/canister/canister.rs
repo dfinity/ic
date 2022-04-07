@@ -35,7 +35,6 @@ use ic_sns_governance::pb::v1::{
     NervousSystemParameters, RewardEvent,
 };
 use ic_sns_governance::types::{Environment, HeapGrowthPotential};
-use ledger_canister::metrics_encoder;
 
 /// Size of the buffer for stable memory reads and writes.
 ///
@@ -458,14 +457,14 @@ fn canister_heartbeat() {
 }
 
 /// Encode the metrics in a format that can be understood by Prometheus.
-fn encode_metrics(_w: &mut metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
+fn encode_metrics(_w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     Ok(())
 }
 
 /// Resources to serve for a given http_request
 #[export_name = "canister_query http_request"]
 fn http_request() {
-    ledger_canister::http_request::serve_metrics(encode_metrics);
+    dfn_http_metrics::serve_metrics(encode_metrics);
 }
 
 /// This makes this Candid service self-describing, so that for example Candid
