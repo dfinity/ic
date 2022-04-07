@@ -30,6 +30,58 @@ use std::iter::FromIterator;
 
 const CURRENT_INITIAL_IDKG_DEALINGS_VERSION: u32 = 0;
 
+impl From<&IDkgTranscriptId> for IDkgTranscriptIdProto {
+    fn from(transcript_id: &IDkgTranscriptId) -> Self {
+        idkg_transcript_id_proto(transcript_id)
+    }
+}
+
+impl TryFrom<&Option<IDkgTranscriptIdProto>> for IDkgTranscriptId {
+    type Error = InitialIDkgDealingsValidationError;
+
+    fn try_from(proto: &Option<IDkgTranscriptIdProto>) -> Result<Self, Self::Error> {
+        idkg_transcript_id_struct(proto)
+    }
+}
+
+impl From<&IDkgTranscript> for IDkgTranscriptProto {
+    fn from(transcript: &IDkgTranscript) -> Self {
+        idkg_transcript_proto(transcript)
+    }
+}
+
+impl TryFrom<&IDkgTranscriptProto> for IDkgTranscript {
+    type Error = InitialIDkgDealingsValidationError;
+
+    fn try_from(proto: &IDkgTranscriptProto) -> Result<Self, Self::Error> {
+        idkg_transcript_struct(proto)
+    }
+}
+
+impl From<&IDkgDealing> for IDkgDealingTupleProto {
+    fn from(idkg_dealing: &IDkgDealing) -> Self {
+        idkg_dealing_tuple_proto(&idkg_dealing.dealer_id, idkg_dealing)
+    }
+}
+
+impl TryFrom<&IDkgDealingTupleProto> for IDkgDealing {
+    type Error = InitialIDkgDealingsValidationError;
+
+    fn try_from(proto: &IDkgDealingTupleProto) -> Result<Self, Self::Error> {
+        let dealing_proto = proto.dealing.as_ref().ok_or(
+            InitialIDkgDealingsValidationError::DeserializationError {
+                error: "Missing IDkgDealing.".to_string(),
+            },
+        )?;
+
+        Ok(IDkgDealing {
+            transcript_id: idkg_transcript_id_struct(&dealing_proto.transcript_id)?,
+            dealer_id: node_id_struct(&proto.dealer)?,
+            internal_dealing_raw: dealing_proto.raw_dealing.clone(),
+        })
+    }
+}
+
 impl From<InitialIDkgDealings> for InitialIDkgDealingsProto {
     fn from(initial_dealings: InitialIDkgDealings) -> Self {
         let dealings = initial_dealings
@@ -90,14 +142,14 @@ impl TryFrom<ExtendedDerivationPathProto> for ExtendedDerivationPath {
 }
 
 // ----- Conversion helpers.
-pub fn idkg_transcript_id_proto(idkg_transcript_id: &IDkgTranscriptId) -> IDkgTranscriptIdProto {
+fn idkg_transcript_id_proto(idkg_transcript_id: &IDkgTranscriptId) -> IDkgTranscriptIdProto {
     IDkgTranscriptIdProto {
         id: idkg_transcript_id.id() as u64,
         subnet_id: Some(subnet_id_into_protobuf(*idkg_transcript_id.subnet())),
     }
 }
 
-pub fn idkg_transcript_id_struct(
+fn idkg_transcript_id_struct(
     maybe_proto: &Option<IDkgTranscriptIdProto>,
 ) -> Result<IDkgTranscriptId, InitialIDkgDealingsValidationError> {
     let proto =
@@ -285,7 +337,7 @@ fn idkg_transcript_params_struct(
     Ok(params)
 }
 
-pub fn idkg_transcript_proto(idkg_transcript: &IDkgTranscript) -> IDkgTranscriptProto {
+fn idkg_transcript_proto(idkg_transcript: &IDkgTranscript) -> IDkgTranscriptProto {
     let verified_dealings = idkg_transcript
         .verified_dealings
         .iter()
@@ -310,7 +362,7 @@ pub fn idkg_transcript_proto(idkg_transcript: &IDkgTranscript) -> IDkgTranscript
     }
 }
 
-pub fn idkg_transcript_struct(
+fn idkg_transcript_struct(
     proto: &IDkgTranscriptProto,
 ) -> Result<IDkgTranscript, InitialIDkgDealingsValidationError> {
     let transcript_id = idkg_transcript_id_struct(&proto.transcript_id)?;
@@ -344,7 +396,7 @@ pub fn idkg_transcript_struct(
     })
 }
 
-pub fn idkg_dealing_tuple_proto(
+fn idkg_dealing_tuple_proto(
     dealer_id: &NodeId,
     idkg_dealing: &IDkgDealing,
 ) -> IDkgDealingTupleProto {
@@ -378,7 +430,7 @@ fn verified_idkg_dealing_proto(
     }
 }
 
-pub fn idkg_dealing_struct(
+fn idkg_dealing_struct(
     maybe_proto: &Option<IDkgDealingTupleProto>,
 ) -> Result<IDkgDealing, InitialIDkgDealingsValidationError> {
     let proto =

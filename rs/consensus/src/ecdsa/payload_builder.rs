@@ -1176,8 +1176,7 @@ fn update_completed_reshare_requests(
 
         let mut dealings = Vec::new();
         for signed_dealing in transcript.verified_dealings.values() {
-            let dealer = signed_dealing.dealing.idkg_dealing.dealer_id;
-            dealings.push((dealer, signed_dealing.dealing.idkg_dealing.clone()));
+            dealings.push(signed_dealing.dealing.idkg_dealing.clone());
         }
 
         completed_reshares.insert(

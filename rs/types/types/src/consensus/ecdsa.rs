@@ -16,10 +16,6 @@ pub use crate::consensus::ecdsa_refs::{
 use crate::consensus::{BasicSignature, MultiSignature, MultiSignatureShare};
 use crate::crypto::{
     canister_threshold_sig::idkg::{
-        proto_conversions::{
-            idkg_dealing_struct, idkg_dealing_tuple_proto, idkg_transcript_id_proto,
-            idkg_transcript_id_struct, idkg_transcript_proto, idkg_transcript_struct,
-        },
         IDkgComplaint, IDkgDealing, IDkgOpening, IDkgTranscript, IDkgTranscriptId,
     },
     canister_threshold_sig::{ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigShare},
@@ -351,14 +347,14 @@ pub struct EcdsaReshareResponse {
     pub reshare_param: ReshareOfUnmaskedParams,
 
     /// The verified dealings in the created transcript.
-    pub dealings: Vec<(NodeId, IDkgDealing)>,
+    pub dealings: Vec<IDkgDealing>,
 }
 
 impl From<&EcdsaReshareResponse> for pb::EcdsaReshareResponse {
     fn from(response: &EcdsaReshareResponse) -> Self {
         let mut tuples = Vec::new();
-        for (dealer, dealing) in &response.dealings {
-            tuples.push(idkg_dealing_tuple_proto(dealer, dealing));
+        for dealing in &response.dealings {
+            tuples.push(dealing.into());
         }
 
         Self {
@@ -379,23 +375,13 @@ impl TryFrom<&pb::EcdsaReshareResponse> for EcdsaReshareResponse {
 
         let mut dealings = Vec::new();
         for tuple in &response.tuples {
-            let proto = tuple
-                .dealer
-                .as_ref()
-                .ok_or("pb::EcdsaReshareResponse:: Missing dealer")?;
-            let dealer = node_id_try_from_protobuf(proto.clone()).map_err(|err| {
+            let dealing = tuple.try_into().map_err(|err| {
                 format!(
-                    "pb::EcdsaReshareResponse:: Failed to convert dealer: {:?}",
+                    "pb::EcdsaReshareResponse:: Failed to convert tuple: {:?}",
                     err
                 )
             })?;
-            let dealing = idkg_dealing_struct(&Some(tuple.clone())).map_err(|err| {
-                format!(
-                    "pb::EcdsaReshareResponse:: Failed to convert dealing: {:?}",
-                    err
-                )
-            })?;
-            dealings.push((dealer, dealing));
+            dealings.push(dealing);
         }
 
         Ok(Self {
@@ -805,14 +791,13 @@ impl From<&EcdsaSummaryPayload> for pb::EcdsaSummaryPayload {
             });
         }
 
-        let next_unused_transcript_id: Option<subnet_pb::IDkgTranscriptId> = Some(
-            idkg_transcript_id_proto(&summary.ecdsa_payload.next_unused_transcript_id),
-        );
+        let next_unused_transcript_id: Option<subnet_pb::IDkgTranscriptId> =
+            Some((&summary.ecdsa_payload.next_unused_transcript_id).into());
 
         // idkg_transcripts
         let mut idkg_transcripts = Vec::new();
         for transcript in summary.ecdsa_payload.idkg_transcripts.values() {
-            idkg_transcripts.push(idkg_transcript_proto(transcript));
+            idkg_transcripts.push(transcript.into());
         }
 
         // ongoing_xnet_reshares
@@ -918,8 +903,9 @@ impl TryFrom<(&pb::EcdsaSummaryPayload, Height)> for EcdsaSummaryPayload {
             quadruples_in_creation.insert(quadruple_id, quadruple);
         }
 
-        let next_unused_transcript_id: IDkgTranscriptId =
-            idkg_transcript_id_struct(&summary.next_unused_transcript_id).map_err(|err| {
+        let next_unused_transcript_id: IDkgTranscriptId = (&summary.next_unused_transcript_id)
+            .try_into()
+            .map_err(|err| {
                 format!(
                     "pb::EcdsaSummaryPayload:: Failed to convert next_unused_transcript_id: {:?}",
                     err
@@ -929,7 +915,7 @@ impl TryFrom<(&pb::EcdsaSummaryPayload, Height)> for EcdsaSummaryPayload {
         // idkg_transcripts
         let mut idkg_transcripts = BTreeMap::new();
         for proto in &summary.idkg_transcripts {
-            let transcript: IDkgTranscript = idkg_transcript_struct(proto).map_err(|err| {
+            let transcript: IDkgTranscript = proto.try_into().map_err(|err| {
                 format!(
                     "pb::EcdsaSummaryPayload:: Failed to convert transcript: {:?}",
                     err
