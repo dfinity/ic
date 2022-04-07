@@ -1,4 +1,4 @@
-use clap::Clap;
+use clap::Parser;
 use ic_types::{CanisterId, PrincipalId, SubnetId};
 use ledger_canister::AccountIdentifier;
 use std::path::PathBuf;
@@ -15,7 +15,7 @@ impl std::str::FromStr for ClapSubnetId {
     }
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 #[clap(version = "1.0")]
 pub struct ReplayToolArgs {
     /// Path to Replica configuration file.
@@ -37,7 +37,7 @@ pub struct ReplayToolArgs {
     pub replay_until_height: Option<u64>,
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 pub enum SubCommand {
     /// Add a new version of the replica binary to the registry.
     AddAndBlessReplicaVersion(AddAndBlessReplicaVersionCmd),
@@ -70,7 +70,7 @@ pub enum SubCommand {
     WithTrustedNeuronsFollowingNeuronForTests(WithTrustedNeuronsFollowingNeuronCmd),
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 pub struct SetRecoveryCupCmd {
     /// State hash (in hex).
     pub state_hash: String,
@@ -82,7 +82,7 @@ pub struct SetRecoveryCupCmd {
     pub registry_store_sha256: Option<String>,
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 pub struct AddAndBlessReplicaVersionCmd {
     /// The Replica version ID.
     pub replica_version_id: String,
@@ -94,7 +94,7 @@ pub struct AddAndBlessReplicaVersionCmd {
     pub update_subnet_record: bool,
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 pub struct RestoreFromBackupCmd {
     /// Registry local store path
     pub registry_local_store_path: PathBuf,
@@ -106,7 +106,7 @@ pub struct RestoreFromBackupCmd {
     pub start_height: u64,
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 pub struct AddRegistryContentCmd {
     /// Path to a directory containing one file for each registry version to be
     /// inserted as initial content into the registry.
@@ -124,7 +124,7 @@ pub struct AddRegistryContentCmd {
     pub allowed_mutation_key_prefixes: String,
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 pub struct WithLedgerAccountCmd {
     /// The account identifier that should be created with `e8s_to_mint` ICP.
     pub account_identifier: AccountIdentifier,
@@ -132,13 +132,13 @@ pub struct WithLedgerAccountCmd {
     pub e8s_to_mint: u64,
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 pub struct WithTrustedNeuronsFollowingNeuronCmd {
     /// The neuron id of the neuron that the trusted neurons should follow.
     pub neuron_id: u64,
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 pub struct WithNeuronCmd {
     /// The controller of the neuron.
     pub neuron_controller: PrincipalId,
