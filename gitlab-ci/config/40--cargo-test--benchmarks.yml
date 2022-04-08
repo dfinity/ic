@@ -7,10 +7,10 @@ benchmarks:
   artifacts:
     paths:
       - report
-  timeout: 5h
+  timeout: 10h
   variables:
     RUST_BACKTRACE: 1
-    CARGO_BENCH_TIMEOUT: 18000 # 5h
+    CARGO_BENCH_TIMEOUT: 34200 # 9.5h
   # Benchmarks should run on a dedicated machine, otherwise benchmark results are meaningless
   tags:
     - dfinity-benchmarks
@@ -57,4 +57,3 @@ benchmarks:
         curl -sS -o /dev/null -H 'Content-Type: application/json' --data @report.json \
           "http://elasticsearch.dfinity.systems:9200/ci-performance-test/properties?pretty"
       done < <(find -L "${CARGO_TARGET_DIR}/criterion" -type d -path '*/new')
-
