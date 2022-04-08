@@ -24,6 +24,10 @@ pub trait SandboxService: Send + Sync {
     /// `ExecutionFinishedRequest` from the sandbox process to the replica
     /// process.
     fn start_execution(&self, req: StartExecutionRequest) -> Call<StartExecutionReply>;
+
+    /// Resume Wasm execution that was previously paused.
+    fn resume_execution(&self, req: ResumeExecutionRequest) -> Call<ResumeExecutionReply>;
+
     /// Perform initial parsing and evaluation needed to create the starting
     /// execution state.
     fn create_execution_state(
@@ -44,6 +48,9 @@ impl<Svc: SandboxService + Send + Sync> DemuxServer<Request, Reply> for Svc {
             Request::CloseMemory(req) => Call::new_wrap(self.close_memory(req), Reply::CloseMemory),
             Request::StartExecution(req) => {
                 Call::new_wrap(self.start_execution(req), Reply::StartExecution)
+            }
+            Request::ResumeExecution(req) => {
+                Call::new_wrap(self.resume_execution(req), Reply::ResumeExecution)
             }
             Request::CreateExecutionState(req) => Call::new_wrap(
                 self.create_execution_state(req),

@@ -73,6 +73,13 @@ impl SandboxService for SandboxServer {
         })
     }
 
+    fn resume_execution(&self, req: ResumeExecutionRequest) -> rpc::Call<ResumeExecutionReply> {
+        rpc::Call::new_resolved({
+            SandboxManager::resume_execution(&self.manager, req.exec_id);
+            Ok(ResumeExecutionReply { success: true })
+        })
+    }
+
     fn create_execution_state(
         &self,
         req: CreateExecutionStateRequest,
@@ -235,6 +242,10 @@ mod tests {
                 &self, req : protocol::ctlsvc::ExecutionFinishedRequest
             ) -> rpc::Call<protocol::ctlsvc::ExecutionFinishedReply>;
 
+            fn execution_paused(
+                &self, req : protocol::ctlsvc::ExecutionPausedRequest
+            ) -> rpc::Call<protocol::ctlsvc::ExecutionPausedReply>;
+
             fn log_via_replica(&self, log: protocol::logging::LogRequest) -> rpc::Call<()>;
         }
     }
@@ -392,6 +403,51 @@ mod tests {
               (export "canister_update write" (func $write))
               (export "canister_query read_stable" (func $read_stable))
               (export "canister_update write_stable" (func $write_stable))
+            )
+            "#;
+
+        wat2wasm(wat_data).unwrap().as_slice().to_vec()
+    }
+
+    fn make_long_running_canister_wasm() -> Vec<u8> {
+        // This canister supports a `run` method that takes 4 bytes
+        // representing an integer number of iterations to run as an argument.
+        // Each iteration executes 6 instructions.
+        let wat_data = r#"
+            (module
+              (import "ic0" "msg_arg_data_size"
+                (func $msg_arg_data_size (result i32)))
+              (import "ic0" "msg_arg_data_copy"
+                (func $msg_arg_data_copy (param i32 i32 i32)))
+              (import "ic0" "msg_reply" (func $msg_reply))
+              (import "ic0" "msg_reply_data_append"
+                (func $msg_reply_data_append (param i32) (param i32)))
+
+              (func $run
+                (local $i i32)
+                (local $limit i32)
+                (call $msg_arg_data_copy ;; copy entire messge ;;
+                  (i32.const 0) ;; dst ;;
+                  (i32.const 0) ;; offset ;;
+                  (call $msg_arg_data_size) ;; size ;;
+                )
+                (i32.load (i32.const 0))
+                (local.set $limit)
+                (loop $loop
+                    local.get $i
+                    i32.const 1
+                    i32.add
+                    local.tee $i
+                    local.get $limit
+                    i32.lt_s
+                    br_if $loop
+                )
+                (call $msg_reply)
+              )
+
+              (memory $memory 1)
+              (export "memory" (memory $memory))
+              (export "canister_update run" (func $run))
             )
             "#;
 
@@ -1095,6 +1151,121 @@ mod tests {
 
         close_memory(&srv, parent_wasm_memory_id);
         close_memory(&srv, parent_stable_memory_id);
+        close_memory(&srv, child_wasm_memory_id);
+        close_memory(&srv, child_stable_memory_id);
+    }
+
+    #[test]
+    fn test_pause_resume() {
+        // The result of a single slice of execution.
+        #[allow(clippy::large_enum_variant)]
+        enum Completion {
+            Paused(protocol::ctlsvc::ExecutionPausedRequest),
+            Finished(protocol::ctlsvc::ExecutionFinishedRequest),
+        }
+
+        // Set up a mock service that puts the result of execution slice into this `SyncCell`.
+        let exec_sync_rx = Arc::new(SyncCell::<Completion>::new());
+        let mut controller = MockControllerService::new();
+        let exec_sync_tx = Arc::clone(&exec_sync_rx);
+        controller.expect_execution_paused().returning(move |req| {
+            (*exec_sync_tx).put(Completion::Paused(req));
+            rpc::Call::new_resolved(Ok(protocol::ctlsvc::ExecutionPausedReply {}))
+        });
+        let exec_sync_tx = Arc::clone(&exec_sync_rx);
+        controller
+            .expect_execution_finished()
+            .returning(move |req| {
+                (*exec_sync_tx).put(Completion::Finished(req));
+                rpc::Call::new_resolved(Ok(protocol::ctlsvc::ExecutionFinishedReply {}))
+            });
+        controller
+            .expect_log_via_replica()
+            .returning(move |_req| rpc::Call::new_resolved(Ok(())));
+
+        // Set up a sandbox server.
+        let srv = SandboxServer::new(SandboxManager::new(
+            Arc::new(controller),
+            EmbeddersConfig::default(),
+        ));
+
+        // Compile the wasm code.
+        let wasm_id = WasmId::new();
+        let rep = srv
+            .open_wasm(OpenWasmRequest {
+                wasm_id,
+                wasm_src: make_long_running_canister_wasm(),
+            })
+            .sync()
+            .unwrap();
+        assert!(rep.0.is_ok());
+
+        let wasm_memory = PageMap::default();
+        let wasm_memory_id = open_memory(&srv, &wasm_memory, 1);
+        let stable_memory = PageMap::default();
+        let stable_memory_id = open_memory(&srv, &stable_memory, 1);
+
+        let child_wasm_memory_id = MemoryId::new();
+        let child_stable_memory_id = MemoryId::new();
+
+        // Prepare the input such that the total execution requires 600+ instructions.
+        let exec_id = ExecId::new();
+        let mut exec_input = exec_input_for_update(
+            "run",
+            &[100, 0, 0, 0],
+            vec![],
+            child_wasm_memory_id,
+            child_stable_memory_id,
+        );
+        exec_input.execution_parameters.total_instruction_limit = NumInstructions::new(1000);
+        exec_input.execution_parameters.slice_instruction_limit = NumInstructions::new(70);
+
+        // Execute the first slice.
+        let rep = srv
+            .start_execution(protocol::sbxsvc::StartExecutionRequest {
+                exec_id,
+                wasm_id,
+                wasm_memory_id,
+                stable_memory_id,
+                exec_input,
+            })
+            .sync()
+            .unwrap();
+        assert!(rep.success);
+
+        // Resume execution 9 times.
+        for i in 0..9 {
+            let completion = exec_sync_rx.get();
+            match completion {
+                Completion::Paused(paused) => assert_eq!(paused.exec_id, exec_id),
+                Completion::Finished(finished) => {
+                    unreachable!(
+                        "Expected the execution to pause, but it finished after {} iterations: {:?}",
+                        i, finished.exec_output.wasm
+                    )
+                }
+            };
+
+            let rep = srv
+                .resume_execution(protocol::sbxsvc::ResumeExecutionRequest { exec_id })
+                .sync()
+                .unwrap();
+            assert!(rep.success);
+        }
+
+        // After 10 slices execution must complete.
+        let completion = exec_sync_rx.get();
+        let result = match completion {
+            Completion::Paused(_) => {
+                unreachable!("Expected the execution to finish, but it was paused")
+            }
+            Completion::Finished(result) => result,
+        };
+        let wasm_result = result.exec_output.wasm.wasm_result.unwrap().unwrap();
+        assert_eq!(WasmResult::Reply([].to_vec()), wasm_result);
+
+        close_memory(&srv, wasm_memory_id);
+        close_memory(&srv, stable_memory_id);
         close_memory(&srv, child_wasm_memory_id);
         close_memory(&srv, child_stable_memory_id);
     }

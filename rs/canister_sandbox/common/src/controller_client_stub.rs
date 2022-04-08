@@ -29,6 +29,16 @@ impl ControllerService for ControllerClientStub {
         Call::new(cell)
     }
 
+    fn execution_paused(&self, req: ExecutionPausedRequest) -> Call<ExecutionPausedReply> {
+        let cell = self
+            .channel
+            .call(Request::ExecutionPaused(req), |rep| match rep {
+                Reply::ExecutionPaused(rep) => Ok(rep),
+                _ => Err(Error::ServerError),
+            });
+        Call::new(cell)
+    }
+
     fn log_via_replica(&self, req: LogRequest) -> Call<()> {
         let cell = self
             .channel

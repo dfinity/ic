@@ -24,7 +24,13 @@ use ic_canister_sandbox_common::protocol::structs::SandboxExecOutput;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-type CompletionFunction = Box<dyn FnOnce(ExecId, SandboxExecOutput) + Sync + Send + 'static>;
+#[allow(clippy::large_enum_variant)]
+pub enum CompletionResult {
+    Paused,
+    Finished(SandboxExecOutput),
+}
+
+type CompletionFunction = Box<dyn FnOnce(ExecId, CompletionResult) + Sync + Send + 'static>;
 
 /// Represents an execution in progress on the sandbox process.
 ///
@@ -63,7 +69,7 @@ impl ActiveExecutionStateRegistry {
     /// in, except when there is a possible collision.
     pub fn register_execution<F>(&self, completion: F) -> ExecId
     where
-        F: FnOnce(ExecId, SandboxExecOutput) + Send + Sync + 'static,
+        F: FnOnce(ExecId, CompletionResult) + Send + Sync + 'static,
     {
         let exec_id = ExecId::new();
         let completion = Box::new(completion);

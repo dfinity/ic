@@ -39,8 +39,9 @@ use ic_interfaces::execution_environment::{ExecutionMode, HypervisorResult, Wasm
 use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::page_map::PageMapSerialization;
 use ic_replicated_state::{EmbedderCache, Memory, PageMap};
-use ic_system_api::DefaultOutOfInstructionsHandler;
 use ic_types::CanisterId;
+
+use crate::dts::{DeterministicTimeSlicingHandler, PausedExecution};
 
 struct ExecutionInstantiateError;
 
@@ -94,13 +95,16 @@ impl Execution {
             sandbox_manager,
         });
 
-        workers.execute(move || execution.run(exec_input, wasm_memory, stable_memory, total_timer));
+        workers.execute(move || {
+            execution.run(exec_id, exec_input, wasm_memory, stable_memory, total_timer)
+        });
     }
 
     // Actual wasm code execution -- this is run on the target thread
     // in the thread pool.
     fn run(
         &self,
+        exec_id: ExecId,
         exec_input: SandboxExecInput,
         mut wasm_memory: Memory,
         mut stable_memory: Memory,
@@ -112,6 +116,24 @@ impl Execution {
             .execution_parameters
             .subnet_available_memory
             .clone();
+
+        let total_instruction_limit = exec_input.execution_parameters.total_instruction_limit;
+        let slice_instruction_limit = exec_input.execution_parameters.slice_instruction_limit;
+        let sandbox_manager = Arc::clone(&self.sandbox_manager);
+        let out_of_instructions_handler = DeterministicTimeSlicingHandler::new(
+            total_instruction_limit,
+            slice_instruction_limit,
+            move |paused_execution| {
+                {
+                    let mut guard = sandbox_manager.repr.lock().unwrap();
+                    guard.paused_executions.insert(exec_id, paused_execution);
+                }
+                sandbox_manager
+                    .controller
+                    .execution_paused(protocol::ctlsvc::ExecutionPausedRequest { exec_id });
+            },
+        );
+
         let (
             WasmExecutionOutput {
                 wasm_result,
@@ -133,7 +155,7 @@ impl Execution {
             &exec_input.globals,
             no_op_logger(),
             exec_input.wasm_reserved_pages,
-            Arc::new(DefaultOutOfInstructionsHandler {}),
+            Arc::new(out_of_instructions_handler),
         );
 
         match wasm_result {
@@ -251,8 +273,9 @@ pub struct SandboxManager {
     config: ic_config::embedders::Config,
 }
 struct SandboxManagerInt {
-    canister_wasms: std::collections::HashMap<WasmId, Arc<CanisterWasm>>,
-    memories: std::collections::HashMap<MemoryId, Arc<Memory>>,
+    canister_wasms: HashMap<WasmId, Arc<CanisterWasm>>,
+    memories: HashMap<MemoryId, Arc<Memory>>,
+    paused_executions: HashMap<ExecId, PausedExecution>,
     workers_for_replicated_execution: threadpool::ThreadPool,
     workers_for_non_replicated_execution: threadpool::ThreadPool,
     workers_for_cleanup: threadpool::ThreadPool,
@@ -269,6 +292,7 @@ impl SandboxManager {
             repr: Mutex::new(SandboxManagerInt {
                 canister_wasms: HashMap::new(),
                 memories: HashMap::new(),
+                paused_executions: HashMap::new(),
                 workers_for_replicated_execution: threadpool::ThreadPool::new(1),
                 workers_for_non_replicated_execution: threadpool::ThreadPool::new(
                     config.query_execution_threads,
@@ -420,6 +444,18 @@ impl SandboxManager {
                 total_timer,
             ),
         };
+    }
+
+    /// Resume the paused Wasm execution.
+    pub fn resume_execution(sandbox_manager: &Arc<SandboxManager>, exec_id: ExecId) {
+        let paused_execution = {
+            let mut guard = sandbox_manager.repr.lock().unwrap();
+            guard
+                .paused_executions
+                .remove(&exec_id)
+                .unwrap_or_else(|| unreachable!("Failed to get paused execution {}", exec_id))
+        };
+        paused_execution.resume();
     }
 
     pub fn create_execution_state(

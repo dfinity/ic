@@ -17,6 +17,13 @@ impl ControllerService for DummyControllerService {
         unimplemented!();
     }
 
+    fn execution_paused(
+        &self,
+        _req: ctlsvc::ExecutionPausedRequest,
+    ) -> rpc::Call<ctlsvc::ExecutionPausedReply> {
+        unimplemented!()
+    }
+
     fn log_via_replica(&self, _req: LogRequest) -> rpc::Call<()> {
         unimplemented!();
     }

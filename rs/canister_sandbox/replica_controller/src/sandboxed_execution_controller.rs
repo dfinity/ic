@@ -32,7 +32,7 @@ use std::sync::{
 use std::thread;
 use std::time::Duration;
 
-use crate::active_execution_state_registry::ActiveExecutionStateRegistry;
+use crate::active_execution_state_registry::{ActiveExecutionStateRegistry, CompletionResult};
 use crate::controller_service_impl::ControllerServiceImpl;
 use crate::launch_as_process::{create_sandbox_process, spawn_launcher_process};
 use crate::process_exe_and_args::{create_launcher_argv, create_sandbox_argv};
@@ -583,13 +583,13 @@ impl SandboxedExecutionController {
         let exec_id =
             sandbox_process
                 .execution_states
-                .register_execution(move |exec_id, exec_output| {
+                .register_execution(move |exec_id, result| {
                     if let Some(sandbox_process) = sandbox_process_weakref.upgrade() {
                         sandbox_process
                             .history
                             .record(format!("Completion(exec_id={})", exec_id));
                     }
-                    tx.send(exec_output).unwrap();
+                    tx.send(result).unwrap();
                 });
 
         // Now set up resources on the sandbox to drive the execution.
@@ -636,13 +636,21 @@ impl SandboxedExecutionController {
             .with_label_values(&[api_type_label])
             .start_timer();
         // Wait for completion.
-        let mut exec_output = rx.recv().unwrap();
+        let result = rx.recv().unwrap();
         drop(wait_timer);
         let _finish_timer = self
             .metrics
             .sandboxed_execution_replica_execute_finish_duration
             .with_label_values(&[api_type_label])
             .start_timer();
+
+        let mut exec_output = match result {
+            CompletionResult::Paused => {
+                // TODO(863): Propagate the paused result to the callers of `process()`.
+                unreachable!("This case cannot happen because DTS is not enabled yet.");
+            }
+            CompletionResult::Finished(exec_output) => exec_output,
+        };
 
         // If sandbox is compromised this value could be larger than the initial limit.
         if exec_output.wasm.num_instructions_left > initial_num_instructions_left {
