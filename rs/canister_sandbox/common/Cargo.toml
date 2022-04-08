@@ -16,7 +16,7 @@ name = "test_sandbox"
 path = "src/test_sandbox.rs"
 
 [dependencies]
-bincode = "1.2.1"
+bincode = "1.3.3"
 bytes = "1.0.1"
 serde_bytes = "0.11"
 ic-interfaces = { path = "../../interfaces" }
