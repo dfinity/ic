@@ -15,7 +15,7 @@ use super::pot_dsl::TestPath;
 #[derive(Clone, Debug)]
 pub struct TestEnv {
     base_path: PathBuf,
-    logger: Logger,
+    pub logger: Logger,
 }
 
 impl TestEnv {

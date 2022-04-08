@@ -414,6 +414,18 @@ pub struct IcNodeSnapshot {
     env: TestEnv,
 }
 
+impl HasTestEnv for IcNodeSnapshot {
+    fn env(&self) -> TestEnv {
+        self.env.clone()
+    }
+}
+
+impl HasVmName for IcNodeSnapshot {
+    fn vm_name(&self) -> String {
+        self.node_id.to_string()
+    }
+}
+
 impl IcNodeSnapshot {
     fn raw_node_record(&self) -> pb_node::NodeRecord {
         self.local_registry
@@ -431,6 +443,16 @@ impl IcNodeSnapshot {
         let url = format!("http://{}:{}/", host_str, http.port);
         Url::parse(&url).expect("Could not parse Url")
     }
+}
+
+pub trait HasTestEnv {
+    /// Returns a TestEnv associated with a given object.
+    fn env(&self) -> TestEnv;
+}
+
+pub trait HasVmName {
+    /// Returns a name of an associated VM.
+    fn vm_name(&self) -> String;
 }
 
 pub trait HasMetricsUrl {
@@ -709,6 +731,68 @@ impl HttpFileStore for FarmFileStore {
                 .join(&format!("file/{}", id))
                 .expect("cannot join urls"),
         }))
+    }
+}
+
+pub trait VmControl {
+    fn kill(&self);
+    fn reboot(&self);
+    fn start(&self);
+}
+
+pub struct FarmHostedVm {
+    farm: Farm,
+    group_name: String,
+    vm_name: String,
+}
+
+/// VmControl enables a user to interact with VMs, i.e. change their state.
+/// All functions belonging to this trait crash if a respective operation is for any reason
+/// unsuccessful.
+impl VmControl for FarmHostedVm {
+    fn kill(&self) {
+        self.farm
+            .destroy_vm(&self.group_name, &self.vm_name)
+            .expect("could not kill VM")
+    }
+
+    fn reboot(&self) {
+        self.farm
+            .reboot_vm(&self.group_name, &self.vm_name)
+            .expect("could not reboot VM")
+    }
+
+    fn start(&self) {
+        self.farm
+            .start_vm(&self.group_name, &self.vm_name)
+            .expect("could not start VM")
+    }
+}
+
+pub trait HasVm {
+    /// Returns a handle used for controlling a VM, i.e. starting, stopping and rebooting.
+    fn vm(&self) -> Box<dyn VmControl>;
+}
+
+impl<T> HasVm for T
+where
+    T: HasTestEnv + HasVmName,
+{
+    /// Returns a handle used for controlling a VM, i.e. starting, stopping and rebooting.
+    fn vm(&self) -> Box<dyn VmControl> {
+        let env = self.env();
+        let base_url: Url = env
+            .read_object(FARM_BASE_URL)
+            .expect("could not read farm_base_url");
+        let farm = Farm::new(base_url, env.logger.clone());
+        let group_name: String = env
+            .read_object(FARM_GROUP_NAME)
+            .expect("could not read group_name");
+        Box::new(FarmHostedVm {
+            farm,
+            group_name,
+            vm_name: self.vm_name(),
+        })
     }
 }
 
