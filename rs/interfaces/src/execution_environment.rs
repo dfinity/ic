@@ -25,7 +25,7 @@ use tower::{buffer::Buffer, util::BoxService};
 /// Instance execution statistics. The stats are cumulative and
 /// contain measurements from the point in time when the instance was
 /// created up until the moment they are requested.
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct InstanceStats {
     /// Total number of (host) pages accessed (read or written) by the instance
     /// and loaded into the linear memory.
@@ -852,7 +852,7 @@ pub trait Scheduler: Send {
     ) -> Self::State;
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct WasmExecutionOutput {
     pub wasm_result: Result<Option<WasmResult>, HypervisorError>,
     pub num_instructions_left: NumInstructions,

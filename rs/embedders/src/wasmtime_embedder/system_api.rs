@@ -860,7 +860,18 @@ pub(crate) fn syscalls<S: SystemApi>(
                 let num_instructions_left =
                     load_value(&num_instructions_global, &mut caller, &log, canister_id)?;
                 let result = with_system_api(&mut caller, |s| {
-                    s.out_of_instructions(num_instructions_left)
+                    if num_instructions_left > s.slice_instruction_limit() {
+                        error!(
+                            log,
+                            "[EXC-BUG] Canister {}: current instructions counter {} is greater than the limit {}",
+                            canister_id,
+                            num_instructions_left,
+                            s.slice_instruction_limit(),
+                        );
+                    }
+                    // The out-of-instruction handler expects that the number of
+                    // left instructions does not exceed the limit.
+                    s.out_of_instructions(num_instructions_left.min(s.slice_instruction_limit()))
                 });
 
                 match result {

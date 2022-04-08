@@ -1,4 +1,6 @@
-use ic_interfaces::execution_environment::{HypervisorError, OutOfInstructionsHandler};
+use ic_interfaces::execution_environment::{
+    HypervisorError, HypervisorResult, OutOfInstructionsHandler,
+};
 use ic_types::NumInstructions;
 use std::sync::{Arc, Condvar, Mutex};
 
@@ -33,6 +35,7 @@ impl State {
         total_instruction_limit: NumInstructions,
         slice_instruction_limit: NumInstructions,
     ) -> Self {
+        assert!(slice_instruction_limit <= total_instruction_limit);
         Self {
             execution_status: ExecutionStatus::Running,
             total_instruction_limit,
@@ -87,23 +90,40 @@ impl DeterministicTimeSlicing {
     }
 
     // Given the number of instructions left in the current slice, the function:
-    // - either transitions to `Paused` after increasing `instruction_executed`
+    // - either transitions to `Paused` after increasing `instructions_executed`
     //   and setting the limit for the next slice.
     // - or returns the `InstructionLimitExceeded` error.
     fn try_pause(&self, instructions_left: NumInstructions) -> Result<(), HypervisorError> {
         let mut state = self.state.lock().unwrap();
         assert_eq!(state.execution_status, ExecutionStatus::Running);
-        let instructions_left = instructions_left.min(state.slice_instruction_limit);
-        let instructions_executed = state.slice_instruction_limit - instructions_left;
-        if instructions_executed.get() == 0 {
+        assert!(
+            instructions_left <= state.slice_instruction_limit,
+            "The precondition of the DTS handler is broken: {} <= {}",
+            instructions_left,
+            state.slice_instruction_limit,
+        );
+        // The main invariant of the DTS handler.
+        assert!(
+            state.instructions_executed + state.slice_instruction_limit
+                <= state.total_instruction_limit,
+            "The main invariant of the DTS handler is broken: {} + {} <= {}",
+            state.instructions_executed,
+            state.slice_instruction_limit,
+            state.total_instruction_limit
+        );
+        let newly_executed_instructions = state.slice_instruction_limit - instructions_left;
+        if newly_executed_instructions.get() == 0 {
             // No progress in executing instructions. Return an early error.
             return Err(HypervisorError::InstructionLimitExceeded);
         }
-        if state.instructions_executed + instructions_executed >= state.total_instruction_limit {
-            // Exceeded the total limit.
+        if state.instructions_executed + state.slice_instruction_limit
+            == state.total_instruction_limit
+        {
+            // This was the last slice.
             return Err(HypervisorError::InstructionLimitExceeded);
         }
-        state.instructions_executed += instructions_executed;
+        state.instructions_executed += newly_executed_instructions;
+        // Maintain the main invariant.
         state.slice_instruction_limit = state
             .slice_instruction_limit
             .min(state.total_instruction_limit - state.instructions_executed);
@@ -151,6 +171,8 @@ impl PausedExecution {
         self.dts.resume();
     }
 
+    // TODO(EXC-864): Implement aborting of execution.
+    #[allow(dead_code)]
     pub fn abort(self) {
         self.dts.abort();
     }

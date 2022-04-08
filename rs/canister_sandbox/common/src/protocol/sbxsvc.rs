@@ -183,9 +183,22 @@ pub struct StartExecutionRequest {
     pub exec_input: SandboxExecInput,
 }
 
-/// Reply to an `OpenExecutionRequest`.
+/// Reply to an `StartExecutionRequest`.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct StartExecutionReply {
+    pub success: bool,
+}
+
+/// Resume execution.
+#[derive(Serialize, Deserialize, Clone)]
+pub struct ResumeExecutionRequest {
+    /// Id of the previously paused execution.
+    pub exec_id: ExecId,
+}
+
+/// Reply to an `ResumeExecutionRequest`.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ResumeExecutionReply {
     pub success: bool,
 }
 
@@ -226,6 +239,7 @@ pub enum Request {
     OpenMemory(OpenMemoryRequest),
     CloseMemory(CloseMemoryRequest),
     StartExecution(StartExecutionRequest),
+    ResumeExecution(ResumeExecutionRequest),
     CreateExecutionState(CreateExecutionStateRequest),
 }
 
@@ -238,7 +252,8 @@ impl EnumerateInnerFileDescriptors for Request {
             | Request::OpenWasm(_)
             | Request::CloseWasm(_)
             | Request::CloseMemory(_)
-            | Request::StartExecution(_) => {}
+            | Request::StartExecution(_)
+            | Request::ResumeExecution(_) => {}
         }
     }
 }
@@ -253,6 +268,7 @@ pub enum Reply {
     OpenMemory(OpenMemoryReply),
     CloseMemory(CloseMemoryReply),
     StartExecution(StartExecutionReply),
+    ResumeExecution(ResumeExecutionReply),
     CreateExecutionState(CreateExecutionStateReply),
 }
 

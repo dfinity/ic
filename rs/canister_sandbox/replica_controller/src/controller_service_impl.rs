@@ -16,6 +16,7 @@ use ic_canister_sandbox_common::rpc;
 use ic_logger::{debug, error, info, trace, ReplicaLogger};
 
 use crate::active_execution_state_registry::ActiveExecutionStateRegistry;
+use crate::active_execution_state_registry::CompletionResult;
 
 use std::sync::Arc;
 
@@ -59,8 +60,29 @@ impl ControllerService for ControllerServiceImpl {
                 Err(rpc::Error::ServerError)
             },
             |completion| {
-                completion(exec_id, exec_output);
+                completion(exec_id, CompletionResult::Finished(exec_output));
                 Ok(protocol::ctlsvc::ExecutionFinishedReply {})
+            },
+        );
+        rpc::Call::new_resolved(reply)
+    }
+
+    fn execution_paused(
+        &self,
+        req: protocol::ctlsvc::ExecutionPausedRequest,
+    ) -> rpc::Call<protocol::ctlsvc::ExecutionPausedReply> {
+        let exec_id = req.exec_id;
+        let reply = self.registry.take(exec_id).map_or_else(
+            || {
+                error!(
+                    self.log,
+                    "Wasm sandbox process paused non-existent execution {}", &exec_id
+                );
+                Err(rpc::Error::ServerError)
+            },
+            |completion| {
+                completion(exec_id, CompletionResult::Paused);
+                Ok(protocol::ctlsvc::ExecutionPausedReply {})
             },
         );
         rpc::Call::new_resolved(reply)
