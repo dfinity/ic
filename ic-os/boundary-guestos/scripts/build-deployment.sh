@@ -285,10 +285,19 @@ function copy_ssh_keys() {
 function copy_certs() {
     if [[ -f ${CERT_DIR}/fullchain.pem ]] && [[ -f ${CERT_DIR}/privkey.pem ]] && [[ -f ${CERT_DIR}/chain.pem ]]; then
         echo "Using certificates ${CERT_DIR}/fullchain.pem ${CERT_DIR}/privkey.pem ${CERT_DIR}/chain.pem"
-        mkdir -p ${CONFIG_DIR}/$NODE_PREFIX/certs
-        cp ${CERT_DIR}/fullchain.pem ${CONFIG_DIR}/$NODE_PREFIX/certs
-        cp ${CERT_DIR}/privkey.pem ${CONFIG_DIR}/$NODE_PREFIX/certs
-        cp ${CERT_DIR}/chain.pem ${CONFIG_DIR}/$NODE_PREFIX/certs
+        for n in $NODES; do
+            declare -n NODE=$n
+            if [[ "${NODE["type"]}" == "boundary" ]]; then
+                local subnet_idx=${NODE["subnet_idx"]}
+                local node_idx=${NODE["node_idx"]}
+
+                NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
+                mkdir -p ${CONFIG_DIR}/$NODE_PREFIX/certs
+                cp ${CERT_DIR}/fullchain.pem ${CONFIG_DIR}/$NODE_PREFIX/certs
+                cp ${CERT_DIR}/privkey.pem ${CONFIG_DIR}/$NODE_PREFIX/certs
+                cp ${CERT_DIR}/chain.pem ${CONFIG_DIR}/$NODE_PREFIX/certs
+            fi
+        done
     else
         echo "Not copying certificates"
     fi
