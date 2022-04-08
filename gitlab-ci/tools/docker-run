@@ -23,7 +23,7 @@ fi
 source "$REPO_ROOT/gitlab-ci/docker/docker-run-include"
 
 wdir="/ic/$(git rev-parse --show-prefix)"
-if [ -z "${@}" ]; then
+if [[ -z "${@}" ]]; then
     set -x
     docker run --rm "${DOCKER_RUN_ARGS[@]}" -w "$wdir" "$IMAGE" bash
 else
