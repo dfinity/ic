@@ -19,8 +19,8 @@ use super::{
     resource::DiskImage,
     test_env::TestEnv,
     test_env_api::{
-        get_ssh_session_from_env, retry, RetrieveIpv4Addr, SshSession, ADMIN, RETRY_BACKOFF,
-        RETRY_TIMEOUT,
+        get_ssh_session_from_env, retry, HasTestEnv, HasVmName, RetrieveIpv4Addr, SshSession,
+        ADMIN, RETRY_BACKOFF, RETRY_TIMEOUT,
     },
 };
 use anyhow::{bail, Result};
@@ -221,6 +221,18 @@ impl BoundaryNodeVm for TestEnv {
 pub struct DeployedBoundaryNode {
     env: TestEnv,
     name: String,
+}
+
+impl HasTestEnv for DeployedBoundaryNode {
+    fn env(&self) -> TestEnv {
+        self.env.clone()
+    }
+}
+
+impl HasVmName for DeployedBoundaryNode {
+    fn vm_name(&self) -> String {
+        self.name.clone()
+    }
 }
 
 impl DeployedBoundaryNode {

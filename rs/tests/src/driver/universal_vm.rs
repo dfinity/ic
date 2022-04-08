@@ -5,8 +5,8 @@ use super::resource::AllocatedVm;
 use super::resource::{allocate_resources, get_resource_request_for_universal_vm, DiskImage};
 use super::test_env::TestEnv;
 use super::test_env_api::{
-    get_ssh_session_from_env, retry, RetrieveIpv4Addr, SshSession, ADMIN, RETRY_BACKOFF,
-    RETRY_TIMEOUT,
+    get_ssh_session_from_env, retry, HasTestEnv, HasVmName, RetrieveIpv4Addr, SshSession, ADMIN,
+    RETRY_BACKOFF, RETRY_TIMEOUT,
 };
 use anyhow::{bail, Result};
 use slog::info;
@@ -172,6 +172,18 @@ fn setup_ssh(env: &TestEnv, config_dir: PathBuf) -> Result<()> {
 pub struct DeployedUniversalVm {
     env: TestEnv,
     name: String,
+}
+
+impl HasTestEnv for DeployedUniversalVm {
+    fn env(&self) -> TestEnv {
+        self.env.clone()
+    }
+}
+
+impl HasVmName for DeployedUniversalVm {
+    fn vm_name(&self) -> String {
+        self.name.clone()
+    }
 }
 
 impl DeployedUniversalVm {
