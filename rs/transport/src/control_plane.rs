@@ -242,10 +242,11 @@ impl TransportImpl {
                     _ => return,
                 };
                 info!(
+                    every_n_seconds => 5,
                     arc_self.log,
                     "ControlPlane::spawn_accept_task(): local_addr = {:?}, flow_tag = {:?}",
                     local_addr,
-                    flow_tag,
+                    flow_tag
                 );
                 match tcp_listener.accept().await {
                     Ok((stream, _)) => {
@@ -391,8 +392,8 @@ impl TransportImpl {
                             .inc();
                         warn!(
                             arc_self.log,
-                            "ControlPlane::connect_to_server(): local_addr = {:?}, peer = {:?}/{:?}, \
-                             flow_tag = {:?}, error = {:?}, retries = {}",
+                            "ControlPlane::connect_to_server(): local_addr = {:?}, flow_tag = {:?}, \
+                             peer = {:?}/{:?}, error = {:?}, retries = {}",
                             local_addr,
                             flow_tag,
                             peer_id,
