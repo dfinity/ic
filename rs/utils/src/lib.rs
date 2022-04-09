@@ -14,4 +14,5 @@ pub mod fs;
 pub mod ic_features;
 pub mod rle;
 pub mod serde_arc;
+pub mod str;
 pub mod thread;
