@@ -576,10 +576,6 @@ impl StreamHandlerImpl {
         stream: &mut StreamHandle,
         subnet_available_memory: &mut i64,
     ) {
-        let payload_size = match &msg {
-            RequestOrResponse::Request(req) => req.payload_size_bytes().get(),
-            RequestOrResponse::Response(res) => res.response_payload.size_of().get(),
-        };
         let msg_type = match msg {
             RequestOrResponse::Request(_) => LABEL_VALUE_TYPE_REQUEST,
             RequestOrResponse::Response(_) => LABEL_VALUE_TYPE_RESPONSE,
@@ -595,6 +591,7 @@ impl StreamHandlerImpl {
                 .routing_table
                 .route(msg.receiver().get());
 
+            let payload_size = msg.payload_size_bytes().get();
             match receiver_host_subnet {
                 // Matching receiver subnet, try inducting message.
                 Some(host_subnet) if host_subnet == self.subnet_id => match state.push_input(

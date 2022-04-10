@@ -211,7 +211,7 @@ fn correct_charging_source_canister_for_a_request() {
     assert_eq!(
         initial_cycles_balance - total_cost
             + cycles_account_manager.xnet_call_bytes_transmitted_fee(
-                MAX_INTER_CANISTER_PAYLOAD_IN_BYTES - response.response_payload.size_of()
+                MAX_INTER_CANISTER_PAYLOAD_IN_BYTES - response.payload_size_bytes()
             ),
         system_state.balance()
     );

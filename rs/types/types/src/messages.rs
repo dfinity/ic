@@ -38,8 +38,10 @@ pub use webauthn::{WebAuthnEnvelope, WebAuthnSignature};
 /// that can be used for computation in const context.
 pub const MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64: u64 = 2 * 1024 * 1024; // 2 MiB
 
-/// This sets the upper bound on how big a single inter-canister request or
-/// response can be.  We know that allowing messages larger than around 2MB has
+/// This sets the upper bound on how large a single inter-canister request or
+/// response (as returned by `RequestOrResponse::payload_size_bytes()`) can be.
+///
+/// We know that allowing messages larger than around 2MB has
 /// various security and performance impacts on the network.  More specifically,
 /// large messages can allow dishonest block makers to always manage to get
 /// their blocks notarized; and when the consensus protocol is configured for

@@ -514,7 +514,7 @@ impl CyclesAccountManager {
         // figure out how many extra bytes we charged for.
         let some_extra_bytes = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES
             .get()
-            .checked_sub(response.response_payload.size_of().get());
+            .checked_sub(response.payload_size_bytes().get());
         if let Some(extra_bytes) = some_extra_bytes {
             let cycles_to_refund =
                 self.config.xnet_byte_transmission_fee * Cycles::from(extra_bytes);

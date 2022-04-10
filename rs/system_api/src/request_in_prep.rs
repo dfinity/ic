@@ -224,21 +224,21 @@ pub(crate) fn into_request(
         }
     }
 
-    let current_size = method_name.len() + method_payload.len();
+    let payload_size = (method_name.len() + method_payload.len()) as u64;
     {
         let max_size_local_subnet = max_size_remote_subnet * multiplier_max_size_local_subnet;
-        if current_size > max_size_local_subnet.get() as usize {
+        if payload_size > max_size_local_subnet.get() {
             return Err(HypervisorError::ContractViolation(format!(
                 "RequestInPrep: size of message {} exceeded the allowed remote-subnet limit {}",
-                current_size, max_size_remote_subnet
+                payload_size, max_size_remote_subnet
             )));
         }
     }
 
-    if destination_subnet != own_subnet_id && current_size > max_size_remote_subnet.get() as usize {
+    if destination_subnet != own_subnet_id && payload_size > max_size_remote_subnet.get() {
         return Err(HypervisorError::ContractViolation(format!(
             "RequestInPrep: size of message {} destined to another subnet cannot exceed {}",
-            current_size, max_size_remote_subnet
+            payload_size, max_size_remote_subnet
         )));
     }
 
@@ -252,14 +252,23 @@ pub(crate) fn into_request(
         on_cleanup,
     ))?;
 
-    Ok(Request {
+    let req = Request {
         sender,
         receiver: destination_canister,
         method_name,
         method_payload,
         sender_reply_callback: callback_id,
         payment: cycles,
-    })
+    };
+    // We cannot call `Request::payload_size_bytes()` before constructing the
+    // request, so ensure our separate calculation matches the actual size.
+    debug_assert_eq!(
+        req.payload_size_bytes().get(),
+        payload_size,
+        "Inconsistent request payload size calculation"
+    );
+
+    Ok(req)
 }
 
 #[cfg(test)]
