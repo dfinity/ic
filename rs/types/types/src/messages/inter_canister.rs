@@ -5,6 +5,7 @@ use ic_protobuf::{
     state::queues::v1 as pb_queues,
     types::v1 as pb_types,
 };
+use ic_utils::{byte_slice_fmt::truncate_and_format, str::StrTruncate};
 use phantom_newtype::Id;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -22,7 +23,7 @@ pub enum CallContextIdTag {}
 pub type CallContextId = Id<CallContextIdTag, u64>;
 
 /// Canister-to-canister request message.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Request {
     pub receiver: CanisterId,
     pub sender: CanisterId,
@@ -57,6 +58,34 @@ impl Request {
     }
 }
 
+impl std::fmt::Debug for Request {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{ receiver: {:?}, ", self.receiver)?;
+        write!(f, "sender: {:?}, ", self.sender)?;
+        write!(
+            f,
+            "sender_reply_callback: {:?}, ",
+            self.sender_reply_callback
+        )?;
+        write!(f, "payment: {:?}, ", self.payment)?;
+        if self.method_name.len() <= 103 {
+            write!(f, "method_name: {:?}, ", self.method_name)?;
+        } else {
+            write!(
+                f,
+                "method_name: {:?}..., ",
+                self.method_name.safe_truncate(100)
+            )?;
+        }
+        write!(
+            f,
+            "method_payload: [{}] }}",
+            truncate_and_format(&self.method_payload, 1024)
+        )?;
+        Ok(())
+    }
+}
+
 /// The context attached when an inter-canister message is rejected.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct RejectContext {
@@ -78,7 +107,7 @@ impl RejectContext {
     }
 
     /// Returns the size of this `RejectContext` in bytes.
-    pub fn size_of(&self) -> NumBytes {
+    fn size_bytes(&self) -> NumBytes {
         let size = std::mem::size_of::<RejectCode>() + self.message.len();
         NumBytes::from(size as u64)
     }
@@ -94,7 +123,7 @@ impl From<UserError> for RejectContext {
 }
 
 /// A union of all possible message payloads.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Payload {
     /// Opaque payload data of the current message.
     Data(Vec<u8>),
@@ -105,10 +134,37 @@ pub enum Payload {
 
 impl Payload {
     /// Returns the size of this `Payload` in bytes.
-    pub fn size_of(&self) -> NumBytes {
+    fn size_bytes(&self) -> NumBytes {
         match self {
             Payload::Data(data) => NumBytes::from(data.len() as u64),
-            Payload::Reject(context) => context.size_of(),
+            Payload::Reject(context) => context.size_bytes(),
+        }
+    }
+}
+
+impl std::fmt::Debug for Payload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Data(data) => {
+                write!(f, "Data([")?;
+                write!(f, "{}", truncate_and_format(data, 1024))?;
+                write!(f, "])")
+            }
+            Self::Reject(context) => {
+                const KB: usize = 1024;
+                write!(f, "Reject({{ ")?;
+                write!(f, "code: {:?}, ", context.code)?;
+                if context.message.len() <= 8 * KB {
+                    write!(f, "message: {:?} ", context.message)?;
+                } else {
+                    let mut message = String::with_capacity(8 * KB);
+                    message.push_str(context.message.safe_truncate(5 * KB));
+                    message.push_str("...");
+                    message.push_str(context.message.safe_truncate_right(2 * KB));
+                    write!(f, "message: {:?} ", message)?;
+                }
+                write!(f, "}})")
+            }
         }
     }
 }
@@ -145,6 +201,13 @@ pub struct Response {
     pub response_payload: Payload,
 }
 
+impl Response {
+    /// Returns the size in bytes of this `Response`'s payload.
+    pub fn payload_size_bytes(&self) -> NumBytes {
+        self.response_payload.size_bytes()
+    }
+}
+
 /// Canister-to-canister message.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum RequestOrResponse {
@@ -164,6 +227,18 @@ impl RequestOrResponse {
         match self {
             RequestOrResponse::Request(req) => req.sender,
             RequestOrResponse::Response(resp) => resp.respondent,
+        }
+    }
+
+    /// Returns the size of the user-controlled part of this message (payload,
+    /// method name) in bytes.
+    ///
+    /// This is the "payload size" based on which cycle costs are calculated;
+    /// and is (generally) limited to `MAX_INTER_CANISTER_PAYLOAD_IN_BYTES`.
+    pub fn payload_size_bytes(&self) -> NumBytes {
+        match self {
+            RequestOrResponse::Request(req) => req.payload_size_bytes(),
+            RequestOrResponse::Response(resp) => resp.response_payload.size_bytes(),
         }
     }
 }

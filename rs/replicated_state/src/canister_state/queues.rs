@@ -1009,7 +1009,7 @@ enum QueueOp {
 }
 
 pub mod testing {
-    use super::CanisterQueues;
+    use super::{CanisterQueues, MemoryUsageStats, QueueOp};
     use crate::{InputQueueType, StateError};
     use ic_interfaces::messages::CanisterInputMessage;
     use ic_types::{
@@ -1067,7 +1067,13 @@ pub mod testing {
         ) -> Option<(QueueIndex, RequestOrResponse)> {
             match self.canister_queues.get_mut(dst_canister) {
                 None => None,
-                Some((_, output_queue)) => output_queue.pop(),
+                Some((_, canister_out_queue)) => {
+                    let ret = canister_out_queue.pop();
+                    if let Some((_, msg)) = &ret {
+                        self.memory_usage_stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, msg);
+                    }
+                    ret
+                }
             }
         }
 
