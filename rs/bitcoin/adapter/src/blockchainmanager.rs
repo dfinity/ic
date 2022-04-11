@@ -10,9 +10,10 @@ use bitcoin::{
     },
     Block, BlockHash, BlockHeader,
 };
+use hashlink::LinkedHashSet;
 use ic_logger::{debug, error, info, warn, ReplicaLogger};
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
+    collections::HashMap,
     net::SocketAddr,
     sync::Arc,
     time::{Instant, SystemTime},
@@ -145,7 +146,7 @@ pub struct BlockchainManager {
     /// is added to the queue.
     ///
     /// A block hash is removed when it is determined a peer can receive another `getdata` message.
-    block_sync_queue: VecDeque<BlockHash>,
+    block_sync_queue: LinkedHashSet<BlockHash>,
 
     /// This field contains a logger for the blockchain manager's use.
     logger: ReplicaLogger,
@@ -163,7 +164,7 @@ impl BlockchainManager {
             blockchain,
             peer_info,
             getdata_request_info,
-            block_sync_queue: VecDeque::new(),
+            block_sync_queue: LinkedHashSet::new(),
             logger,
         }
     }
@@ -615,15 +616,13 @@ impl BlockchainManager {
     /// or in the block cache.
     pub async fn enqueue_new_blocks_to_download(&mut self, next_headers: Vec<BlockHeader>) {
         let state = self.blockchain.lock().await;
-        let mut already_queued_hashes: HashSet<_> = self.block_sync_queue.iter().copied().collect();
         for header in next_headers {
             let hash = header.block_hash();
             if state.get_block(&hash).is_none()
-                && !already_queued_hashes.contains(&hash)
+                && !self.block_sync_queue.contains(&hash)
                 && !self.getdata_request_info.contains_key(&hash)
             {
-                already_queued_hashes.insert(hash);
-                self.block_sync_queue.push_back(hash);
+                self.block_sync_queue.insert(hash);
             }
         }
     }
@@ -906,10 +905,10 @@ pub mod test {
             assert!(maybe_err.is_none());
             blockchain_manager
                 .block_sync_queue
-                .push_back(block_1.block_hash());
+                .insert(block_1.block_hash());
             blockchain_manager
                 .block_sync_queue
-                .push_back(block_2.block_hash());
+                .insert(block_2.block_hash());
         }
         blockchain_manager.add_peer(&mut channel, &peer_addr).await;
         // Ensure that the number of requests is at 0.
@@ -998,7 +997,7 @@ pub mod test {
 
         blockchain_manager
             .block_sync_queue
-            .push_back(test_state.block_2.block_hash());
+            .insert(test_state.block_2.block_hash());
         blockchain_manager.sync_blocks(&mut channel).await;
 
         // The `getdata_request_info` should be empty as the block cache is at the size threshold.
@@ -1068,7 +1067,7 @@ pub mod test {
         };
         blockchain_manager
             .block_sync_queue
-            .push_back(block_1.block_hash());
+            .insert(block_1.block_hash());
         assert_eq!(blockchain_manager.block_sync_queue.len(), 1);
 
         assert!(blockchain_manager
