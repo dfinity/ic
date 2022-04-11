@@ -603,6 +603,11 @@ pub struct StateManagerImpl {
     log: ReplicaLogger,
     metrics: StateManagerMetrics,
     state_layout: StateLayout,
+    /// The main metadata. Different threads will need to access this field.
+    ///
+    /// To avoid the risk of deadlocks, this lock should be held as short a time
+    /// as possible, and not held together with other locks by the same thread,
+    /// particularly the lock for `checkpoint_thread_pool`
     states: Arc<parking_lot::RwLock<SharedState>>,
     verifier: Arc<dyn Verifier>,
     own_subnet_id: SubnetId,
@@ -614,6 +619,15 @@ pub struct StateManagerImpl {
     latest_state_height: AtomicU64,
     latest_certified_height: AtomicU64,
     state_sync_refs: StateSyncRefs,
+    /// A thread pool for creating checkpoints and computing manifests.
+    ///
+    /// Since the thread pool is behind a mutex, only one thread can use it at
+    /// a time. Hence it's not possible to do a manifest computation and write a
+    /// checkpoint at the same time. This is intentional. The thread pool should
+    /// however not be used in other contexts, such as the situations where
+    /// checkpoints need to be loaded, as this would be unnecessary lock contention.
+    /// The lock should also only be held when no other locks are being held by the
+    /// same thread. This applies particularly to the lock for `states`.
     checkpoint_thread_pool: Arc<Mutex<scoped_threadpool::Pool>>,
     _state_hasher_handle: JoinOnDrop<()>,
     _deallocation_handle: JoinOnDrop<()>,
@@ -627,6 +641,8 @@ fn load_checkpoint(
     metrics: &StateManagerMetrics,
     own_subnet_type: SubnetType,
 ) -> Result<ReplicatedState, CheckpointError> {
+    let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
+
     state_layout
         .checkpoint(height)
         .map_err(|e| e.into())
@@ -635,7 +651,7 @@ fn load_checkpoint(
                 .checkpoint_op_duration
                 .with_label_values(&["recover"])
                 .start_timer();
-            checkpoint::load_checkpoint(&layout, own_subnet_type, None)
+            checkpoint::load_checkpoint(&layout, own_subnet_type, Some(&mut thread_pool))
         })
 }
 
@@ -666,7 +682,7 @@ fn load_checkpoint_as_tip(
         .tip(snapshot.height)
         .unwrap_or_else(|err| fatal!(log, "Failed to retrieve tip {:?}", err));
 
-    let mut tip = checkpoint::load_checkpoint(&tip_layout, own_subnet_type, None)
+    let mut tip = checkpoint::load_checkpoint_parallel(&tip_layout, own_subnet_type)
         .unwrap_or_else(|err| fatal!(log, "Failed to load checkpoint as tip {:?}", err));
 
     // Ensure that the `PageMap`s of the tip use the clean read-only checkpoint
@@ -1168,12 +1184,8 @@ impl StateManagerImpl {
                     let state_layout = state_layout.clone();
                     move || {
                         while let Ok(req) = compute_manifest_request_receiver.recv() {
-                            // NB. we should lock the pool for the duration of only a single
-                            // request. If we didn't release it until the next request, State
-                            // Manager wouldn't be able to commit new states.
-                            let mut thread_pool = checkpoint_thread_pool.lock().unwrap();
                             Self::handle_compute_manifest_request(
-                                &mut thread_pool,
+                                &checkpoint_thread_pool,
                                 &metrics,
                                 &log,
                                 &states,
@@ -1338,7 +1350,7 @@ impl StateManagerImpl {
 
     #[allow(clippy::too_many_arguments)]
     fn handle_compute_manifest_request(
-        thread_pool: &mut scoped_threadpool::Pool,
+        thread_pool: &Mutex<scoped_threadpool::Pool>,
         metrics: &StateManagerMetrics,
         log: &ReplicaLogger,
         states: &parking_lot::RwLock<SharedState>,
@@ -1371,8 +1383,11 @@ impl StateManagerImpl {
             });
 
         let start = Instant::now();
+        // NB. we should lock the pool for the shortest amount of time possible.
+        // If we didn't release it until the next request, State
+        // Manager wouldn't be able to commit new states.
         let manifest = crate::manifest::compute_manifest(
-            thread_pool,
+            &mut thread_pool.lock().unwrap(),
             &metrics.manifest_metrics,
             log,
             system_metadata.state_sync_version,
@@ -1527,7 +1542,7 @@ impl StateManagerImpl {
                 )
             });
 
-            let state = checkpoint::load_checkpoint(&cp_layout, own_subnet_type, None)
+            let state = checkpoint::load_checkpoint_parallel(&cp_layout, own_subnet_type)
                 .unwrap_or_else(|err| {
                     fatal!(log, "Failed to load checkpoint @{}: {}", height, err)
                 });
@@ -2427,7 +2442,7 @@ impl StateManager for StateManagerImpl {
                                     .with_label_values(&["recover"])
                                     .start_timer();
 
-                                checkpoint::load_checkpoint(&layout, self.own_subnet_type, None)
+                                checkpoint::load_checkpoint_parallel(&layout, self.own_subnet_type)
                             })
                             .unwrap_or_else(|err| {
                                 fatal!(

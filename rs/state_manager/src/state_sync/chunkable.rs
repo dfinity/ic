@@ -744,7 +744,7 @@ impl IncompleteState {
             .expect("failed to create checkpoint layout");
 
         // Recover the state to make sure it's usable
-        if let Err(err) = crate::checkpoint::load_checkpoint(&ro_layout, own_subnet_type, None) {
+        if let Err(err) = crate::checkpoint::load_checkpoint_parallel(&ro_layout, own_subnet_type) {
             let elapsed = started_at.elapsed();
             metrics
                 .state_sync_duration
