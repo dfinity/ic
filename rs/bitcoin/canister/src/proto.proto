@@ -22,12 +22,9 @@ message UtxoSet {
   bool strict = 2;
   Network network = 3;
 
-  // Small/medium UTXOs and address outpoints are stored in stable structures.
-  // For now stable structures are using vectors as memory.
-  // TODO(EXC-1039): Remove these fields once we're using page maps.
-  bytes small_utxos = 4;
-  bytes medium_utxos = 5;
-  bytes address_to_outpoints = 6;
+  reserved 4;
+  reserved 5;
+  reserved 6;
 }
 
 message Utxo {

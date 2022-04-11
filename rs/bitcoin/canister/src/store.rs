@@ -116,7 +116,6 @@ pub fn get_unstable_blocks(state: &State) -> Vec<&Block> {
 mod test {
     use super::*;
     use crate::{
-        proto,
         test_builder::{BlockBuilder, TransactionBuilder},
         utxos::UtxosTrait,
     };
@@ -128,7 +127,7 @@ mod test {
     use ic_btc_types::OutPoint;
     use std::fs::File;
     use std::str::FromStr;
-    use std::{collections::HashMap, io::BufReader};
+    use std::{collections::HashMap, io::BufReader, path::PathBuf};
 
     fn process_chain(state: &mut State, num_blocks: u32) {
         let mut chain: Vec<Block> = vec![];
@@ -184,7 +183,13 @@ mod test {
 
     #[test]
     fn to_from_proto() {
-        use prost::Message;
+        let root: PathBuf = tempfile::Builder::new()
+            .prefix("bitcoin")
+            .tempdir()
+            .unwrap()
+            .path()
+            .into();
+
         let mut block = BlockBuilder::genesis()
             .with_transaction(TransactionBuilder::coinbase().build())
             .build();
@@ -197,9 +202,9 @@ mod test {
             insert_block(&mut state, block.clone()).unwrap();
         }
 
-        let state_proto = state.to_proto();
-        let state_proto = proto::State::decode(&*state_proto.encode_to_vec()).unwrap();
-        let new_state = State::from_proto(state_proto);
+        state.serialize(&root);
+
+        let new_state = State::load(&root);
 
         assert_eq!(new_state.height, state.height);
         assert_eq!(new_state.unstable_blocks, state.unstable_blocks);
@@ -214,8 +219,19 @@ mod test {
             assert_eq!(new_entry, old_entry);
         }
 
-        // TODO(EXC-1041): Properly encode/decode `address_to_outpoints` once it's
-        // using a stable structure.
+        assert_eq!(
+            new_state.utxos.address_to_outpoints.len(),
+            state.utxos.address_to_outpoints.len()
+        );
+
+        for (new_entry, old_entry) in new_state
+            .utxos
+            .address_to_outpoints
+            .iter()
+            .zip(state.utxos.address_to_outpoints.iter())
+        {
+            assert_eq!(new_entry, old_entry);
+        }
     }
 
     #[test]

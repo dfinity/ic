@@ -588,6 +588,12 @@ impl Buffer {
     pub fn dirty_pages(&self) -> impl Iterator<Item = (PageIndex, &PageBytes)> {
         self.dirty_pages.iter().map(|(i, p)| (*i, p))
     }
+
+    pub fn into_page_map(&self) -> PageMap {
+        let mut page_map = self.page_map.clone();
+        page_map.update(&self.dirty_pages().collect::<Vec<_>>());
+        page_map
+    }
 }
 
 // We have to implement the equality by hand because the derived one
