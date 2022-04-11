@@ -176,8 +176,9 @@ impl NodeRegistration {
                 node_pub_keys.dkg_dealing_encryption_pk.unwrap(),
             ),
             transport_tls_cert: protobuf_to_vec(node_pub_keys.tls_certificate.unwrap()),
-            // TODO(OR-71)
-            idkg_dealing_encryption_pk: None,
+            idkg_dealing_encryption_pk: node_pub_keys
+                .idkg_dealing_encryption_pk
+                .map(|pk| protobuf_to_vec(pk)),
             xnet_endpoint: msg_routing_config_to_endpoint(
                 &self.log,
                 &self.node_config.message_routing,
