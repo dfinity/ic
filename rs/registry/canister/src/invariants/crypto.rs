@@ -37,6 +37,7 @@ type AllTlsCertificates = BTreeMap<NodeId, X509PublicKeyCert>;
 //     - committee signing public key
 //     - DKG dealing encryption public key
 //     - TLS certificate
+//     - interactive DKG encryption public key
 //  * every node's id (node_id) is correctly derived from its node signing
 //    public key
 //  * all the public keys and all the TLS certificates belonging to the all the
