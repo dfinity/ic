@@ -6544,13 +6544,9 @@ version = "0.8.0"
 dependencies = [
  "anyhow",
  "ic-config",
- "ic-crypto",
- "ic-interfaces",
  "ic-logger",
  "ic-prep",
  "ic-protobuf",
- "ic-registry-client",
- "ic-registry-common",
  "ic-registry-provisional-whitelist",
  "ic-registry-subnet-type",
  "ic-types 0.8.0",

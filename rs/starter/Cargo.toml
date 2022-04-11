@@ -8,15 +8,11 @@ edition = "2018"
 [dependencies]
 anyhow = "1.0"
 ic-config = { path = "../config" }
-ic-crypto = { path = "../crypto" }
-ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
 ic-prep = { path = "../prep" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
-ic-registry-client = { path = "../registry/client" }
-ic-registry-common = { path = "../registry/common" }
 ic-types = { path = "../types/types" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.40"
