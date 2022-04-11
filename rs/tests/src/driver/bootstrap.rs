@@ -5,12 +5,10 @@ use std::env;
 use std::net::IpAddr;
 use std::{collections::BTreeMap, fs::File, io, net::SocketAddr, path::PathBuf, process::Command};
 
-use crate::driver::driver_setup::{
-    INITIAL_REPLICA_VERSION, JOURNALBEAT_HOSTS, LOG_DEBUG_OVERRIDES,
-};
+use crate::driver::driver_setup::IcSetup;
 use crate::driver::farm::FarmResult;
 use crate::driver::ic::{InternetComputer, Node};
-use crate::driver::test_env::{HasIcPrepDir, TestEnv};
+use crate::driver::test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute};
 use ic_base_types::NodeId;
 use ic_fondue::ic_instance::{
     node_software_version::NodeSoftwareVersion, port_allocator::AddrType,
@@ -30,7 +28,6 @@ use url::Url;
 
 use super::driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR;
 use super::resource::AllocatedVm;
-use ic_types::ReplicaVersion;
 
 pub type UnassignedNodes = BTreeMap<NodeIndex, NodeConfiguration>;
 pub type NodeVms = BTreeMap<NodeId, AllocatedVm>;
@@ -59,16 +56,16 @@ pub fn init_ic(
     // only as a placeholder: Updating individual binaries (replica/orchestrator)
     // is not supported anymore.
     let dummy_hash = "60958ccac3e5dfa6ae74aa4f8d6206fd33a5fc9546b8abaad65e3f1c4023c5bf".to_string();
-    let initial_replica_version: ReplicaVersion = test_env.read_object(INITIAL_REPLICA_VERSION)?;
+    let ic_setup = IcSetup::read_attribute(test_env);
     info!(
         logger,
-        "Replica Version that is passed in: {:?}", &initial_replica_version
+        "Replica Version that is passed in: {:?}", &ic_setup.initial_replica_version
     );
     let initial_replica = ic
         .initial_version
         .clone()
         .unwrap_or_else(|| NodeSoftwareVersion {
-            replica_version: initial_replica_version,
+            replica_version: ic_setup.initial_replica_version,
             // the following are dummy values, these are not used in production
             replica_url: Url::parse("file:///opt/replica").unwrap(),
             replica_hash: dummy_hash.clone(),
@@ -228,8 +225,9 @@ pub fn create_config_disk_image(
         Command::new(ci_project_dir.join("ic-os/guestos/scripts/build-bootstrap-config-image.sh"));
 
     let ssh_authorized_pub_keys_dir: PathBuf = test_env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
-    let journalbeat_hosts: Vec<String> = test_env.read_object(JOURNALBEAT_HOSTS)?;
-    let log_debug_overrides: Vec<String> = test_env.read_object(LOG_DEBUG_OVERRIDES)?;
+    let ic_setup = IcSetup::read_attribute(test_env);
+    let journalbeat_hosts: Vec<String> = ic_setup.journalbeat_hosts;
+
     let local_store_path = test_env
         .prep_dir(ic_name)
         .expect("no no name IC")
@@ -250,10 +248,11 @@ pub fn create_config_disk_image(
             .arg(journalbeat_hosts.join(" "));
     }
 
-    if !log_debug_overrides.is_empty() {
+    if !ic_setup.log_debug_overrides.is_empty() {
         let log_debug_overrides_val = format!(
             "[{}]",
-            log_debug_overrides
+            ic_setup
+                .log_debug_overrides
                 .iter()
                 .map(|component_unquoted| format!("\"{}\"", component_unquoted))
                 .collect::<Vec<_>>()

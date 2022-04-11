@@ -1,9 +1,9 @@
 use super::bootstrap::{init_ic, setup_and_start_vms};
 use super::resource::{allocate_resources, get_resource_request, ResourceGroup};
-use super::test_env::TestEnv;
-use crate::driver::driver_setup::mk_logger;
-use crate::driver::driver_setup::{FARM_BASE_URL, FARM_GROUP_NAME};
+use super::test_env::{TestEnv, TestEnvAttribute};
+use crate::driver::driver_setup::{mk_logger, IcSetup};
 use crate::driver::farm::Farm;
+use crate::driver::test_setup::PotSetup;
 use anyhow::Result;
 use ic_fondue::ic_instance::node_software_version::NodeSoftwareVersion;
 use ic_prep_lib::node::NodeSecretKeyStore;
@@ -140,8 +140,10 @@ impl InternetComputer {
         self.create_secret_key_stores(tempdir.path())?;
 
         let logger = mk_logger();
-        let farm = Farm::new(env.read_object(FARM_BASE_URL)?, logger.clone());
-        let group_name: String = env.read_object(FARM_GROUP_NAME)?;
+        let ic_setup = IcSetup::read_attribute(env);
+        let pot_setup = PotSetup::read_attribute(env);
+        let farm = Farm::new(ic_setup.farm_base_url, logger.clone());
+        let group_name: String = pot_setup.farm_group_name;
         let res_request = get_resource_request(self, env, &group_name)?;
         let res_group = allocate_resources(&farm, &res_request)?;
         self.propagate_ip_addrs(&res_group);

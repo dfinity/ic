@@ -229,7 +229,7 @@ fn parse_pattern(p: Option<String>) -> Result<Option<Regex>, regex::Error> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ValidatedCliArgs {
     pub log_base_dir: Option<PathBuf>,
     pub log_level: slog::Level,

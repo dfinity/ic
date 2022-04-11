@@ -7,22 +7,19 @@ use std::{
     process::Command,
 };
 
-use crate::driver::driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR;
+use crate::driver::driver_setup::{IcSetup, SSH_AUTHORIZED_PUB_KEYS_DIR};
 
 use super::{
-    driver_setup::{
-        BOUNDARY_NODE_IMG_SHA256, BOUNDARY_NODE_IMG_URL, FARM_BASE_URL, FARM_GROUP_NAME,
-        JOURNALBEAT_HOSTS,
-    },
     farm::{CreateVmRequest, Farm, ImageLocation, VMCreateResponse},
     ic::{AmountOfMemoryKiB, NrOfVCPUs, VmResources},
     resource::DiskImage,
-    test_env::TestEnv,
+    test_env::{TestEnv, TestEnvAttribute},
     test_env_api::{
         get_ssh_session_from_env, retry, HasTestEnv, HasVmName, RetrieveIpv4Addr, SshSession,
         ADMIN, RETRY_BACKOFF, RETRY_TIMEOUT,
     },
 };
+use crate::driver::test_setup::PotSetup;
 use anyhow::{bail, Result};
 use flate2::{write::GzEncoder, Compression};
 use reqwest::Url;
@@ -73,9 +70,10 @@ impl BoundaryNode {
     }
 
     pub fn start(&self, env: &TestEnv) -> Result<()> {
-        let group_name: String = env.read_object(FARM_GROUP_NAME)?;
+        let ic_setup = IcSetup::read_attribute(env);
+        let pot_setup = PotSetup::read_attribute(env);
         let logger = env.logger();
-        let farm = Farm::new(env.read_object(FARM_BASE_URL)?, logger.clone());
+        let farm = Farm::new(ic_setup.farm_base_url, logger.clone());
 
         let create_vm_req = CreateVmRequest::new(
             self.name.clone(),
@@ -85,23 +83,29 @@ impl BoundaryNode {
                 .unwrap_or(DEFAULT_MEMORY_KIB_PER_VM),
             match &self.boot_image {
                 None => {
-                    let url = env.read_object(BOUNDARY_NODE_IMG_URL)?;
-                    let sha256 = env.read_object(BOUNDARY_NODE_IMG_SHA256)?;
+                    let url = ic_setup.boundary_node_img_url;
+                    let sha256 = ic_setup.boundary_node_img_sha256;
                     ImageLocation::IcOsImageViaUrl { url, sha256 }
                 }
                 Some(disk_image) => From::from(disk_image.clone()),
             },
             self.has_ipv4,
         );
-        let vm = farm.create_vm(&group_name, create_vm_req)?;
+        let vm = farm.create_vm(&pot_setup.farm_group_name, create_vm_req)?;
 
         env.write_boundary_node_vm(&self.name, &vm)?;
 
-        let image_id = create_and_upload_config_disk_image(self, env, &group_name, &farm)?;
+        let image_id =
+            create_and_upload_config_disk_image(self, env, &pot_setup.farm_group_name, &farm)?;
 
-        farm.attach_disk_image(&group_name, &self.name, "usb-storage", image_id)?;
+        farm.attach_disk_image(
+            &pot_setup.farm_group_name,
+            &self.name,
+            "usb-storage",
+            image_id,
+        )?;
 
-        farm.start_vm(&group_name, &self.name)?;
+        farm.start_vm(&pot_setup.farm_group_name, &self.name)?;
 
         Ok(())
     }
@@ -129,7 +133,8 @@ pub fn create_and_upload_config_disk_image(
     );
 
     let ssh_authorized_pub_keys_dir: PathBuf = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
-    let journalbeat_hosts: Vec<String> = env.read_object(JOURNALBEAT_HOSTS)?;
+    let ic_setup = IcSetup::read_attribute(env);
+    let journalbeat_hosts: Vec<String> = ic_setup.journalbeat_hosts;
 
     cmd.arg(img_path.clone())
         .arg("--accounts_ssh_authorized_keys")

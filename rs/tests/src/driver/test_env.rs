@@ -66,6 +66,26 @@ impl TestEnv {
     }
 }
 
+/// Types implementing this trait can be written to (read from) TestEnv in a type-safe manner.
+/// It's highly advised to interact with TestEnv throughout implementing the trait, rather than
+/// using the low-level methods of TestEnv, namely `read_object` and `write_object`.
+pub trait TestEnvAttribute
+where
+    Self: DeserializeOwned + Serialize,
+{
+    /// An attribute name is used as a name of a file where the attribute is stored.
+    fn attribute_name() -> String;
+    fn write_attribute(self, env: &TestEnv) {
+        env.write_object(Self::attribute_name(), &self)
+            .unwrap_or_else(|e| panic!("cannot write {} to TestEnv: {}", Self::attribute_name(), e))
+    }
+    fn read_attribute(env: &TestEnv) -> Self {
+        env.read_object(Self::attribute_name()).unwrap_or_else(|e| {
+            panic!("cannot read {} from TestEnv: {}", Self::attribute_name(), e)
+        })
+    }
+}
+
 pub trait HasBaseLogDir {
     fn write_base_log_dir<P: AsRef<Path>>(&self, p: P) -> Result<()>;
 

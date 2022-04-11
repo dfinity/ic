@@ -1,10 +1,23 @@
-use crate::driver::driver_setup::{FARM_BASE_URL, FARM_GROUP_NAME};
-use crate::driver::test_env::{HasIcPrepDir, TestEnv};
+use crate::driver::driver_setup::IcSetup;
+use crate::driver::test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::*;
 use anyhow::{bail, Result};
 use ic_fondue::ic_manager::{FarmInfo, IcEndpoint, IcHandle, IcSubnet, RuntimeDescriptor};
+use serde::{Deserialize, Serialize};
+use std::time::Duration;
 use std::time::Instant;
-use url::Url;
+
+#[derive(Deserialize, Serialize)]
+pub struct PotSetup {
+    pub farm_group_name: String,
+    pub pot_timeout: Duration,
+}
+
+impl TestEnvAttribute for PotSetup {
+    fn attribute_name() -> String {
+        "pot_setup".to_string()
+    }
+}
 
 pub trait IcHandleConstructor {
     fn ic_handle(&self) -> Result<IcHandle>;
@@ -12,8 +25,8 @@ pub trait IcHandleConstructor {
 
 impl IcHandleConstructor for TestEnv {
     fn ic_handle(&self) -> Result<IcHandle> {
-        let group_name: String = self.read_object(FARM_GROUP_NAME)?;
-        let farm_url: Url = self.read_object(FARM_BASE_URL)?;
+        let pot_setup = PotSetup::read_attribute(self);
+        let ic_setup = IcSetup::read_attribute(self);
         let ts = self.topology_snapshot();
 
         let mut nodes = vec![];
@@ -40,9 +53,9 @@ impl IcHandleConstructor for TestEnv {
                 }),
                 started_at,
                 runtime_descriptor: RuntimeDescriptor::Vm(FarmInfo {
-                    group_name: group_name.clone(),
+                    group_name: pot_setup.farm_group_name.clone(),
                     vm_name: n.node_id.to_string(),
-                    url: farm_url.clone(),
+                    url: ic_setup.farm_base_url.clone(),
                 }),
                 is_root_subnet: s.map_or(false, |s| Some(s.subnet_id) == root_subnet_id),
             });

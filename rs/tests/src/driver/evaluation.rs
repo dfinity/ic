@@ -1,11 +1,11 @@
-use std::time::Duration;
 use std::{panic::catch_unwind, time::Instant};
 
-use super::driver_setup::{DriverContext, FARM_BASE_URL};
+use super::driver_setup::DriverContext;
 use super::farm::{Farm, GroupSpec};
 use super::pot_dsl::{ExecutionMode, Pot, Suite, Test, TestPath, TestSet};
-use crate::driver::driver_setup::{FARM_GROUP_NAME, POT_TIMEOUT};
-use crate::driver::test_env::{HasTestPath, TestEnv};
+use crate::driver::driver_setup::IcSetup;
+use crate::driver::test_env::{HasTestPath, TestEnv, TestEnvAttribute};
+use crate::driver::test_setup::PotSetup;
 use anyhow::{bail, Result};
 use crossbeam_channel::{bounded, Receiver, Sender};
 use ic_fondue::result::*;
@@ -98,8 +98,12 @@ fn evaluate_pot(ctx: &DriverContext, mut pot: Pot, path: TestPath) -> Result<Tes
     pot_env
         .write_test_path(&pot_path)
         .expect("Could not write the pot test path");
-    pot_env.write_object(FARM_GROUP_NAME, &group_name)?;
-    pot_env.write_object(POT_TIMEOUT, &pot.pot_timeout.unwrap_or(ctx.pot_timeout))?;
+
+    PotSetup {
+        farm_group_name: group_name.clone(),
+        pot_timeout: pot.pot_timeout.unwrap_or(ctx.pot_timeout),
+    }
+    .write_attribute(&pot_env);
 
     create_group_for_pot(&pot_env, &pot, &ctx.logger)?;
 
@@ -120,13 +124,13 @@ fn evaluate_pot(ctx: &DriverContext, mut pot: Pot, path: TestPath) -> Result<Tes
 }
 
 fn create_group_for_pot(env: &TestEnv, pot: &Pot, logger: &Logger) -> Result<()> {
-    let pot_timeout: Duration = env.read_object(POT_TIMEOUT)?;
-    let group_name: String = env.read_object(FARM_GROUP_NAME)?;
-    let farm = Farm::new(env.read_object(FARM_BASE_URL)?, logger.clone());
-    info!(logger, "creating group '{}'", &group_name);
+    let pot_setup = PotSetup::read_attribute(env);
+    let ic_setup = IcSetup::read_attribute(env);
+    let farm = Farm::new(ic_setup.farm_base_url, logger.clone());
+    info!(logger, "creating group '{}'", &pot_setup.farm_group_name);
     Ok(farm.create_group(
-        &group_name,
-        pot_timeout,
+        &pot_setup.farm_group_name,
+        pot_setup.pot_timeout,
         GroupSpec {
             vm_allocation: pot.vm_allocation.clone(),
         },

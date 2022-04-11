@@ -73,7 +73,7 @@ fn main() -> anyhow::Result<()> {
     fs::create_dir(&system_env)?;
     let logger = mk_logger();
     let env = TestEnv::new(system_env, logger);
-    initialize_env(&env, &validated_args)?;
+    initialize_env(&env, validated_args.clone())?;
 
     let context = create_driver_context_from_cli(validated_args, env, get_hostname());
     let result = evaluate(&context, suite);
