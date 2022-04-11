@@ -1,4 +1,5 @@
 use ic_crypto::utils::{NodeKeysToGenerate, TempCryptoComponent};
+use ic_interfaces::registry::RegistryDataProvider;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client_fake::FakeRegistryClient;
@@ -17,6 +18,8 @@ pub struct TestKeygenCryptoBuilder {
     committee_signing_key: Option<PublicKey>,
     add_dkg_dealing_enc_key_to_registry: bool,
     dkg_dealing_enc_key: Option<PublicKey>,
+    add_idkg_dealing_enc_key_to_registry: bool,
+    idkg_dealing_enc_key: Option<PublicKey>,
     add_tls_cert_to_registry: bool,
     tls_cert: Option<X509PublicKeyCert>,
 }
@@ -57,6 +60,16 @@ impl TestKeygenCryptoBuilder {
         self
     }
 
+    pub fn add_generated_idkg_dealing_enc_key_to_registry(mut self) -> Self {
+        self.add_idkg_dealing_enc_key_to_registry = true;
+        self
+    }
+
+    pub fn with_idkg_dealing_enc_key_in_registry(mut self, key: PublicKey) -> Self {
+        self.idkg_dealing_enc_key = Some(key);
+        self
+    }
+
     pub fn add_generated_tls_cert_to_registry(mut self) -> Self {
         self.add_tls_cert_to_registry = true;
         self
@@ -94,11 +107,21 @@ impl TestKeygenCryptoBuilder {
             &data_provider,
             &node_pubkeys.dkg_dealing_encryption_pk,
         )
+        .add_idkg_dealing_enc_key_to_registry_if_present(
+            registry_version,
+            node_id,
+            &data_provider,
+            &node_pubkeys.idkg_dealing_encryption_pk,
+        )
         .add_tls_cert_to_registry_if_present(
             registry_version,
             node_id,
             &data_provider,
             node_pubkeys.tls_certificate,
+        )
+        .add_dummy_registry_entry_if_necessary_to_ensure_existence_of_registry_version(
+            registry_version,
+            &data_provider,
         );
         registry_client.update_to_latest_version();
         TestKeygenCrypto { temp_crypto }
@@ -206,6 +229,42 @@ impl TestKeygenCryptoBuilder {
         self
     }
 
+    fn add_idkg_dealing_enc_key_to_registry_if_present(
+        self,
+        registry_version: RegistryVersion,
+        node_id: NodeId,
+        data_provider: &Arc<ProtoRegistryDataProvider>,
+        public_key: &Option<PublicKey>,
+    ) -> Self {
+        if self.add_idkg_dealing_enc_key_to_registry && self.idkg_dealing_enc_key.is_some() {
+            panic!("invalid use of builder: cannot add default and custom I-DKG dealing enc key!")
+        }
+        if self.add_idkg_dealing_enc_key_to_registry {
+            add_public_key_to_registry(
+                public_key
+                    .as_ref()
+                    .expect(
+                        "invalid use of builder: I-DKG dealing encryption key was not generated.",
+                    )
+                    .clone(),
+                node_id,
+                KeyPurpose::IDkgMEGaEncryption,
+                Arc::clone(data_provider),
+                registry_version,
+            );
+        }
+        if let Some(pub_key) = self.idkg_dealing_enc_key.as_ref() {
+            add_public_key_to_registry(
+                pub_key.clone(),
+                node_id,
+                KeyPurpose::IDkgMEGaEncryption,
+                Arc::clone(data_provider),
+                registry_version,
+            );
+        }
+        self
+    }
+
     fn add_tls_cert_to_registry_if_present(
         self,
         registry_version: RegistryVersion,
@@ -234,6 +293,31 @@ impl TestKeygenCryptoBuilder {
         }
         self
     }
+
+    fn add_dummy_registry_entry_if_necessary_to_ensure_existence_of_registry_version(
+        self,
+        registry_version: RegistryVersion,
+        data_provider: &Arc<ProtoRegistryDataProvider>,
+    ) -> Self {
+        if data_provider
+            .get_updates_since(RegistryVersion::from(0))
+            .expect("failed to get updates")
+            .is_empty()
+        {
+            let dummy_registry_key = "dummy_registry_key";
+            let dummy_registry_value = X509PublicKeyCert {
+                certificate_der: vec![],
+            };
+            data_provider
+                .add(
+                    dummy_registry_key,
+                    registry_version,
+                    Some(dummy_registry_value),
+                )
+                .expect("Could not add dummy registry entry to registry");
+        }
+        self
+    }
 }
 
 pub struct TestKeygenCrypto {
@@ -247,9 +331,11 @@ impl TestKeygenCrypto {
             add_node_signing_key_to_registry: false,
             node_signing_key: None,
             add_committee_signing_key_to_registry: false,
+            committee_signing_key: None,
             add_dkg_dealing_enc_key_to_registry: false,
             dkg_dealing_enc_key: None,
-            committee_signing_key: None,
+            add_idkg_dealing_enc_key_to_registry: false,
+            idkg_dealing_enc_key: None,
             add_tls_cert_to_registry: false,
             tls_cert: None,
         }

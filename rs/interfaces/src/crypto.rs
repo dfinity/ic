@@ -2,7 +2,7 @@
 mod keygen;
 
 use ic_types::canister_http::CanisterHttpResponseMetadata;
-pub use keygen::KeyManager;
+pub use keygen::{KeyManager, PublicKeyRegistrationStatus};
 
 mod hash;
 
