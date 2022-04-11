@@ -1,0 +1,19 @@
+[Unit]
+Description=IC Bitcoin Testnet Adapter Service Provider
+# We must wait for IC bootstrap to complete: It writes various
+# state files and may also be needed to obtain network config.
+After=bootstrap-ic-node.service
+Wants=bootstrap-ic-node.service
+Requires=ic-btc-testnet-adapter.socket
+StartLimitIntervalSec=0
+
+[Service]
+User=ic-replica
+ExecStartPre=+/opt/ic/bin/generate-btc-adapter-config.sh -b /boot/config/bitcoind_addr.conf -o /run/ic-node/config/ic-btc-testnet-adapter.json5
+ExecStart=/opt/ic/bin/ic-btc-adapter /run/ic-node/config/ic-btc-testnet-adapter.json5
+NotifyAccess=main
+Restart=always
+
+[Install]
+RequiredBy=ic-replica.service
+Also=ic-btc-testnet-adapter.socket

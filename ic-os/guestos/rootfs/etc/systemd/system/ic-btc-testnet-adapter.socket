@@ -1,0 +1,11 @@
+[Unit]
+Description=Socket for IC Bitcoin Testnet Adapter Service Provider
+
+[Socket]
+ListenStream=/run/ic-node/bitcoin-testnet-adapter/socket
+SocketUser=ic-replica
+SocketGroup=ic-replica
+SocketMode=0660
+
+[Install]
+WantedBy=sockets.target
