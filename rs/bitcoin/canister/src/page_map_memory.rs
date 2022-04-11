@@ -1,14 +1,15 @@
-use core::cell::RefCell;
-use ic_replicated_state::page_map::{Buffer, PageMap};
+use ic_replicated_state::page_map::{Buffer, PageMap, PersistenceError};
 use stable_structures::Memory;
+use std::sync::{Arc, Mutex};
 
 const WASM_PAGE_SIZE_IN_BYTES: u64 = 65536;
 const ONE_TB_IN_BYTES: u64 = 1 << 40;
 const ONE_TB_IN_PAGES: u64 = ONE_TB_IN_BYTES / WASM_PAGE_SIZE_IN_BYTES;
 
 /// A memory backed by a [`PageMap`].
+#[derive(Clone)]
 pub struct PageMapMemory {
-    buffer: RefCell<Buffer>,
+    buffer: Arc<Mutex<Buffer>>,
 }
 
 impl Default for PageMapMemory {
@@ -21,24 +22,23 @@ impl PageMapMemory {
     /// Initializes a new pagemap memory.
     pub fn new(page_map: PageMap) -> Self {
         Self {
-            buffer: RefCell::new(Buffer::new(page_map)),
+            buffer: Arc::new(Mutex::new(Buffer::new(page_map))),
         }
     }
 
     /// Opens a memory from a file.
-    pub fn open(path: &std::path::Path) -> Self {
-        let page_map = PageMap::open(path, None).unwrap();
-        Self::new(page_map)
+    pub fn open(path: &std::path::Path) -> Result<Self, PersistenceError> {
+        let page_map = PageMap::open(path, None)?;
+        Ok(Self::new(page_map))
     }
 
     /// Persists the memory to disk at the given path.
-    pub fn persist_and_sync_delta(&self, path: &std::path::Path) {
-        let page_delta: PageMap = self.buffer.borrow().into_page_map();
-        page_delta
-            .persist_and_sync_delta(path)
-            .expect("failed to sync delta");
-        let new_page_map = PageMap::open(path, None).expect("failed to open page map");
-        self.buffer.replace(Buffer::new(new_page_map));
+    pub fn persist_and_sync_delta(&self, path: &std::path::Path) -> Result<(), PersistenceError> {
+        let page_delta: PageMap = self.buffer.lock().unwrap().into_page_map();
+        page_delta.persist_and_sync_delta(path)?;
+        let new_page_map = PageMap::open(path, None)?;
+        *self.buffer.lock().unwrap() = Buffer::new(new_page_map);
+        Ok(())
     }
 }
 
@@ -55,10 +55,10 @@ impl Memory for PageMapMemory {
     }
 
     fn read(&self, offset: u64, dst: &mut [u8]) {
-        self.buffer.borrow().read(dst, offset as usize);
+        self.buffer.lock().unwrap().read(dst, offset as usize);
     }
 
     fn write(&self, offset: u64, src: &[u8]) {
-        self.buffer.borrow_mut().write(src, offset as usize);
+        self.buffer.lock().unwrap().write(src, offset as usize);
     }
 }
