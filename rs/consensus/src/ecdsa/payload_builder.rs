@@ -775,7 +775,7 @@ fn update_next_key_transcript(
     update_next_key_transcript_helper(
         &dealers,
         &receivers,
-        current_registry_version,
+        next_registry_version,
         current_key_transcript,
         next_key_transcript_creation,
         next_unused_transcript_id,
@@ -829,6 +829,12 @@ fn update_next_key_transcript_helper(
             if let Some(transcript) =
                 transcript_cache.get_completed_transcript(config.as_ref().transcript_id)
             {
+                debug!(
+                    log,
+                    "Key transcript created from ReshareOfUnmasked {:?} registry_version {:?}",
+                    config.as_ref().transcript_id,
+                    transcript.registry_version,
+                );
                 let transcript_ref = ecdsa::UnmaskedTranscript::try_from((height, transcript))?;
                 *next_key_transcript_creation =
                     ecdsa::KeyTranscriptCreation::Created(transcript_ref);
@@ -880,6 +886,12 @@ fn update_next_key_transcript_helper(
             if let Some(transcript) =
                 transcript_cache.get_completed_transcript(config.as_ref().transcript_id)
             {
+                debug!(
+                    log,
+                    "Key transcript created from ReshareOfMasked {:?} registry_version {:?}",
+                    config.as_ref().transcript_id,
+                    transcript.registry_version,
+                );
                 let transcript_ref = ecdsa::UnmaskedTranscript::try_from((height, transcript))?;
                 *next_key_transcript_creation =
                     ecdsa::KeyTranscriptCreation::Created(transcript_ref);
