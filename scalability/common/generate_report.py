@@ -130,6 +130,7 @@ def generate_report(base, githash, timestamp):
 
             files = [os.path.join(path, f) for f in os.listdir(path) if f.startswith("summary_machine_")]
             print("Workload generator summaray files: ", files)
+            evaluated_summaries = None
             if len(files) > 0:
                 evaluated_summaries = report.evaluate_summaries(files)
                 (
@@ -230,33 +231,36 @@ def generate_report(base, githash, timestamp):
                         xdata = [int(x) - t_start for x, _ in metrics["http_request_rate"][0]]
                         ydata = [float(y) for _, y in metrics["http_request_rate"][0]]
 
-                        sorted_histograms = sorted(evaluated_summaries.get_success_rate_histograms())
-                        plots = [
-                            {"x": xdata, "y": ydata, "name": "HTTP handler"},
-                            {
-                                "x": [s for s, _ in sorted_histograms],
-                                "y": [s for _, s in sorted_histograms],
-                                "name": "aggregated workload generator stats",
-                            },
-                        ]
+                        if evaluated_summaries:
+                            sorted_histograms = sorted(evaluated_summaries.get_success_rate_histograms())
+                            plots = [
+                                {"x": xdata, "y": ydata, "name": "HTTP handler"},
+                                {
+                                    "x": [s for s, _ in sorted_histograms],
+                                    "y": [s for _, s in sorted_histograms],
+                                    "name": "aggregated workload generator stats",
+                                },
+                            ]
 
-                        layout = {
-                            "yaxis": {"title": "rate [requests / s]", "range": [0, 1.2 * max(ydata)]},
-                            "xaxis": {"title": "iteration time [s]"},
-                        }
-
-                        metrics.update(
-                            {
-                                "http_request_rate_plot": plots,
-                                "http_request_rate_layout": layout,
+                            layout = {
+                                "yaxis": {"title": "rate [requests / s]", "range": [0, 1.2 * max(ydata)]},
+                                "xaxis": {"title": "iteration time [s]"},
                             }
-                        )
+
+                            metrics.update(
+                                {
+                                    "http_request_rate_plot": plots,
+                                    "http_request_rate_layout": layout,
+                                }
+                            )
+
                         iter_data.update({"prometheus": metrics})
 
                         if "finalization_rate" in metrics:
                             finalization_rates.append(metrics["finalization_rate"][1])
 
                     except Exception as err:
+                        traceback.print_exc()
                         print(colored(f"Failed to parse prometheus.json file for iteration {i} - {err}", "red"))
 
             data["iterations"].append(iter_data)

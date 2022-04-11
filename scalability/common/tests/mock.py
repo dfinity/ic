@@ -54,7 +54,7 @@ class Test_Experiment(TestCase):
         exp._WorkloadExperiment__kill_workload_generator = MagicMock()
         BaseExperiment._turn_off_replica = MagicMock()
         exp._WorkloadExperiment__check_workload_generator_installed = Mock(return_value=True)
-        exp._BaseExperiment__get_ic_version = MagicMock(return_value="deadbeef")
+        exp.get_ic_version = MagicMock(return_value="deadbeef")
         exp._WorkloadExperiment__wait_for_quiet = MagicMock(return_value=None)
 
         exp.init()

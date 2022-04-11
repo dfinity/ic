@@ -69,7 +69,7 @@ class BaseExperiment:
 
         self.request_type = request_type
 
-    def __get_ic_version(self, m):
+    def get_ic_version(self, m):
         """Retrieve the IC version from the given machine m."""
         sys.path.insert(1, "../ic-os/guestos/tests")
         import ictools
@@ -78,7 +78,7 @@ class BaseExperiment:
 
     def init(self):
         """Initialize experiment."""
-        self.git_hash = self.__get_ic_version(self.get_machine_to_instrument())
+        self.git_hash = self.get_ic_version(self.get_machine_to_instrument())
         print(f"Running against an IC with git hash: {self.git_hash}")
 
         self.out_dir_timestamp = int(time.time())
@@ -276,6 +276,12 @@ class BaseExperiment:
         nodeinfo = self.__get_node_info(nodeid)
         ip = re.findall(r'ip_addr: "([a-f0-9:A-F]+)"', nodeinfo)
         return ip[0]
+
+    def get_nodeoperator_of_node(self, nodeid):
+        """Get node operator entry in node record."""
+        nodeinfo = self.get_node_info(nodeid)
+        no = re.findall(r"node_operator_id: (\[.+?\])", nodeinfo)
+        return no[0]
 
     def get_unassigned_nodes(self):
         """Return a list of unassigned node IDs in the given subnetwork."""

@@ -23,19 +23,24 @@ class MachineFailure(threading.Thread):
         # Doesn't seem like the order of those things matters
         return ["ic-replica", "ic-btc-adapter", "ic-canister-http-adapter", "ic-crypto-csp"]
 
-    def run(self):
-        """Simulate failures on the given machines."""
-        print(f"💥 Killing replicas on ${self.machines}")
+    def kill_nodes(machines: [str]):
         # The order in which services are killed shouldn't matter (any order can happen in reality).
         services = MachineFailure.get_services()
         random.shuffle(services)
         for service in services:
-            ssh.run_ssh_in_parallel(self.machines, "sudo systemctl kill --signal SIGKILL {service}")
-            ssh.run_ssh_in_parallel(self.machines, f"sudo systemctl stop {service}")
-            ssh.run_ssh_in_parallel(self.machines, f"sudo systemctl status {service}")
+            print(f"💥 Killing replicas on ${machines}")
+            ssh.run_ssh_in_parallel(machines, "sudo systemctl kill --signal SIGKILL ic-replica")
+            ssh.run_ssh_in_parallel(machines, "sudo systemctl stop ic-replica")
+            ssh.run_ssh_in_parallel(machines, "sudo systemctl status ic-replica")
 
-        time.sleep(FLAGS.sleep_time)
-        print(f"🔄 Restarting replicas on ${self.machines}")
+    def start_nodes(machines: [str]):
+        print(f"🔄 Restarting replicas on ${machines}")
         for service in MachineFailure.get_services():
-            ssh.run_ssh_in_parallel(self.machines, f"sudo systemctl start {service}")
-            ssh.run_ssh_in_parallel(self.machines, f"sudo systemctl status {service}")
+            ssh.run_ssh_in_parallel(machines, "sudo systemctl start ic-replica")
+            ssh.run_ssh_in_parallel(machines, "sudo systemctl status ic-replica")
+
+    def run(self):
+        """Simulate failures on the given machines."""
+        MachineFailure.kill_nodes(self.machines)
+        time.sleep(FLAGS.sleep_time)
+        MachineFailure.start_nodes(self.machines)
