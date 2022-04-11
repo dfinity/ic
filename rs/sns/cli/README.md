@@ -17,6 +17,8 @@ Verify the following before deploying locally:
 
 * You have locally cloned the [ic](https://github.com/dfinity/ic) repo.
 
+* You have downloaded and installed the [ic-cdk-optimizer](https://smartcontracts.org/docs/rust-guide/rust-optimize.html#_install_and_run_the_optimizer).
+
 ### Local Deployment
 `cd` into `rs/sns/cli/`. Remove state from past local deployments
 ```shell
