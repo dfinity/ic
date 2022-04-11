@@ -654,6 +654,7 @@ impl From<&Action> for u64 {
             Action::ManageNervousSystemParameters(_) => 2,
             Action::UpgradeSnsControlledCanister(_) => 3,
             Action::ExecuteNervousSystemFunction(_) => 4,
+            Action::CallCanisterMethod(_) => 5,
         }
     }
 }

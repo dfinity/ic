@@ -1,1 +1,6 @@
-service : { get_build_metadata : () -> (text) query }
+service : {
+  explode : (text) -> () query;
+  get_build_metadata : () -> (text) query;
+  get_integer : (null) -> (int32) query;
+  set_integer : (int32) -> ();
+}

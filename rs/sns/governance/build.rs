@@ -107,6 +107,14 @@ fn main() {
         .join(" "),
     );
     config.type_attribute(
+        "ic_sns_governance.pb.v1.CallCanisterMethod",
+        [
+            "#[derive(candid::CandidType, candid::Deserialize)]",
+            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
+        ]
+        .join(" "),
+    );
+    config.type_attribute(
         "ic_sns_governance.pb.v1.Motion",
         [
             "#[derive(candid::CandidType, candid::Deserialize)]",

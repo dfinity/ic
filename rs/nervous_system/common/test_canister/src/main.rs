@@ -1,7 +1,60 @@
 #[macro_use]
 extern crate ic_nervous_system_common;
 
+use candid::candid_method;
+use dfn_candid::candid_one;
+use dfn_core::over;
+use std::cell::RefCell;
+
+thread_local! {
+    static STATE: RefCell<State> = RefCell::new(State::default());
+}
+
 expose_build_metadata! {}
+
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
+struct State {
+    i: i32,
+}
+
+/// Sets an internal integer variable.
+#[export_name = "canister_update set_integer"]
+fn set_integer() {
+    over(candid_one, set_integer_);
+}
+
+/// Implementation of set_integer.
+#[candid_method(update, rename = "set_integer")]
+fn set_integer_(new_integer: i32) {
+    STATE.with(move |state| {
+        let mut state = state.borrow_mut();
+        state.i = new_integer;
+    });
+}
+
+/// Retrieves the value of the integer variable set by set_integer.
+#[export_name = "canister_query get_integer"]
+fn get_integer() {
+    over(candid_one, get_integer_);
+}
+
+/// Implementation of get_integer.
+#[candid_method(query, rename = "get_integer")]
+fn get_integer_(_: ()) -> i32 {
+    STATE.with(|state| state.borrow().i)
+}
+
+/// Panics with the given message.
+#[export_name = "canister_query explode"]
+fn explode() {
+    over(candid_one, explode_);
+}
+
+/// Implementation of explode.
+#[candid_method(query, rename = "explode")]
+fn explode_(message: String) {
+    panic!("Oh noez! {}", message);
+}
 
 // Prints Candid interface definition, which should only contain get_build_metadata method.
 #[cfg(not(test))]
@@ -20,7 +73,7 @@ fn matches_candid_file() {
     assert_eq!(
         actual, expected,
         "Generated candid definition does not match interface.did. \
-         Run `cargo run --bin ic-nns-common-test-canister > interface.did` in \
+         Run `cargo run --bin ic-nervous-system-common-test-canister > interface.did` in \
          rs/nns/common/test_canister to update interface.did."
     );
 }

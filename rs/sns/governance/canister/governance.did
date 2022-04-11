@@ -1,6 +1,7 @@
 type AccountIdentifier = record { hash : vec nat8 };
 type Action = variant {
   ManageNervousSystemParameters : NervousSystemParameters;
+  CallCanisterMethod : CallCanisterMethod;
   ExecuteNervousSystemFunction : ExecuteNervousSystemFunction;
   UpgradeSnsControlledCanister : UpgradeSnsControlledCanister;
   Unspecified : record {};
@@ -19,6 +20,11 @@ type Ballot = record {
 type By = variant {
   MemoAndController : MemoAndController;
   NeuronId : record {};
+};
+type CallCanisterMethod = record {
+  target_canister_id : opt principal;
+  payload : vec nat8;
+  target_method_name : text;
 };
 type CanisterStatusResult = record {
   controller : principal;
