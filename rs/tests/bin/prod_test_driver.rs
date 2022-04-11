@@ -21,13 +21,11 @@ use ic_tests::orchestrator::{
     node_reassignment_test::{self, test as node_reassignment_test},
     ssh_access_to_nodes, unassigned_node_upgrade_test, upgrade_downgrade, upgrade_reject,
 };
-use ic_tests::rejoin_test::{self, test as rejoin_test};
 use ic_tests::rosetta_test;
 use ic_tests::security::nns_voting_fuzzing_poc_test;
 use ic_tests::spec_compliance;
 use ic_tests::token_balance_test::{self, test as token_balance_test};
 use ic_tests::workload_counter_canister_test;
-use ic_tests::xnet_slo_test;
 use ic_tests::{
     basic_health_test::{self, basic_health_test},
     execution, message_routing,
@@ -361,7 +359,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
         ),
     );
 
-    let xnet_slo_3_subnets = xnet_slo_test::config_hotfix_slo_3_subnets();
+    let xnet_slo_3_subnets = message_routing::xnet_slo_test::config_hotfix_slo_3_subnets();
     m.add_suite(suite(
         "hotfix",
         vec![pot(
@@ -375,8 +373,8 @@ fn get_test_suites() -> HashMap<String, Suite> {
         .with_ttl(Duration::from_secs(10 * 60))],
     ));
 
-    let xnet_slo_3_subnets = xnet_slo_test::config_prod_slo_3_subnets();
-    let xnet_slo_29_subnets = xnet_slo_test::config_prod_slo_29_subnets();
+    let xnet_slo_3_subnets = message_routing::xnet_slo_test::config_prod_slo_3_subnets();
+    let xnet_slo_29_subnets = message_routing::xnet_slo_test::config_prod_slo_29_subnets();
     m.add_suite(suite(
         "prod_slo",
         vec![
@@ -401,8 +399,8 @@ fn get_test_suites() -> HashMap<String, Suite> {
         ],
     ));
 
-    let xnet_nightly_3_subnets = xnet_slo_test::config_nightly_3_subnets();
-    let xnet_nightly_29_subnets = xnet_slo_test::config_nightly_29_subnets();
+    let xnet_nightly_3_subnets = message_routing::xnet_slo_test::config_nightly_3_subnets();
+    let xnet_nightly_29_subnets = message_routing::xnet_slo_test::config_nightly_29_subnets();
     m.add_suite(suite(
         "nightly",
         vec![
@@ -484,8 +482,8 @@ fn get_test_suites() -> HashMap<String, Suite> {
             */
             pot(
                 "rejoin",
-                rejoin_test::config(),
-                par(vec![t("rejoin", rejoin_test)]),
+                message_routing::rejoin_test::config(),
+                par(vec![t("rejoin", message_routing::rejoin_test::test)]),
             ),
             pot(
                 "tecdsa_signature_test_pot",
