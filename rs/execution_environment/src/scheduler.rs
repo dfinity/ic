@@ -1,6 +1,8 @@
 use crate::{
-    canister_manager::uninstall_canister, execution_environment::ExecutionEnvironment,
-    metrics::MeasurementScope, util::process_responses,
+    canister_manager::{uninstall_canister, InstallCodeContext},
+    execution_environment::ExecutionEnvironment,
+    metrics::MeasurementScope,
+    util::process_responses,
 };
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
@@ -26,7 +28,7 @@ use ic_types::{
     ingress::{IngressStatus, WasmResult},
     messages::{Ingress, MessageId, Payload, Response, StopCanisterContext},
     AccumulatedPriority, CanisterId, CanisterStatusType, ComputeAllocation, ExecutionRound,
-    InstallCodeContext, MemoryAllocation, NumBytes, NumInstructions, Randomness, SubnetId, Time,
+    MemoryAllocation, NumBytes, NumInstructions, Randomness, SubnetId, Time,
 };
 use ic_types::{nominal_cycles::NominalCycles, NumMessages};
 use lazy_static::lazy_static;

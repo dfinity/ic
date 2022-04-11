@@ -4794,6 +4794,7 @@ dependencies = [
  "candid",
  "criterion",
  "escargot",
+ "hex",
  "iai",
  "ic-base-types",
  "ic-canister-sandbox-replica-controller",

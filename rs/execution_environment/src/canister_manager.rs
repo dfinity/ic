@@ -29,9 +29,12 @@ use ic_types::{
         CanisterInstallMode, Payload, RejectContext, Response as CanisterResponse,
         StopCanisterContext,
     },
-    CanisterId, CanisterStatusType, ComputeAllocation, Cycles, Height, InstallCodeContext,
-    MemoryAllocation, NumBytes, NumInstructions, PrincipalId, SubnetId, Time, UserId,
+    CanisterId, CanisterStatusType, ComputeAllocation, Cycles, Height,
+    InvalidComputeAllocationError, InvalidMemoryAllocationError, InvalidQueryAllocationError,
+    MemoryAllocation, NumBytes, NumInstructions, PrincipalId, QueryAllocation, SubnetId, Time,
+    UserId,
 };
+use num_traits::cast::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::{collections::BTreeSet, convert::TryFrom, str::FromStr, sync::Arc};
@@ -92,6 +95,129 @@ impl CanisterMgrConfig {
             compute_capacity: 100 * num_cores as u64,
             rate_limiting_of_instructions,
         }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct InstallCodeContext {
+    pub sender: PrincipalId,
+    pub mode: CanisterInstallMode,
+    pub canister_id: CanisterId,
+    pub wasm_module: Vec<u8>,
+    pub arg: Vec<u8>,
+    pub compute_allocation: Option<ComputeAllocation>,
+    pub memory_allocation: Option<MemoryAllocation>,
+    pub query_allocation: QueryAllocation,
+}
+
+/// Errors that can occur when converting from (sender, [`InstallCodeArgs`]) to
+/// an [`InstallCodeContext`].
+#[derive(Debug)]
+pub enum InstallCodeContextError {
+    ComputeAllocation(InvalidComputeAllocationError),
+    MemoryAllocation(InvalidMemoryAllocationError),
+    QueryAllocation(InvalidQueryAllocationError),
+    InvalidCanisterId(String),
+}
+
+impl From<InstallCodeContextError> for UserError {
+    fn from(err: InstallCodeContextError) -> Self {
+        match err {
+            InstallCodeContextError::ComputeAllocation(err) => UserError::new(
+                ErrorCode::CanisterContractViolation,
+                format!(
+                    "ComputeAllocation expected to be in the range [{}..{}], got {}",
+                    err.min(),
+                    err.max(),
+                    err.given()
+                ),
+            ),
+            InstallCodeContextError::QueryAllocation(err) => UserError::new(
+                ErrorCode::CanisterContractViolation,
+                format!(
+                    "QueryAllocation expected to be in the range [{}..{}], got {}",
+                    err.min, err.max, err.given
+                ),
+            ),
+            InstallCodeContextError::MemoryAllocation(err) => UserError::new(
+                ErrorCode::CanisterContractViolation,
+                format!(
+                    "MemoryAllocation expected to be in the range [{}..{}], got {}",
+                    err.min, err.max, err.given
+                ),
+            ),
+            InstallCodeContextError::InvalidCanisterId(bytes) => UserError::new(
+                ErrorCode::CanisterContractViolation,
+                format!(
+                    "Specified canister id is not a valid principal id {}",
+                    hex::encode(&bytes[..])
+                ),
+            ),
+        }
+    }
+}
+
+impl From<InvalidComputeAllocationError> for InstallCodeContextError {
+    fn from(err: InvalidComputeAllocationError) -> Self {
+        Self::ComputeAllocation(err)
+    }
+}
+
+impl From<InvalidQueryAllocationError> for InstallCodeContextError {
+    fn from(err: InvalidQueryAllocationError) -> Self {
+        Self::QueryAllocation(err)
+    }
+}
+
+impl From<InvalidMemoryAllocationError> for InstallCodeContextError {
+    fn from(err: InvalidMemoryAllocationError) -> Self {
+        Self::MemoryAllocation(err)
+    }
+}
+
+impl TryFrom<(PrincipalId, InstallCodeArgs)> for InstallCodeContext {
+    type Error = InstallCodeContextError;
+
+    fn try_from(input: (PrincipalId, InstallCodeArgs)) -> Result<Self, Self::Error> {
+        let (sender, args) = input;
+        let canister_id = CanisterId::new(args.canister_id).map_err(|err| {
+            InstallCodeContextError::InvalidCanisterId(format!(
+                "Converting canister id {} failed with {}",
+                args.canister_id, err
+            ))
+        })?;
+        let compute_allocation = match args.compute_allocation {
+            Some(ca) => Some(ComputeAllocation::try_from(ca.0.to_u64().ok_or_else(
+                || {
+                    InstallCodeContextError::ComputeAllocation(InvalidComputeAllocationError::new(
+                        ca,
+                    ))
+                },
+            )?)?),
+            None => None,
+        };
+        let memory_allocation = match args.memory_allocation {
+            Some(ma) => Some(MemoryAllocation::try_from(NumBytes::from(
+                ma.0.to_u64().ok_or_else(|| {
+                    InstallCodeContextError::MemoryAllocation(InvalidMemoryAllocationError::new(ma))
+                })?,
+            ))?),
+            None => None,
+        };
+
+        // TODO(EXE-294): Query allocations are not supported and should be deleted.
+        let query_allocation = QueryAllocation::default();
+
+        Ok(InstallCodeContext {
+            sender,
+            mode: args.mode,
+            canister_id,
+            wasm_module: args.wasm_module,
+            arg: args.arg,
+            compute_allocation,
+            memory_allocation,
+            query_allocation,
+        })
     }
 }
 
@@ -1772,4 +1898,4 @@ impl TryFrom<(CanisterSettings, usize)> for ValidatedCanisterSettings {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

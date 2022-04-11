@@ -1,5 +1,7 @@
 use crate::{
-    canister_manager::{CanisterManager, CanisterMgrConfig, StopCanisterResult},
+    canister_manager::{
+        CanisterManager, CanisterMgrConfig, InstallCodeContext, StopCanisterResult,
+    },
     canister_settings::CanisterSettings,
     execution_environment_metrics::ExecutionEnvironmentMetrics,
     hypervisor::Hypervisor,
@@ -48,8 +50,8 @@ use ic_types::{
         is_subnet_message, CallbackId, Ingress, MessageId, Payload, RejectContext, Request,
         Response, SignedIngressContent, StopCanisterContext,
     },
-    CanisterId, CanisterStatusType, ComputeAllocation, Cycles, InstallCodeContext, NumBytes,
-    NumInstructions, SubnetId, Time, UserId,
+    CanisterId, CanisterStatusType, ComputeAllocation, Cycles, NumBytes, NumInstructions, SubnetId,
+    Time, UserId,
 };
 #[cfg(test)]
 use mockall::automock;
