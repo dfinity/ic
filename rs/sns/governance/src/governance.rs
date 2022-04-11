@@ -19,8 +19,8 @@ use crate::pb::v1::{
         ClaimOrRefresh,
     },
     neuron::{DissolveState, Followees},
-    proposal, Ballot, DefaultFollowees, Empty, GetNeuron, GetNeuronResponse, GetProposal,
-    GetProposalResponse, Governance as GovernanceProto, GovernanceError, ListNeurons,
+    proposal, Ballot, CallCanisterMethod, DefaultFollowees, Empty, GetNeuron, GetNeuronResponse,
+    GetProposal, GetProposalResponse, Governance as GovernanceProto, GovernanceError, ListNeurons,
     ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron, ManageNeuronResponse,
     NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
     NeuronPermissionType, Proposal, ProposalData, ProposalDecisionStatus, ProposalId,
@@ -1523,33 +1523,28 @@ impl Governance {
     }
 
     async fn perform_action(&mut self, proposal_id: u64, action: proposal::Action) {
-        let result = match action {
+        match action {
             // A motion is not executed, just recorded for posterity.
-            proposal::Action::Motion(_) => Ok(()),
+            proposal::Action::Motion(_) => self.set_proposal_execution_status(proposal_id, Ok(())),
 
             proposal::Action::ManageNervousSystemParameters(params) => {
-                self.perform_manage_nervous_system_parameters_action(params)
+                let result = self.perform_manage_nervous_system_parameters_action(params);
+                self.set_proposal_execution_status(proposal_id, result);
             }
             proposal::Action::UpgradeSnsControlledCanister(params) => {
                 self.perform_upgrade_sns_controlled_canister(proposal_id, params)
                     .await;
-
-                // Unlike other cases, perform_upgrade_sns_controlled_canister
-                // takes care of setting proposal execution status. This has to
-                // do with how self.env.call_canister sets execution status for
-                // us. It's not clear how we can make it work differently,
-                // because of limitations on what you can put in a traits (such
-                // as our Environment trait).
-                return;
             }
             proposal::Action::ExecuteNervousSystemFunction(_) => {
                 todo!();
             }
+            proposal::Action::CallCanisterMethod(params) => {
+                self.perform_call_canister_method(proposal_id, params);
+            }
             proposal::Action::Unspecified(_) => {
                 unimplemented!();
             }
-        };
-        self.set_proposal_execution_status(proposal_id, result);
+        }
     }
 
     /// Execute a ManageNervousSystemParameters proposal by updating Governance's NervousSystemParameters
@@ -1675,6 +1670,35 @@ impl Governance {
         // proposal execution status for us.
     }
 
+    fn perform_call_canister_method(&mut self, proposal_id: u64, call: CallCanisterMethod) {
+        let (canister_id, method_name, args) = match unpack_call_canister_method(call) {
+            Ok(ok) => ok,
+
+            // This should not be possible, because proposals are validated when
+            // they are made, but just in case, we do not unwrap or expect.
+            Err(err) => {
+                self.set_proposal_execution_status(
+                    proposal_id,
+                    Err(GovernanceError::new_with_message(
+                        ErrorType::InvalidProposal,
+                        format!("Invalid CallCanisterMethodProposal: {:?}", err),
+                    )),
+                );
+                return;
+            }
+        };
+
+        let result = self
+            .env
+            .call_canister(proposal_id, canister_id, &method_name, args);
+
+        // If result.is_ok, it execution could still fail later. In case of Ok,
+        // status is set later/asynchronously by call_canister.
+        if result.is_err() {
+            self.set_proposal_execution_status(proposal_id, result);
+        }
+    }
+
     fn nervous_system_parameters(&self) -> &NervousSystemParameters {
         self.proto
             .parameters
@@ -1770,6 +1794,8 @@ impl Governance {
             &proposal.action
         {
             return validate_upgrade_sns_controlled_canister(upgrade);
+        } else if let Some(proposal::Action::CallCanisterMethod(call)) = &proposal.action {
+            return validate_call_canister_method(call);
         } else {
             return Ok(());
         };
@@ -3209,6 +3235,55 @@ async fn stop_canister(canister_id: &CanisterId) -> Result<(), GovernanceError> 
     }
 }
 
+fn validate_call_canister_method(call: &CallCanisterMethod) -> Result<(), GovernanceError> {
+    unpack_call_canister_method(call.clone())?;
+    Ok(())
+}
+
+fn unpack_call_canister_method(
+    call: CallCanisterMethod,
+) -> Result<(CanisterId, String, Vec<u8>), GovernanceError> {
+    let CallCanisterMethod {
+        target_canister_id,
+        target_method_name,
+        payload,
+    } = call;
+
+    let mut defects = vec![];
+
+    // Validate the target_canister_id field.
+    let target_canister_id = match target_canister_id {
+        None => {
+            defects.push("target_canister_id field was not populated.".to_string());
+            None
+        }
+        Some(target_canister_id) => match CanisterId::new(target_canister_id) {
+            Err(err) => {
+                defects.push(format!("target_canister_id was invalid: {}", err));
+                None
+            }
+            Ok(target_canister_id) => Some(target_canister_id),
+        },
+    };
+
+    // Validate the target_method_name field.
+    if target_method_name.is_empty() {
+        defects.push("target_method_name was empty.".to_string());
+    }
+
+    if !defects.is_empty() {
+        return Err(GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            format!(
+                "CallCanisterMethod was invalid for the following reason(s):\n{}",
+                defects.join("\n")
+            ),
+        ));
+    }
+
+    Ok((target_canister_id.unwrap(), target_method_name, payload))
+}
+
 /// Affects the perception of time by users of CanisterEnv (i.e. Governance).
 ///
 /// Specifically, the time that Governance sees is the real time + delta.
@@ -3228,150 +3303,193 @@ impl TimeWarp {
 }
 
 #[cfg(test)]
-fn basic_upgrade_sns_controlled_canister() -> UpgradeSnsControlledCanister {
-    let result = UpgradeSnsControlledCanister {
-        canister_id: Some(PrincipalId::try_from(vec![42_u8]).unwrap()),
-        new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
-    };
-    assert!(validate_upgrade_sns_controlled_canister(&result).is_ok());
-    result
-}
-
-#[test]
-fn upgrade_must_have_canister_id() {
-    let mut upgrade = basic_upgrade_sns_controlled_canister();
-    upgrade.canister_id = None;
-
-    let result = validate_upgrade_sns_controlled_canister(&upgrade);
-    assert_eq!(
-        result.unwrap_err().error_type,
-        ErrorType::InvalidProposal as i32
-    );
-}
-
-/// Fun fact: the minimum WASM is 8 bytes long.
-///
-/// A corollary of the above fact is that we must not allow the
-/// new_canister_wasm field to be empty.
-#[test]
-fn upgrade_wasm_must_be_non_empty() {
-    let mut upgrade = basic_upgrade_sns_controlled_canister();
-    upgrade.new_canister_wasm = vec![];
-
-    let result = validate_upgrade_sns_controlled_canister(&upgrade);
-    assert_eq!(
-        result.unwrap_err().error_type,
-        ErrorType::InvalidProposal as i32
-    );
-}
-
-#[test]
-fn upgrade_wasm_must_not_be_dead_beef() {
-    let mut upgrade = basic_upgrade_sns_controlled_canister();
-    // This is invalid, because it does not have the magical first four bytes
-    // that a WASM is supposed to have. (Instead, the first four bytes of this
-    // Vec are 0xDeadBeef.)
-    upgrade.new_canister_wasm = vec![0xde, 0xad, 0xbe, 0xef, 1, 0, 0, 0];
-    assert!(upgrade.new_canister_wasm.len() == 8); // The minimum wasm len.
-
-    let result = validate_upgrade_sns_controlled_canister(&upgrade);
-    assert_eq!(
-        result.unwrap_err().error_type,
-        ErrorType::InvalidProposal as i32
-    );
-}
-
-#[cfg(test)]
-fn basic_governance_proto() -> GovernanceProto {
-    // Test subject.
-    let result = GovernanceProto {
-        root_canister_id: Some(PrincipalId::try_from(vec![42_u8]).unwrap()),
-        ledger_canister_id: Some(PrincipalId::try_from(vec![99_u8]).unwrap()),
-        parameters: Some(NervousSystemParameters::with_default_values()),
-        ..Default::default()
-    };
-
-    ValidGovernanceProto::new(result)
-        .expect("We have not tried to corrupt the test subject yet but it is already invalid???")
-        .into_inner()
-}
-
-#[test]
-fn test_governance_proto_must_have_root_canister_ids() {
-    let mut proto = basic_governance_proto();
-    proto.root_canister_id = None;
-    assert!(ValidGovernanceProto::new(proto).is_err());
-}
-
-#[test]
-fn test_governance_proto_must_have_ledger_canister_ids() {
-    let mut proto = basic_governance_proto();
-    proto.ledger_canister_id = None;
-    assert!(ValidGovernanceProto::new(proto).is_err());
-}
-
-#[test]
-fn test_governance_proto_must_have_parameters() {
-    let mut proto = basic_governance_proto();
-    proto.parameters = None;
-    assert!(ValidGovernanceProto::new(proto).is_err());
-}
-
-#[test]
-fn test_governance_proto_default_followees_must_exist() {
-    let mut proto = basic_governance_proto();
-
-    let neuron_id = NeuronId { id: "A".into() };
-
-    // Populate default_followees with a neuron that does not exist yet.
-    let mut action_id_to_followees = HashMap::new();
-    action_id_to_followees.insert(
-        1, // action ID.
-        Followees {
-            followees: vec![neuron_id.clone()],
-        },
-    );
-    proto.parameters.as_mut().unwrap().default_followees = Some(DefaultFollowees {
-        followees: action_id_to_followees,
-    });
-
-    // assert that proto is not valid, due to referring to an unknown neuron.
-    assert!(ValidGovernanceProto::new(proto.clone()).is_err());
-
-    // Create the neuron so that proto is now valid.
-    proto.neurons.insert(
-        neuron_id.to_string(),
-        Neuron {
-            id: Some(neuron_id),
-            ..Default::default()
-        },
-    );
-
-    // Assert that proto has become valid.
-    ValidGovernanceProto::new(proto.clone()).unwrap_or_else(|e| {
-        panic!(
-            "Still invalid even after adding the required neuron: {:?}: {}",
-            proto, e
-        )
-    });
-}
-
-#[test]
-fn test_time_warp() {
-    let w = TimeWarp { delta_s: 0_i64 };
-    assert_eq!(w.apply(100_u64), 100);
-
-    let w = TimeWarp { delta_s: 42_i64 };
-    assert_eq!(w.apply(100_u64), 142);
-
-    let w = TimeWarp { delta_s: -42_i64 };
-    assert_eq!(w.apply(100_u64), 58);
-}
-
-#[cfg(test)]
-mod test_wait_for_quiet {
+mod test {
+    use super::*;
     use crate::pb::v1::{ProposalData, ProposalId, Tally, WaitForQuietState};
     use proptest::prelude::{prop_assert, proptest};
+
+    fn basic_principal_id() -> PrincipalId {
+        PrincipalId::try_from(vec![42_u8]).unwrap()
+    }
+
+    fn basic_call_canister_method() -> CallCanisterMethod {
+        let result = CallCanisterMethod {
+            target_canister_id: Some(basic_principal_id()),
+            target_method_name: "enact_awesomeness".into(),
+            payload: vec![],
+        };
+        assert!(validate_call_canister_method(&result).is_ok());
+        result
+    }
+
+    #[test]
+    fn test_unpack_valid_call_canister_method() {
+        let (canister_id, method_name, args) =
+            unpack_call_canister_method(basic_call_canister_method()).unwrap();
+
+        assert_eq!(canister_id.get(), basic_principal_id());
+        assert_eq!(method_name, "enact_awesomeness".to_string());
+        assert_eq!(args, Vec::<u8>::new());
+    }
+
+    #[test]
+    fn call_canister_method_must_have_canister_id() {
+        let mut call = basic_call_canister_method();
+        call.target_canister_id = None;
+
+        let err = validate_call_canister_method(&call).unwrap_err();
+        assert_eq!(err.error_type, ErrorType::InvalidProposal as i32,);
+    }
+
+    #[test]
+    fn call_canister_method_must_have_non_empty_method_name() {
+        let mut call = basic_call_canister_method();
+        call.target_method_name = "".into();
+
+        let err = validate_call_canister_method(&call).unwrap_err();
+        assert_eq!(err.error_type, ErrorType::InvalidProposal as i32,);
+    }
+
+    fn basic_upgrade_sns_controlled_canister() -> UpgradeSnsControlledCanister {
+        let result = UpgradeSnsControlledCanister {
+            canister_id: Some(basic_principal_id()),
+            new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
+        };
+        assert!(validate_upgrade_sns_controlled_canister(&result).is_ok());
+        result
+    }
+
+    #[test]
+    fn upgrade_must_have_canister_id() {
+        let mut upgrade = basic_upgrade_sns_controlled_canister();
+        upgrade.canister_id = None;
+
+        let result = validate_upgrade_sns_controlled_canister(&upgrade);
+        assert_eq!(
+            result.unwrap_err().error_type,
+            ErrorType::InvalidProposal as i32
+        );
+    }
+
+    /// Fun fact: the minimum WASM is 8 bytes long.
+    ///
+    /// A corollary of the above fact is that we must not allow the
+    /// new_canister_wasm field to be empty.
+    #[test]
+    fn upgrade_wasm_must_be_non_empty() {
+        let mut upgrade = basic_upgrade_sns_controlled_canister();
+        upgrade.new_canister_wasm = vec![];
+
+        let result = validate_upgrade_sns_controlled_canister(&upgrade);
+        assert_eq!(
+            result.unwrap_err().error_type,
+            ErrorType::InvalidProposal as i32
+        );
+    }
+
+    #[test]
+    fn upgrade_wasm_must_not_be_dead_beef() {
+        let mut upgrade = basic_upgrade_sns_controlled_canister();
+        // This is invalid, because it does not have the magical first four bytes
+        // that a WASM is supposed to have. (Instead, the first four bytes of this
+        // Vec are 0xDeadBeef.)
+        upgrade.new_canister_wasm = vec![0xde, 0xad, 0xbe, 0xef, 1, 0, 0, 0];
+        assert!(upgrade.new_canister_wasm.len() == 8); // The minimum wasm len.
+
+        let result = validate_upgrade_sns_controlled_canister(&upgrade);
+        assert_eq!(
+            result.unwrap_err().error_type,
+            ErrorType::InvalidProposal as i32
+        );
+    }
+
+    fn basic_governance_proto() -> GovernanceProto {
+        // Test subject.
+        let result = GovernanceProto {
+            root_canister_id: Some(PrincipalId::try_from(vec![42_u8]).unwrap()),
+            ledger_canister_id: Some(PrincipalId::try_from(vec![99_u8]).unwrap()),
+            parameters: Some(NervousSystemParameters::with_default_values()),
+            ..Default::default()
+        };
+
+        ValidGovernanceProto::new(result)
+            .expect(
+                "We have not tried to corrupt the test subject yet but it is already invalid???",
+            )
+            .into_inner()
+    }
+
+    #[test]
+    fn test_governance_proto_must_have_root_canister_ids() {
+        let mut proto = basic_governance_proto();
+        proto.root_canister_id = None;
+        assert!(ValidGovernanceProto::new(proto).is_err());
+    }
+
+    #[test]
+    fn test_governance_proto_must_have_ledger_canister_ids() {
+        let mut proto = basic_governance_proto();
+        proto.ledger_canister_id = None;
+        assert!(ValidGovernanceProto::new(proto).is_err());
+    }
+
+    #[test]
+    fn test_governance_proto_must_have_parameters() {
+        let mut proto = basic_governance_proto();
+        proto.parameters = None;
+        assert!(ValidGovernanceProto::new(proto).is_err());
+    }
+
+    #[test]
+    fn test_governance_proto_default_followees_must_exist() {
+        let mut proto = basic_governance_proto();
+
+        let neuron_id = NeuronId { id: "A".into() };
+
+        // Populate default_followees with a neuron that does not exist yet.
+        let mut action_id_to_followees = HashMap::new();
+        action_id_to_followees.insert(
+            1, // action ID.
+            Followees {
+                followees: vec![neuron_id.clone()],
+            },
+        );
+        proto.parameters.as_mut().unwrap().default_followees = Some(DefaultFollowees {
+            followees: action_id_to_followees,
+        });
+
+        // assert that proto is not valid, due to referring to an unknown neuron.
+        assert!(ValidGovernanceProto::new(proto.clone()).is_err());
+
+        // Create the neuron so that proto is now valid.
+        proto.neurons.insert(
+            neuron_id.to_string(),
+            Neuron {
+                id: Some(neuron_id),
+                ..Default::default()
+            },
+        );
+
+        // Assert that proto has become valid.
+        ValidGovernanceProto::new(proto.clone()).unwrap_or_else(|e| {
+            panic!(
+                "Still invalid even after adding the required neuron: {:?}: {}",
+                proto, e
+            )
+        });
+    }
+
+    #[test]
+    fn test_time_warp() {
+        let w = TimeWarp { delta_s: 0_i64 };
+        assert_eq!(w.apply(100_u64), 100);
+
+        let w = TimeWarp { delta_s: 42_i64 };
+        assert_eq!(w.apply(100_u64), 142);
+
+        let w = TimeWarp { delta_s: -42_i64 };
+        assert_eq!(w.apply(100_u64), 58);
+    }
 
     proptest! {
         /// This test ensures that none of the asserts in

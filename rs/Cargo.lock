@@ -5269,6 +5269,8 @@ name = "ic-nervous-system-common-test-canister"
 version = "0.1.0"
 dependencies = [
  "candid",
+ "dfn_candid",
+ "dfn_core",
  "ic-nervous-system-common",
 ]
 

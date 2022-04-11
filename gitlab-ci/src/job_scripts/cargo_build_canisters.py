@@ -18,6 +18,7 @@ CANISTERS = [
     "genesis-token-canister",
     "governance-canister",
     "governance-mem-test-canister",
+    "ic-nervous-system-common-test-canister",
     "identity-canister",
     "inter_canister_error_handling",
     "json",

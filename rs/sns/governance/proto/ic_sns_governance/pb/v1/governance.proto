@@ -186,22 +186,22 @@ message NervousSystemFunction {
   uint64 id = 1;
 
   // The id of the target canister that will be called to execute the proposal.
-  ic_base_types.pb.v1.PrincipalId target_canister = 2;
+  ic_base_types.pb.v1.PrincipalId target_canister_id = 2;
 
   // The name of the method that will be called to execute the proposal.
   // The signature of the method must be equivalent to the following:
   // <method_name>(proposal_data: ProposalData) -> Result<(), String>.
-  optional string target_method = 3;
+  optional string target_method_name = 3;
 
   // The id of the canister that will be called to validate the proposal before
   // it is put up for a vote.
-  ic_base_types.pb.v1.PrincipalId validator_canister = 4;
+  ic_base_types.pb.v1.PrincipalId validator_canister_id = 4;
 
   // The name of the method that will be called to validate the proposal
   // before it is put up for a vote.
   // The signature of the method must be equivalent to the following:
   // <method_name>(proposal_data: ProposalData) -> Result<(), String>
-  optional string validator_method = 5;
+  optional string validator_method_name = 5;
 }
 
 // A proposal action defining a generic proposal, i.e., a proposal
@@ -215,6 +215,18 @@ message ExecuteNervousSystemFunction {
 
   // The payload of the nervous system function's payload.
   bytes payload = 2;
+}
+
+// Call some canister method.
+message CallCanisterMethod {
+  // Which canister to target.
+  ic_base_types.pb.v1.PrincipalId target_canister_id = 1;
+
+  // Which method within the canister to call.
+  string target_method_name = 2;
+
+  // Args data to be passed to that method.
+  bytes payload = 3;
 }
 
 // A proposal action that should guide the future strategy of the SNS's
@@ -273,6 +285,12 @@ message Proposal {
 
     // Execute a method outside the SNS canisters.
     ExecuteNervousSystemFunction execute_nervous_system_function = 8;
+
+    // Similar to the previous action, but this one lets you target based on
+    // canister ID and method name instead of function ID. The current plan is
+    // for this to be superseded by ExecuteNerousFunction once that gets
+    // implemented.
+    CallCanisterMethod call_canister_method = 9;
   }
 }
 
