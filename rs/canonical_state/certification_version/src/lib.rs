@@ -55,24 +55,13 @@ impl std::convert::TryFrom<u32> for CertificationVersion {
 
 /// The Canonical State certification version that should be used for newly
 /// computed states.
-pub const CURRENT_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V7;
+pub const CURRENT_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V8;
 
-/// Maximum supported certification version. Always at least
-/// `CURRENT_CERTIFICATION_VERSION + 1`, since any given canonical state change
-/// is either:
-///
-///  * not yet implemented (true for all future canonical state changes), in
-///    which case the canonical encoding of `CURRENT_CERTIFICATION_VERSION + 1`
-///    must be identical to that of `CURRENT_CERTIFICATION_VERSION` (with the
-///    difference consisting exactly in the fact that that replica is able to
-///    produce the `CURRENT_CERTIFICATION_VERSION + 2` canonical encoding); or
-///
-///  * supported but not enabled, meaning that the canonical encoding for
-///    `CURRENT_CERTIFICATION_VERSION + 1` is explicitly supported.
+/// Maximum supported certification version.
 ///
 /// The replica will panic if requested to certify using a version higher than
 /// this.
-pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V8;
+pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V9;
 
 /// Returns a list of all certification versions up to [MAX_SUPPORTED_CERTIFICATION_VERSION].
 pub fn all_supported_versions() -> impl std::iter::Iterator<Item = CertificationVersion> {
