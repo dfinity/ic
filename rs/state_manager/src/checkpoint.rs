@@ -1,4 +1,4 @@
-use crate::{CheckpointError, CheckpointMetrics};
+use crate::{CheckpointError, CheckpointMetrics, NUMBER_OF_CHECKPOINT_THREADS};
 use ic_base_types::CanisterId;
 use ic_logger::ReplicaLogger;
 use ic_registry_subnet_type::SubnetType;
@@ -185,6 +185,17 @@ fn serialize_canister_to_tip(
             .into(),
         )
         .map_err(CheckpointError::from)
+}
+
+/// Calls [load_checkpoint] with a newly created thread pool.
+/// See [load_checkpoint] for further details.
+pub fn load_checkpoint_parallel<P: ReadPolicy + Send + Sync>(
+    checkpoint_layout: &CheckpointLayout<P>,
+    own_subnet_type: SubnetType,
+) -> Result<ReplicatedState, CheckpointError> {
+    let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
+
+    load_checkpoint(checkpoint_layout, own_subnet_type, Some(&mut thread_pool))
 }
 
 /// loads the node state heighted with `height` using the specified
