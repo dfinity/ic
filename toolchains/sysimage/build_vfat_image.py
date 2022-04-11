@@ -29,7 +29,6 @@ def untar_to_vfat(tf, fs_basedir, out_file, path_transform):
     paths on the system (if it returns "None" for any input path,
     then the corresponding file/dir is dropped).
     """
-    print(fs_basedir)
     for member in tf:
         path = path_transform(member.path)
         if path is None or path == "":
@@ -52,13 +51,23 @@ def untar_to_vfat(tf, fs_basedir, out_file, path_transform):
             raise RuntimeError("Unhandled tar member kind: %s" % member.type)
 
 
-def install_extra_files(out_file, extra_files):
+def install_extra_files(out_file, extra_files, path_transform):
     for extra_file in extra_files:
         source_file, install_target, mode = extra_file.split(":")
         if install_target[0] == "/":
             install_target = install_target[1:]
         subprocess.run(
-            ["faketime", "1970-1-1 0", "mcopy", "-o", "-i", out_file, source_file, "::/" + install_target], check=True
+            [
+                "faketime",
+                "1970-1-1 0",
+                "mcopy",
+                "-o",
+                "-i",
+                out_file,
+                source_file,
+                "::/" + path_transform(install_target),
+            ],
+            check=True,
         )
 
 
@@ -102,6 +111,7 @@ def main():
     out_file = args.output
     image_size = parse_size(args.size)
     limit_prefix = args.path
+    extra_files = args.extra_files
 
     tmpdir = tempfile.mkdtemp()
     atexit.register(lambda: shutil.rmtree(tmpdir))
@@ -124,6 +134,8 @@ def main():
     if in_file:
         with tarfile.open(in_file, mode="r|*") as tf:
             untar_to_vfat(tf, fs_basedir, image_file, path_transform)
+
+    install_extra_files(image_file, extra_files, path_transform)
 
     subprocess.run(
         [
