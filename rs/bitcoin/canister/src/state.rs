@@ -1,7 +1,7 @@
 use crate::{block, proto, types::Height, PageMapMemory};
 use bitcoin::{hashes::Hash, Block, Network, OutPoint, Script, TxOut, Txid};
 use ic_protobuf::bitcoin::v1;
-use ic_replicated_state::page_map::{PageMap, PersistenceError};
+use ic_replicated_state::page_map::PersistenceError;
 use ic_state_layout::{AccessPolicy, ProtoFileWith, RwPolicy};
 use stable_structures::StableBTreeMap;
 use std::collections::BTreeMap;
@@ -45,17 +45,20 @@ impl State {
 
         // Persist all the memories to disk.
         self.utxos
-            .address_to_outpoints_memory
+            .address_to_outpoints
+            .get_memory()
             .persist_and_sync_delta(&root.join("address_outpoints.bin"))?;
 
         self.utxos
             .utxos
-            .small_utxos_memory
+            .small_utxos
+            .get_memory()
             .persist_and_sync_delta(&root.join("small_utxos.bin"))?;
 
         self.utxos
             .utxos
-            .medium_utxos_memory
+            .medium_utxos
+            .get_memory()
             .persist_and_sync_delta(&root.join("medium_utxos.bin"))
     }
 
@@ -134,10 +137,6 @@ pub struct Utxos {
     // The number of entries stored in this map is tiny (see docs above), so a
     // standard `BTreeMap` suffices.
     pub large_utxos: BTreeMap<OutPoint, (TxOut, Height)>,
-
-    // References to the memory used in stable structures for protobuf conversions.
-    small_utxos_memory: PageMapMemory,
-    medium_utxos_memory: PageMapMemory,
 }
 
 // The size of an outpoint in bytes.
@@ -177,23 +176,18 @@ const MAX_ADDRESS_OUTPOINT_SIZE: u32 = MAX_ADDRESS_SIZE + OUTPOINT_SIZE;
 
 impl Default for Utxos {
     fn default() -> Self {
-        let small_utxos_memory = PageMapMemory::default();
-        let medium_utxos_memory = PageMapMemory::default();
-
         Self {
             small_utxos: StableBTreeMap::new(
-                small_utxos_memory.clone(),
+                PageMapMemory::default(),
                 UTXO_KEY_SIZE,
                 UTXO_VALUE_MAX_SIZE_SMALL,
             ),
             medium_utxos: StableBTreeMap::new(
-                medium_utxos_memory.clone(),
+                PageMapMemory::default(),
                 UTXO_KEY_SIZE,
                 UTXO_VALUE_MAX_SIZE_MEDIUM,
             ),
             large_utxos: BTreeMap::default(),
-            small_utxos_memory,
-            medium_utxos_memory,
         }
     }
 }
@@ -216,26 +210,19 @@ pub struct UtxoSet {
 
     // If true, a transaction's inputs must all be present in the UTXO for it to be accepted.
     pub strict: bool,
-
-    // Reference to the memory used in `address_to_outpoints` for protobuf conversions.
-    // This won't be necessary once we migrate to `PageMap`.
-    pub address_to_outpoints_memory: PageMapMemory,
 }
 
 impl UtxoSet {
     pub fn new(strict: bool, network: Network) -> Self {
-        let address_to_outpoints_memory = PageMapMemory::new(PageMap::default());
-
         Self {
             utxos: Utxos::default(),
             address_to_outpoints: StableBTreeMap::new(
-                address_to_outpoints_memory.clone(),
+                PageMapMemory::default(),
                 MAX_ADDRESS_OUTPOINT_SIZE,
                 0, // No values are stored in the map.
             ),
             strict,
             network,
-            address_to_outpoints_memory,
         }
     }
 
@@ -274,8 +261,8 @@ impl UtxoSet {
         address_to_outpoints_memory: PageMapMemory,
     ) -> Self {
         let utxos = Utxos {
-            small_utxos: StableBTreeMap::load(small_utxos_memory.clone()),
-            medium_utxos: StableBTreeMap::load(medium_utxos_memory.clone()),
+            small_utxos: StableBTreeMap::load(small_utxos_memory),
+            medium_utxos: StableBTreeMap::load(medium_utxos_memory),
             large_utxos: utxos_proto
                 .large_utxos
                 .into_iter()
@@ -301,14 +288,11 @@ impl UtxoSet {
                     (outpoint, (tx_out, utxo.height))
                 })
                 .collect(),
-            small_utxos_memory,
-            medium_utxos_memory,
         };
 
         Self {
             utxos,
-            address_to_outpoints: StableBTreeMap::load(address_to_outpoints_memory.clone()),
-            address_to_outpoints_memory,
+            address_to_outpoints: StableBTreeMap::load(address_to_outpoints_memory),
             strict: utxos_proto.strict,
             network: match utxos_proto.network {
                 0 => Network::Bitcoin,

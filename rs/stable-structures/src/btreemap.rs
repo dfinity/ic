@@ -320,6 +320,11 @@ impl<M: Memory + Clone> StableBTreeMap<M> {
         self.length
     }
 
+    /// Returns a reference to the memory used by the map.
+    pub fn get_memory(&self) -> M {
+        self.memory.clone()
+    }
+
     /// Removes a key from the map, returning the previous value at the key if it exists.
     pub fn remove(&mut self, key: &Key) -> Option<Value> {
         if self.root_addr == NULL {
