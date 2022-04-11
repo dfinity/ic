@@ -48,7 +48,7 @@ mod tests {
         test_visitors::{NoopVisitor, TraceEntry as E, TracingVisitor},
         CertificationVersion,
     };
-    use ic_base_types::NumSeconds;
+    use ic_base_types::{NumBytes, NumSeconds};
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
     use ic_registry_subnet_features::SubnetFeatures;
     use ic_registry_subnet_type::SubnetType;
@@ -482,7 +482,11 @@ mod tests {
             SubnetType::Application,
             "/test".into(),
         );
-        state.set_ingress_status(message_test_id(1), IngressStatus::Unknown);
+        state.set_ingress_status(
+            message_test_id(1),
+            IngressStatus::Unknown,
+            NumBytes::from(u64::MAX),
+        );
         state.set_ingress_status(
             message_test_id(2),
             IngressStatus::Processing {
@@ -490,6 +494,7 @@ mod tests {
                 user_id,
                 time,
             },
+            NumBytes::from(u64::MAX),
         );
         state.set_ingress_status(
             message_test_id(3),
@@ -498,6 +503,7 @@ mod tests {
                 user_id,
                 time,
             },
+            NumBytes::from(u64::MAX),
         );
         state.set_ingress_status(
             message_test_id(4),
@@ -507,6 +513,7 @@ mod tests {
                 error: UserError::new(ErrorCode::SubnetOversubscribed, "subnet oversubscribed"),
                 time,
             },
+            NumBytes::from(u64::MAX),
         );
         state.set_ingress_status(
             message_test_id(5),
@@ -516,6 +523,7 @@ mod tests {
                 result: WasmResult::Reply(b"reply".to_vec()),
                 time,
             },
+            NumBytes::from(u64::MAX),
         );
         state.set_ingress_status(
             message_test_id(6),
@@ -525,6 +533,7 @@ mod tests {
                 result: WasmResult::Reject("reject".to_string()),
                 time,
             },
+            NumBytes::from(u64::MAX),
         );
 
         let pattern = Pattern::match_only("request_status", Pattern::all());

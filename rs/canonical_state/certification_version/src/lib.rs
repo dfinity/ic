@@ -18,8 +18,10 @@ pub enum CertificationVersion {
     /// Encoding of canister metadata custom sections.
     V6 = 6,
     /// Support for decoding of `StreamHeader::reject_signals`.
+    /// Support for `done` ingress history status.
     V7 = 7,
     /// Encoding of `StreamHeader::reject_signals`.
+    /// Producing `done` ingress history statuses.
     V8 = 8,
     /// Producing non-empty `StreamHeader::reject_signals`.
     V9 = 9,

@@ -1,3 +1,4 @@
+use ic_base_types::NumBytes;
 use ic_config::state_manager::Config;
 use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, MixedHashTree};
 use ic_interfaces::{
@@ -2125,6 +2126,7 @@ fn certified_read_can_certify_ingress_history_entry() {
                 result: WasmResult::Reply(b"done".to_vec()),
                 time: mock_time(),
             },
+            NumBytes::from(u64::MAX),
         );
         state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
         let path: LabeledTree<()> = LabeledTree::SubTree(flatmap! {
@@ -2242,6 +2244,7 @@ fn certified_read_returns_none_for_non_existing_entries() {
                 result: WasmResult::Reply(b"done".to_vec()),
                 time: mock_time(),
             },
+            NumBytes::from(u64::MAX),
         );
         state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
 
@@ -2272,6 +2275,7 @@ fn certified_read_can_fetch_multiple_entries_in_one_go() {
                 result: WasmResult::Reply(b"done".to_vec()),
                 time: mock_time(),
             },
+            NumBytes::from(u64::MAX),
         );
         state.set_ingress_status(
             message_test_id(2),
@@ -2280,6 +2284,7 @@ fn certified_read_can_fetch_multiple_entries_in_one_go() {
                 user_id: user_test_id(1),
                 time: mock_time(),
             },
+            NumBytes::from(u64::MAX),
         );
         state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
 

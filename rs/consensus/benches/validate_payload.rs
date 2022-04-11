@@ -53,7 +53,7 @@ use ic_types::{
     ic00::IC_00,
     ingress::IngressStatus,
     signature::*,
-    Height, PrincipalId, RegistryVersion, Time, UserId,
+    Height, NumBytes, PrincipalId, RegistryVersion, Time, UserId,
 };
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
@@ -195,6 +195,7 @@ fn setup_ingress_state(now: Time, state_manager: &mut StateManagerImpl) {
                 time: now,
             },
             now,
+            NumBytes::from(u64::MAX),
         );
     }
 

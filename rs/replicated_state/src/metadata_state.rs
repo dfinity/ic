@@ -4,6 +4,7 @@ mod tests;
 
 use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager;
 use ic_base_types::CanisterId;
+use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSION};
 use ic_constants::MAX_INGRESS_TTL;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -28,6 +29,7 @@ use ic_types::{
     CountBytes, CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, SubnetId,
 };
 use serde::{Deserialize, Serialize};
+use std::ops::Bound::{Included, Unbounded};
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     convert::{From, TryFrom, TryInto},
@@ -923,13 +925,31 @@ impl<'a> StreamHandle<'a> {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 /// State associated with the history of statuses of ingress messages as they
 /// traversed through the system.
 pub struct IngressHistoryState {
     statuses: Arc<BTreeMap<MessageId, Arc<IngressStatus>>>,
+    /// Ingress messages in terminal states (`Completed`, `Failed` or `Done`)
+    /// grouped by their respective expiration times.
     pruning_times: Arc<BTreeMap<Time, BTreeSet<MessageId>>>,
+    /// Transient: points to the earliest time in `pruning_times` with
+    /// associated message IDs that still may be of type completed or
+    /// failed.
+    next_terminal_time: Time,
+    /// Transient: memory usage of the ingress history.
     memory_usage: usize,
+}
+
+impl Default for IngressHistoryState {
+    fn default() -> Self {
+        Self {
+            statuses: Arc::new(BTreeMap::new()),
+            pruning_times: Arc::new(BTreeMap::new()),
+            next_terminal_time: UNIX_EPOCH,
+            memory_usage: 0,
+        }
+    }
 }
 
 impl From<&IngressHistoryState> for pb_ingress::IngressHistoryState {
@@ -948,6 +968,11 @@ impl From<&IngressHistoryState> for pb_ingress::IngressHistoryState {
                 messages: messages.iter().map(|m| m.as_bytes().to_vec()).collect(),
             })
             .collect();
+
+        debug_assert_eq!(
+            IngressHistoryState::compute_memory_usage(&item.statuses),
+            item.memory_usage
+        );
 
         pb_ingress::IngressHistoryState {
             statuses,
@@ -985,6 +1010,7 @@ impl TryFrom<pb_ingress::IngressHistoryState> for IngressHistoryState {
         Ok(IngressHistoryState {
             statuses: Arc::new(statuses),
             pruning_times: Arc::new(pruning_times),
+            next_terminal_time: UNIX_EPOCH,
             memory_usage,
         })
     }
@@ -992,27 +1018,51 @@ impl TryFrom<pb_ingress::IngressHistoryState> for IngressHistoryState {
 
 impl IngressHistoryState {
     pub fn new() -> Self {
-        Self {
-            statuses: Arc::new(BTreeMap::new()),
-            pruning_times: Arc::new(BTreeMap::new()),
-            memory_usage: 0,
-        }
+        Self::default()
     }
 
-    /// Inserts a new entry in the ingress history.
-    pub fn insert(&mut self, message_id: MessageId, status: IngressStatus, time: Time) {
+    /// Inserts a new entry in the ingress history. If an entry with `message_id` is
+    /// already present this entry will be overwritten. If `status` is a terminal
+    /// status (`completed`, `failed`, or `done`) the entry will also be enrolled
+    /// to be pruned at `time + MAX_INGRESS_TTL`.
+    pub fn insert(
+        &mut self,
+        message_id: MessageId,
+        status: IngressStatus,
+        time: Time,
+        ingress_memory_capacity: NumBytes,
+    ) {
         // Store the associated expiry time for the given message id only for a
         // "terminal" ingress status. This way we are not risking deleting any status
         // for a message that is still not in a terminal status.
-        if let IngressStatus::Completed { .. } | IngressStatus::Failed { .. } = status {
+        if let IngressStatus::Completed { .. }
+        | IngressStatus::Failed { .. }
+        | IngressStatus::Done { .. } = status
+        {
+            let timeout = time + MAX_INGRESS_TTL;
+
+            // Reset `self.next_terminal_time` in case it is after the current timout
+            // and the entry is completed or failed.
+            if self.next_terminal_time > timeout
+                && matches!(
+                    status,
+                    IngressStatus::Completed { .. } | IngressStatus::Failed { .. }
+                )
+            {
+                self.next_terminal_time = timeout;
+            }
             Arc::make_mut(&mut self.pruning_times)
-                .entry(time + MAX_INGRESS_TTL)
+                .entry(timeout)
                 .or_default()
                 .insert(message_id.clone());
         }
-        self.memory_usage += status.count_bytes();
+        self.memory_usage += status.payload_bytes();
         if let Some(old) = Arc::make_mut(&mut self.statuses).insert(message_id, Arc::new(status)) {
-            self.memory_usage -= old.count_bytes();
+            self.memory_usage -= old.payload_bytes();
+        }
+
+        if self.memory_usage > ingress_memory_capacity.get() as usize {
+            self.forget_terminal_statuses(ingress_memory_capacity);
         }
 
         debug_assert_eq!(
@@ -1059,12 +1109,85 @@ impl IngressHistoryState {
         for t in self.pruning_times.as_ref().keys() {
             for message_id in self.pruning_times.get(t).unwrap() {
                 if let Some(removed) = statuses.remove(message_id) {
-                    self.memory_usage -= removed.count_bytes();
+                    self.memory_usage -= removed.payload_bytes();
                 }
             }
         }
         self.pruning_times = Arc::new(new_pruning_times);
 
+        debug_assert_eq!(
+            Self::compute_memory_usage(&self.statuses),
+            self.memory_usage
+        );
+    }
+
+    /// Goes over the `pruning_times` from oldest to newest and transitions
+    /// the referenced `Completed` and/or `Failed` statuses to `Done` (i.e.,
+    /// forgets the replies). It will stop at the pruning time where the memory
+    /// usage is below `target_size` for the first time. To handle repeated calls
+    /// efficiently it remembers the pruning time it stopped at.
+    ///
+    /// Note that this function must remain private and should only be
+    /// called from within `insert` to ensure that `next_terminal_time`
+    /// is consistently updated and we don't miss any completed statuses.
+    fn forget_terminal_statuses(&mut self, target_size: NumBytes) {
+        // Before certification version 8 no done statuses are produced
+        if CURRENT_CERTIFICATION_VERSION < CertificationVersion::V8 {
+            return;
+        }
+
+        // In debug builds we store the length of the statuses map here so that
+        // we can later debug_assert that no status disappeared.
+        #[cfg(debug_assertions)]
+        let statuses_len_before = self.statuses.len();
+
+        let target_size = target_size.get() as usize;
+        let statuses = Arc::make_mut(&mut self.statuses);
+
+        for (time, ids) in self
+            .pruning_times
+            .range((Included(self.next_terminal_time), Unbounded))
+        {
+            self.next_terminal_time = *time;
+
+            if self.memory_usage <= target_size {
+                break;
+            }
+
+            for id in ids.iter() {
+                match statuses.get(id).map(Arc::as_ref) {
+                    Some(&IngressStatus::Completed {
+                        receiver,
+                        user_id,
+                        time,
+                        ..
+                    })
+                    | Some(&IngressStatus::Failed {
+                        receiver,
+                        user_id,
+                        time,
+                        ..
+                    }) => {
+                        let done_status = Arc::new(IngressStatus::Done {
+                            receiver,
+                            user_id,
+                            time,
+                        });
+                        self.memory_usage += done_status.payload_bytes();
+
+                        // We can safely unwrap here because we know there must be an
+                        // ingress status with the given `id` in `statuses` in this
+                        // branch.
+                        let old_status = statuses.insert(id.clone(), done_status).unwrap();
+                        self.memory_usage -= old_status.payload_bytes();
+                    }
+                    _ => continue,
+                }
+            }
+        }
+
+        #[cfg(debug_assertions)]
+        debug_assert_eq!(self.statuses.len(), statuses_len_before);
         debug_assert_eq!(
             Self::compute_memory_usage(&self.statuses),
             self.memory_usage
@@ -1079,7 +1202,7 @@ impl IngressHistoryState {
     }
 
     fn compute_memory_usage(statuses: &BTreeMap<MessageId, Arc<IngressStatus>>) -> usize {
-        statuses.values().map(|status| status.count_bytes()).sum()
+        statuses.values().map(|status| status.payload_bytes()).sum()
     }
 }
 

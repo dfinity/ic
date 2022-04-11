@@ -112,6 +112,7 @@ fn induct_message_with_successful_history_update() {
                         user_id: user_test_id(0),
                         time: mock_time(),
                     },
+                    NumBytes::from(u64::MAX),
                 );
             });
 
@@ -179,7 +180,7 @@ fn induct_message_fails_for_stopping_canister() {
             )
             .times(1)
             .returning(move |state, _, status| {
-                state.set_ingress_status(msg_id.clone(), status);
+                state.set_ingress_status(msg_id.clone(), status, NumBytes::from(u64::MAX));
             });
         let ingress_history_writer = Arc::new(ingress_history_writer);
         let metrics_registry = MetricsRegistry::new();
@@ -239,7 +240,7 @@ fn induct_message_fails_for_stopped_canister() {
             )
             .times(1)
             .returning(move |state, _, status| {
-                state.set_ingress_status(msg_id.clone(), status);
+                state.set_ingress_status(msg_id.clone(), status, NumBytes::from(u64::MAX));
             });
 
         let ingress_history_writer = Arc::new(ingress_history_writer);
@@ -310,7 +311,7 @@ fn try_to_induct_a_message_marked_as_already_inducted() {
             user_id: user_test_id(0),
             time: mock_time(),
         };
-        state.set_ingress_status(msg.id(), status);
+        state.set_ingress_status(msg.id(), status, NumBytes::from(u64::MAX));
         valid_set_rule.induct_message(&mut state, msg);
     });
 }
@@ -342,7 +343,7 @@ fn update_history_if_induction_failed() {
             .with(always(), eq(msg.id()), always())
             .times(1)
             .returning(move |state, _, _| {
-                state.set_ingress_status(msg_id.clone(), status.clone());
+                state.set_ingress_status(msg_id.clone(), status.clone(), NumBytes::from(u64::MAX));
             });
 
         let ingress_history_writer = Arc::new(ingress_history_writer);
@@ -415,6 +416,7 @@ fn dont_induct_duplicate_messages() {
                         user_id: user_test_id(0),
                         time: mock_time(),
                     },
+                    NumBytes::from(u64::MAX),
                 );
             });
 
@@ -439,6 +441,7 @@ fn dont_induct_duplicate_messages() {
                 user_id: user_test_id(0),
                 time: mock_time(),
             },
+            NumBytes::from(u64::MAX),
         );
         state.set_ingress_status(
             msg1.id(),
@@ -447,6 +450,7 @@ fn dont_induct_duplicate_messages() {
                 user_id: user_test_id(0),
                 time: mock_time(),
             },
+            NumBytes::from(u64::MAX),
         );
 
         insert_canister(&mut state, canister_id1);

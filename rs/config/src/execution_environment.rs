@@ -29,6 +29,12 @@ const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(350 * GB);
 /// responses; plus the maximum allowed response size per queue reservation.
 const SUBNET_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(50 * GB);
 
+/// This is the upper limit on how much memory can be used by the ingress
+/// history on a given subnet. It is lower than the subnet messsage memory
+/// capacity because here we count actual memory consumption as opposed to
+/// memory plus reservations.
+const INGRESS_HISTORY_MEMORY_CAPACITY: NumBytes = NumBytes::new(10 * GB);
+
 /// This is the upper limit on how big heap deltas all the canisters together
 /// can produce on a subnet in between checkpoints. Once, the total delta size
 /// is above this limit, no more canisters will be executed till the next
@@ -62,6 +68,10 @@ pub struct Config {
     /// The maximum amount of logical storage available to canister messages
     /// across the whole subnet.
     pub subnet_message_memory_capacity: NumBytes,
+
+    /// The maximum amount of logical storage available to the ingress history
+    /// across the whole subnet.
+    pub ingress_history_memory_capacity: NumBytes,
 
     /// The maximum amount of memory that can be utilized by a single canister.
     pub max_canister_memory_size: NumBytes,
@@ -102,6 +112,7 @@ impl Default for Config {
             max_instructions_for_message_acceptance_calls: MAX_INSTRUCTIONS_PER_MESSAGE,
             subnet_memory_capacity: SUBNET_MEMORY_CAPACITY,
             subnet_message_memory_capacity: SUBNET_MESSAGE_MEMORY_CAPACITY,
+            ingress_history_memory_capacity: INGRESS_HISTORY_MEMORY_CAPACITY,
             max_canister_memory_size: NumBytes::new(
                 MAX_STABLE_MEMORY_IN_BYTES + MAX_WASM_MEMORY_IN_BYTES,
             ),

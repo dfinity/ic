@@ -103,19 +103,17 @@ impl IngressStatus {
             IngressStatus::Unknown => "unknown",
         }
     }
-}
 
-impl CountBytes for IngressStatus {
-    fn count_bytes(&self) -> usize {
-        std::mem::size_of::<IngressStatus>()
-            + match self {
-                IngressStatus::Completed { result, .. } => result.count_bytes(),
-                IngressStatus::Failed { error, .. } => error.description().as_bytes().len(),
-                IngressStatus::Received { .. }
-                | IngressStatus::Processing { .. }
-                | IngressStatus::Done { .. }
-                | IngressStatus::Unknown => 0,
-            }
+    /// Returns the byte size of the payload of the ingress status
+    pub fn payload_bytes(&self) -> usize {
+        match self {
+            IngressStatus::Completed { result, .. } => result.count_bytes(),
+            IngressStatus::Failed { error, .. } => error.description().as_bytes().len(),
+            IngressStatus::Received { .. }
+            | IngressStatus::Processing { .. }
+            | IngressStatus::Done { .. }
+            | IngressStatus::Unknown => 0,
+        }
     }
 }
 
