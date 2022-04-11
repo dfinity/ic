@@ -35,9 +35,13 @@ use ic_tests::{
 use ic_tests::{
     cycles_minting_test,
     networking::firewall::{self, change_to_firewall_rules_takes_effect},
-    nns_canister_upgrade_test, nns_uninstall_canister_by_proposal_test,
-    registry_authentication_test, tecdsa_add_nodes_test, tecdsa_remove_nodes_test,
-    tecdsa_signature_test, transaction_ledger_correctness_test, wasm_generator_test,
+    nns_canister_upgrade_test,
+    nns_uninstall_canister_by_proposal_test,
+    registry_authentication_test,
+    tecdsa_add_nodes_test, // tecdsa_remove_nodes_test,
+    tecdsa_signature_test,
+    transaction_ledger_correctness_test,
+    wasm_generator_test,
 };
 use regex::Regex;
 use std::collections::HashMap;
@@ -467,6 +471,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     tecdsa_add_nodes_test::test,
                 )]),
             ),
+            /*
             pot(
                 "tecdsa_remove_nodes_pot",
                 tecdsa_remove_nodes_test::config(),
@@ -476,6 +481,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 )]),
             )
             .with_ttl(Duration::from_secs(15 * 60)), // 15 minutes
+            */
             pot(
                 "rejoin",
                 rejoin_test::config(),
