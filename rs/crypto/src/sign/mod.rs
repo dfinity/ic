@@ -41,7 +41,10 @@ mod canister_threshold_sig;
 mod multi_sig;
 mod threshold_sig;
 
-pub use canister_threshold_sig::{get_mega_pubkey, MegaKeyFromRegistryError};
+pub use canister_threshold_sig::{
+    get_mega_pubkey, mega_public_key_from_proto, MEGaPublicKeyFromProtoError,
+    MegaKeyFromRegistryError,
+};
 
 #[cfg(test)]
 mod tests;

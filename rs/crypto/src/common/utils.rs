@@ -1,11 +1,14 @@
 //! Static crypto utility methods.
+use crate::sign::{mega_public_key_from_proto, MEGaPublicKeyFromProtoError};
 use ic_config::crypto::CryptoConfig;
-use ic_crypto_internal_csp::api::{CspIDkgProtocol, CspKeyGenerator, NiDkgCspClient};
-use ic_crypto_internal_csp::keygen::public_key_hash_as_key_id;
+use ic_crypto_internal_csp::api::{
+    CspIDkgProtocol, CspKeyGenerator, CspSecretKeyStoreChecker, NiDkgCspClient,
+};
+use ic_crypto_internal_csp::keygen::{mega_key_id, public_key_hash_as_key_id};
+use ic_crypto_internal_csp::public_key_store;
 use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
 use ic_crypto_internal_csp::types::{CspPop, CspPublicKey};
 use ic_crypto_internal_csp::Csp;
-use ic_crypto_internal_csp::{public_key_store, CryptoServiceProvider};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_crypto_utils_basic_sig::conversions as basicsig_conversions;
 use ic_protobuf::crypto::v1::NodePublicKeys;
@@ -196,6 +199,12 @@ fn check_keys_locally(crypto_root: &Path) -> CryptoResult<Option<NodePublicKeys>
     }
     let csp = csp_at_root(crypto_root);
     ensure_node_signing_key_is_set_up_locally(&node_pks.node_signing_pk, &csp)?;
+    if node_pks.idkg_dealing_encryption_pk.is_some() {
+        ensure_idkg_dealing_encryption_key_is_set_up_locally(
+            &node_pks.idkg_dealing_encryption_pk,
+            &csp,
+        )?;
+    }
     // TODO (CRP-994): add checks for other local keys.
     Ok(Some(node_pks))
 }
@@ -210,7 +219,7 @@ fn node_public_keys_are_empty(node_pks: &NodePublicKeys) -> bool {
 
 fn ensure_node_signing_key_is_set_up_locally(
     maybe_pk: &Option<PublicKeyProto>,
-    csp: &dyn CryptoServiceProvider,
+    csp: &dyn CspSecretKeyStoreChecker,
 ) -> CryptoResult<()> {
     let pk_proto = match maybe_pk {
         Some(pk) => Ok(pk.clone()),
@@ -232,6 +241,49 @@ fn ensure_node_signing_key_is_set_up_locally(
     if !csp.sks_contains(&key_id) {
         return Err(CryptoError::SecretKeyNotFound {
             algorithm: AlgorithmId::Ed25519,
+            key_id,
+        });
+    }
+    Ok(())
+}
+
+fn ensure_idkg_dealing_encryption_key_is_set_up_locally(
+    maybe_idkg_dealing_encryption_pubkey_proto: &Option<PublicKeyProto>,
+    csp: &dyn CspSecretKeyStoreChecker,
+) -> CryptoResult<()> {
+    let idkg_de_pk_proto = maybe_idkg_dealing_encryption_pubkey_proto
+        .as_ref()
+        .ok_or_else(|| CryptoError::MalformedPublicKey {
+            algorithm: AlgorithmId::MegaSecp256k1,
+            key_bytes: None,
+            internal_error: "missing iDKG dealing encryption key in local public key store"
+                .to_string(),
+        })?;
+    let idkg_dealing_encryption_pk = mega_public_key_from_proto(idkg_de_pk_proto).map_err(|e|
+        match e {
+            MEGaPublicKeyFromProtoError::UnsupportedAlgorithm { algorithm_id } => {
+                CryptoError::MalformedPublicKey {
+                    algorithm: AlgorithmId::MegaSecp256k1,
+                    key_bytes: None,
+                    internal_error: format!(
+                        "unsupported algorithm ({:?}) of I-DKG dealing encryption key in local public key store",
+                        algorithm_id,
+                    ),
+                }
+            }
+            MEGaPublicKeyFromProtoError::MalformedPublicKey { key_bytes } => {
+                CryptoError::MalformedPublicKey {
+                    algorithm: AlgorithmId::MegaSecp256k1,
+                    key_bytes: Some(key_bytes),
+                    internal_error: "I-DKG dealing encryption key malformed in local public key store".to_string(),
+                }
+            }
+        })?;
+
+    let key_id = mega_key_id(&idkg_dealing_encryption_pk);
+    if !csp.sks_contains(&key_id) {
+        return Err(CryptoError::SecretKeyNotFound {
+            algorithm: AlgorithmId::MegaSecp256k1,
             key_id,
         });
     }
