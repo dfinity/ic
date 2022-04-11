@@ -1,6 +1,8 @@
 mod address_utxoset;
 pub mod block;
 mod blocktree;
+mod page_map_memory;
+use page_map_memory::PageMapMemory;
 pub mod state;
 pub mod store;
 pub mod test_builder;

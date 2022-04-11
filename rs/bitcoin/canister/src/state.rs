@@ -1,9 +1,11 @@
-use crate::{block, proto, types::Height};
+use crate::{block, proto, types::Height, PageMapMemory};
 use bitcoin::{hashes::Hash, Block, Network, OutPoint, Script, TxOut, Txid};
-use core::cell::RefCell;
 use ic_protobuf::bitcoin::v1;
-use stable_structures::{StableBTreeMap, VectorMemory};
+use ic_replicated_state::PageMap;
+use ic_state_layout::{AccessPolicy, ProtoFileWith, RwPolicy};
+use stable_structures::StableBTreeMap;
 use std::collections::BTreeMap;
+use std::path::Path;
 use std::rc::Rc;
 
 /// A structure used to maintain the entire state.
@@ -32,19 +34,60 @@ impl State {
         }
     }
 
-    pub fn to_proto(&self) -> proto::State {
-        proto::State {
-            height: self.height,
-            utxos: Some(self.utxos.to_proto()),
-            unstable_blocks: Some(self.unstable_blocks.to_proto()),
-        }
+    /// Serializes the state to disk at the given path.
+    pub fn serialize(&self, root: &Path) {
+        // Create the directory if it doesn't exist.
+        RwPolicy::check_dir(root).expect("Couldn't create directory.");
+
+        let proto_file: ProtoFileWith<proto::State, RwPolicy> = root.join("state.pbuf").into();
+        proto_file
+            .serialize(self.into())
+            .expect("Serializing state failed");
+
+        // Persist all the memories to disk.
+        self.utxos
+            .address_to_outpoints_memory
+            .persist_and_sync_delta(&root.join("address_outpoints.bin"));
+
+        self.utxos
+            .utxos
+            .small_utxos_memory
+            .persist_and_sync_delta(&root.join("small_utxos.bin"));
+
+        self.utxos
+            .utxos
+            .medium_utxos_memory
+            .persist_and_sync_delta(&root.join("medium_utxos.bin"));
     }
 
-    pub fn from_proto(proto_state: proto::State) -> Self {
+    pub fn load(root: &Path) -> Self {
+        let small_utxos_memory = Rc::new(PageMapMemory::open(&root.join("small_utxos.bin")));
+        let medium_utxos_memory = Rc::new(PageMapMemory::open(&root.join("medium_utxos.bin")));
+        let address_to_outpoints_memory =
+            Rc::new(PageMapMemory::open(&root.join("address_outpoints.bin")));
+
+        let state_file: ProtoFileWith<proto::State, RwPolicy> = root.join("state.pbuf").into();
+        let proto_state = state_file.deserialize_opt().unwrap().unwrap();
+
         Self {
             height: proto_state.height,
-            utxos: UtxoSet::from_proto(proto_state.utxos.unwrap()),
+            utxos: UtxoSet::from_proto(
+                proto_state.utxos.unwrap(),
+                small_utxos_memory,
+                medium_utxos_memory,
+                address_to_outpoints_memory,
+            ),
             unstable_blocks: UnstableBlocks::from_proto(proto_state.unstable_blocks.unwrap()),
+        }
+    }
+}
+
+impl From<&State> for proto::State {
+    fn from(state: &State) -> Self {
+        proto::State {
+            height: state.height,
+            utxos: Some(state.utxos.to_proto()),
+            unstable_blocks: Some(state.unstable_blocks.to_proto()),
         }
     }
 }
@@ -85,11 +128,11 @@ impl State {
 pub struct Utxos {
     // A map storing the UTXOs that are "small" in size.
     // TODO(EXC-1039): Use pagemap instead of a vec.
-    pub small_utxos: StableBTreeMap<VectorMemory>,
+    pub small_utxos: StableBTreeMap<Rc<PageMapMemory>>,
 
     // A map storing the UTXOs that are "medium" in size.
     // TODO(EXC-1039): Use pagemap instead of a vec.
-    pub medium_utxos: StableBTreeMap<VectorMemory>,
+    pub medium_utxos: StableBTreeMap<Rc<PageMapMemory>>,
 
     // A map storing the UTXOs that are "large" in size.
     // The number of entries stored in this map is tiny (see docs above), so a
@@ -97,8 +140,8 @@ pub struct Utxos {
     pub large_utxos: BTreeMap<OutPoint, (TxOut, Height)>,
 
     // References to the memory used in stable structures for protobuf conversions.
-    small_utxos_memory: VectorMemory,
-    medium_utxos_memory: VectorMemory,
+    small_utxos_memory: Rc<PageMapMemory>,
+    medium_utxos_memory: Rc<PageMapMemory>,
 }
 
 // The size of an outpoint in bytes.
@@ -174,19 +217,19 @@ pub struct UtxoSet {
     pub network: Network,
     // An index for fast retrievals of an address's UTXOs.
     // TODO(EXC-1039): Use pagemap instead of a vec.
-    pub address_to_outpoints: StableBTreeMap<VectorMemory>,
+    pub address_to_outpoints: StableBTreeMap<Rc<PageMapMemory>>,
 
     // If true, a transaction's inputs must all be present in the UTXO for it to be accepted.
     pub strict: bool,
 
     // Reference to the memory used in `address_to_outpoints` for protobuf conversions.
     // This won't be necessary once we migrate to `PageMap`.
-    pub address_to_outpoints_memory: VectorMemory,
+    pub address_to_outpoints_memory: Rc<PageMapMemory>,
 }
 
 impl UtxoSet {
     pub fn new(strict: bool, network: Network) -> Self {
-        let address_to_outpoints_memory = make_memory();
+        let address_to_outpoints_memory = Rc::new(PageMapMemory::new(PageMap::default()));
 
         Self {
             utxos: Utxos::default(),
@@ -203,8 +246,6 @@ impl UtxoSet {
 
     pub fn to_proto(&self) -> proto::UtxoSet {
         proto::UtxoSet {
-            small_utxos: self.utxos.small_utxos_memory.borrow().clone(),
-            medium_utxos: self.utxos.medium_utxos_memory.borrow().clone(),
             large_utxos: self
                 .utxos
                 .large_utxos
@@ -221,7 +262,6 @@ impl UtxoSet {
                     height: *height,
                 })
                 .collect(),
-            address_to_outpoints: self.address_to_outpoints_memory.borrow().clone(),
             strict: self.strict,
             network: match self.network {
                 Network::Bitcoin => 0,
@@ -232,10 +272,12 @@ impl UtxoSet {
         }
     }
 
-    pub fn from_proto(utxos_proto: proto::UtxoSet) -> Self {
-        let small_utxos_memory = Rc::new(RefCell::new(utxos_proto.small_utxos));
-        let medium_utxos_memory = Rc::new(RefCell::new(utxos_proto.medium_utxos));
-        let address_to_outpoints_memory = Rc::new(RefCell::new(utxos_proto.address_to_outpoints));
+    pub fn from_proto(
+        utxos_proto: proto::UtxoSet,
+        small_utxos_memory: Rc<PageMapMemory>,
+        medium_utxos_memory: Rc<PageMapMemory>,
+        address_to_outpoints_memory: Rc<PageMapMemory>,
+    ) -> Self {
         let utxos = Utxos {
             small_utxos: StableBTreeMap::load(small_utxos_memory.clone()),
             medium_utxos: StableBTreeMap::load(medium_utxos_memory.clone()),
@@ -357,6 +399,6 @@ impl BlockTree {
     }
 }
 
-fn make_memory() -> VectorMemory {
-    Rc::new(RefCell::new(Vec::new()))
+fn make_memory() -> Rc<PageMapMemory> {
+    Rc::new(PageMapMemory::new(PageMap::default()))
 }
