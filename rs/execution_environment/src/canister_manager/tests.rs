@@ -1,7 +1,7 @@
 use crate::{
     canister_manager::{
         canister_layout, uninstall_canister, CanisterManager, CanisterManagerError,
-        CanisterMgrConfig, StopCanisterResult,
+        CanisterMgrConfig, InstallCodeContext, StopCanisterResult,
     },
     canister_settings::CanisterSettings,
     hypervisor::Hypervisor,
@@ -13,6 +13,7 @@ use ic_base_types::{NumSeconds, PrincipalId};
 use ic_config::{execution_environment::Config, flag_status::FlagStatus};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
+use ic_ic00_types::InstallCodeArgs;
 use ic_interfaces::{
     execution_environment::{
         AvailableMemory, ExecutionMode, ExecutionParameters, HypervisorError, SubnetAvailableMemory,
@@ -39,9 +40,7 @@ use ic_test_utilities::{
     },
     types::{
         ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
-        messages::{
-            IngressBuilder, InstallCodeContextBuilder, RequestBuilder, SignedIngressBuilder,
-        },
+        messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder},
     },
     universal_canister::wasm,
     with_test_replica_logger,
@@ -50,8 +49,8 @@ use ic_types::{
     ingress::{IngressStatus, WasmResult},
     messages::{CallbackId, CanisterInstallMode, RequestOrResponse, StopCanisterContext},
     nominal_cycles::NominalCycles,
-    CanisterId, CanisterStatusType, ComputeAllocation, Cycles, InstallCodeContext,
-    MemoryAllocation, NumBytes, NumInstructions, QueryAllocation, SubnetId,
+    CanisterId, CanisterStatusType, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
+    NumInstructions, QueryAllocation, SubnetId,
 };
 use ic_wasm_types::WasmValidationError;
 use lazy_static::lazy_static;
@@ -87,6 +86,74 @@ lazy_static! {
         subnet_type: SubnetType::Application,
         execution_mode: ExecutionMode::Replicated,
     };
+}
+
+pub struct InstallCodeContextBuilder {
+    ctx: InstallCodeContext,
+}
+
+impl InstallCodeContextBuilder {
+    pub fn sender(mut self, sender: PrincipalId) -> Self {
+        self.ctx.sender = sender;
+        self
+    }
+
+    pub fn canister_id(mut self, canister_id: CanisterId) -> Self {
+        self.ctx.canister_id = canister_id;
+        self
+    }
+
+    pub fn wasm_module(mut self, wasm_module: Vec<u8>) -> Self {
+        self.ctx.wasm_module = wasm_module;
+        self
+    }
+
+    #[allow(dead_code)]
+    pub fn arg(mut self, arg: Vec<u8>) -> Self {
+        self.ctx.arg = arg;
+        self
+    }
+
+    pub fn compute_allocation(mut self, compute_allocation: ComputeAllocation) -> Self {
+        self.ctx.compute_allocation = Some(compute_allocation);
+        self
+    }
+
+    pub fn memory_allocation(mut self, memory_allocation: MemoryAllocation) -> Self {
+        self.ctx.memory_allocation = Some(memory_allocation);
+        self
+    }
+
+    pub fn query_allocation(mut self, query_allocation: QueryAllocation) -> Self {
+        self.ctx.query_allocation = query_allocation;
+        self
+    }
+
+    pub fn mode(mut self, mode: CanisterInstallMode) -> Self {
+        self.ctx.mode = mode;
+        self
+    }
+
+    pub fn build(&self) -> InstallCodeContext {
+        self.ctx.clone()
+    }
+}
+
+impl Default for InstallCodeContextBuilder {
+    fn default() -> Self {
+        Self {
+            ctx: InstallCodeContext {
+                sender: PrincipalId::new_user_test_id(0),
+                canister_id: canister_test_id(0),
+                wasm_module: wabt::wat2wasm(r#"(module (memory $memory 1 1000))"#).unwrap(),
+                arg: vec![],
+                compute_allocation: Some(ComputeAllocation::default()),
+                memory_allocation: None,
+                mode: CanisterInstallMode::Install,
+                query_allocation: QueryAllocation::default(),
+            },
+        }
+    }
 }
 
 struct CanisterManagerBuilder {
@@ -3969,4 +4036,23 @@ fn test_install_code_rate_limiting_disabled() {
         EXECUTION_PARAMETERS.clone(),
     );
     result.unwrap();
+}
+
+#[test]
+fn install_code_context_conversion_u128() {
+    let install_args = InstallCodeArgs {
+        mode: CanisterInstallMode::Install,
+        canister_id: PrincipalId::try_from([1, 2, 3].as_ref()).unwrap(),
+        wasm_module: vec![],
+        arg: vec![],
+        compute_allocation: Some(candid::Nat::from(u128::MAX)),
+        memory_allocation: Some(candid::Nat::from(u128::MAX)),
+        query_allocation: Some(candid::Nat::from(u128::MAX)),
+    };
+
+    assert!(InstallCodeContext::try_from((
+        PrincipalId::try_from([1, 2, 3].as_ref()).unwrap(),
+        install_args,
+    ))
+    .is_err());
 }

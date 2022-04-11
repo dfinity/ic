@@ -1,4 +1,5 @@
 use crate::{
+    canister_manager::tests::InstallCodeContextBuilder,
     canister_manager::{CanisterManager, CanisterMgrConfig},
     canister_settings::CanisterSettings,
     hypervisor::Hypervisor,
@@ -16,10 +17,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
-    types::{
-        ids::{canister_test_id, subnet_test_id, user_test_id},
-        messages::InstallCodeContextBuilder,
-    },
+    types::ids::{canister_test_id, subnet_test_id, user_test_id},
     universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM},
     with_test_replica_logger,
 };
