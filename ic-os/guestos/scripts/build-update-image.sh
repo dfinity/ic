@@ -51,38 +51,71 @@ while getopts "i:o:p:t:v:x:" OPT; do
             EXEC_SRCDIR="${OPTARG}"
             ;;
         *)
-            usage
+            usage >&2
             exit 1
             ;;
     esac
 done
 
+# Preparatory steps and temporary build directory.
+BASE_DIR=$(dirname "${BASH_SOURCE[0]}")/..
+
+TOOL_DIR="${BASE_DIR}/../../toolchains/sysimage/"
+
+TMPDIR=$(mktemp -d -t build-image-XXXXXXXXXXXX)
+trap "rm -rf $TMPDIR" exit
+
+# Validate and process arguments
+
 if [ "${OUT_FILE}" == "" ]; then
-    usage
+    usage >&2
     exit 1
 fi
 
-TMPDIR=$(mktemp -d)
-trap "rm -rf ${TMPDIR}" exit
-BASE_DIR=$(dirname "${BASH_SOURCE[0]}")/..
-
-BOOT_IMG="${TMPDIR}"/boot.img
-ROOT_IMG="${TMPDIR}"/root.img
-
-if [ "${IN_FILE}" != "" ]; then
-    "${BASE_DIR}/scripts/build-ubuntu.sh" -i "${IN_FILE}" -r "${ROOT_IMG}" -b "${BOOT_IMG}" -t "${BUILD_TYPE}"
-    # HACK: allow running without explicitly given version, extract version
-    # from rootfs. This is NOT good, but workable for the moment.
-    VERSION=$(debugfs "${ROOT_IMG}" cat /opt/ic/share/version.txt)
-else
-    "${BASE_DIR}/scripts/build-ubuntu.sh" -r "${ROOT_IMG}" -b "${BOOT_IMG}" -p "${ROOT_PASSWORD}" -v "${VERSION}" -x "${EXEC_SRCDIR}" -t "${BUILD_TYPE}"
+if [ "${BUILD_TYPE}" != "dev" -a "${BUILD_TYPE}" != "prod" ]; then
+    echo "Unknown build type: ${BUILD_TYPE}" >&2
+    exit 1
 fi
 
-echo "${VERSION}" >"${TMPDIR}/VERSION.TXT"
-# Sort by name in tar file -- makes ordering deterministic and ensures
-# that VERSION.TXT is first entry, making it quick & easy to extract.
-# Override owner, group and mtime to make build independent of the user
-# building it.
-tar czf "${OUT_FILE}" --sort=name --owner=root:0 --group=root:0 --mtime='UTC 2020-01-01' --sparse -C "${TMPDIR}" .
+if [ "${ROOT_PASSWORD}" != "" -a "${BUILD_TYPE}" != "dev" ]; then
+    echo "Root password is valid only for build type 'dev'" >&2
+    exit 1
+fi
 
-rm -rf "${TMPDIR}"
+if [ "${VERSION}" == "" ]; then
+    echo "Version needs to be specified for build to succeed" >&2
+    exit 1
+fi
+
+BASE_IMAGE=$(cat "${BASE_DIR}/rootfs/docker-base.${BUILD_TYPE}")
+
+# Compute arguments for actual build stage.
+
+declare -a IC_EXECUTABLES=(orchestrator replica canister_sandbox sandbox_launcher vsock_agent state-tool ic-consensus-pool-util ic-crypto-csp ic-regedit ic-btc-adapter ic-canister-http-adapter)
+declare -a INSTALL_EXEC_ARGS=()
+for IC_EXECUTABLE in "${IC_EXECUTABLES[@]}"; do
+    INSTALL_EXEC_ARGS+=("${EXEC_SRCDIR}/${IC_EXECUTABLE}:/opt/ic/bin/${IC_EXECUTABLE}:0755")
+done
+
+echo "${VERSION}" >"${TMPDIR}/version.txt"
+
+# Build all pieces and assemble the disk image.
+
+"${TOOL_DIR}"/docker_tar.py -o "${TMPDIR}/rootfs-tree.tar" -- --build-arg ROOT_PASSWORD="${ROOT_PASSWORD}" --build-arg BASE_IMAGE="${BASE_IMAGE}" "${BASE_DIR}/rootfs"
+tar xOf "${TMPDIR}"/rootfs-tree.tar --occurrence=1 etc/selinux/default/contexts/files/file_contexts >"${TMPDIR}/file_contexts"
+"${TOOL_DIR}"/build_ext4_image.py -o "${TMPDIR}/partition-boot.tar" -s 1G -i "${TMPDIR}/rootfs-tree.tar" -S "${TMPDIR}/file_contexts" -p boot/ \
+    "${TMPDIR}/version.txt:/boot/version.txt:0644" \
+    "${BASE_DIR}/rootfs/boot/extra_boot_args:/boot/extra_boot_args:0644"
+"${TOOL_DIR}"/build_ext4_image.py -o "${TMPDIR}/partition-root.tar" -s 3G -i "${TMPDIR}/rootfs-tree.tar" -S "${TMPDIR}/file_contexts" \
+    "${INSTALL_EXEC_ARGS[@]}" \
+    "${TMPDIR}/version.txt:/opt/ic/share/version.txt:0644"
+
+# Now assemble the upgrade image
+
+mkdir -p "${TMPDIR}/tar"
+
+tar xf "${TMPDIR}/partition-boot.tar" --transform="s/partition.img/boot.img/" -C "${TMPDIR}/tar"
+tar xf "${TMPDIR}/partition-root.tar" --transform="s/partition.img/root.img/" -C "${TMPDIR}/tar"
+echo "${VERSION}" >"${TMPDIR}/tar/VERSION.TXT"
+
+tar czf "${OUT_FILE}" --sort=name --owner=root:0 --group=root:0 --mtime='UTC 1970-01-01 00:00:00' --sparse -C "${TMPDIR}/tar" .
