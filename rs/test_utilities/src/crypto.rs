@@ -11,8 +11,9 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 };
 use ic_interfaces::crypto::{
     BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, CanisterSigVerifier, IDkgProtocol,
-    KeyManager, LoadTranscriptResult, NiDkgAlgorithm, ThresholdEcdsaSigVerifier,
-    ThresholdEcdsaSigner, ThresholdSigVerifier, ThresholdSigVerifierByPublicKey, ThresholdSigner,
+    KeyManager, LoadTranscriptResult, NiDkgAlgorithm, PublicKeyRegistrationStatus,
+    ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner, ThresholdSigVerifier,
+    ThresholdSigVerifierByPublicKey, ThresholdSigner,
 };
 use ic_interfaces::crypto::{MultiSigVerifier, MultiSigner, Signable};
 use ic_interfaces::registry::RegistryClient;
@@ -479,8 +480,11 @@ impl NiDkgAlgorithm for CryptoReturningOk {
 }
 
 impl KeyManager for CryptoReturningOk {
-    fn check_keys_with_registry(&self, _registry_version: RegistryVersion) -> CryptoResult<()> {
-        Ok(())
+    fn check_keys_with_registry(
+        &self,
+        _registry_version: RegistryVersion,
+    ) -> CryptoResult<PublicKeyRegistrationStatus> {
+        Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
     }
 
     fn node_public_keys(&self) -> NodePublicKeys {

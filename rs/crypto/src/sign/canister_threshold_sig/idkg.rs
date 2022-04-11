@@ -21,6 +21,8 @@ mod mocks;
 mod transcript;
 mod utils;
 
+pub use utils::{get_mega_pubkey, MegaKeyFromRegistryError};
+
 /// Currently, these are implemented with noop stubs,
 /// while the true implementation is in progress.
 impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {

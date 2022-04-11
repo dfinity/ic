@@ -228,13 +228,15 @@ impl TempCryptoComponent {
         };
 
         let node_pubkeys = NodePublicKeys {
-            version: 0,
+            version: 1,
             node_signing_pk,
             committee_signing_pk,
             dkg_dealing_encryption_pk,
             idkg_dealing_encryption_pk,
             tls_certificate,
         };
+        public_key_store::store_node_public_keys(&config.crypto_root, &node_pubkeys)
+            .unwrap_or_else(|_| panic!("Failed to store public key material"));
 
         let temp_crypto =
             TempCryptoComponent::new_with(registry_client, node_id, &config, temp_dir);
@@ -323,6 +325,13 @@ impl NodeKeysToGenerate {
         }
     }
 
+    pub fn all_except_idkg_dealing_encryption_key() -> Self {
+        NodeKeysToGenerate {
+            generate_idkg_dealing_encryption_keys: false,
+            ..Self::all()
+        }
+    }
+
     pub fn only_node_signing_key() -> Self {
         NodeKeysToGenerate {
             generate_node_signing_keys: true,
@@ -333,6 +342,20 @@ impl NodeKeysToGenerate {
     pub fn only_committee_signing_key() -> Self {
         NodeKeysToGenerate {
             generate_committee_signing_keys: true,
+            ..Self::none()
+        }
+    }
+
+    pub fn only_dkg_dealing_encryption_key() -> Self {
+        NodeKeysToGenerate {
+            generate_dkg_dealing_encryption_keys: true,
+            ..Self::none()
+        }
+    }
+
+    pub fn only_idkg_dealing_encryption_key() -> Self {
+        NodeKeysToGenerate {
+            generate_idkg_dealing_encryption_keys: true,
             ..Self::none()
         }
     }

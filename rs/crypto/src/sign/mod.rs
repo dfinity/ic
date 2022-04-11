@@ -41,6 +41,8 @@ mod canister_threshold_sig;
 mod multi_sig;
 mod threshold_sig;
 
+pub use canister_threshold_sig::{get_mega_pubkey, MegaKeyFromRegistryError};
+
 #[cfg(test)]
 mod tests;
 // TODO: Remove this indirection:

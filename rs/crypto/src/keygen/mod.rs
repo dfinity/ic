@@ -1,5 +1,8 @@
+use crate::sign::{get_mega_pubkey, MegaKeyFromRegistryError};
 use crate::{key_from_registry, CryptoComponentFatClient};
-use ic_crypto_internal_csp::keygen::{forward_secure_key_id, public_key_hash_as_key_id};
+use ic_crypto_internal_csp::keygen::{
+    forward_secure_key_id, mega_key_id, public_key_hash_as_key_id,
+};
 use ic_crypto_internal_csp::types::conversions::CspPopFromPublicKeyProtoError;
 use ic_crypto_internal_csp::types::{CspPop, CspPublicKey};
 use ic_crypto_internal_csp::CryptoServiceProvider;
@@ -7,7 +10,8 @@ use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
 };
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_interfaces::crypto::KeyManager;
+use ic_interfaces::crypto::{KeyManager, PublicKeyRegistrationStatus};
+use ic_logger::warn;
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_registry_client_helpers::crypto::CryptoRegistry;
@@ -21,12 +25,37 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
         self.csp.node_public_keys()
     }
 
-    fn check_keys_with_registry(&self, registry_version: RegistryVersion) -> CryptoResult<()> {
+    fn check_keys_with_registry(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> CryptoResult<PublicKeyRegistrationStatus> {
         self.ensure_node_signing_key_material_is_set_up(registry_version)?;
         self.ensure_committee_signing_key_material_is_set_up(registry_version)?;
         self.ensure_dkg_dealing_encryption_key_material_is_set_up(registry_version)?;
         self.ensure_tls_key_material_is_set_up(registry_version)?;
-        Ok(())
+
+        if let Some(pubkey) = self.unregistered_idkg_dealing_encryption_key(registry_version) {
+            return Ok(PublicKeyRegistrationStatus::IDkgDealingEncPubkeyNeedsRegistration(pubkey));
+        }
+        if self.node_public_keys().idkg_dealing_encryption_pk.is_none() {
+            warn!(
+                self.logger,
+                "iDKG dealing encryption key of node {} is missing in local public key store",
+                self.node_id
+            );
+        } else if let Err(error) =
+            self.ensure_idkg_dealing_encryption_key_material_is_set_up(registry_version)
+        {
+            warn!(
+                self.logger,
+                "iDKG dealing encryption key of node {} is not properly set up \
+                  in the registry for registry version {}: {}",
+                self.node_id,
+                registry_version,
+                error
+            );
+        }
+        Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
     }
 }
 
@@ -124,6 +153,68 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
         if !self.csp.sks_contains(&key_id) {
             return Err(CryptoError::SecretKeyNotFound {
                 algorithm: AlgorithmId::Groth20_Bls12_381,
+                key_id,
+            });
+        }
+        Ok(())
+    }
+
+    fn unregistered_idkg_dealing_encryption_key(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> Option<PublicKeyProto> {
+        let result = get_mega_pubkey(&self.node_id, &self.registry_client, registry_version);
+        if let Err(MegaKeyFromRegistryError::PublicKeyNotFound { .. }) = result {
+            if let Some(idkg_dealing_enc_pk) = self.node_public_keys().idkg_dealing_encryption_pk {
+                return Some(idkg_dealing_enc_pk);
+            }
+        }
+        None
+    }
+
+    fn ensure_idkg_dealing_encryption_key_material_is_set_up(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> CryptoResult<()> {
+        let idkg_dealing_encryption_pk = get_mega_pubkey(
+            &self.node_id,
+            &self.registry_client,
+            registry_version,
+        )
+        .map_err(|e| match e {
+            MegaKeyFromRegistryError::RegistryError(e) => CryptoError::RegistryClient(e),
+            MegaKeyFromRegistryError::PublicKeyNotFound { .. } => CryptoError::PublicKeyNotFound {
+                node_id: self.node_id,
+                key_purpose: KeyPurpose::IDkgMEGaEncryption,
+                registry_version,
+            },
+            MegaKeyFromRegistryError::UnsupportedAlgorithm { algorithm_id } => {
+                CryptoError::MalformedPublicKey {
+                    algorithm: AlgorithmId::MegaSecp256k1,
+                    key_bytes: None,
+                    internal_error: format!(
+                        "unsupported algorithm ({:?}) of I-DKG dealing encryption public key of node `{}` in registry",
+                        algorithm_id,
+                        self.node_id,
+                    ),
+                }
+            }
+            MegaKeyFromRegistryError::MalformedPublicKey { node_id, key_bytes } => {
+                CryptoError::MalformedPublicKey {
+                    algorithm: AlgorithmId::MegaSecp256k1,
+                    key_bytes: Some(key_bytes),
+                    internal_error: format!(
+                        "I-DKG dealing encryption public key of node `{}` malformed in registry",
+                        node_id
+                    ),
+                }
+            }
+        })?;
+
+        let key_id = mega_key_id(&idkg_dealing_encryption_pk);
+        if !self.csp.sks_contains(&key_id) {
+            return Err(CryptoError::SecretKeyNotFound {
+                algorithm: AlgorithmId::MegaSecp256k1,
                 key_id,
             });
         }
