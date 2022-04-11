@@ -1,7 +1,8 @@
-use crate::driver::test_env::TestEnv;
+use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use anyhow::Result;
 use chrono::{DateTime, SecondsFormat, Utc};
 use ic_nns_init::set_up_env_vars_for_all_canisters;
+use ic_types::ReplicaVersion;
 use rand_chacha::{rand_core, ChaCha8Rng};
 use slog::{o, warn, Drain, Logger};
 use slog_async::OverflowStrategy;
@@ -19,24 +20,33 @@ use super::cli::ValidatedCliArgs;
 use super::farm::Farm;
 use super::pot_dsl::{self};
 use super::test_env::HasBaseLogDir;
+use serde::{Deserialize, Serialize};
 
 const ASYNC_CHAN_SIZE: usize = 8192;
 const DEFAULT_FARM_BASE_URL: &str = "https://farm.dfinity.systems";
 
-pub const FARM_GROUP_NAME: &str = "farm/group_name";
-pub const FARM_BASE_URL: &str = "farm/base_url";
-pub const IC_OS_IMG_URL: &str = "ic_os_img_url";
-pub const IC_OS_IMG_SHA256: &str = "ic_os_img_sha256";
-pub const BOUNDARY_NODE_IMG_URL: &str = "boundary_node_img_url";
-pub const BOUNDARY_NODE_IMG_SHA256: &str = "boundary_node_img_sha256";
-pub const INITIAL_REPLICA_VERSION: &str = "initial_replica_version";
-pub const JOURNALBEAT_HOSTS: &str = "journalbeat_hosts";
-pub const LOG_DEBUG_OVERRIDES: &str = "log_debug_overrides";
 pub const SSH_AUTHORIZED_PUB_KEYS_DIR: &str = "ssh/authorized_pub_keys";
 pub const SSH_AUTHORIZED_PRIV_KEYS_DIR: &str = "ssh/authorized_priv_keys";
-pub const POT_TIMEOUT: &str = "pot_timeout";
 
-pub fn initialize_env(env: &TestEnv, cli_args: &ValidatedCliArgs) -> Result<()> {
+#[derive(Deserialize, Serialize)]
+pub struct IcSetup {
+    pub farm_base_url: Url,
+    pub ic_os_img_url: Url,
+    pub ic_os_img_sha256: String,
+    pub boundary_node_img_url: Url,
+    pub boundary_node_img_sha256: String,
+    pub journalbeat_hosts: Vec<String>,
+    pub initial_replica_version: ReplicaVersion,
+    pub log_debug_overrides: Vec<String>,
+}
+
+impl TestEnvAttribute for IcSetup {
+    fn attribute_name() -> String {
+        "ic_setup".to_string()
+    }
+}
+
+pub fn initialize_env(env: &TestEnv, cli_args: ValidatedCliArgs) -> Result<()> {
     let farm_base_url = cli_args
         .farm_base_url
         .clone()
@@ -44,14 +54,17 @@ pub fn initialize_env(env: &TestEnv, cli_args: &ValidatedCliArgs) -> Result<()> 
     if let Some(authorized_ssh_accounts) = cli_args.authorized_ssh_accounts.clone() {
         copy_ssh_keys(env, authorized_ssh_accounts)?;
     }
-    env.write_object(FARM_BASE_URL, &farm_base_url)?;
-    env.write_object(IC_OS_IMG_URL, &cli_args.ic_os_img_url)?;
-    env.write_object(IC_OS_IMG_SHA256, &cli_args.ic_os_img_sha256)?;
-    env.write_object(BOUNDARY_NODE_IMG_URL, &cli_args.boundary_node_img_url)?;
-    env.write_object(BOUNDARY_NODE_IMG_SHA256, &cli_args.boundary_node_img_sha256)?;
-    env.write_object(JOURNALBEAT_HOSTS, &cli_args.journalbeat_hosts)?;
-    env.write_object(INITIAL_REPLICA_VERSION, &cli_args.initial_replica_version)?;
-    env.write_object(LOG_DEBUG_OVERRIDES, &cli_args.log_debug_overrides)?;
+    IcSetup {
+        farm_base_url,
+        ic_os_img_url: cli_args.ic_os_img_url,
+        ic_os_img_sha256: cli_args.ic_os_img_sha256,
+        boundary_node_img_url: cli_args.boundary_node_img_url,
+        boundary_node_img_sha256: cli_args.boundary_node_img_sha256,
+        journalbeat_hosts: cli_args.journalbeat_hosts,
+        initial_replica_version: cli_args.initial_replica_version,
+        log_debug_overrides: cli_args.log_debug_overrides,
+    }
+    .write_attribute(env);
     if let Some(base_dir) = &cli_args.log_base_dir {
         env.write_base_log_dir(base_dir)?;
     }

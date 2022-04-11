@@ -6,13 +6,13 @@ use std::collections::BTreeMap;
 use std::net::Ipv6Addr;
 use url::Url;
 
-use super::driver_setup::{IC_OS_IMG_SHA256, IC_OS_IMG_URL};
 use super::farm::CreateVmRequest;
 use super::farm::Farm;
 use super::farm::FarmResult;
 use super::farm::ImageLocation;
 use super::farm::ImageLocation::{IcOsImageViaUrl, ImageViaUrl};
-use super::test_env::TestEnv;
+use super::test_env::{TestEnv, TestEnvAttribute};
+use crate::driver::driver_setup::IcSetup;
 
 const DEFAULT_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(4);
 const DEFAULT_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(25165824); // 24GiB
@@ -130,8 +130,9 @@ pub fn get_resource_request(
     test_env: &TestEnv,
     group_name: &str,
 ) -> anyhow::Result<ResourceRequest> {
-    let url = test_env.read_object(IC_OS_IMG_URL)?;
-    let primary_image_sha256 = test_env.read_object(IC_OS_IMG_SHA256)?;
+    let ic_setup = IcSetup::read_attribute(test_env);
+    let url = ic_setup.ic_os_img_url;
+    let primary_image_sha256 = ic_setup.ic_os_img_sha256;
     let mut res_req = ResourceRequest::new(ImageType::IcOsImage, url, primary_image_sha256);
     res_req.group_name = group_name.to_string();
     for s in &config.subnets {

@@ -126,9 +126,10 @@
 //! Thus, instead of randomly selecting a node to fetch registry updates, it is
 //! better to let the user select a node.
 //!
-use crate::driver::driver_setup::{FARM_BASE_URL, FARM_GROUP_NAME};
+use super::driver_setup::{IcSetup, SSH_AUTHORIZED_PRIV_KEYS_DIR};
+use super::test_setup::PotSetup;
 use crate::driver::farm::Farm;
-use crate::driver::test_env::{HasIcPrepDir, TestEnv};
+use crate::driver::test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute};
 use crate::util::create_agent;
 use anyhow::{bail, Result};
 use ic_agent::Agent;
@@ -152,8 +153,6 @@ use std::{convert::TryFrom, net::IpAddr, str::FromStr, sync::Arc};
 use tokio::runtime::Runtime as Rt;
 use url::Url;
 
-use super::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
-
 pub const RETRY_TIMEOUT: Duration = Duration::from_secs(120);
 pub const RETRY_BACKOFF: Duration = Duration::from_secs(5);
 
@@ -164,8 +163,8 @@ pub trait IcHandleConstructor {
 impl IcHandleConstructor for TestEnv {
     fn ic_handle(&self) -> Result<IcHandle> {
         use ic_registry_client_helpers::subnet::SubnetRegistry;
-        let group_name: String = self.read_object(FARM_GROUP_NAME)?;
-        let farm_url: Url = self.read_object(FARM_BASE_URL)?;
+        let pot_setup = PotSetup::read_attribute(self);
+        let ic_setup = IcSetup::read_attribute(self);
         let ts = self.topology_snapshot();
 
         let mut nodes = vec![];
@@ -195,9 +194,9 @@ impl IcHandleConstructor for TestEnv {
                 }),
                 started_at,
                 runtime_descriptor: RuntimeDescriptor::Vm(FarmInfo {
-                    group_name: group_name.clone(),
+                    group_name: pot_setup.farm_group_name.clone(),
                     vm_name: n.node_id.to_string(),
-                    url: farm_url.clone(),
+                    url: ic_setup.farm_base_url.clone(),
                 }),
                 is_root_subnet: s.map_or(false, |s| s.subnet_id == root_subnet_id),
             });
@@ -679,10 +678,8 @@ pub trait HasHttpFileStore {
 
 impl HasHttpFileStore for TestEnv {
     fn http_file_store(&self) -> Box<dyn HttpFileStore> {
-        let base_url: Url = self
-            .read_object(FARM_BASE_URL)
-            .expect("could not fetch farm_base_url");
-        let farm = Farm::new(base_url, self.logger());
+        let ic_setup = IcSetup::read_attribute(self);
+        let farm = Farm::new(ic_setup.farm_base_url, self.logger());
         Box::new(FarmFileStore { farm })
     }
 }
@@ -781,16 +778,12 @@ where
     /// Returns a handle used for controlling a VM, i.e. starting, stopping and rebooting.
     fn vm(&self) -> Box<dyn VmControl> {
         let env = self.env();
-        let base_url: Url = env
-            .read_object(FARM_BASE_URL)
-            .expect("could not read farm_base_url");
-        let farm = Farm::new(base_url, env.logger.clone());
-        let group_name: String = env
-            .read_object(FARM_GROUP_NAME)
-            .expect("could not read group_name");
+        let pot_setup = PotSetup::read_attribute(&env);
+        let ic_setup = IcSetup::read_attribute(&env);
+        let farm = Farm::new(ic_setup.farm_base_url, env.logger.clone());
         Box::new(FarmHostedVm {
             farm,
-            group_name,
+            group_name: pot_setup.farm_group_name,
             vm_name: self.vm_name(),
         })
     }

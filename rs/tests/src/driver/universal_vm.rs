@@ -1,13 +1,15 @@
-use super::driver_setup::{FARM_BASE_URL, FARM_GROUP_NAME, SSH_AUTHORIZED_PUB_KEYS_DIR};
+use super::driver_setup::IcSetup;
+use super::driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR;
 use super::farm::Farm;
 use super::ic::VmResources;
 use super::resource::AllocatedVm;
 use super::resource::{allocate_resources, get_resource_request_for_universal_vm, DiskImage};
-use super::test_env::TestEnv;
+use super::test_env::{TestEnv, TestEnvAttribute};
 use super::test_env_api::{
     get_ssh_session_from_env, retry, HasTestEnv, HasVmName, RetrieveIpv4Addr, SshSession, ADMIN,
     RETRY_BACKOFF, RETRY_TIMEOUT,
 };
+use crate::driver::test_setup::PotSetup;
 use anyhow::{bail, Result};
 use slog::info;
 use ssh2::Session;
@@ -66,10 +68,11 @@ impl UniversalVm {
     }
 
     pub fn start(&self, env: &TestEnv) -> Result<()> {
-        let group_name: String = env.read_object(FARM_GROUP_NAME)?;
+        let ic_setup = IcSetup::read_attribute(env);
+        let pot_setup = PotSetup::read_attribute(env);
         let logger = env.logger();
-        let farm = Farm::new(env.read_object(FARM_BASE_URL)?, logger.clone());
-        let res_request = get_resource_request_for_universal_vm(self, &group_name)?;
+        let farm = Farm::new(ic_setup.farm_base_url, logger.clone());
+        let res_request = get_resource_request_for_universal_vm(self, &pot_setup.farm_group_name)?;
         let resource_group = allocate_resources(&farm, &res_request)?;
         let vm = resource_group
             .vms
@@ -100,10 +103,15 @@ impl UniversalVm {
             let image_id = farm.upload_file(config_img, CONF_IMG_FNAME)?;
             info!(logger, "Uploaded image: {}", image_id);
 
-            farm.attach_disk_image(&group_name, &self.name, "usb-storage", image_id)?;
+            farm.attach_disk_image(
+                &pot_setup.farm_group_name,
+                &self.name,
+                "usb-storage",
+                image_id,
+            )?;
         }
 
-        farm.start_vm(&group_name, &self.name)?;
+        farm.start_vm(&pot_setup.farm_group_name, &self.name)?;
         Ok(())
     }
 }
