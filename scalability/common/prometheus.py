@@ -241,6 +241,23 @@ def get_finalization_rate(testnet, hosts, t_start, t_end):
     return json.loads(r.text)
 
 
+def get_state_sync_duration(testnet, load_hosts, timestamp):
+    """
+    Get the state sync duration summed up until timestamp from the given machines.
+
+    Results are not aggregated. This function will return a list of results, where
+    each element corresponds to one machine.
+    """
+    query = 'state_sync_duration_seconds_sum{{{}, status="ok"}}'.format(get_common(load_hosts, testnet))
+
+    payload = {"time": timestamp, "query": query}
+
+    r = get_prometheus(payload)
+    j = json.loads(r.text)
+
+    return j
+
+
 def get_common(hosts, testnet):
 
     assert isinstance(hosts, list)
