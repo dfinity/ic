@@ -208,14 +208,13 @@ fn check_keys_locally_returns_none_if_no_public_keys_are_present() {
 }
 
 #[test]
-fn should_fail_check_keys_locally_if_no_matching_secret_key_is_present() {
+fn should_fail_check_keys_locally_if_no_matching_node_signing_secret_key_is_present() {
     let (temp_crypto, node_keys) = TempCryptoComponent::new_with_node_keys_generation(
         empty_fake_registry(),
         node_test_id(1),
         NodeKeysToGenerate::only_node_signing_key(),
     );
     let crypto_root = temp_crypto.temp_dir_path();
-    let node_signing_pk = node_keys.node_signing_pk;
     let different_node_signing_pk = {
         let (_temp_crypto2, node_keys2) = TempCryptoComponent::new_with_node_keys_generation(
             empty_fake_registry(),
@@ -224,45 +223,94 @@ fn should_fail_check_keys_locally_if_no_matching_secret_key_is_present() {
         );
         node_keys2.node_signing_pk
     };
-
-    // Fail the check if `different_node_signing_pk` is stored.
+    assert_ne!(node_keys.node_signing_pk, different_node_signing_pk);
     store_public_keys(
         crypto_root,
         &NodePublicKeys {
             node_signing_pk: different_node_signing_pk,
-            ..Default::default()
+            ..node_keys
         },
     );
-    let result = check_keys_locally(crypto_root);
-    assert!(result.is_err());
 
-    // Succeed the check if node_signing_pk is stored.
+    let result = check_keys_locally(crypto_root);
+
+    assert!(matches!(
+        result,
+        Err(CryptoError::SecretKeyNotFound { algorithm, .. })
+        if algorithm == AlgorithmId::Ed25519
+    ));
+}
+
+#[test]
+fn should_fail_check_keys_locally_if_no_matching_idkg_dealing_encryption_secret_key_is_present() {
+    let (temp_crypto, node_keys) = TempCryptoComponent::new_with_node_keys_generation(
+        empty_fake_registry(),
+        node_test_id(1),
+        NodeKeysToGenerate {
+            generate_node_signing_keys: true,
+            generate_idkg_dealing_encryption_keys: true,
+            ..NodeKeysToGenerate::none()
+        },
+    );
+    let crypto_root = temp_crypto.temp_dir_path();
+    let different_idkg_dealing_enc_pk = {
+        let (_temp_crypto2, node_keys2) = TempCryptoComponent::new_with_node_keys_generation(
+            empty_fake_registry(),
+            node_test_id(2),
+            NodeKeysToGenerate::only_idkg_dealing_encryption_key(),
+        );
+        node_keys2.idkg_dealing_encryption_pk
+    };
+    assert_ne!(
+        node_keys.idkg_dealing_encryption_pk,
+        different_idkg_dealing_enc_pk
+    );
     store_public_keys(
         crypto_root,
         &NodePublicKeys {
-            node_signing_pk,
-            ..Default::default()
+            idkg_dealing_encryption_pk: different_idkg_dealing_enc_pk,
+            ..node_keys
         },
     );
+
     let result = check_keys_locally(crypto_root);
-    assert!(result.is_ok());
-    assert!(result.unwrap().is_some());
+
+    assert!(matches!(
+        result,
+        Err(CryptoError::SecretKeyNotFound { algorithm, .. })
+        if algorithm == AlgorithmId::MegaSecp256k1
+    ));
 }
 
 #[test]
 fn should_succeed_check_keys_locally_if_all_keys_are_present() {
-    CryptoConfig::run_with_temp_config(|config| {
-        let node_signing_pk = Some(generate_node_signing_keys(&config.crypto_root));
-        store_public_keys(
-            &config.crypto_root,
-            &NodePublicKeys {
-                node_signing_pk,
-                ..Default::default()
-            },
-        );
-        let result = check_keys_locally(&config.crypto_root);
-        assert!(result.is_ok());
-    })
+    let (temp_crypto, node_keys) = TempCryptoComponent::new_with_node_keys_generation(
+        empty_fake_registry(),
+        node_test_id(1),
+        NodeKeysToGenerate::all(),
+    );
+    let crypto_root = temp_crypto.temp_dir_path();
+    store_public_keys(crypto_root, &node_keys);
+
+    let result = check_keys_locally(crypto_root);
+
+    assert!(matches!(result, Ok(Some(_))));
+}
+
+#[test]
+fn should_succeed_check_keys_locally_if_all_keys_except_idkg_dealing_enc_key_are_present() {
+    let (temp_crypto, node_keys) = TempCryptoComponent::new_with_node_keys_generation(
+        empty_fake_registry(),
+        node_test_id(1),
+        NodeKeysToGenerate::all_except_idkg_dealing_encryption_key(),
+    );
+    assert!(node_keys.idkg_dealing_encryption_pk.is_none());
+    let crypto_root = temp_crypto.temp_dir_path();
+    store_public_keys(crypto_root, &node_keys);
+
+    let result = check_keys_locally(crypto_root);
+
+    assert!(matches!(result, Ok(Some(_))));
 }
 
 mod tls {

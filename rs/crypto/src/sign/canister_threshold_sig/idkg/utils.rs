@@ -43,34 +43,49 @@ pub fn get_mega_pubkey(
     registry: &Arc<dyn RegistryClient>,
     registry_version: RegistryVersion,
 ) -> Result<MEGaPublicKey, MegaKeyFromRegistryError> {
-    let maybe_key = registry
+    let pk_proto = registry
         .get_crypto_key_for_node(*node_id, KeyPurpose::IDkgMEGaEncryption, registry_version)
-        .map_err(MegaKeyFromRegistryError::RegistryError)?;
-
-    match &maybe_key {
-        Some(pk_proto) => mega_public_key_from_proto(pk_proto, node_id),
-        None => Err(MegaKeyFromRegistryError::PublicKeyNotFound {
+        .map_err(MegaKeyFromRegistryError::RegistryError)?
+        .ok_or_else(|| MegaKeyFromRegistryError::PublicKeyNotFound {
             registry_version,
             node_id: *node_id,
-        }),
-    }
+        })?;
+    let mega_pubkey = mega_public_key_from_proto(&pk_proto).map_err(|e| match e {
+        MEGaPublicKeyFromProtoError::UnsupportedAlgorithm { algorithm_id } => {
+            MegaKeyFromRegistryError::UnsupportedAlgorithm { algorithm_id }
+        }
+        MEGaPublicKeyFromProtoError::MalformedPublicKey { key_bytes } => {
+            MegaKeyFromRegistryError::MalformedPublicKey {
+                node_id: *node_id,
+                key_bytes,
+            }
+        }
+    })?;
+    Ok(mega_pubkey)
+}
+
+pub enum MEGaPublicKeyFromProtoError {
+    UnsupportedAlgorithm {
+        algorithm_id: Option<AlgorithmIdProto>,
+    },
+    MalformedPublicKey {
+        key_bytes: Vec<u8>,
+    },
 }
 
 /// Deserialize a Protobuf public key to a MEGaPublicKey.
-fn mega_public_key_from_proto(
+pub fn mega_public_key_from_proto(
     proto: &PublicKeyProto,
-    node_id: &NodeId,
-) -> Result<MEGaPublicKey, MegaKeyFromRegistryError> {
+) -> Result<MEGaPublicKey, MEGaPublicKeyFromProtoError> {
     let curve_type = match AlgorithmIdProto::from_i32(proto.algorithm) {
         Some(AlgorithmIdProto::MegaSecp256k1) => Ok(EccCurveType::K256),
-        alg_id => Err(MegaKeyFromRegistryError::UnsupportedAlgorithm {
+        alg_id => Err(MEGaPublicKeyFromProtoError::UnsupportedAlgorithm {
             algorithm_id: alg_id,
         }),
     }?;
 
     MEGaPublicKey::deserialize(curve_type, &proto.key_value).map_err(|_| {
-        MegaKeyFromRegistryError::MalformedPublicKey {
-            node_id: *node_id,
+        MEGaPublicKeyFromProtoError::MalformedPublicKey {
             key_bytes: proto.key_value.clone(),
         }
     })
