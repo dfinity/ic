@@ -1067,6 +1067,12 @@ impl LedgerClient {
                                                 .into(),
                                         )));
                                     }
+                                    "done" => {
+                                        return Err(
+                                            "The call has completed but the reply/reject data has been pruned."
+                                                .to_string(),
+                                        );
+                                    }
                                     _ => {
                                         return Err(format!(
                                             "Send returned unexpected result: {:?} - {:?}",
