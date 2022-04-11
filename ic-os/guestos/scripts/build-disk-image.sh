@@ -53,7 +53,7 @@ while getopts "o:t:u:b:r:t:v:p:x:" OPT; do
             EXEC_SRCDIR="${OPTARG}"
             ;;
         *)
-            usage
+            usage >&2
             exit 1
             ;;
     esac
@@ -61,7 +61,6 @@ done
 
 # Preparatory steps and temporary build directory.
 BASE_DIR=$(dirname "${BASH_SOURCE[0]}")/..
-source "${BASE_DIR}"/scripts/partitions.sh
 
 TOOL_DIR="${BASE_DIR}/../../toolchains/sysimage/"
 
@@ -71,22 +70,23 @@ trap "rm -rf $TMPDIR" exit
 # Validate and process arguments
 
 if [ "${OUT_FILE}" == "" ]; then
-    usage
+    usage >&2
     exit 1
 fi
 
 if [ "${BUILD_TYPE}" != "dev" -a "${BUILD_TYPE}" != "prod" ]; then
-    echo "Unknown build type: ${BUILD_TYPE}"
+    echo "Unknown build type: ${BUILD_TYPE}" >&2
     exit 1
 fi
 
 if [ "${ROOT_PASSWORD}" != "" -a "${BUILD_TYPE}" != "dev" ]; then
-    echo "Root password is valid only for build type 'dev'"
-    exti 1
+    echo "Root password is valid only for build type 'dev'" >&2
+    exit 1
 fi
 
 if [ "${VERSION}" == "" ]; then
-    echo "Version needs to be specified for build to succeed"
+    echo "Version needs to be specified for build to succeed" >&2
+    exit 1
 fi
 
 BASE_IMAGE=$(cat "${BASE_DIR}/rootfs/docker-base.${BUILD_TYPE}")

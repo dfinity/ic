@@ -76,6 +76,6 @@ echo "${VERSION}" >"${TMPDIR}/VERSION.TXT"
 # that VERSION.TXT is first entry, making it quick & easy to extract.
 # Override owner, group and mtime to make build independent of the user
 # building it.
-tar czf "${OUT_FILE}" --sort=name --owner=root:0 --group=root:0 --mtime='UTC 2020-01-01' --sparse -C "${TMPDIR}" .
+tar czf "${OUT_FILE}" --sort=name --owner=root:0 --group=root:0 --mtime='UTC 1970-01-01 00:00:00' --sparse -C "${TMPDIR}" .
 
 rm -rf "${TMPDIR}"
