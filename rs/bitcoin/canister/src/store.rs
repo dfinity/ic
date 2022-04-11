@@ -202,9 +202,9 @@ mod test {
             insert_block(&mut state, block.clone()).unwrap();
         }
 
-        state.serialize(&root);
+        state.serialize(&root).unwrap();
 
-        let new_state = State::load(&root);
+        let new_state = State::load(&root).unwrap();
 
         assert_eq!(new_state.height, state.height);
         assert_eq!(new_state.unstable_blocks, state.unstable_blocks);

@@ -1,12 +1,11 @@
 use crate::{block, proto, types::Height, PageMapMemory};
 use bitcoin::{hashes::Hash, Block, Network, OutPoint, Script, TxOut, Txid};
 use ic_protobuf::bitcoin::v1;
-use ic_replicated_state::PageMap;
+use ic_replicated_state::page_map::{PageMap, PersistenceError};
 use ic_state_layout::{AccessPolicy, ProtoFileWith, RwPolicy};
 use stable_structures::StableBTreeMap;
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::rc::Rc;
 
 /// A structure used to maintain the entire state.
 pub struct State {
@@ -35,7 +34,7 @@ impl State {
     }
 
     /// Serializes the state to disk at the given path.
-    pub fn serialize(&self, root: &Path) {
+    pub fn serialize(&self, root: &Path) -> Result<(), PersistenceError> {
         // Create the directory if it doesn't exist.
         RwPolicy::check_dir(root).expect("Couldn't create directory.");
 
@@ -47,29 +46,28 @@ impl State {
         // Persist all the memories to disk.
         self.utxos
             .address_to_outpoints_memory
-            .persist_and_sync_delta(&root.join("address_outpoints.bin"));
+            .persist_and_sync_delta(&root.join("address_outpoints.bin"))?;
 
         self.utxos
             .utxos
             .small_utxos_memory
-            .persist_and_sync_delta(&root.join("small_utxos.bin"));
+            .persist_and_sync_delta(&root.join("small_utxos.bin"))?;
 
         self.utxos
             .utxos
             .medium_utxos_memory
-            .persist_and_sync_delta(&root.join("medium_utxos.bin"));
+            .persist_and_sync_delta(&root.join("medium_utxos.bin"))
     }
 
-    pub fn load(root: &Path) -> Self {
-        let small_utxos_memory = Rc::new(PageMapMemory::open(&root.join("small_utxos.bin")));
-        let medium_utxos_memory = Rc::new(PageMapMemory::open(&root.join("medium_utxos.bin")));
-        let address_to_outpoints_memory =
-            Rc::new(PageMapMemory::open(&root.join("address_outpoints.bin")));
+    pub fn load(root: &Path) -> Result<Self, PersistenceError> {
+        let small_utxos_memory = PageMapMemory::open(&root.join("small_utxos.bin"))?;
+        let medium_utxos_memory = PageMapMemory::open(&root.join("medium_utxos.bin"))?;
+        let address_to_outpoints_memory = PageMapMemory::open(&root.join("address_outpoints.bin"))?;
 
         let state_file: ProtoFileWith<proto::State, RwPolicy> = root.join("state.pbuf").into();
         let proto_state = state_file.deserialize_opt().unwrap().unwrap();
 
-        Self {
+        Ok(Self {
             height: proto_state.height,
             utxos: UtxoSet::from_proto(
                 proto_state.utxos.unwrap(),
@@ -78,7 +76,7 @@ impl State {
                 address_to_outpoints_memory,
             ),
             unstable_blocks: UnstableBlocks::from_proto(proto_state.unstable_blocks.unwrap()),
-        }
+        })
     }
 }
 
@@ -127,12 +125,10 @@ impl From<&State> for proto::State {
 ///    3) "Large" to store UTXOs with script size > 201 bytes.
 pub struct Utxos {
     // A map storing the UTXOs that are "small" in size.
-    // TODO(EXC-1039): Use pagemap instead of a vec.
-    pub small_utxos: StableBTreeMap<Rc<PageMapMemory>>,
+    pub small_utxos: StableBTreeMap<PageMapMemory>,
 
     // A map storing the UTXOs that are "medium" in size.
-    // TODO(EXC-1039): Use pagemap instead of a vec.
-    pub medium_utxos: StableBTreeMap<Rc<PageMapMemory>>,
+    pub medium_utxos: StableBTreeMap<PageMapMemory>,
 
     // A map storing the UTXOs that are "large" in size.
     // The number of entries stored in this map is tiny (see docs above), so a
@@ -140,8 +136,8 @@ pub struct Utxos {
     pub large_utxos: BTreeMap<OutPoint, (TxOut, Height)>,
 
     // References to the memory used in stable structures for protobuf conversions.
-    small_utxos_memory: Rc<PageMapMemory>,
-    medium_utxos_memory: Rc<PageMapMemory>,
+    small_utxos_memory: PageMapMemory,
+    medium_utxos_memory: PageMapMemory,
 }
 
 // The size of an outpoint in bytes.
@@ -181,8 +177,8 @@ const MAX_ADDRESS_OUTPOINT_SIZE: u32 = MAX_ADDRESS_SIZE + OUTPOINT_SIZE;
 
 impl Default for Utxos {
     fn default() -> Self {
-        let small_utxos_memory = make_memory();
-        let medium_utxos_memory = make_memory();
+        let small_utxos_memory = PageMapMemory::default();
+        let medium_utxos_memory = PageMapMemory::default();
 
         Self {
             small_utxos: StableBTreeMap::new(
@@ -216,20 +212,19 @@ pub struct UtxoSet {
     pub utxos: Utxos,
     pub network: Network,
     // An index for fast retrievals of an address's UTXOs.
-    // TODO(EXC-1039): Use pagemap instead of a vec.
-    pub address_to_outpoints: StableBTreeMap<Rc<PageMapMemory>>,
+    pub address_to_outpoints: StableBTreeMap<PageMapMemory>,
 
     // If true, a transaction's inputs must all be present in the UTXO for it to be accepted.
     pub strict: bool,
 
     // Reference to the memory used in `address_to_outpoints` for protobuf conversions.
     // This won't be necessary once we migrate to `PageMap`.
-    pub address_to_outpoints_memory: Rc<PageMapMemory>,
+    pub address_to_outpoints_memory: PageMapMemory,
 }
 
 impl UtxoSet {
     pub fn new(strict: bool, network: Network) -> Self {
-        let address_to_outpoints_memory = Rc::new(PageMapMemory::new(PageMap::default()));
+        let address_to_outpoints_memory = PageMapMemory::new(PageMap::default());
 
         Self {
             utxos: Utxos::default(),
@@ -274,9 +269,9 @@ impl UtxoSet {
 
     pub fn from_proto(
         utxos_proto: proto::UtxoSet,
-        small_utxos_memory: Rc<PageMapMemory>,
-        medium_utxos_memory: Rc<PageMapMemory>,
-        address_to_outpoints_memory: Rc<PageMapMemory>,
+        small_utxos_memory: PageMapMemory,
+        medium_utxos_memory: PageMapMemory,
+        address_to_outpoints_memory: PageMapMemory,
     ) -> Self {
         let utxos = Utxos {
             small_utxos: StableBTreeMap::load(small_utxos_memory.clone()),
@@ -397,8 +392,4 @@ impl BlockTree {
                 .collect(),
         }
     }
-}
-
-fn make_memory() -> Rc<PageMapMemory> {
-    Rc::new(PageMapMemory::new(PageMap::default()))
 }

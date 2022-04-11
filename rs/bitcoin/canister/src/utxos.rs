@@ -3,7 +3,6 @@ use crate::types::{Height, Storable};
 use crate::PageMapMemory;
 use bitcoin::{OutPoint, TxOut};
 use stable_structures::{btreemap, Memory};
-use std::rc::Rc;
 
 /// Methods defined for [`Utxos`] struct.
 /// These are declared as a trait since [`Utxos`] is declared in a different crate.
@@ -22,7 +21,7 @@ pub trait UtxosTrait {
 
     /// Gets an iterator over the entries of the map.
     /// NOTE: The entries are not guaranteed to be sorted in any particular way.
-    fn iter(&self) -> Iter<Rc<PageMapMemory>>;
+    fn iter(&self) -> Iter<PageMapMemory>;
 }
 
 impl UtxosTrait for Utxos {
@@ -76,7 +75,7 @@ impl UtxosTrait for Utxos {
             || self.large_utxos.contains_key(key)
     }
 
-    fn iter(&self) -> Iter<Rc<PageMapMemory>> {
+    fn iter(&self) -> Iter<PageMapMemory> {
         Iter::new(self)
     }
 }
@@ -89,7 +88,7 @@ pub struct Iter<'a, M: Memory> {
     large_utxos_iter: std::collections::btree_map::Iter<'a, OutPoint, (TxOut, Height)>,
 }
 
-impl<'a> Iter<'a, Rc<PageMapMemory>> {
+impl<'a> Iter<'a, PageMapMemory> {
     fn new(utxos: &'a Utxos) -> Self {
         Self {
             small_utxos_iter: utxos.small_utxos.iter(),
