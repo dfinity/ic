@@ -138,7 +138,7 @@ impl ExecutionEnvironmentBuilder {
         );
         let hypervisor = Arc::new(hypervisor);
         let ingress_history_writer =
-            IngressHistoryWriterImpl::new(self.log.clone(), &metrics_registry);
+            IngressHistoryWriterImpl::new(Config::default(), self.log.clone(), &metrics_registry);
         let ingress_history_writer = Arc::new(ingress_history_writer);
         let exec_env = ExecutionEnvironmentImpl::new(
             self.log,

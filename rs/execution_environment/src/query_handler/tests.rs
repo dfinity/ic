@@ -72,6 +72,7 @@ where
         );
         let hypervisor = Arc::new(hypervisor);
         let ingress_history_writer = Arc::new(IngressHistoryWriterImpl::new(
+            Config::default(),
             log.clone(),
             &metrics_registry,
         ));

@@ -1,6 +1,7 @@
 use super::*;
 use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager;
 use ic_constants::MAX_INGRESS_TTL;
+use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::HttpMethodType;
 use ic_test_utilities::{
     mock_time,
@@ -45,6 +46,7 @@ fn can_prune_old_ingress_history_entries() {
             time: mock_time(),
         },
         time,
+        NumBytes::from(u64::MAX),
     );
     ingress_history.insert(
         message_id2.clone(),
@@ -55,6 +57,7 @@ fn can_prune_old_ingress_history_entries() {
             time: mock_time(),
         },
         time,
+        NumBytes::from(u64::MAX),
     );
     ingress_history.insert(
         message_id3.clone(),
@@ -65,6 +68,7 @@ fn can_prune_old_ingress_history_entries() {
             time: mock_time(),
         },
         time + MAX_INGRESS_TTL / 2,
+        NumBytes::from(u64::MAX),
     );
 
     // Pretend that the time has advanced
@@ -90,6 +94,7 @@ fn entries_sorted_lexicographically() {
                 time,
             },
             time,
+            NumBytes::from(u64::MAX),
         );
     }
     let mut expected: Vec<_> = (0..10u64).map(message_test_id).collect();
@@ -336,6 +341,371 @@ fn network_topology_ecdsa_subnets() {
     };
 
     assert_eq!(network_topology.ecdsa_subnets(), vec![subnet_test_id(1)]);
+}
+
+/// Test fixture that will produce an ingress status of type completed or failed,
+/// depending on whether `i % 2 == 0` (completed) or not (failed). Both statuses
+/// will have the same payload size.
+fn test_status_terminal(i: u64) -> IngressStatus {
+    let test_status_completed = |i| IngressStatus::Completed {
+        receiver: canister_test_id(i).get(),
+        user_id: user_test_id(i),
+        result: WasmResult::Reply(vec![0, 1, 2, 3, 4]),
+        time: Time::from_nanos_since_unix_epoch(i),
+    };
+    let test_status_failed = |i| IngressStatus::Failed {
+        receiver: canister_test_id(i).get(),
+        user_id: user_test_id(i),
+        error: UserError::new(ErrorCode::SubnetOversubscribed, "Error"),
+        time: Time::from_nanos_since_unix_epoch(i),
+    };
+
+    if i % 2 == 0 {
+        test_status_completed(i)
+    } else {
+        test_status_failed(i)
+    }
+}
+
+/// Test fixture to generate an ingress status of type done.
+fn test_status_done(i: u64) -> IngressStatus {
+    IngressStatus::Done {
+        receiver: canister_test_id(i).get(),
+        user_id: user_test_id(i),
+        time: Time::from_nanos_since_unix_epoch(i),
+    }
+}
+
+#[test]
+fn ingress_history_insert_beyond_limit_will_succeed() {
+    let mut ingress_history = IngressHistoryState::default();
+
+    let insert_status = |ingress_history: &mut IngressHistoryState, i, max_num_entries| {
+        let message_id = message_test_id(i);
+        let status = test_status_terminal(i);
+        let limit = NumBytes::from(max_num_entries * status.payload_bytes() as u64);
+        ingress_history.insert(
+            message_id.clone(),
+            status.clone(),
+            Time::from_nanos_since_unix_epoch(i),
+            limit,
+        );
+        (message_id, status)
+    };
+
+    // Inserting with enough space for exactly one entry will always leave the
+    // most recently inserted status there while setting everything else to
+    // done.
+    for i in 1..=100 {
+        let (inserted_message_id, inserted_status) = insert_status(&mut ingress_history, i, 1);
+
+        assert_eq!(ingress_history.statuses().count(), i as usize);
+        if CURRENT_CERTIFICATION_VERSION >= CertificationVersion::V8 {
+            assert_eq!(
+                ingress_history.get(&inserted_message_id).unwrap(),
+                &inserted_status
+            );
+            assert_eq!(
+                ingress_history
+                    .statuses()
+                    .filter(|(_, status)| matches!(
+                        status,
+                        IngressStatus::Completed { .. } | IngressStatus::Failed { .. }
+                    ))
+                    .count(),
+                1
+            );
+        } else {
+            assert_eq!(
+                ingress_history
+                    .statuses()
+                    .filter(|(_, status)| matches!(
+                        status,
+                        IngressStatus::Completed { .. } | IngressStatus::Failed { .. }
+                    ))
+                    .count(),
+                i as usize
+            );
+            assert!(!ingress_history
+                .statuses()
+                .any(|(_, status)| matches!(status, IngressStatus::Done { .. })));
+        }
+    }
+
+    // Inserting without available space will directly transition inserted status
+    // to done.
+    for i in 101..=200 {
+        let (inserted_message_id, _) = insert_status(&mut ingress_history, i, 0);
+
+        assert_eq!(ingress_history.statuses().count(), i as usize);
+        if CURRENT_CERTIFICATION_VERSION >= CertificationVersion::V8 {
+            assert_eq!(
+                ingress_history.get(&inserted_message_id).unwrap(),
+                &test_status_done(i),
+            );
+
+            assert_eq!(
+                ingress_history
+                    .statuses()
+                    .filter(|(_, status)| matches!(
+                        status,
+                        IngressStatus::Completed { .. } | IngressStatus::Failed { .. }
+                    ))
+                    .count(),
+                0
+            );
+        } else {
+            assert_eq!(
+                ingress_history
+                    .statuses()
+                    .filter(|(_, status)| matches!(
+                        status,
+                        IngressStatus::Completed { .. } | IngressStatus::Failed { .. }
+                    ))
+                    .count(),
+                i as usize
+            );
+            assert!(!ingress_history
+                .statuses()
+                .any(|(_, status)| matches!(status, IngressStatus::Done { .. })));
+        }
+    }
+}
+
+#[test]
+fn ingress_history_forget_completed_does_not_touch_other_statuses() {
+    // Set up two ingress history states. In one we will later insert with a limit
+    // of `0` whereas we will insert in the other with a limit of `u64::MAX`. Given
+    // that we only insert non-terminal statuses this should lead to the same
+    // ingress history state.
+    let mut ingress_history_limit = IngressHistoryState::default();
+    let mut ingress_history_no_limit = IngressHistoryState::default();
+
+    let statuses = vec![
+        IngressStatus::Processing {
+            receiver: canister_test_id(2).get(),
+            user_id: user_test_id(2),
+            time: Time::from_nanos_since_unix_epoch(2),
+        },
+        IngressStatus::Received {
+            receiver: canister_test_id(3).get(),
+            user_id: user_test_id(3),
+            time: Time::from_nanos_since_unix_epoch(3),
+        },
+        test_status_done(4),
+        IngressStatus::Unknown,
+    ];
+    statuses.into_iter().enumerate().for_each(|(i, status)| {
+        ingress_history_limit.insert(
+            message_test_id(i as u64),
+            status.clone(),
+            Time::from_nanos_since_unix_epoch(0),
+            NumBytes::from(0),
+        );
+        ingress_history_no_limit.insert(
+            message_test_id(i as u64),
+            status,
+            Time::from_nanos_since_unix_epoch(0),
+            NumBytes::from(u64::MAX),
+        );
+    });
+
+    assert_eq!(ingress_history_limit, ingress_history_no_limit);
+
+    let mut ingress_history_before = ingress_history_limit.clone();
+
+    // Forgetting terminal statuses when the ingress history only contains non-terminal
+    // statuses should be a no-op.
+    ingress_history_limit.forget_terminal_statuses(NumBytes::from(0));
+    // ... except that if current certification version >= 8, the next_terminal_time
+    // is updated to the first key in the pruning_times map
+    if CURRENT_CERTIFICATION_VERSION >= CertificationVersion::V8 {
+        ingress_history_before.next_terminal_time =
+            *ingress_history_limit.pruning_times().next().unwrap().0;
+    }
+
+    assert_eq!(ingress_history_before, ingress_history_limit);
+}
+
+#[test]
+fn ingress_history_respects_limits() {
+    let run_test = |num_statuses, max_num_terminal| {
+        let mut ingress_history = IngressHistoryState::default();
+
+        assert_eq!(ingress_history.memory_usage, 0);
+
+        let terminal_size = NumBytes::from(
+            max_num_terminal as u64 * test_status_terminal(0).payload_bytes() as u64,
+        );
+
+        for i in 1..=num_statuses {
+            ingress_history.insert(
+                message_test_id(i),
+                test_status_terminal(i),
+                Time::from_nanos_since_unix_epoch(i),
+                terminal_size,
+            );
+
+            let terminal_count = ingress_history
+                .statuses()
+                .filter(|(_, status)| {
+                    matches!(
+                        status,
+                        IngressStatus::Completed { .. } | IngressStatus::Failed { .. }
+                    )
+                })
+                .count();
+
+            let done_count = ingress_history
+                .statuses()
+                .filter(|(_, status)| matches!(status, IngressStatus::Done { .. }))
+                .count();
+
+            if CURRENT_CERTIFICATION_VERSION >= CertificationVersion::V8 {
+                assert_eq!(terminal_count, i.min(max_num_terminal) as usize);
+                assert_eq!(done_count, i.saturating_sub(max_num_terminal) as usize);
+            } else {
+                assert_eq!(terminal_count, i as usize);
+                assert_eq!(done_count, 0);
+            }
+
+            assert_eq!(
+                terminal_count + done_count,
+                ingress_history.statuses().count()
+            )
+        }
+    };
+
+    run_test(10, 1);
+    run_test(10, 6);
+    run_test(10, 6);
+    run_test(10, 0);
+}
+
+#[test]
+fn ingress_history_insert_before_next_complete_time_resets_it() {
+    if CURRENT_CERTIFICATION_VERSION < CertificationVersion::V8 {
+        return;
+    }
+
+    let mut ingress_history = IngressHistoryState::new();
+
+    // Fill the ingress history with 10 terminal entries...
+    for i in 1..=10 {
+        ingress_history.insert(
+            message_test_id(i),
+            test_status_terminal(i),
+            Time::from_nanos_since_unix_epoch(i),
+            NumBytes::from(u64::MAX),
+        );
+    }
+
+    // ... and trigger forgetting terminal statuses with a limit sufficient
+    // for 5 non-terminal entries
+    let status_size = NumBytes::from(5 * test_status_terminal(0).payload_bytes() as u64);
+    ingress_history.forget_terminal_statuses(status_size);
+
+    // ... which should lead to the next_terminal_time pointing to 6 + TTL.
+    assert_eq!(
+        ingress_history.next_terminal_time,
+        Time::from_nanos_since_unix_epoch(6 + MAX_INGRESS_TTL.as_nanos() as u64)
+    );
+
+    // Insert another status with a time of `3` ...
+    ingress_history.insert(
+        message_test_id(11),
+        test_status_terminal(11),
+        Time::from_nanos_since_unix_epoch(3),
+        NumBytes::from(u64::MAX),
+    );
+
+    // ... should lead to resetting the next_terminal_time to 3 + TTL.
+    assert_eq!(
+        ingress_history.next_terminal_time,
+        Time::from_nanos_since_unix_epoch(3 + MAX_INGRESS_TTL.as_nanos() as u64)
+    );
+
+    // At this point forgetting terminal statuses with a limit sufficient
+    // for 5 statuses should lead to "forgetting" the terminal status
+    // we just inserted above.
+    ingress_history.forget_terminal_statuses(status_size);
+
+    let expected_fogotten = ingress_history.get(&message_test_id(11)).unwrap();
+
+    if let IngressStatus::Done {
+        receiver,
+        user_id,
+        time,
+    } = expected_fogotten
+    {
+        assert_eq!(receiver, &canister_test_id(11).get());
+        assert_eq!(user_id, &user_test_id(11));
+        assert_eq!(time, &Time::from_nanos_since_unix_epoch(11));
+    } else {
+        panic!("Expected a done status");
+    }
+}
+
+#[test]
+fn ingress_history_forget_behaves_the_same_with_reset_next_complete_time() {
+    if CURRENT_CERTIFICATION_VERSION < CertificationVersion::V8 {
+        return;
+    }
+
+    let mut ingress_history = IngressHistoryState::new();
+
+    // Fill the ingress history with 10 terminal entries...
+    for i in 1..=10 {
+        ingress_history.insert(
+            message_test_id(i),
+            test_status_terminal(i),
+            Time::from_nanos_since_unix_epoch(i),
+            NumBytes::from(u64::MAX),
+        );
+    }
+
+    // ... and trigger forgetting terminal statuses with a limit sufficient
+    // for 5 non-terminal entries
+    let status_size = NumBytes::from(5 * test_status_terminal(0).payload_bytes() as u64);
+    ingress_history.forget_terminal_statuses(status_size);
+
+    // ... which should lead to the next_terminal_time pointing to 6 + TTL.
+    assert_eq!(
+        ingress_history.next_terminal_time,
+        Time::from_nanos_since_unix_epoch(6 + MAX_INGRESS_TTL.as_nanos() as u64)
+    );
+
+    // Make a clone of the ingress history that has the `next_terminal_time` reset to
+    // 0, i.e., the way it is after deserialization.
+    let mut ingress_history_reset = {
+        let mut hist = ingress_history.clone();
+        hist.next_terminal_time = Time::from_nanos_since_unix_epoch(0);
+        hist
+    };
+
+    // Insert two more entries with a time of 3 (i.e., before next_terminal_time of
+    // the initial ingress history)
+    ingress_history.insert(
+        message_test_id(11),
+        test_status_terminal(11),
+        Time::from_nanos_since_unix_epoch(3),
+        NumBytes::from(u64::MAX),
+    );
+    ingress_history_reset.insert(
+        message_test_id(11),
+        test_status_terminal(11),
+        Time::from_nanos_since_unix_epoch(3),
+        NumBytes::from(u64::MAX),
+    );
+
+    // ... and trigger forgetting terminal statuses with a limit sufficient
+    // for 5 non-terminal entries
+    ingress_history.forget_terminal_statuses(status_size);
+    ingress_history_reset.forget_terminal_statuses(status_size);
+
+    // ... which should bring both versions of the ingress history in the
+    // same state.
+    assert_eq!(ingress_history, ingress_history_reset);
 }
 
 #[derive(Clone)]

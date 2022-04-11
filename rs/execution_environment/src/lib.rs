@@ -103,6 +103,7 @@ impl ExecutionServices {
         ));
 
         let ingress_history_writer = Arc::new(IngressHistoryWriterImpl::new(
+            config.clone(),
             logger.clone(),
             metrics_registry,
         ));

@@ -496,12 +496,28 @@ impl ReplicatedState {
         self.metadata.ingress_history.clone()
     }
 
-    pub fn set_ingress_status(&mut self, message_id: MessageId, status: IngressStatus) {
-        self.metadata
-            .ingress_history
-            .insert(message_id, status, self.time());
+    /// Sets the `status` for `message_id` in the ingress history. It will
+    /// be ensured that the cumulative payload size of statuses in the
+    /// ingress history will be below or equal to `ingress_memory_capacity`
+    /// by transitioning `Completed` and `Failed` statuses to `Done` from
+    /// oldest to newest in case inserting `status` pushes the memory
+    /// consumption over the bound.
+    pub fn set_ingress_status(
+        &mut self,
+        message_id: MessageId,
+        status: IngressStatus,
+        ingress_memory_capacity: NumBytes,
+    ) {
+        self.metadata.ingress_history.insert(
+            message_id,
+            status,
+            self.time(),
+            ingress_memory_capacity,
+        );
     }
 
+    /// Prunes ingress history statuses with a pruning time older than
+    /// `self.time()`.
     pub fn prune_ingress_history(&mut self) {
         self.metadata.ingress_history.prune(self.time());
     }

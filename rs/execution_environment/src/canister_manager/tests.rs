@@ -182,6 +182,7 @@ impl CanisterManagerBuilder {
         let subnet_type = SubnetType::Application;
         let metrics_registry = MetricsRegistry::new();
         let ingress_history_writer = Arc::new(IngressHistoryWriterImpl::new(
+            Config::default(),
             no_op_logger(),
             &metrics_registry,
         ));
@@ -287,6 +288,7 @@ where
 
         let hypervisor = Arc::new(hypervisor);
         let ingress_history_writer = Arc::new(IngressHistoryWriterImpl::new(
+            Config::default(),
             log.clone(),
             &metrics_registry,
         ));
@@ -1229,6 +1231,7 @@ fn reinstall_calls_canister_start_and_canister_init() {
 
         let hypervisor = Arc::new(hypervisor);
         let ingress_history_writer = Arc::new(IngressHistoryWriterImpl::new(
+            Config::default(),
             log.clone(),
             &metrics_registry,
         ));
@@ -1324,6 +1327,7 @@ fn install_calls_canister_start_and_canister_init() {
         );
         let hypervisor = Arc::new(hypervisor);
         let ingress_history_writer = Arc::new(IngressHistoryWriterImpl::new(
+            Config::default(),
             log.clone(),
             &metrics_registry,
         ));

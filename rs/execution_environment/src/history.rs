@@ -1,3 +1,4 @@
+use ic_config::execution_environment::Config;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_interfaces::execution_environment::{
     IngressHistoryError, IngressHistoryReader, IngressHistoryWriter,
@@ -73,6 +74,7 @@ struct TransitionStartTime {
 /// Struct that implements the ingress history writer trait. Consumers of this
 /// trait can use this to update the ingress history.
 pub struct IngressHistoryWriterImpl {
+    config: Config,
     log: ReplicaLogger,
     // Wrapped in a RwLock for interior mutability, otherwise &self in methods
     // has to be &mut self.
@@ -84,8 +86,9 @@ pub struct IngressHistoryWriterImpl {
 }
 
 impl IngressHistoryWriterImpl {
-    pub fn new(log: ReplicaLogger, metrics_registry: &MetricsRegistry) -> Self {
+    pub fn new(config: Config, log: ReplicaLogger, metrics_registry: &MetricsRegistry) -> Self {
         Self {
+            config,
             log,
             received_time: RwLock::new(HashMap::new()),
             message_state_transition_completed_ic_duration_seconds: metrics_registry.histogram(
@@ -195,7 +198,11 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
             _ => {}
         };
 
-        state.set_ingress_status(message_id, status);
+        state.set_ingress_status(
+            message_id,
+            status,
+            self.config.ingress_history_memory_capacity,
+        );
     }
 }
 

@@ -39,8 +39,8 @@ struct VsrMetrics {
     /// The latency metric is unreliable because we assume expiry time
     /// was set by 'current_time_and_expiry_time'.
     unreliable_induct_ingress_message_duration: HistogramVec,
-    /// Memory currently used by the ingress history (including reservations
-    /// for statuses that may still change).
+    /// Memory currently used by payloads of statuses in the ingress
+    /// history.
     ingress_history_size: IntGauge,
 }
 
@@ -76,9 +76,7 @@ impl VsrMetrics {
         );
         let ingress_history_size = metrics_registry.int_gauge(
             METRIC_INGRESS_HISTORY_SIZE,
-            "Memory currently used by the ingress history (including \
-            `MAX_RESPONSE_COUNT_BYTES` bytes reservation for each status \
-            that may still change).",
+            "Memory currently used by payloads of statuses in the ingress history",
         );
 
         // Initialize all `inducted_ingress_messages` counters with zero, so they are

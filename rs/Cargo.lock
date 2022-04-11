@@ -6239,6 +6239,7 @@ dependencies = [
  "debug_stub_derive",
  "ic-base-types",
  "ic-btc-types-internal",
+ "ic-certification-version",
  "ic-config",
  "ic-constants",
  "ic-error-types",

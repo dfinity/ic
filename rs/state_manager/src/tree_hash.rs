@@ -60,7 +60,7 @@ pub fn hash_state(state: &ReplicatedState) -> HashTree {
 mod tests {
     use super::*;
     use hex::FromHex;
-    use ic_base_types::NumSeconds;
+    use ic_base_types::{NumBytes, NumSeconds};
     use ic_crypto_tree_hash::Digest;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
@@ -205,7 +205,11 @@ mod tests {
             });
 
             for i in 1..6 {
-                state.set_ingress_status(message_test_id(i), IngressStatus::Unknown);
+                state.set_ingress_status(
+                    message_test_id(i),
+                    IngressStatus::Unknown,
+                    NumBytes::from(u64::MAX),
+                );
             }
 
             state.metadata.certification_version = certification_version;

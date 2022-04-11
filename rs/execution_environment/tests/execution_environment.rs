@@ -130,7 +130,11 @@ where
             Arc::clone(&cycles_account_manager),
         );
         let hypervisor = Arc::new(hypervisor);
-        let ingress_history_writer = IngressHistoryWriterImpl::new(log.clone(), &metrics_registry);
+        let ingress_history_writer = IngressHistoryWriterImpl::new(
+            execution_environment::Config::default(),
+            log.clone(),
+            &metrics_registry,
+        );
         let ingress_history_writer = Arc::new(ingress_history_writer);
         let exec_env = ExecutionEnvironmentImpl::new(
             log,
@@ -2426,7 +2430,11 @@ fn metrics_are_observed_for_subnet_messages() {
             Arc::clone(&cycles_account_manager),
         );
         let hypervisor = Arc::new(hypervisor);
-        let ingress_history_writer = IngressHistoryWriterImpl::new(log.clone(), &metrics_registry);
+        let ingress_history_writer = IngressHistoryWriterImpl::new(
+            execution_environment::Config::default(),
+            log.clone(),
+            &metrics_registry,
+        );
         let ingress_history_writer = Arc::new(ingress_history_writer);
         let exec_env = ExecutionEnvironmentImpl::new(
             log,
