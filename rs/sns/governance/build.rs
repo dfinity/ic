@@ -96,7 +96,11 @@ fn main() {
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.NervousSystemFunction",
-        "#[derive(candid::CandidType, candid::Deserialize)]",
+        [
+            "#[derive(candid::CandidType, candid::Deserialize)]",
+            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
+        ]
+        .join(" "),
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ExecuteNervousSystemFunction",

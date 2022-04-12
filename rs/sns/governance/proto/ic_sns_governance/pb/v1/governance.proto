@@ -840,6 +840,9 @@ message Governance {
 
   // The canister ID of the root canister.
   ic_base_types.pb.v1.PrincipalId root_canister_id = 17;
+
+  // ID to NervousSystemFunction (which has an id field).
+  map<uint64, NervousSystemFunction> id_to_nervous_system_functions = 18;
 }
 
 // Empty message to use in oneof fields that represent empty
