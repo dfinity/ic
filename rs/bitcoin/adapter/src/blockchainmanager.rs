@@ -83,9 +83,11 @@ enum ReceivedInvMessageError {
 /// The possible errors the `BlockchainManager::received_block_message(...)` may produce.
 #[derive(Debug, Error)]
 pub enum ReceivedBlockMessageError {
-    /// This variant represents when a message from a no longer known peer.
+    /// This variant represents when a message from an unknown peer.
     #[error("Unknown peer")]
     UnknownPeer,
+    #[error("Unknown block")]
+    UnknownBlock,
     /// This variant represents that a block was not able to be added to the `block_cache` in the
     /// BlockchainState.
     #[error("Failed to add block")]
@@ -396,7 +398,11 @@ impl BlockchainManager {
         );
 
         //Remove the corresponding `getdata` request from peer_info and getdata_request_info.
-        self.getdata_request_info.remove(&block_hash);
+        let maybe_request = self.getdata_request_info.remove(&block_hash);
+        if maybe_request.is_none() {
+            // Exit early. If the block is not in the `getdata_request_info`, the block is no longer wanted.
+            return Err(ReceivedBlockMessageError::UnknownBlock);
+        }
 
         match self.blockchain.lock().await.add_block(block.clone()) {
             Ok(block_height) => {
@@ -629,11 +635,36 @@ impl BlockchainManager {
 
     /// Wrapper function to access the blockchain state to prune blocks that are no longer
     /// needed.
-    pub async fn prune_old_blocks(&mut self, processed_block_hashes: &[BlockHash]) {
-        self.blockchain
-            .lock()
-            .await
-            .prune_old_blocks(processed_block_hashes);
+    pub async fn prune_blocks(
+        &mut self,
+        anchor: BlockHash,
+        processed_block_hashes: Vec<BlockHash>,
+    ) {
+        {
+            let mut blockchain = self.blockchain.lock().await;
+            let anchor_height = blockchain
+                .get_cached_header(&anchor)
+                .map_or(0, |c| c.height);
+            let filter_height = anchor_height
+                .checked_add(1)
+                .expect("prune by block height: overflow occurred");
+
+            blockchain.prune_blocks(&processed_block_hashes);
+            blockchain.prune_blocks_below_height(filter_height);
+
+            self.getdata_request_info.retain(|b, _| {
+                blockchain.get_cached_header(b).map_or(0, |c| c.height) >= filter_height
+            });
+
+            self.block_sync_queue.retain(|b| {
+                blockchain.get_cached_header(b).map_or(0, |c| c.height) >= filter_height
+            });
+        };
+
+        for block_hash in processed_block_hashes {
+            self.getdata_request_info.remove(&block_hash);
+            self.block_sync_queue.remove(&block_hash);
+        }
     }
 
     /// Retrieves the height of the active tip.
@@ -1176,5 +1207,135 @@ pub mod test {
             "{:#?} != {:#?}",
             enqueued_blocks, next_hashes
         );
+    }
+
+    #[tokio::test]
+    async fn test_pruning_blocks_based_on_the_anchor_hash_and_processed_hashes() {
+        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let blockchain_state = BlockchainState::new(&config);
+        let genesis = blockchain_state.genesis().clone();
+        let genesis_hash = genesis.header.block_hash();
+        let mut blockchain_manager =
+            BlockchainManager::new(Arc::new(Mutex::new(blockchain_state)), no_op_logger());
+        let addr = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
+        let mut channel = TestChannel::new(vec![addr]);
+
+        let next_headers = generate_headers(genesis_hash, genesis.header.time, 11, &[]);
+        let next_hashes = next_headers
+            .iter()
+            .map(|h| h.block_hash())
+            .collect::<Vec<_>>();
+        // Create and add a block to the cache, remove the hash
+        let block_3 = Block {
+            header: next_headers[2],
+            txdata: vec![],
+        };
+
+        {
+            let mut blockchain = blockchain_manager.blockchain.lock().await;
+            let (headers_added, maybe_err) = blockchain.add_headers(&next_headers);
+            assert_eq!(headers_added.len(), next_headers.len(), "{:#?}", maybe_err);
+            blockchain.add_block(block_3).expect("unable to add block");
+        }
+
+        blockchain_manager.add_peer(&mut channel, &addr).await;
+        blockchain_manager
+            .enqueue_new_blocks_to_download(next_headers)
+            .await;
+
+        // The block sync queue should contain 10 block hashes. Missing block 3 as it is in the cache already.
+        assert_eq!(blockchain_manager.block_sync_queue.len(), 10);
+
+        blockchain_manager.sync_blocks(&mut channel).await;
+        assert_eq!(blockchain_manager.getdata_request_info.len(), 8);
+
+        blockchain_manager
+            .prune_blocks(next_hashes[2], next_hashes[3..8].to_vec())
+            .await;
+        // `getdata` requests should be completely clears based on the processed block hashes.
+        assert_eq!(blockchain_manager.getdata_request_info.len(), 1);
+        // Block sync should only contain block 11's hash.
+        assert_eq!(blockchain_manager.block_sync_queue.len(), 2);
+        assert_eq!(
+            blockchain_manager
+                .block_sync_queue
+                .back()
+                .expect("should contain 1 block hash"),
+            next_hashes
+                .last()
+                .expect("next_hashes should contain 1 block hash")
+        );
+        // Block 3 should be removed from the cache as it is the anchor.
+        assert!(blockchain_manager
+            .blockchain
+            .lock()
+            .await
+            .get_block(&next_hashes[2])
+            .is_none());
+    }
+
+    #[tokio::test]
+    async fn test_pruning_blocks_to_ensure_it_does_not_prune_anchor_adjacent_blocks() {
+        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let blockchain_state = BlockchainState::new(&config);
+        let genesis = blockchain_state.genesis().clone();
+        let genesis_hash = genesis.header.block_hash();
+        let mut blockchain_manager =
+            BlockchainManager::new(Arc::new(Mutex::new(blockchain_state)), no_op_logger());
+        let addr = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
+        let mut channel = TestChannel::new(vec![addr]);
+
+        let next_headers = generate_headers(genesis_hash, genesis.header.time, 11, &[]);
+        let next_hashes = next_headers
+            .iter()
+            .map(|h| h.block_hash())
+            .collect::<Vec<_>>();
+        // Create and add a block to the cache, remove the hash
+        let block_5 = Block {
+            header: next_headers[4],
+            txdata: vec![],
+        };
+
+        {
+            let mut blockchain = blockchain_manager.blockchain.lock().await;
+            let (headers_added, maybe_err) = blockchain.add_headers(&next_headers);
+            assert_eq!(headers_added.len(), next_headers.len(), "{:#?}", maybe_err);
+            blockchain.add_block(block_5).expect("unable to add block");
+        }
+
+        blockchain_manager.add_peer(&mut channel, &addr).await;
+        blockchain_manager
+            .enqueue_new_blocks_to_download(next_headers)
+            .await;
+
+        // The block sync queue should contain 10 block hashes. Missing block 3 as it is in the cache already.
+        assert_eq!(blockchain_manager.block_sync_queue.len(), 10);
+        blockchain_manager.prune_blocks(genesis_hash, vec![]).await;
+        assert_eq!(blockchain_manager.block_sync_queue.len(), 10);
+
+        blockchain_manager.sync_blocks(&mut channel).await;
+        assert_eq!(blockchain_manager.getdata_request_info.len(), 8);
+
+        blockchain_manager.prune_blocks(genesis_hash, vec![]).await;
+        // `getdata` requests should be completely clears based on the processed block hashes.
+        assert_eq!(blockchain_manager.getdata_request_info.len(), 8);
+        // Block sync should only contain block 11's hash.
+        assert_eq!(blockchain_manager.block_sync_queue.len(), 2);
+        assert_eq!(
+            blockchain_manager
+                .block_sync_queue
+                .back()
+                .expect("should contain 1 block hash"),
+            next_hashes
+                .last()
+                .expect("next_hashes should contain 1 block hash")
+        );
+        // Block 5 shoul still be in the cache.
+        assert!(blockchain_manager
+            .blockchain
+            .lock()
+            .await
+            .get_block(&next_hashes[4])
+            .is_some());
     }
 }

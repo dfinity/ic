@@ -256,11 +256,23 @@ impl BlockchainState {
         &self.tips[0]
     }
 
-    /// This method is used to remove old blocks in the `header_cache`
-    pub fn prune_old_blocks(&mut self, block_hashes: &[BlockHash]) {
+    /// This method is used to remove blocks in the `header_cache` that are found in the given
+    /// block hashes.
+    pub fn prune_blocks(&mut self, block_hashes: &[BlockHash]) {
         for block_hash in block_hashes {
             self.block_cache.remove(block_hash);
         }
+    }
+
+    /// Removes blocks that are below a given height from the block cache.
+    pub fn prune_blocks_below_height(&mut self, height: BlockHeight) {
+        let hashes_below_height = self
+            .block_cache
+            .keys()
+            .filter(|b| height > self.get_cached_header(b).map_or(0, |c| c.height))
+            .copied()
+            .collect::<Vec<_>>();
+        self.prune_blocks(&hashes_below_height);
     }
 
     /// Get the locator hashes for the active chain (the chain with the highest amount of work).
@@ -553,19 +565,38 @@ mod test {
         );
     }
 
-    /// Tests the functionality of `BlockchainState::prune_old_blocks(...)` to ensure
+    /// Tests the functionality of `BlockchainState::prune_blocks(...)` to ensure
     /// blocks are removed from the cache.
     #[test]
-    fn test_pruning_old_blocks_from_the_cache() {
+    fn test_pruning_blocks_from_the_cache() {
         let test_state = TestState::setup();
         let config = ConfigBuilder::new().build();
         let mut state = BlockchainState::new(&config);
+        let block_1_hash = test_state.block_1.block_hash();
         let block_2_hash = test_state.block_2.block_hash();
         state.add_block(test_state.block_1).unwrap();
         state.add_block(test_state.block_2).unwrap();
 
-        state.prune_old_blocks(&[block_2_hash]);
+        state.prune_blocks(&[block_2_hash]);
+        assert!(state.block_cache.contains_key(&block_1_hash));
         assert!(!state.block_cache.contains_key(&block_2_hash));
+    }
+
+    /// Tests the functionality of `BlockchainState::prune_blocks_below_height(...)` to ensure
+    /// blocks are removed from the cache that are below a given height.
+    #[test]
+    fn test_pruning_blocks_below_a_given_height_from_the_cache() {
+        let test_state = TestState::setup();
+        let config = ConfigBuilder::new().build();
+        let mut state = BlockchainState::new(&config);
+        let block_1_hash = test_state.block_1.block_hash();
+        let block_2_hash = test_state.block_2.block_hash();
+        state.add_block(test_state.block_1).unwrap();
+        state.add_block(test_state.block_2).unwrap();
+
+        state.prune_blocks_below_height(2);
+        assert!(!state.block_cache.contains_key(&block_1_hash));
+        assert!(state.block_cache.contains_key(&block_2_hash));
     }
 
     /// Simple test to verify that `BlockchainState::block_cache_size()` returns the total
