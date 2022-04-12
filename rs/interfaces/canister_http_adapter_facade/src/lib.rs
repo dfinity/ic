@@ -1,4 +1,4 @@
-use ic_types::canister_http::{CanisterHttpRequest, CanisterHttpResponseContent};
+use ic_types::canister_http::{CanisterHttpRequest, CanisterHttpResponse};
 
 /// The error type that can be returned on "send".
 #[derive(Debug, PartialEq)]
@@ -22,4 +22,4 @@ pub trait NonBlockingChannel<Request, Response> {
 }
 
 pub type CanisterHttpClient =
-    Box<dyn NonBlockingChannel<CanisterHttpRequest, CanisterHttpResponseContent> + Send>;
+    Box<dyn NonBlockingChannel<CanisterHttpRequest, CanisterHttpResponse> + Send>;
