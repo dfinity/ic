@@ -192,6 +192,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     boundary_nodes::config,
                     par(vec![
                         sys_t("boundary_nodes_test", boundary_nodes::test),
+                        sys_t("boundary_nodes_nginx_test", boundary_nodes::nginx_test),
                     ]),
                 ),
                 pot(

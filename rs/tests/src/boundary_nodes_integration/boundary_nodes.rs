@@ -88,3 +88,40 @@ pub fn test(env: TestEnv, logger: Logger) {
         }
     }
 }
+
+/* tag::catalog[]
+Title:: Boundary nodes nginx test
+
+Goal:: Verify that nginx configuration is correct by running `nginx -T` on the boundary node.
+
+Runbook:
+. Set up a subnet with 4 nodes and a boundary node.
+. SSH into the boundary node and execute `sudo nginx -t`
+
+Success:: The output contains the string
+`nginx: configuration file /etc/nginx/nginx.conf test is successful`
+
+Coverage:: NGINX configuration is not broken
+
+end::catalog[] */
+
+pub fn nginx_test(env: TestEnv, logger: Logger) {
+    let deployed_boundary_node = env.get_deployed_boundary_node(BOUNDARY_NODE_NAME).unwrap();
+
+    // SSH into Boundary Nodes:
+    let sess = deployed_boundary_node.block_on_ssh_session(ADMIN).unwrap();
+    let mut channel = sess.channel_session().unwrap();
+    channel.exec("sudo nginx -t 2>&1").unwrap();
+    let mut nginx_result = String::new();
+    channel.read_to_string(&mut nginx_result).unwrap();
+    channel.wait_close().unwrap();
+    info!(
+        logger,
+        "nginx test result = '{}'. Exit status = {}",
+        nginx_result.trim(),
+        channel.exit_status().unwrap()
+    );
+    if !nginx_result.trim().contains("test is successful") {
+        panic!("NGINX test failed.");
+    }
+}
