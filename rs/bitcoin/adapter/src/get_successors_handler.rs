@@ -108,7 +108,8 @@ impl GetSuccessorsHandler {
             // This would allow prune to remove blocks that are below the anchor hash in cases where
             // the channel did fill completely and has caught up again.
             self.command_sender
-                .try_send(BlockchainManagerRequest::PruneOldBlocks(
+                .try_send(BlockchainManagerRequest::PruneBlocks(
+                    request.anchor,
                     request.processed_block_hashes,
                 ))
                 .ok();

@@ -131,7 +131,7 @@ pub enum BlockchainManagerRequest {
     /// Inform the adapter to enqueue the next block headers into the syncing queue.
     EnqueueNewBlocksToDownload(Vec<BlockHeader>),
     /// Inform the adapter to prune the following block hashes from the cache.
-    PruneOldBlocks(Vec<BlockHash>),
+    PruneBlocks(BlockHash, Vec<BlockHash>),
 }
 
 /// The transaction manager is owned by a single thread which listens on a channel

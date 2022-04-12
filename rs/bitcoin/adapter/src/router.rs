@@ -85,8 +85,8 @@ pub fn start_router(
                         BlockchainManagerRequest::EnqueueNewBlocksToDownload(next_headers) => {
                             blockchain_manager.enqueue_new_blocks_to_download(next_headers).await;
                         }
-                        BlockchainManagerRequest::PruneOldBlocks(processed_block_hashes) => {
-                            blockchain_manager.prune_old_blocks(&processed_block_hashes).await;
+                        BlockchainManagerRequest::PruneBlocks(anchor, processed_block_hashes) => {
+                            blockchain_manager.prune_blocks(anchor, processed_block_hashes).await;
                         }
                     };
                 }
