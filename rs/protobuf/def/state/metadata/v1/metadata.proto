@@ -72,6 +72,11 @@ enum HttpMethodType {
     HTTP_METHOD_TYPE_GET = 1;
 }
 
+message HttpHeader {
+    string name = 1;
+    string value = 2;
+}
+
 message CanisterHttpRequestContext {
     state.queues.v1.Request request = 1;
     string url = 2;
@@ -79,6 +84,7 @@ message CanisterHttpRequestContext {
     google.protobuf.StringValue transform_method_name = 4;
     HttpMethodType http_method = 5;
     uint64 time = 6;
+    repeated HttpHeader headers = 7;
 }
 
 message CanisterHttpRequestContextTree {

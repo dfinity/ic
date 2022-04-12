@@ -472,6 +472,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                                     .push_http_request(CanisterHttpRequestContext {
                                         request: request.clone(),
                                         url: args.url,
+                                        headers: args.headers,
                                         body: args.body,
                                         http_method: args.http_method,
                                         transform_method_name: args.transform_method_name,
