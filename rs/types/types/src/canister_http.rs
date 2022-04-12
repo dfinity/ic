@@ -97,9 +97,9 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct CanisterHttpRequest {
-    id: CanisterHttpRequestId,
-    timeout: Time,
-    content: CanisterHttpRequestContext,
+    pub id: CanisterHttpRequestId,
+    pub timeout: Time,
+    pub content: CanisterHttpRequestContext,
 }
 
 /// The content of a response of a after the filtering step.
