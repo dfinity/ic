@@ -23,7 +23,7 @@ use crate::{
     signature::*,
     Time,
 };
-use ic_ic00_types::{CanisterHttpHeader, HttpMethodType};
+use ic_error_types::RejectCode;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::system_metadata::v1 as pb_metadata,
@@ -37,9 +37,9 @@ pub type CanisterHttpRequestId = CallbackId;
 pub struct CanisterHttpRequestContext {
     pub request: Request,
     pub url: String,
-    pub headers: Vec<CanisterHttpHeader>,
+    pub headers: Vec<ic_ic00_types::CanisterHttpHeader>,
     pub body: Option<Vec<u8>>,
-    pub http_method: HttpMethodType,
+    pub http_method: ic_ic00_types::HttpMethodType,
     pub transform_method_name: Option<String>,
     pub time: Time,
 }
@@ -80,13 +80,13 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
             headers: context
                 .headers
                 .into_iter()
-                .map(|h| CanisterHttpHeader {
+                .map(|h| ic_ic00_types::CanisterHttpHeader {
                     name: h.name,
                     value: h.value,
                 })
                 .collect(),
             body: context.body,
-            http_method: HttpMethodType::from(
+            http_method: ic_ic00_types::HttpMethodType::from(
                 pb_metadata::HttpMethodType::from_i32(context.http_method).unwrap_or_default(),
             ),
             transform_method_name: context.transform_method_name.map(From::from),
@@ -104,10 +104,35 @@ pub struct CanisterHttpRequest {
 
 /// The content of a response of a after the filtering step.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct CanisterHttpResponseContent {
+pub struct CanisterHttpResponse {
     pub id: CanisterHttpRequestId,
     pub timeout: Time,
-    // TODO: Content goes here
+    pub content: CanisterHttpResponseContent,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum CanisterHttpResponseContent {
+    Success(CanisterHttpPayload),
+    Failed(CanisterHttpReject),
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+pub struct CanisterHttpReject {
+    pub reject_code: RejectCode,
+    pub message: String,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+pub struct CanisterHttpHeader {
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct CanisterHttpPayload {
+    pub status: u64,
+    pub headers: Vec<CanisterHttpHeader>,
+    pub body: Vec<u8>,
 }
 
 // type CanisterHttpResponseWithConsensus =
@@ -123,9 +148,9 @@ pub struct CanisterHttpResponseDivergence {
 }
 
 impl CanisterHttpResponseMetadata {
-    pub fn from_content<F>(content: &CanisterHttpResponseContent, hash_fn: F) -> Self
+    pub fn from_content<F>(content: &CanisterHttpResponse, hash_fn: F) -> Self
     where
-        F: Fn(&CanisterHttpResponseContent) -> CryptoHashOf<CanisterHttpResponseContent>,
+        F: Fn(&CanisterHttpResponse) -> CryptoHashOf<CanisterHttpResponse>,
     {
         Self {
             id: content.id,
@@ -140,7 +165,7 @@ impl CanisterHttpResponseMetadata {
 pub struct CanisterHttpResponseMetadata {
     pub id: CanisterHttpRequestId,
     pub timeout: Time,
-    pub content_hash: CryptoHashOf<CanisterHttpResponseContent>,
+    pub content_hash: CryptoHashOf<CanisterHttpResponse>,
 }
 
 impl crate::crypto::SignedBytesWithoutDomainSeparator for CanisterHttpResponseMetadata {
