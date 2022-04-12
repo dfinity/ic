@@ -4,11 +4,15 @@ Statesync experiment
 
 Purpose: Stress state sync mechanisms with large state changes
 
-Topology: 13 node subnet, 1 machine NNS
-Deploy one instance of statesync canister
-Make an update call
-Kill a node for > 4 * DKG interval update calls
-Restart node
+Minimal topology: 13 node app subnet, 1 node NNS
+
+Runbook:
+. Deploy one instance of statesync canister
+. Make an update call
+. Kill a node for > 3 * DKG interval update calls
+. Kill nodes in the same data center
+. Restart node
+. Make another update call
 
 Measure and determine:
   State sync duration
@@ -170,7 +174,6 @@ class StatesyncExperiment(base_experiment.BaseExperiment):
         print("Restarted", count, "nodes")
         print()
 
-        time.sleep(60)
         return state_sync_duration
 
 
