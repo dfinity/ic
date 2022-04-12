@@ -57,7 +57,7 @@ impl IcHandleConstructor for TestEnv {
                     vm_name: n.node_id.to_string(),
                     url: ic_setup.farm_base_url.clone(),
                 }),
-                is_root_subnet: s.map_or(false, |s| Some(s.subnet_id) == root_subnet_id),
+                is_root_subnet: s.map_or(false, |s| s.subnet_id == root_subnet_id),
             });
         }
 

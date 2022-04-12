@@ -29,7 +29,9 @@ use crate::util::{self /* runtime_from_url */};
 // use dfn_candid::candid;
 use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{DefaultIC, HasPublicApiUrl, IcNodeContainer, RetrieveIpv4Addr};
+use crate::driver::test_env_api::{
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, RetrieveIpv4Addr,
+};
 use crate::driver::universal_vm::UniversalVms;
 use crate::util::UniversalCanister;
 use crate::{

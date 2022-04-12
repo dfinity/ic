@@ -132,19 +132,28 @@ use crate::driver::farm::Farm;
 use crate::driver::test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute};
 use crate::util::create_agent;
 use anyhow::{bail, Result};
+use canister_test::{RemoteTestRuntime, Runtime};
 use ic_agent::Agent;
+use ic_canister_client::Agent as InternalAgent;
+use ic_canister_client::Sender;
 use ic_fondue::ic_manager::handle::READY_RESPONSE_TIMEOUT;
 use ic_fondue::ic_manager::{FarmInfo, IcEndpoint, IcHandle, IcSubnet, RuntimeDescriptor};
 use ic_interfaces::registry::{RegistryClient, RegistryClientResult};
+use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID};
+use ic_nns_init::read_initial_mutations_from_local_store_dir;
+use ic_nns_test_keys::TEST_USER1_PRINCIPAL;
+use ic_nns_test_utils::itest_helpers::{NnsCanisters, NnsInitPayloadsBuilder};
+use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_protobuf::registry::{node::v1 as pb_node, subnet::v1 as pb_subnet};
 use ic_registry_client::local_registry::LocalRegistry;
 use ic_registry_client_helpers::node::NodeRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use ic_types::{NodeId, RegistryVersion, SubnetId};
-use slog::{info, warn};
+use ledger_canister::{LedgerCanisterInitPayload, Tokens};
+use slog::{info, warn, Logger};
 use ssh2::Session;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::net::{Ipv4Addr, TcpStream};
 use std::path::{Path, PathBuf};
@@ -155,7 +164,252 @@ use url::Url;
 
 pub const RETRY_TIMEOUT: Duration = Duration::from_secs(120);
 pub const RETRY_BACKOFF: Duration = Duration::from_secs(5);
+const REGISTRY_QUERY_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// An immutable snapshot of the Internet Computer topology valid at a
+/// particular registry version.
+#[derive(Clone)]
+pub struct TopologySnapshot {
+    registry_version: RegistryVersion,
+    local_registry: Arc<LocalRegistry>,
+    ic_name: String,
+    env: TestEnv,
+}
+
+impl TopologySnapshot {
+    pub fn subnets(&self) -> Box<dyn Iterator<Item = SubnetSnapshot>> {
+        use ic_registry_client_helpers::subnet::SubnetListRegistry;
+        let registry_version = self.local_registry.get_latest_version();
+        Box::new(
+            self.local_registry
+                .get_subnet_ids(registry_version)
+                .unwrap_result()
+                .into_iter()
+                .map(|subnet_id| SubnetSnapshot {
+                    subnet_id,
+                    registry_version,
+                    local_registry: self.local_registry.clone(),
+                    env: self.env.clone(),
+                    ic_name: self.ic_name.clone(),
+                })
+                .collect::<Vec<_>>()
+                .into_iter(),
+        )
+    }
+
+    pub fn unassigned_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
+        use ic_registry_client_helpers::subnet::{SubnetListRegistry, SubnetRegistry};
+
+        let registry_version = self.local_registry.get_latest_version();
+        let assigned_nodes: HashSet<_> = self
+            .local_registry
+            .get_subnet_ids(registry_version)
+            .unwrap_result()
+            .into_iter()
+            .flat_map(|subnet_id| {
+                self.local_registry
+                    .get_node_ids_on_subnet(subnet_id, registry_version)
+                    .unwrap_result()
+            })
+            .collect();
+
+        Box::new(
+            self.local_registry
+                .get_node_ids(registry_version)
+                .unwrap()
+                .into_iter()
+                .filter(|node_id| !assigned_nodes.contains(node_id))
+                .map(|node_id| IcNodeSnapshot {
+                    node_id,
+                    registry_version,
+                    local_registry: self.local_registry.clone(),
+                    env: self.env.clone(),
+                    ic_name: self.ic_name.clone(),
+                })
+                .collect::<Vec<_>>()
+                .into_iter(),
+        )
+    }
+
+    /// The subnet id of the root subnet.
+    ///
+    /// This method panics if in the underlying registry, the root subnet id is
+    /// not set.
+    pub fn root_subnet_id(&self) -> SubnetId {
+        use ic_registry_client_helpers::subnet::SubnetRegistry;
+        self.local_registry
+            .get_root_subnet_id(self.registry_version)
+            .expect("failed to fetch root subnet id from registry")
+            .expect("root subnet id is not set")
+    }
+
+    pub fn root_subnet(&self) -> SubnetSnapshot {
+        let subnet_id = self.root_subnet_id();
+        SubnetSnapshot {
+            subnet_id,
+            registry_version: self.registry_version,
+            local_registry: self.local_registry.clone(),
+            env: self.env.clone(),
+            ic_name: self.ic_name.clone(),
+        }
+    }
+
+    /// This method blocks and repeatedly fetches updates from the registry
+    /// canister until the latest available registry version is newer than the
+    /// registry version of this snapshot.
+    ///
+    /// The registry version of the returned snapshot is the newest available
+    /// registry version.
+    ///
+    /// # Known Limitations
+    ///
+    /// As the test driver does not implement timeouts on the test level, this
+    /// method blocks for a duration of 180 seconds at maximum.
+    pub fn block_for_newer_registry_version(&self) -> Result<TopologySnapshot> {
+        let minimum_version = self.local_registry.get_latest_version() + RegistryVersion::from(1);
+        self.block_for_min_registry_version(minimum_version)
+    }
+
+    /// This method blocks and repeatedly fetches updates from the registry
+    /// canister until the latest available registry version is higher or equal
+    /// to `min_version`.
+    ///
+    /// The registry version of the returned snapshot is the newest available
+    /// registry version.
+    ///
+    /// Note that this method will immediately return if `min_version` is
+    /// less than or equal to the latest available version.
+    ///
+    /// # Known Limitations
+    ///
+    /// As the test driver does not implement timeouts on the test level, this
+    /// method blocks for a duration of 180 seconds at maximum.
+    pub fn block_for_min_registry_version(
+        &self,
+        min_version: RegistryVersion,
+    ) -> Result<TopologySnapshot> {
+        let duration = Duration::from_secs(180);
+        let backoff = Duration::from_secs(2);
+        let mut latest_version = self.local_registry.get_latest_version();
+        if min_version > latest_version {
+            latest_version = retry(self.env.logger(), duration, backoff, || {
+                self.local_registry.sync_with_nns()?;
+                let latest_version = self.local_registry.get_latest_version();
+                if latest_version >= min_version {
+                    Ok(latest_version)
+                } else {
+                    bail!(
+                        "latest_version: {}, expected minimum version: {}",
+                        latest_version,
+                        min_version
+                    )
+                }
+            })?;
+        }
+        Ok(Self {
+            registry_version: latest_version,
+            local_registry: self.local_registry.clone(),
+            ic_name: "".to_string(),
+            env: self.env.clone(),
+        })
+    }
+}
+
+#[derive(Clone)]
+pub struct SubnetSnapshot {
+    pub subnet_id: SubnetId,
+    ic_name: String,
+    registry_version: RegistryVersion,
+    local_registry: Arc<LocalRegistry>,
+    env: TestEnv,
+}
+
+impl SubnetSnapshot {
+    pub fn subnet_type(&self) -> SubnetType {
+        let subnet_record = self.raw_subnet_record();
+        SubnetType::try_from(subnet_record.subnet_type)
+            .expect("Could not transform from protobuf subnet type")
+    }
+
+    pub fn raw_subnet_record(&self) -> pb_subnet::SubnetRecord {
+        use ic_registry_client_helpers::subnet::SubnetRegistry;
+
+        self.local_registry
+            .get_subnet_record(self.subnet_id, self.registry_version)
+            .unwrap_result()
+    }
+}
+
+#[derive(Clone)]
+pub struct IcNodeSnapshot {
+    pub ic_name: String,
+    pub node_id: NodeId,
+    registry_version: RegistryVersion,
+    local_registry: Arc<LocalRegistry>,
+    env: TestEnv,
+}
+
+impl IcNodeSnapshot {
+    fn raw_node_record(&self) -> pb_node::NodeRecord {
+        self.local_registry
+            .get_transport_info(self.node_id, self.registry_version)
+            .unwrap_result()
+    }
+
+    fn http_endpoint_to_url(http: &pb_node::ConnectionEndpoint) -> Url {
+        let host_str = match IpAddr::from_str(&http.ip_addr.clone()) {
+            Ok(v) if v.is_ipv6() => format!("[{}]", v),
+            Ok(v) => v.to_string(),
+            Err(_) => http.ip_addr.clone(),
+        };
+
+        let url = format!("http://{}:{}/", host_str, http.port);
+        Url::parse(&url).expect("Could not parse Url")
+    }
+}
+
+pub trait HasTopologySnapshot {
+    fn topology_snapshot(&self) -> TopologySnapshot;
+    fn topology_snapshot_by_name(&self, name: &str) -> TopologySnapshot;
+
+    fn create_topology_snapshot<S: ToString, P: AsRef<Path>>(
+        name: S,
+        local_store_path: P,
+        env: TestEnv,
+    ) -> TopologySnapshot {
+        let local_registry = Arc::new(
+            LocalRegistry::new(local_store_path, REGISTRY_QUERY_TIMEOUT)
+                .expect("Could not create local registry"),
+        );
+        let registry_version = local_registry.get_latest_version();
+        TopologySnapshot {
+            local_registry,
+            registry_version,
+            ic_name: name.to_string(),
+            env,
+        }
+    }
+}
+
+impl HasTopologySnapshot for TestEnv {
+    fn topology_snapshot(&self) -> TopologySnapshot {
+        let local_store_path = self
+            .prep_dir("")
+            .expect("No no name Internet Computer")
+            .registry_local_store_path();
+        Self::create_topology_snapshot("", local_store_path, self.clone())
+    }
+
+    fn topology_snapshot_by_name(&self, name: &str) -> TopologySnapshot {
+        let local_store_path = self
+            .prep_dir(name)
+            .unwrap_or_else(|| panic!("No snapshot for internet computer: {:?}", name))
+            .registry_local_store_path();
+        Self::create_topology_snapshot(name, local_store_path, self.clone())
+    }
+}
+
+/// Construct `IcHandle` for backwards compatibility with the older test API.
 pub trait IcHandleConstructor {
     fn ic_handle(&self) -> Result<IcHandle>;
 }
@@ -214,239 +468,74 @@ impl IcHandleConstructor for TestEnv {
     }
 }
 
-pub trait DefaultIC {
-    fn topology_snapshot(&self) -> TopologySnapshot;
-    fn topology_snapshot_by_name(&self, name: &str) -> TopologySnapshot;
-}
-
-impl DefaultIC for TestEnv {
-    fn topology_snapshot(&self) -> TopologySnapshot {
-        let local_store_path = self
-            .prep_dir("")
-            .expect("No no name Internet Computer")
-            .registry_local_store_path();
-        create_topology_snapshot(local_store_path, self.clone())
-    }
-
-    fn topology_snapshot_by_name(&self, name: &str) -> TopologySnapshot {
-        let local_store_path = self
-            .prep_dir(name)
-            .unwrap_or_else(|| panic!("No snapshot for internet computer: {:?}", name))
-            .registry_local_store_path();
-        create_topology_snapshot(local_store_path, self.clone())
-    }
-}
-
-fn create_topology_snapshot<P: AsRef<Path>>(local_store_path: P, env: TestEnv) -> TopologySnapshot {
-    let local_registry = Arc::new(
-        LocalRegistry::new(local_store_path, REGISTRY_QUERY_TIMEOUT)
-            .expect("Could not create local registry"),
-    );
-    let registry_version = local_registry.get_latest_version();
-    TopologySnapshot {
-        local_registry,
-        registry_version,
-        env,
-    }
-}
-
-const REGISTRY_QUERY_TIMEOUT: Duration = Duration::from_secs(5);
-
-/// An immutable snapshot of the Internet Computer topology valid at a
-/// particular registry version.
-#[derive(Clone)]
-pub struct TopologySnapshot {
-    registry_version: RegistryVersion,
-    local_registry: Arc<LocalRegistry>,
-    env: TestEnv,
-}
-
-impl TopologySnapshot {
-    pub fn subnets(&self) -> Box<dyn Iterator<Item = SubnetSnapshot>> {
-        use ic_registry_client_helpers::subnet::SubnetListRegistry;
-        let registry_version = self.local_registry.get_latest_version();
-        Box::new(
-            self.local_registry
-                .get_subnet_ids(registry_version)
-                .unwrap_result()
-                .into_iter()
-                .map(|subnet_id| SubnetSnapshot {
-                    subnet_id,
-                    registry_version,
-                    local_registry: self.local_registry.clone(),
-                    env: self.env.clone(),
-                })
-                .collect::<Vec<_>>()
-                .into_iter(),
-        )
-    }
-
-    pub fn unassigned_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
-        use ic_registry_client_helpers::subnet::{SubnetListRegistry, SubnetRegistry};
-
-        let registry_version = self.local_registry.get_latest_version();
-        let assigned_nodes: HashSet<_> = self
-            .local_registry
-            .get_subnet_ids(registry_version)
-            .unwrap_result()
-            .into_iter()
-            .flat_map(|subnet_id| {
-                self.local_registry
-                    .get_node_ids_on_subnet(subnet_id, registry_version)
-                    .unwrap_result()
-            })
-            .collect();
-
-        Box::new(
-            self.local_registry
-                .get_node_ids(registry_version)
-                .unwrap()
-                .into_iter()
-                .filter(|node_id| !assigned_nodes.contains(node_id))
-                .map(|node_id| IcNodeSnapshot {
-                    node_id,
-                    registry_version,
-                    local_registry: self.local_registry.clone(),
-                    env: self.env.clone(),
-                })
-                .collect::<Vec<_>>()
-                .into_iter(),
-        )
-    }
-
-    pub fn root_subnet_id(&self) -> Option<SubnetId> {
-        use ic_registry_client_helpers::subnet::SubnetRegistry;
-        self.local_registry
-            .get_root_subnet_id(self.registry_version)
-            .expect("failed to fetch root subnet id from registry")
-    }
-
-    /// This method blocks and repeatedly fetches updates from the registry
-    /// canister until the latest available registry version is newer than the
-    /// registry version of this snapshot.
-    ///
-    /// The registry version of the returned snapshot is the newest available
-    /// registry version.
-    ///
-    /// # Known Limitations
-    ///
-    /// As the test driver does not implement timeouts on the test level, this
-    /// method blocks for a duration of 180 seconds at maximum.
-    pub fn block_for_newer_registry_version(&self) -> Result<TopologySnapshot> {
-        let minimum_version = self.local_registry.get_latest_version() + RegistryVersion::from(1);
-        self.block_for_min_registry_version(minimum_version)
-    }
-
-    /// This method blocks and repeatedly fetches updates from the registry
-    /// canister until the latest available registry version is higher or equal
-    /// to `min_version`.
-    ///
-    /// The registry version of the returned snapshot is the newest available
-    /// registry version.
-    ///
-    /// Note that this method will immediately return if `min_version` is
-    /// less than or equal to the latest available version.
-    ///
-    /// # Known Limitations
-    ///
-    /// As the test driver does not implement timeouts on the test level, this
-    /// method blocks for a duration of 180 seconds at maximum.
-    pub fn block_for_min_registry_version(
-        &self,
-        min_version: RegistryVersion,
-    ) -> Result<TopologySnapshot> {
-        let duration = Duration::from_secs(180);
-        let backoff = Duration::from_secs(2);
-        let mut latest_version = self.local_registry.get_latest_version();
-        if min_version > latest_version {
-            latest_version = retry(self.env.logger(), duration, backoff, || {
-                self.local_registry.sync_with_nns()?;
-                let latest_version = self.local_registry.get_latest_version();
-                if latest_version >= min_version {
-                    Ok(latest_version)
-                } else {
-                    bail!(
-                        "latest_version: {}, expected minimum version: {}",
-                        latest_version,
-                        min_version
-                    )
-                }
-            })?;
-        }
-        Ok(Self {
-            registry_version: latest_version,
-            local_registry: self.local_registry.clone(),
-            env: self.env.clone(),
-        })
-    }
-}
-
-#[derive(Clone)]
-pub struct SubnetSnapshot {
-    pub subnet_id: SubnetId,
-    registry_version: RegistryVersion,
-    local_registry: Arc<LocalRegistry>,
-    env: TestEnv,
-}
-
-impl SubnetSnapshot {
-    pub fn subnet_type(&self) -> SubnetType {
-        let subnet_record = self.raw_subnet_record();
-        SubnetType::try_from(subnet_record.subnet_type)
-            .expect("Could not transform from protobuf subnet type")
-    }
-
-    pub fn raw_subnet_record(&self) -> pb_subnet::SubnetRecord {
-        use ic_registry_client_helpers::subnet::SubnetRegistry;
-
-        self.local_registry
-            .get_subnet_record(self.subnet_id, self.registry_version)
-            .unwrap_result()
-    }
-}
-
-#[derive(Clone)]
-pub struct IcNodeSnapshot {
-    pub node_id: NodeId,
-    registry_version: RegistryVersion,
-    local_registry: Arc<LocalRegistry>,
-    env: TestEnv,
+/// All test env objects are associated with the test env itself and thus should
+/// implement this trait.
+pub trait HasTestEnv {
+    /// Returns a TestEnv associated with a given object.
+    fn test_env(&self) -> TestEnv;
 }
 
 impl HasTestEnv for IcNodeSnapshot {
-    fn env(&self) -> TestEnv {
+    fn test_env(&self) -> TestEnv {
         self.env.clone()
     }
+}
+
+impl HasTestEnv for SubnetSnapshot {
+    fn test_env(&self) -> TestEnv {
+        self.env.clone()
+    }
+}
+
+impl HasTestEnv for TopologySnapshot {
+    fn test_env(&self) -> TestEnv {
+        self.env.clone()
+    }
+}
+
+/// Returns the name of the Internet Computer instance that this object is
+/// associated with.
+///
+/// In case of the no-name Internet Computer the empty string is returned.
+pub trait HasIcName: HasTestEnv {
+    fn ic_name(&self) -> String;
+}
+
+impl HasIcName for TopologySnapshot {
+    fn ic_name(&self) -> String {
+        self.ic_name.clone()
+    }
+}
+
+impl HasIcName for SubnetSnapshot {
+    fn ic_name(&self) -> String {
+        self.ic_name.clone()
+    }
+}
+
+impl HasIcName for IcNodeSnapshot {
+    fn ic_name(&self) -> String {
+        self.ic_name.clone()
+    }
+}
+
+pub trait SshSession {
+    /// Return an SSH session to the machine referenced from self authenticating with the given user.
+    fn get_ssh_session(&self, user: &str) -> Result<Session>;
+
+    /// Try a number of times to establish an SSH session to the machine referenced from self authenticating with the given user.
+    fn block_on_ssh_session(&self, user: &str) -> Result<Session>;
+}
+
+pub trait RetrieveIpv4Addr {
+    /// Try a number of times to retrieve the IPv4 address from the machine referenced from self.  
+    fn block_on_ipv4(&self) -> Result<Ipv4Addr>;
 }
 
 impl HasVmName for IcNodeSnapshot {
     fn vm_name(&self) -> String {
         self.node_id.to_string()
     }
-}
-
-impl IcNodeSnapshot {
-    fn raw_node_record(&self) -> pb_node::NodeRecord {
-        self.local_registry
-            .get_transport_info(self.node_id, self.registry_version)
-            .unwrap_result()
-    }
-
-    fn http_endpoint_to_url(http: &pb_node::ConnectionEndpoint) -> Url {
-        let host_str = match IpAddr::from_str(&http.ip_addr.clone()) {
-            Ok(v) if v.is_ipv6() => format!("[{}]", v),
-            Ok(v) => v.to_string(),
-            Err(_) => http.ip_addr.clone(),
-        };
-
-        let url = format!("http://{}:{}/", host_str, http.port);
-        Url::parse(&url).expect("Could not parse Url")
-    }
-}
-
-pub trait HasTestEnv {
-    /// Returns a TestEnv associated with a given object.
-    fn env(&self) -> TestEnv;
 }
 
 pub trait HasVmName {
@@ -564,34 +653,29 @@ impl HasPublicApiUrl for IcNodeSnapshot {
     }
 }
 
-pub fn retry<F, R>(log: slog::Logger, timeout: Duration, backoff: Duration, f: F) -> Result<R>
-where
-    F: Fn() -> Result<R>,
-{
-    let mut attempt = 1;
-    let start = Instant::now();
-    info!(
-        log,
-        "Retrying for a maximum of {:?} with a linear backoff of {:?}", timeout, backoff
-    );
-    loop {
-        match f() {
-            Ok(v) => break Ok(v),
-            Err(e) => {
-                if start.elapsed() > timeout {
-                    let err_msg = e.to_string();
-                    break Err(e.context(format!("Timed out! Last error: {}", err_msg)));
-                }
-                info!(log, "Attempt {} failed. Error: {:?}", attempt, e);
-                std::thread::sleep(backoff);
-                attempt += 1;
-            }
-        }
-    }
+pub trait NnsInstallationExt {
+    /// Installs the NNS canisters on the subnet this node belongs to. The NNS
+    /// is installed with test neurons enabled which simplify voting on
+    /// proposals in testing.
+    fn install_nns_canisters(&self) -> Result<()>;
 }
 
-pub trait HasIpAddr {
-    fn get_ip_addr(&self) -> IpAddr;
+impl<T> NnsInstallationExt for T
+where
+    T: HasIcName + HasPublicApiUrl,
+{
+    fn install_nns_canisters(&self) -> Result<()> {
+        let test_env = self.test_env();
+        let log = test_env.logger();
+        let ic_name = self.ic_name();
+        let url = self.get_public_url();
+        let prep_dir = match test_env.prep_dir(&ic_name) {
+            Some(v) => v,
+            None => bail!("Prep Dir for IC {:?} does not exist.", ic_name),
+        };
+        install_nns_canisters(&log, url, &prep_dir, true);
+        Ok(())
+    }
 }
 
 pub trait HasRegistryVersion {
@@ -641,6 +725,7 @@ impl IcNodeContainer for SubnetSnapshot {
                 .into_iter()
                 .map(|node_id| IcNodeSnapshot {
                     node_id,
+                    ic_name: self.ic_name.clone(),
                     registry_version,
                     local_registry: self.local_registry.clone(),
                     env: self.env.clone(),
@@ -661,17 +746,7 @@ impl IcNodeContainer for SubnetSnapshot {
     }
 }
 
-impl<T> RegistryResultHelper<T> for RegistryClientResult<T> {
-    fn unwrap_result(self) -> T {
-        self.expect("registry error!")
-            .expect("registry value not present")
-    }
-}
-
-trait RegistryResultHelper<T> {
-    fn unwrap_result(self) -> T;
-}
-
+/* ### HTTP File Store API ### */
 pub trait HasHttpFileStore {
     fn http_file_store(&self) -> Box<dyn HttpFileStore>;
 }
@@ -684,32 +759,12 @@ impl HasHttpFileStore for TestEnv {
     }
 }
 
-pub trait HttpFileStore {
-    fn upload(&self, path: PathBuf) -> anyhow::Result<Box<dyn HttpFileHandle>>;
-}
-
-pub trait HttpFileHandle {
-    fn download(&self, sink: Box<dyn std::io::Write>) -> anyhow::Result<()>;
-    fn url(&self) -> Url;
-}
-
-pub struct FarmFileHandle {
-    farm: Farm,
-    url: Url,
-}
-
-impl HttpFileHandle for FarmFileHandle {
-    fn download(&self, sink: Box<dyn std::io::Write>) -> anyhow::Result<()> {
-        self.farm.download_file(self.url.clone(), sink)?;
-        Ok(())
-    }
-    fn url(&self) -> Url {
-        self.url.clone()
-    }
-}
-
 pub struct FarmFileStore {
     farm: Farm,
+}
+
+pub trait HttpFileStore {
+    fn upload(&self, path: PathBuf) -> anyhow::Result<Box<dyn HttpFileHandle>>;
 }
 
 impl HttpFileStore for FarmFileStore {
@@ -730,6 +785,28 @@ impl HttpFileStore for FarmFileStore {
         }))
     }
 }
+
+pub struct FarmFileHandle {
+    farm: Farm,
+    url: Url,
+}
+
+pub trait HttpFileHandle {
+    fn download(&self, sink: Box<dyn std::io::Write>) -> anyhow::Result<()>;
+    fn url(&self) -> Url;
+}
+
+impl HttpFileHandle for FarmFileHandle {
+    fn download(&self, sink: Box<dyn std::io::Write>) -> anyhow::Result<()> {
+        self.farm.download_file(self.url.clone(), sink)?;
+        Ok(())
+    }
+    fn url(&self) -> Url {
+        self.url.clone()
+    }
+}
+
+/* ### VM Control ### */
 
 pub trait VmControl {
     fn kill(&self);
@@ -777,7 +854,7 @@ where
 {
     /// Returns a handle used for controlling a VM, i.e. starting, stopping and rebooting.
     fn vm(&self) -> Box<dyn VmControl> {
-        let env = self.env();
+        let env = self.test_env();
         let pot_setup = PotSetup::read_attribute(&env);
         let ic_setup = IcSetup::read_attribute(&env);
         let farm = Farm::new(ic_setup.farm_base_url, env.logger.clone());
@@ -787,14 +864,6 @@ where
             vm_name: self.vm_name(),
         })
     }
-}
-
-pub trait SshSession {
-    /// Return an SSH session to the machine referenced from self authenticating with the given user.
-    fn get_ssh_session(&self, user: &str) -> Result<Session>;
-
-    /// Try a number of times to establish an SSH session to the machine referenced from self authenticating with the given user.
-    fn block_on_ssh_session(&self, user: &str) -> Result<Session>;
 }
 
 pub const ADMIN: &str = "admin";
@@ -824,7 +893,93 @@ impl SshSession for IcNodeSnapshot {
     }
 }
 
-pub trait RetrieveIpv4Addr {
-    /// Try a number of times to retrieve the IPv4 address from the machine referenced from self.  
-    fn block_on_ipv4(&self) -> Result<Ipv4Addr>;
+/* ### Auxiliary functions & helpers ### */
+
+pub fn retry<F, R>(log: slog::Logger, timeout: Duration, backoff: Duration, f: F) -> Result<R>
+where
+    F: Fn() -> Result<R>,
+{
+    let mut attempt = 1;
+    let start = Instant::now();
+    info!(
+        log,
+        "Retrying for a maximum of {:?} with a linear backoff of {:?}", timeout, backoff
+    );
+    loop {
+        match f() {
+            Ok(v) => break Ok(v),
+            Err(e) => {
+                if start.elapsed() > timeout {
+                    let err_msg = e.to_string();
+                    break Err(e.context(format!("Timed out! Last error: {}", err_msg)));
+                }
+                info!(log, "Attempt {} failed. Error: {:?}", attempt, e);
+                std::thread::sleep(backoff);
+                attempt += 1;
+            }
+        }
+    }
+}
+
+impl<T> RegistryResultHelper<T> for RegistryClientResult<T> {
+    fn unwrap_result(self) -> T {
+        self.expect("registry error!")
+            .expect("registry value not present")
+    }
+}
+
+trait RegistryResultHelper<T> {
+    fn unwrap_result(self) -> T;
+}
+
+/// Installs the NNS canisters on the node given by `url` using the initial
+/// registry created by `ic-prep`, stored under `registry_local_store`.
+pub fn install_nns_canisters(
+    logger: &Logger,
+    url: Url,
+    ic_prep_state_dir: &IcPrepStateDir,
+    nns_test_neurons_present: bool,
+) {
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+    info!(
+        logger,
+        "Compiling/installing NNS canisters (might take a while)."
+    );
+    rt.block_on(async move {
+        let mut init_payloads = NnsInitPayloadsBuilder::new();
+        if nns_test_neurons_present {
+            let mut ledger_balances = HashMap::new();
+            ledger_balances.insert(
+                LIFELINE_CANISTER_ID.get().into(),
+                Tokens::from_tokens(10000).unwrap(),
+            );
+            ledger_balances.insert(
+                (*TEST_USER1_PRINCIPAL).into(),
+                Tokens::from_tokens(200000).unwrap(),
+            );
+            info!(logger, "Initial ledger: {:?}", ledger_balances);
+            let mut ledger_init_payload = LedgerCanisterInitPayload::builder()
+                .minting_account(GOVERNANCE_CANISTER_ID.get().into())
+                .initial_values(ledger_balances)
+                .build()
+                .unwrap();
+            ledger_init_payload
+                .send_whitelist
+                .insert(CYCLES_MINTING_CANISTER_ID);
+            init_payloads
+                .with_test_neurons()
+                .with_ledger_init_state(ledger_init_payload);
+        }
+        let registry_local_store = ic_prep_state_dir.registry_local_store_path();
+        let initial_mutations = read_initial_mutations_from_local_store_dir(&registry_local_store);
+        init_payloads.with_initial_mutations(initial_mutations);
+
+        let agent = InternalAgent::new(
+            url,
+            Sender::from_keypair(&ic_test_identity::TEST_IDENTITY_KEYPAIR),
+        );
+        let runtime = Runtime::Remote(RemoteTestRuntime { agent });
+
+        NnsCanisters::set_up(&runtime, init_payloads.build()).await;
+    });
 }

@@ -7,7 +7,8 @@ use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::{HasIcPrepDir, TestEnv};
 use crate::driver::test_env_api::{
-    DefaultIC, HasPublicApiUrl, IcNodeContainer, RetrieveIpv4Addr, SshSession, ADMIN,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt, RetrieveIpv4Addr,
+    SshSession, ADMIN,
 };
 use std::io::Read;
 use std::net::Ipv4Addr;
@@ -24,6 +25,14 @@ pub fn config(env: TestEnv) {
         .expect("failed to setup IC under test");
 
     let (handle, _ctx) = get_ic_handle_and_ctx(env.clone(), env.logger());
+
+    env.topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .unwrap()
+        .install_nns_canisters()
+        .expect("Could not install NNS canisters");
 
     let nns_urls = handle
         .public_api_endpoints

@@ -183,7 +183,7 @@ pub struct DeployedUniversalVm {
 }
 
 impl HasTestEnv for DeployedUniversalVm {
-    fn env(&self) -> TestEnv {
+    fn test_env(&self) -> TestEnv {
         self.env.clone()
     }
 }

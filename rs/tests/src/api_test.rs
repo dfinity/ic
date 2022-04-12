@@ -3,7 +3,7 @@
 use crate::driver::{
     ic::InternetComputer,
     test_env::TestEnv,
-    test_env_api::{DefaultIC, HasHttpFileStore},
+    test_env_api::{HasHttpFileStore, HasTopologySnapshot},
 };
 use ic_registry_subnet_type::SubnetType;
 use slog::Logger;
