@@ -597,7 +597,7 @@ const DEALLOCATION_BACKLOG_THRESHOLD: usize = 500;
 const MAX_DIVERGED_STATES_TO_KEEP: usize = 2;
 
 /// The number of extra checkpoints to keep for state sync.
-const EXTRA_CHECKPOINTS_TO_KEEP: usize = 2;
+const EXTRA_CHECKPOINTS_TO_KEEP: usize = 1;
 
 pub struct StateManagerImpl {
     log: ReplicaLogger,

@@ -211,9 +211,9 @@ fn starting_height_independent_of_remove_states_below() {
         let (_height, recovered_tip) = state_manager.take_tip();
         assert_eq!(canister_ids(&recovered_tip), canister_id);
 
-        let state_manager = restart_fn(state_manager, Some(height(1)));
+        let state_manager = restart_fn(state_manager, Some(height(2)));
 
-        let canister_id: Vec<CanisterId> = vec![canister_test_id(100)];
+        let canister_id: Vec<CanisterId> = vec![canister_test_id(100), canister_test_id(200)];
         let (_height, recovered_tip) = state_manager.take_tip();
         assert_eq!(canister_ids(&recovered_tip), canister_id);
     });
@@ -771,7 +771,7 @@ fn can_keep_last_checkpoint_and_higher_states_after_removal() {
 
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
-            vec![height(0), height(4), height(6), height(8), height(9)],
+            vec![height(0), height(6), height(8), height(9)],
         );
 
         assert_eq!(height(9), state_manager.latest_state_height());
@@ -782,7 +782,7 @@ fn can_keep_last_checkpoint_and_higher_states_after_removal() {
 
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
-            vec![height(0), height(4), height(6), height(8),],
+            vec![height(0), height(6), height(8),],
         );
         assert_eq!(height(8), state_manager.latest_state_height());
         let latest_state = state_manager.get_latest_state();
@@ -1033,7 +1033,7 @@ fn can_purge_intermediate_snapshots() {
             ],
         );
 
-        // Checkpoints @10, @15 and @20 are kept because they are the three most recent
+        // Checkpoints @15 and @20 are kept because they are the two most recent
         // checkpoints.
         // Intermediate states from @16 to @18 are purged.
         state_manager.remove_states_below(height(19));
@@ -1041,7 +1041,6 @@ fn can_purge_intermediate_snapshots() {
             state_manager.list_state_heights(CERT_ANY),
             vec![
                 height(0),
-                height(10),
                 height(15),
                 height(19),
                 height(20),
@@ -1055,14 +1054,7 @@ fn can_purge_intermediate_snapshots() {
         state_manager.remove_states_below(height(20));
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
-            vec![
-                height(0),
-                height(10),
-                height(15),
-                height(20),
-                height(21),
-                height(22)
-            ],
+            vec![height(0), height(15), height(20), height(21), height(22)],
         );
 
         // Test calling `remove_states_below` at the latest state height.
@@ -1070,7 +1062,7 @@ fn can_purge_intermediate_snapshots() {
         state_manager.remove_states_below(height(22));
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
-            vec![height(0), height(10), height(15), height(20), height(22)],
+            vec![height(0), height(15), height(20), height(22)],
         );
 
         // Test calling `remove_states_below` at a higher height than the latest state
@@ -1080,7 +1072,7 @@ fn can_purge_intermediate_snapshots() {
         state_manager.remove_states_below(height(25));
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
-            vec![height(0), height(10), height(15), height(20), height(22)],
+            vec![height(0), height(15), height(20), height(22)],
         );
     })
 }
