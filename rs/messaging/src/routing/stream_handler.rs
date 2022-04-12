@@ -655,11 +655,6 @@ impl StreamHandlerImpl {
                         }
 
                         RequestOrResponse::Response(_) => {
-                            #[cfg(not(debug_assertions))]
-                            assert!(
-                                self.testing_flag_generate_reject_signals,
-                                "`testing_flag_generate_reject_signals` enabled in release build"
-                            );
                             if state.metadata.certification_version >= 9
                                 || self.testing_flag_generate_reject_signals
                             {
