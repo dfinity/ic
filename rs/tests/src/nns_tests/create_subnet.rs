@@ -49,7 +49,7 @@ pub fn config() -> InternetComputer {
         .with_unassigned_nodes(4)
 }
 
-pub fn create_subnet_test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     // [Phase I] Prepare NNS
     ctx.install_nns_canisters(&handle, true);
     let mut rng = ctx.rng.clone();

@@ -2,18 +2,14 @@ use ic_fondue::pot::execution::TestResult;
 use ic_tests::api_test;
 use ic_tests::boundary_nodes_integration::boundary_nodes;
 use ic_tests::btc_integration::btc;
-use ic_tests::create_subnet::{self, create_subnet_test};
 use ic_tests::driver::cli::CliArgs;
 use ic_tests::driver::driver_setup::{create_driver_context_from_cli, initialize_env, mk_logger};
 use ic_tests::driver::evaluation::evaluate;
 use ic_tests::driver::pot_dsl::*;
 use ic_tests::driver::test_env::TestEnv;
 use ic_tests::http_from_canister::basic_http;
-use ic_tests::nns_follow_test::{self, test as follow_test};
-use ic_tests::nns_voting_test::{self, test as voting_test};
 use ic_tests::node_assign_test::{self, test as node_assign_test};
 use ic_tests::node_graceful_leaving_test::{self, test as node_graceful_leaving_test};
-use ic_tests::node_removal_from_registry_test::{self, test as node_removal_from_registry_test};
 use ic_tests::node_restart_test::{self, test as node_restart_test};
 use ic_tests::orchestrator::{
     nns_backup,
@@ -26,12 +22,10 @@ use ic_tests::spec_compliance;
 use ic_tests::workload_counter_canister_test;
 use ic_tests::{
     basic_health_test::{self, basic_health_test},
-    execution, message_routing,
+    execution, ledger_tests, message_routing, nns_tests,
 };
 use ic_tests::{
-    cycles_minting_test, ledger_tests,
     networking::firewall::{self, change_to_firewall_rules_takes_effect},
-    nns_canister_upgrade_test, nns_uninstall_canister_by_proposal_test,
     registry_authentication_test, tecdsa_add_nodes_test, tecdsa_remove_nodes_test,
     tecdsa_signature_test, wasm_generator_test,
 };
@@ -202,9 +196,9 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 ),
                 pot(
                     "create_subnet",
-                    create_subnet::config(),
+                    nns_tests::create_subnet::config(),
                     par(vec![
-                        t("create_subnet", create_subnet_test),
+                        t("create_subnet", nns_tests::create_subnet::test),
                     ]),
                 ),
                 execution::upgraded_pots::general_execution_pot(),
@@ -218,8 +212,8 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 ),
                 pot(
                     "node_removal_from_registry_pot",
-                    node_removal_from_registry_test::config(),
-                    par(vec![t("node_removal_from_registry_test", node_removal_from_registry_test)]),
+                    nns_tests::node_removal_from_registry::config(),
+                    par(vec![t("node_removal_from_registry_test", nns_tests::node_removal_from_registry::test)]),
                 ),
                 pot(
                     "node_assign_pot",
@@ -233,13 +227,13 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 ),
                 pot(
                     "nns_follow_pot",
-                    nns_follow_test::config(),
-                    par(vec![t("follow_test", follow_test)]),
+                    nns_tests::nns_follow::config(),
+                    par(vec![t("follow_test", nns_tests::nns_follow::test)]),
                 ),
                 pot(
                     "nns_voting_pot",
-                    nns_voting_test::config(),
-                    par(vec![t("voting_test", voting_test)]),
+                    nns_tests::nns_voting::config(),
+                    par(vec![t("voting_test", nns_tests::nns_voting::test)]),
                 ),
                 pot(
                     "nns_token_balance_pot",
@@ -253,8 +247,8 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 ),
                 pot(
                     "cycles_minting_pot",
-                    cycles_minting_test::config(),
-                    par(vec![t("cycles_minting_test", cycles_minting_test::test)]),
+                    nns_tests::cycles_minting::config(),
+                    par(vec![t("cycles_minting_test", nns_tests::cycles_minting::test)]),
                 ).with_ttl(Duration::from_secs(60 * 15 /* 15 minutes */)),
                 pot(
                     "nns_voting_fuzzing_poc_pot",
@@ -266,18 +260,18 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 ),
                 pot(
                     "nns_canister_uninstall_pot",
-                    nns_uninstall_canister_by_proposal_test::config(),
+                    nns_tests::nns_uninstall_canister_by_proposal::config(),
                     par(vec![t(
                         "nns_uninstall_canister_by_proposal_test",
-                        nns_uninstall_canister_by_proposal_test::test,
+                        nns_tests::nns_uninstall_canister_by_proposal::test,
                     )]),
                 ),
                 pot(
                     "nns_canister_upgrade_pot",
-                    nns_canister_upgrade_test::config(),
+                    nns_tests::nns_canister_upgrade::config(),
                     par(vec![t(
                         "nns_canister_upgrade_test",
-                        nns_canister_upgrade_test::test,
+                        nns_tests::nns_canister_upgrade::test,
                     )]),
                 ),
                 pot(
@@ -448,8 +442,8 @@ fn get_test_suites() -> HashMap<String, Suite> {
             ),
             pot(
                 "create_subnet",
-                create_subnet::config(),
-                par(vec![t("create_subnet", create_subnet_test)]),
+                nns_tests::create_subnet::config(),
+                par(vec![t("create_subnet", nns_tests::create_subnet::test)]),
             ),
             pot(
                 "upgrade_reject_pot",
