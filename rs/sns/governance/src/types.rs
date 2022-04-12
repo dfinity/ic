@@ -7,6 +7,9 @@ use crate::pb::v1::{
     NervousSystemParameters, NeuronId, NeuronPermissionList, NeuronPermissionType, ProposalId,
     RewardEvent, Vote,
 };
+
+use async_trait::async_trait;
+
 use ic_base_types::CanisterId;
 use ic_nervous_system_common::NervousSystemError;
 use ledger_canister::{DEFAULT_TRANSFER_FEE, TOKEN_SUBDIVIDABLE_BY};
@@ -676,6 +679,7 @@ impl fmt::Display for RewardEvent {
 }
 
 /// A general trait for the environment in which governance is running.
+#[async_trait]
 pub trait Environment: Send + Sync {
     /// Returns the current time, in seconds since the epoch.
     fn now(&self) -> u64;
@@ -695,16 +699,19 @@ pub trait Environment: Send + Sync {
     /// This number is the same in all replicas.
     fn random_byte_array(&mut self) -> [u8; 32];
 
-    /// Executes a `ExecuteNervousSystemFunction`. The standard implementation
-    /// is expected to call out to another canister and eventually report
-    /// the result back
-    fn call_canister(
+    /// Calls another canister.
+    async fn call_canister(
         &self,
-        proposal_id: u64,
         canister_id: CanisterId,
         method_name: &str,
         arg: Vec<u8>,
-    ) -> Result<(), GovernanceError>;
+    ) -> Result<
+        /* reply: */ Vec<u8>,
+        (
+            /* error_code: */ Option<i32>,
+            /* message: */ String,
+        ),
+    >;
 
     /// Returns rough information as to how much the heap can grow.
     ///
