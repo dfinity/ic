@@ -14,36 +14,43 @@ use std::fmt::{Display, Formatter};
 use std::iter::FromIterator;
 use std::str::FromStr;
 
-/// The maximum number results returned by the method `list_neurons`.
+/// The maximum number of neurons returned by the method `list_neurons`.
 pub const MAX_LIST_NEURONS_RESULTS: u32 = 100;
 
-/// The state of the neuron
+/// The state of a neuron
 #[derive(Debug, PartialEq)]
 pub enum NeuronState {
     /// In this state, the neuron is not dissolving and has a specific
-    /// `dissolve_delay`.
+    /// `dissolve_delay` that is larger than zero.
     NotDissolving,
-    /// In this state, the neuron's `dissolve_delay` decreases with the
-    /// passage of time.
+    /// In this state, the neuron's dissolve clock is running down with
+    /// the passage of time. The neuron has a defined
+    /// `when_dissolved_timestamp` that specifies at what time (in the
+    /// future) it will be dissolved.
     Dissolving,
-    /// In this state, the neuron's `when_dissolved_timestamp` is in the past
-    /// and the neuron can be disbursed.
+    /// In this state, the neuron is dissolved and can be disbursed.
+    /// This captures all the remaining cases. In particular a neuron
+    /// is dissolved if its `when_dissolved_timestamp` is in the past
+    /// or when its `dissolve_delay` is zero.
     Dissolved,
 }
-/// Indicates the status of a invocation of `remove_permission`.
+/// The status of an invocation of `remove_permission`.
 #[derive(Debug, PartialEq)]
 pub enum RemovePermissionsStatus {
-    /// This status indicates all PermissionTypes were removed and therefore
-    /// the PrincipalId was as well.
+    /// This status indicates all PermissionTypes for a PrincipalId
+    /// were removed from a neuron's permission list and therefore
+    /// the PrincipalId was removed as well.
     AllPermissionTypesRemoved,
-    /// This status indicates only some PermissionTypes were removed
-    /// and therefore the PrincipalId was not.
+    /// This status indicates that only some PermissionTypes for a
+    /// PrincipalId were removed from a neuron's permission list
+    /// and therefore the PrincipalId was not removed.
     SomePermissionTypesRemoved,
 }
 
 impl Neuron {
-    // --- Utility methods on neurons: mostly not for public consumption.
+    // Utility methods on neurons.
 
+    /// Returns the neuron's state.
     pub fn state(&self, now_seconds: u64) -> NeuronState {
         match self.dissolve_state {
             Some(DissolveState::DissolveDelaySeconds(d)) => {
@@ -64,6 +71,8 @@ impl Neuron {
         }
     }
 
+    /// Checks whether a given principal has the permission to perform a certain action on
+    /// the neuron.
     pub(crate) fn check_authorized(
         &self,
         principal: &PrincipalId,
@@ -84,6 +93,7 @@ impl Neuron {
         Ok(())
     }
 
+    /// Returns true if the principalId has the permission to act on this neuron (i.e., self).
     pub(crate) fn is_authorized(
         &self,
         principal: &PrincipalId,
@@ -101,13 +111,16 @@ impl Neuron {
         false
     }
 
-    /// Return the voting power of this neuron.
+    /// Returns the voting power of the neuron.
     ///
-    /// The voting power is the stake of the neuron modified by a
-    /// bonus of up to 100% depending on the dissolve delay, with
-    /// the maximum bonus of 100% received at an 8 year dissolve
-    /// delay. The voting power is further modified by the age of
-    /// the neuron giving up to 25% bonus after four years.
+    /// The voting power is computed as
+    /// the neuron's stake * a dissolve delay bonus * an age bonus.
+    /// The dissolve delay bonus depends on the neuron's dissolve delay and is in the range
+    /// of 0%, for 0 dissolve delay, up to 100%, for a neuron with max_dissolve_delay_seconds.
+    /// The age bonus depends on the neuron's age and is in the range of 0%, for 0 age, up
+    /// to 25%, for a neuron with max_neuron_age_for_age_bonus.
+    /// max_dissolve_delay_seconds and max_neuron_age_for_age_bonus are defined in
+    /// the nervous system parameters.
     pub(crate) fn voting_power(
         &self,
         now_seconds: u64,
@@ -116,9 +129,8 @@ impl Neuron {
     ) -> u64 {
         // We compute the stake adjustments in u128.
         let stake = self.stake_e8s() as u128;
-        // Dissolve delay is capped to eight years, but we cap it
-        // again here to make sure, e.g., if this changes in the
-        // future.
+        // Dissolve delay is capped to max_dissolve_delay_seconds, but we cap it
+        // again here to make sure, e.g., if this changes in the future.
         let d = std::cmp::min(
             self.dissolve_delay_seconds(now_seconds),
             max_dissolve_delay_seconds,
@@ -128,7 +140,7 @@ impl Neuron {
         // Sanity check.
         assert!(d_stake <= 2 * stake);
         // The voting power is also a function of the age of the
-        // neuron, giving a bonus of up to 25% at the four year mark.
+        // neuron, giving a bonus of up to 25% at max_neuron_age_for_age_bonus.
         let a = std::cmp::min(self.age_seconds(now_seconds), max_neuron_age_for_age_bonus) as u128;
         let ad_stake = d_stake + ((d_stake * a) / (4 * max_neuron_age_for_age_bonus as u128));
         // Final stake 'ad_stake' is at most 5/4 of the 'd_stake'.
@@ -140,7 +152,7 @@ impl Neuron {
         std::cmp::min(ad_stake, u64::MAX as u128) as u64
     }
 
-    /// Given the specified `ballots`: determine how this neuron would
+    /// Given the specified `ballots`, determine how the neuron would
     /// vote on a proposal of `action` based on which neurons this
     /// neuron follows on this action (or on the default action if this
     /// neuron doesn't specify any followees for `action`).
@@ -189,8 +201,8 @@ impl Neuron {
         Vote::Unspecified
     }
 
-    // See the relevant protobuf for a high-level description of
-    // these operations
+    // See the relevant SNS' governance's protobuf for a high-level description
+    // of the following operations
 
     /// If this method is called on a non-dissolving neuron, it remains
     /// non-dissolving. If it is called on dissolving neuron, it remains
@@ -281,12 +293,12 @@ impl Neuron {
         }
     }
 
-    /// If this neuron is not dissolving, start dissolving it.
+    /// If the neuron is not dissolving, starts dissolving it.
     ///
     /// If the neuron is dissolving or dissolved, an error is returned.
     fn start_dissolving(&mut self, now_seconds: u64) -> Result<(), GovernanceError> {
         if let Some(DissolveState::DissolveDelaySeconds(delay)) = self.dissolve_state {
-            // Neuron is actually not dissolving.
+            // Neuron is not dissolving.
             if delay > 0 {
                 self.dissolve_state = Some(DissolveState::WhenDissolvedTimestampSeconds(
                     delay + now_seconds,
@@ -309,30 +321,27 @@ impl Neuron {
         }
     }
 
-    /// If this neuron is dissolving, set it to not dissolving.
+    /// If the neuron is dissolving, sets it to not dissolving.
     ///
     /// If the neuron is not dissolving, an error is returned.
     fn stop_dissolving(&mut self, now_seconds: u64) -> Result<(), GovernanceError> {
         if let Some(DissolveState::WhenDissolvedTimestampSeconds(ts)) = self.dissolve_state {
             if ts > now_seconds {
-                // Dissolve time is in the future: pause dissolving.
+                // As the dissolve time is in the future, the neuron is dissolving. Pause dissolving.
                 self.dissolve_state = Some(DissolveState::DissolveDelaySeconds(ts - now_seconds));
                 self.aging_since_timestamp_seconds = now_seconds;
                 Ok(())
             } else {
-                // Neuron is already dissolved, so it doesn't
-                // make sense to stop dissolving it.
+                // Already dissolved - cannot stop dissolving.
                 Err(GovernanceError::new(ErrorType::RequiresDissolving))
             }
         } else {
-            // The neuron is not in a dissolving state.
+            // Already not dissolving or dissolved - cannot stop dissolving..
             Err(GovernanceError::new(ErrorType::RequiresDissolving))
         }
     }
 
-    // --- Public interface of a neuron.
-
-    /// Return the age of this neuron.
+    /// Returns the neuron's age.
     ///
     /// A dissolving neuron has age zero.
     ///
@@ -346,7 +355,7 @@ impl Neuron {
         now_seconds.saturating_sub(self.aging_since_timestamp_seconds)
     }
 
-    /// Returns the dissolve delay of this neuron. For a non-dissolving
+    /// Returns the neuron's dissolve delay. For a non-dissolving
     /// neuron, this is just the recorded dissolve delay; for a
     /// dissolving neuron, this is the the time left (from
     /// `now_seconds`) until the neuron becomes dissolved; for a
@@ -422,22 +431,25 @@ impl Neuron {
         }
     }
 
-    /// Return the current 'stake' of this Neuron in number of 10^-8 governance
+    /// Returns the neuron's effective 'stake' in number of 10^-8 governance
     /// tokens. (That is, if the stake is 1 governance token, this function
     /// will return 10^8).
     // TODO verify correctness of comment.
+    /// The neuron's effective stake is the difference between the neuron's
+    /// cached stake and the fees that the neuron owes.
     /// The stake can be decreased by making proposals that are
-    /// subsequently rejected, and increased by transferring funds
-    /// to the account of this neuron and then refreshing the stake.
+    /// subsequently rejected, and increased by previously submitted proposals
+    /// that are adopted (then the fees are returned and not owed anymore) or
+    /// by transferring funds to the neuron's account and then refreshing the stake.
     pub fn stake_e8s(&self) -> u64 {
         self.cached_neuron_stake_e8s
             .saturating_sub(self.neuron_fees_e8s)
     }
 
-    /// Update the stake of this neuron to `new_stake` and adjust this neuron's
+    /// Updates the stake of this neuron to `new_stake` and adjust this neuron's
     /// age accordingly
     pub fn update_stake(&mut self, new_stake_e8s: u64, now: u64) {
-        // If this neuron has an age and its stake is being increased, adjust this
+        // If this neuron has an age and its stake is being increased, adjust the
         // neuron's age
         if self.aging_since_timestamp_seconds < now && self.cached_neuron_stake_e8s <= new_stake_e8s
         {
@@ -469,18 +481,21 @@ impl Neuron {
         self.cached_neuron_stake_e8s = new_stake_e8s as u64;
     }
 
+    /// Returns a neuron's subaccount or an error if there is none (a neuron
+    /// should always have a subaccount).
     pub fn subaccount(&self) -> Result<Subaccount, GovernanceError> {
         if let Some(nid) = &self.id {
             nid.subaccount()
         } else {
             Err(GovernanceError::new_with_message(
                 ErrorType::NotFound,
-                "Neuron must have a NeuronId",
+                "Neuron must have a subaccount",
             ))
         }
     }
 
-    /// Update an existing `NeuronPermission`, or insert a new one for a single PrincipalId.
+    /// Adds a given permission to a principalId's `NeuronPermission` for this neuron. If
+    /// no permissions exist for this principal, add a new `NeuronPermission`.
     pub fn add_permissions_for_principal(
         &mut self,
         principal_id: PrincipalId,
@@ -514,8 +529,9 @@ impl Neuron {
         }
     }
 
-    /// Removes the given permissions for the given PrincipalId. Returns a enum indicating
-    /// if a NeuronPermission is removed due to all of its PermissionTypes being removed.
+    /// Removes a given permissions from a principalId's `NeuronPermission` for this neuron.
+    /// Returns an enum indicating if a `NeuronPermission' is removed due to all of the
+    /// principalId's PermissionTypes being removed.
     pub fn remove_permissions_for_principal(
         &mut self,
         principal_id: PrincipalId,
@@ -580,6 +596,7 @@ impl Neuron {
     }
 }
 
+/// A neuron's ID that is defined as the neuron's subaccount on the ledger canister.
 impl NeuronId {
     pub fn subaccount(&self) -> Result<Subaccount, GovernanceError> {
         match Subaccount::try_from(self.id.as_slice()) {
