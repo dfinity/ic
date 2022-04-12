@@ -9,6 +9,7 @@
 // type, annotated with `#[candid_method(query/update)]` to be able to generate
 // the did definition of the method.
 
+use async_trait::async_trait;
 use ic_nns_governance::stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter};
 use rand::rngs::StdRng;
 use rand_core::{RngCore, SeedableRng};
@@ -19,7 +20,7 @@ use prost::Message;
 
 use candid::candid_method;
 use dfn_candid::{candid, candid_one, CandidOne};
-use dfn_core::api::{call_with_callbacks, reject_message};
+use dfn_core::api::{call_bytes_with_cleanup, Funds};
 use dfn_core::{
     api::{caller, id, now},
     over, over_async, over_init, println,
@@ -29,10 +30,9 @@ use ic_base_types::CanisterId;
 use ic_nervous_system_common::ledger::LedgerCanister;
 use ic_sns_governance::governance::{log_prefix, Governance, TimeWarp, ValidGovernanceProto};
 use ic_sns_governance::pb::v1::{
-    governance_error::ErrorType, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
-    Governance as GovernanceProto, GovernanceError, ListNeurons, ListNeuronsResponse,
-    ListProposals, ListProposalsResponse, ManageNeuron, ManageNeuronResponse,
-    NervousSystemParameters, RewardEvent,
+    GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse, Governance as GovernanceProto,
+    ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron,
+    ManageNeuronResponse, NervousSystemParameters, RewardEvent,
 };
 use ic_sns_governance::types::{Environment, HeapGrowthPotential};
 
@@ -95,6 +95,7 @@ impl CanisterEnv {
     }
 }
 
+#[async_trait]
 impl Environment for CanisterEnv {
     fn now(&self) -> u64 {
         self.time_warp.apply(
@@ -125,56 +126,19 @@ impl Environment for CanisterEnv {
     // proposal as a result of the proposal being adopted.
     //
     // The method returns either a success or error.
-    fn call_canister(
+    async fn call_canister(
         &self,
-        proposal_id: u64,
         canister_id: CanisterId,
         method_name: &str,
         arg: Vec<u8>,
-    ) -> Result<(), GovernanceError> {
-        // If there is a reply, set the proposal's execution status accordingly.
-        let on_reply = move || governance_mut().set_proposal_execution_status(proposal_id, Ok(()));
-
-        // If the message was rejected, set the proposal's execution status to failed with the
-        // error using the reject_message on a best-effort basis (see below).
-        let on_reject = move || {
-            // There's no guarantee that the reject response is a string of characters and it can
-            // potentially be large. Propagating error information is thus done on a best-effort
-            // basis.
-            let mut msg = reject_message();
-            const MAX_REJECT_MSG_SIZE: usize = 10000;
-            if msg.len() > MAX_REJECT_MSG_SIZE {
-                msg = "(truncated error message) "
-                    .to_string()
-                    .chars()
-                    .chain(
-                        msg.char_indices()
-                            .take_while(|(pos, _)| *pos < MAX_REJECT_MSG_SIZE)
-                            .map(|(_, char)| char),
-                    )
-                    .collect();
-            }
-            governance_mut().set_proposal_execution_status(
-                proposal_id,
-                Err(GovernanceError::new_with_message(
-                    ErrorType::External,
-                    format!(
-                        "Error executing ExecuteNervousSystemFunction proposal. Rejection message: {}",
-                        msg
-                    ),
-                )),
-            );
-        };
-
-        let err = call_with_callbacks(canister_id, method_name, &arg, on_reply, on_reject);
-        if err != 0 {
-            Err(GovernanceError::new_with_message(
-                ErrorType::External,
-                format!("call_with_callbacks failed: {:?}", err),
-            ))
-        } else {
-            Ok(())
-        }
+    ) -> Result<
+        /* reply: */ Vec<u8>,
+        (
+            /* error_code: */ Option<i32>,
+            /* message: */ String,
+        ),
+    > {
+        call_bytes_with_cleanup(canister_id, method_name, &arg, Funds::zero()).await
     }
 
     #[cfg(target_arch = "wasm32")]

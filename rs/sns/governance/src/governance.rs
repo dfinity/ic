@@ -44,15 +44,14 @@ use crate::proposal::{
     PROPOSAL_URL_CHAR_MAX,
 };
 use crate::types::{Environment, HeapGrowthPotential, LedgerUpdateLock};
-use candid::Encode;
-use dfn_core::api::{call, id, spawn, CanisterId};
+use candid::{Decode, Encode};
+use dfn_core::api::{id, spawn, CanisterId};
 use ic_nervous_system_common::{
     ledger::{self, Ledger},
     NervousSystemError,
 };
 use ic_nervous_system_root::{
-    install_code, CanisterIdRecord, CanisterStatusResult, CanisterStatusType,
-    ChangeCanisterProposal,
+    CanisterIdRecord, CanisterStatusResult, CanisterStatusType, ChangeCanisterProposal,
 };
 use ledger_canister::Tokens;
 
@@ -1523,28 +1522,28 @@ impl Governance {
     }
 
     async fn perform_action(&mut self, proposal_id: u64, action: proposal::Action) {
-        match action {
+        let result = match action {
             // A motion is not executed, just recorded for posterity.
-            proposal::Action::Motion(_) => self.set_proposal_execution_status(proposal_id, Ok(())),
+            proposal::Action::Motion(_) => Ok(()),
 
             proposal::Action::ManageNervousSystemParameters(params) => {
-                let result = self.perform_manage_nervous_system_parameters_action(params);
-                self.set_proposal_execution_status(proposal_id, result);
+                self.perform_manage_nervous_system_parameters_action(params)
             }
             proposal::Action::UpgradeSnsControlledCanister(params) => {
-                self.perform_upgrade_sns_controlled_canister(proposal_id, params)
-                    .await;
+                self.perform_upgrade_sns_controlled_canister(params).await
             }
             proposal::Action::ExecuteNervousSystemFunction(_) => {
                 todo!();
             }
             proposal::Action::CallCanisterMethod(params) => {
-                self.perform_call_canister_method(proposal_id, params);
+                perform_call_canister_method(&*self.env, params).await
             }
             proposal::Action::Unspecified(_) => {
                 unimplemented!();
             }
-        }
+        };
+
+        self.set_proposal_execution_status(proposal_id, result);
     }
 
     /// Execute a ManageNervousSystemParameters proposal by updating Governance's NervousSystemParameters
@@ -1580,41 +1579,9 @@ impl Governance {
 
     async fn perform_upgrade_sns_controlled_canister(
         &mut self,
-        proposal_id: u64,
         upgrade: UpgradeSnsControlledCanister,
-    ) {
-        let target_canister_id = match upgrade.canister_id {
-            Some(c) => c,
-            // This should not be possible, because proposal validation should
-            // notice this defect when the proposal was originally made, and
-            // reject the proposal right away.
-            None => {
-                let result = Err(GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    "Canister upgrade failed, because no target canister was specified.",
-                ));
-                self.set_proposal_execution_status(proposal_id, result);
-                return;
-            }
-        };
-        let target_canister_id = match CanisterId::new(target_canister_id) {
-            Ok(ok) => ok,
-            // This should not be possible, because proposal validation should
-            // notice this defect when the proposal was originally made, and
-            // reject the proposal right away.
-            Err(err) => {
-                let result = Err(GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!(
-                        "(Direct) canister upgrade failed, because the specified target \
-                         canister ID was invalid: {:?}",
-                        err,
-                    ),
-                ));
-                self.set_proposal_execution_status(proposal_id, result);
-                return;
-            }
-        };
+    ) -> Result<(), GovernanceError> {
+        let target_canister_id = get_canister_id(&upgrade.canister_id)?;
 
         let target_is_root = target_canister_id == self.proto.root_canister_id_or_panic();
         println!(
@@ -1624,14 +1591,12 @@ impl Governance {
             target_canister_id
         );
         if target_is_root {
-            let result =
-                upgrade_canister_directly(target_canister_id, upgrade.new_canister_wasm).await;
-            if let Err(err) = &result {
-                println!("{}upgrade_canister_directly failed: {}", log_prefix(), err);
-            }
-
-            self.set_proposal_execution_status(proposal_id, result);
-            return;
+            return upgrade_canister_directly(
+                &*self.env,
+                target_canister_id,
+                upgrade.new_canister_wasm,
+            )
+            .await;
         }
 
         // Serialize upgrade.
@@ -1655,48 +1620,21 @@ impl Governance {
             candid::Encode!(&change_canister_arg).unwrap()
         };
 
-        let result = self.env.call_canister(
-            proposal_id,
-            self.proto.root_canister_id_or_panic(),
-            "change_canister",
-            payload,
-        );
-
-        if result.is_err() {
-            self.set_proposal_execution_status(proposal_id, result);
-        }
-        // In the case of Ok, something else could still go wrong down the
-        // road. Either way, self.env.call_canister will take care of setting
-        // proposal execution status for us.
-    }
-
-    fn perform_call_canister_method(&mut self, proposal_id: u64, call: CallCanisterMethod) {
-        let (canister_id, method_name, args) = match unpack_call_canister_method(call) {
-            Ok(ok) => ok,
-
-            // This should not be possible, because proposals are validated when
-            // they are made, but just in case, we do not unwrap or expect.
-            Err(err) => {
-                self.set_proposal_execution_status(
-                    proposal_id,
-                    Err(GovernanceError::new_with_message(
-                        ErrorType::InvalidProposal,
-                        format!("Invalid CallCanisterMethodProposal: {:?}", err),
-                    )),
-                );
-                return;
-            }
-        };
-
-        let result = self
-            .env
-            .call_canister(proposal_id, canister_id, &method_name, args);
-
-        // If result.is_ok, it execution could still fail later. In case of Ok,
-        // status is set later/asynchronously by call_canister.
-        if result.is_err() {
-            self.set_proposal_execution_status(proposal_id, result);
-        }
+        self.env
+            .call_canister(
+                self.proto.root_canister_id_or_panic(),
+                "change_canister",
+                payload,
+            )
+            .await
+            // Convert to return type.
+            .map(|_reply| ())
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Canister method call failed: {:?}", err),
+                )
+            })
     }
 
     fn nervous_system_parameters(&self) -> &NervousSystemParameters {
@@ -3085,26 +3023,7 @@ fn validate_upgrade_sns_controlled_canister(
     upgrade: &UpgradeSnsControlledCanister,
 ) -> Result<(), GovernanceError> {
     // Require that canister_id be supplied (and be valid).
-    let canister_id = match upgrade.canister_id {
-        Some(id) => id,
-        None => {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "Upgrade Proposal lacks a target canister ID.",
-            ))
-        }
-    };
-
-    // The canister_id (which is of type PrincipalId) field must be populated
-    // with a valid value. Based on the implementation of CanisterId::new, I
-    // believe that there is no way for this to fail, but there might be some
-    // reason they decided its return type should be Result.
-    CanisterId::new(canister_id).map_err(|err| {
-        GovernanceError::new_with_message(
-            ErrorType::InvalidProposal,
-            format!("Supplied canister ID was invalid: {}", err),
-        )
-    })?;
+    get_canister_id(&upgrade.canister_id)?;
 
     // Very basic checks on the wasm.
     const WASM_HEADER: [u8; 4] = [0, 0x61, 0x73, 0x6d];
@@ -3121,12 +3040,29 @@ fn validate_upgrade_sns_controlled_canister(
     Ok(())
 }
 
+fn get_canister_id(canister_id: &Option<PrincipalId>) -> Result<CanisterId, GovernanceError> {
+    let canister_id = canister_id.ok_or_else(|| {
+        GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            "No canister ID was specified.",
+        )
+    })?;
+
+    CanisterId::new(canister_id).map_err(|err| {
+        GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            format!("Specified canister ID was invalid: {:?}", err,),
+        )
+    })
+}
+
 async fn upgrade_canister_directly(
+    env: &dyn Environment,
     canister_id: CanisterId,
     wasm: Vec<u8>,
 ) -> Result<(), GovernanceError> {
     println!("{}Begin: Stop canister {}.", log_prefix(), canister_id);
-    stop_canister(&canister_id).await?;
+    stop_canister(env, canister_id).await?;
     println!("{}End: Stop canister {}.", log_prefix(), canister_id);
 
     println!(
@@ -3134,20 +3070,11 @@ async fn upgrade_canister_directly(
         log_prefix(),
         canister_id
     );
-    let install_code_arg = ChangeCanisterProposal::new(
-        false, // stop_before_installing. Not actually used by install_code though.
-        ic_ic00_types::CanisterInstallMode::Upgrade,
-        canister_id,
-    )
-    .with_wasm(wasm);
-    let install_result = install_code(install_code_arg).await.map_err(|err| {
-        let err = GovernanceError::new_with_message(
-            ErrorType::External,
-            format!("Failed to install code into the target canister: {:?}", err),
-        );
-        println!("{}{:?}", log_prefix(), err);
-        err
-    });
+    let install_result = install_code(env, canister_id, wasm)
+        // No question mark operator here, because we always want to re-start
+        // the canister after attempting install_code, even if install_code
+        // fails.
+        .await;
     println!(
         "{}End: Install code into canister {}",
         log_prefix(),
@@ -3155,20 +3082,58 @@ async fn upgrade_canister_directly(
     );
 
     println!("{}Begin: Re-start canister {}", log_prefix(), canister_id);
-    start_canister(&canister_id).await?;
+    start_canister(env, canister_id).await?;
     println!("{}End: Re-start canister {}", log_prefix(), canister_id);
 
     install_result
 }
 
-async fn start_canister(canister_id: &CanisterId) -> Result<(), GovernanceError> {
-    call(
-        CanisterId::ic_00(),
-        "start_canister",
-        dfn_candid::candid_multi_arity,
-        (CanisterIdRecord::from(*canister_id),),
+async fn install_code(
+    env: &dyn Environment,
+    canister_id: CanisterId,
+    wasm: Vec<u8>,
+) -> Result<(), GovernanceError> {
+    const MEMORY_ALLOCATION_BYTES: u64 = 1_u64 << 30;
+
+    let install_code_args = ic_ic00_types::InstallCodeArgs {
+        mode: ic_ic00_types::CanisterInstallMode::Upgrade,
+        canister_id: canister_id.get(),
+        wasm_module: wasm,
+        arg: vec![],
+        compute_allocation: None,
+        memory_allocation: Some(candid::Nat::from(MEMORY_ALLOCATION_BYTES)),
+        query_allocation: None,
+    };
+
+    env.call_canister(
+        ic_ic00_types::IC_00,
+        "install_code",
+        Encode!(&install_code_args).expect("Unable to encode install_code args."),
     )
     .await
+    .map(|_reply| ())
+    .map_err(|err| {
+        let err = GovernanceError::new_with_message(
+            ErrorType::External,
+            format!("Failed to install code into the target canister: {:?}", err),
+        );
+        println!("{}{:?}", log_prefix(), err);
+        err
+    })
+}
+
+async fn start_canister(
+    env: &dyn Environment,
+    canister_id: CanisterId,
+) -> Result<(), GovernanceError> {
+    env.call_canister(
+        CanisterId::ic_00(),
+        "start_canister",
+        Encode!(&CanisterIdRecord::from(canister_id))
+            .expect("Unable to encode start_canister args."),
+    )
+    .await
+    .map(|_reply| ())
     .map_err(|err| {
         let err = GovernanceError::new_with_message(
             ErrorType::External,
@@ -3179,12 +3144,17 @@ async fn start_canister(canister_id: &CanisterId) -> Result<(), GovernanceError>
     })
 }
 
-async fn stop_canister(canister_id: &CanisterId) -> Result<(), GovernanceError> {
-    call(
+async fn stop_canister(
+    env: &dyn Environment,
+    canister_id: CanisterId,
+) -> Result<(), GovernanceError> {
+    let serialize_canister_id = candid::Encode!(&CanisterIdRecord::from(canister_id))
+        .expect("Unable to encode stop_canister args.");
+
+    env.call_canister(
         CanisterId::ic_00(),
         "stop_canister",
-        dfn_candid::candid_multi_arity,
-        (CanisterIdRecord::from(*canister_id),),
+        serialize_canister_id.clone(),
     )
     .await
     .map_err(|err| {
@@ -3198,15 +3168,16 @@ async fn stop_canister(canister_id: &CanisterId) -> Result<(), GovernanceError> 
 
     // Wait until canister is in the stopped state.
     loop {
-        let result = call(
-            CanisterId::ic_00(),
-            "canister_status",
-            dfn_candid::candid,
-            (CanisterIdRecord::from(*canister_id),),
-        )
-        .await;
-        let status: CanisterStatusResult = match result {
-            Ok(ok) => ok,
+        let result = env
+            .call_canister(
+                CanisterId::ic_00(),
+                "canister_status",
+                serialize_canister_id.clone(),
+            )
+            .await;
+        let status = match result {
+            Ok(ok) => Decode!(&ok, CanisterStatusResult)
+                .expect("Unable to decode canister_status response."),
 
             // This is probably a permanent error, so we give up right away.
             Err(err) => {
@@ -3282,6 +3253,36 @@ fn unpack_call_canister_method(
     }
 
     Ok((target_canister_id.unwrap(), target_method_name, payload))
+}
+
+async fn perform_call_canister_method(
+    env: &dyn Environment,
+    call: CallCanisterMethod,
+) -> Result<(), GovernanceError> {
+    let (canister_id, method_name, args) = unpack_call_canister_method(call)?;
+
+    let result = env.call_canister(canister_id, &method_name, args).await;
+
+    // Convert result.
+    match result {
+        Err(err) => Err(GovernanceError::new_with_message(
+            ErrorType::External,
+            format!("Canister method call failed: {:?}", err),
+        )),
+
+        Ok(_reply) => {
+            // TODO: Do something with reply. E.g. store it in the proposal,
+            // and/or deserialize it so that we can detect whether there was an
+            // application-level error, as opposed to a communication
+            // error. Detecting application error could be done as follows:
+            //
+            //   candid::!Decode(&reply, Result<String, String>)
+            //
+            // This could then be converted into a Result<(), GovernanceError>.
+            // For now, any reply is considered a success.
+            Ok(())
+        }
+    }
 }
 
 /// Affects the perception of time by users of CanisterEnv (i.e. Governance).
