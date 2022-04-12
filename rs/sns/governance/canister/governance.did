@@ -102,6 +102,7 @@ type GetProposal = record { proposal_id : opt ProposalId };
 type GetProposalResponse = record { result : opt Result_1 };
 type Governance = record {
   root_canister_id : opt principal;
+  id_to_nervous_system_functions : vec record { nat64; NervousSystemFunction };
   metrics : opt GovernanceCachedMetrics;
   parameters : opt NervousSystemParameters;
   latest_reward_event : opt RewardEvent;
@@ -155,6 +156,13 @@ type MergeMaturityResponse = record {
   new_stake_e8s : nat64;
 };
 type Motion = record { motion_text : text };
+type NervousSystemFunction = record {
+  id : nat64;
+  validator_canister_id : opt principal;
+  target_canister_id : opt principal;
+  validator_method_name : opt text;
+  target_method_name : opt text;
+};
 type NervousSystemParameters = record {
   default_followees : opt DefaultFollowees;
   max_dissolve_delay_seconds : opt nat64;
