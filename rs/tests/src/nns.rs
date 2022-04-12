@@ -1,48 +1,40 @@
 //! Contains methods and structs that support settings up the NNS.
-use crate::util::{block_on, create_agent, runtime_from_url};
+use crate::{
+    driver::test_env_api::install_nns_canisters,
+    util::{block_on, create_agent, runtime_from_url},
+};
 use candid::CandidType;
-use canister_test::{Canister, RemoteTestRuntime, Runtime};
+use canister_test::{Canister, Runtime};
 use cycles_minting_canister::SetAuthorizedSubnetworkListArgs;
 use dfn_candid::candid_one;
 use ic_base_types::NodeId;
-use ic_canister_client::{Agent, Sender};
+use ic_canister_client::Sender;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_fondue::{
     ic_instance::node_software_version::NodeSoftwareVersion,
     ic_manager::{IcEndpoint, IcHandle},
 };
-use ic_interfaces::registry::ZERO_REGISTRY_VERSION;
 use ic_nns_common::types::{NeuronId, ProposalId};
-use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID};
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::pb::v1::{
     manage_neuron::{Command, NeuronIdOrSubaccount, RegisterVote},
     ManageNeuron, ManageNeuronResponse, NnsFunction, ProposalInfo, ProposalStatus, Vote,
 };
-use ic_nns_test_keys::{TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_PRINCIPAL};
+use ic_nns_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_test_utils::governance::submit_external_update_proposal_allowing_error;
+use ic_nns_test_utils::governance::{submit_external_update_proposal, wait_for_final_state};
 use ic_nns_test_utils::{governance::get_proposal_info, ids::TEST_NEURON_1_ID};
-use ic_nns_test_utils::{
-    governance::{submit_external_update_proposal, wait_for_final_state},
-    itest_helpers::{NnsCanisters, NnsInitPayloadsBuilder},
-};
-use ic_prep_lib::{
-    prep_state_directory::IcPrepStateDir,
-    subnet_configuration::{self, duration_to_millis},
-};
+use ic_prep_lib::subnet_configuration::{self, duration_to_millis};
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_client_helpers::deserialize_registry_value;
 use ic_registry_common::{
-    local_store::{ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreReader},
+    local_store::{LocalStoreImpl, LocalStoreReader},
     registry::RegistryCanister,
 };
 use ic_registry_keys::{get_node_record_node_id, make_subnet_list_record_key};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_registry_transport::pb::v1::registry_mutation::Type;
-use ic_registry_transport::pb::v1::{RegistryAtomicMutateRequest, RegistryMutation};
 use ic_types::{p2p, CanisterId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId};
-use ledger_canister::LedgerCanisterInitPayload;
-use ledger_canister::Tokens;
 use prost::Message;
 use registry_canister::mutations::{
     do_add_nodes_to_subnet::AddNodesToSubnetPayload, do_create_subnet::CreateSubnetPayload,
@@ -53,68 +45,11 @@ use registry_canister::mutations::{
     do_bless_replica_version::BlessReplicaVersionPayload,
     do_update_subnet_replica::UpdateSubnetReplicaVersionPayload,
 };
-use slog::{info, Logger};
-use std::collections::HashMap;
+use slog::info;
 use std::convert::TryFrom;
-use std::path::Path;
 use std::time::Duration;
 use tokio::time::sleep;
 use url::Url;
-
-/// Reads the initial content to inject into the registry in the "local store"
-/// format.
-///
-/// `local_store_dir` is expected to be a directory containing specially-named
-/// files following the schema implemented in local_store.rs.
-fn read_initial_mutations_from_local_store_dir<P: AsRef<Path>>(
-    local_store_dir: P,
-) -> Vec<RegistryAtomicMutateRequest> {
-    let store = LocalStoreImpl::new(local_store_dir.as_ref());
-    let changelog = store
-        .get_changelog_since_version(ZERO_REGISTRY_VERSION)
-        .unwrap_or_else(|e| {
-            panic!(
-                "Could not read the content of the local store at {} due to: {}",
-                local_store_dir.as_ref().to_str().unwrap_or(""),
-                e
-            )
-        });
-    changelog
-        .into_iter()
-        .map(|cle: ChangelogEntry| RegistryAtomicMutateRequest {
-            mutations: cle
-                .into_iter()
-                .map(|km: KeyMutation| match km.value {
-                    Some(bytes) => upsert(km.key.as_bytes(), bytes),
-                    None => delete(km.key),
-                })
-                .collect(),
-            preconditions: vec![],
-        })
-        .collect()
-}
-
-/// Shorthand to create a RegistryMutation with type Delete.
-fn delete(key: impl AsRef<[u8]>) -> RegistryMutation {
-    mutation(Type::Delete, key, b"")
-}
-
-/// Shorthand to create a RegistryMutation with type Upsert.
-fn upsert(key: impl AsRef<[u8]>, value: impl AsRef<[u8]>) -> RegistryMutation {
-    mutation(Type::Upsert, key, value)
-}
-
-fn mutation(
-    mutation_type: Type,
-    key: impl AsRef<[u8]>,
-    value: impl AsRef<[u8]>,
-) -> RegistryMutation {
-    RegistryMutation {
-        mutation_type: mutation_type as i32,
-        key: key.as_ref().to_vec(),
-        value: value.as_ref().to_vec(),
-    }
-}
 
 /// Installation of NNS Canisters.
 
@@ -314,58 +249,6 @@ pub fn first_root_url(ic_handle: &IcHandle) -> Url {
         .expect("empty iterator")
         .url
         .clone()
-}
-
-/// Installs the NNS canisters on the node given by `nc` using the initial
-/// registry created by `ic-prep`, stored under `registry_local_store`.
-pub fn install_nns_canisters(
-    logger: &Logger,
-    url: Url,
-    ic_prep_state_dir: &IcPrepStateDir,
-    nns_test_neurons_present: bool,
-) {
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    info!(
-        logger,
-        "Compiling/installing NNS canisters (might take a while)."
-    );
-    rt.block_on(async move {
-        let mut init_payloads = NnsInitPayloadsBuilder::new();
-        if nns_test_neurons_present {
-            let mut ledger_balances = HashMap::new();
-            ledger_balances.insert(
-                LIFELINE_CANISTER_ID.get().into(),
-                Tokens::from_tokens(10000).unwrap(),
-            );
-            ledger_balances.insert(
-                (*TEST_USER1_PRINCIPAL).into(),
-                Tokens::from_tokens(200000).unwrap(),
-            );
-            info!(logger, "Initial ledger: {:?}", ledger_balances);
-            let mut ledger_init_payload = LedgerCanisterInitPayload::builder()
-                .minting_account(GOVERNANCE_CANISTER_ID.get().into())
-                .initial_values(ledger_balances)
-                .build()
-                .unwrap();
-            ledger_init_payload
-                .send_whitelist
-                .insert(CYCLES_MINTING_CANISTER_ID);
-            init_payloads
-                .with_test_neurons()
-                .with_ledger_init_state(ledger_init_payload);
-        }
-        let registry_local_store = ic_prep_state_dir.registry_local_store_path();
-        let initial_mutations = read_initial_mutations_from_local_store_dir(registry_local_store);
-        init_payloads.with_initial_mutations(initial_mutations);
-
-        let agent = Agent::new(
-            url,
-            Sender::from_keypair(&ic_test_identity::TEST_IDENTITY_KEYPAIR),
-        );
-        let runtime = Runtime::Remote(RemoteTestRuntime { agent });
-
-        NnsCanisters::set_up(&runtime, init_payloads.build()).await;
-    });
 }
 
 /// Send an update-call to the governance-canister on the NNS asking for Subnet

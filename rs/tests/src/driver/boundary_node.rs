@@ -229,7 +229,7 @@ pub struct DeployedBoundaryNode {
 }
 
 impl HasTestEnv for DeployedBoundaryNode {
-    fn env(&self) -> TestEnv {
+    fn test_env(&self) -> TestEnv {
         self.env.clone()
     }
 }
