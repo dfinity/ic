@@ -1,3 +1,19 @@
+/* tag::catalog[]
+Goal:: Token balance is update correctly despite node failure
+
+Runbook::
+. Setup IC with NNS and app subnet with four nodes each
+. Install 2 universal canisters on app subnet
+. Top them up with ICP
+. Kill one node
+. Transfer ICP from one canister to the other
+. Kill another node
+. Restart the first node
+. Transfer ICP from one canister to the other
+
+Success:: balances obtained by queries matches expected balances after transfers
+
+end::catalog[] */
 use ic_fondue::ic_manager::IcHandle;
 
 use crate::nns::NnsExt;

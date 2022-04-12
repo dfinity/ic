@@ -9,7 +9,6 @@ use ic_tests::driver::evaluation::evaluate;
 use ic_tests::driver::pot_dsl::*;
 use ic_tests::driver::test_env::TestEnv;
 use ic_tests::http_from_canister::basic_http;
-use ic_tests::nns_fault_tolerance_test;
 use ic_tests::nns_follow_test::{self, test as follow_test};
 use ic_tests::nns_voting_test::{self, test as voting_test};
 use ic_tests::node_assign_test::{self, test as node_assign_test};
@@ -24,18 +23,17 @@ use ic_tests::orchestrator::{
 use ic_tests::rosetta_test;
 use ic_tests::security::nns_voting_fuzzing_poc_test;
 use ic_tests::spec_compliance;
-use ic_tests::token_balance_test::{self, test as token_balance_test};
 use ic_tests::workload_counter_canister_test;
 use ic_tests::{
     basic_health_test::{self, basic_health_test},
     execution, message_routing,
 };
 use ic_tests::{
-    cycles_minting_test,
+    cycles_minting_test, ledger_tests,
     networking::firewall::{self, change_to_firewall_rules_takes_effect},
     nns_canister_upgrade_test, nns_uninstall_canister_by_proposal_test,
     registry_authentication_test, tecdsa_add_nodes_test, tecdsa_remove_nodes_test,
-    tecdsa_signature_test, transaction_ledger_correctness_test, wasm_generator_test,
+    tecdsa_signature_test, wasm_generator_test,
 };
 use regex::Regex;
 use std::collections::HashMap;
@@ -245,8 +243,8 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 ),
                 pot(
                     "nns_token_balance_pot",
-                    token_balance_test::config(),
-                    par(vec![t("token_balance_test", token_balance_test)]),
+                    ledger_tests::token_balance::config(),
+                    par(vec![t("token_balance_test", ledger_tests::token_balance::test)]),
                 ),
                 pot(
                     "node_restart_pot",
@@ -292,10 +290,10 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 ),
                 pot(
                     "transaction_ledger_correctness_pot",
-                    transaction_ledger_correctness_test::config(),
+                    ledger_tests::transaction_ledger_correctness::config(),
                     par(vec![t(
                         "transaction_ledger_correctness_test",
-                        transaction_ledger_correctness_test::test,
+                        ledger_tests::transaction_ledger_correctness::test,
                     )]),
                 ),
                 pot(
@@ -442,10 +440,10 @@ fn get_test_suites() -> HashMap<String, Suite> {
             ),
             pot(
                 "nns_fault_tolerance_pot",
-                nns_fault_tolerance_test::config(),
+                ledger_tests::token_fault_tolerance::config(),
                 par(vec![t(
-                    "nns_fault_tolerance_test",
-                    nns_fault_tolerance_test::test,
+                    "token_fault_tolerance_test",
+                    ledger_tests::token_fault_tolerance::test,
                 )]),
             ),
             pot(
