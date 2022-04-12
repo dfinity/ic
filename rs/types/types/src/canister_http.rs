@@ -23,7 +23,7 @@ use crate::{
     signature::*,
     Time,
 };
-use ic_ic00_types::HttpMethodType;
+use ic_ic00_types::{CanisterHttpHeader, HttpMethodType};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::system_metadata::v1 as pb_metadata,
@@ -37,6 +37,7 @@ pub type CanisterHttpRequestId = CallbackId;
 pub struct CanisterHttpRequestContext {
     pub request: Request,
     pub url: String,
+    pub headers: Vec<CanisterHttpHeader>,
     pub body: Option<Vec<u8>>,
     pub http_method: HttpMethodType,
     pub transform_method_name: Option<String>,
@@ -48,6 +49,15 @@ impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestConte
         pb_metadata::CanisterHttpRequestContext {
             request: Some((&context.request).into()),
             url: context.url.clone(),
+            headers: context
+                .headers
+                .clone()
+                .into_iter()
+                .map(|h| pb_metadata::HttpHeader {
+                    name: h.name,
+                    value: h.value,
+                })
+                .collect(),
             body: context.body.clone(),
             transform_method_name: context
                 .transform_method_name
@@ -67,6 +77,14 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
         Ok(CanisterHttpRequestContext {
             request,
             url: context.url,
+            headers: context
+                .headers
+                .into_iter()
+                .map(|h| CanisterHttpHeader {
+                    name: h.name,
+                    value: h.value,
+                })
+                .collect(),
             body: context.body,
             http_method: HttpMethodType::from(
                 pb_metadata::HttpMethodType::from_i32(context.http_method).unwrap_or_default(),

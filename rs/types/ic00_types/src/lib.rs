@@ -555,6 +555,7 @@ impl Payload<'_> for SetControllerArgs {}
 /// Struct used for encoding/decoding
 /// `(http_request : (record {
 //     url : text;
+//     headers : vec http_header;
 //     method : variant { get };
 //     body : opt blob;
 //     transform : opt variant { function: func (http_response) -> (http_response) query };
@@ -562,6 +563,7 @@ impl Payload<'_> for SetControllerArgs {}
 #[derive(CandidType, Deserialize, Debug)]
 pub struct CanisterHttpRequestArgs {
     pub url: String,
+    pub headers: Vec<CanisterHttpHeader>,
     pub body: Option<Vec<u8>>,
     pub http_method: HttpMethodType,
     pub transform_method_name: Option<String>,
@@ -574,7 +576,7 @@ impl Payload<'_> for CanisterHttpRequestArgs {}
 /// name: text;
 /// value: text;
 /// })`;
-#[derive(CandidType, Deserialize, Debug, PartialEq)]
+#[derive(CandidType, Clone, Deserialize, Debug, Eq, Hash, PartialEq, Serialize)]
 pub struct CanisterHttpHeader {
     pub name: String,
     pub value: String,

@@ -3133,6 +3133,7 @@ fn execute_canister_http_request() {
         let transform_method_name = Some("transform".to_string());
         let request_payload = CanisterHttpRequestArgs {
             url: url.clone(),
+            headers: Vec::new(),
             body: None,
             http_method: HttpMethodType::GET,
             transform_method_name: transform_method_name.clone(),
@@ -3199,6 +3200,7 @@ fn execute_canister_http_request_disabled() {
         // Create payload of the request.
         let request_payload = CanisterHttpRequestArgs {
             url: "https::/".to_string(),
+            headers: Vec::new(),
             body: None,
             http_method: HttpMethodType::GET,
             transform_method_name: Some("transform".to_string()),
