@@ -164,7 +164,7 @@ benchmark-response-payload:
       $SHELL_WRAPPER pipenv --python 3
       $SHELL_WRAPPER pipenv install -r requirements.txt
 
-      $SHELL_WRAPPER pipenv run experiments/run_response_payload_size_experiment.py --testnet $TESTNET --skip_generate_report=False  --branch="$CURRENT_BRANCH"
+      $SHELL_WRAPPER timeout 1h pipenv run experiments/run_response_payload_size_experiment.py --testnet "$TESTNET" --wg_testnet "$TESTNET"  --wg_subnet 2
 
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
@@ -214,7 +214,7 @@ benchmark-xnet:
       git fetch
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
 
-      $SHELL_WRAPPER timeout 30m ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION" --hosts-ini hosts_single_node_subnets.ini
+      $SHELL_WRAPPER timeout 30m ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION"
       cd ./scalability
 
       $SHELL_WRAPPER pipenv --python 3
@@ -256,7 +256,6 @@ large-subnet-gossip-experiment:
       
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
-      $SHELL_WRAPPER pipenv run python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --is_max_capacity_run="True" --branch="$CURRENT_BRANCH" --is_max_capacity_run="True" --gitlab_job_id="$CI_JOB_ID"
 
       cd -
 
