@@ -2,7 +2,7 @@ use crate::{pb::v1::NodeProvidersMonthlyXdrRewards, registry::Registry};
 use ic_nns_common::registry::decode_or_panic;
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
-use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
+use ic_protobuf::registry::node_rewards::v2::{NodeRewardRate, NodeRewardsTable};
 use ic_registry_keys::{
     make_data_center_record_key, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
 };
@@ -64,15 +64,23 @@ impl Registry {
                 let dc = decode_or_panic::<DataCenterRecord>(dc_record_bytes);
                 let region = &dc.region;
 
-                let np_rewards = rewards.rewards.entry(node_provider_id).or_default();
+                let np_rewards = rewards.rewards.entry(node_provider_id.clone()).or_default();
                 for (node_type, node_count) in node_operator.rewardable_nodes {
-                    let rate = rewards_table.get_rate(region, &node_type).ok_or_else(|| {
-                        format!(
-                            "The Node Rewards Table does not have an entry for \
-                             node type '{}' within region '{}' or parent region",
-                            node_type, region
-                        )
-                    })?;
+                    let rate = match rewards_table.get_rate(region, &node_type) {
+                        Some(rate) => rate,
+                        None => {
+                            println!(
+                                "The Node Rewards Table does not have an entry for \
+                             node type '{}' within region '{}' or parent region, defaulting to 1 xdr per month for \
+                             NodeProvider '{}' on Node Operator Record '{:?}'",
+                                node_type, region, node_provider_id, from_utf8(key)
+                            );
+                            NodeRewardRate {
+                                xdr_permyriad_per_node_per_month: 1,
+                            }
+                        }
+                    };
+
                     *np_rewards += node_count as u64 * rate.xdr_permyriad_per_node_per_month;
                 }
             }
@@ -196,15 +204,12 @@ mod tests {
 
         registry.do_add_or_remove_data_centers(dc_payload);
 
-        // Assert get_node_providers_monthly_xdr_rewards fails because rewards table
-        // does not have an entry for the DC's region
-        let err = registry
-            .get_node_providers_monthly_xdr_rewards()
-            .unwrap_err();
-        assert_eq!(
-            &err,
-            "The Node Rewards Table does not have an entry for node type 'default' within region 'North America,US,NY' or parent region"
-        );
+        // Assert get_node_providers_monthly_xdr_rewards defaults to 1 XDR per month per node
+        // because there rewards table does not have an entry for the DC's region
+        let monthly_rewards = registry.get_node_providers_monthly_xdr_rewards().unwrap();
+        let np1 = TEST_USER1_PRINCIPAL.to_string();
+        let np1_rewards = monthly_rewards.rewards.get(&np1).unwrap();
+        assert_eq!(*np1_rewards, 5); // 5 nodes at 1 XDR/month/node
 
         // Add regions to rewards table (but an empty map to test failure cases)
         let new_entries = btreemap! {
@@ -216,15 +221,12 @@ mod tests {
         let node_rewards_payload = UpdateNodeRewardsTableProposalPayload { new_entries };
         registry.do_update_node_rewards_table(node_rewards_payload);
 
-        // Assert get_node_providers_monthly_xdr_rewards fails because rewards table
+        // Assert get_node_providers_monthly_xdr_rewards provides default value because rewards table
         // does not have expected node type entries
-        let err = registry
-            .get_node_providers_monthly_xdr_rewards()
-            .unwrap_err();
-        assert_eq!(
-            &err,
-            "The Node Rewards Table does not have an entry for node type 'default' within region 'North America,US,NY' or parent region"
-        );
+        let monthly_rewards = registry.get_node_providers_monthly_xdr_rewards().unwrap();
+        let np1 = TEST_USER1_PRINCIPAL.to_string();
+        let np1_rewards = monthly_rewards.rewards.get(&np1).unwrap();
+        assert_eq!(*np1_rewards, 5); // 5 nodes at 1 XDR/month/node
 
         let new_entries = btreemap! {
             "North America,US,NY".to_string() => NodeRewardRates {
@@ -287,7 +289,9 @@ mod tests {
         let np2 = TEST_USER2_PRINCIPAL.to_string();
         let np2_rewards = monthly_rewards.rewards.get(&np2).unwrap();
 
-        assert_eq!(*np1_rewards, 4 * 240 + 456);
+        // 4 'default' nodes in 'North America,US,NY', 1 'type1' node in 'North America,US'
+        assert_eq!(*np1_rewards, (4 * 240) + 456);
+        // 11 'default' nodes in 'CAN', 7 'small' nodes in 'CAN'
         assert_eq!(*np2_rewards, (11 * 68) + (7 * 11));
     }
 }
