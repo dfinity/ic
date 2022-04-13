@@ -1,8 +1,13 @@
 use crate::governance::log_prefix;
 use crate::pb::v1::{
-    Proposal, ProposalData, ProposalDecisionStatus, ProposalRewardStatus, Tally, Vote,
+    proposal, CallCanisterMethod, ExecuteNervousSystemFunction, Motion, NervousSystemParameters,
+    Proposal, ProposalData, ProposalDecisionStatus, ProposalRewardStatus, Tally,
+    UpgradeSnsControlledCanister, Vote,
 };
 use crate::types::ONE_DAY_SECONDS;
+use crate::{validate_chars_count, validate_len, validate_required_field};
+
+use dfn_core::api::CanisterId;
 
 /// The maximum number of bytes in an SNS proposal's title.
 pub const PROPOSAL_TITLE_BYTES_MAX: usize = 256;
@@ -38,6 +43,187 @@ impl Proposal {
             .as_ref()
             .map_or(false, |a| a.allowed_when_resources_are_low())
     }
+}
+
+/// current_nervous_system_paramters is only used when self is a
+/// ManageNervousSystemParameters proposal.
+///
+/// Pro tip: If it is difficult to get the current NervousSystemParameters, you
+/// may be able to use NervousSystemParameters::with_default_values() instead.
+pub fn validate_proposal(
+    proposal: &Proposal,
+    current_nervous_system_parameters: &NervousSystemParameters,
+) -> Result<(), String> {
+    let mut defects = Vec::new();
+
+    let mut defects_push = |r| {
+        if let Err(err) = r {
+            defects.push(err);
+        }
+    };
+
+    const NO_MIN: usize = 0;
+
+    // Inspect (the length of) string fields.
+    defects_push(validate_len(
+        "title",
+        &proposal.title,
+        NO_MIN,
+        PROPOSAL_TITLE_BYTES_MAX,
+    ));
+    defects_push(validate_len(
+        "summary",
+        &proposal.summary,
+        NO_MIN,
+        PROPOSAL_SUMMARY_BYTES_MAX,
+    ));
+    defects_push(validate_chars_count(
+        "url",
+        &proposal.url,
+        NO_MIN,
+        PROPOSAL_URL_CHAR_MAX,
+    ));
+
+    defects_push(validate_action(
+        &proposal.action,
+        current_nervous_system_parameters,
+    ));
+
+    // Concatenate defects (if any).
+    if !defects.is_empty() {
+        return Err(format!(
+            "{} defects in Proposal:\n{}",
+            defects.len(),
+            defects.join("\n"),
+        ));
+    }
+
+    Ok(())
+}
+
+pub fn validate_action(
+    action: &Option<proposal::Action>,
+    current_nervous_system_parameters: &NervousSystemParameters,
+) -> Result<(), String> {
+    let action = match action.as_ref() {
+        None => return Err("No action was specified.".into()),
+        Some(action) => action,
+    };
+
+    match action {
+        proposal::Action::Unspecified(_unspecified) => {
+            Err("`unspecified` was used, but is not a valid Proposal action.".into())
+        }
+        proposal::Action::Motion(motion) => validate_motion(motion),
+        proposal::Action::ManageNervousSystemParameters(manage) => {
+            validate_manage_nervous_system_parameters(manage, current_nervous_system_parameters)
+        }
+        proposal::Action::UpgradeSnsControlledCanister(upgrade) => {
+            validate_upgrade_sns_controlled_canister(upgrade)
+        }
+        proposal::Action::ExecuteNervousSystemFunction(execute) => {
+            validate_execute_nervous_system_function(execute)
+        }
+        proposal::Action::CallCanisterMethod(call) => validate_call_canister_method(call),
+    }
+}
+
+fn validate_motion(motion: &Motion) -> Result<(), String> {
+    validate_len(
+        "motion.motion_text",
+        &motion.motion_text,
+        0, // min
+        PROPOSAL_MOTION_TEXT_BYTES_MAX,
+    )
+}
+
+fn validate_manage_nervous_system_parameters(
+    new: &NervousSystemParameters,
+    current: &NervousSystemParameters,
+) -> Result<(), String> {
+    new.inherit_from(current).validate()
+}
+
+fn validate_upgrade_sns_controlled_canister(
+    upgrade: &UpgradeSnsControlledCanister,
+) -> Result<(), String> {
+    let mut defects = vec![];
+
+    // Inspect canister_id.
+    match validate_required_field("canister_id", &upgrade.canister_id) {
+        Err(err) => {
+            defects.push(err);
+        }
+        Ok(canister_id) => {
+            if let Err(err) = CanisterId::new(*canister_id) {
+                defects.push(format!("Specified canister ID was invalid: {}", err));
+            }
+        }
+    }
+
+    // Inspect wasm.
+    const WASM_HEADER: [u8; 4] = [0, 0x61, 0x73, 0x6d];
+    const MIN_WASM_LEN: usize = 8;
+    if let Err(err) = validate_len(
+        "new_canister_wasm",
+        &upgrade.new_canister_wasm,
+        MIN_WASM_LEN,
+        usize::MAX,
+    ) {
+        defects.push(err);
+    } else if upgrade.new_canister_wasm[..4] != WASM_HEADER[..] {
+        defects.push("new_canister_wasm lacks the magic value in its header.".into());
+    }
+
+    // Generate final report.
+    if !defects.is_empty() {
+        return Err(format!(
+            "UpgradeSnsControlledCanister was invalid for the following reason(s):\n{}",
+            defects.join("\n"),
+        ));
+    }
+
+    Ok(())
+}
+
+pub fn validate_execute_nervous_system_function(
+    _execute: &ExecuteNervousSystemFunction,
+) -> Result<(), String> {
+    todo!();
+}
+
+pub(crate) fn validate_call_canister_method(call: &CallCanisterMethod) -> Result<(), String> {
+    let CallCanisterMethod {
+        target_canister_id,
+        target_method_name,
+        payload: _,
+    } = call;
+
+    let mut defects = vec![];
+
+    // Validate the target_canister_id field.
+    match target_canister_id {
+        None => defects.push("target_canister_id field was not populated.".to_string()),
+        Some(id) => {
+            if let Err(err) = CanisterId::new(*id) {
+                defects.push(format!("target_canister_id was invalid: {}", err));
+            }
+        }
+    }
+
+    // Validate the target_method_name field.
+    if target_method_name.is_empty() {
+        defects.push("target_method_name was empty.".to_string());
+    }
+
+    if !defects.is_empty() {
+        return Err(format!(
+            "CallCanisterMethod was invalid for the following reason(s):\n{}",
+            defects.join("\n")
+        ));
+    }
+
+    Ok(())
 }
 
 impl ProposalData {
@@ -311,3 +497,282 @@ impl ProposalRewardStatus {
         matches!(self, ProposalRewardStatus::Settled)
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::pb::v1::Empty;
+    use crate::test::{assert_is_err, assert_is_ok};
+    use ic_base_types::PrincipalId;
+    use std::convert::TryFrom;
+
+    fn validate_default_proposal(proposal: &Proposal) -> Result<(), String> {
+        let parameters = NervousSystemParameters::with_default_values();
+        validate_proposal(proposal, &parameters)
+    }
+
+    fn validate_default_action(action: &Option<proposal::Action>) -> Result<(), String> {
+        let parameters = NervousSystemParameters::with_default_values();
+        validate_action(action, &parameters)
+    }
+
+    fn basic_principal_id() -> PrincipalId {
+        PrincipalId::try_from(vec![42_u8]).unwrap()
+    }
+
+    fn basic_motion_proposal() -> Proposal {
+        let result = Proposal {
+            title: "title".into(),
+            summary: "summary".into(),
+            url: "http://www.example.com".into(),
+            action: Some(proposal::Action::Motion(Motion::default())),
+        };
+        assert_is_ok(validate_default_proposal(&result));
+        result
+    }
+
+    #[test]
+    fn proposal_title_is_not_too_long() {
+        let mut proposal = basic_motion_proposal();
+        proposal.title = "".into();
+
+        assert_is_ok(validate_default_proposal(&proposal));
+
+        for _ in 0..PROPOSAL_TITLE_BYTES_MAX {
+            proposal.title.push('x');
+            assert_is_ok(validate_default_proposal(&proposal));
+        }
+
+        // Kaboom!
+        proposal.title.push('z');
+        assert_is_err(validate_default_proposal(&proposal));
+    }
+
+    #[test]
+    fn proposal_summary_is_not_too_long() {
+        let mut proposal = basic_motion_proposal();
+        proposal.summary = "".into();
+        assert_is_ok(validate_default_proposal(&proposal));
+
+        for _ in 0..PROPOSAL_SUMMARY_BYTES_MAX {
+            proposal.summary.push('x');
+            assert_is_ok(validate_default_proposal(&proposal));
+        }
+
+        // Kaboom!
+        proposal.summary.push('z');
+        assert_is_err(validate_default_proposal(&proposal));
+    }
+
+    #[test]
+    fn proposal_url_is_not_too_long() {
+        let mut proposal = basic_motion_proposal();
+        proposal.url = "".into();
+        assert_is_ok(validate_default_proposal(&proposal));
+
+        for _ in 0..PROPOSAL_URL_CHAR_MAX {
+            proposal.url.push('x');
+            assert_is_ok(validate_default_proposal(&proposal));
+        }
+
+        // Kaboom!
+        proposal.url.push('z');
+        assert_is_err(validate_default_proposal(&proposal));
+    }
+
+    #[test]
+    fn proposal_action_is_required() {
+        assert_is_err(validate_default_action(&None));
+    }
+
+    #[test]
+    fn unspecified_action_is_invalid() {
+        assert_is_err(validate_default_action(&Some(
+            proposal::Action::Unspecified(Empty {}),
+        )));
+    }
+
+    #[test]
+    fn motion_text_not_too_long() {
+        let mut proposal = basic_motion_proposal();
+
+        fn validate_is_ok(proposal: &Proposal) {
+            assert_is_ok(validate_default_proposal(proposal));
+            assert_is_ok(validate_default_action(&proposal.action));
+            match proposal.action.as_ref().unwrap() {
+                proposal::Action::Motion(motion) => assert_is_ok(validate_motion(motion)),
+                _ => panic!("proposal.action is not Motion."),
+            }
+        }
+
+        validate_is_ok(&proposal);
+        for _ in 0..PROPOSAL_MOTION_TEXT_BYTES_MAX {
+            // Push a character to motion_text.
+            match proposal.action.as_mut().unwrap() {
+                proposal::Action::Motion(motion) => motion.motion_text.push('a'),
+                _ => panic!("proposal.action is not Motion."),
+            }
+
+            validate_is_ok(&proposal);
+        }
+
+        // The straw that breaks the camel's back: push one more character to motion_text.
+        match proposal.action.as_mut().unwrap() {
+            proposal::Action::Motion(motion) => motion.motion_text.push('a'),
+            _ => panic!("proposal.action is not Motion."),
+        }
+
+        // Assert that proposal is no longer ok.
+        assert_is_err(validate_default_proposal(&proposal));
+        assert_is_err(validate_default_action(&proposal.action));
+        match proposal.action.as_ref().unwrap() {
+            proposal::Action::Motion(motion) => assert_is_err(validate_motion(motion)),
+            _ => panic!("proposal.action is not Motion."),
+        }
+    }
+
+    fn basic_upgrade_sns_controlled_canister_proposal() -> Proposal {
+        let upgrade = UpgradeSnsControlledCanister {
+            canister_id: Some(basic_principal_id()),
+            new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
+        };
+        assert_is_ok(validate_upgrade_sns_controlled_canister(&upgrade));
+
+        let mut result = basic_motion_proposal();
+        result.action = Some(proposal::Action::UpgradeSnsControlledCanister(upgrade));
+
+        assert_is_ok(validate_default_action(&result.action));
+        assert_is_ok(validate_default_proposal(&result));
+
+        result
+    }
+
+    fn assert_validate_upgrade_sns_controlled_canister_is_err(proposal: &Proposal) {
+        assert_is_err(validate_default_proposal(proposal));
+        assert_is_err(validate_default_action(&proposal.action));
+
+        match proposal.action.as_ref().unwrap() {
+            proposal::Action::UpgradeSnsControlledCanister(upgrade) => {
+                assert_is_err(validate_upgrade_sns_controlled_canister(upgrade))
+            }
+            _ => panic!("Proposal.action is not an UpgradeSnsControlledCanister."),
+        }
+    }
+
+    #[test]
+    fn upgrade_must_have_canister_id() {
+        let mut proposal = basic_upgrade_sns_controlled_canister_proposal();
+
+        // Create a defect.
+        match proposal.action.as_mut().unwrap() {
+            proposal::Action::UpgradeSnsControlledCanister(upgrade) => {
+                upgrade.canister_id = None;
+                assert_is_err(validate_upgrade_sns_controlled_canister(upgrade));
+            }
+            _ => panic!("Proposal.action is not an UpgradeSnsControlledCanister."),
+        }
+
+        assert_validate_upgrade_sns_controlled_canister_is_err(&proposal);
+    }
+
+    /// Fun fact: the minimum WASM is 8 bytes long.
+    ///
+    /// A corollary of the above fact is that we must not allow the
+    /// new_canister_wasm field to be empty.
+    #[test]
+    fn upgrade_wasm_must_be_non_empty() {
+        let mut proposal = basic_upgrade_sns_controlled_canister_proposal();
+
+        // Create a defect.
+        match proposal.action.as_mut().unwrap() {
+            proposal::Action::UpgradeSnsControlledCanister(upgrade) => {
+                upgrade.new_canister_wasm = vec![];
+                assert_is_err(validate_upgrade_sns_controlled_canister(upgrade));
+            }
+            _ => panic!("Proposal.action is not an UpgradeSnsControlledCanister."),
+        }
+
+        assert_validate_upgrade_sns_controlled_canister_is_err(&proposal);
+    }
+
+    #[test]
+    fn upgrade_wasm_must_not_be_dead_beef() {
+        let mut proposal = basic_upgrade_sns_controlled_canister_proposal();
+
+        // Create a defect.
+        match proposal.action.as_mut().unwrap() {
+            proposal::Action::UpgradeSnsControlledCanister(upgrade) => {
+                // This is invalid, because it does not have the magical first
+                // four bytes that a WASM is supposed to have. (Instead, the
+                // first four bytes of this Vec are 0xDeadBeef.)
+                upgrade.new_canister_wasm = vec![0xde, 0xad, 0xbe, 0xef, 1, 0, 0, 0];
+                assert!(upgrade.new_canister_wasm.len() == 8); // The minimum wasm len.
+                assert_is_err(validate_upgrade_sns_controlled_canister(upgrade));
+            }
+            _ => panic!("Proposal.action is not an UpgradeSnsControlledCanister."),
+        }
+
+        assert_validate_upgrade_sns_controlled_canister_is_err(&proposal);
+    }
+
+    fn basic_call_canister_method_proposal() -> Proposal {
+        let call = CallCanisterMethod {
+            target_canister_id: Some(basic_principal_id()),
+            target_method_name: "enact_awesomeness".into(),
+            payload: vec![],
+        };
+        assert_is_ok(validate_call_canister_method(&call));
+
+        let mut result = basic_motion_proposal();
+        result.action = Some(proposal::Action::CallCanisterMethod(call));
+
+        assert_is_ok(validate_default_action(&result.action));
+        assert_is_ok(validate_default_proposal(&result));
+
+        result
+    }
+
+    fn assert_validate_call_canister_method_is_err(proposal: &Proposal) {
+        assert_is_err(validate_default_action(&proposal.action));
+        assert_is_err(validate_default_proposal(proposal));
+
+        match proposal.action.as_ref().unwrap() {
+            proposal::Action::CallCanisterMethod(call) => {
+                assert_is_err(validate_call_canister_method(call))
+            }
+            _ => panic!("Proposal.action is not an UpgradeSnsControlledCanister."),
+        }
+    }
+
+    #[test]
+    fn test_validate_call_canister_method_fail_no_target_canister_id() {
+        let mut proposal = basic_call_canister_method_proposal();
+
+        // Create a defect.
+        match proposal.action.as_mut().unwrap() {
+            proposal::Action::CallCanisterMethod(call) => {
+                call.target_canister_id = None;
+                assert_is_err(validate_call_canister_method(call));
+            }
+            _ => panic!("Proposal.action is not a CallCanisterMethod."),
+        }
+
+        assert_validate_call_canister_method_is_err(&proposal);
+    }
+
+    #[test]
+    fn test_validate_call_canister_method_fail_empty_target_method_name() {
+        let mut proposal = basic_call_canister_method_proposal();
+
+        // Create a defect.
+        match proposal.action.as_mut().unwrap() {
+            proposal::Action::CallCanisterMethod(call) => {
+                call.target_method_name = "".into();
+                assert_is_err(validate_call_canister_method(call));
+            }
+            _ => panic!("Proposal.action is not a CallCanisterMethod."),
+        }
+
+        assert_validate_call_canister_method_is_err(&proposal);
+    }
+} // mod test
