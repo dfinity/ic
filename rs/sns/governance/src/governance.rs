@@ -38,11 +38,12 @@ use crate::pb::v1::manage_neuron::{AddNeuronPermissions, RemoveNeuronPermissions
 use crate::pb::v1::manage_neuron_response::{DisburseMaturityResponse, MergeMaturityResponse};
 use crate::pb::v1::proposal::Action;
 use crate::pb::v1::WaitForQuietState;
+
 use crate::proposal::{
-    MAX_LIST_PROPOSAL_RESULTS, MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
-    PROPOSAL_MOTION_TEXT_BYTES_MAX, PROPOSAL_SUMMARY_BYTES_MAX, PROPOSAL_TITLE_BYTES_MAX,
-    PROPOSAL_URL_CHAR_MAX,
+    validate_call_canister_method, validate_proposal, MAX_LIST_PROPOSAL_RESULTS,
+    MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
 };
+
 use crate::types::{Environment, HeapGrowthPotential, LedgerUpdateLock};
 use candid::{Decode, Encode};
 use dfn_core::api::{id, spawn, CanisterId};
@@ -1419,49 +1420,69 @@ impl Governance {
     ///
     /// If a proposal is adopted but not executed, this method
     /// attempts to execute it.
-    pub fn process_proposal(&mut self, pid: u64) {
+    pub fn process_proposal(&mut self, proposal_id: u64) {
         let now_seconds = self.env.now();
         // Due to Rust lifetime issues, we must extract a closure that
         // computes the voting period before we borrow `self.proposals` mutably.
         let voting_period_seconds_fn = self.voting_period_seconds();
-        if let Some(p) = self.proto.proposals.get_mut(&pid) {
-            if p.status() != ProposalDecisionStatus::ProposalStatusOpen {
-                return;
-            }
-            let voting_period_seconds = voting_period_seconds_fn();
-            // Recompute the tally here. It is imperative that only
-            // 'open' proposals have their tally recomputed. Votes may
-            // arrive after a decision has been made: such votes count
-            // for voting rewards, but shall not make it into the
-            // tally.
-            p.recompute_tally(now_seconds, voting_period_seconds);
-            if p.can_make_decision(now_seconds) {
-                // This marks the proposal as no longer open.
-                p.decided_timestamp_seconds = now_seconds;
-                if p.is_accepted() {
-                    // The proposal was adopted, return the rejection fee.
-                    if let Some(nid) = &p.proposer {
-                        if let Some(neuron) = self.proto.neurons.get_mut(&nid.to_string()) {
-                            if neuron.neuron_fees_e8s >= p.reject_cost_e8s {
-                                neuron.neuron_fees_e8s -= p.reject_cost_e8s;
-                            }
-                        }
-                    }
-                    if let Some(action) = p.proposal.as_ref().and_then(|x| x.action.clone()) {
-                        // A yes decision as been made, execute the proposal!
-                        self.start_proposal_execution(pid, &action);
-                    } else {
-                        self.set_proposal_execution_status(
-                            pid,
-                            Err(GovernanceError::new_with_message(
-                                ErrorType::PreconditionFailed,
-                                "Proposal action is missing.",
-                            )),
-                        );
-                    }
+        let proposal_data = match self.proto.proposals.get_mut(&proposal_id) {
+            None => return,
+            Some(p) => p,
+        };
+
+        if proposal_data.status() != ProposalDecisionStatus::ProposalStatusOpen {
+            return;
+        }
+
+        let voting_period_seconds = voting_period_seconds_fn();
+        // Recompute the tally here. It is imperative that only
+        // 'open' proposals have their tally recomputed. Votes may
+        // arrive after a decision has been made: such votes count
+        // for voting rewards, but shall not make it into the
+        // tally.
+        proposal_data.recompute_tally(now_seconds, voting_period_seconds);
+        if !proposal_data.can_make_decision(now_seconds) {
+            return;
+        }
+
+        // This marks the proposal_data as no longer open.
+        proposal_data.decided_timestamp_seconds = now_seconds;
+        if !proposal_data.is_accepted() {
+            return;
+        }
+
+        // Return the rejection fee
+        if let Some(nid) = &proposal_data.proposer {
+            if let Some(neuron) = self.proto.neurons.get_mut(&nid.to_string()) {
+                if neuron.neuron_fees_e8s >= proposal_data.reject_cost_e8s {
+                    neuron.neuron_fees_e8s -= proposal_data.reject_cost_e8s;
                 }
             }
         }
+
+        // A yes decision as been made, execute the proposal!
+        // Safely unwrap action.
+        let action = proposal_data
+            .proposal
+            .as_ref()
+            .and_then(|p| p.action.clone());
+        let action = match action {
+            Some(action) => action,
+
+            // This should not be possible, because proposal validation should
+            // have been performed when the proposal was first made.
+            None => {
+                self.set_proposal_execution_status(
+                    proposal_id,
+                    Err(GovernanceError::new_with_message(
+                        ErrorType::InvalidProposal,
+                        "Proposal has no action.",
+                    )),
+                );
+                return;
+            }
+        };
+        self.start_proposal_execution(proposal_id, action);
     }
 
     /// Process all the open proposals.
@@ -1503,7 +1524,7 @@ impl Governance {
     /// * `action` - What to do (basically, function and parameters to be applied). One of the
     ///   possibilities listed under oneof action in message Proposal (defined in
     ///   governance.proto).
-    fn start_proposal_execution(&mut self, proposal_id: u64, action: &proposal::Action) {
+    fn start_proposal_execution(&mut self, proposal_id: u64, action: proposal::Action) {
         // `perform_action` is an async method of &mut self.
         //
         // Starting it and letting it run in the background requires knowing that
@@ -1518,12 +1539,12 @@ impl Governance {
         // - in prod, "self" in a reference to the GOVERNANCE static variable, which is
         //   initialized only once (in canister_init or canister_post_upgrade)
         let governance: &'static mut Governance = unsafe { std::mem::transmute(self) };
-        spawn(governance.perform_action(proposal_id, action.clone()));
+        spawn(governance.perform_action(proposal_id, action));
     }
 
     async fn perform_action(&mut self, proposal_id: u64, action: proposal::Action) {
         let result = match action {
-            // A motion is not executed, just recorded for posterity.
+            // Execution of Motion proposals is trivial.
             proposal::Action::Motion(_) => Ok(()),
 
             proposal::Action::ManageNervousSystemParameters(params) => {
@@ -1538,9 +1559,16 @@ impl Governance {
             proposal::Action::CallCanisterMethod(params) => {
                 perform_call_canister_method(&*self.env, params).await
             }
-            proposal::Action::Unspecified(_) => {
-                unimplemented!();
-            }
+            // This should not be possible, because Proposal validation is performed when
+            // a proposal is first made.
+            proposal::Action::Unspecified(_) => Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!(
+                    "A Proposal somehow made it all the way to execution despite being \
+                         invalid for having its `unspecified` field populated. action: {:?}",
+                    action
+                ),
+            )),
         };
 
         self.set_proposal_execution_status(proposal_id, result);
@@ -1566,6 +1594,15 @@ impl Governance {
                 self.proto.parameters = Some(new_params);
                 Ok(())
             }
+
+            // Even though proposals are validated when they are first made, this is still
+            // possible, because the inner value of a ManageNervousSystemParameters
+            // proposal is only valid with respect to the current
+            // nervous_system_parameters() at the time when the proposal was first
+            // made. If nervous_system_parameters() changed (by another proposal) since
+            // the current propoal was first made, the current proposal might have become
+            // valid. Basically, this might occur if there are conflicting (concurrent)
+            // proposals, but we expect this to be highly unusual up in practice.
             Err(msg) => Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 format!(
@@ -1690,58 +1727,8 @@ impl Governance {
             self.check_heap_can_grow()?;
         }
 
-        let error_str = if proposal.title.len() > PROPOSAL_TITLE_BYTES_MAX {
-            format!(
-                "The maximum proposal title size is {} bytes, this proposal title is: {} bytes",
-                PROPOSAL_TITLE_BYTES_MAX,
-                proposal.title.len(),
-            )
-        } else if proposal.summary.len() > PROPOSAL_SUMMARY_BYTES_MAX {
-            format!(
-                "The maximum proposal summary size is {} bytes, this proposal is: {} bytes",
-                PROPOSAL_SUMMARY_BYTES_MAX,
-                proposal.summary.len(),
-            )
-        } else if proposal.url.chars().count() > PROPOSAL_URL_CHAR_MAX {
-            format!(
-                "The maximum proposal url size is {} characters, this proposal has: {} characters",
-                PROPOSAL_URL_CHAR_MAX,
-                proposal.url.chars().count()
-            )
-        } else if let Some(proposal::Action::Motion(motion)) = &proposal.action {
-            if motion.motion_text.len() > PROPOSAL_MOTION_TEXT_BYTES_MAX {
-                format!(
-                    "The maximum motion text size in a proposal action is {} bytes, this motion text is: {} bytes",
-                    PROPOSAL_MOTION_TEXT_BYTES_MAX,
-                    motion.motion_text.len()
-                )
-            } else {
-                return Ok(());
-            }
-        } else if let Some(proposal::Action::ManageNervousSystemParameters(params)) =
-            &proposal.action
-        {
-            // Proposed NervousSystemParameters are valid if when "applied" to the current system
-            // params the resulting NervousSystemParameters are valid.
-            return params
-                .clone()
-                .inherit_from(self.nervous_system_parameters())
-                .validate()
-                .map_err(|msg| GovernanceError::new_with_message(ErrorType::InvalidProposal, msg));
-        } else if let Some(proposal::Action::UpgradeSnsControlledCanister(upgrade)) =
-            &proposal.action
-        {
-            return validate_upgrade_sns_controlled_canister(upgrade);
-        } else if let Some(proposal::Action::CallCanisterMethod(call)) = &proposal.action {
-            return validate_call_canister_method(call);
-        } else {
-            return Ok(());
-        };
-
-        Err(GovernanceError::new_with_message(
-            ErrorType::InvalidProposal,
-            &error_str,
-        ))
+        validate_proposal(proposal, self.nervous_system_parameters())
+            .map_err(|e| GovernanceError::new_with_message(ErrorType::InvalidProposal, e))
     }
 
     pub fn make_proposal(
@@ -1751,24 +1738,11 @@ impl Governance {
         proposal: &Proposal,
     ) -> Result<ProposalId, GovernanceError> {
         let now_seconds = self.env.now();
-        let unspecified = Action::Unspecified(Empty {});
 
         // Validate proposal
         self.validate_proposal(proposal)?;
-
-        let action = proposal.action.as_ref().ok_or_else(|| {
-            GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "Proposal must have an action",
-            )
-        })?;
-
-        if action == &unspecified {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "Proposal cannot be submitted with action set to Action::Unspecified",
-            ));
-        }
+        // This should not panic, because proposal was just validated.
+        let action = proposal.action.as_ref().expect("No action.");
 
         let reject_cost_e8s = self
             .nervous_system_parameters()
@@ -3019,27 +2993,6 @@ impl Governance {
     }
 }
 
-fn validate_upgrade_sns_controlled_canister(
-    upgrade: &UpgradeSnsControlledCanister,
-) -> Result<(), GovernanceError> {
-    // Require that canister_id be supplied (and be valid).
-    get_canister_id(&upgrade.canister_id)?;
-
-    // Very basic checks on the wasm.
-    const WASM_HEADER: [u8; 4] = [0, 0x61, 0x73, 0x6d];
-    const MIN_WASM_LEN: usize = 8;
-    if upgrade.new_canister_wasm.len() < MIN_WASM_LEN
-        || upgrade.new_canister_wasm[..4] != WASM_HEADER[..]
-    {
-        return Err(GovernanceError::new_with_message(
-            ErrorType::InvalidProposal,
-            "The supplied wasm is invalid.",
-        ));
-    }
-
-    Ok(())
-}
-
 fn get_canister_id(canister_id: &Option<PrincipalId>) -> Result<CanisterId, GovernanceError> {
     let canister_id = canister_id.ok_or_else(|| {
         GovernanceError::new_with_message(
@@ -3206,68 +3159,41 @@ async fn stop_canister(
     }
 }
 
-fn validate_call_canister_method(call: &CallCanisterMethod) -> Result<(), GovernanceError> {
-    unpack_call_canister_method(call.clone())?;
-    Ok(())
-}
-
-fn unpack_call_canister_method(
+async fn perform_call_canister_method(
+    env: &dyn Environment,
     call: CallCanisterMethod,
-) -> Result<(CanisterId, String, Vec<u8>), GovernanceError> {
+) -> Result<(), GovernanceError> {
+    // 1. Inputs.
+    validate_call_canister_method(&call)
+        // Convert to GovernanceError. In practice, this should never happen,
+        // because the proposal was validated when it was first made. However,
+        // since we cannot control that, it is possible to provoke this failure
+        // (e.g. in test).
+        .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidProposal, err))?;
     let CallCanisterMethod {
         target_canister_id,
         target_method_name,
         payload,
     } = call;
+    // This should not panic, since we just validated call.
+    let target_canister_id = CanisterId::new(target_canister_id.unwrap()).unwrap();
+    let payload_len = payload.len(); // Might be used later, but after payload is consumed.
 
-    let mut defects = vec![];
+    // 2. The real work.
+    let result = env
+        .call_canister(target_canister_id, &target_method_name, payload)
+        .await;
 
-    // Validate the target_canister_id field.
-    let target_canister_id = match target_canister_id {
-        None => {
-            defects.push("target_canister_id field was not populated.".to_string());
-            None
-        }
-        Some(target_canister_id) => match CanisterId::new(target_canister_id) {
-            Err(err) => {
-                defects.push(format!("target_canister_id was invalid: {}", err));
-                None
-            }
-            Ok(target_canister_id) => Some(target_canister_id),
-        },
-    };
-
-    // Validate the target_method_name field.
-    if target_method_name.is_empty() {
-        defects.push("target_method_name was empty.".to_string());
-    }
-
-    if !defects.is_empty() {
-        return Err(GovernanceError::new_with_message(
-            ErrorType::InvalidProposal,
-            format!(
-                "CallCanisterMethod was invalid for the following reason(s):\n{}",
-                defects.join("\n")
-            ),
-        ));
-    }
-
-    Ok((target_canister_id.unwrap(), target_method_name, payload))
-}
-
-async fn perform_call_canister_method(
-    env: &dyn Environment,
-    call: CallCanisterMethod,
-) -> Result<(), GovernanceError> {
-    let (canister_id, method_name, args) = unpack_call_canister_method(call)?;
-
-    let result = env.call_canister(canister_id, &method_name, args).await;
-
-    // Convert result.
+    // 3. Convert result.
     match result {
-        Err(err) => Err(GovernanceError::new_with_message(
+        Err(err /* (Option<i32>, String) */) => Err(GovernanceError::new_with_message(
             ErrorType::External,
-            format!("Canister method call failed: {:?}", err),
+            format!(
+                "Canister method call failed \
+                 (target_canister_id = {:?}, target_method_name = {:?}, payload.len = {:?}): \
+                 {:?}",
+                target_canister_id, target_method_name, payload_len, err
+            ),
         )),
 
         Ok(_reply) => {
@@ -3308,101 +3234,6 @@ mod test {
     use super::*;
     use crate::pb::v1::{ProposalData, ProposalId, Tally, WaitForQuietState};
     use proptest::prelude::{prop_assert, proptest};
-
-    fn basic_principal_id() -> PrincipalId {
-        PrincipalId::try_from(vec![42_u8]).unwrap()
-    }
-
-    fn basic_call_canister_method() -> CallCanisterMethod {
-        let result = CallCanisterMethod {
-            target_canister_id: Some(basic_principal_id()),
-            target_method_name: "enact_awesomeness".into(),
-            payload: vec![],
-        };
-        assert!(validate_call_canister_method(&result).is_ok());
-        result
-    }
-
-    #[test]
-    fn test_unpack_valid_call_canister_method() {
-        let (canister_id, method_name, args) =
-            unpack_call_canister_method(basic_call_canister_method()).unwrap();
-
-        assert_eq!(canister_id.get(), basic_principal_id());
-        assert_eq!(method_name, "enact_awesomeness".to_string());
-        assert_eq!(args, Vec::<u8>::new());
-    }
-
-    #[test]
-    fn call_canister_method_must_have_canister_id() {
-        let mut call = basic_call_canister_method();
-        call.target_canister_id = None;
-
-        let err = validate_call_canister_method(&call).unwrap_err();
-        assert_eq!(err.error_type, ErrorType::InvalidProposal as i32,);
-    }
-
-    #[test]
-    fn call_canister_method_must_have_non_empty_method_name() {
-        let mut call = basic_call_canister_method();
-        call.target_method_name = "".into();
-
-        let err = validate_call_canister_method(&call).unwrap_err();
-        assert_eq!(err.error_type, ErrorType::InvalidProposal as i32,);
-    }
-
-    fn basic_upgrade_sns_controlled_canister() -> UpgradeSnsControlledCanister {
-        let result = UpgradeSnsControlledCanister {
-            canister_id: Some(basic_principal_id()),
-            new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
-        };
-        assert!(validate_upgrade_sns_controlled_canister(&result).is_ok());
-        result
-    }
-
-    #[test]
-    fn upgrade_must_have_canister_id() {
-        let mut upgrade = basic_upgrade_sns_controlled_canister();
-        upgrade.canister_id = None;
-
-        let result = validate_upgrade_sns_controlled_canister(&upgrade);
-        assert_eq!(
-            result.unwrap_err().error_type,
-            ErrorType::InvalidProposal as i32
-        );
-    }
-
-    /// Fun fact: the minimum WASM is 8 bytes long.
-    ///
-    /// A corollary of the above fact is that we must not allow the
-    /// new_canister_wasm field to be empty.
-    #[test]
-    fn upgrade_wasm_must_be_non_empty() {
-        let mut upgrade = basic_upgrade_sns_controlled_canister();
-        upgrade.new_canister_wasm = vec![];
-
-        let result = validate_upgrade_sns_controlled_canister(&upgrade);
-        assert_eq!(
-            result.unwrap_err().error_type,
-            ErrorType::InvalidProposal as i32
-        );
-    }
-
-    #[test]
-    fn upgrade_wasm_must_not_be_dead_beef() {
-        let mut upgrade = basic_upgrade_sns_controlled_canister();
-        // This is invalid, because it does not have the magical first four bytes
-        // that a WASM is supposed to have. (Instead, the first four bytes of this
-        // Vec are 0xDeadBeef.)
-        upgrade.new_canister_wasm = vec![0xde, 0xad, 0xbe, 0xef, 1, 0, 0, 0];
-        assert!(upgrade.new_canister_wasm.len() == 8); // The minimum wasm len.
-
-        let result = validate_upgrade_sns_controlled_canister(&upgrade);
-        assert_eq!(
-            result.unwrap_err().error_type,
-            ErrorType::InvalidProposal as i32
-        );
-    }
 
     fn basic_governance_proto() -> GovernanceProto {
         // Test subject.
