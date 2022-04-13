@@ -330,6 +330,7 @@ service : (Governance) -> {
       Result_2,
     ) query;
   get_monthly_node_provider_rewards : () -> (Result_3);
+  get_network_economics_parameters : () -> (NetworkEconomics) query;
   get_neuron_ids : () -> (vec nat64) query;
   get_neuron_info : (nat64) -> (Result_4) query;
   get_neuron_info_by_id_or_subaccount : (NeuronIdOrSubaccount) -> (

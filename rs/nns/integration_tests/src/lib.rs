@@ -104,3 +104,6 @@ mod update_node_provider;
 
 #[cfg(test)]
 mod list_node_providers;
+
+#[cfg(test)]
+mod network_economics;
