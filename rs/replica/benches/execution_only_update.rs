@@ -6,6 +6,7 @@ use ic_config::{
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::ExecutionServices;
+use ic_ic00_types::CanisterInstallMode;
 use ic_interfaces::{execution_environment::IngressHistoryReader, messaging::MessageRouting};
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_messaging::MessageRoutingImpl;
@@ -21,7 +22,7 @@ use ic_types::{
     ic00,
     ic00::Payload,
     ingress::{IngressStatus, WasmResult},
-    messages::{CanisterInstallMode, SignedIngress},
+    messages::SignedIngress,
     Randomness, RegistryVersion,
 };
 use ic_types::{messages::MessageId, replica_config::ReplicaConfig, CanisterId};

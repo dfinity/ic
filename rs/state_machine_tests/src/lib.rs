@@ -1,13 +1,13 @@
-use ic_config::subnet_config::SubnetConfig;
-use ic_config::subnet_config::SubnetConfigs;
+use ic_config::subnet_config::{SubnetConfig, SubnetConfigs};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::UserError;
 use ic_execution_environment::ExecutionServices;
-use ic_interfaces::registry::RegistryClient;
+use ic_ic00_types::CanisterInstallMode;
 use ic_interfaces::{
     certification::{Verifier, VerifierError},
     execution_environment::{IngressHistoryReader, QueryHandler},
     messaging::MessageRouting,
+    registry::RegistryClient,
     validation::ValidationResult,
 };
 use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager, StateReader};
@@ -40,8 +40,8 @@ use ic_types::{
     ic00::{CanisterIdRecord, CanisterSettingsArgs, InstallCodeArgs, Method, Payload},
     ingress::{IngressStatus, WasmResult},
     messages::{
-        Blob, CanisterInstallMode, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope,
-        MessageId, SignedIngress, UserQuery,
+        Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, MessageId, SignedIngress,
+        UserQuery,
     },
     time::{current_time_and_expiry_time, Time, UNIX_EPOCH},
     CanisterId, CryptoHashOfState, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId,

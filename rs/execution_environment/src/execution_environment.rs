@@ -16,7 +16,7 @@ use ic_cycles_account_manager::{
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
-    CanisterHttpRequestArgs, CanisterIdRecord, CanisterSettingsArgs,
+    CanisterHttpRequestArgs, CanisterIdRecord, CanisterSettingsArgs, CanisterStatusType,
     ComputeInitialEcdsaDealingsArgs, CreateCanisterArgs, ECDSAPublicKeyArgs,
     ECDSAPublicKeyResponse, EmptyBlob, InstallCodeArgs, Method as Ic00Method,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
@@ -50,8 +50,7 @@ use ic_types::{
         is_subnet_message, CallbackId, Ingress, MessageId, Payload, RejectContext, Request,
         Response, SignedIngressContent, StopCanisterContext,
     },
-    CanisterId, CanisterStatusType, ComputeAllocation, Cycles, NumBytes, NumInstructions, SubnetId,
-    Time, UserId,
+    CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, SubnetId, Time, UserId,
 };
 #[cfg(test)]
 use mockall::automock;

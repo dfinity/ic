@@ -5,6 +5,7 @@ use ic_config::Config;
 use ic_config::{crypto::CryptoConfig, transport::TransportFlowConfig};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::IngressHistoryReaderImpl;
+use ic_ic00_types::CanisterInstallMode;
 use ic_interfaces::execution_environment::{IngressHistoryReader, QueryHandler};
 use ic_interfaces::registry::RegistryClient;
 use ic_interfaces_p2p::IngressIngestionService;
@@ -31,7 +32,7 @@ use ic_types::{
         ProvisionalCreateCanisterWithCyclesArgs, IC_00,
     },
     ingress::{IngressStatus, WasmResult},
-    messages::{CanisterInstallMode, SignedIngress, UserQuery},
+    messages::{SignedIngress, UserQuery},
     replica_config::NODE_INDEX_DEFAULT,
     time::current_time_and_expiry_time,
     CanisterId, Height, NodeId, RegistryVersion, Time,

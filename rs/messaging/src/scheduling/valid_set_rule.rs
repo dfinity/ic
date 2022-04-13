@@ -8,6 +8,7 @@ use ic_cycles_account_manager::{
     CyclesAccountManager, IngressInductionCost, IngressInductionCostError,
 };
 use ic_error_types::{ErrorCode, UserError};
+use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::IngressHistoryWriter;
 use ic_logger::{debug, error, trace, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, buckets::linear_buckets, MetricsRegistry};
@@ -19,12 +20,11 @@ use ic_replicated_state::{
     },
     ReplicatedState, StateError,
 };
-use ic_types::messages::HttpRequestContent;
 use ic_types::{
     ingress::IngressStatus,
-    messages::{is_subnet_message, SignedIngressContent},
+    messages::{is_subnet_message, HttpRequestContent, SignedIngressContent},
     time::current_time_and_expiry_time,
-    CanisterStatusType, SubnetId, Time,
+    SubnetId, Time,
 };
 use prometheus::{Histogram, HistogramVec, IntCounterVec, IntGauge};
 use std::sync::Arc;

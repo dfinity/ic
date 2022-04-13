@@ -6,7 +6,7 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::{
     ExecutionEnvironment, ExecutionEnvironmentImpl, Hypervisor, IngressHistoryWriterImpl,
 };
-use ic_ic00_types::HttpMethodType;
+use ic_ic00_types::{CanisterInstallMode, CanisterStatusType, HttpMethodType};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_interfaces::{
     execution_environment::{
@@ -56,12 +56,12 @@ use ic_types::{
     },
     ingress::{IngressStatus, WasmResult},
     messages::{
-        CallbackId, CanisterInstallMode, MessageId, Payload, RejectContext, RequestOrResponse,
-        Response, StopCanisterContext, MAX_RESPONSE_COUNT_BYTES,
+        CallbackId, MessageId, Payload, RejectContext, RequestOrResponse, Response,
+        StopCanisterContext, MAX_RESPONSE_COUNT_BYTES,
     },
     methods::{Callback, WasmClosure},
-    CanisterId, CanisterStatusType, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
-    NumInstructions, PrincipalId, QueueIndex, RegistryVersion, SubnetId, Time,
+    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+    PrincipalId, QueueIndex, RegistryVersion, SubnetId, Time,
 };
 use lazy_static::lazy_static;
 use maplit::btreemap;

@@ -71,6 +71,7 @@ tower = { version = "0.4.11", features = ["util"] }
 assert_cmd = "0.12"
 canister-test = { path = "../rust_canisters/canister_test" }
 criterion = "0.3"
+ic-ic00-types = { path = "../types/ic00_types" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
 predicates = "1.0.1"

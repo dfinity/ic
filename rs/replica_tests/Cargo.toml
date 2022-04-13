@@ -9,6 +9,7 @@ ic-config = { path = "../config" }
 ic-canister-client = { path = "../canister_client" }
 ic-error-types = { path = "../types/error_types" }
 ic-execution-environment = { path = "../execution_environment" }
+ic-ic00-types = { path = "../types/ic00_types" }
 ic-replica = { path = "../replica" }
 ic-registry-client-fake = { path = "../registry/fake" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
