@@ -1,14 +1,14 @@
 //! Defines types used for threshold ECDSA key generation.
 
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::convert::{TryFrom, TryInto};
 use std::fmt::{self, Display, Formatter};
 use strum_macros::EnumIter;
 
 pub use crate::consensus::ecdsa_refs::{
     EcdsaBlockReader, IDkgTranscriptOperationRef, IDkgTranscriptParamsRef, MaskedTranscript,
-    PreSignatureQuadrupleRef, QuadrupleInCreation, RandomTranscriptParams, RequestId, RequestIdTag,
+    PreSignatureQuadrupleRef, QuadrupleId, QuadrupleInCreation, RandomTranscriptParams, RequestId,
     ReshareOfMaskedParams, ReshareOfUnmaskedParams, ThresholdEcdsaSigInputsRef,
     TranscriptCastError, TranscriptLookupError, TranscriptRef, UnmaskedTimesMaskedParams,
     UnmaskedTranscript,
@@ -22,7 +22,7 @@ use crate::crypto::{
     CryptoHash, CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator,
 };
 use crate::{node_id_into_protobuf, node_id_try_from_protobuf};
-use crate::{Height, NodeId, RegistryVersion};
+use crate::{Height, NodeId, RegistryVersion, SubnetId};
 use ic_protobuf::registry::subnet::v1 as subnet_pb;
 use ic_protobuf::types::v1 as pb;
 
@@ -52,8 +52,8 @@ pub struct EcdsaPayload {
     /// Ecdsa Quadruple in creation.
     pub quadruples_in_creation: BTreeMap<QuadrupleId, QuadrupleInCreation>,
 
-    /// Next TranscriptId that is incremented after creating a new transcript.
-    pub next_unused_transcript_id: IDkgTranscriptId,
+    /// Generator of unique ids.
+    pub uid_generator: EcdsaUIDGenerator,
 
     /// Transcripts created at this height.
     pub idkg_transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
@@ -141,6 +141,33 @@ impl EcdsaPayload {
                 .map(|(_, quadruple)| quadruple.iter_transcript_configs_in_creation())
                 .flatten()
                 .chain(iter),
+        )
+    }
+
+    /// Return an iterator of all request ids that is used in the payload.
+    /// Note that it doesn't guarantee any ordering.
+    pub fn iter_request_ids(&self) -> Box<dyn Iterator<Item = &RequestId> + '_> {
+        Box::new(
+            self.signature_agreements
+                .keys()
+                .chain(self.ongoing_signatures.keys()),
+        )
+    }
+
+    /// Return an iterator of all unassigned quadruple ids that is used in the payload.
+    /// A quadruple id is assigned if it already paired with a signature request (i.e.
+    /// there exists a request id that contains this quadruple id).
+    pub fn unassigned_quadruple_ids(&self) -> Box<dyn Iterator<Item = QuadrupleId> + '_> {
+        let assigned = self
+            .iter_request_ids()
+            .map(|id| id.quadruple_id)
+            .collect::<BTreeSet<_>>();
+        Box::new(
+            self.available_quadruples
+                .keys()
+                .chain(self.quadruples_in_creation.keys())
+                .filter(move |id| !assigned.contains(id))
+                .cloned(),
         )
     }
 
@@ -283,17 +310,6 @@ impl EcdsaSummaryPayload {
     }
 }
 
-#[derive(
-    Copy, Clone, Default, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize, Hash,
-)]
-pub struct QuadrupleId(pub u64);
-
-impl QuadrupleId {
-    pub fn increment(self) -> QuadrupleId {
-        QuadrupleId(self.0 + 1)
-    }
-}
-
 /// Internal format of the resharing request from execution.
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct EcdsaReshareRequest {
@@ -395,6 +411,35 @@ impl TryFrom<&pb::EcdsaReshareResponse> for EcdsaReshareResponse {
 pub enum CompletedReshareRequest {
     ReportedToExecution,
     Unreported(Box<EcdsaReshareResponse>),
+}
+
+/// To make sure all ids used in ECDSA payload are uniquely generated,
+/// we use a generator to keep track of this state.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct EcdsaUIDGenerator {
+    next_unused_transcript_id: IDkgTranscriptId,
+    next_unused_quadruple_id: QuadrupleId,
+}
+
+impl EcdsaUIDGenerator {
+    pub fn new(subnet_id: SubnetId) -> Self {
+        Self {
+            next_unused_transcript_id: IDkgTranscriptId::new(subnet_id, 0),
+            next_unused_quadruple_id: QuadrupleId(0),
+        }
+    }
+
+    pub fn next_transcript_id(&mut self) -> IDkgTranscriptId {
+        let id = self.next_unused_transcript_id;
+        self.next_unused_transcript_id = id.increment();
+        id
+    }
+
+    pub fn next_quadruple_id(&mut self) -> QuadrupleId {
+        let id = self.next_unused_quadruple_id;
+        self.next_unused_quadruple_id = QuadrupleId(id.0 + 1);
+        id
+    }
 }
 
 /// The ECDSA artifact.
@@ -755,9 +800,7 @@ impl From<&EcdsaSummaryPayload> for pb::EcdsaSummaryPayload {
                 CompletedSignature::ReportedToExecution => vec![],
             };
             signature_agreements.push(pb::CompletedSignature {
-                request_id: Some(pb::RequestId {
-                    request_id: request_id.as_ref().clone(),
-                }),
+                request_id: Some(request_id.clone().into()),
                 unreported,
             });
         }
@@ -766,9 +809,7 @@ impl From<&EcdsaSummaryPayload> for pb::EcdsaSummaryPayload {
         let mut ongoing_signatures = Vec::new();
         for (request_id, ongoing) in &summary.ecdsa_payload.ongoing_signatures {
             ongoing_signatures.push(pb::OngoingSignature {
-                request_id: Some(pb::RequestId {
-                    request_id: request_id.as_ref().clone(),
-                }),
+                request_id: Some(request_id.clone().into()),
                 sig_inputs: Some(ongoing.into()),
             })
         }
@@ -777,7 +818,7 @@ impl From<&EcdsaSummaryPayload> for pb::EcdsaSummaryPayload {
         let mut available_quadruples = Vec::new();
         for (quadruple_id, quadruple) in &summary.ecdsa_payload.available_quadruples {
             available_quadruples.push(pb::AvailableQuadruple {
-                quadrupled_id: quadruple_id.0,
+                quadruple_id: quadruple_id.0,
                 quadruple: Some(quadruple.into()),
             });
         }
@@ -786,13 +827,24 @@ impl From<&EcdsaSummaryPayload> for pb::EcdsaSummaryPayload {
         let mut quadruples_in_creation = Vec::new();
         for (quadruple_id, quadruple) in &summary.ecdsa_payload.quadruples_in_creation {
             quadruples_in_creation.push(pb::QuadrupleInProgress {
-                quadrupled_id: quadruple_id.0,
+                quadruple_id: quadruple_id.0,
                 quadruple: Some(quadruple.into()),
             });
         }
 
-        let next_unused_transcript_id: Option<subnet_pb::IDkgTranscriptId> =
-            Some((&summary.ecdsa_payload.next_unused_transcript_id).into());
+        let next_unused_transcript_id: Option<subnet_pb::IDkgTranscriptId> = Some(
+            (&summary
+                .ecdsa_payload
+                .uid_generator
+                .next_unused_transcript_id)
+                .into(),
+        );
+
+        let next_unused_quadruple_id = summary
+            .ecdsa_payload
+            .uid_generator
+            .next_unused_quadruple_id
+            .0;
 
         // idkg_transcripts
         let mut idkg_transcripts = Vec::new();
@@ -831,6 +883,7 @@ impl From<&EcdsaSummaryPayload> for pb::EcdsaSummaryPayload {
             available_quadruples,
             quadruples_in_creation,
             next_unused_transcript_id,
+            next_unused_quadruple_id,
             idkg_transcripts,
             ongoing_xnet_reshares,
             xnet_reshare_agreements,
@@ -849,10 +902,9 @@ impl TryFrom<(&pb::EcdsaSummaryPayload, Height)> for EcdsaSummaryPayload {
         for completed_signature in &summary.signature_agreements {
             let request_id = completed_signature
                 .request_id
-                .as_ref()
+                .clone()
                 .ok_or("pb::EcdsaSummaryPayload:: Missing completed_signature request Id")
-                .map(|id| RequestId::new(id.request_id.clone()))?;
-
+                .map(RequestId::from)?;
             let signature = if !completed_signature.unreported.is_empty() {
                 CompletedSignature::Unreported(ThresholdEcdsaCombinedSignature {
                     signature: completed_signature.unreported.clone(),
@@ -868,9 +920,9 @@ impl TryFrom<(&pb::EcdsaSummaryPayload, Height)> for EcdsaSummaryPayload {
         for ongoing_signature in &summary.ongoing_signatures {
             let request_id = ongoing_signature
                 .request_id
-                .as_ref()
+                .clone()
                 .ok_or("pb::EcdsaSummaryPayload:: Missing ongoing_signature request Id")
-                .map(|id| RequestId::new(id.request_id.clone()))?;
+                .map(RequestId::from)?;
             let proto = ongoing_signature
                 .sig_inputs
                 .as_ref()
@@ -882,7 +934,7 @@ impl TryFrom<(&pb::EcdsaSummaryPayload, Height)> for EcdsaSummaryPayload {
         // available_quadruples
         let mut available_quadruples = BTreeMap::new();
         for available_quadruple in &summary.available_quadruples {
-            let quadruple_id = QuadrupleId(available_quadruple.quadrupled_id);
+            let quadruple_id = QuadrupleId(available_quadruple.quadruple_id);
             let proto = available_quadruple
                 .quadruple
                 .as_ref()
@@ -894,7 +946,7 @@ impl TryFrom<(&pb::EcdsaSummaryPayload, Height)> for EcdsaSummaryPayload {
         // quadruples_in_creation
         let mut quadruples_in_creation = BTreeMap::new();
         for quadruple_in_creation in &summary.quadruples_in_creation {
-            let quadruple_id = QuadrupleId(quadruple_in_creation.quadrupled_id);
+            let quadruple_id = QuadrupleId(quadruple_in_creation.quadruple_id);
             let proto = quadruple_in_creation
                 .quadruple
                 .as_ref()
@@ -911,6 +963,13 @@ impl TryFrom<(&pb::EcdsaSummaryPayload, Height)> for EcdsaSummaryPayload {
                     err
                 )
             })?;
+
+        let next_unused_quadruple_id: QuadrupleId = QuadrupleId(summary.next_unused_quadruple_id);
+
+        let uid_generator = EcdsaUIDGenerator {
+            next_unused_transcript_id,
+            next_unused_quadruple_id,
+        };
 
         // idkg_transcripts
         let mut idkg_transcripts = BTreeMap::new();
@@ -973,10 +1032,10 @@ impl TryFrom<(&pb::EcdsaSummaryPayload, Height)> for EcdsaSummaryPayload {
                 ongoing_signatures,
                 available_quadruples,
                 quadruples_in_creation,
-                next_unused_transcript_id,
                 idkg_transcripts,
                 ongoing_xnet_reshares,
                 xnet_reshare_agreements,
+                uid_generator,
             },
             current_key_transcript,
         };

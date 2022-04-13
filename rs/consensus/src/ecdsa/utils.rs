@@ -498,11 +498,6 @@ pub(crate) mod test_utils {
         dummy_idkg_transcript_id_for_tests(id)
     }
 
-    // Creates a RequestId for tests
-    pub(crate) fn create_request_id(id: u8) -> RequestId {
-        RequestId::from(vec![id])
-    }
-
     // Creates a test transcript
     pub(crate) fn create_transcript(
         transcript_id: IDkgTranscriptId,

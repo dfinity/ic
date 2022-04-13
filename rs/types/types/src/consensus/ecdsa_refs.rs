@@ -22,10 +22,41 @@ use crate::crypto::{
 use crate::{Height, Randomness, RegistryVersion};
 use ic_protobuf::registry::subnet::v1 as subnet_pb;
 use ic_protobuf::types::v1 as pb;
-use phantom_newtype::Id;
 
-pub struct RequestIdTag;
-pub type RequestId = Id<RequestIdTag, Vec<u8>>;
+/// RequestId is used for two purposes:
+/// 1. to identify the matching request in sign-with_ecdas_contexts.
+/// 2. to identify which quadruple the request is matched to.
+///
+/// Quadruples must be matched with requests in the same order as requests
+/// are created.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+pub struct RequestId {
+    pub quadruple_id: QuadrupleId,
+    pub pseudo_random_id: Vec<u8>,
+}
+
+impl From<RequestId> for pb::RequestId {
+    fn from(request_id: RequestId) -> Self {
+        Self {
+            quadruple_id: request_id.quadruple_id.0 as u64,
+            pseudo_random_id: request_id.pseudo_random_id,
+        }
+    }
+}
+
+impl From<pb::RequestId> for RequestId {
+    fn from(request_id: pb::RequestId) -> Self {
+        Self {
+            quadruple_id: QuadrupleId(request_id.quadruple_id),
+            pseudo_random_id: request_id.pseudo_random_id,
+        }
+    }
+}
+
+#[derive(
+    Copy, Clone, Default, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize, Hash,
+)]
+pub struct QuadrupleId(pub(crate) u64);
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 pub struct TranscriptRef {
