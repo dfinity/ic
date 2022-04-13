@@ -1,11 +1,11 @@
 //! Module for managing the canisters in test.
 
 use ic_canister_client::{Agent, HttpClient, Sender as AgentSender};
+use ic_ic00_types::CanisterInstallMode;
 use ic_types::{
     ic00::{
         CanisterIdRecord, InstallCodeArgs, Payload, ProvisionalCreateCanisterWithCyclesArgs, IC_00,
     },
-    messages::CanisterInstallMode,
     CanisterId,
 };
 use std::{fs::File, io::Read, path::Path, time::Duration};

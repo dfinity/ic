@@ -11,6 +11,7 @@ cargo_metadata = "0.14.2"
 dfn_candid={path="../dfn_candid"}
 ic-canister-client = { path = "../../canister_client" }
 ic-config = { path = "../../config" }
+ic-ic00-types = { path = "../../types/ic00_types" }
 ic-registry-transport = { path = "../../registry/transport" }
 ic-replica-tests = { path = "../../replica_tests" }
 ic-test-utilities = { path = "../../test_utilities" }

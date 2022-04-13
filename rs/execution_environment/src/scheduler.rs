@@ -9,7 +9,7 @@ use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto::prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::Method as Ic00Method;
+use ic_ic00_types::{CanisterStatusType, Method as Ic00Method};
 use ic_interfaces::execution_environment::AvailableMemory;
 use ic_interfaces::{
     execution_environment::{IngressHistoryWriter, Scheduler, SubnetAvailableMemory},
@@ -27,8 +27,8 @@ use ic_types::{
     ic00::{EmptyBlob, InstallCodeArgs, Payload as _, IC_00},
     ingress::{IngressStatus, WasmResult},
     messages::{Ingress, MessageId, Payload, Response, StopCanisterContext},
-    AccumulatedPriority, CanisterId, CanisterStatusType, ComputeAllocation, ExecutionRound,
-    MemoryAllocation, NumBytes, NumInstructions, Randomness, SubnetId, Time,
+    AccumulatedPriority, CanisterId, ComputeAllocation, ExecutionRound, MemoryAllocation, NumBytes,
+    NumInstructions, Randomness, SubnetId, Time,
 };
 use ic_types::{nominal_cycles::NominalCycles, NumMessages};
 use lazy_static::lazy_static;

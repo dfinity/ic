@@ -1,7 +1,7 @@
 mod setup;
 
 use ic_ic00_types::{
-    CanisterIdRecord, InstallCodeArgs, Method as Ic00Method, Payload,
+    CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, Method as Ic00Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs, IC_00,
 };
 use ic_interfaces::{execution_environment::IngressHistoryReader, messaging::MessageRouting};
@@ -16,7 +16,7 @@ use ic_types::{
     artifact::SignedIngress,
     batch::{Batch, BatchPayload, IngressPayload, SelfValidatingPayload, XNetPayload},
     ingress::{IngressStatus, WasmResult},
-    messages::{CanisterInstallMode, MessageId},
+    messages::MessageId,
     time::UNIX_EPOCH,
     CanisterId, CryptoHashOfState, Randomness, RegistryVersion,
 };

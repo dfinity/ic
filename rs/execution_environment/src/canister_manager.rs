@@ -10,8 +10,8 @@ use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
-    CanisterIdRecord, CanisterStatusResultV2, InstallCodeArgs, Method as Ic00Method,
-    SetControllerArgs, UpdateSettingsArgs,
+    CanisterIdRecord, CanisterInstallMode, CanisterStatusResultV2, CanisterStatusType,
+    InstallCodeArgs, Method as Ic00Method, SetControllerArgs, UpdateSettingsArgs,
 };
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, ExecutionParameters, HypervisorError, IngressHistoryWriter,
@@ -25,14 +25,10 @@ use ic_replicated_state::{
 use ic_state_layout::{CanisterLayout, CheckpointLayout, RwPolicy};
 use ic_types::{
     ingress::IngressStatus,
-    messages::{
-        CanisterInstallMode, Payload, RejectContext, Response as CanisterResponse,
-        StopCanisterContext,
-    },
-    CanisterId, CanisterStatusType, ComputeAllocation, Cycles, Height,
-    InvalidComputeAllocationError, InvalidMemoryAllocationError, InvalidQueryAllocationError,
-    MemoryAllocation, NumBytes, NumInstructions, PrincipalId, QueryAllocation, SubnetId, Time,
-    UserId,
+    messages::{Payload, RejectContext, Response as CanisterResponse, StopCanisterContext},
+    CanisterId, ComputeAllocation, Cycles, Height, InvalidComputeAllocationError,
+    InvalidMemoryAllocationError, InvalidQueryAllocationError, MemoryAllocation, NumBytes,
+    NumInstructions, PrincipalId, QueryAllocation, SubnetId, Time, UserId,
 };
 use num_traits::cast::ToPrimitive;
 use serde::{Deserialize, Serialize};

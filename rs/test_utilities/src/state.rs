@@ -8,6 +8,7 @@ use crate::{
 };
 use ic_base_types::NumSeconds;
 use ic_btc_types_internal::BitcoinAdapterRequestWrapper;
+use ic_ic00_types::CanisterStatusType;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -28,8 +29,8 @@ use ic_types::methods::{Callback, WasmClosure};
 use ic_types::{
     messages::{Ingress, Request, RequestOrResponse},
     xnet::{QueueId, StreamHeader, StreamIndex, StreamIndexedQueue},
-    CanisterId, CanisterStatusType, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation,
-    NumBytes, PrincipalId, QueueIndex, SubnetId, Time,
+    CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumBytes, PrincipalId,
+    QueueIndex, SubnetId, Time,
 };
 use ic_wasm_types::CanisterModule;
 use proptest::prelude::*;

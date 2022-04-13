@@ -4,6 +4,7 @@ use crate::{
 };
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_cycles_account_manager::CyclesAccountManager;
+use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::{
     certified_stream_store::CertifiedStreamStore,
     execution_environment::{IngressHistoryWriter, Scheduler},
@@ -30,7 +31,7 @@ use ic_types::{
     batch::Batch,
     registry::RegistryClientError,
     xnet::{StreamHeader, StreamIndex},
-    CanisterStatusType, Height, NodeId, NumBytes, RegistryVersion, SubnetId,
+    Height, NodeId, NumBytes, RegistryVersion, SubnetId,
 };
 use ic_utils::thread::JoinOnDrop;
 #[cfg(test)]

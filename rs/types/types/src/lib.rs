@@ -88,7 +88,6 @@ pub use ic_base_types::{
     RegistryVersion, SubnetId,
 };
 pub use ic_crypto_internal_types::NodeIndex;
-pub use ic_ic00_types::CanisterStatusType;
 use ic_protobuf::types::v1 as pb;
 use phantom_newtype::{AmountOf, Id};
 use serde::{Deserialize, Serialize};

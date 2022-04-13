@@ -23,6 +23,7 @@ ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-embedders = { path = "../embedders" }
 ic-execution-environment = { path = "../execution_environment" }
+ic-ic00-types = { path = "../types/ic00_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-bitcoin-adapter-client = { path = "../interfaces/bitcoin_adapter_client" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }

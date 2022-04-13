@@ -13,7 +13,7 @@ use ic_base_types::{NumSeconds, PrincipalId};
 use ic_config::{execution_environment::Config, flag_status::FlagStatus};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::InstallCodeArgs;
+use ic_ic00_types::{CanisterInstallMode, CanisterStatusType, InstallCodeArgs};
 use ic_interfaces::{
     execution_environment::{
         AvailableMemory, ExecutionMode, ExecutionParameters, HypervisorError, SubnetAvailableMemory,
@@ -47,10 +47,10 @@ use ic_test_utilities::{
 };
 use ic_types::{
     ingress::{IngressStatus, WasmResult},
-    messages::{CallbackId, CanisterInstallMode, RequestOrResponse, StopCanisterContext},
+    messages::{CallbackId, RequestOrResponse, StopCanisterContext},
     nominal_cycles::NominalCycles,
-    CanisterId, CanisterStatusType, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
-    NumInstructions, QueryAllocation, SubnetId,
+    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+    QueryAllocation, SubnetId,
 };
 use ic_wasm_types::WasmValidationError;
 use lazy_static::lazy_static;

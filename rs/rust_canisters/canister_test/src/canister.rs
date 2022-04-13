@@ -3,10 +3,11 @@ use core::future::Future;
 use dfn_candid::{candid, candid_multi_arity};
 use ic_canister_client::{Agent, Sender};
 use ic_config::{subnet_config::SubnetConfig, Config};
+pub use ic_ic00_types::CanisterInstallMode;
+use ic_ic00_types::CanisterStatusType::Stopped;
 use ic_registry_transport::pb::v1::RegistryMutation;
 use ic_replica_tests::*;
 pub use ic_test_utilities::assert_utils::assert_balance_equals;
-use ic_types::CanisterStatusType::Stopped;
 pub use ic_types::{
     ic00,
     ic00::{
@@ -14,7 +15,6 @@ pub use ic_types::{
         ProvisionalCreateCanisterWithCyclesArgs, SetControllerArgs, IC_00,
     },
     ingress::WasmResult,
-    messages::CanisterInstallMode,
     CanisterId, Cycles, PrincipalId,
 };
 use on_wire::{FromWire, IntoWire, NewType};

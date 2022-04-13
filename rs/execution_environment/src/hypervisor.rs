@@ -5,6 +5,7 @@ use ic_config::{embedders::Config as EmbeddersConfig, execution_environment::Con
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{wasm_executor::WasmExecutor, WasmExecutionInput, WasmtimeEmbedder};
 use ic_error_types::{ErrorCode, UserError};
+use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::{
     ExecutionParameters, HypervisorError, HypervisorResult, WasmExecutionOutput,
 };
@@ -26,7 +27,7 @@ use ic_types::{
     ingress::WasmResult,
     messages::Payload,
     methods::{Callback, FuncRef, SystemMethod, WasmMethod},
-    CanisterId, CanisterStatusType, Cycles, NumBytes, NumInstructions, PrincipalId, SubnetId, Time,
+    CanisterId, Cycles, NumBytes, NumInstructions, PrincipalId, SubnetId, Time,
 };
 use prometheus::{Histogram, IntCounterVec, IntGauge};
 use std::{path::PathBuf, sync::Arc};

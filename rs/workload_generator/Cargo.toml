@@ -7,6 +7,7 @@ edition = "2018"
 backoff = "0.3.0"
 ic-canister-client = { path = "../canister_client" }
 ic-config = { path = "../config" }
+ic-ic00-types = { path = "../types/ic00_types" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-metrics-exporter = { path = "../monitoring/metrics_exporter" }
 ic-test-identity = { path = "../test_utilities/identity" }

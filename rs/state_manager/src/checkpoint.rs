@@ -369,6 +369,7 @@ mod tests {
     use super::*;
     use crate::NUMBER_OF_CHECKPOINT_THREADS;
     use ic_base_types::NumSeconds;
+    use ic_ic00_types::CanisterStatusType;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
         canister_state::execution_state::WasmBinary, canister_state::execution_state::WasmMetadata,
@@ -385,7 +386,7 @@ mod tests {
         with_test_replica_logger,
     };
     use ic_types::messages::StopCanisterContext;
-    use ic_types::{CanisterId, CanisterStatusType, Cycles, ExecutionRound, Height};
+    use ic_types::{CanisterId, Cycles, ExecutionRound, Height};
     use ic_wasm_types::CanisterModule;
     use std::collections::BTreeSet;
     use tempfile::Builder;

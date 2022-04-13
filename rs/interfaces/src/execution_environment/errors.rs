@@ -1,6 +1,7 @@
 use ic_base_types::{CanisterIdError, PrincipalIdBlobParseError};
 use ic_error_types::UserError;
-use ic_types::{methods::WasmMethod, CanisterId, CanisterStatusType, Cycles};
+use ic_ic00_types::CanisterStatusType;
+use ic_types::{methods::WasmMethod, CanisterId, Cycles};
 use ic_wasm_types::{WasmEngineError, WasmInstrumentationError, WasmValidationError};
 use serde::{Deserialize, Serialize};
 
