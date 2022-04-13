@@ -32,7 +32,7 @@ use ic_tests::request_auth_malicious_replica_test;
 use ic_tests::request_signature_test;
 use ic_tests::security::nns_voting_fuzzing_poc_test;
 use ic_tests::security::system_api_security_test;
-use ic_tests::tecdsa_complaint_test;
+use ic_tests::tecdsa;
 use ic_tests::util::CYCLES_LIMIT_PER_CANISTER;
 
 mod cli;
@@ -180,9 +180,9 @@ fn system_api_security_pot() -> pot::Pot {
 fn tecdsa_complaint_test_pot() -> pot::Pot {
     composable!(
         "tecdsa_complaint_test",
-        tecdsa_complaint_test::enable_ecdsa_signatures_feature(),
+        tecdsa::tecdsa_complaint_test::enable_ecdsa_signatures_feature(),
         steps! {
-            tecdsa_complaint_test::test_threshold_ecdsa_complaint => "tECDSA complaints test"
+            tecdsa::tecdsa_complaint_test::test_threshold_ecdsa_complaint => "tECDSA complaints test"
         }
     )
 }

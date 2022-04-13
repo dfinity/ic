@@ -1,7 +1,7 @@
 /* tag::catalog[]
 end::catalog[] */
 
-use crate::tecdsa_signature_test::{get_public_key, get_signature, verify_signature};
+use crate::tecdsa::tecdsa_signature_test::{get_public_key, get_signature, verify_signature};
 use crate::util::*;
 use canister_test::Cycles;
 use ic_fondue::{

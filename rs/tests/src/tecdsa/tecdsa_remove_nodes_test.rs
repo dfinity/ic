@@ -20,7 +20,7 @@ use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::vm_control::IcControl;
 use crate::{
     nns::NnsExt,
-    tecdsa_signature_test::{get_public_key, get_signature, verify_signature},
+    tecdsa::tecdsa_signature_test::{get_public_key, get_signature, verify_signature},
     util::*,
 };
 use canister_test::Cycles;
