@@ -12,9 +12,11 @@ use ic_consensus::consensus::{
 };
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
+use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
 use ic_interfaces::{
     certification::CertificationPool,
     certification::Verifier,
+    consensus_pool::ConsensusPoolCache,
     execution_environment::{IngressHistoryReader, QueryHandler},
     messaging::{MessageRouting, MessageRoutingError},
     registry::{RegistryClient, RegistryTransportRecord},
@@ -46,11 +48,16 @@ use ic_replicated_state::ReplicatedState;
 use ic_state_manager::StateManagerImpl;
 use ic_types::{
     batch::{Batch, BatchPayload, IngressPayload},
-    consensus::{CatchUpPackage, HasVersion},
+    consensus::{CatchUpPackage, HasHeight, HasVersion},
     ingress::{IngressStatus, WasmResult},
     messages::{MessageId, SignedIngress, UserQuery},
     time::current_time,
-    Height, PrincipalId, Randomness, RegistryVersion, ReplicaVersion, SubnetId, Time, UserId,
+    CryptoHashOfState, Height, PrincipalId, Randomness, RegistryVersion, ReplicaVersion, SubnetId,
+    Time, UserId,
+};
+use ic_types::{
+    consensus::CatchUpContentProtobufBytes,
+    crypto::{CombinedThresholdSig, CombinedThresholdSigOf},
 };
 use std::{
     path::{Path, PathBuf},
@@ -60,7 +67,7 @@ use std::{
 use tempfile::TempDir;
 
 // Amount of time we are waiting for execution, after batches are delivered.
-const WAIT_DURATION: Duration = Duration::from_millis(200);
+const WAIT_DURATION: Duration = Duration::from_millis(500);
 
 /// The main ic-replay component that sets up consensus and execution
 /// environment to replay past blocks.
@@ -144,12 +151,7 @@ impl Player {
             .join(subnet_id.to_string())
             .join(replica_version.to_string());
         // Extract the genesis CUP and instantiate a new pool.
-        let initial_cup = backup::read_cup_at_height(
-            registry.clone(),
-            subnet_id,
-            &backup_dir,
-            Height::from(start_height),
-        );
+        let initial_cup = backup::read_cup_at_height(&backup_dir, Height::from(start_height));
         // This would create a new pool with just the genesis CUP.
         let pool = ConsensusPoolImpl::new_from_cup_without_bytes(
             subnet_id,
@@ -330,6 +332,12 @@ impl Player {
         if let (Some(consensus_pool), Some(certification_pool)) =
             (&self.consensus_pool, &self.certification_pool)
         {
+            verify_cup_and_state(
+                self.registry.clone(),
+                self.subnet_id,
+                &*self.state_manager,
+                &*consensus_pool.get_cache(),
+            );
             let pool_reader = &PoolReader::new(consensus_pool);
             let finalized_height = pool_reader.get_finalized_height();
             let target_height = Some(
@@ -388,25 +396,14 @@ impl Player {
     // Blocks until the state at the given height is committed.
     fn wait_for_state(&self, height: Height) {
         loop {
-            let latest_state_height = self.state_manager.latest_state_height();
-            if latest_state_height >= height {
-                match self.state_manager.get_state_hash_at(height) {
-                    Ok(hash) => {
-                        println!("Latest checkpoint at height: {}", height);
-                        println!("Latest state hash: {}", hex::encode(&hash.get().0));
-                        break;
-                    }
-                    Err(StateHashError::Transient(err)) => {
-                        println!("Waiting for state hash: {:?}", err);
-                    }
-                    // This only happens for partially certified heights.
-                    Err(StateHashError::Permanent(
-                        PermanentStateHashError::StateNotFullyCertified(h),
-                    )) if h == height => break,
-                    Err(err) => {
-                        panic!("State computation failed: {:?}", err)
-                    }
-                }
+            // We first check if `height` was executed. Otherwise the state manager
+            // would return a permanent error on a too big height.
+            if self.state_manager.latest_state_height() >= height {
+                if let Some(hash) = get_state_hash(&*self.state_manager, height) {
+                    println!("Latest checkpoint at height: {}", height);
+                    println!("Latest state hash: {}", hex::encode(&hash.get().0));
+                };
+                break;
             }
             std::thread::sleep(WAIT_DURATION);
         }
@@ -701,6 +698,8 @@ impl Player {
         backup::assert_consistency_and_clean_up(
             &*self.state_manager,
             self.consensus_pool.as_mut().unwrap(),
+            self.registry.clone(),
+            self.subnet_id,
         );
         // We start with the specified height and restore heights until we run out of
         // heights on the backup spool or bump into a newer replica version.
@@ -733,14 +732,14 @@ impl Player {
                 backup::ExitPoint::CUPHeightWasFinalized(cup_height) => {
                     backup::insert_cup_at_height(
                         self.consensus_pool.as_mut().unwrap(),
-                        self.registry.clone(),
-                        self.subnet_id,
                         backup_dir,
                         cup_height,
                     );
                     backup::assert_consistency_and_clean_up(
                         &*self.state_manager,
                         self.consensus_pool.as_mut().unwrap(),
+                        self.registry.clone(),
+                        self.subnet_id,
                     );
                 }
                 // When we run into an NNS block referencing a newer registry version, we need to dump
@@ -828,4 +827,66 @@ fn setup_registry(
         panic!("fetch_and_start_polling failed: {}", e);
     }
     registry
+}
+
+/// Checks that the catch-up package inside the consensus pool contains the same state hash as
+/// the one computed by the state manager. Additionally, it verifies the CUP's signature.
+pub(crate) fn verify_cup_and_state<T>(
+    registry: Arc<dyn RegistryClient>,
+    subnet_id: SubnetId,
+    state_manager: &dyn StateManager<State = T>,
+    pool: &dyn ConsensusPoolCache,
+) {
+    let last_cup_with_proto = pool.cup_with_protobuf();
+    let last_cup = last_cup_with_proto.cup;
+    // We cannot verify the genesis CUP with this subnet's public key. And there is no state.
+    if last_cup.height() == Height::from(0) {
+        return;
+    }
+
+    // Verify the CUP signature.
+    let protobuf = last_cup_with_proto.protobuf;
+    let crypto = ic_crypto::CryptoComponentFatClient::new_for_verification_only(registry.clone());
+    crypto
+        .verify_combined_threshold_sig_by_public_key(
+            &CombinedThresholdSigOf::new(CombinedThresholdSig(protobuf.signature)),
+            &CatchUpContentProtobufBytes(protobuf.content),
+            subnet_id,
+            last_cup.content.block.get_value().context.registry_version,
+        )
+        .expect("Verification of the signature on the CUP failed");
+
+    // Verify state hash against the state hash in the CUP
+    assert_eq!(
+        get_state_hash(state_manager, last_cup.height()).expect("No hash for CUP found"),
+        last_cup.content.state_hash,
+        "The state hash of the CUP at height {:?} differes from the local state's hash",
+        last_cup.height()
+    );
+}
+
+// Returns the state hash for the given height once it is computed. For non-checkpoints heights
+// `None` is returned.
+fn get_state_hash<T>(
+    state_manager: &dyn StateManager<State = T>,
+    height: Height,
+) -> Option<CryptoHashOfState> {
+    loop {
+        match state_manager.get_state_hash_at(height) {
+            Ok(hash) => return Some(hash),
+            Err(StateHashError::Transient(err)) => {
+                println!("Waiting for state hash: {:?}", err);
+            }
+            // This only happens for partially certified heights.
+            Err(StateHashError::Permanent(PermanentStateHashError::StateNotFullyCertified(h)))
+                if h == height =>
+            {
+                return None
+            }
+            Err(err) => {
+                panic!("State computation failed: {:?}", err)
+            }
+        }
+        std::thread::sleep(WAIT_DURATION);
+    }
 }
