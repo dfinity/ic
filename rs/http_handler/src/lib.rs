@@ -1,10 +1,10 @@
-/// This is the entry point of the Internet Computer. This deals with
-/// accepting HTTP connections, parsing messages and forwarding them to the
-/// correct components.
-///
-/// As much as possible the naming of structs in this module should match the
-/// naming used in the [Interface
-/// Specification](https://sdk.dfinity.org/docs/interface-spec/index.html)
+//! This is the entry point of the Internet Computer. This deals with
+//! accepting HTTP connections, parsing messages and forwarding them to the
+//! correct components.
+//!
+//! As much as possible the naming of structs in this module should match the
+//! naming used in the [Interface
+//! Specification](https://sdk.dfinity.org/docs/interface-spec/index.html)
 mod body;
 mod call;
 mod catch_up_package;
@@ -130,7 +130,7 @@ const CONTENT_TYPE_CBOR: &str = "application/cbor";
 const UNKNOWN_LABEL: &str = "unknown";
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct HttpError {
+pub(crate) struct HttpError {
     pub status: StatusCode,
     pub message: String,
 }
