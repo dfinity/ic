@@ -241,7 +241,70 @@ fn test_the_governance_canister_can_add_or_remove_data_centers() {
         let error = get_value_and_unwrap_error(&registry, "Invalid owner").await;
         assert_matches!(error, KeyNotPresent(_));
 
-        // Data center records can be overwritten
+        // Data center records cannot be overwritten
+        let data_centers = vec![DataCenterRecord {
+            id: "AN1".into(),
+            region: "Not BEL".into(),
+            owner: "Bob".into(),
+            gps: Some(Gps {
+                latitude: 4.0,
+                longitude: 5.0,
+            }),
+        }];
+
+        let payload = AddOrRemoveDataCentersProposalPayload {
+            data_centers_to_add: data_centers,
+            data_centers_to_remove: vec![],
+        };
+
+        // asserting the call returns an error
+        assert!(
+            !forward_call_via_universal_canister(
+                &fake_governance_canister,
+                &registry,
+                "add_or_remove_data_centers",
+                Encode!(&payload).unwrap(),
+            )
+            .await
+        );
+
+        let dc =
+            get_value::<DataCenterRecord>(&registry, make_data_center_record_key("AN1").as_bytes())
+                .await;
+
+        // original values are still there
+        assert_eq!(&dc.id, "AN1");
+        assert_eq!(&dc.region, "BEL");
+        assert_eq!(&dc.owner, "Alice");
+        assert_eq!(
+            &dc.gps.unwrap(),
+            &Gps {
+                latitude: 1.0,
+                longitude: 2.0
+            }
+        );
+
+        // Data center records can be deleted
+        let payload = AddOrRemoveDataCentersProposalPayload {
+            data_centers_to_add: vec![],
+            data_centers_to_remove: vec!["AN1".to_string()],
+        };
+
+        assert!(
+            forward_call_via_universal_canister(
+                &fake_governance_canister,
+                &registry,
+                "add_or_remove_data_centers",
+                Encode!(&payload).unwrap(),
+            )
+            .await
+        );
+
+        // Assert that the data center was deleted
+        let error = get_value_and_unwrap_error(&registry, "AN1").await;
+        assert_matches!(error, KeyNotPresent(_));
+
+        // Data centers that are deleted can be re-added
         let data_centers = vec![DataCenterRecord {
             id: "AN1".into(),
             region: "Not BEL".into(),
@@ -270,7 +333,7 @@ fn test_the_governance_canister_can_add_or_remove_data_centers() {
         let dc =
             get_value::<DataCenterRecord>(&registry, make_data_center_record_key("AN1").as_bytes())
                 .await;
-
+        // new values are there
         assert_eq!(&dc.id, "AN1");
         assert_eq!(&dc.region, "Not BEL");
         assert_eq!(&dc.owner, "Bob");
@@ -281,26 +344,6 @@ fn test_the_governance_canister_can_add_or_remove_data_centers() {
                 longitude: 5.0
             }
         );
-
-        // Data center records can be deleted
-        let payload = AddOrRemoveDataCentersProposalPayload {
-            data_centers_to_add: vec![],
-            data_centers_to_remove: vec!["AN1".to_string()],
-        };
-
-        assert!(
-            forward_call_via_universal_canister(
-                &fake_governance_canister,
-                &registry,
-                "add_or_remove_data_centers",
-                Encode!(&payload).unwrap(),
-            )
-            .await
-        );
-
-        // Invalid DataCenterRecords should not have been added
-        let error = get_value_and_unwrap_error(&registry, "AN1").await;
-        assert_matches!(error, KeyNotPresent(_));
 
         Ok(())
     });
