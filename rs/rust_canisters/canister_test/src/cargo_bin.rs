@@ -146,7 +146,8 @@ impl Project {
             .target("wasm32-unknown-unknown")
             .env("CARGO_BUILD_RUSTFLAGS", build_rust_flags)
             .bin(bin_name.to_string())
-            .release()
+            .arg("--profile")
+            .arg("canister-release")
             .manifest_path(cargo_toml_path)
             .target_dir(wasm_target_dir);
 

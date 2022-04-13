@@ -278,13 +278,14 @@ impl NnsCanisters<'_> {
         let nns_ui = Canister::new(runtime, NNS_UI_CANISTER_ID);
 
         // Install all the canisters
-        // These two need to finish first or the process hangs
+        // Registry and Governance need to first or the process hangs,
+        // Ledger is just added as to avoid Governance spamming the logs.
         futures::join!(
             install_registry_canister(&mut registry, init_payloads.registry.clone()),
             install_governance_canister(&mut governance, init_payloads.governance.clone()),
+            install_ledger_canister(&mut ledger, init_payloads.ledger.clone()),
         );
         futures::join!(
-            install_ledger_canister(&mut ledger, init_payloads.ledger),
             install_root_canister(&mut root, init_payloads.root.clone()),
             install_cycles_minting_canister(
                 &mut cycles_minting,
