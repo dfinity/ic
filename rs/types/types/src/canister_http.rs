@@ -21,7 +21,7 @@ use crate::{
     crypto::{CryptoHashOf, Signed},
     messages::{CallbackId, Request},
     signature::*,
-    Time,
+    CountBytes, Time,
 };
 use ic_error_types::RejectCode;
 use ic_protobuf::{
@@ -29,7 +29,7 @@ use ic_protobuf::{
     state::system_metadata::v1 as pb_metadata,
 };
 use serde::{Deserialize, Serialize};
-use std::convert::TryFrom;
+use std::{convert::TryFrom, mem::size_of};
 
 pub type CanisterHttpRequestId = CallbackId;
 
@@ -110,16 +110,37 @@ pub struct CanisterHttpResponse {
     pub content: CanisterHttpResponseContent,
 }
 
+impl CountBytes for CanisterHttpResponse {
+    fn count_bytes(&self) -> usize {
+        size_of::<CanisterHttpRequestId>() + size_of::<Time>() + self.content.count_bytes()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CanisterHttpResponseContent {
     Success(CanisterHttpPayload),
     Failed(CanisterHttpReject),
 }
 
+impl CountBytes for CanisterHttpResponseContent {
+    fn count_bytes(&self) -> usize {
+        match self {
+            CanisterHttpResponseContent::Success(payload) => payload.count_bytes(),
+            CanisterHttpResponseContent::Failed(err) => err.count_bytes(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub struct CanisterHttpReject {
     pub reject_code: RejectCode,
     pub message: String,
+}
+
+impl CountBytes for CanisterHttpReject {
+    fn count_bytes(&self) -> usize {
+        size_of::<RejectCode>() + self.message.len()
+    }
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
@@ -135,8 +156,30 @@ pub struct CanisterHttpPayload {
     pub body: Vec<u8>,
 }
 
-// type CanisterHttpResponseWithConsensus =
-//     Signed<CanisterHttpResponseContent, CanisterHttpResponseProof>;
+impl CountBytes for CanisterHttpPayload {
+    fn count_bytes(&self) -> usize {
+        size_of::<u64>()
+            + self
+                .headers
+                .iter()
+                .map(|header| header.name.len() + header.value.len())
+                .sum::<usize>()
+            + self.body.len()
+    }
+}
+
+/// A proof that the replicas have reached consensus on some [`CanisterHttpResponseContent`].
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct CanisterHttpResponseWithConsensus {
+    pub content: CanisterHttpResponse,
+    pub proof: CanisterHttpResponseProof,
+}
+
+impl CountBytes for CanisterHttpResponseWithConsensus {
+    fn count_bytes(&self) -> usize {
+        self.proof.count_bytes() + self.content.count_bytes()
+    }
+}
 
 /// A collection of signature shares supporting the same [`CanisterHttpRequestId`] with different hashes.
 ///
@@ -170,7 +213,7 @@ pub struct CanisterHttpResponseMetadata {
 
 impl crate::crypto::SignedBytesWithoutDomainSeparator for CanisterHttpResponseMetadata {
     fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        todo!()
+        serde_cbor::to_vec(&self).unwrap()
     }
 }
 
@@ -183,3 +226,9 @@ pub type CanisterHttpResponseShare =
 /// A signature of of [`CanisterHttpResponseMetadata`].
 pub type CanisterHttpResponseProof =
     Signed<CanisterHttpResponseMetadata, MultiSignature<CanisterHttpResponseMetadata>>;
+
+impl CountBytes for CanisterHttpResponseProof {
+    fn count_bytes(&self) -> usize {
+        size_of::<CanisterHttpResponseProof>()
+    }
+}
