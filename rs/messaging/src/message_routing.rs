@@ -615,14 +615,14 @@ fn get_subnet_public_key(
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
 ) -> Result<Vec<u8>, RegistryClientError> {
-    use ic_crypto::threshold_sig_public_key_to_der;
+    use ic_crypto_utils_threshold_sig_der::public_key_to_der;
     Ok(registry
         .get_initial_dkg_transcripts(subnet_id, registry_version)?
         .value
         .map(|transcripts| {
             let transcript = transcripts.high_threshold;
             let pk = transcript.public_key();
-            threshold_sig_public_key_to_der(pk).unwrap_or_else(|err| {
+            public_key_to_der(&pk.into_bytes()).unwrap_or_else(|err| {
                 panic!("Invalid public key for subnet {}: {:?}", subnet_id, err)
             })
         })

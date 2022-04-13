@@ -1,0 +1,11 @@
+[package]
+name = "ic-crypto-utils-threshold-sig-der"
+version = "0.8.0"
+edition = "2018"
+description = "Utils for serializing threshold signatures to DER"
+
+[dependencies]
+ic-crypto-internal-threshold-sig-bls12381-der = { path = "../../internal/crypto_lib/threshold_sig/bls12_381/der_utils"}
+# Note: keep this crate as light-weight as possible. In particular, do not add
+# dependencies that make this crate (e.g., transitively) dependent on
+# heavy-weight crates such as miracl_core.
