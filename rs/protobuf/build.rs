@@ -51,7 +51,6 @@ fn main() {
     build_state_proto();
     build_p2p_proto();
     build_bitcoin_proto();
-    build_canister_http_proto();
 }
 
 /// Generates Rust structs from logging Protobuf messages.
@@ -341,15 +340,6 @@ fn build_bitcoin_proto() {
     config.out_dir("gen/bitcoin");
     config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
     let files = ["def/bitcoin/v1/bitcoin.proto"];
-    compile_protos(config, &files);
-}
-
-/// Generates Rust structs from HTTP from canister adapter Protobuf messages.
-fn build_canister_http_proto() {
-    let mut config = base_config();
-    config.out_dir("gen/canister_http");
-    config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
-    let files = ["def/canister_http/v1/canister_http.proto"];
     compile_protos(config, &files);
 }
 
