@@ -18,7 +18,6 @@ ic-async-utils = { path = "../../async_utils" }
 ic-canister-http-adapter-service = { path = "../adapter_service"}
 ic-config = { path = "../../config" }
 ic-logger = { path = "../../monitoring/logger" }
-ic-protobuf = { path = "../../protobuf" }
 prost = "0.9"
 rand = "0.8.3"
 serde = { version = "1.0", features = ["derive"] }

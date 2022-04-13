@@ -10,9 +10,9 @@ use hyper_tls::HttpsConnector;
 use ic_canister_http_adapter::{CanisterHttp, Config};
 use ic_canister_http_adapter_service::{
     http_adapter_client::HttpAdapterClient, http_adapter_server::HttpAdapterServer,
+    CanisterHttpRequest, HttpHeader,
 };
 use ic_logger::{new_replica_logger_from_config, ReplicaLogger};
-use ic_protobuf::canister_http::v1::{CanisterHttpRequest, HttpHeader};
 use std::convert::TryFrom;
 use std::{convert::Infallible, net::SocketAddr};
 use tokio::net::UnixStream;
@@ -183,7 +183,7 @@ async fn test_socks_fallback() {
 fn build_http_canister_request(url: String) -> CanisterHttpRequest {
     let headers = vec![HttpHeader {
         name: "User-Agent".to_string(),
-        value: "test".as_bytes().to_vec(),
+        value: "test".to_string(),
     }];
 
     CanisterHttpRequest {

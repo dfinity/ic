@@ -3632,7 +3632,6 @@ dependencies = [
  "ic-canister-http-adapter-service",
  "ic-config",
  "ic-logger",
- "ic-protobuf",
  "prost",
  "rand 0.8.4",
  "serde",
@@ -3652,7 +3651,7 @@ dependencies = [
 name = "ic-canister-http-adapter-service"
 version = "0.1.0"
 dependencies = [
- "ic-protobuf",
+ "prost",
  "prost-build",
  "tonic",
  "tonic-build",
