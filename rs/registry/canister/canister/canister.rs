@@ -12,8 +12,8 @@ use ic_nervous_system_common::MethodAuthzChange;
 use ic_nns_common::{access_control::check_caller_is_root, pb::v1::CanisterAuthzInfo};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_protobuf::registry::{
-    dc::v1::AddOrRemoveDataCentersProposalPayload,
-    node_rewards::v2::UpdateNodeRewardsTableProposalPayload,
+    dc::v1::AddOrRemoveDataCentersProposalPayload, dc::v1::DataCenterRecord,
+    node_operator::v1::NodeOperatorRecord, node_rewards::v2::UpdateNodeRewardsTableProposalPayload,
 };
 use ic_registry_transport::{
     deserialize_atomic_mutate_request, deserialize_get_changes_since_request,
@@ -27,6 +27,7 @@ use ic_registry_transport::{
     serialize_get_value_response,
 };
 use ic_types::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as MAX_RESPONSE_SIZE;
+use ic_types::PrincipalId;
 use registry_canister::{
     certification::{current_version_tree, hash_tree_to_proto},
     common::LOG_PREFIX,
@@ -659,6 +660,23 @@ fn get_node_providers_monthly_xdr_rewards() {
 #[candid_method(query, rename = "get_node_providers_monthly_xdr_rewards")]
 fn get_node_providers_monthly_xdr_rewards_() -> Result<NodeProvidersMonthlyXdrRewards, String> {
     registry().get_node_providers_monthly_xdr_rewards()
+}
+
+#[export_name = "canister_query get_node_operators_and_dcs_of_node_provider"]
+fn get_node_operators_and_dcs_of_node_provider() {
+    over(
+        candid_one,
+        |node_provider: PrincipalId| -> Result<Vec<(DataCenterRecord, NodeOperatorRecord)>, String> {
+            get_node_operators_and_dcs_of_node_provider_(node_provider)
+        },
+    )
+}
+
+#[candid_method(query, rename = "get_node_operators_and_dcs_of_node_provider")]
+fn get_node_operators_and_dcs_of_node_provider_(
+    node_provider: PrincipalId,
+) -> Result<Vec<(DataCenterRecord, NodeOperatorRecord)>, String> {
+    registry().get_node_operators_and_dcs_of_node_provider(node_provider)
 }
 
 #[export_name = "canister_update add_node"]
