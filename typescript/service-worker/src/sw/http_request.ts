@@ -1,14 +1,15 @@
 /**
  * Implement the HttpRequest to Canisters Proposal.
  *
- * TODO: Add support for streaming.
  */
 import { Actor, HttpAgent } from '@dfinity/agent';
-import { IDL } from '@dfinity/candid';
 import { Principal } from '@dfinity/principal';
 import { validateBody } from './validation';
 import * as base64Arraybuffer from 'base64-arraybuffer';
 import * as pako from 'pako';
+import { HttpResponse } from '../http-interface/canister_http_interface_types';
+import { idlFactory } from '../http-interface/canister_http_interface';
+import { streamContent } from './streaming';
 
 const hostnameCanisterIdMap: Record<string, [string, string]> = {
   'identity.ic0.app': ['rdmx6-jaaaa-aaaaa-aaadq-cai', 'ic0.app'],
@@ -20,7 +21,6 @@ const hostnameCanisterIdMap: Record<string, [string, string]> = {
 const shouldFetchRootKey: boolean = ['1', 'true'].includes(
   process.env.FORCE_FETCH_ROOT_KEY
 );
-
 const swLocation = new URL(self.location.toString());
 const [, swDomains] = (() => {
   const maybeSplit = splitHostnameForCanisterId(swLocation.hostname);
@@ -172,26 +172,6 @@ function maybeResolveCanisterIdFromHttpRequest(
   );
 }
 
-const canisterIdlFactory: IDL.InterfaceFactory = ({ IDL }) => {
-  const HeaderField = IDL.Tuple(IDL.Text, IDL.Text);
-  const HttpRequest = IDL.Record({
-    method: IDL.Text,
-    url: IDL.Text,
-    headers: IDL.Vec(HeaderField),
-    body: IDL.Vec(IDL.Nat8),
-  });
-  const HttpResponse = IDL.Record({
-    status_code: IDL.Nat16,
-    headers: IDL.Vec(HeaderField),
-    body: IDL.Vec(IDL.Nat8),
-    // TODO: Support streaming in JavaScript.
-  });
-
-  return IDL.Service({
-    http_request: IDL.Func([HttpRequest], [HttpResponse], ['query']),
-  });
-};
-
 /**
  * Decode a body (ie. deflate or gunzip it) based on its content-encoding.
  * @param body The body to decode.
@@ -256,7 +236,7 @@ export async function handleRequest(request: Request): Promise<Response> {
     try {
       const replicaUrl = new URL(url.origin);
       const agent = new HttpAgent({ host: replicaUrl.toString() });
-      const actor = Actor.createActor(canisterIdlFactory, {
+      const actor = Actor.createActor(idlFactory, {
         agent,
         canisterId: maybeCanisterId,
       });
@@ -277,7 +257,9 @@ export async function handleRequest(request: Request): Promise<Response> {
         body: [...new Uint8Array(await request.arrayBuffer())],
       };
 
-      const httpResponse: any = await actor.http_request(httpRequest);
+      const httpResponse: HttpResponse = (await actor.http_request(
+        httpRequest
+      )) as HttpResponse;
       const headers = new Headers();
 
       let certificate: ArrayBuffer | undefined;
@@ -310,7 +292,18 @@ export async function handleRequest(request: Request): Promise<Response> {
         headers.append(key, value);
       }
 
-      const body = new Uint8Array(httpResponse.body);
+      // if we do streaming, body contains the first chunk
+      let buffer = httpResponse.body;
+      if (httpResponse.streaming_strategy.length !== 0) {
+        buffer = buffer.concat(
+          await streamContent(
+            agent,
+            maybeCanisterId,
+            httpResponse.streaming_strategy[0]
+          )
+        );
+      }
+      const body = new Uint8Array(buffer);
       const identity = decodeBody(body, encoding);
 
       let bodyValid = false;

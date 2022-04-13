@@ -7,7 +7,14 @@ module.exports = {
   setupFiles: [`<rootDir>/test-setup.ts`],
   moduleDirectories: ['node_modules'],
   transform: {
-    '^.+\\.ts$': 'ts-jest',
+    '^.+\\.[tj]s$': 'ts-jest',
   },
   reporters: ['default', 'jest-junit'],
+  globals: {
+    'ts-jest': {
+      tsconfig: {
+        allowJs: true,
+      },
+    },
+  },
 };
