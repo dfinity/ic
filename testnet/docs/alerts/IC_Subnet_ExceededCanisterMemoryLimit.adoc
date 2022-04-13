@@ -1,15 +1,16 @@
 = IC_Subnet_ExceededCanisterMemoryLimit
 :icons: font
 ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+:url-execution-dashboard: https://grafana.dfinity.systems/d/GWlsOrn7z/execution-metrics-2-0?viewPanel=105&orgId=1&from=now-24h&to=now&var-ic=mercury&var-ic_subnet=jtdsg-3h6gi-hs7o5-z2soi-43w3z-soyl3-ajnp3-ekni5-sw553-5kw67-nqe&var-instance=All&var-node_instance=All&var-heatmap_period=$__auto_interval_heatmap_period
 
 == Triggered by
 
 The canister memory used on the subnet has exceeded the soft limit of
-250GB.
+300GB.
 
 == Impact
 
-Subnets have a maximum canister memory limit of ~ 300GB, after which
+Subnets have a maximum canister memory limit of ~ 350GB, after which
 allocation requests will fail, canisters will become stuck, etc.
 
 == Possible causes (non-exhaustive)
@@ -18,7 +19,10 @@ The IC is popular.
 
 == Troubleshooting and remediation
 
-You can't troubleshoot, this is expected behaviour.
+Check the {url-execution-dashboard}[rate of increase] in canister state memory (make sure to filter by the appropriate subnet).
 
-To mitigate you will need to take action to stop new canisters being
-created on the subnet.
+At the moment we can only try to mitigate the problem by taking actions to stop new canisters from being created on the subnet (the long term subnet splitting solution is still ongoing).
+
+- Work with the release team to submit a proposal to remove the subnet from the list of authorized subnets (this will stop new canisters being created from users).
+
+- Consult with the execution team whether a hard-stop should be put on creating new canisters on the subnet via setting the `max_number_of_canisters` parameter in the subnet's record.
