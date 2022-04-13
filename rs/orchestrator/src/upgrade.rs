@@ -235,10 +235,10 @@ impl Upgrade {
         &self,
         subnet_id: SubnetId,
     ) -> OrchestratorResult<()> {
-        let replica_version = self.registry.get_latest_version();
+        let registry_version = self.registry.get_latest_version();
         let new_replica_version = self
             .registry
-            .get_replica_version(subnet_id, replica_version)?;
+            .get_replica_version(subnet_id, registry_version)?;
         if new_replica_version != self.replica_version {
             info!(
                 self.logger,
