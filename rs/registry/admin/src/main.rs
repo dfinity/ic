@@ -48,6 +48,7 @@ use ic_nns_test_keys::{
     TEST_USER4_PRINCIPAL,
 };
 use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
+use ic_protobuf::registry::firewall::v1::FirewallConfig;
 use ic_protobuf::registry::node_rewards::v2::{
     NodeRewardsTable, UpdateNodeRewardsTableProposalPayload,
 };
@@ -75,10 +76,11 @@ use ic_registry_common::registry::RegistryCanister;
 use ic_registry_keys::{
     get_node_record_node_id, is_node_record_key, make_blessed_replica_version_key,
     make_crypto_node_key, make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
-    make_data_center_record_key, make_node_operator_record_key, make_node_record_key,
-    make_provisional_whitelist_record_key, make_replica_version_key, make_routing_table_record_key,
-    make_subnet_list_record_key, make_subnet_record_key, make_unassigned_nodes_config_record_key,
-    NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY,
+    make_data_center_record_key, make_firewall_config_record_key, make_node_operator_record_key,
+    make_node_record_key, make_provisional_whitelist_record_key, make_replica_version_key,
+    make_routing_table_record_key, make_subnet_list_record_key, make_subnet_record_key,
+    make_unassigned_nodes_config_record_key, NODE_OPERATOR_RECORD_KEY_PREFIX,
+    NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -285,6 +287,8 @@ enum SubCommand {
     ProposeToClearProvisionalWhitelist(ProposeToClearProvisionalWhitelistCmd),
     /// Update the Node Operator's specified parameters
     ProposeToUpdateNodeOperatorConfig(ProposeToUpdateNodeOperatorConfigCmd),
+    /// Get the current firewall config
+    GetFirewallConfig,
     /// Propose to set the firewall config
     ProposeToSetFirewallConfig(ProposeToSetFirewallConfigCmd),
     /// Propose to remove a node from the registry via proposal.
@@ -2651,6 +2655,13 @@ async fn main() {
                 sender,
             )
             .await;
+        }
+        SubCommand::GetFirewallConfig => {
+            let key = make_firewall_config_record_key();
+            let (bytes, _) = registry_canister.get_value(key.into(), None).await.unwrap();
+
+            let firewall_config = decode_registry_value::<FirewallConfig>(bytes);
+            println!("{:#?}", firewall_config);
         }
         SubCommand::ProposeToSetFirewallConfig(cmd) => {
             propose_external_proposal_from_command(
