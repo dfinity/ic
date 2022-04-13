@@ -1,12 +1,20 @@
 load("//bazel:defs.bzl", "cargo_build", "optimized_canister")
 
+package(default_visibility = ["//visibility:public"])
+
 cargo_build(
     name = "binaries",
     srcs = ["//rs:all_sources"],
     binaries = [
-        "replica",
+        "canister_sandbox",
+        "ic-btc-adapter",
+        "ic-consensus-pool-util",
+        "ic-crypto-csp",
+        "ic-regedit",
         "orchestrator",
-        "ic-admin",
+        "replica",
+        "state-tool",
+        "vsock_agent",
     ],
     cargo_flags = [
         "--manifest-path",

@@ -1,0 +1,77 @@
+load("//toolchains/sysimage:toolchain.bzl", "docker_tar", "vfat_image", "ext4_image", "disk_image", "tar_extract")
+
+docker_tar(
+    name="bootloader-tree.tar",
+    src=":bootloader",
+    dep=glob(["bootloader/**"]),
+)
+
+docker_tar(
+    name="rootfs-tree.tar",
+    src=":rootfs",
+    dep=glob(["rootfs/**"]),
+    extra_args=["--build-arg", "ROOT_PASSWORD=root", "--build-arg", "BASE_IMAGE=dfinity/guestos-base-dev@sha256:c8de9496654ddad9d4b337f07f19dfe780d6449323fb9223b254d21039a07c57"],
+)
+
+vfat_image(
+    name="partition-esp.tar",
+    src=":bootloader-tree.tar",
+    partition_size="100M",
+    subdir="boot/efi",
+)
+
+vfat_image(
+    name="partition-grub.tar",
+    src=":bootloader-tree.tar",
+    partition_size="100M",
+    subdir="boot/grub",
+)
+
+ext4_image(
+    name="partition-config.tar",
+    partition_size="100M",
+)
+
+tar_extract(
+    name="file_contexts",
+    src=":rootfs-tree.tar",
+    path="etc/selinux/default/contexts/files/file_contexts",
+)
+
+ext4_image(
+    name="partition-boot.tar",
+    partition_size="1G",
+    src=":rootfs-tree.tar",
+    file_contexts=":file_contexts",
+    subdir="boot/",
+)
+
+ext4_image(
+    name="partition-root.tar",
+    partition_size="3G",
+    file_contexts=":file_contexts",
+    src=":rootfs-tree.tar",
+    extra_files={
+        "//:canister_sandbox": "/opt/ic/bin/canister_sandbox:0755",
+        "//:ic-btc-adapter": "/opt/ic/bin/ic-btc-adapter:0755",
+        "//:ic-consensus-pool-util": "/opt/ic/bin/ic-consensus-pool-util:0755",
+        "//:ic-crypto-csp": "/opt/ic/bin/ic-crypto-csp:0755",
+        "//:ic-regedit": "/opt/ic/bin/ic-regedit:0755",
+        "//:orchestrator": "/opt/ic/bin/orchestrator:0755",
+        "//:replica": "/opt/ic/bin/replica:0755",
+        "//:state-tool": "/opt/ic/bin/state-tool:0755",
+        "//:vsock_agent": "/opt/ic/bin/vsock_agent:0755",
+    }
+)
+
+disk_image(
+    name="disk.img.tar",
+    layout=":partitions.csv",
+    partitions=[
+        ":partition-esp.tar",
+        ":partition-grub.tar",
+        ":partition-config.tar",
+        ":partition-boot.tar",
+        ":partition-root.tar",
+    ]
+)
