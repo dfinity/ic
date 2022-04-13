@@ -254,7 +254,7 @@ impl<'a> UniversalCanister<'a> {
         offset: u32,
         len: u32,
         max_retries: u64,
-        retry_wait_sec: u64,
+        retry_wait: Duration,
     ) -> Vec<u8> {
         for i in 0..max_retries + 1 {
             debug!(log, "Reading from stable memory, attempt {}.", i + 1);
@@ -263,8 +263,8 @@ impl<'a> UniversalCanister<'a> {
                 Ok(message) => return message,
                 Err(err) => {
                     debug!(log, "Couldn't read from stable memory, err={}", err);
-                    debug!(log, "Retrying in {} secs...", retry_wait_sec);
-                    tokio::time::sleep(std::time::Duration::from_secs(retry_wait_sec)).await;
+                    debug!(log, "Retrying in {} secs ...", retry_wait.as_secs());
+                    tokio::time::sleep(retry_wait).await;
                 }
             }
         }

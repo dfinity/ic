@@ -31,6 +31,8 @@ Coverage::
 
 end::catalog[] */
 
+use std::time::Duration;
+
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env_api::*;
 use crate::driver::{ic::VmAllocationStrategy, test_env::TestEnv};
@@ -54,6 +56,8 @@ pub fn config_multiple_hosts() -> InternetComputer {
 }
 
 const MSG: &[u8] = b"this beautiful prose should be persisted for future generations";
+const READ_RETRIES: u64 = 10;
+const RETRY_WAIT: Duration = Duration::from_secs(10);
 
 /// Here we define the test workflow, which should implement the Runbook given
 /// in the test catalog entry at the top of this file.
@@ -131,8 +135,7 @@ pub fn basic_health_test(env: TestEnv, log: Logger) {
             info!(log, "Assert correct read message from canister...");
             // Verify the originating canister now has the expected content.
             assert_eq!(
-                ucan.try_read_stable_with_retries(&log, 0, expect.len() as u32, 10, 10)
-                    .await,
+                ucan.try_read_stable(0, expect.len() as u32).await,
                 expect.to_vec()
             );
         });
@@ -142,10 +145,19 @@ pub fn basic_health_test(env: TestEnv, log: Logger) {
     // Finally we query each of the canisters to ensure that the canister
     // memories have been updated as expected.
     for (node, ucan_id) in nodes.iter().zip(ucan_ids) {
+        let log = log.clone();
         node.with_default_agent(move |agent| async move {
             let ucan = UniversalCanister::from_canister_id(&agent, ucan_id);
+            // NOTE: retries are important here, 1/3 of the nodes might not observe changes immediately.
             assert_eq!(
-                ucan.try_read_stable(0, XNET_MSG.len() as u32).await,
+                ucan.try_read_stable_with_retries(
+                    &log,
+                    0,
+                    XNET_MSG.len() as u32,
+                    READ_RETRIES,
+                    RETRY_WAIT
+                )
+                .await,
                 XNET_MSG.to_vec()
             );
         })
