@@ -53,8 +53,12 @@ noErrorLogMessage =
     examine $ \o -> case getLog o of
       Nothing -> top
       Just l ->
-        bottomWhen (logLevel l `elem` ["CRITICAL", "ERROR"]) $
+        bottomWhen (errOrCrit l && nonBoot l) $
           "unexpected log message: [" ++ logLevel l ++ "] " ++ logMessage l
+  where
+    errOrCrit l = logLevel l `elem` ["CRITICAL", "ERROR"]
+    -- in legacy system tests, we have to ignore such messages
+    nonBoot l = not $ "Could not confirm the boot" `isInfixOf` logMessage l
 
 data Log = Log
   { logLevel :: !String,
