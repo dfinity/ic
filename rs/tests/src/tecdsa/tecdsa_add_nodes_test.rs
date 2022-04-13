@@ -19,7 +19,7 @@ end::catalog[] */
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::{
     nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed, NnsExt},
-    tecdsa_signature_test::{get_public_key, get_signature, verify_signature},
+    tecdsa::tecdsa_signature_test::{get_public_key, get_signature, verify_signature},
     util::*,
 };
 use canister_test::Cycles;

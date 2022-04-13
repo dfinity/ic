@@ -26,8 +26,7 @@ use ic_tests::{
 };
 use ic_tests::{
     networking::firewall::{self, change_to_firewall_rules_takes_effect},
-    registry_authentication_test, tecdsa_add_nodes_test, tecdsa_remove_nodes_test,
-    tecdsa_signature_test, wasm_generator_test,
+    registry_authentication_test, tecdsa, wasm_generator_test,
 };
 use regex::Regex;
 use std::collections::HashMap;
@@ -452,18 +451,18 @@ fn get_test_suites() -> HashMap<String, Suite> {
             ),
             pot(
                 "tecdsa_add_nodes_pot",
-                tecdsa_add_nodes_test::config(),
+                tecdsa::tecdsa_add_nodes_test::config(),
                 par(vec![t(
                     "test_tecdsa_add_nodes",
-                    tecdsa_add_nodes_test::test,
+                    tecdsa::tecdsa_add_nodes_test::test,
                 )]),
             ),
             pot(
                 "tecdsa_remove_nodes_pot",
-                tecdsa_remove_nodes_test::config(),
+                tecdsa::tecdsa_remove_nodes_test::config(),
                 par(vec![t(
                     "test_tecdsa_remove_nodes",
-                    tecdsa_remove_nodes_test::test,
+                    tecdsa::tecdsa_remove_nodes_test::test,
                 )]),
             )
             .with_ttl(Duration::from_secs(15 * 60)), // 15 minutes
@@ -474,19 +473,19 @@ fn get_test_suites() -> HashMap<String, Suite> {
             ),
             pot(
                 "tecdsa_signature_test_pot",
-                tecdsa_signature_test::enable_ecdsa_signatures_feature(),
+                tecdsa::tecdsa_signature_test::enable_ecdsa_signatures_feature(),
                 par(vec![
                     t(
                         "test_threshold_ecdsa_signature",
-                        tecdsa_signature_test::test_threshold_ecdsa_signature,
+                        tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature,
                     ),
                     t(
                         "test_threshold_ecdsa_signature_from_other_subnet",
-                        tecdsa_signature_test::test_threshold_ecdsa_signature_from_other_subnet,
+                        tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_from_other_subnet,
                     ),
                     t(
                         "test_threshold_ecdsa_signature_fails_without_cycles",
-                        tecdsa_signature_test::test_threshold_ecdsa_signature_fails_without_cycles,
+                        tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_fails_without_cycles,
                     ),
                 ]),
             ),
