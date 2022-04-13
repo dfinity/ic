@@ -85,13 +85,25 @@ Usage:
 
   Action is one of
 
-    install
+    upgrade-install
       Installs a new system image into the spare partition and changes
       bootloader to use it on next boot. (Caller will still have to
       reboot on next opportunity).
-      The new system image must be given via two filenames as
-      additional command line arguments: first the "boot" partition
-      image, then the "root" partition image.
+      The new system image can be given in two different ways:
+      - as a singe .tar (or .tar.gz) file containing two files
+        named "boot.img" and "root.img"
+      - as two filenames: first the "boot" partition
+        image, then the "root" partition image.
+      The update is written to the partitions, but the bootloader is
+      not changed yet, see next command.
+
+    upgrade-commit
+      Commits a previously installed upgrade by writing instructions to the
+      bootloader to switch to new system after reboot, and also triggers
+      reboot immediately.
+      This must be called after upgrade-install command above finished
+      successfully. Calling it under any other circumstances is illegal and
+      will result in a wrong (possibly failing) boot.
 
     confirm
       Confirm that the current system booted fine (required after first
@@ -128,7 +140,7 @@ while getopts ":f" OPT; do
             GRUBENV_FILE="${OPTARG}"
             ;;
         *)
-            usage
+            usage >&2
             exit 1
             ;;
     esac
@@ -163,32 +175,63 @@ TARGET_VAR=$(get_var_partition "${TARGET_ALTERNATIVE}")
 
 # Execute subsequent action
 ACTION="$1"
+case "${ACTION}" in
+    upgrade-install) ;&
+
+    upgrade-commit) ;&
+
+    confirm)
+        # Re-execute script as root (unless root already) for operations that
+        # require privilege.
+        if [ $(id -u) != 0 ]; then
+            exec sudo "$0" "$@"
+        fi
+        ;;
+    *) ;;
+
+esac
+
 shift
 
 case "${ACTION}" in
-    install)
+    upgrade-install)
         if [ "${IS_STABLE}" != 1 ]; then
-            echo "Cannot install an upgrade before present system is committed as stable." >2
+            echo "Cannot install an upgrade before present system is committed as stable." >&2
             exit 1
         fi
-        BOOT_IMG="$1"
-        ROOT_IMG="$2"
 
-        if [ "${BOOT_IMG}" == "" -o "${ROOT_IMG}" == "" ]; then
-            usage
+        if [ "$#" == 2 ]; then
+            BOOT_IMG="$1"
+            ROOT_IMG="$2"
+        elif [ "$#" == 1 ]; then
+            TMPDIR=$(mktemp -d -t upgrade-image-XXXXXXXXXXXX)
+            trap "rm -rf $TMPDIR" exit
+            tar -xf "$1" -C "${TMPDIR}"
+            BOOT_IMG="${TMPDIR}"/boot.img
+            ROOT_IMG="${TMPDIR}"/root.img
+        else
+            usage >&2
             exit 1
         fi
 
         # Write to target partitions, and "wipe" header of var partition
         # (to ensure that new target starts from a pristine state).
-
         dd if="${BOOT_IMG}" of="${TARGET_BOOT}" bs=1M status=progress
         dd if="${ROOT_IMG}" of="${TARGET_ROOT}" bs=1M status=progress
         dd if=/dev/zero of="${TARGET_VAR}" bs=1M count=16 status=progress
+        ;;
+    upgrade-commit)
+        if [ "${IS_STABLE}" != 1 ]; then
+            echo "Cannot install an upgrade before present system is committed as stable." >&2
+            exit 1
+        fi
 
+        # Tell boot loader to switch partitions on next boot.
         boot_alternative="${TARGET_ALTERNATIVE}"
         boot_cycle=first_boot
         write_grubenv "${GRUBENV_FILE}"
+        sync
+        reboot
         ;;
     confirm)
         if [ "$boot_cycle" != "stable" ]; then
