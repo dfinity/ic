@@ -594,19 +594,30 @@ mod tests {
     use ic_interfaces::artifact_pool::UnvalidatedArtifact;
     use ic_interfaces::ecdsa::MutableEcdsaPool;
     use ic_interfaces::time_source::TimeSource;
-    use ic_test_utilities::types::ids::{NODE_1, NODE_2, NODE_3};
+    use ic_test_utilities::types::ids::{subnet_test_id, NODE_1, NODE_2, NODE_3};
     use ic_test_utilities::with_test_replica_logger;
     use ic_test_utilities::FastForwardTimeSource;
+    use ic_types::consensus::ecdsa::*;
     use ic_types::Height;
+
+    fn create_request_id(generator: &mut EcdsaUIDGenerator) -> RequestId {
+        let quadruple_id = generator.next_quadruple_id();
+        let pseudo_random_id = Vec::new();
+        RequestId {
+            quadruple_id,
+            pseudo_random_id,
+        }
+    }
 
     // Tests the Action logic
     #[test]
     fn test_ecdsa_signer_action() {
+        let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1));
         let (id_1, id_2, id_3, id_4) = (
-            create_request_id(1),
-            create_request_id(2),
-            create_request_id(3),
-            create_request_id(4),
+            create_request_id(&mut uid_generator),
+            create_request_id(&mut uid_generator),
+            create_request_id(&mut uid_generator),
+            create_request_id(&mut uid_generator),
         );
 
         // The finalized block requests signatures 1, 2, 3
@@ -638,7 +649,7 @@ mod tests {
                 &block_reader,
                 &requested,
                 Height::from(100),
-                &create_request_id(123)
+                &create_request_id(&mut uid_generator)
             ),
             Action::Drop
         );
@@ -647,7 +658,7 @@ mod tests {
                 &block_reader,
                 &requested,
                 Height::from(10),
-                &create_request_id(123)
+                &create_request_id(&mut uid_generator)
             ),
             Action::Drop
         );
@@ -673,12 +684,13 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, signer) = create_signer_dependencies(pool_config, logger);
+                let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1));
                 let (id_1, id_2, id_3, id_4, id_5) = (
-                    create_request_id(1),
-                    create_request_id(2),
-                    create_request_id(3),
-                    create_request_id(4),
-                    create_request_id(5),
+                    create_request_id(&mut uid_generator),
+                    create_request_id(&mut uid_generator),
+                    create_request_id(&mut uid_generator),
+                    create_request_id(&mut uid_generator),
+                    create_request_id(&mut uid_generator),
                 );
 
                 // Set up the ECDSA pool. Pool has shares for requests 1, 2, 3.
@@ -731,10 +743,11 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (ecdsa_pool, signer) = create_signer_dependencies(pool_config, logger);
+                let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1));
                 let (id_1, id_2, id_3) = (
-                    create_request_id(1),
-                    create_request_id(2),
-                    create_request_id(3),
+                    create_request_id(&mut uid_generator),
+                    create_request_id(&mut uid_generator),
+                    create_request_id(&mut uid_generator),
                 );
 
                 // Set up the signature requests
@@ -774,12 +787,13 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, signer) = create_signer_dependencies(pool_config, logger);
+                let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1));
                 let time_source = FastForwardTimeSource::new();
                 let (id_1, id_2, id_3, id_4) = (
-                    create_request_id(1),
-                    create_request_id(2),
-                    create_request_id(3),
-                    create_request_id(4),
+                    create_request_id(&mut uid_generator),
+                    create_request_id(&mut uid_generator),
+                    create_request_id(&mut uid_generator),
+                    create_request_id(&mut uid_generator),
                 );
 
                 // Set up the transcript creation request
@@ -848,8 +862,9 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, signer) = create_signer_dependencies(pool_config, logger);
+                let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1));
                 let time_source = FastForwardTimeSource::new();
-                let id_2 = create_request_id(2);
+                let id_2 = create_request_id(&mut uid_generator);
 
                 // Set up the ECDSA pool
                 // Validated pool has: {signature share 2, signer = NODE_2}
@@ -888,8 +903,9 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, signer) = create_signer_dependencies(pool_config, logger);
+                let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1));
                 let time_source = FastForwardTimeSource::new();
-                let id_2 = create_request_id(2);
+                let id_2 = create_request_id(&mut uid_generator);
 
                 // Unvalidated pool has: {signature share 2, signer = NODE_2, height = 100}
                 let mut share = create_signature_share(NODE_2, id_2.clone());
@@ -941,11 +957,12 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, signer) = create_signer_dependencies(pool_config, logger);
+                let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1));
                 let time_source = FastForwardTimeSource::new();
                 let (id_1, id_2, id_3) = (
-                    create_request_id(1),
-                    create_request_id(2),
-                    create_request_id(3),
+                    create_request_id(&mut uid_generator),
+                    create_request_id(&mut uid_generator),
+                    create_request_id(&mut uid_generator),
                 );
 
                 // Set up the transcript creation request
@@ -999,10 +1016,11 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, signer) = create_signer_dependencies(pool_config, logger);
+                let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1));
                 let (id_1, id_2, id_3) = (
-                    create_request_id(1),
-                    create_request_id(2),
-                    create_request_id(3),
+                    create_request_id(&mut uid_generator),
+                    create_request_id(&mut uid_generator),
+                    create_request_id(&mut uid_generator),
                 );
 
                 // Set up the transcript creation request

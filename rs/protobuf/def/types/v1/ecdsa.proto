@@ -15,6 +15,7 @@ message EcdsaSummaryPayload {
   repeated OngoingXnetReshare ongoing_xnet_reshares = 7;
   repeated XnetReshareAgreement xnet_reshare_agreements = 8;
   UnmaskedTranscript current_key_transcript = 9;
+  uint64 next_unused_quadruple_id = 10;
 }
 
 message OngoingSignature {
@@ -23,12 +24,12 @@ message OngoingSignature {
 }
 
 message AvailableQuadruple {
-  uint64 quadrupled_id = 1;
+  uint64 quadruple_id = 1;
   PreSignatureQuadrupleRef quadruple = 2;
 }
 
 message QuadrupleInProgress {
-  uint64 quadrupled_id = 1;
+  uint64 quadruple_id = 1;
   QuadrupleInCreation quadruple = 2;
 }
 
@@ -43,7 +44,8 @@ message XnetReshareAgreement {
 }
 
 message RequestId {
-  bytes request_id = 1;
+  bytes pseudo_random_id = 1;
+  uint64 quadruple_id = 2;
 }
 
 message TranscriptRef {

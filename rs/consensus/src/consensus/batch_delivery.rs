@@ -356,10 +356,14 @@ pub fn generate_responses_to_sign_with_ecdsa_calls(
 ) -> Vec<Response> {
     use ic_ic00_types::{Payload, SignWithECDSAReply};
     let mut consensus_responses = Vec::<Response>::new();
+    let mut completed_set = ecdsa_payload
+        .signature_agreements
+        .iter()
+        .map(|(request_id, sig)| (request_id.pseudo_random_id.clone(), sig))
+        .collect::<BTreeMap<_, _>>();
     for (callback_id, context) in contexts.iter() {
-        let request_id = ecdsa::RequestId::from(context.pseudo_random_id.to_vec());
         if let Some(CompletedSignature::Unreported(response)) =
-            ecdsa_payload.signature_agreements.get(&request_id).cloned()
+            completed_set.remove(context.pseudo_random_id.as_slice())
         {
             consensus_responses.push(Response {
                 originator: context.request.sender,
@@ -371,7 +375,7 @@ pub fn generate_responses_to_sign_with_ecdsa_calls(
                 refund: context.request.payment,
                 response_payload: messages::Payload::Data(
                     SignWithECDSAReply {
-                        signature: response.signature,
+                        signature: response.signature.clone(),
                     }
                     .encode(),
                 ),
