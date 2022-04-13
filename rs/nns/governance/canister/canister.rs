@@ -11,7 +11,7 @@
 
 use ic_nns_governance::{
     governance::TimeWarp,
-    pb::v1::{manage_neuron::NeuronIdOrSubaccount, RewardNodeProviders},
+    pb::v1::{manage_neuron::NeuronIdOrSubaccount, NetworkEconomics, RewardNodeProviders},
 };
 use rand::rngs::StdRng;
 use rand_core::{RngCore, SeedableRng};
@@ -661,6 +661,24 @@ fn get_neuron_ids_() -> Vec<NeuronId> {
         .into_iter()
         .map(NeuronId)
         .collect()
+}
+
+#[export_name = "canister_query get_network_economics_parameters"]
+fn get_network_economics_parameters() {
+    println!("{}get_network_economics_parameters", LOG_PREFIX);
+    over(candid, |()| -> NetworkEconomics {
+        get_network_economics_parameters_()
+    })
+}
+
+#[candid_method(query, rename = "get_network_economics_parameters")]
+fn get_network_economics_parameters_() -> NetworkEconomics {
+    governance()
+        .proto
+        .economics
+        .as_ref()
+        .expect("Governance must have network economics.")
+        .clone()
 }
 
 #[export_name = "canister_heartbeat"]
