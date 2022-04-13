@@ -6,28 +6,34 @@
 The http handler is responsible for processing http requests as specified in the
 https://sdk.dfinity.org/docs/interface-spec/index.html#http-interface[IC specification]. Processing semantics include:
 
-* managing TCP connections
-* managing secure and insecure connections
-* safe receiving of http body
+* accepting TCP connections
+* TLS handshake for connections using HTTPs
+* safe/bounded receiving of http requests
+* forwarding, potentially after a transform, each request to the corresponding downstream component
 * request validation according to the https://sdk.dfinity.org/docs/interface-spec/index.html[interface specification of the IC]
-
-In addition, the http handler serves content under /_/{dashboard|catch_up_package|pprof} for 
-operational purposes.
+* async execution within the http handler 
 
 === Startup
 
-The HTTP handler starts accepting requests as soon as it is instantiated. This is driven by operational needs, we want to serve
-/status, /dashboard, /catch_up_package endpoints as soon as possible.
+The HTTP handler starts serving requests as soon as `+ic_http_handler::start_server+` is called. This is driven by operational needs,
+we want to serve `+/status+`, `+/_/dashboard+`, `+/_/pprof+`,`+/catch_up_package+` endpoints as soon as possible.
 
-In order to serve query, read_state or call requests the replica needs to meet few preconditions.
-The precondidation are encoded in the +ic_types::messages::ReplicaHealthStatus+ enum. 
+In order to serve `+query+`, `+read_state+` or `+call+` requests the replica needs to meet a few preconditions. The precondidation are
+encoded in the `+ic_types::messages::ReplicaHealthStatus+` enum which is part of the `+/status+` response. 
+If you try to send, for example a query request, before the replica enters `+ReplicaHealthStatus::Healthy+`, then *503 Service Unavailable*
+is returned as part of the response.
 
-If you try to send, for example a query request, before the replica enters ReplicaHealthStatus::Healthy, then
-503 Service Unavailable will be returned as part of the response.
+=== HTTP vs HTTPs
+
+Currently we peek the first byte of the TCP stream to determine if the connection is TLS or not.
+
+Alternatively, to peeking the first byte of the stream, we could use a dedicated ports for HTTP and HTTPs. Until we
+implement client authentication we decided to keep the current solution.
 
 === Code structure
 
-For each HTTP(s) endpoint there is a module that processes the corresponding requests. (e.g. query.rs, call.rs)
+For each HTTP(s) endpoint there is a module that processes the corresponding requests (`+query.rs+`,
+`+call.rs+`, `+query.rs+`, `+read_state.rs+`, etc.). 
 
 == tower::Service FAQ
 
