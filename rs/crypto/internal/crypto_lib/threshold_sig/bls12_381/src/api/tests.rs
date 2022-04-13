@@ -226,3 +226,11 @@ proptest! {
             test_threshold_sig_api_and_core_match(Randomness::from(seed), NumberOfNodes::from(threshold + redundancy), NumberOfNodes::from(threshold), &message);
         }
 }
+
+#[test]
+fn should_use_correct_key_size_in_der_utils() {
+    assert_eq!(
+        ic_crypto_internal_threshold_sig_bls12381_der::KEY_SIZE,
+        PublicKeyBytes::SIZE
+    );
+}

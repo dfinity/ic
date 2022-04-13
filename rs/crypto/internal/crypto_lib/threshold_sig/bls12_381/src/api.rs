@@ -44,13 +44,13 @@ use super::types::{
 use crate::api::threshold_sign_error::ClibThresholdSignError;
 use crate::types::public_coefficients::conversions::pub_key_bytes_from_pub_coeff_bytes;
 use crate::types::PublicKey;
+use ic_crypto_internal_threshold_sig_bls12381_der as der;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_types::{
     crypto::{AlgorithmId, CryptoError, CryptoResult},
     NodeIndex, NumberOfNodes, Randomness,
 };
-use simple_asn1::{oid, ASN1Block};
 use std::convert::{TryFrom, TryInto};
 
 pub mod dkg_errors;
@@ -259,29 +259,11 @@ pub fn verify_combined_signature(
 ///
 /// See [the Interface Spec](https://sdk.dfinity.org/docs/interface-spec/index.html#_certificate) and [RFC 5480](https://tools.ietf.org/html/rfc5480).
 pub fn public_key_to_der(key: PublicKeyBytes) -> CryptoResult<Vec<u8>> {
-    use simple_asn1::to_der;
-    let key = key.0;
-
-    to_der(&ASN1Block::Sequence(
-        2,
-        vec![
-            ASN1Block::Sequence(0, vec![bls_algorithm_id(), bls_curve_id()]),
-            ASN1Block::BitString(0, key.len() * 8, key.to_vec()),
-        ],
-    ))
-    .map_err(|e| CryptoError::MalformedPublicKey {
+    der::public_key_to_der(&key.0).map_err(|e| CryptoError::MalformedPublicKey {
         algorithm: AlgorithmId::ThresBls12_381,
-        key_bytes: Some(key.to_vec()),
+        key_bytes: Some(key.0.to_vec()),
         internal_error: format!("Conversion to DER failed with error {}", e),
     })
-}
-
-fn bls_algorithm_id() -> ASN1Block {
-    ASN1Block::ObjectIdentifier(0, oid!(1, 3, 6, 1, 4, 1, 44668, 5, 3, 1, 2, 1))
-}
-
-fn bls_curve_id() -> ASN1Block {
-    ASN1Block::ObjectIdentifier(0, oid!(1, 3, 6, 1, 4, 1, 44668, 5, 3, 2, 1))
 }
 
 /// Parses a `PublicKeyBytes` from its DER-encoded form.
@@ -293,60 +275,13 @@ fn bls_curve_id() -> ASN1Block {
 /// * `CryptoError::MalformedPublicKey` if the given `bytes` are not valid
 ///   ASN.1, or include unexpected ASN.1 structures..
 pub fn public_key_from_der(bytes: &[u8]) -> CryptoResult<PublicKeyBytes> {
-    use simple_asn1::{
-        from_der,
-        ASN1Block::{BitString, Sequence},
-    };
-
-    let malformed_key_err = |msg| {
-        Err(CryptoError::MalformedPublicKey {
+    match der::public_key_from_der(bytes) {
+        Ok(key_bytes) => Ok(PublicKeyBytes(key_bytes)),
+        Err(internal_error) => Err(CryptoError::MalformedPublicKey {
             algorithm: AlgorithmId::ThresBls12_381,
             key_bytes: Some(bytes.to_vec()),
-            internal_error: msg,
-        })
-    };
-
-    let unexpected_struct_err = |s: &ASN1Block| {
-        malformed_key_err(format!(
-            "unexpected ASN1 structure: {:?}, wanted: seq(seq(OID, OID), bitstring)",
-            s
-        ))
-    };
-
-    let asn1_values = from_der(bytes).map_err(|e| CryptoError::MalformedPublicKey {
-        algorithm: AlgorithmId::ThresBls12_381,
-        key_bytes: Some(bytes.to_vec()),
-        internal_error: format!("failed to deserialize DER blocks: {}", e),
-    })?;
-
-    match asn1_values[..] {
-        [Sequence(_, ref seq)] => match &seq[..] {
-            [Sequence(_, ids), BitString(_, len, key)] => {
-                if ids.len() != 2 {
-                    return unexpected_struct_err(&asn1_values[0]);
-                }
-
-                if *len != PublicKeyBytes::SIZE * 8 {
-                    return malformed_key_err(format!("unexpected key length: {} bits", len));
-                }
-
-                if ids[0] == bls_algorithm_id() && ids[1] == bls_curve_id() {
-                    let mut key_bytes = [0u8; PublicKeyBytes::SIZE];
-                    key_bytes.copy_from_slice(key.as_slice());
-                    Ok(PublicKeyBytes(key_bytes))
-                } else {
-                    malformed_key_err(format!(
-                        "unsupported algorithm ({:?}) and/or curve ({:?}) OIDs",
-                        ids[0], ids[1],
-                    ))
-                }
-            }
-            _ => unexpected_struct_err(&asn1_values[0]),
-        },
-        _ => malformed_key_err(format!(
-            "expected exactly one ASN1 block, got sequence: {:?}",
-            asn1_values
-        )),
+            internal_error,
+        }),
     }
 }
 

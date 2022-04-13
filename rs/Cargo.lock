@@ -4375,6 +4375,7 @@ dependencies = [
  "ic-crypto-internal-csp-test-utils",
  "ic-crypto-internal-fs-ni-dkg",
  "ic-crypto-internal-test-vectors",
+ "ic-crypto-internal-threshold-sig-bls12381-der",
  "ic-crypto-internal-types",
  "ic-crypto-sha",
  "ic-crypto-test-utils",
@@ -4396,6 +4397,13 @@ dependencies = [
  "simple_asn1 0.5.4",
  "strum_macros 0.23.1",
  "zeroize",
+]
+
+[[package]]
+name = "ic-crypto-internal-threshold-sig-bls12381-der"
+version = "0.8.0"
+dependencies = [
+ "simple_asn1 0.5.4",
 ]
 
 [[package]]
@@ -4652,6 +4660,13 @@ dependencies = [
  "ic-interfaces",
  "ic-types 0.8.0",
  "tempfile",
+]
+
+[[package]]
+name = "ic-crypto-utils-threshold-sig-der"
+version = "0.8.0"
+dependencies = [
+ "ic-crypto-internal-threshold-sig-bls12381-der",
 ]
 
 [[package]]
@@ -5172,9 +5187,9 @@ dependencies = [
  "ic-base-types",
  "ic-canonical-state",
  "ic-config",
- "ic-crypto",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tree-hash",
+ "ic-crypto-utils-threshold-sig-der",
  "ic-cycles-account-manager",
  "ic-error-types",
  "ic-ic00-types",

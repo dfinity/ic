@@ -9,6 +9,7 @@ base64 = "0.11.0"
 ic-crypto-internal-bls12381-common = { path = "../../bls12_381/common"}
 ic-crypto-internal-bls12381-serde-miracl = { path = "../../bls12_381/serde/miracl" }
 ic-crypto-internal-fs-ni-dkg = { path = "../../fs_ni_dkg" }
+ic-crypto-internal-threshold-sig-bls12381-der = { path = "der_utils"}
 ic-crypto-internal-types = { path = "../../types" }
 ic-crypto-sha = { path = "../../../../sha" }
 ic-types = { path = "../../../../../types/types" }
