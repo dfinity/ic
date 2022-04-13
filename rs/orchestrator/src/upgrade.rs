@@ -287,28 +287,35 @@ impl Upgrade {
             .make_version_dir(replica_version)?
             .join("base-os.tar.gz");
         let mut script = self.ic_binary_dir.clone();
-        script.push("install-upgrade.sh");
-        let mut c = Command::new("sudo");
+        script.push("manageboot.sh");
+        let mut c = Command::new(script.clone().into_os_string());
         let out = c
-            .arg(script.into_os_string())
+            .arg("upgrade-install")
             .arg(image_path)
             .output()
             .map_err(|e| OrchestratorError::file_command_error(e, &c))?;
 
         info!(self.logger, "Installing upgrade {:?}", out);
         if out.status.success() {
-            let mut c = Command::new("sudo");
+            info!(self.logger, "Rebooting {:?}", out);
+            let mut c = Command::new(script.into_os_string());
             let out = c
-                .arg("reboot")
+                .arg("upgrade-commit")
                 .output()
                 .map_err(|e| OrchestratorError::file_command_error(e, &c))?;
 
-            info!(self.logger, "Rebooting {:?}", out);
-            exit(42);
+            if !out.status.success() {
+                warn!(self.logger, "upgrade-commit has failed");
+                Err(OrchestratorError::UpgradeError(
+                    "upgrade-commit failed".to_string(),
+                ))
+            } else {
+                exit(42);
+            }
         } else {
-            warn!(self.logger, "Upgrade has failed");
+            warn!(self.logger, "upgrade-install has failed");
             Err(OrchestratorError::UpgradeError(
-                "Upgrade failed".to_string(),
+                "upgrade-install failed".to_string(),
             ))
         }
     }
@@ -387,8 +394,7 @@ impl Upgrade {
     // successfully. With a confirmation the image will be reverted on the next
     // restart.
     fn confirm_boot(&self) {
-        if let Err(err) = Command::new("sudo")
-            .arg(self.ic_binary_dir.join("manageboot.sh").into_os_string())
+        if let Err(err) = Command::new(self.ic_binary_dir.join("manageboot.sh").into_os_string())
             .arg("confirm")
             .output()
         {
