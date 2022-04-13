@@ -78,6 +78,13 @@ type EcdsaConfig = record {
   key_ids : vec text;
 };
 type Gps = record { latitude : float32; longitude : float32 };
+type NodeOperatorRecord = record {
+  node_operator_principal_id : vec nat8;
+  node_allowance : nat64;
+  rewardable_nodes : vec record { text; nat32 };
+  node_provider_principal_id : vec nat8;
+  dc_id : text;
+};
 type NodeProvidersMonthlyXdrRewards = record {
   rewards : vec record { text; nat64 };
 };
@@ -102,8 +109,12 @@ type RerouteCanisterRangePayload = record {
   destination_subnet : principal;
 };
 type Result = variant { Ok : principal; Err : text };
-type Result_1 = variant { Ok : NodeProvidersMonthlyXdrRewards; Err : text };
-type Result_2 = variant { Ok; Err : text };
+type Result_1 = variant {
+  Ok : vec record { DataCenterRecord; NodeOperatorRecord };
+  Err : text;
+};
+type Result_2 = variant { Ok : NodeProvidersMonthlyXdrRewards; Err : text };
+type Result_3 = variant { Ok; Err : text };
 type SetFirewallConfigPayload = record {
   ipv4_prefixes : vec text;
   firewall_config : text;
@@ -183,15 +194,16 @@ service : {
   create_subnet : (CreateSubnetPayload) -> ();
   delete_subnet : (DeleteSubnetPayload) -> ();
   get_build_metadata : () -> (text) query;
-  get_node_providers_monthly_xdr_rewards : () -> (Result_1) query;
+  get_node_operators_and_dcs_of_node_provider : (principal) -> (Result_1) query;
+  get_node_providers_monthly_xdr_rewards : () -> (Result_2) query;
   recover_subnet : (RecoverSubnetPayload) -> ();
   remove_node_directly : (RemoveNodeDirectlyPayload) -> ();
   remove_node_operators : (RemoveNodeOperatorsPayload) -> ();
   remove_nodes : (RemoveNodesPayload) -> ();
   remove_nodes_from_subnet : (RemoveNodesPayload) -> ();
-  reroute_canister_range : (RerouteCanisterRangePayload) -> (Result_2);
+  reroute_canister_range : (RerouteCanisterRangePayload) -> (Result_3);
   set_firewall_config : (SetFirewallConfigPayload) -> ();
-  update_node_directly : (UpdateNodeDirectlyPayload) -> (Result_2);
+  update_node_directly : (UpdateNodeDirectlyPayload) -> (Result_3);
   update_node_operator_config : (UpdateNodeOperatorConfigPayload) -> ();
   update_node_operator_config_directly : (
       UpdateNodeOperatorConfigDirectlyPayload,
