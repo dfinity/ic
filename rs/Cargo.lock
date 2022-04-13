@@ -4832,8 +4832,6 @@ dependencies = [
  "ic-logger",
  "ic-metrics",
  "ic-nns-constants",
- "ic-registry-client",
- "ic-registry-common",
  "ic-registry-provisional-whitelist",
  "ic-registry-routing-table",
  "ic-registry-subnet-type",

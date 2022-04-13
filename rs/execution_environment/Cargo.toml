@@ -20,8 +20,6 @@ ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-nns-constants = { path = "../nns/constants" }
-ic-registry-client = { path = "../registry/client" }
-ic-registry-common = { path = "../registry/common" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
 ic-registry-routing-table = { path = "../registry/routing_table" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
