@@ -20,7 +20,7 @@ cargo_build(
         "--manifest-path",
         "rs/Cargo.toml",
     ],
-    profile = "release",
+    profile = "release-stripped",
 )
 
 cargo_build(

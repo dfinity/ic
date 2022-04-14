@@ -206,6 +206,11 @@ exclude = ["universal_canister/impl"]
 # https://doc.rust-lang.org/cargo/reference/manifest.html#the-profile-sections
 debug = true
 
+[profile.release-stripped]
+inherits = "release"
+lto = "thin"
+debug = false
+
 [profile.release-lto]
 inherits = "release"
 # Enable "thin" LTO to reduce both the compilation time and the binary size.
