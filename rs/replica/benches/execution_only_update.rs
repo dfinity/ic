@@ -6,7 +6,7 @@ use ic_config::{
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::ExecutionServices;
-use ic_ic00_types::CanisterInstallMode;
+use ic_ic00_types::{self as ic00, CanisterInstallMode, Payload};
 use ic_interfaces::{execution_environment::IngressHistoryReader, messaging::MessageRouting};
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_messaging::MessageRoutingImpl;
@@ -19,8 +19,6 @@ use ic_test_utilities::{
 use ic_test_utilities_registry::MockRegistryClient;
 use ic_types::{
     batch::{Batch, BatchPayload, IngressPayload, SelfValidatingPayload, XNetPayload},
-    ic00,
-    ic00::Payload,
     ingress::{IngressStatus, WasmResult},
     messages::SignedIngress,
     Randomness, RegistryVersion,

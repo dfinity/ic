@@ -4,10 +4,7 @@ end::catalog[] */
 use crate::types::*;
 use crate::util::*;
 use ic_fondue::ic_manager::IcHandle;
-use ic_types::{
-    ic00,
-    ic00::{EmptyBlob, Method},
-};
+use ic_ic00_types::{self as ic00, EmptyBlob, Method};
 use ic_universal_canister::{call_args, wasm};
 
 pub fn test_raw_rand_api(handle: IcHandle, ctx: &ic_fondue::pot::Context) {

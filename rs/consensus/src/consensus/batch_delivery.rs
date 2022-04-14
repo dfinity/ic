@@ -11,6 +11,7 @@ use crate::ecdsa::utils::EcdsaBlockReaderImpl;
 use ic_artifact_pool::consensus_pool::build_consensus_block_chain;
 use ic_crypto::get_tecdsa_master_public_key;
 use ic_crypto::utils::ni_dkg::initial_ni_dkg_transcript_record_from_transcript;
+use ic_ic00_types::SetupInitialDKGResponse;
 use ic_interfaces::{
     messaging::{MessageRouting, MessageRoutingError},
     registry::RegistryClient,
@@ -25,7 +26,6 @@ use ic_types::{
     crypto::threshold_sig::ni_dkg::{
         NiDkgId, NiDkgTag, NiDkgTargetSubnet::Remote, NiDkgTranscript,
     },
-    ic00::SetupInitialDKGResponse,
     messages::{CallbackId, Response},
     CountBytes, ReplicaVersion,
 };

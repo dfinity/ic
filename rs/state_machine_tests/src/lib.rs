@@ -3,6 +3,9 @@ use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::UserError;
 use ic_execution_environment::ExecutionServices;
 use ic_ic00_types::CanisterInstallMode;
+use ic_ic00_types::{
+    self as ic00, CanisterIdRecord, CanisterSettingsArgs, InstallCodeArgs, Method, Payload,
+};
 use ic_interfaces::{
     certification::{Verifier, VerifierError},
     execution_environment::{IngressHistoryReader, QueryHandler},
@@ -36,8 +39,6 @@ use ic_test_utilities_registry::{
 use ic_types::{
     batch::{Batch, BatchPayload, IngressPayload, SelfValidatingPayload, XNetPayload},
     consensus::certification::Certification,
-    ic00,
-    ic00::{CanisterIdRecord, CanisterSettingsArgs, InstallCodeArgs, Method, Payload},
     ingress::{IngressStatus, WasmResult},
     messages::{
         Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, MessageId, SignedIngress,

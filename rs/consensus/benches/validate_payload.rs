@@ -20,6 +20,7 @@ use ic_consensus::consensus::{
 use ic_consensus_message::ConsensusMessageHashable;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_execution_environment::IngressHistoryReaderImpl;
+use ic_ic00_types::IC_00;
 use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
     consensus::PayloadValidationError,
@@ -50,7 +51,6 @@ use ic_types::{
     consensus::certification::*,
     consensus::*,
     crypto::Signed,
-    ic00::IC_00,
     ingress::IngressStatus,
     signature::*,
     Height, NumBytes, PrincipalId, RegistryVersion, Time, UserId,

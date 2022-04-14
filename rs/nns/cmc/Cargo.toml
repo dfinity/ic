@@ -12,6 +12,7 @@ dfn_core = {path = "../../rust_canisters/dfn_core"}
 dfn_http_metrics = { path = "../../rust_canisters/dfn_http_metrics" }
 ic-base-types = {path="../../types/base_types"}
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
+ic-ic00-types = {path = "../../types/ic00_types"}
 ic-metrics-encoder = { path = "../../monitoring/metrics_encoder" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nns-common = { path = "../../nns/common" }

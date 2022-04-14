@@ -22,6 +22,7 @@ use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_crypto::threshold_sig_public_key_from_der;
 use ic_crypto_tree_hash::MixedHashTree;
 use ic_fondue::ic_manager::IcHandle;
+use ic_ic00_types::{CanisterIdRecord, CanisterStatusResult};
 use ic_nns_common::types::{NeuronId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, ROOT_CANISTER_ID,
@@ -38,10 +39,7 @@ use ic_nns_test_utils::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_rosetta_test_utils::make_user;
-use ic_types::{
-    ic00::{CanisterIdRecord, CanisterStatusResult},
-    CanisterId, Cycles, PrincipalId,
-};
+use ic_types::{CanisterId, Cycles, PrincipalId};
 use ledger_canister::protobuf::TipOfChainRequest;
 use ledger_canister::{
     AccountBalanceArgs, AccountIdentifier, Block, BlockArg, BlockHeight, BlockRes, CyclesResponse,

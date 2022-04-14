@@ -6,6 +6,7 @@ use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{wasm_executor::WasmExecutor, WasmExecutionInput, WasmtimeEmbedder};
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::CanisterStatusType;
+use ic_ic00_types::IC_00;
 use ic_interfaces::execution_environment::{
     ExecutionParameters, HypervisorError, HypervisorResult, WasmExecutionOutput,
 };
@@ -22,7 +23,6 @@ use ic_sys::PAGE_SIZE;
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, NonReplicatedQueryKind,
 };
-use ic_types::ic00::IC_00;
 use ic_types::{
     ingress::WasmResult,
     messages::Payload,

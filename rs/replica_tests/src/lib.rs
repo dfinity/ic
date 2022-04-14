@@ -6,6 +6,10 @@ use ic_config::{crypto::CryptoConfig, transport::TransportFlowConfig};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_ic00_types::CanisterInstallMode;
+use ic_ic00_types::{
+    CanisterIdRecord, InstallCodeArgs, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs,
+    IC_00,
+};
 use ic_interfaces::execution_environment::{IngressHistoryReader, QueryHandler};
 use ic_interfaces::registry::RegistryClient;
 use ic_interfaces_p2p::IngressIngestionService;
@@ -27,10 +31,6 @@ use ic_test_utilities::{
     universal_canister::UNIVERSAL_CANISTER_WASM, with_test_replica_logger,
 };
 use ic_types::{
-    ic00::{
-        CanisterIdRecord, InstallCodeArgs, Method, Payload,
-        ProvisionalCreateCanisterWithCyclesArgs, IC_00,
-    },
     ingress::{IngressStatus, WasmResult},
     messages::{SignedIngress, UserQuery},
     replica_config::NODE_INDEX_DEFAULT,

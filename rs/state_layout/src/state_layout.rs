@@ -1123,8 +1123,8 @@ impl TryFrom<pb_canister_state_bits::ExecutionStateBits> for ExecutionStateBits 
 mod test {
     use super::*;
 
+    use ic_ic00_types::IC_00;
     use ic_test_utilities::types::ids::canister_test_id;
-    use ic_types::ic00::IC_00;
 
     #[test]
     fn test_encode_decode_empty_controllers() {

@@ -11,6 +11,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_artifact_pool::ingress_pool::IngressPoolImpl;
 use ic_constants::MAX_INGRESS_TTL;
+use ic_ic00_types::IC_00;
 use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
     artifact_pool::UnvalidatedArtifact,
@@ -41,7 +42,6 @@ use ic_test_utilities_registry::test_subnet_record;
 use ic_types::{
     artifact::{IngressMessageAttribute, IngressMessageId},
     batch::ValidationContext,
-    ic00::IC_00,
     ingress::IngressStatus,
     malicious_flags::MaliciousFlags,
     Height, NumBytes, RegistryVersion, SubnetId, Time,

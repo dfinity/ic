@@ -3,20 +3,15 @@ use core::future::Future;
 use dfn_candid::{candid, candid_multi_arity};
 use ic_canister_client::{Agent, Sender};
 use ic_config::{subnet_config::SubnetConfig, Config};
-pub use ic_ic00_types::CanisterInstallMode;
 use ic_ic00_types::CanisterStatusType::Stopped;
+pub use ic_ic00_types::{
+    self as ic00, CanisterIdRecord, CanisterInstallMode, CanisterStatusResult, InstallCodeArgs,
+    ProvisionalCreateCanisterWithCyclesArgs, SetControllerArgs, IC_00,
+};
 use ic_registry_transport::pb::v1::RegistryMutation;
 use ic_replica_tests::*;
 pub use ic_test_utilities::assert_utils::assert_balance_equals;
-pub use ic_types::{
-    ic00,
-    ic00::{
-        CanisterIdRecord, CanisterStatusResult, InstallCodeArgs,
-        ProvisionalCreateCanisterWithCyclesArgs, SetControllerArgs, IC_00,
-    },
-    ingress::WasmResult,
-    CanisterId, Cycles, PrincipalId,
-};
+pub use ic_types::{ingress::WasmResult, CanisterId, Cycles, PrincipalId};
 use on_wire::{FromWire, IntoWire, NewType};
 
 use std::convert::TryFrom;
