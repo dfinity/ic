@@ -4,6 +4,7 @@
 //! to the respective crate/component at some point in the future.
 
 pub mod crypto;
+pub mod ecdsa_keys;
 pub mod firewall;
 pub mod node;
 pub mod node_operator;

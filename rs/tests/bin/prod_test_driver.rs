@@ -451,11 +451,11 @@ fn get_test_suites() -> HashMap<String, Suite> {
             ),
             pot(
                 "tecdsa_signature_test_pot",
-                tecdsa::tecdsa_signature_test::enable_ecdsa_signatures_feature(),
+                tecdsa::tecdsa_signature_test::config(),
                 par(vec![
                     t(
-                        "test_threshold_ecdsa_signature",
-                        tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature,
+                        "test_threshold_ecdsa_signature_same_subnet",
+                        tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_same_subnet,
                     ),
                     t(
                         "test_threshold_ecdsa_signature_from_other_subnet",
@@ -465,6 +465,10 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "test_threshold_ecdsa_signature_fails_without_cycles",
                         tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_fails_without_cycles,
                     ),
+                    t(
+                        "test_threshold_ecdsa_signature_from_nns_without_cycles",
+                        tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_from_nns_without_cycles,
+                    )
                 ]),
             ),
             pot(

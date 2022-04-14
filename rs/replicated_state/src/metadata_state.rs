@@ -136,6 +136,9 @@ pub struct NetworkTopology {
     #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
     pub canister_migrations: Arc<CanisterMigrations>,
     pub nns_subnet_id: SubnetId,
+    /// Mapping from key_id to a list of subnets which can sign with the given
+    /// key.
+    pub ecdsa_keys: BTreeMap<String, Vec<SubnetId>>,
 }
 
 impl Default for NetworkTopology {
@@ -145,6 +148,7 @@ impl Default for NetworkTopology {
             routing_table: Default::default(),
             canister_migrations: Default::default(),
             nns_subnet_id: SubnetId::new(PrincipalId::new_anonymous()),
+            ecdsa_keys: Default::default(),
         }
     }
 }
@@ -163,12 +167,11 @@ impl NetworkTopology {
     }
 
     /// Returns a list of subnets where the ecdsa feature is enabled.
-    pub fn ecdsa_subnets(&self) -> Vec<SubnetId> {
-        self.subnets
-            .iter()
-            .filter(|(_, subnet_topology)| subnet_topology.subnet_features.ecdsa_signatures)
-            .map(|(subnet_id, _)| *subnet_id)
-            .collect()
+    pub fn ecdsa_subnets(&self, key_id: &str) -> &[SubnetId] {
+        self.ecdsa_keys
+            .get(key_id)
+            .map(|ids| &ids[..])
+            .unwrap_or(&[])
     }
 }
 
@@ -186,6 +189,20 @@ impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
             routing_table: Some(item.routing_table.as_ref().into()),
             nns_subnet_id: Some(subnet_id_into_protobuf(item.nns_subnet_id)),
             canister_migrations: Some(item.canister_migrations.as_ref().into()),
+            ecdsa_keys: item
+                .ecdsa_keys
+                .iter()
+                .map(|(key_id, subnet_ids)| {
+                    let subnet_ids = subnet_ids
+                        .iter()
+                        .map(|id| subnet_id_into_protobuf(*id))
+                        .collect();
+                    pb_metadata::EcdsaKeyEntry {
+                        key_id: key_id.clone(),
+                        subnet_ids,
+                    }
+                })
+                .collect(),
         }
     }
 }
@@ -210,6 +227,14 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
                 Ok(subnet_id) => subnet_id_try_from_protobuf(subnet_id)?,
                 Err(_) => SubnetId::new(PrincipalId::new_anonymous()),
             };
+        let mut ecdsa_keys = BTreeMap::new();
+        for entry in item.ecdsa_keys {
+            let mut subnet_ids = vec![];
+            for subnet_id in entry.subnet_ids {
+                subnet_ids.push(subnet_id_try_from_protobuf(subnet_id)?);
+            }
+            ecdsa_keys.insert(entry.key_id, subnet_ids);
+        }
 
         Ok(Self {
             subnets,
@@ -226,6 +251,7 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
                 .unwrap_or_default()
                 .into(),
             nns_subnet_id,
+            ecdsa_keys,
         })
     }
 }
