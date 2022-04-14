@@ -42,7 +42,7 @@ use ic_replicated_state::{
 };
 use ic_types::messages::InternalQuery;
 use ic_types::{
-    canister_http::CanisterHttpRequestContext,
+    canister_http::{CanisterHttpHeader, CanisterHttpRequestContext},
     crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterEcdsaPublicKey},
     crypto::threshold_sig::ni_dkg::NiDkgTargetId,
     ingress::{IngressStatus, WasmResult},
@@ -471,7 +471,15 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                                     .push_http_request(CanisterHttpRequestContext {
                                         request: request.clone(),
                                         url: args.url,
-                                        headers: args.headers,
+                                        headers: args
+                                            .headers
+                                            .clone()
+                                            .into_iter()
+                                            .map(|h| CanisterHttpHeader {
+                                                name: h.name,
+                                                value: h.value,
+                                            })
+                                            .collect(),
                                         body: args.body,
                                         http_method: args.http_method,
                                         transform_method_name: args.transform_method_name,
