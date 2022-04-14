@@ -48,14 +48,14 @@ docker run -v bitcoind-data:/bitcoin/.bitcoin --name=bitcoind-node -d \
 
     InternetComputer::new()
         .with_bitcoind_addr(IpAddr::V6(btc_node_ipv6))
-        .add_subnet(Subnet::new(SubnetType::System).add_nodes(4))
+        .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_features(SubnetFeatures {
                     bitcoin_testnet_feature: Some(BitcoinFeature::Enabled),
                     ..SubnetFeatures::default()
                 })
-                .add_nodes(4),
+                .add_nodes(1),
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
