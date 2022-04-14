@@ -31,8 +31,9 @@ use ic_nervous_system_common::ledger::LedgerCanister;
 use ic_sns_governance::governance::{log_prefix, Governance, TimeWarp, ValidGovernanceProto};
 use ic_sns_governance::pb::v1::{
     GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse, Governance as GovernanceProto,
-    ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron,
-    ManageNeuronResponse, NervousSystemParameters, RewardEvent,
+    ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
+    ListProposalsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters,
+    RewardEvent,
 };
 use ic_sns_governance::types::{Environment, HeapGrowthPotential};
 
@@ -372,6 +373,19 @@ fn list_proposals() {
 #[candid_method(query, rename = "list_proposals")]
 fn list_proposals_(list_proposals: ListProposals) -> ListProposalsResponse {
     governance().list_proposals(&list_proposals)
+}
+
+/// Returns the current list of available NervousSystemFunctions.
+#[export_name = "canister_query list_nervous_system_functions"]
+fn list_nervous_system_functions() {
+    println!("{}list_nervous_system_functions", log_prefix());
+    over(candid, |()| list_nervous_system_functions_())
+}
+
+/// Internal method for calling list_nervous_system_functions.
+#[candid_method(query, rename = "list_nervous_system_functions")]
+fn list_nervous_system_functions_() -> ListNervousSystemFunctionsResponse {
+    governance().list_nervous_system_functions()
 }
 
 /// Returns the latest reward event.

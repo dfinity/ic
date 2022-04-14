@@ -121,6 +121,14 @@ pub fn validate_action(
         proposal::Action::UpgradeSnsControlledCanister(upgrade) => {
             validate_upgrade_sns_controlled_canister(upgrade)
         }
+        proposal::Action::AddNervousSystemFunction(_add_nervous_system_function) => {
+            // TODO
+            Ok(())
+        }
+        proposal::Action::RemoveNervousSystemFunction(_id_to_remove) => {
+            // TODO
+            Ok(())
+        }
         proposal::Action::ExecuteNervousSystemFunction(execute) => {
             validate_execute_nervous_system_function(execute)
         }
@@ -189,7 +197,8 @@ fn validate_upgrade_sns_controlled_canister(
 pub fn validate_execute_nervous_system_function(
     _execute: &ExecuteNervousSystemFunction,
 ) -> Result<(), String> {
-    todo!();
+    // TODO
+    Ok(())
 }
 
 pub(crate) fn validate_call_canister_method(call: &CallCanisterMethod) -> Result<(), String> {

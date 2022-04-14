@@ -658,6 +658,8 @@ impl From<&Action> for u64 {
             Action::UpgradeSnsControlledCanister(_) => 3,
             Action::ExecuteNervousSystemFunction(_) => 4,
             Action::CallCanisterMethod(_) => 5,
+            Action::AddNervousSystemFunction(_) => 6,
+            Action::RemoveNervousSystemFunction(_) => 7,
         }
     }
 }
@@ -755,7 +757,7 @@ impl Drop for LedgerUpdateLock {
 mod tests {
     use super::*;
     use crate::pb::v1::neuron::Followees;
-    use maplit::hashmap;
+    use maplit::btreemap;
 
     #[test]
     fn test_nervous_system_parameters_validate() {
@@ -806,7 +808,7 @@ mod tests {
             NervousSystemParameters {
                 max_followees_per_action: Some(0),
                 default_followees: Some(DefaultFollowees {
-                    followees: hashmap! {12 => Followees { followees: vec![NeuronId { id: vec![] }] }},
+                    followees: btreemap! {12 => Followees { followees: vec![NeuronId { id: vec![] }] }},
                 }),
                 ..NervousSystemParameters::with_default_values()
             },
@@ -910,7 +912,7 @@ mod tests {
     fn test_inherit_from() {
         let default_params = NervousSystemParameters::with_default_values();
         let followees = DefaultFollowees {
-            followees: hashmap! { 1 => Followees { followees: vec![] } },
+            followees: btreemap! { 1 => Followees { followees: vec![] } },
         };
 
         let proposed_params = NervousSystemParameters {
@@ -938,12 +940,12 @@ mod tests {
     fn test_inherit_from_inherits_default_followees() {
         let default_params = NervousSystemParameters::with_default_values();
         let followees = DefaultFollowees {
-            followees: hashmap! { 1 => Followees { followees: vec![] } },
+            followees: btreemap! { 1 => Followees { followees: vec![] } },
         };
 
         let proposed_params = NervousSystemParameters {
             default_followees: Some(DefaultFollowees {
-                followees: hashmap! {},
+                followees: btreemap! {},
             }),
             ..Default::default()
         };
@@ -956,7 +958,7 @@ mod tests {
         let new_params = proposed_params.inherit_from(&current_params);
         let expected_params = NervousSystemParameters {
             default_followees: Some(DefaultFollowees {
-                followees: hashmap! {},
+                followees: btreemap! {},
             }),
             ..default_params
         };

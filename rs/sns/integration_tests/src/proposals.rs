@@ -1,5 +1,5 @@
 use canister_test::Canister;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use dfn_candid::{candid, candid_one};
@@ -1516,7 +1516,7 @@ fn test_proposal_rejection() {
     });
 }
 
-fn assert_ballot_is_cast(ballots: &HashMap<String, Ballot>, neuron_id: &NeuronId, vote: Vote) {
+fn assert_ballot_is_cast(ballots: &BTreeMap<String, Ballot>, neuron_id: &NeuronId, vote: Vote) {
     let ballot = ballots
         .get(neuron_id.to_string().as_str())
         .expect("Expected there to be a ballot");

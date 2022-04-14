@@ -35,6 +35,7 @@ CANISTERS = [
     "root-canister",
     "sns-governance-canister",
     "sns-root-canister",
+    "sns-test-dapp-canister",
     "stable",
     "statesync-test-canister",
     "test-notified",

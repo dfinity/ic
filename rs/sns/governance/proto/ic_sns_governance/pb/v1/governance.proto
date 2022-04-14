@@ -291,6 +291,12 @@ message Proposal {
     // for this to be superseded by ExecuteNerousFunction once that gets
     // implemented.
     CallCanisterMethod call_canister_method = 9;
+
+    // Add a new NervousSystemFunction to be executable by proposal.
+    NervousSystemFunction add_nervous_system_function = 10;
+
+    // Remove a NervousSystemFunction from being executable by proposal.
+    uint64 remove_nervous_system_function = 11;
   }
 }
 
@@ -1248,4 +1254,9 @@ message ListNeurons {
 message ListNeuronsResponse {
   // The returned list of neurons.
   repeated Neuron neurons = 1;
+}
+
+// The response to the list_nervous_system_functions query.
+message ListNervousSystemFunctionsResponse {
+  repeated NervousSystemFunction functions = 1;
 }
