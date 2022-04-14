@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# Transparently switch uid to root in order to perform the privileged function.
+if [ $(id -u) != 0 ]; then
+    exec sudo "$0" "$@"
+fi
+
 # Expects:
 # - name of account to install keys for as first argument
 # - replacement authorized_keys file on stdin
