@@ -162,16 +162,15 @@
 /rs/tests/bin/prod_test_driver.rs       @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/basic_health_test.rs      @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/boundary_nodes_integration/     @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/ic-testing-verification
-/rs/tests/src/consensus.rs              @dfinity-lab/teams/consensus-owners @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/consensus/                @dfinity-lab/teams/consensus-owners @dfinity-lab/teams/ic-testing-verification
-/rs/tests/src/execution.rs              @dfinity-lab/teams/execution-owners @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/execution/                @dfinity-lab/teams/execution-owners @dfinity-lab/teams/ic-testing-verification
-/rs/tests/src/nns_tests/                @dfinity-lab/teams/nns-team @dfinity-lab/teams/ic-testing-verification
+/rs/tests/src/ledger_tests/             @dfinity-lab/teams/financial-integrations  @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/message_routing/          @dfinity-lab/teams/message-routing-owners  @dfinity-lab/teams/ic-testing-verification
-/rs/tests/src/rosetta_test.rs           @dfinity-lab/teams/financial-integrations @dfinity-lab/teams/ic-testing-verification
+/rs/tests/src/nns_tests/                @dfinity-lab/teams/nns-team @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/networking                @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
 /rs/tests/src/orchestrator/             @dfinity-lab/teams/orchestrator-owners @dfinity-lab/teams/ic-testing-verification
-/rs/tests/src/orchestrator.rs           @dfinity-lab/teams/orchestrator-owners @dfinity-lab/teams/ic-testing-verification
+/rs/tests/src/rosetta_test.rs           @dfinity-lab/teams/financial-integrations @dfinity-lab/teams/ic-testing-verification
+/rs/tests/src/tecsda/                  @dfinity-lab/teams/consensus-owners @dfinity-lab/teams/ic-testing-verification
 /rs/transport/                          @dfinity-lab/teams/networking-team
 /rs/transport_test_client/              @dfinity-lab/teams/networking-team
 /rs/tree_deserializer/                  @dfinity-lab/teams/message-routing-owners

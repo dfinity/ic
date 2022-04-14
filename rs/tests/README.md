@@ -22,6 +22,7 @@ in turn are grouped into _test suites_.
 
 ### How can I run system tests?
 
+Make sure you're in the nix-shell.
 When running system tests, the base ic-os version has to be set manually.
 Currently, only images built by CI can be used. Thus, you first need to find out
 the `IC_VERSION_ID` that belongs to the image that you want to use. Note that

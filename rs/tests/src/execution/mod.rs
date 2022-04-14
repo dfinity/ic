@@ -7,9 +7,13 @@ pub mod cycles_transfer;
 pub mod ingress_rate_limiting;
 pub mod instructions_limit;
 pub mod inter_canister_queries;
+pub mod malicious_input;
 pub mod nns_shielding;
 pub mod queries;
+pub mod registry_authentication_test;
+pub mod request_signature_test;
 pub mod subnet_capacity;
+pub mod system_api_security_test;
 pub mod upgraded_pots;
 
 use crate::driver::ic::{InternetComputer, Subnet};
