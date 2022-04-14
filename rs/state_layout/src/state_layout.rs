@@ -15,6 +15,7 @@ use ic_replicated_state::{
     canister_state::execution_state::WasmMetadata, CallContextManager, CanisterStatus,
     ExportedFunctions, Global, NumWasmPages,
 };
+use ic_sys::mmap::ScopedMmap;
 use ic_types::{
     nominal_cycles::NominalCycles, AccumulatedPriority, CanisterId, ComputeAllocation, Cycles,
     ExecutionRound, Height, MemoryAllocation, NumInstructions, PrincipalId,
@@ -872,17 +873,13 @@ where
         self.deserialize_file(file)
     }
 
-    fn deserialize_file(&self, mut f: std::fs::File) -> Result<T, LayoutError> {
-        let mut buffer: Vec<u8> = Vec::new();
-        use std::io::prelude::*;
-
-        f.read_to_end(&mut buffer)
-            .map_err(|io_err| LayoutError::IoError {
-                path: self.path.clone(),
-                message: "failed to read file".to_string(),
-                io_err,
-            })?;
-        T::decode(buffer.as_slice()).map_err(|err| LayoutError::CorruptedLayout {
+    fn deserialize_file(&self, f: std::fs::File) -> Result<T, LayoutError> {
+        let mmap = ScopedMmap::mmap_file_readonly(f).map_err(|io_err| LayoutError::IoError {
+            path: self.path.clone(),
+            message: "failed to mmap a file".to_string(),
+            io_err,
+        })?;
+        T::decode(mmap.as_slice()).map_err(|err| LayoutError::CorruptedLayout {
             path: self.path.clone(),
             message: format!(
                 "failed to deserialize an object of type {} from protobuf: {}",

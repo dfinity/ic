@@ -48,7 +48,11 @@ impl ScopedMmap {
 
     /// Creates a new mapping for a file at specified `path`.
     pub fn from_path<P: AsRef<Path>>(path: P) -> io::Result<Self> {
-        let f = std::fs::File::open(path)?;
+        Self::mmap_file_readonly(std::fs::File::open(path)?)
+    }
+
+    /// Creates a full read-only mapping for the specified file.
+    pub fn mmap_file_readonly(f: std::fs::File) -> io::Result<Self> {
         let len = f.metadata()?.len() as usize;
         Self::from_readonly_file(&f, len)
     }
