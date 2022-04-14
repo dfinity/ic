@@ -8,10 +8,10 @@ use serde::Serialize;
 use ic_base_types::{subnet_id_into_protobuf, SubnetId};
 use ic_protobuf::registry::{
     crypto::v1::EcdsaSigningSubnetList,
-    subnet::v1::{EcdsaConfig, GossipAdvertConfig, SubnetRecord},
+    subnet::v1::{GossipAdvertConfig, SubnetRecord},
 };
 use ic_registry_keys::{make_ecdsa_signing_subnet_list_key, make_subnet_record_key};
-use ic_registry_subnet_features::SubnetFeatures;
+use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
 use ic_types::p2p::build_default_gossip_config;
@@ -487,10 +487,13 @@ mod tests {
                     }
                     .into()
                 ),
-                ecdsa_config: Some(EcdsaConfig {
-                    quadruples_to_create_in_advance: 10,
-                    key_ids: vec!["key_id_1".to_string()]
-                }),
+                ecdsa_config: Some(
+                    EcdsaConfig {
+                        quadruples_to_create_in_advance: 10,
+                        key_ids: vec!["key_id_1".to_string()]
+                    }
+                    .into()
+                ),
                 max_number_of_canisters: 10,
                 ssh_readonly_access: vec!["pub_key_0".to_string()],
                 ssh_backup_access: vec!["pub_key_1".to_string()],
@@ -623,10 +626,13 @@ mod tests {
         });
 
         let subnet_record = SubnetRecord {
-            ecdsa_config: Some(EcdsaConfig {
-                key_ids: vec!["key_id_1".to_string()],
-                ..Default::default()
-            }),
+            ecdsa_config: Some(
+                EcdsaConfig {
+                    key_ids: vec!["key_id_1".to_string()],
+                    ..Default::default()
+                }
+                .into(),
+            ),
             ..Default::default()
         };
 
@@ -639,7 +645,7 @@ mod tests {
         );
 
         let mut new_subnet_record = subnet_record.clone();
-        new_subnet_record.ecdsa_config = ecdsa_config;
+        new_subnet_record.ecdsa_config = ecdsa_config.map(|c| c.into());
 
         let mut payload_2 = make_default_payload_for_tests();
         payload_2.ecdsa_config = Some(EcdsaConfig {
@@ -656,10 +662,13 @@ mod tests {
     #[should_panic]
     fn panic_on_removing_ecdsa_key_ids() {
         let subnet_record = SubnetRecord {
-            ecdsa_config: Some(EcdsaConfig {
-                key_ids: vec!["key_id_1".to_string()],
-                ..Default::default()
-            }),
+            ecdsa_config: Some(
+                EcdsaConfig {
+                    key_ids: vec!["key_id_1".to_string()],
+                    ..Default::default()
+                }
+                .into(),
+            ),
             ..Default::default()
         };
 
@@ -676,10 +685,13 @@ mod tests {
     #[should_panic]
     fn panic_on_removing_ecdsa_config_none_value() {
         let subnet_record = SubnetRecord {
-            ecdsa_config: Some(EcdsaConfig {
-                key_ids: vec!["key_id_1".to_string()],
-                ..Default::default()
-            }),
+            ecdsa_config: Some(
+                EcdsaConfig {
+                    key_ids: vec!["key_id_1".to_string()],
+                    ..Default::default()
+                }
+                .into(),
+            ),
             ..Default::default()
         };
 

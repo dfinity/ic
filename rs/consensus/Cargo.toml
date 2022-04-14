@@ -20,6 +20,7 @@ ic-replicated-state = { path = "../replicated_state" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
+ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-protobuf = { path = "../protobuf" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }

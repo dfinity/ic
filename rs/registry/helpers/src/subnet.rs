@@ -5,18 +5,16 @@ use ic_interfaces::registry::{
 use ic_protobuf::registry::{
     node::v1::NodeRecord,
     replica_version::v1::ReplicaVersionRecord,
-    subnet::v1::{
-        CatchUpPackageContents, EcdsaConfig, GossipConfig, SubnetListRecord, SubnetRecord,
-    },
+    subnet::v1::{CatchUpPackageContents, GossipConfig, SubnetListRecord, SubnetRecord},
 };
 use ic_protobuf::types::v1::SubnetId as SubnetIdProto;
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_node_record_key, make_replica_version_key,
     make_subnet_list_record_key, make_subnet_record_key, ROOT_SUBNET_ID_KEY,
 };
-use ic_registry_subnet_features::SubnetFeatures;
+use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
 use ic_types::{Height, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId};
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::time::Duration;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -262,7 +260,7 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
     ) -> RegistryClientResult<EcdsaConfig> {
         let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
         let subnet = deserialize_registry_value::<SubnetRecord>(bytes)?;
-        Ok(subnet.and_then(|subnet| subnet.ecdsa_config))
+        Ok(subnet.and_then(|subnet| subnet.ecdsa_config.map(|config| config.try_into().unwrap())))
     }
 
     fn get_notarization_delay_settings(

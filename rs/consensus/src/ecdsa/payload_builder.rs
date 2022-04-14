@@ -14,8 +14,8 @@ use ic_interfaces::{
 };
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
 use ic_logger::{debug, info, warn, ReplicaLogger};
-use ic_protobuf::registry::subnet::v1::EcdsaConfig;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
+use ic_registry_subnet_features::EcdsaConfig;
 use ic_replicated_state::{metadata_state::subnet_call_context_manager::*, ReplicatedState};
 use ic_types::{
     batch::ValidationContext,
