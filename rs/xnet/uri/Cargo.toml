@@ -1,0 +1,8 @@
+[package]
+name = "ic-xnet-uri"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+http = "0.2.5"
+ic-types = { path = "../../types/types" }

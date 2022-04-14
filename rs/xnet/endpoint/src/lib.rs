@@ -153,8 +153,8 @@ impl<'a> XNetEndpoint {
         metrics: &MetricsRegistry,
         log: ReplicaLogger,
     ) -> Self {
-        use crate::hyper::{tls_bind, ExecuteOnRuntime, TlsConnection};
         use hyper::service::{make_service_fn, service_fn};
+        use ic_xnet_hyper::{ExecuteOnRuntime, TlsConnection};
 
         let metrics = Arc::new(XNetEndpointMetrics::new(metrics));
 
@@ -242,6 +242,13 @@ impl<'a> XNetEndpoint {
 
         let (address, server) = {
             let _guard = runtime_handle.enter();
+
+            #[cfg(test)]
+            use ic_xnet_hyper::tls_bind_for_test as tls_bind;
+
+            #[cfg(not(test))]
+            use ic_xnet_hyper::tls_bind;
+
             let (addr, builder) =
                 tls_bind(&config.address, tls, registry_client).unwrap_or_else(|e| {
                     panic!(

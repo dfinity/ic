@@ -1,6 +1,6 @@
 use crate::message_routing::LatencyMetrics;
-use crate::xnet_payload_builder::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_base_types::NumBytes;
+use ic_constants::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_error_types::RejectCode;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};

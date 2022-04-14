@@ -1,14 +1,6 @@
 use assert_matches::assert_matches;
 use ic_canonical_state::LabelLike;
 use ic_crypto_tree_hash::{flat_map::FlatMap, Label, LabeledTree};
-use ic_messaging::{
-    certified_slice_pool::{
-        certified_slice_count_bytes, testing, CertifiedSliceError, CertifiedSlicePool,
-        InvalidAppend, InvalidSlice, UnpackedStreamSlice, LABEL_STATUS, STATUS_NONE,
-        STATUS_SUCCESS,
-    },
-    ExpectedIndices,
-};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{messaging::xnet::v1, proxy::ProtoProxy};
 use ic_test_utilities::{
@@ -18,6 +10,14 @@ use ic_test_utilities::{
 use ic_types::{
     xnet::{CertifiedStreamSlice, StreamIndex},
     CountBytes, SubnetId,
+};
+use ic_xnet_payload_builder::{
+    certified_slice_pool::{
+        certified_slice_count_bytes, testing, CertifiedSliceError, CertifiedSlicePool,
+        InvalidAppend, InvalidSlice, UnpackedStreamSlice, LABEL_STATUS, STATUS_NONE,
+        STATUS_SUCCESS,
+    },
+    ExpectedIndices,
 };
 use maplit::btreemap;
 use proptest::prelude::*;

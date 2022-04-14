@@ -44,6 +44,8 @@ ic-state-manager = { path = "../state_manager" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
+ic-xnet-endpoint = { path = "../xnet/endpoint" }
+ic-xnet-payload-builder = { path = "../xnet/payload_builder" }
 jemallocator = "0.3.2"
 jemalloc-ctl = "0.3.3"
 libc = "0.2.91"

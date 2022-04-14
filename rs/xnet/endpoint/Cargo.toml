@@ -1,0 +1,35 @@
+[package]
+name = "ic-xnet-endpoint"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+crossbeam-channel = "0.5.0"
+hyper = { version = "0.14.18" , features = ["full", "tcp"] }
+ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
+ic-interfaces = { path = "../../interfaces" }
+ic-logger = { path = "../../monitoring/logger" }
+ic-metrics = { path = "../../monitoring/metrics" }
+ic-protobuf = { path = "../../protobuf" }
+ic-registry-client-helpers = { path = "../../registry/helpers" }
+ic-types = { path = "../../types/types" }
+ic-xnet-hyper = { path = "../hyper" }
+ic-xnet-uri = { path = "../uri" }
+prometheus = { version = "0.12.0", features = [ "process" ] }
+serde = { version = "1.0.99", features = [ "derive" ] }
+serde_json = "1.0.40"
+slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
+socket2 = { version = "0.3.19", features = ["reuseport"] }
+tokio = { version = "1.15.0", features = ["full"] }
+url = "2.1.1"
+
+[dev-dependencies]
+bytes = "1.0.1"
+ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
+ic-registry-keys = { path = "../../registry/keys" }
+ic-replicated-state = { path = "../../replicated_state" }
+ic-test-utilities = { path = "../../test_utilities" }
+ic-test-utilities-registry = { path = "../../test_utilities/registry" }
+maplit = "1.0.2"
+prost = "0.9.0"
+reqwest = "0.11.1"
