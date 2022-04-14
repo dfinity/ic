@@ -1,4 +1,7 @@
-//! # System Tests
+//! # Legacy System Tests
+//!
+//! Please do not add new tests here but learn from the README how write
+//! system tests these days.
 //!
 //! ## Tackling Flakiness & Disabling Tests
 //!
@@ -21,17 +24,10 @@ use ic_fondue::{
 use ic_registry_subnet_type::SubnetType;
 use slog::Logger;
 
-use ic_tests::cow_safety_test;
+use ic_tests::consensus::cow_safety_test;
 use ic_tests::execution;
-use ic_tests::feature_flags;
-use ic_tests::malicious_input_test;
-use ic_tests::nns_tests;
-use ic_tests::registry_authentication_test;
-use ic_tests::replica_determinism_test;
-use ic_tests::request_auth_malicious_replica_test;
-use ic_tests::request_signature_test;
-use ic_tests::security::nns_voting_fuzzing_poc_test;
-use ic_tests::security::system_api_security_test;
+use ic_tests::execution::system_api_security_test;
+use ic_tests::nns_tests::nns_voting_fuzzing_poc_test;
 use ic_tests::tecdsa;
 use ic_tests::util::CYCLES_LIMIT_PER_CANISTER;
 
@@ -69,8 +65,8 @@ fn cow_safety_pot() -> pot::Pot {
 fn request_auth_malicious_replica_pot() -> pot::Pot {
     composable!(
         "request_auth_malicious_replica_pot",
-        request_auth_malicious_replica_test::config(),
-        steps! {request_auth_malicious_replica_test::test => "request_auth_malicious_replica_test"}
+        consensus::request_auth_malicious_replica_test::config(),
+        steps! {consensus::request_auth_malicious_replica_test::test => "request_auth_malicious_replica_test"}
     )
 }
 
@@ -142,8 +138,8 @@ fn consensus_safety_pot() -> pot::Pot {
 fn replica_determinism_pot() -> pot::Pot {
     composable!(
         "replica_determinism_pot",
-        replica_determinism_test::config(),
-        steps! {replica_determinism_test::test => "replica_determinism_test"}
+        consensus::replica_determinism_test::config(),
+        steps! {consensus::replica_determinism_test::test => "replica_determinism_test"}
     )
 }
 

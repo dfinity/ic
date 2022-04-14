@@ -1,32 +1,13 @@
 use ic_fondue::pot::execution::TestResult;
-use ic_tests::api_test;
-use ic_tests::boundary_nodes_integration::boundary_nodes;
-use ic_tests::btc_integration::btc;
 use ic_tests::driver::cli::CliArgs;
 use ic_tests::driver::driver_setup::{create_driver_context_from_cli, initialize_env, mk_logger};
 use ic_tests::driver::evaluation::evaluate;
 use ic_tests::driver::pot_dsl::*;
 use ic_tests::driver::test_env::TestEnv;
-use ic_tests::http_from_canister::basic_http;
-use ic_tests::node_assign_test::{self, test as node_assign_test};
-use ic_tests::node_graceful_leaving_test::{self, test as node_graceful_leaving_test};
-use ic_tests::node_restart_test::{self, test as node_restart_test};
-use ic_tests::orchestrator::{
-    nns_backup,
-    node_reassignment_test::{self, test as node_reassignment_test},
-    ssh_access_to_nodes, unassigned_node_upgrade_test, upgrade_downgrade, upgrade_reject,
-};
-use ic_tests::rosetta_test;
-use ic_tests::security::nns_voting_fuzzing_poc_test;
-use ic_tests::spec_compliance;
-use ic_tests::workload_counter_canister_test;
 use ic_tests::{
-    basic_health_test::{self, basic_health_test},
-    execution, ledger_tests, message_routing, nns_tests,
-};
-use ic_tests::{
-    networking::firewall::{self, change_to_firewall_rules_takes_effect},
-    registry_authentication_test, tecdsa, wasm_generator_test,
+    api_test, basic_health_test, boundary_nodes_integration, btc_integration, consensus, execution,
+    http_from_canister, ledger_tests, message_routing, networking, nns_tests, orchestrator,
+    rosetta_test, spec_compliance, tecdsa, wasm_generator_test, workload_counter_canister_test,
 };
 use regex::Regex;
 use std::collections::HashMap;
@@ -161,36 +142,37 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     api_test::two_ics,
                     par(vec![
                         sys_t("ics_have_correct_subnet_count", api_test::ics_have_correct_subnet_count),
+                        sys_t("vm_control", api_test::vm_control),
                         sys_t("upload_file_to_farm", api_test::upload_file_to_farm)
                     ]),
                 ),
                 pot_with_setup(
                     "btc_pot",
-                    btc::config,
+                    btc_integration::btc::config,
                     par(vec![
-                        sys_t("btc_test", btc::test),
+                        sys_t("btc_test", btc_integration::btc::test),
                     ]),
                 ),
                 pot_with_setup(
                     "http_pot",
-                    basic_http::config,
+                    http_from_canister::basic_http::config,
                     par(vec![
-                        sys_t("basic_http", basic_http::test),
+                        sys_t("basic_http", http_from_canister::basic_http::test),
                     ]),
                 ),
                 pot_with_setup(
                     "boundary_nodes_pot",
-                    boundary_nodes::config,
+                    boundary_nodes_integration::boundary_nodes::config,
                     par(vec![
-                        sys_t("boundary_nodes_test", boundary_nodes::test),
-                        sys_t("boundary_nodes_nginx_test", boundary_nodes::nginx_test),
+                        sys_t("boundary_nodes_test", boundary_nodes_integration::boundary_nodes::test),
+                        sys_t("boundary_nodes_nginx_test", boundary_nodes_integration::boundary_nodes::nginx_test),
                     ]),
                 ),
                 pot(
                     "firewall_pot",
-                    firewall::config(),
+                    networking::firewall::config(),
                     par(vec![
-                        t("change_to_firewall_rules_takes_effect", change_to_firewall_rules_takes_effect),
+                        t("change_to_firewall_rules_takes_effect", networking::firewall::change_to_firewall_rules_takes_effect),
                     ]),
                 ),
                 pot(
@@ -216,13 +198,13 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 ),
                 pot(
                     "node_assign_pot",
-                    node_assign_test::config(),
-                    par(vec![t("node_assign_test", node_assign_test)]),
+                    orchestrator::node_assign_test::config(),
+                    par(vec![t("node_assign_test", orchestrator::node_assign_test::test)]),
                 ),
                 pot(
                     "node_graceful_leaving_pot",
-                    node_graceful_leaving_test::config(),
-                    par(vec![t("node_graceful_leaving_test", node_graceful_leaving_test)]),
+                    consensus::node_graceful_leaving_test::config(),
+                    par(vec![t("node_graceful_leaving_test", consensus::node_graceful_leaving_test::test)]),
                 ),
                 pot(
                     "nns_follow_pot",
@@ -240,21 +222,16 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     par(vec![t("token_balance_test", ledger_tests::token_balance::test)]),
                 ),
                 pot(
-                    "node_restart_pot",
-                    node_restart_test::config(),
-                    par(vec![t("node_restart_test", node_restart_test)]),
-                ),
-                pot(
                     "cycles_minting_pot",
                     nns_tests::cycles_minting::config(),
                     par(vec![t("cycles_minting_test", nns_tests::cycles_minting::test)]),
                 ).with_ttl(Duration::from_secs(60 * 15 /* 15 minutes */)),
                 pot(
                     "nns_voting_fuzzing_poc_pot",
-                    nns_voting_fuzzing_poc_test::config(),
+                    nns_tests::nns_voting_fuzzing_poc_test::config(),
                     par(vec![t(
                         "nns_voting_fuzzing_poc_test",
-                        nns_voting_fuzzing_poc_test::test,
+                        nns_tests::nns_voting_fuzzing_poc_test::test,
                     )]),
                 ),
                 pot(
@@ -275,10 +252,10 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 ),
                 pot(
                     "certified_registry_pot",
-                    registry_authentication_test::config(),
+                    execution::registry_authentication_test::config(),
                     par(vec![t(
                         "registry_authentication_test",
-                        registry_authentication_test::test,
+                        execution::registry_authentication_test::test,
                     )]),
                 ),
                 pot(
@@ -291,55 +268,55 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 ),
                 pot(
                     "unassigned_node_upgrade_test_pot",
-                    unassigned_node_upgrade_test::config(),
+                    orchestrator::unassigned_node_upgrade_test::config(),
                     par(vec![t(
                         "unassigned_node_upgrade_test",
-                        unassigned_node_upgrade_test::test,
+                        orchestrator::unassigned_node_upgrade_test::test,
                     )]),
                 ),
                 pot(
                     "ssh_access_to_nodes_pot",
-                    ssh_access_to_nodes::config(),
+                    orchestrator::ssh_access_to_nodes::config(),
                     seq(vec![
                         t(
                             "root_cannot_authenticate",
-                            ssh_access_to_nodes::root_cannot_authenticate,
+                            orchestrator::ssh_access_to_nodes::root_cannot_authenticate,
                         ),
                         t(
                             "readonly_cannot_authenticate_without_a_key",
-                            ssh_access_to_nodes::readonly_cannot_authenticate_without_a_key,
+                            orchestrator::ssh_access_to_nodes::readonly_cannot_authenticate_without_a_key,
                         ),
                         t(
                             "readonly_cannot_authenticate_with_random_key",
-                            ssh_access_to_nodes::readonly_cannot_authenticate_with_random_key,
+                            orchestrator::ssh_access_to_nodes::readonly_cannot_authenticate_with_random_key,
                         ),
                         t(
                             "keys_in_the_subnet_record_can_be_updated",
-                            ssh_access_to_nodes::keys_in_the_subnet_record_can_be_updated,
+                            orchestrator::ssh_access_to_nodes::keys_in_the_subnet_record_can_be_updated,
                         ),
                         t(
                             "keys_for_unassigned_nodes_can_be_updated",
-                            ssh_access_to_nodes::keys_for_unassigned_nodes_can_be_updated,
+                            orchestrator::ssh_access_to_nodes::keys_for_unassigned_nodes_can_be_updated,
                         ),
                         t(
                             "multiple_keys_can_access_one_account",
-                            ssh_access_to_nodes::multiple_keys_can_access_one_account,
+                            orchestrator::ssh_access_to_nodes::multiple_keys_can_access_one_account,
                         ),
                         t(
                             "multiple_keys_can_access_one_account_on_unassigned_nodes",
-                            ssh_access_to_nodes::multiple_keys_can_access_one_account_on_unassigned_nodes,
+                            orchestrator::ssh_access_to_nodes::multiple_keys_can_access_one_account_on_unassigned_nodes,
                         ),
                         t(
                             "updating_readonly_does_not_remove_backup_keys",
-                            ssh_access_to_nodes::updating_readonly_does_not_remove_backup_keys,
+                            orchestrator::ssh_access_to_nodes::updating_readonly_does_not_remove_backup_keys,
                         ),
                         t(
                             "can_add_max_number_of_readonly_and_backup_keys",
-                            ssh_access_to_nodes::can_add_max_number_of_readonly_and_backup_keys,
+                            orchestrator::ssh_access_to_nodes::can_add_max_number_of_readonly_and_backup_keys,
                         ),
                         t(
                             "cannot_add_more_than_max_number_of_readonly_or_backup_keys",
-                            ssh_access_to_nodes::cannot_add_more_than_max_number_of_readonly_or_backup_keys,
+                            orchestrator::ssh_access_to_nodes::cannot_add_more_than_max_number_of_readonly_or_backup_keys,
                         ),
                     ]),
                 ),
@@ -419,17 +396,20 @@ fn get_test_suites() -> HashMap<String, Suite> {
             pot_with_setup(
                 "basic_health_pot_single_host",
                 basic_health_test::config_single_host,
-                par(vec![sys_t("basic_health_test", basic_health_test)]),
+                par(vec![sys_t("basic_health_test", basic_health_test::test)]),
             ),
             pot(
                 "basic_health_pot_multiple_hosts",
                 basic_health_test::config_multiple_hosts(),
-                par(vec![sys_t("basic_health_test", basic_health_test)]),
+                par(vec![sys_t("basic_health_test", basic_health_test::test)]),
             ),
             pot(
                 "node_reassignment_pot",
-                node_reassignment_test::config(),
-                par(vec![t("node_reassignment_test", node_reassignment_test)]),
+                orchestrator::node_reassignment_test::config(),
+                par(vec![t(
+                    "node_reassignment_test",
+                    orchestrator::node_reassignment_test::test,
+                )]),
             ),
             pot(
                 "nns_fault_tolerance_pot",
@@ -446,8 +426,11 @@ fn get_test_suites() -> HashMap<String, Suite> {
             ),
             pot(
                 "upgrade_reject_pot",
-                upgrade_reject::config(),
-                par(vec![t("upgrade_reject_test", upgrade_reject::test)]),
+                orchestrator::upgrade_reject::config(),
+                par(vec![t(
+                    "upgrade_reject_test",
+                    orchestrator::upgrade_reject::test,
+                )]),
             ),
             pot(
                 "tecdsa_add_nodes_pot",
@@ -491,8 +474,8 @@ fn get_test_suites() -> HashMap<String, Suite> {
             ),
             pot(
                 "nns_backup_pot",
-                nns_backup::config(),
-                par(vec![t("nns_backup_test", nns_backup::test)]),
+                orchestrator::nns_backup::config(),
+                par(vec![t("nns_backup_test", orchestrator::nns_backup::test)]),
             )
             .with_ttl(Duration::from_secs(7200)),
         ],
@@ -515,19 +498,19 @@ fn get_test_suites() -> HashMap<String, Suite> {
         vec![
             pot(
                 "upgrade_downgrade_app_subnet",
-                upgrade_downgrade::config(),
+                orchestrator::upgrade_downgrade::config(),
                 par(vec![t(
                     "upgrade_downgrade_app_subnet",
-                    upgrade_downgrade::upgrade_downgrade_app_subnet,
+                    orchestrator::upgrade_downgrade::upgrade_downgrade_app_subnet,
                 )]),
             )
             .with_ttl(Duration::from_secs(1800)),
             pot(
                 "upgrade_downgrade_nns_subnet",
-                upgrade_downgrade::config(),
+                orchestrator::upgrade_downgrade::config(),
                 par(vec![t(
                     "upgrade_downgrade_nns_subnet",
-                    upgrade_downgrade::upgrade_downgrade_nns_subnet,
+                    orchestrator::upgrade_downgrade::upgrade_downgrade_nns_subnet,
                 )]),
             )
             .with_ttl(Duration::from_secs(1800)),

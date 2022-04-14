@@ -25,7 +25,7 @@ Coverage::
 Authentication checks in block validation.
 end::catalog[] */
 
-use crate::request_signature_test::{expiry_time, random_ecdsa_identity, sign_update};
+use crate::execution::request_signature_test::{expiry_time, random_ecdsa_identity, sign_update};
 use crate::util::*;
 use ic_agent::export::Principal;
 use ic_agent::{agent::status::Value, Identity};

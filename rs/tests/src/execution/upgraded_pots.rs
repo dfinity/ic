@@ -1,9 +1,6 @@
 use crate::driver::pot_dsl::{par, pot, t, Pot};
 
-use crate::{
-    execution::{self, config_system_verified_application_subnets},
-    malicious_input_test, request_signature_test,
-};
+use crate::execution;
 
 /// The pot containing general execution environment tests. As upgraded System
 /// Tests allow for the parallel execution of tests, we put all of them into one
@@ -11,15 +8,15 @@ use crate::{
 pub fn general_execution_pot() -> Pot {
     pot(
         "general_execution_pot",
-        config_system_verified_application_subnets(),
+        execution::config_system_verified_application_subnets(),
         par(vec![
             t(
                 "request_signature_test",
-                request_signature_test::test
+                execution::request_signature_test::test
             ),
             t(
                 "malicious_input_test",
-                malicious_input_test::test
+                execution::malicious_input::test
             ),
             t(
                 "test_raw_rand_api",

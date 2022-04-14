@@ -43,7 +43,7 @@ use slog::{info, Logger};
 pub fn config_single_host(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(4))
-        .add_subnet(Subnet::new(SubnetType::System).add_nodes(4))
+        .add_subnet(Subnet::new(SubnetType::Application).add_nodes(4))
         .setup_and_start(&env)
         .expect("failed to setup IC under test")
 }
@@ -51,7 +51,7 @@ pub fn config_single_host(env: TestEnv) {
 pub fn config_multiple_hosts() -> InternetComputer {
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(4))
-        .add_subnet(Subnet::new(SubnetType::System).add_nodes(4))
+        .add_subnet(Subnet::new(SubnetType::Application).add_nodes(4))
         .with_allocation_strategy(VmAllocationStrategy::DistributeAcrossDcs)
 }
 
@@ -61,7 +61,7 @@ const RETRY_WAIT: Duration = Duration::from_secs(10);
 
 /// Here we define the test workflow, which should implement the Runbook given
 /// in the test catalog entry at the top of this file.
-pub fn basic_health_test(env: TestEnv, log: Logger) {
+pub fn test(env: TestEnv, log: Logger) {
     // Assemble a list that contains one node per subnet.
     let nodes: Vec<_> = env
         .topology_snapshot()

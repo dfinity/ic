@@ -91,9 +91,13 @@
 //! ```text
 //! let agent = node.build_default_agent();
 //! ```
+//! Node VMs can be killed, started, or rebooted as follows:
 //!
-//! Upcoming: Implementation of VM operations as a separate trait implemented by
-//! NodeSnapshot.
+//! ```text
+//! node.vm().kill();
+//! node.vm().start();
+//! node.vm().reboot();
+//! ```
 //!
 //! ## Design Principles
 //!
