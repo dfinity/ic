@@ -2,7 +2,6 @@
 
 //! This module contains various utilities for https://hyper.rs
 //! specific to Message Routing.
-use crate::xnet_uri::XNetAuthority;
 use hyper::{
     client::connect::{Connected, Connection, HttpConnector},
     server::{accept::Accept, conn::AddrIncoming},
@@ -14,6 +13,7 @@ use ic_crypto_tls_interfaces::{
     TlsStream,
 };
 use ic_interfaces::registry::RegistryClient;
+use ic_xnet_uri::XNetAuthority;
 use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::future::Future;
@@ -239,6 +239,26 @@ pub fn tls_bind(
     tls: Arc<dyn TlsHandshake + Send + Sync>,
     registry_client: Arc<dyn RegistryClient + Send + Sync>,
 ) -> Result<(SocketAddr, hyper::server::Builder<TlsAccept>), BoxError> {
+    tls_bind_with_connection_type(addr, tls, registry_client, ConnectionType::Tls)
+}
+
+/// Like [tls_bind], but accepts unencrypted connections.
+/// This function should be used only in tests.
+pub fn tls_bind_for_test(
+    addr: &SocketAddr,
+    tls: Arc<dyn TlsHandshake + Send + Sync>,
+    registry_client: Arc<dyn RegistryClient + Send + Sync>,
+) -> Result<(SocketAddr, hyper::server::Builder<TlsAccept>), BoxError> {
+    tls_bind_with_connection_type(addr, tls, registry_client, ConnectionType::Raw)
+}
+
+/// A common implementation
+fn tls_bind_with_connection_type(
+    addr: &SocketAddr,
+    tls: Arc<dyn TlsHandshake + Send + Sync>,
+    registry_client: Arc<dyn RegistryClient + Send + Sync>,
+    connection_type: ConnectionType,
+) -> Result<(SocketAddr, hyper::server::Builder<TlsAccept>), BoxError> {
     let socket = bind_tcp_socket_with_reuse(addr)?;
     socket.listen(128)?;
     let listener = TcpListener::from_std(socket.into())?;
@@ -248,7 +268,7 @@ pub fn tls_bind(
             (
                 inner.local_addr(),
                 hyper::server::Server::<TlsAccept, ()>::builder(TlsAccept {
-                    connection_type: ConnectionType::default(),
+                    connection_type,
                     inner,
                     tls,
                     registry_client,
@@ -294,14 +314,7 @@ enum ConnectionType {
     Raw,
 }
 
-// Unit tests are not ready to handle TLS yet, so we fallback
-// to raw connections there.
 impl Default for ConnectionType {
-    #[cfg(test)]
-    fn default() -> Self {
-        ConnectionType::Raw
-    }
-    #[cfg(not(test))]
     fn default() -> Self {
         ConnectionType::Tls
     }
@@ -320,7 +333,19 @@ impl TlsConnector {
         let mut http = HttpConnector::new();
         http.enforce_http(false);
         Self {
-            connection_type: ConnectionType::default(),
+            connection_type: ConnectionType::Tls,
+            http,
+            tls,
+        }
+    }
+
+    /// Like [TlsConnector::new], but connects over unencrypted channel.
+    /// This function should be used only in tests.
+    pub fn new_for_tests(tls: Arc<dyn TlsHandshake + Send + Sync>) -> Self {
+        let mut http = HttpConnector::new();
+        http.enforce_http(false);
+        Self {
+            connection_type: ConnectionType::Raw,
             http,
             tls,
         }

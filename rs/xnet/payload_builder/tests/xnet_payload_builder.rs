@@ -1,14 +1,10 @@
 use async_trait::async_trait;
+use ic_constants::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_interfaces::{
     certified_stream_store::CertifiedStreamStore, messaging::XNetPayloadBuilder,
     registry::RegistryClient,
 };
 use ic_logger::ReplicaLogger;
-use ic_messaging::{
-    certified_slice_pool::{CertifiedSlicePool, UnpackedStreamSlice},
-    xnet_payload_builder_testing::*,
-    ExpectedIndices, XNetPayloadBuilderImpl,
-};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::{
     node::v1::connection_endpoint::Protocol, subnet::v1::SubnetListRecord,
@@ -38,6 +34,11 @@ use ic_types::{
     batch::ValidationContext,
     xnet::{CertifiedStreamSlice, StreamIndex, StreamIndexedQueue, StreamSlice},
     CountBytes, Height, NodeId, RegistryVersion, SubnetId,
+};
+use ic_xnet_payload_builder::{
+    certified_slice_pool::{CertifiedSlicePool, UnpackedStreamSlice},
+    testing::*,
+    ExpectedIndices, XNetPayloadBuilderImpl,
 };
 use maplit::btreemap;
 use proptest::prelude::*;

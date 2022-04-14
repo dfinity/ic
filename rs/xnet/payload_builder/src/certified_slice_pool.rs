@@ -1,7 +1,7 @@
 //! A pool of incoming `CertifiedStreamSlices` used by `XNetPayloadBuilderImpl`
 //! to build `XNetPayloads` without the need for I/O on the critical path.
 
-use crate::xnet_payload_builder::ExpectedIndices;
+use crate::ExpectedIndices;
 use header::Header;
 use ic_canonical_state::LabelLike;
 use ic_crypto_tree_hash::{

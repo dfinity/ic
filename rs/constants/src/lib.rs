@@ -33,3 +33,7 @@ pub const PERMITTED_DRIFT_AT_VALIDATOR: Duration = Duration::from_secs(30);
 /// may lead to more messages being admitted to the ingress pool, but
 /// shouldn't impact other parts of the system.
 pub const PERMITTED_DRIFT_AT_ARTIFACT_MANAGER: Duration = Duration::from_secs(60);
+
+/// Message count limit for `System` subnet outgoing streams used for throttling
+/// the matching input stream.
+pub const SYSTEM_SUBNET_STREAM_MSG_LIMIT: usize = 100;

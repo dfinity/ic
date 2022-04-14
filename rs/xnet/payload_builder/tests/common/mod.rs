@@ -5,10 +5,6 @@ use ic_config::state_manager::Config;
 use ic_interfaces::{certification::Verifier, certified_stream_store::CertifiedStreamStore};
 use ic_interfaces_state_manager::*;
 use ic_logger::ReplicaLogger;
-use ic_messaging::certified_slice_pool::{
-    UnpackedStreamSlice, METRIC_POOL_SIZE_BYTES, METRIC_TAKE_COUNT, METRIC_TAKE_GCED_MESSAGES,
-    METRIC_TAKE_MESSAGES, METRIC_TAKE_SIZE_BYTES,
-};
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{testing::ReplicatedStateTesting, Stream};
@@ -27,6 +23,10 @@ use ic_types::{
     signature::ThresholdSignature,
     xnet::{CertifiedStreamSlice, StreamIndex},
     Height, SubnetId,
+};
+use ic_xnet_payload_builder::certified_slice_pool::{
+    UnpackedStreamSlice, METRIC_POOL_SIZE_BYTES, METRIC_TAKE_COUNT, METRIC_TAKE_GCED_MESSAGES,
+    METRIC_TAKE_MESSAGES, METRIC_TAKE_SIZE_BYTES,
 };
 use proptest::prelude::*;
 use std::{convert::TryFrom, sync::Arc};

@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use hyper::Uri;
+use http::Uri;
 use ic_types::{NodeId, PrincipalId, RegistryVersion};
 use std::convert::TryFrom;
 use std::fmt;

@@ -1,3 +1,4 @@
+pub mod certified_slice_pool;
 mod proximity;
 
 #[cfg(test)]
@@ -9,13 +10,12 @@ mod tests;
 #[cfg(test)]
 mod xnet_client_tests;
 
-use crate::{
-    certified_slice_pool::{certified_slice_count_bytes, CertifiedSlicePool, CertifiedSliceResult},
-    hyper::{ExecuteOnRuntime, TlsConnector},
-    xnet_uri::XNetAuthority,
+use crate::certified_slice_pool::{
+    certified_slice_count_bytes, CertifiedSlicePool, CertifiedSliceResult,
 };
 use async_trait::async_trait;
 use hyper::{client::Client, Body, Request, StatusCode, Uri};
+use ic_constants::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces::{
     certified_stream_store::CertifiedStreamStore,
@@ -45,6 +45,8 @@ use ic_types::{
     xnet::{CertifiedStreamSlice, StreamIndex},
     CountBytes, Height, NodeId, NumBytes, RegistryVersion, SubnetId, Time,
 };
+use ic_xnet_hyper::{ExecuteOnRuntime, TlsConnector};
+use ic_xnet_uri::XNetAuthority;
 use prometheus::{Histogram, HistogramVec, IntCounterVec, IntGauge};
 pub use proximity::{GenRangeFn, ProximityMap};
 use rand::{thread_rng, Rng};
@@ -247,10 +249,6 @@ pub struct ExpectedIndices {
     pub message_index: StreamIndex,
     pub signal_index: StreamIndex,
 }
-
-/// Message count limit for `System` subnet outgoing streams used for throttling
-/// the matching input stream.
-pub const SYSTEM_SUBNET_STREAM_MSG_LIMIT: usize = 100;
 
 impl XNetPayloadBuilderImpl {
     /// Creates a new `XNetPayloadBuilderImpl` for a node on `subnet_id`, using
@@ -1387,7 +1385,12 @@ impl XNetClientImpl {
             .pool_idle_timeout(Some(Duration::from_secs(600)))
             .pool_max_idle_per_host(1)
             .executor(ExecuteOnRuntime(runtime_handle))
-            .build(TlsConnector::new(tls));
+            .build(
+                #[cfg(not(test))]
+                TlsConnector::new(tls),
+                #[cfg(test)]
+                TlsConnector::new_for_tests(tls),
+            );
 
         let response_body_size = metrics_registry.histogram_vec(
             METRIC_RESPONSE_BODY_SIZE,
@@ -1528,7 +1531,7 @@ pub mod testing {
         EndpointLocator, GenRangeFn, PoolRefillTask, ProximityMap, RefillTaskHandle, XNetClient,
         XNetClientError, XNetEndpointResolver, XNetPayloadBuilderMetrics, LABEL_STATUS,
         METRIC_BUILD_PAYLOAD_DURATION, METRIC_SLICE_MESSAGES, METRIC_SLICE_PAYLOAD_SIZE,
-        POOL_SLICE_BYTE_SIZE_MAX, STATUS_SUCCESS, SYSTEM_SUBNET_STREAM_MSG_LIMIT,
+        POOL_SLICE_BYTE_SIZE_MAX, STATUS_SUCCESS,
     };
 
     /// Puts the provided slice into the payload builder's slice pool.

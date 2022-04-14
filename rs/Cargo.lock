@@ -5181,16 +5181,9 @@ dependencies = [
 name = "ic-messaging"
 version = "0.8.0"
 dependencies = [
- "assert_matches",
- "async-trait",
- "bytes",
- "crossbeam-channel 0.5.1",
- "futures",
- "hyper",
  "ic-base-types",
- "ic-canonical-state",
  "ic-config",
- "ic-crypto-tls-interfaces",
+ "ic-constants",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig-der",
  "ic-cycles-account-manager",
@@ -5201,39 +5194,24 @@ dependencies = [
  "ic-logger",
  "ic-metrics",
  "ic-protobuf",
- "ic-registry-client-fake",
  "ic-registry-client-helpers",
  "ic-registry-keys",
- "ic-registry-proto-data-provider",
  "ic-registry-provisional-whitelist",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-replicated-state",
  "ic-state-layout",
- "ic-state-manager",
  "ic-test-utilities",
- "ic-test-utilities-registry",
  "ic-types 0.8.0",
  "ic-utils 0.8.0",
  "lazy_static",
  "maplit",
  "mockall 0.7.2",
- "nix 0.23.0",
  "prometheus",
- "proptest 0.9.6",
- "prost",
  "rand 0.7.3",
  "rand_chacha 0.2.2",
- "reqwest",
- "serde",
- "serde_json",
  "slog",
- "socket2 0.3.19",
- "tempfile",
- "tiny_http",
- "tokio",
- "url",
 ]
 
 [[package]]
@@ -6148,6 +6126,8 @@ dependencies = [
  "ic-test-utilities-registry",
  "ic-types 0.8.0",
  "ic-utils 0.8.0",
+ "ic-xnet-endpoint",
+ "ic-xnet-payload-builder",
  "jemalloc-ctl",
  "jemallocator",
  "libc",
@@ -7169,6 +7149,104 @@ dependencies = [
  "tokio",
  "url",
  "wabt",
+]
+
+[[package]]
+name = "ic-xnet-endpoint"
+version = "0.8.0"
+dependencies = [
+ "bytes",
+ "crossbeam-channel 0.5.1",
+ "hyper",
+ "ic-crypto-tls-interfaces",
+ "ic-interfaces",
+ "ic-interfaces-state-manager",
+ "ic-logger",
+ "ic-metrics",
+ "ic-protobuf",
+ "ic-registry-client-helpers",
+ "ic-registry-keys",
+ "ic-replicated-state",
+ "ic-test-utilities",
+ "ic-test-utilities-registry",
+ "ic-types 0.8.0",
+ "ic-xnet-hyper",
+ "ic-xnet-uri",
+ "maplit",
+ "prometheus",
+ "prost",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "slog",
+ "socket2 0.3.19",
+ "tokio",
+ "url",
+]
+
+[[package]]
+name = "ic-xnet-hyper"
+version = "0.8.0"
+dependencies = [
+ "hyper",
+ "ic-crypto-tls-interfaces",
+ "ic-interfaces",
+ "ic-xnet-uri",
+ "socket2 0.3.19",
+ "tokio",
+]
+
+[[package]]
+name = "ic-xnet-payload-builder"
+version = "0.8.0"
+dependencies = [
+ "assert_matches",
+ "async-trait",
+ "hyper",
+ "ic-base-types",
+ "ic-canonical-state",
+ "ic-config",
+ "ic-constants",
+ "ic-crypto-tls-interfaces",
+ "ic-crypto-tree-hash",
+ "ic-interfaces",
+ "ic-interfaces-state-manager",
+ "ic-logger",
+ "ic-metrics",
+ "ic-protobuf",
+ "ic-registry-client-fake",
+ "ic-registry-client-helpers",
+ "ic-registry-keys",
+ "ic-registry-proto-data-provider",
+ "ic-registry-subnet-type",
+ "ic-replicated-state",
+ "ic-state-manager",
+ "ic-test-utilities",
+ "ic-test-utilities-registry",
+ "ic-types 0.8.0",
+ "ic-xnet-hyper",
+ "ic-xnet-uri",
+ "maplit",
+ "mockall 0.7.2",
+ "nix 0.23.0",
+ "prometheus",
+ "proptest 0.9.6",
+ "rand 0.7.3",
+ "rand_chacha 0.2.2",
+ "reqwest",
+ "slog",
+ "tempfile",
+ "tiny_http",
+ "tokio",
+ "url",
+]
+
+[[package]]
+name = "ic-xnet-uri"
+version = "0.8.0"
+dependencies = [
+ "http",
+ "ic-types 0.8.0",
 ]
 
 [[package]]
