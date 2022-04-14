@@ -7,7 +7,7 @@ use ic_types::{
     artifact::{CanisterHttpResponseId, PriorityFn},
     batch::CanisterHttpPayload,
     canister_http::{
-        CanisterHttpResponseAttribute, CanisterHttpResponseContent, CanisterHttpResponseShare,
+        CanisterHttpResponse, CanisterHttpResponseAttribute, CanisterHttpResponseShare,
     },
     crypto::CryptoHashOf,
 };
@@ -29,7 +29,7 @@ impl BatchPayloadSectionType for CanisterHttpPayload {
 }
 
 pub enum CanisterHttpChangeAction {
-    AddToValidated(CanisterHttpResponseShare, CanisterHttpResponseContent),
+    AddToValidated(CanisterHttpResponseShare, CanisterHttpResponse),
     MoveToValidated(CanisterHttpResponseId),
     RemoveValidated(CanisterHttpResponseId),
     RemoveUnvalidated(CanisterHttpResponseId),
@@ -44,14 +44,7 @@ pub trait CanisterHttpPool: Send + Sync {
     fn get_unvalidated_shares(&self) -> Box<dyn Iterator<Item = &CanisterHttpResponseShare> + '_>;
     fn get_response_content_items(
         &self,
-    ) -> Box<
-        dyn Iterator<
-                Item = (
-                    &CryptoHashOf<CanisterHttpResponseContent>,
-                    &CanisterHttpResponseContent,
-                ),
-            > + '_,
-    >;
+    ) -> Box<dyn Iterator<Item = (&CryptoHashOf<CanisterHttpResponse>, &CanisterHttpResponse)> + '_>;
 
     fn lookup_validated(
         &self,

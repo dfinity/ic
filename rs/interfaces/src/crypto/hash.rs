@@ -1,6 +1,6 @@
 use ic_types::artifact::StateSyncMessage;
 use ic_types::canister_http::{
-    CanisterHttpResponseContent, CanisterHttpResponseMetadata, CanisterHttpResponseShare,
+    CanisterHttpResponse, CanisterHttpResponseMetadata, CanisterHttpResponseShare,
 };
 use ic_types::consensus::certification::CertificationMessage;
 use ic_types::consensus::dkg as consensus_dkg;
@@ -186,14 +186,14 @@ mod private {
     impl CryptoHashDomainSeal for EcdsaOpeningContent {}
     impl CryptoHashDomainSeal for Signed<EcdsaOpeningContent, BasicSignature<EcdsaOpeningContent>> {}
 
-    impl CryptoHashDomainSeal for CanisterHttpResponseContent {}
+    impl CryptoHashDomainSeal for CanisterHttpResponse {}
     impl CryptoHashDomainSeal for CanisterHttpResponseMetadata {}
     impl CryptoHashDomainSeal for CanisterHttpResponseShare {}
 
     impl CryptoHashDomainSeal for CryptoHashableTestDummy {}
 }
 
-impl CryptoHashDomain for CanisterHttpResponseContent {
+impl CryptoHashDomain for CanisterHttpResponse {
     fn domain(&self) -> String {
         DOMAIN_CANISTER_HTTP_RESPONSE.to_string()
     }
