@@ -2,7 +2,9 @@ use std::{convert::TryFrom, path::PathBuf, time::Duration};
 
 use bitcoin::{blockdata::constants::genesis_block, consensus::Decodable, Block, BlockHash};
 use clap::Parser;
-use ic_btc_adapter_service::{btc_adapter_client::BtcAdapterClient, GetSuccessorsRpcRequest};
+use ic_btc_adapter_service::{
+    btc_adapter_client::BtcAdapterClient, GetSuccessorsRpcRequest, GetSuccessorsRpcResponse,
+};
 use tokio::{
     net::UnixStream,
     time::{sleep, Instant},
@@ -36,44 +38,57 @@ async fn main() {
     } else {
         panic!("Cannot use systemd as a incoming source.");
     };
+    let interval_sleep_ms = Duration::from_millis(1000);
+    let request_timeout_ms = Duration::from_millis(50);
 
-    let mut processed_block_hashes: Vec<BlockHash> = vec![];
     let block_0 = genesis_block(config.network);
+    let mut total_processed_block_hashes: usize = 0;
+    let mut processed_block_hashes: Vec<BlockHash> = vec![];
     let mut current_anchor = block_0.block_hash();
     let mut rpc_client = setup_client(uds_path).await;
+    let total_timer = Instant::now();
 
     loop {
-        let request = tonic::Request::new(GetSuccessorsRpcRequest {
+        let mut request = tonic::Request::new(GetSuccessorsRpcRequest {
             processed_block_hashes: processed_block_hashes.iter().map(|h| h.to_vec()).collect(),
             anchor: current_anchor.to_vec(),
         });
+        request.set_timeout(request_timeout_ms);
 
         let instant = Instant::now();
-        let response = rpc_client
-            .get_successors(request)
-            .await
-            .expect("failed to receive response");
-        let elapsed = instant.elapsed().as_millis();
-        let inner = response.into_inner();
-        println!(
-            "{}ms,{},{},{}",
-            elapsed,
-            inner.blocks.len(),
-            inner.next.len(),
-            processed_block_hashes.len()
-        );
 
+        let response: Result<tonic::Response<GetSuccessorsRpcResponse>, tonic::Status> =
+            rpc_client.get_successors(request).await;
+        let inner: GetSuccessorsRpcResponse = match response {
+            Ok(response) => response.into_inner(),
+            Err(status) => match status.code() {
+                tonic::Code::Cancelled => continue,
+                _ => break,
+            },
+        };
+
+        let elapsed = instant.elapsed().as_millis();
         if !inner.blocks.is_empty() {
             let block_hashes = inner
                 .blocks
-                .into_iter()
-                .map(|b| Block::consensus_decode(&*b).unwrap().block_hash())
+                .iter()
+                .map(|b| Block::consensus_decode(b.as_slice()).unwrap().block_hash())
                 .collect::<Vec<_>>();
 
             current_anchor = *block_hashes.last().expect("failed to get last block hash");
+            total_processed_block_hashes += block_hashes.len();
             processed_block_hashes = block_hashes;
         }
 
-        sleep(Duration::from_millis(1000)).await;
+        println!(
+            "{}s,{}ms,{},{},{}",
+            total_timer.elapsed().as_secs(),
+            elapsed,
+            inner.blocks.len(),
+            inner.next.len(),
+            total_processed_block_hashes
+        );
+
+        sleep(interval_sleep_ms).await;
     }
 }
