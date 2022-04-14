@@ -77,6 +77,7 @@ impl ClonableKeyPair {
 }
 
 pub type SignF = Arc<dyn Fn(&[u8]) -> Result<Vec<u8>, Box<dyn Error>> + Send + Sync>;
+pub type SignFID = Arc<dyn Fn(&MessageId) -> Result<Vec<u8>, Box<dyn Error>> + Send + Sync>;
 
 #[derive(Clone)]
 pub struct Secp256k1KeyPair {
@@ -113,6 +114,13 @@ pub enum Sender {
     Anonymous,
     /// Principal ID (no signature)
     PrincipalId(PrincipalId),
+    /// Signed from the node itself, with its key.
+    Node {
+        /// DER encoded public key
+        pub_key: Vec<u8>,
+        /// Function that signs the message id
+        sign: SignFID,
+    },
 }
 
 impl Sender {
@@ -147,17 +155,25 @@ impl Sender {
             Self::ExternalHsm { pub_key, .. } => PrincipalId::new_self_authenticating(pub_key),
             Self::Anonymous => PrincipalId::new_anonymous(),
             Self::PrincipalId(id) => *id,
+            Self::Node { pub_key, .. } => {
+                PrincipalId::new_self_authenticating(&ed25519_public_key_to_der(pub_key.clone()))
+            }
         }
     }
 
     pub fn sign_message_id(&self, msg_id: &MessageId) -> Result<Option<Vec<u8>>, Box<dyn Error>> {
-        let mut sig_data = vec![];
-        sig_data.extend_from_slice(DOMAIN_IC_REQUEST);
-        sig_data.extend_from_slice(msg_id.as_bytes());
-        self.sign(&sig_data)
+        match self {
+            Self::Node { sign, .. } => sign(msg_id).map(Some),
+            _ => {
+                let mut sig_data = vec![];
+                sig_data.extend_from_slice(DOMAIN_IC_REQUEST);
+                sig_data.extend_from_slice(msg_id.as_bytes());
+                self.sign(&sig_data)
+            }
+        }
     }
 
-    pub fn sign(&self, msg: &[u8]) -> Result<Option<Vec<u8>>, Box<dyn Error>> {
+    fn sign(&self, msg: &[u8]) -> Result<Option<Vec<u8>>, Box<dyn Error>> {
         match self {
             Self::KeyPair(keypair) => Ok(Some(keypair.get().sign(msg).to_bytes().to_vec())),
             Self::SigKeys(sig_keys) => match sig_keys {
@@ -177,6 +193,7 @@ impl Sender {
             Self::ExternalHsm { sign, .. } => sign(msg).map(Some),
             Self::Anonymous => Ok(None),
             Self::PrincipalId(_) => Ok(None),
+            Self::Node { .. } => unreachable!("Wrong case of agent.sign()"),
         }
     }
 
@@ -193,6 +210,7 @@ impl Sender {
             Self::ExternalHsm { pub_key, .. } => Some(pub_key.clone()),
             Self::Anonymous => None,
             Self::PrincipalId(_) => None,
+            Self::Node { pub_key, .. } => Some(ed25519_public_key_to_der(pub_key.clone())),
         }
     }
 }

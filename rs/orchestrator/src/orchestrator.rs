@@ -10,8 +10,9 @@ use crate::ssh_access_manager::SshAccessManager;
 use crate::upgrade::Upgrade;
 use ic_config::metrics::{Config as MetricsConfig, Exporter};
 use ic_crypto::utils::get_node_keys_or_generate_if_missing;
+use ic_crypto::CryptoComponentForNonReplicaProcess;
 use ic_crypto_tls_interfaces::TlsHandshake;
-use ic_interfaces::{crypto::KeyManager, registry::RegistryClient};
+use ic_interfaces::registry::RegistryClient;
 use ic_logger::{error, info, new_replica_logger_from_config, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_metrics_exporter::MetricsRuntimeImpl;
@@ -35,6 +36,7 @@ pub struct Orchestrator {
     upgrade: Option<Upgrade>,
     firewall: Option<Firewall>,
     ssh_access_manager: Option<SshAccessManager>,
+    registration: Option<NodeRegistration>,
     // A flag used to communicate to async tasks, that their job is done.
     exit_signal: Arc<RwLock<bool>>,
     // The subnet id of the node.
@@ -112,7 +114,8 @@ impl Orchestrator {
             logger.clone(),
             config.clone(),
             Arc::clone(&registry_client),
-            Arc::clone(&crypto) as Arc<dyn KeyManager>,
+            node_id,
+            Arc::clone(&crypto) as Arc<dyn CryptoComponentForNonReplicaProcess>,
             registry_local_store.clone(),
         );
 
@@ -176,6 +179,7 @@ impl Orchestrator {
             upgrade,
             firewall,
             ssh_access_manager,
+            registration: Some(registration),
             exit_signal: Default::default(),
             subnet_id: Default::default(),
             task_handles: Default::default(),
@@ -194,6 +198,10 @@ impl Orchestrator {
     /// new data center is added, orchestrator will generate a new firewall
     /// configuration allowing access from the IP range specified in the DC
     /// record.
+    ///
+    /// 3. Periodicaly try to update the registry with the iDKG key. Eventually
+    /// once all replicas are updated this functionality should be removed,
+    /// but the plumbing of the adding key mechanism will remain.
     pub fn spawn_tasks(&mut self) {
         async fn upgrade_checks(
             maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
@@ -233,6 +241,23 @@ impl Orchestrator {
             }
             info!(log, "Shut down the ssh keys & firewall monitoring loop");
         }
+        async fn update_keys_in_registry(
+            log: ReplicaLogger,
+            exit_signal: Arc<RwLock<bool>>,
+            registration: NodeRegistration,
+        ) {
+            while !*exit_signal.read().await {
+                if registration
+                    .check_additional_key_registered_otherwise_register()
+                    .await
+                {
+                    // additional key was successfully registered
+                    break;
+                };
+                tokio::time::sleep(CHECK_INTERVAL_SECS).await;
+            }
+            info!(log, "Shut down update keys in registration loop");
+        }
 
         if let Some(upgrade) = self.upgrade.take() {
             info!(self.logger, "Spawning the upgrade loop");
@@ -258,6 +283,14 @@ impl Orchestrator {
                     Arc::clone(&self.exit_signal),
                     self.logger.clone(),
                 )));
+        }
+        if let Some(registration) = self.registration.take() {
+            info!(self.logger, "Spawning the additional key registration loop");
+            self.task_handles.push(tokio::spawn(update_keys_in_registry(
+                self.logger.clone(),
+                Arc::clone(&self.exit_signal),
+                registration,
+            )));
         }
     }
 

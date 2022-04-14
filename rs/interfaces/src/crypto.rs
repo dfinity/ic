@@ -48,6 +48,8 @@ pub trait Crypto:
     // Block
     + BasicSigner<Block>
     + BasicSigVerifier<Block>
+    // MessageId
+    + BasicSigner<MessageId>
     // Dealing
     + BasicSigner<consensus_dkg::DealingContent>
     + BasicSigVerifier<consensus_dkg::DealingContent>
@@ -116,6 +118,7 @@ impl<T> Crypto for T where
     T: KeyManager
         + BasicSigner<Block>
         + BasicSigVerifier<Block>
+        + BasicSigner<MessageId>
         + BasicSigner<consensus_dkg::DealingContent>
         + BasicSigVerifier<consensus_dkg::DealingContent>
         + NiDkgAlgorithm
