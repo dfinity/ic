@@ -37,7 +37,7 @@ use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces::crypto::{
-    BasicSigVerifier, BasicSigVerifierByPublicKey, KeyManager, MultiSigVerifier,
+    BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, KeyManager, MultiSigVerifier,
     ThresholdSigVerifier, ThresholdSigVerifierByPublicKey,
 };
 use ic_interfaces::registry::RegistryClient;
@@ -82,6 +82,7 @@ pub type CryptoComponent =
 /// modify the secret key store.
 pub trait CryptoComponentForNonReplicaProcess:
     KeyManager
+    + BasicSigner<MessageId>
     + ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes>
     + TlsHandshake
     + Send
@@ -93,6 +94,7 @@ pub trait CryptoComponentForNonReplicaProcess:
 // that fulfill the requirements.
 impl<T> CryptoComponentForNonReplicaProcess for T where
     T: KeyManager
+        + BasicSigner<MessageId>
         + ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes>
         + TlsHandshake
         + Send

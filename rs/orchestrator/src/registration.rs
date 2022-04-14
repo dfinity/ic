@@ -9,14 +9,20 @@ use ic_config::{
     transport::TransportConfig,
     Config,
 };
-use ic_interfaces::crypto::KeyManager;
-use ic_interfaces::registry::{RegistryClient, ZERO_REGISTRY_VERSION};
+use ic_crypto::CryptoComponentForNonReplicaProcess;
+use ic_interfaces::{
+    crypto::PublicKeyRegistrationStatus,
+    registry::{RegistryClient, ZERO_REGISTRY_VERSION},
+};
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
+use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_registry_common::local_store::LocalStore;
 use ic_sys::utility_command::UtilityCommand;
+use ic_types::{messages::MessageId, NodeId};
 use prost::Message;
 use rand::prelude::*;
+use registry_canister::mutations::do_update_node_directly::UpdateNodeDirectlyPayload;
 use registry_canister::mutations::node_management::do_add_node::AddNodePayload;
 use std::net::IpAddr;
 use std::sync::Arc;
@@ -28,7 +34,8 @@ pub(crate) struct NodeRegistration {
     log: ReplicaLogger,
     node_config: Config,
     registry_client: Arc<dyn RegistryClient>,
-    key_manager: Arc<dyn KeyManager>,
+    node_id: NodeId,
+    key_handler: Arc<dyn CryptoComponentForNonReplicaProcess>,
     local_store: Arc<dyn LocalStore>,
 }
 
@@ -37,14 +44,16 @@ impl NodeRegistration {
         log: ReplicaLogger,
         node_config: Config,
         registry_client: Arc<dyn RegistryClient>,
-        key_manager: Arc<dyn KeyManager>,
+        node_id: NodeId,
+        key_handler: Arc<dyn CryptoComponentForNonReplicaProcess>,
         local_store: Arc<dyn LocalStore>,
     ) -> Self {
         Self {
             log,
             node_config,
             registry_client,
-            key_manager,
+            node_id,
+            key_handler,
             local_store,
         }
     }
@@ -56,7 +65,7 @@ impl NodeRegistration {
     /// one of the nns nodes in `nns_node_list`.
     pub(crate) async fn register_node(&mut self) {
         let latest_version = self.registry_client.get_latest_version();
-        if let Err(e) = self.key_manager.check_keys_with_registry(latest_version) {
+        if let Err(e) = self.key_handler.check_keys_with_registry(latest_version) {
             warn!(self.log, "Node keys are not setup: {:?}", e);
             self.retry_register_node().await;
             self.touch_eject_file();
@@ -66,50 +75,8 @@ impl NodeRegistration {
 
     // postcondition: we are registered with the NNS
     async fn retry_register_node(&mut self) {
-        let mut version = self.registry_client.get_latest_version();
-        while version == ZERO_REGISTRY_VERSION {
-            warn!(self.log, "Registry cache is still at version 0.");
-            tokio::time::sleep(Duration::from_secs(10)).await;
-            version = self.registry_client.get_latest_version();
-        }
-
-        use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
-
-        let nns_subnet_id = self
-            .registry_client
-            .get_root_subnet_id(version)
-            .expect("Error when fetching nns subnet id.")
-            .expect("NNS subnet id not defined");
-        let node_ids = self
-            .registry_client
-            .get_node_ids_on_subnet(nns_subnet_id, version)
-            .expect("could not load node ids from nns")
-            .expect("no nodes on the nns subnet");
-
-        let mut nns_urls = node_ids
-            .iter()
-            .map(|nid| {
-                let r = self
-                    .registry_client
-                    .get_transport_info(*nid, version)
-                    .expect("Registration: Fetching NNS node record registry failed.")
-                    .expect("Registration: No NNS node record found in registry.");
-                let http = r.http.expect("no http record");
-                let ip = http.ip_addr;
-                let port = http.port;
-                Url::parse(&format!(
-                    "http://{}/",
-                    get_endpoint(&self.log, ip, port as u16)
-                        .expect("could not parse connection endpoint information")
-                ))
-                .expect("can't fail")
-            })
-            .collect::<Vec<_>>();
-
-        let mut rng = thread_rng();
-        nns_urls.shuffle(&mut rng);
+        let nns_urls = self.collect_nns_urls().await.unwrap();
         let mut nns_urls = nns_urls.iter().cycle();
-
         let sign_cmd = |msg: &[u8]| {
             UtilityCommand::try_to_attach_hsm();
             let res = UtilityCommand::sign_message(msg.to_vec(), None, None, None)
@@ -166,7 +133,7 @@ impl NodeRegistration {
     }
 
     fn assemble_add_node_message(&self) -> AddNodePayload {
-        let node_pub_keys = self.key_manager.node_public_keys();
+        let node_pub_keys = self.key_handler.node_public_keys();
 
         AddNodePayload {
             // These four are raw bytes because sadly we can't marshal between pb and candid...
@@ -199,9 +166,130 @@ impl NodeRegistration {
         }
     }
 
+    /// Checks if the nodes additional key is properly registered and if it
+    /// isn't try to register it.
+    ///
+    /// Return true means all is done.
+    /// Return false means we will need to check it again later. Also we might
+    /// try to register it now, but will need to check the registration later.
+    pub async fn check_additional_key_registered_otherwise_register(&self) -> bool {
+        let registry_version = self.registry_client.get_latest_version();
+        match self.key_handler.check_keys_with_registry(registry_version) {
+            Ok(PublicKeyRegistrationStatus::IDkgDealingEncPubkeyNeedsRegistration(key)) => {
+                self.try_to_register_additional_key(key).await
+            }
+            Ok(PublicKeyRegistrationStatus::AllKeysRegistered) => {
+                return true; // key is properly registered, we are all good
+            }
+            Err(e) => {
+                warn!(self.log, "Registry error: {:?}", e);
+            }
+        }
+        false
+    }
+
+    async fn try_to_register_additional_key(&self, idkg_pk: PublicKey) {
+        let nns_urls = match self.collect_nns_urls().await {
+            Ok(urls) => urls,
+            Err(e) => {
+                warn!(self.log, "Error collecting URLs: {:?}", e);
+                return;
+            }
+        };
+
+        let node_id = self.node_id;
+
+        let node_pub_key = if let Some(pk) = self.key_handler.node_public_keys().node_signing_pk {
+            pk
+        } else {
+            warn!(self.log, "Missing node signing key.");
+            return; // missing signing key, can't continue
+        };
+
+        let key_handler = self.key_handler.clone();
+        let registry_version = self.registry_client.get_latest_version();
+        let sign_cmd = move |msg: &MessageId| {
+            key_handler
+                .sign_basic(msg, node_id, registry_version)
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+                .map(|value| value.get().0)
+        };
+
+        let sender = Sender::Node {
+            pub_key: node_pub_key.key_value,
+            sign: Arc::new(sign_cmd),
+        };
+
+        let agent = Agent::new(nns_urls[0].clone(), sender);
+        let update_node_payload = UpdateNodeDirectlyPayload {
+            idkg_dealing_encryption_pk: Some(protobuf_to_vec(idkg_pk)),
+        };
+
+        if let Err(e) = agent
+            .execute_update(
+                &REGISTRY_CANISTER_ID,
+                "update_node_directly",
+                Encode!(&update_node_payload)
+                    .expect("Could not encode payload for update_node-call."),
+                generate_nonce(),
+            )
+            .await
+        {
+            warn!(
+                self.log,
+                "Error when sending register additional key request: {:?}", e
+            );
+        }
+    }
+
+    async fn collect_nns_urls(&self) -> Result<Vec<Url>, String> {
+        let mut version = self.registry_client.get_latest_version();
+        while version == ZERO_REGISTRY_VERSION {
+            warn!(self.log, "Registry cache is still at version 0.");
+            tokio::time::sleep(Duration::from_secs(10)).await;
+            version = self.registry_client.get_latest_version();
+        }
+        use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
+        let nns_subnet_id = self
+            .registry_client
+            .get_root_subnet_id(version)
+            .map_err(|e| format!("Error when fetching NNS subnet ID: {:?}", e))?
+            .ok_or("NNS subnet ID not defined")?;
+        let node_ids = self
+            .registry_client
+            .get_node_ids_on_subnet(nns_subnet_id, version)
+            .map_err(|e| format!("Could not load node IDs from NNS: {:?}", e))?
+            .ok_or("No nodes on the NNS subnet")?;
+        let nns_urls: Result<Vec<Url>, String> = node_ids
+            .iter()
+            .map(|nid| {
+                let r = self
+                    .registry_client
+                    .get_transport_info(*nid, version)
+                    .map_err(|e| format!("Fetching NNS node record registry failed: {:?}", e))?
+                    .ok_or("No NNS node record found in registry.")?;
+                let http = r.http.ok_or("No http record")?;
+                let ip = http.ip_addr;
+                let port = http.port;
+                let url = Url::parse(&format!(
+                    "http://{}/",
+                    get_endpoint(&self.log, ip, port as u16)
+                        .map_err(|e| format!("Could not parse endpoint information: {:?}", e))?
+                ))
+                .map_err(|e| format!("Can't fail: {:?}", e))?;
+                Ok(url)
+            })
+            .collect::<Result<_, _>>();
+        nns_urls.map(|mut urls| {
+            let mut rng = thread_rng();
+            urls.shuffle(&mut rng);
+            urls
+        })
+    }
+
     fn is_node_registered(&self) -> bool {
         let latest_version = self.registry_client.get_latest_version();
-        match self.key_manager.check_keys_with_registry(latest_version) {
+        match self.key_handler.check_keys_with_registry(latest_version) {
             Ok(_) => true,
             Err(e) => {
                 warn!(
