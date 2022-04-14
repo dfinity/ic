@@ -31,11 +31,17 @@ message SubnetsEntry {
     SubnetTopology subnet_topology = 2;
 }
 
+message EcdsaKeyEntry {
+    string key_id = 1;
+    repeated types.v1.SubnetId subnet_ids = 2;
+}
+
 message NetworkTopology {
     repeated SubnetsEntry subnets = 1;
     registry.routing_table.v1.RoutingTable routing_table = 2;
     types.v1.SubnetId nns_subnet_id = 3;
     registry.routing_table.v1.CanisterMigrations canister_migrations = 4;
+    repeated EcdsaKeyEntry ecdsa_keys = 5;
 }
 
 message SetupInitialDkgContext {

@@ -20,7 +20,7 @@ use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::vm_control::IcControl;
 use crate::{
     nns::NnsExt,
-    tecdsa::tecdsa_signature_test::{get_public_key, get_signature, verify_signature},
+    tecdsa::tecdsa_signature_test::{get_public_key, get_signature, verify_signature, KEY_ID1},
     util::*,
 };
 use canister_test::Cycles;
@@ -63,7 +63,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         assert_endpoints_reachability(endpoints.as_slice(), EndpointsStatus::AllReachable).await;
         let agent = assert_create_agent(endpoints[0].url.as_str()).await;
         let uni_can = UniversalCanister::new(&agent).await;
-        let public_key = get_public_key(&uni_can, ctx).await;
+        let public_key = get_public_key(KEY_ID1, &uni_can, ctx).await;
         (uni_can.canister_id(), public_key)
     });
 
@@ -104,9 +104,9 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     block_on(async {
         let agent = assert_create_agent(endpoints[0].url.as_str()).await;
         let uni_can = UniversalCanister::from_canister_id(&agent, canister_id);
-        let public_key_ = get_public_key(&uni_can, ctx).await;
+        let public_key_ = get_public_key(KEY_ID1, &uni_can, ctx).await;
         assert_eq!(public_key, public_key_);
-        let signature = get_signature(&message_hash, Cycles::zero(), &uni_can, ctx)
+        let signature = get_signature(&message_hash, Cycles::zero(), KEY_ID1, &uni_can, ctx)
             .await
             .unwrap();
         verify_signature(&message_hash, &public_key, &signature);

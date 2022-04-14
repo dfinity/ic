@@ -6754,6 +6754,7 @@ dependencies = [
 name = "ic-system-api"
 version = "0.8.0"
 dependencies = [
+ "assert_matches",
  "candid",
  "ic-base-types",
  "ic-cycles-account-manager",

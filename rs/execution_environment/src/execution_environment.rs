@@ -953,17 +953,6 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
     }
 }
 
-fn verify_ecdsa_key_id(key_id: &str) -> Result<(), UserError> {
-    if key_id != "secp256k1" {
-        Err(UserError::new(
-            ErrorCode::CanisterRejectedMessage,
-            "key_id must be \"secp256k1\"",
-        ))
-    } else {
-        Ok(())
-    }
-}
-
 impl ExecutionEnvironmentImpl {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -2004,7 +1993,8 @@ impl ExecutionEnvironmentImpl {
         subnet_public_key: &MasterEcdsaPublicKey,
         principal_id: PrincipalId,
         derivation_path: Vec<Vec<u8>>,
-        key_id: &str,
+        // TODO EXC-1060: get the right public key.
+        _key_id: &str,
     ) -> Result<ECDSAPublicKeyResponse, UserError> {
         let _ = CanisterId::new(principal_id).map_err(|err| {
             UserError::new(
@@ -2012,7 +2002,6 @@ impl ExecutionEnvironmentImpl {
                 format!("Not a canister id: {}", err),
             )
         })?;
-        verify_ecdsa_key_id(key_id)?;
         let path = ExtendedDerivationPath {
             caller: principal_id,
             derivation_path,
@@ -2031,7 +2020,8 @@ impl ExecutionEnvironmentImpl {
         mut request: Request,
         message_hash: Vec<u8>,
         derivation_path: Vec<Vec<u8>>,
-        key_id: &str,
+        // TODO EXC-1061: pass key_id to consensus.
+        _key_id: &str,
         state: &mut ReplicatedState,
         rng: &mut (dyn RngCore + 'static),
     ) -> Result<(), UserError> {
@@ -2041,7 +2031,6 @@ impl ExecutionEnvironmentImpl {
                 "message_hash must be 32 bytes",
             ));
         }
-        verify_ecdsa_key_id(key_id)?;
 
         // If the request isn't from the NNS, then we need to charge for it.
         // Consensus will return any remaining cycles.
@@ -2094,7 +2083,6 @@ impl ExecutionEnvironmentImpl {
         args: ComputeInitialEcdsaDealingsArgs,
         request: &Request,
     ) -> Result<(), UserError> {
-        verify_ecdsa_key_id(&args.key_id)?;
         let sender_subnet_id = state.find_subnet_id(*sender)?;
 
         if sender_subnet_id != state.metadata.network_topology.nns_subnet_id {

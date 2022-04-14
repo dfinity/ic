@@ -286,5 +286,7 @@ fn error_replication_of_registry_client_error(registry_client_error: &RegistryCl
         RegistryClientError::PollLockFailed { .. } => false,
         // may be transient errors
         RegistryClientError::PollingLatestVersionFailed { .. } => false,
+        // true, as the registry is guaranteed to be consistent accross replicas
+        RegistryClientError::DecodeError { .. } => true,
     }
 }

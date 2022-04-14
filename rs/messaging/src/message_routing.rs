@@ -18,6 +18,7 @@ use ic_metrics::{MetricsRegistry, Timer};
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
+    ecdsa_keys::EcdsaKeysRegistry,
     node::NodeRegistry,
     provisional_whitelist::ProvisionalWhitelistRegistry,
     routing_table::RoutingTableRegistry,
@@ -536,11 +537,17 @@ impl BatchProcessorImpl {
             .unwrap_or_default();
         let nns_subnet_id = self.get_nns_subnet_id(registry_version);
 
+        let ecdsa_keys = self
+            .registry
+            .get_ecdsa_keys(registry_version)?
+            .unwrap_or_default();
+
         Ok(NetworkTopology {
             subnets,
             routing_table: Arc::new(routing_table),
             nns_subnet_id,
             canister_migrations: Arc::new(canister_migrations),
+            ecdsa_keys,
         })
     }
 
