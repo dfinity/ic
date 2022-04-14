@@ -1,9 +1,9 @@
 use std::convert::TryFrom;
+use std::sync::Arc;
 
 use candid::Encode;
 use dfn_candid::candid;
-
-use ic_base_types::{PrincipalId, SubnetId};
+use ic_base_types::{PrincipalId, RegistryVersion, SubnetId};
 use ic_crypto::utils::get_node_keys_or_generate_if_missing;
 use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::{
@@ -11,16 +11,14 @@ use ic_nns_test_utils::{
         forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
         set_up_universal_canister,
     },
-    registry::{get_value, insert_value, invariant_compliant_mutation_as_atomic_req},
+    registry::{get_value, invariant_compliant_mutation_as_atomic_req},
 };
 use ic_protobuf::registry::node::v1::NodeRecord;
-use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
 use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord};
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_node_key, make_node_record_key,
-    make_routing_table_record_key, make_subnet_list_record_key, make_subnet_record_key,
+    make_subnet_list_record_key, make_subnet_record_key,
 };
-use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{
@@ -39,6 +37,9 @@ use registry_canister::{
 };
 
 use assert_matches::assert_matches;
+use canister_test::{Canister, Runtime};
+use ic_registry_client_fake::FakeRegistryClient;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use registry_canister::mutations::node_management::do_add_node::{
     connection_endpoint_from_string, flow_endpoint_from_string,
 };
@@ -104,38 +105,7 @@ fn test_the_anonymous_user_cannot_create_a_subnet() {
             get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
                 .await;
 
-        let payload = CreateSubnetPayload {
-            node_ids: node_ids.clone(),
-            subnet_id_override: None,
-            ingress_bytes_per_block_soft_cap: 2 * 1024 * 1024,
-            max_ingress_bytes_per_message: 6 * 1024 * 1024,
-            max_ingress_messages_per_block: 1000,
-            max_block_payload_size: 4 * 1024 * 1024,
-            unit_delay_millis: 500,
-            initial_notary_delay_millis: 1500,
-            replica_version_id: "1337".to_string(),
-            dkg_interval_length: 0,
-            dkg_dealings_per_block: 1,
-            gossip_max_artifact_streams_per_peer: MAX_ARTIFACT_STREAMS_PER_PEER,
-            gossip_max_chunk_wait_ms: MAX_CHUNK_WAIT_MS,
-            gossip_max_duplicity: MAX_DUPLICITY,
-            gossip_max_chunk_size: MAX_CHUNK_SIZE,
-            gossip_receive_check_cache_size: RECEIVE_CHECK_PEER_SET_SIZE,
-            gossip_pfn_evaluation_period_ms: PFN_EVALUATION_PERIOD_MS,
-            gossip_registry_poll_period_ms: REGISTRY_POLL_PERIOD_MS,
-            gossip_retransmission_request_ms: RETRANSMISSION_REQUEST_MS,
-            advert_best_effort_percentage: None,
-            start_as_nns: false,
-            subnet_type: SubnetType::Application,
-            is_halted: false,
-            max_instructions_per_message: 5_000_000_000,
-            max_instructions_per_round: 7_000_000_000,
-            max_instructions_per_install_code: 200_000_000_000,
-            features: SubnetFeatures::default(),
-            max_number_of_canisters: 0,
-            ssh_readonly_access: vec![],
-            ssh_backup_access: vec![],
-        };
+        let payload = make_create_subnet_payload(node_ids.clone());
 
         // The anonymous end-user tries to create a subnet, bypassing the proposals
         // This should be rejected.
@@ -146,21 +116,20 @@ fn test_the_anonymous_user_cannot_create_a_subnet() {
             Err(s) if s.contains("is not authorized to call this method: create_subnet"));
 
         // .. And there should therefore be no new subnet record (any, actually)
-        let subnet_list_record =
-            get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
-                .await;
+        let subnet_list_record = get_subnet_list_record(&registry).await;
         assert_eq!(subnet_list_record, initial_subnet_list_record);
 
         // Go through an upgrade cycle, and verify that it still works the same
         registry.upgrade_to_self_binary(vec![]).await.unwrap();
+
         let response: Result<(), String> = registry
             .update_("create_subnet", candid, (payload.clone(),))
             .await;
+
         assert_matches!(response,
             Err(s) if s.contains("is not authorized to call this method: create_subnet"));
-        let subnet_list_record =
-            get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
-                .await;
+
+        let subnet_list_record = get_subnet_list_record(&registry).await;
         assert_eq!(subnet_list_record, initial_subnet_list_record);
 
         Ok(())
@@ -189,42 +158,9 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_create_a_subnet() {
         )
         .await;
 
-        let initial_subnet_list_record =
-            get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
-                .await;
+        let initial_subnet_list_record = get_subnet_list_record(&registry).await;
 
-        let payload = CreateSubnetPayload {
-            node_ids: node_ids.clone(),
-            subnet_id_override: None,
-            ingress_bytes_per_block_soft_cap: 3 * 1024 * 1024,
-            max_ingress_bytes_per_message: 6 * 1024 * 1024,
-            max_ingress_messages_per_block: 1000,
-            max_block_payload_size: 4 * 1024 * 1024,
-            unit_delay_millis: 500,
-            initial_notary_delay_millis: 1500,
-            replica_version_id: "1337".to_string(),
-            dkg_interval_length: 0,
-            dkg_dealings_per_block: 1,
-            gossip_max_artifact_streams_per_peer: MAX_ARTIFACT_STREAMS_PER_PEER,
-            gossip_max_chunk_wait_ms: MAX_CHUNK_WAIT_MS,
-            gossip_max_duplicity: MAX_DUPLICITY,
-            gossip_max_chunk_size: MAX_CHUNK_SIZE,
-            gossip_receive_check_cache_size: RECEIVE_CHECK_PEER_SET_SIZE,
-            gossip_pfn_evaluation_period_ms: PFN_EVALUATION_PERIOD_MS,
-            gossip_registry_poll_period_ms: REGISTRY_POLL_PERIOD_MS,
-            gossip_retransmission_request_ms: RETRANSMISSION_REQUEST_MS,
-            advert_best_effort_percentage: Some(50),
-            start_as_nns: false,
-            subnet_type: SubnetType::Application,
-            is_halted: false,
-            max_instructions_per_message: 5_000_000_000,
-            max_instructions_per_round: 7_000_000_000,
-            max_instructions_per_install_code: 200_000_000_000,
-            features: SubnetFeatures::default(),
-            max_number_of_canisters: 0,
-            ssh_readonly_access: vec![],
-            ssh_backup_access: vec![],
-        };
+        let payload = make_create_subnet_payload(node_ids.clone());
 
         // The attacker canister tries to create a subnet, pretending to be the
         // proposals canister. This should have no effect.
@@ -238,92 +174,40 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_create_a_subnet() {
             .await
         );
         // .. And there should therefore be no new subnet record (any, actually)
-        let subnet_list_record =
-            get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
-                .await;
+        let subnet_list_record = get_subnet_list_record(&registry).await;
         assert_eq!(subnet_list_record, initial_subnet_list_record);
 
         Ok(())
     });
 }
 
-// TODO (NNS-79): This test cannot pass with the current fixtures: we use a fake
-// registry component to setup the consensus/p2p stack, but then inside this
-// test we spin up a registry canister to write all the subnet updates.
-// Obviously, there is no connection between both registries, so the consensus
-// fails on creating a DKG for a new subnet due to a registry version being not
-// available locally.
 #[test]
-#[ignore]
-fn test_accepted_proposal_mutates_the_registry_no_subnet_apriori() {
+fn test_accepted_proposal_mutates_the_registry_some_subnets_present() {
     local_test_on_nns_subnet(|runtime| async move {
-        let (init_mutate, node_ids) = prepare_registry(5);
-        let registry = set_up_registry_canister(
-            &runtime,
-            RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
-                .push_init_mutate_request(init_mutate)
-                .build(),
-        )
-        .await;
+        let (data_provider, fake_client) = match runtime {
+            Runtime::Remote(_) => {
+                panic!("Cannot run this test on Runtime::Remote at this time");
+            }
+            Runtime::Local(ref r) => (r.registry_data_provider.clone(), r.registry_client.clone()),
+        };
 
-        // Add an empty routing table to the registry
-        let routing_table = PbRoutingTable::from(RoutingTable::default());
-        insert_value(
-            &registry,
-            make_routing_table_record_key().as_bytes(),
-            &routing_table,
+        let (init_mutate, node_ids) = prepare_registry(5);
+
+        let registry = setup_registry_synced_with_fake_client(
+            &runtime,
+            fake_client,
+            data_provider,
+            vec![init_mutate],
         )
         .await;
 
         // Install the universal canister in place of the proposals canister
-        let fake_proposal_canister = set_up_universal_canister(&runtime).await;
-        // Since it takes the id reserved for the proposal canister, it can impersonate
-        // it
-        assert_eq!(
-            fake_proposal_canister.canister_id(),
-            ic_nns_constants::GOVERNANCE_CANISTER_ID
-        );
+        let fake_proposal_canister = set_up_universal_canister_as_governance(&runtime).await;
 
-        // first, ensure there is no subnet yet
-        let subnet_list_record =
-            get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
-                .await;
-        assert_eq!(subnet_list_record, SubnetListRecord::default());
-
+        // first, get current list of subnets created by underlying system
+        let initial_subnet_list_record = get_subnet_list_record(&registry).await;
         // create payload message
-        let payload = CreateSubnetPayload {
-            node_ids: node_ids.clone(),
-            subnet_id_override: None,
-            ingress_bytes_per_block_soft_cap: 2 * 1024 * 1024,
-            max_ingress_bytes_per_message: 60 * 1024 * 1024,
-            max_ingress_messages_per_block: 1000,
-            max_block_payload_size: 4 * 1024 * 1024,
-            unit_delay_millis: 500,
-            initial_notary_delay_millis: 1500,
-            replica_version_id: "version_42".to_string(),
-            dkg_interval_length: 0,
-            dkg_dealings_per_block: 1,
-            gossip_max_artifact_streams_per_peer: MAX_ARTIFACT_STREAMS_PER_PEER,
-            gossip_max_chunk_wait_ms: MAX_CHUNK_WAIT_MS,
-            gossip_max_duplicity: MAX_DUPLICITY,
-            gossip_max_chunk_size: MAX_CHUNK_SIZE,
-            gossip_receive_check_cache_size: RECEIVE_CHECK_PEER_SET_SIZE,
-            gossip_pfn_evaluation_period_ms: PFN_EVALUATION_PERIOD_MS,
-            gossip_registry_poll_period_ms: REGISTRY_POLL_PERIOD_MS,
-            gossip_retransmission_request_ms: RETRANSMISSION_REQUEST_MS,
-            advert_best_effort_percentage: None,
-            start_as_nns: false,
-            subnet_type: SubnetType::Application,
-            is_halted: false,
-            max_instructions_per_message: 5_000_000_000,
-            max_instructions_per_round: 7_000_000_000,
-            max_instructions_per_install_code: 200_000_000_000,
-            features: SubnetFeatures::default(),
-            max_number_of_canisters: 0,
-            ssh_readonly_access: vec![],
-            ssh_backup_access: vec![],
-        };
+        let payload = make_create_subnet_payload(node_ids.clone());
 
         assert!(
             forward_call_via_universal_canister(
@@ -337,23 +221,9 @@ fn test_accepted_proposal_mutates_the_registry_no_subnet_apriori() {
 
         // Now let's check directly in the registry that the mutation actually happened
         // by observing a new subnet in the subnet list
-        let subnet_list_record =
-            get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
-                .await;
-        assert_ne!(subnet_list_record, SubnetListRecord::default());
+        let (subnet_id, subnet_record) =
+            get_added_subnet(&registry, &initial_subnet_list_record).await;
 
-        let subnet_ids: Vec<SubnetId> = subnet_list_record
-            .subnets
-            .iter()
-            .map(|s| SubnetId::new(PrincipalId::try_from(s.clone().as_slice()).unwrap()))
-            .collect();
-        assert_eq!(subnet_ids.len(), 1);
-        let subnet_id = subnet_ids[0_usize];
-
-        // Now let's check directly in the registry that the mutation actually happened
-        let subnet_record =
-            get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
-                .await;
         // Check if some fields are equal
         assert_eq!(subnet_record.replica_version_id, payload.replica_version_id);
         assert_eq!(
@@ -364,11 +234,8 @@ fn test_accepted_proposal_mutates_the_registry_no_subnet_apriori() {
                 .collect::<::std::vec::Vec<std::vec::Vec<u8>>>()
         );
 
-        let cup_contents = get_value::<CatchUpPackageContents>(
-            &registry,
-            make_catch_up_package_contents_key(subnet_id).as_bytes(),
-        )
-        .await;
+        let cup_contents = get_cup_contents(&registry, subnet_id).await;
+
         assert!(cup_contents
             .initial_ni_dkg_transcript_low_threshold
             .is_some());
@@ -380,158 +247,120 @@ fn test_accepted_proposal_mutates_the_registry_no_subnet_apriori() {
     });
 }
 
-// TODO (NNS-79): This test cannot pass with the current fixtures: we use a fake
-// registry component to setup the consensus/p2p stack, but then inside this
-// test we spin up a registry canister to write all the subnet updates.
-// Obviously, there is no connection between both registries, so the consensus
-// fails on creating a DKG for a new subnet due to a registry version being not
-// available locally.
-#[test]
-#[ignore]
-fn test_accepted_proposal_mutates_the_registry_some_subnets_present() {
-    local_test_on_nns_subnet(|runtime| async move {
-        let (init_mutate, node_ids) = prepare_registry(5);
-        let registry = set_up_registry_canister(
-            &runtime,
-            RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
-                .push_init_mutate_request(init_mutate)
-                .build(),
-        )
-        .await;
+// Start helper functions
+fn make_create_subnet_payload(node_ids: Vec<NodeId>) -> CreateSubnetPayload {
+    // create payload message
+    CreateSubnetPayload {
+        node_ids,
+        subnet_id_override: None,
+        ingress_bytes_per_block_soft_cap: 2 * 1024 * 1024,
+        max_ingress_bytes_per_message: 60 * 1024 * 1024,
+        max_ingress_messages_per_block: 1000,
+        max_block_payload_size: 4 * 1024 * 1024,
+        unit_delay_millis: 500,
+        initial_notary_delay_millis: 1500,
+        replica_version_id: "version_42".to_string(),
+        dkg_interval_length: 0,
+        dkg_dealings_per_block: 1,
+        gossip_max_artifact_streams_per_peer: MAX_ARTIFACT_STREAMS_PER_PEER,
+        gossip_max_chunk_wait_ms: MAX_CHUNK_WAIT_MS,
+        gossip_max_duplicity: MAX_DUPLICITY,
+        gossip_max_chunk_size: MAX_CHUNK_SIZE,
+        gossip_receive_check_cache_size: RECEIVE_CHECK_PEER_SET_SIZE,
+        gossip_pfn_evaluation_period_ms: PFN_EVALUATION_PERIOD_MS,
+        gossip_registry_poll_period_ms: REGISTRY_POLL_PERIOD_MS,
+        gossip_retransmission_request_ms: RETRANSMISSION_REQUEST_MS,
+        advert_best_effort_percentage: Some(10),
+        start_as_nns: false,
+        subnet_type: SubnetType::Application,
+        is_halted: false,
+        max_instructions_per_message: 5_000_000_000,
+        max_instructions_per_round: 7_000_000_000,
+        max_instructions_per_install_code: 200_000_000_000,
+        features: SubnetFeatures::default(),
+        max_number_of_canisters: 0,
+        ssh_readonly_access: vec![],
+        ssh_backup_access: vec![],
+    }
+}
 
-        // Install the universal canister in place of the proposals canister
-        let fake_proposal_canister = set_up_universal_canister(&runtime).await;
-        // Since it takes the id reserved for the proposal canister, it can impersonate
-        // it
-        assert_eq!(
-            fake_proposal_canister.canister_id(),
-            ic_nns_constants::GOVERNANCE_CANISTER_ID
-        );
+fn get_added_subnets(
+    former_subnet_list_record: &SubnetListRecord,
+    current_subnet_list_record: &SubnetListRecord,
+) -> Vec<SubnetId> {
+    current_subnet_list_record
+        .subnets
+        .iter()
+        .filter(|&x| !former_subnet_list_record.subnets.contains(x))
+        .map(|s| SubnetId::new(PrincipalId::try_from(s.clone().as_slice()).unwrap()))
+        .collect()
+}
 
-        // first, ensure there is no subnet yet
-        let subnet_list_record =
-            get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
-                .await;
-        assert_eq!(subnet_list_record, SubnetListRecord::default());
+async fn get_subnet_list_record(registry: &Canister<'_>) -> SubnetListRecord {
+    get_value::<SubnetListRecord>(registry, make_subnet_list_record_key().as_bytes()).await
+}
 
-        // then, create a preexisting set of dummy subnets and insert in the
-        // subnet list record
-        let preexisting_subnets = (117..125)
-            .map(|x| PrincipalId::new_subnet_test_id(x).to_vec())
-            .collect();
-        let subnet_list_record = SubnetListRecord {
-            subnets: preexisting_subnets,
-        };
-        insert_value(
-            &registry,
-            make_subnet_list_record_key().as_bytes(),
-            &subnet_list_record,
-        )
-        .await;
+async fn get_subnet_record(registry: &Canister<'_>, subnet_id: SubnetId) -> SubnetRecord {
+    get_value::<SubnetRecord>(registry, make_subnet_record_key(subnet_id).as_bytes()).await
+}
 
-        // Add an empty routing table to the registry
-        // This is needed to satisfy preconditions the create_subnet depends on,
-        // when there are other subnets present.
-        let routing_table = PbRoutingTable::from(RoutingTable::default());
-        insert_value(
-            &registry,
-            make_routing_table_record_key().as_bytes(),
-            &routing_table,
-        )
-        .await;
+// This does not do anything special - just ensures you created the canister in the right position
+// so that it gets the governance ID
+async fn set_up_universal_canister_as_governance(runtime: &'_ Runtime) -> Canister<'_> {
+    // Install the universal canister in place of the proposals canister
+    let fake_proposal_canister = set_up_universal_canister(runtime).await;
+    // Since it takes the id reserved for the proposal canister, it can impersonate
+    // it
+    assert_eq!(
+        fake_proposal_canister.canister_id(),
+        ic_nns_constants::GOVERNANCE_CANISTER_ID
+    );
+    fake_proposal_canister
+}
 
-        let former_subnet_list_record =
-            get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
-                .await;
-        assert_eq!(former_subnet_list_record.subnets.len(), 8);
+async fn get_added_subnet(
+    registry: &Canister<'_>,
+    former_subnet_list_record: &SubnetListRecord,
+) -> (SubnetId, SubnetRecord) {
+    let subnet_list_record = get_subnet_list_record(registry).await;
 
-        // create payload message
-        let payload = CreateSubnetPayload {
-            node_ids: node_ids.clone(),
-            subnet_id_override: None,
-            ingress_bytes_per_block_soft_cap: 2 * 1024 * 1024,
-            max_ingress_bytes_per_message: 60 * 1024 * 1024,
-            max_ingress_messages_per_block: 1000,
-            max_block_payload_size: 4 * 1024 * 1024,
-            unit_delay_millis: 500,
-            initial_notary_delay_millis: 1500,
-            replica_version_id: "version_42".to_string(),
-            dkg_interval_length: 0,
-            dkg_dealings_per_block: 1,
-            gossip_max_artifact_streams_per_peer: MAX_ARTIFACT_STREAMS_PER_PEER,
-            gossip_max_chunk_wait_ms: MAX_CHUNK_WAIT_MS,
-            gossip_max_duplicity: MAX_DUPLICITY,
-            gossip_max_chunk_size: MAX_CHUNK_SIZE,
-            gossip_receive_check_cache_size: RECEIVE_CHECK_PEER_SET_SIZE,
-            gossip_pfn_evaluation_period_ms: PFN_EVALUATION_PERIOD_MS,
-            gossip_registry_poll_period_ms: REGISTRY_POLL_PERIOD_MS,
-            gossip_retransmission_request_ms: RETRANSMISSION_REQUEST_MS,
-            advert_best_effort_percentage: Some(10),
-            start_as_nns: false,
-            subnet_type: SubnetType::Application,
-            is_halted: false,
-            max_instructions_per_message: 5_000_000_000,
-            max_instructions_per_round: 7_000_000_000,
-            max_instructions_per_install_code: 200_000_000_000,
-            features: SubnetFeatures::default(),
-            max_number_of_canisters: 0,
-            ssh_readonly_access: vec![],
-            ssh_backup_access: vec![],
-        };
+    let added_subnet_ids = get_added_subnets(former_subnet_list_record, &subnet_list_record);
+    // ensure only one subnet was added, or this function won't give expected results
+    assert_eq!(added_subnet_ids.len(), 1);
+    let subnet_id = added_subnet_ids[0_usize];
+    (subnet_id, get_subnet_record(registry, subnet_id).await)
+}
 
-        assert!(
-            forward_call_via_universal_canister(
-                &fake_proposal_canister,
-                &registry,
-                "create_subnet",
-                Encode!(&payload).unwrap()
-            )
-            .await
-        );
+async fn get_cup_contents(registry: &Canister<'_>, subnet_id: SubnetId) -> CatchUpPackageContents {
+    get_value::<CatchUpPackageContents>(
+        registry,
+        make_catch_up_package_contents_key(subnet_id).as_bytes(),
+    )
+    .await
+}
 
-        // Now let's check directly in the registry that the mutation actually happened
-        // by observing a new subnet in the subnet list
-        let subnet_list_record =
-            get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
-                .await;
-        assert_eq!(subnet_list_record.subnets.len(), 9);
+/// This allows us to create a registry canister that is in-sync with the FakeRegistryClient
+/// and ProtoRegistryDataProvider used by the underlying IC setup (consensus and execution)
+/// Without those being in sync, calls to CanisterId::ic_00 time out waiting for registry versions
+/// to get in sync
+async fn setup_registry_synced_with_fake_client(
+    runtime: &'_ Runtime,
+    fake_registry_client: Arc<FakeRegistryClient>,
+    fake_data_provider: Arc<ProtoRegistryDataProvider>,
+    initial_mutations: Vec<RegistryAtomicMutateRequest>,
+) -> Canister<'_> {
+    let initial_fake_data = fake_data_provider.export_versions_as_atomic_mutation_requests();
+    let mut builder = RegistryCanisterInitPayloadBuilder::new();
+    for version in initial_fake_data {
+        builder.push_init_mutate_request(version);
+    }
 
-        let fresh_subnet_ids: Vec<SubnetId> = subnet_list_record
-            .subnets
-            .iter()
-            .filter(|&x| !former_subnet_list_record.subnets.contains(x))
-            .map(|s| SubnetId::new(PrincipalId::try_from(s.clone().as_slice()).unwrap()))
-            .collect();
-        assert_eq!(fresh_subnet_ids.len(), 1);
-        let subnet_id = fresh_subnet_ids[0_usize];
+    for m in initial_mutations {
+        let next_version = RegistryVersion::from(fake_data_provider.latest_version().get() + 1);
+        fake_data_provider.apply_mutations_as_version(m.mutations.clone(), next_version);
+        builder.push_init_mutate_request(m);
+    }
+    fake_registry_client.update_to_latest_version();
 
-        // Now let's check directly in the registry that the mutation actually happened
-        let subnet_record =
-            get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
-                .await;
-        // Check if some fields are equal
-        assert_eq!(subnet_record.replica_version_id, payload.replica_version_id);
-        assert_eq!(
-            subnet_record.membership,
-            node_ids
-                .into_iter()
-                .map(|n| n.get().into_vec())
-                .collect::<::std::vec::Vec<std::vec::Vec<u8>>>()
-        );
-
-        let cup_contents = get_value::<CatchUpPackageContents>(
-            &registry,
-            make_catch_up_package_contents_key(subnet_id).as_bytes(),
-        )
-        .await;
-        assert!(cup_contents
-            .initial_ni_dkg_transcript_low_threshold
-            .is_some());
-        assert!(cup_contents
-            .initial_ni_dkg_transcript_high_threshold
-            .is_some());
-
-        Ok(())
-    });
+    set_up_registry_canister(runtime, builder.build()).await
 }

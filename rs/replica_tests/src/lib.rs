@@ -164,6 +164,8 @@ pub struct LocalTestRuntime {
     pub node_id: NodeId,
     nonce: Mutex<u64>,
     pub ingress_time_limit: Duration,
+    pub registry_data_provider: Arc<ProtoRegistryDataProvider>,
+    pub registry_client: Arc<FakeRegistryClient>,
 }
 
 /// This function is here to maintain compatibility with existing tests
@@ -227,10 +229,10 @@ pub fn get_ic_config() -> IcConfig {
     subnet_nodes.insert(
         NODE_INDEX_DEFAULT,
         NodeConfiguration {
-            xnet_api: vec!["http://0.0.0.0:0".parse().expect("can't fail")],
-            public_api: vec!["http://0.0.0.0:0".parse().expect("can't fail")],
+            xnet_api: vec!["http://0.0.0.1:0".parse().expect("can't fail")],
+            public_api: vec!["http://128.0.0.1:10000".parse().expect("can't fail")],
             private_api: vec![],
-            p2p_addr: "org.internetcomputer.p2p1://0.0.0.0:0"
+            p2p_addr: "org.internetcomputer.p2p1://128.0.0.1:10000"
                 .parse()
                 .expect("can't fail"),
             prometheus_metrics: vec![],
@@ -345,9 +347,10 @@ where
         // load the registry file written by ic-prep
         let data_provider =
             ProtoRegistryDataProvider::load_from_file(init_ic.registry_path().as_path());
-        let registry = Arc::new(FakeRegistryClient::new(Arc::new(data_provider)));
-        registry.update_to_latest_version();
-        let registry = registry as Arc<dyn RegistryClient + Send + Sync>;
+        let data_provider = Arc::new(data_provider);
+        let fake_registry_client = Arc::new(FakeRegistryClient::new(data_provider.clone()));
+        fake_registry_client.update_to_latest_version();
+        let registry = fake_registry_client.clone() as Arc<dyn RegistryClient + Send + Sync>;
         let crypto = setup_crypto_provider(
             &config.crypto,
             registry.clone(),
@@ -440,6 +443,8 @@ where
             node_id,
             nonce: Mutex::new(0),
             ingress_time_limit: Duration::from_secs(300),
+            registry_data_provider: data_provider,
+            registry_client: fake_registry_client,
         };
         tokio::runtime::Handle::current().block_on(test(runtime))
     })

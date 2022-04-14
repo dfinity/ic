@@ -1,9 +1,12 @@
 use bytes::{Buf, BufMut};
 use ic_interfaces::registry::{RegistryDataProvider, RegistryTransportRecord, RegistryValue};
 use ic_registry_common_proto::pb::proto_registry::v1::{ProtoRegistry, ProtoRegistryRecord};
-use ic_registry_transport::pb::v1::RegistryMutation;
+use ic_registry_transport::insert;
+use ic_registry_transport::pb::v1::registry_mutation::Type;
+use ic_registry_transport::pb::v1::{RegistryAtomicMutateRequest, RegistryMutation};
 use ic_types::{registry::RegistryDataProviderError, RegistryVersion};
 use ic_utils::fs::write_atomically;
+use std::collections::HashMap;
 use std::{
     io::Write,
     path::Path,
@@ -146,6 +149,87 @@ impl ProtoRegistryDataProvider {
             f.write_all(buf.as_slice())
         })
         .expect("Could not write to path.");
+    }
+
+    /// Useful to sync from other mutations
+    pub fn apply_mutations_as_version(
+        &self,
+        mut mutations: Vec<RegistryMutation>,
+        version: RegistryVersion,
+    ) {
+        let mut records = self.records.write().unwrap();
+
+        mutations.sort_by(|l, r| l.key.cmp(&r.key));
+        for m in mutations.iter_mut() {
+            m.mutation_type = match Type::from_i32(m.mutation_type).unwrap() {
+                Type::Insert | Type::Update | Type::Upsert => Type::Upsert,
+                Type::Delete => {
+                    unimplemented!("Need to implement Delete below to execute these mutations")
+                }
+            } as i32;
+        }
+
+        for mutation in mutations {
+            let key = std::str::from_utf8(&mutation.key)
+                .expect("Expected registry key to be utf8-encoded");
+
+            let search_key = &(&version.get(), key);
+
+            match records.binary_search_by_key(search_key, |r| (&r.version, &r.key)) {
+                Ok(_) => {
+                    panic!("Not sure this should happen in test context...");
+                }
+                Err(idx) => {
+                    let record = ProtoRegistryRecord {
+                        key: key.to_string(),
+                        version: version.get(),
+                        value: Some(mutation.value),
+                    };
+                    records.insert(idx, record);
+                }
+            }
+        }
+    }
+
+    /// Useful to sync a new registry test instance with records from a fake data provider.
+    pub fn export_versions_as_atomic_mutation_requests(&self) -> Vec<RegistryAtomicMutateRequest> {
+        let mut records = self.records.read().unwrap().clone();
+        records.sort_by(|a, b| Ord::cmp(&a.version, &b.version));
+        let mut mutations_by_version: HashMap<u64, Vec<RegistryMutation>> = HashMap::new();
+
+        for record in records {
+            let version = record.version;
+            let mutation = insert(record.key, record.value.or_else(|| Some(vec![])).unwrap());
+
+            if let Some(mutations_vec) = mutations_by_version.get_mut(&version) {
+                mutations_vec.push(mutation);
+            } else {
+                let mutations = vec![mutation];
+                mutations_by_version.insert(version, mutations);
+            }
+        }
+
+        let mut mutations_by_version = mutations_by_version
+            .iter()
+            .map(|(k, mutations)| (k, mutations))
+            .collect::<Vec<_>>();
+
+        mutations_by_version.sort_by_key(|x| x.0);
+
+        mutations_by_version
+            .iter()
+            .map(|(_, mutations)| RegistryAtomicMutateRequest {
+                mutations: mutations.to_vec(),
+                preconditions: vec![],
+            })
+            .collect()
+    }
+
+    /// Useful to determine level to apply mutations
+    pub fn latest_version(&self) -> RegistryVersion {
+        let records = self.records.read().unwrap().clone();
+        let latest_version = records.iter().map(|x| x.version).max().unwrap();
+        RegistryVersion::from(latest_version)
     }
 }
 
