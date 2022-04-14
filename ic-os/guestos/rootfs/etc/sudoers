@@ -29,4 +29,6 @@ root	ALL=(ALL:ALL) NOPASSWD:ALL
 # Allow members of group sudo to execute any command
 %sudo	ALL=(ALL:ALL) NOPASSWD:ALL
 
+ic-replica ALL=(ALL:ALL) NOPASSWD: /opt/ic/bin/manageboot.sh, /opt/ic/bin/provision-ssh-keys.sh
+
 # See sudoers(5) for more information on "#include" directives:

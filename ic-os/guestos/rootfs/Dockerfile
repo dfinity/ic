@@ -136,8 +136,7 @@ RUN adduser --system --disabled-password --home /var/lib/ic --group --no-create-
     adduser ic-replica nonconfidential && \
     adduser ic-replica confidential && \
     adduser ic-replica ic-registry-local-store && \
-    adduser ic-replica vsock && \
-    adduser ic-replica sudo
+    adduser ic-replica vsock
 
 # Accounts to allow remote access to state bits
 

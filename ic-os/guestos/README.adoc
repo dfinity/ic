@@ -95,8 +95,8 @@ partition image that can be put there as upgrade:
 disk image build). Transfer this in whatever way to the target system
 and install it using the tool included, by running on the *target* *system*:
 
-  cat /tmp/upgrade-image.tar | /opt/ic/bin/install-upgrade.sh
-  reboot
+  /opt/ic/bin/manageboot.sh upgrade-install upgrade-image.tar
+  /opt/ic/bin/manageboot.sh upgrade-commit
 
 After that, the newly installed system will be booted. On next boot, it will
 revert to the original system unless you previously confirm that the new
