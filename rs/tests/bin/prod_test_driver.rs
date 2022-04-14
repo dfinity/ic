@@ -399,11 +399,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 par(vec![sys_t("basic_health_test", basic_health_test::test)]),
             ),
             pot(
-                "basic_health_pot_multiple_hosts",
-                basic_health_test::config_multiple_hosts(),
-                par(vec![sys_t("basic_health_test", basic_health_test::test)]),
-            ),
-            pot(
                 "node_reassignment_pot",
                 orchestrator::node_reassignment_test::config(),
                 par(vec![t(
