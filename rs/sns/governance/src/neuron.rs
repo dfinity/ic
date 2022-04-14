@@ -8,7 +8,7 @@ use crate::pb::v1::{
 use ic_base_types::PrincipalId;
 use ledger_canister::Subaccount;
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::fmt::{Display, Formatter};
 use std::iter::FromIterator;
@@ -159,7 +159,7 @@ impl Neuron {
     pub(crate) fn would_follow_ballots(
         &self,
         action: u64,
-        ballots: &HashMap<String, Ballot>,
+        ballots: &BTreeMap<String, Ballot>,
     ) -> Vote {
         // Compute the list of followees for this action. If no
         // following is specified for the action, use the followees

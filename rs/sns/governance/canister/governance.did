@@ -2,8 +2,10 @@ type AccountIdentifier = record { hash : vec nat8 };
 type Action = variant {
   ManageNervousSystemParameters : NervousSystemParameters;
   CallCanisterMethod : CallCanisterMethod;
+  AddNervousSystemFunction : NervousSystemFunction;
   ExecuteNervousSystemFunction : ExecuteNervousSystemFunction;
   UpgradeSnsControlledCanister : UpgradeSnsControlledCanister;
+  RemoveNervousSystemFunction : nat64;
   Unspecified : record {};
   Motion : Motion;
 };
@@ -132,6 +134,9 @@ type GovernanceCachedMetrics = record {
 type GovernanceError = record { error_message : text; error_type : int32 };
 type IncreaseDissolveDelay = record {
   additional_dissolve_delay_seconds : nat32;
+};
+type ListNervousSystemFunctionsResponse = record {
+  functions : vec NervousSystemFunction;
 };
 type ListNeurons = record {
   of_principal : opt principal;
@@ -263,6 +268,9 @@ service : (Governance) -> {
   get_neuron : (GetNeuron) -> (GetNeuronResponse) query;
   get_proposal : (GetProposal) -> (GetProposalResponse) query;
   get_root_canister_status : (null) -> (CanisterStatusResult);
+  list_nervous_system_functions : () -> (
+      ListNervousSystemFunctionsResponse,
+    ) query;
   list_neurons : (ListNeurons) -> (ListNeuronsResponse) query;
   list_proposals : (ListProposals) -> (ListProposalsResponse) query;
   manage_neuron : (ManageNeuron) -> (ManageNeuronResponse);

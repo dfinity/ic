@@ -20,6 +20,9 @@ mod ledger;
 mod nervous_system_parameters;
 
 #[cfg(test)]
+mod nervous_system_functions;
+
+#[cfg(test)]
 mod neuron;
 
 #[cfg(test)]

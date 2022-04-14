@@ -21,15 +21,9 @@ fn main() {
     let mut config = Config::new();
     config.protoc_arg("--experimental_allow_proto3_optional");
 
-    // Use BTreeMap for the proposals map.
-    // This is useful because:
-    // - the reverse iterator can be used to access the greatest proposal ID
-    // - there are public methods that return several proposals. For those, it
-    // is useful to have them ordered.
-    config.btree_map(&[
-        ".ic_sns_governance.pb.v1.Governance.neurons",
-        ".ic_sns_governance.pb.v1.Governance.proposals",
-    ]);
+    // Use BTreeMap for all maps to enforce determinism and to be able to use reverse
+    // iterators.
+    config.btree_map(&["."]);
     config.out_dir("gen");
     config.extern_path(".ic_base_types.pb.v1", "::ic-base-types");
     config.extern_path(".ic_ledger.pb.v1", "::ledger-canister::protobuf");
@@ -623,6 +617,10 @@ fn main() {
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ListNeuronsResponse",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
+        "ic_sns_governance.pb.v1.ListNervousSystemFunctionsResponse",
         "#[derive(candid::CandidType, candid::Deserialize)]",
     );
 

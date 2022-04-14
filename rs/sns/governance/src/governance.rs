@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::btree_map::BTreeMap;
+use std::collections::btree_map::{BTreeMap, Entry};
 use std::collections::btree_set::BTreeSet;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
@@ -20,11 +20,12 @@ use crate::pb::v1::{
     },
     neuron::{DissolveState, Followees},
     proposal, Ballot, CallCanisterMethod, DefaultFollowees, Empty, GetNeuron, GetNeuronResponse,
-    GetProposal, GetProposalResponse, Governance as GovernanceProto, GovernanceError, ListNeurons,
-    ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron, ManageNeuronResponse,
-    NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
-    NeuronPermissionType, Proposal, ProposalData, ProposalDecisionStatus, ProposalId,
-    ProposalRewardStatus, RewardEvent, Tally, UpgradeSnsControlledCanister, Vote,
+    GetProposal, GetProposalResponse, Governance as GovernanceProto, GovernanceError,
+    ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
+    ListProposalsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters, Neuron,
+    NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
+    ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RewardEvent, Tally,
+    UpgradeSnsControlledCanister, Vote,
 };
 use ic_base_types::PrincipalId;
 use ledger_canister::{AccountIdentifier, Subaccount};
@@ -37,8 +38,7 @@ use crate::neuron::{NeuronState, RemovePermissionsStatus, MAX_LIST_NEURONS_RESUL
 use crate::pb::v1::manage_neuron::{AddNeuronPermissions, RemoveNeuronPermissions};
 use crate::pb::v1::manage_neuron_response::{DisburseMaturityResponse, MergeMaturityResponse};
 use crate::pb::v1::proposal::Action;
-use crate::pb::v1::WaitForQuietState;
-
+use crate::pb::v1::{ExecuteNervousSystemFunction, NervousSystemFunction, WaitForQuietState};
 use crate::proposal::{
     validate_call_canister_method, validate_proposal, MAX_LIST_PROPOSAL_RESULTS,
     MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
@@ -1308,7 +1308,7 @@ impl Governance {
             reject_cost_e8s: data.reject_cost_e8s,
             proposal: new_proposal,
             proposal_creation_timestamp_seconds: data.proposal_creation_timestamp_seconds,
-            ballots: HashMap::new(), // To reduce size of payload, exclude ballots
+            ballots: BTreeMap::new(), // To reduce size of payload, exclude ballots
             latest_tally: data.latest_tally.clone(),
             decided_timestamp_seconds: data.decided_timestamp_seconds,
             executed_timestamp_seconds: data.executed_timestamp_seconds,
@@ -1397,6 +1397,17 @@ impl Governance {
         // Ignore the keys and clone to a vector.
         ListProposalsResponse {
             proposals: proposal_info,
+        }
+    }
+
+    pub fn list_nervous_system_functions(&self) -> ListNervousSystemFunctionsResponse {
+        ListNervousSystemFunctionsResponse {
+            functions: self
+                .proto
+                .id_to_nervous_system_functions
+                .values()
+                .cloned()
+                .collect(),
         }
     }
 
@@ -1548,16 +1559,22 @@ impl Governance {
             proposal::Action::Motion(_) => Ok(()),
 
             proposal::Action::ManageNervousSystemParameters(params) => {
-                self.perform_manage_nervous_system_parameters_action(params)
+                self.perform_manage_nervous_system_parameters(params)
             }
             proposal::Action::UpgradeSnsControlledCanister(params) => {
                 self.perform_upgrade_sns_controlled_canister(params).await
             }
-            proposal::Action::ExecuteNervousSystemFunction(_) => {
-                todo!();
+            proposal::Action::ExecuteNervousSystemFunction(call) => {
+                self.perform_execute_nervous_system_function(call).await
             }
             proposal::Action::CallCanisterMethod(params) => {
                 perform_call_canister_method(&*self.env, params).await
+            }
+            proposal::Action::AddNervousSystemFunction(nervous_system_function) => {
+                self.perform_add_nervous_system_function(nervous_system_function)
+            }
+            proposal::Action::RemoveNervousSystemFunction(id) => {
+                self.perform_remove_nervous_system_function(id)
             }
             // This should not be possible, because Proposal validation is performed when
             // a proposal is first made.
@@ -1574,8 +1591,65 @@ impl Governance {
         self.set_proposal_execution_status(proposal_id, result);
     }
 
+    fn perform_add_nervous_system_function(
+        &mut self,
+        nervous_system_function: NervousSystemFunction,
+    ) -> Result<(), GovernanceError> {
+        let id = nervous_system_function.id;
+        let entry = self.proto.id_to_nervous_system_functions.entry(id);
+        match entry {
+            Entry::Vacant(v) => {
+                v.insert(nervous_system_function);
+                Ok(())
+            },
+            Entry::Occupied(_) =>
+                Err(GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    format!("Failed to add NervousSystemFunction. There is already a NervousSystemFunction with id: {}", id),
+            )),
+        }
+    }
+
+    fn perform_remove_nervous_system_function(&mut self, id: u64) -> Result<(), GovernanceError> {
+        let entry = self.proto.id_to_nervous_system_functions.entry(id);
+        match entry {
+            Entry::Vacant(_) =>
+                Err(GovernanceError::new_with_message(
+                    ErrorType::NotFound,
+                    format!("Failed to remove NervousSystemFunction. There is no NervousSystemFunction with id: {}", id),
+            )),
+            Entry::Occupied(o) => {
+                o.remove();
+                Ok(())
+            },
+        }
+    }
+
+    async fn perform_execute_nervous_system_function(
+        &self,
+        call: ExecuteNervousSystemFunction,
+    ) -> Result<(), GovernanceError> {
+        match self
+            .proto
+            .id_to_nervous_system_functions
+            .get(&call.function_id)
+        {
+            None => Err(GovernanceError::new_with_message(
+                ErrorType::NotFound,
+                format!(
+                    "There is no NervousSystemFunction with id: {}",
+                    call.function_id
+                ),
+            )),
+            Some(function) => {
+                perform_execute_nervous_system_function_call(&*self.env, function.clone(), call)
+                    .await
+            }
+        }
+    }
+
     /// Execute a ManageNervousSystemParameters proposal by updating Governance's NervousSystemParameters
-    fn perform_manage_nervous_system_parameters_action(
+    fn perform_manage_nervous_system_parameters(
         &mut self,
         proposed_params: NervousSystemParameters,
     ) -> Result<(), GovernanceError> {
@@ -1813,7 +1887,7 @@ impl Governance {
         // time of the proposal (i.e., now).
         //
         // The electoral roll to put into the proposal.
-        let mut electoral_roll = HashMap::<String, Ballot>::new();
+        let mut electoral_roll = BTreeMap::<String, Ballot>::new();
         let mut total_power: u128 = 0;
         let max_dissolve_delay = self
             .nervous_system_parameters()
@@ -1915,7 +1989,7 @@ impl Governance {
     // the action) and 'neurons' (which contains a mapping of followers
     // to followees).
     fn cast_vote_and_cascade_follow(
-        ballots: &mut HashMap<String, Ballot>,
+        ballots: &mut BTreeMap<String, Ballot>,
         voting_neuron_id: &NeuronId,
         vote_of_neuron: Vote,
         action: &Action,
@@ -3159,6 +3233,85 @@ async fn stop_canister(
     }
 }
 
+fn unpack_execute_nervous_system_function(
+    function: NervousSystemFunction,
+) -> Result<(CanisterId, String), GovernanceError> {
+    let NervousSystemFunction {
+        id: _,
+        target_canister_id,
+        target_method_name,
+        validator_canister_id: _,
+        validator_method_name: _,
+    } = function;
+
+    let mut defects = vec![];
+
+    // Validate the target_canister_id field.
+    let target_canister_id = match target_canister_id {
+        None => {
+            defects.push("target_canister_id field was not populated.".to_string());
+            None
+        }
+        Some(target_canister_id) => match CanisterId::new(target_canister_id) {
+            Err(err) => {
+                defects.push(format!("target_canister_id was invalid: {}", err));
+                None
+            }
+            Ok(target_canister_id) => Some(target_canister_id),
+        },
+    };
+
+    // Validate the target_method_name field.
+    if target_method_name.is_none() || target_method_name.as_ref().unwrap().is_empty() {
+        defects.push("target_method_name was empty.".to_string());
+    }
+
+    if !defects.is_empty() {
+        return Err(GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            format!(
+                "ExecuteNervousSystemFunction was invalid for the following reason(s):\n{}",
+                defects.join("\n")
+            ),
+        ));
+    }
+
+    Ok((target_canister_id.unwrap(), target_method_name.unwrap()))
+}
+
+async fn perform_execute_nervous_system_function_call(
+    env: &dyn Environment,
+    function: NervousSystemFunction,
+    call: ExecuteNervousSystemFunction,
+) -> Result<(), GovernanceError> {
+    let (canister_id, method_name) = unpack_execute_nervous_system_function(function)?;
+
+    let result = env
+        .call_canister(canister_id, &method_name, call.payload)
+        .await;
+
+    // Convert result.
+    match result {
+        Err(err) => Err(GovernanceError::new_with_message(
+            ErrorType::External,
+            format!("Canister method call failed: {:?}", err),
+        )),
+
+        Ok(_reply) => {
+            // TODO: Do something with reply. E.g. store it in the proposal,
+            // and/or deserialize it so that we can detect whether there was an
+            // application-level error, as opposed to a communication
+            // error. Detecting application error could be done as follows:
+            //
+            //   candid::!Decode(&reply, Result<String, String>)
+            //
+            // This could then be converted into a Result<(), GovernanceError>.
+            // For now, any reply is considered a success.
+            Ok(())
+        }
+    }
+}
+
 async fn perform_call_canister_method(
     env: &dyn Environment,
     call: CallCanisterMethod,
@@ -3279,7 +3432,7 @@ mod test {
         let neuron_id = NeuronId { id: "A".into() };
 
         // Populate default_followees with a neuron that does not exist yet.
-        let mut action_id_to_followees = HashMap::new();
+        let mut action_id_to_followees = BTreeMap::new();
         action_id_to_followees.insert(
             1, // action ID.
             Followees {
