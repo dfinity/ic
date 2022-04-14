@@ -37,7 +37,7 @@ pub type CanisterHttpRequestId = CallbackId;
 pub struct CanisterHttpRequestContext {
     pub request: Request,
     pub url: String,
-    pub headers: Vec<ic_ic00_types::CanisterHttpHeader>,
+    pub headers: Vec<CanisterHttpHeader>,
     pub body: Option<Vec<u8>>,
     pub http_method: ic_ic00_types::HttpMethodType,
     pub transform_method_name: Option<String>,
@@ -80,7 +80,7 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
             headers: context
                 .headers
                 .into_iter()
-                .map(|h| ic_ic00_types::CanisterHttpHeader {
+                .map(|h| CanisterHttpHeader {
                     name: h.name,
                     value: h.value,
                 })

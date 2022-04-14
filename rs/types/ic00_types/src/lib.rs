@@ -563,7 +563,7 @@ impl Payload<'_> for SetControllerArgs {}
 #[derive(CandidType, Deserialize, Debug)]
 pub struct CanisterHttpRequestArgs {
     pub url: String,
-    pub headers: Vec<CanisterHttpHeader>,
+    pub headers: Vec<HttpHeader>,
     pub body: Option<Vec<u8>>,
     pub http_method: HttpMethodType,
     pub transform_method_name: Option<String>,
@@ -577,12 +577,12 @@ impl Payload<'_> for CanisterHttpRequestArgs {}
 /// value: text;
 /// })`;
 #[derive(CandidType, Clone, Deserialize, Debug, Eq, Hash, PartialEq, Serialize)]
-pub struct CanisterHttpHeader {
+pub struct HttpHeader {
     pub name: String,
     pub value: String,
 }
 
-impl Payload<'_> for CanisterHttpHeader {}
+impl Payload<'_> for HttpHeader {}
 
 /// Represents the response for a canister http request.
 /// Struct used for encoding/decoding
@@ -594,7 +594,7 @@ impl Payload<'_> for CanisterHttpHeader {}
 #[derive(CandidType, Deserialize, Debug, PartialEq)]
 pub struct CanisterHttpResponsePayload {
     pub status: u64,
-    pub headers: Vec<CanisterHttpHeader>,
+    pub headers: Vec<HttpHeader>,
     pub body: Vec<u8>,
 }
 
