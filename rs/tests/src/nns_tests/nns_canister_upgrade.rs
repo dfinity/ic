@@ -28,13 +28,13 @@ use candid::Encode;
 use canister_test::Canister;
 use dfn_candid::candid_one;
 
+use ic_ic00_types::{CanisterIdRecord, CanisterStatusResult};
 use ic_nns_common::pb::v1::MethodAuthzInfo;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_test_utils::governance::{
     append_inert, upgrade_nns_canister_by_proposal, upgrade_nns_canister_with_arg_by_proposal,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_types::ic00::{CanisterIdRecord, CanisterStatusResult};
 
 pub fn config() -> InternetComputer {
     InternetComputer::new().add_fast_single_node_subnet(SubnetType::System)

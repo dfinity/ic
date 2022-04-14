@@ -1,6 +1,7 @@
 use ic_base_types::NumSeconds;
 use ic_config::subnet_config::SubnetConfigs;
 use ic_cycles_account_manager::{IngressInductionCost, IngressInductionCostError};
+use ic_ic00_types::{CanisterIdRecord, Payload, IC_00};
 use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::SystemState;
@@ -14,10 +15,8 @@ use ic_test_utilities::{
     with_test_replica_logger,
 };
 use ic_types::{
-    ic00::{CanisterIdRecord, Payload, IC_00},
-    messages::SignedIngressContent,
-    nominal_cycles::NominalCycles,
-    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+    messages::SignedIngressContent, nominal_cycles::NominalCycles, CanisterId, ComputeAllocation,
+    Cycles, MemoryAllocation, NumBytes, NumInstructions,
 };
 use std::{convert::TryFrom, time::Duration};
 

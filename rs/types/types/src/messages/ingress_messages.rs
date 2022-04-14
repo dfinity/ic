@@ -2,7 +2,6 @@
 
 use super::{MessageId, RawHttpRequestVal, EXPECTED_MESSAGE_ID_LENGTH};
 use crate::{
-    ic00::IC_00,
     messages::message_id::hash_of_map,
     messages::{
         Authentication, HasCanisterId, HttpCallContent, HttpCanisterUpdate, HttpRequest,
@@ -10,6 +9,7 @@ use crate::{
     },
     CanisterId, CountBytes, PrincipalId, SubnetId, Time, UserId,
 };
+use ic_ic00_types::IC_00;
 use ic_protobuf::{
     log::ingress_message_log_entry::v1::IngressMessageLogEntry,
     proxy::{try_from_option_field, ProxyDecodeError},

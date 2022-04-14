@@ -493,6 +493,7 @@ mod tests {
     use crate::tests::{access_ingress_pool, setup, setup_registry, setup_with_params};
     use assert_matches::assert_matches;
     use ic_crypto::crypto_hash;
+    use ic_ic00_types::{CanisterIdRecord, Payload, IC_00};
     use ic_interfaces::{
         artifact_pool::UnvalidatedArtifact,
         execution_environment::IngressHistoryError,
@@ -514,7 +515,6 @@ mod tests {
     use ic_types::{
         artifact::{IngressMessageAttribute, IngressMessageId},
         batch::IngressPayload,
-        ic00::{CanisterIdRecord, Payload, IC_00},
         messages::{MessageId, SignedIngress},
         time::current_time_and_expiry_time,
         Height, RegistryVersion,

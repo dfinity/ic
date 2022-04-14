@@ -1,8 +1,8 @@
 use ic_config::subnet_config::{CyclesAccountManagerConfig, SubnetConfigs};
 use ic_error_types::ErrorCode;
+use ic_ic00_types::CanisterSettingsArgs;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::StateMachine;
-use ic_types::ic00::CanisterSettingsArgs;
 use ic_types::{Cycles, PrincipalId, SubnetId};
 
 /// This is a canister that keeps a counter on the heap and exposes various test

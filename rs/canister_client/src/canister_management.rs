@@ -1,7 +1,7 @@
 //! Functions for clients to talk to the Management Canister, a.k.a ic:00.
 use crate::agent::Agent;
 
-use ic_types::ic00::{InstallCodeArgs, Method, Payload, IC_00};
+use ic_ic00_types::{InstallCodeArgs, Method, Payload, IC_00};
 
 impl Agent {
     // Ships a binary wasm module to a canister.

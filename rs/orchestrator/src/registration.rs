@@ -178,7 +178,7 @@ impl NodeRegistration {
             transport_tls_cert: protobuf_to_vec(node_pub_keys.tls_certificate.unwrap()),
             idkg_dealing_encryption_pk: node_pub_keys
                 .idkg_dealing_encryption_pk
-                .map(|pk| protobuf_to_vec(pk)),
+                .map(protobuf_to_vec),
             xnet_endpoint: msg_routing_config_to_endpoint(
                 &self.log,
                 &self.node_config.message_routing,

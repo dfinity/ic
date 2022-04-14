@@ -27,6 +27,7 @@ criterion = "0.3"
 ed25519-dalek = "1.0.1"
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-config = { path = "../config" }
+ic-ic00-types = { path = "../types/ic00_types" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }

@@ -20,7 +20,7 @@ use ic_types::p2p;
 #[macro_use]
 extern crate ic_admin_derive;
 use ic_consensus::dkg::make_registry_cup;
-use ic_ic00_types::CanisterInstallMode;
+use ic_ic00_types::{CanisterIdRecord, CanisterInstallMode};
 use ic_interfaces::registry::RegistryClient;
 use ic_nervous_system_root::{
     AddCanisterProposal, CanisterAction, CanisterStatusResult, ChangeCanisterProposal,
@@ -88,7 +88,6 @@ use ic_registry_transport::Error;
 use ic_types::{
     consensus::{catchup::CUPWithOriginalProtobuf, HasHeight},
     crypto::{threshold_sig::ThresholdSigPublicKey, KeyPurpose},
-    ic00::CanisterIdRecord,
     CanisterId, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId,
 };
 use prost::Message;

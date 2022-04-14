@@ -351,6 +351,7 @@ mod tests {
     use super::*;
     use crate::consensus::batch_delivery::generate_responses_to_setup_initial_dkg_calls;
     use crate::consensus::mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
+    use ic_ic00_types::SetupInitialDKGResponse;
     use ic_interfaces_state_manager::Labeled;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
@@ -369,7 +370,6 @@ mod tests {
         crypto::threshold_sig::ni_dkg::{
             NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet, NiDkgTranscript,
         },
-        ic00::SetupInitialDKGResponse,
         messages::{CallbackId, Request},
     };
     use std::collections::BTreeMap;

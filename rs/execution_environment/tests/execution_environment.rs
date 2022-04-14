@@ -6,6 +6,10 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::{
     ExecutionEnvironment, ExecutionEnvironmentImpl, Hypervisor, IngressHistoryWriterImpl,
 };
+use ic_ic00_types::{
+    self as ic00, CanisterHttpRequestArgs, CanisterIdRecord, CanisterStatusResultV2, EmptyBlob,
+    InstallCodeArgs, Method, Payload as Ic00Payload, IC_00,
+};
 use ic_ic00_types::{CanisterInstallMode, CanisterStatusType, HttpMethodType};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_interfaces::{
@@ -49,11 +53,6 @@ use ic_test_utilities::{
     with_test_replica_logger,
 };
 use ic_types::{
-    ic00,
-    ic00::{
-        CanisterHttpRequestArgs, CanisterIdRecord, CanisterStatusResultV2, EmptyBlob,
-        InstallCodeArgs, Method, Payload as Ic00Payload, IC_00,
-    },
     ingress::{IngressStatus, WasmResult},
     messages::{
         CallbackId, MessageId, Payload, RejectContext, RequestOrResponse, Response,

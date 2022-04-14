@@ -2,21 +2,16 @@ use assert_matches::assert_matches;
 use candid::Encode;
 use ic_config::Config;
 use ic_error_types::{ErrorCode, RejectCode};
-use ic_ic00_types::{CanisterInstallMode, CanisterStatusType};
+use ic_ic00_types::{
+    self as ic00, CanisterIdRecord, CanisterInstallMode, CanisterStatusResultV2,
+    CanisterStatusType, EmptyBlob, InstallCodeArgs, Method, Payload, SetControllerArgs, IC_00,
+};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replica_tests as utils;
 use ic_replica_tests::assert_reject;
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities::universal_canister::{call_args, management, wasm, UNIVERSAL_CANISTER_WASM};
-use ic_types::{
-    ic00,
-    ic00::{
-        CanisterIdRecord, CanisterStatusResultV2, EmptyBlob, InstallCodeArgs, Method, Payload,
-        SetControllerArgs, IC_00,
-    },
-    ingress::WasmResult,
-    CanisterId, ComputeAllocation, Cycles, NumBytes, PrincipalId,
-};
+use ic_types::{ingress::WasmResult, CanisterId, ComputeAllocation, Cycles, NumBytes, PrincipalId};
 use maplit::btreeset;
 use std::{collections::BTreeSet, str::FromStr};
 

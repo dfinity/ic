@@ -1,10 +1,8 @@
+use ic_ic00_types::{CanisterIdRecord, EmptyBlob, Method, Payload, IC_00};
 use ic_replica_tests as utils;
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities::universal_canister::{call_args, wasm};
-use ic_types::{
-    ic00::{CanisterIdRecord, EmptyBlob, Method, Payload, IC_00},
-    Cycles,
-};
+use ic_types::Cycles;
 
 const BALANCE_EPSILON: Cycles = Cycles::new(2_000_000u128);
 const CANISTER_CREATION_FEE: Cycles = Cycles::new(1_000_000_000_000);

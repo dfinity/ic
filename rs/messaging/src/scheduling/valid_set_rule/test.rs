@@ -1,4 +1,5 @@
 use super::*;
+use ic_ic00_types::IC_00;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::testing::CanisterQueuesTesting;
@@ -21,7 +22,6 @@ use ic_test_utilities::{
     with_test_replica_logger,
 };
 use ic_types::{
-    ic00::IC_00,
     ingress::IngressStatus,
     messages::{MessageId, SignedIngressContent},
     CanisterId,

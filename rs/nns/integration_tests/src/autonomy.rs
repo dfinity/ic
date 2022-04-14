@@ -4,10 +4,10 @@
 use assert_matches::assert_matches;
 use dfn_candid::candid_multi_arity;
 use ic_error_types::ErrorCode;
+use ic_ic00_types::CanisterIdRecord;
 use ic_nns_test_utils::itest_helpers::{
     local_test_on_nns_subnet, NnsCanisters, NnsInitPayloadsBuilder,
 };
-use ic_types::ic00::CanisterIdRecord;
 
 #[test]
 fn test_that_the_anonymous_user_cannot_stop_any_nns_canister() {

@@ -6,6 +6,7 @@ edition = "2018"
 [dependencies]
 hex = "0.4.2"
 ic-base-types = { path = "../types/base_types" }
+ic-ic00-types = { path = "../types/ic00_types" }
 ic-logger = { path = "../monitoring/logger" }
 ic-protobuf = { path = "../protobuf" }
 ic-replicated-state = { path = "../replicated_state" }

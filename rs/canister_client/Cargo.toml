@@ -11,6 +11,7 @@ ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ecdsa-secp256k1 = { path = "../crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1", package = "ic-crypto-internal-basic-sig-ecdsa-secp256k1"}
 ic-interfaces = { path = "../interfaces" }
 ic-protobuf = { path = "../protobuf" }
+ic-ic00-types = { path = "../types/ic00_types" }
 ic-types = { path = "../types/types" }
 async-trait = "0.1.36"
 bytes = "1.0.1"

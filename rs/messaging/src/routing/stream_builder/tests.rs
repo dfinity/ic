@@ -1,6 +1,7 @@
 use super::*;
 use ic_base_types::NumSeconds;
 use ic_error_types::RejectCode;
+use ic_ic00_types::Method;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -21,7 +22,6 @@ use ic_test_utilities::{
     with_test_replica_logger,
 };
 use ic_types::{
-    ic00::Method,
     messages::{
         CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response,
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64,

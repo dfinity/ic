@@ -1,10 +1,8 @@
 use super::CanisterId;
 
 use hex::decode;
-use ic_ic00_types::CanisterInstallMode;
+use ic_ic00_types::{self as ic00, CanisterInstallMode, Payload};
 use ic_types::{
-    ic00,
-    ic00::Payload,
     messages::{SignedIngress, UserQuery},
     time::current_time_and_expiry_time,
     PrincipalId, UserId,
