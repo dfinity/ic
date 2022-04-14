@@ -3,9 +3,10 @@
 use ic_consensus_message::ConsensusMessageHashable;
 use ic_ecdsa_object::ecdsa_msg_hash;
 use ic_types::{
-    artifact::*, canister_http::CanisterHttpResponseShare,
-    consensus::certification::CertificationMessageHash, consensus::ecdsa::EcdsaMessageAttribute,
-    crypto::CryptoHashOf, messages::SignedRequestBytes, CountBytes,
+    artifact::*, canister_http::CanisterHttpResponseAttribute,
+    canister_http::CanisterHttpResponseShare, consensus::certification::CertificationMessageHash,
+    consensus::ecdsa::EcdsaMessageAttribute, crypto::CryptoHashOf, messages::SignedRequestBytes,
+    CountBytes,
 };
 use serde::{Deserialize, Serialize};
 
@@ -173,7 +174,7 @@ impl ArtifactKind for CanisterHttpArtifact {
     type Id = CanisterHttpResponseId;
     type Message = CanisterHttpResponseShare;
     type SerializeAs = CanisterHttpResponseShare;
-    type Attribute = ();
+    type Attribute = CanisterHttpResponseAttribute;
     type Filter = ();
 
     /// This function converts a `CanisterHttpResponseShare` into an advert for a
@@ -184,7 +185,11 @@ impl ArtifactKind for CanisterHttpArtifact {
         let hash = ic_crypto_hash::crypto_hash(msg);
         Advert {
             id: hash.clone(),
-            attribute: (),
+            attribute: CanisterHttpResponseAttribute::Share(
+                msg.content.registry_version,
+                msg.content.id,
+                msg.content.content_hash.clone(),
+            ),
             size,
             integrity_hash: hash.get(),
         }

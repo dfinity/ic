@@ -21,7 +21,7 @@ use crate::{
     crypto::{CryptoHashOf, Signed},
     messages::{CallbackId, Request},
     signature::*,
-    CountBytes, Time,
+    CountBytes, RegistryVersion, Time,
 };
 use ic_error_types::RejectCode;
 use ic_protobuf::{
@@ -190,25 +190,13 @@ pub struct CanisterHttpResponseDivergence {
     pub response_shares: Vec<CanisterHttpResponseShare>,
 }
 
-impl CanisterHttpResponseMetadata {
-    pub fn from_content<F>(content: &CanisterHttpResponse, hash_fn: F) -> Self
-    where
-        F: Fn(&CanisterHttpResponse) -> CryptoHashOf<CanisterHttpResponse>,
-    {
-        Self {
-            id: content.id,
-            timeout: content.timeout,
-            content_hash: hash_fn(content),
-        }
-    }
-}
-
 /// Metadata about some [`CanisterHttpResponseContent`].
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct CanisterHttpResponseMetadata {
     pub id: CanisterHttpRequestId,
     pub timeout: Time,
     pub content_hash: CryptoHashOf<CanisterHttpResponse>,
+    pub registry_version: RegistryVersion,
 }
 
 impl crate::crypto::SignedBytesWithoutDomainSeparator for CanisterHttpResponseMetadata {
@@ -231,4 +219,12 @@ impl CountBytes for CanisterHttpResponseProof {
     fn count_bytes(&self) -> usize {
         size_of::<CanisterHttpResponseProof>()
     }
+}
+
+pub enum CanisterHttpResponseAttribute {
+    Share(
+        RegistryVersion,
+        CallbackId,
+        CryptoHashOf<CanisterHttpResponse>,
+    ),
 }

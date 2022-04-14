@@ -672,7 +672,7 @@ impl<Pool: EcdsaPool + EcdsaGossipPool + Send + Sync> ArtifactClient<EcdsaArtifa
 /// The CanisterHttp Client
 pub struct CanisterHttpClient<Pool> {
     pool: Arc<RwLock<Pool>>,
-    _gossip: Arc<dyn CanisterHttpGossip + Send + Sync>,
+    gossip: Arc<dyn CanisterHttpGossip + Send + Sync>,
 }
 
 impl<Pool: CanisterHttpPool + CanisterHttpGossipPool + Send + Sync> CanisterHttpClient<Pool> {
@@ -682,12 +682,12 @@ impl<Pool: CanisterHttpPool + CanisterHttpGossipPool + Send + Sync> CanisterHttp
     ) -> Self {
         Self {
             pool,
-            _gossip: Arc::new(gossip),
+            gossip: Arc::new(gossip),
         }
     }
 }
 
-impl<Pool: CanisterHttpGossipPool + CanisterHttpGossip + Send + Sync>
+impl<Pool: CanisterHttpPool + CanisterHttpGossipPool + CanisterHttpGossip + Send + Sync>
     ArtifactClient<CanisterHttpArtifact> for CanisterHttpClient<Pool>
 {
     fn check_artifact_acceptance(
@@ -712,11 +712,11 @@ impl<Pool: CanisterHttpGossipPool + CanisterHttpGossip + Send + Sync>
             .get_validated_by_identifier(msg_id)
     }
 
-    fn get_priority_function(&self) -> Option<PriorityFn<CanisterHttpResponseId, ()>> {
-        // TODO: This priority function makes it so that we will unconditionally
-        // drop all incoming messages. We need to implement a proper priority
-        // function for the canister http feature to work at all.
-        Some(Box::new(|_, _| Priority::Drop))
+    fn get_priority_function(
+        &self,
+    ) -> Option<PriorityFn<CanisterHttpResponseId, CanisterHttpResponseAttribute>> {
+        let pool = &*self.pool.read().unwrap();
+        Some(self.gossip.get_priority_function(pool))
     }
 
     fn get_chunk_tracker(&self, _id: &CanisterHttpResponseId) -> Box<dyn Chunkable + Send + Sync> {

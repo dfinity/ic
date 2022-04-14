@@ -1,11 +1,10 @@
 //! Canister Http related public interfaces.
 use crate::artifact_pool::UnvalidatedArtifact;
 use crate::consensus_pool::ConsensusPoolCache;
-use ic_types::crypto::CryptoHashOf;
 use ic_types::{
     artifact::{CanisterHttpResponseId, PriorityFn},
-    canister_http::{CanisterHttpResponseContent, CanisterHttpResponseShare},
-    Height,
+    canister_http::*,
+    crypto::CryptoHashOf,
 };
 
 pub enum CanisterHttpChangeAction {
@@ -57,7 +56,7 @@ pub trait CanisterHttpGossip: Send + Sync {
     fn get_priority_function(
         &self,
         canister_http_pool: &dyn CanisterHttpPool,
-    ) -> PriorityFn<CanisterHttpResponseId, Height>;
+    ) -> PriorityFn<CanisterHttpResponseId, CanisterHttpResponseAttribute>;
 }
 
 pub trait CanisterHttpPoolManager: Send {
@@ -67,8 +66,4 @@ pub trait CanisterHttpPoolManager: Send {
         consensus_cache: &dyn ConsensusPoolCache,
         canister_http_pool: &dyn CanisterHttpPool,
     ) -> CanisterHttpChangeSet;
-}
-
-pub enum CanisterHttpResponseAttribute {
-    None,
 }
