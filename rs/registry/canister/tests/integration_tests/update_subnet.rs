@@ -12,9 +12,10 @@ use ic_nns_test_utils::{
 };
 use ic_protobuf::registry::{
     crypto::v1::EcdsaSigningSubnetList,
-    subnet::v1::{EcdsaConfig, GossipAdvertConfig, GossipConfig, SubnetRecord},
+    subnet::v1::{GossipAdvertConfig, GossipConfig, SubnetRecord},
 };
 use ic_registry_keys::{make_ecdsa_signing_subnet_list_key, make_subnet_record_key};
+use ic_registry_subnet_features::EcdsaConfig;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
 use ic_types::p2p::{
@@ -520,10 +521,13 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
         assert_eq!(
             new_subnet_record,
             SubnetRecord {
-                ecdsa_config: Some(EcdsaConfig {
-                    quadruples_to_create_in_advance: 10,
-                    key_ids: vec!["key_id_1".to_string()],
-                }),
+                ecdsa_config: Some(
+                    EcdsaConfig {
+                        quadruples_to_create_in_advance: 10,
+                        key_ids: vec!["key_id_1".to_string()],
+                    }
+                    .into()
+                ),
                 ..subnet_record
             }
         );

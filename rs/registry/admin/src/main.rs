@@ -57,7 +57,7 @@ use ic_protobuf::registry::{
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
     routing_table::v1::RoutingTable,
-    subnet::v1::{EcdsaConfig, SubnetListRecord, SubnetRecord as SubnetRecordProto},
+    subnet::v1::{SubnetListRecord, SubnetRecord as SubnetRecordProto},
     unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
 use ic_protobuf::registry::{
@@ -79,7 +79,7 @@ use ic_registry_keys::{
     make_subnet_list_record_key, make_subnet_record_key, make_unassigned_nodes_config_record_key,
     NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY,
 };
-use ic_registry_subnet_features::SubnetFeatures;
+use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::Error;
 use ic_types::{
