@@ -5,6 +5,7 @@ edition = "2018"
 
 [dependencies]
 candid = "0.7.4"
+clap = { version = "3.1.6", features = ["derive"] }
 exec = "0.3.1"
 hex = "0.4.2"
 http = "0.2.1"
@@ -43,7 +44,6 @@ serde_cbor = "0.11.1"
 signal-hook = "0.1"
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
 slog-async = { version = "2.5", features = ["nested-values"] }
-structopt = "0.3"
 tar = "0.4.38"
 tempfile = "3.1.0"
 tokio = { version = "1.15.0", features = ["full"] }

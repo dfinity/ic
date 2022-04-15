@@ -1,34 +1,34 @@
 use chrono::{DateTime, Duration};
+use clap::Parser;
 use log_analyzer::*;
 use regex::Regex;
 use std::io::*;
-use structopt::StructOpt;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, StructOpt)]
-#[structopt(name = "ic-starter", about = "Starter.")]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Parser)]
+#[clap(name = "ic-starter", about = "Starter.", version)]
 struct CliArgs {
-    #[structopt(long = "begin", short = "b")]
+    #[clap(long = "begin", short = 'b')]
     begin: String,
 
-    #[structopt(long = "end", short = "e")]
+    #[clap(long = "end", short = 'e')]
     end: String,
 
-    #[structopt(
+    #[clap(
         long = "date-regexp",
-        short = "r",
+        short = 'r',
         default_value = "^(?P<date>[-+:0-9 ]+)"
     )]
     date_regexp: String,
 
-    #[structopt(long = "format", short = "F", default_value = "%Y-%m-%d %H:%M:%S %z")]
+    #[clap(long = "format", short = 'F', default_value = "%Y-%m-%d %H:%M:%S %z")]
     format: String,
 
-    #[structopt(long = "timeout", short = "t", default_value = "30")]
+    #[clap(long = "timeout", short = 't', default_value = "30")]
     timeout: u32,
 }
 
 fn main() {
-    let opts: CliArgs = CliArgs::from_args();
+    let opts: CliArgs = CliArgs::parse();
     let date_re: Regex = Regex::new(&opts.date_regexp).unwrap();
 
     let formula: Formula<'_, String> = re::ranged_within_time(

@@ -7,6 +7,7 @@ edition = "2018"
 [dependencies]
 base64 = "0.11.0"
 bitcoin = "0.27.1"
+clap = { version = "3.1.6", features = ["derive"] }
 hex = "0.4.2"
 ic-btc-adapter-service = { path = "../bitcoin/adapter_service" }
 ic-btc-types-internal = { path = "../bitcoin/types/internal" }
@@ -59,7 +60,6 @@ serde_cbor = "0.11.1"
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
 slog-async = "2.5.0"
 static_assertions = "0.3.4"
-structopt = "0.3"
 tempfile = "3.1.0"
 thread_profiler = { version = "0.3", optional = true }
 tokio = { version = "1.15.0", features = ["full"] }

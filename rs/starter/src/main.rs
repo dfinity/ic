@@ -20,6 +20,7 @@
 //!   - serves metrics at localhost:18080 instead of dumping them at stdout
 
 use anyhow::Result;
+use clap::Parser;
 use ic_config::{
     artifact_pool::ArtifactPoolTomlConfig,
     consensus::ConsensusConfig,
@@ -54,7 +55,6 @@ use std::{
     time::Duration,
 };
 use std::{io, os::unix::process::CommandExt, path::PathBuf, process::Command};
-use structopt::StructOpt;
 use tempfile::TempDir;
 
 const NODE_INDEX: NodeIndex = 100;
@@ -64,7 +64,7 @@ fn main() -> Result<()> {
     let logger = LoggerImpl::new(&LoggerConfig::default(), "starter_slog".to_string());
     let log = logger.root.new(slog::o!("Application" => "starter"));
 
-    let config = CliArgs::from_args().validate()?;
+    let config = CliArgs::parse().validate()?;
     info!(log, "ic-starter. Configuration: {:?}", config);
     let config_path = config.state_dir.join("ic.json5");
     if config_path.as_path().exists() {
@@ -180,8 +180,8 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, StructOpt)]
-#[structopt(name = "ic-starter", about = "Starter.")]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Parser)]
+#[clap(name = "ic-starter", about = "Starter.", version)]
 struct CliArgs {
     /// Path the to replica binary.
     ///
@@ -189,17 +189,17 @@ struct CliArgs {
     /// expected that a config will be found for '--bin replica'. In other
     /// words, it is expected that the starter is invoked from the rs/
     /// directory.
-    #[structopt(long = "replica-path", parse(from_os_str))]
+    #[clap(long = "replica-path", parse(from_os_str))]
     replica_path: Option<PathBuf>,
 
     /// Version of the replica binary.
-    #[structopt(long = "replica-version", default_value = "0.8.0")]
+    #[clap(long = "replica-version", default_value = "0.8.0")]
     replica_version: String,
 
     /// Path to the cargo binary. Not optional because there is a default value.
     ///
     /// Unused if --replica-path is present
-    #[structopt(long = "cargo", default_value = "cargo")]
+    #[clap(long = "cargo", default_value = "cargo")]
     cargo_bin: String,
 
     /// Options to pass to cargo, such as "--release". Not optional because
@@ -209,13 +209,13 @@ struct CliArgs {
     /// instance: cargo run ic-starter -- '--cargo-opts=--release --quiet'
     ///
     /// Unused if --replica-path is present
-    #[structopt(long = "cargo-opts", default_value = "")]
+    #[clap(long = "cargo-opts", default_value = "")]
     cargo_opts: String,
 
     /// Path to the directory containing all state for this replica. (default: a
     /// temp directory that will be deleted immediately when the replica
     /// stops).
-    #[structopt(long = "state-dir", parse(from_os_str))]
+    #[clap(long = "state-dir", parse(from_os_str))]
     state_dir: Option<PathBuf>,
 
     /// The http port of the public API.
@@ -224,14 +224,14 @@ struct CliArgs {
     /// used.
     ///
     /// This argument is incompatible with --http-port-file.
-    #[structopt(long = "http-port")]
+    #[clap(long = "http-port")]
     http_port: Option<u16>,
 
     /// The http listening address of the public API.
     ///
     /// If not specified, and if --http-port-file is empty, then 127.0.0.1:8080
     /// will be used.
-    #[structopt(long = "http-listen-addr")]
+    #[clap(long = "http-listen-addr")]
     http_listen_addr: Option<SocketAddr>,
 
     /// The file where the chosen port of the public api will be written to.
@@ -239,62 +239,62 @@ struct CliArgs {
     /// at start time.
     ///
     /// This argument is incompatible with --http-port.
-    #[structopt(long = "http-port-file", parse(from_os_str))]
+    #[clap(long = "http-port-file", parse(from_os_str))]
     http_port_file: Option<PathBuf>,
 
     /// Arg to control whitelist for creating funds which is either set to "*"
     /// or "".
-    #[structopt(short = "-c", long = "create-funds-whitelist")]
+    #[clap(short = 'c', long = "create-funds-whitelist")]
     provisional_whitelist: Option<String>,
 
     /// Run replica with the provided log level. Default is Warning
-    #[structopt(long = "log-level",
+    #[clap(long = "log-level",
                 possible_values = &["critical", "error", "warning", "info", "debug", "trace"],
-                case_insensitive = true)]
+                ignore_case = true)]
     log_level: Option<String>,
 
     /// Metrics port. Default is None, i.e. periodically dump metrics on stdout.
-    #[structopt(long = "metrics-port")]
+    #[clap(long = "metrics-port")]
     metrics_port: Option<u16>,
 
     /// Metrics address. Use this in preference to metrics-port
-    #[structopt(long = "metrics-addr")]
+    #[clap(long = "metrics-addr")]
     metrics_addr: Option<SocketAddr>,
 
     /// Unit delay for blockmaker (in milliseconds).
     /// If running integration tests locally (e.g. ic-ref-test),
     /// setting this to 100ms results in faster execution (and higher
     /// CPU consumption).
-    #[structopt(long = "unit-delay-millis")]
+    #[clap(long = "unit-delay-millis")]
     unit_delay_millis: Option<u64>,
 
     /// Initial delay for notary (in milliseconds).
     /// If running integration tests locally (e.g. ic-ref-test),
     /// setting this to 100ms results in faster execution (and higher
     /// CPU consumption).
-    #[structopt(long = "initial-notary-delay-millis")]
+    #[clap(long = "initial-notary-delay-millis")]
     initial_notary_delay_millis: Option<u64>,
 
     /// DKG interval length (in number of blocks).
-    #[structopt(long = "dkg-interval-length")]
+    #[clap(long = "dkg-interval-length")]
     dkg_interval_length: Option<u64>,
 
     /// Whether or not to detect and warn of starvations in consensus.
-    #[structopt(long = "detect-consensus-starvation")]
+    #[clap(long = "detect-consensus-starvation")]
     detect_consensus_starvation: Option<bool>,
 
     /// The backend DB used by Consensus, can be rocksdb or lmdb.
-    #[structopt(long = "consensus-pool-backend",
+    #[clap(long = "consensus-pool-backend",
                 possible_values = &["lmdb", "rocksdb"])]
     consensus_pool_backend: Option<String>,
 
     /// Subnet features
-    #[structopt(long = "subnet-features",
-                possible_values = &["ecdsa_signatures", "canister_sandboxing", "http_requests", "bitcoin_testnet_feature"])]
+    #[clap(long = "subnet-features",
+                possible_values = &["ecdsa_signatures", "canister_sandboxing", "http_requests", "bitcoin_testnet_feature"],multiple_values(true))]
     subnet_features: Vec<String>,
 
     /// Subnet type
-    #[structopt(long = "subnet-type",
+    #[clap(long = "subnet-type",
                 possible_values = &["application", "verified_application", "system"])]
     subnet_type: Option<String>,
 }

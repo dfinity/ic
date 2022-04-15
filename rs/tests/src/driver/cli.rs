@@ -1,34 +1,38 @@
 use anyhow::{bail, Result};
+use clap::Parser;
 use humantime::parse_duration;
 use ic_types::ReplicaVersion;
 use regex::Regex;
 use std::{convert::TryFrom, path::PathBuf, str::FromStr, time::Duration};
-use structopt::StructOpt;
 use url::Url;
 
 const RND_SEED_DEFAULT: u64 = 42;
 
-#[derive(StructOpt, Debug)]
-#[structopt(name = "prod-test-driver", about = "Production Test Driver.")]
+#[derive(Parser, Debug)]
+#[clap(
+    name = "prod-test-driver",
+    override_help = "Production Test Driver.",
+    version
+)]
 pub struct CliArgs {
-    #[structopt(
+    #[clap(
         long = "log-base-dir",
-        about = "If set, specifies where to write demultiplexed test-specific logs."
+        help = "If set, specifies where to write demultiplexed test-specific logs."
     )]
     log_base_dir: Option<PathBuf>,
 
-    #[structopt(
+    #[clap(
         long = "log-level",
-        about = "One of TRACE, DEBUG, INFO, WARN, or ERROR. (Default: Info)"
+        help = "One of TRACE, DEBUG, INFO, WARN, or ERROR. (Default: Info)"
     )]
     log_level: Option<String>,
 
-    #[structopt(long = "rand-seed", about = "A 64-bit wide random seed.")]
+    #[clap(long = "rand-seed", help = "A 64-bit wide random seed.")]
     rand_seed: Option<u64>,
 
-    #[structopt(
+    #[clap(
         long = "job-id",
-        about = r#"
+        help = r#"
 A unique string identifying this test run. On CI, this could be the
 CI-Job-Number, e.g.
 
@@ -37,58 +41,58 @@ If not provided, a default of the form `$HOSTNAME-<timestamp>` is used, where
     )]
     job_id: Option<String>,
 
-    #[structopt(
+    #[clap(
         long = "initial-replica-version",
-        about = r#"
+        help = r#"
 The initial replica version. This version must match the version of the guest os
 image that the IC is bootstrapped with. If not provided, the default version is
 used."#
     )]
     initial_replica_version: String,
 
-    #[structopt(
+    #[clap(
         long = "ic-os-img-sha256",
-        about = r#"The sha256 hash sum of the IC-OS image."#
+        help = r#"The sha256 hash sum of the IC-OS image."#
     )]
     ic_os_img_sha256: String,
 
-    #[structopt(
+    #[clap(
         long = "ic-os-img-url",
-        about = r#"The URL of the IC-OS disk image used by default for all IC nodes
+        help = r#"The URL of the IC-OS disk image used by default for all IC nodes
         version."#,
         parse(try_from_str = url::Url::parse)
     )]
     ic_os_img_url: Url,
 
-    #[structopt(
+    #[clap(
         long = "boundary-node-img-sha256",
-        about = r#"The SHA-256 hash of the Boundary Node disk image"#
+        help = r#"The SHA-256 hash of the Boundary Node disk image"#
     )]
     boundary_node_img_sha256: String,
 
-    #[structopt(
+    #[clap(
         long = "boundary-node-img-url",
-        about = r#"The URL of the Boundary Node disk image"#,
+        help = r#"The URL of the Boundary Node disk image"#,
         parse(try_from_str = url::Url::parse)
     )]
     boundary_node_img_url: Url,
 
-    #[structopt(
+    #[clap(
         long = "farm-base-url",
-        about = r#"The base URL of the Farm-service to be used for resource
+        help = r#"The base URL of the Farm-service to be used for resource
         management. (default: https://farm.dfinity.systems)"#,
         parse(try_from_str = url::Url::parse)
     )]
     farm_base_url: Option<Url>,
 
-    #[structopt(
+    #[clap(
         long = "result-file",
         parse(from_os_str),
         help = "If set, specifies where to write results of executed tests."
     )]
     pub result_file: Option<PathBuf>,
 
-    #[structopt(
+    #[clap(
         long = "nns-canister-path",
         parse(from_os_str),
         help = r#"Path to directory containing wasm-files of NNS canisters.
@@ -96,10 +100,10 @@ used."#
     )]
     pub nns_canister_path: Option<PathBuf>,
 
-    #[structopt(long = "suite", help = r#"Mandatory name of a test suite to run."#)]
+    #[clap(long = "suite", help = r#"Mandatory name of a test suite to run."#)]
     pub suite: String,
 
-    #[structopt(
+    #[clap(
         long = "include-pattern",
         help = r#"If set, only tests matching this regex will be excercised
         and all others will be ignored. Note: when `include-pattern` is set,
@@ -107,21 +111,21 @@ used."#
     )]
     pub include_pattern: Option<String>,
 
-    #[structopt(
+    #[clap(
         long = "ignore-pattern",
         help = r#"If set, all tests matching this regex will be ignored,
         i.e. completely omitted by the framework."#
     )]
     pub ignore_pattern: Option<String>,
 
-    #[structopt(
+    #[clap(
         long = "skip-pattern",
         help = r#"If set, all tests matching this regex will be skipped,
         i.e. included in a summary, but not exercised."#
     )]
     pub skip_pattern: Option<String>,
 
-    #[structopt(
+    #[clap(
         long = "authorized-ssh-accounts",
         parse(from_os_str),
         help = r#"Path to directory containing ssh public/private key pairs
@@ -129,21 +133,21 @@ used."#
     )]
     pub authorized_ssh_accounts: Option<PathBuf>,
 
-    #[structopt(
+    #[clap(
         long = "journalbeat-hosts",
         help = r#"A comma-separated list of hostname/port-pairs that journalbeat
         should use as target hosts. (e.g. "host1.target.com:443,host2.target.com:443")"#
     )]
     pub journalbeat_hosts: Option<String>,
 
-    #[structopt(
+    #[clap(
         long = "log-debug-overrides",
         help = r#"A string containing debug overrides in terms of ic.json5.template 
         (e.g. "ic_consensus::consensus::batch_delivery,ic_artifact_manager::processors")"#
     )]
     pub log_debug_overrides: Option<String>,
 
-    #[structopt(
+    #[clap(
     long = "pot-timeout",
     default_value = "600s",
     parse(try_from_str = parse_duration),
@@ -151,9 +155,9 @@ used."#
     )]
     pub pot_timeout: Duration,
 
-    #[structopt(
+    #[clap(
         long = "working-dir",
-        about = "Path to a working directory of the test driver."
+        help = "Path to a working directory of the test driver."
     )]
     working_dir: PathBuf,
 }

@@ -13,8 +13,8 @@ use std::{
 };
 
 use anyhow::{bail, Context, Result};
+use clap::Parser;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use structopt::StructOpt;
 use thiserror::Error;
 use url::Url;
 
@@ -29,121 +29,121 @@ use ic_types::{
     registry::connection_endpoint::ConnectionEndpoint, Height, PrincipalId, ReplicaVersion,
 };
 
-#[derive(StructOpt)]
-#[structopt(name = "ic-prep")]
+#[derive(Parser)]
+#[clap(name = "ic-prep")]
 /// Prepare initial files for an Internet Computer instance.
 ///
 /// See the README.adoc file for more details.
 struct CliArgs {
     /// The version of the Replica being run
-    #[structopt(long, parse(try_from_str = ReplicaVersion::try_from))]
+    #[clap(long, parse(try_from_str = ReplicaVersion::try_from))]
     pub replica_version: Option<ReplicaVersion>,
 
     /// URL from which to download the replica binary
-    #[structopt(long, parse(try_from_str = url::Url::parse))]
+    #[clap(long, parse(try_from_str = url::Url::parse))]
     pub replica_download_url: Option<Url>,
 
     /// sha256-hash of the replica binary in hex.
-    #[structopt(long)]
+    #[clap(long)]
     pub replica_hash: Option<String>,
 
     /// URL from which to download the orchestrator binary
-    #[structopt(long, parse(try_from_str = url::Url::parse))]
+    #[clap(long, parse(try_from_str = url::Url::parse))]
     pub orchestrator_download_url: Option<Url>,
 
     /// sha256-hash of the orchestrator binary in hex.
-    #[structopt(long)]
+    #[clap(long)]
     pub orchestrator_hash: Option<String>,
 
     /// The URL against which a HTTP GET request will return a release
     /// package that corresponds to this version.
-    #[structopt(long, parse(try_from_str = url::Url::parse))]
+    #[clap(long, parse(try_from_str = url::Url::parse))]
     pub release_package_download_url: Option<Url>,
 
     /// The hex-formatted SHA-256 hash of the archive served by
     /// 'release_package_url'. Must be present if release_package_url is
     /// present.
-    #[structopt(long)]
+    #[clap(long)]
     pub release_package_sha256_hex: Option<String>,
 
     /// List of tuples describing the nodes
-    #[structopt(long, parse(try_from_str = parse_nodes_deprecated), group = "node_spec")]
+    #[clap(long, parse(try_from_str = parse_nodes_deprecated), group = "node_spec", multiple_values(true))]
     pub nodes: Vec<Node>,
 
     /// JSON5 node definition
-    #[structopt(long, group = "node_spec")]
+    #[clap(long, group = "node_spec", multiple_values(true))]
     pub node: Vec<Node>,
 
     /// Path to working directory for node states.
-    #[structopt(long, parse(from_os_str))]
+    #[clap(long, parse(from_os_str))]
     pub working_dir: PathBuf,
 
     /// Flows per node.
-    #[structopt(long, parse(try_from_str = parse_flows))]
+    #[clap(long, parse(try_from_str = parse_flows))]
     pub p2p_flows: FlowConfig,
 
     /// Skip generating subnet records
-    #[structopt(long)]
+    #[clap(long)]
     pub no_subnet_records: bool,
 
     /// The index of the subnet that should act as NNS subnet, if any.
-    #[structopt(long)]
+    #[clap(long)]
     pub nns_subnet_index: Option<u64>,
 
     /// Reads a directory containing datacenter's DER keys and a "meta.json"
     /// file containing metainformation for each datacenter.
-    #[structopt(long, parse(from_os_str))]
+    #[clap(long, parse(from_os_str))]
     pub dc_pk_path: Option<PathBuf>,
 
     /// Indicate whether each node operator entry is required to specify a file
     /// that contains the node provider public key of the corresponding node
     /// provider.
-    #[structopt(long)]
+    #[clap(long)]
     pub require_node_provider_key: bool,
 
     /// DKG interval length
     /// Negative integer means the default should be used.
-    #[structopt(long, allow_hyphen_values = true)]
+    #[clap(long, allow_hyphen_values = true)]
     pub dkg_interval_length: Option<i64>,
 
     /// A json-file containing a list of whitelisted principal IDs. A
     /// whitelisted principal is allowed to create canisters on any subnet on
     /// the IC.
-    #[structopt(long, parse(from_os_str))]
+    #[clap(long, parse(from_os_str))]
     pub provisional_whitelist: Option<PathBuf>,
 
     /// The Principal Id of the node operator that is used for all nodes created
     /// in the initial (!) registry. Note that this is unrelated to the node
     /// operators that are specified via the `dc-pk-path`-option. The latter are
     /// used to add new node _after_ the IC has been initialized/bootstrapped.
-    #[structopt(long)]
+    #[clap(long)]
     pub initial_node_operator: Option<PrincipalId>,
 
     /// If an initial node operator is provided, this is the Principal Id that
     /// is set as the node provider of that node operator.
-    #[structopt(long)]
+    #[clap(long)]
     pub initial_node_provider: Option<PrincipalId>,
 
     /// The path to the file which contains the initial set of SSH public keys
     /// to populate the registry with, to give "readonly" access to all the
     /// nodes.
-    #[structopt(long, parse(from_os_str))]
+    #[clap(long, parse(from_os_str))]
     pub ssh_readonly_access_file: Option<PathBuf>,
 
     /// The path to the file which contains the initial set of SSH public keys
     /// to populate the registry with, to give "backup" access to all the
     /// nodes.
-    #[structopt(long, parse(from_os_str))]
+    #[clap(long, parse(from_os_str))]
     pub ssh_backup_access_file: Option<PathBuf>,
 
     /// Maximum size of ingress message in bytes.
     /// Negative integer means the default should be used.
-    #[structopt(long, allow_hyphen_values = true)]
+    #[clap(long, allow_hyphen_values = true)]
     pub max_ingress_bytes_per_message: Option<i64>,
 }
 
 fn main() -> Result<()> {
-    let valid_args = CliArgs::from_args().validate()?;
+    let valid_args = CliArgs::parse().validate()?;
 
     let root_subnet_idx = valid_args.nns_subnet_index.unwrap_or(0);
     let mut topology_config = TopologyConfig::default();

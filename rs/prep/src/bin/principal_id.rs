@@ -1,3 +1,4 @@
+use clap::{ArgEnum, Parser};
 use ic_types::PrincipalId;
 use openssl::pkey;
 use std::{
@@ -6,12 +7,10 @@ use std::{
     io,
     io::Read,
     path::{Path, PathBuf},
-    str::FromStr,
     string::ToString,
 };
-use structopt::StructOpt;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, ArgEnum)]
 enum PemOrDer {
     Pem,
     Der,
@@ -26,17 +25,6 @@ impl ToString for PemOrDerParseError {
     }
 }
 
-impl FromStr for PemOrDer {
-    type Err = PemOrDerParseError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_ascii_lowercase().as_str() {
-            "pem" => Ok(PemOrDer::Pem),
-            "der" => Ok(PemOrDer::Der),
-            _ => Err(PemOrDerParseError(())),
-        }
-    }
-}
-
 impl ToString for PemOrDer {
     fn to_string(&self) -> String {
         match self {
@@ -47,8 +35,8 @@ impl ToString for PemOrDer {
     }
 }
 
-#[derive(StructOpt, Debug)]
-#[structopt(
+#[derive(Parser, Debug)]
+#[clap(
     name = "ic-principal-id",
     about = r#"
 Converts a multitude of formats into principal ids.
@@ -63,18 +51,19 @@ EXAMPLES:
 
   * Producing a human readable version from raw bytes:
       $ ic-principal-id raw < raw_bytes_file
-"#
+"#,
+    version
 )]
 enum CliArgs {
     SelfSigned {
-        #[structopt(short = "i", long = "input", parse(from_os_str))]
+        #[clap(short = 'i', long = "input", parse(from_os_str))]
         file: Option<PathBuf>,
 
-        #[structopt(short = "t", long = "type")]
+        #[clap(arg_enum, short = 't', long = "type")]
         pem_or_der: Option<PemOrDer>,
     },
     Raw {
-        #[structopt(short = "i", long = "input", parse(from_os_str))]
+        #[clap(short = 'i', long = "input", parse(from_os_str))]
         file: Option<PathBuf>,
     },
 }
@@ -139,7 +128,7 @@ fn run_self_signed(fname: Option<PathBuf>, pod: Option<PemOrDer>) -> io::Result<
                 }
                 None => {
                     if let Some(ext) = fname.extension() {
-                        parser = PemOrDer::from_str(ext.to_str().unwrap()).map_err(|_e| {
+                        parser = PemOrDer::from_str(ext.to_str().unwrap(), true).map_err(|_e| {
                             io::Error::new(
                                 io::ErrorKind::InvalidInput,
                                 format!("Can't parse file extension ({}).", fname.display()),
@@ -192,7 +181,7 @@ fn run_raw(fname: Option<PathBuf>) -> io::Result<()> {
 }
 
 fn main() -> io::Result<()> {
-    let args = match CliArgs::from_iter_safe(env::args()) {
+    let args = match CliArgs::try_parse_from(env::args()) {
         Ok(args) => args,
         Err(e) => {
             eprintln!("{}", e);

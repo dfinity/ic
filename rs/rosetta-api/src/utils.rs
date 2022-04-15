@@ -1,13 +1,13 @@
+use clap::Parser;
 use ic_types::PrincipalId;
 use ledger_canister::AccountIdentifier;
 use std::convert::TryFrom;
 use std::str::FromStr;
-use structopt::StructOpt;
 
 /// Some utils for tasks we have to do a lot
 
 fn main() {
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
     for s in opt.convert.into_iter() {
         match PrincipalId::from_str(&s)
             .map_err(|e| e.to_string())
@@ -24,8 +24,9 @@ fn main() {
     }
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Parser)]
+#[clap(version)]
 struct Opt {
-    #[structopt(short = "c", long = "convert_address")]
+    #[clap(short = 'c', long = "convert_address", multiple_values(true))]
     convert: Vec<String>,
 }

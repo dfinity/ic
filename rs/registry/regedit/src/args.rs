@@ -1,26 +1,26 @@
 use anyhow::{bail, Result};
+use clap::Parser;
 use ic_registry_client::client::RegistryVersion;
 use serde_json::Value;
 use std::{collections::HashSet, fs::File, io::BufReader, path::PathBuf};
-use structopt::StructOpt;
 use thiserror::Error;
 use url::Url;
 
 pub type Projection = Vec<String>;
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Parser)]
 pub struct CliArgs {
-    #[structopt(subcommand)]
+    #[clap(subcommand)]
     source: CommandArg,
 }
 
-#[derive(StructOpt, Debug, Clone)]
-#[structopt(name = "ic-regedit", about = "Registry (Local Store) Editor.")]
+#[derive(Parser, Debug, Clone)]
+#[clap(name = "ic-regedit", about = "Registry (Local Store) Editor.", version)]
 pub enum CommandArg {
     Snapshot {
         /// The registry version of the snapshot. (default: latest available
         /// version.)
-        #[structopt(short, long, allow_hyphen_values = true)]
+        #[clap(short, long, allow_hyphen_values = true)]
         version: Option<i64>,
 
         /// Comma-separated list of key prefixes. If provided, only which the
@@ -29,50 +29,50 @@ pub enum CommandArg {
         /// Note: This flag should only be used when inspecting a registry
         /// version on the console as the resulting snapshot is
         /// incomplete.
-        #[structopt(short, long)]
+        #[clap(short, long)]
         keys: Option<String>,
 
         /// Path to the local store (may not be specified together with --url).
-        #[structopt(parse(from_os_str))]
+        #[clap(parse(from_os_str))]
         local_store_path: PathBuf,
     },
     ShowDiff {
         /// The registry version of the snapshot. (default: latest available
         /// version.)
-        #[structopt(short, long, allow_hyphen_values = true)]
+        #[clap(short, long, allow_hyphen_values = true)]
         version: Option<i64>,
 
         /// Path to the local store (may not be specified together with --url).
-        #[structopt(parse(from_os_str))]
+        #[clap(parse(from_os_str))]
         local_store_path: PathBuf,
 
         /// Path to the local store (may not be specified together with --url).
-        #[structopt(parse(from_os_str))]
+        #[clap(parse(from_os_str))]
         snapshot_file: PathBuf,
     },
     ApplyUpdate {
         /// Amend the latest version of the local-store, i.e. overwrite the
         /// latest version.
-        #[structopt(long)]
+        #[clap(long)]
         amend: bool,
 
         /// Path to the local store (may not be specified together with --url).
-        #[structopt(parse(from_os_str))]
+        #[clap(parse(from_os_str))]
         local_store_path: PathBuf,
 
         /// Path to the local store (may not be specified together with --url).
-        #[structopt(parse(from_os_str))]
+        #[clap(parse(from_os_str))]
         snapshot_file: PathBuf,
     },
     CanisterSnapshot {
         /// Url to a node hosting the registry canister (may not be specified
         /// together with --local-store).
-        #[structopt(long, parse(try_from_str = url::Url::parse))]
+        #[clap(long, parse(try_from_str = url::Url::parse))]
         url: Url,
 
         /// The registry version of the snapshot. (default: latest available
         /// version.)
-        #[structopt(short, long, allow_hyphen_values = true)]
+        #[clap(short, long, allow_hyphen_values = true)]
         version: Option<i64>,
 
         /// Comma-separated list of key prefixes by which the content of the
@@ -81,22 +81,22 @@ pub enum CommandArg {
         /// Note: This flag should only be used when inspecting a registry
         /// version on the console as the resulting snapshot is
         /// incomplete.
-        #[structopt(short, long)]
+        #[clap(short, long)]
         keys: Option<String>,
     },
     CanisterShowDiff {
         /// Url to a node hosting the registry canister (may not be specified
         /// together with --local-store).
-        #[structopt(long, parse(try_from_str = url::Url::parse))]
+        #[clap(long, parse(try_from_str = url::Url::parse))]
         url: Url,
 
         /// The registry version of the snapshot. (default: latest available
         /// version.)
-        #[structopt(short, long, allow_hyphen_values = true)]
+        #[clap(short, long, allow_hyphen_values = true)]
         version: Option<i64>,
 
         /// Path to the local store (may not be specified together with --url).
-        #[structopt(parse(from_os_str))]
+        #[clap(parse(from_os_str))]
         snapshot_file: PathBuf,
     },
 }

@@ -4,70 +4,70 @@
 //! persisted state files, diff checkpoints, compute partial state hashes and
 //! checkpoint manifests, import state trees).
 
+use clap::Parser;
 use std::path::PathBuf;
-use structopt::StructOpt;
 
 mod commands;
 
 /// Supported `state_tool` commands and their arguments.
-#[derive(StructOpt, Debug)]
-#[structopt(about = "IC state tool")]
+#[derive(Parser, Debug)]
+#[clap(about = "IC state tool", version)]
 enum Opt {
     /// Computes diff of canonical trees between checkpoints.
-    #[structopt(name = "cdiff")]
+    #[clap(name = "cdiff")]
     CDiff { path_a: PathBuf, path_b: PathBuf },
 
     /// Computes partial state hash that is used for certification.
-    #[structopt(name = "chash")]
+    #[clap(name = "chash")]
     CHash {
         /// Path to a checkpoint.
-        #[structopt(long = "state")]
+        #[clap(long = "state")]
         path: PathBuf,
     },
 
     /// Imports replicated state from an external location.
-    #[structopt(name = "import")]
+    #[clap(name = "import")]
     ImportState {
         /// Path to the state to import.
-        #[structopt(long = "state")]
+        #[clap(long = "state")]
         state: PathBuf,
 
         /// Path to the replica configuration (ic.json).
-        #[structopt(long = "config")]
+        #[clap(long = "config")]
         config: PathBuf,
 
         /// The height to label the state with.
-        #[structopt(long = "height", short = "h")]
+        #[clap(long = "height", short = 'h')]
         height: u64,
     },
 
     /// Computes manifest of a checkpoint.
-    #[structopt(name = "manifest")]
+    #[clap(name = "manifest")]
     Manifest {
         /// Path to a checkpoint.
-        #[structopt(long = "state")]
+        #[clap(long = "state")]
         path: PathBuf,
     },
 
     /// Enumerates persisted states.
-    #[structopt(name = "list")]
+    #[clap(name = "list")]
     ListStates {
         /// Path to the replica configuration (ic.json).
-        #[structopt(long = "config")]
+        #[clap(long = "config")]
         config: PathBuf,
     },
 
     /// Displays a pretty-printed debug view of a state file.
-    #[structopt(name = "decode")]
+    #[clap(name = "decode")]
     Decode {
         /// Path to the file to display.
-        #[structopt(long = "file")]
+        #[clap(long = "file")]
         file: PathBuf,
     },
 }
 
 fn main() {
-    let opt = Opt::from_args();
+    let opt = Parser::parse();
     let result = match opt {
         Opt::CDiff { path_a, path_b } => commands::cdiff::do_diff(path_a, path_b),
         Opt::CHash { path } => commands::chash::do_hash(path),
