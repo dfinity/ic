@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package canister_http.v1;
+
+message HttpHeader {
+  string name = 1;
+  bytes value = 2;
+}
+
+message CanisterHttpRequest {
+  string url = 1;
+  bytes body = 2;
+  repeated HttpHeader headers = 3;
+}
+
+message CanisterHttpResponse {
+  uint64 id = 1;
+  uint64 timeout = 2;
+  CanisterHttpResponseContent content = 3;
+}
+
+message CanisterHttpResponseContent {
+  oneof status {
+    CanisterHttpResponsePayload success = 1;
+    CanisterHttpReject failed = 2;
+  }
+}
+
+message CanisterHttpResponsePayload {
+  uint32 status = 1;
+  repeated HttpHeader headers = 2;
+  bytes body = 3;
+}
+
+message CanisterHttpReject {
+  uint32 reject_code = 1;
+  string message = 2;
+}
+
+message CanisterHttpResponseWithConsensus {
+  CanisterHttpResponse response = 1;
+  bytes hash = 2;
+  uint64 registry_version = 3;
+  bytes signature = 4;
+  repeated bytes signers = 5;
+}

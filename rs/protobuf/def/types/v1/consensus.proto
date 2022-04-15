@@ -4,6 +4,7 @@ syntax = "proto3";
 package types.v1;
 
 import "bitcoin/v1/bitcoin.proto";
+import "canister_http/v1/canister_http.proto";
 import "types/v1/types.proto";
 import "types/v1/dkg.proto";
 import "types/v1/ecdsa.proto";
@@ -39,6 +40,7 @@ message Block {
 	SelfValidatingPayload self_validating_payload = 12;
 	// Only present in summary blocks
 	EcdsaSummaryPayload ecdsa_summary = 13;
+	//CanisterHttpPayload canister_http_payload = 14;
 	bytes payload_hash = 11;
 }
 
@@ -92,6 +94,10 @@ message SelfValidatingPayload {
 
 message XNetPayload {
 	repeated SubnetStreamSlice stream_slices = 1;
+}
+
+message CanisterHttpPayload {
+	repeated canister_http.v1.CanisterHttpResponseWithConsensus payload = 1;
 }
 
 message IngressIdOffset {
