@@ -215,6 +215,7 @@ if [[ "${USE_ICOS_BOUNDARY_NODE_VMs}" == "true" ]]; then
     "$REPO_ROOT"/ic-os/boundary-guestos/scripts/build-deployment.sh \
         --input="$BN_MEDIA_PATH/${deployment}.json" \
         --output="$BN_MEDIA_PATH" \
+        --deployment-type=dev \
         --git-revision=$GIT_REVISION
     echo "-------------------------------------------------------------------------------"
 fi

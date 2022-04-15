@@ -29,6 +29,7 @@ Arguments:
   -c=, --certdir=                       specify directory holding TLS certificates for hosted domain (Default: None i.e. snakeoil/self certified certificate will be used)
   -n=, --nns_urls=                      specify a file that lists on each line a nns url of the form http://[ip]:port this file will override nns urls derived from input json file
        --git-revision=                  git revision for which to prepare the media
+       --deployment-type={prod|dev}        production or development deployment type
   -x,  --debug                enable verbose console output
 '
             exit 1
@@ -57,6 +58,15 @@ Arguments:
             GIT_REVISION="${argument#*=}"
             shift
             ;;
+        --deployment-type=*)
+            DEPLOYMENT_TYPE="${argument#*=}"
+            shift
+            # mark the deployment as a dev/prod
+            if [ ${DEPLOYMENT_TYPE} != "prod" ] && [ ${DEPLOYMENT_TYPE} != "dev" ]; then
+                echo "only prod or dev deployment types supported"
+                exit 1
+            fi
+            ;;
         *)
             echo 'Error: Argument is not supported.'
             exit 1
@@ -70,6 +80,7 @@ OUTPUT="${OUTPUT:=${BASE_DIR}/build-out}"
 SSH="${SSH:=${BASE_DIR}/../../testnet/config/ssh_authorized_keys}"
 CERT_DIR="${CERT_DIR:=""}"
 GIT_REVISION="${GIT_REVISION:=}"
+DEPLOYMENT_TYPE="${DEPLOYMENT_TYPE:="prod"}"
 
 if [[ -z "$GIT_REVISION" ]]; then
     echo "Please provide the GIT_REVISION as env. variable or the command line with --git-revision=<value>"
@@ -221,6 +232,7 @@ function generate_boundary_node_config() {
                 cp "${IC_PREP_DIR}/nns_public_key.pem" "${CONFIG_DIR}/$NODE_PREFIX/nns_public_key.pem"
             fi
             echo "nns_url=${NNS_URL}" >"${CONFIG_DIR}/$NODE_PREFIX/nns.conf"
+            echo ${DEPLOYMENT_TYPE:="prod"} >"${CONFIG_DIR}/$NODE_PREFIX"/deployment_type
         done
     done
 }

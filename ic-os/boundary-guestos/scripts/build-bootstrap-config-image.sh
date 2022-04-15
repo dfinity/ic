@@ -65,6 +65,13 @@ options may be specified:
     "PATH/admin" then it is transferred to "~admin/.ssh/authorized_keys" on
     the target). The presently recognized accounts are: backup, readonly,
     admin and root (the latter one for testing purposes only!)
+
+  --deployment-type [prod|dev]
+    Creates a file named ./deployment_type with contents 'dev|prod' on the
+    config image.  The boundary vm consults this file to perform any runtime
+    change required for enabling a development mode. The default deployment type
+    is 'prod'.
+
 EOF
 }
 
@@ -118,6 +125,14 @@ function build_ic_bootstrap_tar() {
             --accounts_ssh_authorized_keys)
                 ACCOUNTS_SSH_AUTHORIZED_KEYS="$2"
                 ;;
+            --deployment-type)
+                DEPLOYMENT_TYPE="$2"
+                if [ ${DEPLOYMENT_TYPE} != "prod" ] && [ ${DEPLOYMENT_TYPE} != "dev" ]; then
+                    echo "only prod or dev deployment types supported"
+                    usage
+                    exit 1
+                fi
+                ;;
             *)
                 echo "Unrecognized option: $1"
                 usage
@@ -158,9 +173,9 @@ EOF
     if [ "${ACCOUNTS_SSH_AUTHORIZED_KEYS}" != "" ]; then
         cp -r "${ACCOUNTS_SSH_AUTHORIZED_KEYS}" "${BOOTSTRAP_TMPDIR}/accounts_ssh_authorized_keys"
     fi
+    echo ${DEPLOYMENT_TYPE:="prod"} >"${BOOTSTRAP_TMPDIR}/deployment_type"
 
     tar cf "${OUT_FILE}" -C "${BOOTSTRAP_TMPDIR}" .
-
     rm -rf "${BOOTSTRAP_TMPDIR}"
 }
 

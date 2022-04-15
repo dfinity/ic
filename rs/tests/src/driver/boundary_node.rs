@@ -140,7 +140,9 @@ pub fn create_and_upload_config_disk_image(
         .arg("--accounts_ssh_authorized_keys")
         .arg(ssh_authorized_pub_keys_dir)
         .arg("--journalbeat_tags")
-        .arg(format!("system_test {}", group_name));
+        .arg(format!("system_test {}", group_name))
+        .arg("--deployment-type")
+        .arg("dev");
 
     if !boundary_node.nns_node_urls.is_empty() {
         cmd.arg("--nns_url").arg({
