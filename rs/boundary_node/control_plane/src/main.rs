@@ -1,28 +1,29 @@
 //! Internet Computer Boundary Node Control Plane
 //!
 //! See README.md for details.
+use std::convert::TryInto;
+use std::time::Instant;
+use std::{
+    collections::{HashMap, HashSet},
+    fs::{read_dir, remove_file, File},
+    io::{stdout, BufWriter, Write},
+    net::SocketAddr,
+    path::{Path, PathBuf},
+    pin::Pin,
+    process::exit,
+    sync::Arc,
+    time::Duration,
+};
+
 use anyhow::Result;
 use async_trait::async_trait;
-use boundary_node_control_plane::{CanisterRoute, NodeRoute, Routes, SubnetRoute};
+use fix_hidden_lifetime_bug::fix_hidden_lifetime_bug;
 use futures::future::join_all;
 use hyper::{
     body::HttpBody, client::HttpConnector, server::conn::Http, service::service_fn, Body, Client,
     Method, Request, Response, Uri,
 };
 use hyper_tls::HttpsConnector;
-use ic_crypto_utils_basic_sig::conversions::pem::der_to_pem;
-use ic_crypto_utils_threshold_sig::parse_threshold_sig_key;
-use ic_registry_client::client::{
-    create_data_provider, DataProviderConfig, RegistryClient, RegistryClientImpl,
-    RegistryDataProvider,
-};
-use ic_registry_client_helpers::{
-    crypto::CryptoRegistry,
-    node::NodeRegistry,
-    routing_table::RoutingTableRegistry,
-    subnet::{SubnetListRegistry, SubnetRegistry},
-};
-use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use lazy_static::lazy_static;
 use openssl::{
     asn1::Asn1Time,
@@ -36,24 +37,10 @@ use openssl::{
     },
 };
 use prometheus::{
-    register_int_counter, register_int_gauge, Encoder, IntCounter, IntGauge, TextEncoder,
+    exponential_buckets, register_histogram_vec, register_int_counter, register_int_counter_vec,
+    register_int_gauge, Encoder, HistogramVec, IntCounter, IntCounterVec, IntGauge, TextEncoder,
 };
-
-use fix_hidden_lifetime_bug::fix_hidden_lifetime_bug;
 use slog::{error, slog_o, trace, warn, Drain, Logger};
-use std::convert::TryInto;
-
-use std::{
-    collections::{HashMap, HashSet},
-    fs::{read_dir, remove_file, File},
-    io::{stdout, BufWriter, Write},
-    net::SocketAddr,
-    path::{Path, PathBuf},
-    pin::Pin,
-    process::exit,
-    sync::Arc,
-    time::Duration,
-};
 use tokio::{
     net::{TcpListener, TcpStream},
     spawn,
@@ -63,6 +50,21 @@ use tokio::{
 };
 use tokio_openssl::SslStream;
 use url::Url;
+
+use boundary_node_control_plane::{CanisterRoute, NodeRoute, Routes, SubnetRoute};
+use ic_crypto_utils_basic_sig::conversions::pem::der_to_pem;
+use ic_crypto_utils_threshold_sig::parse_threshold_sig_key;
+use ic_registry_client::client::{
+    create_data_provider, DataProviderConfig, RegistryClient, RegistryClientImpl,
+    RegistryDataProvider,
+};
+use ic_registry_client_helpers::{
+    crypto::CryptoRegistry,
+    node::NodeRegistry,
+    routing_table::RoutingTableRegistry,
+    subnet::{SubnetListRegistry, SubnetRegistry},
+};
+use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(3);
 const STATUS_TIMEOUT: Duration = Duration::from_secs(5);
@@ -93,9 +95,17 @@ lazy_static! {
         register_int_gauge!("nodes_down", "Number of nodes which are considered down").unwrap();
     pub static ref STATUS: IntGauge =
         register_int_gauge!("status_good", "Status: 1 == good, 0 == bad").unwrap();
-    pub static ref REGISTRY_POLL_FAILURES: IntCounter = register_int_counter!(
+    pub static ref REGISTRY_POLL_FAILURES: IntCounterVec = register_int_counter_vec!(
         "registry_poll_failures",
-        "Number of times registry polling failed"
+        "Number of times registry polling failed",
+        &["error"]
+    )
+    .unwrap();
+    pub static ref REGISTRY_CLIENT_TIME: HistogramVec = register_histogram_vec!(
+        "registry_client_time",
+        "Histogram of client creation duration",
+        &["error"],
+        exponential_buckets(0.1, 2.0, 20).unwrap()
     )
     .unwrap();
 }
@@ -133,76 +143,7 @@ async fn main() -> Result<()> {
     let _guard = slog_scope::set_global_logger(log.clone());
     STATUS.set(0); // Set status to "bad" until it is "good".
 
-    let metrics_join_handle = if METRICS_PORT.is_present() {
-        // Start metrics server.
-        let (public_key, private_key) = generate_tls_key_pair();
-        let metrics_service = service_fn(move |_req| {
-            let metrics_registry = ic_metrics::MetricsRegistry::global();
-            let encoder = TextEncoder::new();
-
-            async move {
-                let metric_families = metrics_registry.prometheus_registry().gather();
-                let mut buffer = vec![];
-                encoder.encode(&metric_families, &mut buffer).unwrap();
-                Ok::<_, hyper::Error>(Response::new(Body::from(buffer)))
-            }
-        });
-        let mut addr = "[::]:9090".parse::<SocketAddr>().unwrap();
-        addr.set_port(METRICS_PORT.flag);
-        let metrics_join_handle = spawn(async move {
-            let listener = match TcpListener::bind(addr).await {
-                Err(e) => {
-                    error!(log, "HTTP exporter server error: {}", e);
-                    return;
-                }
-                Ok(listener) => listener,
-            };
-            let http = Http::new();
-            loop {
-                let log = log.clone();
-                let http = http.clone();
-                let public_key = public_key.clone();
-                let private_key = private_key.clone();
-                if let Ok((stream, _)) = listener.accept().await {
-                    spawn(async move {
-                        let mut b = [0_u8; 1];
-                        if stream.peek(&mut b).await.is_ok() {
-                            if b[0] == 22 {
-                                // TLS
-                                match perform_tls_server_handshake(
-                                    stream,
-                                    &public_key,
-                                    &private_key,
-                                    Vec::new(),
-                                )
-                                .await
-                                {
-                                    Err(e) => warn!(log, "TLS error: {}", e),
-                                    Ok((stream, _peer_id)) => {
-                                        if let Err(e) =
-                                            http.serve_connection(stream, metrics_service).await
-                                        {
-                                            trace!(log, "Connection error: {}", e);
-                                        }
-                                    }
-                                };
-                            } else {
-                                // HTTP
-                                if let Err(e) = http.serve_connection(stream, metrics_service).await
-                                {
-                                    trace!(log, "Connection error: {}", e);
-                                }
-                            }
-                        }
-                    });
-                }
-            }
-        });
-        Some(metrics_join_handle)
-    } else {
-        None
-    };
-
+    let metrics_join_handle = start_metrics_server(log);
     let nns_public_key = if NNS_PUBLIC_KEY.is_present() {
         Some(
             parse_threshold_sig_key(&NNS_PUBLIC_KEY.flag.to_path_buf())
@@ -225,25 +166,7 @@ async fn main() -> Result<()> {
     let dir = ROUTES_DIR.flag.to_path_buf();
     let status = get_status(&nns_urls, &client, &dir).await;
     eprintln!("got status from NNS");
-    let mut registry_client = Arc::new(RegistryClientImpl::new(data_provider.clone(), None));
-    loop {
-        while let Err(e) = registry_client.try_polling_latest_version(100) {
-            eprintln!("error: try_polling_latest_version failed: {}, retrying", e);
-            REGISTRY_POLL_FAILURES.inc();
-            sleep(Duration::from_secs(10)).await;
-        }
-        // At this point, before we start the background thread, we should have a
-        // reasonably recent registry version available in the registry client.
-        match registry_client.fetch_and_start_polling() {
-            Ok(_) => break,
-            Err(e) => {
-                eprintln!("error: fetch_and_start_polling failed: {}, retrying", e);
-                REGISTRY_POLL_FAILURES.inc();
-                registry_client = Arc::new(RegistryClientImpl::new(data_provider.clone(), None));
-            }
-        }
-        sleep(Duration::from_secs(10)).await;
-    }
+    let registry_client = new_registry_client(&data_provider).await;
     STATUS.set(1); // Set status to "good".
     let routes_join_handle = start_routes_export(
         dir,
@@ -261,6 +184,117 @@ async fn main() -> Result<()> {
         eprintln!("error: {}", error);
     }
     Ok(())
+}
+
+fn start_metrics_server(log: Logger) -> Option<JoinHandle<()>> {
+    if !METRICS_PORT.is_present() {
+        return None;
+    }
+
+    let (public_key, private_key) = generate_tls_key_pair();
+    let metrics_service = service_fn(move |_req| {
+        let metrics_registry = ic_metrics::MetricsRegistry::global();
+        let encoder = TextEncoder::new();
+
+        async move {
+            let metric_families = metrics_registry.prometheus_registry().gather();
+            let mut buffer = vec![];
+            encoder.encode(&*metric_families, &mut buffer).unwrap();
+            Ok::<_, hyper::Error>(Response::new(Body::from(buffer)))
+        }
+    });
+    let mut addr = "[::]:9090".parse::<SocketAddr>().unwrap();
+    addr.set_port(METRICS_PORT.flag);
+    let metrics_join_handle = spawn(async move {
+        let listener = match TcpListener::bind(addr).await {
+            Err(e) => {
+                error!(log, "HTTP exporter server error: {}", e);
+                return;
+            }
+            Ok(listener) => listener,
+        };
+        let http = Http::new();
+        loop {
+            let log = log.clone();
+            let http = http.clone();
+            let public_key = public_key.clone();
+            let private_key = private_key.clone();
+            if let Ok((stream, _)) = listener.accept().await {
+                spawn(async move {
+                    let mut b = [0_u8; 1];
+                    if stream.peek(&mut b).await.is_ok() {
+                        if b[0] == 22 {
+                            // TLS
+                            match perform_tls_server_handshake(
+                                stream,
+                                &public_key,
+                                &private_key,
+                                Vec::new(),
+                            )
+                            .await
+                            {
+                                Err(e) => warn!(log, "TLS error: {}", e),
+                                Ok((stream, _peer_id)) => {
+                                    if let Err(e) =
+                                        http.serve_connection(stream, metrics_service).await
+                                    {
+                                        trace!(log, "Connection error: {}", e);
+                                    }
+                                }
+                            };
+                        } else {
+                            // HTTP
+                            if let Err(e) = http.serve_connection(stream, metrics_service).await {
+                                trace!(log, "Connection error: {}", e);
+                            }
+                        }
+                    }
+                });
+            }
+        }
+    });
+    Some(metrics_join_handle)
+}
+
+/// Retry creating a new registry client every 10s. Count failures in REGISTRY_POLL_FAILURES.
+async fn new_registry_client(
+    data_provider: &Arc<dyn RegistryDataProvider>,
+) -> Arc<RegistryClientImpl> {
+    let start = Instant::now();
+    let mut error_cause = "noerror";
+    let mut registry_client = Arc::new(RegistryClientImpl::new(data_provider.clone(), None));
+    loop {
+        while let Err(e) = registry_client.try_polling_latest_version(100) {
+            eprintln!(
+                "error: try_polling_latest_version failed: {:?}, retrying",
+                e
+            );
+            error_cause = "tplv_error";
+            REGISTRY_POLL_FAILURES
+                .with_label_values(&[error_cause])
+                .inc();
+            sleep(Duration::from_secs(10)).await;
+        }
+        // At this point, before we start the background thread, we should have a
+        // reasonably recent registry version available in the registry client.
+        match registry_client.fetch_and_start_polling() {
+            Ok(_) => break,
+            Err(e) => {
+                eprintln!("error: fetch_and_start_polling failed: {:?}, retrying", e);
+                error_cause = "fasp_error";
+                REGISTRY_POLL_FAILURES
+                    .with_label_values(&[error_cause])
+                    .inc();
+                registry_client = Arc::new(RegistryClientImpl::new(data_provider.clone(), None));
+            }
+        }
+        sleep(Duration::from_secs(10)).await;
+    }
+    REGISTRY_CLIENT_TIME
+        .get_metric_with_label_values(&[error_cause])
+        .unwrap()
+        .observe(start.elapsed().as_secs_f64());
+    registry_client
 }
 
 type HttpsClient = Client<HttpsConnector<HttpConnector>>;
@@ -359,6 +393,7 @@ trait HealthChecker: Send + Sync {
 }
 
 struct Probe {}
+
 #[async_trait]
 impl HealthChecker for Probe {
     async fn is_node_down(&self, node: &str, client: &HttpsClient) -> bool {
@@ -432,17 +467,17 @@ fn start_routes_export(
             let data_provider = data_provider.clone();
             let new_status = get_status(&nns_urls, &client, &dir).await;
             if status != new_status {
+                // The status has changed, and now we want to write the new routes.
                 status = new_status;
-                eprintln!("status from NNS changed");
+                eprintln!("status from NNS changed. New status={:?}", status);
                 clear_routes_dir(&dir);
                 STATUS_CHANGES.inc();
-                registry_client = Arc::new(RegistryClientImpl::new(data_provider, None));
-                if let Err(e) = registry_client.fetch_and_start_polling() {
-                    panic!("fetch_and_start_polling failed: {}", e);
-                }
+                // Create new registry client because the replica had a problem.
+                registry_client = new_registry_client(&data_provider).await;
             }
             let registry_client = registry_client.clone();
             let registry_version = registry_client.get_latest_version();
+            // Load routes only if first run, registry version changed, or probe changed "down".
             if first || down_changed || registry_version != last_registry_version {
                 first = false;
                 last_registry_version = registry_version;
@@ -614,7 +649,11 @@ fn cert_store(certs: Vec<X509>) -> core::result::Result<X509Store, openssl::ssl:
 mod tests {
     use std::sync::atomic::{AtomicU32, Ordering};
 
-    use super::*;
+    use prometheus::core::Collector;
+    use serde::{Deserialize, Serialize};
+    // Should have a test that checks for a bad client connection.
+    use substring::Substring;
+
     use ic_crypto_tls::generate_tls_keys;
     use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
     use ic_protobuf::types::v1::PrincipalId as PrincipalIdIdProto;
@@ -624,14 +663,13 @@ mod tests {
     };
     use ic_registry_routing_table::RoutingTable;
     use ic_test_utilities::p2p::test_group_set_registry;
+    use ic_test_utilities::types::ids::SUBNET_1;
     use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
-
     use ic_types::messages::Blob;
     use ic_types::{RegistryVersion, SubnetId};
 
-    use serde::{Deserialize, Serialize};
+    use super::*;
 
-    use ic_test_utilities::types::ids::SUBNET_1;
     pub const ROOT_SUBNET_ID: SubnetId = SUBNET_1;
     const REG_V1: RegistryVersion = RegistryVersion::new(1);
     const COMMON_NAME: &str = "common name";
@@ -705,6 +743,7 @@ mod tests {
     }
 
     struct TestNodeDown {}
+
     #[async_trait]
     impl HealthChecker for TestNodeDown {
         async fn is_node_down(&self, node: &str, _: &HttpsClient) -> bool {
@@ -714,6 +753,7 @@ mod tests {
     }
 
     struct TestNodeUp {}
+
     #[async_trait]
     impl HealthChecker for TestNodeUp {
         async fn is_node_down(&self, node: &str, _: &HttpsClient) -> bool {
@@ -725,6 +765,7 @@ mod tests {
     struct TestOddNodeDown {
         count: std::sync::atomic::AtomicU32,
     }
+
     #[async_trait]
     impl HealthChecker for TestOddNodeDown {
         async fn is_node_down(&self, node: &str, _: &HttpsClient) -> bool {
@@ -740,6 +781,7 @@ mod tests {
     }
 
     const MAX_NODES: u16 = 100;
+
     #[tokio::test]
     async fn dead_node_detection() {
         let registry_version = REG_V1;
@@ -785,8 +827,8 @@ mod tests {
 
         /* Check initial routes */
         let routes = get_routes(registry_client.clone(), &mut nodes_down_map).unwrap();
-        assert!(routes.subnets[0].nodes.len() == MAX_NODES as usize);
-        assert!(nodes_down_map.len() == MAX_NODES as usize);
+        assert_eq!(routes.subnets[0].nodes.len(), MAX_NODES as usize);
+        assert_eq!(nodes_down_map.len(), MAX_NODES as usize);
 
         /* Detect all nodes are alive */
         let down_changed = batched_probe(
@@ -805,7 +847,10 @@ mod tests {
         )
         .await;
         assert!(down_changed);
-        assert!(nodes_down_map.values().filter(|v| **v).count() == MAX_NODES as usize);
+        assert_eq!(
+            nodes_down_map.values().filter(|v| **v).count(),
+            MAX_NODES as usize
+        );
 
         /* detect half  nodes as dead */
         let down_changed = batched_probe(
@@ -817,11 +862,41 @@ mod tests {
         )
         .await;
         assert!(down_changed);
-        assert!(nodes_down_map.values().filter(|v| **v).count() == (MAX_NODES as usize) / 2);
+        assert_eq!(
+            nodes_down_map.values().filter(|v| **v).count(),
+            (MAX_NODES as usize) / 2
+        );
 
         /* Check if routes to deads nodes are disabled. */
         let routes = get_routes(registry_client, &mut nodes_down_map).unwrap();
-        assert!(routes.subnets[0].nodes.len() == (MAX_NODES as usize) / 2);
-        assert!(nodes_down_map.len() == MAX_NODES as usize);
+        assert_eq!(routes.subnets[0].nodes.len(), (MAX_NODES as usize) / 2);
+        assert_eq!(nodes_down_map.len(), MAX_NODES as usize);
+    }
+
+    #[tokio::test]
+    async fn new_registry_client_test() {
+        let node_port_allocation = Arc::new((0..MAX_NODES).collect::<Vec<_>>());
+        let data_provider: Arc<dyn RegistryDataProvider> =
+            test_group_set_registry(subnet_test_id(0), node_port_allocation);
+        let client = new_registry_client(&data_provider).await;
+        assert_eq!(client.get_latest_version().get(), 1);
+    }
+
+    #[tokio::test]
+    async fn new_registry_client_test_metrics() {
+        let node_port_allocation = Arc::new((0..MAX_NODES).collect::<Vec<_>>());
+        let data_provider: Arc<dyn RegistryDataProvider> =
+            test_group_set_registry(subnet_test_id(0), node_port_allocation);
+        let _client = new_registry_client(&data_provider).await;
+        let mut buffer = vec![];
+        TextEncoder::new()
+            .encode(&*REGISTRY_CLIENT_TIME.collect(), &mut buffer)
+            .unwrap();
+        let metric_str = std::str::from_utf8(&buffer).unwrap();
+        assert_eq!(
+            metric_str.substring(88, 151),
+            "_time histogram
+registry_client_time_bucket{error=\"noerror\",le="
+        );
     }
 }
