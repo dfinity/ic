@@ -6,11 +6,11 @@ edition = "2018"
 [dependencies]
 anyhow = "1.0"
 base64 = "0.11"
+clap = { version = "3.1.6", features = ["derive"] }
 chrono = "0.4.19"
 fs_extra = "1.2.0"
 ic-crypto = { path = "../crypto" }
 ic-config = { path = "../config" }
-structopt = { version = "0.3", features = ["wrap_help"] }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
 ic-protobuf = { path = "../protobuf" }

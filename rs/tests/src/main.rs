@@ -9,11 +9,11 @@
 //! have identified a flaky test and therefore want to disable it, at least
 //! include the principal author on the corresponding PR.
 #![allow(unused_imports)]
+use clap::Parser;
 use ic_tests::consensus;
 use std::ffi::OsString;
 use std::fs;
 use std::panic;
-use structopt::StructOpt;
 
 use ic_fondue::pot;
 use ic_fondue::*; // Import the macros for easier pot declaration
@@ -185,7 +185,7 @@ fn tecdsa_complaint_test_pot() -> pot::Pot {
 
 fn main() {
     let started_at = Instant::now();
-    let opt = cli::Options::from_args();
+    let opt = cli::Options::parse();
     // Here we create a default fondue config but then randomize the rng_seed.
     // If the user specified their own seed 's', then 's' will be used when we
     // `modify_fondue_exec_config`.

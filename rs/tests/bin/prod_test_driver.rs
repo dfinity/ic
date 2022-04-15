@@ -1,3 +1,4 @@
+use clap::Parser;
 use ic_fondue::pot::execution::TestResult;
 use ic_tests::driver::cli::CliArgs;
 use ic_tests::driver::driver_setup::{create_driver_context_from_cli, initialize_env, mk_logger};
@@ -13,10 +14,9 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::fs;
 use std::time::Duration;
-use structopt::StructOpt;
 
 fn main() -> anyhow::Result<()> {
-    let cli_args = CliArgs::from_args();
+    let cli_args = CliArgs::parse();
     let validated_args = cli_args.validate()?;
 
     let mut writer = None;

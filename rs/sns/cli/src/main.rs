@@ -1,6 +1,7 @@
 //! A command-line tool to initialize, deploy and interact with a SNS (Service Nervous System)
 
 use candid::{CandidType, Encode, IDLArgs};
+use clap::Parser;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_sns_governance::init::GovernanceCanisterInitPayloadBuilder;
 use ic_sns_governance::pb::v1::{Governance, NeuronPermissionList, NeuronPermissionType};
@@ -14,38 +15,38 @@ use std::fs::File;
 use std::path::PathBuf;
 use std::process::{Command, Output};
 use std::str::FromStr;
-use structopt::StructOpt;
 
-#[derive(Debug, StructOpt)]
-#[structopt(
+#[derive(Debug, Parser)]
+#[clap(
     name = "sns-cli",
-    about = "Initialize, deploy and interact with an SNS."
+    about = "Initialize, deploy and interact with an SNS.",
+    version
 )]
 struct CliArgs {
-    #[structopt(subcommand)]
+    #[clap(subcommand)]
     sub_command: SubCommand,
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Parser)]
 enum SubCommand {
     LocalDeploy(LocalDeployArgs),
     AccountBalance(AccountBalanceArgs),
 }
 
 /// The arguments used to configure a SNS deployment
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Parser)]
 struct LocalDeployArgs {
     /// The transaction fee that must be paid for ledger transactions (except
     /// minting and burning governance tokens), denominated in e8s (1 token = 100,000,000 e8s).
-    #[structopt(long)]
+    #[clap(long)]
     transaction_fee_e8s: Option<u64>,
 
     /// The name of the governance token controlled by this SNS, for example "Bitcoin"
-    #[structopt(long)]
+    #[clap(long)]
     pub token_name: String,
 
     /// The symbol of the governance token controlled by this SNS, for example "BTC"
-    #[structopt(long)]
+    #[clap(long)]
     pub token_symbol: String,
 
     /// The initial Ledger accounts that the SNS will be initialized with. This is a JSON file
@@ -55,28 +56,28 @@ struct LocalDeployArgs {
     /// For example, this file can contain:
     /// { "fpyvw-ycywu-lzoho-vmluf-zivfl-534ds-uccto-ovwu6-xxpnj-j2hzq-dqe": 1000000000,
     ///   "fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe": 2000000000 }
-    #[structopt(long, parse(from_os_str))]
+    #[clap(long, parse(from_os_str))]
     pub initial_ledger_accounts: Option<PathBuf>,
 
     /// The number of e8s (10E-8 of a token) that a rejected proposal costs the proposer.
-    #[structopt(long)]
+    #[clap(long)]
     pub proposal_reject_cost_e8s: Option<u64>,
 
     /// The minimum number of e8s (10E-8 of a token) that can be staked in a neuron.
     ///
     /// To ensure that staking and disbursing of the neuron work, the chosen value
     /// must be larger than the transaction_fee_e8s.
-    #[structopt(long)]
+    #[clap(long)]
     pub neuron_minimum_stake_e8s: Option<u64>,
 }
 
 /// The arguments used to display the account balance of a user
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Parser)]
 struct AccountBalanceArgs {
     /// The principal ID of the account owner to display their main account balance (note that
     /// subaccounts are not yet supported). If not specified, the principal of the current dfx
     /// identity is used.
-    #[structopt(long)]
+    #[clap(long)]
     pub principal_id: Option<String>,
 }
 
@@ -141,7 +142,7 @@ struct SnsCanisterIds {
 }
 
 fn main() {
-    let args = CliArgs::from_iter_safe(std::env::args())
+    let args = CliArgs::try_parse_from(std::env::args())
         .unwrap_or_else(|e| panic!("Illegal arguments: {}", e));
 
     match args.sub_command {

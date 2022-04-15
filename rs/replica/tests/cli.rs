@@ -19,7 +19,7 @@ fn too_many_arguments_causes_exit_code_1() {
         .args(&["arg1", "arg2"])
         .assert()
         .stderr(predicate::str::starts_with(
-            "Failed to parse command line arguments",
+            "error: Found argument 'arg1' which wasn't expected",
         ))
         .failure();
 }
@@ -30,8 +30,8 @@ fn help_arg_prints_help() {
         .unwrap()
         .arg("--help")
         .assert()
-        .stderr(predicate::str::starts_with(
-            "Failed to parse command line arguments",
+        .stdout(predicate::str::contains(
+            "Arguments for the Internet Computer Replica.",
         ))
         .failure();
 }

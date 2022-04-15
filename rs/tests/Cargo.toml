@@ -13,6 +13,7 @@ base64 = "0.11"
 candid = "0.7.4"
 canister-test = { path = "../rust_canisters/canister_test" }
 chrono = "0.4.19"
+clap = { version = "3.1.6", features = ["derive"] }
 crossbeam-channel = "0.5.1"
 cycles-minting-canister = { path = "../nns/cmc" }
 dfn_candid = { path = "../rust_canisters/dfn_candid" }
@@ -101,7 +102,6 @@ slog = { version = "2.5.2", features = ["max_level_trace", "release_max_level_tr
 slog-async = { version = "2.5", features = ["nested-values"] }
 slog-term = "2.6.0"
 ssh2 = { git = "https://github.com/dfinity-lab/ssh2-rs", branch = "master" }
-structopt = "0.3"
 tempfile = "3.1.0"
 thiserror = "1.0"
 tokio = {version = "1.15.0", features = ["full"]}

@@ -57,7 +57,6 @@ slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "rel
 slog-async = { version = "2.5", features = ["nested-values"] }
 slog-term = "2.6.0"
 ssh2 = { git = "https://github.com/dfinity-lab/ssh2-rs", branch = "master" }
-structopt = { version = "0.3", default-features = false }
 tempfile = "3.1"
 thiserror = "1.0"
 tokio = "1.15.0"

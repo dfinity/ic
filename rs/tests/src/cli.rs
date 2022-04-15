@@ -1,3 +1,4 @@
+use clap::Parser;
 use ic_base_types::NodeId;
 use ic_fondue::ic_manager::{IcEndpoint, IcManagerSettings, IcSubnet, RuntimeDescriptor};
 use ic_fondue::pot::execution::Config as ExecConfig;
@@ -7,7 +8,6 @@ use ic_types::{PrincipalId, SubnetId};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
-use structopt::StructOpt;
 use url::Url;
 
 impl Options {
@@ -92,10 +92,10 @@ impl Options {
     }
 }
 
-#[derive(Debug, Clone, StructOpt)]
-#[structopt(name = "system-tests", about = "Runs the our system-tests")]
+#[derive(Debug, Clone, Parser)]
+#[clap(name = "system-tests", about = "Runs the our system-tests", version)]
 pub struct Options {
-    #[structopt(
+    #[clap(
         long = "seed",
         help = r#"
 Uses the specified seed for starting up the RNG;
@@ -103,15 +103,15 @@ This is important to pay attention to if you want to reproduce a run."#
     )]
     pub fondue_seed: Option<u64>,
 
-    #[structopt(
+    #[clap(
         long = "ready-timeout",
         parse(try_from_str = parse_duration),
         help = "How much time should we wait for the replicas to be ready for interaction"
     )]
     pub fondue_ready_timeout: Option<Duration>,
 
-    #[structopt(
-        short = "v",
+    #[clap(
+        short = 'v',
         parse(from_occurrences),
         help = r#"
 Verbosity control. Using -v makes the tests a little chatty while
@@ -119,56 +119,56 @@ Verbosity control. Using -v makes the tests a little chatty while
     )]
     pub fondue_log_level: u64,
 
-    #[structopt(
+    #[clap(
         long = "fondue-logs",
         parse(from_os_str),
         help = "Saves the framework logs to a file. See 'tee-replica-logs-base-dir' for saving the replica logs."
     )]
     pub fondue_log_target: Option<PathBuf>,
 
-    #[structopt(
+    #[clap(
         long = "tee-replica-logs-base-dir",
         parse(from_os_str),
         help = "Saves the logs of every replica to a dedicated file, unique for corresponding pot and channel."
     )]
     pub tee_replica_logs_base_dir: Option<PathBuf>,
 
-    #[structopt(
+    #[clap(
         long = "endpoint-urls",
         help = "If specified, execute eligible system tests against a running IC."
     )]
     pub endpoint_urls: Option<String>,
 
-    #[structopt(
+    #[clap(
         long = "timeout",
         parse(try_from_str = parse_duration),
         help = "How much time should each test take before being killed"
     )]
     pub pot_timeout: Option<Duration>,
 
-    #[structopt(long = "jobs", help = "How many fondue jobs should we run in parallel")]
+    #[clap(long = "jobs", help = "How many fondue jobs should we run in parallel")]
     pub jobs: Option<usize>,
 
-    #[structopt(
+    #[clap(
         long = "pots",
         help = "Run only pots containing the given string in their names"
     )]
     pub pot_filter: Option<String>,
 
-    #[structopt(long = "skip", help = "Skip any tests that match this filter")]
+    #[clap(long = "skip", help = "Skip any tests that match this filter")]
     pub skip: Option<String>,
 
-    #[structopt(long_help = "Run any tests that contain this filter in their name")]
+    #[clap(long_help = "Run any tests that contain this filter in their name")]
     pub filters: Option<String>,
 
-    #[structopt(
+    #[clap(
         long = "result-file",
         parse(from_os_str),
         help = "If set, specifies where to write results of executed tests"
     )]
     pub result_file: Option<PathBuf>,
 
-    #[structopt(
+    #[clap(
         long = "experimental",
         help = "Include 'experimetnal' (vm-based) pots."
     )]

@@ -1,11 +1,11 @@
+use clap::Parser;
 use ic_async_utils::shutdown_signal;
 use orchestrator::args::OrchestratorArgs;
 use orchestrator::orchestrator::Orchestrator;
-use structopt::StructOpt;
 
 #[tokio::main]
 async fn main() {
-    let args = OrchestratorArgs::from_args();
+    let args = OrchestratorArgs::parse();
 
     if args.node_id {
         Orchestrator::node_id(args);

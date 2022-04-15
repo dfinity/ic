@@ -1,4 +1,5 @@
 use crate::args::ReplicaArgs;
+use clap::Parser;
 use ic_config::{crypto::CryptoConfig, Config, ConfigSource, SAMPLE_CONFIG};
 use ic_crypto::CryptoComponent;
 use ic_crypto_utils_threshold_sig::parse_threshold_sig_key;
@@ -16,12 +17,10 @@ use std::convert::TryFrom;
 use std::env;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use structopt::clap;
-use structopt::StructOpt;
 
 /// Parse command-line args into `ReplicaArgs`
 pub fn parse_args() -> Result<ReplicaArgs, clap::Error> {
-    let args_result = ReplicaArgs::from_iter_safe(env::args());
+    let args_result = ReplicaArgs::try_parse_from(env::args());
 
     args_result.map(|args| {
         if args.print_sample_config {

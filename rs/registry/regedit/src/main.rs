@@ -10,15 +10,15 @@ mod tests;
 
 use anyhow::Result;
 use args::{CliArgs, Command, RegistrySpec, SourceSpec, VersionSpec};
+use clap::Parser;
 use ic_base_types::RegistryVersion;
 use ic_registry_common::local_store::{LocalStoreImpl, LocalStoreWriter};
 use normalization::NormalizedSnapshot;
 use serde_json::Value;
 use snapshot::Snapshot;
-use structopt::StructOpt;
 
 fn main() -> Result<()> {
-    let cmd: Command = CliArgs::from_args().validate()?;
+    let cmd: Command = CliArgs::parse().validate()?;
 
     let out = execute_command(cmd)?;
     let out = serde_json::to_string_pretty(&out).expect("Could not pretty print value.");

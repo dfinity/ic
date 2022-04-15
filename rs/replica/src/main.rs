@@ -135,7 +135,7 @@ async fn run() -> io::Result<()> {
     // Parse command-line args
     let replica_args = setup::parse_args();
     if let Err(e) = &replica_args {
-        eprintln!("Failed to parse command line arguments: {}", e.message);
+        e.print().expect("Failed to print CLI argument error.");
     }
 
     let config_source = setup::get_config_source(&replica_args);

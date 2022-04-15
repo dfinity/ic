@@ -6,6 +6,7 @@ use std::{
 };
 
 use anyhow::{bail, Result};
+use clap::Parser;
 use crossbeam::select;
 use crossbeam_channel::Receiver;
 use futures_util::FutureExt;
@@ -22,10 +23,9 @@ use ic_p8s_service_discovery::titanium::{
     rest_api::start_http_server,
 };
 use slog::{info, o, warn, Drain, Logger};
-use structopt::StructOpt;
 
 fn main() -> Result<()> {
-    let cli_args = CliArgs::from_args().validate()?;
+    let cli_args = CliArgs::parse().validate()?;
     let rt = tokio::runtime::Runtime::new()?;
     let log = make_logger();
     let metrics_registry = MetricsRegistry::new();
@@ -199,11 +199,12 @@ fn make_logger() -> Logger {
     slog::Logger::root(drain.fuse(), o!())
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
+#[clap(about, version)]
 pub struct CliArgs {
-    #[structopt(
+    #[clap(
         long = "targets-dir",
-        about = r#"
+        help = r#"
 A writeable directory where the registries of the targeted Internet Computer
 instances are stored.
 
@@ -215,9 +216,9 @@ initialized with a hardcoded initial registry.
     )]
     targets_dir: PathBuf,
 
-    #[structopt(
+    #[clap(
         long = "no-mercury",
-        about = r#"
+        help = r#"
 Omit initializing the mercury (mainnet) registry if it is not present in the
 scraping directory.
 
@@ -225,9 +226,9 @@ scraping directory.
     )]
     no_mercury: bool,
 
-    #[structopt(
+    #[clap(
         long = "no-poll",
-        about = r#"
+        help = r#"
 Do not scrape the ICs (i.e. the content of the scraping directory and the served
 targets remains unchanged).
 
@@ -235,7 +236,7 @@ targets remains unchanged).
     )]
     no_poll: bool,
 
-    #[structopt(
+    #[clap(
     long = "poll-interval",
     default_value = "10s",
     parse(try_from_str = parse_duration),
@@ -246,7 +247,7 @@ The interval at which ICs are polled for updates.
     )]
     poll_interval: Duration,
 
-    #[structopt(
+    #[clap(
     long = "query-request-timeout",
     default_value = "5s",
     parse(try_from_str = parse_duration),
@@ -257,7 +258,7 @@ The HTTP-request timeout used when quering for registry updates.
     )]
     registry_query_timeout: Duration,
 
-    #[structopt(
+    #[clap(
         long = "listen-addr",
         help = r#"
 The listen address for service discovery.
@@ -266,7 +267,7 @@ The listen address for service discovery.
     )]
     listen_addr: Option<SocketAddr>,
 
-    #[structopt(
+    #[clap(
         long = "file-sd-base-path",
         help = r#"
 If specified, for each job, a json file containing the targets will be written
@@ -277,7 +278,7 @@ targets.
     )]
     file_sd_base_path: Option<PathBuf>,
 
-    #[structopt(
+    #[clap(
         long = "metrics-listen-addr",
         default_value = "[::]:9099",
         help = r#"

@@ -1,5 +1,6 @@
 //! An utility to help inspecting the stable memory of NNS canisters.
 
+use clap::Parser;
 use ic_base_types::CanisterId;
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
@@ -15,30 +16,30 @@ use std::io::{Read, Write};
 use std::path::Path;
 use std::path::PathBuf;
 use std::string::ToString;
-use structopt::StructOpt;
 
 /// Command line argument to the utility.
-#[derive(Debug, StructOpt)]
-#[structopt(
+#[derive(Debug, Parser)]
+#[clap(
     name = "nns-inspector",
-    about = "Read and decode the NNS's stable memory."
+    about = "Read and decode the NNS's stable memory.",
+    version
 )]
 struct CliArgs {
     /// Path to stable the `canister_states` directory
-    #[structopt(parse(from_os_str))]
+    #[clap(parse(from_os_str))]
     input: PathBuf,
 
-    #[structopt(parse(from_os_str), default_value = ".")]
+    #[clap(parse(from_os_str), default_value = ".")]
     output: PathBuf,
 
     /// The location of the "rs" directory. Used to find .proto files.
-    #[structopt(long, parse(from_os_str), default_value = ".")]
+    #[clap(long, parse(from_os_str), default_value = ".")]
     rs: PathBuf,
 }
 
 /// Main method to run the utility.
 fn main() {
-    let args = CliArgs::from_iter_safe(std::env::args())
+    let args = CliArgs::try_parse_from(std::env::args())
         .unwrap_or_else(|e| panic!("Illegal arguments: {}", e));
 
     assert!(
