@@ -1,0 +1,17 @@
+[Unit]
+Description=Manage GuestOS virtual machine
+Requires=libvirtd.service
+After=libvirtd.service
+Requires=generate-guestos-config.service
+After=generate-guestos-config.service
+
+[Service]
+Type=forking
+ExecStartPre=/opt/ic/bin/detect-first-boot.sh
+ExecStart=/opt/ic/bin/start-guestos.sh
+ExecStop=/opt/ic/bin/stop-guestos.sh
+Restart=on-failure
+PIDFile=/var/run/libvirt/qemu/guestos.pid
+
+[Install]
+WantedBy=multi-user.target

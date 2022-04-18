@@ -1,0 +1,21 @@
+# LVM volumes specification
+#
+# Each row takes the form:
+#   name,start,size,uuid,comment
+# where
+#   name: identifier used for the partition (see design doc)
+#   start: start of partition in extents (4 MB)
+#   size: size of partition in extents (4 MB)
+#   uuid: uuid for partition (to ensure that the build is deterministic)
+#   comment: free-form field explaining the partition
+#
+# Note that "start" and "size" need to match up correctly, otherwise
+# LVM volume building will fail.
+config ,    0,   25,SIs20R-l6gh-2Rli-KAP0-ZO88-3Y4q-G9JPAm,Config partition for HostOS
+A_boot ,   25,  256,0BQNUA-dzGu-wvW5-mMRh-Ptr6-J6DT-Ff2a9x,Boot partition for system A
+A_root ,  281, 2560,RM99J5-B2t1-JU3l-HNco-J2f2-1808-eJGo3s,Root partition for system A
+A_var  , 2841, 2560,AkcyNt-TkgJ-JL7M-UNoP-jWWC-Fhvh-86QyHG,Mutable data partition for system A
+B_boot , 5401,  256,6gl2Fd-qm1V-9E3W-Arjv-J5mW-RqFO-EgYiNC,Boot partition for system B
+B_root , 5657, 2560,UVBREu-GuBh-VHHb-RUAp-jjhQ-blIy-ez3Tjr,Root partition for system B
+B_var  , 8217, 2560,VNZoZ9-013f-hbEJ-Xd9C-AH6E-vAhI-KkzZ4p,Mutable data partition for system B
+guestos,10777,13056,woW7RT-t6jS-cRo2-uENw-iQXu-ni2u-AZdHpq,GuestOS LVM partition

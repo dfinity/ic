@@ -1,0 +1,26 @@
+#cloud-config
+
+# Do not print SSH fingerprints to the console
+no_ssh_fingerprints: false
+
+# Do not print SSH host keys to the console
+ssh:
+  emit_keys_to_console: false
+
+# Do not configure network
+network:
+  config: disabled
+disable_network_activation: true
+
+runcmd:
+- bash /media/cdrom/nocloud/01_setupos.sh
+- bash /media/cdrom/nocloud/02_hardware.sh
+# NOTE: Firmware up-/downgrades are currently applied manually
+#- bash /media/cdrom/nocloud/03_firmware.sh
+# NOTE: UEFI settings are currently applied manually
+#- bash /media/cdrom/nocloud/04_uefi.sh
+- bash /media/cdrom/nocloud/05_disk.sh
+- bash /media/cdrom/nocloud/06_hostos.sh
+- bash /media/cdrom/nocloud/07_guestos.sh
+- bash /media/cdrom/nocloud/08_devices.sh
+- bash /media/cdrom/nocloud/09_setupos.sh
