@@ -75,8 +75,16 @@ impl NodeRegistration {
 
     // postcondition: we are registered with the NNS
     async fn retry_register_node(&mut self) {
-        let nns_urls = self.collect_nns_urls().await.unwrap();
-        let mut nns_urls = nns_urls.iter().cycle();
+        let nns_urls_col = loop {
+            match self.collect_nns_urls().await {
+                Ok(urls) => break urls,
+                Err(e) => {
+                    warn!(self.log, "Failed to collect the NNS URLs: {:?}", e);
+                    tokio::time::sleep(Duration::from_secs(10)).await;
+                }
+            }
+        };
+        let mut nns_urls = nns_urls_col.iter().cycle();
         let sign_cmd = |msg: &[u8]| {
             UtilityCommand::try_to_attach_hsm();
             let res = UtilityCommand::sign_message(msg.to_vec(), None, None, None)
@@ -243,11 +251,9 @@ impl NodeRegistration {
     }
 
     async fn collect_nns_urls(&self) -> Result<Vec<Url>, String> {
-        let mut version = self.registry_client.get_latest_version();
-        while version == ZERO_REGISTRY_VERSION {
-            warn!(self.log, "Registry cache is still at version 0.");
-            tokio::time::sleep(Duration::from_secs(10)).await;
-            version = self.registry_client.get_latest_version();
+        let version = self.registry_client.get_latest_version();
+        if version == ZERO_REGISTRY_VERSION {
+            return Err("Registry cache is still at version 0".to_string());
         }
         use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
         let nns_subnet_id = self
