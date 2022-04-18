@@ -468,6 +468,14 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 ]),
             ),
             pot(
+                "update_registry_idkg_key_pot",
+                orchestrator::update_registry_idkg_key::config(),
+                par(vec![t(
+                    "update_registry_idkg_key_test",
+                    orchestrator::update_registry_idkg_key::test,
+                )]),
+            ),
+            pot(
                 "nns_backup_pot",
                 orchestrator::nns_backup::config(),
                 par(vec![t("nns_backup_test", orchestrator::nns_backup::test)]),

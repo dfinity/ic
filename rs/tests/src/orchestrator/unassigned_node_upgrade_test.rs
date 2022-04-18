@@ -7,16 +7,16 @@ Goal:: Ensure we can set SSH readonly keys and upgrade the unassigned nodes.
 Description::
 We deploy an IC with a set of unassigned nodes. Then we make a proposal and add an
 SSH key for the read-only access and set the replica version for unassigned nodes.
-Then we make sure that unassgined nodes eventually upgrade to that version by
+Then we make sure that unassigned nodes eventually upgrade to that version by
 leveraging the SSH access.
 
 Runbook::
-. Deploy an IC with unassgined nodes
-. Deploy a config for unassgined nodes with one SSH key and a replica version.
-. ssh into one of the unassgined nodes and read the version file.
+. Deploy an IC with unassigned nodes
+. Deploy a config for the unassigned nodes with one SSH key and a replica version.
+. ssh into one of the unassigned nodes and read the version file.
 
 Success::
-. At least one unassgined node has SSH enabled and runs the expected version.
+. At least one unassigned node has SSH enabled and runs the expected version.
 
 end::catalog[] */
 
