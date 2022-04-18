@@ -47,7 +47,7 @@ options may be specified:
   --journalbeat_hosts hosts
     Logging hosts to use. Can be multiple hosts separated by space (make sure
     to quote the argument string so it appears as a single argument to the
-    script, e.g. --journalbeat_hosts "h1.domain.tld:9220 h2.domain.tld:9230").
+    script, e.g. --journalbeat_hosts "h1.domain.tld h2.domain.tld").
 
   --journalbeat_tags tags
     Tags to be used by Journalbeat. Can be multiple tags separated by space

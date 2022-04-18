@@ -1,0 +1,11 @@
+[Unit]
+Description=Set up ssh account keys
+Before=ssh.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/setup-ssh-account-keys.sh
+
+[Install]
+WantedBy=multi-user.target

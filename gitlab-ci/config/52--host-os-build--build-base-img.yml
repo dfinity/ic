@@ -1,0 +1,33 @@
+deploy-host-os-baseimg:
+  extends:
+    - .ubuntu-nix-docker-protected
+    - .rules-protected-branch-manual
+  stage: host-os-build
+  needs: []
+  script:
+   - |
+    set -euo pipefail
+
+    TAG=$(date '+%Y-%m-%d-%H%M')
+
+    docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
+    cd "${CI_PROJECT_DIR}/ic-os/hostos/rootfs"
+    docker build -q -t dfinity/hostos-base:"$TAG" -t dfinity/hostos-base:latest -f Dockerfile.base .
+    docker push dfinity/hostos-base:"$TAG"
+
+    echo "Use the image with it's SHA256 DIGEST below for IC-OS Dockerfile"
+    docker inspect --format='{{index .RepoDigests 0}}' dfinity/hostos-base:"$TAG"
+
+build-host-os-baseimg:
+  extends:
+    - .cargo-build-docker
+    - .rules-dockerfile-base-changes
+  stage: host-os-build
+  needs: []
+  script:
+  - |
+    set -euo pipefail
+
+    TAG=$(date '+%Y-%m-%d-%H%M')
+    cd "${CI_PROJECT_DIR}/ic-os/hostos/rootfs"
+    docker build -t dfinity/hostos-base:"$TAG" -t dfinity/hostos-base:latest -f Dockerfile.base .
