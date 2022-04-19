@@ -341,11 +341,13 @@ pub struct ReplicatedState {
 impl PartialEq for ReplicatedState {
     fn eq(&self, rhs: &Self) -> bool {
         (
+            &self.bitcoin_testnet,
             &self.canister_states,
             &self.metadata,
             &self.subnet_queues,
             &self.consensus_queue,
         ) == (
+            &rhs.bitcoin_testnet,
             &rhs.canister_states,
             &rhs.metadata,
             &rhs.subnet_queues,

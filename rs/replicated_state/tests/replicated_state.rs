@@ -776,6 +776,29 @@ fn push_response_bitcoin_testnet_respects_bitcoin_feature_flag() {
         .unwrap();
 }
 
+#[test]
+fn state_equality_with_bitcoin() {
+    let mut state =
+        ReplicatedState::new_rooted_at(SUBNET_ID, SubnetType::Application, "unused".into());
+
+    // Enable bitcoin feature.
+    state.metadata.own_subnet_features = SubnetFeatures::from_str("bitcoin_testnet").unwrap();
+
+    let original_state = state.clone();
+
+    state
+        .push_request_bitcoin_testnet(BitcoinAdapterRequestWrapper::GetSuccessorsRequest(
+            GetSuccessorsRequest {
+                processed_block_hashes: vec![vec![10; 32]],
+                anchor: vec![10; 32],
+            },
+        ))
+        .unwrap();
+
+    // The bitcoin state is different and so the states cannot be equal.
+    assert_ne!(original_state, state);
+}
+
 proptest! {
     #[test]
     fn peek_and_next_consistent(
