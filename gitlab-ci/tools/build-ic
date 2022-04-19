@@ -154,8 +154,6 @@ if [ "$BUILD_IMAGES" == "true" ]; then
     fi
     echo -e "\n${HEADER_ICOS}\n"
     gitlab-ci/src/job_scripts/lib/guest-os-updateimg.sh "${DISK_DIR}"
-    # XXX FIXME: Avoid building host-os update image until artifact limit has been increased.
-    # gitlab-ci/src/job_scripts/lib/host-os-updateimg.sh "${DISK_DIR}"
 fi
 
 echo
@@ -178,8 +176,6 @@ if [ "$BUILD_IMAGES" == "true" ] && [ "$BUILD_BINARIES" == "true" ] && [ "$BUILD
     echo IC-OS Image
     cd "$DISK_DIR"
     ls -1 update-img.tar.gz | xargs -n1 sha256sum | tee /tmp/update-img.txt
-    # XXX FIXME: Avoid building host-os update image until artifact limit has been increased.
-    # ls -1 host-update-img.tar.gz | xargs -n1 sha256sum | tee /tmp/host-update-img.txt
     echo
 fi
 
@@ -193,7 +189,5 @@ if [ "$BUILD_CANISTERS" == "true" ]; then
 fi
 if [ "$BUILD_IMAGES" == "true" ] && [ "$BUILD_BINARIES" == "true" ] && [ "$BUILD_CANISTERS" == "true" ]; then
     sha256sum update-img.txt
-    # XXX FIXME: Avoid building host-os update image until artifact limit has been increased.
-    # sha256sum host-update-img.txt
 fi
 echo

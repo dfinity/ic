@@ -66,11 +66,7 @@ JOURNALBEAT_TAGS="${journalbeat_tags}"
 
 if [ "${JOURNALBEAT_HOSTS}" != "" ]; then
     # Covert string into comma separated array
-    if [ "$(echo ${JOURNALBEAT_HOSTS} | grep ':')" ]; then
-        journalbeat_hosts_array=$(for host in ${JOURNALBEAT_HOSTS}; do echo -n "\"${host}\", "; done | sed -E "s@, \$@@g")
-    else
-        journalbeat_hosts_array=$(for host in ${JOURNALBEAT_HOSTS}; do echo -n "\"${host}:443\", "; done | sed -E "s@, \$@@g")
-    fi
+    journalbeat_hosts_array=$(for host in ${JOURNALBEAT_HOSTS}; do echo -n "\"${host}\", "; done | sed -E "s@, \$@@g")
     sed -e "s@{{ journalbeat_hosts }}@${journalbeat_hosts_array}@" "${IN_FILE}" >"${OUT_FILE}"
 fi
 
