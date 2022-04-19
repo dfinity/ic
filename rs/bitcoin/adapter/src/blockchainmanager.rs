@@ -183,6 +183,7 @@ impl BlockchainManager {
 
     /// This method sends `getheaders` command to the adapter.
     /// The adapter then sends the `getheaders` request to the Bitcoin node.
+    /// https://en.bitcoin.it/wiki/Protocol_documentation#getheaders
     fn send_getheaders(
         &mut self,
         channel: &mut impl Channel,
@@ -428,7 +429,14 @@ impl BlockchainManager {
         if self.peer_info.contains_key(addr) {
             return;
         }
-        let initial_hash = self.blockchain.lock().await.genesis().header.block_hash();
+
+        let (initial_hash, locator_hashes) = {
+            let blockchain = self.blockchain.lock().await;
+            (
+                blockchain.genesis().header.block_hash(),
+                blockchain.locator_hashes(),
+            )
+        };
 
         info!(self.logger, "Adding peer_info with addr : {} ", addr);
         self.peer_info.insert(
@@ -442,7 +450,7 @@ impl BlockchainManager {
                 on_timeout: OnTimeout::Ignore,
             },
         );
-        let locators = (vec![initial_hash], BlockHash::default());
+        let locators = (locator_hashes, BlockHash::default());
         self.send_getheaders(channel, addr, locators, OnTimeout::Disconnect);
     }
 
@@ -740,17 +748,15 @@ pub mod test {
         );
     }
 
-    /// This unit test is used to verify if the BlockChainManager initiates sync from `adapter_genesis_hash`
-    /// whenever a new peer is added.
-    /// The test creates a new blockchain manager, an aribtrary chain and 3 peers.
-    /// The test then adds each of the peers and verifies the response from the blockchain manager.
+    /// This test ensures that, when a peer is connected to, the known locator hashes are sent
+    /// to the peer. When first starting, the adapter should send only the genesis hash. After headers
+    /// are received, the locator hashes sent should follow the algorithm defined in
+    /// BlockchainState::locator_hashes.
     #[tokio::test]
     async fn test_init_sync() {
-        let sockets = vec![
-            SocketAddr::from_str("127.0.0.1:8333").expect("bad address format"),
-            SocketAddr::from_str("127.0.0.1:8334").expect("bad address format"),
-            SocketAddr::from_str("127.0.0.1:8335").expect("bad address format"),
-        ];
+        let addr1 = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
+        let addr2 = SocketAddr::from_str("127.0.0.1:8444").expect("bad address format");
+        let sockets = vec![addr1, addr2];
         let mut channel = TestChannel::new(sockets.clone());
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let blockchain_state = BlockchainState::new(&config);
@@ -761,55 +767,85 @@ pub mod test {
 
         // Create an arbitrary chain and adding to the BlockchainState.
         let chain = generate_headers(genesis_hash, genesis.header.time, 16, &[]);
+        let mut after_first_received_headers_message_hashes = chain
+            .iter()
+            .rev()
+            .take(9)
+            .map(|h| h.block_hash())
+            .collect::<Vec<BlockHash>>();
+        after_first_received_headers_message_hashes.push(chain[5].block_hash());
+        after_first_received_headers_message_hashes.push(chain[1].block_hash());
+        after_first_received_headers_message_hashes.push(genesis_hash);
 
-        for socket in sockets.iter() {
-            blockchain_manager.add_peer(&mut channel, socket).await;
-            if let Some(command) = channel.pop_front() {
-                assert_eq!(
-                    command.address.unwrap(),
-                    *socket,
-                    "The getheaders command is not for the added peer"
-                );
-                assert!(
-                    matches!(command.message, NetworkMessage::GetHeaders(_)),
-                    "Didn't send getheaders command after adding the peer"
-                );
-                if let NetworkMessage::GetHeaders(get_headers_message) = &command.message {
-                    assert_eq!(
-                        get_headers_message.locator_hashes,
-                        vec![genesis.header.block_hash()],
-                        "Didn't send the right genesis hash for initial syncing"
-                    );
-                    assert_eq!(
-                        get_headers_message.stop_hash,
-                        BlockHash::default(),
-                        "Didn't send the right stop hash for initial syncing"
-                    );
-                }
+        blockchain_manager.add_peer(&mut channel, &addr1).await;
+        let command = channel
+            .pop_front()
+            .expect("there should be a getheaders message");
+        assert_eq!(
+            command.address.unwrap(),
+            addr1,
+            "The getheaders command is not for the addr1"
+        );
+        assert!(
+            matches!(command.message, NetworkMessage::GetHeaders(_)),
+            "Didn't send getheaders command after adding the peer"
+        );
+        let get_headers_message = match command.message {
+            NetworkMessage::GetHeaders(get_headers_message) => get_headers_message,
+            _ => GetHeadersMessage {
+                version: 0,
+                locator_hashes: vec![],
+                stop_hash: BlockHash::default(),
+            },
+        };
+        assert_eq!(
+            get_headers_message.locator_hashes,
+            vec![genesis_hash],
+            "Didn't send the right genesis hash for initial syncing"
+        );
+        assert_eq!(
+            get_headers_message.stop_hash,
+            BlockHash::default(),
+            "Didn't send the right stop hash for initial syncing"
+        );
 
-                let message = NetworkMessage::Headers(chain.clone());
+        // Add headers to the blockchain state.
+        let message = NetworkMessage::Headers(chain.clone());
+        assert!(blockchain_manager
+            .process_bitcoin_network_message(&mut channel, addr1, &message)
+            .await
+            .is_ok());
 
-                assert!(blockchain_manager
-                    .process_bitcoin_network_message(&mut channel, *socket, &message)
-                    .await
-                    .is_ok());
-                let peer = blockchain_manager.peer_info.get(socket).unwrap();
-                assert_eq!(peer.height, 16, "Height of peer {} is not correct", socket);
-                assert_eq!(
-                    blockchain_manager
-                        .blockchain
-                        .lock()
-                        .await
-                        .get_active_chain_tip()
-                        .height,
-                    16,
-                    "Height of the blockchain is not matching after adding the headers"
-                );
-                channel.pop_front();
-            } else {
-                panic!("No command sent after adding a peer");
-            }
-        }
+        blockchain_manager.add_peer(&mut channel, &addr2).await;
+        let command = channel
+            .pop_front()
+            .expect("there should be a getheaders message");
+        assert_eq!(
+            command.address.unwrap(),
+            addr2,
+            "The getheaders command is not for the addr2"
+        );
+        assert!(
+            matches!(command.message, NetworkMessage::GetHeaders(_)),
+            "Didn't send getheaders command after adding the peer"
+        );
+        let get_headers_message = match command.message {
+            NetworkMessage::GetHeaders(get_headers_message) => get_headers_message,
+            _ => GetHeadersMessage {
+                version: 0,
+                locator_hashes: vec![],
+                stop_hash: BlockHash::default(),
+            },
+        };
+        assert_eq!(
+            get_headers_message.locator_hashes, after_first_received_headers_message_hashes,
+            "Didn't send the right genesis hash for initial syncing"
+        );
+        assert_eq!(
+            get_headers_message.stop_hash,
+            BlockHash::default(),
+            "Didn't send the right stop hash for initial syncing"
+        );
     }
 
     #[tokio::test]
