@@ -1,11 +1,9 @@
 use ic_config::subnet_config::{SubnetConfig, SubnetConfigs};
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_error_types::UserError;
+pub use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::ExecutionServices;
-use ic_ic00_types::CanisterInstallMode;
-use ic_ic00_types::{
-    self as ic00, CanisterIdRecord, CanisterSettingsArgs, InstallCodeArgs, Method, Payload,
-};
+use ic_ic00_types::{self as ic00, CanisterIdRecord, InstallCodeArgs, Method, Payload};
+pub use ic_ic00_types::{CanisterInstallMode, CanisterSettingsArgs};
 use ic_interfaces::{
     certification::{Verifier, VerifierError},
     execution_environment::{IngressHistoryReader, QueryHandler},
@@ -39,21 +37,24 @@ use ic_test_utilities_registry::{
 use ic_types::{
     batch::{Batch, BatchPayload, IngressPayload, SelfValidatingPayload, XNetPayload},
     consensus::certification::Certification,
-    ingress::{IngressStatus, WasmResult},
     messages::{
-        Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, MessageId, SignedIngress,
-        UserQuery,
+        Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SignedIngress, UserQuery,
     },
-    time::{current_time_and_expiry_time, Time, UNIX_EPOCH},
-    CanisterId, CryptoHashOfState, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId,
-    UserId,
+    time::{current_time_and_expiry_time, UNIX_EPOCH},
+    Height, NodeId, Randomness, RegistryVersion,
+};
+pub use ic_types::{
+    ingress::{IngressStatus, WasmResult},
+    messages::MessageId,
+    time::Time,
+    CanisterId, CryptoHashOfState, PrincipalId, SubnetId, UserId,
 };
 use std::convert::TryFrom;
 use std::fmt;
 use std::path::Path;
 use std::string::ToString;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
 
@@ -136,6 +137,7 @@ pub struct StateMachine {
     query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
     _runtime: Runtime,
     state_dir: TempDir,
+    checkpoints_enabled: std::cell::Cell<bool>,
     nonce: std::cell::Cell<u64>,
     time: std::cell::Cell<Time>,
 }
@@ -167,6 +169,7 @@ impl StateMachine {
         )
     }
 
+    /// Constructs a new environment with the specified configuration.
     pub fn new_with_config(config: SubnetConfig) -> Self {
         Self::setup_from_dir(
             TempDir::new().expect("failed to create a temporary directory"),
@@ -272,6 +275,9 @@ impl StateMachine {
             query_handler: execution_services.sync_query_handler,
             _runtime: runtime,
             state_dir,
+            // Note: state machine tests are commonly used for testing
+            // canisters, such tests usually don't rely on any persistence.
+            checkpoints_enabled: std::cell::Cell::new(false),
             nonce: std::cell::Cell::new(nonce),
             time: std::cell::Cell::new(time),
         }
@@ -282,6 +288,8 @@ impl StateMachine {
         Self::setup_from_dir(self.state_dir, self.nonce.get(), self.time.get(), None)
     }
 
+    /// Same as [restart_node], but the subnet will have the specified `config`
+    /// after the restart.
     pub fn restart_node_with_config(self, config: SubnetConfig) -> Self {
         Self::setup_from_dir(
             self.state_dir,
@@ -291,17 +299,35 @@ impl StateMachine {
         )
     }
 
+    /// If the argument is true, the state machine will create an on-disk
+    /// checkpoint for each new state it creates.
+    ///
+    /// You have to call this function with `true` before you make any changes
+    /// to the state machine if you want to use [restart_node] and
+    /// [await_state_hash] functions.
+    pub fn set_checkpoints_enabled(&self, enabled: bool) {
+        self.checkpoints_enabled.set(enabled)
+    }
+
     /// Creates a new batch containing a single ingress message and sends it for
     /// processing to the replicated state machine.
     fn send_signed_ingress(&self, msg: SignedIngress) {
-        // Move the block time forward by 1 second.
-        self.time.set(self.time.get() + Duration::from_secs(1));
+        self.execute_block_with_ingress_payload(IngressPayload::from(vec![msg]))
+    }
 
+    /// Triggers a single round of execution without any new inputs.  The state
+    /// machine will invoke hearbeats and make progress on pending async calls.
+    pub fn tick(&self) {
+        self.execute_block_with_ingress_payload(IngressPayload::default())
+    }
+
+    fn execute_block_with_ingress_payload(&self, ingress: IngressPayload) {
+        let batch_number = self.message_routing.expected_batch_height();
         let batch = Batch {
-            batch_number: self.message_routing.expected_batch_height(),
-            requires_full_state_hash: true,
+            batch_number,
+            requires_full_state_hash: self.checkpoints_enabled.get(),
             payload: BatchPayload {
-                ingress: IngressPayload::from(vec![msg]),
+                ingress,
                 xnet: XNetPayload {
                     stream_slices: Default::default(),
                 },
@@ -315,7 +341,39 @@ impl StateMachine {
         };
         self.message_routing
             .deliver_batch(batch)
-            .expect("MR queue overflow")
+            .expect("MR queue overflow");
+        self.await_height(batch_number);
+    }
+
+    fn await_height(&self, h: Height) {
+        const SLEEP_TIME: Duration = Duration::from_millis(100);
+        const MAX_WAIT_TIME: Duration = Duration::from_secs(60);
+
+        let started_at = Instant::now();
+
+        while started_at.elapsed() < MAX_WAIT_TIME {
+            if self.state_manager.latest_state_height() >= h {
+                return;
+            }
+            std::thread::sleep(SLEEP_TIME);
+        }
+
+        panic!(
+            "Did not finish executing block {} in {:?}, last executed block: {}",
+            h,
+            started_at.elapsed(),
+            self.state_manager.latest_state_height(),
+        )
+    }
+
+    /// Sets the time that the state machine will use for executing next
+    /// messages.
+    pub fn set_time(&self, time: SystemTime) {
+        self.time.set(Time::from_nanos_since_unix_epoch(
+            time.duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos() as u64,
+        ));
     }
 
     /// Blocks until the hash of the latest state is computed.
@@ -352,25 +410,28 @@ impl StateMachine {
     ///
     /// # Panics
     ///
-    /// This function panics if the result doesn't become available in a
-    /// reasonable amount of time (typically, a few seconds).
-    pub fn await_ingress(&self, msg_id: MessageId) -> Result<WasmResult, UserError> {
-        let mut tries = 0;
+    /// This function panics if the result doesn't become available after the
+    /// specified number of state machine ticks.
+    pub fn await_ingress(
+        &self,
+        msg_id: MessageId,
+        max_ticks: usize,
+    ) -> Result<WasmResult, UserError> {
         let started_at = Instant::now();
-        while tries < 6000 {
+
+        for _tick in 0..max_ticks {
             match self.ingress_status(&msg_id) {
                 IngressStatus::Completed { result, .. } => return Ok(result),
                 IngressStatus::Failed { error, .. } => return Err(error),
                 _ => {
-                    tries += 1;
-                    std::thread::sleep(Duration::from_millis(100));
-                    continue;
+                    self.tick();
                 }
             }
         }
         panic!(
-            "did not get answer to ingress {} after {:?}",
+            "Did not get answer to ingress {} after {} state machine ticks ({:?} elapsed)",
             msg_id,
+            max_ticks,
             started_at.elapsed()
         )
     }
@@ -557,6 +618,17 @@ impl StateMachine {
         self.install_wat_in_mode(canister_id, CanisterInstallMode::Upgrade, wat, payload);
     }
 
+    /// Performs upgrade of the canister with the specified ID to the specified
+    /// Wasm code.
+    pub fn upgrade_canister(
+        &self,
+        canister_id: CanisterId,
+        wasm: Vec<u8>,
+        payload: Vec<u8>,
+    ) -> Result<(), UserError> {
+        self.install_wasm_in_mode(canister_id, CanisterInstallMode::Upgrade, wasm, payload)
+    }
+
     /// Queries the canister with the specified ID.
     pub fn query(
         &self,
@@ -608,8 +680,9 @@ impl StateMachine {
         method: impl ToString,
         payload: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
+        const MAX_TICKS: usize = 100;
         let msg_id = self.send_ingress(sender, canister_id, method, payload);
-        self.await_ingress(msg_id)
+        self.await_ingress(msg_id, MAX_TICKS)
     }
 
     pub fn execute_ingress(
@@ -660,6 +733,7 @@ impl StateMachine {
         (self.ingress_history_reader.get_latest_status())(msg_id)
     }
 
+    /// Stops the canister with the specified ID.
     pub fn stop_canister(&self, canister_id: CanisterId) -> Result<WasmResult, UserError> {
         self.execute_ingress(
             CanisterId::ic_00(),
