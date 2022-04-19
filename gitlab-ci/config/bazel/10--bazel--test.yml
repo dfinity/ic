@@ -1,0 +1,11 @@
+bazel-test:
+  extends:
+    - .ubuntu-nix-docker
+    - .rules-parent-pipeline-autorun-on-trigger
+  stage: test
+  script:
+    - |
+      set -euo pipefail
+
+      bazel --version
+      bazel build :all --remote_cache=grpc://10.117.26.74:8980

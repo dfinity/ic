@@ -1,0 +1,8 @@
+bazel-pipeline:
+  extends: .bazel-rules-child-pipeline
+  # Child pipeline must be generated in a stage prior to the one where it runs
+  stage: test
+  needs: []
+  trigger:
+    include: /gitlab-ci/config/bazel/00--bazel-pipeline-root.yml
+    strategy: depend

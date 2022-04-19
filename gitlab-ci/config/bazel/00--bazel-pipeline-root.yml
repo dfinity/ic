@@ -1,0 +1,4 @@
+include:
+  - local: /gitlab-ci/config/00--common.yml
+  - local: /gitlab-ci/config/00--common--rules.yml
+  - local: /gitlab-ci/config/bazel/10--bazel--test.yml

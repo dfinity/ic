@@ -9,6 +9,20 @@
       when: manual
       allow_failure: true  # the pipeline continues running even if the manual job is not run
 
+.bazel-rules-child-pipeline:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - '**/BUILD.bazel'
+        - '**/*.bzl'
+      when: always
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\[bazel\]/'
+      when: always
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
+
 .cargo-rules-autorun-on-trigger:
   # References (anchors) do not work for 'rules' (yet), so we need to copy the `.cargo-rules`
   # https://docs.gitlab.com/ee/ci/yaml/#yaml-anchors-for-scripts
