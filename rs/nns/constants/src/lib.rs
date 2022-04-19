@@ -104,4 +104,4 @@ pub fn memory_allocation_of(canister_id: CanisterId) -> u64 {
 }
 
 /// The whitelist of allowed node types
-pub const NODE_TYPES: &[&str] = &["default", "small", "storage_upgrade"];
+pub const NODE_TYPES: &[&str] = &["type0", "type1", "type2"];
