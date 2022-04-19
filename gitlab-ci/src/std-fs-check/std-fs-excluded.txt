@@ -6,3 +6,4 @@
 # testing related code that runs in CI, 
 tests/
 ic_fondue/
+bitcoin/canister/src/examples/
