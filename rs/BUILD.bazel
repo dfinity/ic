@@ -9,7 +9,8 @@ filegroup(
         exclude = [
             "target",
             "*.swp",
-	    "**/gen/**/*.rs",
+            "**/gen/**/*.rs",
+            "nervous_system/common/bazel-out/**",
         ],
     ),
 )
