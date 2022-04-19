@@ -1249,6 +1249,11 @@ struct ProposeToUpdateSubnetCmd {
     /// for more details on how to choose values.
     max_instructions_per_install_code: Option<u64>,
 
+    #[clap(long)]
+    /// Enable key signing on this subnet for a particular key_id
+    /// Only one key_id is permitted at a time at the moment
+    ecdsa_key_signing_enable: Option<Vec<String>>,
+
     /// Configuration for ECDSA feature.
     #[clap(long)]
     pub ecdsa_quadruples_to_create_in_advance: Option<u32>,
@@ -1323,7 +1328,7 @@ impl ProposalTitleAndPayload<UpdateSubnetPayload> for ProposeToUpdateSubnetCmd {
                     quadruples_to_create_in_advance: val,
                     key_ids: vec![],
                 }),
-            ecdsa_key_signing_enable: None,
+            ecdsa_key_signing_enable: self.ecdsa_key_signing_enable.clone(),
             ssh_readonly_access: self.ssh_readonly_access.clone(),
             ssh_backup_access: self.ssh_backup_access.clone(),
             max_number_of_canisters: self.max_number_of_canisters,
