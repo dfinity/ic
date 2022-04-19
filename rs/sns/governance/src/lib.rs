@@ -1,3 +1,4 @@
+pub mod canister_control;
 pub mod governance;
 pub mod init;
 mod neuron;

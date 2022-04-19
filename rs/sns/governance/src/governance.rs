@@ -8,6 +8,10 @@ use std::ops::Bound::{Excluded, Unbounded};
 use std::str::FromStr;
 use std::string::ToString;
 
+use crate::canister_control::{
+    get_canister_id, perform_call_canister_method, perform_execute_nervous_system_function_call,
+    upgrade_canister_directly,
+};
 use crate::pb::v1::{
     get_neuron_response, get_proposal_response,
     governance::neuron_in_flight_command::Command as InFlightCommand,
@@ -19,8 +23,8 @@ use crate::pb::v1::{
         ClaimOrRefresh,
     },
     neuron::{DissolveState, Followees},
-    proposal, Ballot, CallCanisterMethod, DefaultFollowees, Empty, GetNeuron, GetNeuronResponse,
-    GetProposal, GetProposalResponse, Governance as GovernanceProto, GovernanceError,
+    proposal, Ballot, DefaultFollowees, Empty, GetNeuron, GetNeuronResponse, GetProposal,
+    GetProposalResponse, Governance as GovernanceProto, GovernanceError,
     ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
     ListProposalsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters, Neuron,
     NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
@@ -40,21 +44,26 @@ use crate::pb::v1::manage_neuron_response::{DisburseMaturityResponse, MergeMatur
 use crate::pb::v1::proposal::Action;
 use crate::pb::v1::{ExecuteNervousSystemFunction, NervousSystemFunction, WaitForQuietState};
 use crate::proposal::{
-    validate_call_canister_method, validate_proposal, MAX_LIST_PROPOSAL_RESULTS,
-    MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
+    validate_and_render_proposal, MAX_LIST_PROPOSAL_RESULTS, MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
 };
 
 use crate::types::{Environment, HeapGrowthPotential, LedgerUpdateLock};
-use candid::{Decode, Encode};
+use candid::Encode;
 use dfn_core::api::{id, spawn, CanisterId};
 use ic_nervous_system_common::{
     ledger::{self, Ledger},
     NervousSystemError,
 };
-use ic_nervous_system_root::{
-    CanisterIdRecord, CanisterStatusResult, CanisterStatusType, ChangeCanisterProposal,
-};
+use ic_nervous_system_root::ChangeCanisterProposal;
 use ledger_canister::Tokens;
+
+pub const NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER: NervousSystemFunction = NervousSystemFunction {
+    id: 0,
+    target_canister_id: None,
+    target_method_name: None,
+    validator_canister_id: None,
+    validator_method_name: None,
+};
 
 // When `list_proposals` is called, for each proposal if a payload exceeds
 // this limit (1 KB) it's payload will not be returned in the reply.
@@ -1316,6 +1325,7 @@ impl Governance {
             failure_reason: data.failure_reason.clone(),
             reward_event_round: data.reward_event_round,
             wait_for_quiet_state: data.wait_for_quiet_state.clone(),
+            payload_text_rendering: data.payload_text_rendering.clone(),
         }
     }
 
@@ -1618,8 +1628,10 @@ impl Governance {
                     ErrorType::NotFound,
                     format!("Failed to remove NervousSystemFunction. There is no NervousSystemFunction with id: {}", id),
             )),
-            Entry::Occupied(o) => {
-                o.remove();
+            Entry::Occupied(mut o) => {
+                // Insert a deletion marker to signify that there was a nervoussystemfunction
+                // with this id at some point, but that it was deleted.
+                o.insert(NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER.clone());
                 Ok(())
             },
         }
@@ -1796,16 +1808,31 @@ impl Governance {
             .map_or(1, |(k, _)| k + 1)
     }
 
-    fn validate_proposal(&mut self, proposal: &Proposal) -> Result<(), GovernanceError> {
+    /// Validates and renders a proposal.
+    /// If a proposal is valid it returns the rendering for the Proposals's payload
+    /// If the proposal is invalid it returns a descriptive error.
+    async fn validate_and_render_proposal(
+        &mut self,
+        proposal: &Proposal,
+    ) -> Result<String, GovernanceError> {
         if !proposal.allowed_when_resources_are_low() {
             self.check_heap_can_grow()?;
         }
 
-        validate_proposal(proposal, self.nervous_system_parameters())
-            .map_err(|e| GovernanceError::new_with_message(ErrorType::InvalidProposal, e))
+        validate_and_render_proposal(
+            proposal,
+            &*self.env,
+            self.proto
+                .parameters
+                .as_ref()
+                .expect("Governance must have NervousSystemParameters."),
+            &self.proto.id_to_nervous_system_functions,
+        )
+        .await
+        .map_err(|e| GovernanceError::new_with_message(ErrorType::InvalidProposal, e))
     }
 
-    pub fn make_proposal(
+    pub async fn make_proposal(
         &mut self,
         proposer_id: &NeuronId,
         caller: &PrincipalId,
@@ -1814,7 +1841,7 @@ impl Governance {
         let now_seconds = self.env.now();
 
         // Validate proposal
-        self.validate_proposal(proposal)?;
+        let rendering = self.validate_and_render_proposal(proposal).await?;
         // This should not panic, because proposal was just validated.
         let action = proposal.action.as_ref().expect("No action.");
 
@@ -1946,6 +1973,7 @@ impl Governance {
             proposal: Some(proposal.clone()),
             proposal_creation_timestamp_seconds: now_seconds,
             ballots: electoral_roll,
+            payload_text_rendering: Some(rendering),
             ..Default::default()
         };
 
@@ -2726,6 +2754,7 @@ impl Governance {
                 .map(|_| ManageNeuronResponse::follow_response()),
             Some(manage_neuron::Command::MakeProposal(p)) => self
                 .make_proposal(&id, caller, p)
+                .await
                 .map(ManageNeuronResponse::make_proposal_response),
             Some(manage_neuron::Command::RegisterVote(v)) => self
                 .register_vote(&id, caller, v)
@@ -3064,303 +3093,6 @@ impl Governance {
             .neurons
             .get_mut(&nid.to_string())
             .ok_or_else(|| Self::neuron_not_found_error(nid))
-    }
-}
-
-fn get_canister_id(canister_id: &Option<PrincipalId>) -> Result<CanisterId, GovernanceError> {
-    let canister_id = canister_id.ok_or_else(|| {
-        GovernanceError::new_with_message(
-            ErrorType::InvalidProposal,
-            "No canister ID was specified.",
-        )
-    })?;
-
-    CanisterId::new(canister_id).map_err(|err| {
-        GovernanceError::new_with_message(
-            ErrorType::InvalidProposal,
-            format!("Specified canister ID was invalid: {:?}", err,),
-        )
-    })
-}
-
-async fn upgrade_canister_directly(
-    env: &dyn Environment,
-    canister_id: CanisterId,
-    wasm: Vec<u8>,
-) -> Result<(), GovernanceError> {
-    println!("{}Begin: Stop canister {}.", log_prefix(), canister_id);
-    stop_canister(env, canister_id).await?;
-    println!("{}End: Stop canister {}.", log_prefix(), canister_id);
-
-    println!(
-        "{}Begin: Install code into canister {}",
-        log_prefix(),
-        canister_id
-    );
-    let install_result = install_code(env, canister_id, wasm)
-        // No question mark operator here, because we always want to re-start
-        // the canister after attempting install_code, even if install_code
-        // fails.
-        .await;
-    println!(
-        "{}End: Install code into canister {}",
-        log_prefix(),
-        canister_id
-    );
-
-    println!("{}Begin: Re-start canister {}", log_prefix(), canister_id);
-    start_canister(env, canister_id).await?;
-    println!("{}End: Re-start canister {}", log_prefix(), canister_id);
-
-    install_result
-}
-
-async fn install_code(
-    env: &dyn Environment,
-    canister_id: CanisterId,
-    wasm: Vec<u8>,
-) -> Result<(), GovernanceError> {
-    const MEMORY_ALLOCATION_BYTES: u64 = 1_u64 << 30;
-
-    let install_code_args = ic_ic00_types::InstallCodeArgs {
-        mode: ic_ic00_types::CanisterInstallMode::Upgrade,
-        canister_id: canister_id.get(),
-        wasm_module: wasm,
-        arg: vec![],
-        compute_allocation: None,
-        memory_allocation: Some(candid::Nat::from(MEMORY_ALLOCATION_BYTES)),
-        query_allocation: None,
-    };
-
-    env.call_canister(
-        ic_ic00_types::IC_00,
-        "install_code",
-        Encode!(&install_code_args).expect("Unable to encode install_code args."),
-    )
-    .await
-    .map(|_reply| ())
-    .map_err(|err| {
-        let err = GovernanceError::new_with_message(
-            ErrorType::External,
-            format!("Failed to install code into the target canister: {:?}", err),
-        );
-        println!("{}{:?}", log_prefix(), err);
-        err
-    })
-}
-
-async fn start_canister(
-    env: &dyn Environment,
-    canister_id: CanisterId,
-) -> Result<(), GovernanceError> {
-    env.call_canister(
-        CanisterId::ic_00(),
-        "start_canister",
-        Encode!(&CanisterIdRecord::from(canister_id))
-            .expect("Unable to encode start_canister args."),
-    )
-    .await
-    .map(|_reply| ())
-    .map_err(|err| {
-        let err = GovernanceError::new_with_message(
-            ErrorType::External,
-            format!("Failed to restart the target canister: {:?}", err),
-        );
-        println!("{}{:?}", log_prefix(), err);
-        err
-    })
-}
-
-async fn stop_canister(
-    env: &dyn Environment,
-    canister_id: CanisterId,
-) -> Result<(), GovernanceError> {
-    let serialize_canister_id = candid::Encode!(&CanisterIdRecord::from(canister_id))
-        .expect("Unable to encode stop_canister args.");
-
-    env.call_canister(
-        CanisterId::ic_00(),
-        "stop_canister",
-        serialize_canister_id.clone(),
-    )
-    .await
-    .map_err(|err| {
-        let err = GovernanceError::new_with_message(
-            ErrorType::External,
-            format!("Unable to stop the target canister: {:?}", err),
-        );
-        println!("{}{:?}", log_prefix(), err);
-        err
-    })?;
-
-    // Wait until canister is in the stopped state.
-    loop {
-        let result = env
-            .call_canister(
-                CanisterId::ic_00(),
-                "canister_status",
-                serialize_canister_id.clone(),
-            )
-            .await;
-        let status = match result {
-            Ok(ok) => Decode!(&ok, CanisterStatusResult)
-                .expect("Unable to decode canister_status response."),
-
-            // This is probably a permanent error, so we give up right away.
-            Err(err) => {
-                let err = GovernanceError::new_with_message(
-                    ErrorType::External,
-                    format!(
-                        "An error occurred while waiting for the target canister to stop: {:?}",
-                        err
-                    ),
-                );
-                println!("{}{:?}", log_prefix(), err);
-                return Err(err);
-            }
-        };
-
-        if status.status == CanisterStatusType::Stopped {
-            return Ok(());
-        }
-
-        println!(
-            "{}Still waiting for canister {} to stop. status: {:?}",
-            log_prefix(),
-            canister_id,
-            status
-        );
-    }
-}
-
-fn unpack_execute_nervous_system_function(
-    function: NervousSystemFunction,
-) -> Result<(CanisterId, String), GovernanceError> {
-    let NervousSystemFunction {
-        id: _,
-        target_canister_id,
-        target_method_name,
-        validator_canister_id: _,
-        validator_method_name: _,
-    } = function;
-
-    let mut defects = vec![];
-
-    // Validate the target_canister_id field.
-    let target_canister_id = match target_canister_id {
-        None => {
-            defects.push("target_canister_id field was not populated.".to_string());
-            None
-        }
-        Some(target_canister_id) => match CanisterId::new(target_canister_id) {
-            Err(err) => {
-                defects.push(format!("target_canister_id was invalid: {}", err));
-                None
-            }
-            Ok(target_canister_id) => Some(target_canister_id),
-        },
-    };
-
-    // Validate the target_method_name field.
-    if target_method_name.is_none() || target_method_name.as_ref().unwrap().is_empty() {
-        defects.push("target_method_name was empty.".to_string());
-    }
-
-    if !defects.is_empty() {
-        return Err(GovernanceError::new_with_message(
-            ErrorType::InvalidProposal,
-            format!(
-                "ExecuteNervousSystemFunction was invalid for the following reason(s):\n{}",
-                defects.join("\n")
-            ),
-        ));
-    }
-
-    Ok((target_canister_id.unwrap(), target_method_name.unwrap()))
-}
-
-async fn perform_execute_nervous_system_function_call(
-    env: &dyn Environment,
-    function: NervousSystemFunction,
-    call: ExecuteNervousSystemFunction,
-) -> Result<(), GovernanceError> {
-    let (canister_id, method_name) = unpack_execute_nervous_system_function(function)?;
-
-    let result = env
-        .call_canister(canister_id, &method_name, call.payload)
-        .await;
-
-    // Convert result.
-    match result {
-        Err(err) => Err(GovernanceError::new_with_message(
-            ErrorType::External,
-            format!("Canister method call failed: {:?}", err),
-        )),
-
-        Ok(_reply) => {
-            // TODO: Do something with reply. E.g. store it in the proposal,
-            // and/or deserialize it so that we can detect whether there was an
-            // application-level error, as opposed to a communication
-            // error. Detecting application error could be done as follows:
-            //
-            //   candid::!Decode(&reply, Result<String, String>)
-            //
-            // This could then be converted into a Result<(), GovernanceError>.
-            // For now, any reply is considered a success.
-            Ok(())
-        }
-    }
-}
-
-async fn perform_call_canister_method(
-    env: &dyn Environment,
-    call: CallCanisterMethod,
-) -> Result<(), GovernanceError> {
-    // 1. Inputs.
-    validate_call_canister_method(&call)
-        // Convert to GovernanceError. In practice, this should never happen,
-        // because the proposal was validated when it was first made. However,
-        // since we cannot control that, it is possible to provoke this failure
-        // (e.g. in test).
-        .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidProposal, err))?;
-    let CallCanisterMethod {
-        target_canister_id,
-        target_method_name,
-        payload,
-    } = call;
-    // This should not panic, since we just validated call.
-    let target_canister_id = CanisterId::new(target_canister_id.unwrap()).unwrap();
-    let payload_len = payload.len(); // Might be used later, but after payload is consumed.
-
-    // 2. The real work.
-    let result = env
-        .call_canister(target_canister_id, &target_method_name, payload)
-        .await;
-
-    // 3. Convert result.
-    match result {
-        Err(err /* (Option<i32>, String) */) => Err(GovernanceError::new_with_message(
-            ErrorType::External,
-            format!(
-                "Canister method call failed \
-                 (target_canister_id = {:?}, target_method_name = {:?}, payload.len = {:?}): \
-                 {:?}",
-                target_canister_id, target_method_name, payload_len, err
-            ),
-        )),
-
-        Ok(_reply) => {
-            // TODO: Do something with reply. E.g. store it in the proposal,
-            // and/or deserialize it so that we can detect whether there was an
-            // application-level error, as opposed to a communication
-            // error. Detecting application error could be done as follows:
-            //
-            //   candid::!Decode(&reply, Result<String, String>)
-            //
-            // This could then be converted into a Result<(), GovernanceError>.
-            // For now, any reply is considered a success.
-            Ok(())
-        }
     }
 }
 

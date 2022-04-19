@@ -4,6 +4,7 @@ use ic_config::subnet_config::SubnetConfig;
 use ic_config::Config;
 use ic_sns_governance::init::GovernanceCanisterInitPayloadBuilder;
 use ic_sns_governance::pb::v1::manage_neuron_response::Command as CommandResponse;
+use ic_sns_governance::pb::v1::ListNervousSystemFunctionsResponse;
 use ic_sns_governance::pb::v1::{
     get_neuron_response, get_proposal_response,
     manage_neuron::{
@@ -445,6 +446,13 @@ impl SnsCanisters<'_> {
         }
 
         neuron_id
+    }
+
+    pub async fn list_nervous_system_functions(&self) -> ListNervousSystemFunctionsResponse {
+        self.governance
+            .query_("list_nervous_system_functions", candid_one, ())
+            .await
+            .expect("Error calling list_nervous_system_functions")
     }
 
     pub async fn stake_neuron_account(
