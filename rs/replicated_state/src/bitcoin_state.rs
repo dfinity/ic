@@ -1,10 +1,7 @@
 use ic_btc_types_internal::{
     BitcoinAdapterRequest, BitcoinAdapterRequestWrapper, BitcoinAdapterResponse,
 };
-use ic_protobuf::{
-    bitcoin::v1 as pb_bitcoin,
-    proxy::{try_from_option_field, ProxyDecodeError},
-};
+use ic_protobuf::{bitcoin::v1 as pb_bitcoin, proxy::ProxyDecodeError};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, VecDeque},
@@ -54,7 +51,7 @@ impl std::fmt::Display for BitcoinStateError {
 /// Represents the queues for requests to and responses from the Bitcoin Adapter.
 /// See `ic_protobuf::bitcoin::v1` for documentation of the fields.
 #[derive(Clone, Debug, PartialEq)]
-struct AdapterQueues {
+pub struct AdapterQueues {
     next_callback_id: u64,
     requests: BTreeMap<u64, BitcoinAdapterRequest>,
     responses: VecDeque<BitcoinAdapterResponse>,
@@ -62,11 +59,29 @@ struct AdapterQueues {
     in_flight_get_successors_requests_num: u32,
 }
 
+impl Default for AdapterQueues {
+    fn default() -> Self {
+        Self::new(REQUEST_QUEUE_CAPACITY)
+    }
+}
+
+impl AdapterQueues {
+    pub fn new(requests_queue_capacity: u32) -> Self {
+        Self {
+            next_callback_id: 0,
+            requests: BTreeMap::new(),
+            responses: VecDeque::new(),
+            requests_queue_capacity,
+            in_flight_get_successors_requests_num: 0,
+        }
+    }
+}
+
 /// Represents the bitcoin state of the subnet.
 /// See `ic_protobuf::bitcoin::v1` for documentation of the fields.
 #[derive(Clone, Debug, PartialEq)]
 pub struct BitcoinState {
-    adapter_queues: AdapterQueues,
+    pub adapter_queues: AdapterQueues,
 }
 
 impl Default for BitcoinState {
@@ -78,13 +93,7 @@ impl Default for BitcoinState {
 impl BitcoinState {
     pub fn new(requests_queue_capacity: u32) -> Self {
         Self {
-            adapter_queues: AdapterQueues {
-                next_callback_id: 0,
-                requests: BTreeMap::new(),
-                responses: VecDeque::new(),
-                requests_queue_capacity,
-                in_flight_get_successors_requests_num: 0,
-            },
+            adapter_queues: AdapterQueues::new(requests_queue_capacity),
         }
     }
 
@@ -206,24 +215,6 @@ impl TryFrom<pb_bitcoin::AdapterQueues> for AdapterQueues {
             requests_queue_capacity: queues.requests_queue_capacity,
             in_flight_get_successors_requests_num,
         })
-    }
-}
-
-impl From<&BitcoinState> for pb_bitcoin::BitcoinState {
-    fn from(bitcoin_state: &BitcoinState) -> pb_bitcoin::BitcoinState {
-        pb_bitcoin::BitcoinState {
-            adapter_queues: Some((&bitcoin_state.adapter_queues).into()),
-        }
-    }
-}
-
-impl TryFrom<pb_bitcoin::BitcoinState> for BitcoinState {
-    type Error = ProxyDecodeError;
-
-    fn try_from(bitcoin_state: pb_bitcoin::BitcoinState) -> Result<Self, Self::Error> {
-        let adapter_queues: AdapterQueues =
-            try_from_option_field(bitcoin_state.adapter_queues, "BitcoinState::adapter_queues")?;
-        Ok(BitcoinState { adapter_queues })
     }
 }
 

@@ -9,8 +9,8 @@ use ic_replicated_state::{
     SystemState,
 };
 use ic_state_layout::{
-    CanisterLayout, CanisterStateBits, CheckpointLayout, ExecutionStateBits, ReadPolicy, RwPolicy,
-    StateLayout,
+    BitcoinStateBits, BitcoinStateLayout, CanisterLayout, CanisterStateBits, CheckpointLayout,
+    ExecutionStateBits, ReadPolicy, RwPolicy, StateLayout,
 };
 use ic_types::Height;
 use ic_utils::thread::parallel_map;
@@ -80,13 +80,12 @@ fn serialize_to_tip(
         serialize_canister_to_tip(log, canister_state, tip)
     });
 
-    tip.bitcoin_testnet()?
-        .bitcoin_state()
-        .serialize(state.bitcoin_testnet().into())?;
-
     for result in results.into_iter() {
         result?;
     }
+
+    serialize_bitcoin_state_to_tip(state.bitcoin_testnet(), &tip.bitcoin_testnet()?)?;
+
     Ok(())
 }
 
@@ -187,6 +186,22 @@ fn serialize_canister_to_tip(
         .map_err(CheckpointError::from)
 }
 
+fn serialize_bitcoin_state_to_tip(
+    state: &BitcoinState,
+    layout: &BitcoinStateLayout<RwPolicy>,
+) -> Result<(), CheckpointError> {
+    layout
+        .bitcoin_state()
+        .serialize(
+            // TODO(EXC-1076): Remove unnecessary clone.
+            (&BitcoinStateBits {
+                adapter_queues: state.adapter_queues.clone(),
+            })
+                .into(),
+        )
+        .map_err(CheckpointError::from)
+}
+
 /// Calls [load_checkpoint] with a newly created thread pool.
 /// See [load_checkpoint] for further details.
 pub fn load_checkpoint_parallel<P: ReadPolicy + Send + Sync>(
@@ -245,14 +260,7 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
         }
     }
 
-    let bitcoin_testnet_layout = checkpoint_layout.bitcoin_testnet()?;
-    let bitcoin_state_proto = bitcoin_testnet_layout.bitcoin_state().deserialize_opt()?;
-
-    let bitcoin_testnet: BitcoinState =
-        bitcoin_state_proto.map_or(Ok(BitcoinState::default()), |v| {
-            BitcoinState::try_from(v)
-                .map_err(|err| into_checkpoint_error("BitcoinState".into(), err))
-        })?;
+    let bitcoin_testnet = load_bitcoin_state(checkpoint_layout)?;
 
     let state = ReplicatedState::new_from_checkpoint(
         canister_states,
@@ -362,6 +370,29 @@ fn load_canister_state_from_checkpoint<P: ReadPolicy>(
 ) -> Result<CanisterState, CheckpointError> {
     let canister_layout = checkpoint_layout.canister(canister_id)?;
     load_canister_state::<P>(&canister_layout, canister_id, checkpoint_layout.height())
+}
+
+fn load_bitcoin_state<P: ReadPolicy>(
+    checkpoint_layout: &CheckpointLayout<P>,
+) -> Result<BitcoinState, CheckpointError> {
+    let layout = checkpoint_layout.bitcoin_testnet()?;
+
+    let into_checkpoint_error =
+        |field: String, err: ic_protobuf::proxy::ProxyDecodeError| CheckpointError::ProtoError {
+            path: layout.raw_path(),
+            field,
+            proto_err: err.to_string(),
+        };
+
+    let bitcoin_state_proto = layout.bitcoin_state().deserialize_opt()?;
+
+    let bitcoin_state_bits: BitcoinStateBits =
+        BitcoinStateBits::try_from(bitcoin_state_proto.unwrap_or_default())
+            .map_err(|err| into_checkpoint_error(String::from("BitcoinStateBits"), err))?;
+
+    Ok(BitcoinState {
+        adapter_queues: bitcoin_state_bits.adapter_queues,
+    })
 }
 
 #[cfg(test)]
@@ -918,6 +949,54 @@ mod tests {
             assert_eq!(
                 original_state.subnet_queues(),
                 recovered_state.subnet_queues()
+            );
+        });
+    }
+
+    #[test]
+    fn can_recover_bitcoin_state() {
+        use ic_btc_types_internal::{BitcoinAdapterRequestWrapper, GetSuccessorsRequest};
+        use ic_registry_subnet_features::BitcoinFeature;
+
+        with_test_replica_logger(|log| {
+            let tmp = Builder::new().prefix("test").tempdir().unwrap();
+            let root = tmp.path().to_path_buf();
+            let layout = StateLayout::new(log.clone(), root);
+
+            const HEIGHT: Height = Height::new(42);
+
+            let own_subnet_type = SubnetType::Application;
+            let subnet_id = subnet_test_id(1);
+            let mut state =
+                ReplicatedState::new_rooted_at(subnet_id, own_subnet_type, "NOT_USED".into());
+
+            // Enable the bitcoin feature to be able to mutate its state.
+            state.metadata.own_subnet_features.bitcoin_testnet_feature =
+                Some(BitcoinFeature::Enabled);
+
+            // Make some change in the Bitcoin state to later verify that it gets recovered.
+            state
+                .push_request_bitcoin_testnet(BitcoinAdapterRequestWrapper::GetSuccessorsRequest(
+                    GetSuccessorsRequest {
+                        processed_block_hashes: vec![],
+                        anchor: vec![],
+                    },
+                ))
+                .unwrap();
+
+            let original_state = state.clone();
+            let _state = make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout);
+
+            let recovered_state = load_checkpoint(
+                &layout.checkpoint(HEIGHT).unwrap(),
+                own_subnet_type,
+                Some(&mut thread_pool()),
+            )
+            .unwrap();
+
+            assert_eq!(
+                recovered_state.bitcoin_testnet().adapter_queues,
+                original_state.bitcoin_testnet().adapter_queues
             );
         });
     }
