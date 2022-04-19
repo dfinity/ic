@@ -449,27 +449,37 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 message_routing::rejoin_test::config(),
                 par(vec![t("rejoin", message_routing::rejoin_test::test)]),
             ),
-            pot(
-                "tecdsa_signature_test_pot",
-                tecdsa::tecdsa_signature_test::config(),
-                par(vec![
-                    t(
-                        "test_threshold_ecdsa_signature_same_subnet",
-                        tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_same_subnet,
-                    ),
-                    t(
-                        "test_threshold_ecdsa_signature_from_other_subnet",
-                        tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_from_other_subnet,
-                    ),
-                    t(
-                        "test_threshold_ecdsa_signature_fails_without_cycles",
-                        tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_fails_without_cycles,
-                    ),
-                    t(
-                        "test_threshold_ecdsa_signature_from_nns_without_cycles",
-                        tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_from_nns_without_cycles,
-                    )
-                ]),
+            pot_with_setup(
+                "tecdsa_signature_same_subnet_pot",
+                tecdsa::tecdsa_signature_test::config,
+                seq(vec![t(
+                    "test_threshold_ecdsa_signature_same_subnet",
+                    tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_same_subnet,
+                )])
+            ),
+            pot_with_setup(
+                "tecdsa_signature_from_other_subnet_pot",
+                tecdsa::tecdsa_signature_test::config,
+                seq(vec![t(
+                    "test_threshold_ecdsa_signature_from_other_subnet",
+                    tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_from_other_subnet,
+                )])
+            ),
+            pot_with_setup(
+                "tecdsa_signature_fails_without_cycles_pot",
+                tecdsa::tecdsa_signature_test::config,
+                seq(vec![t(
+                    "test_threshold_ecdsa_signature_fails_without_cycles",
+                    tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_fails_without_cycles,
+                )])
+            ),
+            pot_with_setup(
+                "tecdsa_signature_from_nns_without_cycles_pot",
+                tecdsa::tecdsa_signature_test::config,
+                seq(vec![t(
+                    "test_threshold_ecdsa_signature_from_nns_without_cycles",
+                    tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_from_nns_without_cycles,
+                )])
             ),
             pot(
                 "update_registry_idkg_key_pot",
