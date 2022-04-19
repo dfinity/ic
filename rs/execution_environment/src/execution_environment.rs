@@ -22,11 +22,11 @@ use ic_ic00_types::{
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
     SetControllerArgs, SetupInitialDKGArgs, SignWithECDSAArgs, UpdateSettingsArgs, IC_00,
 };
-use ic_interfaces::execution_environment::AvailableMemory;
+use ic_interfaces::execution_environment::{AvailableMemory, CanisterOutOfCyclesError};
 use ic_interfaces::{
     execution_environment::{
-        CanisterHeartbeatError, ExecuteMessageResult, ExecutionMode, ExecutionParameters,
-        HypervisorError, IngressHistoryWriter, SubnetAvailableMemory,
+        ExecuteMessageResult, ExecutionMode, ExecutionParameters, HypervisorError,
+        IngressHistoryWriter, SubnetAvailableMemory,
     },
     messages::{CanisterInputMessage, RequestOrIngress},
 };
@@ -156,6 +156,49 @@ fn candid_error_to_user_error(error: candid::Error) -> UserError {
         ErrorCode::CanisterContractViolation,
         format!("Error decoding candid: {}", error),
     )
+}
+
+/// Errors when executing `canister_heartbeat`.
+#[derive(Debug, Eq, PartialEq)]
+pub enum CanisterHeartbeatError {
+    /// The canister isn't running.
+    CanisterNotRunning {
+        status: CanisterStatusType,
+    },
+
+    OutOfCycles(CanisterOutOfCyclesError),
+
+    /// Execution failed while executing the `canister_heartbeat`.
+    CanisterExecutionFailed(HypervisorError),
+}
+
+impl std::fmt::Display for CanisterHeartbeatError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CanisterHeartbeatError::CanisterNotRunning { status } => write!(
+                f,
+                "Canister in status {} instead of {}",
+                status,
+                CanisterStatusType::Running
+            ),
+            CanisterHeartbeatError::OutOfCycles(err) => write!(f, "{}", err),
+            CanisterHeartbeatError::CanisterExecutionFailed(err) => write!(f, "{}", err),
+        }
+    }
+}
+
+impl CanisterHeartbeatError {
+    /// Does this error come from a problem in the execution environment?
+    /// Other errors could be caused by bad canister code.
+    pub fn is_system_error(&self) -> bool {
+        match self {
+            CanisterHeartbeatError::CanisterExecutionFailed(hypervisor_err) => {
+                hypervisor_err.is_system_error()
+            }
+            CanisterHeartbeatError::CanisterNotRunning { status: _ }
+            | CanisterHeartbeatError::OutOfCycles(_) => false,
+        }
+    }
 }
 
 impl ExecutionEnvironment for ExecutionEnvironmentImpl {

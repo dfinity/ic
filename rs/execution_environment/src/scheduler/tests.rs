@@ -1,14 +1,12 @@
 use super::*;
 #[cfg(test)]
-use crate::execution_environment::MockExecutionEnvironment;
+use crate::execution_environment::{CanisterHeartbeatError, MockExecutionEnvironment};
 use candid::Encode;
 use ic_base_types::NumSeconds;
 use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{CanisterIdRecord, Method};
-use ic_interfaces::execution_environment::{
-    CanisterHeartbeatError, ExecuteMessageResult, HypervisorError,
-};
+use ic_interfaces::execution_environment::{ExecuteMessageResult, HypervisorError};
 use ic_interfaces::messages::CanisterInputMessage;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;

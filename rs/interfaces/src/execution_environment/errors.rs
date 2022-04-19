@@ -1,6 +1,5 @@
 use ic_base_types::{CanisterIdError, PrincipalIdBlobParseError};
 use ic_error_types::UserError;
-use ic_ic00_types::CanisterStatusType;
 use ic_types::{methods::WasmMethod, CanisterId, Cycles};
 use ic_wasm_types::{WasmEngineError, WasmInstrumentationError, WasmValidationError};
 use serde::{Deserialize, Serialize};
@@ -62,49 +61,6 @@ impl std::fmt::Display for CanisterOutOfCyclesError {
             "Canister {} is out of cycles: requested {} cycles but the available balance is {} cycles and the freezing threshold {} cycles",
             self.canister_id, self.requested, self.available, self.threshold
         )
-    }
-}
-
-/// Errors when executing `canister_heartbeat`.
-#[derive(Debug, Eq, PartialEq)]
-pub enum CanisterHeartbeatError {
-    /// The canister isn't running.
-    CanisterNotRunning {
-        status: CanisterStatusType,
-    },
-
-    OutOfCycles(CanisterOutOfCyclesError),
-
-    /// Execution failed while executing the `canister_heartbeat`.
-    CanisterExecutionFailed(HypervisorError),
-}
-
-impl std::fmt::Display for CanisterHeartbeatError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CanisterHeartbeatError::CanisterNotRunning { status } => write!(
-                f,
-                "Canister in status {} instead of {}",
-                status,
-                CanisterStatusType::Running
-            ),
-            CanisterHeartbeatError::OutOfCycles(err) => write!(f, "{}", err),
-            CanisterHeartbeatError::CanisterExecutionFailed(err) => write!(f, "{}", err),
-        }
-    }
-}
-
-impl CanisterHeartbeatError {
-    /// Does this error come from a problem in the execution environment?
-    /// Other errors could be caused by bad canister code.
-    pub fn is_system_error(&self) -> bool {
-        match self {
-            CanisterHeartbeatError::CanisterExecutionFailed(hypervisor_err) => {
-                hypervisor_err.is_system_error()
-            }
-            CanisterHeartbeatError::CanisterNotRunning { status: _ }
-            | CanisterHeartbeatError::OutOfCycles(_) => false,
-        }
     }
 }
 

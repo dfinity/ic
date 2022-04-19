@@ -4,7 +4,8 @@ use ic_base_types::NumSeconds;
 use ic_config::{execution_environment, subnet_config::CyclesAccountManagerConfig};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::{
-    ExecutionEnvironment, ExecutionEnvironmentImpl, Hypervisor, IngressHistoryWriterImpl,
+    CanisterHeartbeatError, ExecutionEnvironment, ExecutionEnvironmentImpl, Hypervisor,
+    IngressHistoryWriterImpl,
 };
 use ic_ic00_types::{
     self as ic00, CanisterHttpRequestArgs, CanisterIdRecord, CanisterStatusResultV2, EmptyBlob,
@@ -13,9 +14,7 @@ use ic_ic00_types::{
 use ic_ic00_types::{CanisterInstallMode, CanisterStatusType, HttpMethodType};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_interfaces::{
-    execution_environment::{
-        AvailableMemory, CanisterHeartbeatError, ExecuteMessageResult, ExecutionMode,
-    },
+    execution_environment::{AvailableMemory, ExecuteMessageResult, ExecutionMode},
     messages::CanisterInputMessage,
 };
 use ic_logger::ReplicaLogger;
