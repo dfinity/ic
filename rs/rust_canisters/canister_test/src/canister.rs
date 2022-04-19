@@ -28,6 +28,7 @@ const MAX_BACKOFF_INTERVAL: Duration = Duration::from_secs(10);
 // The multiplier is chosen such that the sum of all intervals is about 100
 // seconds: `sum ~= (1.1^25 - 1) / (1.1 - 1) ~= 98`.
 const BACKOFF_INTERVAL_MULTIPLIER: f64 = 1.1;
+const MAX_ELAPSED_TIME: Duration = Duration::from_secs(60 * 5); // 5 minutes
 
 pub fn get_backoff_policy() -> backoff::ExponentialBackoff {
     backoff::ExponentialBackoff {
@@ -37,7 +38,7 @@ pub fn get_backoff_policy() -> backoff::ExponentialBackoff {
         multiplier: BACKOFF_INTERVAL_MULTIPLIER,
         start_time: std::time::Instant::now(),
         max_interval: MAX_BACKOFF_INTERVAL,
-        max_elapsed_time: None,
+        max_elapsed_time: Some(MAX_ELAPSED_TIME),
         clock: backoff::SystemClock::default(),
     }
 }

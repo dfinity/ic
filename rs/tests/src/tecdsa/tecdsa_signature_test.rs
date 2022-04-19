@@ -17,8 +17,8 @@ end::catalog[] */
 use std::collections::BTreeMap;
 
 use crate::driver::ic::{InternetComputer, Subnet};
+use crate::driver::test_env::TestEnv;
 use crate::nns::vote_and_execute_proposal;
-use crate::nns::NnsExt;
 use crate::util::*;
 use candid::Encode;
 use candid::Principal;
@@ -84,7 +84,8 @@ fn empty_subnet_update() -> UpdateSubnetPayload {
 }
 
 /// Creates one system subnet and two application subnets.
-pub fn config() -> InternetComputer {
+pub fn config(test_env: TestEnv) {
+    use crate::driver::test_env_api::*;
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -113,6 +114,21 @@ pub fn config() -> InternetComputer {
                 })
                 .add_nodes(4),
         )
+        .setup_and_start(&test_env)
+        .expect("Could not start IC!");
+
+    // Currently, we make the assumption that the first subnets is the root
+    // subnet. This might not hold in the future.
+    test_env
+        .topology_snapshot()
+        .subnets()
+        .next()
+        .unwrap()
+        .nodes()
+        .next()
+        .unwrap()
+        .install_nns_canisters()
+        .expect("Failed to install NNS canisters");
 }
 
 struct Endpoints {
@@ -284,7 +300,6 @@ async fn enable_ecdsa_signing(governance: &Canister<'_>, subnet_id: SubnetId, ke
 /// Tests whether a call to `sign_with_ecdsa` is responded with a signature
 /// that is verifiable with the result from `ecdsa_public_key`.
 pub fn test_threshold_ecdsa_signature_same_subnet(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    ctx.install_nns_canisters(&handle, true);
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on(async move {
         let endpoints = get_endpoints(&handle);
@@ -326,7 +341,6 @@ pub fn test_threshold_ecdsa_signature_from_other_subnet(
     handle: IcHandle,
     ctx: &ic_fondue::pot::Context,
 ) {
-    ctx.install_nns_canisters(&handle, true);
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on(async move {
         let endpoints = get_endpoints(&handle);
@@ -363,7 +377,6 @@ pub fn test_threshold_ecdsa_signature_fails_without_cycles(
     handle: IcHandle,
     ctx: &ic_fondue::pot::Context,
 ) {
-    ctx.install_nns_canisters(&handle, true);
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on(async move {
         let endpoints = get_endpoints(&handle);
@@ -407,7 +420,6 @@ pub fn test_threshold_ecdsa_signature_from_nns_without_cycles(
     handle: IcHandle,
     ctx: &ic_fondue::pot::Context,
 ) {
-    ctx.install_nns_canisters(&handle, true);
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on(async move {
         let endpoints = get_endpoints(&handle);
