@@ -228,17 +228,33 @@ class BaseExperiment:
         """Return path to ic-admin."""
         return os.path.join(self.artifacts_path, "ic-admin")
 
-    def __get_topology(self):
-        """Get the current topology from the registry."""
+    def __get_topology(self, nns_url=None):
+        """
+        Get the current topology from the registry.
+
+        A different NNS can be choosen by setting nns_url. This is useful, for example
+        when multiple testnets are used, one for workload generators, and one for
+        target machines.
+        """
+        if nns_url is None:
+            nns_url = self._get_nns_url()
         res = subprocess.check_output(
-            [self._get_ic_admin_path(), "--nns-url", self._get_nns_url(), "get-topology"], encoding="utf-8"
+            [self._get_ic_admin_path(), "--nns-url", nns_url, "get-topology"], encoding="utf-8"
         )
         return json.loads(res)
 
-    def __get_node_info(self, nodeid):
-        """Get info for the given node from the registry."""
+    def __get_node_info(self, nodeid, nns_url=None):
+        """
+        Get info for the given node from the registry.
+
+        A different NNS can be choosen by setting nns_url. This is useful, for example
+        when multiple testnets are used, one for workload generators, and one for
+        target machines.
+        """
+        if nns_url is None:
+            nns_url = self._get_nns_url()
         return subprocess.check_output(
-            [self._get_ic_admin_path(), "--nns-url", self._get_nns_url(), "get-node", nodeid], encoding="utf-8"
+            [self._get_ic_admin_path(), "--nns-url", nns_url, "get-node", nodeid], encoding="utf-8"
         )
 
     def _get_subnet_info(self, subnet_idx):
@@ -271,9 +287,9 @@ class BaseExperiment:
             )
             p.wait()
 
-    def get_node_ip_address(self, nodeid):
+    def get_node_ip_address(self, nodeid, nns_url=None):
         """Get HTTP endpoint for the given node."""
-        nodeinfo = self.__get_node_info(nodeid)
+        nodeinfo = self.__get_node_info(nodeid, nns_url)
         ip = re.findall(r'ip_addr: "([a-f0-9:A-F]+)"', nodeinfo)
         return ip[0]
 
@@ -422,15 +438,15 @@ class BaseExperiment:
 
         return this_canister_id
 
-    def get_hostnames(self, for_subnet_idx=0):
+    def get_hostnames(self, for_subnet_idx=0, nns_url=None):
         """Return hostnames of all machines in the given testnet and subnet from the registry."""
-        topology = self.__get_topology()
+        topology = self.__get_topology(nns_url)
         for curr_subnet_idx, (subnet, info) in enumerate(topology["topology"]["subnets"].items()):
             subnet_type = info["records"][0]["value"]["subnet_type"]
             members = info["records"][0]["value"]["membership"]
             assert curr_subnet_idx != 0 or subnet_type == "system"
             if for_subnet_idx == curr_subnet_idx:
-                return sorted([self.get_node_ip_address(member) for member in members])
+                return sorted([self.get_node_ip_address(member, nns_url) for member in members])
 
     def __build_summary_file(self):
         """Build dictionary to be used to build the summary file."""
