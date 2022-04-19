@@ -33,7 +33,15 @@ class Test_Experiment(TestCase):
 
     def test_verify__mock(self):
         """Test passes when the experiment runs to end."""
-        sys.argv = ["mock.py", "--testnet", "abc", "--wg_testnet", "def"]
+        sys.argv = [
+            "mock.py",
+            "--testnet",
+            "abc",
+            "--wg_testnet",
+            "def",
+            "--workload_generator_machines",
+            "3.3.3.3,4.4.4.4",
+        ]
 
         misc.parse_command_line_args()
 
@@ -41,7 +49,6 @@ class Test_Experiment(TestCase):
 
         # Mock functions that won't work without a proper IC deployment
         exp._WorkloadExperiment__get_targets = Mock(return_value=["1.1.1.1", "2.2.2.2"])
-        exp.get_hostnames = Mock(return_value=["3.3.3.3", "4.4.4.4"])
         exp._WorkloadExperiment__get_subnet_for_target = MagicMock()
         exp.get_subnet_to_instrument = MagicMock()
         BaseExperiment._get_subnet_info = Mock(return_value="{}")

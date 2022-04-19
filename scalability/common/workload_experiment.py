@@ -8,6 +8,7 @@ from statistics import mean
 from typing import List
 
 import gflags
+from common import ansible
 from common import base_experiment
 from common import prometheus
 from common import report
@@ -61,11 +62,17 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         self.target_nodes = self.get_mainnet_targets() if self.testnet == "mercury" else self.__get_targets()
         super().init()
 
-        workload_generator_machines = (
-            FLAGS.workload_generator_machines.split(",")
-            if len(FLAGS.workload_generator_machines) > 0
-            else self.get_hostnames(FLAGS.wg_subnet)
-        )
+        # Determine which machines run workload generators.
+        # For that, we need to query the NNS of the workload generator subnetwork
+        if len(FLAGS.workload_generator_machines) > 0:
+            workload_generator_machines = FLAGS.workload_generator_machines.split(",")
+        else:
+            wg_testnet_nns_host = ansible.get_ansible_hostnames_for_subnet(
+                FLAGS.wg_testnet, base_experiment.NNS_SUBNET_INDEX, sort=False
+            )[0]
+
+            workload_generator_machines = self.get_hostnames(FLAGS.wg_subnet, f"http://[{wg_testnet_nns_host}]:8080")
+
         if self.num_workload_gen > len(workload_generator_machines):
             raise Exception(
                 colored(
