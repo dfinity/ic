@@ -222,10 +222,6 @@ benchmark-xnet:
 
       $SHELL_WRAPPER pipenv run experiments/run_xnet_experiment.py --testnet $TESTNET --hosts_ini_filename=hosts_single_node_subnets.ini
 
-      TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
-      $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
-      $SHELL_WRAPPER pipenv run python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --is_max_capacity_run="True" --branch="$CURRENT_BRANCH" --is_max_capacity_run="True" --gitlab_job_id="$CI_JOB_ID"
-
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
 

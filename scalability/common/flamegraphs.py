@@ -58,7 +58,7 @@ class Flamegraph(metrics.Metric):
             assert rcs == all_correct
 
             destinations = ["admin@[{}]:".format(m) for m in machines]
-            sources = ["flamegraph" for _ in machines]
+            sources = ["common/flamegraph" for _ in machines]
             return ssh.scp_in_parallel(sources, destinations)
 
         else:
@@ -74,8 +74,8 @@ class Flamegraph(metrics.Metric):
                 f"sudo rm -rf {TARGET_DIR}; "
                 f"sudo mkdir {TARGET_DIR}; "
                 f"sudo chmod 0777 {TARGET_DIR}; "
-                f"cp -f common/flamegraph {TARGET_DIR}; cd {TARGET_DIR}; "
-                f"sudo flamegraph -p $(pidof replica) --root --no-inline -o {TARGET_DIR}/flamegraph.svg"
+                f"cp -f flamegraph {TARGET_DIR}; cd {TARGET_DIR}; "
+                f"sudo ./flamegraph -p $(pidof replica) --root --no-inline -o {TARGET_DIR}/flamegraph.svg"
             ),
             os.path.join(outdir, "flamegraph-{}.stdout.log".format(self.target)),
             os.path.join(outdir, "flamegraph-{}.stderr.log".format(self.target)),
