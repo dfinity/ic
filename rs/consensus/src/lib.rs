@@ -5,6 +5,7 @@
 //! algorithm, and a component responsible for certifying state hashes produced
 //! by the upper layers of the internet computer.
 
+pub mod canister_http;
 pub mod certification;
 pub mod consensus;
 pub mod dkg;
