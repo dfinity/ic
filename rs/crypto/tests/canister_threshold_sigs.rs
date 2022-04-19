@@ -1754,7 +1754,7 @@ fn fake_sig_inputs(nodes: &BTreeSet<NodeId>) -> ThresholdEcdsaSigInputs {
 
     ThresholdEcdsaSigInputs::new(
         &derivation_path,
-        &[],
+        &[0u8; 32],
         Randomness::from([0_u8; 32]),
         fake_presig_quadruple,
         fake_key,

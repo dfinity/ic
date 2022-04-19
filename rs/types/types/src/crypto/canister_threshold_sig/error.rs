@@ -18,17 +18,19 @@ macro_rules! impl_display_using_debug {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PresignatureQuadrupleCreationError {
-    WrongTypes,
-    InconsistentAlgorithms,
+    InconsistentAlgorithmIds,
     InconsistentReceivers,
+    InvalidTranscriptOrigin(String),
 }
 impl_display_using_debug!(PresignatureQuadrupleCreationError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ThresholdEcdsaSigInputsCreationError {
-    NonmatchingTranscriptIds,
-    InconsistentAlgorithms,
+    InconsistentAlgorithmIds,
     InconsistentReceivers,
+    InvalidHashLength,
+    InvalidQuadrupleOrigin(String),
+    UnsupportedAlgorithm,
 }
 impl_display_using_debug!(ThresholdEcdsaSigInputsCreationError);
 
