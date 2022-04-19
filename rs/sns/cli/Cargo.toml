@@ -14,6 +14,7 @@ dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 ic-base-types = { path = "../../types/base_types" }
+ic-crypto-sha = { path = "../../crypto/sha" }
 ic-nervous-system-common = {path = "../../nervous_system/common"}
 ic-protobuf = { path = "../../protobuf" }
 ic-sns-test-utils = { path = "../test_utils" }

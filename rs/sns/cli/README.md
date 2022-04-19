@@ -1,8 +1,8 @@
 # SNS CLI
 `sns` is a command-line tool (CLI) that can be used to initialize, deploy and interact with an SNS (Service Nervous System)
 
-## Local deployment
-The following instructions will guide you through deploying a SNS locally.
+## Deployment
+The following instructions will guide you through deploying an SNS.
 
 ### Prerequisites
 
@@ -21,22 +21,48 @@ Verify the following before deploying locally:
 
 * You have installed [nix](https://nixos.org/manual/nix/stable/installation/installing-binary.html) and can run `nix-shell`.
 
-### Local Deployment
-`cd` into `rs/` and enter `nix-shell`:
+### Building `sns` and the SNS canisters
+Within the `ic` repo, `cd` into `rs/` and enter `nix-shell`:
 ```shell
-nix-shell
+cd rs; nix-shell
 ```
-`cd` into `rs/sns/cli/`. Remove state from past local deployments (if you want to do a clean local deploy)
+`cd` into `sns/cli/`:
+```shell
+cd sns/cli
+```
+To build only `sns`, run
+```shell
+cargo build
+```
+To build the `sns` CLI and the SNS canisters, run:
+```shell
+make
+```
+The rest of this demo assumes that the `sns` binary is on your `PATH`. The location of the
+`sns` depends on your environment, but it may be at a location similar to:
+```shell
+ic/rs/target/x86_64-apple-darwin/debug/sns
+```
+Add this location to your `PATH`. For example on Mac OS:
+```shell
+export PATH="<PATH_TO_PROJECT>/ic/rs/target/x86_64-apple-darwin/debug:$PATH"
+```
+
+### Deployment Arguments 
+There are many arguments that can be passed to `sns deploy`. To view these args and their
+documentation, run
+```shell
+sns deploy --help
+```
+
+### Local Deployment
+If you wish to remove state from past local deployments (to do a clean local deploy), run:
 ```shell
 make clean
 ```
 In a separate tab (still in `rs/sns/cli/`), start a local Internet Computer network:
 ```shell
 dfx start
-```
-Build `sns-cli` and the SNS canisters (skip this step if canisters and `sns-cli` are already built):
-```shell
-make
 ```
 
 #### Barebones deploy
@@ -47,12 +73,7 @@ sns deploy --token-name="My Example Token" --token-symbol="MET"
 (assuming `sns` is in your `PATH`)
 
 You should see the output of calls to `get_nervous_system_parameters` and `transfer_fee`, and see a 
-"Successfully deployed!" message if the deployment was successful. 
-
-If `sns` is not in your `PATH`, you can find it in `target`, e.g.
-```shell
-../../target/x86_64-apple-darwin/debug/sns
-```
+"Successfully deployed!" message if the deployment was successful.
 
 #### Deploy with initial Ledger accounts
 To deploy SNS locally initial ledger accounts, you can run `deploy` with the `--initial-ledger-accounts` arg.
