@@ -6476,6 +6476,7 @@ dependencies = [
  "ic-protobuf",
  "ic-sns-governance",
  "ic-types 0.8.0",
+ "lazy_static",
  "ledger-canister",
  "maplit",
  "on_wire",

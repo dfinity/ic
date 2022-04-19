@@ -1,13 +1,19 @@
-use crate::governance::log_prefix;
+use std::collections::BTreeMap;
+use std::convert::TryFrom;
+
+use crate::canister_control::perform_execute_nervous_system_function_validate_and_render_call;
+use crate::governance::{log_prefix, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER};
 use crate::pb::v1::{
-    proposal, CallCanisterMethod, ExecuteNervousSystemFunction, Motion, NervousSystemParameters,
-    Proposal, ProposalData, ProposalDecisionStatus, ProposalRewardStatus, Tally,
-    UpgradeSnsControlledCanister, Vote,
+    proposal, CallCanisterMethod, ExecuteNervousSystemFunction, Motion, NervousSystemFunction,
+    NervousSystemParameters, Proposal, ProposalData, ProposalDecisionStatus, ProposalRewardStatus,
+    Tally, UpgradeSnsControlledCanister, Vote,
 };
-use crate::types::ONE_DAY_SECONDS;
+use crate::types::{Environment, ONE_DAY_SECONDS};
 use crate::{validate_chars_count, validate_len, validate_required_field};
 
 use dfn_core::api::CanisterId;
+use ic_base_types::PrincipalId;
+use ic_crypto_sha::Sha256;
 
 /// The maximum number of bytes in an SNS proposal's title.
 pub const PROPOSAL_TITLE_BYTES_MAX: usize = 256;
@@ -45,15 +51,17 @@ impl Proposal {
     }
 }
 
-/// current_nervous_system_paramters is only used when self is a
-/// ManageNervousSystemParameters proposal.
+/// Validates a proposal and returns a displayable text rendering of the payload
+/// if the proposal is valid.
 ///
-/// Pro tip: If it is difficult to get the current NervousSystemParameters, you
-/// may be able to use NervousSystemParameters::with_default_values() instead.
-pub fn validate_proposal(
+/// Takes in the GovernanceProto as to be able to validate agaisnt the current
+/// state of governance.
+pub async fn validate_and_render_proposal(
     proposal: &Proposal,
-    current_nervous_system_parameters: &NervousSystemParameters,
-) -> Result<(), String> {
+    env: &dyn Environment,
+    parameters: &NervousSystemParameters,
+    functions: &BTreeMap<u64, NervousSystemFunction>,
+) -> Result<String, String> {
     let mut defects = Vec::new();
 
     let mut defects_push = |r| {
@@ -84,27 +92,36 @@ pub fn validate_proposal(
         PROPOSAL_URL_CHAR_MAX,
     ));
 
-    defects_push(validate_action(
-        &proposal.action,
-        current_nervous_system_parameters,
-    ));
-
-    // Concatenate defects (if any).
-    if !defects.is_empty() {
-        return Err(format!(
-            "{} defects in Proposal:\n{}",
-            defects.len(),
-            defects.join("\n"),
-        ));
+    // Even if we already found defects, still validate as to return all the errors found.
+    match validate_and_render_action(&proposal.action, env, parameters, functions).await {
+        Err(err) => {
+            defects.push(err);
+            Err(format!(
+                "{} defects in Proposal:\n{}",
+                defects.len(),
+                defects.join("\n"),
+            ))
+        }
+        Ok(rendering) => {
+            if !defects.is_empty() {
+                Err(format!(
+                    "{} defects in Proposal:\n{}",
+                    defects.len(),
+                    defects.join("\n"),
+                ))
+            } else {
+                Ok(rendering)
+            }
+        }
     }
-
-    Ok(())
 }
 
-pub fn validate_action(
+pub async fn validate_and_render_action(
     action: &Option<proposal::Action>,
-    current_nervous_system_parameters: &NervousSystemParameters,
-) -> Result<(), String> {
+    env: &dyn Environment,
+    current_parameters: &NervousSystemParameters,
+    existing_functions: &BTreeMap<u64, NervousSystemFunction>,
+) -> Result<String, String> {
     let action = match action.as_ref() {
         None => return Err("No action was specified.".into()),
         Some(action) => action,
@@ -114,51 +131,70 @@ pub fn validate_action(
         proposal::Action::Unspecified(_unspecified) => {
             Err("`unspecified` was used, but is not a valid Proposal action.".into())
         }
-        proposal::Action::Motion(motion) => validate_motion(motion),
+        proposal::Action::Motion(motion) => validate_and_render_motion(motion),
         proposal::Action::ManageNervousSystemParameters(manage) => {
-            validate_manage_nervous_system_parameters(manage, current_nervous_system_parameters)
+            validate_and_render_manage_nervous_system_parameters(manage, current_parameters)
         }
         proposal::Action::UpgradeSnsControlledCanister(upgrade) => {
-            validate_upgrade_sns_controlled_canister(upgrade)
+            validate_and_render_upgrade_sns_controlled_canister(upgrade)
         }
-        proposal::Action::AddNervousSystemFunction(_add_nervous_system_function) => {
-            // TODO
-            Ok(())
+        proposal::Action::AddNervousSystemFunction(function_to_add) => {
+            validate_and_render_add_nervous_system_function(function_to_add, existing_functions)
         }
-        proposal::Action::RemoveNervousSystemFunction(_id_to_remove) => {
-            // TODO
-            Ok(())
+        proposal::Action::RemoveNervousSystemFunction(id_to_remove) => {
+            validate_and_render_remove_nervous_system_function(*id_to_remove, existing_functions)
         }
         proposal::Action::ExecuteNervousSystemFunction(execute) => {
-            validate_execute_nervous_system_function(execute)
+            validate_and_render_execute_nervous_system_function(env, execute, existing_functions)
+                .await
         }
         proposal::Action::CallCanisterMethod(call) => validate_call_canister_method(call),
     }
 }
 
-fn validate_motion(motion: &Motion) -> Result<(), String> {
+fn validate_and_render_motion(motion: &Motion) -> Result<String, String> {
     validate_len(
         "motion.motion_text",
         &motion.motion_text,
         0, // min
         PROPOSAL_MOTION_TEXT_BYTES_MAX,
-    )
+    )?;
+
+    Ok(format!(
+        r"# Motion Proposal:
+## Motion Text:
+
+{}",
+        &motion.motion_text
+    ))
 }
 
-fn validate_manage_nervous_system_parameters(
-    new: &NervousSystemParameters,
-    current: &NervousSystemParameters,
-) -> Result<(), String> {
-    new.inherit_from(current).validate()
+fn validate_and_render_manage_nervous_system_parameters(
+    new_parameters: &NervousSystemParameters,
+    current_parameters: &NervousSystemParameters,
+) -> Result<String, String> {
+    new_parameters.inherit_from(current_parameters).validate()?;
+
+    Ok(format!(
+        r"# Proposal to change nervous system parameters:
+## Current nervous system parameters:
+
+{:?}
+
+## New nervous system parameters:
+
+{:?}",
+        &current_parameters, new_parameters
+    ))
 }
 
-fn validate_upgrade_sns_controlled_canister(
+fn validate_and_render_upgrade_sns_controlled_canister(
     upgrade: &UpgradeSnsControlledCanister,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let mut defects = vec![];
 
     // Inspect canister_id.
-    match validate_required_field("canister_id", &upgrade.canister_id) {
+    let canister_id = match validate_required_field("canister_id", &upgrade.canister_id) {
         Err(err) => {
             defects.push(err);
         }
@@ -167,7 +203,7 @@ fn validate_upgrade_sns_controlled_canister(
                 defects.push(format!("Specified canister ID was invalid: {}", err));
             }
         }
-    }
+    };
 
     // Inspect wasm.
     const WASM_HEADER: [u8; 4] = [0, 0x61, 0x73, 0x6d];
@@ -191,17 +227,186 @@ fn validate_upgrade_sns_controlled_canister(
         ));
     }
 
-    Ok(())
+    let mut state = Sha256::new();
+    state.write(&upgrade.new_canister_wasm);
+    let sha = state.finish();
+
+    // TODO calculate and display the new wasm's hash.
+    Ok(format!(
+        r"# Proposal to upgrade SNS controlled canister:
+
+## Canister id: {:?}
+
+## Canister wasm sha256: {}",
+        canister_id,
+        hex::encode(sha)
+    ))
 }
 
-pub fn validate_execute_nervous_system_function(
-    _execute: &ExecuteNervousSystemFunction,
-) -> Result<(), String> {
-    // TODO
-    Ok(())
+#[derive(Debug)]
+pub(crate) struct ValidNervousSystemFunction {
+    pub id: u64,
+    pub target_canister_id: CanisterId,
+    pub target_method: String,
+    pub validator_canister_id: CanisterId,
+    pub validator_method: String,
 }
 
-pub(crate) fn validate_call_canister_method(call: &CallCanisterMethod) -> Result<(), String> {
+fn validate_canister_id(
+    field_name: &str,
+    canister_id: &Option<PrincipalId>,
+    defects: &mut Vec<String>,
+) -> Option<CanisterId> {
+    match canister_id {
+        None => {
+            defects.push(format!("{} field was not populated.", field_name));
+            None
+        }
+        Some(canister_id) => match CanisterId::new(*canister_id) {
+            Err(err) => {
+                defects.push(format!("{} was invalid: {}", field_name, err));
+                None
+            }
+            Ok(target_canister_id) => Some(target_canister_id),
+        },
+    }
+}
+
+impl TryFrom<&NervousSystemFunction> for ValidNervousSystemFunction {
+    type Error = String;
+
+    fn try_from(value: &NervousSystemFunction) -> Result<Self, Self::Error> {
+        let NervousSystemFunction {
+            id,
+            validator_canister_id,
+            validator_method_name,
+            target_canister_id,
+            target_method_name,
+        } = value;
+
+        let mut defects = vec![];
+
+        if id < &1000 {
+            defects.push("NervousSystemFunction's must have ids starting at 1000".to_string());
+        }
+
+        // Validate the target_canister_id field.
+        let target_canister_id =
+            validate_canister_id("target_canister_id", target_canister_id, &mut defects);
+
+        // Validate the validator_canister_id field.
+        let validator_canister_id =
+            validate_canister_id("validator_canister_id", validator_canister_id, &mut defects);
+
+        // Validate the target_method_name field.
+        if target_method_name.is_none() || target_method_name.as_ref().unwrap().is_empty() {
+            defects.push("target_method_name was empty.".to_string());
+        }
+
+        if validator_method_name.is_none() || validator_method_name.as_ref().unwrap().is_empty() {
+            defects.push("validator_method_name was empty.".to_string());
+        }
+
+        if !defects.is_empty() {
+            return Err(format!(
+                "ExecuteNervousSystemFunction was invalid for the following reason(s):\n{}",
+                defects.join("\n")
+            ));
+        }
+
+        Ok(ValidNervousSystemFunction {
+            id: *id,
+            target_canister_id: target_canister_id.unwrap(),
+            target_method: target_method_name.as_ref().unwrap().clone(),
+            validator_canister_id: validator_canister_id.unwrap(),
+            validator_method: validator_method_name.as_ref().unwrap().clone(),
+        })
+    }
+}
+
+pub fn validate_and_render_add_nervous_system_function(
+    add: &NervousSystemFunction,
+    existing_functions: &BTreeMap<u64, NervousSystemFunction>,
+) -> Result<String, String> {
+    if existing_functions.contains_key(&add.id) {
+        Err(format!(
+            "There is already a NervousSystemFunction with id: {}",
+            add.id
+        ))
+    } else {
+        let validated_function = ValidNervousSystemFunction::try_from(add)?;
+        Ok(format!(
+            r"Proposal to add new NervousSystemFunction:
+
+## Function:
+
+{:?}",
+            validated_function
+        ))
+    }
+}
+
+pub fn validate_and_render_remove_nervous_system_function(
+    remove: u64,
+    existing_functions: &BTreeMap<u64, NervousSystemFunction>,
+) -> Result<String, String> {
+    match existing_functions.get(&remove) {
+        None => Err(format!("NervousSystemFunction: {} doesn't exist", remove)),
+        Some(function) => Ok(format!(
+            r"# Proposal to remove existing NervousSystemFunction:
+
+## Function:
+
+{:?}",
+            function
+        )),
+    }
+}
+
+pub async fn validate_and_render_execute_nervous_system_function(
+    env: &dyn Environment,
+    execute: &ExecuteNervousSystemFunction,
+    existing_functions: &BTreeMap<u64, NervousSystemFunction>,
+) -> Result<String, String> {
+    let id = execute.function_id;
+    match existing_functions.get(&execute.function_id) {
+        None => Err(format!("There is no NervousSystemFunction with id: {}", id)),
+        Some(function) => {
+            // Make sure this isn't a NervousSystemFunction which has been deleted.
+            if function == &NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER {
+                Err(format!("There is no NervousSystemFunction with id: {}", id))
+            } else {
+                // To validate the proposal we try and call the validation method,
+                // which should produce a payload rendering if the proposal is valid
+                // or an error if it isn't.
+                let rendering = perform_execute_nervous_system_function_validate_and_render_call(
+                    env,
+                    function.clone(),
+                    execute.clone(),
+                )
+                .await?;
+
+                Ok(format!(
+                    r"# Proposal to execute nervous system function:
+
+## Nervous system function:
+
+{:?}
+
+## Payload:
+
+{}",
+                    function, rendering
+                ))
+            }
+        }
+    }
+}
+
+// This does not return a proper rendering of the payload since:
+// 1- It's opaque to the governance canister and we can't know it
+// 2- It will be removed soon
+pub(crate) fn validate_call_canister_method(call: &CallCanisterMethod) -> Result<String, String> {
     let CallCanisterMethod {
         target_canister_id,
         target_method_name,
@@ -232,7 +437,7 @@ pub(crate) fn validate_call_canister_method(call: &CallCanisterMethod) -> Result
         ));
     }
 
-    Ok(())
+    Ok("".to_string())
 }
 
 impl ProposalData {
@@ -512,17 +717,63 @@ mod test {
     use super::*;
     use crate::pb::v1::Empty;
     use crate::test::{assert_is_err, assert_is_ok};
+    use async_trait::async_trait;
+    use futures::FutureExt;
     use ic_base_types::PrincipalId;
+    use lazy_static::lazy_static;
     use std::convert::TryFrom;
 
-    fn validate_default_proposal(proposal: &Proposal) -> Result<(), String> {
-        let parameters = NervousSystemParameters::with_default_values();
-        validate_proposal(proposal, &parameters)
+    struct FakeEnv {}
+
+    #[async_trait]
+    impl Environment for FakeEnv {
+        fn now(&self) -> u64 {
+            unimplemented!()
+        }
+
+        fn random_u64(&mut self) -> u64 {
+            unimplemented!()
+        }
+
+        fn random_byte_array(&mut self) -> [u8; 32] {
+            unimplemented!()
+        }
+
+        async fn call_canister(
+            &self,
+            _canister_id: CanisterId,
+            _method_name: &str,
+            _arg: Vec<u8>,
+        ) -> Result<Vec<u8>, (Option<i32>, String)> {
+            unimplemented!()
+        }
+
+        fn heap_growth_potential(&self) -> crate::types::HeapGrowthPotential {
+            unimplemented!()
+        }
+
+        fn canister_id(&self) -> CanisterId {
+            unimplemented!()
+        }
     }
 
-    fn validate_default_action(action: &Option<proposal::Action>) -> Result<(), String> {
-        let parameters = NervousSystemParameters::with_default_values();
-        validate_action(action, &parameters)
+    lazy_static! {
+        static ref FAKE_ENV: Box<dyn Environment> = Box::new(FakeEnv {});
+        static ref DEFAULT_PARAMS: NervousSystemParameters =
+            NervousSystemParameters::with_default_values();
+        static ref EMPTY_FUNCTIONS: BTreeMap<u64, NervousSystemFunction> = BTreeMap::new();
+    }
+
+    fn validate_default_proposal(proposal: &Proposal) -> Result<String, String> {
+        validate_and_render_proposal(proposal, &**FAKE_ENV, &DEFAULT_PARAMS, &EMPTY_FUNCTIONS)
+            .now_or_never()
+            .unwrap()
+    }
+
+    fn validate_default_action(action: &Option<proposal::Action>) -> Result<String, String> {
+        validate_and_render_action(action, &**FAKE_ENV, &DEFAULT_PARAMS, &EMPTY_FUNCTIONS)
+            .now_or_never()
+            .unwrap()
     }
 
     fn basic_principal_id() -> PrincipalId {
@@ -609,7 +860,9 @@ mod test {
             assert_is_ok(validate_default_proposal(proposal));
             assert_is_ok(validate_default_action(&proposal.action));
             match proposal.action.as_ref().unwrap() {
-                proposal::Action::Motion(motion) => assert_is_ok(validate_motion(motion)),
+                proposal::Action::Motion(motion) => {
+                    assert_is_ok(validate_and_render_motion(motion))
+                }
                 _ => panic!("proposal.action is not Motion."),
             }
         }
@@ -635,7 +888,7 @@ mod test {
         assert_is_err(validate_default_proposal(&proposal));
         assert_is_err(validate_default_action(&proposal.action));
         match proposal.action.as_ref().unwrap() {
-            proposal::Action::Motion(motion) => assert_is_err(validate_motion(motion)),
+            proposal::Action::Motion(motion) => assert_is_err(validate_and_render_motion(motion)),
             _ => panic!("proposal.action is not Motion."),
         }
     }
@@ -645,7 +898,9 @@ mod test {
             canister_id: Some(basic_principal_id()),
             new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
         };
-        assert_is_ok(validate_upgrade_sns_controlled_canister(&upgrade));
+        assert_is_ok(validate_and_render_upgrade_sns_controlled_canister(
+            &upgrade,
+        ));
 
         let mut result = basic_motion_proposal();
         result.action = Some(proposal::Action::UpgradeSnsControlledCanister(upgrade));
@@ -662,7 +917,7 @@ mod test {
 
         match proposal.action.as_ref().unwrap() {
             proposal::Action::UpgradeSnsControlledCanister(upgrade) => {
-                assert_is_err(validate_upgrade_sns_controlled_canister(upgrade))
+                assert_is_err(validate_and_render_upgrade_sns_controlled_canister(upgrade))
             }
             _ => panic!("Proposal.action is not an UpgradeSnsControlledCanister."),
         }
@@ -676,7 +931,7 @@ mod test {
         match proposal.action.as_mut().unwrap() {
             proposal::Action::UpgradeSnsControlledCanister(upgrade) => {
                 upgrade.canister_id = None;
-                assert_is_err(validate_upgrade_sns_controlled_canister(upgrade));
+                assert_is_err(validate_and_render_upgrade_sns_controlled_canister(upgrade));
             }
             _ => panic!("Proposal.action is not an UpgradeSnsControlledCanister."),
         }
@@ -696,7 +951,7 @@ mod test {
         match proposal.action.as_mut().unwrap() {
             proposal::Action::UpgradeSnsControlledCanister(upgrade) => {
                 upgrade.new_canister_wasm = vec![];
-                assert_is_err(validate_upgrade_sns_controlled_canister(upgrade));
+                assert_is_err(validate_and_render_upgrade_sns_controlled_canister(upgrade));
             }
             _ => panic!("Proposal.action is not an UpgradeSnsControlledCanister."),
         }
@@ -716,12 +971,132 @@ mod test {
                 // first four bytes of this Vec are 0xDeadBeef.)
                 upgrade.new_canister_wasm = vec![0xde, 0xad, 0xbe, 0xef, 1, 0, 0, 0];
                 assert!(upgrade.new_canister_wasm.len() == 8); // The minimum wasm len.
-                assert_is_err(validate_upgrade_sns_controlled_canister(upgrade));
+                assert_is_err(validate_and_render_upgrade_sns_controlled_canister(upgrade));
             }
             _ => panic!("Proposal.action is not an UpgradeSnsControlledCanister."),
         }
 
         assert_validate_upgrade_sns_controlled_canister_is_err(&proposal);
+    }
+
+    fn basic_add_nervous_system_function_proposal() -> Proposal {
+        let nervous_system_function = NervousSystemFunction {
+            id: 1000,
+            target_canister_id: Some(CanisterId::from_u64(1).get()),
+            target_method_name: Some("test_method".to_string()),
+            validator_canister_id: Some(CanisterId::from_u64(1).get()),
+            validator_method_name: Some("test_validator_method".to_string()),
+        };
+        assert_is_ok(validate_and_render_add_nervous_system_function(
+            &nervous_system_function,
+            &EMPTY_FUNCTIONS,
+        ));
+
+        let mut result = basic_motion_proposal();
+        result.action = Some(proposal::Action::AddNervousSystemFunction(
+            nervous_system_function,
+        ));
+
+        assert_is_ok(validate_default_action(&result.action));
+        assert_is_ok(validate_default_proposal(&result));
+
+        result
+    }
+
+    #[test]
+    fn add_nervous_system_function_function_must_have_fields_set() {
+        let mut proposal = basic_add_nervous_system_function_proposal();
+
+        // Make sure invalid/unset ids are invalid.
+        match proposal.clone().action.as_mut().unwrap() {
+            proposal::Action::AddNervousSystemFunction(nervous_system_function) => {
+                nervous_system_function.id = 100;
+                assert_is_err(validate_and_render_add_nervous_system_function(
+                    nervous_system_function,
+                    &EMPTY_FUNCTIONS,
+                ));
+            }
+            _ => panic!("Proposal.action is not AddNervousSystemFunction"),
+        }
+
+        // Make sure not setting the target canister is invalid.
+        match proposal.clone().action.as_mut().unwrap() {
+            proposal::Action::AddNervousSystemFunction(nervous_system_function) => {
+                nervous_system_function.target_canister_id = None;
+                assert_is_err(validate_and_render_add_nervous_system_function(
+                    nervous_system_function,
+                    &EMPTY_FUNCTIONS,
+                ));
+            }
+            _ => panic!("Proposal.action is not AddNervousSystemFunction"),
+        }
+
+        // Make sure not seeting the target method name is invalid.
+        match proposal.clone().action.as_mut().unwrap() {
+            proposal::Action::AddNervousSystemFunction(nervous_system_function) => {
+                nervous_system_function.target_method_name = None;
+                assert_is_err(validate_and_render_add_nervous_system_function(
+                    nervous_system_function,
+                    &EMPTY_FUNCTIONS,
+                ));
+            }
+            _ => panic!("Proposal.action is not AddNervousSystemFunction"),
+        }
+
+        // Make sure not setting the validator canister id is invalid.
+        match proposal.clone().action.as_mut().unwrap() {
+            proposal::Action::AddNervousSystemFunction(nervous_system_function) => {
+                nervous_system_function.validator_canister_id = None;
+                assert_is_err(validate_and_render_add_nervous_system_function(
+                    nervous_system_function,
+                    &EMPTY_FUNCTIONS,
+                ));
+            }
+            _ => panic!("Proposal.action is not AddNervousSystemFunction"),
+        }
+
+        // Make sure not setting the validator method name is invalid.
+        match proposal.action.as_mut().unwrap() {
+            proposal::Action::AddNervousSystemFunction(nervous_system_function) => {
+                nervous_system_function.validator_method_name = None;
+                assert_is_err(validate_and_render_add_nervous_system_function(
+                    nervous_system_function,
+                    &EMPTY_FUNCTIONS,
+                ));
+            }
+            _ => panic!("Proposal.action is not AddNervousSystemFunction"),
+        }
+    }
+
+    #[test]
+    fn add_nervous_system_function_cant_reuse_ids() {
+        let nervous_system_function = NervousSystemFunction {
+            id: 1000,
+            target_canister_id: Some(CanisterId::from_u64(1).get()),
+            target_method_name: Some("test_method".to_string()),
+            validator_canister_id: Some(CanisterId::from_u64(1).get()),
+            validator_method_name: Some("test_validator_method".to_string()),
+        };
+
+        let mut functions_map = BTreeMap::new();
+        assert_is_ok(validate_and_render_add_nervous_system_function(
+            &nervous_system_function,
+            &functions_map,
+        ));
+
+        functions_map.insert(1000, nervous_system_function.clone());
+
+        assert_is_ok(validate_and_render_remove_nervous_system_function(
+            1000,
+            &functions_map,
+        ));
+
+        functions_map.insert(1000, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER);
+
+        assert_is_err(validate_and_render_add_nervous_system_function(
+            &nervous_system_function,
+            &functions_map,
+        ));
     }
 
     fn basic_call_canister_method_proposal() -> Proposal {

@@ -221,6 +221,7 @@ type Proposal = record {
 };
 type ProposalData = record {
   id : opt ProposalId;
+  payload_text_rendering : opt text;
   action : nat64;
   failure_reason : opt GovernanceError;
   ballots : vec record { text; Ballot };

@@ -538,6 +538,10 @@ message ProposalData {
 
   // The proposal's wait-for-quiet state. This needs to be saved in stable memory.
   WaitForQuietState wait_for_quiet_state = 14;
+
+  // The proposal's payload rendered as text, for display in text/UI frontends.
+  // This is set if the proposal is considered valid at time of submission.
+  optional string payload_text_rendering = 15;
 }
 
 // The nervous system's parameters, which are parameters that can be changed, via proposals,
