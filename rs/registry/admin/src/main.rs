@@ -11,7 +11,6 @@ use cycles_minting_canister::SetAuthorizedSubnetworkListArgs;
 use ed25519_dalek::Keypair;
 use ic_canister_client::{Agent, Sender};
 use ic_config::subnet_config::SchedulerConfig;
-use ic_crypto::threshold_sig_public_key_to_der;
 use ic_crypto_sha::Sha256;
 use ic_crypto_utils_basic_sig::conversions::Ed25519SecretKeyConversions;
 use ic_http_utils::file_downloader::{check_file_hash, extract_tar_gz_into_dir, FileDownloader};
@@ -3209,7 +3208,7 @@ impl std::fmt::Debug for UpgradeRootProposalPayload {
 pub fn store_threshold_sig_pk<P: AsRef<Path>>(pk: &PublicKey, path: P) {
     let pk = ThresholdSigPublicKey::try_from(pk.clone())
         .expect("failed to parse threshold signature PK from protobuf");
-    let der_bytes = threshold_sig_public_key_to_der(pk)
+    let der_bytes = ic_crypto_utils_threshold_sig_der::public_key_to_der(&pk.into_bytes())
         .expect("failed to encode threshold signature PK into DER");
 
     let mut bytes = vec![];
