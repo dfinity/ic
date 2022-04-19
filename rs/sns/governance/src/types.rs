@@ -29,51 +29,54 @@ const PROPOSAL_EXECUTE_SNS_FUNCTION_PAYLOAD_BYTES_MAX: usize = 70000;
 /// The number of e8s per governance token;
 pub const E8S_PER_TOKEN: u64 = TOKEN_SUBDIVIDABLE_BY;
 
-// The default values for network parameters (until we initialize it).
-// Can't implement Default since it conflicts with Prost's.
+// Some constants that define upper bound (ceiling) and lower bounds (floor) for some of
+// the nervous system parameters as well as the default values for the nervous system
+// parameters (until we initialize them). We can't implement Default since it conflicts
+// with PB's.
 impl NervousSystemParameters {
-    /// Exceeding this value for `max_proposals_to_keep_per_action` may cause degradation in the
-    /// corresponding Governance canister or the SNS subnet.
+    /// This is an upper bound for `max_proposals_to_keep_per_action`. Exceeding it
+    /// may cause degradation in the governance canister or the subnet hosting the SNS.
     pub const MAX_PROPOSALS_TO_KEEP_PER_ACTION_CEILING: u32 = 700;
 
-    /// Exceeding this value for `max_number_of_neurons` may cause degradation in the
-    /// corresponding Governance canister or the SNS subnet.
+    /// This is an upper bound for `max_number_of_neurons`. Exceeding it may cause
+    /// degradation in the governance canister or the subnet hosting the SNS.
     pub const MAX_NUMBER_OF_NEURONS_CEILING: u64 = 200_000;
 
-    /// Exceeding this value for `max_number_of_proposals_with_ballots` may cause degradation in the
-    /// corresponding Governance canister or the SNS subnet.
+    /// This is an upper bound for `max_number_of_proposals_with_ballots`. Exceeding
+    /// it may cause degradation in the governance canister or the subnet hosting the SNS.
     pub const MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS_CEILING: u64 = 700;
 
-    /// Exceeding this value for `initial_voting_period` may cause degradation in the
-    /// corresponding Governance canister or the SNS subnet.
+    /// This is an upper bound for `initial_voting_period`. Exceeding it may cause
+    /// degradation in the governance canister or the subnet hosting the SNS.
     pub const INITIAL_VOTING_PERIOD_CEILING: u64 = 30 * ONE_DAY_SECONDS;
 
-    /// Not exceeding this value for `initial_voting_period` may cause the
-    /// corresponding Governance canister to be ineffective.
+    /// This is a lower bound for `initial_voting_period`. Exceeding it may cause
+    /// degradation in the governance canister or the subnet hosting the SNS.
     pub const INITIAL_VOTING_PERIOD_FLOOR: u64 = ONE_DAY_SECONDS;
 
-    /// Exceeding this value for `max_followees_per_action` may cause degradation in the
-    /// corresponding Governance canister or the SNS subnet.
+    /// This is an upper bound for `max_followees_per_action`. Exceeding it may cause
+    /// degradation in the governance canister or the subnet hosting the SNS.
     pub const MAX_FOLLOWEES_PER_ACTION_CEILING: u64 = 15;
 
-    /// Exceeding this value for `max_number_of_principals_per_neuron` may cause
-    /// degradation in the corresponding Governance canister or the SNS subnet.
+    /// This is an upper bound for `max_number_of_principals_per_neuron`. Exceeding
+    /// it may cause may cause degradation in the governance canister or the subnet
+    /// hosting the SNS.
     pub const MAX_NUMBER_OF_PRINCIPALS_PER_NEURON_CEILING: u64 = 15;
 
     pub fn with_default_values() -> Self {
         Self {
-            reject_cost_e8s: Some(E8S_PER_TOKEN),          // 1 Token
-            neuron_minimum_stake_e8s: Some(E8S_PER_TOKEN), // 1 Token
+            reject_cost_e8s: Some(E8S_PER_TOKEN), // 1 governance token
+            neuron_minimum_stake_e8s: Some(E8S_PER_TOKEN), // 1 governance token
             transaction_fee_e8s: Some(DEFAULT_TRANSFER_FEE.get_e8s()),
             max_proposals_to_keep_per_action: Some(100),
-            initial_voting_period: Some(4 * ONE_DAY_SECONDS),
+            initial_voting_period: Some(4 * ONE_DAY_SECONDS), // 4d
             default_followees: Some(DefaultFollowees::default()),
             max_number_of_neurons: Some(200_000),
-            neuron_minimum_dissolve_delay_to_vote_seconds: Some(6 * ONE_MONTH_SECONDS),
+            neuron_minimum_dissolve_delay_to_vote_seconds: Some(6 * ONE_MONTH_SECONDS), // 6m
             max_followees_per_action: Some(15),
-            max_dissolve_delay_seconds: Some(8 * ONE_YEAR_SECONDS),
-            max_neuron_age_for_age_bonus: Some(4 * ONE_YEAR_SECONDS),
-            reward_distribution_period_seconds: Some(ONE_DAY_SECONDS),
+            max_dissolve_delay_seconds: Some(8 * ONE_YEAR_SECONDS), // 8y
+            max_neuron_age_for_age_bonus: Some(4 * ONE_YEAR_SECONDS), // 4y
+            reward_distribution_period_seconds: Some(ONE_DAY_SECONDS), // 1d
             max_number_of_proposals_with_ballots: Some(700),
             neuron_claimer_permissions: Some(Self::default_neuron_claimer_permissions()),
             neuron_grantable_permissions: Some(NeuronPermissionList::default()),
@@ -81,7 +84,7 @@ impl NervousSystemParameters {
         }
     }
 
-    /// Any empty fields of `self` will be overwritten with the corresponding fields of `base`
+    /// Any empty fields of `self` are overwritten with the corresponding fields of `base`.
     pub fn inherit_from(&self, base: &Self) -> Self {
         let mut new_params = self.clone();
         new_params.reject_cost_e8s = self.reject_cost_e8s.or(base.reject_cost_e8s);
@@ -133,7 +136,7 @@ impl NervousSystemParameters {
         new_params
     }
 
-    /// Validate that this `NervousSystemParameters` is well-formed
+    /// This validates that the `NervousSystemParameters` are well-formed.
     pub fn validate(&self) -> Result<(), String> {
         self.validate_reject_cost_e8s()?;
         self.validate_neuron_minimum_stake_e8s()?;
@@ -155,11 +158,13 @@ impl NervousSystemParameters {
         Ok(())
     }
 
+    /// Validates that the nervous system parameter reject_cost_e8s is well-formed.
     fn validate_reject_cost_e8s(&self) -> Result<u64, String> {
         self.reject_cost_e8s
             .ok_or_else(|| "NervousSystemParameters.reject_cost_e8s must be set".to_string())
     }
 
+    /// Validates that the nervous system parameter neuron_minimum_stake_e8s is well-formed.
     fn validate_neuron_minimum_stake_e8s(&self) -> Result<(), String> {
         let transaction_fee_e8s = self.validate_transaction_fee_e8s()?;
 
@@ -178,11 +183,14 @@ impl NervousSystemParameters {
         }
     }
 
+    /// Validates that the nervous system parameter transaction_fee_e8s is well-formed.
     fn validate_transaction_fee_e8s(&self) -> Result<u64, String> {
         self.transaction_fee_e8s
             .ok_or_else(|| "NervousSystemParameters.transaction_fee_e8s must be set".to_string())
     }
 
+    /// Validates that the nervous system parameter max_proposals_to_keep_per_action
+    /// is well-formed.
     fn validate_max_proposals_to_keep_per_action(&self) -> Result<(), String> {
         let max_proposals_to_keep_per_action =
             self.max_proposals_to_keep_per_action.ok_or_else(|| {
@@ -208,6 +216,7 @@ impl NervousSystemParameters {
         }
     }
 
+    /// Validates that the nervous system parameter initial_voting_period is well-formed.
     fn validate_initial_voting_period(&self) -> Result<(), String> {
         let initial_voting_period = self.initial_voting_period.ok_or_else(|| {
             "NervousSystemParameters.initial_voting_period must be set".to_string()
@@ -228,6 +237,7 @@ impl NervousSystemParameters {
         }
     }
 
+    /// Validates that the nervous system parameter default_followees is well-formed.
     fn validate_default_followees(&self) -> Result<(), String> {
         let default_followees = self
             .default_followees
@@ -246,6 +256,7 @@ impl NervousSystemParameters {
         Ok(())
     }
 
+    /// Validates that the nervous system parameter max_number_of_neurons is well-formed.
     fn validate_max_number_of_neurons(&self) -> Result<(), String> {
         let max_number_of_neurons = self.max_number_of_neurons.ok_or_else(|| {
             "NervousSystemParameters.max_number_of_neurons must be set".to_string()
@@ -263,6 +274,8 @@ impl NervousSystemParameters {
         }
     }
 
+    /// Validates that the nervous system parameter
+    /// neuron_minimum_dissolve_delay_to_vote_seconds is well-formed.
     fn validate_neuron_minimum_dissolve_delay_to_vote_seconds(&self) -> Result<(), String> {
         let max_dissolve_delay_seconds = self.validate_max_dissolve_delay_seconds()?;
 
@@ -284,6 +297,7 @@ impl NervousSystemParameters {
         }
     }
 
+    /// Validates that the nervous system parameter max_followees_per_action is well-formed.
     fn validate_max_followees_per_action(&self) -> Result<u64, String> {
         let max_followees_per_action = self.max_followees_per_action.ok_or_else(|| {
             "NervousSystemParameters.max_followees_per_action must be set".to_string()
@@ -300,12 +314,14 @@ impl NervousSystemParameters {
         }
     }
 
+    /// Validates that the nervous system parameter max_dissolve_delay_seconds is well-formed.
     fn validate_max_dissolve_delay_seconds(&self) -> Result<u64, String> {
         self.max_dissolve_delay_seconds.ok_or_else(|| {
             "NervousSystemParameters.max_dissolve_delay_seconds must be set".to_string()
         })
     }
 
+    /// Validates that the nervous system parameter max_neuron_age_for_age_bonus is well-formed.
     fn validate_max_neuron_age_for_age_bonus(&self) -> Result<(), String> {
         self.max_neuron_age_for_age_bonus.ok_or_else(|| {
             "NervousSystemParameters.max_neuron_age_for_age_bonus must be set".to_string()
@@ -314,6 +330,8 @@ impl NervousSystemParameters {
         Ok(())
     }
 
+    /// Validates that the nervous system parameter reward_distribution_period_seconds
+    /// is well-formed.
     fn validate_reward_distribution_period_seconds(&self) -> Result<(), String> {
         self.reward_distribution_period_seconds.ok_or_else(|| {
             "NervousSystemParameters.reward_distribution_period_seconds must be set".to_string()
@@ -322,6 +340,8 @@ impl NervousSystemParameters {
         Ok(())
     }
 
+    /// Validates that the nervous system parameter max_number_of_proposals_with_ballots
+    /// is well-formed.
     fn validate_max_number_of_proposals_with_ballots(&self) -> Result<(), String> {
         let max_number_of_proposals_with_ballots =
             self.max_number_of_proposals_with_ballots.ok_or_else(|| {
@@ -346,6 +366,7 @@ impl NervousSystemParameters {
         }
     }
 
+    /// Validates that the nervous system parameter neuron_claimer_permissions is well-formed.
     fn validate_neuron_claimer_permissions(&self) -> Result<(), String> {
         let neuron_claimer_permissions =
             self.neuron_claimer_permissions.as_ref().ok_or_else(|| {
@@ -362,12 +383,14 @@ impl NervousSystemParameters {
         Ok(())
     }
 
+    /// Returns the default for the nervous system parameter neuron_claimer_permissions.
     fn default_neuron_claimer_permissions() -> NeuronPermissionList {
         NeuronPermissionList {
             permissions: vec![NeuronPermissionType::ManagePrincipals as i32],
         }
     }
 
+    /// Validates that the nervous system parameter neuron_grantable_permissions is well-formed.
     fn validate_neuron_grantable_permissions(&self) -> Result<(), String> {
         self.neuron_grantable_permissions.as_ref().ok_or_else(|| {
             "NervousSystemParameters.neuron_grantable_permissions must be set".to_string()
@@ -376,6 +399,8 @@ impl NervousSystemParameters {
         Ok(())
     }
 
+    /// Validates that the nervous system parameter max_number_of_principals_per_neuron
+    /// is well-formed.
     fn validate_max_number_of_principals_per_neuron(&self) -> Result<(), String> {
         let max_number_of_principals_per_neuron =
             self.max_number_of_principals_per_neuron.ok_or_else(|| {
@@ -487,7 +512,7 @@ impl From<i32> for Vote {
 }
 
 impl Vote {
-    /// Returns whether this vote is eligible for voting reward.
+    /// Returns whether this vote is eligible for voting rewards.
     pub(crate) fn eligible_for_rewards(&self) -> bool {
         match self {
             Vote::Unspecified => false,
@@ -634,7 +659,7 @@ impl Action {
     pub(crate) fn allowed_when_resources_are_low(&self) -> bool {
         match self {
             Action::UpgradeSnsControlledCanister(_) => true,
-            // This line is just to avoid triggering clippy::match-like-matches-macro.
+            // TODO This line is just to avoid triggering clippy::match-like-matches-macro.
             // Once we have more cases, it can be deleted (along with this comment).
             Action::Motion(_) => false,
             _ => false,
@@ -642,8 +667,7 @@ impl Action {
     }
 
     /// Returns whether a provided action is a valid [Action].
-    /// This is to prevent memory attacks due to keying on
-    /// u64
+    /// This is to prevent memory attacks due to keying on u64
     pub fn is_valid_action(_action: &u64) -> bool {
         todo!()
     }
@@ -686,7 +710,7 @@ pub trait Environment: Send + Sync {
     /// Returns the current time, in seconds since the epoch.
     fn now(&self) -> u64;
 
-    /// An optional feature that is currently only used by CanisterEnv.
+    /// An optional feature used in tests to apply a delta to the canister's system timestamp.
     fn set_time_warp(&mut self, _new_time_warp: TimeWarp) {
         panic!("Not implemented.");
     }
@@ -698,10 +722,16 @@ pub trait Environment: Send + Sync {
 
     /// Returns a random byte array with 32 bytes.
     ///
-    /// This number is the same in all replicas.
+    /// This byte array is the same in all replicas.
     fn random_byte_array(&mut self) -> [u8; 32];
 
-    /// Calls another canister.
+    /// Calls another canister. The return value indicates whether the call can be successfully
+    /// initiated. If initiating the call is successful, the call could later be rejected by the
+    /// remote canister. In CanisterEnv (the production implementation of this trait), to
+    /// distinguish between whether the remote canister replies or rejects,
+    /// set_proposal_execution_status is called (asynchronously). Therefore, the caller of
+    /// call_canister should not call set_proposal_execution_status if call_canister returns Ok,
+    /// because the call could fail later.
     async fn call_canister(
         &self,
         canister_id: CanisterId,
@@ -722,7 +752,7 @@ pub trait Environment: Send + Sync {
     /// growth becomes limited.
     fn heap_growth_potential(&self) -> HeapGrowthPotential;
 
-    /// Returns the PrincipalId of the canister.
+    /// Returns the PrincipalId of the canister implementing the Environment trait.
     fn canister_id(&self) -> CanisterId;
 }
 
@@ -735,7 +765,8 @@ pub enum HeapGrowthPotential {
     LimitedAvailability,
 }
 
-/// A single ongoing update for a single neuron.
+/// A lock for a single ongoing update for a single neuron, ensuring that only a single
+/// update can happen at a time for a given neuron.
 /// Releases the lock when destroyed.
 pub struct LedgerUpdateLock {
     pub nid: String,
@@ -743,6 +774,7 @@ pub struct LedgerUpdateLock {
 }
 
 impl Drop for LedgerUpdateLock {
+    /// Drops the lock on the neuron.
     fn drop(&mut self) {
         // It's always ok to dereference the governance when a LedgerUpdateLock
         // goes out of scope. Indeed, in the scope of any Governance method,
@@ -935,7 +967,8 @@ mod tests {
         assert_eq!(new_params, expected_params);
     }
 
-    /// Test that default followees can be cleared by inheriting an empty default_followees
+    /// Test that the nervous system parameter default_followees can be cleared by
+    /// inheriting an empty default_followees.
     #[test]
     fn test_inherit_from_inherits_default_followees() {
         let default_params = NervousSystemParameters::with_default_values();
