@@ -113,8 +113,8 @@ message AdapterQueues {
   uint32 requests_queue_capacity = 4;
 }
 
-// Represents the Bitcoin state of the subnet.
-message BitcoinState {
+// Represents the Bitcoin state that isn't stored in PageMaps.
+message BitcoinStateBits {
   // The queues that maintain the requests to and responses from the Bitcoin
   // Adapter.
   AdapterQueues adapter_queues = 1;

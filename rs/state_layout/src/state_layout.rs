@@ -12,8 +12,8 @@ use ic_protobuf::{
     },
 };
 use ic_replicated_state::{
-    canister_state::execution_state::WasmMetadata, CallContextManager, CanisterStatus,
-    ExportedFunctions, Global, NumWasmPages,
+    bitcoin_state, canister_state::execution_state::WasmMetadata, CallContextManager,
+    CanisterStatus, ExportedFunctions, Global, NumWasmPages,
 };
 use ic_sys::mmap::ScopedMmap;
 use ic_types::{
@@ -183,6 +183,13 @@ pub struct CanisterStateBits {
     pub stable_memory_size: NumWasmPages,
     pub heap_delta_debit: NumBytes,
     pub install_code_debit: NumInstructions,
+}
+
+/// This struct contains bits of the `BitcoinState` that are not already
+/// covered somewhere else and are too small to be serialized separately.
+#[derive(Debug, Default)]
+pub struct BitcoinStateBits {
+    pub adapter_queues: bitcoin_state::AdapterQueues,
 }
 
 /// `StateLayout` provides convenience functions to construct correct
@@ -783,7 +790,7 @@ impl<Permissions: AccessPolicy> BitcoinStateLayout<Permissions> {
         self.bitcoin_root.clone()
     }
 
-    pub fn bitcoin_state(&self) -> ProtoFileWith<pb_bitcoin::BitcoinState, Permissions> {
+    pub fn bitcoin_state(&self) -> ProtoFileWith<pb_bitcoin::BitcoinStateBits, Permissions> {
         self.bitcoin_root.join("state.pbuf").into()
     }
 }
@@ -1113,6 +1120,24 @@ impl TryFrom<pb_canister_state_bits::ExecutionStateBits> for ExecutionStateBits 
             metadata: try_from_option_field(value.metadata, "ExecutionStateBits::metadata")
                 .unwrap_or_default(),
         })
+    }
+}
+
+impl From<&BitcoinStateBits> for pb_bitcoin::BitcoinStateBits {
+    fn from(item: &BitcoinStateBits) -> Self {
+        pb_bitcoin::BitcoinStateBits {
+            adapter_queues: Some((&item.adapter_queues).into()),
+        }
+    }
+}
+
+impl TryFrom<pb_bitcoin::BitcoinStateBits> for BitcoinStateBits {
+    type Error = ProxyDecodeError;
+
+    fn try_from(value: pb_bitcoin::BitcoinStateBits) -> Result<Self, Self::Error> {
+        let adapter_queues: bitcoin_state::AdapterQueues =
+            try_from_option_field(value.adapter_queues, "BitcoinStateBits::adapter_queues")?;
+        Ok(BitcoinStateBits { adapter_queues })
     }
 }
 
