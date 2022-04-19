@@ -22,6 +22,7 @@
 use anyhow::Result;
 use clap::Parser;
 use ic_config::{
+    adapters::AdaptersConfig,
     artifact_pool::ArtifactPoolTomlConfig,
     consensus::ConsensusConfig,
     crypto::CryptoConfig,
@@ -297,6 +298,10 @@ struct CliArgs {
     #[clap(long = "subnet-type",
                 possible_values = &["application", "verified_application", "system"])]
     subnet_type: Option<String>,
+
+    /// Unix Domain Socket for Bitcoin testnet
+    #[clap(long = "bitcoin-testnet-uds-path")]
+    bitcoin_testnet_uds_path: Option<PathBuf>,
 }
 
 impl CliArgs {
@@ -484,6 +489,7 @@ impl CliArgs {
             consensus_pool_backend: self.consensus_pool_backend,
             subnet_features: to_subnet_features(&self.subnet_features),
             subnet_type,
+            bitcoin_testnet_uds_path: self.bitcoin_testnet_uds_path,
         })
     }
 }
@@ -528,6 +534,7 @@ struct ValidatedConfig {
     consensus_pool_backend: Option<String>,
     subnet_features: SubnetFeatures,
     subnet_type: SubnetType,
+    bitcoin_testnet_uds_path: Option<PathBuf>,
 
     // Not intended to ever be read: role is to keep the temp dir from being deleted.
     _state_dir_holder: Option<TempDir>,
@@ -592,6 +599,11 @@ impl ValidatedConfig {
 
         let consensus = self.detect_consensus_starvation.map(ConsensusConfig::new);
 
+        let adapters_config = Some(AdaptersConfig {
+            bitcoin_testnet_uds_path: self.bitcoin_testnet_uds_path.clone(),
+            ..AdaptersConfig::default()
+        });
+
         ReplicaConfig {
             registry_client,
             transport,
@@ -603,6 +615,7 @@ impl ValidatedConfig {
             consensus,
             crypto,
             logger,
+            adapters_config,
             ..ReplicaConfig::default()
         }
     }
