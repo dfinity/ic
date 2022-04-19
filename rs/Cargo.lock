@@ -3263,10 +3263,10 @@ dependencies = [
  "ic-canister-client",
  "ic-config",
  "ic-consensus",
- "ic-crypto",
  "ic-crypto-internal-types",
  "ic-crypto-sha",
  "ic-crypto-utils-basic-sig",
+ "ic-crypto-utils-threshold-sig-der",
  "ic-http-utils",
  "ic-ic00-types",
  "ic-interfaces",
@@ -3833,10 +3833,10 @@ dependencies = [
 name = "ic-certified-vars-test-utils"
 version = "0.1.0"
 dependencies = [
- "ic-crypto",
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-crypto-internal-types",
  "ic-crypto-tree-hash",
+ "ic-crypto-utils-threshold-sig-der",
  "ic-interfaces",
  "ic-types 0.8.0",
  "leb128",

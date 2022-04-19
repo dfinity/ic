@@ -1,7 +1,6 @@
 use rand::{thread_rng, Rng};
 use serde::Serialize;
 
-use ic_crypto::threshold_sig_public_key_to_der;
 use ic_crypto_internal_threshold_sig_bls12381::api::{
     combine_signatures, combined_public_key, keygen, sign_message,
 };
@@ -11,6 +10,7 @@ use ic_crypto_tree_hash::{
     flatmap, Digest, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, MixedHashTree,
     WitnessGenerator,
 };
+use ic_crypto_utils_threshold_sig_der::public_key_to_der;
 use ic_interfaces::crypto::Signable;
 use ic_types::messages::Blob;
 use ic_types::{
@@ -79,7 +79,7 @@ impl CertificateData {
                     Label::from("subnet") => LabeledTree::SubTree(flatmap![
                         Label::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
                             Label::from("canister_ranges") => LabeledTree::Leaf(serialize_to_cbor(canister_id_ranges)),
-                            Label::from("public_key") => LabeledTree::Leaf(threshold_sig_public_key_to_der(public_key).unwrap()),
+                            Label::from("public_key") => LabeledTree::Leaf(public_key_to_der(&public_key.into_bytes()).unwrap()),
                         ])
                     ]),
                     Label::from("time") => LabeledTree::Leaf(encoded_time)
