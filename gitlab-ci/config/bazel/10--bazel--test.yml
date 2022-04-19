@@ -9,3 +9,5 @@ bazel-test:
 
       bazel --version
       bazel build :all --remote_cache=grpc://10.117.26.74:8980
+
+      bazel build --spawn_strategy=standalone --remote_cache=grpc://10.117.26.74:8980 //ic-os/guestos:disk.img.tar
