@@ -10,13 +10,13 @@ use bitcoin::{
     },
     Block, BlockHash, BlockHeader,
 };
-use hashlink::LinkedHashSet;
+use hashlink::{LinkedHashMap, LinkedHashSet};
 use ic_logger::{debug, error, info, warn, ReplicaLogger};
 use std::{
     collections::HashMap,
     net::SocketAddr,
     sync::Arc,
-    time::{Instant, SystemTime},
+    time::{Duration, Instant, SystemTime},
 };
 use thiserror::Error;
 use tokio::sync::Mutex;
@@ -113,15 +113,13 @@ pub struct PeerInfo {
     on_timeout: OnTimeout,
 }
 
-/// This struct stores the information related to a "getdata" request sent by the BlockChainManager
+/// This struct stores the information related to a "getdata" request sent by the BlockChainManager.
 #[derive(Debug)]
 pub struct GetDataRequestInfo {
     /// This field stores the socket address of the Bitcoin node to which the request was sent.
     socket: SocketAddr,
     /// This field contains the time at which the getdata request was sent.  
     sent_at: Instant,
-    /// This field contains the action to take if the request is expired.
-    _on_timeout: OnTimeout,
 }
 
 /// The BlockChainManager struct handles interactions that involve the headers.
@@ -134,11 +132,9 @@ pub struct BlockchainManager {
     peer_info: HashMap<SocketAddr, PeerInfo>,
 
     /// This HashMap stores the information related to each getdata request
-    /// sent by the BlockChainManager. An entry is removed from this hashmap if
-    /// (1) The corresponding "Block" response is received or
-    /// (2) If the request is expired or
-    /// (3) If the peer is disconnected.
-    getdata_request_info: HashMap<BlockHash, GetDataRequestInfo>,
+    /// sent by the BlockChainManager. An entry is removed from this hashmap when
+    /// the corresponding "Block" response is received.
+    getdata_request_info: LinkedHashMap<BlockHash, GetDataRequestInfo>,
 
     /// This queue stores the set of block hashes belonging to blocks that have yet to be synced by the BlockChainManager
     /// and stored into the block cache.
@@ -160,7 +156,7 @@ impl BlockchainManager {
     /// BTC network.
     pub fn new(blockchain: Arc<Mutex<BlockchainState>>, logger: ReplicaLogger) -> Self {
         let peer_info = HashMap::new();
-        let getdata_request_info = HashMap::new();
+        let getdata_request_info = LinkedHashMap::new();
 
         BlockchainManager {
             blockchain,
@@ -460,21 +456,30 @@ impl BlockchainManager {
         info!(self.logger, "Removing peer_info with addr : {} ", addr);
         self.peer_info.remove(addr);
         // Removing all the `getdata` requests that have been sent to the peer before.
-        self.getdata_request_info.retain(|_, v| v.socket != *addr);
-    }
-
-    fn filter_expired_getdata_requests(&mut self) {
-        self.getdata_request_info.retain(|_, request| {
-            request.sent_at.elapsed().as_secs() <= GETDATA_REQUEST_TIMEOUT_SECS
-        });
+        for request in self.getdata_request_info.values_mut() {
+            if request.socket == *addr {
+                request.sent_at =
+                    Instant::now() - Duration::from_secs(2 * GETDATA_REQUEST_TIMEOUT_SECS);
+            }
+        }
     }
 
     async fn sync_blocks(&mut self, channel: &mut impl Channel) {
-        // Removing expired getdata requests so they may be enqueued again.
-        self.filter_expired_getdata_requests();
+        // Timeout requests so they may be retried again.
+        let mut retry_queue = self
+            .getdata_request_info
+            .iter()
+            .filter_map(|(block_hash, request)| {
+                if request.sent_at.elapsed().as_secs() > GETDATA_REQUEST_TIMEOUT_SECS {
+                    Some(*block_hash)
+                } else {
+                    None
+                }
+            })
+            .collect::<LinkedHashSet<_>>();
 
         // If nothing to be synced, then there is nothing to do at this point.
-        if self.block_sync_queue.is_empty() {
+        if retry_queue.is_empty() && self.block_sync_queue.is_empty() {
             return;
         }
 
@@ -484,14 +489,13 @@ impl BlockchainManager {
             self.logger,
             "Cache Size: {}, Max Size: {}", block_cache_size, BLOCK_CACHE_THRESHOLD_BYTES
         );
-        if block_cache_size >= BLOCK_CACHE_THRESHOLD_BYTES {
-            return;
-        }
+
+        let is_cache_full = block_cache_size >= BLOCK_CACHE_THRESHOLD_BYTES;
 
         debug!(
             self.logger,
             "Syncing blocks. Blocks to be synced : {:?}",
-            self.block_sync_queue.len()
+            retry_queue.len() + self.block_sync_queue.len()
         );
 
         // Count the number of requests per peer.
@@ -519,7 +523,11 @@ impl BlockchainManager {
             // Randomly sample some inventory to be requested from the peer.
             let mut selected_inventory = vec![];
             for _ in 0..num_requests_to_be_sent {
-                match self.block_sync_queue.pop_front() {
+                match get_next_block_hash_to_sync(
+                    is_cache_full,
+                    &mut retry_queue,
+                    &mut self.block_sync_queue,
+                ) {
                     Some(hash) => {
                         selected_inventory.push(hash);
                     }
@@ -551,12 +559,11 @@ impl BlockchainManager {
 
             for inv in selected_inventory {
                 // Record the `getdata` request.
-                self.getdata_request_info.insert(
+                self.getdata_request_info.replace(
                     inv,
                     GetDataRequestInfo {
                         socket: peer.socket,
                         sent_at: Instant::now(),
-                        _on_timeout: OnTimeout::Ignore,
                     },
                 );
             }
@@ -681,6 +688,22 @@ impl BlockchainManager {
     }
 }
 
+fn get_next_block_hash_to_sync(
+    is_cache_full: bool,
+    retry_queue: &mut LinkedHashSet<BlockHash>,
+    sync_queue: &mut LinkedHashSet<BlockHash>,
+) -> Option<BlockHash> {
+    if !retry_queue.is_empty() {
+        return retry_queue.pop_front();
+    }
+
+    if is_cache_full {
+        return None;
+    }
+
+    sync_queue.pop_front()
+}
+
 #[cfg(test)]
 pub mod test {
     use super::*;
@@ -689,6 +712,7 @@ pub mod test {
         BLOCK_2_ENCODED,
     };
     use crate::config::test::ConfigBuilder;
+    use bitcoin::blockdata::constants::genesis_block;
     use bitcoin::consensus::deserialize;
     use bitcoin::Network;
     use bitcoin::{
@@ -1071,33 +1095,187 @@ pub mod test {
         assert!(blockchain_manager.getdata_request_info.is_empty());
     }
 
-    /// This function tests to ensure that the BlockchainManager clears out timed out `getdata` requests
+    /// This function tests to ensure that the BlockchainManager retries timed out `getdata` requests
     /// when calling `sync_blocks`.
     #[tokio::test]
-    async fn test_ensure_sync_blocks_clears_timed_out_getdata_requests() {
+    async fn test_ensure_sync_blocks_retries_timed_out_getdata_requests() {
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
         let sockets = vec![addr];
         let mut channel = TestChannel::new(sockets.clone());
         let config = ConfigBuilder::new().build();
         let blockchain_state = BlockchainState::new(&config);
         let test_state = TestState::setup();
+        let block_1_hash = test_state.block_1.block_hash();
         let mut blockchain_manager =
             BlockchainManager::new(Arc::new(Mutex::new(blockchain_state)), no_op_logger());
+        blockchain_manager.add_peer(&mut channel, &addr).await;
 
         // Ensure that the request info will be timed out.
-        let sent_at = Instant::now() - Duration::from_secs(GETDATA_REQUEST_TIMEOUT_SECS + 1);
         blockchain_manager.getdata_request_info.insert(
             test_state.block_1.block_hash(),
             GetDataRequestInfo {
                 socket: addr,
-                sent_at,
-                _on_timeout: OnTimeout::Ignore,
+                sent_at: Instant::now() - Duration::from_secs(GETDATA_REQUEST_TIMEOUT_SECS + 1),
             },
         );
 
         blockchain_manager.sync_blocks(&mut channel).await;
 
-        assert!(blockchain_manager.getdata_request_info.is_empty());
+        assert_eq!(blockchain_manager.getdata_request_info.len(), 1);
+        // The request is considered retried if its timeout is less than the the timeout seconds.
+        let request = blockchain_manager
+            .getdata_request_info
+            .get(&block_1_hash)
+            .expect("missing request info for block hash 1");
+        assert!(request.sent_at.elapsed().as_secs() < GETDATA_REQUEST_TIMEOUT_SECS);
+        let getdata_command = channel
+            .pop_back()
+            .expect("there should `getdata` request in the channel");
+        assert!(matches!(
+            getdata_command.message,
+            NetworkMessage::GetData(_)
+        ));
+        let hashes_sent = match getdata_command.message {
+            NetworkMessage::GetData(inv) => inv,
+            _ => vec![],
+        };
+        assert_eq!(hashes_sent.len(), 1);
+        assert!(
+            matches!(hashes_sent.first(), Some(Inventory::Block(hash)) if *hash == block_1_hash)
+        );
+    }
+
+    /// This function tests to ensure that the BlockchainManager retries `getdata` requests
+    /// that were sent to peers that have disconnected when calling `sync_blocks`.
+    #[tokio::test]
+    async fn test_manager_retries_getdata_requests_where_the_peer_has_disconnected() {
+        let addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
+        let addr2 = SocketAddr::from_str("127.0.0.1:3338").expect("bad address format");
+        let sockets = vec![addr];
+        let mut channel = TestChannel::new(sockets.clone());
+        let config = ConfigBuilder::new().build();
+        let blockchain_state = BlockchainState::new(&config);
+        let test_state = TestState::setup();
+        let block_1_hash = test_state.block_1.block_hash();
+        let mut blockchain_manager =
+            BlockchainManager::new(Arc::new(Mutex::new(blockchain_state)), no_op_logger());
+        blockchain_manager.add_peer(&mut channel, &addr).await;
+
+        // Ensure that the request info will be timed out.
+        blockchain_manager.getdata_request_info.insert(
+            test_state.block_1.block_hash(),
+            GetDataRequestInfo {
+                socket: addr,
+                sent_at: Instant::now(),
+            },
+        );
+
+        blockchain_manager.remove_peer(&addr);
+        blockchain_manager.add_peer(&mut channel, &addr2).await;
+
+        blockchain_manager.sync_blocks(&mut channel).await;
+
+        assert_eq!(blockchain_manager.getdata_request_info.len(), 1);
+        // The request is considered retried if its timeout is less than the the timeout seconds.
+        let request = blockchain_manager
+            .getdata_request_info
+            .get(&block_1_hash)
+            .expect("missing request info for block hash 1");
+        assert!(request.sent_at.elapsed().as_secs() < GETDATA_REQUEST_TIMEOUT_SECS);
+        assert_eq!(request.socket, addr2);
+        let getdata_command = channel
+            .pop_back()
+            .expect("there should `getdata` request in the channel");
+        assert!(matches!(
+            getdata_command.message,
+            NetworkMessage::GetData(_)
+        ));
+        let hashes_sent = match getdata_command.message {
+            NetworkMessage::GetData(inv) => inv,
+            _ => vec![],
+        };
+        assert_eq!(hashes_sent.len(), 1);
+        assert!(
+            matches!(hashes_sent.first(), Some(Inventory::Block(hash)) if *hash == block_1_hash)
+        );
+    }
+
+    /// This function tests to ensure that the BlockchainManager retries `getdata` requests
+    /// that have failed when calling `sync_blocks` with a full block cache.
+    #[tokio::test]
+    async fn test_ensure_getdata_requests_are_retried_with_a_full_cache() {
+        let addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
+        let sockets = vec![addr];
+        let mut channel = TestChannel::new(sockets.clone());
+        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let blockchain_state = BlockchainState::new(&config);
+        let genesis = blockchain_state.genesis().clone();
+
+        let mut blockchain_manager =
+            BlockchainManager::new(Arc::new(Mutex::new(blockchain_state)), no_op_logger());
+        blockchain_manager.add_peer(&mut channel, &addr).await;
+
+        let mut large_blockchain =
+            generate_large_block_blockchain(genesis.header.block_hash(), genesis.header.time, 7);
+        let large_blockchain_headers = large_blockchain
+            .iter()
+            .map(|b| b.header)
+            .collect::<Vec<_>>();
+
+        // Remove the first block to use for retrying.
+        large_blockchain.drain(..1);
+
+        {
+            let mut blockchain = blockchain_manager.blockchain.lock().await;
+            let (added_headers, maybe_err) = blockchain.add_headers(&large_blockchain_headers);
+            assert_eq!(added_headers.len(), large_blockchain_headers.len());
+            assert!(maybe_err.is_none());
+
+            for block in large_blockchain {
+                blockchain.add_block(block).expect("failed to add block");
+            }
+
+            assert!(blockchain.get_block_cache_size() >= BLOCK_CACHE_THRESHOLD_BYTES);
+        }
+
+        let block_1_hash = large_blockchain_headers
+            .first()
+            .expect("should be at least 1 header")
+            .block_hash();
+
+        // Ensure that the request info will be timed out.
+        blockchain_manager.getdata_request_info.insert(
+            block_1_hash,
+            GetDataRequestInfo {
+                socket: addr,
+                sent_at: Instant::now() - Duration::from_secs(GETDATA_REQUEST_TIMEOUT_SECS + 1),
+            },
+        );
+
+        blockchain_manager.sync_blocks(&mut channel).await;
+
+        assert_eq!(blockchain_manager.getdata_request_info.len(), 1);
+        // The request is considered retried if its timeout is less than the the timeout seconds.
+        let request = blockchain_manager
+            .getdata_request_info
+            .get(&block_1_hash)
+            .expect("missing request info for block hash 1");
+        assert!(request.sent_at.elapsed().as_secs() < GETDATA_REQUEST_TIMEOUT_SECS);
+        let getdata_command = channel
+            .pop_back()
+            .expect("there should `getdata` request in the channel");
+        assert!(matches!(
+            getdata_command.message,
+            NetworkMessage::GetData(_)
+        ));
+        let hashes_sent = match getdata_command.message {
+            NetworkMessage::GetData(inv) => inv,
+            _ => vec![],
+        };
+        assert_eq!(hashes_sent.len(), 1);
+        assert!(
+            matches!(hashes_sent.first(), Some(Inventory::Block(hash)) if *hash == block_1_hash)
+        );
     }
 
     /// Tests the `BlockchainManager::idle(...)` function to ensure it clears the state from the
@@ -1212,7 +1390,6 @@ pub mod test {
             GetDataRequestInfo {
                 socket: SocketAddr::from_str("127.0.0.1:8333").expect("should be valid addr"),
                 sent_at: Instant::now(),
-                _on_timeout: OnTimeout::Ignore,
             },
         );
 
@@ -1373,5 +1550,88 @@ pub mod test {
             .await
             .get_block(&next_hashes[4])
             .is_some());
+    }
+
+    /// Test to check that the retry queue is always used to retrieve the next block hash.
+    #[test]
+    fn test_get_next_block_hash_to_sync_always_retrieves_from_the_retry_queue() {
+        let genesis_block = genesis_block(Network::Regtest);
+        let headers = generate_headers(
+            genesis_block.block_hash(),
+            genesis_block.header.time,
+            3,
+            &[],
+        );
+        let mut retry_queue: LinkedHashSet<BlockHash> =
+            headers.iter().map(|h| h.block_hash()).take(2).collect();
+        let mut sync_queue: LinkedHashSet<BlockHash> = headers
+            .iter()
+            .map(|h| h.block_hash())
+            .skip(2)
+            .take(1)
+            .collect();
+
+        // Try with `is_cache_full` set to false.
+        let first_hash = retry_queue
+            .front()
+            .copied()
+            .expect("Retry queue should have 2 items.");
+        let result = get_next_block_hash_to_sync(false, &mut retry_queue, &mut sync_queue);
+        assert!(matches!(result, Some(block_hash) if block_hash == first_hash));
+        assert_eq!(retry_queue.len(), 1);
+        assert_eq!(sync_queue.len(), 1);
+
+        // Try with `is_cache_full` set to true.
+        let first_hash = retry_queue
+            .front()
+            .copied()
+            .expect("Retry queue should have 1 item.");
+        let result = get_next_block_hash_to_sync(true, &mut retry_queue, &mut sync_queue);
+        assert!(matches!(result, Some(block_hash) if block_hash == first_hash));
+        assert_eq!(sync_queue.len(), 1);
+        assert_eq!(retry_queue.len(), 0);
+    }
+
+    /// Tests if the cache is full and the retry queue is empty, then no blocks are returned.
+    #[test]
+    fn test_get_next_block_hash_to_sync_full_cache_and_empty_retry_queue() {
+        let genesis_block = genesis_block(Network::Regtest);
+        let headers = generate_headers(
+            genesis_block.block_hash(),
+            genesis_block.header.time,
+            1,
+            &[],
+        );
+        let mut retry_queue = LinkedHashSet::new();
+        let mut sync_queue: LinkedHashSet<BlockHash> =
+            headers.iter().map(|h| h.block_hash()).collect();
+        let result = get_next_block_hash_to_sync(true, &mut retry_queue, &mut sync_queue);
+        assert!(matches!(result, None));
+        assert_eq!(sync_queue.len(), 1);
+        assert_eq!(retry_queue.len(), 0);
+    }
+
+    /// Tests that the sync queue is used last only if the cache is not full and the retry queue
+    /// is empty.
+    #[test]
+    fn test_get_next_block_hash_to_sync_cache_is_not_full_and_empty_retry_queue() {
+        let genesis_block = genesis_block(Network::Regtest);
+        let headers = generate_headers(
+            genesis_block.block_hash(),
+            genesis_block.header.time,
+            1,
+            &[],
+        );
+        let mut retry_queue = LinkedHashSet::new();
+        let mut sync_queue: LinkedHashSet<BlockHash> =
+            headers.iter().map(|h| h.block_hash()).collect();
+        let first_hash = sync_queue
+            .front()
+            .copied()
+            .expect("Sync queue should have 1 item.");
+        let result = get_next_block_hash_to_sync(false, &mut retry_queue, &mut sync_queue);
+        assert!(matches!(result, Some(block_hash) if block_hash == first_hash));
+        assert_eq!(sync_queue.len(), 0);
+        assert_eq!(retry_queue.len(), 0);
     }
 }
