@@ -209,7 +209,6 @@ mod test {
         assert_eq!(new_state.height, state.height);
         assert_eq!(new_state.unstable_blocks, state.unstable_blocks);
         assert_eq!(new_state.utxos.network, state.utxos.network);
-        assert_eq!(new_state.utxos.strict, state.utxos.strict);
         assert_eq!(
             new_state.utxos.utxos.large_utxos,
             state.utxos.utxos.large_utxos
