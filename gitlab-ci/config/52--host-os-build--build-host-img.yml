@@ -31,8 +31,6 @@ host-os-diskimg:
       "${CI_PROJECT_DIR}"/gitlab-ci/src/job_scripts/lib/host-os-diskimg.sh \
         "$BUILD_OUT" "$BUILD_TMP" "$UPLOAD_TARGET" "$VERSION"
 
-      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/openssl-sign.sh "$BUILD_OUT"
-
       buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" rclone -- \
       "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" "$BUILD_OUT" "$UPLOAD_TARGET"
 
