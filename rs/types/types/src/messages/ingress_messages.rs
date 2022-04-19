@@ -9,7 +9,6 @@ use crate::{
     },
     CanisterId, CountBytes, PrincipalId, SubnetId, Time, UserId,
 };
-use ic_ic00_types::IC_00;
 use ic_protobuf::{
     log::ingress_message_log_entry::v1::IngressMessageLogEntry,
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -372,5 +371,5 @@ impl CountBytes for Ingress {
 // than to a canister).
 pub fn is_subnet_message(msg: &SignedIngressContent, own_subnet_id: SubnetId) -> bool {
     let canister_id = msg.canister_id();
-    canister_id == IC_00 || canister_id.get_ref() == own_subnet_id.get_ref()
+    canister_id == CanisterId::ic_00() || canister_id.get_ref() == own_subnet_id.get_ref()
 }
