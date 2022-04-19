@@ -13,7 +13,9 @@ mod types;
 mod util;
 
 use crate::internal_query_handler::AnonymousQueryHandler;
-pub use execution_environment::{ExecutionEnvironment, ExecutionEnvironmentImpl};
+pub use execution_environment::{
+    CanisterHeartbeatError, ExecutionEnvironment, ExecutionEnvironmentImpl,
+};
 pub use history::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
 pub use hypervisor::{Hypervisor, HypervisorMetrics};
 use ic_config::{execution_environment::Config, subnet_config::SchedulerConfig};

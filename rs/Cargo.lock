@@ -5098,7 +5098,6 @@ dependencies = [
  "ic-base-types",
  "ic-crypto-tree-hash",
  "ic-error-types",
- "ic-ic00-types",
  "ic-protobuf",
  "ic-registry-provisional-whitelist",
  "ic-registry-subnet-type",

@@ -9,7 +9,6 @@ derive_more = { git = "https://github.com/dfinity-lab/derive_more", branch = "ma
 ic-base-types = { path = "../types/base_types" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-error-types = { path = "../types/error_types" }
-ic-ic00-types = { path = "../types/ic00_types" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
