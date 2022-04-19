@@ -173,7 +173,7 @@ mod test {
             Network::Bitcoin,
         );
 
-        let utxo_set = UtxoSet::new(true, Network::Bitcoin);
+        let utxo_set = UtxoSet::new(Network::Bitcoin);
 
         let mut address_utxo_set = AddressUtxoSet::new(address_1.to_string(), &utxo_set);
 
@@ -213,7 +213,7 @@ mod test {
             Network::Bitcoin,
         );
 
-        let utxo_set = UtxoSet::new(true, Network::Bitcoin);
+        let utxo_set = UtxoSet::new(Network::Bitcoin);
 
         let mut address_utxo_set = AddressUtxoSet::new(address_1.to_string(), &utxo_set);
 
@@ -263,7 +263,7 @@ mod test {
             Network::Bitcoin,
         );
 
-        let utxo_set = UtxoSet::new(true, Network::Bitcoin);
+        let utxo_set = UtxoSet::new(Network::Bitcoin);
 
         let mut address_utxo_set = AddressUtxoSet::new(address_1.to_string(), &utxo_set);
 

@@ -28,7 +28,7 @@ impl State {
     pub fn new(stability_threshold: u64, network: Network, genesis_block: Block) -> Self {
         Self {
             height: 0,
-            utxos: UtxoSet::new(true, network),
+            utxos: UtxoSet::new(network),
             unstable_blocks: UnstableBlocks::new(stability_threshold, genesis_block),
         }
     }
@@ -207,13 +207,10 @@ pub struct UtxoSet {
     pub network: Network,
     // An index for fast retrievals of an address's UTXOs.
     pub address_to_outpoints: StableBTreeMap<PageMapMemory>,
-
-    // If true, a transaction's inputs must all be present in the UTXO for it to be accepted.
-    pub strict: bool,
 }
 
 impl UtxoSet {
-    pub fn new(strict: bool, network: Network) -> Self {
+    pub fn new(network: Network) -> Self {
         Self {
             utxos: Utxos::default(),
             address_to_outpoints: StableBTreeMap::new(
@@ -221,7 +218,6 @@ impl UtxoSet {
                 MAX_ADDRESS_OUTPOINT_SIZE,
                 0, // No values are stored in the map.
             ),
-            strict,
             network,
         }
     }
@@ -244,7 +240,6 @@ impl UtxoSet {
                     height: *height,
                 })
                 .collect(),
-            strict: self.strict,
             network: match self.network {
                 Network::Bitcoin => 0,
                 Network::Testnet => 1,
@@ -293,7 +288,6 @@ impl UtxoSet {
         Self {
             utxos,
             address_to_outpoints: StableBTreeMap::load(address_to_outpoints_memory),
-            strict: utxos_proto.strict,
             network: match utxos_proto.network {
                 0 => Network::Bitcoin,
                 1 => Network::Testnet,

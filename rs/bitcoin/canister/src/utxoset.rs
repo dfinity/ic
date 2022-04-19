@@ -125,7 +125,7 @@ mod test {
                 .with_output(&address, 1000)
                 .build();
 
-            let mut utxo = UtxoSet::new(true, *network);
+            let mut utxo = UtxoSet::new(*network);
             insert_tx(&mut utxo, &coinbase_tx, 0);
 
             assert_eq!(utxo.utxos.len(), 1);
@@ -146,7 +146,7 @@ mod test {
     #[test]
     fn tx_without_outputs_leaves_utxo_set_unchanged() {
         for network in [Network::Bitcoin, Network::Regtest, Network::Testnet].iter() {
-            let mut utxo = UtxoSet::new(true, *network);
+            let mut utxo = UtxoSet::new(*network);
 
             // no output coinbase
             let mut coinbase_empty_tx = TransactionBuilder::coinbase().build();
@@ -161,7 +161,7 @@ mod test {
     #[test]
     fn filter_provably_unspendable_utxos() {
         for network in [Network::Bitcoin, Network::Regtest, Network::Testnet].iter() {
-            let mut utxo = UtxoSet::new(true, *network);
+            let mut utxo = UtxoSet::new(*network);
 
             // op return coinbase
             let coinbase_op_return_tx = Transaction {
@@ -190,7 +190,7 @@ mod test {
             let address_2 =
                 Address::p2pkh(&PublicKey::new(secp.generate_keypair(&mut rng).1), *network);
 
-            let mut utxo = UtxoSet::new(true, *network);
+            let mut utxo = UtxoSet::new(*network);
 
             let coinbase_tx = TransactionBuilder::coinbase()
                 .with_output(&address_1, 1000)
