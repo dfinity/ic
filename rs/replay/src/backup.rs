@@ -5,21 +5,20 @@ use ic_consensus_message::ConsensusMessageHashable;
 use ic_interfaces::{
     certification::{Verifier, VerifierError},
     consensus_pool::{ChangeAction, MutableConsensusPool},
-    crypto::{MultiSigVerifier, ThresholdSigVerifierByPublicKey},
+    crypto::MultiSigVerifier,
     registry::RegistryClient,
     time_source::SysTimeSource,
     validation::ValidationResult,
 };
-use ic_interfaces_state_manager::{StateHashError, StateManager};
+use ic_interfaces_state_manager::StateManager;
 use ic_logger::replica_logger::no_op_logger;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
     consensus::{
-        certification::Certification, BlockProposal, CatchUpContentProtobufBytes, CatchUpPackage,
-        Finalization, HasHeight, Notarization, RandomBeacon, RandomTape,
+        certification::Certification, BlockProposal, CatchUpPackage, Finalization, HasHeight,
+        Notarization, RandomBeacon, RandomTape,
     },
-    crypto::{CombinedThresholdSig, CombinedThresholdSigOf},
     Height, RegistryVersion, ReplicaVersion, SubnetId,
 };
 use prost::Message;
@@ -74,12 +73,10 @@ pub(crate) enum ExitPoint {
 /// Deserialize the CUP at the given height and inserts it into the pool.
 pub(crate) fn insert_cup_at_height(
     pool: &mut dyn MutableConsensusPool,
-    registry: Arc<dyn RegistryClient>,
-    subnet_id: SubnetId,
     backup_dir: &Path,
     height: Height,
 ) {
-    let cup = read_cup_at_height(registry, subnet_id, backup_dir, height);
+    let cup = read_cup_at_height(backup_dir, height);
     pool.apply_changes(
         &SysTimeSource::new(),
         ChangeAction::AddToValidated(cup.into_message()).into(),
@@ -87,12 +84,7 @@ pub(crate) fn insert_cup_at_height(
 }
 
 /// Deserializes the CUP at the given height and returns it.
-pub(crate) fn read_cup_at_height(
-    registry: Arc<dyn RegistryClient>,
-    subnet_id: SubnetId,
-    backup_dir: &Path,
-    height: Height,
-) -> CatchUpPackage {
+pub(crate) fn read_cup_at_height(backup_dir: &Path, height: Height) -> CatchUpPackage {
     let group_key = (height.get() / BACKUP_GROUP_SIZE) * BACKUP_GROUP_SIZE;
     let buffer = read_file(
         &backup_dir
@@ -104,24 +96,8 @@ pub(crate) fn read_cup_at_height(
     let protobuf = ic_protobuf::types::v1::CatchUpPackage::decode(buffer.as_slice())
         .expect("Protobuf decoding failed");
 
-    let cup = CatchUpPackage::try_from(&protobuf)
-        .unwrap_or_else(|_| panic!("{}", deserialization_error(height)));
-
-    // We cannot verify the genesis CUP with this subnet's public key.
-    if height.get() != 0 {
-        let crypto =
-            ic_crypto::CryptoComponentFatClient::new_for_verification_only(registry.clone());
-        crypto
-            .verify_combined_threshold_sig_by_public_key(
-                &CombinedThresholdSigOf::new(CombinedThresholdSig(protobuf.signature)),
-                &CatchUpContentProtobufBytes(protobuf.content),
-                subnet_id,
-                cup.content.block.get_value().context.registry_version,
-            )
-            .expect("Verification of the signature on the CUP failed");
-    }
-
-    cup
+    CatchUpPackage::try_from(&protobuf)
+        .unwrap_or_else(|_| panic!("{}", deserialization_error(height)))
 }
 
 /// Read all files from the backup folder starting from the `start_height` and
@@ -401,38 +377,12 @@ pub(crate) fn deserialize_consensus_artifacts(
 pub(crate) fn assert_consistency_and_clean_up<T>(
     state_manager: &dyn StateManager<State = T>,
     pool: &mut ConsensusPoolImpl,
+    registry: Arc<dyn RegistryClient>,
+    subnet_id: SubnetId,
 ) {
-    let last_cup = pool.get_cache().catch_up_package();
-    if last_cup.height() == Height::from(0) {
-        return;
-    }
-    let hash = loop {
-        match state_manager.get_state_hash_at(last_cup.height()) {
-            Ok(hash) => break hash,
-            Err(StateHashError::Transient(err)) => {
-                println!(
-                    "REPLAY WARN: no hash for the state at CUP height {:?}: {:?}; waiting...",
-                    last_cup.height(),
-                    err
-                );
-                std::thread::sleep(std::time::Duration::from_secs(3));
-            }
-            Err(StateHashError::Permanent(err)) => {
-                panic!(
-                    "REPLAY ERROR: couldn't fetch the state at CUP height {:?}: {:?}",
-                    last_cup.height(),
-                    err
-                );
-            }
-        }
-    };
-    assert_eq!(
-        hash,
-        last_cup.content.state_hash,
-        "The hash state of the CUP at height {:?} does not correspond to the hash of the computed state",
-        last_cup.height()
-    );
-    let purge_height = last_cup.height();
+    let cache = pool.get_cache();
+    crate::player::verify_cup_and_state(registry, subnet_id, state_manager, &*cache);
+    let purge_height = cache.catch_up_package().height();
     println!("Removing all states below height {:?}", purge_height);
     state_manager.remove_states_below(purge_height);
     pool.apply_changes(
