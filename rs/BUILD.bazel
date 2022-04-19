@@ -9,6 +9,7 @@ filegroup(
         exclude = [
             "target",
             "*.swp",
+	    "**/gen/**/*.rs",
         ],
     ),
 )
