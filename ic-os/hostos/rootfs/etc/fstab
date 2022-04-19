@@ -1,5 +1,0 @@
-/dev/rootfs /   ext4    ro,errors=remount-ro   0   1
-tmpfs    /tmp    tmpfs   defaults 0   2
-PARTUUID=f46600e3-d0e6-4258-9607-e64b13cf7595   /boot/efi   vfat    defaults    0   2
-PARTUUID=1a7c28b7-efe0-4f17-9230-678cf2df8db2   /boot/grub  vfat    defaults    0   2
-/dev/hostlvm/config   /boot/config    ext4    defaults,sync    0   2

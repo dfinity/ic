@@ -63,7 +63,6 @@ input = [
         "artifacts/canisters/xnet-test-canister.wasm.gz",
         # IC-OS Build scripts
         "ic-os/guestos/scripts/*",
-        "ic-os/scripts/*",
         "gitlab-ci/src/job_scripts/*",
         "ic-os/guestos/bootloader/*",
         "ic-os/guestos/rootfs/**/*",

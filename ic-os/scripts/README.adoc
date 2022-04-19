@@ -1,5 +1,0 @@
-= Scripts
-
-This folder contains build and utility scripts for HostOS, intended to be
-unified with `ic-os/guestos/scripts` and `ic-os/generic-guestos/scripts` to be
-a common build system for any docker based images.

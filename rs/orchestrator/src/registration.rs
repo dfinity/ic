@@ -138,8 +138,6 @@ impl NodeRegistration {
             };
             tokio::time::sleep(Duration::from_secs(2)).await;
         }
-
-        UtilityCommand::notify_host_success();
     }
 
     fn assemble_add_node_message(&self) -> AddNodePayload {

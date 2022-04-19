@@ -18,10 +18,6 @@ include:
 - local: /gitlab-ci/config/47--guest-os-test--guest-os-e2e-test.yml
 - local: /gitlab-ci/config/47--guest-os-test--e2e-scalability.yml
 - local: /gitlab-ci/config/48--determinism-test.yml
-- local: /gitlab-ci/config/52--host-os-build--build-host-img.yml
-- local: /gitlab-ci/config/52--host-os-build--build-update-img.yml
-- local: /gitlab-ci/config/53--host-os-build--build-iso-img.yml
-- local: /gitlab-ci/config/54--host-os-test--host-os-upgrade-test.yml
 
 .cargo-build-docker-protected:
   needs: []  # don't wait on other jobs by default

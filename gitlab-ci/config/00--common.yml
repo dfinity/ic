@@ -12,8 +12,6 @@ stages:             # Files from the given stage should be prefixed with:
   - guest-os-test       # 47--
   - build-determinism-test  # 48--
   - e2e-tests           # 50--
-  - host-os-build       # 52--
-  - host-os-test        # 54--
   - prod-tests          # 60--
     # Shard prod tests into 5 groups, because there are 5 'cdnightly' testnet environments.
     # The stages are purely for visual convenience when rendering the pipeline in the GitLab UI.
@@ -223,7 +221,7 @@ after_script:
   # - Build results are stored in non-persisted /cargo_target
   # - The container is destroyed and all non-persisted data is dropped, including /cargo_target
   image:
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-nix:2022-03-29-0bd5868e7-680ce9a5065742d97e268e3889118eaf21a26a4a"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-nix:2022-03-29-09b55cf44-d94121860c64b161888521097e591ee2e25c0637"
   tags:
     # Build on runners that have following tags
     - dfinity
