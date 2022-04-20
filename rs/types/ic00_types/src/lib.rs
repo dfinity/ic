@@ -4,7 +4,6 @@ use ic_base_types::{CanisterId, NodeId, NumBytes, PrincipalId, RegistryVersion, 
 use ic_error_types::{ErrorCode, UserError};
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
-use ic_protobuf::state::system_metadata::v1 as pb_metadata;
 use num_traits::cast::ToPrimitive;
 use serde::Serialize;
 use std::{collections::BTreeSet, convert::TryFrom, fmt, slice::Iter};
@@ -565,7 +564,7 @@ pub struct CanisterHttpRequestArgs {
     pub url: String,
     pub headers: Vec<HttpHeader>,
     pub body: Option<Vec<u8>>,
-    pub http_method: HttpMethodType,
+    pub http_method: HttpMethod,
     pub transform_method_name: Option<String>,
 }
 
@@ -583,6 +582,11 @@ pub struct HttpHeader {
 }
 
 impl Payload<'_> for HttpHeader {}
+
+#[derive(Clone, Debug, PartialEq, CandidType, Eq, Hash, Serialize, Deserialize)]
+pub enum HttpMethod {
+    GET,
+}
 
 /// Represents the response for a canister http request.
 /// Struct used for encoding/decoding
@@ -858,26 +862,3 @@ impl ComputeInitialEcdsaDealingsArgs {
 }
 
 impl Payload<'_> for ComputeInitialEcdsaDealingsArgs {}
-
-#[derive(Clone, Debug, PartialEq, CandidType, Eq, Hash, Serialize, Deserialize)]
-pub enum HttpMethodType {
-    GET,
-}
-
-impl From<&HttpMethodType> for pb_metadata::HttpMethodType {
-    fn from(http_method_type: &HttpMethodType) -> Self {
-        match http_method_type {
-            HttpMethodType::GET => pb_metadata::HttpMethodType::Get,
-        }
-    }
-}
-
-impl From<pb_metadata::HttpMethodType> for HttpMethodType {
-    fn from(http_method_type: pb_metadata::HttpMethodType) -> Self {
-        match http_method_type {
-            pb_metadata::HttpMethodType::Unspecified | pb_metadata::HttpMethodType::Get => {
-                HttpMethodType::GET
-            }
-        }
-    }
-}

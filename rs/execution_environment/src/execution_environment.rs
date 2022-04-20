@@ -18,7 +18,7 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
     CanisterHttpRequestArgs, CanisterIdRecord, CanisterSettingsArgs, CanisterStatusType,
     ComputeInitialEcdsaDealingsArgs, CreateCanisterArgs, ECDSAPublicKeyArgs,
-    ECDSAPublicKeyResponse, EmptyBlob, InstallCodeArgs, Method as Ic00Method,
+    ECDSAPublicKeyResponse, EmptyBlob, HttpMethod, InstallCodeArgs, Method as Ic00Method,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
     SetControllerArgs, SetupInitialDKGArgs, SignWithECDSAArgs, UpdateSettingsArgs, IC_00,
 };
@@ -42,7 +42,7 @@ use ic_replicated_state::{
 };
 use ic_types::messages::InternalQuery;
 use ic_types::{
-    canister_http::{CanisterHttpHeader, CanisterHttpRequestContext},
+    canister_http::{CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequestContext},
     crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterEcdsaPublicKey},
     crypto::threshold_sig::ni_dkg::NiDkgTargetId,
     ingress::{IngressStatus, WasmResult},
@@ -481,7 +481,9 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                                             })
                                             .collect(),
                                         body: args.body,
-                                        http_method: args.http_method,
+                                        http_method: match args.http_method {
+                                            HttpMethod::GET => CanisterHttpMethod::GET,
+                                        },
                                         transform_method_name: args.transform_method_name,
                                         time: state.time(),
                                     });
