@@ -8,6 +8,7 @@ use crate::vault::test_utils;
 use crate::RemoteCspVault;
 use ic_crypto_internal_csp_test_utils::remote_csp_vault::start_new_remote_csp_vault_server_for_test;
 use std::sync::Arc;
+use std::time::Duration;
 
 // Starts a fresh CSP Vault server instance for testing, and creates a CSP Vault client
 // that is connected to the server.  Returns the resulting `CspVault`-object.
@@ -16,6 +17,16 @@ fn new_csp_vault_for_test() -> Arc<dyn CspVault> {
     Arc::new(RemoteCspVault::new(&socket_path).expect("Could not create RemoteCspVault"))
 }
 
+// Starts a fresh CSP Vault server instance for testing, and creates a CSP Vault client
+// that is connected to the server.  Returns the resulting `CspVault`-object, which will
+// use the specified `timeout` when making RPC calls to the server.
+fn new_csp_vault_for_test_with_timeout(timeout: Duration) -> Arc<dyn CspVault> {
+    let socket_path = start_new_remote_csp_vault_server_for_test();
+    Arc::new(
+        RemoteCspVault::new_for_test(&socket_path, timeout)
+            .expect("Could not create RemoteCspVault"),
+    )
+}
 mod thread_blocking {
     use super::super::tarpc_csp_vault_client::thread_universal_block_on;
 
@@ -38,6 +49,27 @@ mod thread_blocking {
         assert_eq!(
             thread_universal_block_on(join_handle.join().expect("could not join thread")),
             "std"
+        );
+    }
+}
+
+mod timeout {
+    use super::*;
+    use crate::vault::api::CspBasicSignatureKeygenError;
+    use ic_types::crypto::AlgorithmId;
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn should_fail_with_deadline_exceeded() {
+        let csp_vault = new_csp_vault_for_test_with_timeout(Duration::from_millis(1));
+        let gen_key_result = csp_vault.gen_key_pair(AlgorithmId::Ed25519);
+        assert!(
+            matches!(
+                gen_key_result.clone(),
+                Err(CspBasicSignatureKeygenError::InternalError { internal_error })
+                if internal_error.contains("the request exceeded its deadline")
+            ),
+            "Unexpected gen_key_result: {:?}",
+            gen_key_result
         );
     }
 }
