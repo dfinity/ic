@@ -35,7 +35,7 @@ use ic_test_utilities_registry::{
     add_subnet_record, insert_initial_dkg_transcript, SubnetRecordBuilder,
 };
 use ic_types::{
-    batch::{Batch, BatchPayload, IngressPayload, SelfValidatingPayload, XNetPayload},
+    batch::{Batch, BatchPayload, IngressPayload},
     consensus::certification::Certification,
     messages::{
         Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SignedIngress, UserQuery,
@@ -328,10 +328,7 @@ impl StateMachine {
             requires_full_state_hash: self.checkpoints_enabled.get(),
             payload: BatchPayload {
                 ingress,
-                xnet: XNetPayload {
-                    stream_slices: Default::default(),
-                },
-                self_validating: SelfValidatingPayload::default(),
+                ..BatchPayload::default()
             },
             randomness: Randomness::from([0; 32]),
             ecdsa_subnet_public_key: None,

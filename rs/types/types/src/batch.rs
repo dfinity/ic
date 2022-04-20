@@ -85,6 +85,7 @@ pub struct BatchPayload {
     pub ingress: IngressPayload,
     pub xnet: XNetPayload,
     pub self_validating: SelfValidatingPayload,
+    pub canister_http: CanisterHttpPayload,
 }
 
 /// Return ingress messages, xnet messages, and responses from the bitcoin adapter.
@@ -99,11 +100,13 @@ impl BatchPayload {
         ingress: IngressPayload,
         xnet: XNetPayload,
         self_validating: SelfValidatingPayload,
+        canister_http: CanisterHttpPayload,
     ) -> Self {
         BatchPayload {
             ingress,
             xnet,
             self_validating,
+            canister_http,
         }
     }
 
@@ -588,6 +591,16 @@ mod tests {
         },
         time::current_time_and_expiry_time,
     };
+
+    /// This is a quick test to check the invariant, that the [`Default`] implementation
+    /// of a payload section actually produces the empty payload,
+    #[test]
+    fn default_batch_payload_is_empty() {
+        assert_eq!(IngressPayload::default().count_bytes(), 0);
+        assert_eq!(XNetPayload::default().count_bytes(), 0);
+        assert_eq!(SelfValidatingPayload::default().count_bytes(), 0);
+        assert_eq!(CanisterHttpPayload::default().count_bytes(), 0);
+    }
 
     /// Build a Vec<SignedIngress>.  Convert to IngressPayload and then back to
     /// Vec<SignedIngress>.  Ensure that the two vectors are identical.

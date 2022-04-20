@@ -1,11 +1,12 @@
-use ic_types::batch::{BatchPayload, IngressPayload, SelfValidatingPayload, XNetPayload};
+use ic_types::batch::{
+    BatchPayload, CanisterHttpPayload, IngressPayload, SelfValidatingPayload, XNetPayload,
+};
 
 pub struct PayloadBuilder {
     payload: BatchPayload,
 }
 
 impl Default for PayloadBuilder {
-    /// Create a default, empty, XNetPayload
     fn default() -> Self {
         Self {
             payload: BatchPayload {
@@ -13,6 +14,7 @@ impl Default for PayloadBuilder {
                 xnet: super::xnet_payload::XNetPayloadBuilder::default().build(),
                 // TODO(MR-70): use payload builder
                 self_validating: SelfValidatingPayload::default(),
+                canister_http: CanisterHttpPayload::default(),
             },
         }
     }
@@ -49,8 +51,7 @@ fn batch_payload_serialize_then_deserialize() {
         .build();
     let batch_payload_0 = BatchPayload {
         ingress: IngressPayload::from(vec![ingress_0]),
-        xnet: XNetPayload::default(),
-        self_validating: SelfValidatingPayload::default(),
+        ..BatchPayload::default()
     };
     let vec = serde_cbor::ser::to_vec(&batch_payload_0).unwrap();
     let batch_payload_1: BatchPayload = serde_cbor::de::from_slice(&vec).unwrap();
@@ -91,8 +92,7 @@ fn payload_serialize_then_deserialize() {
         .build();
     let batch_payload_0 = BatchPayload {
         ingress: IngressPayload::from(vec![ingress_0]),
-        xnet: XNetPayload::default(),
-        self_validating: SelfValidatingPayload::default(),
+        ..BatchPayload::default()
     };
     let payload_0 = Payload::new(
         ic_crypto::crypto_hash,

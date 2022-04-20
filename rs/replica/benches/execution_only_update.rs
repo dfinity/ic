@@ -18,7 +18,7 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_registry::MockRegistryClient;
 use ic_types::{
-    batch::{Batch, BatchPayload, IngressPayload, SelfValidatingPayload, XNetPayload},
+    batch::{Batch, BatchPayload, IngressPayload},
     ingress::{IngressStatus, WasmResult},
     messages::SignedIngress,
     Randomness, RegistryVersion,
@@ -112,10 +112,7 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
         requires_full_state_hash: !msgs.is_empty(),
         payload: BatchPayload {
             ingress: IngressPayload::from(msgs),
-            xnet: XNetPayload {
-                stream_slices: Default::default(),
-            },
-            self_validating: SelfValidatingPayload::default(),
+            ..BatchPayload::default()
         },
         randomness: Randomness::from([0; 32]),
         ecdsa_subnet_public_key: None,

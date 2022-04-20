@@ -40,7 +40,7 @@ message Block {
 	SelfValidatingPayload self_validating_payload = 12;
 	// Only present in summary blocks
 	EcdsaSummaryPayload ecdsa_summary = 13;
-	//CanisterHttpPayload canister_http_payload = 14;
+	CanisterHttpPayload canister_http_payload = 14;
 	bytes payload_hash = 11;
 }
 

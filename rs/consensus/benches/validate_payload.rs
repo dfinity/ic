@@ -47,7 +47,7 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
 use ic_types::{
-    batch::{BatchPayload, IngressPayload, SelfValidatingPayload, ValidationContext, XNetPayload},
+    batch::{BatchPayload, IngressPayload, ValidationContext},
     consensus::certification::*,
     consensus::*,
     crypto::Signed,
@@ -254,12 +254,13 @@ fn add_past_blocks(
         let mut block = Block::from_parent(&parent);
         block.rank = Rank(i as u64);
         let ingress = prepare_ingress_payload(now, message_count, i as u8);
-        let xnet = XNetPayload::default();
-        let self_validating = SelfValidatingPayload::default();
         block.payload = Payload::new(
             ic_crypto::crypto_hash,
             (
-                BatchPayload::new(ingress, xnet, self_validating),
+                BatchPayload {
+                    ingress,
+                    ..BatchPayload::default()
+                },
                 dkg::Dealings::new_empty(block.payload.as_ref().dkg_interval_start_height()),
                 None,
             )
@@ -319,12 +320,13 @@ fn validate_payload_benchmark(criterion: &mut Criterion) {
 
                 let seed = CERTIFIED_HEIGHT + PAST_PAYLOAD_HEIGHT + 10;
                 let ingress = prepare_ingress_payload(now, message_count, seed as u8);
-                let xnet = XNetPayload::default();
-                let self_validating = SelfValidatingPayload::default();
                 let payload = Payload::new(
                     ic_crypto::crypto_hash,
                     (
-                        BatchPayload::new(ingress, xnet, self_validating),
+                        BatchPayload {
+                            ingress,
+                            ..BatchPayload::default()
+                        },
                         dkg::Dealings::new_empty(tip.payload.as_ref().dkg_interval_start_height()),
                         None,
                     )

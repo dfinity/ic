@@ -4,7 +4,10 @@
 //! Consensus internal traits that are used in the `payload_builder`.
 use ic_interfaces::{consensus::PayloadValidationError, payload::BatchPayloadSectionBuilder};
 use ic_types::{
-    batch::{BatchPayload, IngressPayload, SelfValidatingPayload, ValidationContext, XNetPayload},
+    batch::{
+        BatchPayload, CanisterHttpPayload, IngressPayload, SelfValidatingPayload,
+        ValidationContext, XNetPayload,
+    },
     consensus::Payload,
     Height, NumBytes, Time,
 };
@@ -20,6 +23,7 @@ enum BatchPayloadSectionAdapter {
     Ingress(Box<dyn BatchPayloadSectionBuilder<IngressPayload>>),
     XNet(Box<dyn BatchPayloadSectionBuilder<XNetPayload>>),
     SelfValidating(Box<dyn BatchPayloadSectionBuilder<SelfValidatingPayload>>),
+    CanisterHttps(Box<dyn BatchPayloadSectionBuilder<CanisterHttpPayload>>),
 }
 
 impl BatchPayloadSectionAdapter {
@@ -50,6 +54,12 @@ impl BatchPayloadSectionAdapter {
                 payload.self_validating = payload_section;
                 size
             }
+            Self::CanisterHttps(builder) => {
+                let (payload_section, size) =
+                    builder.build_payload(validation_context, max_size, priority, past_payloads);
+                payload.canister_http = payload_section;
+                size
+            }
         }
     }
 
@@ -68,6 +78,9 @@ impl BatchPayloadSectionAdapter {
                 .map_err(PayloadValidationError::from),
             Self::SelfValidating(builder) => builder
                 .validate_payload(&payload.self_validating, validation_context, past_payloads)
+                .map_err(PayloadValidationError::from),
+            Self::CanisterHttps(builder) => builder
+                .validate_payload(&payload.canister_http, validation_context, past_payloads)
                 .map_err(PayloadValidationError::from),
         }
     }
