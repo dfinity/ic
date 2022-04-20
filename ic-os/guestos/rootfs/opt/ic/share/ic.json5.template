@@ -135,7 +135,7 @@
         // IPC socket path for BTC Testnet adapter. This UDS path has to be the same as
         // specified in the systemd socket file.
         // The BTC adapter socket file is: /ic-os/guestos/rootfs/etc/systemd/system/ic-btc-testnet-adapter.socket
-        bitcoin_testnet_uds_path: "/run/ic-node/bitcoin-tesnet-adapter/socket",
+        bitcoin_testnet_uds_path: "/run/ic-node/bitcoin-testnet-adapter/socket",
         // IPC socket path for BTC Mainnet adapter. This UDS path has to be the same as
         // specified in the systemd socket file.
         bitcoin_mainnet_uds_path: "/run/ic-node/bitcoin-mainnet-adapter/socket",
