@@ -14,6 +14,15 @@ Follow the steps below to deploy your copy of the ledger canister to a local rep
      curl -o ledger.private.did https://raw.githubusercontent.com/dfinity/ic/${IC_VERSION}/rs/rosetta-api/ledger.did
      curl -o ledger.public.did https://raw.githubusercontent.com/dfinity/ic/${IC_VERSION}/rs/rosetta-api/ledger_canister/ledger.did
      ```
+
+     For MacOS:
+     ```sh
+     export IC_VERSION=a7058d009494bea7e1d898a3dd7b525922979039
+     curl -o ledger.wasm.gz https://download.dfinity.systems/ic/$IC_VERSION/canisters/ledger-canister_notify-method.wasm.gz
+     gunzip ledger.wasm.gz
+     curl -o ledger.private.did https://raw.githubusercontent.com/dfinity/ic/$IC_VERSION/rs/rosetta-api/ledger.did
+     curl -o ledger.public.did https://raw.githubusercontent.com/dfinity/ic/$IC_VERSION/rs/rosetta-api/ledger_canister/ledger.did
+     ```	
      NOTE: the `IC_VERSION` variable is a commit hash from the http://github.com/dfinity/ic repository.
 
   1. Make sure you use a recent version of DFX.
