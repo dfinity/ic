@@ -1,11 +1,32 @@
 //! Canister Http related public interfaces.
-use crate::artifact_pool::UnvalidatedArtifact;
-use crate::consensus_pool::ConsensusPoolCache;
+use crate::{
+    artifact_pool::UnvalidatedArtifact, consensus_pool::ConsensusPoolCache,
+    payload::BatchPayloadSectionType, validation::ValidationError,
+};
 use ic_types::{
     artifact::{CanisterHttpResponseId, PriorityFn},
-    canister_http::*,
+    batch::CanisterHttpPayload,
+    canister_http::{
+        CanisterHttpResponseAttribute, CanisterHttpResponseContent, CanisterHttpResponseShare,
+    },
     crypto::CryptoHashOf,
 };
+
+#[derive(Debug)]
+pub enum CanisterHttpPermananentValidationError {
+    PayloadTooBig(usize, usize),
+}
+
+#[derive(Debug)]
+pub enum CanisterHttpTransientValidationError {}
+
+pub type CanisterHttpPayloadValidationError =
+    ValidationError<CanisterHttpPermananentValidationError, CanisterHttpTransientValidationError>;
+
+impl BatchPayloadSectionType for CanisterHttpPayload {
+    type PermanentValidationError = CanisterHttpPermananentValidationError;
+    type TransientValidationError = CanisterHttpTransientValidationError;
+}
 
 pub enum CanisterHttpChangeAction {
     AddToValidated(CanisterHttpResponseShare, CanisterHttpResponseContent),

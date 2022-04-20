@@ -12,9 +12,8 @@ use ic_test_utilities::{
     types::ids::{node_test_id, subnet_test_id},
     types::messages::SignedIngressBuilder,
 };
-use ic_types::batch::SelfValidatingPayload;
 use ic_types::{
-    batch::{BatchPayload, IngressPayload, XNetPayload},
+    batch::{BatchPayload, IngressPayload},
     consensus::{dkg, Block, BlockProposal, HasHeight, Payload, Rank},
     Height,
 };
@@ -53,12 +52,13 @@ fn prepare(pool: &mut ConsensusPoolImpl, num: usize) {
         let ingress = IngressPayload::from(vec![SignedIngressBuilder::new()
             .method_payload(vec![0; 128 * 1024])
             .build()]);
-        let xnet = XNetPayload::default();
-        let self_validating = SelfValidatingPayload::default();
         block.payload = Payload::new(
             ic_crypto::crypto_hash,
             (
-                BatchPayload::new(ingress, xnet, self_validating),
+                BatchPayload {
+                    ingress,
+                    ..BatchPayload::default()
+                },
                 dkg::Dealings::new_empty(parent.payload.as_ref().dkg_interval_start_height()),
                 None,
             )

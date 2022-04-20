@@ -1,5 +1,9 @@
 //! The consensus public interface.
 use crate::{
+    canister_http::{
+        CanisterHttpPayloadValidationError, CanisterHttpPermananentValidationError,
+        CanisterHttpTransientValidationError,
+    },
     consensus_pool::{ChangeSet, ConsensusPool},
     ingress_manager::{
         IngressPayloadValidationError, IngressPermanentError, IngressTransientError,
@@ -57,6 +61,7 @@ pub enum PayloadPermanentError {
         received: NumBytes,
     },
     SelfValidatingPayloadValidationError(InvalidSelfValidatingPayload),
+    CanisterHttpPayloadValidationError(CanisterHttpPermananentValidationError),
 }
 
 #[derive(Debug)]
@@ -66,6 +71,7 @@ pub enum PayloadTransientError {
     RegistryUnavailable(RegistryClientError),
     SubnetNotFound(SubnetId),
     SelfValidatingPayloadValidationError(SelfValidatingTransientValidationError),
+    CanisterHttpPayloadValidationError(CanisterHttpTransientValidationError),
 }
 
 /// Payload validation error
@@ -94,6 +100,15 @@ impl From<SelfValidatingPayloadValidationError> for PayloadValidationError {
         err.map(
             PayloadPermanentError::SelfValidatingPayloadValidationError,
             PayloadTransientError::SelfValidatingPayloadValidationError,
+        )
+    }
+}
+
+impl From<CanisterHttpPayloadValidationError> for PayloadValidationError {
+    fn from(err: CanisterHttpPayloadValidationError) -> Self {
+        err.map(
+            PayloadPermanentError::CanisterHttpPayloadValidationError,
+            PayloadTransientError::CanisterHttpPayloadValidationError,
         )
     }
 }

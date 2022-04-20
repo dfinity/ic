@@ -595,7 +595,7 @@ pub enum HttpMethod {
 /// headers: vec http_header;
 /// body: blob;
 /// })`;
-#[derive(CandidType, Deserialize, Debug, PartialEq)]
+#[derive(CandidType, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct CanisterHttpResponsePayload {
     pub status: u64,
     pub headers: Vec<HttpHeader>,

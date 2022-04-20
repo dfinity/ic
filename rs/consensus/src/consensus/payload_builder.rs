@@ -2,6 +2,7 @@
 
 use crate::consensus::{block_maker::SubnetRecords, metrics::PayloadBuilderMetrics};
 use ic_interfaces::{
+    canister_http::CanisterHttpPermananentValidationError,
     consensus::{PayloadPermanentError, PayloadTransientError, PayloadValidationError},
     ingress_manager::IngressSelector,
     messaging::XNetPayloadBuilder,
@@ -14,7 +15,7 @@ use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
-    batch::{BatchPayload, ValidationContext},
+    batch::{BatchPayload, CanisterHttpPayload, ValidationContext},
     consensus::Payload,
     messages::MAX_XNET_PAYLOAD_IN_BYTES,
     CountBytes, Height, NumBytes, SubnetId, Time,
@@ -152,6 +153,8 @@ impl PayloadBuilder for PayloadBuilderImpl {
             ingress,
             xnet,
             self_validating,
+            // TODO: Use actual canister http payload builder
+            canister_http: CanisterHttpPayload::default(),
         }
     }
 
@@ -230,6 +233,17 @@ impl PayloadBuilder for PayloadBuilderImpl {
                     .self_validating_payload_builder
                     .filter_past_payloads(past_payloads),
             )?;
+
+        // TODO: Implement proper [`CanisterHttpPayload`] validation
+        // This reject all non empty [`CanisterHttpPayload`]
+        let canister_http_bytes = batch_payload.canister_http.count_bytes();
+        if canister_http_bytes != 0 {
+            return Err(ValidationError::Permanent(
+                PayloadPermanentError::CanisterHttpPayloadValidationError(
+                    CanisterHttpPermananentValidationError::PayloadTooBig(0, canister_http_bytes),
+                ),
+            ));
+        }
 
         Ok(())
     }
