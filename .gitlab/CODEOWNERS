@@ -89,6 +89,7 @@
 /rs/config/                             @dfinity-lab/teams/interface-owners
 /rs/config/src/execution_environment.rs @dfinity-lab/teams/interface-owners @dfinity-lab/teams/execution-owners
 /rs/consensus/                          @dfinity-lab/teams/consensus-owners
+/rs/constants                           @dfinity-lab/teams/interface-owners
 /rs/crypto/                             @dfinity-lab/teams/crypto-owners
 /rs/cycles_account_manager/             @dfinity-lab/teams/execution-owners
 /rs/depcheck                            @dfinity-lag/teams/interface-owners
@@ -174,9 +175,8 @@
 /rs/transport/                          @dfinity-lab/teams/networking-team
 /rs/transport_test_client/              @dfinity-lab/teams/networking-team
 /rs/tree_deserializer/                  @dfinity-lab/teams/message-routing-owners
-/rs/constants                           @dfinity-lab/teams/interface-owners
-/rs/types/base_types/                   @dfinity-lab/teams/interface-owners
-/rs/types/types/                        @dfinity-lab/teams/interface-owners
+/rs/types/                              @dfinity-lab/teams/interface-owners
+/rs/types/ic00_types/                   @dfinity-lab/teams/execution-owners
 /rs/types/types/src/canister_http.rs    @dfinity-lab/teams/consensus-owners
 /rs/types/types/src/consensus.rs        @dfinity-lab/teams/consensus-owners
 /rs/types/types/src/consensus/          @dfinity-lab/teams/consensus-owners
@@ -184,9 +184,8 @@
 /rs/types/types/src/signature/          @dfinity-lab/teams/consensus-owners
 /rs/types/types/src/crypto.rs           @dfinity-lab/teams/crypto-owners
 /rs/types/types/src/crypto/             @dfinity-lab/teams/crypto-owners
-/rs/types/types/src/ic00.rs             @dfinity-lab/teams/execution-owners
-/rs/types/ic00_types/                   @dfinity-lab/teams/execution-owners
 /rs/types/types/src/p2p.rs              @dfinity-lab/teams/networking-team
+/rs/types/wasm_types/                   @dfinity-lab/teams/execution-owners
 /rs/universal_canister/                 @dfinity-lab/teams/execution-owners @dfinity-lab/teams/ic-testing-verification
 /rs/validator/                          @dfinity-lab/teams/execution-owners
 /rs/workload_generator/                 @dfinity-lab/teams/node-team
