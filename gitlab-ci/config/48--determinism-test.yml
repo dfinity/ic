@@ -52,12 +52,12 @@ build-determinism-canisters:
       echo "cargo-build-canisters:"
       cd artifacts/canisters
       # we ignore panics for now
-      rm -f panics.wasm.gz
+      rm -f panics.wasm.gz sns-test-dapp-canister.wasm.gz
       sha256sum -- *.gz | tee SHAS
       cd -
       echo "docker-build-ic:"
       cd artifacts/docker-build-ic/canisters
-      rm -f panics.wasm.gz
+      rm -f panics.wasm.gz sns-test-dapp-canister.wasm.gz
       sha256sum -- *.gz | tee SHAS
       cd -
       if [ "${CI_COMMIT_REF_PROTECTED:-}" != "true" ]; then
