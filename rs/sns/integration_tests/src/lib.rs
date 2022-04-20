@@ -11,9 +11,6 @@
 //! crate.
 
 #[cfg(test)]
-mod call_canister_method;
-
-#[cfg(test)]
 mod ledger;
 
 #[cfg(test)]

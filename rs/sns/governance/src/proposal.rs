@@ -4,9 +4,9 @@ use std::convert::TryFrom;
 use crate::canister_control::perform_execute_nervous_system_function_validate_and_render_call;
 use crate::governance::{log_prefix, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER};
 use crate::pb::v1::{
-    proposal, CallCanisterMethod, ExecuteNervousSystemFunction, Motion, NervousSystemFunction,
-    NervousSystemParameters, Proposal, ProposalData, ProposalDecisionStatus, ProposalRewardStatus,
-    Tally, UpgradeSnsControlledCanister, Vote,
+    proposal, ExecuteNervousSystemFunction, Motion, NervousSystemFunction, NervousSystemParameters,
+    Proposal, ProposalData, ProposalDecisionStatus, ProposalRewardStatus, Tally,
+    UpgradeSnsControlledCanister, Vote,
 };
 use crate::types::{Environment, ONE_DAY_SECONDS};
 use crate::{validate_chars_count, validate_len, validate_required_field};
@@ -148,7 +148,6 @@ pub async fn validate_and_render_action(
             validate_and_render_execute_nervous_system_function(env, execute, existing_functions)
                 .await
         }
-        proposal::Action::CallCanisterMethod(call) => validate_call_canister_method(call),
     }
 }
 
@@ -401,43 +400,6 @@ pub async fn validate_and_render_execute_nervous_system_function(
             }
         }
     }
-}
-
-// This does not return a proper rendering of the payload since:
-// 1- It's opaque to the governance canister and we can't know it
-// 2- It will be removed soon
-pub(crate) fn validate_call_canister_method(call: &CallCanisterMethod) -> Result<String, String> {
-    let CallCanisterMethod {
-        target_canister_id,
-        target_method_name,
-        payload: _,
-    } = call;
-
-    let mut defects = vec![];
-
-    // Validate the target_canister_id field.
-    match target_canister_id {
-        None => defects.push("target_canister_id field was not populated.".to_string()),
-        Some(id) => {
-            if let Err(err) = CanisterId::new(*id) {
-                defects.push(format!("target_canister_id was invalid: {}", err));
-            }
-        }
-    }
-
-    // Validate the target_method_name field.
-    if target_method_name.is_empty() {
-        defects.push("target_method_name was empty.".to_string());
-    }
-
-    if !defects.is_empty() {
-        return Err(format!(
-            "CallCanisterMethod was invalid for the following reason(s):\n{}",
-            defects.join("\n")
-        ));
-    }
-
-    Ok("".to_string())
 }
 
 impl ProposalData {
@@ -1097,66 +1059,5 @@ mod test {
             &nervous_system_function,
             &functions_map,
         ));
-    }
-
-    fn basic_call_canister_method_proposal() -> Proposal {
-        let call = CallCanisterMethod {
-            target_canister_id: Some(basic_principal_id()),
-            target_method_name: "enact_awesomeness".into(),
-            payload: vec![],
-        };
-        assert_is_ok(validate_call_canister_method(&call));
-
-        let mut result = basic_motion_proposal();
-        result.action = Some(proposal::Action::CallCanisterMethod(call));
-
-        assert_is_ok(validate_default_action(&result.action));
-        assert_is_ok(validate_default_proposal(&result));
-
-        result
-    }
-
-    fn assert_validate_call_canister_method_is_err(proposal: &Proposal) {
-        assert_is_err(validate_default_action(&proposal.action));
-        assert_is_err(validate_default_proposal(proposal));
-
-        match proposal.action.as_ref().unwrap() {
-            proposal::Action::CallCanisterMethod(call) => {
-                assert_is_err(validate_call_canister_method(call))
-            }
-            _ => panic!("Proposal.action is not an UpgradeSnsControlledCanister."),
-        }
-    }
-
-    #[test]
-    fn test_validate_call_canister_method_fail_no_target_canister_id() {
-        let mut proposal = basic_call_canister_method_proposal();
-
-        // Create a defect.
-        match proposal.action.as_mut().unwrap() {
-            proposal::Action::CallCanisterMethod(call) => {
-                call.target_canister_id = None;
-                assert_is_err(validate_call_canister_method(call));
-            }
-            _ => panic!("Proposal.action is not a CallCanisterMethod."),
-        }
-
-        assert_validate_call_canister_method_is_err(&proposal);
-    }
-
-    #[test]
-    fn test_validate_call_canister_method_fail_empty_target_method_name() {
-        let mut proposal = basic_call_canister_method_proposal();
-
-        // Create a defect.
-        match proposal.action.as_mut().unwrap() {
-            proposal::Action::CallCanisterMethod(call) => {
-                call.target_method_name = "".into();
-                assert_is_err(validate_call_canister_method(call));
-            }
-            _ => panic!("Proposal.action is not a CallCanisterMethod."),
-        }
-
-        assert_validate_call_canister_method_is_err(&proposal);
     }
 } // mod test
