@@ -205,7 +205,7 @@ impl Orchestrator {
     pub fn spawn_tasks(&mut self) {
         async fn upgrade_checks(
             maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
-            upgrade: Upgrade,
+            mut upgrade: Upgrade,
             exit_signal: Arc<RwLock<bool>>,
             log: ReplicaLogger,
         ) {
