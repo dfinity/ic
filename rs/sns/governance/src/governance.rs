@@ -466,23 +466,18 @@ impl Governance {
             .build_principal_to_neuron_ids_index(&self.proto.neurons);
     }
 
-    fn transaction_fee(&self) -> u64 {
+    /// Returns the NervousSystemParameters::transaction_fee_e8s
+    fn transaction_fee_e8s(&self) -> u64 {
         self.nervous_system_parameters()
             .transaction_fee_e8s
             .expect("NervousSystemParameters must have transaction_fee_e8s")
     }
 
-    /// Return the effective _voting period_ of a given action.
-    ///
-    /// This function is "curried" to alleviate lifetime issues on the
-    /// `self` parameter.
-    fn voting_period_seconds(&self) -> impl Fn() -> u64 {
-        let voting_period = self
-            .nervous_system_parameters()
+    /// Returns the NervousSystemParameters::initial_voting_period
+    fn initial_voting_period(&self) -> u64 {
+        self.nervous_system_parameters()
             .initial_voting_period
-            .expect("NervousSystemParameters must have initial_voting_period");
-
-        move || voting_period
+            .expect("NervousSystemParameters must have initial_voting_period")
     }
 
     /// Generates a new, unused, NeuronId.
@@ -768,7 +763,7 @@ impl Governance {
         caller: &PrincipalId,
         disburse: &manage_neuron::Disburse,
     ) -> Result<u64, GovernanceError> {
-        let transaction_fee_e8s = self.transaction_fee();
+        let transaction_fee_e8s = self.transaction_fee_e8s();
         let neuron = self.get_neuron_result(id)?;
 
         neuron.check_authorized(caller, NeuronPermissionType::Disburse)?;
@@ -915,7 +910,7 @@ impl Governance {
             .neuron_minimum_stake_e8s
             .expect("NervousSystemParameters must have neuron_minimum_stake_e8s");
 
-        let transaction_fee_e8s = self.transaction_fee();
+        let transaction_fee_e8s = self.transaction_fee_e8s();
 
         // Get the neuron and clone to appease the borrow checker.
         // We'll get a mutable reference when we need to change it later.
@@ -1071,7 +1066,7 @@ impl Governance {
                 "The percentage of maturity to merge must be a value between 1 and 100 (inclusive)."));
         }
 
-        let transaction_fee_e8s = self.transaction_fee();
+        let transaction_fee_e8s = self.transaction_fee_e8s();
 
         let mut maturity_to_merge =
             (neuron.maturity_e8s_equivalent * merge_maturity.percentage_to_merge as u64) / 100;
@@ -1187,7 +1182,7 @@ impl Governance {
             },
         )?;
 
-        let transaction_fee_e8s = self.transaction_fee();
+        let transaction_fee_e8s = self.transaction_fee_e8s();
         if maturity_to_disburse < transaction_fee_e8s {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
@@ -1443,9 +1438,8 @@ impl Governance {
     /// attempts to execute it.
     pub fn process_proposal(&mut self, proposal_id: u64) {
         let now_seconds = self.env.now();
-        // Due to Rust lifetime issues, we must extract a closure that
-        // computes the voting period before we borrow `self.proposals` mutably.
-        let voting_period_seconds_fn = self.voting_period_seconds();
+        let initial_voting_period = self.initial_voting_period();
+
         let proposal_data = match self.proto.proposals.get_mut(&proposal_id) {
             None => return,
             Some(p) => p,
@@ -1455,13 +1449,12 @@ impl Governance {
             return;
         }
 
-        let voting_period_seconds = voting_period_seconds_fn();
         // Recompute the tally here. It is imperative that only
         // 'open' proposals have their tally recomputed. Votes may
         // arrive after a decision has been made: such votes count
         // for voting rewards, but shall not make it into the
         // tally.
-        proposal_data.recompute_tally(now_seconds, voting_period_seconds);
+        proposal_data.recompute_tally(now_seconds, initial_voting_period);
         if !proposal_data.can_make_decision(now_seconds) {
             return;
         }
@@ -1525,6 +1518,8 @@ impl Governance {
             self.process_proposal(pid);
         }
 
+        let initial_voting_period = self.initial_voting_period();
+
         self.closest_proposal_deadline_timestamp_seconds = self
             .proto
             .proposals
@@ -1532,7 +1527,7 @@ impl Governance {
             .filter(|data| data.status() == ProposalDecisionStatus::ProposalStatusOpen)
             .map(|data| {
                 data.proposal_creation_timestamp_seconds
-                    .saturating_add(self.voting_period_seconds()())
+                    .saturating_add(initial_voting_period)
             })
             .min()
             .unwrap_or(u64::MAX);
@@ -1787,9 +1782,10 @@ impl Governance {
     ///
     /// This is a low-level function that makes no verification whatsoever.
     fn insert_proposal(&mut self, pid: u64, data: ProposalData) {
-        let voting_period_seconds = self.voting_period_seconds()();
+        let initial_voting_period = self.initial_voting_period();
+
         self.closest_proposal_deadline_timestamp_seconds = std::cmp::min(
-            data.proposal_creation_timestamp_seconds + voting_period_seconds,
+            data.proposal_creation_timestamp_seconds + initial_voting_period,
             self.closest_proposal_deadline_timestamp_seconds,
         );
         self.proto.proposals.insert(pid, data);
@@ -1924,6 +1920,7 @@ impl Governance {
             .nervous_system_parameters()
             .max_neuron_age_for_age_bonus
             .expect("NervousSystemParameters must have max_neuron_age_for_age_bonus");
+        let initial_voting_period = self.initial_voting_period();
 
         for (k, v) in self.proto.neurons.iter() {
             // If this neuron is eligible to vote, record its
@@ -1978,8 +1975,7 @@ impl Governance {
         };
 
         proposal_data.wait_for_quiet_state = Some(WaitForQuietState {
-            current_deadline_timestamp_seconds: now_seconds
-                .saturating_add(self.voting_period_seconds()()),
+            current_deadline_timestamp_seconds: now_seconds.saturating_add(initial_voting_period),
         });
 
         // Charge the cost of rejection upfront.
