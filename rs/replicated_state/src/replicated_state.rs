@@ -334,6 +334,7 @@ pub struct ReplicatedState {
 
     pub root: PathBuf,
 
+    // State of the Bitcoin testnet network.
     bitcoin_testnet: BitcoinState,
 }
 
@@ -761,6 +762,11 @@ impl ReplicatedState {
     /// Returns a reference to the `BitcoinState`.
     pub fn bitcoin_testnet(&self) -> &BitcoinState {
         &self.bitcoin_testnet
+    }
+
+    /// Returns a mutable reference to the `BitcoinState`.
+    pub fn bitcoin_testnet_mut(&mut self) -> &mut BitcoinState {
+        &mut self.bitcoin_testnet
     }
 
     /// Pushes a request onto the testnet `BitcoinState` iff the bitcoin testnet

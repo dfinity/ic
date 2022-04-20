@@ -211,6 +211,9 @@ pub struct BitcoinStateBits {
 /// │   ├── bitcoin
 /// |   |   └── testnet
 /// |   |       └── state.pbuf
+/// |   |       └── utxos_small.bin
+/// |   |       └── utxos_medium.bin
+/// |   |       └── address_outpoints.bin
 /// │   └── canister_states
 /// │       └── <hex(canister_id)>
 /// │           ├── queues.pbuf
@@ -226,6 +229,9 @@ pub struct BitcoinStateBits {
 /// |      ├── bitcoin
 /// |      |   └── testnet
 /// |      |       └── state.pbuf
+/// |      |       └── utxos_small.bin
+/// |      |       └── utxos_medium.bin
+/// |      |       └── address_outpoints.bin
 /// │      └── canister_states
 /// │          └── <hex(canister_id)>
 /// │              ├── queues.pbuf
@@ -792,6 +798,18 @@ impl<Permissions: AccessPolicy> BitcoinStateLayout<Permissions> {
 
     pub fn bitcoin_state(&self) -> ProtoFileWith<pb_bitcoin::BitcoinStateBits, Permissions> {
         self.bitcoin_root.join("state.pbuf").into()
+    }
+
+    pub fn utxos_small(&self) -> PathBuf {
+        self.bitcoin_root.join("utxos_small.bin")
+    }
+
+    pub fn utxos_medium(&self) -> PathBuf {
+        self.bitcoin_root.join("utxos_medium.bin")
+    }
+
+    pub fn address_outpoints(&self) -> PathBuf {
+        self.bitcoin_root.join("address_outpoints.bin")
     }
 }
 
