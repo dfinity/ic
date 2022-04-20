@@ -1,3 +1,4 @@
+use crate::page_map::PageMap;
 use ic_btc_types_internal::{
     BitcoinAdapterRequest, BitcoinAdapterRequestWrapper, BitcoinAdapterResponse,
 };
@@ -77,11 +78,26 @@ impl AdapterQueues {
     }
 }
 
+/// The Bitcoin network's UTXO set.
+/// See `ic_btc_canister::state` for more documentation.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct UtxoSet {
+    /// PageMap storing all the UTXOs that are small in size.
+    pub utxos_small: PageMap,
+
+    /// PageMap storing all the UTXOs that are medium in size.
+    pub utxos_medium: PageMap,
+
+    /// PageMap storing an index mapping a Bitcoin address to its UTXOs.
+    pub address_outpoints: PageMap,
+}
+
 /// Represents the bitcoin state of the subnet.
 /// See `ic_protobuf::bitcoin::v1` for documentation of the fields.
 #[derive(Clone, Debug, PartialEq)]
 pub struct BitcoinState {
     pub adapter_queues: AdapterQueues,
+    pub utxo_set: UtxoSet,
 }
 
 impl Default for BitcoinState {
@@ -94,6 +110,7 @@ impl BitcoinState {
     pub fn new(requests_queue_capacity: u32) -> Self {
         Self {
             adapter_queues: AdapterQueues::new(requests_queue_capacity),
+            utxo_set: UtxoSet::default(),
         }
     }
 

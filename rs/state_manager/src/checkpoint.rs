@@ -1,10 +1,12 @@
-use crate::{CheckpointError, CheckpointMetrics, NUMBER_OF_CHECKPOINT_THREADS};
+use crate::{CheckpointError, CheckpointMetrics, PersistenceError, NUMBER_OF_CHECKPOINT_THREADS};
 use ic_base_types::CanisterId;
 use ic_logger::ReplicaLogger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::Memory;
 use ic_replicated_state::{
-    bitcoin_state::BitcoinState, canister_state::execution_state::WasmBinary, page_map::PageMap,
+    bitcoin_state::{BitcoinState, UtxoSet},
+    canister_state::execution_state::WasmBinary,
+    page_map::PageMap,
     CanisterMetrics, CanisterState, ExecutionState, NumWasmPages, ReplicatedState, SchedulerState,
     SystemState,
 };
@@ -15,7 +17,10 @@ use ic_state_layout::{
 use ic_types::Height;
 use ic_utils::thread::parallel_map;
 use std::collections::BTreeMap;
-use std::convert::{From, TryFrom};
+use std::{
+    convert::{From, TryFrom},
+    path::Path,
+};
 
 /// Creates a checkpoint of the node state using specified directory
 /// layout. Returns a new state that is equivalent to the given one
@@ -190,6 +195,21 @@ fn serialize_bitcoin_state_to_tip(
     state: &BitcoinState,
     layout: &BitcoinStateLayout<RwPolicy>,
 ) -> Result<(), CheckpointError> {
+    state
+        .utxo_set
+        .utxos_small
+        .persist_and_sync_delta(&layout.utxos_small())?;
+
+    state
+        .utxo_set
+        .utxos_medium
+        .persist_and_sync_delta(&layout.utxos_medium())?;
+
+    state
+        .utxo_set
+        .address_outpoints
+        .persist_and_sync_delta(&layout.address_outpoints())?;
+
     layout
         .bitcoin_state()
         .serialize(
@@ -376,6 +396,7 @@ fn load_bitcoin_state<P: ReadPolicy>(
     checkpoint_layout: &CheckpointLayout<P>,
 ) -> Result<BitcoinState, CheckpointError> {
     let layout = checkpoint_layout.bitcoin_testnet()?;
+    let height = checkpoint_layout.height();
 
     let into_checkpoint_error =
         |field: String, err: ic_protobuf::proxy::ProxyDecodeError| CheckpointError::ProtoError {
@@ -390,9 +411,29 @@ fn load_bitcoin_state<P: ReadPolicy>(
         BitcoinStateBits::try_from(bitcoin_state_proto.unwrap_or_default())
             .map_err(|err| into_checkpoint_error(String::from("BitcoinStateBits"), err))?;
 
+    let utxos_small = load_or_create_pagemap(&layout.utxos_small(), Some(height))?;
+    let utxos_medium = load_or_create_pagemap(&layout.utxos_medium(), Some(height))?;
+    let address_outpoints = load_or_create_pagemap(&layout.address_outpoints(), Some(height))?;
+
     Ok(BitcoinState {
         adapter_queues: bitcoin_state_bits.adapter_queues,
+        utxo_set: UtxoSet {
+            utxos_small,
+            utxos_medium,
+            address_outpoints,
+        },
     })
+}
+
+fn load_or_create_pagemap(
+    path: &Path,
+    height: Option<Height>,
+) -> Result<PageMap, PersistenceError> {
+    if path.exists() {
+        PageMap::open(path, height)
+    } else {
+        Ok(PageMap::default())
+    }
 }
 
 #[cfg(test)]
@@ -995,8 +1036,45 @@ mod tests {
             .unwrap();
 
             assert_eq!(
-                recovered_state.bitcoin_testnet().adapter_queues,
-                original_state.bitcoin_testnet().adapter_queues
+                recovered_state.bitcoin_testnet(),
+                original_state.bitcoin_testnet(),
+            );
+        });
+    }
+
+    #[test]
+    fn can_recover_bitcoin_page_maps() {
+        with_test_replica_logger(|log| {
+            let tmp = Builder::new().prefix("test").tempdir().unwrap();
+            let root = tmp.path().to_path_buf();
+            let layout = StateLayout::new(log.clone(), root);
+
+            const HEIGHT: Height = Height::new(42);
+
+            let own_subnet_type = SubnetType::Application;
+            let subnet_id = subnet_test_id(1);
+            let mut state =
+                ReplicatedState::new_rooted_at(subnet_id, own_subnet_type, "NOT_USED".into());
+
+            // Make some change in the Bitcoin page maps to later verify they get recovered.
+            state.bitcoin_testnet_mut().utxo_set.utxos_small = PageMap::from(&[1, 2, 3, 4][..]);
+            state.bitcoin_testnet_mut().utxo_set.utxos_medium = PageMap::from(&[5, 6, 7, 8][..]);
+            state.bitcoin_testnet_mut().utxo_set.address_outpoints =
+                PageMap::from(&[9, 10, 11, 12][..]);
+
+            let original_state = state.clone();
+            let _state = make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout);
+
+            let recovered_state = load_checkpoint(
+                &layout.checkpoint(HEIGHT).unwrap(),
+                own_subnet_type,
+                Some(&mut thread_pool()),
+            )
+            .unwrap();
+
+            assert_eq!(
+                recovered_state.bitcoin_testnet(),
+                original_state.bitcoin_testnet()
             );
         });
     }

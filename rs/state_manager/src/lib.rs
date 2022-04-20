@@ -766,6 +766,15 @@ fn report_last_diverged_checkpoint(
 pub enum PageMapType {
     WasmMemory(CanisterId),
     StableMemory(CanisterId),
+    Bitcoin(BitcoinPageMap),
+}
+
+/// PageMaps used in the Bitcoin state.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum BitcoinPageMap {
+    UtxosSmall,
+    UtxosMedium,
+    AddressOutpoints,
 }
 
 impl PageMapType {
@@ -779,6 +788,10 @@ impl PageMapType {
             }
         }
 
+        result.push(Self::Bitcoin(BitcoinPageMap::UtxosSmall));
+        result.push(Self::Bitcoin(BitcoinPageMap::UtxosMedium));
+        result.push(Self::Bitcoin(BitcoinPageMap::AddressOutpoints));
+
         result
     }
 
@@ -790,6 +803,15 @@ impl PageMapType {
         match &self {
             PageMapType::WasmMemory(id) => Ok(layout.canister(id)?.vmemory_0()),
             PageMapType::StableMemory(id) => Ok(layout.canister(id)?.stable_memory_blob()),
+            PageMapType::Bitcoin(BitcoinPageMap::UtxosSmall) => {
+                Ok(layout.bitcoin_testnet()?.utxos_small())
+            }
+            PageMapType::Bitcoin(BitcoinPageMap::UtxosMedium) => {
+                Ok(layout.bitcoin_testnet()?.utxos_medium())
+            }
+            PageMapType::Bitcoin(BitcoinPageMap::AddressOutpoints) => {
+                Ok(layout.bitcoin_testnet()?.address_outpoints())
+            }
         }
     }
 
@@ -806,6 +828,15 @@ impl PageMapType {
                     .as_ref()
                     .map(|ex| &ex.stable_memory.page_map)
             }),
+            PageMapType::Bitcoin(BitcoinPageMap::UtxosSmall) => {
+                Some(&state.bitcoin_testnet().utxo_set.utxos_small)
+            }
+            PageMapType::Bitcoin(BitcoinPageMap::UtxosMedium) => {
+                Some(&state.bitcoin_testnet().utxo_set.utxos_medium)
+            }
+            PageMapType::Bitcoin(BitcoinPageMap::AddressOutpoints) => {
+                Some(&state.bitcoin_testnet().utxo_set.address_outpoints)
+            }
         }
     }
 
@@ -822,6 +853,15 @@ impl PageMapType {
                     .as_mut()
                     .map(|ex| &mut ex.stable_memory.page_map)
             }),
+            PageMapType::Bitcoin(BitcoinPageMap::UtxosSmall) => {
+                Some(&mut state.bitcoin_testnet_mut().utxo_set.utxos_small)
+            }
+            PageMapType::Bitcoin(BitcoinPageMap::UtxosMedium) => {
+                Some(&mut state.bitcoin_testnet_mut().utxo_set.utxos_medium)
+            }
+            PageMapType::Bitcoin(BitcoinPageMap::AddressOutpoints) => {
+                Some(&mut state.bitcoin_testnet_mut().utxo_set.address_outpoints)
+            }
         }
     }
 }
