@@ -29,7 +29,10 @@ use ic_protobuf::{
     state::system_metadata::v1 as pb_metadata,
 };
 use serde::{Deserialize, Serialize};
-use std::{convert::TryFrom, mem::size_of};
+use std::{
+    convert::{TryFrom, TryInto},
+    mem::size_of,
+};
 
 pub type CanisterHttpRequestId = CallbackId;
 
@@ -39,7 +42,7 @@ pub struct CanisterHttpRequestContext {
     pub url: String,
     pub headers: Vec<CanisterHttpHeader>,
     pub body: Option<Vec<u8>>,
-    pub http_method: ic_ic00_types::HttpMethodType,
+    pub http_method: CanisterHttpMethod,
     pub transform_method_name: Option<String>,
     pub time: Time,
 }
@@ -63,7 +66,7 @@ impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestConte
                 .transform_method_name
                 .as_ref()
                 .map(|method_name| method_name.into()),
-            http_method: pb_metadata::HttpMethodType::from(&context.http_method) as i32,
+            http_method: pb_metadata::HttpMethod::from(&context.http_method).into(),
             time: context.time.as_nanos_since_unix_epoch(),
         }
     }
@@ -86,9 +89,15 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
                 })
                 .collect(),
             body: context.body,
-            http_method: ic_ic00_types::HttpMethodType::from(
-                pb_metadata::HttpMethodType::from_i32(context.http_method).unwrap_or_default(),
-            ),
+            http_method: pb_metadata::HttpMethod::from_i32(context.http_method)
+                .ok_or(ProxyDecodeError::ValueOutOfRange {
+                    typ: "ic_protobuf::state::system_metadata::v1::HttpMethod",
+                    err: format!(
+                        "{} is not one of the expected variants of HttpMethod",
+                        context.http_method
+                    ),
+                })?
+                .try_into()?,
             transform_method_name: context.transform_method_name.map(From::from),
             time: Time::from_nanos_since_unix_epoch(context.time),
         })
@@ -147,6 +156,33 @@ impl CountBytes for CanisterHttpReject {
 pub struct CanisterHttpHeader {
     pub name: String,
     pub value: String,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+pub enum CanisterHttpMethod {
+    GET,
+}
+
+impl From<&CanisterHttpMethod> for pb_metadata::HttpMethod {
+    fn from(http_method: &CanisterHttpMethod) -> Self {
+        match http_method {
+            CanisterHttpMethod::GET => pb_metadata::HttpMethod::Get,
+        }
+    }
+}
+
+impl TryFrom<pb_metadata::HttpMethod> for CanisterHttpMethod {
+    type Error = ProxyDecodeError;
+
+    fn try_from(http_method: pb_metadata::HttpMethod) -> Result<Self, Self::Error> {
+        match http_method {
+            pb_metadata::HttpMethod::Get => Ok(CanisterHttpMethod::GET),
+            pb_metadata::HttpMethod::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
+                typ: "ic_protobuf::state::system_metadata::v1::HttpMethod",
+                err: "Unspecified HttpMethod".to_string(),
+            }),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]

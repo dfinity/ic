@@ -11,7 +11,7 @@ use ic_ic00_types::{
     self as ic00, CanisterHttpRequestArgs, CanisterIdRecord, CanisterStatusResultV2, EmptyBlob,
     InstallCodeArgs, Method, Payload as Ic00Payload, IC_00,
 };
-use ic_ic00_types::{CanisterInstallMode, CanisterStatusType, HttpMethodType};
+use ic_ic00_types::{CanisterInstallMode, CanisterStatusType, HttpMethod};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_interfaces::{
     execution_environment::{AvailableMemory, ExecuteMessageResult, ExecutionMode},
@@ -52,6 +52,7 @@ use ic_test_utilities::{
     with_test_replica_logger,
 };
 use ic_types::{
+    canister_http::CanisterHttpMethod,
     ingress::{IngressStatus, WasmResult},
     messages::{
         CallbackId, MessageId, Payload, RejectContext, RequestOrResponse, Response,
@@ -3141,7 +3142,7 @@ fn execute_canister_http_request() {
             url: url.clone(),
             headers: Vec::new(),
             body: None,
-            http_method: HttpMethodType::GET,
+            http_method: HttpMethod::GET,
             transform_method_name: transform_method_name.clone(),
         };
 
@@ -3191,7 +3192,7 @@ fn execute_canister_http_request() {
             http_request_context.transform_method_name,
             transform_method_name
         );
-        assert_eq!(http_request_context.http_method, HttpMethodType::GET);
+        assert_eq!(http_request_context.http_method, CanisterHttpMethod::GET);
         assert_eq!(http_request_context.request, request);
     });
 }
@@ -3208,7 +3209,7 @@ fn execute_canister_http_request_disabled() {
             url: "https::/".to_string(),
             headers: Vec::new(),
             body: None,
-            http_method: HttpMethodType::GET,
+            http_method: HttpMethod::GET,
             transform_method_name: Some("transform".to_string()),
         };
 

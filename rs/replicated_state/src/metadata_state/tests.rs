@@ -2,7 +2,6 @@ use super::*;
 use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::HttpMethodType;
 use ic_test_utilities::{
     mock_time,
     types::{
@@ -15,7 +14,7 @@ use ic_test_utilities::{
     },
 };
 use ic_types::{
-    canister_http::CanisterHttpRequestContext,
+    canister_http::{CanisterHttpMethod, CanisterHttpRequestContext},
     ingress::WasmResult,
     messages::{CallbackId, Payload},
 };
@@ -234,7 +233,7 @@ fn subnet_call_contexts_deserialization() {
         url: url.clone(),
         headers: Vec::new(),
         body: None,
-        http_method: HttpMethodType::GET,
+        http_method: CanisterHttpMethod::GET,
         transform_method_name: transform_method_name.clone(),
         time: mock_time(),
     };
@@ -258,7 +257,7 @@ fn subnet_call_contexts_deserialization() {
     assert_eq!(deserialized_http_request_context.url, url);
     assert_eq!(
         deserialized_http_request_context.http_method,
-        HttpMethodType::GET
+        CanisterHttpMethod::GET
     );
     assert_eq!(
         deserialized_http_request_context.transform_method_name,

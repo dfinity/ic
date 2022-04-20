@@ -73,9 +73,9 @@ message SignWithEcdsaContextTree {
     SignWithEcdsaContext context = 2;
 }
 
-enum HttpMethodType {
-    HTTP_METHOD_TYPE_UNSPECIFIED = 0;
-    HTTP_METHOD_TYPE_GET = 1;
+enum HttpMethod {
+    HTTP_METHOD_UNSPECIFIED = 0;
+    HTTP_METHOD_GET = 1;
 }
 
 message HttpHeader {
@@ -88,9 +88,11 @@ message CanisterHttpRequestContext {
     string url = 2;
     google.protobuf.BytesValue body = 3;
     google.protobuf.StringValue transform_method_name = 4;
-    HttpMethodType http_method = 5;
+    HttpMethod http_method = 8;
     uint64 time = 6;
     repeated HttpHeader headers = 7;
+    
+    reserved 5;
 }
 
 message CanisterHttpRequestContextTree {
