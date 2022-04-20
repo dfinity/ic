@@ -9,7 +9,7 @@ base64 = "0.11.0"
 bitcoin = "0.27.1"
 clap = { version = "3.1.6", features = ["derive"] }
 hex = "0.4.2"
-ic-btc-adapter-service = { path = "../bitcoin/adapter_service" }
+ic-btc-service = { path = "../bitcoin/service" }
 ic-btc-types-internal = { path = "../bitcoin/types/internal" }
 ic-async-utils = { path = "../async_utils" }
 ic-btc-consensus = { path = "../bitcoin/consensus" }
