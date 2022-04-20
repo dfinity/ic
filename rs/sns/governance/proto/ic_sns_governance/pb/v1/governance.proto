@@ -217,18 +217,6 @@ message ExecuteNervousSystemFunction {
   bytes payload = 2;
 }
 
-// Call some canister method.
-message CallCanisterMethod {
-  // Which canister to target.
-  ic_base_types.pb.v1.PrincipalId target_canister_id = 1;
-
-  // Which method within the canister to call.
-  string target_method_name = 2;
-
-  // Args data to be passed to that method.
-  bytes payload = 3;
-}
-
 // A proposal action that should guide the future strategy of the SNS's
 // ecosystem but does not have immediate effect in the sense that a method is executed.
 message Motion {
@@ -286,17 +274,11 @@ message Proposal {
     // Execute a method outside the SNS canisters.
     ExecuteNervousSystemFunction execute_nervous_system_function = 8;
 
-    // Similar to the previous action, but this one lets you target based on
-    // canister ID and method name instead of function ID. The current plan is
-    // for this to be superseded by ExecuteNerousFunction once that gets
-    // implemented.
-    CallCanisterMethod call_canister_method = 9;
-
     // Add a new NervousSystemFunction to be executable by proposal.
-    NervousSystemFunction add_nervous_system_function = 10;
+    NervousSystemFunction add_nervous_system_function = 9;
 
     // Remove a NervousSystemFunction from being executable by proposal.
-    uint64 remove_nervous_system_function = 11;
+    uint64 remove_nervous_system_function = 10;
   }
 }
 

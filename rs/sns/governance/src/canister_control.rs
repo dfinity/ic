@@ -11,10 +11,10 @@ use dfn_core::println;
 use crate::{
     governance::log_prefix,
     pb::v1::{
-        governance_error::ErrorType, CallCanisterMethod, ExecuteNervousSystemFunction,
-        GovernanceError, NervousSystemFunction,
+        governance_error::ErrorType, ExecuteNervousSystemFunction, GovernanceError,
+        NervousSystemFunction,
     },
-    proposal::{validate_call_canister_method, ValidNervousSystemFunction},
+    proposal::ValidNervousSystemFunction,
     types::Environment,
 };
 
@@ -244,58 +244,6 @@ pub async fn perform_execute_nervous_system_function_call(
         Err(err) => Err(GovernanceError::new_with_message(
             ErrorType::External,
             format!("Canister method call to execute proposal failed: {:?}", err),
-        )),
-
-        Ok(_reply) => {
-            // TODO: Do something with reply. E.g. store it in the proposal,
-            // and/or deserialize it so that we can detect whether there was an
-            // application-level error, as opposed to a communication
-            // error. Detecting application error could be done as follows:
-            //
-            //   candid::!Decode(&reply, Result<String, String>)
-            //
-            // This could then be converted into a Result<(), GovernanceError>.
-            // For now, any reply is considered a success.
-            Ok(())
-        }
-    }
-}
-
-pub async fn perform_call_canister_method(
-    env: &dyn Environment,
-    call: CallCanisterMethod,
-) -> Result<(), GovernanceError> {
-    // 1. Inputs.
-    validate_call_canister_method(&call)
-        // Convert to GovernanceError. In practice, this should never happen,
-        // because the proposal was validated when it was first made. However,
-        // since we cannot control that, it is possible to provoke this failure
-        // (e.g. in test).
-        .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidProposal, err))?;
-    let CallCanisterMethod {
-        target_canister_id,
-        target_method_name,
-        payload,
-    } = call;
-    // This should not panic, since we just validated call.
-    let target_canister_id = CanisterId::new(target_canister_id.unwrap()).unwrap();
-    let payload_len = payload.len(); // Might be used later, but after payload is consumed.
-
-    // 2. The real work.
-    let result = env
-        .call_canister(target_canister_id, &target_method_name, payload)
-        .await;
-
-    // 3. Convert result.
-    match result {
-        Err(err /* (Option<i32>, String) */) => Err(GovernanceError::new_with_message(
-            ErrorType::External,
-            format!(
-                "Canister method call failed \
-                 (target_canister_id = {:?}, target_method_name = {:?}, payload.len = {:?}): \
-                 {:?}",
-                target_canister_id, target_method_name, payload_len, err
-            ),
         )),
 
         Ok(_reply) => {

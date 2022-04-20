@@ -9,8 +9,7 @@ use std::str::FromStr;
 use std::string::ToString;
 
 use crate::canister_control::{
-    get_canister_id, perform_call_canister_method, perform_execute_nervous_system_function_call,
-    upgrade_canister_directly,
+    get_canister_id, perform_execute_nervous_system_function_call, upgrade_canister_directly,
 };
 use crate::pb::v1::{
     get_neuron_response, get_proposal_response,
@@ -1571,9 +1570,6 @@ impl Governance {
             }
             proposal::Action::ExecuteNervousSystemFunction(call) => {
                 self.perform_execute_nervous_system_function(call).await
-            }
-            proposal::Action::CallCanisterMethod(params) => {
-                perform_call_canister_method(&*self.env, params).await
             }
             proposal::Action::AddNervousSystemFunction(nervous_system_function) => {
                 self.perform_add_nervous_system_function(nervous_system_function)
