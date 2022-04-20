@@ -42,6 +42,8 @@ pub(crate) struct Upgrade {
     release_content_dir: PathBuf,
     logger: ReplicaLogger,
     node_id: NodeId,
+    /// The replica version that is prepared by 'prepare_upgrade' to upgrade to.
+    prepared_upgrade_version: Option<ReplicaVersion>,
 }
 
 impl Upgrade {
@@ -69,6 +71,7 @@ impl Upgrade {
             ic_binary_dir,
             registry_replicator,
             logger,
+            prepared_upgrade_version: None,
         };
         value.confirm_boot();
         value
@@ -76,7 +79,7 @@ impl Upgrade {
 
     /// Checks for a new release package, and if found, upgrades to this release
     /// package
-    pub(crate) async fn check(&self) -> OrchestratorResult<Option<SubnetId>> {
+    pub(crate) async fn check(&mut self) -> OrchestratorResult<Option<SubnetId>> {
         let latest_registry_version = self.registry.get_latest_version();
         // Determine the subnet_id using the local CUP.
         let (subnet_id, local_cup) = if let Some(cup) = self.cup_provider.get_local_cup() {
@@ -158,9 +161,9 @@ impl Upgrade {
                 "Starting version upgrade: {} -> {}", self.replica_version, new_replica_version
             );
             // Only downloads the new image if it doesn't already exists locally, i.e. it
-            // was previously downloaded by `download_image_if_upgrade_scheduled()`, see
+            // was previously downloaded by `prepare_upgrade_if_scheduled()`, see
             // below.
-            return self.download_and_upgrade(&new_replica_version).await;
+            return self.execute_upgrade(&new_replica_version).await;
         }
 
         // If we arrive here, we are on the newest replica version.
@@ -173,7 +176,7 @@ impl Upgrade {
 
         // This will trigger an image download if one is already scheduled but we did
         // not arrive at the corresponding CUP yet.
-        self.download_image_if_upgrade_scheduled(subnet_id).await?;
+        self.prepare_upgrade_if_scheduled(subnet_id).await?;
 
         Ok(Some(subnet_id))
     }
@@ -231,8 +234,8 @@ impl Upgrade {
     // Checks if the subnet record for the given subnet_id contains a different
     // replica version. If it is the case, the image will be downloaded. This
     // allows us to decrease the upgrade downtime.
-    async fn download_image_if_upgrade_scheduled(
-        &self,
+    async fn prepare_upgrade_if_scheduled(
+        &mut self,
         subnet_id: SubnetId,
     ) -> OrchestratorResult<()> {
         let registry_version = self.registry.get_latest_version();
@@ -244,12 +247,12 @@ impl Upgrade {
                 self.logger,
                 "Version upgrade detected: {} -> {}", self.replica_version, new_replica_version
             );
-            self.download_release_package(new_replica_version).await?;
+            self.prepare_upgrade(new_replica_version).await?
         }
         Ok(())
     }
 
-    async fn check_for_upgrade_as_unassigned(&self) -> OrchestratorResult<()> {
+    async fn check_for_upgrade_as_unassigned(&mut self) -> OrchestratorResult<()> {
         let registry = &self.registry.registry_client;
         match registry.get_unassigned_nodes_config(registry.get_latest_version()) {
             Ok(Some(record)) => {
@@ -269,7 +272,7 @@ impl Upgrade {
                     self.replica_version,
                     replica_version
                 );
-                self.download_and_upgrade(&replica_version).await
+                self.execute_upgrade(&replica_version).await
             }
             _ => Err(OrchestratorError::UpgradeError(
                 "No replica version for unassigned nodes found".to_string(),
@@ -277,46 +280,41 @@ impl Upgrade {
         }
     }
 
-    async fn download_and_upgrade<T>(
-        &self,
+    async fn execute_upgrade<T>(
+        &mut self,
         replica_version: &ReplicaVersion,
     ) -> OrchestratorResult<T> {
-        self.download_release_package(replica_version.clone())
-            .await?;
-        let image_path = self
-            .make_version_dir(replica_version)?
-            .join("base-os.tar.gz");
+        match &self.prepared_upgrade_version {
+            Some(version) if version == replica_version => {
+                info!(
+                    self.logger,
+                    "Replica version {} has already been prepared for upgrade.", replica_version
+                )
+            }
+            _ => self.prepare_upgrade(replica_version.clone()).await?,
+        };
+
+        // If we ever retry this function, it means we encountered an issue somewhere.
+        // To be safe, we should re-do all the steps.
+        self.prepared_upgrade_version = None;
+
+        info!(self.logger, "Attempting to reboot");
         let mut script = self.ic_binary_dir.clone();
         script.push("manageboot.sh");
-        let mut c = Command::new(script.clone().into_os_string());
+        let mut c = Command::new(script.into_os_string());
         let out = c
-            .arg("upgrade-install")
-            .arg(image_path)
+            .arg("upgrade-commit")
             .output()
             .map_err(|e| OrchestratorError::file_command_error(e, &c))?;
 
-        info!(self.logger, "Installing upgrade {:?}", out);
-        if out.status.success() {
-            info!(self.logger, "Rebooting {:?}", out);
-            let mut c = Command::new(script.into_os_string());
-            let out = c
-                .arg("upgrade-commit")
-                .output()
-                .map_err(|e| OrchestratorError::file_command_error(e, &c))?;
-
-            if !out.status.success() {
-                warn!(self.logger, "upgrade-commit has failed");
-                Err(OrchestratorError::UpgradeError(
-                    "upgrade-commit failed".to_string(),
-                ))
-            } else {
-                exit(42);
-            }
-        } else {
-            warn!(self.logger, "upgrade-install has failed");
+        if !out.status.success() {
+            warn!(self.logger, "upgrade-commit has failed");
             Err(OrchestratorError::UpgradeError(
-                "upgrade-install failed".to_string(),
+                "upgrade-commit failed".to_string(),
             ))
+        } else {
+            info!(self.logger, "Rebooting {:?}", out);
+            exit(42);
         }
     }
 
@@ -439,6 +437,44 @@ impl Upgrade {
             start_time.elapsed(),
         );
         Ok(())
+    }
+
+    // Downloads release package associated with the given version,
+    // calls the node script that extracts it and copies it to the boot partition.
+    async fn prepare_upgrade(&mut self, replica_version: ReplicaVersion) -> OrchestratorResult<()> {
+        // Return immediately if 'replica version' is already prepared for an upgrade.
+        if self.prepared_upgrade_version == Some(replica_version.clone()) {
+            return Ok(());
+        }
+
+        self.download_release_package(replica_version.clone())
+            .await?;
+
+        // The call to `manageboot.sh upgrade-install` could corrupt any previous upgrade preperation.
+        // In case this function fails and we do want to leave `prepared_upgrade_version` set. Therefore,
+        // clear it here.
+        self.prepared_upgrade_version = None;
+
+        let image_path = self
+            .make_version_dir(&replica_version)?
+            .join("base-os.tar.gz");
+        let mut script = self.ic_binary_dir.clone();
+        script.push("manageboot.sh");
+        let mut c = Command::new(script.clone().into_os_string());
+        let out = c
+            .arg("upgrade-install")
+            .arg(image_path)
+            .output()
+            .map_err(|e| OrchestratorError::file_command_error(e, &c))?;
+        if out.status.success() {
+            self.prepared_upgrade_version = Some(replica_version);
+            Ok(())
+        } else {
+            warn!(self.logger, "upgrade-install has failed");
+            Err(OrchestratorError::UpgradeError(
+                "upgrade-install failed".to_string(),
+            ))
+        }
     }
 
     // Make a dir to store a release package for the given replica version
