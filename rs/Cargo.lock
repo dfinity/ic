@@ -3498,7 +3498,7 @@ dependencies = [
  "hashlink 0.8.0",
  "hex",
  "ic-async-utils",
- "ic-btc-adapter-service",
+ "ic-btc-service",
  "ic-btc-validation",
  "ic-config",
  "ic-logger",
@@ -3514,16 +3514,6 @@ dependencies = [
  "tokio-socks",
  "tonic",
  "tower",
-]
-
-[[package]]
-name = "ic-btc-adapter-service"
-version = "0.1.0"
-dependencies = [
- "prost",
- "prost-build",
- "tonic",
- "tonic-build",
 ]
 
 [[package]]
@@ -3565,6 +3555,16 @@ dependencies = [
  "prometheus",
  "slog",
  "thiserror",
+]
+
+[[package]]
+name = "ic-btc-service"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "prost-build",
+ "tonic",
+ "tonic-build",
 ]
 
 [[package]]
@@ -6097,8 +6097,8 @@ dependencies = [
  "criterion",
  "hex",
  "ic-async-utils",
- "ic-btc-adapter-service",
  "ic-btc-consensus",
+ "ic-btc-service",
  "ic-btc-types-internal",
  "ic-config",
  "ic-consensus",

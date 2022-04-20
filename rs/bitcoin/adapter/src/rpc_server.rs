@@ -6,25 +6,25 @@ use bitcoin::{consensus::Encodable, hashes::Hash, BlockHash};
 use ic_async_utils::{
     ensure_single_systemd_socket, incoming_from_first_systemd_socket, incoming_from_path,
 };
-use ic_btc_adapter_service::{
-    btc_adapter_server::{BtcAdapter, BtcAdapterServer},
-    GetSuccessorsRpcRequest, GetSuccessorsRpcResponse, SendTransactionRpcRequest,
-    SendTransactionRpcResponse,
+use ic_btc_service::{
+    btc_service_server::{BtcService, BtcServiceServer},
+    BtcServiceGetSuccessorsRequest, BtcServiceGetSuccessorsResponse,
+    BtcServiceSendTransactionRequest, BtcServiceSendTransactionResponse,
 };
 use std::convert::{TryFrom, TryInto};
 use tokio::sync::mpsc::UnboundedSender;
 use tonic::{transport::Server, Request, Response, Status};
 
-struct BtcAdapterImpl {
+struct BtcServiceImpl {
     adapter_state: AdapterState,
     get_successors_handler: GetSuccessorsHandler,
     transaction_manager_tx: UnboundedSender<TransactionManagerRequest>,
 }
 
-impl TryFrom<GetSuccessorsRpcRequest> for GetSuccessorsRequest {
+impl TryFrom<BtcServiceGetSuccessorsRequest> for GetSuccessorsRequest {
     type Error = Status;
 
-    fn try_from(request: GetSuccessorsRpcRequest) -> Result<Self, Self::Error> {
+    fn try_from(request: BtcServiceGetSuccessorsRequest) -> Result<Self, Self::Error> {
         let anchor = BlockHash::from_slice(request.anchor.as_slice())
             .map_err(|_| Status::internal("Failed to parse anchor hash!"))?;
 
@@ -44,7 +44,7 @@ impl TryFrom<GetSuccessorsRpcRequest> for GetSuccessorsRequest {
     }
 }
 
-impl TryFrom<GetSuccessorsResponse> for GetSuccessorsRpcResponse {
+impl TryFrom<GetSuccessorsResponse> for BtcServiceGetSuccessorsResponse {
     type Error = Status;
     fn try_from(response: GetSuccessorsResponse) -> Result<Self, Self::Error> {
         let mut blocks = vec![];
@@ -64,19 +64,19 @@ impl TryFrom<GetSuccessorsResponse> for GetSuccessorsRpcResponse {
                 .map_err(|_| Status::internal("Failed to encode block header!"))?;
             next.push(encoded_block_header);
         }
-        Ok(GetSuccessorsRpcResponse { blocks, next })
+        Ok(BtcServiceGetSuccessorsResponse { blocks, next })
     }
 }
 
 #[tonic::async_trait]
-impl BtcAdapter for BtcAdapterImpl {
+impl BtcService for BtcServiceImpl {
     async fn get_successors(
         &self,
-        request: Request<GetSuccessorsRpcRequest>,
-    ) -> Result<Response<GetSuccessorsRpcResponse>, Status> {
+        request: Request<BtcServiceGetSuccessorsRequest>,
+    ) -> Result<Response<BtcServiceGetSuccessorsResponse>, Status> {
         self.adapter_state.received_now();
         let request = request.into_inner().try_into()?;
-        match GetSuccessorsRpcResponse::try_from(
+        match BtcServiceGetSuccessorsResponse::try_from(
             self.get_successors_handler.get_successors(request).await,
         ) {
             Ok(res) => Ok(Response::new(res)),
@@ -86,8 +86,8 @@ impl BtcAdapter for BtcAdapterImpl {
 
     async fn send_transaction(
         &self,
-        request: Request<SendTransactionRpcRequest>,
-    ) -> Result<Response<SendTransactionRpcResponse>, Status> {
+        request: Request<BtcServiceSendTransactionRequest>,
+    ) -> Result<Response<BtcServiceSendTransactionResponse>, Status> {
         self.adapter_state.received_now();
         let transaction = request.into_inner().transaction;
         self.transaction_manager_tx
@@ -95,7 +95,7 @@ impl BtcAdapter for BtcAdapterImpl {
             .expect(
                 "Sending should not fail because we never close the receiving part of the channel.",
             );
-        Ok(Response::new(SendTransactionRpcResponse {}))
+        Ok(Response::new(BtcServiceSendTransactionResponse {}))
     }
 }
 
@@ -110,7 +110,7 @@ pub fn spawn_grpc_server(
     if config.incoming_source == IncomingSource::Systemd {
         ensure_single_systemd_socket();
     }
-    let btc_adapter_impl = BtcAdapterImpl {
+    let btc_adapter_impl = BtcServiceImpl {
         adapter_state,
         get_successors_handler,
         transaction_manager_tx,
@@ -119,14 +119,14 @@ pub fn spawn_grpc_server(
         match config.incoming_source {
             IncomingSource::Path(uds_path) => {
                 Server::builder()
-                    .add_service(BtcAdapterServer::new(btc_adapter_impl))
+                    .add_service(BtcServiceServer::new(btc_adapter_impl))
                     .serve_with_incoming(incoming_from_path(uds_path))
                     .await
                     .expect("gRPC server crashed");
             }
             IncomingSource::Systemd => {
                 Server::builder()
-                    .add_service(BtcAdapterServer::new(btc_adapter_impl))
+                    .add_service(BtcServiceServer::new(btc_adapter_impl))
                     .serve_with_incoming(incoming_from_first_systemd_socket())
                     .await
                     .expect("gRPC server crashed");

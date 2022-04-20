@@ -1,5 +1,5 @@
 [package]
-name = "ic-btc-adapter-service"
+name = "ic-btc-service"
 version = "0.1.0"
 edition = "2021"
 

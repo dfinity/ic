@@ -2,8 +2,9 @@ use std::{convert::TryFrom, path::PathBuf, time::Duration};
 
 use bitcoin::{blockdata::constants::genesis_block, consensus::Decodable, Block, BlockHash};
 use clap::Parser;
-use ic_btc_adapter_service::{
-    btc_adapter_client::BtcAdapterClient, GetSuccessorsRpcRequest, GetSuccessorsRpcResponse,
+use ic_btc_service::{
+    btc_service_client::BtcServiceClient, BtcServiceGetSuccessorsRequest,
+    BtcServiceGetSuccessorsResponse,
 };
 use tokio::{
     net::UnixStream,
@@ -24,9 +25,9 @@ async fn setup_channel(uds_path: PathBuf) -> Channel {
         .expect("failed to connect to socket")
 }
 
-async fn setup_client(uds_path: PathBuf) -> BtcAdapterClient<Channel> {
+async fn setup_client(uds_path: PathBuf) -> BtcServiceClient<Channel> {
     let channel = setup_channel(uds_path).await;
-    BtcAdapterClient::new(channel)
+    BtcServiceClient::new(channel)
 }
 
 #[tokio::main]
@@ -49,7 +50,7 @@ async fn main() {
     let total_timer = Instant::now();
 
     loop {
-        let mut request = tonic::Request::new(GetSuccessorsRpcRequest {
+        let mut request = tonic::Request::new(BtcServiceGetSuccessorsRequest {
             processed_block_hashes: processed_block_hashes.iter().map(|h| h.to_vec()).collect(),
             anchor: current_anchor.to_vec(),
         });
@@ -57,9 +58,9 @@ async fn main() {
 
         let instant = Instant::now();
 
-        let response: Result<tonic::Response<GetSuccessorsRpcResponse>, tonic::Status> =
+        let response: Result<tonic::Response<BtcServiceGetSuccessorsResponse>, tonic::Status> =
             rpc_client.get_successors(request).await;
-        let inner: GetSuccessorsRpcResponse = match response {
+        let inner: BtcServiceGetSuccessorsResponse = match response {
             Ok(response) => response.into_inner(),
             Err(status) => match status.code() {
                 tonic::Code::Cancelled => continue,

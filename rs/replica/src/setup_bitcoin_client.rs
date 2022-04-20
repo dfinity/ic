@@ -1,6 +1,7 @@
 use bitcoin::consensus::Decodable;
-use ic_btc_adapter_service::{
-    btc_adapter_client::BtcAdapterClient, GetSuccessorsRpcRequest, SendTransactionRpcRequest,
+use ic_btc_service::{
+    btc_service_client::BtcServiceClient, BtcServiceGetSuccessorsRequest,
+    BtcServiceSendTransactionRequest,
 };
 use ic_btc_types_internal::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper, Block as InternalBlock,
@@ -25,12 +26,12 @@ fn convert_tonic_error(status: tonic::Status) -> RpcError {
 
 struct BitcoinAdapterClientImpl {
     rt_handle: tokio::runtime::Handle,
-    client: BtcAdapterClient<Channel>,
+    client: BtcServiceClient<Channel>,
 }
 
 impl BitcoinAdapterClientImpl {
     fn new(rt_handle: tokio::runtime::Handle, channel: Channel) -> Self {
-        let client = BtcAdapterClient::new(channel);
+        let client = BtcServiceClient::new(channel);
         Self { rt_handle, client }
     }
 }
@@ -96,7 +97,7 @@ impl BitcoinAdapterClient for BitcoinAdapterClientImpl {
         self.rt_handle.block_on(async move {
             match request {
                 BitcoinAdapterRequestWrapper::GetSuccessorsRequest(r) => {
-                    let get_successors_request = GetSuccessorsRpcRequest {
+                    let get_successors_request = BtcServiceGetSuccessorsRequest {
                         processed_block_hashes: r.processed_block_hashes,
                         anchor: r.anchor,
                     };
@@ -129,7 +130,7 @@ impl BitcoinAdapterClient for BitcoinAdapterClientImpl {
                         .map_err(convert_tonic_error)
                 }
                 BitcoinAdapterRequestWrapper::SendTransactionRequest(r) => {
-                    let send_transaction_request = SendTransactionRpcRequest {
+                    let send_transaction_request = BtcServiceSendTransactionRequest {
                         transaction: r.transaction,
                     };
                     let mut tonic_request = tonic::Request::new(send_transaction_request);

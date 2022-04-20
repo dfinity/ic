@@ -1,8 +1,8 @@
 syntax = "proto3";
 
-package btc_adapter;
+package btc_service.v1;
 
-message GetSuccessorsRpcRequest {
+message BtcServiceGetSuccessorsRequest {
   // Used by the adapter to filter out previously sent blocks from its
   // `GetSuccessorsResponse`. 
   repeated bytes processed_block_hashes = 1;
@@ -12,7 +12,7 @@ message GetSuccessorsRpcRequest {
   bytes anchor = 2;
 }
 
-message GetSuccessorsRpcResponse {
+message BtcServiceGetSuccessorsResponse {
   // The blocks that the adapter has knowledge of based on the anchor and
   // processed block hashes provided in the `GetSuccessorsRequest`.
   repeated bytes blocks = 1;
@@ -21,13 +21,13 @@ message GetSuccessorsRpcResponse {
   repeated bytes next = 2;
 }
 
-message SendTransactionRpcRequest {
+message BtcServiceSendTransactionRequest {
   bytes transaction = 1;
 }
 
-message SendTransactionRpcResponse {};
+message BtcServiceSendTransactionResponse {};
 
-service BtcAdapter {
-    rpc GetSuccessors(GetSuccessorsRpcRequest) returns (GetSuccessorsRpcResponse);
-    rpc SendTransaction(SendTransactionRpcRequest) returns (SendTransactionRpcResponse);
+service BtcService {
+    rpc GetSuccessors(BtcServiceGetSuccessorsRequest) returns (BtcServiceGetSuccessorsResponse);
+    rpc SendTransaction(BtcServiceSendTransactionRequest) returns (BtcServiceSendTransactionResponse);
 }
