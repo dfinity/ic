@@ -1,0 +1,29 @@
+[package]
+name = "ic-recovery"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+candid = "0.7.4"
+clap = { version = "3.1.6", features = ["derive"] }
+hex = "0.4.2"
+ic-base-types = { path = "../types/base_types/" }
+ic-cup-explorer = { path = "../cup_explorer" }
+ic-http-utils = { path = "../http_utils" }
+ic-replay = { path = "../replay" }
+ic-types = { path = "../types/types" }
+reqwest = { version = "0.11.1", features = [ "blocking", "json", "multipart", "native-tls" ] }
+serde = { version = "1.0.115", features = ["derive"] }
+serde_cbor = "0.11.1"
+serde_json = "1.0.54"
+slog = { version = "2.5.2", features = ["max_level_trace", "release_max_level_trace"] }
+slog-async = { version = "2.5", features = ["nested-values"] }
+slog-term = "2.6.0"
+strum = "0.23.0"
+strum_macros = "0.23.0"
+tokio = { version = "1.15.0", features = ["full"] }
+url = { version = "2.1.1", features = ["serde"] }
+
+[[bin]]
+name = "ic-recovery"
+path = "src/main.rs"

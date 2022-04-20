@@ -5812,6 +5812,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-recovery"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "clap 3.1.9",
+ "hex",
+ "ic-base-types",
+ "ic-cup-explorer",
+ "ic-http-utils",
+ "ic-replay",
+ "ic-types 0.8.0",
+ "reqwest",
+ "serde",
+ "serde_cbor",
+ "serde_json",
+ "slog",
+ "slog-async",
+ "slog-term",
+ "strum 0.23.0",
+ "strum_macros 0.23.1",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "ic-regedit"
 version = "0.8.0"
 dependencies = [

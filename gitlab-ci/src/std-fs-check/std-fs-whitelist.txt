@@ -66,6 +66,7 @@ prep/src/internet_computer.rs:    fmt,
 prep/src/internet_computer.rs:    fs::{self, File},
 prep/src/internet_computer.rs:use std::{
 prep/src/node.rs:use std::os::unix::fs::PermissionsExt;
+recovery/src/file_sync_helper.rs:use std::fs::{self, File, ReadDir};
 registry/admin/src/main.rs:    convert::TryFrom,
 registry/admin/src/main.rs:    fs::{metadata, read_to_string, File},
 registry/admin/src/main.rs:use std::{

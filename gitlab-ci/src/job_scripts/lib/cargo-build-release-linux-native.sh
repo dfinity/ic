@@ -30,6 +30,7 @@ cargo build --target $CARGO_BUILD_TARGET --release \
     --bin ic-p8s-service-discovery \
     --bin ic-p8s-sd \
     --bin ic-prep \
+    --bin ic-recovery \
     --bin ic-regedit \
     --bin ic-replay \
     --bin ic-rosetta-api \
