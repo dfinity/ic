@@ -1,0 +1,32 @@
+= Semantics of different packages in rs/types
+
+== `ic-base-types`
+
+Core types that all other packages, including Rust canisters, can share.
+It should be possible to compile `ic-base-types` to WebAssembly.
+
+Examples:
+
+  * `PrincipalId` and `CanisterId`, with their candid derivations,
+  * `NodeId` and `SubnetId`,
+  * `NumBytes` and `NumSeconds`.
+
+== `ic-error-types`
+
+This package contains definitions of error types that the user of the IC can observe when they call the HTTP interface, such as `+ErrorCode+` and `RejectCode`.
+
+Avoid adding component-specific error types to this package.
+
+== `ic-ic00-types`
+
+This package contains types specified in the https://github.com/dfinity/interface-spec/blob/master/spec/ic.did[ic00 management canister interface].
+
+This package targets the management canister implementation and tools to communicate with the management canister.
+
+Avoid adding platform-specific dependencies to this package.
+
+== `ic-types`
+
+This package contains type definitions shared among all platform components: execution, consensus, messaging, p2p, etc.
+
+Avoid adding new types to this package unless you need to share these types among several components.
