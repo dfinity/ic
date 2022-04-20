@@ -420,6 +420,18 @@ impl Player {
         );
     }
 
+    /// Return latest height and state hash according to state manager.
+    pub fn get_latest_state_height_and_hash(&self) -> (Height, String) {
+        let height = self.state_manager.latest_state_height();
+        self.wait_for_state(height);
+        let hash_raw = self
+            .state_manager
+            .get_state_hash_at(height)
+            .expect("Should have already panicked.");
+        let hash = hex::encode(&hash_raw.get().0);
+        (height, hash)
+    }
+
     /// Fetch registry records from the given `nns_url`, and update the local
     /// registry store with the new records.
     pub fn update_registry_local_store(&self) {

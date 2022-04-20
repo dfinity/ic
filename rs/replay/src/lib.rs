@@ -21,8 +21,10 @@ use crate::player::Player;
 use ic_canister_client::{Agent, Sender};
 use ic_config::{Config, ConfigSource};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_types::ReplicaVersion;
+use ic_types::{Height, ReplicaVersion};
+use std::cell::RefCell;
 use std::convert::TryFrom;
+use std::rc::Rc;
 
 mod backup;
 pub mod cmd;
@@ -59,8 +61,10 @@ pub mod player;
 /// // replay function could be called as follows:
 /// // replay(args);
 /// ```
-pub fn replay(args: ReplayToolArgs) {
+pub fn replay(args: ReplayToolArgs) -> Option<(Height, String)> {
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+    let result = Rc::new(RefCell::new(None));
+    let res_clone = Rc::clone(&result);
     Config::run_with_temp_config(|default_config| {
         let source = ConfigSource::File(args.config);
         let cfg = Config::load_with_default(&source, default_config).unwrap_or_else(|err| {
@@ -147,8 +151,11 @@ pub fn replay(args: ReplayToolArgs) {
             if let Some(SubCommand::UpdateRegistryLocalStore) = subcmd {
                 player.update_registry_local_store()
             }
+            *res_clone.borrow_mut() = Some(player.get_latest_state_height_and_hash());
         })
-    })
+    });
+    let ret = result.borrow().clone();
+    ret
 }
 
 /// Prints a question to the user and returns `true`

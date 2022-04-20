@@ -70,6 +70,7 @@ members = [
   "cup_explorer",
   "depcheck",
   "drun",
+  "recovery",
   "replay",
   "elastic_common_schema",
   "embedders",

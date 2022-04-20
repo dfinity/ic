@@ -33,6 +33,7 @@ RUST_BINARIES = [
     "ic-p8s-service-discovery",
     "ic-p8s-sd",
     "ic-prep",
+    "ic-recovery",
     "ic-regedit",
     "ic-replay",
     "ic-rosetta-api",
