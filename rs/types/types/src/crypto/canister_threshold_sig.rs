@@ -198,7 +198,7 @@ impl PreSignatureQuadruple {
                 Ok(())
             }
             _ => Err(error::PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(
-                format!("`kappa_times_lambda` transcript expected to have type `Masked` with `UnmaskedTimesMasked` origin, but found transcript of type {:?}", kappa_times_lambda.transcript_type))
+                format!("`kappa_times_lambda` transcript expected to have type `Masked` with origin of type `UnmaskedTimesMasked({:?},{:?})`, but found transcript of type {:?}", kappa_unmasked.transcript_id, lambda_masked.transcript_id, kappa_times_lambda.transcript_type))
             ),
         }
     }
@@ -208,14 +208,12 @@ impl PreSignatureQuadruple {
         key_times_lambda: &IDkgTranscript,
     ) -> Result<(), error::PresignatureQuadrupleCreationError> {
         match &key_times_lambda.transcript_type {
-            IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(
-                                           _,
-                                           id_r,
-            )) if *id_r == lambda_masked.transcript_id => {
+            IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(_, id_r, ))
+            if *id_r == lambda_masked.transcript_id => {
                 Ok(())
             }
             _ => Err(error::PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(
-                format!("`key_times_lambda` transcript expected to have type `Masked` with `UnmaskedTimesMasked` origin, but found transcript of type {:?}", key_times_lambda.transcript_type))
+                format!("`key_times_lambda` transcript expected to have type `Masked` with origin of type `UnmaskedTimesMasked(_,{:?})`, but found transcript of type {:?}", lambda_masked.transcript_id, key_times_lambda.transcript_type))
             ),
         }
     }

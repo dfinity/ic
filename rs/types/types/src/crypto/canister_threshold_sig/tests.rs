@@ -133,14 +133,14 @@ fn should_not_create_quadruples_for_kappa_times_lambda_with_wrong_origin() {
     kappa_times_lambda.transcript_type = wrong_kappa_times_lambda_type.clone();
 
     let quadruple = PreSignatureQuadruple::new(
-        kappa_unmasked,
-        lambda_masked,
+        kappa_unmasked.clone(),
+        lambda_masked.clone(),
         kappa_times_lambda,
         key_times_lambda,
     );
     assert!(
         matches!(quadruple, Err(PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
-        if error==format!("`kappa_times_lambda` transcript expected to have type `Masked` with `UnmaskedTimesMasked` origin, but found transcript of type {:?}",wrong_kappa_times_lambda_type))
+          if error==format!("`kappa_times_lambda` transcript expected to have type `Masked` with origin of type `UnmaskedTimesMasked({:?},{:?})`, but found transcript of type {:?}", kappa_unmasked.transcript_id, lambda_masked.transcript_id, wrong_kappa_times_lambda_type))
     );
 }
 
@@ -159,14 +159,14 @@ fn should_not_create_quadruples_for_kappa_times_lambda_of_wrong_type() {
     kappa_times_lambda.transcript_type = wrong_kappa_times_lambda_type.clone();
 
     let quadruple = PreSignatureQuadruple::new(
-        kappa_unmasked,
-        lambda_masked,
+        kappa_unmasked.clone(),
+        lambda_masked.clone(),
         kappa_times_lambda,
         key_times_lambda,
     );
     assert!(
         matches!(quadruple, Err(PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
-        if error==format!("`kappa_times_lambda` transcript expected to have type `Masked` with `UnmaskedTimesMasked` origin, but found transcript of type {:?}",wrong_kappa_times_lambda_type))
+        if error==format!("`kappa_times_lambda` transcript expected to have type `Masked` with origin of type `UnmaskedTimesMasked({:?},{:?})`, but found transcript of type {:?}", kappa_unmasked.transcript_id, lambda_masked.transcript_id, wrong_kappa_times_lambda_type))
     );
 }
 
@@ -189,13 +189,13 @@ fn should_not_create_quadruples_for_key_times_lambda_with_wrong_origin() {
 
     let quadruple = PreSignatureQuadruple::new(
         kappa_unmasked,
-        lambda_masked,
+        lambda_masked.clone(),
         kappa_times_lambda,
         key_times_lambda,
     );
     assert!(
         matches!(quadruple, Err(PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
-        if error==format!("`key_times_lambda` transcript expected to have type `Masked` with `UnmaskedTimesMasked` origin, but found transcript of type {:?}", wrong_key_times_lambda_type))
+        if error==format!("`key_times_lambda` transcript expected to have type `Masked` with origin of type `UnmaskedTimesMasked(_,{:?})`, but found transcript of type {:?}", lambda_masked.transcript_id, wrong_key_times_lambda_type))
     );
 }
 
@@ -215,13 +215,13 @@ fn should_not_create_quadruples_for_key_times_lambda_with_wrong_type() {
 
     let quadruple = PreSignatureQuadruple::new(
         kappa_unmasked,
-        lambda_masked,
+        lambda_masked.clone(),
         kappa_times_lambda,
         key_times_lambda,
     );
     assert!(
         matches!(quadruple, Err(PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
-        if error==format!("`key_times_lambda` transcript expected to have type `Masked` with `UnmaskedTimesMasked` origin, but found transcript of type {:?}", wrong_key_times_lambda_type))
+        if error==format!("`key_times_lambda` transcript expected to have type `Masked` with origin of type `UnmaskedTimesMasked(_,{:?})`, but found transcript of type {:?}", lambda_masked.transcript_id, wrong_key_times_lambda_type))
     );
 }
 
