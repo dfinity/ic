@@ -51,8 +51,9 @@ pub struct Config {
     pub incoming_source: IncomingSource,
 }
 
+/// Set the default idle seconds to one hour.
 fn default_idle_seconds() -> u64 {
-    5
+    3600
 }
 
 impl Config {
