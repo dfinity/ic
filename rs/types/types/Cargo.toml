@@ -17,7 +17,6 @@ ic-base-types = { path = "../base_types" }
 ic-btc-types-internal = { path = "../../bitcoin/types/internal" }
 ic-constants = { path = "../../constants" }
 ic-error-types = { path = "../error_types" }
-ic-ic00-types = { path = "../ic00_types" }
 ic-crypto-internal-types = { path = "../../crypto/internal/crypto_lib/types" }
 ic-crypto-sha = { path = "../../crypto/sha" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
