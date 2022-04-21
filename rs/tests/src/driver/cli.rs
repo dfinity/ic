@@ -103,6 +103,13 @@ used."#
     #[clap(long = "suite", help = r#"Mandatory name of a test suite to run."#)]
     pub suite: String,
 
+    #[structopt(
+        long = "artifacts-path",
+        parse(from_os_str),
+        help = r#"Path containing test artifacts (additional binaries, canisters, etc.)."#
+    )]
+    pub artifacts_path: Option<PathBuf>,
+
     #[clap(
         long = "include-pattern",
         help = r#"If set, only tests matching this regex will be excercised
@@ -187,6 +194,15 @@ impl CliArgs {
             None
         };
 
+        let artifacts_path = if let Some(p) = self.artifacts_path {
+            if !p.is_dir() {
+                bail!("artifacts-path is not a directory");
+            }
+            Some(p)
+        } else {
+            None
+        };
+
         if !is_sha256_hex(&self.ic_os_img_sha256) {
             bail!("Invalid base image hash: {:?}", self.ic_os_img_sha256)
         }
@@ -212,6 +228,7 @@ impl CliArgs {
             farm_base_url: self.farm_base_url,
             result_file: self.result_file,
             nns_canister_path,
+            artifacts_path,
             suite: self.suite,
             include_pattern,
             ignore_pattern,
@@ -247,6 +264,7 @@ pub struct ValidatedCliArgs {
     pub farm_base_url: Option<Url>,
     pub result_file: Option<PathBuf>,
     pub nns_canister_path: Option<PathBuf>,
+    pub artifacts_path: Option<PathBuf>,
     pub suite: String,
     pub include_pattern: Option<Regex>,
     pub ignore_pattern: Option<Regex>,

@@ -314,6 +314,7 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
             f"--boundary-node-img-url={BOUNDARY_NODE_IMG_URL}",
             f"--boundary-node-img-sha256={BOUNDARY_NODE_IMG_SHA256}",
             f"--nns-canister-path={ARTIFACT_DIR}",
+            f"--artifacts-path={ARTIFACT_DIR}",
             f"--authorized-ssh-accounts={SSH_KEY_DIR}",
             f"--result-file={RESULT_FILE}",
             f"--journalbeat-hosts={TEST_ES_HOSTNAMES}",

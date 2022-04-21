@@ -134,6 +134,7 @@ pub fn create_driver_context_from_cli(
         job_id,
         farm,
         logs_base_dir: cli_args.log_base_dir,
+        artifacts_path: cli_args.artifacts_path,
         pot_timeout: cli_args.pot_timeout,
         env,
         working_dir: cli_args.working_dir,
@@ -193,6 +194,7 @@ pub struct DriverContext {
     /// Abstraction for the Farm service
     pub farm: Farm,
     pub logs_base_dir: Option<PathBuf>,
+    pub artifacts_path: Option<PathBuf>,
     pub pot_timeout: Duration,
     pub env: TestEnv,
     pub working_dir: PathBuf,

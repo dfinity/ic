@@ -121,9 +121,7 @@ pub fn config(test_env: TestEnv) {
     // subnet. This might not hold in the future.
     test_env
         .topology_snapshot()
-        .subnets()
-        .next()
-        .unwrap()
+        .root_subnet()
         .nodes()
         .next()
         .unwrap()
