@@ -134,9 +134,10 @@ use super::driver_setup::{IcSetup, SSH_AUTHORIZED_PRIV_KEYS_DIR};
 use super::test_setup::PotSetup;
 use crate::driver::farm::Farm;
 use crate::driver::test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute};
-use crate::util::create_agent;
+use crate::util::{create_agent, delay};
 use anyhow::{bail, Result};
 use canister_test::{RemoteTestRuntime, Runtime};
+use ic_agent::export::Principal;
 use ic_agent::Agent;
 use ic_canister_client::Agent as InternalAgent;
 use ic_canister_client::Sender;
@@ -154,6 +155,7 @@ use ic_registry_client_helpers::node::NodeRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use ic_types::{NodeId, RegistryVersion, SubnetId};
+use ic_utils::interfaces::ManagementCanister;
 use ledger_canister::{LedgerCanisterInitPayload, Tokens};
 use slog::{info, warn, Logger};
 use ssh2::Session;
@@ -479,6 +481,12 @@ pub trait HasTestEnv {
     fn test_env(&self) -> TestEnv;
 }
 
+impl HasTestEnv for TestEnv {
+    fn test_env(&self) -> TestEnv {
+        self.clone()
+    }
+}
+
 impl HasTestEnv for IcNodeSnapshot {
     fn test_env(&self) -> TestEnv {
         self.env.clone()
@@ -520,6 +528,75 @@ impl HasIcName for SubnetSnapshot {
 impl HasIcName for IcNodeSnapshot {
     fn ic_name(&self) -> String {
         self.ic_name.clone()
+    }
+}
+
+pub trait HasArtifacts {
+    /// Returns the path to an artifact named `p` that is situated relative to a
+    /// global directory containing artifacts that were provided to the test
+    /// driver. Note that the directory is possibly shared and should be
+    /// treated as *read only*.
+    ///
+    /// # Panics
+    ///
+    /// This method panics if ...
+    ///
+    /// * ... the driver was not provided with a path to an artifacts directory.
+    /// * ... the given path is not relative.
+    /// * ... the given path does not point to a file.
+    fn get_artifact_path<P: AsRef<Path>>(&self, p: P) -> PathBuf;
+
+    /// Returns the content of an artifact named `p` that is situated relative
+    /// to a global directory containing artifacts that were provided to the
+    /// test driver. Note that the directory is possibly shared and should be
+    /// treated as *read only*.
+    ///
+    /// # Panics
+    ///
+    /// This method panics if ...
+    ///
+    /// * ... the driver was not provided with a path to an artifacts directory.
+    /// * ... the given path is not relative.
+    /// * ... the given path does not point to a file.
+    /// * ... an I/O-Error occurred when reading the file.
+    fn get_artifact<P: AsRef<Path>>(&self, p: P) -> Vec<u8>;
+
+    /// Convenience method that loads a wasm-module from the artifacts
+    /// directory.
+    ///
+    /// # Panics
+    ///
+    /// * if `get_artifacs(p)` panics.
+    /// * if a .wat-module cannot be compiled
+    /// * if a .wasm-module does not start with the expected magic bytes
+    fn load_wasm<P: AsRef<Path>>(&self, p: P) -> Vec<u8> {
+        let mut wasm_bytes = self.get_artifact(&p);
+
+        if p.as_ref().extension().unwrap() == "wat" {
+            wasm_bytes = wabt::wat2wasm(wasm_bytes).expect("Could not compile wat to wasm");
+        }
+
+        if !wasm_bytes.starts_with(WASM_MAGIC_BYTES) {
+            panic!("Invalid magic bytes for wasm module: {:?}", p.as_ref());
+        }
+
+        wasm_bytes
+    }
+}
+
+impl<T> HasArtifacts for T
+where
+    T: HasTestEnv,
+{
+    fn get_artifact_path<P: AsRef<Path>>(&self, p: P) -> PathBuf {
+        let artifact_path = PotSetup::read_attribute(&self.test_env())
+            .artifact_path
+            .expect("Artifact path is not set.");
+        artifact_path.join(p)
+    }
+
+    fn get_artifact<P: AsRef<Path>>(&self, p: P) -> Vec<u8> {
+        std::fs::read(self.get_artifact_path(p)).expect("Could not read artifact")
     }
 }
 
@@ -576,6 +653,15 @@ pub trait HasPublicApiUrl {
     where
         F: FnOnce(Agent) -> Fut + 'static,
         Fut: Future<Output = R>;
+
+    /// Load wasm binary from the artifacts directory (see [HasArtifacts]) and
+    /// install it on the target node.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the canister `name` could not be loaded, is not
+    /// a wasm module or the installation fails.
+    fn create_and_install_canister_with_arg(&self, name: &str, arg: Option<Vec<u8>>) -> Principal;
 
     fn build_default_agent(&self) -> Agent;
 }
@@ -648,6 +734,33 @@ impl HasPublicApiUrl for IcNodeSnapshot {
             let agent = create_agent(&url).await.expect("Could not create agent");
             op(agent).await
         })
+    }
+
+    fn create_and_install_canister_with_arg(&self, name: &str, arg: Option<Vec<u8>>) -> Principal {
+        let canister_bytes = self.test_env().load_wasm(name);
+
+        self.with_default_agent(|agent| async move {
+            // Create a canister.
+            let mgr = ManagementCanister::create(&agent);
+            let canister_id = mgr
+                .create_canister()
+                .as_provisional_create_with_amount(None)
+                .call_and_wait(delay())
+                .await
+                .map_err(|err| format!("Couldn't create canister with provisional API: {}", err))?
+                .0;
+
+            let mut install_code = mgr.install_code(&canister_id, &canister_bytes);
+            if let Some(arg) = arg {
+                install_code = install_code.with_raw_arg(arg)
+            }
+            install_code
+                .call_and_wait(delay())
+                .await
+                .map_err(|err| format!("Couldn't install canister: {}", err))?;
+            Ok::<_, String>(canister_id)
+        })
+        .expect("Could not install canister")
     }
 
     fn build_default_agent(&self) -> Agent {
@@ -987,3 +1100,6 @@ pub fn install_nns_canisters(
         NnsCanisters::set_up(&runtime, init_payloads.build()).await;
     });
 }
+
+/// A short wasm module that is a legal canister binary.
+pub(crate) const WASM_MAGIC_BYTES: &[u8] = &[0, 97, 115, 109];

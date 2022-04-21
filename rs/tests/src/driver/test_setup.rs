@@ -4,13 +4,17 @@ use crate::driver::test_env_api::*;
 use anyhow::{bail, Result};
 use ic_fondue::ic_manager::{FarmInfo, IcEndpoint, IcHandle, IcSubnet, RuntimeDescriptor};
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::time::Duration;
 use std::time::Instant;
 
 #[derive(Deserialize, Serialize)]
 pub struct PotSetup {
     pub farm_group_name: String,
+    /// For now, the pot timeout strictly translates to the corresponding group
+    /// TTL.
     pub pot_timeout: Duration,
+    pub artifact_path: Option<PathBuf>,
 }
 
 impl TestEnvAttribute for PotSetup {
