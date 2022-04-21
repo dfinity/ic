@@ -1,0 +1,17 @@
+[Unit]
+Description=HSM Agent
+After=syslog.target
+
+[Service]
+User=root
+Group=root
+ExecStart=python3 /opt/ic/bin/hostos-vsock-agent/hostos_vsock_agent.py server --verbose
+Restart=always
+RuntimeMaxSec=3600
+RestartSec=10
+KillSignal=SIGINT
+StartLimitBurst=5
+StartLimitInterval=60
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,10 @@
+[Unit]
+Description=Monitor GuestOS virtual machine on a regular basis
+Requires=monitor-guestos.service
+
+[Timer]
+Unit=monitor-guestos.service
+OnCalendar=*-*-* *:*:00
+
+[Install]
+WantedBy=timers.target

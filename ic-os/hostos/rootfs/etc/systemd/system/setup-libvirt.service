@@ -1,0 +1,11 @@
+[Unit]
+Description=Set up libvirt
+Before=libvirtd.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/setup-libvirt.sh
+
+[Install]
+WantedBy=multi-user.target
