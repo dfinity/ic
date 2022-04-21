@@ -1,4 +1,4 @@
-bazel-test:
+.bazel-run:
   extends:
     - .ubuntu-nix-docker
     - .rules-parent-pipeline-autorun-on-trigger
@@ -6,11 +6,21 @@ bazel-test:
   artifacts:
     paths:
       - bazel-build-log*.json
+  before_script:
+    - !reference [before_script]
+    - set -euo pipefail
+    - bazel --version
+
+bazel-build-all:
+  extends:
+    - .bazel-run
+  stage: test
   script:
-    - |
-      set -euo pipefail
+    - bazel build :all --remote_cache=grpc://10.117.26.74:8980 --execution_log_json_file=bazel-build-log-all.json
 
-      bazel --version
-      bazel build :all --remote_cache=grpc://10.117.26.74:8980 --execution_log_json_file=bazel-build-log-all.json
-
-      bazel build --spawn_strategy=standalone --remote_cache=grpc://10.117.26.74:8980 //ic-os/guestos:disk.img.tar --execution_log_json_file=bazel-build-log-guestos.json
+bazel-build-guestos:
+  extends:
+    - .bazel-run
+  stage: test
+  script:
+    - bazel build --spawn_strategy=standalone --remote_cache=grpc://10.117.26.74:8980 //ic-os/guestos:disk.img.tar --execution_log_json_file=bazel-build-log-guestos.json
