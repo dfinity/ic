@@ -1,21 +1,9 @@
-use bitcoin::{
-    blockdata::constants::genesis_block, util::psbt::serialize::Deserialize, Network, Transaction,
-};
-use ic_btc_canister::{state::State, store};
+use crate::{state::State, store};
+use bitcoin::{util::psbt::serialize::Deserialize, Transaction};
 use ic_btc_types::{
     GetBalanceError, GetBalanceRequest, GetUtxosError, GetUtxosRequest, GetUtxosResponse,
     SendTransactionError, SendTransactionRequest, UtxosFilter,
 };
-use ic_protobuf::bitcoin::v1::{GetSuccessorsRequest, GetSuccessorsResponse};
-use prost::Message;
-use std::{cell::RefCell, collections::VecDeque};
-
-thread_local! {
-    // Initialize the canister to expect blocks from the Regtest network.
-    static STATE: RefCell<State> = RefCell::new(State::new(1, Network::Regtest, genesis_block(Network::Regtest)));
-    // A queue of transactions awaiting to be sent.
-    static OUTGOING_TRANSACTIONS: RefCell<VecDeque<Vec<u8>>> = RefCell::new(VecDeque::new());
-}
 
 /// Retrieves the balance of the given Bitcoin address.
 pub fn get_balance(state: &State, request: GetBalanceRequest) -> Result<u64, GetBalanceError> {
@@ -50,76 +38,18 @@ pub fn send_transaction(request: SendTransactionRequest) -> Result<(), SendTrans
         return Err(SendTransactionError::MalformedTransaction);
     }
 
-    // NOTE: In the final release, transactions will be cached for up to 24 hours and
-    // occasionally resent to the network until the transaction is observed in a block.
-
-    OUTGOING_TRANSACTIONS.with(|txs| {
-        txs.borrow_mut().push_back(request.transaction);
-    });
+    // TODO(EXC-911): Implement send transactions.
 
     Ok(())
 }
 
-// Below are helper methods used by the adapter shim. They will not be included in the main
-// release.
-
-// Retrieves a `GetSuccessorsRequest` to send to the adapter.
-pub fn get_successors_request(state: &State) -> Vec<u8> {
-    let mut processed_block_hashes: Vec<Vec<u8>> = store::get_unstable_blocks(state)
-        .iter()
-        .map(|b| b.block_hash().to_vec())
-        .collect();
-
-    // This is safe as there will always be at least 1 unstable block.
-    let anchor = processed_block_hashes.remove(0);
-
-    println!("block hashes: {:?}", processed_block_hashes);
-    GetSuccessorsRequest {
-        anchor,
-        processed_block_hashes,
-    }
-    .encode_to_vec()
-}
-
-pub fn has_outgoing_transaction() -> bool {
-    OUTGOING_TRANSACTIONS.with(|txs| !txs.borrow_mut().is_empty())
-}
-
-// Retrieve a raw tx to send to the network
-pub fn get_outgoing_transaction() -> Option<Vec<u8>> {
-    OUTGOING_TRANSACTIONS.with(|txs| txs.borrow_mut().pop_front())
-}
-
-// Process a (binary) `GetSuccessorsResponse` received from the adapter.
-// Returns the height of the chain after the response is processed.
-pub fn get_successors_response(state: &mut State, response_vec: Vec<u8>) -> u32 {
-    let response = GetSuccessorsResponse::decode(&*response_vec).unwrap();
-
-    for block_proto in response.blocks {
-        let block = ic_btc_canister::block::from_proto(&block_proto);
-        println!("Processing block with hash: {}", block.block_hash());
-
-        let block_hash = block.block_hash();
-        if store::insert_block(state, block).is_err() {
-            println!(
-                "Received block that doesn't extend existing blocks: {}",
-                block_hash
-            );
-        }
-    }
-
-    store::main_chain_height(state)
-}
-
-fn main() {}
-
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::test_builder::{BlockBuilder, TransactionBuilder};
     use bitcoin::secp256k1::rand::rngs::OsRng;
     use bitcoin::secp256k1::Secp256k1;
-    use bitcoin::{Address, PublicKey};
-    use ic_btc_canister::test_builder::{BlockBuilder, TransactionBuilder};
+    use bitcoin::{blockdata::constants::genesis_block, Address, Network, PublicKey};
     use ic_btc_types::{OutPoint, Utxo};
 
     // A default state to use for tests.

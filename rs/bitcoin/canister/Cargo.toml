@@ -21,10 +21,6 @@ ic-state-layout = { path = "../../state_layout" }
 [build-dependencies]
 prost-build = "0.9.0"
 
-[[bin]]
-name = "bitcoin-canister"
-path = "src/main.rs"
-
 [[example]]
 name = "build-utxo-set"
 path = "src/examples/build_utxo_set.rs"
