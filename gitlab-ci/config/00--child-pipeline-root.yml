@@ -20,6 +20,7 @@ include:
 - local: /gitlab-ci/config/48--determinism-test.yml
 - local: /gitlab-ci/config/52--host-os-build--build-host-img.yml
 - local: /gitlab-ci/config/52--host-os-build--build-update-img.yml
+- local: /gitlab-ci/config/52--host-os-build--build-base-img.yml
 - local: /gitlab-ci/config/53--host-os-build--build-iso-img.yml
 - local: /gitlab-ci/config/54--host-os-test--host-os-upgrade-test.yml
 
