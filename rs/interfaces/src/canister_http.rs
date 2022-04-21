@@ -3,18 +3,21 @@ use crate::{
     artifact_pool::UnvalidatedArtifact, consensus_pool::ConsensusPoolCache,
     payload::BatchPayloadSectionType, validation::ValidationError,
 };
+use ic_base_types::NumBytes;
 use ic_types::{
     artifact::{CanisterHttpResponseId, PriorityFn},
-    batch::CanisterHttpPayload,
+    batch::{CanisterHttpPayload, ValidationContext},
     canister_http::{
         CanisterHttpResponse, CanisterHttpResponseAttribute, CanisterHttpResponseShare,
     },
+    consensus::Payload,
     crypto::CryptoHashOf,
+    Height, Time,
 };
 
 #[derive(Debug)]
 pub enum CanisterHttpPermananentValidationError {
-    PayloadTooBig(usize, usize),
+    PayloadTooBig { expected: usize, received: usize },
 }
 
 #[derive(Debug)]
@@ -57,7 +60,6 @@ pub trait CanisterHttpPool: Send + Sync {
     ) -> Option<CanisterHttpResponseShare>;
 }
 
-/// Artifact pool for the ECDSA messages (update interface)
 pub trait MutableCanisterHttpPool: CanisterHttpPool {
     /// Adds the entry to the unvalidated section of the artifact pool.
     fn insert(&mut self, msg: UnvalidatedArtifact<CanisterHttpResponseShare>);
@@ -80,4 +82,36 @@ pub trait CanisterHttpPoolManager: Send {
         consensus_cache: &dyn ConsensusPoolCache,
         canister_http_pool: &dyn CanisterHttpPool,
     ) -> CanisterHttpChangeSet;
+}
+
+pub trait CanisterHttpPayloadBuilder: Send + Sync {
+    fn get_canister_http_payload(
+        &self,
+        validation_context: &ValidationContext,
+        past_payloads: &[&CanisterHttpPayload],
+        byte_limit: NumBytes,
+    ) -> CanisterHttpPayload;
+
+    fn validate_canister_http_payload(
+        &self,
+        payload: &CanisterHttpPayload,
+        validation_context: &ValidationContext,
+        past_payloads: &[&CanisterHttpPayload],
+    ) -> Result<NumBytes, CanisterHttpPayloadValidationError>;
+
+    fn filter_past_payloads<'a>(
+        &self,
+        past_payloads: &'a [(Height, Time, Payload)],
+    ) -> Vec<&'a CanisterHttpPayload> {
+        past_payloads
+            .iter()
+            .filter_map(|(_, _, payload)| {
+                if payload.is_summary() {
+                    None
+                } else {
+                    Some(&payload.as_ref().as_data().batch.canister_http)
+                }
+            })
+            .collect()
+    }
 }
