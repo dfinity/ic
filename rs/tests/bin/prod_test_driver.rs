@@ -457,6 +457,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_same_subnet,
                 )])
             ),
+            /* This test is WIP (#CON-779)
             pot_with_setup(
                 "tecdsa_signature_from_other_subnet_pot",
                 tecdsa::tecdsa_signature_test::config,
@@ -464,7 +465,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "test_threshold_ecdsa_signature_from_other_subnet",
                     tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_from_other_subnet,
                 )])
-            ),
+            ),*/
             pot_with_setup(
                 "tecdsa_signature_fails_without_cycles_pot",
                 tecdsa::tecdsa_signature_test::config,
@@ -473,6 +474,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_fails_without_cycles,
                 )])
             ),
+            /* This test is WIP (#CON-779)
             pot_with_setup(
                 "tecdsa_signature_from_nns_without_cycles_pot",
                 tecdsa::tecdsa_signature_test::config,
@@ -480,7 +482,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "test_threshold_ecdsa_signature_from_nns_without_cycles",
                     tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_from_nns_without_cycles,
                 )])
-            ),
+            ),*/
             pot(
                 "update_registry_idkg_key_pot",
                 orchestrator::update_registry_idkg_key::config(),
