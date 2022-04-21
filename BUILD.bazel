@@ -1,4 +1,4 @@
-load("//bazel:defs.bzl", "cargo_build", "optimized_canister")
+load("//bazel:defs.bzl", "cargo_build", "gzip_compress", "optimized_canister")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -38,6 +38,47 @@ cargo_build(
 )
 
 optimized_canister(
-    name = "ledger_archive",
+    name = "ledger_archive_canister",
     wasm = ":ledger_archive_wasm",
 )
+
+CANISTERS = [
+    "cycles-minting-canister",
+    "genesis-token-canister",
+    "governance-canister",
+    "ledger-canister",
+    "nns-ui-canister",
+    "registry-canister",
+    "root-canister",
+    "sns-governance-canister",
+    "sns-root-canister",
+    "xnet-test-canister",
+]
+
+cargo_build(
+    name = "all_canisters",
+    srcs = ["//rs:all_sources"],
+    binaries = CANISTERS,
+    cargo_flags = [
+        "--manifest-path",
+        "rs/Cargo.toml",
+    ],
+    env_paths = {
+        "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(execpath :ledger_archive_canister)",
+    },
+    profile = "canister-release",
+    target = "wasm32-unknown-unknown",
+    deps = [
+        ":ledger_archive_canister",
+    ],
+)
+
+[optimized_canister(
+    name = canister + "-opt.wasm",
+    wasm = ":" + canister + ".wasm",
+) for canister in CANISTERS]
+
+[gzip_compress(
+    name = canister + ".wasm.gz",
+    srcs = [":" + canister + "-opt.wasm"],
+) for canister in CANISTERS]
