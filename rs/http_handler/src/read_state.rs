@@ -4,13 +4,13 @@ use crate::{
     common::{
         cbor_response, into_cbor, make_plaintext_response, make_response_on_validation_error,
     },
+    state_reader_executor::StateReaderExecutor,
     types::{ApiReqType, RequestType},
     HttpError, HttpHandlerMetrics, ReplicaHealthStatus, UNKNOWN_LABEL,
 };
 use hyper::{Body, Response, StatusCode};
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path};
 use ic_interfaces::{crypto::IngressSigVerifier, registry::RegistryClient};
-use ic_interfaces_state_manager::StateReader;
 use ic_logger::{trace, ReplicaLogger};
 use ic_replicated_state::{canister_state::execution_state::CustomSectionType, ReplicatedState};
 use ic_types::{
@@ -39,7 +39,7 @@ pub(crate) struct ReadStateService {
     metrics: HttpHandlerMetrics,
     health_status: Arc<RwLock<ReplicaHealthStatus>>,
     delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
-    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    state_reader_executor: StateReaderExecutor,
     validator: Arc<dyn IngressSigVerifier + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
     malicious_flags: MaliciousFlags,
@@ -52,7 +52,7 @@ impl ReadStateService {
         metrics: HttpHandlerMetrics,
         health_status: Arc<RwLock<ReplicaHealthStatus>>,
         delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
-        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+        state_reader_executor: StateReaderExecutor,
         validator: Arc<dyn IngressSigVerifier + Send + Sync>,
         registry_client: Arc<dyn RegistryClient>,
         malicious_flags: MaliciousFlags,
@@ -62,7 +62,7 @@ impl ReadStateService {
             metrics,
             health_status,
             delegation_from_nns,
-            state_reader,
+            state_reader_executor,
             validator,
             registry_client,
             malicious_flags,
@@ -90,6 +90,7 @@ impl Service<Vec<u8>> for ReadStateService {
                 UNKNOWN_LABEL,
             ])
             .observe(body.len() as f64);
+
         if *self.health_status.read().unwrap() != ReplicaHealthStatus::Healthy {
             let res = make_plaintext_response(
                 StatusCode::SERVICE_UNAVAILABLE,
@@ -112,8 +113,7 @@ impl Service<Vec<u8>> for ReadStateService {
             }
         };
 
-        // Convert the message to a strongly-typed struct, making structural validations
-        // on the way.
+        // Convert the message to a strongly-typed struct.
         let request = match HttpRequest::<ReadState>::try_from(request) {
             Ok(request) => request,
             Err(e) => {
@@ -124,33 +124,22 @@ impl Service<Vec<u8>> for ReadStateService {
                 return Box::pin(async move { Ok(res) });
             }
         };
-        let read_state = request.content();
-
-        match get_authorized_canisters(
+        let targets = match get_authorized_canisters(
             &request,
             self.validator.as_ref(),
             current_time(),
             self.registry_client.get_latest_version(),
             &self.malicious_flags,
         ) {
-            Ok(targets) => {
-                if let Err(HttpError { status, message }) = verify_paths(
-                    self.state_reader.as_ref(),
-                    &read_state.source,
-                    &read_state.paths,
-                    &targets,
-                ) {
-                    return Box::pin(async move { Ok(make_plaintext_response(status, message)) });
-                }
-            }
+            Ok(targets) => targets,
             Err(err) => {
                 let res = make_response_on_validation_error(request.id(), err, &self.log);
                 return Box::pin(async move { Ok(res) });
             }
-        }
+        };
 
-        // Verify that the sender has authorization to the paths requested.
-
+        // Collect requested path.
+        let read_state = request.content().clone();
         let mut paths: Vec<Path> = read_state.paths.clone();
 
         // Always add "time" to the paths even if not explicitly requested.
@@ -158,35 +147,59 @@ impl Service<Vec<u8>> for ReadStateService {
 
         let labeled_tree = sparse_labeled_tree_from_paths(&mut paths);
 
-        let res = match self.state_reader.read_certified_state(&labeled_tree) {
-            Some((_state, tree, certification)) => {
-                let signature = certification.signed.signature.signature.get().0;
-                let res = HttpReadStateResponse {
-                    certificate: Blob(into_cbor(&Certificate {
-                        tree,
-                        signature: Blob(signature),
-                        delegation: delegation_from_nns,
-                    })),
-                };
-                cbor_response(&res)
+        let state_reader_executor = self.state_reader_executor.clone();
+        Box::pin(async move {
+            // Verify authorization for requested paths.
+            if let Err(HttpError { status, message }) = verify_paths(
+                &state_reader_executor,
+                &read_state.source,
+                &read_state.paths,
+                &targets,
+            )
+            .await
+            {
+                return Ok(make_plaintext_response(status, message));
             }
-            None => make_plaintext_response(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "Certified state is not available yet. Please try again...".to_string(),
-            ),
-        };
-        Box::pin(async move { Ok(res) })
+
+            let res = match state_reader_executor
+                .read_certified_state(&labeled_tree)
+                .await
+            {
+                Ok(r) => r,
+                Err(e) => return Ok(make_plaintext_response(e.status, e.message)),
+            };
+
+            let res = match res {
+                Some((_state, tree, certification)) => {
+                    let signature = certification.signed.signature.signature.get().0;
+                    let res = HttpReadStateResponse {
+                        certificate: Blob(into_cbor(&Certificate {
+                            tree,
+                            signature: Blob(signature),
+                            delegation: delegation_from_nns,
+                        })),
+                    };
+                    cbor_response(&res)
+                }
+                None => make_plaintext_response(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "Certified state is not available yet. Please try again...".to_string(),
+                ),
+            };
+
+            Ok(res)
+        })
     }
 }
 
 // Verifies that the `user` is authorized to retrieve the `paths` requested.
-fn verify_paths(
-    state_reader: &dyn StateReader<State = ReplicatedState>,
+async fn verify_paths(
+    state_reader_executor: &StateReaderExecutor,
     user: &UserId,
     paths: &[Path],
     targets: &CanisterIdSet,
 ) -> Result<(), HttpError> {
-    let state = state_reader.get_latest_state().take();
+    let state = state_reader_executor.get_latest_state().await?.take();
     let mut num_request_ids = 0;
 
     // Convert the paths to slices to make it easier to match below.
@@ -322,15 +335,26 @@ fn can_read_canister_metadata(
 
 #[cfg(test)]
 mod test {
-    use crate::common::test::{array, assert_cbor_ser_equal, bytes, int};
-    use crate::read_state::can_read_canister_metadata;
-    use crate::HttpError;
+    use crate::{
+        common::test::{array, assert_cbor_ser_equal, bytes, int},
+        read_state::{can_read_canister_metadata, verify_paths},
+        state_reader_executor::StateReaderExecutor,
+        HttpError,
+    };
     use hyper::StatusCode;
-    use ic_crypto_tree_hash::{Digest, Label, MixedHashTree};
+    use ic_crypto_tree_hash::{Digest, Label, MixedHashTree, Path};
+    use ic_interfaces_state_manager::Labeled;
     use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::ReplicatedState;
-    use ic_test_utilities::state::insert_dummy_canister;
-    use ic_test_utilities::types::ids::{canister_test_id, subnet_test_id, user_test_id};
+    use ic_replicated_state::{BitcoinState, CanisterQueues, ReplicatedState, SystemMetadata};
+    use ic_test_utilities::{
+        mock_time,
+        state::insert_dummy_canister,
+        state_manager::MockStateManager,
+        types::ids::{canister_test_id, subnet_test_id, user_test_id},
+    };
+    use ic_types::Height;
+    use ic_validator::CanisterIdSet;
+    use std::{collections::BTreeMap, sync::Arc};
 
     #[test]
     fn encoding_read_state_tree_empty() {
@@ -448,6 +472,42 @@ mod test {
                 status: StatusCode::NOT_FOUND,
                 message: "Custom section unknown-name not found.".to_string()
             })
+        );
+    }
+
+    #[tokio::test]
+    async fn async_verify_path() {
+        let subnet_id = subnet_test_id(1);
+        let mut mock_state_manager = MockStateManager::new();
+        mock_state_manager
+            .expect_get_latest_state()
+            .returning(move || {
+                let mut metadata = SystemMetadata::new(subnet_id, SubnetType::Application);
+                metadata.batch_time = mock_time();
+                Labeled::new(
+                    Height::from(1),
+                    Arc::new(ReplicatedState::new_from_checkpoint(
+                        BTreeMap::new(),
+                        metadata,
+                        CanisterQueues::default(),
+                        Vec::new(),
+                        BitcoinState::default(),
+                        std::path::PathBuf::new(),
+                    )),
+                )
+            });
+
+        let state_manager = Arc::new(mock_state_manager);
+        let sre = StateReaderExecutor::new(state_manager.clone());
+        assert_eq!(
+            verify_paths(
+                &sre,
+                &user_test_id(1),
+                &[Path::from(Label::from("time"))],
+                &CanisterIdSet::All
+            )
+            .await,
+            Ok(())
         );
     }
 }

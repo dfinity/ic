@@ -1,10 +1,8 @@
 //! Module that deals with requests to /api/v2/status
-use crate::common;
+use crate::{common, state_reader_executor::StateReaderExecutor};
 use hyper::{Body, Response};
 use ic_config::http_handler::Config;
-use ic_interfaces_state_manager::StateReader;
 use ic_logger::{trace, warn, ReplicaLogger};
-use ic_replicated_state::ReplicatedState;
 use ic_types::{
     messages::{Blob, HttpStatusResponse, ReplicaHealthStatus},
     replica_version::REPLICA_BINARY_HASH,
@@ -24,7 +22,7 @@ pub(crate) struct StatusService {
     log: ReplicaLogger,
     config: Config,
     nns_subnet_id: SubnetId,
-    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    state_reader_executor: StateReaderExecutor,
     replica_health_status: Arc<RwLock<ReplicaHealthStatus>>,
 }
 
@@ -33,14 +31,14 @@ impl StatusService {
         log: ReplicaLogger,
         config: Config,
         nns_subnet_id: SubnetId,
-        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+        state_reader_executor: StateReaderExecutor,
         replica_health_status: Arc<RwLock<ReplicaHealthStatus>>,
     ) -> StatusService {
         Self {
             log,
             config,
             nns_subnet_id,
-            state_reader,
+            state_reader_executor,
             replica_health_status,
         }
     }
@@ -59,41 +57,50 @@ impl Service<Body> for StatusService {
     fn call(&mut self, _unused: Body) -> Self::Future {
         trace!(self.log, "in handle status");
 
-        // The root key is the public key of this Internet Computer instance,
-        // and is the public key of the root (i.e. NNS) subnet.
-        let root_key = if self.config.show_root_key_in_status {
-            let subnets = &self
-                .state_reader
-                .get_latest_state()
-                .take()
-                .metadata
-                .network_topology
-                .subnets;
-            if subnets.len() == 1 {
-                // In single-subnet instances (e.g. `dfx start`, which has no NNS)
-                // we use this single subnet’s key
-                Some(Blob(subnets.values().next().unwrap().public_key.clone()))
-            } else if let Some(snt) = subnets.get(&self.nns_subnet_id) {
-                // NNS subnet
-                Some(Blob(snt.public_key.clone()))
-            } else {
-                warn!(
-                    self.log,
-                    "Cannot identify root subnet, will not report root key in status"
-                );
-                None
-            }
-        } else {
-            None
-        };
+        let log = self.log.clone();
+        let nns_subnet_id = self.nns_subnet_id;
+        let root_key_status = self.config.show_root_key_in_status;
+        let state_reader_executor = self.state_reader_executor.clone();
+        let replica_health_status = self.replica_health_status.read().unwrap().clone();
+        Box::pin(async move {
+            // The root key is the public key of this Internet Computer instance,
+            // and is the public key of the root (i.e. NNS) subnet.
+            let root_key = if root_key_status {
+                let latest_state = match state_reader_executor.get_latest_state().await {
+                    Ok(ls) => ls,
+                    Err(e) => {
+                        return Ok(common::make_plaintext_response(e.status, e.message));
+                    }
+                };
 
-        let response = HttpStatusResponse {
-            ic_api_version: IC_API_VERSION.to_string(),
-            root_key,
-            impl_version: Some(ReplicaVersion::default().to_string()),
-            impl_hash: REPLICA_BINARY_HASH.get().map(|s| s.to_string()),
-            replica_health_status: Some(self.replica_health_status.read().unwrap().clone()),
-        };
-        Box::pin(async move { Ok(common::cbor_response(&response)) })
+                let subnets = &latest_state.take().metadata.network_topology.subnets;
+                if subnets.len() == 1 {
+                    // In single-subnet instances (e.g. `dfx start`, which has no NNS)
+                    // we use this single subnet’s key
+                    Some(Blob(subnets.values().next().unwrap().public_key.clone()))
+                } else if let Some(snt) = subnets.get(&nns_subnet_id) {
+                    // NNS subnet
+                    Some(Blob(snt.public_key.clone()))
+                } else {
+                    warn!(
+                        log,
+                        "Cannot identify root subnet, will not report root key in status"
+                    );
+                    None
+                }
+            } else {
+                None
+            };
+
+            let response = HttpStatusResponse {
+                ic_api_version: IC_API_VERSION.to_string(),
+                root_key,
+                impl_version: Some(ReplicaVersion::default().to_string()),
+                impl_hash: REPLICA_BINARY_HASH.get().map(|s| s.to_string()),
+                replica_health_status: Some(replica_health_status),
+            };
+
+            Ok(common::cbor_response(&response))
+        })
     }
 }
