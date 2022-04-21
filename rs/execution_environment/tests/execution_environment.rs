@@ -11,7 +11,7 @@ use ic_ic00_types::{
     self as ic00, CanisterHttpRequestArgs, CanisterIdRecord, CanisterStatusResultV2, EmptyBlob,
     InstallCodeArgs, Method, Payload as Ic00Payload, IC_00,
 };
-use ic_ic00_types::{CanisterInstallMode, CanisterStatusType, HttpMethod};
+use ic_ic00_types::{CanisterInstallMode, CanisterStatusType, EcdsaCurve, EcdsaKeyId, HttpMethod};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_interfaces::{
     execution_environment::{AvailableMemory, ExecuteMessageResult, ExecutionMode},
@@ -3259,7 +3259,7 @@ fn execute_compute_initial_ecdsa_dealings(
     own_subnet_id: SubnetId,
     sender_subnet_id: SubnetId,
     own_subnet_is_ecdsa_enabled: bool,
-    key_id: String,
+    key_id: EcdsaKeyId,
     log: ReplicaLogger,
 ) -> ReplicatedState {
     let receiver = canister_test_id(1);
@@ -3318,6 +3318,13 @@ fn get_reject_message(response: RequestOrResponse) -> String {
     }
 }
 
+fn make_key(name: &str) -> EcdsaKeyId {
+    EcdsaKeyId {
+        curve: EcdsaCurve::Secp256k1,
+        name: name.to_string(),
+    }
+}
+
 #[test]
 fn compute_initial_ecdsa_dealings_sender_on_nns() {
     with_test_replica_logger(|log| {
@@ -3332,7 +3339,7 @@ fn compute_initial_ecdsa_dealings_sender_on_nns() {
             own_subnet_id,
             sender_subnet_id,
             true,
-            "secp256k1".to_string(),
+            make_key("secp256k1"),
             log,
         );
 
@@ -3354,7 +3361,7 @@ fn compute_initial_ecdsa_dealings_sender_not_on_nns() {
             own_subnet_id,
             sender_subnet_id,
             true,
-            "secp256k1".to_string(),
+            make_key("secp256k1"),
             log,
         );
 
@@ -3387,7 +3394,7 @@ fn compute_initial_ecdsa_dealings_without_ecdsa_enabled() {
             own_subnet_id,
             sender_subnet_id,
             false,
-            "secp256k1".to_string(),
+            make_key("secp256k1"),
             log,
         );
 
@@ -3423,7 +3430,7 @@ fn compute_initial_ecdsa_dealings_with_unknown_key() {
             own_subnet_id,
             sender_subnet_id,
             true,
-            "foo".to_string(),
+            make_key("foo"),
             log,
         );
 
@@ -3465,7 +3472,7 @@ fn execute_ecdsa_signing(
     let request_payload = ic00::SignWithECDSAArgs {
         message_hash: [1; 32].to_vec(),
         derivation_path: vec![],
-        key_id: "secp256k1".to_string(),
+        key_id: make_key("secp256k1"),
     };
     state
         .subnet_queues_mut()

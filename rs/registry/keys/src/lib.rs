@@ -4,7 +4,9 @@
 //! be compilable to WASM as well a native.
 
 use ic_base_types::{NodeId, SubnetId};
+use ic_ic00_types::EcdsaKeyId;
 use ic_types::crypto::KeyPurpose;
+use ic_types::registry::RegistryClientError;
 use ic_types::PrincipalId;
 use std::str::FromStr;
 
@@ -27,12 +29,29 @@ pub const CRYPTO_THRESHOLD_SIGNING_KEY_PREFIX: &str = "crypto_threshold_signing_
 pub const DATA_CENTER_KEY_PREFIX: &str = "data_center_record_";
 pub const ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX: &str = "key_id_";
 
-pub fn make_ecdsa_signing_subnet_list_key<S: AsRef<str>>(key_id: S) -> String {
-    format!(
-        "{}{}",
-        ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX,
-        key_id.as_ref()
-    )
+pub fn make_ecdsa_signing_subnet_list_key(key_id: &EcdsaKeyId) -> String {
+    format!("{}{}", ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX, key_id)
+}
+
+pub fn get_ecdsa_key_id_from_signing_subnet_list_key(
+    signing_subnet_list_key: &str,
+) -> Result<EcdsaKeyId, RegistryClientError> {
+    let prefix_removed = signing_subnet_list_key
+        .strip_prefix(ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX)
+        .ok_or_else(|| RegistryClientError::DecodeError {
+            error: format!(
+                "ECDSA Signing Subnet List key id {} does not start with prefix {}",
+                signing_subnet_list_key, ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX
+            ),
+        })?;
+    prefix_removed
+        .parse::<EcdsaKeyId>()
+        .map_err(|error| RegistryClientError::DecodeError {
+            error: format!(
+                "ECDSA Signing Subnet List key id {} could not be converted to an EcdsaKeyId: {:?}",
+                signing_subnet_list_key, error
+            ),
+        })
 }
 
 /// Returns the only key whose payload is the list of subnets.
@@ -191,6 +210,7 @@ pub fn make_nns_canister_records_key() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ic_ic00_types::EcdsaCurve;
     use rand::Rng;
 
     #[test]
@@ -254,5 +274,44 @@ mod tests {
         let wrong_key = make_crypto_tls_cert_key(node_id);
         let parsed = maybe_parse_crypto_threshold_signing_pubkey_key(&wrong_key);
         assert!(parsed.is_none());
+    }
+
+    #[test]
+    fn escdsa_signing_subnet_list_key_round_trips() {
+        let key_id = EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "some_key".to_string(),
+        };
+        let signing_subnet_list_key = make_ecdsa_signing_subnet_list_key(&key_id);
+        assert_eq!(
+            get_ecdsa_key_id_from_signing_subnet_list_key(&signing_subnet_list_key).unwrap(),
+            key_id
+        );
+    }
+
+    #[test]
+    fn escdsa_signing_subnet_list_bad_key_id_error_message() {
+        let bad_key = "key_without_curve";
+        let signing_subnet_list_key =
+            format!("{}{}", ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX, bad_key);
+        assert_eq!(
+            get_ecdsa_key_id_from_signing_subnet_list_key(&signing_subnet_list_key).unwrap_err(),
+            RegistryClientError::DecodeError {
+                error: "ECDSA Signing Subnet List key id key_id_key_without_curve could not be converted to an EcdsaKeyId: \"ECDSA key id key_without_curve does not contain a ':'\"".to_string()
+            }
+        )
+    }
+
+    #[test]
+    fn escdsa_signing_subnet_list_bad_curve_error_message() {
+        let bad_key = "UnknownCurve:key_name";
+        let signing_subnet_list_key =
+            format!("{}{}", ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX, bad_key);
+        assert_eq!(
+            get_ecdsa_key_id_from_signing_subnet_list_key(&signing_subnet_list_key).unwrap_err(),
+            RegistryClientError::DecodeError {
+                error: "ECDSA Signing Subnet List key id key_id_UnknownCurve:key_name could not be converted to an EcdsaKeyId: \"UnknownCurve is not a recognized ECDSA curve\"".to_string()
+            }
+        )
     }
 }

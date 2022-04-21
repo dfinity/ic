@@ -5,6 +5,7 @@ import "state/ingress/v1/ingress.proto";
 import "state/queues/v1/queues.proto";
 import "registry/routing_table/v1/routing_table.proto";
 import "registry/subnet/v1/subnet.proto";
+import "registry/crypto/v1/crypto.proto";
 import "google/protobuf/wrappers.proto";
 
 message NodeTopology {
@@ -32,7 +33,8 @@ message SubnetsEntry {
 }
 
 message EcdsaKeyEntry {
-    string key_id = 1;
+    reserved 1;
+    registry.crypto.v1.EcdsaKeyId key_id = 3;
     repeated types.v1.SubnetId subnet_ids = 2;
 }
 
@@ -102,9 +104,10 @@ message CanisterHttpRequestContextTree {
 
 message EcdsaDealingsContext {
     state.queues.v1.Request request = 1;
-    string key_id = 2;
+    reserved 2;
     repeated types.v1.NodeId nodes = 3;
     uint64 registry_version = 4;
+    registry.crypto.v1.EcdsaKeyId key_id = 5;
 }
 
 message EcdsaDealingsContextTree {

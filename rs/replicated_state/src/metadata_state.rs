@@ -6,6 +6,7 @@ use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager
 use ic_base_types::CanisterId;
 use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSION};
 use ic_constants::MAX_INGRESS_TTL;
+use ic_ic00_types::EcdsaKeyId;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     registry::subnet::v1 as pb_subnet,
@@ -138,7 +139,7 @@ pub struct NetworkTopology {
     pub nns_subnet_id: SubnetId,
     /// Mapping from key_id to a list of subnets which can sign with the given
     /// key.
-    pub ecdsa_keys: BTreeMap<String, Vec<SubnetId>>,
+    pub ecdsa_keys: BTreeMap<EcdsaKeyId, Vec<SubnetId>>,
 }
 
 impl Default for NetworkTopology {
@@ -167,7 +168,7 @@ impl NetworkTopology {
     }
 
     /// Returns a list of subnets where the ecdsa feature is enabled.
-    pub fn ecdsa_subnets(&self, key_id: &str) -> &[SubnetId] {
+    pub fn ecdsa_subnets(&self, key_id: &EcdsaKeyId) -> &[SubnetId] {
         self.ecdsa_keys
             .get(key_id)
             .map(|ids| &ids[..])
@@ -198,7 +199,7 @@ impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
                         .map(|id| subnet_id_into_protobuf(*id))
                         .collect();
                     pb_metadata::EcdsaKeyEntry {
-                        key_id: key_id.clone(),
+                        key_id: Some(key_id.into()),
                         subnet_ids,
                     }
                 })
@@ -233,7 +234,10 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
             for subnet_id in entry.subnet_ids {
                 subnet_ids.push(subnet_id_try_from_protobuf(subnet_id)?);
             }
-            ecdsa_keys.insert(entry.key_id, subnet_ids);
+            ecdsa_keys.insert(
+                try_from_option_field(entry.key_id, "EcdsaKeyEntry::key_id")?,
+                subnet_ids,
+            );
         }
 
         Ok(Self {

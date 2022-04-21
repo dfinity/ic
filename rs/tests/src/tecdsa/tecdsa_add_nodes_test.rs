@@ -17,6 +17,7 @@ Success::
 end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
+use crate::tecdsa::tecdsa_signature_test::make_key;
 use crate::{
     nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed, NnsExt},
     tecdsa::tecdsa_signature_test::{get_public_key, get_signature, verify_signature, KEY_ID1},
@@ -75,7 +76,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         nns_endpoint.assert_ready(ctx).await;
         let agent = assert_create_agent(nns_endpoint.url.as_str()).await;
         let uni_can = UniversalCanister::new(&agent).await;
-        let public_key = get_public_key(KEY_ID1, &uni_can, ctx).await;
+        let public_key = get_public_key(make_key(KEY_ID1), &uni_can, ctx).await;
         (uni_can.canister_id(), public_key)
     });
 
@@ -113,11 +114,17 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     block_on(async {
         let agent = assert_create_agent(nns_endpoint.url.as_str()).await;
         let uni_can = UniversalCanister::from_canister_id(&agent, canister_id);
-        let public_key_ = get_public_key(KEY_ID1, &uni_can, ctx).await;
+        let public_key_ = get_public_key(make_key(KEY_ID1), &uni_can, ctx).await;
         assert_eq!(public_key, public_key_);
-        let signature = get_signature(&message_hash, Cycles::zero(), KEY_ID1, &uni_can, ctx)
-            .await
-            .unwrap();
+        let signature = get_signature(
+            &message_hash,
+            Cycles::zero(),
+            make_key(KEY_ID1),
+            &uni_can,
+            ctx,
+        )
+        .await
+        .unwrap();
         verify_signature(&message_hash, &public_key, &signature);
     });
 }

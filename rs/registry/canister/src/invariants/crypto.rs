@@ -18,8 +18,9 @@ use ic_protobuf::{
     registry::crypto::v1::{PublicKey, X509PublicKeyCert},
 };
 use ic_registry_keys::{
-    make_subnet_record_key, maybe_parse_crypto_node_key, maybe_parse_crypto_tls_cert_key,
-    CRYPTO_RECORD_KEY_PREFIX, CRYPTO_TLS_CERT_KEY_PREFIX,
+    get_ecdsa_key_id_from_signing_subnet_list_key, make_subnet_record_key,
+    maybe_parse_crypto_node_key, maybe_parse_crypto_tls_cert_key, CRYPTO_RECORD_KEY_PREFIX,
+    CRYPTO_TLS_CERT_KEY_PREFIX,
 };
 use ic_types::crypto::KeyPurpose;
 
@@ -207,6 +208,20 @@ fn check_ecdsa_signing_subnet_lists(
                 });
             }
 
+            let ecdsa_key_id =  match get_ecdsa_key_id_from_signing_subnet_list_key(key_id) {
+                Ok(ecdsa_key_id) => ecdsa_key_id,
+                Err(error) => {
+                    return Err(InvariantCheckError {
+                        msg: format!(
+                            "Registry key_id {} could not be converted to an ECDSA signature key id: {:?}",
+                            key_id,
+                            error,
+                        ),
+                        source: None,
+                    });
+                }
+            };
+
             ecdsa_signing_subnet_list
                 .subnets
                 .iter()
@@ -229,7 +244,7 @@ fn check_ecdsa_signing_subnet_lists(
                             source: None,
                         })?
                         .key_ids
-                        .contains(key_id)
+                        .contains(&(&ecdsa_key_id).into())
                         .then(|| ())
                         .ok_or(InvariantCheckError {
                             msg: format!(

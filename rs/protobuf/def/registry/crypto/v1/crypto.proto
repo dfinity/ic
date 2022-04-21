@@ -44,3 +44,14 @@ message PublicKey {
 message X509PublicKeyCert {
   bytes certificate_der = 1;
 }
+
+// Types of curves that can be used for ECDSA signatures.
+enum EcdsaCurve {
+  ECDSA_CURVE_UNSPECIFIED = 0;
+  ECDSA_CURVE_SECP256K1 = 1;
+}
+
+message EcdsaKeyId {
+  EcdsaCurve curve = 1;
+  string name = 2;
+}

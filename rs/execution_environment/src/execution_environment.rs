@@ -18,9 +18,10 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
     CanisterHttpRequestArgs, CanisterIdRecord, CanisterSettingsArgs, CanisterStatusType,
     ComputeInitialEcdsaDealingsArgs, CreateCanisterArgs, ECDSAPublicKeyArgs,
-    ECDSAPublicKeyResponse, EmptyBlob, HttpMethod, InstallCodeArgs, Method as Ic00Method,
-    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    SetControllerArgs, SetupInitialDKGArgs, SignWithECDSAArgs, UpdateSettingsArgs, IC_00,
+    ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob, HttpMethod, InstallCodeArgs,
+    Method as Ic00Method, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
+    ProvisionalTopUpCanisterArgs, SetControllerArgs, SetupInitialDKGArgs, SignWithECDSAArgs,
+    UpdateSettingsArgs, IC_00,
 };
 use ic_interfaces::execution_environment::{AvailableMemory, CanisterOutOfCyclesError};
 use ic_interfaces::{
@@ -2039,7 +2040,7 @@ impl ExecutionEnvironmentImpl {
         principal_id: PrincipalId,
         derivation_path: Vec<Vec<u8>>,
         // TODO EXC-1060: get the right public key.
-        _key_id: &str,
+        _key_id: &EcdsaKeyId,
     ) -> Result<ECDSAPublicKeyResponse, UserError> {
         let _ = CanisterId::new(principal_id).map_err(|err| {
             UserError::new(
@@ -2066,7 +2067,7 @@ impl ExecutionEnvironmentImpl {
         message_hash: Vec<u8>,
         derivation_path: Vec<Vec<u8>>,
         // TODO EXC-1061: pass key_id to consensus.
-        _key_id: &str,
+        _key_id: &EcdsaKeyId,
         state: &mut ReplicatedState,
         rng: &mut (dyn RngCore + 'static),
     ) -> Result<(), UserError> {

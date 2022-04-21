@@ -314,6 +314,7 @@ message SubnetFeatures {
 message EcdsaConfig {
   // Number of quadruples to create in advance.
   uint32 quadruples_to_create_in_advance = 1;
+  reserved 2;
   // Identifiers for threshold ECDSA keys held by the subnet.
-  repeated string key_ids = 2;
+  repeated registry.crypto.v1.EcdsaKeyId key_ids = 3;
 }

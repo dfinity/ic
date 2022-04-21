@@ -30,14 +30,15 @@ use ic_canister_client::Sender;
 use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
 use ic_fondue::ic_manager::{IcEndpoint, IcHandle};
 use ic_ic00_types::{
-    ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, Payload, SignWithECDSAArgs, SignWithECDSAReply,
+    ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId, Payload, SignWithECDSAArgs,
+    SignWithECDSAReply,
 };
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_test_utils::{governance::submit_external_update_proposal, ids::TEST_NEURON_1_ID};
-use ic_registry_subnet_features::SubnetFeatures;
+use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use ic_types_test_utils::ids::subnet_test_id;
@@ -47,6 +48,13 @@ use slog::{debug, info};
 
 pub(crate) const KEY_ID1: &str = "secp256k1";
 pub(crate) const KEY_ID2: &str = "some_other_key";
+
+pub(crate) fn make_key(name: &str) -> EcdsaKeyId {
+    EcdsaKeyId {
+        curve: EcdsaCurve::Secp256k1,
+        name: name.to_string(),
+    }
+}
 
 fn empty_subnet_update() -> UpdateSubnetPayload {
     UpdateSubnetPayload {
@@ -75,8 +83,8 @@ fn empty_subnet_update() -> UpdateSubnetPayload {
         max_instructions_per_round: None,
         max_instructions_per_install_code: None,
         features: None,
-        // ecdsa_config: None,
-        // ecdsa_key_signing_enable: None,
+        ecdsa_config: None,
+        ecdsa_key_signing_enable: None,
         max_number_of_canisters: None,
         ssh_readonly_access: None,
         ssh_backup_access: None,
@@ -176,14 +184,14 @@ fn get_endpoints(handle: &IcHandle) -> Endpoints {
 }
 
 pub(crate) async fn get_public_key(
-    key_id: &str,
+    key_id: EcdsaKeyId,
     uni_can: &UniversalCanister<'_>,
     ctx: &ic_fondue::pot::Context,
 ) -> PublicKey {
     let public_key_request = ECDSAPublicKeyArgs {
         canister_id: None,
         derivation_path: vec![],
-        key_id: key_id.to_string(),
+        key_id,
     };
 
     let mut count = 0;
@@ -238,14 +246,14 @@ async fn execute_update_subnet_proposal(
 pub(crate) async fn get_signature(
     message_hash: &[u8],
     cycles: Cycles,
-    key_id: &str,
+    key_id: EcdsaKeyId,
     uni_can: &UniversalCanister<'_>,
     ctx: &ic_fondue::pot::Context,
 ) -> Result<Signature, AgentError> {
     let signature_request = SignWithECDSAArgs {
         message_hash: message_hash.to_vec(),
         derivation_path: Vec::new(),
-        key_id: key_id.to_string(),
+        key_id,
     };
 
     // Ask for a signature.
@@ -273,23 +281,23 @@ pub(crate) fn verify_signature(message_hash: &[u8], public_key: &PublicKey, sign
     assert!(secp.verify(&message, signature, public_key).is_ok());
 }
 
-async fn enable_ecdsa_signing(governance: &Canister<'_>, subnet_id: SubnetId, _key_id: &str) {
+async fn enable_ecdsa_signing(governance: &Canister<'_>, subnet_id: SubnetId, key_id: EcdsaKeyId) {
     // The ECDSA key sharing process requires that a key first be added to a
     // subnet, and then enabling signing with that key must happen in a separate
     // proposal.
     let proposal_payload = UpdateSubnetPayload {
         subnet_id,
-        // ecdsa_config: Some(EcdsaConfig {
-        //     quadruples_to_create_in_advance: 10,
-        //     key_ids: vec![key_id.to_string()],
-        // }),
+        ecdsa_config: Some(EcdsaConfig {
+            quadruples_to_create_in_advance: 10,
+            key_ids: vec![key_id.clone()],
+        }),
         ..empty_subnet_update()
     };
     execute_update_subnet_proposal(governance, proposal_payload).await;
 
     let proposal_payload = UpdateSubnetPayload {
         subnet_id,
-        // ecdsa_key_signing_enable: Some(vec![key_id.to_string()]),
+        ecdsa_key_signing_enable: Some(vec![key_id]),
         ..empty_subnet_update()
     };
     execute_update_subnet_proposal(governance, proposal_payload).await;
@@ -311,17 +319,17 @@ pub fn test_threshold_ecdsa_signature_same_subnet(handle: IcHandle, ctx: &ic_fon
         enable_ecdsa_signing(
             &governance,
             app_endpoint.subnet.as_ref().unwrap().id,
-            KEY_ID1,
+            make_key(KEY_ID1),
         )
         .await;
         let agent = assert_create_agent(app_endpoint.url.as_str()).await;
         let uni_can = UniversalCanister::new(&agent).await;
         let message_hash = [0xabu8; 32];
-        let public_key = get_public_key(KEY_ID1, &uni_can, ctx).await;
+        let public_key = get_public_key(make_key(KEY_ID1), &uni_can, ctx).await;
         let signature = get_signature(
             &message_hash,
             Cycles::from(7_000_000_000u64),
-            KEY_ID1,
+            make_key(KEY_ID1),
             &uni_can,
             ctx,
         )
@@ -352,7 +360,7 @@ pub fn test_threshold_ecdsa_signature_from_other_subnet(
         enable_ecdsa_signing(
             &governance,
             app_endpoint.subnet.as_ref().unwrap().id,
-            KEY_ID2,
+            make_key(KEY_ID2),
         )
         .await;
 
@@ -361,10 +369,16 @@ pub fn test_threshold_ecdsa_signature_from_other_subnet(
         let agent = assert_create_agent(endpoint.url.as_str()).await;
         let uni_can = UniversalCanister::new(&agent).await;
         let message_hash = [0xabu8; 32];
-        let public_key = get_public_key(KEY_ID2, &uni_can, ctx).await;
-        let signature = get_signature(&message_hash, ECDSA_SIGNATURE_FEE, KEY_ID2, &uni_can, ctx)
-            .await
-            .unwrap();
+        let public_key = get_public_key(make_key(KEY_ID2), &uni_can, ctx).await;
+        let signature = get_signature(
+            &message_hash,
+            ECDSA_SIGNATURE_FEE,
+            make_key(KEY_ID2),
+            &uni_can,
+            ctx,
+        )
+        .await
+        .unwrap();
         verify_signature(&message_hash, &public_key, &signature);
     });
 }
@@ -392,7 +406,7 @@ pub fn test_threshold_ecdsa_signature_fails_without_cycles(
         let error = get_signature(
             &message_hash,
             ECDSA_SIGNATURE_FEE - Cycles::from(1u64),
-            KEY_ID1,
+            make_key(KEY_ID1),
             &uni_can,
             ctx,
         )
@@ -431,17 +445,23 @@ pub fn test_threshold_ecdsa_signature_from_nns_without_cycles(
         enable_ecdsa_signing(
             &governance,
             app_endpoint.subnet.as_ref().unwrap().id,
-            KEY_ID2,
+            make_key(KEY_ID2),
         )
         .await;
 
         let agent = assert_create_agent(nns_endpoint.url.as_str()).await;
         let uni_can = UniversalCanister::new(&agent).await;
         let message_hash = [0xabu8; 32];
-        let public_key = get_public_key(KEY_ID2, &uni_can, ctx).await;
-        let signature = get_signature(&message_hash, Cycles::zero(), KEY_ID2, &uni_can, ctx)
-            .await
-            .unwrap();
+        let public_key = get_public_key(make_key(KEY_ID2), &uni_can, ctx).await;
+        let signature = get_signature(
+            &message_hash,
+            Cycles::zero(),
+            make_key(KEY_ID2),
+            &uni_can,
+            ctx,
+        )
+        .await
+        .unwrap();
         verify_signature(&message_hash, &public_key, &signature);
     });
 }

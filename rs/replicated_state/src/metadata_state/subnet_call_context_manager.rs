@@ -1,3 +1,4 @@
+use ic_ic00_types::EcdsaKeyId;
 use ic_logger::{info, ReplicaLogger};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -276,7 +277,7 @@ impl TryFrom<pb_metadata::SignWithEcdsaContext> for SignWithEcdsaContext {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EcdsaDealingsContext {
     pub request: Request,
-    pub key_id: String,
+    pub key_id: EcdsaKeyId,
     pub nodes: BTreeSet<NodeId>,
     pub registry_version: RegistryVersion,
 }
@@ -285,7 +286,7 @@ impl From<&EcdsaDealingsContext> for pb_metadata::EcdsaDealingsContext {
     fn from(context: &EcdsaDealingsContext) -> Self {
         pb_metadata::EcdsaDealingsContext {
             request: Some((&context.request).into()),
-            key_id: context.key_id.clone(),
+            key_id: Some((&context.key_id).into()),
             nodes: context
                 .nodes
                 .iter()
@@ -301,13 +302,15 @@ impl TryFrom<pb_metadata::EcdsaDealingsContext> for EcdsaDealingsContext {
     fn try_from(context: pb_metadata::EcdsaDealingsContext) -> Result<Self, Self::Error> {
         let request: Request =
             try_from_option_field(context.request, "EcdsaDealingsContext::request")?;
+        let key_id: EcdsaKeyId =
+            try_from_option_field(context.key_id, "EcdsaDealingsContext::key_id")?;
         let mut nodes = BTreeSet::<NodeId>::new();
         for node_id in context.nodes {
             nodes.insert(node_id_try_from_protobuf(node_id)?);
         }
         Ok(EcdsaDealingsContext {
             request,
-            key_id: context.key_id,
+            key_id,
             nodes,
             registry_version: RegistryVersion::from(context.registry_version),
         })

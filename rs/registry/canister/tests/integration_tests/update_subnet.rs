@@ -2,6 +2,7 @@ use assert_matches::assert_matches;
 use candid::Encode;
 use dfn_candid::candid;
 use ic_base_types::{subnet_id_try_from_protobuf, PrincipalId, SubnetId};
+use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
 use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::{
     itest_helpers::{
@@ -27,6 +28,13 @@ use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder, mutations::do_update_subnet::UpdateSubnetPayload,
 };
 use std::str::FromStr;
+
+fn make_ecdsa_key(name: &str) -> EcdsaKeyId {
+    EcdsaKeyId {
+        curve: EcdsaCurve::Secp256k1,
+        name: name.to_string(),
+    }
+}
 
 #[test]
 fn test_the_anonymous_user_cannot_update_a_subnets_configuration() {
@@ -76,8 +84,8 @@ fn test_the_anonymous_user_cannot_update_a_subnets_configuration() {
             max_instructions_per_round: Some(8_000_000_000),
             max_instructions_per_install_code: Some(300_000_000_000),
             features: None,
-            // ecdsa_config: None,
-            // ecdsa_key_signing_enable: None,
+            ecdsa_config: None,
+            ecdsa_key_signing_enable: None,
             max_number_of_canisters: Some(10),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
@@ -199,8 +207,8 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             max_instructions_per_round: Some(8_000_000_000),
             max_instructions_per_install_code: Some(300_000_000_000),
             features: None,
-            // ecdsa_config: None,
-            // ecdsa_key_signing_enable: None,
+            ecdsa_config: None,
+            ecdsa_key_signing_enable: None,
             max_number_of_canisters: Some(100),
             ssh_readonly_access: None,
             ssh_backup_access: None,
@@ -314,8 +322,8 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
             max_instructions_per_round: Some(8_000_000_000),
             max_instructions_per_install_code: Some(300_000_000_000),
             features: None,
-            // ecdsa_config: None,
-            // ecdsa_key_signing_enable: None,
+            ecdsa_config: None,
+            ecdsa_key_signing_enable: None,
             max_number_of_canisters: Some(42),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
@@ -381,9 +389,8 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
 }
 
 #[test]
-#[ignore]
 fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
-    const REJECT_MSG: &str = "Canister rejected with message: IC0503: Canister rwlgt-iiaaa-aaaaa-aaaaa-cai trapped explicitly: Panicked at 'Proposal attempts to enable signing for ECDSA key key_id_1 on Subnet bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae,  but the subnet does not hold the given key. A proposal to add that key to the subnet must first be separately submitted.'";
+    const REJECT_MSG: &str = "Canister rejected with message: IC0503: Canister rwlgt-iiaaa-aaaaa-aaaaa-cai trapped explicitly: Panicked at 'Proposal attempts to enable signing for ECDSA key Secp256k1:key_id_1 on Subnet bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae,  but the subnet does not hold the given key. A proposal to add that key to the subnet must first be separately submitted.'";
 
     local_test_on_nns_subnet(|runtime| async move {
         let subnet_id = SubnetId::from(
@@ -446,11 +453,11 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
 
         // update payload message
         let mut payload = UpdateSubnetPayload {
-            // ecdsa_config: Some(EcdsaConfig {
-            //     quadruples_to_create_in_advance: 10,
-            //     key_ids: vec!["key_id_1".to_string()],
-            // }),
-            // ecdsa_key_signing_enable: Some(vec!["key_id_1".to_string()]),
+            ecdsa_config: Some(EcdsaConfig {
+                quadruples_to_create_in_advance: 10,
+                key_ids: vec![make_ecdsa_key("key_id_1")],
+            }),
+            ecdsa_key_signing_enable: Some(vec![make_ecdsa_key("key_id_1")]),
             ..empty_update_subnet_payload(subnet_id)
         };
 
@@ -473,8 +480,8 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
 
         // Change one field at a time in this payload
         payload = UpdateSubnetPayload {
-            // ecdsa_config: None,
-            // ecdsa_key_signing_enable: Some(vec!["key_id_1".to_string()]),
+            ecdsa_config: None,
+            ecdsa_key_signing_enable: Some(vec![make_ecdsa_key("key_id_1")]),
             ..empty_update_subnet_payload(subnet_id)
         };
 
@@ -497,11 +504,11 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
 
         // Trying again, this time in the correct order
         payload = UpdateSubnetPayload {
-            // ecdsa_config: Some(EcdsaConfig {
-            //     quadruples_to_create_in_advance: 10,
-            //     key_ids: vec!["key_id_1".to_string()],
-            // }),
-            // ecdsa_key_signing_enable: None,
+            ecdsa_config: Some(EcdsaConfig {
+                quadruples_to_create_in_advance: 10,
+                key_ids: vec![make_ecdsa_key("key_id_1")],
+            }),
+            ecdsa_key_signing_enable: None,
             ..empty_update_subnet_payload(subnet_id)
         };
 
@@ -525,7 +532,7 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
                 ecdsa_config: Some(
                     EcdsaConfig {
                         quadruples_to_create_in_advance: 10,
-                        key_ids: vec!["key_id_1".to_string()],
+                        key_ids: vec![make_ecdsa_key("key_id_1")],
                     }
                     .into()
                 ),
@@ -535,11 +542,11 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
 
         // This update should enable signing on our subnet for the given key.
         payload = UpdateSubnetPayload {
-            // ecdsa_config: Some(EcdsaConfig {
-            //     quadruples_to_create_in_advance: 10,
-            //     key_ids: vec!["key_id_1".to_string()],
-            // }),
-            // ecdsa_key_signing_enable: Some(vec!["key_id_1".to_string()]),
+            ecdsa_config: Some(EcdsaConfig {
+                quadruples_to_create_in_advance: 10,
+                key_ids: vec![make_ecdsa_key("key_id_1")],
+            }),
+            ecdsa_key_signing_enable: Some(vec![make_ecdsa_key("key_id_1")]),
             ..empty_update_subnet_payload(subnet_id)
         };
 
@@ -554,7 +561,7 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
 
         let new_signing_subnet_list: Vec<_> = get_value::<EcdsaSigningSubnetList>(
             &registry,
-            make_ecdsa_signing_subnet_list_key("key_id_1").as_bytes(),
+            make_ecdsa_signing_subnet_list_key(&make_ecdsa_key("key_id_1")).as_bytes(),
         )
         .await
         .subnets
@@ -600,7 +607,7 @@ fn empty_update_subnet_payload(subnet_id: SubnetId) -> UpdateSubnetPayload {
         max_number_of_canisters: None,
         ssh_readonly_access: None,
         ssh_backup_access: None,
-        // ecdsa_config: None,
-        // ecdsa_key_signing_enable: None,
+        ecdsa_config: None,
+        ecdsa_key_signing_enable: None,
     }
 }
