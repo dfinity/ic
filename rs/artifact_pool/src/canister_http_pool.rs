@@ -16,7 +16,7 @@ use ic_interfaces::{
 use ic_metrics::MetricsRegistry;
 use ic_types::{
     artifact::CanisterHttpResponseId,
-    canister_http::{CanisterHttpResponseContent, CanisterHttpResponseShare},
+    canister_http::{CanisterHttpResponse, CanisterHttpResponseShare},
     crypto::CryptoHashOf,
     time::current_time,
 };
@@ -35,7 +35,7 @@ type UnvalidatedCanisterHttpPoolSection = PoolSection<
 >;
 
 type ContentCanisterHttpPoolSection =
-    PoolSection<CryptoHashOf<CanisterHttpResponseContent>, CanisterHttpResponseContent>;
+    PoolSection<CryptoHashOf<CanisterHttpResponse>, CanisterHttpResponse>;
 
 pub struct CanisterHttpPoolImpl {
     validated: ValidatedCanisterHttpPoolSection,
@@ -72,14 +72,8 @@ impl CanisterHttpPool for CanisterHttpPoolImpl {
 
     fn get_response_content_items(
         &self,
-    ) -> Box<
-        dyn Iterator<
-                Item = (
-                    &CryptoHashOf<CanisterHttpResponseContent>,
-                    &CanisterHttpResponseContent,
-                ),
-            > + '_,
-    > {
+    ) -> Box<dyn Iterator<Item = (&CryptoHashOf<CanisterHttpResponse>, &CanisterHttpResponse)> + '_>
+    {
         Box::new(self.content.iter())
     }
 
