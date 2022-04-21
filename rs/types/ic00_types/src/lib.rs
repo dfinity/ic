@@ -1,4 +1,7 @@
 //! Data types used for encoding/decoding the Candid payloads of ic:00.
+mod http;
+mod provisional;
+
 use candid::{CandidType, Decode, Deserialize, Encode};
 use ic_base_types::{CanisterId, NodeId, NumBytes, PrincipalId, RegistryVersion, SubnetId};
 use ic_error_types::{ErrorCode, UserError};
@@ -12,6 +15,8 @@ use strum_macros::{Display, EnumIter, EnumString};
 /// The id of the management canister.
 pub const IC_00: CanisterId = CanisterId::ic_00();
 pub const MAX_CONTROLLERS: usize = 10;
+pub use http::{CanisterHttpRequestArgs, CanisterHttpResponsePayload, HttpHeader, HttpMethod};
+pub use provisional::{ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs};
 
 /// Methods exported by ic:00.
 #[derive(Debug, EnumString, EnumIter, Display, Copy, Clone)]
@@ -552,59 +557,6 @@ impl SetControllerArgs {
 impl Payload<'_> for SetControllerArgs {}
 
 /// Struct used for encoding/decoding
-/// `(http_request : (record {
-//     url : text;
-//     headers : vec http_header;
-//     method : variant { get };
-//     body : opt blob;
-//     transform : opt variant { function: func (http_response) -> (http_response) query };
-//   })`
-#[derive(CandidType, Deserialize, Debug)]
-pub struct CanisterHttpRequestArgs {
-    pub url: String,
-    pub headers: Vec<HttpHeader>,
-    pub body: Option<Vec<u8>>,
-    pub http_method: HttpMethod,
-    pub transform_method_name: Option<String>,
-}
-
-impl Payload<'_> for CanisterHttpRequestArgs {}
-
-/// Struct used for encoding/decoding
-/// `(record {
-/// name: text;
-/// value: text;
-/// })`;
-#[derive(CandidType, Clone, Deserialize, Debug, Eq, Hash, PartialEq, Serialize)]
-pub struct HttpHeader {
-    pub name: String,
-    pub value: String,
-}
-
-impl Payload<'_> for HttpHeader {}
-
-#[derive(Clone, Debug, PartialEq, CandidType, Eq, Hash, Serialize, Deserialize)]
-pub enum HttpMethod {
-    GET,
-}
-
-/// Represents the response for a canister http request.
-/// Struct used for encoding/decoding
-/// `(record {
-/// status: nat;
-/// headers: vec http_header;
-/// body: blob;
-/// })`;
-#[derive(CandidType, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct CanisterHttpResponsePayload {
-    pub status: u64,
-    pub headers: Vec<HttpHeader>,
-    pub body: Vec<u8>,
-}
-
-impl Payload<'_> for CanisterHttpResponsePayload {}
-
-/// Struct used for encoding/decoding
 /// `(record {
 ///     node_ids : vec principal;
 ///     registry_version: nat;
@@ -704,62 +656,6 @@ impl SetupInitialDKGResponse {
         }
     }
 }
-
-/// Struct used for encoding/decoding `(record { amount : opt nat; })`
-#[derive(CandidType, Deserialize, Debug)]
-pub struct ProvisionalCreateCanisterWithCyclesArgs {
-    pub amount: Option<candid::Nat>,
-    pub settings: Option<CanisterSettingsArgs>,
-}
-
-impl ProvisionalCreateCanisterWithCyclesArgs {
-    pub fn new(amount: Option<u128>) -> Self {
-        Self {
-            amount: amount.map(candid::Nat::from),
-            settings: None,
-        }
-    }
-
-    pub fn to_u128(&self) -> Option<u128> {
-        match &self.amount {
-            Some(amount) => amount.0.to_u128(),
-            None => None,
-        }
-    }
-}
-
-impl Payload<'_> for ProvisionalCreateCanisterWithCyclesArgs {}
-
-/// Struct used for encoding/decoding
-/// `(record {
-///     canister_id : principal;
-///     amount: nat;
-/// })`
-#[derive(CandidType, Deserialize, Debug)]
-pub struct ProvisionalTopUpCanisterArgs {
-    canister_id: PrincipalId,
-    amount: candid::Nat,
-}
-
-impl ProvisionalTopUpCanisterArgs {
-    pub fn new(canister_id: CanisterId, amount: u128) -> Self {
-        Self {
-            canister_id: canister_id.get(),
-            amount: candid::Nat::from(amount),
-        }
-    }
-
-    pub fn to_u128(&self) -> Option<u128> {
-        self.amount.0.to_u128()
-    }
-
-    pub fn get_canister_id(&self) -> CanisterId {
-        // Safe as this was converted from CanisterId when Self was constructed.
-        CanisterId::new(self.canister_id).unwrap()
-    }
-}
-
-impl Payload<'_> for ProvisionalTopUpCanisterArgs {}
 
 /// Represents the argument of the sign_with_ecdsa API.
 /// ```text
