@@ -2,7 +2,7 @@
 end::catalog[] */
 
 use crate::tecdsa::tecdsa_signature_test::{
-    get_public_key, get_signature, verify_signature, KEY_ID1,
+    get_public_key, get_signature, make_key, verify_signature, KEY_ID1,
 };
 use crate::util::*;
 use canister_test::Cycles;
@@ -43,10 +43,16 @@ pub fn test_threshold_ecdsa_complaint(handle: IcHandle, ctx: &ic_fondue::pot::Co
         let agent = assert_create_agent(endpoint.url.as_str()).await;
         let uni_can = UniversalCanister::new(&agent).await;
         let message_hash = [0xabu8; 32];
-        let public_key = get_public_key(KEY_ID1, &uni_can, ctx).await;
-        let signature = get_signature(&message_hash, Cycles::zero(), KEY_ID1, &uni_can, ctx)
-            .await
-            .unwrap();
+        let public_key = get_public_key(make_key(KEY_ID1), &uni_can, ctx).await;
+        let signature = get_signature(
+            &message_hash,
+            Cycles::zero(),
+            make_key(KEY_ID1),
+            &uni_can,
+            ctx,
+        )
+        .await
+        .unwrap();
         verify_signature(&message_hash, &public_key, &signature);
     });
 }

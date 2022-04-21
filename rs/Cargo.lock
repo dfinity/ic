@@ -5907,6 +5907,7 @@ dependencies = [
 name = "ic-registry-client-helpers"
 version = "0.8.0"
 dependencies = [
+ "ic-ic00-types",
  "ic-interfaces",
  "ic-protobuf",
  "ic-registry-client-fake",
@@ -5968,6 +5969,7 @@ name = "ic-registry-keys"
 version = "0.8.0"
 dependencies = [
  "ic-base-types",
+ "ic-ic00-types",
  "ic-types 0.8.0",
  "rand 0.7.3",
 ]
@@ -6031,6 +6033,7 @@ name = "ic-registry-subnet-features"
 version = "0.8.0"
 dependencies = [
  "candid",
+ "ic-ic00-types",
  "ic-protobuf",
  "serde",
 ]
@@ -10022,6 +10025,7 @@ dependencies = [
  "ic-crypto-node-key-validation",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-basic-sig",
+ "ic-ic00-types",
  "ic-interfaces",
  "ic-nervous-system-common",
  "ic-nns-common",

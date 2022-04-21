@@ -3,9 +3,9 @@ use std::str::FromStr;
 use candid::Decode;
 use ic_base_types::{CanisterId, SubnetId};
 use ic_ic00_types::{
-    CanisterIdRecord, ComputeInitialEcdsaDealingsArgs, ECDSAPublicKeyArgs, InstallCodeArgs,
-    Method as Ic00Method, Payload, ProvisionalTopUpCanisterArgs, SetControllerArgs,
-    SignWithECDSAArgs, UpdateSettingsArgs,
+    CanisterIdRecord, ComputeInitialEcdsaDealingsArgs, ECDSAPublicKeyArgs, EcdsaKeyId,
+    InstallCodeArgs, Method as Ic00Method, Payload, ProvisionalTopUpCanisterArgs,
+    SetControllerArgs, SignWithECDSAArgs, UpdateSettingsArgs,
 };
 use ic_replicated_state::NetworkTopology;
 
@@ -130,7 +130,7 @@ pub(super) fn resolve_destination(
 }
 
 fn route_ecdsa_message(
-    key_id: &str,
+    key_id: &EcdsaKeyId,
     network_topology: &NetworkTopology,
 ) -> Result<SubnetId, ResolveDestinationError> {
     if let Some(subnet_id) = network_topology.ecdsa_subnets(key_id).get(0) {
@@ -148,19 +148,26 @@ mod tests {
     use assert_matches::assert_matches;
     use candid::Encode;
     use ic_base_types::RegistryVersion;
-    use ic_ic00_types::{ComputeInitialEcdsaDealingsArgs, SignWithECDSAArgs};
+    use ic_ic00_types::{
+        ComputeInitialEcdsaDealingsArgs, EcdsaCurve, EcdsaKeyId, SignWithECDSAArgs,
+    };
     use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
     use maplit::btreemap;
 
     use super::*;
 
-    const KEY_ID: &str = "some_key";
+    fn key_id() -> EcdsaKeyId {
+        EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "some_key".to_string(),
+        }
+    }
 
     fn network_with_ecdsa_on_subnet_0() -> NetworkTopology {
         let subnet_id = subnet_test_id(0);
         NetworkTopology {
             ecdsa_keys: btreemap! {
-                KEY_ID.to_string() => vec![subnet_id],
+                key_id() => vec![subnet_id],
             },
             ..NetworkTopology::default()
         }
@@ -172,7 +179,7 @@ mod tests {
 
     fn compute_initial_ecdsa_dealings_req() -> Vec<u8> {
         let args = ComputeInitialEcdsaDealingsArgs::new(
-            KEY_ID.to_string(),
+            key_id(),
             vec![node_test_id(0)].into_iter().collect(),
             RegistryVersion::from(100),
         );
@@ -183,7 +190,7 @@ mod tests {
         let args = SignWithECDSAArgs {
             message_hash: vec![1; 32],
             derivation_path: vec![vec![0; 10]],
-            key_id: KEY_ID.to_string(),
+            key_id: key_id(),
         };
         Encode!(&args).unwrap()
     }
@@ -214,7 +221,7 @@ mod tests {
             .unwrap_err(),
             ResolveDestinationError::MethodNotFound(err) => assert_eq!(
                 err,
-                format!("requested key: {}, existing keys: {{}}", KEY_ID)
+                format!("requested key: {}, existing keys: {{}}", key_id())
             )
         )
     }
@@ -244,7 +251,7 @@ mod tests {
         .unwrap_err(),
         ResolveDestinationError::MethodNotFound(err) => assert_eq!(
                 err,
-                format!("requested key: {}, existing keys: {{}}", KEY_ID)
+                format!("requested key: {}, existing keys: {{}}", key_id())
             )
         )
     }

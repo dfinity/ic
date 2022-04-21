@@ -19,7 +19,7 @@ use ic_types::p2p;
 #[macro_use]
 extern crate ic_admin_derive;
 use ic_consensus::dkg::make_registry_cup;
-use ic_ic00_types::{CanisterIdRecord, CanisterInstallMode};
+use ic_ic00_types::{CanisterIdRecord, CanisterInstallMode, EcdsaKeyId};
 use ic_interfaces::registry::RegistryClient;
 use ic_nervous_system_root::{
     AddCanisterProposal, CanisterAction, CanisterStatusResult, ChangeCanisterProposal,
@@ -81,7 +81,7 @@ use ic_registry_keys::{
     make_unassigned_nodes_config_record_key, NODE_OPERATOR_RECORD_KEY_PREFIX,
     NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY,
 };
-use ic_registry_subnet_features::SubnetFeatures;
+use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::Error;
 use ic_types::{
@@ -1321,13 +1321,17 @@ impl ProposalTitleAndPayload<UpdateSubnetPayload> for ProposeToUpdateSubnetCmd {
             max_instructions_per_round: self.max_instructions_per_round,
             max_instructions_per_install_code: self.max_instructions_per_install_code,
             features: self.features,
-            // ecdsa_config: self
-            //     .ecdsa_quadruples_to_create_in_advance
-            //     .map(|val| EcdsaConfig {
-            //         quadruples_to_create_in_advance: val,
-            //         key_ids: vec![],
-            //     }),
-            // ecdsa_key_signing_enable: self.ecdsa_key_signing_enable.clone(),
+            ecdsa_config: self
+                .ecdsa_quadruples_to_create_in_advance
+                .map(|val| EcdsaConfig {
+                    quadruples_to_create_in_advance: val,
+                    key_ids: vec![],
+                }),
+            ecdsa_key_signing_enable: self.ecdsa_key_signing_enable.as_ref().map(|keys| {
+                keys.iter()
+                    .map(|key| key.parse::<EcdsaKeyId>().unwrap())
+                    .collect()
+            }),
             ssh_readonly_access: self.ssh_readonly_access.clone(),
             ssh_backup_access: self.ssh_backup_access.clone(),
             max_number_of_canisters: self.max_number_of_canisters,

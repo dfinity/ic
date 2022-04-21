@@ -57,11 +57,8 @@ pub(crate) fn get_all_ecdsa_signing_subnet_list_records(
 ) -> BTreeMap<String, EcdsaSigningSubnetList> {
     let mut result = BTreeMap::<String, EcdsaSigningSubnetList>::new();
     for key in snapshot.keys() {
-        if let Some(key_id) = String::from_utf8(key.clone())
-            .unwrap()
-            .as_str()
-            .strip_prefix(ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX)
-        {
+        let signing_subnet_list_key = String::from_utf8(key.clone()).unwrap();
+        if signing_subnet_list_key.starts_with(ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX) {
             let ecdsa_signing_subnet_list_record = match snapshot.get(key) {
                 Some(ecdsa_signing_subnet_list_record_bytes) => {
                     decode_or_panic::<EcdsaSigningSubnetList>(
@@ -70,7 +67,7 @@ pub(crate) fn get_all_ecdsa_signing_subnet_list_records(
                 }
                 None => panic!("Cannot fetch EcdsaSigningSubnetList record for an existing key"),
             };
-            result.insert(key_id.to_string(), ecdsa_signing_subnet_list_record);
+            result.insert(signing_subnet_list_key, ecdsa_signing_subnet_list_record);
         }
     }
     result

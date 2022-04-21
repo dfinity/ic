@@ -7,9 +7,10 @@ use ic_base_types::{CanisterId, NodeId, NumBytes, PrincipalId, RegistryVersion, 
 use ic_error_types::{ErrorCode, UserError};
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
+use ic_protobuf::{proxy::ProxyDecodeError, registry::crypto::v1 as pb_registry_crypto};
 use num_traits::cast::ToPrimitive;
 use serde::Serialize;
-use std::{collections::BTreeSet, convert::TryFrom, fmt, slice::Iter};
+use std::{collections::BTreeSet, convert::TryFrom, fmt, slice::Iter, str::FromStr};
 use strum_macros::{Display, EnumIter, EnumString};
 
 /// The id of the management canister.
@@ -657,19 +658,148 @@ impl SetupInitialDKGResponse {
     }
 }
 
+/// Types of curves that can be used for ECDSA signing.
+/// ```text
+/// (variant { secp256k1; })
+/// ```
+#[derive(
+    CandidType, Copy, Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize,
+)]
+pub enum EcdsaCurve {
+    #[serde(rename = "secp256k1")]
+    Secp256k1,
+}
+
+impl TryFrom<pb_registry_crypto::EcdsaCurve> for EcdsaCurve {
+    type Error = ProxyDecodeError;
+
+    fn try_from(item: pb_registry_crypto::EcdsaCurve) -> Result<Self, Self::Error> {
+        match item {
+            pb_registry_crypto::EcdsaCurve::Secp256k1 => Ok(EcdsaCurve::Secp256k1),
+            pb_registry_crypto::EcdsaCurve::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
+                typ: "EcdsaCurve",
+                err: format!("Unable to convert {:?} to an EcdsaCurve", item),
+            }),
+        }
+    }
+}
+
+impl From<EcdsaCurve> for pb_registry_crypto::EcdsaCurve {
+    fn from(item: EcdsaCurve) -> Self {
+        match item {
+            EcdsaCurve::Secp256k1 => pb_registry_crypto::EcdsaCurve::Secp256k1,
+        }
+    }
+}
+
+impl std::fmt::Display for EcdsaCurve {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl FromStr for EcdsaCurve {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Secp256k1" => Ok(Self::Secp256k1),
+            _ => Err(format!("{} is not a recognized ECDSA curve", s)),
+        }
+    }
+}
+
+#[test]
+fn ecdsa_curve_round_trip() {
+    assert_eq!(
+        format!("{}", EcdsaCurve::Secp256k1)
+            .parse::<EcdsaCurve>()
+            .unwrap(),
+        EcdsaCurve::Secp256k1
+    );
+}
+
+/// Unique identifier for a key that can be used for ECDSA signatures. The name
+/// is just a identifier, but it may be used to convey some information about
+/// the key (e.g. that the key is meant to be used for testing purposes).
+/// ```text
+/// (record { curve: ecdsa_curve; name: text})
+/// ```
+#[derive(CandidType, Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EcdsaKeyId {
+    pub curve: EcdsaCurve,
+    pub name: String,
+}
+
+impl TryFrom<pb_registry_crypto::EcdsaKeyId> for EcdsaKeyId {
+    type Error = ProxyDecodeError;
+    fn try_from(item: pb_registry_crypto::EcdsaKeyId) -> Result<Self, Self::Error> {
+        Ok(Self {
+            curve: EcdsaCurve::try_from(
+                pb_registry_crypto::EcdsaCurve::from_i32(item.curve).ok_or(
+                    ProxyDecodeError::ValueOutOfRange {
+                        typ: "EcdsaKeyId",
+                        err: format!("Unable to convert {} to an EcdsaCurve", item.curve),
+                    },
+                )?,
+            )?,
+            name: item.name,
+        })
+    }
+}
+
+impl From<&EcdsaKeyId> for pb_registry_crypto::EcdsaKeyId {
+    fn from(item: &EcdsaKeyId) -> Self {
+        Self {
+            curve: pb_registry_crypto::EcdsaCurve::from(item.curve) as i32,
+            name: item.name.clone(),
+        }
+    }
+}
+
+impl std::fmt::Display for EcdsaKeyId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.curve, self.name)
+    }
+}
+
+impl FromStr for EcdsaKeyId {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (curve, name) = s
+            .split_once(':')
+            .ok_or_else(|| format!("ECDSA key id {} does not contain a ':'", s))?;
+        Ok(EcdsaKeyId {
+            curve: curve.parse::<EcdsaCurve>()?,
+            name: name.to_string(),
+        })
+    }
+}
+
+#[test]
+fn ecdsa_key_id_round_trip() {
+    for name in ["secp256k1", "", "other_key", "other key", "other:key"] {
+        let key = EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: name.to_string(),
+        };
+        assert_eq!(format!("{}", key).parse::<EcdsaKeyId>().unwrap(), key);
+    }
+}
+
 /// Represents the argument of the sign_with_ecdsa API.
 /// ```text
 /// (record {
 ///   message_hash : blob;
 ///   derivation_path : vec blob;
-///   key_id : text;
+///   key_id : ecdsa_key_id;
 /// })
 /// ```
 #[derive(CandidType, Deserialize, Debug)]
 pub struct SignWithECDSAArgs {
     pub message_hash: Vec<u8>,
     pub derivation_path: Vec<Vec<u8>>,
-    pub key_id: String,
+    pub key_id: EcdsaKeyId,
 }
 
 impl Payload<'_> for SignWithECDSAArgs {}
@@ -687,14 +817,14 @@ impl Payload<'_> for SignWithECDSAReply {}
 /// (record {
 ///   canister_id : opt canister_id;
 ///   derivation_path : vec blob;
-///   key_id : text;
+///   key_id : ecdsa_key_id;
 /// })
 /// ```
 #[derive(CandidType, Deserialize, Debug)]
 pub struct ECDSAPublicKeyArgs {
     pub canister_id: Option<CanisterId>,
     pub derivation_path: Vec<Vec<u8>>,
-    pub key_id: String,
+    pub key_id: EcdsaKeyId,
 }
 
 impl Payload<'_> for ECDSAPublicKeyArgs {}
@@ -716,19 +846,23 @@ impl Payload<'_> for ECDSAPublicKeyResponse {}
 
 /// Argument of the compute_initial_ecdsa_dealings API.
 /// `(record {
-///     key_id: text;
+///     key_id: ecdsa_key_id;
 ///     nodes: vec principal;
 ///     registry_version: nat;
 /// })`
 #[derive(CandidType, Deserialize, Debug, Eq, PartialEq)]
 pub struct ComputeInitialEcdsaDealingsArgs {
-    pub key_id: String,
+    pub key_id: EcdsaKeyId,
     nodes: Vec<PrincipalId>,
     registry_version: u64,
 }
 
 impl ComputeInitialEcdsaDealingsArgs {
-    pub fn new(key_id: String, nodes: BTreeSet<NodeId>, registry_version: RegistryVersion) -> Self {
+    pub fn new(
+        key_id: EcdsaKeyId,
+        nodes: BTreeSet<NodeId>,
+        registry_version: RegistryVersion,
+    ) -> Self {
         Self {
             key_id,
             nodes: nodes.iter().map(|id| id.get()).collect(),

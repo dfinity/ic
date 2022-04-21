@@ -73,6 +73,12 @@ type DataCenterRecord = record {
   owner : text;
 };
 type DeleteSubnetPayload = record { subnet_id : opt principal };
+type EcdsaConfig = record {
+  quadruples_to_create_in_advance : nat32;
+  key_ids : vec EcdsaKeyId;
+};
+type EcdsaCurve = variant { secp256k1 };
+type EcdsaKeyId = record { name : text; curve : EcdsaCurve };
 type Gps = record { latitude : float32; longitude : float32 };
 type NodeOperatorRecord = record {
   node_operator_principal_id : vec nat8;
@@ -157,12 +163,14 @@ type UpdateSubnetPayload = record {
   is_halted : opt bool;
   max_ingress_messages_per_block : opt nat64;
   max_number_of_canisters : opt nat64;
+  ecdsa_config : opt EcdsaConfig;
   advert_best_effort_percentage : opt nat32;
   retransmission_request_ms : opt nat32;
   dkg_interval_length : opt nat64;
   registry_poll_period_ms : opt nat32;
   max_chunk_wait_ms : opt nat32;
   receive_check_cache_size : opt nat32;
+  ecdsa_key_signing_enable : opt vec EcdsaKeyId;
   ssh_backup_access : opt vec text;
   max_chunk_size : opt nat32;
   initial_notary_delay_millis : opt nat64;

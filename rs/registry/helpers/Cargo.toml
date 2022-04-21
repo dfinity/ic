@@ -6,6 +6,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+ic-ic00-types = { path = "../../types/ic00_types" }
 ic-interfaces = { path = "../../interfaces" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-common-proto = { path = "../proto" }

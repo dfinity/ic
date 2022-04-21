@@ -1,5 +1,6 @@
 use candid::CandidType;
-use ic_protobuf::registry::subnet::v1 as pb;
+use ic_ic00_types::EcdsaKeyId;
+use ic_protobuf::{proxy::ProxyDecodeError, registry::subnet::v1 as pb};
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, str::FromStr};
 
@@ -129,25 +130,29 @@ impl From<i32> for BitcoinFeature {
 #[derive(CandidType, Clone, Default, Deserialize, Debug, Eq, PartialEq, Serialize)]
 pub struct EcdsaConfig {
     pub quadruples_to_create_in_advance: u32,
-    pub key_ids: Vec<String>,
+    pub key_ids: Vec<EcdsaKeyId>,
 }
 
 impl From<EcdsaConfig> for pb::EcdsaConfig {
     fn from(item: EcdsaConfig) -> Self {
         pb::EcdsaConfig {
             quadruples_to_create_in_advance: item.quadruples_to_create_in_advance,
-            key_ids: item.key_ids,
+            key_ids: item.key_ids.iter().map(|key| key.into()).collect(),
         }
     }
 }
 
 impl TryFrom<pb::EcdsaConfig> for EcdsaConfig {
-    type Error = ();
+    type Error = ProxyDecodeError;
 
     fn try_from(value: pb::EcdsaConfig) -> Result<Self, Self::Error> {
+        let mut key_ids = vec![];
+        for key in value.key_ids {
+            key_ids.push(EcdsaKeyId::try_from(key)?);
+        }
         Ok(EcdsaConfig {
             quadruples_to_create_in_advance: value.quadruples_to_create_in_advance,
-            key_ids: value.key_ids,
+            key_ids,
         })
     }
 }

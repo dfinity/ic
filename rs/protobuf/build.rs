@@ -195,6 +195,14 @@ fn build_registry_proto() {
         "#[derive(serde::Serialize, serde::Deserialize)]",
     );
     config.type_attribute(
+        ".registry.crypto.v1.EcdsaCurve",
+        "#[derive(candid::CandidType)]",
+    );
+    config.type_attribute(
+        ".registry.crypto.v1.EcdsaKeyId",
+        "#[derive(candid::CandidType, Eq)]",
+    );
+    config.type_attribute(
         ".registry.node_operator",
         "#[derive(candid::CandidType, serde::Serialize, candid::Deserialize, Eq, Hash)]",
     );

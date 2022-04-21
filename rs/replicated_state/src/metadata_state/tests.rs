@@ -2,6 +2,7 @@ use super::*;
 use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_error_types::{ErrorCode, UserError};
+use ic_ic00_types::EcdsaCurve;
 use ic_test_utilities::{
     mock_time,
     types::{
@@ -27,7 +28,12 @@ lazy_static! {
     static ref REMOTE_CANISTER: CanisterId = CanisterId::from(0x134);
 }
 
-const ECDSA_KEY_ID: &str = "secp256k1";
+fn make_key_id() -> EcdsaKeyId {
+    EcdsaKeyId {
+        curve: EcdsaCurve::Secp256k1,
+        name: "secp256k1".to_string(),
+    }
+}
 
 #[test]
 fn can_prune_old_ingress_history_entries() {
@@ -276,7 +282,7 @@ fn empty_network_topology() {
     };
 
     assert_eq!(network_topology.bitcoin_testnet_subnets(), vec![]);
-    assert_eq!(network_topology.ecdsa_subnets(ECDSA_KEY_ID), vec![]);
+    assert_eq!(network_topology.ecdsa_subnets(&make_key_id()), vec![]);
 }
 
 #[test]
@@ -321,20 +327,18 @@ fn network_topology_bitcoin_testnet_subnets() {
 
 #[test]
 fn network_topology_ecdsa_subnets() {
+    let key = make_key_id();
     let network_topology = NetworkTopology {
         subnets: Default::default(),
         routing_table: Arc::new(RoutingTable::default()),
         canister_migrations: Arc::new(CanisterMigrations::default()),
         nns_subnet_id: subnet_test_id(42),
         ecdsa_keys: btreemap! {
-            ECDSA_KEY_ID.to_string() => vec![subnet_test_id(1)],
+            key.clone() => vec![subnet_test_id(1)],
         },
     };
 
-    assert_eq!(
-        network_topology.ecdsa_subnets(ECDSA_KEY_ID),
-        &[subnet_test_id(1)]
-    );
+    assert_eq!(network_topology.ecdsa_subnets(&key), &[subnet_test_id(1)]);
 }
 
 /// Test fixture that will produce an ingress status of type completed or failed,
