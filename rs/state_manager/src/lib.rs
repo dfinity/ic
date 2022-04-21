@@ -1049,6 +1049,10 @@ impl StateManagerImpl {
         );
         let state_layout = StateLayout::new(log.clone(), config.state_root());
 
+        state_layout
+            .remove_tmp()
+            .unwrap_or_else(|err| fatal!(log, "{:?}", err));
+
         let starting_time = Instant::now();
         let mut states_metadata =
             Self::load_metadata(&log, state_layout.states_metadata().as_path());

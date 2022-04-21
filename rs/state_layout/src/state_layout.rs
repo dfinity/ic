@@ -272,6 +272,16 @@ impl StateLayout {
         Ok(tmp)
     }
 
+    /// Removes the tmp directory and all its contents
+    pub fn remove_tmp(&self) -> Result<(), LayoutError> {
+        let tmp = self.tmp()?;
+        std::fs::remove_dir_all(&tmp).map_err(|err| LayoutError::IoError {
+            path: tmp,
+            message: "Unable to remove temporary directory".to_string(),
+            io_err: err,
+        })
+    }
+
     /// Returns a layout object representing tip state in "tip"
     /// directory. During round execution this directory may contain
     /// inconsistent state. During full checkpointing this directory contains
