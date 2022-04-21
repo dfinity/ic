@@ -76,8 +76,8 @@ fn test_the_anonymous_user_cannot_update_a_subnets_configuration() {
             max_instructions_per_round: Some(8_000_000_000),
             max_instructions_per_install_code: Some(300_000_000_000),
             features: None,
-            ecdsa_config: None,
-            ecdsa_key_signing_enable: None,
+            // ecdsa_config: None,
+            // ecdsa_key_signing_enable: None,
             max_number_of_canisters: Some(10),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
@@ -199,8 +199,8 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             max_instructions_per_round: Some(8_000_000_000),
             max_instructions_per_install_code: Some(300_000_000_000),
             features: None,
-            ecdsa_config: None,
-            ecdsa_key_signing_enable: None,
+            // ecdsa_config: None,
+            // ecdsa_key_signing_enable: None,
             max_number_of_canisters: Some(100),
             ssh_readonly_access: None,
             ssh_backup_access: None,
@@ -314,8 +314,8 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
             max_instructions_per_round: Some(8_000_000_000),
             max_instructions_per_install_code: Some(300_000_000_000),
             features: None,
-            ecdsa_config: None,
-            ecdsa_key_signing_enable: None,
+            // ecdsa_config: None,
+            // ecdsa_key_signing_enable: None,
             max_number_of_canisters: Some(42),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
@@ -381,6 +381,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
 }
 
 #[test]
+#[ignore]
 fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
     const REJECT_MSG: &str = "Canister rejected with message: IC0503: Canister rwlgt-iiaaa-aaaaa-aaaaa-cai trapped explicitly: Panicked at 'Proposal attempts to enable signing for ECDSA key key_id_1 on Subnet bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae,  but the subnet does not hold the given key. A proposal to add that key to the subnet must first be separately submitted.'";
 
@@ -445,11 +446,11 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
 
         // update payload message
         let mut payload = UpdateSubnetPayload {
-            ecdsa_config: Some(EcdsaConfig {
-                quadruples_to_create_in_advance: 10,
-                key_ids: vec!["key_id_1".to_string()],
-            }),
-            ecdsa_key_signing_enable: Some(vec!["key_id_1".to_string()]),
+            // ecdsa_config: Some(EcdsaConfig {
+            //     quadruples_to_create_in_advance: 10,
+            //     key_ids: vec!["key_id_1".to_string()],
+            // }),
+            // ecdsa_key_signing_enable: Some(vec!["key_id_1".to_string()]),
             ..empty_update_subnet_payload(subnet_id)
         };
 
@@ -472,8 +473,8 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
 
         // Change one field at a time in this payload
         payload = UpdateSubnetPayload {
-            ecdsa_config: None,
-            ecdsa_key_signing_enable: Some(vec!["key_id_1".to_string()]),
+            // ecdsa_config: None,
+            // ecdsa_key_signing_enable: Some(vec!["key_id_1".to_string()]),
             ..empty_update_subnet_payload(subnet_id)
         };
 
@@ -496,11 +497,11 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
 
         // Trying again, this time in the correct order
         payload = UpdateSubnetPayload {
-            ecdsa_config: Some(EcdsaConfig {
-                quadruples_to_create_in_advance: 10,
-                key_ids: vec!["key_id_1".to_string()],
-            }),
-            ecdsa_key_signing_enable: None,
+            // ecdsa_config: Some(EcdsaConfig {
+            //     quadruples_to_create_in_advance: 10,
+            //     key_ids: vec!["key_id_1".to_string()],
+            // }),
+            // ecdsa_key_signing_enable: None,
             ..empty_update_subnet_payload(subnet_id)
         };
 
@@ -534,11 +535,11 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
 
         // This update should enable signing on our subnet for the given key.
         payload = UpdateSubnetPayload {
-            ecdsa_config: Some(EcdsaConfig {
-                quadruples_to_create_in_advance: 10,
-                key_ids: vec!["key_id_1".to_string()],
-            }),
-            ecdsa_key_signing_enable: Some(vec!["key_id_1".to_string()]),
+            // ecdsa_config: Some(EcdsaConfig {
+            //     quadruples_to_create_in_advance: 10,
+            //     key_ids: vec!["key_id_1".to_string()],
+            // }),
+            // ecdsa_key_signing_enable: Some(vec!["key_id_1".to_string()]),
             ..empty_update_subnet_payload(subnet_id)
         };
 
@@ -599,7 +600,7 @@ fn empty_update_subnet_payload(subnet_id: SubnetId) -> UpdateSubnetPayload {
         max_number_of_canisters: None,
         ssh_readonly_access: None,
         ssh_backup_access: None,
-        ecdsa_config: None,
-        ecdsa_key_signing_enable: None,
+        // ecdsa_config: None,
+        // ecdsa_key_signing_enable: None,
     }
 }
