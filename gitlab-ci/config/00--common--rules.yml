@@ -237,6 +237,9 @@
         - ic-os/guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/packages.common
         - ic-os/guestos/rootfs/packages.dev
+        - ic-os/hostos/rootfs/Dockerfile.base
+        - ic-os/hostos/rootfs/packages.common
+        - ic-os/hostos/rootfs/packages.dev
 
 .rules-service-worker-release:
   rules:
