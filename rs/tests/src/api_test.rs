@@ -87,7 +87,7 @@ pub fn vm_control(test_env: TestEnv, _: Logger) {
     info!(logger, "All nodes are ready starting test...");
     // get one node per subnet, then restart them
     let nodes: Vec<_> = test_env
-        .topology_snapshot()
+        .topology_snapshot_by_name("two_subnets")
         .subnets()
         .map(|s| s.nodes().next().unwrap())
         .collect();
