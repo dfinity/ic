@@ -77,6 +77,35 @@ fn label<T: Into<Label>>(t: T) -> Label {
 }
 
 #[test]
+fn temporary_directory_gets_cleaned() {
+    state_manager_restart_test(|state_manager, restart_fn| {
+        // write something to some file in the tmp directory
+        let test_file = state_manager
+            .state_layout()
+            .tmp()
+            .expect("failed to get tmp directory path")
+            .join("some_file");
+        std::fs::write(&test_file, "some stuff").expect("failed to write to test file");
+
+        // restart the state_manager
+        let state_manager = restart_fn(state_manager, None);
+
+        // check the tmp directory is empty
+        assert!(
+            state_manager
+                .state_layout()
+                .tmp()
+                .unwrap()
+                .read_dir()
+                .unwrap()
+                .next()
+                .is_none(),
+            "tmp directory is not empty"
+        );
+    });
+}
+
+#[test]
 fn tip_can_be_recovered_if_no_checkpoint_exists() {
     // three scenarios
     // Tip is clean after crash but no checkpoints have happened.
