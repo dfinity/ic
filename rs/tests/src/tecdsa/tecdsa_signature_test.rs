@@ -37,7 +37,7 @@ use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_test_utils::{governance::submit_external_update_proposal, ids::TEST_NEURON_1_ID};
-use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
+use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use ic_types_test_utils::ids::subnet_test_id;
@@ -75,8 +75,8 @@ fn empty_subnet_update() -> UpdateSubnetPayload {
         max_instructions_per_round: None,
         max_instructions_per_install_code: None,
         features: None,
-        ecdsa_config: None,
-        ecdsa_key_signing_enable: None,
+        // ecdsa_config: None,
+        // ecdsa_key_signing_enable: None,
         max_number_of_canisters: None,
         ssh_readonly_access: None,
         ssh_backup_access: None,
@@ -273,23 +273,23 @@ pub(crate) fn verify_signature(message_hash: &[u8], public_key: &PublicKey, sign
     assert!(secp.verify(&message, signature, public_key).is_ok());
 }
 
-async fn enable_ecdsa_signing(governance: &Canister<'_>, subnet_id: SubnetId, key_id: &str) {
+async fn enable_ecdsa_signing(governance: &Canister<'_>, subnet_id: SubnetId, _key_id: &str) {
     // The ECDSA key sharing process requires that a key first be added to a
     // subnet, and then enabling signing with that key must happen in a separate
     // proposal.
     let proposal_payload = UpdateSubnetPayload {
         subnet_id,
-        ecdsa_config: Some(EcdsaConfig {
-            quadruples_to_create_in_advance: 10,
-            key_ids: vec![key_id.to_string()],
-        }),
+        // ecdsa_config: Some(EcdsaConfig {
+        //     quadruples_to_create_in_advance: 10,
+        //     key_ids: vec![key_id.to_string()],
+        // }),
         ..empty_subnet_update()
     };
     execute_update_subnet_proposal(governance, proposal_payload).await;
 
     let proposal_payload = UpdateSubnetPayload {
         subnet_id,
-        ecdsa_key_signing_enable: Some(vec![key_id.to_string()]),
+        // ecdsa_key_signing_enable: Some(vec![key_id.to_string()]),
         ..empty_subnet_update()
     };
     execute_update_subnet_proposal(governance, proposal_payload).await;
