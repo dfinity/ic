@@ -240,7 +240,10 @@ impl PayloadBuilder for PayloadBuilderImpl {
         if canister_http_bytes != 0 {
             return Err(ValidationError::Permanent(
                 PayloadPermanentError::CanisterHttpPayloadValidationError(
-                    CanisterHttpPermananentValidationError::PayloadTooBig(0, canister_http_bytes),
+                    CanisterHttpPermananentValidationError::PayloadTooBig {
+                        expected: 0,
+                        received: canister_http_bytes,
+                    },
                 ),
             ));
         }
