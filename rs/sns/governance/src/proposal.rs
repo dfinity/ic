@@ -21,29 +21,34 @@ pub const PROPOSAL_TITLE_BYTES_MAX: usize = 256;
 pub const PROPOSAL_SUMMARY_BYTES_MAX: usize = 15000;
 /// The maximum number of bytes in an SNS proposal's URL.
 pub const PROPOSAL_URL_CHAR_MAX: usize = 2048;
-/// The maximum number of bytes in an SNS motion proposal's motion_text
+/// The maximum number of bytes in an SNS motion proposal's motion_text.
 pub const PROPOSAL_MOTION_TEXT_BYTES_MAX: usize = 10000;
 
-/// A proposal does not need to reach absolute majority to be accepted. However
-/// there is a minimum amount of votes needed for a simple majority to be
-/// enough. This minimum is expressed as a ratio of the total possible votes for
-/// the proposal.
+/// The minimum number of votes a proposal must have at the end of the voting period to be
+/// adopted with a plurality of the voting power submitted rather than a majority of the
+/// total available voting power.
+///
+/// A proposal is adopted if either a majority of the total voting power available voted
+/// in favor of the proposal or if the proposal reaches the end of the voting period,
+/// there is a minimum amount of votes, and a plurality of the used voting power is in
+/// favor of the proposal. This minimum of votes is expressed as a ratio of the used
+/// voting power in favor of the proposal divided by the total available voting power.
 pub const MIN_NUMBER_VOTES_FOR_PROPOSAL_RATIO: f64 = 0.03;
 
-/// Parameter of the wait for quiet algorithm. This is the maximum amount the
-/// deadline can be delayed on each vote.
+/// The maximum amount of time that a proposal's initial deadline can be increased by the
+/// wait-for-quiet algorithm.
 pub const WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS: u64 = ONE_DAY_SECONDS;
 
-/// The maximum number results returned by the method `list_proposals`.
+/// The maximum number of proposals returned by one call to the method `list_proposals`,
+/// which can be used to list all proposals in a paginated fashion.
 pub const MAX_LIST_PROPOSAL_RESULTS: u32 = 100;
 
-/// The max number of unsettled proposals -- that is proposals for which ballots
-/// are still stored.
+/// The maximum number of unsettled proposals (proposals for which ballots are still stored).
 pub const MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS: usize = 700;
 
 impl Proposal {
-    /// Returns whether such a proposal should be allowed to
-    /// be submitted when the heap growth potential is low.
+    /// Returns whether a proposal is allowed to be submitted when
+    /// the heap growth potential is low.
     pub(crate) fn allowed_when_resources_are_low(&self) -> bool {
         self.action
             .as_ref()
@@ -403,8 +408,8 @@ pub async fn validate_and_render_execute_nervous_system_function(
 }
 
 impl ProposalData {
-    /// Compute the 'status' of a proposal. See [ProposalDecisionStatus] for
-    /// more information.
+    /// Returns the proposal's decision status. See [ProposalDecisionStatus] in the SNS's
+    /// proto for more information.
     pub fn status(&self) -> ProposalDecisionStatus {
         if self.decided_timestamp_seconds == 0 {
             ProposalDecisionStatus::ProposalStatusOpen
@@ -421,6 +426,8 @@ impl ProposalData {
         }
     }
 
+    /// Returns the proposal's reward status. See [ProposalRewardStatus] in the SNS's
+    /// proto for more information.
     pub fn reward_status(&self, now_seconds: u64) -> ProposalRewardStatus {
         match self.reward_event_round {
             0 => {
@@ -434,6 +441,7 @@ impl ProposalData {
         }
     }
 
+    /// Returns the proposal's current voting period deadline in seconds from the Unix epoch.
     pub fn get_deadline_timestamp_seconds(&self) -> u64 {
         self.wait_for_quiet_state
             .as_ref()
@@ -441,26 +449,33 @@ impl ProposalData {
             .current_deadline_timestamp_seconds
     }
 
-    /// Returns true if votes are still accepted for this proposal and
+    /// Returns true if votes are still accepted for the proposal and
     /// false otherwise.
     ///
     /// For voting reward purposes, votes may be accepted even after a
-    /// decision has been made on a proposal. Such votes will not
-    /// affect the decision on the proposal, but they affect the
-    /// voting rewards of the voting neuron.
-    ///
-    /// This method can return true even if the proposal is
-    /// already decided.
+    /// proposal has been decided. Thus, this method may return true
+    /// even if the proposal is already decided.
+    /// (As soon as a majority is reached, the result cannot turn anymore,
+    /// thus the proposal is decided. We still give time to other voters
+    /// to cast their votes until the voting period ends so that they can
+    /// collect voting rewards).
     pub fn accepts_vote(&self, now_seconds: u64) -> bool {
-        // Naive version of the wait-for-quiet mechanics. For now just tests
-        // that the proposal duration is smaller than the threshold, which
-        // we're just currently setting as seconds.
-        //
-        // Wait for quiet is meant to be able to decide proposals without
-        // quorum. The tally must have been done above already.
+        // Checks if the proposal's deadline is still in the future.
         now_seconds < self.get_deadline_timestamp_seconds()
     }
 
+    /// Possibly extends a proposal's voting period. The underlying idea is
+    /// that if a proposal has a clear result, then there is no need to have
+    /// a long voting period. However, if a proposal is controversial and the
+    /// result keeps flipping, we should give voters more time to contribute
+    /// to the decision.
+    /// To this end, this method applies the so called wait-for-quiet algorithm
+    /// to the given proposal: It evaluates whether the proposal's voting result
+    /// has turned (a yes-result turned into a no-result or vice versa) and, if
+    /// this is the case, extends the proposal's deadline.
+    /// TODO adjust
+    /// The initial voting period is increased at most by
+    /// WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS.
     pub fn evaluate_wait_for_quiet(
         &mut self,
         now_seconds: u64,
@@ -473,9 +488,9 @@ impl ProposalData {
             .as_mut()
             .expect("Proposal must have a wait_for_quiet_state.");
 
-        // Dont evaluate wait for quiet if there is already a decision, or the
-        // deadline has been met. The deciding amount for yes and no are
-        // slightly different, because yes needs a majority to succeed, while
+        // Do not evaluate wait-for-quiet if there is already a decision, or the
+        // proposal's voting deadline has been reached. The deciding amount for yes
+        // and no are slightly different, because yes needs a majority to succeed, while
         // no only needs a tie.
         let current_deadline = wait_for_quiet_state.current_deadline_timestamp_seconds;
         let deciding_amount_yes = new_tally.total / 2 + 1;
@@ -487,8 +502,8 @@ impl ProposalData {
             return;
         }
 
-        // Returns whether the vote has turned, i.e. if the vote is now yes, when it was
-        // previously no, or if the vote is now no if it was previously yes.
+        // Returns whether the tally result has turned, i.e. if the result now
+        // favors yes, but it used to favor no or vice versa.
         fn vote_has_turned(old_tally: &Tally, new_tally: &Tally) -> bool {
             (old_tally.yes > old_tally.no && new_tally.yes <= new_tally.no)
                 || (old_tally.yes <= old_tally.no && new_tally.yes > new_tally.no)
@@ -497,26 +512,30 @@ impl ProposalData {
             return;
         }
 
+        // Let W be the maximum voting period extension that is defined in
+        // WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS. A proposal's voting
+        // period starts with an initial_voting_period and can be extended
+        // to at most initial_voting_period + 2 * W.
         // The required_margin reflects the proposed deadline extension to be
         // made beyond the current moment, so long as that extends beyond the
         // current wait-for-quiet deadline. We calculate the required_margin a
         // bit indirectly here so as to keep with unsigned integers, but the
         // idea is:
         //
-        //     W + (voting_period - elapsed) / 2
+        //     W + (initial_voting_period - elapsed) / 2
         //
-        // Thus, while we are still within the original voting period, we add
+        // Thus, while we are still within the initial voting period, we add
         // to W, but once we are beyond that window, we subtract from W until
         // reaching the limit where required_margin remains at zero. This
         // occurs when:
         //
-        //     elapsed = voting_period + 2 * W
+        //     elapsed = initial_voting_period + 2 * W
         //
-        // As an example, given that W = 12h, if the initial voting_period is
+        // As an example, given that W = 12h, if the initial_voting_period is
         // 24h then the maximum deadline will be 48h.
         //
         // The required_margin ends up being a linearly decreasing value,
-        // starting at W + voting_period / 2 and reducing to zero at the
+        // starting at W + initial_voting_period / 2 and reducing to zero at the
         // furthest possible deadline. When the vote does not flip, we do not
         // update the deadline, and so there is a chance of ending prior to
         // the extreme limit. But each time the vote flips, we "re-enter" the
@@ -549,6 +568,7 @@ impl ProposalData {
         }
     }
 
+    /// Recomputes the proposal's tally.
     /// This is an expensive operation.
     pub fn recompute_tally(&mut self, now_seconds: u64, voting_period_seconds: u64) {
         // Tally proposal
@@ -600,8 +620,9 @@ impl ProposalData {
         self.latest_tally = Some(new_tally);
     }
 
-    /// Returns true if a proposal meets the conditions to be accepted. The
-    /// result is only meaningful if the proposal can be decided, i.e., either there is a majority or the deadline has passed.
+    /// Returns true if the proposal meets the conditions to be accepted, also called "adopted".
+    /// The result is only meaningful if a decision on the proposal's result can be made, i.e.,
+    /// either there is a majority of yes-votes or the proposal's deadline has passed.
     pub fn is_accepted(&self) -> bool {
         if let Some(tally) = self.latest_tally.as_ref() {
             (tally.yes as f64 >= tally.total as f64 * MIN_NUMBER_VOTES_FOR_PROPOSAL_RATIO)
@@ -611,16 +632,15 @@ impl ProposalData {
         }
     }
 
-    /// Returns true if a decision may be made right now to adopt or
-    /// reject this proposal. The proposal must be tallied prior to
-    /// calling this method.
+    /// Returns true if a decision can be made right now to adopt or reject the proposal.
+    /// The proposal must be tallied prior to calling this method.
     pub(crate) fn can_make_decision(&self, now_seconds: u64) -> bool {
         if let Some(tally) = &self.latest_tally {
-            // A proposal is adopted if strictly more than half of the
-            // votes are 'yes' and rejected if at least half of the votes
-            // are 'no'. The conditions are described as below to avoid
-            // overflow. In the absence of overflow, the below is
-            // equivalent to (2 * yes > total) || (2 * no >= total).
+            // Even when a proposal's deadline has not passed, a proposal is
+            // adopted if strictly more than half of the votes are 'yes' and
+            // rejected if at least half of the votes are 'no'. The conditions
+            // are described as below to avoid overflow. In the absence of overflow,
+            // the below is equivalent to (2 * yes > total) || (2 * no >= total).
             let majority =
                 (tally.yes > tally.total - tally.yes) || (tally.no >= tally.total - tally.no);
             let expired = !self.accepts_vote(now_seconds);
@@ -646,7 +666,7 @@ impl ProposalData {
         false
     }
 
-    /// Return true if this proposal can be purged from storage, e.g.,
+    /// Return true if the proposal can be purged from storage, e.g.,
     /// if it is allowed to be garbage collected.
     pub(crate) fn can_be_purged(&self, now_seconds: u64) -> bool {
         self.status().is_final() && self.reward_status(now_seconds).is_final()
@@ -654,8 +674,8 @@ impl ProposalData {
 }
 
 impl ProposalDecisionStatus {
-    /// Return true if this status is 'final' in the sense that no
-    /// further state transitions are possible.
+    /// Return true if the proposal decision status is 'final', i.e., the proposal
+    /// decision status is one that cannot be changed anymore.
     pub fn is_final(&self) -> bool {
         matches!(
             self,
@@ -667,8 +687,8 @@ impl ProposalDecisionStatus {
 }
 
 impl ProposalRewardStatus {
-    /// Return true if this reward status is 'final' in the sense that
-    /// no further state transitions are possible.
+    /// Return true if this reward status is 'final', i.e., the proposal
+    /// reward status is one that cannot be changed anymore.
     pub fn is_final(&self) -> bool {
         matches!(self, ProposalRewardStatus::Settled)
     }
