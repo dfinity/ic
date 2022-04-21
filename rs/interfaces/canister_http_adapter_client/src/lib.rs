@@ -3,7 +3,7 @@ use ic_types::canister_http::{CanisterHttpRequest, CanisterHttpResponse};
 /// The error type that can be returned on "send".
 #[derive(Debug, PartialEq)]
 pub enum SendError<Request> {
-    /// The "bridge" is full. Some responses must be consumes before new
+    /// Channel is full. Some responses must be consumes before new
     /// requests are send.
     Full(Request),
 }
@@ -21,5 +21,5 @@ pub trait NonBlockingChannel<Request, Response> {
     fn try_receive(&mut self) -> Result<Response, TryReceiveError>;
 }
 
-pub type CanisterHttpClient =
+pub type CanisterHttpAdapterClient =
     Box<dyn NonBlockingChannel<CanisterHttpRequest, CanisterHttpResponse> + Send>;

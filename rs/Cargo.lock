@@ -5134,7 +5134,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-interfaces-canister-http-adapter-facade"
+name = "ic-interfaces-canister-http-adapter-client"
 version = "0.8.0"
 dependencies = [
  "ic-types 0.8.0",
