@@ -1,0 +1,14 @@
+{
+  "deployment": {
+    "name": "{{ deployment_name }}"
+  },
+  "logging": {
+    "hosts": "{{ logging_hosts }}"
+  },
+  "nns": {
+    "url": "{{ nns_url }}"
+  },
+  "resources": {
+    "memory": "{{ resources_memory }}"
+  }
+}

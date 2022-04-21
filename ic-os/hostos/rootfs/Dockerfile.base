@@ -1,0 +1,38 @@
+# HostOS - Base Image
+#
+# Build steps:
+# - `docker build -t dfinity/hostos-base:<tag> -f Dockerfile.base .`
+# - `docker push/pull dfinity/hostos-base:<tag>`
+# - `docker build -t dfinity/hostos-base-dev:<tag> --build-arg PACKAGE_FILES="packages.common packages.dev" -f Dockerfile.base .`
+# - `docker push/pull dfinity/hostos-base-dev:<tag>`
+#
+# First build stage:
+# - Download and cache minimal Ubuntu Server 20.04 LTS Docker image
+# - Install and cache upstream packages from built-in Ubuntu repositories
+#
+# NOTE:
+# If you edit this file, you will need to perform the following operations
+# to get your changes deployed.
+#
+# 1. Get your MR approved and merged into master
+# 2. On the next hourly master pipeline, click the "deploy-host-os-baseimg" job
+# 3. Note down the sha256 and update the sha256 reference in the neighboring
+#    Dockerfiles
+FROM ubuntu:20.04
+
+ENV SOURCE_DATE_EPOCH=0
+ENV TZ=UTC
+ENV DEBIAN_FRONTEND=noninteractive
+
+
+# For the prod image, just use packages.common to define the packages installed
+# on target.
+# For the dev image, use both "packages.common" and "packages.dev" -- this can
+# be set via docker build args (see above).
+ARG PACKAGE_FILES=packages.common
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+COPY packages.* /tmp/
+RUN apt-get -y update && \
+    apt-get -y upgrade && \
+    apt-get -y --no-install-recommends install $(for P in ${PACKAGE_FILES}; do cat /tmp/$P | sed -e "s/#.*//" ; done) && \
+    rm /tmp/packages.*

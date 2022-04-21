@@ -94,6 +94,25 @@ fn main() -> Result<(), Error> {
                 .help("Request the HSM device to be detached"),
         )
         .arg(
+            Arg::with_name("set-node-id")
+                .long("set-node-id")
+                .value_name("node_id")
+                .help("Set the node ID on the host.")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("join-success")
+                .long("join-success")
+                .help("Notify the host of a successful join request"),
+        )
+        .arg(
+            Arg::with_name("upgrade")
+                .long("upgrade")
+                .value_name("info")
+                .help("Request the HostOS to apply upgrade")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("port")
                 .long("port")
                 .value_name("PORT")
@@ -111,6 +130,20 @@ fn main() -> Result<(), Error> {
 
     if matches.is_present("detach-hsm") {
         return send_msg_to_host("detach-hsm", port);
+    }
+
+    if let Some(node_id) = matches.value_of("set-node-id") {
+        return send_msg_to_host(&format!("set-node-id[{}]", node_id), port);
+    }
+
+    if matches.is_present("join-success") {
+        return send_msg_to_host("join-success", port);
+    }
+
+    // TODO: Currently `info` is a string of the form `"url sha"`. Instead, we
+    // should use `clap` to present this better.
+    if let Some(info) = matches.value_of("upgrade") {
+        return send_msg_to_host(&format!("upgrade[{}]", info), port);
     }
 
     Ok(())

@@ -67,13 +67,14 @@ dist-newstyle
 test_report.xml
 
 # IC-OS disk images
-ic-os.img.tar
-ic-os.img
+*-os.iso
+*-img.tar.gz
 
 # Various build artifacts
 /artifacts/
 **/build
 **/build-tmp
+**/build-out
 **/boot/version.txt
 **/bin/canister_sandbox
 **/bin/ic-btc-adapter
@@ -85,7 +86,7 @@ ic-os.img
 **/bin/replica
 **/bin/state-tool
 **/bin/vsock_agent
-**/bin/canister_sandbox
+**/bin/sandbox_launcher
 **/bin/boundary-node-prober
 
 # Boundary node control plane binary

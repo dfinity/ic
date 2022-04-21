@@ -1,0 +1,9 @@
+[Unit]
+Description=Store HSM to config partition
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ic/bin/hsm-utils.sh --save
+
+[Install]
+WantedBy=multi-user.target

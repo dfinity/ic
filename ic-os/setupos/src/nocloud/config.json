@@ -1,0 +1,583 @@
+{
+  "network": {
+    "name_servers": "2606:4700:4700::1111 2606:4700:4700::1001 2001:4860:4860::8888 2001:4860:4860::8844",
+    "dcs": {
+      "feb2q-mgxwe-okz7r-juws2-mahg4-wflqu-oeflf-kvh4r-qaqit-hbqpg-uqe": {
+        "ipv6_prefix": "2001:438:fffd:11c",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2001:438:fffd:11c::1",
+        "datacenter_name": "bc1"
+      },
+      "ml6cq-rzbnj-r4e7q-pjmpi-2z6no-gxesu-mhnja-2noyy-tuuf2-x5pu5-dae": {
+        "ipv6_prefix": "2001:470:1:c76",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2001:470:1:c76::1",
+        "datacenter_name": "fm1"
+      },
+      "jjymt-wmgqv-dv3ue-hno3w-ccxaf-ecvys-rvje7-eqmoo-hbppb-ltsba-iae": {
+        "ipv6_prefix": "2001:470:1:c76",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2001:470:1:c76::1",
+        "datacenter_name": "fm1"
+      },
+      "2ybbq-hrrex-ywmpg-edkpy-w2yyb-5xerj-t4aba-lupuu-ixfuy-gyzks-aqe": {
+        "ipv6_prefix": "2001:470:1:c76",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2001:470:1:c76::1",
+        "datacenter_name": "fm1"
+      },
+      "k4wvb-4fh4x-3wdjp-kuy7z-xdqxu-622hg-yy6fk-clqsw-svsaj-jjxda-5ae": {
+        "ipv6_prefix": "2001:470:1:c76",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2001:470:1:c76::1",
+        "datacenter_name": "fm1"
+      },
+      "jamvj-vlnyv-hg77l-nruxk-esp5u-yics2-hg4jg-4xkdd-z7yk2-wctgm-bqe": {
+        "ipv6_prefix": "2001:470:1:c76",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2001:470:1:c76::1",
+        "datacenter_name": "fm1"
+      },
+      "4q2h5-yua6n-kocnh-godkj-tzhzz-vxvti-ugvfs-axtnd-wjbhk-imntm-bae": {
+        "ipv6_prefix": "2001:470:1:c76",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2001:470:1:c76::1",
+        "datacenter_name": "fm1"
+      },
+      "k64o4-426ua-v2f2u-vek6t-msc5j-4hsjp-4wgrj-o25fn-7w7v4-yalzw-kqe": {
+        "ipv6_prefix": "2001:470:1:c76",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2001:470:1:c76::1",
+        "datacenter_name": "fm1"
+      },
+      "lyevh-bqcwa-7nw53-njsal-vwa4a-hlvpb-7lf4f-aq7je-wptpy-g2lns-2ae": {
+        "ipv6_prefix": "2001:470:1:c76",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2001:470:1:c76::1",
+        "datacenter_name": "fm1"
+      },
+      "5yxxh-76kgb-f2psv-d4qsc-wbzc5-kfxu7-6apac-ostfr-ktglk-nhyfl-xqe": {
+        "ipv6_prefix": "2001:470:1:c76",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2001:470:1:c76::1",
+        "datacenter_name": "fm1"
+      },
+      "mlh5i-sboiz-fyvjk-lagid-pevh6-wpzdo-llcf2-hc76e-usad5-gfs7h-nae": {
+        "ipv6_prefix": "2001:470:1:c76",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2001:470:1:c76::1",
+        "datacenter_name": "fm1"
+      },
+      "3nu7r-l6i5c-jlmhi-fmmhm-4wcw4-ndlwb-yovrx-o3wxh-suzew-hvbbo-7qe": {
+        "ipv6_prefix": "2001:4d78:400:10a",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2001:4d78:400:10a::1",
+        "datacenter_name": "fr2"
+      },
+      "oorkg-ilned-36bwb-vyprm-56g55-hp6xq-gucq3-fmn2i-44a4e-txzlp-gqe": {
+        "ipv6_prefix": "2001:920:401a:1706",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2001:920:401a:1706::1",
+        "datacenter_name": "br2"
+      },
+      "pgunx-7pdft-jwvuo-j65kd-2mdxl-bi3r7-znv4c-vw2q3-2gno4-2uoeg-wqe": {
+        "ipv6_prefix": "2001:920:401a:1708",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2001:920:401a:1708::1",
+        "datacenter_name": "an1"
+      },
+      "mjeqs-wxqp7-tecvn-77uxe-eowch-4l4gy-6lc6f-ys6je-qnybm-5fxya-qqe": {
+        "ipv6_prefix": "2001:920:401a:1710",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2001:920:401a:1710::1",
+        "datacenter_name": "br1"
+      },
+      "qffmn-uqkl2-uuw6l-jo5i6-obdek-tix6f-u4odv-j3265-pcpcn-jy5le-lae": {
+        "ipv6_prefix": "2401:3f00:1000:22",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2401:3f00:1000:22::1",
+        "datacenter_name": "sg2"
+      },
+      "5mhxl-exk6r-cvm3q-ose77-qojd2-dybc4-hvrdj-5dnr6-ylvg7-wtn23-2qe": {
+        "ipv6_prefix": "2401:3f00:1000:23",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2401:3f00:1000:23::1",
+        "datacenter_name": "sg3"
+      },
+      "d4bin-5o2wg-ycbdq-yljr7-45pjv-ptf6d-v243j-vg6x5-dlo7t-yqu62-5qe": {
+        "ipv6_prefix": "2401:3f00:1000:24",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2401:3f00:1000:24::1",
+        "datacenter_name": "sg1"
+      },
+      "wmrev-cdq34-iqwdm-oeaak-f6kch-s4axw-ojbhe-yuolf-bazh4-rjdty-oae": {
+        "ipv6_prefix": "2600:2c01:21:0",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2600:2c01:21::1",
+        "datacenter_name": "jv1"
+      },
+      "mggfn-mkpex-vf5i3-yvh2f-4nndb-ab5uo-kbjct-3knnr-ttdnz-vzis3-aqe": {
+        "ipv6_prefix": "2600:3000:1300:1300",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2600:3000:1300:1300::1",
+        "datacenter_name": "dn1"
+      },
+      "sambh-2izbh-p3bex-lamdj-retvw-g2uob-nptqo-bhcng-k6w44-vzenu-5ae": {
+        "ipv6_prefix": "2600:3000:6100:200",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2600:3000:6100:200::1",
+        "datacenter_name": "dl1"
+      },
+      "lz4fy-gca6y-aodk3-ncdrw-ouoqb-kgvjj-h4nul-eybyu-puwev-hkogp-fqe": {
+        "ipv6_prefix": "2600:3004:1200:1200",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2600:3004:1200:1200::1",
+        "datacenter_name": "pl1"
+      },
+      "it7v7-gb556-xhrhm-aaprs-ou5tu-evlk7-u5u2e-cvl5h-7lw6s-httyn-zqe": {
+        "ipv6_prefix": "2600:3006:1400:1500",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2600:3006:1400:1500::1",
+        "datacenter_name": "lv1"
+      },
+      "xgakf-thvoi-ktliq-yzbzw-iimxg-7xrqg-rytjr-zegaq-g7mgc-vgnkr-gqe": {
+        "ipv6_prefix": "2600:c02:b002:15",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2600:c02:b002:15::1",
+        "datacenter_name": "sj1"
+      },
+      "d3yth-jcexn-vmjkd-v3o6e-5u4kp-7m4e7-ifseg-xedds-upvge-2lf64-5qe": {
+        "ipv6_prefix": "2600:c02:b002:15",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2600:c02:b002:15::1",
+        "datacenter_name": "sj1"
+      },
+      "dofam-sv7es-sondk-6ujbj-dux36-j3e7b-4ypsi-3dh73-wx75v-ra2a4-mae": {
+        "ipv6_prefix": "2600:c02:b002:15",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2600:c02:b002:15::1",
+        "datacenter_name": "sj1"
+      },
+      "i3qb7-ibpad-onj4l-agg26-y2fmz-srqtz-aiu2m-ekdwg-kwjbe-vfa32-iqe": {
+        "ipv6_prefix": "2600:c02:b002:15",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2600:c02:b002:15::1",
+        "datacenter_name": "sj1"
+      },
+      "r42hg-udzef-ynpjx-ygtw5-7lbdb-com7k-ci75q-wrr2w-ohanz-bvyhi-4ae": {
+        "ipv6_prefix": "2600:c02:b002:15",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2600:c02:b002:15::1",
+        "datacenter_name": "sj1"
+      },
+      "qoj6s-jzxym-ayoea-a2xvu-gqler-7xx73-lfnhj-ckgka-fekoa-djunj-zae": {
+        "ipv6_prefix": "2600:c02:b002:15",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2600:c02:b002:15::1",
+        "datacenter_name": "sj1"
+      },
+      "zy6hg-uw7mf-xkihb-o6vfb-f5can-ytwjn-vg6ar-dyxuj-pd6be-hzumb-6qe": {
+        "ipv6_prefix": "2600:c02:b002:15",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2600:c02:b002:15::1",
+        "datacenter_name": "sj1"
+      },
+      "agukz-qtcdt-slwoi-ovhe7-vor4b-x7kmc-ia2m2-4kswr-de6yv-qiqky-sqe": {
+        "ipv6_prefix": "2600:c02:b002:15",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2600:c02:b002:15::1",
+        "datacenter_name": "sj1"
+      },
+      "gmqwa-45rep-ucuch-dzfjr-eos2s-ftvag-avtyu-qova4-uh5df-v4itk-gae": {
+        "ipv6_prefix": "2600:c02:b002:15",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2600:c02:b002:15::1",
+        "datacenter_name": "sj1"
+      },
+      "ziee6-vlgpx-lftmr-4co3x-3ymwd-ou3rs-qr2zm-esz6v-kis2x-w6r4z-rae": {
+        "ipv6_prefix": "2600:c02:b002:15",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2600:c02:b002:15::1",
+        "datacenter_name": "sj1"
+      },
+      "4xx2h-uwkev-r6uku-yjv2u-43yy7-63nf3-2mvnb-dkv7n-mprpw-ytt4a-jae": {
+        "ipv6_prefix": "2600:c02:b002:15",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2600:c02:b002:15::1",
+        "datacenter_name": "sj1"
+      },
+      "3byxg-jzave-zvsvt-wtm6d-yva3f-ja7um-o5ylv-3qt3d-pjziz-ob5dz-gae": {
+        "ipv6_prefix": "2600:c02:b002:15",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2600:c02:b002:15::1",
+        "datacenter_name": "sj1"
+      },
+      "zcjkw-qqkxh-lwmb5-gw23g-j4aic-gevqd-lj2ud-dmcbb-osm6e-j4ajz-zae": {
+        "ipv6_prefix": "2600:c02:b002:15",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2600:c02:b002:15::1",
+        "datacenter_name": "sj1"
+      },
+      "2tfwa-dpoci-5vpka-ryjfl-ou7s5-n56mf-bah6e-rtyxt-qw3tw-zwivi-7ae": {
+        "ipv6_prefix": "2600:c0d:3002:4",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2600:c0d:3002:4::1",
+        "datacenter_name": "bo1"
+      },
+      "bmlhw-kinr6-7cyv5-3o3v6-ic6tw-pnzk3-jycod-6d7sw-owaft-3b6k3-kqe": {
+        "ipv6_prefix": "2604:3fc0:2001:0",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2604:3fc0:2001:0::1",
+        "datacenter_name": "at2"
+      },
+      "5syyj-syqbw-ubz3m-f4lkg-u7v2j-madhv-3s4vx-yl67f-bets5-xmrbf-zae": {
+        "ipv6_prefix": "2604:3fc0:2001:0",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2604:3fc0:2001:0::1",
+        "datacenter_name": "at2"
+      },
+      "redpf-rrb5x-sa2it-zhbh7-q2fsp-bqlwz-4mf4y-tgxmj-g5y7p-ezjtj-5qe": {
+        "ipv6_prefix": "2604:3fc0:3002:0",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2604:3fc0:3002:0::1",
+        "datacenter_name": "or1"
+      },
+      "codio-e5e6p-ol6sn-o3mgw-r7v5p-4jmch-a7exl-7pifz-cw4gn-ah47y-6ae": {
+        "ipv6_prefix": "2604:7e00:30:3",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2604:7e00:30:3::1",
+        "datacenter_name": "aw1"
+      },
+      "vkwql-433e7-au6b7-v5g7z-tduiu-no4od-6wb4c-z5zru-vzssq-zwspo-dqe": {
+        "ipv6_prefix": "2604:7e00:50:0",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2604:7e00:50::1",
+        "datacenter_name": "ch2"
+      },
+      "fthz3-5otsb-xppaq-zhlut-dxel6-5fgxj-oz56h-r7zrz-xlq5z-cxpe4-uae": {
+        "ipv6_prefix": "2604:b900:4001:76",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2604:b900:4001:76::1",
+        "datacenter_name": "hu1"
+      },
+      "u4f3y-wubbf-lxfqi-v43pp-dfp7e-gxxct-22r5h-6mcbw-vmj33-5qqv5-nae": {
+        "ipv6_prefix": "2607:f1d0:10:1",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2607:f1d0:10:1::1",
+        "datacenter_name": "ny1"
+      },
+      "5njak-uyote-7ciuj-wwcvi-idndr-4y6k7-jzrzc-klail-l3gih-5uklm-sae": {
+        "ipv6_prefix": "2607:f758:1220:0",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2607:f758:1120::1",
+        "datacenter_name": "at1"
+      },
+      "ti2ya-tkbxj-pxsx5-2jhxx-oxumb-vkzth-g7lyl-etecw-wcajo-5h42j-7qe": {
+        "ipv6_prefix": "2607:f758:1220:0",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2607:f758:1120::1",
+        "datacenter_name": "at1"
+      },
+      "yvop7-y6bqy-f3dm2-4uwwc-sn3ez-vzhdy-whxjo-zgask-rsiog-hmjhz-eae": {
+        "ipv6_prefix": "2607:f758:1220:0",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2607:f758:1120::1",
+        "datacenter_name": "at1"
+      },
+      "c4c3a-gbuee-vjynb-6af74-mdrm5-2c2d7-acv7g-3r2hi-uamra-fzbxa-2qe": {
+        "ipv6_prefix": "2607:f758:1220:0",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2607:f758:1120::1",
+        "datacenter_name": "at1"
+      },
+      "rml6b-xxhc7-qlzps-5f7os-yekbt-h32h6-hgptm-akz3d-gkqqg-7kxxp-4qe": {
+        "ipv6_prefix": "2607:f758:1220:0",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2607:f758:1120::1",
+        "datacenter_name": "at1"
+      },
+      "s4zl5-a77ey-yprwx-fsjtn-igkua-fcxg2-moicu-ypvss-wczqj-hg2ms-xae": {
+        "ipv6_prefix": "2607:f758:1220:0",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2607:f758:1120::1",
+        "datacenter_name": "at1"
+      },
+      "nfvb5-ufgwh-fuhnb-dfp2m-pj5kw-ozwbx-bsft3-cemgg-23uxw-3iucb-iae": {
+        "ipv6_prefix": "2607:f758:1220:0",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2607:f758:1120::1",
+        "datacenter_name": "at1"
+      },
+      "n3hwp-iwklj-lymsk-j54tf-75xxe-zjovd-rfsfw-ofdok-3de4m-zjoio-oqe": {
+        "ipv6_prefix": "2607:f758:1220:0",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2607:f758:1120::1",
+        "datacenter_name": "at1"
+      },
+      "xla4b-4vmw4-db4cm-qg63h-6jvj6-zm2nj-von5y-7dx2k-calku-e6hke-wae": {
+        "ipv6_prefix": "2607:f758:c300:0",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2607:f758:c300::1",
+        "datacenter_name": "tp1"
+      },
+      "z6nmn-kxmjd-66nkb-57svv-446u7-llm6g-esyrj-vpvav-no5zy-vfz4s-sae": {
+        "ipv6_prefix": "2607:f758:c300:0",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2607:f758:c300::1",
+        "datacenter_name": "tp1"
+      },
+      "7fnoo-4pqrc-tpnof-6mce7-ue5p4-5pe3d-rvyo3-jd2ah-c3bbq-lhyrx-7qe": {
+        "ipv6_prefix": "2607:f758:c300:0",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2607:f758:c300::1",
+        "datacenter_name": "tp1"
+      },
+      "li6yt-s3gqo-4enn7-a7h6b-jgxyz-ug2qa-whuha-ee77d-4ytfs-t37wo-gqe": {
+        "ipv6_prefix": "2607:f758:c300:0",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2607:f758:c300::1",
+        "datacenter_name": "tp1"
+      },
+      "t75ks-tnvpv-glfr5-lw5yn-36xhp-bn47m-lr2ec-rs26e-5c3d4-hth3g-iae": {
+        "ipv6_prefix": "2607:f758:c300:0",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2607:f758:c300::1",
+        "datacenter_name": "tp1"
+      },
+      "cuew2-gaeuu-74ucz-wfpmz-2ryd6-2cnzg-twpml-2n5op-44se6-uw62n-oae": {
+        "ipv6_prefix": "2607:f758:c300:0",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2607:f758:c300::1",
+        "datacenter_name": "tp1"
+      },
+      "pbyrs-a2v22-6covl-rl2eq-q4eit-a5hfs-stync-ndjdl-hxspd-ux63t-wqe": {
+        "ipv6_prefix": "2607:f758:c300:0",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2607:f758:c300::1",
+        "datacenter_name": "tp1"
+      },
+      "q4x5j-zns5n-xkmlt-3srm4-cysyf-uy2nx-ivkus-zv2f5-ogvkc-rxpmu-7ae": {
+        "ipv6_prefix": "2607:f758:c300:0",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2607:f758:c300::1",
+        "datacenter_name": "tp1"
+      },
+      "7l2et-gtaqh-wfokv-27gat-rnh6h-m4gd4-to2fe-6ecpz-7ox4r-nph27-mqe": {
+        "ipv6_prefix": "2607:ff70:3:2",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2607:ff70:3:2::1",
+        "datacenter_name": "ch3"
+      },
+      "kdqam-hauon-sdvym-42eyg-5wyff-4ywbw-v6iij-2sw2z-bu4rj-ejusn-jae": {
+        "ipv6_prefix": "2610:190:6000:1",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2610:190:6000:1::1",
+        "datacenter_name": "ph1"
+      },
+      "ku6ly-gfjiz-cgyob-6ycix-m5swk-jeoqd-gbeix-kxdcl-lh4td-33omd-rae": {
+        "ipv6_prefix": "2610:190:df01:5",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2610:190:df01:5::1",
+        "datacenter_name": "st1"
+      },
+      "5atxd-q4jom-dtpxr-awd3p-e562x-hpavj-godtj-g6vmz-of2c6-ildhh-fae": {
+        "ipv6_prefix": "2a00:fa0:3:0",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2a00:fa0:3:0::1",
+        "datacenter_name": "ge2"
+      },
+      "rmctk-s2vcj-fbxud-5gv4k-vfmqo-i7k7n-upz7z-47n6b-u7dyd-bdqk4-3qe": {
+        "ipv6_prefix": "2a00:fb01:400:100",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2a00:fb01:400:100::1",
+        "datacenter_name": "zh2"
+      },
+      "hfjum-y6koo-ux5qc-ona6f-mdzx2-p2ohq-divm7-jfejp-4got3-6ycro-jae": {
+        "ipv6_prefix": "2a00:fb01:400:100",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2a00:fb01:400:100::1",
+        "datacenter_name": "zh2"
+      },
+      "oa3sb-m5gwt-ld4dd-sqi3x-wh47g-lqot6-ps3um-afi3z-7cyuy-57mdg-iae": {
+        "ipv6_prefix": "2a00:fb01:400:100",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2a00:fb01:400:100::1",
+        "datacenter_name": "zh2"
+      },
+      "wnca2-grvnb-wsd4a-b7h5z-iepws-t7rdb-ccdp6-5sgoi-svn4d-vm6no-oae": {
+        "ipv6_prefix": "2a00:fb01:400:100",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2a00:fb01:400:100::1",
+        "datacenter_name": "zh2"
+      },
+      "sm6rh-sldoa-opp4o-d7ckn-y4r2g-eoqhv-nymok-teuto-4e5ep-yt6ky-bqe": {
+        "ipv6_prefix": "2a00:fb01:400:100",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2a00:fb01:400:100::1",
+        "datacenter_name": "zh2"
+      },
+      "xcne4-m67do-bnrkt-ny5xy-gxepb-5jycf-kcuvt-bdmh6-w565c-fvmdo-oae": {
+        "ipv6_prefix": "2a00:fb01:400:100",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2a00:fb01:400:100::1",
+        "datacenter_name": "zh2"
+      },
+      "s7dud-dfedw-dmrax-rjvop-5k4qw-htm4w-gj7ak-j2itz-txwwn-o5ymv-tae": {
+        "ipv6_prefix": "2a00:fb01:400:100",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2a00:fb01:400:100::1",
+        "datacenter_name": "zh2"
+      },
+      "rzskv-pde6u-albub-bojhe-odunj-k3nnf-j2eag-akkjm-o3ydz-z5tcy-vae": {
+        "ipv6_prefix": "2a00:fb01:400:100",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2a00:fb01:400:100::1",
+        "datacenter_name": "zh2"
+      },
+      "y4c7z-5wyt7-h4dtr-s77cd-t5pue-ajl7h-65ct4-ab5dr-fjaqa-x63kh-xqe": {
+        "ipv6_prefix": "2a00:fb01:400:100",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2a00:fb01:400:100::1",
+        "datacenter_name": "zh2"
+      },
+      "byspq-73pbj-e44pb-5gq3o-a6sqa-p3p3l-blq2j-dtjup-77zyx-k26zh-aae": {
+        "ipv6_prefix": "2a00:fb01:400:100",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2a00:fb01:400:100::1",
+        "datacenter_name": "zh2"
+      },
+      "wqyl3-uvtrm-5lhi3-rjcas-ntrhs-bimkv-viu7b-2tff6-ervao-u2cjg-wqe": {
+        "ipv6_prefix": "2a00:fb01:400:100",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2a00:fb01:400:100::1",
+        "datacenter_name": "zh2"
+      },
+      "pi3wm-ofu73-5wyma-gec6p-lplqp-6euwt-c5jjb-pwaey-gxmlr-rzqmk-xqe": {
+        "ipv6_prefix": "2a00:fb01:400:100",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2a00:fb01:400:100::1",
+        "datacenter_name": "zh2"
+      },
+      "vqe65-zvwhc-x7bw7-76c74-3dc6v-v6uzb-nyfvb-6wgnv-nhiew-fkoug-oqe": {
+        "ipv6_prefix": "2a00:fb01:400:100",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2a00:fb01:400:100::1",
+        "datacenter_name": "zh2"
+      },
+      "gl27f-y5srq-yy5ot-v4x5z-y2a2s-sgoor-l4gjg-qv4x4-v2olb-dz4dc-wae": {
+        "ipv6_prefix": "2a00:fc0:5000:300",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2a00:fc0:5000:300::1",
+        "datacenter_name": "mb1"
+      },
+      "yl63e-n74ks-fnefm-einyj-kwqot-7nkim-g5rq4-ctn3h-3ee6h-24fe4-uqe": {
+        "ipv6_prefix": "2a01:138:900a:0",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2a01:138:900a:0::1",
+        "datacenter_name": "mu1"
+      },
+      "ciprs-d7ktn-eiqrv-pqbcf-npk57-ty4m3-npkk2-yu4en-d4ccs-ek5xw-dae": {
+        "ipv6_prefix": "2a01:2a8:a13c:1",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2a01:2a8:a13c:1::1",
+        "datacenter_name": "zh6"
+      },
+      "4ohfd-bdyeu-5djlz-rf3lc-bqca2-h22rg-t5ipt-cjhl2-r5dbf-tk3fv-hae": {
+        "ipv6_prefix": "2a01:2a8:a13d:1",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2a01:2a8:a13d:1::1",
+        "datacenter_name": "zh5"
+      },
+      "tisgk-lbq4u-zxwec-ak7ze-6ngg3-tjxhb-wasri-ska3d-ro6by-ba7vc-5ae": {
+        "ipv6_prefix": "2a01:2a8:a13e:1",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2a01:2a8:a13e:1::1",
+        "datacenter_name": "zh7"
+      },
+      "anodw-youcx-pycyh-tkyat-znvdz-rtmop-t7tpo-pyrcn-nuzzw-qp35i-2ae": {
+        "ipv6_prefix": "2a02:418:3002:0",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2a02:418:3002:0::1",
+        "datacenter_name": "zh3"
+      },
+      "paxme-ikvh3-v6cve-in3jx-z6xf2-x67nq-4yqf5-ufdag-c7os3-byb4f-cae": {
+        "ipv6_prefix": "2a02:41b:300e:0",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2a02:41b:300e::1",
+        "datacenter_name": "zh4"
+      },
+      "3xiew-2wo3x-tnbn2-o7kok-wwsnw-7koo2-gna5r-rlrt3-zotsh-dwpg6-kae": {
+        "ipv6_prefix": "2a02:800:2:2003",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2a02:800:2:2003::1",
+        "datacenter_name": "lj1"
+      },
+      "c5ssg-eh22p-pmsn6-fpjzj-k5nql-mx5mc-7gb4a-4klco-c4f37-ydnfp-bae": {
+        "ipv6_prefix": "2a04:9dc0:0:108",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2a04:9dc0:0:108::1",
+        "datacenter_name": "bu1"
+      },
+      "yngfj-akg4s-nectt-whzgk-5zqbw-z3e5u-zuycn-zqygi-xz4vt-244v6-zae": {
+        "ipv6_prefix": "2a0f:cd00:2:1",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2a0f:cd00:2:1::1",
+        "datacenter_name": "ge1"
+      },
+      "fv6gw-axucj-upche-ruqwv-wwpg7-a2mrr-7syyo-vosk3-n33d5-f76am-3qe": {
+        "ipv6_prefix": "2607:f758:5240:0",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2607:f758:5040::1",
+        "datacenter_name": "ft1"
+      },
+      "6kijh-dth6f-r2s4w-cbg37-54hv2-3acft-3ceh6-lb67u-5zrem-lk7mi-iqe": {
+        "ipv6_prefix": "2600:3000:3100:400",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2600:3000:3100:300::1",
+        "datacenter_name": "mn1"
+      },
+      "hwqrd-3jtl3-cezs5-djz4d-66jzq-s7yo6-mnhu4-bxwr7-7zhpl-hmk4s-7ae": {
+        "ipv6_prefix": "2607:f758:a380:0",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2607:f758:a040::1",
+        "datacenter_name": "lo1"
+      },
+      "lgfor-6hknd-vdybo-hfahv-bv5jb-m7ajk-dlwxl-omm6f-ehvkf-k57bl-5qe": {
+        "ipv6_prefix": "2607:f758:9100:0",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2607:f758:9100::1",
+        "datacenter_name": "ci1"
+      },
+      "a5glg-n6ul6-rkuc7-idthk-fb2fe-d5m75-4g4l7-22yko-h27pr-q3a7k-lae": {
+        "ipv6_prefix": "2602:ffe4:801:18",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2602:ffe4:801:15::1",
+        "datacenter_name": "ty3"
+      },
+      "xxswn-iq3ne-oay4w-5aoec-euj5g-27h2d-vqvqu-vcw4s-ms35g-2q7lx-7ae": {
+        "ipv6_prefix": "2607:f758:2380:0",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2607:f758:2040::1",
+        "datacenter_name": "rl1"
+      },
+      "dpt4y-mkhk4-7gchc-yx2by-hzfe6-czv2t-xebyb-as4q3-gkspj-ivvsv-hae": {
+        "ipv6_prefix": "2602:ffe4:801:17",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2602:ffe4:801:14::1",
+        "datacenter_name": "ty2"
+      },
+      "4sslu-4unjl-slto2-g4yzi-2sc5z-vnqn3-upyha-lo7cb-u4rhj-h37ug-aqe": {
+        "ipv6_prefix": "2604:3fc0:3002:0",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2604:3fc0:3000:2::1",
+        "datacenter_name": "cr1"
+      },
+      "cqjev-4qb7l-xv373-jfmhi-73n3a-cxhst-p6okb-vywwc-a4zbi-6sf3u-bae": {
+        "ipv6_prefix": "2602:ffe4:801:16",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2602:ffe4:801:13::1",
+        "datacenter_name": "ty1"
+      }
+    }
+  }
+}
