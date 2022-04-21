@@ -14,6 +14,7 @@ mod metrics;
 mod pprof;
 mod query;
 mod read_state;
+mod state_reader_executor;
 mod status;
 mod types;
 
@@ -28,6 +29,7 @@ use crate::{
     },
     query::QueryService,
     read_state::ReadStateService,
+    state_reader_executor::StateReaderExecutor,
     status::StatusService,
     types::*,
 };
@@ -152,7 +154,7 @@ struct HttpHandler {
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
     subnet_type: SubnetType,
-    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    state_reader_executor: StateReaderExecutor,
     registry_client: Arc<dyn RegistryClient>,
     validator: Arc<dyn IngressSigVerifier + Send + Sync>,
 
@@ -290,7 +292,7 @@ pub async fn start_server(
         subnet_id,
         nns_subnet_id,
         subnet_type,
-        state_reader,
+        state_reader_executor: StateReaderExecutor::new(state_reader.clone()),
         registry_client,
         validator: ingress_verifier,
         query_execution_service,
@@ -322,7 +324,7 @@ pub async fn start_server(
     }
 
     start_server_initialization(
-        Arc::clone(&http_handler.state_reader),
+        Arc::clone(&state_reader),
         http_handler.subnet_id,
         http_handler.nns_subnet_id,
         http_handler.log.clone(),
@@ -566,13 +568,13 @@ async fn make_router(
         http_handler.log.clone(),
         http_handler.config.clone(),
         http_handler.nns_subnet_id,
-        Arc::clone(&http_handler.state_reader),
+        http_handler.state_reader_executor.clone(),
         Arc::clone(&http_handler.health_status),
     ));
     let dashboard_service = BoxService::new(DashboardService::new(
         http_handler.config,
         http_handler.subnet_type,
-        Arc::clone(&http_handler.state_reader),
+        http_handler.state_reader_executor.clone(),
     ));
     let catch_up_package_service = BoxService::new(
         ServiceBuilder::new()
@@ -590,7 +592,7 @@ async fn make_router(
                 metrics.clone(),
                 Arc::clone(&http_handler.health_status),
                 Arc::clone(&http_handler.delegation_from_nns),
-                Arc::clone(&http_handler.state_reader),
+                http_handler.state_reader_executor.clone(),
                 Arc::clone(&http_handler.validator),
                 Arc::clone(&http_handler.registry_client),
                 http_handler.malicious_flags.clone(),
