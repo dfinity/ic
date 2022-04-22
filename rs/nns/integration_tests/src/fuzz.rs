@@ -76,7 +76,7 @@ struct Account {
     subaccount: Option<Subaccount>,
     /// The user that is the owner of the account.
     owner: User,
-    /// The expected balance, in ICPTs.
+    /// The expected balance, in ICPs.
     balance: Tokens,
 }
 
@@ -98,7 +98,7 @@ struct Neuron {
     nonce: u64,
     /// The user that is the owner of the neuron.
     owner: User,
-    /// The expected stake of the Neuron, in ICPTs.
+    /// The expected stake of the Neuron, in ICPs.
     balance: Tokens,
 }
 
