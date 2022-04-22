@@ -12,8 +12,6 @@ use std::convert::TryFrom;
 /// in its artifact pool. The adverts of different artifact types may differ
 /// in their attributes. Upon the reception of an advert, a node can decide
 /// if and when to request the corresponding artifact from the sender.
-// TODO(P2P-481): `GossipAdvert` should not be exposed to clients as it is
-// internal to the gossip module.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct GossipAdvert {
     pub attribute: ArtifactAttribute,
