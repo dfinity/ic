@@ -5,7 +5,7 @@ notion-page](https://www.notion.so/Testing-Terminology-8cc0735dfcd945959f8d47cae
 
 ## System tests
 
-System Tests (declared in `rs/tests/bin/prod_test_driver.rs`) drive all
+System Tests (declared in `rs/tests/bin/prod_test_driver.rs`) can involve all
 components in combination in the form of a functioning IC. The test API is
 implemented in Rust.
 
@@ -63,24 +63,6 @@ IC_VERSION_ID=<version> ./run-system-tests.py --suite hourly --include-pattern b
 
 If you have further questions, please contact the testing team on #eng-testing.
 
-## Legacy System Tests
-
-The `rs/tests`-crate is also host to so-called legacy system tests declared in
-`rs/tests/src/main.rs`. The tests use largely the same API, however, the nodes
-are instantiated as processes that are launched on the same operating system as
-the test driver.
-
-**Note**: Legacy system tests are **not** supported on Darwin!
-### My test is failing/flaky, what do I do?
-
-Please, check the [FAQ](doc/FAQ.md) or [TROUBLESHOOTING](doc/TROUBLESHOOTING.md) before submitting
-a bug report
-
-### Running the tests
-To run the tests locally, run the `setup-and-cargo-test.sh` script. Go to the end of the page for info on the CLI arguments.
-If you are running the script within nix-shell on Linux and run out of disk space, `export TMPDIR=` might solve this issue for you.
-On Ubuntu 20.04, nix-shell sets the initially unset TMPDIR to /run/user/1000, which might be too small for the tests. Unsetting this variable enables the tests to use /tmp instead.
-
 ### High Level Overview
 
 The `rs/tests` crate builds our `system-tests` binary, whose sole responsibility is to run our system tests 
@@ -111,18 +93,12 @@ Please, ask your questions away on #eng-testing! We're happy to answer them.
 
 When writing your test, please keep in mind a few important things:
 
-1. Make sure to add a ASCIIDOC description to the beginning of your file, just
+. Make sure to add a ASCIIDOC description to the beginning of your file, just
 	 like `basic_health_test`.
-1. Don't forget to make use of the `ekg` module, which provides combinators to
-	 passively monitor the behavior of the replicas that are running. Most of the
-	 times you'll want `ekg::basic_monitoring`, just like `basic_health_test`.
-1. Make sure to mark your test as "stating", this means it wont be blocking PRs
-	 until you're confident it is stable enough to block PRs.
-1. Keep reproducibility at mind. All the tests receive a PRNG to be used to do
+. Keep reproducibility in mind. All the tests receive a PRNG to be used to do
 	 any sort of random operation, please use it as much as reasonably possible.
-1. Refrain from `println!` and use the logging primitives and `ctx.logger`
-	 instead.
-1. Do not make too many environment assumptions: `fondue` enables us to easily
+. Refrain from `println!` and use the logging primitives instead.
+. Do not make too many environment assumptions: `fondue` enables us to easily
 	 re-use a setup, providing a simple way to decrease runtime of our tests. In
 	 fact, `fondue` divides tests in two categories: (A) isolated tests and (B)
 	 composable tests. Isolated tests have full freedom to change their
@@ -130,7 +106,9 @@ When writing your test, please keep in mind a few important things:
 	 on the other hand, can only _read_ from their environment. Hence, if you
 	 write your test as a composable test, chances are we can group it with some
 	 other composable tests and share the same IC instance to run them.
-1. Go ahead and write a test that we can run!
+. Put your test in a suitable folder in the src directory or create a new sub-directory.
+     Don't forget to modify CODEOWNERS accordingly.
+. Go ahead and write a test that we can run!
 
 
 ### A note on the CLI
@@ -182,6 +160,27 @@ In `fondue`, tests are organized in _pots_ of two different kinds:
 	environment. This single test, however, receives a `IcManager` instead of a
 	`IcManager::handle()`; hence, it is allowed to perform arbitrary changes in
 	its environment.
+
+
+## Legacy System Tests
+
+The `rs/tests` crate also hosts the so-called _legacy system tests_ declared in
+`rs/tests/src/main.rs`. The tests use largely the same API, however, the nodes
+for legacy system tests are instantiated as _processes_ (rather than virtual machines).
+These processes all share the resources of a single OS that launched the legacy system tests.
+Conversely, we encourage you to use the new system tests framework based on the Farm service that offers on-demand resource allocation and load balancing across a pool of remote servers.
+
+**Note**: Legacy system tests are **not** supported on Darwin!
+### My test is failing/flaky, what do I do?
+
+Please, check the [FAQ](doc/FAQ.md) or [TROUBLESHOOTING](doc/TROUBLESHOOTING.md) before submitting
+a bug report.
+
+### Running the tests
+Legacy system tests can be launched via the `setup-and-cargo-test.sh` script. Go to the end of the page for info on the CLI arguments.
+If you are running the script within nix-shell on Linux and run out of disk space, `export TMPDIR=` might solve this issue for you.
+In particular, the `nix-shell` command run in Ubuntu 20.04 sets the `TMPDIR` variable to `/run/user/1000`, which might correspond to a disk partition that is be too small for storing all the artifacts produced by the tests. To mitigate the problem, one could run, e.g., `export TMPDIR=/tmp`.
+
 
 ### Filtering
 
