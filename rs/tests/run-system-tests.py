@@ -202,7 +202,7 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
         f"https://download.dfinity.systems/ic/{IC_VERSION_ID}/guest-os/disk-img-dev/"
     )
     BOUNDARY_NODE_IMG_SHA256, BOUNDARY_NODE_IMG_URL = get_ic_os_image_sha(
-        f"https://download.dfinity.systems/ic/{IC_VERSION_ID}/boundary-os/disk-img/"
+        f"https://download.dfinity.systems/ic/{IC_VERSION_ID}/boundary-os/disk-img-dev/"
     )
 
     if SSH_KEY_DIR is None:
