@@ -33,8 +33,39 @@ pub mod test {
     use super::*;
     use crate::IncomingSource;
     use bitcoin::Network;
+    use std::io::Write;
     use std::path::PathBuf;
     use std::str::FromStr;
+    use tempfile::NamedTempFile;
+
+    const EMPTY_CONFIG: &str = r#"{}"#;
+    const MAINNET_CONFIG: &str = r#"{
+        "network": "bitcoin",
+        "dns_seeds": [
+            "seed.bitcoin.sipa.be",
+            "dnsseed.bluematt.me",
+            "dnsseed.bitcoin.dashjr.org",
+            "seed.bitcoinstats.com",
+            "seed.bitcoin.jonasschnelli.ch",
+            "seed.btc.petertodd.org",
+            "seed.bitcoin.sprovoost.nl",
+            "dnsseed.emzy.de",
+            "seed.bitcoin.wiz.biz"
+        ]
+    }"#;
+    const TESTNET_CONFIG: &str = r#"{
+        "network": "testnet",
+        "dns_seeds": [
+            "testnet-seed.bitcoin.jonasschnelli.ch",
+            "seed.tbtc.petertodd.org",
+            "seed.testnet.bitcoin.sprovoost.nl",
+            "testnet-seed.bluematt.me"
+        ],
+        "incoming_source": {
+            "Path": "/tmp/ic-btc-adapter.socket"
+        },
+        "ipv6_only": true    
+    }"#;
 
     #[test]
     fn test_cli_get_config_error_opening_file() {
@@ -49,9 +80,10 @@ pub mod test {
 
     #[test]
     fn test_cli_get_config_error_invalid_json() {
+        let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
+        writeln!(tmpfile, "{}", EMPTY_CONFIG).expect("Failed to write to tmp file");
         let cli = Cli {
-            config: PathBuf::from_str("./src/json_configs/empty.config.json")
-                .expect("Bad file path string"),
+            config: tmpfile.path().to_owned(),
         };
         let result = cli.get_config();
         assert!(result.is_err());
@@ -67,9 +99,10 @@ pub mod test {
 
     #[test]
     fn test_cli_get_config_good_mainnet_json() {
+        let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
+        writeln!(tmpfile, "{}", MAINNET_CONFIG).expect("Failed to write to tmp file");
         let cli = Cli {
-            config: PathBuf::from_str("./src/json_configs/mainnet.config.json")
-                .expect("Bad file path string"),
+            config: tmpfile.path().to_owned(),
         };
         let result = cli.get_config();
         let config = result.unwrap();
@@ -81,9 +114,10 @@ pub mod test {
 
     #[test]
     fn test_cli_get_config_good_testnet_json() {
+        let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
+        writeln!(tmpfile, "{}", TESTNET_CONFIG).expect("Failed to write to tmp file");
         let cli = Cli {
-            config: PathBuf::from_str("./src/json_configs/testnet.config.json")
-                .expect("Bad file path string"),
+            config: tmpfile.path().to_owned(),
         };
         let result = cli.get_config();
         let config = result.unwrap();
