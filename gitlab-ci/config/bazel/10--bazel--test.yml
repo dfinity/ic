@@ -16,11 +16,11 @@ bazel-build-all:
     - .bazel-run
   stage: test
   script:
-    - bazel build :all --remote_cache=grpc://10.117.26.74:8980 --execution_log_json_file=bazel-build-log-all.json
+    - bazel build --config ci :all
 
 bazel-build-guestos:
   extends:
     - .bazel-run
   stage: test
   script:
-    - bazel build --spawn_strategy=standalone --remote_cache=grpc://10.117.26.74:8980 //ic-os/guestos:disk.img.tar --execution_log_json_file=bazel-build-log-guestos.json
+    - bazel build --config ci --spawn_strategy=standalone //ic-os/guestos:disk.img.tar
