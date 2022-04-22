@@ -6,7 +6,7 @@ use bitcoin::{
     blockdata::transaction::Transaction, hash_types::Txid, network::message::NetworkMessage,
     network::message_blockdata::Inventory,
 };
-use ic_logger::{debug, ReplicaLogger};
+use ic_logger::{debug, trace, ReplicaLogger};
 
 use crate::ProcessBitcoinNetworkMessageError;
 use crate::{Channel, Command};
@@ -69,8 +69,8 @@ impl TransactionManager {
     }
 
     /// This function processes a `getdata` message from a BTC node.
-    /// If there are messages for transactions, the transaction queues up outgoing messages
-    /// to be processed later.
+    /// If there are messages for transactions, the transaction is sent to the
+    /// requesting node. Transactions sent are then removed from the cache.
     fn process_getdata_message(
         &mut self,
         channel: &mut impl Channel,
@@ -79,13 +79,14 @@ impl TransactionManager {
     ) {
         for inv in inventory {
             if let Inventory::Transaction(txid) = inv {
-                if let Some(info) = self.transactions.get(txid) {
-                    channel
-                        .send(Command {
-                            address: Some(*address),
-                            message: NetworkMessage::Tx(info.transaction.clone()),
-                        })
-                        .ok();
+                if let Some(TransactionInfo { transaction, .. }) = self.transactions.get(txid) {
+                    let result = channel.send(Command {
+                        address: Some(*address),
+                        message: NetworkMessage::Tx(transaction.clone()),
+                    });
+                    if result.is_ok() {
+                        self.transactions.remove(txid);
+                    }
                 }
             }
         }
@@ -103,7 +104,7 @@ impl TransactionManager {
     pub fn send_transaction(&mut self, raw_tx: &[u8]) {
         if let Ok(transaction) = deserialize::<Transaction>(raw_tx) {
             let txid = transaction.txid();
-            debug!(self.logger, "Received {} from the system component", txid);
+            trace!(self.logger, "Received {} from the system component", txid);
             self.transactions
                 .entry(txid)
                 .or_insert_with(|| TransactionInfo::new(&transaction));
@@ -118,7 +119,6 @@ impl TransactionManager {
 
     /// Clear out transactions that have been held on to for more than the transaction timeout period.
     fn reap(&mut self) {
-        debug!(self.logger, "Reaping old transactions");
         let now = SystemTime::now();
         self.transactions.retain(|_, info| info.timeout_at > now);
     }
@@ -329,7 +329,7 @@ mod test {
             )
             .ok();
         assert_eq!(channel.command_count(), 2);
-        assert_eq!(manager.transactions.len(), 1);
+        assert_eq!(manager.transactions.len(), 0);
 
         let command = channel.pop_front().unwrap();
         assert!(matches!(command.message, NetworkMessage::Inv(_)));
@@ -345,6 +345,7 @@ mod test {
         let command = channel.pop_front().unwrap();
         assert!(matches!(command.message, NetworkMessage::Tx(t) if t.txid() == txid));
 
+        manager.send_transaction(&raw_tx);
         let info = manager
             .transactions
             .get_mut(&transaction.txid())
@@ -355,24 +356,18 @@ mod test {
     }
 
     /// Test to ensure that when `TransactionManager.idle(...)` is called that the `transactions`
-    /// and `outgoing_command_queue` fields are cleared.
+    /// field is cleared.
     #[test]
     fn test_make_idle() {
-        let address = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
-        let mut channel = TestChannel::new(vec![address]);
         let mut manager = make_transaction_manager();
         let transaction = get_transaction();
         let raw_tx = serialize(&transaction);
         let txid = transaction.txid();
-        let address = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
-        let inventory = vec![Inventory::Transaction(txid)];
 
         manager.send_transaction(&raw_tx);
-        manager.process_getdata_message(&mut channel, &address, &inventory);
 
         assert_eq!(manager.transactions.len(), 1);
         assert!(manager.transactions.contains_key(&txid));
-        assert_eq!(channel.command_count(), 1);
 
         manager.make_idle();
         assert_eq!(manager.transactions.len(), 0);
