@@ -98,3 +98,4 @@ scalability/results/
 
 # Bazel outdir dirs
 /bazel-*
+bazel-build-log.json
