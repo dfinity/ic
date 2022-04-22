@@ -738,7 +738,7 @@ fn test_cascade_following_new() {
         )
         .unwrap();
 
-    // The fee should now be 1 ICPT since the fees are charged upfront.
+    // The fee should now be 1 ICP since the fees are charged upfront.
     assert_eq!(nns.get_neuron(&id).neuron_fees_e8s, 100_000_000);
 
     // Once the proposal passes
@@ -1199,7 +1199,7 @@ fn test_cascade_following() {
     )
     .unwrap();
 
-    // The fee should now be 1 ICPT since the fees are charged upfront.
+    // The fee should now be 1 ICP since the fees are charged upfront.
     assert_eq!(
         gov.proto.neurons.get(&1).unwrap().neuron_fees_e8s,
         100_000_000
@@ -3330,7 +3330,7 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
         driver.advance_time_by(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS + 1);
     }
 
-    let neuron_fees_e8s = 50_000_000; // 0.5 ICPT
+    let neuron_fees_e8s = 50_000_000; // 0.5 ICP
     let neuron_maturity = 25_000_000;
     // Pretend the neuron has some rewards and fees to pay.
     neuron.neuron_fees_e8s = neuron_fees_e8s;
@@ -5468,7 +5468,7 @@ fn test_disburse_to_neuron() {
 
     let block_height = 543212234;
     let dissolve_delay_seconds = MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS;
-    let neuron_stake_e8s = 10 * 100_000_000; // 10 ICPT
+    let neuron_stake_e8s = 10 * 100_000_000; // 10 ICP
 
     let (mut driver, mut gov, id, _to_subaccount) = governance_with_staked_neuron(
         dissolve_delay_seconds,
@@ -5510,7 +5510,7 @@ fn test_disburse_to_neuron() {
             &from,
             &DisburseToNeuron {
                 new_controller: Some(child_controller),
-                amount_e8s: 2 * 100_000_000 + transaction_fee, // 2 ICPT + transaction_fee
+                amount_e8s: 2 * 100_000_000 + transaction_fee, // 2 ICP + transaction_fee
                 dissolve_delay_seconds: 24 * 60 * 60,          // 1 day.
                 kyc_verified: true,
                 nonce,

@@ -121,8 +121,8 @@ pub const MAX_NUMBER_OF_NEURONS: usize = 200_000;
 /// The maximum number results returned by the method `list_proposals`.
 pub const MAX_LIST_PROPOSAL_RESULTS: u32 = 100;
 
-/// The number of e8s per ICPT;
-const E8S_PER_ICPT: u64 = TOKEN_SUBDIVIDABLE_BY;
+/// The number of e8s per ICP;
+const E8S_PER_ICP: u64 = TOKEN_SUBDIVIDABLE_BY;
 
 /// The max number of unsettled proposals -- that is proposals for which ballots
 /// are still stored.
@@ -157,11 +157,11 @@ pub const KNOWN_NEURON_DESCRIPTION_MAX_LEN: usize = 3000;
 impl NetworkEconomics {
     pub const fn with_default_values() -> Self {
         Self {
-            reject_cost_e8s: E8S_PER_ICPT,                              // 1 ICP
+            reject_cost_e8s: E8S_PER_ICP,                               // 1 ICP
             neuron_management_fee_per_proposal_e8s: 1_000_000,          // 0.01 ICP
-            neuron_minimum_stake_e8s: E8S_PER_ICPT,                     // 1 ICP
+            neuron_minimum_stake_e8s: E8S_PER_ICP,                      // 1 ICP
             neuron_spawn_dissolve_delay_seconds: ONE_DAY_SECONDS * 7,   // 7 days
-            maximum_node_provider_rewards_e8s: 1_000_000 * 100_000_000, // 1M ICPT
+            maximum_node_provider_rewards_e8s: 1_000_000 * 100_000_000, // 1M ICP
             minimum_icp_xdr_rate: 100,                                  // 1 XDR
             transaction_fee_e8s: DEFAULT_TRANSFER_FEE.get_e8s(),
             max_proposals_to_keep_per_topic: 100,

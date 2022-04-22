@@ -488,7 +488,7 @@ message AddOrRemoveNodeProvider {
 }
 
 // This proposal payload is used to reward a node provider by minting
-// ICPTs directly to the node provider's ledger account, or into a new
+// ICPs directly to the node provider's ledger account, or into a new
 // neuron created on behalf of the node provider.
 message RewardNodeProvider {
   // The NodeProvider to reward.

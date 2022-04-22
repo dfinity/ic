@@ -11,5 +11,5 @@ pub const TEST_NEURON_2_ID: u64 = 4368585614685248742;
 /// ID ot Test Neuron 3
 pub const TEST_NEURON_3_ID: u64 = 4884056990215423907;
 
-/// The sum of the total ICPT staked in test neurons.
+/// The sum of the total ICP staked in test neurons.
 pub const TEST_NEURON_TOTAL_STAKE_DOMS: u64 = 1_110_000_000;

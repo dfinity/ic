@@ -277,7 +277,7 @@ async fn assert_unclaimed_neurons_can_be_forwarded(
     assert!(!account_before_forward.has_donated);
     assert!(!account_before_forward.has_forwarded);
 
-    // Calculate how much ICPT is expected to be forwarded to the custodian
+    // Calculate how much ICP is expected to be forwarded to the custodian
     // neuron.
     let expected_custodian_account_balance_increase: Tokens = Tokens::from_e8s(
         Tokens::from_tokens(account_before_forward.icpts as u64)
@@ -426,7 +426,7 @@ async fn assert_neurons_can_be_donated(
     assert!(!account_before_donation.has_donated);
     assert!(!account_before_donation.has_forwarded);
 
-    // Calculate how much ICPT is expected to be donated to the custodian
+    // Calculate how much ICP is expected to be donated to the custodian
     // neuron.
     let expected_custodian_account_balance_increase: Tokens = Tokens::from_e8s(
         Tokens::from_tokens(account_before_donation.icpts as u64)

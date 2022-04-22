@@ -291,7 +291,7 @@ fn test_stop_start_nns_canister() {
                 )
                 .await?;
 
-            // The balance of the first user should have been deducted 200 ICPTs from both
+            // The balance of the first user should have been deducted 200 ICPs from both
             // transfers, minus 2 * the transaction fees.
             assert_eq!(
                 user1_balance,
@@ -313,7 +313,7 @@ fn test_stop_start_nns_canister() {
                 )
                 .await?;
 
-            // The balance of the first user should have been deducted 200 ICPTs from both
+            // The balance of the first user should have been deducted 200 ICPs from both
             // transfers.
             assert_eq!(user2_balance, Tokens::from_tokens(200).unwrap());
 
