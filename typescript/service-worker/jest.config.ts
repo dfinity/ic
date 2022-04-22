@@ -9,6 +9,7 @@ module.exports = {
   transform: {
     '^.+\\.[tj]s$': 'ts-jest',
   },
+  timers: 'fake',
   reporters: ['default', 'jest-junit'],
   globals: {
     'ts-jest': {

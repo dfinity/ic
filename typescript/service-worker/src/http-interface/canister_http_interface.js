@@ -18,7 +18,7 @@ export const idlFactory = ({ IDL }) => {
       token: tokenType,
       callback: IDL.Func(
         [tokenType],
-        [streamingCallbackHttpResponseType],
+        [IDL.Opt(streamingCallbackHttpResponseType)],
         ['query']
       ),
     }),
@@ -28,9 +28,11 @@ export const idlFactory = ({ IDL }) => {
     headers: IDL.Vec(HeaderField),
     streaming_strategy: IDL.Opt(StreamingStrategy),
     status_code: IDL.Nat16,
+    upgrade: IDL.Opt(IDL.Bool),
   });
   return IDL.Service({
     http_request: IDL.Func([HttpRequest], [HttpResponse], ['query']),
+    http_request_update: IDL.Func([HttpRequest], [HttpResponse]),
   });
 };
 export const init = ({ IDL }) => {

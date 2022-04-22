@@ -13,6 +13,7 @@ export interface HttpResponse {
   headers: Array<HeaderField>;
   streaming_strategy: [] | [StreamingStrategy];
   status_code: number;
+  upgrade: [] | [boolean];
 }
 export interface StreamingCallbackHttpResponse {
   token: [] | [Token];
@@ -24,4 +25,5 @@ export type StreamingStrategy = {
 export type Token = { type: () => IDL.Type };
 export interface _SERVICE {
   http_request: (arg_0: HttpRequest) => Promise<HttpResponse>;
+  http_request_update: (arg_0: HttpRequest) => Promise<HttpResponse>;
 }
