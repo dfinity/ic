@@ -1,38 +1,38 @@
 {
   "registry": {
-    "mercury": "rwlgt-iiaaa-aaaaa-aaaaa-cai",
-    "nnstestnet": "rwlgt-iiaaa-aaaaa-aaaaa-cai"
+    "mainnet": "rwlgt-iiaaa-aaaaa-aaaaa-cai",
+    "small01": "rwlgt-iiaaa-aaaaa-aaaaa-cai"
   },
   "governance": {
-    "mercury": "rrkah-fqaaa-aaaaa-aaaaq-cai",
-    "nnstestnet": "rrkah-fqaaa-aaaaa-aaaaq-cai"
+    "mainnet": "rrkah-fqaaa-aaaaa-aaaaq-cai",
+    "small01": "rrkah-fqaaa-aaaaa-aaaaq-cai"
   },
   "ledger": {
-    "mercury": "ryjl3-tyaaa-aaaaa-aaaba-cai",
-    "nnstestnet": "ryjl3-tyaaa-aaaaa-aaaba-cai"
+    "mainnet": "ryjl3-tyaaa-aaaaa-aaaba-cai",
+    "small01": "ryjl3-tyaaa-aaaaa-aaaba-cai"
   },
   "root": {
-    "mercury": "r7inp-6aaaa-aaaaa-aaabq-cai",
-    "nnstestnet": "r7inp-6aaaa-aaaaa-aaabq-cai"
+    "mainnet": "r7inp-6aaaa-aaaaa-aaabq-cai",
+    "small01": "r7inp-6aaaa-aaaaa-aaabq-cai"
   },
   "cycles-minting": {
-    "mercury": "rkp4c-7iaaa-aaaaa-aaaca-cai",
-    "nnstestnet": "rkp4c-7iaaa-aaaaa-aaaca-cai"
+    "mainnet": "rkp4c-7iaaa-aaaaa-aaaca-cai",
+    "small01": "rkp4c-7iaaa-aaaaa-aaaca-cai"
   },
   "lifeline": {
-    "mercury": "rno2w-sqaaa-aaaaa-aaacq-cai",
-    "nnstestnet": "rno2w-sqaaa-aaaaa-aaacq-cai"
+    "mainnet": "rno2w-sqaaa-aaaaa-aaacq-cai",
+    "small01": "rno2w-sqaaa-aaaaa-aaacq-cai"
   },
   "genesis-token": {
-    "mercury": "renrk-eyaaa-aaaaa-aaada-cai",
-    "nnstestnet": "renrk-eyaaa-aaaaa-aaada-cai"
+    "mainnet": "renrk-eyaaa-aaaaa-aaada-cai",
+    "small01": "renrk-eyaaa-aaaaa-aaada-cai"
   },
   "identity": {
-    "mercury": "rdmx6-jaaaa-aaaaa-aaadq-cai",
-    "nnstestnet": "rdmx6-jaaaa-aaaaa-aaadq-cai"
+    "mainnet": "rdmx6-jaaaa-aaaaa-aaadq-cai",
+    "small01": "rdmx6-jaaaa-aaaaa-aaadq-cai"
   },
   "nns-ui": {
-    "mercury": "qoctq-giaaa-aaaaa-aaaea-cai",
-    "nnstestnet": "qoctq-giaaa-aaaaa-aaaea-cai"
+    "mainnet": "qoctq-giaaa-aaaaa-aaaea-cai",
+    "small01": "qoctq-giaaa-aaaaa-aaaea-cai"
   }
 }
