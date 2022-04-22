@@ -38,7 +38,7 @@ use crate::driver::test_env_api::*;
 use crate::driver::{ic::VmAllocationStrategy, test_env::TestEnv};
 use crate::util::*; // to use the universal canister
 use ic_registry_subnet_type::SubnetType;
-use slog::{info, Logger};
+use slog::info;
 
 pub fn config_single_host(env: TestEnv) {
     InternetComputer::new()
@@ -61,7 +61,8 @@ const RETRY_WAIT: Duration = Duration::from_secs(10);
 
 /// Here we define the test workflow, which should implement the Runbook given
 /// in the test catalog entry at the top of this file.
-pub fn test(env: TestEnv, log: Logger) {
+pub fn test(env: TestEnv) {
+    let log = env.logger();
     // Assemble a list that contains one node per subnet.
     let nodes: Vec<_> = env
         .topology_snapshot()

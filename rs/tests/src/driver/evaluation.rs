@@ -221,8 +221,7 @@ fn evaluate_test(
         .write_test_path(&path)
         .expect("Could not write test path");
     info!(ctx.logger, "Starting test: {}", path);
-    let logger = ctx.logger();
-    let t_res = catch_unwind(|| (t.f)(test_env, logger));
+    let t_res = catch_unwind(|| (t.f)(test_env));
     if let Err(panic_res) = t_res {
         if let Some(s) = panic_res.downcast_ref::<String>() {
             warn!(ctx.logger, "{} FAILED: {}", path, s);

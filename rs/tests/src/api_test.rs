@@ -11,7 +11,7 @@ use crate::driver::{
     test_env_api::*,
 };
 use ic_registry_subnet_type::SubnetType;
-use slog::{info, Logger};
+use slog::info;
 use std::fs::File;
 
 /// The following setup function demonstrates how to create more than one
@@ -41,7 +41,7 @@ pub fn setup_two_ics(test_env: TestEnv) {
 ///
 /// See the [TopologySnapshot] and the documentation in the
 /// [crate::driver::test_env_api] for more information.
-pub fn ics_have_correct_subnet_count(test_env: TestEnv, _logger: Logger) {
+pub fn ics_have_correct_subnet_count(test_env: TestEnv) {
     let topo_snapshot = test_env.topology_snapshot();
     assert_eq!(topo_snapshot.subnets().count(), 1);
 
@@ -54,7 +54,7 @@ pub fn ics_have_correct_subnet_count(test_env: TestEnv, _logger: Logger) {
 ///
 /// This is used, e.g., in recovery tests to publish recovery CUPs that are
 /// referenced via HTTP in governance proposals.
-pub fn upload_file_to_farm(test_env: TestEnv, _: Logger) {
+pub fn upload_file_to_farm(test_env: TestEnv) {
     test_env
         .write_object("uploaded", &String::from("magic"))
         .expect("failed to write to env");
@@ -76,7 +76,7 @@ pub fn upload_file_to_farm(test_env: TestEnv, _: Logger) {
 ///
 /// NOTE: If this test will most likely interfere with other tests that run in
 /// parallel to this test.
-pub fn vm_control(test_env: TestEnv, _: Logger) {
+pub fn vm_control(test_env: TestEnv) {
     let logger = test_env.logger();
     info!(&logger, "Checking readiness of all nodes...");
     for subnet in test_env.topology_snapshot_by_name("two_subnets").subnets() {
@@ -120,7 +120,7 @@ pub fn vm_control(test_env: TestEnv, _: Logger) {
 
 /// Install a counter canister by loading the corresponding `counter.wat` from
 /// the artifacts directory.
-pub fn install_counter_canister(test_env: TestEnv, _: Logger) {
+pub fn install_counter_canister(test_env: TestEnv) {
     let topo_snapshot = test_env.topology_snapshot();
 
     let node = topo_snapshot

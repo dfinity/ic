@@ -14,7 +14,7 @@ use std::io::Read;
 use std::net::Ipv4Addr;
 
 use ic_registry_subnet_type::SubnetType;
-use slog::{info, Logger};
+use slog::info;
 
 const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
 
@@ -48,7 +48,8 @@ pub fn config(env: TestEnv) {
         .expect("failed to setup universal VM");
 }
 
-pub fn test(env: TestEnv, logger: Logger) {
+pub fn test(env: TestEnv) {
+    let logger = env.logger();
     let deployed_boundary_node = env.get_deployed_boundary_node(BOUNDARY_NODE_NAME).unwrap();
     let boundary_node_vm = deployed_boundary_node.get_vm().unwrap();
     info!(
@@ -114,7 +115,8 @@ Coverage:: NGINX configuration is not broken
 
 end::catalog[] */
 
-pub fn nginx_test(env: TestEnv, logger: Logger) {
+pub fn nginx_test(env: TestEnv) {
+    let logger = env.logger();
     let deployed_boundary_node = env.get_deployed_boundary_node(BOUNDARY_NODE_NAME).unwrap();
 
     // SSH into Boundary Nodes:
