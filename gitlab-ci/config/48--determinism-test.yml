@@ -80,19 +80,25 @@ build-determinism-update-img:
     - .rules-parent-pipeline
   stage: build-determinism-test
   needs:
-    - guest-os-updateimg-build
-    - guest-os-updateimg-build-determinism
+    - job: artifacts-upload-to-s3
+    - job: guest-os-updateimg-build
+      artifacts: false
+    - job: guest-os-updateimg-build-determinism
+      artifacts: false
   script:
     - |
       set -eux
-      echo "guest-os-updateimg-build:"
-      cd ic-os/guestos/build-out/update-img
-      sha256sum update-img.tar.gz | tee SHAS
-      cd -
-      echo "guest-os-updateimg-build-determinism:"
-      cd ic-os/guestos/build-out/update-img-determinism
-      sha256sum update-img.tar.gz | tee SHAS
-      cd -
+      VERSION=$(cat VERSION)
+      export VERSION
+
+      for IMG in update-img update-img-determinism
+      do
+        # TODO: just fetch SHA file?
+        "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
+            --git-rev="${VERSION}" --remote-path="guest-os/${IMG}" --out="${IMG}"
+        (cd "${IMG}"; sha256sum update-img.tar.gz | tee SHAS)
+      done
+
       if [ "${CI_COMMIT_REF_PROTECTED:-}" != "true" ]; then
           set +x
           echo "Build determinism check compares two IC-OS guest update images built on a separate CI jobs:"
@@ -104,4 +110,4 @@ build-determinism-update-img:
       else
           echo "Difference indicates that Build Determinism is broken IC-OS guest image!"
       fi
-      diff -u ic-os/guestos/build-out/update-img/SHAS ic-os/guestos/build-out/update-img-determinism/SHAS
+      diff -u update-img/SHAS update-img-determinism/SHAS

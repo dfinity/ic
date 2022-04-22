@@ -50,11 +50,6 @@ guest-os-updateimg-build:
       buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
         "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" "${BUILD_OUT}" "${UPLOAD_TARGET}"
 
-  artifacts:
-    paths:
-      - ic-os/guestos/build-out/update-img${BUILD_EXTRA_SUFFIX}/*
-    expire_in: 2 days
-
 # Build dev image. See diskimg for explanation.
 guest-os-updateimg-build-dev:
   extends:
