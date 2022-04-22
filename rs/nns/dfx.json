@@ -3,7 +3,7 @@
   "canisters": {
     "registry": {
       "type": "custom",
-      "candid": "empty.did",
+      "candid": "../registry/canister/canister/registry.did",
       "wasm": "../target/wasm32-unknown-unknown/release/registry-canister.wasm",
       "build": "cargo build --target wasm32-unknown-unknown --release -p registry-canister"
     },
@@ -30,15 +30,15 @@
     }
   },
   "networks": {
-    "mercury": {
+    "mainnet": {
       "providers": [
         "http://[2a00:fb01:400:100:5000:61ff:fe2c:14ac]:8080"
       ],
       "type": "persistent"
     },
-    "nnstestnet": {
+    "small01": {
       "providers": [
-        "http://dcs-nns-8.dfinity.systems:8080"
+        "http://[2a00:fb01:400:42:5000:3dff:feca:9312]:8080"
       ],
       "type": "persistent"
     },
