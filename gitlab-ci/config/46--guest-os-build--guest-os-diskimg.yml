@@ -86,3 +86,14 @@ boundary-os-diskimg:
     paths:
       - ic-os/boundary-guestos/build-out/disk-img${BUILD_EXTRA_SUFFIX}/*
     expire_in: 2 days
+
+# Build dev image.
+#
+# This is the same as the prod image with the following differences:
+# - it has password "root" set for root to allow console login
+boundary-os-diskimg-dev:
+  extends:
+    - boundary-os-diskimg
+  variables:
+      BUILD_EXTRA_ARGS: "-p root"
+      BUILD_EXTRA_SUFFIX: "-dev"
