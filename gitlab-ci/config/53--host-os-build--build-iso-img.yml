@@ -18,7 +18,7 @@ host-os-iso:
       VERSION=$(cat VERSION)
       echo "Build ID: ${VERSION}"
 
-      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py --remote-path=guest-os --blessed-only --out=guestos --git-rev 9817eb2304d45c2c6ec5e0050b8cc4e72919c314
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py --remote-path=guest-os --blessed-only --out=guestos --git-rev 0ef2aebde4ff735a1a93efa342dcf966b6df5061
 
       BUILD_OUT="ic-os/setupos/build-out"
       UPLOAD_TARGET="setup-os"
