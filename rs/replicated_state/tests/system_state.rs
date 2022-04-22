@@ -11,7 +11,6 @@ use ic_test_utilities::types::{
     messages::{RequestBuilder, ResponseBuilder},
 };
 use ic_types::{
-    freeze_threshold_cycles,
     messages::{RequestOrResponse, MAX_RESPONSE_COUNT_BYTES},
     Cycles, QueueIndex,
 };
@@ -19,10 +18,26 @@ use ic_types::{
 const CANISTER_AVAILABLE_MEMORY: i64 = 4 << 30;
 const SUBNET_AVAILABLE_MEMORY: i64 = 300 << 30;
 
+/// Figure out how many cycles a canister should have so that it can support the
+/// given amount of storage for the given amount of time, given the storage fee.
+fn mock_freeze_threshold_cycles(
+    freeze_threshold: NumSeconds,
+    gib_storage_per_second_fee: Cycles,
+    expected_canister_size: NumBytes,
+) -> Cycles {
+    let one_gib = 1024 * 1024 * 1024;
+    Cycles::from(
+        expected_canister_size.get() as u128
+            * gib_storage_per_second_fee.get()
+            * freeze_threshold.get() as u128
+            / one_gib,
+    )
+}
+
 #[test]
 fn correct_charging_target_canister_for_a_response() {
     let freeze_threshold = NumSeconds::new(30 * 24 * 60 * 60);
-    let initial_cycles = freeze_threshold_cycles(
+    let initial_cycles = mock_freeze_threshold_cycles(
         freeze_threshold,
         Cycles::from(2_000_000),
         NumBytes::from(4 << 30),
