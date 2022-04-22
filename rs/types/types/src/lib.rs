@@ -46,7 +46,7 @@
 // Canisters which did not get the top priority in this round, have their
 // accumulated priority replaced with the value of their round_priority. The
 // top scheduler_cores many canisters' accumulated priority is updated with
-// the value of their round priorities subtracted by (the sum of compute
+// the value of their round priorities subtracted by the sum of compute
 // allocations of all canisters times multiplier divided by the number of
 // canisters that are given top priority in this round.
 //
@@ -80,7 +80,6 @@ pub mod xnet;
 pub use crate::replica_version::ReplicaVersion;
 pub use crate::time::Time;
 pub use funds::*;
-use ic_base_types::NumSeconds;
 pub use ic_base_types::{
     subnet_id_into_protobuf, subnet_id_try_from_protobuf, CanisterId, CanisterIdBlobParseError,
     NodeId, NodeTag, NumBytes, PrincipalId, PrincipalIdBlobParseError, PrincipalIdParseError,
@@ -523,20 +522,4 @@ impl CountBytes for Time {
     fn count_bytes(&self) -> usize {
         8
     }
-}
-
-/// Figure out how many cycles a canister should have so that it can support the
-/// given amount of storage for the given amount of time, given the storage fee.
-pub fn freeze_threshold_cycles(
-    freeze_threshold: NumSeconds,
-    gib_storage_per_second_fee: Cycles,
-    expected_canister_size: NumBytes,
-) -> Cycles {
-    let one_gib = 1024 * 1024 * 1024;
-    Cycles::from(
-        expected_canister_size.get() as u128
-            * gib_storage_per_second_fee.get()
-            * freeze_threshold.get() as u128
-            / one_gib,
-    )
 }
