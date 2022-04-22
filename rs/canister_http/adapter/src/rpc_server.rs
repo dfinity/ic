@@ -6,8 +6,9 @@ use hyper::{
     header::{HeaderMap, ToStrError},
     Body, Client, Method,
 };
-use ic_canister_http_adapter_service::{
-    http_adapter_server::HttpAdapter, CanisterHttpRequest, CanisterHttpResponse, HttpHeader,
+use ic_canister_http_service::{
+    canister_http_service_server::CanisterHttpService, CanisterHttpSendRequest,
+    CanisterHttpSendResponse, HttpHeader,
 };
 use ic_logger::{debug, ReplicaLogger};
 use tonic::{Request, Response, Status};
@@ -25,11 +26,11 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttp<C> {
 }
 
 #[tonic::async_trait]
-impl<C: Clone + Connect + Send + Sync + 'static> HttpAdapter for CanisterHttp<C> {
-    async fn send_http_request(
+impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for CanisterHttp<C> {
+    async fn canister_http_send(
         &self,
-        request: Request<CanisterHttpRequest>,
-    ) -> Result<Response<CanisterHttpResponse>, Status> {
+        request: Request<CanisterHttpSendRequest>,
+    ) -> Result<Response<CanisterHttpSendResponse>, Status> {
         let req = request.into_inner();
 
         let uri = req.url.parse::<Uri>().map_err(|err| {
@@ -93,7 +94,7 @@ impl<C: Clone + Connect + Send + Sync + 'static> HttpAdapter for CanisterHttp<C>
             )
         })?;
 
-        Ok(Response::new(CanisterHttpResponse {
+        Ok(Response::new(CanisterHttpSendResponse {
             status,
             headers,
             content: body_bytes.to_vec(),

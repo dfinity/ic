@@ -11,7 +11,7 @@ use ic_async_utils::{
     ensure_single_systemd_socket, incoming_from_first_systemd_socket, incoming_from_path,
 };
 use ic_canister_http_adapter::{CanisterHttp, Cli, IncomingSource};
-use ic_canister_http_adapter_service::http_adapter_server::HttpAdapterServer;
+use ic_canister_http_service::canister_http_service_server::CanisterHttpServiceServer;
 use ic_logger::{error, info, new_replica_logger_from_config};
 use serde_json::to_string_pretty;
 use tonic::transport::{Server, Uri};
@@ -60,13 +60,13 @@ pub async fn main() {
             let canister_http = CanisterHttp::new(https_client, logger.clone());
             match config.incoming_source {
                 IncomingSource::Path(uds_path) => Server::builder()
-                    .add_service(HttpAdapterServer::new(canister_http))
+                    .add_service(CanisterHttpServiceServer::new(canister_http))
                     .serve_with_incoming(incoming_from_path(uds_path))
                     .await
                     .map_err(|e| error!(logger, "Canister Http adapter crashed: {}", e))
                     .expect("gRPC server crashed"),
                 IncomingSource::Systemd => Server::builder()
-                    .add_service(HttpAdapterServer::new(canister_http))
+                    .add_service(CanisterHttpServiceServer::new(canister_http))
                     .serve_with_incoming(incoming_from_first_systemd_socket())
                     .await
                     .map_err(|e| error!(logger, "Canister Http adapter crashed: {}", e))
@@ -80,13 +80,13 @@ pub async fn main() {
             let canister_http = CanisterHttp::new(https_client, logger.clone());
             match config.incoming_source {
                 IncomingSource::Path(uds_path) => Server::builder()
-                    .add_service(HttpAdapterServer::new(canister_http))
+                    .add_service(CanisterHttpServiceServer::new(canister_http))
                     .serve_with_incoming(incoming_from_path(uds_path))
                     .await
                     .map_err(|e| error!(logger, "Canister Http adapter crashed: {}", e))
                     .expect("gRPC server crashed"),
                 IncomingSource::Systemd => Server::builder()
-                    .add_service(HttpAdapterServer::new(canister_http))
+                    .add_service(CanisterHttpServiceServer::new(canister_http))
                     .serve_with_incoming(incoming_from_first_systemd_socket())
                     .await
                     .map_err(|e| error!(logger, "Canister Http adapter crashed: {}", e))

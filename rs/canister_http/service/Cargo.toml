@@ -1,5 +1,5 @@
 [package]
-name = "ic-canister-http-adapter-service"
+name = "ic-canister-http-service"
 version = "0.1.0"
 edition = "2021"
 
