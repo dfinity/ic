@@ -64,35 +64,28 @@ pub const NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER: NervousSystemFunction = Nervo
     validator_method_name: None,
 };
 
-// When `list_proposals` is called, for each proposal if a payload exceeds
-// this limit (1 KB) it's payload will not be returned in the reply.
-pub const EXECUTE_NERVOUS_SYSTEM_FUNCTION_PAYLOAD_LISTING_BYTES_MAX: usize = 1000;
+/// The maximum payload size that will be included in proposals when `list_proposals` is called.
+/// That is, when `list_proposals` is called, for each proposal whose payload exceeds
+/// this limit, the payload will not be returned in the reply.
+pub const EXECUTE_NERVOUS_SYSTEM_FUNCTION_PAYLOAD_LISTING_BYTES_MAX: usize = 1000; // 1 KB
 
 const MAX_HEAP_SIZE_IN_KIB: usize = 4 * 1024 * 1024;
 const WASM32_PAGE_SIZE_IN_KIB: usize = 64;
 
-/// Max number of wasm32 pages for the heap after which we consider that there
+/// The max number of wasm32 pages for the heap after which we consider that there
 /// is a risk to the ability to grow the heap.
 ///
-/// This is 7/8 of the maximum number of pages. This corresponds to 3.5 GiB.
+/// This is 7/8 of the maximum number of pages and corresponds to 3.5 GiB.
 pub const HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES: usize =
     MAX_HEAP_SIZE_IN_KIB / WASM32_PAGE_SIZE_IN_KIB * 7 / 8;
 
-/// Prefixes each log line for this canister
-#[cfg(not(test))]
-pub fn log_prefix() -> String {
-    format!("[{}][Governance] ", id())
-}
-
-/// Prefixes each log line for this canister. Note that `id()` panics when not called
-/// within a canister env, so we remove its use in the test env.
-#[cfg(test)]
+/// Prefixes each log line for this canister.
 pub fn log_prefix() -> String {
     "[Governance] ".into()
 }
 
 impl NeuronPermissionType {
-    /// Returns all the permissions as a vector
+    /// Returns all the different types of neuron permissions as a vector.
     pub fn all() -> Vec<i32> {
         NeuronPermissionType::iter()
             .map(|permission| permission as i32)
@@ -101,7 +94,7 @@ impl NeuronPermissionType {
 }
 
 impl NeuronPermission {
-    /// Grants all permissions to the given principal
+    /// Grants all permissions to the given principal.
     pub fn all(principal: &PrincipalId) -> NeuronPermission {
         NeuronPermission::new(principal, NeuronPermissionType::all())
     }
@@ -115,10 +108,12 @@ impl NeuronPermission {
 }
 
 impl GovernanceProto {
-    /// From the `neurons` part of this `Governance` struct, build the
-    /// index (per action) from followee to set of followers. The
-    /// neurons themselves map followers (the neuron ID) to a set of
-    /// followees (per action).
+    /// Builds an index that maps proposal actions to (followee) neuron IDs to these neuron's
+    /// followers. The resulting index is a map
+    /// Action -> (followee's neuron ID) -> set of followers' neuron IDs.
+    ///
+    /// The index is built from the `neurons` in the `Governance` struct, which map followers
+    /// (the neuron ID) to a set of followees per action.
     pub fn build_action_followee_index(
         &self,
         neurons: &BTreeMap<String, Neuron>,
@@ -133,6 +128,7 @@ impl GovernanceProto {
         action_followee_index
     }
 
+    /// Adds a neuron to the action_followee_index.
     pub fn add_neuron_to_action_followee_index(
         index: &mut BTreeMap<u64, BTreeMap<String, BTreeSet<NeuronId>>>,
         neuron: &Neuron,
@@ -164,6 +160,7 @@ impl GovernanceProto {
         }
     }
 
+    /// Removes a neuron from the action_followee_index.
     pub fn remove_neuron_from_action_followee_index(
         index: &mut BTreeMap<u64, BTreeMap<String, BTreeSet<NeuronId>>>,
         neuron: &Neuron,
@@ -186,8 +183,9 @@ impl GovernanceProto {
         }
     }
 
-    /// Update `index` to map all the principals that have a
-    /// permission in a Neuron's access control list to `neuron_id`
+    /// Iterate through one neuron and add all the principals that have some permission on this
+    /// neuron to the index that maps principalIDs to a set of neurons for which the principal
+    /// has some permissions.
     pub fn add_neuron_to_principal_to_neuron_ids_index(
         index: &mut BTreeMap<PrincipalId, HashSet<NeuronId>>,
         neuron: &Neuron,
@@ -205,6 +203,9 @@ impl GovernanceProto {
             })
     }
 
+    /// In the index that maps principalIDs to a set of neurons for which the principal
+    /// has some permissions, add the given neuron_id to the set of neurons for which the
+    /// given principalId has permissions.
     pub fn add_neuron_to_principal_in_principal_to_neuron_ids_index(
         index: &mut BTreeMap<PrincipalId, HashSet<NeuronId>>,
         neuron_id: &NeuronId,
@@ -214,8 +215,9 @@ impl GovernanceProto {
         neuron_ids.insert(neuron_id.clone());
     }
 
-    /// Update `index` to remove the neuron from the list of neurons mapped to
-    /// principals.
+    /// Iterate through one neuron and remove all the principals that have some permission on this
+    /// neuron from the index that maps principalIDs to a set of neurons for which the principal
+    /// has some permissions.
     pub fn remove_neuron_from_principal_to_neuron_ids_index(
         index: &mut BTreeMap<PrincipalId, HashSet<NeuronId>>,
         neuron: &Neuron,
@@ -233,6 +235,9 @@ impl GovernanceProto {
             })
     }
 
+    /// In the index that maps principalIDs to a set of neurons for which the principal
+    /// has some permissions, remove the given neuron_id from the set of neurons for which the
+    /// given principalId has permissions.
     pub fn remove_neuron_from_principal_in_principal_to_neuron_ids_index(
         index: &mut BTreeMap<PrincipalId, HashSet<NeuronId>>,
         neuron_id: &NeuronId,
@@ -251,6 +256,11 @@ impl GovernanceProto {
         }
     }
 
+    /// Builds an index that maps principalIDs to a set of neurons for which the
+    /// principals have some permissions.
+    ///
+    /// This index is build from the `neurons` in the `Governance` struct, which specify
+    /// the principals that can modify the neuron.
     pub fn build_principal_to_neuron_ids_index(
         &self,
         neurons: &BTreeMap<String, Neuron>,
@@ -276,7 +286,7 @@ impl GovernanceProto {
 pub struct ValidGovernanceProto(GovernanceProto);
 
 impl ValidGovernanceProto {
-    /// Convert GovernanceProto into Self.
+    /// Converts GovernanceProto into ValidGovernanceProto (Self).
     ///
     /// If base is not valid, then Err is returned with an explanation.
     pub fn new(base: GovernanceProto) -> Result<Self, String> {
@@ -291,6 +301,7 @@ impl ValidGovernanceProto {
         Ok(Self(base))
     }
 
+    /// Returns a summary of some governance's settings
     pub fn summary(&self) -> String {
         let inner = &self.0;
 
@@ -302,20 +313,21 @@ impl ValidGovernanceProto {
         )
     }
 
-    /// Unwrap self. c.f. Box::into_inner.
+    /// Unwrap self. Also see Box::into_inner.
     fn into_inner(self) -> GovernanceProto {
         self.0
     }
 
+    /// Returns the canister ID of the ledger canister set in governance.
     pub fn ledger_canister_id(&self) -> CanisterId {
         self.0.ledger_canister_id_or_panic()
     }
 
-    /// Convert field_value into a Result.
+    /// Converts field_value into a Result.
     ///
     /// If field_value is None, returns Err with an inner value describing what's
-    /// wrong with the field value (i.e. that it is None). This description
-    /// mentions the name of the field in GovernanceProto.
+    /// wrong with the field value (i.e. that it is None) and what's the name of the
+    /// field in GovernanceProto.
     pub fn validate_required_field<'a, Inner>(
         field_name: &str,
         field_value: &'a Option<Inner>,
@@ -326,12 +338,13 @@ impl ValidGovernanceProto {
     }
 }
 
-/// Require that the neurons identified in base.parameters.default_followeees
-/// exist (i.e. be in base.neurons). default_followees can be None.
+/// Validates the default followees specified in the nervous system parameters of the
+/// base GovernanceProto.
+/// Specifically, it validates that either the default followees are None or that the
+/// default followees are neurons that do exist in the base GovernanceProto's neurons.
 ///
-/// Assume that base.parameters is Some.
-///
-/// The String in returned Err explains why base is invalid.
+/// If the validation fails, an Err is returned containing a string that explains why
+/// base is invalid.
 pub fn validate_default_followees(base: &GovernanceProto) -> Result<(), String> {
     let action_id_to_followee = match &base
         .parameters
@@ -348,7 +361,7 @@ pub fn validate_default_followees(base: &GovernanceProto) -> Result<(), String> 
     // Iterate over neurons in default_followees.
     for followees in action_id_to_followee.values() {
         for followee in &followees.followees {
-            // followee must be a known neuron.
+            // each followee must be a neuron that exists in governance
             if !neuron_id_to_neuron.contains_key(&followee.to_string()) {
                 return Err(format!(
                     "Unknown neuron listed as a default followee: {} neuron_id_to_neurons: {:?}",
@@ -361,12 +374,11 @@ pub fn validate_default_followees(base: &GovernanceProto) -> Result<(), String> 
     Ok(())
 }
 
-/// The `Governance` canister implements the full public interface of the
-/// SNS' governance.
+/// `Governance` implements the full public interface of the SNS' governance canister.
 pub struct Governance {
     /// The Governance Protobuf which contains all persistent state of
-    /// the SNS' governance system. Needs to be stored and retrieved
-    /// on upgrades.
+    /// the SNS' governance system.
+    /// This needs to be stored and retrieved on upgrades.
     pub proto: GovernanceProto,
 
     /// Implementation of Environment to make unit testing easier.
@@ -375,38 +387,46 @@ pub struct Governance {
     /// Implementation of the interface with the SNS ledger canister.
     ledger: Box<dyn Ledger>,
 
-    /// Cached data structure that (for each action) maps a followee to
-    /// the set of followers. This is the inverse of the mapping from
-    /// neuron (follower) to followees, in the neurons. This is a
-    /// cached index and will be removed and recreated when the state
+    /// Cached data structure that (for each proposal action) maps a followee to
+    /// the set of its followers. It is the inverse of the mapping from follower
+    /// to followees that is stored in each (follower) neuron.
+    ///
+    /// This is a cached index and will be removed and recreated when the state
     /// is saved and restored.
     ///
     /// Action -> (followee's neuron ID) -> set of followers' neuron IDs.
     pub action_followee_index: BTreeMap<u64, BTreeMap<String, BTreeSet<NeuronId>>>,
 
-    /// Maps Principals to the Neuron IDs of all Neurons that have this
-    /// Principal associated with a NeuronPermissionType for the Neuron.
+    /// Maps Principals to the Neuron IDs of all Neurons for which this principal
+    /// has some permissions, i.e., all neurons that have this principal associated
+    /// with a NeuronPermissionType for the Neuron.
     ///
     /// This is a cached index and will be removed and recreated when the state
     /// is saved and restored.
     pub principal_to_neuron_ids_index: BTreeMap<PrincipalId, HashSet<NeuronId>>,
 
-    /// Timestamp, in seconds since the unix epoch, of the "closest"
-    /// open proposal's deadline tracked by the governance.
+    /// The timestamp, in seconds since the unix epoch, of the "closest"
+    /// open proposal's deadline tracked by the governance (i.e., the deadline that will be
+    /// reached first).
     closest_proposal_deadline_timestamp_seconds: u64,
 
-    /// The time of the latest "garbage collection" - when obsolete
-    /// proposals were cleaned up.
+    /// The timestamp, in seconds since the unix epoch, of the latest "garbage collection", i.e.,
+    /// when obsolete proposals were cleaned up.
     pub latest_gc_timestamp_seconds: u64,
 
-    /// The number of proposals after the last time GC was run.
+    /// The number of proposals after the last time "garbage collection" was run.
     pub latest_gc_num_proposals: usize,
 }
 
+/// Returns the ledger account identifier of the minting account on the ledger canister
+/// (currently an account controlled by the governance canister).
+/// TODO - if we later allow to set the minting account more flexibly, this method should be renamed
 pub fn governance_minting_account() -> AccountIdentifier {
     AccountIdentifier::new(id().get(), None)
 }
 
+/// Returns the ledger account identifier of a given neuron, where the neuron is specified by
+/// its subaccount.
 pub fn neuron_account_id(subaccount: Subaccount) -> AccountIdentifier {
     AccountIdentifier::new(id().get(), Some(subaccount))
 }
@@ -450,6 +470,7 @@ impl Governance {
         gov
     }
 
+    /// Returns the status of the SNS root canister (that is controlled by the governance canister)
     pub async fn get_root_canister_status(&self) -> ic_nervous_system_root::CanisterStatusResult {
         ic_nervous_system_root::canister_status((self.proto.root_canister_id_or_panic().into(),))
             .await
@@ -465,21 +486,21 @@ impl Governance {
             .build_principal_to_neuron_ids_index(&self.proto.neurons);
     }
 
-    /// Returns the NervousSystemParameters::transaction_fee_e8s
+    /// Returns the ledger's transaction fee as stored in the service nervous parameters.
     fn transaction_fee_e8s(&self) -> u64 {
         self.nervous_system_parameters()
             .transaction_fee_e8s
             .expect("NervousSystemParameters must have transaction_fee_e8s")
     }
 
-    /// Returns the NervousSystemParameters::initial_voting_period
+    /// Returns the initial voting period of proposals.
     fn initial_voting_period(&self) -> u64 {
         self.nervous_system_parameters()
             .initial_voting_period
             .expect("NervousSystemParameters must have initial_voting_period")
     }
 
-    /// Generates a new, unused, NeuronId.
+    /// Computes the NeuronId or returns a GovernanceError if a neuron with this ID already exists.
     fn new_neuron_id(
         &mut self,
         controller: &PrincipalId,
@@ -494,10 +515,14 @@ impl Governance {
         Ok(nid)
     }
 
+    /// Returns an error to be used when a neuron is not found.
     fn neuron_not_found_error(nid: &NeuronId) -> GovernanceError {
         GovernanceError::new_with_message(ErrorType::NotFound, format!("Neuron not found: {}", nid))
     }
 
+    /// Returns and error to be used if the subaccount computed from the given memo already exists
+    /// in another neuron.
+    /// TODO - change the name of the method and add the principalID to the returned message.
     fn invalid_subaccount_with_nonce(memo: u64) -> GovernanceError {
         GovernanceError::new_with_message(
             ErrorType::PreconditionFailed,
@@ -508,13 +533,13 @@ impl Governance {
         )
     }
 
+    /// Converts bytes to a subaccount
     fn bytes_to_subaccount(bytes: &[u8]) -> Result<ledger_canister::Subaccount, GovernanceError> {
         bytes.try_into().map_err(|_| {
             GovernanceError::new_with_message(ErrorType::PreconditionFailed, "Invalid subaccount")
         })
     }
 
-    // TODO verify accuracy of this comment on launch of SNS
     /// Locks a given neuron, signaling there is an ongoing neuron operation.
     ///
     /// This stores the in-flight operation in the proto so that, if anything
@@ -523,7 +548,7 @@ impl Governance {
     /// 1 - Know what was happening.
     /// 2 - Reconcile the state post-upgrade, if necessary.
     ///
-    /// No concurrent updates to this neuron's state are possible
+    /// No concurrent updates that also acquire a lock to this neuron are possible
     /// until the lock is released.
     ///
     /// ***** IMPORTANT *****
@@ -544,7 +569,7 @@ impl Governance {
     /// ```
     /// is useless, because the
     /// LedgerUpdateLock is a temporary object. It is constructed (and the lock
-    /// is acquired), the immediately dropped (and the lock is released).
+    /// is acquired), then immediately dropped (and the lock is released).
     ///
     /// However, the expression
     /// ```text
@@ -569,7 +594,7 @@ impl Governance {
         Ok(LedgerUpdateLock { nid, gov: self })
     }
 
-    /// Unlocks a given neuron.
+    /// Releases the lock on a given neuron.
     pub(crate) fn unlock_neuron(&mut self, id: &str) {
         match self.proto.in_flight_commands.remove(id) {
             None => {
@@ -583,12 +608,13 @@ impl Governance {
         }
     }
 
-    /// Add a neuron to the list of neurons and update
-    /// `principal_to_neuron_ids_index` and `action_followee_index`
+    /// Adds a neuron to the list of neurons and updates the indices
+    /// `principal_to_neuron_ids_index` and `action_followee_index`.
     ///
-    /// Fails under the following conditions:
-    /// - the maximum number of neurons has been reached, or
-    /// - the given `neuron_id` already exists in `self.proto.neurons`, or
+    /// Preconditions:
+    /// - the heap can still grow
+    /// - the maximum number of neurons has not been reached
+    /// - the given `neuron_id` does not already exists in `self.proto.neurons`
     fn add_neuron(&mut self, neuron: Neuron) -> Result<(), GovernanceError> {
         let neuron_id = neuron
             .id
@@ -627,11 +653,11 @@ impl Governance {
         Ok(())
     }
 
-    // TODO derive `neuron_id` from `neuron`. Verify there is no edge case where neuron_id != neuron.id
-    /// Remove a neuron from the list of neurons and update
-    /// indices `principal_to_neuron_ids_index` and `action_followee_index`
+    /// Removes a neuron from the list of neurons and updates the indices
+    /// `principal_to_neuron_ids_index` and `action_followee_index`.
     ///
-    /// Fail if the given `neuron_id` doesn't exist in `self.proto.neurons`
+    /// Preconditions:
+    /// - the given `neuron_id` exists in `self.proto.neurons`
     fn remove_neuron(
         &mut self,
         neuron_id: &NeuronId,
@@ -662,7 +688,8 @@ impl Governance {
         Ok(())
     }
 
-    /// Tries to get a neuron given a NeuronId
+    /// Returns a neuron given the neuron's ID or an error if no neuron with the given ID
+    /// is found.
     pub fn get_neuron(&self, req: &GetNeuron) -> GetNeuronResponse {
         let nid = &req
             .neuron_id
@@ -681,8 +708,8 @@ impl Governance {
         }
     }
 
-    /// Return a deterministically ordered list of size `limit` containing
-    /// Neurons starting at but not including `start_page_at`.
+    /// Returns a deterministically ordered list of size `limit` containing
+    /// Neurons starting at but not including the neuron with ID `start_page_at`.
     fn list_neurons_ordered(&self, start_page_at: &Option<NeuronId>, limit: usize) -> Vec<Neuron> {
         let neuron_range = if let Some(neuron_id) = start_page_at {
             self.proto
@@ -696,8 +723,8 @@ impl Governance {
         neuron_range.take(limit).map(|(_, y)| y.clone()).collect()
     }
 
-    /// Return a list of size `limit` containing Neurons that have `principal`
-    /// in their permissions
+    /// Returns a list of size `limit` containing Neurons that have `principal`
+    /// in their permissions.
     fn list_neurons_by_principal(&self, principal: &PrincipalId, limit: usize) -> Vec<Neuron> {
         self.get_neuron_ids_by_principal(principal)
             .iter()
@@ -708,8 +735,8 @@ impl Governance {
             .collect()
     }
 
-    /// Return the Neuron IDs of all Neurons that have `principal` in their
-    /// permissions
+    /// Returns the Neuron IDs of all Neurons that have `principal` in their
+    /// permissions.
     fn get_neuron_ids_by_principal(&self, principal: &PrincipalId) -> Vec<NeuronId> {
         self.principal_to_neuron_ids_index
             .get(principal)
@@ -717,7 +744,8 @@ impl Governance {
             .unwrap_or_default()
     }
 
-    /// See `ListNeurons`.
+    /// Allows listing all neurons tracked in the Governance state in a paginated fashion.
+    /// See `ListNeurons` in the Governance's proto for details.
     pub fn list_neurons(&self, req: &ListNeurons) -> ListNeuronsResponse {
         let limit = if req.limit == 0 || req.limit > MAX_LIST_NEURONS_RESULTS {
             MAX_LIST_NEURONS_RESULTS
