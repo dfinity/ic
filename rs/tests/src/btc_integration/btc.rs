@@ -21,7 +21,7 @@ use crate::{
 };
 use ic_registry_subnet_features::{BitcoinFeature, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
-use slog::{info, Logger};
+use slog::info;
 
 const UNIVERSAL_VM_NAME: &str = "btc-node";
 
@@ -61,7 +61,8 @@ docker run -v bitcoind-data:/bitcoin/.bitcoin --name=bitcoind-node -d \
         .expect("failed to setup IC under test");
 }
 
-pub fn test(env: TestEnv, logger: Logger) {
+pub fn test(env: TestEnv) {
+    let logger = env.logger();
     info!(&logger, "Checking readiness of all nodes...");
     for subnet in env.topology_snapshot().subnets() {
         for node in subnet.nodes() {

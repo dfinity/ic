@@ -17,8 +17,8 @@ use std::time::Duration;
 pub trait PotSetupFn: FnOnce(TestEnv) + UnwindSafe + Send + Sync + 'static {}
 impl<T: FnOnce(TestEnv) + UnwindSafe + Send + Sync + 'static> PotSetupFn for T {}
 
-pub trait SysTestFn: FnOnce(TestEnv, Logger) + UnwindSafe + Send + Sync + 'static {}
-impl<T: FnOnce(TestEnv, Logger) + UnwindSafe + Send + Sync + 'static> SysTestFn for T {}
+pub trait SysTestFn: FnOnce(TestEnv) + UnwindSafe + Send + Sync + 'static {}
+impl<T: FnOnce(TestEnv) + UnwindSafe + Send + Sync + 'static> SysTestFn for T {}
 
 pub fn suite(name: &str, pots: Vec<Pot>) -> Suite {
     let name = name.to_string();
@@ -52,7 +52,8 @@ where
     Test {
         name: name.to_string(),
         execution_mode: ExecutionMode::Run,
-        f: Box::new(|test_env: TestEnv, log: Logger| {
+        f: Box::new(|test_env: TestEnv| {
+            let log = test_env.logger();
             let (ic_handle, test_ctx) = get_ic_handle_and_ctx(test_env, log);
             (test)(ic_handle, &test_ctx);
         }),
