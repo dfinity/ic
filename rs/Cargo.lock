@@ -3641,7 +3641,7 @@ dependencies = [
  "hyper-socks2",
  "hyper-tls",
  "ic-async-utils",
- "ic-canister-http-adapter-service",
+ "ic-canister-http-service",
  "ic-config",
  "ic-logger",
  "prost",
@@ -3660,7 +3660,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-canister-http-adapter-service"
+name = "ic-canister-http-service"
 version = "0.1.0"
 dependencies = [
  "prost",

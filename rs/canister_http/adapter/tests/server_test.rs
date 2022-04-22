@@ -8,9 +8,9 @@ use hyper::{
 use hyper_socks2::SocksConnector;
 use hyper_tls::HttpsConnector;
 use ic_canister_http_adapter::{CanisterHttp, Config};
-use ic_canister_http_adapter_service::{
-    http_adapter_client::HttpAdapterClient, http_adapter_server::HttpAdapterServer,
-    CanisterHttpRequest, HttpHeader,
+use ic_canister_http_service::{
+    canister_http_service_client::CanisterHttpServiceClient,
+    canister_http_service_server::CanisterHttpServiceServer, CanisterHttpSendRequest, HttpHeader,
 };
 use ic_logger::{new_replica_logger_from_config, ReplicaLogger};
 use std::convert::TryFrom;
@@ -31,13 +31,13 @@ async fn test_https() {
     let channel = setup_loop_channel_unix(canister_http).await;
 
     // create gRPC client that communicated with gRPC server through UDS channel
-    let mut client = HttpAdapterClient::new(channel);
+    let mut client = CanisterHttpServiceClient::new(channel);
 
     let request = tonic::Request::new(build_http_canister_request(
         "https://www.google.com".to_string(),
     ));
 
-    let response = client.send_http_request(request).await;
+    let response = client.canister_http_send(request).await;
 
     assert!(response.is_ok());
     assert_eq!(
@@ -53,14 +53,14 @@ async fn test_http() {
 
     let canister_http = setup_grpc_server_with_https_client(logger.clone());
     let channel = setup_loop_channel_unix(canister_http).await;
-    let mut client = HttpAdapterClient::new(channel);
+    let mut client = CanisterHttpServiceClient::new(channel);
 
     let request = tonic::Request::new(build_http_canister_request(
         "http://www.bing.com".to_string(),
     ));
 
     // HTTP adapter enforces HTTPS. HTTP connection requests are rejected.
-    let response = client.send_http_request(request).await;
+    let response = client.canister_http_send(request).await;
     assert!(response.is_err());
     let status = response.unwrap_err();
     assert_eq!(status.code(), tonic::Code::Unavailable);
@@ -73,11 +73,11 @@ async fn test_no_http() {
 
     let canister_http = setup_grpc_server_with_https_client(logger.clone());
     let channel = setup_loop_channel_unix(canister_http).await;
-    let mut client = HttpAdapterClient::new(channel);
+    let mut client = CanisterHttpServiceClient::new(channel);
 
     let request = tonic::Request::new(build_http_canister_request("www.google.com".to_string()));
 
-    let response = client.send_http_request(request).await;
+    let response = client.canister_http_send(request).await;
     assert!(response.is_err());
 }
 
@@ -92,13 +92,13 @@ async fn test_bad_socks() {
         logger.clone(),
     );
     let channel = setup_loop_channel_unix(canister_http).await;
-    let mut client = HttpAdapterClient::new(channel);
+    let mut client = CanisterHttpServiceClient::new(channel);
 
     let request = tonic::Request::new(build_http_canister_request(
         "https://www.google.com".to_string(),
     ));
 
-    let response = client.send_http_request(request).await;
+    let response = client.canister_http_send(request).await;
     assert!(response.is_err());
 }
 
@@ -113,7 +113,7 @@ async fn test_socks() {
         logger.clone(),
     );
     let channel = setup_loop_channel_unix(canister_http).await;
-    let mut client = HttpAdapterClient::new(channel);
+    let mut client = CanisterHttpServiceClient::new(channel);
 
     tokio::task::spawn(async move {
         spawn_socks5_server("127.0.0.1:8088".to_string()).await;
@@ -122,7 +122,7 @@ async fn test_socks() {
     let request = tonic::Request::new(build_http_canister_request(
         "https://www.google.com".to_string(),
     ));
-    let response = client.send_http_request(request).await;
+    let response = client.canister_http_send(request).await;
     assert!(response.is_ok());
 }
 
@@ -166,7 +166,7 @@ async fn test_socks_fallback() {
     let canister_http = CanisterHttp::new(https_client, logger.clone());
 
     let channel = setup_loop_channel_unix(canister_http).await;
-    let mut client = HttpAdapterClient::new(channel);
+    let mut client = CanisterHttpServiceClient::new(channel);
 
     // Spawn socks prox on 127.0.0.1:8089
     tokio::task::spawn(async move {
@@ -175,18 +175,18 @@ async fn test_socks_fallback() {
     let request = tonic::Request::new(build_http_canister_request(
         "https://www.bing.com".to_string(),
     ));
-    let response = client.send_http_request(request).await;
+    let response = client.canister_http_send(request).await;
     assert!(response.is_ok());
 }
 
 // TODO: increase functionality of this function (NET-883)
-fn build_http_canister_request(url: String) -> CanisterHttpRequest {
+fn build_http_canister_request(url: String) -> CanisterHttpSendRequest {
     let headers = vec![HttpHeader {
         name: "User-Agent".to_string(),
         value: "test".to_string(),
     }];
 
-    CanisterHttpRequest {
+    CanisterHttpSendRequest {
         url,
         body: "".to_string().into_bytes(),
         headers,
@@ -263,7 +263,7 @@ async fn setup_loop_channel_unix<C: Clone + Connect + Send + Sync + 'static>(
     // spawn gRPC server
     tokio::spawn(async move {
         Server::builder()
-            .add_service(HttpAdapterServer::new(canister_http))
+            .add_service(CanisterHttpServiceServer::new(canister_http))
             .serve_with_incoming(incoming)
             .await
             .expect("server shutdown")

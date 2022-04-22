@@ -15,7 +15,7 @@ hyper = { version = "0.14.18", features = ["full"] }
 hyper-socks2 = "0.6.0"
 hyper-tls = "0.5.0"
 ic-async-utils = { path = "../../async_utils" }
-ic-canister-http-adapter-service = { path = "../adapter_service"}
+ic-canister-http-service = { path = "../service"}
 ic-config = { path = "../../config" }
 ic-logger = { path = "../../monitoring/logger" }
 prost = "0.9"
