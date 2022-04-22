@@ -701,8 +701,7 @@ impl Governance {
     fn list_neurons_by_principal(&self, principal: &PrincipalId, limit: usize) -> Vec<Neuron> {
         self.get_neuron_ids_by_principal(principal)
             .iter()
-            .map(|nid| self.proto.neurons.get(&nid.to_string()))
-            .flatten()
+            .filter_map(|nid| self.proto.neurons.get(&nid.to_string()))
             .take(limit)
             .cloned()
             .collect()

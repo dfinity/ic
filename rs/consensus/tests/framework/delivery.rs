@@ -200,7 +200,7 @@ fn random_graph<T: Rng>(num_nodes: usize, degree: usize, rng: &mut T) -> Vec<Vec
 
 /// Floyd–Warshall algorithm that computes the distance between all pairs of
 /// nodes. Return max distance (or diameter) if successful, or None otherwise.
-fn distance_vector(distances: &mut Vec<Vec<usize>>) -> Option<usize> {
+fn distance_vector(distances: &mut [Vec<usize>]) -> Option<usize> {
     let n = distances.len();
     for k in 0..n {
         for i in 0..n {

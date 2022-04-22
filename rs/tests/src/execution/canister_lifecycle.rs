@@ -883,7 +883,7 @@ pub fn canister_can_manage_other_canister(handle: IcHandle, ctx: &ic_fondue::pot
             canister_a
                 .update(wasm().call(management::install_code(
                     canister_b,
-                    UNIVERSAL_CANISTER_WASM.to_vec(),
+                    UNIVERSAL_CANISTER_WASM,
                 )))
                 .await
                 .unwrap();
@@ -930,15 +930,14 @@ pub fn canister_can_manage_other_canister_batched(handle: IcHandle, ctx: &ic_fon
 
             let arbitrary_bytes = b";ioapusdvzn,x";
             let res = canister_a
-                .update(
-                    wasm().call(
-                        management::install_code(canister_b, UNIVERSAL_CANISTER_WASM.to_vec())
-                            .on_reply(wasm().inter_update(
-                                canister_b,
-                                call_args().other_side(wasm().reply_data(arbitrary_bytes)),
-                            )),
+                .update(wasm().call(
+                    management::install_code(canister_b, UNIVERSAL_CANISTER_WASM).on_reply(
+                        wasm().inter_update(
+                            canister_b,
+                            call_args().other_side(wasm().reply_data(arbitrary_bytes)),
+                        ),
                     ),
-                )
+                ))
                 .await
                 .unwrap();
             assert_eq!(res, arbitrary_bytes);
@@ -1033,15 +1032,12 @@ pub fn total_compute_allocation_cannot_be_exceeded(
             let res = universal_canister
                 .update(
                     wasm().call(
-                        management::install_code(
-                            created_canister,
-                            UNIVERSAL_CANISTER_WASM.to_vec(),
-                        )
-                        .with_compute_allocation(MAX_COMP_ALLOC.unwrap())
-                        .on_reply(wasm().inter_update(
-                            created_canister,
-                            call_args().other_side(wasm().reply_data(reply_data)),
-                        )),
+                        management::install_code(created_canister, UNIVERSAL_CANISTER_WASM)
+                            .with_compute_allocation(MAX_COMP_ALLOC.unwrap())
+                            .on_reply(wasm().inter_update(
+                                created_canister,
+                                call_args().other_side(wasm().reply_data(reply_data)),
+                            )),
                     ),
                 )
                 .await;
@@ -1383,7 +1379,7 @@ pub fn controller_and_controllee_on_different_subnets(
             ) -> Result<Vec<u8>, AgentError> {
                 cr.update(
                     wasm().call(
-                        management::install_code(target, UNIVERSAL_CANISTER_WASM.to_vec())
+                        management::install_code(target, UNIVERSAL_CANISTER_WASM)
                             .with_mode(management::InstallMode::Reinstall),
                     ),
                 )

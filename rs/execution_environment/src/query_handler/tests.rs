@@ -160,7 +160,7 @@ fn query_metrics_are_reported() {
                     method_payload: wasm()
                         .inter_query(
                             canister_b,
-                            call_args().other_side(wasm().reply_data(&b"pong".to_vec())),
+                            call_args().other_side(wasm().reply_data(b"pong".as_ref())),
                         )
                         .build(),
                     ingress_expiry: 0,
@@ -315,7 +315,7 @@ fn query_call_with_side_effects() {
                         .inter_query(
                             canister_b,
                             call_args()
-                                .other_side(wasm().reply_data(&b"ignore".to_vec()))
+                                .other_side(wasm().reply_data(b"ignore".as_ref()))
                                 .on_reply(wasm().stable_size().reply_int()),
                         )
                         .build(),
@@ -351,7 +351,7 @@ fn query_calls_disabled_for_application_subnet() {
                         .inter_query(
                             canister_b,
                             call_args()
-                                .other_side(wasm().reply_data(&b"ignore".to_vec()))
+                                .other_side(wasm().reply_data(b"ignore".as_ref()))
                                 .on_reply(wasm().stable_size().reply_int()),
                         )
                         .build(),

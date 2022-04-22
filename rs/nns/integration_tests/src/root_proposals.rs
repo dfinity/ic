@@ -126,7 +126,7 @@ fn test_upgrade_governance_through_root_proposal() {
         vote_on_root_proposal(
             &voter,
             &proposer_pid,
-            &empty_wasm_sha.to_vec(),
+            empty_wasm_sha.as_ref(),
             &nns_canisters.root,
             RootProposalBallot::Yes,
         )
@@ -146,7 +146,7 @@ fn test_upgrade_governance_through_root_proposal() {
                 Sender::from_keypair(&TEST_USER5_KEYPAIR),
             ],
             &proposer_pid,
-            &empty_wasm_sha.to_vec(),
+            empty_wasm_sha.as_ref(),
             &nns_canisters.root,
             RootProposalBallot::Yes,
         )
@@ -310,7 +310,7 @@ fn test_enough_no_votes_rejects_the_proposal() {
                 Sender::from_keypair(&TEST_USER4_KEYPAIR),
             ],
             &proposer_pid,
-            &empty_wasm_sha.to_vec(),
+            empty_wasm_sha.as_ref(),
             &nns_canisters.root,
             RootProposalBallot::No,
         )
@@ -423,7 +423,7 @@ fn test_changing_the_sha_invalidates_the_proposal() {
                 Sender::from_keypair(&TEST_USER6_KEYPAIR),
             ],
             &proposer2_pid,
-            &empty_wasm_sha.to_vec(),
+            empty_wasm_sha.as_ref(),
             &nns_canisters.root,
             RootProposalBallot::Yes,
         )
@@ -440,7 +440,7 @@ fn test_changing_the_sha_invalidates_the_proposal() {
                 Sender::from_keypair(&TEST_USER5_KEYPAIR),
             ],
             &proposer1_pid,
-            &empty_wasm_sha.to_vec(),
+            empty_wasm_sha.as_ref(),
             &nns_canisters.root,
             RootProposalBallot::Yes,
         )

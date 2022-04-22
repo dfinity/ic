@@ -37,8 +37,7 @@ impl SummaryPayload {
         if let Some(ecdsa_version) = self
             .ecdsa
             .as_ref()
-            .map(|payload| payload.get_oldest_registry_version_in_use())
-            .flatten()
+            .and_then(|payload| payload.get_oldest_registry_version_in_use())
         {
             dkg_version.min(ecdsa_version)
         } else {

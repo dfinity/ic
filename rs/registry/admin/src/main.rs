@@ -3596,8 +3596,8 @@ impl GovernanceCanisterClient {
         self.submit_external_proposal(
             &create_make_proposal_payload(
                 create_external_update_proposal_candid(
-                    &title.to_string(),
-                    &summary.to_string(),
+                    title,
+                    summary,
                     &url,
                     external_update_type,
                     payload,

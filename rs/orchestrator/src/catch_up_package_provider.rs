@@ -72,7 +72,7 @@ impl CatchUpPackageProvider {
             .get_subnet_transport_infos(subnet_id, registry_version)
             .ok()
             .flatten()
-            .unwrap_or_else(Vec::new);
+            .unwrap_or_default();
         // Randomize the order of peer_urls
         nodes.shuffle(&mut rand::thread_rng());
 

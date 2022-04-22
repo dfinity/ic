@@ -214,7 +214,7 @@ fn test_accepted_proposal_mutates_the_registry() {
         assert_eq!(
             get_value::<ReplicaVersionRecord>(
                 &registry,
-                make_replica_version_key("version_42".to_string()).as_bytes()
+                make_replica_version_key("version_42").as_bytes()
             )
             .await,
             ReplicaVersionRecord {

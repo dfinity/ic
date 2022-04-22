@@ -356,7 +356,7 @@ pub fn recompute_digest(
         Witness::Pruned { digest } => Ok(digest),
         Witness::Fork { .. } | Witness::Node { .. } | Witness::Known() => {
             Err(TreeHashError::InconsistentPartialTree {
-                offending_path: path_to_first_known(&pruned).unwrap_or_else(Vec::new),
+                offending_path: path_to_first_known(&pruned).unwrap_or_default(),
             })
         }
     }

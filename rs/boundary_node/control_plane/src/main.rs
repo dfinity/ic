@@ -145,10 +145,7 @@ async fn main() -> Result<()> {
 
     let metrics_join_handle = start_metrics_server(log);
     let nns_public_key = if NNS_PUBLIC_KEY.is_present() {
-        Some(
-            parse_threshold_sig_key(&NNS_PUBLIC_KEY.flag.to_path_buf())
-                .expect("unable to parse NNS public key"),
-        )
+        Some(parse_threshold_sig_key(NNS_PUBLIC_KEY.flag).expect("unable to parse NNS public key"))
     } else {
         None
     };

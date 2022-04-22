@@ -178,7 +178,7 @@ impl TempCryptoComponent {
         node_id: NodeId,
     ) -> (Self, TlsPublicKeyCert) {
         let (config, temp_dir) = CryptoConfig::new_in_temp_dir();
-        let tls_pubkey = generate_tls_keys(&temp_dir.path().to_path_buf(), node_id);
+        let tls_pubkey = generate_tls_keys(temp_dir.path(), node_id);
 
         let temp_crypto =
             TempCryptoComponent::new_with(registry_client, node_id, &config, temp_dir);

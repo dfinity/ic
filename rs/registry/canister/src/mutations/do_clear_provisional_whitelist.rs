@@ -31,7 +31,7 @@ impl Registry {
         provisional_whitelist.set = vec![];
 
         let mutations = vec![upsert(
-            make_provisional_whitelist_record_key().as_bytes().to_vec(),
+            make_provisional_whitelist_record_key().as_bytes(),
             encode_or_panic(&provisional_whitelist),
         )];
 

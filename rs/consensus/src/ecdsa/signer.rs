@@ -79,7 +79,7 @@ impl EcdsaSignerImpl {
             .filter(|(request_id, _)| {
                 !self.signer_has_issued_signature_share(ecdsa_pool, &self.node_id, request_id)
             })
-            .map(|(request_id, sig_inputs)| {
+            .flat_map(|(request_id, sig_inputs)| {
                 self.crypto_create_signature_share(
                     ecdsa_pool,
                     transcript_loader,
@@ -88,7 +88,6 @@ impl EcdsaSignerImpl {
                     sig_inputs,
                 )
             })
-            .flatten()
             .collect()
     }
 

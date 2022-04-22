@@ -1091,8 +1091,8 @@ fn fixture_for_following() -> GovernanceProto {
                                 .to_vec(),
                         },
                     )]
-                    .to_vec()
-                    .into_iter()
+                    .iter()
+                    .cloned()
                     .collect(),
                     ..neuron(2)
                 },
@@ -1107,8 +1107,8 @@ fn fixture_for_following() -> GovernanceProto {
                                 .to_vec(),
                         },
                     )]
-                    .to_vec()
-                    .into_iter()
+                    .iter()
+                    .cloned()
                     .collect(),
                     ..neuron(3)
                 },
@@ -1144,8 +1144,8 @@ fn fixture_for_following() -> GovernanceProto {
             ),
             (9, neuron(9)),
         ]
-        .to_vec()
-        .into_iter()
+        .iter()
+        .cloned()
         .collect(),
         ..Default::default()
     }
@@ -1713,8 +1713,8 @@ fn fixture_for_manage_neuron() -> GovernanceProto {
                                 .to_vec(),
                         },
                     )]
-                    .to_vec()
-                    .into_iter()
+                    .iter()
+                    .cloned()
                     .collect(),
                     ..neuron(1)
                 },
@@ -1750,8 +1750,8 @@ fn fixture_for_manage_neuron() -> GovernanceProto {
             ),
             (6, neuron(6)),
         ]
-        .to_vec()
-        .into_iter()
+        .iter()
+        .cloned()
         .collect(),
         ..Default::default()
     }
@@ -2997,8 +2997,8 @@ fn fixture_for_approve_kyc() -> GovernanceProto {
                 },
             ),
         ]
-        .to_vec()
-        .into_iter()
+        .iter()
+        .cloned()
         .collect(),
         ..Default::default()
     }
@@ -4722,12 +4722,11 @@ fn do_test_merge_neurons(
     prop_assert_changes!(
         nns,
         Changed::Changed({
-            let stake_to_transfer;
-            if n1_cached_stake > fee {
-                stake_to_transfer = n1_cached_stake.saturating_sub(n1_fees).saturating_sub(fee);
+            let stake_to_transfer = if n1_cached_stake > fee {
+                n1_cached_stake.saturating_sub(n1_fees).saturating_sub(fee)
             } else {
-                stake_to_transfer = 0;
-            }
+                0
+            };
 
             let cached_stake_remaining;
             if n1_fees > fee {
@@ -6734,8 +6733,8 @@ fn test_recompute_tally() {
             (4, ballot(Vote::No)),
             (5, ballot(Vote::Unspecified)),
         ]
-        .to_vec()
-        .into_iter()
+        .iter()
+        .cloned()
         .collect(),
         ..Default::default()
     };
@@ -7064,15 +7063,15 @@ fn test_filter_proposals() {
                             followees: [NeuronId { id: 3 }, NeuronId { id: 4 }].to_vec(),
                         },
                     )]
-                    .to_vec()
-                    .into_iter()
+                    .iter()
+                    .cloned()
                     .collect(),
                     ..Default::default()
                 },
             ),
         ]
-        .to_vec()
-        .into_iter()
+        .iter()
+        .cloned()
         .collect(),
         proposals: [
             (
@@ -7193,8 +7192,8 @@ fn test_filter_proposals() {
                             },
                         ),
                     ]
-                    .to_vec()
-                    .into_iter()
+                    .iter()
+                    .cloned()
                     .collect(),
                     latest_tally: Some(Tally {
                         timestamp_seconds: 10,
@@ -7235,8 +7234,8 @@ fn test_filter_proposals() {
                 },
             ),
         ]
-        .to_vec()
-        .into_iter()
+        .iter()
+        .cloned()
         .collect::<BTreeMap<u64, ProposalData>>(),
         ..Default::default()
     };
@@ -7411,8 +7410,8 @@ fn test_filter_proposals() {
                 }
             ),
         ]
-        .to_vec()
-        .into_iter()
+        .iter()
+        .cloned()
         .collect::<HashMap<u64, Ballot>>(),
         lst[0].ballots
     );
@@ -7448,8 +7447,8 @@ fn test_filter_proposals() {
                 }
             ),
         ]
-        .to_vec()
-        .into_iter()
+        .iter()
+        .cloned()
         .collect::<HashMap<u64, Ballot>>(),
         lst[0].ballots
     );
@@ -7521,8 +7520,8 @@ fn test_list_neurons() {
             followees: [NeuronId { id: 2 }, NeuronId { id: 4 }].to_vec(),
         },
     )]
-    .to_vec()
-    .into_iter()
+    .iter()
+    .cloned()
     .collect();
     let driver = fake::FakeDriver::default();
     let gov = Governance::new(proto, driver.get_fake_env(), driver.get_fake_ledger());
@@ -8460,8 +8459,8 @@ fn fixture_for_dissolving_neuron_tests(id: u64, dissolve_state: DissolveState) -
                 ..Neuron::default()
             },
         )]
-        .to_vec()
-        .into_iter()
+        .iter()
+        .cloned()
         .collect(),
         ..Default::default()
     }
@@ -8797,8 +8796,8 @@ fn test_increase_dissolve_delay() {
                 },
             ),
         ]
-        .to_vec()
-        .into_iter()
+        .iter()
+        .cloned()
         .collect(),
         ..Default::default()
     };
@@ -8930,8 +8929,8 @@ fn test_join_community_fund() {
                 },
             ),
         ]
-        .to_vec()
-        .into_iter()
+        .iter()
+        .cloned()
         .collect(),
         ..Default::default()
     };
@@ -9957,12 +9956,7 @@ fn test_wfq_constant_flipping() {
     }];
 
     for i in 1..ONE_DAY_SECONDS / 10 {
-        let vote: Vote;
-        if i % 2 == 0 {
-            vote = Vote::Yes;
-        } else {
-            vote = Vote::No;
-        }
+        let vote = if i % 2 == 0 { Vote::Yes } else { Vote::No };
         neuron_votes.push(NeuronVote {
             vote_and_time: Some((vote, 80 * i as u64)),
             stake: 20,
@@ -10040,8 +10034,8 @@ fn test_known_neurons() {
             },
         ),
     ]
-    .to_vec()
-    .into_iter()
+    .iter()
+    .cloned()
     .collect();
     let governance_proto = GovernanceProto {
         economics: Some(NetworkEconomics::with_default_values()),
@@ -10188,13 +10182,13 @@ fn test_known_neurons() {
 #[test]
 fn test_no_proposal_title_is_invalid() {
     let result = validate_proposal_title(&None);
-    assert!(!result.is_ok());
+    assert!(result.is_err());
 }
 
 #[test]
 fn test_short_proposal_title_is_invalid() {
     let result = validate_proposal_title(&Some("hi".to_string()));
-    assert!(!result.is_ok());
+    assert!(result.is_err());
 }
 
 #[test]
@@ -10205,7 +10199,7 @@ fn test_long_proposal_title_is_invalid() {
     }
 
     let result = validate_proposal_title(&Some(long_title));
-    assert!(!result.is_ok());
+    assert!(result.is_err());
 }
 
 #[test]

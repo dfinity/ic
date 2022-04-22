@@ -229,7 +229,7 @@ fn dump_heap(t: &mut HypervisorTest) -> Vec<u8> {
     }
 }
 
-fn buf_apply_write(heap: &mut Vec<u8>, write: &Write) {
+fn buf_apply_write(heap: &mut [u8], write: &Write) {
     // match the behavior of write_bytes: copy the i32 `addr` to heap[0;4]
     heap[0..4].copy_from_slice(&write.dst.to_le_bytes());
     heap[write.dst as usize..(write.dst as usize + write.bytes.len() as usize)]

@@ -956,20 +956,14 @@ fn decompose_key(key: &[u8]) -> (u64, Vec<u8>) {
 /// Builds a key which is the lexicographical minimum for a given height and is
 /// guaranteed to be less than or equal to any artifact at that height.
 fn make_min_key(height: u64) -> Vec<u8> {
-    make_key(
-        height,
-        &check_not_none_uw!(&MIN_KEY.get(HASH_POS..KEY_SIZE)).to_vec(),
-    )
+    make_key(height, check_not_none_uw!(&MIN_KEY.get(HASH_POS..KEY_SIZE)))
 }
 
 /// Builds a key which is the lexicographical maximum for a given height
 /// and is guaranteed to be higher than or equal to all the artifacts at
 /// height.
 fn make_max_key(height: u64) -> Vec<u8> {
-    make_key(
-        height,
-        &check_not_none_uw!(&MAX_KEY.get(HASH_POS..KEY_SIZE)).to_vec(),
-    )
+    make_key(height, check_not_none_uw!(&MAX_KEY.get(HASH_POS..KEY_SIZE)))
 }
 
 const CERTIFICATION_CF_INFO: ArtifactCFInfo = ArtifactCFInfo::new("CE");

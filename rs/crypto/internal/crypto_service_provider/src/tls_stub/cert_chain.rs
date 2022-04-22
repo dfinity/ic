@@ -100,7 +100,7 @@ impl fmt::Debug for CspCertificateChain {
         match self.chain.len() {
             0 => panic!("invariant violated: chain is empty"),
             1 => {
-                writeln!(f, "root=leaf: {:?}, ", self.chain.get(root_idx).to_owned())?;
+                writeln!(f, "root=leaf: {:?}, ", self.chain.get(root_idx))?;
             }
             _ => {
                 writeln!(f, "Start of certificate chain")?;
@@ -112,7 +112,7 @@ impl fmt::Debug for CspCertificateChain {
                     if i == self.leaf_index() {
                         write!(f, " leaf: ")?;
                     }
-                    writeln!(f, "{:?}", cert.to_owned())?;
+                    writeln!(f, "{:?}", cert)?;
                 }
                 writeln!(f, "End of certificate chain")?;
             }

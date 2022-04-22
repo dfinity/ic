@@ -236,8 +236,7 @@ pub mod groth20_bls12_381 {
         pub fn get(&self, node_index: NodeIndex) -> Option<&[G1Bytes; NUM_CHUNKS]> {
             usize::try_from(node_index)
                 .ok()
-                .map(|node_index| self.ciphertext_chunks.get(node_index))
-                .flatten()
+                .and_then(|node_index| self.ciphertext_chunks.get(node_index))
         }
     }
 }

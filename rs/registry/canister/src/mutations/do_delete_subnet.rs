@@ -65,23 +65,17 @@ impl Registry {
             .subnets
             .retain(|subnet_id| *subnet_id != subnet_id_to_remove.get().to_vec());
         let update_subnet_list_mutation = update(
-            make_subnet_list_record_key().as_bytes().to_vec(),
+            make_subnet_list_record_key().as_bytes(),
             encode_or_panic(&subnet_list),
         );
 
         // 3. Delete Subnet's CUP
-        let delete_cup_mutation = delete(
-            make_catch_up_package_contents_key(subnet_id_to_remove)
-                .as_bytes()
-                .to_vec(),
-        );
+        let delete_cup_mutation =
+            delete(make_catch_up_package_contents_key(subnet_id_to_remove).as_bytes());
 
         // 4. Delete Subnet's threshold signing key
-        let delete_threshold_signing_pubkey = delete(
-            make_crypto_threshold_signing_pubkey_key(subnet_id_to_remove)
-                .as_bytes()
-                .to_vec(),
-        );
+        let delete_threshold_signing_pubkey =
+            delete(make_crypto_threshold_signing_pubkey_key(subnet_id_to_remove).as_bytes());
 
         // 5. Delete Subnet record
         let delete_subnet_mutation = delete(make_subnet_record_key(subnet_id_to_remove));

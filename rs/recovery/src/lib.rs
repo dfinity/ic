@@ -258,7 +258,7 @@ impl Recovery {
     // Execute an `ic-admin` command, log the output.
     fn exec_admin_cmd(logger: Logger, ic_admin_cmd: &IcAdmin) -> RecoveryResult<()> {
         let mut cmd = Command::new(&ic_admin_cmd[0]);
-        cmd.args(ic_admin_cmd[1..].iter().map(|s| s.replace("\"", "")));
+        cmd.args(ic_admin_cmd[1..].iter().map(|s| s.replace('\"', "")));
         if let Some(res) = exec_cmd(&mut cmd)? {
             info!(logger, "{}", res);
         }

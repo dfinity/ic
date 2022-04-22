@@ -36,12 +36,8 @@ fn node_is_removed_on_receiving_the_request() {
     local_test_on_nns_subnet(|runtime| async move {
         let test_node_record = NodeRecord {
             node_operator_id: (*TEST_NEURON_1_OWNER_PRINCIPAL).to_vec(),
-            xnet: Some(connection_endpoint_from_string(
-                &("128.0.0.1:1234".to_string()),
-            )),
-            http: Some(connection_endpoint_from_string(
-                &("128.0.0.1:1234".to_string()),
-            )),
+            xnet: Some(connection_endpoint_from_string("128.0.0.1:1234")),
+            http: Some(connection_endpoint_from_string("128.0.0.1:1234")),
             p2p_flow_endpoints: vec!["123,128.0.0.1:10000"]
                 .iter()
                 .map(|x| flow_endpoint_from_string(x))
@@ -102,12 +98,8 @@ fn node_cannot_be_removed_by_non_node_operator() {
     local_test_on_nns_subnet(|runtime| async move {
         let test_node_record = NodeRecord {
             node_operator_id: (*TEST_NEURON_1_OWNER_PRINCIPAL).to_vec(),
-            xnet: Some(connection_endpoint_from_string(
-                &("128.0.0.1:1234".to_string()),
-            )),
-            http: Some(connection_endpoint_from_string(
-                &("128.0.0.1:1234".to_string()),
-            )),
+            xnet: Some(connection_endpoint_from_string("128.0.0.1:1234")),
+            http: Some(connection_endpoint_from_string("128.0.0.1:1234")),
             p2p_flow_endpoints: vec!["123,128.0.0.1:10000"]
                 .iter()
                 .map(|x| flow_endpoint_from_string(x))
@@ -140,12 +132,8 @@ fn node_cannot_be_removed_if_in_subnet() {
     local_test_on_nns_subnet(|runtime| async move {
         let test_node_record = NodeRecord {
             node_operator_id: (*TEST_NEURON_1_OWNER_PRINCIPAL).to_vec(),
-            xnet: Some(connection_endpoint_from_string(
-                &("128.0.0.1:1234".to_string()),
-            )),
-            http: Some(connection_endpoint_from_string(
-                &("128.0.0.1:1234".to_string()),
-            )),
+            xnet: Some(connection_endpoint_from_string("128.0.0.1:1234")),
+            http: Some(connection_endpoint_from_string("128.0.0.1:1234")),
             p2p_flow_endpoints: vec!["123,128.0.0.1:10000"]
                 .iter()
                 .map(|x| flow_endpoint_from_string(x))

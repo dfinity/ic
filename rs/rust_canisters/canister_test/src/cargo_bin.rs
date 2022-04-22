@@ -145,7 +145,7 @@ impl Project {
         let mut cargo_build = CargoBuild::new()
             .target("wasm32-unknown-unknown")
             .env("CARGO_BUILD_RUSTFLAGS", build_rust_flags)
-            .bin(bin_name.to_string())
+            .bin(bin_name)
             .arg("--profile")
             .arg("canister-release")
             .manifest_path(cargo_toml_path)

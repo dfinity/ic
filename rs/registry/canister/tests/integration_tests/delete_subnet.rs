@@ -94,51 +94,41 @@ fn test_subnet_is_only_deleted_when_appropriate() {
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![
                         insert(
-                            make_node_record_key(node_pid_2).as_bytes().to_vec(),
+                            make_node_record_key(node_pid_2).as_bytes(),
                             encode_or_panic(&node_2),
                         ),
                         insert(
-                            make_node_record_key(node_pid_3).as_bytes().to_vec(),
+                            make_node_record_key(node_pid_3).as_bytes(),
                             encode_or_panic(&node_3),
                         ),
                         insert(
-                            make_subnet_record_key(application_subnet_id)
-                                .as_bytes()
-                                .to_vec(),
+                            make_subnet_record_key(application_subnet_id).as_bytes(),
                             encode_or_panic(&application_subnet),
                         ),
                         insert(
-                            make_catch_up_package_contents_key(application_subnet_id)
-                                .as_bytes()
-                                .to_vec(),
+                            make_catch_up_package_contents_key(application_subnet_id).as_bytes(),
                             encode_or_panic(&application_subnet_cup),
                         ),
                         insert(
                             make_crypto_threshold_signing_pubkey_key(application_subnet_id)
-                                .as_bytes()
-                                .to_vec(),
+                                .as_bytes(),
                             encode_or_panic(&application_subnet_pk),
                         ),
                         insert(
-                            make_catch_up_package_contents_key(second_system_subnet_id)
-                                .as_bytes()
-                                .to_vec(),
+                            make_catch_up_package_contents_key(second_system_subnet_id).as_bytes(),
                             encode_or_panic(&second_system_subnet_cup),
                         ),
                         insert(
                             make_crypto_threshold_signing_pubkey_key(second_system_subnet_id)
-                                .as_bytes()
-                                .to_vec(),
+                                .as_bytes(),
                             encode_or_panic(&second_system_subnet_pk),
                         ),
                         insert(
-                            make_subnet_record_key(second_system_subnet_id)
-                                .as_bytes()
-                                .to_vec(),
+                            make_subnet_record_key(second_system_subnet_id).as_bytes(),
                             encode_or_panic(&second_system_subnet),
                         ),
                         update(
-                            make_subnet_list_record_key().as_bytes().to_vec(),
+                            make_subnet_list_record_key().as_bytes(),
                             encode_or_panic(&subnet_list),
                         ),
                     ],

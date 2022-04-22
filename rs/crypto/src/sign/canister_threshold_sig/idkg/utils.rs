@@ -46,7 +46,7 @@ pub fn get_mega_pubkey(
     let pk_proto = registry
         .get_crypto_key_for_node(*node_id, KeyPurpose::IDkgMEGaEncryption, registry_version)
         .map_err(MegaKeyFromRegistryError::RegistryError)?
-        .ok_or_else(|| MegaKeyFromRegistryError::PublicKeyNotFound {
+        .ok_or(MegaKeyFromRegistryError::PublicKeyNotFound {
             registry_version,
             node_id: *node_id,
         })?;

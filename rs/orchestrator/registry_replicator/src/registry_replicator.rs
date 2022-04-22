@@ -146,7 +146,7 @@ impl RegistryReplicator {
             }
             Some(string) => string
                 .split(',')
-                .map(|s| match Url::parse(s) {
+                .flat_map(|s| match Url::parse(s) {
                     Err(_) => {
                         info!(
                             self.logger,
@@ -156,7 +156,6 @@ impl RegistryReplicator {
                     }
                     Ok(url) => Some(url),
                 })
-                .flatten()
                 .collect::<Vec<Url>>(),
         };
 

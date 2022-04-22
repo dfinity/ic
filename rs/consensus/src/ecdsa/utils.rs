@@ -94,9 +94,10 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
 
         idkg_transcripts
             .get(&transcript_ref.transcript_id)
-            .ok_or_else(|| {
-                TranscriptLookupError::TranscriptNotFound(*transcript_ref, is_summary_block)
-            })
+            .ok_or(TranscriptLookupError::TranscriptNotFound(
+                *transcript_ref,
+                is_summary_block,
+            ))
             .map(|entry| entry.clone())
     }
 }

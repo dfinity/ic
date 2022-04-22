@@ -49,7 +49,7 @@ impl Registry {
 
         let node_key = make_node_record_key(node_id);
         self
-            .get(&node_key.as_bytes().to_vec(), self.latest_version())
+            .get(node_key.as_bytes(), self.latest_version())
             .ok_or_else(|| format!(
             "{}do_update_node_directly: Node Id {:} not found in the registry, aborting node update.",
             LOG_PREFIX, node_id))?;
@@ -57,7 +57,7 @@ impl Registry {
         // 4. Disallow updating if a key has already been set
         let idkg_de_pk_key = make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption);
         if self
-            .get(&idkg_de_pk_key.as_bytes().to_vec(), self.latest_version())
+            .get(idkg_de_pk_key.as_bytes(), self.latest_version())
             .is_some()
         {
             return Err(format!(
@@ -73,7 +73,7 @@ impl Registry {
 
         // 6. Create and apply mutation for new record
         let insert_idkg_key = insert(
-            idkg_de_pk_key.as_bytes().to_vec(),
+            idkg_de_pk_key.as_bytes(),
             encode_or_panic(valid_idkg_dealing_encryption_pk.get()),
         );
 

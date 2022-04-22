@@ -100,7 +100,7 @@ impl EcdsaPreSignerImpl {
                         &self.node_id,
                     )
             })
-            .map(|transcript_params| {
+            .flat_map(|transcript_params| {
                 self.crypto_create_dealing(
                     ecdsa_pool,
                     transcript_loader,
@@ -108,7 +108,6 @@ impl EcdsaPreSignerImpl {
                     transcript_params,
                 )
             })
-            .flatten()
             .collect()
     }
 
@@ -252,10 +251,9 @@ impl EcdsaPreSignerImpl {
                     None
                 }
             })
-            .map(|(id, transcript_params, signed_dealing)| {
+            .flat_map(|(id, transcript_params, signed_dealing)| {
                 self.crypto_create_dealing_support(&id, transcript_params, signed_dealing.get())
             })
-            .flatten()
             .collect()
     }
 

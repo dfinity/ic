@@ -67,27 +67,19 @@ fn remove_nodes_with_duplicate_endpoints_succeeds() {
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![
                         insert(
-                            make_node_operator_record_key(user_test_id(NO_ID).get())
-                                .as_bytes()
-                                .to_vec(),
+                            make_node_operator_record_key(user_test_id(NO_ID).get()).as_bytes(),
                             encode_or_panic(&node_operator),
                         ),
                         insert(
-                            make_node_operator_record_key(user_test_id(TEST_ID).get())
-                                .as_bytes()
-                                .to_vec(),
+                            make_node_operator_record_key(user_test_id(TEST_ID).get()).as_bytes(),
                             encode_or_panic(&node_operator2),
                         ),
                         insert(
-                            make_node_record_key(node_test_id(NO_ID))
-                                .as_bytes()
-                                .to_vec(),
+                            make_node_record_key(node_test_id(NO_ID)).as_bytes(),
                             encode_or_panic(&node1),
                         ),
                         insert(
-                            make_node_record_key(node_test_id(NO_ID + 1))
-                                .as_bytes()
-                                .to_vec(),
+                            make_node_record_key(node_test_id(NO_ID + 1)).as_bytes(),
                             encode_or_panic(&node2),
                         ),
                     ],
@@ -184,21 +176,15 @@ fn remove_nodes_succeeds() {
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![
                         insert(
-                            make_node_operator_record_key(user_test_id(NO_ID).get())
-                                .as_bytes()
-                                .to_vec(),
+                            make_node_operator_record_key(user_test_id(NO_ID).get()).as_bytes(),
                             encode_or_panic(&node_operator),
                         ),
                         insert(
-                            make_node_operator_record_key(user_test_id(TEST_ID).get())
-                                .as_bytes()
-                                .to_vec(),
+                            make_node_operator_record_key(user_test_id(TEST_ID).get()).as_bytes(),
                             encode_or_panic(&node_operator2),
                         ),
                         insert(
-                            make_node_record_key(node_test_id(NO_ID))
-                                .as_bytes()
-                                .to_vec(),
+                            make_node_record_key(node_test_id(NO_ID)).as_bytes(),
                             encode_or_panic(&node),
                         ),
                     ],
@@ -342,9 +328,7 @@ fn nodes_cannot_be_removed_if_any_in_subnet() {
         };
 
         init_mutation.mutations.push(insert(
-            make_node_operator_record_key(user_test_id(TEST_ID).get())
-                .as_bytes()
-                .to_vec(),
+            make_node_operator_record_key(user_test_id(TEST_ID).get()).as_bytes(),
             encode_or_panic(&node_operator),
         ));
 

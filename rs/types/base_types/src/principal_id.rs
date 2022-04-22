@@ -21,7 +21,12 @@ use std::{
 /// want [`PrincipalId`] to implement the Copy trait, we encode them as
 /// a fixed-size array and a length.
 #[derive(Clone, Copy, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable), describe_type(String), describe_body(self.to_string()))]
+#[cfg_attr(
+    feature = "test",
+    derive(comparable::Comparable),
+    describe_type(String),
+    describe_body(self.to_string())
+)]
 #[repr(transparent)]
 #[serde(transparent)]
 pub struct PrincipalId(#[cfg_attr(feature = "test", comparable_ignore)] pub Principal);
@@ -462,10 +467,10 @@ mod tests {
 
     #[test]
     fn parse_bad_checksum() {
-        let good = PrincipalId::from_str(&"bfozs-kwa73-7nadi".to_string())
-            .expect("PrincipalId::from_str failed");
+        let good =
+            PrincipalId::from_str("bfozs-kwa73-7nadi").expect("PrincipalId::from_str failed");
         assert_eq!(
-            PrincipalId::from_str(&"5h74t-uga73-7nadi".to_string()),
+            PrincipalId::from_str("5h74t-uga73-7nadi"),
             Err(PrincipalIdError(PrincipalError::AbnormalTextualFormat(
                 good.into()
             )))
@@ -475,11 +480,11 @@ mod tests {
     #[test]
     fn parse_too_short() {
         assert_eq!(
-            PrincipalId::from_str(&"".to_string()),
+            PrincipalId::from_str(""),
             Err(PrincipalIdError(PrincipalError::TextTooSmall()))
         );
         assert_eq!(
-            PrincipalId::from_str(&"vpgq".to_string()),
+            PrincipalId::from_str("vpgq"),
             Err(PrincipalIdError(PrincipalError::TextTooSmall()))
         );
     }
@@ -496,22 +501,22 @@ mod tests {
 
     #[test]
     fn parse_not_normalized() {
-        let good = PrincipalId::from_str(&"bfozs-kwa73-7nadi".to_string())
-            .expect("PrincipalId::from_str failed");
+        let good =
+            PrincipalId::from_str("bfozs-kwa73-7nadi").expect("PrincipalId::from_str failed");
         assert_eq!(
-            PrincipalId::from_str(&"BFOZS-KWA73-7NADI".to_string()),
+            PrincipalId::from_str("BFOZS-KWA73-7NADI"),
             Err(PrincipalIdError(PrincipalError::AbnormalTextualFormat(
                 good.into()
             )))
         );
         assert_eq!(
-            PrincipalId::from_str(&"bfozskwa737nadi".to_string()),
+            PrincipalId::from_str("bfozskwa737nadi"),
             Err(PrincipalIdError(PrincipalError::AbnormalTextualFormat(
                 good.into()
             )))
         );
         assert_eq!(
-            PrincipalId::from_str(&"bf-oz-sk-wa737-nadi".to_string()),
+            PrincipalId::from_str("bf-oz-sk-wa737-nadi"),
             Err(PrincipalIdError(PrincipalError::AbnormalTextualFormat(
                 good.into()
             )))

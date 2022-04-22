@@ -171,7 +171,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
                 .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![insert(
-                        make_subnet_record_key(subnet_id).as_bytes().to_vec(),
+                        make_subnet_record_key(subnet_id).as_bytes(),
                         encode_or_panic(&initial_subnet_record),
                     )],
                     preconditions: vec![],
@@ -255,7 +255,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                 .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![insert(
-                        make_subnet_record_key(subnet_id).as_bytes().to_vec(),
+                        make_subnet_record_key(subnet_id).as_bytes(),
                         encode_or_panic(&SubnetRecord {
                             membership: vec![],
                             max_ingress_bytes_per_message: 60 * 1024 * 1024,
@@ -433,7 +433,7 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
                 .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![insert(
-                        make_subnet_record_key(subnet_id).as_bytes().to_vec(),
+                        make_subnet_record_key(subnet_id).as_bytes(),
                         encode_or_panic(&subnet_record),
                     )],
                     preconditions: vec![],

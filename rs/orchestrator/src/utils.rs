@@ -94,7 +94,7 @@ mod tests {
             .tempdir()
             .unwrap();
 
-        assert!(get_oldest_entry(&tmpdir.path().to_path_buf()).is_none());
+        assert!(get_oldest_entry(tmpdir.path()).is_none());
 
         let path = tmpdir.path();
 
@@ -104,9 +104,7 @@ mod tests {
         thread::sleep(Duration::from_millis(5));
         File::create(path.join("file3")).unwrap();
 
-        let oldest_path = get_oldest_entry(&tmpdir.path().to_path_buf())
-            .unwrap()
-            .into_boxed_path();
+        let oldest_path = get_oldest_entry(tmpdir.path()).unwrap().into_boxed_path();
         let oldest_file_name = oldest_path.file_name().unwrap().to_str().unwrap();
 
         assert_eq!(oldest_file_name, "file1");

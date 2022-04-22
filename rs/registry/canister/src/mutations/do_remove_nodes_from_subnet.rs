@@ -33,7 +33,7 @@ impl Registry {
 
                 if initial_len != subnet.membership.len() {
                     Some(update(
-                        make_subnet_record_key(subnet_id).as_bytes().to_vec(),
+                        make_subnet_record_key(subnet_id).as_bytes(),
                         encode_or_panic(&subnet),
                     ))
                 } else {

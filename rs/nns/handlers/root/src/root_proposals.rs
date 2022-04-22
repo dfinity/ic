@@ -489,7 +489,7 @@ pub fn get_pending_root_proposals_to_upgrade_governance_canister(
 /// figure out which subnet has the governance canister's id.
 async fn get_nns_subnet_id() -> Result<SubnetId, String> {
     let routing_table = RoutingTable::try_from(
-        get_value::<RoutingTablePb>(&make_routing_table_record_key().as_bytes().to_vec(), None)
+        get_value::<RoutingTablePb>(make_routing_table_record_key().as_bytes(), None)
             .await
             .map_err(|e| {
                 format!(
@@ -512,12 +512,10 @@ async fn get_nns_subnet_id() -> Result<SubnetId, String> {
 /// Returns the membership for the nns subnetwork, and the version at which it
 /// was fetched.
 async fn get_nns_membership(subnet_id: &SubnetId) -> Result<(Vec<NodeId>, u64), String> {
-    let (subnet_registry_entry, version) = get_value::<SubnetRecordPb>(
-        &make_subnet_record_key(*subnet_id).as_bytes().to_vec(),
-        None,
-    )
-    .await
-    .map_err(|e| format!("Error getting membership of nns subnet. Error: {:?}", e))?;
+    let (subnet_registry_entry, version) =
+        get_value::<SubnetRecordPb>(make_subnet_record_key(*subnet_id).as_bytes(), None)
+            .await
+            .map_err(|e| format!("Error getting membership of nns subnet. Error: {:?}", e))?;
 
     Ok((
         subnet_registry_entry
@@ -536,17 +534,15 @@ async fn get_node_operator_pid_of_node(
     node_id: &NodeId,
     version: u64,
 ) -> Result<PrincipalId, String> {
-    let (node_record, _) = get_value::<NodeRecordPb>(
-        &make_node_record_key(*node_id).as_bytes().to_vec(),
-        Some(version),
-    )
-    .await
-    .map_err(|e| {
-        format!(
-            "Error getting the node record from the registry. Error: {:?}",
-            e
-        )
-    })?;
+    let (node_record, _) =
+        get_value::<NodeRecordPb>(make_node_record_key(*node_id).as_bytes(), Some(version))
+            .await
+            .map_err(|e| {
+                format!(
+                    "Error getting the node record from the registry. Error: {:?}",
+                    e
+                )
+            })?;
     PrincipalId::try_from(node_record.node_operator_id).map_err(|e| {
         format!(
             "Error decoding the node operator id from the node record. Error: {:?}",

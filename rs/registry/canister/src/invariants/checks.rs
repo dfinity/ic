@@ -99,7 +99,7 @@ impl Registry {
                     snapshot.insert(key.to_vec(), mutation.value.clone());
                 }
                 Type::Delete => {
-                    snapshot.remove(&key.to_vec());
+                    snapshot.remove(key);
                 }
             }
         }

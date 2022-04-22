@@ -248,8 +248,7 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
         let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
         let subnet = deserialize_registry_value::<SubnetRecord>(bytes)?;
         Ok(subnet
-            .map(|subnet| subnet.features)
-            .flatten()
+            .and_then(|subnet| subnet.features)
             .map(SubnetFeatures::from))
     }
 

@@ -35,8 +35,7 @@ impl Registry {
 
         // 3. Loop through each node
         let mutations = nodes_to_be_removed
-            .into_iter()
-            .map(|node_to_remove| {
+            .into_iter().flat_map(|node_to_remove| {
 
                 // 4. Find the node operator id for this record
                 // and abort if the node record is not found
@@ -87,7 +86,7 @@ impl Registry {
                         encode_or_panic(&new_node_operator_record),
                     ),
                 ]
-        }).flatten().collect();
+        }).collect();
 
         // 8. Apply mutations after checking invariants
         self.maybe_apply_mutation_internal(mutations);
