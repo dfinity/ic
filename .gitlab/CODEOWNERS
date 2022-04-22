@@ -183,6 +183,8 @@
 /rs/types/types/src/canister_http.rs    @dfinity-lab/teams/consensus-owners
 /rs/types/types/src/consensus.rs        @dfinity-lab/teams/consensus-owners
 /rs/types/types/src/consensus/          @dfinity-lab/teams/consensus-owners
+/rs/types/types/src/batch.rs            @dfinity-lab/teams/consensus-owners
+/rs/types/types/src/batch/              @dfinity-lab/teams/consensus-owners
 /rs/types/types/src/signature.rs        @dfinity-lab/teams/consensus-owners
 /rs/types/types/src/signature/          @dfinity-lab/teams/consensus-owners
 /rs/types/types/src/crypto.rs           @dfinity-lab/teams/crypto-owners
