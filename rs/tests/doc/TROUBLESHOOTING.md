@@ -13,7 +13,7 @@ us to look into it.
 ## I'm running the test locally
 
 1. Are you on the latest `master`?
-1. Are you running through `./setup-and-cargo-test.sh`? In particular, are you sure the latest replica is being used?
+1. Are you running through `./run-system-tests.py` in nix-shell from the `rs/tests` folder? In particular, are you sure the latest replica is being used?
 
 ## The test failed on CI
 
